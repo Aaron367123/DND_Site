@@ -1,75 +1,9 @@
 // ============================================================
 // DATA LOADER — 5etools JSON → internal search format
 // ============================================================
-// Tries every known bestiary/spell/condition file under data/.
-// Missing files (404) are silently skipped — copy as many or
-// as few source files as you like.
-
-const _BESTIARY_FILES = [
-  'data/bestiary/bestiary-mm.json',
-  'data/bestiary/bestiary-xmm.json',
-  'data/bestiary/bestiary-vgm.json',
-  'data/bestiary/bestiary-mtf.json',
-  'data/bestiary/bestiary-mpmm.json',
-  'data/bestiary/bestiary-ftd.json',
-  'data/bestiary/bestiary-bgg.json',
-  'data/bestiary/bestiary-tce.json',
-  'data/bestiary/bestiary-idrotf.json',
-  'data/bestiary/bestiary-wbtw.json',
-  'data/bestiary/bestiary-scc.json',
-  'data/bestiary/bestiary-ggr.json',
-  'data/bestiary/bestiary-bgdia.json',
-  'data/bestiary/bestiary-cos.json',
-  'data/bestiary/bestiary-dmg.json',
-  'data/bestiary/bestiary-egw.json',
-  'data/bestiary/bestiary-erlw.json',
-  'data/bestiary/bestiary-gos.json',
-  'data/bestiary/bestiary-hotdq.json',
-  'data/bestiary/bestiary-lmop.json',
-  'data/bestiary/bestiary-oota.json',
-  'data/bestiary/bestiary-phb.json',
-  'data/bestiary/bestiary-pota.json',
-  'data/bestiary/bestiary-rot.json',
-  'data/bestiary/bestiary-toa.json',
-  'data/bestiary/bestiary-tftyp.json',
-  'data/bestiary/bestiary-ai.json',
-  'data/bestiary/bestiary-llk.json',
-  'data/bestiary/bestiary-rmbre.json',
-  'data/bestiary/bestiary-sads.json',
-  'data/bestiary/bestiary-sdw.json',
-  'data/bestiary/bestiary-slw.json',
-  'data/bestiary/bestiary-dc.json',
-  'data/bestiary/bestiary-dip.json',
-  'data/bestiary/bestiary-dod.json',
-  'data/bestiary/bestiary-dodk.json',
-  'data/bestiary/bestiary-dsotdq.json',
-  'data/bestiary/bestiary-hat-tg.json',
-  'data/bestiary/bestiary-hol.json',
-  'data/bestiary/bestiary-kftgv.json',
-  'data/bestiary/bestiary-mabjov.json',
-  'data/bestiary/bestiary-mff.json',
-  'data/bestiary/bestiary-pabtso.json',
-  'data/bestiary/bestiary-psi.json',
-  'data/bestiary/bestiary-qftis.json',
-  'data/bestiary/bestiary-skt.json',
-  'data/bestiary/bestiary-veor.json',
-  'data/bestiary/bestiary-xdmg.json',
-  'data/bestiary/bestiary-xphb.json',
-];
-
-const _SPELL_FILES = [
-  'data/spells/spells-phb.json',
-  'data/spells/spells-xphb.json',
-  'data/spells/spells-xge.json',
-  'data/spells/spells-tce.json',
-  'data/spells/spells-ai.json',
-  'data/spells/spells-egw.json',
-  'data/spells/spells-ftd.json',
-  'data/spells/spells-llk.json',
-  'data/spells/spells-scc.json',
-  'data/spells/spells-idrotf.json',
-  'data/spells/spells-xdmg.json',
-];
+// Dynamically discovers bestiary and spell files via index.json.
+// Also loads magic items (items.json) and feats (feats.json).
+// Missing files (404) are silently skipped.
 
 const _CONDITION_FILES = [
   'data/conditionsdiseases.json',
@@ -285,6 +219,39 @@ function _convertCondition(d) {
   return {name:d.name, index:_toIndex(d.name), _source:d.source, desc:descs};
 }
 
+// ─── Item converter ─────────────────────────────────────────────────────────────
+function _convertItem(d) {
+  const desc = _parseEntries(d.entries || d.entriesTemplate || []);
+  const rarity = d.rarity || 'unknown';
+  const attune = d.reqAttune
+    ? (typeof d.reqAttune === 'string' ? d.reqAttune : 'attunement required')
+    : null;
+  return {
+    name: d.name, index: _toIndex(d.name), _source: d.source,
+    rarity,
+    requires_attunement: attune,
+    desc: desc ? [desc] : [],
+  };
+}
+
+// ─── Feat converter ─────────────────────────────────────────────────────────────
+function _convertFeat(d) {
+  const prereq = (d.prerequisite || []).map(p => {
+    if (p.level)   return `Level ${p.level.level}`;
+    if (p.ability) return Object.entries(p.ability[0]).map(([k,v]) => `${k.toUpperCase()} ${v}+`).join(', ');
+    if (p.race)    return p.race.map(r => r.name).join(' or ');
+    if (p.other)   return p.other;
+    if (p.spellcasting) return 'Spellcasting ability';
+    return '';
+  }).filter(Boolean).join('; ');
+  const desc = _parseEntries(d.entries || []);
+  return {
+    name: d.name, index: _toIndex(d.name), _source: d.source,
+    prerequisite: prereq,
+    desc: desc ? [desc] : [],
+  };
+}
+
 // ─── State ─────────────────────────────────────────────────────────────────────
 let _5eData      = [];
 let _5eLoaded    = false;
@@ -312,6 +279,7 @@ async function load5eData() {
     results.push({
       cat:'monster', name:d.name, _slug:r.index, _fromLocal:true,
       meta:`${r.size} ${r.type} · CR ${r.challenge_rating}`.trim(),
+      _source:d.source,
       hp:r.hit_points, ac:r.armor_class?.[0]?.value||10,
       speed:Object.entries(r.speed||{}).map(([k,v])=>k+' '+v).join(', ')||'—',
       str:r.strength, dex:r.dexterity, con:r.constitution,
@@ -329,6 +297,7 @@ async function load5eData() {
     results.push({
       cat:'spell', name:d.name, _slug:r.index, _fromLocal:true,
       meta:`${lvl} ${r.school.name}`.trim(),
+      _source:d.source,
       cast:r.casting_time, range:r.range,
       components:r.components.join(', ')+(r.material?' ('+r.material+')':''),
       duration:r.duration, desc:r.desc.join('\n\n'),
@@ -343,7 +312,34 @@ async function load5eData() {
     const r = _convertCondition(d);
     results.push({
       cat:'condition', name:d.name, _slug:r.index, _fromLocal:true,
-      meta:'Condition', desc:r.desc.join('\n'), _raw:r,
+      meta:'Condition', _source:d.source, desc:r.desc.join('\n'), _raw:r,
+    });
+  }
+
+  function addItem(d) {
+    if (!d.rarity || d.rarity === 'none') return; // skip mundane items
+    const key = 'item:'+d.name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    const r = _convertItem(d);
+    results.push({
+      cat:'item', name:d.name, _slug:r.index, _fromLocal:true,
+      meta: r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)+(r.requires_attunement?' · Attunement':''),
+      _source:d.source,
+      _raw:r,
+    });
+  }
+
+  function addFeat(d) {
+    const key = 'feat:'+d.name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    const r = _convertFeat(d);
+    results.push({
+      cat:'feat', name:d.name, _slug:r.index, _fromLocal:true,
+      meta: r.prerequisite ? 'Prerequisite: '+r.prerequisite : 'Feat',
+      _source:d.source,
+      _raw:r,
     });
   }
 
@@ -355,20 +351,34 @@ async function load5eData() {
     } catch { return null; }
   };
 
-  // Load all files in parallel
-  const [bestiaries, spellbooks, conditionFiles] = await Promise.all([
-    Promise.all(_BESTIARY_FILES.map(fetchFile)),
-    Promise.all(_SPELL_FILES.map(fetchFile)),
-    Promise.all(_CONDITION_FILES.map(fetchFile)),
+  // Step 1: fetch index files to discover all available source files dynamically
+  const [bestiaryIdx, spellIdx] = await Promise.all([
+    fetchFile('data/bestiary/index.json'),
+    fetchFile('data/spells/index.json'),
   ]);
 
-  bestiaries.forEach(json  => json && (json.monster||[]).forEach(addMonster));
-  spellbooks.forEach(json  => json && (json.spell||[]).forEach(addSpell));
-  conditionFiles.forEach(json => {
-    if (!json) return;
-    (json.condition||[]).forEach(addCondition);
-    // conditionsdiseases.json also contains diseases — skip those
-  });
+  const _skipKeys = new Set(['fluff-index.json', 'index.json', 'sources.json', 'foundry.json']);
+  const bestiaryFiles = bestiaryIdx
+    ? Object.values(bestiaryIdx).filter(f => !f.startsWith('fluff-') && !_skipKeys.has(f)).map(f => `data/bestiary/${f}`)
+    : [];
+  const spellFiles = spellIdx
+    ? Object.values(spellIdx).filter(f => !f.startsWith('fluff-') && !_skipKeys.has(f)).map(f => `data/spells/${f}`)
+    : [];
+
+  // Step 2: fetch all data files in parallel
+  const [bestiaries, spellbooks, conditionFiles, itemFile, featFile] = await Promise.all([
+    Promise.all(bestiaryFiles.map(fetchFile)),
+    Promise.all(spellFiles.map(fetchFile)),
+    Promise.all(_CONDITION_FILES.map(fetchFile)),
+    fetchFile('data/items.json'),
+    fetchFile('data/feats.json'),
+  ]);
+
+  bestiaries.forEach(json     => json && (json.monster   ||[]).forEach(addMonster));
+  spellbooks.forEach(json     => json && (json.spell      ||[]).forEach(addSpell));
+  conditionFiles.forEach(json => { if (!json) return; (json.condition||[]).forEach(addCondition); });
+  if (itemFile) (itemFile.item||[]).forEach(addItem);
+  if (featFile) (featFile.feat||[]).forEach(addFeat);
 
   _5eData    = results;
   _5eLoaded  = true;

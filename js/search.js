@@ -77,6 +77,15 @@ function renderItemFull(d) {
   return html;
 }
 
+function renderFeatFull(d) {
+  const r = d._raw || {};
+  const desc = Array.isArray(r.desc) ? r.desc.join('\n\n') : (r.desc || d.desc || '');
+  let html = '';
+  if (r.prerequisite) html += `<div class="detail-section" style="color:var(--text-dim)"><strong>Prerequisite.</strong> ${esc(r.prerequisite)}</div>`;
+  html += `<div class="detail-section" style="line-height:1.7">${esc(desc)}</div>`;
+  return html;
+}
+
 function renderConditionFull(d) {
   const r = d._raw || {};
   // dnd5eapi returns desc as string[], Open5e returned [{desc:string}]
@@ -111,7 +120,7 @@ function doSearch(){
 
 function renderSearchTabs(){
   const pool=getSearchPool();
-  const labels={all:'All',monster:'Monsters',spell:'Spells',item:'Items',condition:'Conditions',party:'Party'};
+  const labels={all:'All',monster:'Monsters',spell:'Spells',item:'Items',condition:'Conditions',feat:'Feats',party:'Party'};
   document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>{
     const cat=tab.dataset.cat,count=cat==='all'?pool.length:pool.filter(r=>r.cat===cat).length;
     tab.innerHTML=`${labels[cat]} <span class="count">${count}</span>`;
@@ -160,7 +169,7 @@ function renderSearchDetail(){
   const container=document.getElementById('search-results');
   const d=state.searchState.detail;
 
-  const isMonster=d.cat==='monster', isSpell=d.cat==='spell', isItem=d.cat==='item', isCond=d.cat==='condition', isParty=d.cat==='party';
+  const isMonster=d.cat==='monster', isSpell=d.cat==='spell', isItem=d.cat==='item', isCond=d.cat==='condition', isFeat=d.cat==='feat', isParty=d.cat==='party';
 
   let bodyHtml = '';
   if (isParty) {
@@ -174,10 +183,11 @@ function renderSearchDetail(){
       +(p.notes?'<div class="detail-section"><strong>Notes.</strong> '+esc(p.notes)+'</div>':'')
       +(p.inspiration?'<div class="detail-section" style="color:var(--warning)">★ Has inspiration</div>':'');
   } else if (d._raw) {
-    if(isMonster) bodyHtml = renderMonsterFull(d, d);
+    if(isMonster)    bodyHtml = renderMonsterFull(d, d);
     else if(isSpell) bodyHtml = renderSpellFull(d);
     else if(isItem)  bodyHtml = renderItemFull(d);
     else if(isCond)  bodyHtml = renderConditionFull(d);
+    else if(isFeat)  bodyHtml = renderFeatFull(d);
   } else {
     // Fallback for old SEARCH_DATA entries without _raw
     if(isMonster){
