@@ -93,6 +93,17 @@ function renderConditionFull(d) {
   return `<div class="detail-section" style="line-height:1.7">${descs.map(p=>`<p style="margin:0 0 8px">${esc(p)}</p>`).join('')}</div>`;
 }
 
+// Fallback renderer for any reference entry (background, race, deity, table, etc.)
+// that just has parsed `desc` text — splits into paragraphs, preserves line breaks.
+function renderRefFull(d) {
+  const text = d.desc || '';
+  if (!text.trim()) return '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
+  const paragraphs = text.split(/\n{2,}/).filter(p => p.trim());
+  return paragraphs.map(p =>
+    `<div class="detail-section" style="line-height:1.7;white-space:pre-wrap">${esc(p)}</div>`
+  ).join('');
+}
+
 // Spell link click from monster detail — find in local data
 function searchForSpell(slug) {
   const match = _5eData.find(d => d.cat==='spell' && d._slug===slug);
@@ -120,7 +131,7 @@ function doSearch(){
 
 function renderSearchTabs(){
   const pool=getSearchPool();
-  const labels={all:'All',monster:'Monsters',spell:'Spells',item:'Items',condition:'Conditions',feat:'Feats',party:'Party'};
+  const labels={all:'All',monster:'Monsters',spell:'Spells',item:'Items',condition:'Conditions',feat:'Feats',background:'Backgrounds',race:'Races',class:'Classes',party:'Party'};
   document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>{
     const cat=tab.dataset.cat,count=cat==='all'?pool.length:pool.filter(r=>r.cat===cat).length;
     tab.innerHTML=`${labels[cat]} <span class="count">${count}</span>`;
@@ -186,6 +197,10 @@ function buildDetailBody(d) {
     if(isItem)    return renderItemFull(d);
     if(isCond)    return renderConditionFull(d);
     if(isFeat)    return renderFeatFull(d);
+    // All the long-tail reference categories (background, race, class, deity,
+    // object, vehicle, table, recipe, action, skill, etc.) share a generic
+    // entries→paragraphs render.
+    return renderRefFull(d);
   }
   // Fallback for old SEARCH_DATA entries without _raw
   if(isMonster){

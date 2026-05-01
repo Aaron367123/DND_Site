@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c 'import json; d=json.load\\(open\\('\\\\''D:/Downloads/DND_Site/data/__TRACKED_VAR__'\\\\''\\)\\); print\\(list\\(d.keys\\(\\)\\)\\); k=[k for k in d.keys\\(\\) if not k.startswith\\('\\\\''_'\\\\''\\)][0]; print\\('\\\\''  array key:'\\\\'', k, '\\\\''| count:'\\\\'', len\\(d[k]\\) if isinstance\\(d[k],list\\) else '\\\\''not array'\\\\''\\); print\\('\\\\''  first entry keys:'\\\\'', list\\(d[k][0].keys\\(\\)\\)[:15] if isinstance\\(d[k],list\\) and d[k] else '\\\\''n/a'\\\\''\\)')",
+      "Bash(python -c ' *)",
+      "Bash(node --check \"D:/Downloads/DND_Site/js/data-loader.js\")",
+      "Bash(node --check \"D:/Downloads/DND_Site/js/search.js\")",
+      "Bash(node --check \"D:/Downloads/DND_Site/js/utils.js\")"
+    ]
+  }
+}

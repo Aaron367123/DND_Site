@@ -116,6 +116,115 @@ function _damageArr(arr) {
   return (arr||[]).map(v => typeof v==='string' ? v : (Array.isArray(v) ? v.join(', ') : (v.resist||v.immune||v.vulnerable||v.special||''))).filter(Boolean);
 }
 
+// ─── _copy resolution ──────────────────────────────────────────────────────────
+// Many 5etools entries inherit from a base creature via {_copy:{name,source,_mod}}.
+// We support the common _mod operations seen in the bundled bestiaries:
+// replaceTxt, appendArr, prependArr, replaceArr, replaceOrAppendArr, removeArr.
+// Unsupported modes (addSpells, scalar*, etc.) are silently skipped — the inheriting
+// creature still gets the base creature's stats, just without the niche tweaks.
+function _walkReplaceStrings(node, re, withStr) {
+  if (node == null || typeof node === 'string') return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i++) {
+      if (typeof node[i] === 'string') node[i] = node[i].replace(re, withStr);
+      else _walkReplaceStrings(node[i], re, withStr);
+    }
+    return;
+  }
+  if (typeof node === 'object') {
+    Object.keys(node).forEach(k => {
+      const v = node[k];
+      if (typeof v === 'string') node[k] = v.replace(re, withStr);
+      else if (v && typeof v === 'object') _walkReplaceStrings(v, re, withStr);
+    });
+  }
+}
+
+function _applyMod(target, prop, mod) {
+  if (!mod || !mod.mode) return;
+  switch (mod.mode) {
+    case 'replaceTxt': {
+      let flags = mod.flags || '';
+      if (!flags.includes('g')) flags += 'g';
+      let re;
+      try { re = new RegExp(mod.replace, flags); } catch (e) { return; }
+      const root = (prop === '*' || prop === '_') ? target : target[prop];
+      _walkReplaceStrings(root, re, mod.with || '');
+      break;
+    }
+    case 'appendArr': {
+      const items = Array.isArray(mod.items) ? mod.items : [mod.items];
+      if (!Array.isArray(target[prop])) target[prop] = [];
+      target[prop] = target[prop].concat(items);
+      break;
+    }
+    case 'prependArr': {
+      const items = Array.isArray(mod.items) ? mod.items : [mod.items];
+      if (!Array.isArray(target[prop])) target[prop] = [];
+      target[prop] = items.concat(target[prop]);
+      break;
+    }
+    case 'replaceArr':
+    case 'replaceOrAppendArr': {
+      const items = Array.isArray(mod.items) ? mod.items : [mod.items];
+      if (!Array.isArray(target[prop])) {
+        if (mod.mode === 'replaceOrAppendArr') target[prop] = items.slice();
+        return;
+      }
+      const replaceName = typeof mod.replace === 'string' ? mod.replace : (mod.replace && mod.replace.name);
+      const idx = replaceName ? target[prop].findIndex(it => it && it.name === replaceName) : -1;
+      if (idx >= 0) target[prop].splice(idx, 1, ...items);
+      else if (mod.mode === 'replaceOrAppendArr') target[prop] = target[prop].concat(items);
+      break;
+    }
+    case 'removeArr': {
+      if (!Array.isArray(target[prop])) return;
+      if (mod.names) {
+        const names = Array.isArray(mod.names) ? mod.names : [mod.names];
+        target[prop] = target[prop].filter(it => !it || !names.includes(it.name));
+      } else if (mod.items) {
+        const items = Array.isArray(mod.items) ? mod.items : [mod.items];
+        target[prop] = target[prop].filter(it => !items.includes(it));
+      }
+      break;
+    }
+    default:
+      // addSpells, scalarAddProp, scalarMultProp, etc. — skip silently.
+      break;
+  }
+}
+
+function _resolveCopy(monster, byKey, depth) {
+  if (!monster || !monster._copy) return monster;
+  if (depth > 5) return monster; // guard against pathological cycles
+  const ref = monster._copy;
+  const srcKey = ((ref.name || '') + '|' + (ref.source || '')).toLowerCase();
+  const src = byKey[srcKey];
+  if (!src) {
+    console.warn('[SKT] _copy unresolved:', monster.name, '→', ref.name, '('+ref.source+')');
+    return monster;
+  }
+  // Resolve the source first if it itself uses _copy (chained inheritance)
+  const baseSrc = src._copy ? _resolveCopy(src, byKey, (depth || 0) + 1) : src;
+  // Start from a deep clone of the inheriting entity (its values win)
+  const cpy = JSON.parse(JSON.stringify(monster));
+  // Pull in any field from the base that the copy doesn't define (or explicitly nulls out)
+  Object.keys(baseSrc).forEach(k => {
+    if (k === '_copy' || k === '_mod') return;
+    if (cpy[k] === null) { delete cpy[k]; return; }
+    if (cpy[k] === undefined) cpy[k] = JSON.parse(JSON.stringify(baseSrc[k]));
+  });
+  // Apply any mods declared on the _copy spec
+  if (ref._mod) {
+    Object.entries(ref._mod).forEach(([prop, modSpecs]) => {
+      const mods = Array.isArray(modSpecs) ? modSpecs : [modSpecs];
+      mods.forEach(m => _applyMod(cpy, prop, m));
+    });
+  }
+  delete cpy._copy;
+  return cpy;
+}
+
 // ─── Monster converter ──────────────────────────────────────────────────────────
 function _convertMonster(d) {
   return {
@@ -343,6 +452,26 @@ async function load5eData() {
     });
   }
 
+  // Generic loader used for the long tail of reference categories. Most 5etools
+  // entries follow the same shape: {name, source, entries:[…]}. We extract the
+  // description text and keep _raw for the detail view.
+  function addRef(cat, d, meta, opts) {
+    if (!d || !d.name) return;
+    opts = opts || {};
+    const dedupeName = opts.dedupeKey || d.name;
+    const key = cat + ':' + dedupeName.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push({
+      cat: cat, name: opts.displayName || d.name, _slug: _toIndex(opts.displayName || d.name),
+      _fromLocal: true,
+      meta: meta || cat,
+      _source: d.source,
+      desc: _parseEntries(d.entries || []),
+      _raw: d,
+    });
+  }
+
   const fetchFile = async (path) => {
     try {
       const r = await fetch(path);
@@ -352,9 +481,10 @@ async function load5eData() {
   };
 
   // Step 1: fetch index files to discover all available source files dynamically
-  const [bestiaryIdx, spellIdx] = await Promise.all([
+  const [bestiaryIdx, spellIdx, classIdx] = await Promise.all([
     fetchFile('data/bestiary/index.json'),
     fetchFile('data/spells/index.json'),
+    fetchFile('data/class/index.json'),
   ]);
 
   const _skipKeys = new Set(['fluff-index.json', 'index.json', 'sources.json', 'foundry.json']);
@@ -364,21 +494,152 @@ async function load5eData() {
   const spellFiles = spellIdx
     ? Object.values(spellIdx).filter(f => !f.startsWith('fluff-') && !_skipKeys.has(f)).map(f => `data/spells/${f}`)
     : [];
+  const classFiles = classIdx
+    ? Object.values(classIdx).filter(f => !_skipKeys.has(f)).map(f => `data/class/${f}`)
+    : [];
+
+  // Long tail of single-file reference categories
+  const _refSpecs = [
+    {path:'data/backgrounds.json',         arr:'background',   cat:'background'},
+    {path:'data/races.json',               arr:'race',         cat:'race'},
+    {path:'data/races.json',               arr:'subrace',      cat:'race', subrace:true},
+    {path:'data/optionalfeatures.json',    arr:'optionalfeature', cat:'optionalfeature'},
+    {path:'data/deities.json',             arr:'deity',        cat:'deity'},
+    {path:'data/objects.json',             arr:'object',       cat:'object'},
+    {path:'data/vehicles.json',            arr:'vehicle',      cat:'vehicle'},
+    {path:'data/rewards.json',             arr:'reward',       cat:'reward'},
+    {path:'data/psionics.json',            arr:'psionic',      cat:'psionic'},
+    {path:'data/trapshazards.json',        arr:'trap',         cat:'trap'},
+    {path:'data/trapshazards.json',        arr:'hazard',       cat:'hazard'},
+    {path:'data/variantrules.json',        arr:'variantrule',  cat:'variantrule'},
+    {path:'data/tables.json',              arr:'table',        cat:'table'},
+    {path:'data/recipes.json',             arr:'recipe',       cat:'recipe'},
+    {path:'data/decks.json',               arr:'deck',         cat:'deck'},
+    {path:'data/bastions.json',            arr:'facility',     cat:'facility'},
+    {path:'data/languages.json',           arr:'language',     cat:'language'},
+    {path:'data/cultsboons.json',          arr:'cult',         cat:'cult'},
+    {path:'data/cultsboons.json',          arr:'boon',         cat:'boon'},
+    {path:'data/actions.json',             arr:'action',       cat:'action'},
+    {path:'data/skills.json',              arr:'skill',        cat:'skill'},
+    {path:'data/senses.json',              arr:'sense',        cat:'sense'},
+    {path:'data/charcreationoptions.json', arr:'charoption',   cat:'charoption'},
+  ];
+  const _refUniquePaths = [...new Set(_refSpecs.map(s => s.path))];
 
   // Step 2: fetch all data files in parallel
-  const [bestiaries, spellbooks, conditionFiles, itemFile, featFile] = await Promise.all([
+  const [bestiaries, spellbooks, classBooks, conditionFiles, itemFile, featFile, refFiles] = await Promise.all([
     Promise.all(bestiaryFiles.map(fetchFile)),
     Promise.all(spellFiles.map(fetchFile)),
+    Promise.all(classFiles.map(fetchFile)),
     Promise.all(_CONDITION_FILES.map(fetchFile)),
     fetchFile('data/items.json'),
     fetchFile('data/feats.json'),
+    Promise.all(_refUniquePaths.map(fetchFile)),
   ]);
+  const _refByPath = {};
+  _refUniquePaths.forEach((p, i) => { _refByPath[p] = refFiles[i]; });
 
-  bestiaries.forEach(json     => json && (json.monster   ||[]).forEach(addMonster));
+  // Two passes for monsters: first index every raw entry by name|source so _copy
+  // references can be resolved across bestiary files (e.g. SKT's Xolkin → MM's
+  // Bandit Captain), then resolve + convert each entry.
+  const _monsterByKey = {};
+  const _allRawMonsters = [];
+  bestiaries.forEach(json => {
+    if (!json) return;
+    (json.monster || []).forEach(d => {
+      _allRawMonsters.push(d);
+      const k = ((d.name || '') + '|' + (d.source || '')).toLowerCase();
+      if (!_monsterByKey[k]) _monsterByKey[k] = d;
+    });
+  });
+  _allRawMonsters.forEach(d => addMonster(d._copy ? _resolveCopy(d, _monsterByKey, 0) : d));
   spellbooks.forEach(json     => json && (json.spell      ||[]).forEach(addSpell));
   conditionFiles.forEach(json => { if (!json) return; (json.condition||[]).forEach(addCondition); });
   if (itemFile) (itemFile.item||[]).forEach(addItem);
   if (featFile) (featFile.feat||[]).forEach(addFeat);
+
+  // Classes, subclasses, and class/subclass features
+  classBooks.forEach(json => {
+    if (!json) return;
+    (json.class||[]).forEach(d => {
+      const hd = d.hd?.faces ? `Hit Die d${d.hd.faces}` : '';
+      addRef('class', d, ['Class', hd].filter(Boolean).join(' · '));
+    });
+    (json.subclass||[]).forEach(d => {
+      const display = d.name + (d.className?` (${d.className})`:'');
+      addRef('class', d, 'Subclass · '+(d.className||''), {displayName: display, dedupeKey: display});
+    });
+    (json.classFeature||[]).forEach(d => {
+      const meta = `${d.className||''} feature${d.level?(' · L'+d.level):''}`;
+      const dedupe = `${d.className||''}-${d.name}`;
+      addRef('classFeature', d, meta, {dedupeKey: dedupe});
+    });
+    (json.subclassFeature||[]).forEach(d => {
+      const sc = d.subclassShortName ? ` (${d.subclassShortName})` : '';
+      const meta = `${d.className||''}${sc} feature${d.level?(' · L'+d.level):''}`;
+      const dedupe = `${d.className||''}-${d.subclassShortName||''}-${d.name}-${d.level||''}`;
+      addRef('classFeature', d, meta, {dedupeKey: dedupe});
+    });
+  });
+
+  // Long-tail reference categories
+  _refSpecs.forEach(spec => {
+    const json = _refByPath[spec.path];
+    if (!json) return;
+    (json[spec.arr]||[]).forEach(d => {
+      let meta = '', display, dedupe;
+      switch (spec.cat) {
+        case 'background': meta = 'Background'; break;
+        case 'race': {
+          if (spec.subrace) {
+            const parent = d.raceName || '';
+            display = d.name + (parent?` (${parent})`:'');
+            dedupe  = display;
+            meta = 'Subrace · ' + parent;
+          } else {
+            const sz = (Array.isArray(d.size)?d.size[0]:d.size) || '';
+            const sizeName = _SIZE[sz] || sz || '';
+            const speed = typeof d.speed==='number' ? d.speed+' ft' : (d.speed?.walk?d.speed.walk+' ft':'');
+            meta = ['Race', sizeName, speed?('Speed '+speed):''].filter(Boolean).join(' · ');
+          }
+          break;
+        }
+        case 'optionalfeature': {
+          const types = (d.featureType||[]).join(', ');
+          meta = 'Optional feature' + (types?' · '+types:'');
+          break;
+        }
+        case 'deity': {
+          const align = Array.isArray(d.alignment) ? d.alignment.join('') : '';
+          meta = ['Deity', d.pantheon, align].filter(Boolean).join(' · ');
+          break;
+        }
+        case 'object': {
+          const sz = (Array.isArray(d.size)?d.size[0]:d.size) || '';
+          meta = ['Object', _SIZE[sz]||sz, d.objectType].filter(Boolean).join(' · ');
+          break;
+        }
+        case 'vehicle':     meta = ['Vehicle', d.vehicleType].filter(Boolean).join(' · '); break;
+        case 'reward':      meta = 'Reward'  + (d.type?' · '+d.type:''); break;
+        case 'psionic':     meta = 'Psionic' + (d.type?' · '+d.type:''); break;
+        case 'trap':        meta = 'Trap'    + (d.trapHazType?' · '+d.trapHazType:''); break;
+        case 'hazard':      meta = 'Hazard'  + (d.trapHazType?' · '+d.trapHazType:''); break;
+        case 'variantrule': meta = 'Variant rule' + (d.ruleType?' · '+d.ruleType:''); break;
+        case 'table':       meta = 'Table'   + (d.caption?' · '+d.caption.slice(0,40):''); break;
+        case 'recipe':      meta = 'Recipe'  + (d.type?' · '+d.type:''); break;
+        case 'deck':        meta = 'Deck'; break;
+        case 'facility':    meta = ['Bastion facility', d.facilityType, d.level?('L'+d.level):''].filter(Boolean).join(' · '); break;
+        case 'language':    meta = 'Language'+ (d.type?' · '+d.type:''); break;
+        case 'cult':        meta = 'Cult'    + (d.type?' · '+d.type:''); break;
+        case 'boon':        meta = 'Boon'    + (d.type?' · '+d.type:''); break;
+        case 'action':      meta = 'Action'; break;
+        case 'skill':       meta = 'Skill'   + (d.ability?(' · '+d.ability.toUpperCase()):''); break;
+        case 'sense':       meta = 'Sense'; break;
+        case 'charoption':  meta = 'Char option' + (d.optionType?' · '+d.optionType:''); break;
+      }
+      addRef(spec.cat, d, meta, {displayName: display, dedupeKey: dedupe});
+    });
+  });
 
   _5eData    = results;
   _5eLoaded  = true;
