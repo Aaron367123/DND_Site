@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SKT Campaign — Workspace</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a1a1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SKT DnD">
+<link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+<div class="app" id="app">
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <h1>⚔ SKT Campaign</h1>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" class="search-bar" id="search-input" placeholder="Search monsters, spells, items, conditions..." autocomplete="off">
+      <span class="search-kbd">/</span>
+      <div class="search-popup" id="search-popup">
+        <div class="search-tabs" id="search-tabs">
+          <button class="search-tab active" data-cat="all">All</button>
+          <button class="search-tab" data-cat="monster">Monsters</button>
+          <button class="search-tab" data-cat="spell">Spells</button>
+          <button class="search-tab" data-cat="item">Items</button>
+          <button class="search-tab" data-cat="condition">Conditions</button>
+          <button class="search-tab" data-cat="party">Party</button>
+        </div>
+        <div class="search-results" id="search-results"></div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="sync-indicator" id="sync-status"><span class="sync-dot"></span><span>Local</span></div>
+    <button class="btn small" id="settings-btn">⚙ Settings</button>
+  </div>
+
+  <!-- DOCK -->
+  <div class="panel-dock">
+    <button class="dock-btn" data-panel="combat" title="Combat Tracker">⚔</button>
+    <button class="dock-btn" data-panel="party"  title="Party Tracker">♥</button>
+    <button class="dock-btn" data-panel="shop"   title="Shop Generator">$</button>
+    <div class="dock-divider"></div>
+    <button class="dock-btn" data-panel="notes"      title="Session Notes">📝</button>
+    <button class="dock-btn" data-panel="battlemap"  title="Battle Map">🗺</button>
+    <button class="dock-btn" data-panel="npclib"     title="NPC Library">👤</button>
+    <button class="dock-btn" data-panel="npcgen"     title="NPC Generator">🎲</button>
+    <button class="dock-btn" data-panel="loot"       title="Loot Tracker">💰</button>
+    <button class="dock-btn" data-panel="encounter"  title="Encounter Builder">⚡</button>
+    <button class="dock-btn" data-panel="soundboard" title="Sound Board">🔊</button>
+    <div class="spacer"></div>
+    <button class="dock-btn" id="reset-layout-btn" title="Reset layout">↻</button>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div class="workspace" id="workspace"></div>
+</div>
+
+<!-- SETTINGS DRAWER -->
+<div class="drawer" id="settings-drawer">
+  <div class="drawer-head">
+    <h2>Settings</h2>
+    <button class="btn icon-btn" id="close-drawer">✕</button>
+  </div>
+  <div class="drawer-section">
+    <h3>Shop Generator</h3>
+    <div class="drawer-row">
+      <label>Currency symbol</label>
+      <input type="text" id="currency-symbol" value="gp" style="width:60px">
+    </div>
+    <div class="drawer-row">
+      <label>Price jitter</label>
+      <input type="range" id="price-jitter" min="0" max="50" value="20">
+      <span id="jitter-val" style="font-size:11px;width:30px;text-align:right">20%</span>
+    </div>
+    <div class="drawer-row">
+      <label>Rounding</label>
+      <div class="toggle-group" id="rounding-group">
+        <button class="active" data-val="none">None</button>
+        <button data-val="1">1</button>
+        <button data-val="5">5</button>
+        <button data-val="10">10</button>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-section">
+    <h3>Data</h3>
+    <button class="btn small" id="export-btn">Export JSON</button>
+    <button class="btn small" id="import-btn" style="margin-top:6px">Import JSON</button>
+    <input type="file" id="import-file" accept=".json" style="display:none">
+    <p class="drawer-note" style="margin-top:10px">Your data auto-saves to this browser. Use Export/Import to back up or move to another device.</p>
+  </div>
+  <div class="drawer-section">
+    <h3>Danger zone</h3>
+    <button class="btn small danger" id="reset-data-btn">Reset to defaults</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase (required for real-time sync; safe to remove if not using) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<!-- 1. Data (no deps) -->
+<script src="js/data.js"></script>
+<!-- 2. Pure utilities (no deps) -->
+<script src="js/utils.js"></script>
+<!-- 3. State (depends on DEFAULT_* from data.js) -->
+<script src="js/state.js"></script>
+<!-- 4. Window manager (depends on state) -->
+<script src="js/window-manager.js"></script>
+<!-- 5. Panels (each depends on window manager + state + utils) -->
+<script src="js/panels/combat.js"></script>
+<script src="js/panels/party.js"></script>
+<script src="js/panels/shop.js"></script>
+<script src="js/panels/notes.js"></script>
+<script src="js/panels/battlemap.js"></script>
+<script src="js/panels/npc-library.js"></script>
+<script src="js/panels/npc-generator.js"></script>
+<script src="js/panels/loot.js"></script>
+<script src="js/panels/encounter.js"></script>
+<script src="js/panels/soundboard.js"></script>
+<!-- 6. Features (depend on state + utils + panels) -->
+<script src="js/data-loader.js"></script>
+<script src="js/search.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/player-view.js"></script>
+<script src="js/realtime.js"></script>
+<!-- 7. Entry point (calls initPanels() + init()) -->
+<script src="js/app.js"></script>
+</body>
+</html>
