@@ -65,3 +65,47 @@ function showModal(title, fields, confirmLabel) {
     backdrop.addEventListener('mousedown', function(e) { if(e.target === backdrop) close(null); });
   });
 }
+
+// Lightweight context menu — shown at (x, y) with a list of {label, onClick, checked?} items.
+// Closes on item click, outside mousedown, Esc, or scroll. Auto-clamps to viewport.
+function showContextMenu(x, y, items) {
+  document.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
+
+  var menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  items.forEach(function(it) {
+    var btn = document.createElement('button');
+    btn.className = 'ctx-menu-item' + (it.checked ? ' checked' : '');
+    btn.textContent = (it.checked ? '✓ ' : '   ') + it.label;
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      close();
+      if (it.onClick) it.onClick();
+    });
+    menu.appendChild(btn);
+  });
+
+  document.body.appendChild(menu);
+  var r = menu.getBoundingClientRect();
+  var vw = window.innerWidth, vh = window.innerHeight;
+  menu.style.left = Math.max(2, Math.min(x, vw - r.width  - 4)) + 'px';
+  menu.style.top  = Math.max(2, Math.min(y, vh - r.height - 4)) + 'px';
+
+  function close() {
+    menu.remove();
+    document.removeEventListener('mousedown', onDown, true);
+    document.removeEventListener('keydown',   onKey,  true);
+    window.removeEventListener('scroll',      close,  true);
+    window.removeEventListener('resize',      close);
+  }
+  function onDown(e) { if (!menu.contains(e.target)) close(); }
+  function onKey(e)  { if (e.key === 'Escape') close(); }
+
+  // Defer listener install so the originating contextmenu event doesn't immediately close us.
+  setTimeout(function() {
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown',   onKey,  true);
+    window.addEventListener('scroll',      close,  true);
+    window.addEventListener('resize',      close);
+  }, 0);
+}

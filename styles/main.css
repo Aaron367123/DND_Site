@@ -371,6 +371,12 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .modal-actions{display:flex;gap:8px;justify-content:flex-end}
 .modal-actions .btn{padding:7px 20px;font-size:13px}
 
+/* CONTEXT MENU */
+.ctx-menu{position:fixed;z-index:600;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:5px;box-shadow:0 6px 18px rgba(0,0,0,.55);padding:4px 0;min-width:150px;max-height:70vh;overflow-y:auto;font-family:inherit}
+.ctx-menu-item{display:block;width:100%;padding:5px 12px;background:transparent;border:none;text-align:left;color:var(--text);font-size:12px;cursor:pointer;font-family:inherit;white-space:pre}
+.ctx-menu-item:hover{background:var(--panel-2);color:var(--accent)}
+.ctx-menu-item.checked{color:var(--accent)}
+
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);color:var(--text);padding:8px 16px;border-radius:4px;font-size:12px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-track{background:var(--bg)}

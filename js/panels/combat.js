@@ -37,7 +37,7 @@ registerPanel('combat',{
       const isPC=c.isPC;
       const bonus=c.initBonus||0;
       const bonusStr=bonus>0?'+'+bonus:bonus<0?String(bonus):'';
-      return'<div class="combatant '+(active?'active':'')+' '+(dead?'dead':'')+'">'
+      return'<div class="combatant '+(active?'active':'')+' '+(dead?'dead':'')+'" data-idx="'+i+'" title="Right-click to add a condition">'
         +'<div class="init-wrap" title="Edit initiative (double-click to reroll)">'
           +'<input class="init-input" type="number" value="'+c.initiative+'" data-ci="'+i+'" data-cf="initiative">'
           +(bonusStr?'<div class="init-bonus-tag">'+bonusStr+'</div>':'')
@@ -131,6 +131,22 @@ registerPanel('combat',{
           showToast((state.combatants[i]?.name||'')+(': rolled '+newInit));
         });
       }
+    });
+
+    // Right-click on a combatant row → conditions menu
+    b.querySelectorAll('.combatant:not(.party-row)').forEach(row=>{
+      row.addEventListener('contextmenu',e=>{
+        // Let the browser handle right-click on form inputs (so users can paste, etc.)
+        if(e.target.matches('input,textarea')) return;
+        e.preventDefault(); e.stopPropagation();
+        const i=+row.dataset.idx;
+        const c=state.combatants[i]; if(!c) return;
+        const have=new Set(c.conditions||[]);
+        const items=SEARCH_DATA
+          .filter(d=>d.cat==='condition')
+          .map(d=>({label:d.name, checked:have.has(d.name), onClick:()=>this._toggleCondAtIdx(i,d.name)}));
+        showContextMenu(e.clientX, e.clientY, items);
+      });
     });
 
     // Party section stat inputs
@@ -240,6 +256,16 @@ registerPanel('combat',{
   _removeCond(i,cond){
     state.combatants[i]={...state.combatants[i],conditions:(state.combatants[i].conditions||[]).filter(x=>x!==cond)};
     save();this._render();
+  },
+
+  _toggleCondAtIdx(i,cond){
+    const c=state.combatants[i]; if(!c) return;
+    const conds=c.conditions||[];
+    const has=conds.includes(cond);
+    const next=has?conds.filter(x=>x!==cond):[...conds,cond];
+    state.combatants[i]={...c,conditions:next};
+    save();this._render();
+    showToast(has?(cond+' removed from '+c.name):(cond+' → '+c.name));
   },
 
   applyCondition(cond){
