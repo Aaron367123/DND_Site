@@ -109,3 +109,94 @@ function showContextMenu(x, y, items) {
     window.addEventListener('resize',      close);
   }, 0);
 }
+
+// Transient draggable/resizable floating window. Not registered with the panel
+// system, so position is not persisted and it disappears on refresh.
+// opts: { title, icon, html, w, h, x, y }  → returns { el, body, close }
+function createFloatingWindow(opts) {
+  opts = opts || {};
+  var ws = document.getElementById('workspace');
+  var w = opts.w || 360, h = opts.h || 460;
+  // Cascade successive popouts a bit so they don't perfectly stack
+  createFloatingWindow._n = (createFloatingWindow._n || 0) + 1;
+  var off = (createFloatingWindow._n - 1) * 24;
+  var defaultX = Math.max(20, Math.round(window.innerWidth/2  - w/2)) + (off % 200);
+  var defaultY = Math.max(20, Math.round(window.innerHeight/2 - h/2)) + ((off/2) % 120);
+  var x = opts.x != null ? opts.x : defaultX;
+  var y = opts.y != null ? opts.y : defaultY;
+
+  zCounter++;
+  var el = document.createElement('div');
+  el.className = 'window focused';
+  el.dataset.ephemeral = '1';
+  Object.assign(el.style, {position:'absolute', left:x+'px', top:y+'px', width:w+'px', height:h+'px', zIndex:zCounter});
+  el.innerHTML =
+    '<div class="window-head">'
+      +'<div class="window-title">'
+        +'<span class="window-title-icon">'+(opts.icon||'◇')+'</span>'
+        +'<span>'+esc(opts.title||'')+'</span>'
+      +'</div>'
+      +'<div class="window-actions"><button class="btn" data-wact="close">✕</button></div>'
+    +'</div>'
+    +'<div class="window-body"></div>'
+    +'<div class="window-resize"></div>';
+
+  var body = el.querySelector('.window-body');
+  if (typeof opts.html === 'string') body.innerHTML = opts.html;
+
+  ws.appendChild(el);
+
+  // Bring to front on any mousedown inside the window
+  el.addEventListener('mousedown', function() {
+    zCounter++;
+    el.style.zIndex = zCounter;
+    document.querySelectorAll('.window').forEach(function(w){ w.classList.remove('focused'); });
+    el.classList.add('focused');
+  });
+
+  // Drag (header) — listeners are attached only during the drag and removed on mouseup
+  var head = el.querySelector('.window-head');
+  head.addEventListener('mousedown', function(e) {
+    if (e.target.closest('button')) return;
+    var ox = parseInt(el.style.left), oy = parseInt(el.style.top);
+    var sx = e.clientX, sy = e.clientY;
+    function move(ev) {
+      el.style.left = Math.max(0, ox + ev.clientX - sx) + 'px';
+      el.style.top  = Math.max(0, oy + ev.clientY - sy) + 'px';
+    }
+    function up() {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+    }
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    e.preventDefault();
+  });
+
+  // Resize (bottom-right corner)
+  var resizer = el.querySelector('.window-resize');
+  resizer.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    var ow = parseInt(el.style.width), oh = parseInt(el.style.height);
+    var sx = e.clientX, sy = e.clientY;
+    function move(ev) {
+      el.style.width  = Math.max(240, ow + ev.clientX - sx) + 'px';
+      el.style.height = Math.max(120, oh + ev.clientY - sy) + 'px';
+    }
+    function up() {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+    }
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    e.preventDefault();
+  });
+
+  function close() { el.remove(); }
+  el.querySelector('[data-wact="close"]').addEventListener('click', function(e) {
+    e.stopPropagation();
+    close();
+  });
+
+  return { el: el, body: body, close: close };
+}

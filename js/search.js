@@ -165,16 +165,13 @@ function renderSearchResults(){
   }));
 }
 
-function renderSearchDetail(){
-  const container=document.getElementById('search-results');
-  const d=state.searchState.detail;
-
+// Builds just the inner stat-block / description HTML for any search entry.
+// Reused by both the in-popup detail view and the popped-out floating window.
+function buildDetailBody(d) {
   const isMonster=d.cat==='monster', isSpell=d.cat==='spell', isItem=d.cat==='item', isCond=d.cat==='condition', isFeat=d.cat==='feat', isParty=d.cat==='party';
-
-  let bodyHtml = '';
   if (isParty) {
     const p=d.partyData;
-    bodyHtml='<div class="detail-stats">'
+    return '<div class="detail-stats">'
       +'<div class="stat-block"><div class="lab">HP</div><div class="val">'+p.hp+'/'+p.hpMax+'</div></div>'
       +'<div class="stat-block"><div class="lab">AC</div><div class="val">'+p.ac+'</div></div>'
       +'<div class="stat-block"><div class="lab">Init</div><div class="val">'+(p.init>=0?'+':'')+p.init+'</div></div>'
@@ -182,44 +179,99 @@ function renderSearchDetail(){
       +'<div class="detail-section"><strong>Speed.</strong> '+p.spd+' ft &nbsp;<strong>PP.</strong> '+p.pp+' &nbsp;<strong>GP.</strong> '+p.gp+'</div>'
       +(p.notes?'<div class="detail-section"><strong>Notes.</strong> '+esc(p.notes)+'</div>':'')
       +(p.inspiration?'<div class="detail-section" style="color:var(--warning)">★ Has inspiration</div>':'');
-  } else if (d._raw) {
-    if(isMonster)    bodyHtml = renderMonsterFull(d, d);
-    else if(isSpell) bodyHtml = renderSpellFull(d);
-    else if(isItem)  bodyHtml = renderItemFull(d);
-    else if(isCond)  bodyHtml = renderConditionFull(d);
-    else if(isFeat)  bodyHtml = renderFeatFull(d);
-  } else {
-    // Fallback for old SEARCH_DATA entries without _raw
-    if(isMonster){
-      bodyHtml+=`<div class="detail-stats"><div class="stat-block"><div class="lab">HP</div><div class="val">${d.hp||'?'}</div></div><div class="stat-block"><div class="lab">AC</div><div class="val">${d.ac||'?'}</div></div><div class="stat-block"><div class="lab">Speed</div><div class="val">${esc(d.speed||'—')}</div></div></div>`;
-      if(d.str){const ab=(l,s)=>`<div class="ability"><div class="ab-name">${l}</div><div class="ab-val">${s}</div><div class="ab-mod">${mod(s)>=0?'+':''}${mod(s)}</div></div>`;bodyHtml+=`<div class="ability-grid">${ab('STR',d.str)}${ab('DEX',d.dex)}${ab('CON',d.con)}${ab('INT',d.int)}${ab('WIS',d.wis)}${ab('CHA',d.cha)}</div>`;}
-    } else {
-      bodyHtml+=`<div class="detail-section">${esc(d.desc||d.cast||'')}</div>`;
-    }
   }
+  if (d._raw) {
+    if(isMonster) return renderMonsterFull(d, d);
+    if(isSpell)   return renderSpellFull(d);
+    if(isItem)    return renderItemFull(d);
+    if(isCond)    return renderConditionFull(d);
+    if(isFeat)    return renderFeatFull(d);
+  }
+  // Fallback for old SEARCH_DATA entries without _raw
+  if(isMonster){
+    let html=`<div class="detail-stats"><div class="stat-block"><div class="lab">HP</div><div class="val">${d.hp||'?'}</div></div><div class="stat-block"><div class="lab">AC</div><div class="val">${d.ac||'?'}</div></div><div class="stat-block"><div class="lab">Speed</div><div class="val">${esc(d.speed||'—')}</div></div></div>`;
+    if(d.str){const ab=(l,s)=>`<div class="ability"><div class="ab-name">${l}</div><div class="ab-val">${s}</div><div class="ab-mod">${mod(s)>=0?'+':''}${mod(s)}</div></div>`;html+=`<div class="ability-grid">${ab('STR',d.str)}${ab('DEX',d.dex)}${ab('CON',d.con)}${ab('INT',d.int)}${ab('WIS',d.wis)}${ab('CHA',d.cha)}</div>`;}
+    return html;
+  }
+  return `<div class="detail-section">${esc(d.desc||d.cast||'')}</div>`;
+}
 
-  let actionsHtml = '<div class="detail-actions">';
-  if(isMonster) actionsHtml+=`<button class="btn small primary" id="det-add-monster">+ Add to combat</button>`;
-  if(isCond)    actionsHtml+=`<button class="btn small primary" id="det-apply-cond">+ Apply to active combatant</button>`;
-  actionsHtml += '</div>';
-
+// Build the full detail card HTML (header + meta + image + body + action buttons).
+// idSuffix lets multiple instances coexist (search popup vs popped-out windows).
+function buildDetailCard(d, idSuffix) {
+  const isMonster=d.cat==='monster', isCond=d.cat==='condition', isParty=d.cat==='party';
   const srcBadge = d._source ? `<span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(d._source)}</span>` : '';
-
-  container.innerHTML=`<div class="search-detail">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <button class="detail-back" id="detail-back">← Back</button>
-      ${srcBadge}
-    </div>
+  let actionsHtml = '';
+  if (!isParty) {
+    actionsHtml = '<div class="detail-actions">';
+    if(isMonster) actionsHtml+=`<button class="btn small primary" id="det-add-monster${idSuffix}">+ Add to combat</button>`;
+    if(isCond)    actionsHtml+=`<button class="btn small primary" id="det-apply-cond${idSuffix}">+ Apply to active combatant</button>`;
+    actionsHtml += '</div>';
+  }
+  return `<div class="search-detail">
+    ${srcBadge?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${srcBadge}</div>`:''}
     <h4>${esc(d.name)}</h4>
     <div class="detail-meta">${esc(d.meta||'')}</div>
     ${isMonster?`<img class="detail-img" src="https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png" onerror="this.style.display='none'" alt="${esc(d.name)}">`:''}
-    <div id="detail-body">${bodyHtml}</div>
-    ${!isParty?actionsHtml:''}
+    <div>${buildDetailBody(d)}</div>
+    ${actionsHtml}
+  </div>`;
+}
+
+// Wire the action buttons inside a detail card. onAfterAction is called once
+// the action succeeds (closes the search popup, but leaves popouts open).
+function wireDetailActions(d, root, idSuffix, onAfterAction) {
+  root.querySelector('#det-add-monster'+idSuffix)?.addEventListener('click',()=>{
+    panelDefs.combat.addMonster(d);
+    onAfterAction?.();
+  });
+  root.querySelector('#det-apply-cond'+idSuffix)?.addEventListener('click',()=>{
+    if(panelDefs.combat.applyCondition(d.name)) onAfterAction?.();
+  });
+}
+
+const _detailIcon = {monster:'⚔', spell:'✦', item:'📿', condition:'⚡', feat:'⭐', party:'☻'};
+
+function popOutDetail(d) {
+  const win = createFloatingWindow({
+    title: d.name,
+    icon: _detailIcon[d.cat] || '◇',
+    w: 380, h: 500,
+  });
+  const suffix = '-pop-' + uid();
+  win.body.innerHTML = buildDetailCard(d, suffix);
+  win.body.style.padding = '12px';
+  win.body.style.overflowY = 'auto';
+  wireDetailActions(d, win.body, suffix, null /* keep popout open after action */);
+  closeSearch();
+}
+
+function renderSearchDetail(){
+  const container=document.getElementById('search-results');
+  const d=state.searchState.detail;
+  const suffix = '';
+
+  container.innerHTML=`<div class="search-detail">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">
+      <button class="detail-back" id="detail-back">← Back</button>
+      <button class="detail-back" id="detail-popout" title="Open in its own window">⧉ Pop out</button>
+    </div>
+    <h4>${esc(d.name)}</h4>
+    <div class="detail-meta">${esc(d.meta||'')}</div>
+    ${d._source?`<div style="margin:4px 0"><span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(d._source)}</span></div>`:''}
+    ${d.cat==='monster'?`<img class="detail-img" src="https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png" onerror="this.style.display='none'" alt="${esc(d.name)}">`:''}
+    <div id="detail-body">${buildDetailBody(d)}</div>
+    ${d.cat==='party' ? '' : (function(){
+      let h='<div class="detail-actions">';
+      if(d.cat==='monster')   h+=`<button class="btn small primary" id="det-add-monster${suffix}">+ Add to combat</button>`;
+      if(d.cat==='condition') h+=`<button class="btn small primary" id="det-apply-cond${suffix}">+ Apply to active combatant</button>`;
+      return h+'</div>';
+    })()}
   </div>`;
 
   document.getElementById('detail-back')?.addEventListener('click',()=>{state.searchState.detail=null;renderSearchResults();});
-  document.getElementById('det-add-monster')?.addEventListener('click',()=>{panelDefs.combat.addMonster(d);closeSearch();});
-  document.getElementById('det-apply-cond')?.addEventListener('click',()=>{if(panelDefs.combat.applyCondition(d.name))closeSearch();});
+  document.getElementById('detail-popout')?.addEventListener('click',()=>popOutDetail(d));
+  wireDetailActions(d, container, suffix, closeSearch);
 }
 
 function openSearch(){document.getElementById('search-popup').classList.add('open');state.searchState.detail=null;renderSearchTabs();renderSearchResults();}

@@ -45,7 +45,7 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .search-bar{width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:18px;font-size:12px}
 .search-bar:focus{outline:none;border-color:var(--accent)}
 .search-kbd{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:9px;color:var(--text-dim);background:var(--panel-3);padding:2px 5px;border-radius:3px;pointer-events:none;border:1px solid var(--border)}
-.search-popup{position:absolute;top:calc(100% + 6px);left:0;width:480px;max-height:460px;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden;display:none;z-index:50;flex-direction:column}
+.search-popup{position:absolute;top:calc(100% + 6px);left:0;width:480px;max-height:460px;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden;display:none;z-index:450;flex-direction:column}
 .search-popup.open{display:flex}
 .search-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel-2)}
 .search-tab{flex:1;padding:7px 8px;background:transparent;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
