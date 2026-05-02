@@ -9,13 +9,13 @@ const NPC_DEFAULT_GROUP = 'Unfiled';
 const NPC_ATTITUDES = ['Ally','Friendly','Neutral','Hostile','Imprisoned','Unknown'];
 
 const DEFAULT_NPCS_V2 = [
-  {id:'n1', name:'Skarn',   role:'Cook',         group:'Rhea',     attitude:'Ally',    hp:13, ac:3, init:6, tags:['Old'],            description:'Age 67\nHums funeral dirges when it rains.', notes:'', images:[]},
-  {id:'n2', name:'Xaerion', role:'Glacier',      group:'Rhea',     attitude:'Ally',    hp:42, ac:14,init:2, tags:['Frost'],          description:'', notes:'', images:[]},
-  {id:'n3', name:'Aravia',  role:'Stoneherd',    group:'Rhea',     attitude:'Ally',    hp:31, ac:13,init:1, tags:[],                 description:'', notes:'', images:[]},
-  {id:'n4', name:'Aerja',   role:'Tutor',        group:'Rhea',     attitude:'Friendly',hp:18, ac:11,init:0, tags:['Scholar'],        description:'', notes:'', images:[]},
-  {id:'n5', name:'Brakka',  role:'Watchman',     group:'Petra',    attitude:'Neutral', hp:24, ac:14,init:1, tags:[],                 description:'', notes:'', images:[]},
-  {id:'n6', name:'Dricen',  role:'Chancellor',   group:'Petra',    attitude:'Neutral', hp:22, ac:12,init:0, tags:['Politician'],     description:'', notes:'', images:[]},
-  {id:'n7', name:'Margrim', role:'Scribe',       group:'Flahgfall',attitude:'Friendly',hp:16, ac:11,init:0, tags:[],                 description:'', notes:'', images:[]},
+  {id:'n1', name:'Skarn',   role:'Cook',         group:'Rhea',     attitude:'Ally',    hp:13, ac:3, init:6, tags:['Old'],            description:'Age 67\nHums funeral dirges when it rains.', notes:''},
+  {id:'n2', name:'Xaerion', role:'Glacier',      group:'Rhea',     attitude:'Ally',    hp:42, ac:14,init:2, tags:['Frost'],          description:'', notes:''},
+  {id:'n3', name:'Aravia',  role:'Stoneherd',    group:'Rhea',     attitude:'Ally',    hp:31, ac:13,init:1, tags:[],                 description:'', notes:''},
+  {id:'n4', name:'Aerja',   role:'Tutor',        group:'Rhea',     attitude:'Friendly',hp:18, ac:11,init:0, tags:['Scholar'],        description:'', notes:''},
+  {id:'n5', name:'Brakka',  role:'Watchman',     group:'Petra',    attitude:'Neutral', hp:24, ac:14,init:1, tags:[],                 description:'', notes:''},
+  {id:'n6', name:'Dricen',  role:'Chancellor',   group:'Petra',    attitude:'Neutral', hp:22, ac:12,init:0, tags:['Politician'],     description:'', notes:''},
+  {id:'n7', name:'Margrim', role:'Scribe',       group:'Flahgfall',attitude:'Friendly',hp:16, ac:11,init:0, tags:[],                 description:'', notes:''},
 ];
 
 function _npcInitials(name) {
@@ -59,7 +59,7 @@ registerPanel('npclib', {
               attitude: n.attitude || 'Neutral',
               hp: n.hp||0, ac: n.ac||10, init: n.init||0,
               tags: n.tags||[], description: n.description||n.quirks||'',
-              notes: n.notes||'', images: [],
+              notes: n.notes||'',
             }));
           } else {
             this._npcs = JSON.parse(JSON.stringify(DEFAULT_NPCS_V2));
@@ -69,6 +69,11 @@ registerPanel('npclib', {
     }
     if (!this._collapsed) this._collapsed = {};
     if (!this._selectedId && this._npcs.length) this._selectedId = this._npcs[0].id;
+    // One-time cleanup: gallery feature was removed; drop the field so it
+    // stops round-tripping through Firebase on every save.
+    let cleaned = false;
+    this._npcs.forEach(n => { if (n.images){ delete n.images; cleaned = true; } });
+    if (cleaned) this._save();
     this._render();
   },
   unmount(){ this._body = null; },
@@ -80,7 +85,7 @@ registerPanel('npclib', {
   _newNpc(){
     const n = {
       id: uid(), name:'New NPC', role:'', group: NPC_DEFAULT_GROUP,
-      attitude:'Neutral', hp:10, ac:10, init:0, tags:[], description:'', notes:'', images:[],
+      attitude:'Neutral', hp:10, ac:10, init:0, tags:[], description:'', notes:'',
     };
     this._npcs.unshift(n);
     this._selectedId = n.id;
@@ -222,17 +227,6 @@ registerPanel('npclib', {
       </div>
       <div class="npclib-notes" contenteditable="true" data-field="notes" data-placeholder="Click here to start typing.">${n.notes||''}</div>
 
-      <div class="npclib-section-label" style="display:flex;align-items:center;justify-content:space-between">
-        <span>IMAGES</span>
-        <button class="btn icon-btn" data-act="add-image" title="Add image">+</button>
-      </div>
-      <div class="npclib-images">
-        ${(n.images||[]).map((img,ii) => `<div class="npclib-image-tile">
-          <img src="${esc(img)}" alt="">
-          <button class="image-rm" data-rmimg="${ii}" title="Remove">×</button>
-        </div>`).join('')}
-      </div>
-
       <div class="npclib-detail-actions">
         <button class="btn small primary" data-act="to-combat">+ Add to combat</button>
       </div>
@@ -361,28 +355,6 @@ registerPanel('npclib', {
       });
       inp.click();
     });
-
-    // Add image gallery item
-    b.querySelector('[data-act="add-image"]')?.addEventListener('click', () => {
-      const inp = document.createElement('input');
-      inp.type='file'; inp.accept='image/*';
-      inp.addEventListener('change', async ev => {
-        const f = ev.target.files[0]; if (!f) return;
-        try {
-          const dataUrl = await showCropModal(f, {size:256, shape:'square', title:'Crop gallery image'});
-          if (!dataUrl) return;
-          n.images = [...(n.images||[]), dataUrl];
-          this._save(); this._render();
-        } catch(err){ showToast('Upload failed: '+err.message); }
-      });
-      inp.click();
-    });
-    b.querySelectorAll('[data-rmimg]').forEach(btn => btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const ii = +btn.dataset.rmimg;
-      n.images = (n.images||[]).filter((_,i) => i !== ii);
-      this._save(); this._render();
-    }));
 
     // Delete NPC
     b.querySelector('[data-act="delete"]')?.addEventListener('click', () => {

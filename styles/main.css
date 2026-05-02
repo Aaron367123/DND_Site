@@ -464,12 +464,6 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .npclib-notes code{background:var(--panel-3);padding:1px 4px;border-radius:3px;font-family:'Cascadia Code',Consolas,monospace;font-size:11px}
 .npclib-notes ul{padding-left:20px;margin:6px 0}
 
-.npclib-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
-.npclib-image-tile{position:relative;aspect-ratio:1;background:var(--panel-3);border:1px solid var(--border);border-radius:5px;overflow:hidden}
-.npclib-image-tile img{width:100%;height:100%;object-fit:cover}
-.npclib-image-tile .image-rm{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.7);border:none;color:#fff;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s}
-.npclib-image-tile:hover .image-rm{opacity:1}
-
 .npclib-detail-actions{margin-top:14px;display:flex;gap:6px}
 /* BESTIARY */
 .bestiary-root{display:flex;flex-direction:column;height:100%;overflow:hidden}

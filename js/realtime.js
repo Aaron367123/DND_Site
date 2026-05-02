@@ -41,92 +41,110 @@ const SKT_SYNC_KEYS = [
 // Firebase keys cannot contain hyphens or dots — convert to underscores
 function _toFbKey(lsKey) { return lsKey.replace(/[-\.]/g, '_'); }
 
-let _remoteUpdate = false; // true while applying remote changes → prevents echo writes
-let _pushTimer    = null;  // debounce handle for outgoing writes
-let _fbDb         = null;  // Firebase database reference
+let _remoteUpdate = false;        // true while applying remote changes → prevents echo writes
+let _pushTimer    = null;         // debounce handle for outgoing writes
+let _fbDb         = null;         // Firebase database reference
+const _dirtyKeys  = new Set();    // sync keys that have changed since last flush
+
+// Which panels to refresh when a particular sync key changes. Avoids re-rendering
+// the whole world when a single subsystem updates.
+const _PANELS_FOR_KEY = {
+  'skt-workspace-v1': ['combat', 'party', 'shop'],     // panels that read from `state`
+  'skt-battlemap-v1': ['battlemap'],
+  'skt-enc-v1':       ['encounter'],
+  'skt-loot-v1':      ['loot'],
+  'skt-notes-v1':     ['notes'],
+  'skt-npcs-v2':      ['npclib'],
+  'skt-bestiary-v1':  ['bestiary'],
+};
 
 // ─── Intercept localStorage writes ────────────────────────────────────────────
-// Any panel that calls localStorage.setItem('skt-*', ...) will automatically
-// trigger a push to Firebase. No panel code needs to change.
+// Any panel that calls localStorage.setItem('skt-*', ...) marks that key dirty
+// and schedules a debounced push of only the dirty keys.
 function _patchLocalStorage() {
   const _orig = Storage.prototype.setItem;
   Storage.prototype.setItem = function(key, value) {
     _orig.call(this, key, value);
     if (!_remoteUpdate && SKT_SYNC_KEYS.includes(key) && _fbDb) {
+      _dirtyKeys.add(key);
       clearTimeout(_pushTimer);
-      _pushTimer = setTimeout(_pushToCloud, 300); // debounce: batch rapid saves
+      _pushTimer = setTimeout(_flushDirtyKeys, 300);
     }
   };
 }
 
-function _pushToCloud() {
-  if (!_fbDb) return;
-  const payload = {};
-  SKT_SYNC_KEYS.forEach(k => {
+// Push only the keys that changed, in a single multi-path update() so it's one
+// atomic round trip even when several keys went dirty during the debounce window.
+function _flushDirtyKeys() {
+  if (!_fbDb || _dirtyKeys.size === 0) return;
+  const updates = {};
+  _dirtyKeys.forEach(k => {
     const val = localStorage.getItem(k);
-    if (val != null) payload[_toFbKey(k)] = val;
+    updates['skt/' + _toFbKey(k)] = val != null ? val : null;
   });
-  _fbDb.ref('skt/data').set(payload).catch(() => {});
+  _dirtyKeys.clear();
+  _fbDb.ref().update(updates).catch(() => {});
 }
 
-// ─── Apply incoming remote changes ────────────────────────────────────────────
-function _applyRemoteData(data) {
-  let changed = false;
+// ─── Apply one incoming remote key ────────────────────────────────────────────
+// Called per-listener when a single sync key changes on the server. Only the
+// panels that depend on that key get refreshed.
+function _applyRemoteKey(key, fbVal) {
+  if (typeof fbVal !== 'string') return;
+  if (localStorage.getItem(key) === fbVal) return; // identical — skip work
 
   _remoteUpdate = true;
-  SKT_SYNC_KEYS.forEach(k => {
-    const fbVal = data[_toFbKey(k)];
-    if (fbVal != null && localStorage.getItem(k) !== fbVal) {
-      localStorage.setItem(k, fbVal); // won't echo back (remoteUpdate = true)
-      changed = true;
-    }
-  });
+  localStorage.setItem(key, fbVal);
   _remoteUpdate = false;
 
-  if (!changed) return;
+  // skt-workspace-v1 backs the global `state` object — re-read it.
+  if (key === 'skt-workspace-v1') load();
 
-  // Re-read main state object from the updated localStorage
-  load();
-
-  // Re-render every open panel whose data may have changed
-  _reloadPanels();
+  const panels = _PANELS_FOR_KEY[key] || [];
+  panels.forEach(id => _reloadPanel(id));
 }
 
-function _reloadPanels() {
-  // Panels that read directly from the global `state` object
-  ['combat', 'party', 'shop'].forEach(id => {
-    const def = panelDefs[id];
-    if (def && def._body) def._render?.();
-  });
-
-  // Panels that cache localStorage into their own property
-  _remountPanel('npclib',    () => { panelDefs.npclib._npcs    = null; });
-  _remountPanel('loot',      () => { panelDefs.loot._loot      = null; });
-  _remountPanel('notes',     () => { panelDefs.notes._data     = null; });
-  _remountPanel('bestiary',  () => { panelDefs.bestiary._data  = null; });
-  _remountPanel('encounter', () => { /* mount() always re-reads */ });
-
-  // Battle map: update internal data directly to avoid duplicate BroadcastChannel
-  const bm = panelDefs.battlemap;
-  if (bm && bm._body) {
-    try {
-      const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
-      bm._tokens   = d.tokens   || [];
-      bm._fog      = d.fog      ? new Set(d.fog) : null;
-      bm._bgColor  = d.bgColor  || bm._bgColor;
-      bm._cellSize = d.cellSize || bm._cellSize;
-      bm._cols     = d.cols     || bm._cols;
-      bm._rows     = d.rows     || bm._rows;
-      bm._render();
-    } catch(e) {}
-  }
-}
-
-function _remountPanel(id, resetFn) {
+// Per-panel reload. Panels that cache data into their own property need a
+// remount; panels that read straight from `state` just need a re-render.
+function _reloadPanel(id) {
   const def = panelDefs[id];
   if (!def || !def._body) return;
-  resetFn();
-  def.mount(def._body);
+
+  if (id === 'battlemap') {
+    // Update internal data directly so the BroadcastChannel doesn't fire
+    // a duplicate event into the player view.
+    try {
+      const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+      def._tokens     = d.tokens   || [];
+      def._fog        = d.fog      ? new Set(d.fog) : null;
+      def._bgColor    = d.bgColor  || def._bgColor;
+      def._cellSize   = d.cellSize || def._cellSize;
+      def._cols       = d.cols     || def._cols;
+      def._rows       = d.rows     || def._rows;
+      def._showGrid   = d.showGrid !== false;
+      def._bgMapPath  = d.bgMapPath || null;
+      def._render();
+      if (def._bgMapPath) def._loadBgFromPath?.(def._bgMapPath);
+    } catch(e) {}
+    return;
+  }
+
+  // Cached-into-property panels: clear the cache, re-mount.
+  const resets = {
+    npclib:    () => { def._npcs = null; },
+    loot:      () => { def._loot = null; },
+    notes:     () => { def._data = null; },
+    bestiary:  () => { def._data = null; },
+    encounter: () => { /* mount() always re-reads */ },
+  };
+  if (resets[id]) {
+    resets[id]();
+    def.mount(def._body);
+    return;
+  }
+
+  // Plain re-render (panels that read from global `state`).
+  def._render?.();
 }
 
 // ─── Sync indicator ───────────────────────────────────────────────────────────
@@ -173,26 +191,33 @@ function initRealtime() {
 
   _patchLocalStorage();
 
-  // Watch for changes from any connected client (including ourselves on first load)
-  _fbDb.ref('skt/data').on('value', snapshot => {
-    if (!snapshot.exists()) {
-      // Database empty — we're the first user; seed it with our local data
-      _pushToCloud();
-      return;
-    }
-    _applyRemoteData(snapshot.val());
-  }, err => {
-    console.error('[SKT] Firebase read error:', err);
-    _setSyncStatus('offline');
+  // One listener per sync key. A change to one subsystem only re-downloads
+  // that subsystem's blob — not the entire dataset. Massive bandwidth win
+  // during play, when most edits touch a single key (HP, token positions, etc).
+  SKT_SYNC_KEYS.forEach(k => {
+    const path = 'skt/' + _toFbKey(k);
+    _fbDb.ref(path).on('value', snap => {
+      if (!snap.exists()){
+        // No remote value yet for this key — seed it from local if we have one.
+        const local = localStorage.getItem(k);
+        if (local != null){
+          _dirtyKeys.add(k);
+          clearTimeout(_pushTimer);
+          _pushTimer = setTimeout(_flushDirtyKeys, 100);
+        }
+        return;
+      }
+      _applyRemoteKey(k, snap.val());
+    }, err => {
+      console.error('[SKT] Firebase read error for ' + k + ':', err);
+      _setSyncStatus('offline');
+    });
   });
 
-  // Track connection state for the status indicator
+  // Track connection state for the status indicator. Firebase queues writes
+  // automatically while offline and flushes them on reconnect — no manual
+  // re-push needed here.
   _fbDb.ref('.info/connected').on('value', snap => {
     _setSyncStatus(snap.val() ? 'live' : 'offline');
-    // On reconnect after being offline, push any local changes we accumulated
-    if (snap.val()) {
-      clearTimeout(_pushTimer);
-      _pushTimer = setTimeout(_pushToCloud, 500);
-    }
   });
 }
