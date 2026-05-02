@@ -45,10 +45,42 @@ registerPanel('encounter',{
     if(adjXP<partyThresh[3])return{label:'Hard',cls:'hard'};
     return{label:'Deadly',cls:'deadly'};
   },
+  // Pull monster pool: prefer the loaded 5etools bestiary, fall back to the
+  // built-in static list while data is still loading.
+  _searchPool(q){
+    if (typeof _5eLoaded !== 'undefined' && _5eLoaded && Array.isArray(_5eData)) {
+      const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+      return _5eData
+        .filter(d => d.cat==='monster')
+        .filter(d => tokens.every(t => (d.name+' '+(d.meta||'')).toLowerCase().includes(t)))
+        .slice(0, 30)
+        .map(d => ({ name:d.name, cr:d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d._raw?.dexterity||10, _img:d._img }));
+    }
+    return MONSTER_LIST.filter(m => m.name.toLowerCase().includes(q.toLowerCase())).slice(0, 12);
+  },
+  _renderSearchDropdown(){
+    const b=this._body; if(!b) return;
+    const drop = b.querySelector('#enc-search-results'); if(!drop) return;
+    const results = this._searchQ ? this._searchPool(this._searchQ) : [];
+    const open = this._searchOpen && results.length;
+    drop.classList.toggle('open', !!open);
+    drop.innerHTML = results.map(m =>
+      `<div class="enc-search-result" data-mname="${esc(m.name)}" data-mcr="${esc(String(m.cr))}" data-mhp="${m.hp}" data-mac="${m.ac}" data-mdex="${m.dex||10}">
+        <span>${esc(m.name)}</span><span class="enc-cr-badge">CR ${esc(String(m.cr))} · ${CR_XP[m.cr]||'?'} XP</span>
+      </div>`).join('');
+    drop.querySelectorAll('.enc-search-result').forEach(el => el.addEventListener('click', () => {
+      const name = el.dataset.mname, cr = el.dataset.mcr, hp = +el.dataset.mhp, ac = +el.dataset.mac, dex = +el.dataset.mdex;
+      const existing = this._monsters.find(m => m.name === name);
+      if (existing) existing.count = (existing.count||1) + 1;
+      else this._monsters.push({ name, cr, hp, ac, dex, count: 1 });
+      this._searchQ = ''; this._searchOpen = false; this._save();
+      this._render();
+    }));
+  },
+
   _render(){
     const b=this._body;if(!b)return;
     const xp=this._calcXP();const diff=this._difficulty(xp.adjusted);
-    const searchResults=this._searchQ?MONSTER_LIST.filter(m=>m.name.toLowerCase().includes(this._searchQ.toLowerCase())).slice(0,12):[];
     b.innerHTML=`<div class="enc-panel">
       <div class="enc-left">
         <div class="enc-section">
@@ -74,11 +106,7 @@ registerPanel('encounter',{
           <div class="enc-add-input">
             <input type="text" id="enc-search" placeholder="Search monster..." style="font-size:11px">
           </div>
-          <div class="enc-search-results ${this._searchOpen&&searchResults.length?'open':''}" id="enc-search-results">
-            ${searchResults.map(m=>`<div class="enc-search-result" data-mname="${esc(m.name)}" data-mcr="${esc(m.cr)}" data-mhp="${m.hp}" data-mac="${m.ac}">
-              <span>${esc(m.name)}</span><span class="enc-cr-badge">CR ${m.cr} · ${CR_XP[m.cr]||'?'} XP</span>
-            </div>`).join('')}
-          </div>
+          <div class="enc-search-results" id="enc-search-results"></div>
         </div>
       </div>
       <div class="enc-right">
@@ -105,22 +133,24 @@ registerPanel('encounter',{
     // Monster list
     b.querySelectorAll('[data-eact="del"]').forEach(btn=>btn.addEventListener('click',()=>{this._monsters.splice(+btn.dataset.ei,1);this._save();this._render();}));
     b.querySelectorAll('#enc-monster-list input[type="number"]').forEach(inp=>inp.addEventListener('change',e=>{this._monsters[+e.target.dataset.ei].count=parseInt(e.target.value)||1;this._save();this._render();}));
-    // Search
+    // Search — only update the dropdown on input/focus so the input keeps focus.
     const searchInp=b.querySelector('#enc-search');
     searchInp.value=this._searchQ;
-    searchInp.addEventListener('input',e=>{this._searchQ=e.target.value;this._searchOpen=true;this._render();});
-    searchInp.addEventListener('focus',()=>{this._searchOpen=true;this._render();});
-    b.querySelectorAll('.enc-search-result').forEach(el=>el.addEventListener('click',()=>{
-      const name=el.dataset.mname,cr=el.dataset.mcr,hp=+el.dataset.mhp,ac=+el.dataset.mac;
-      const existing=this._monsters.find(m=>m.name===name);
-      if(existing)existing.count=(existing.count||1)+1;
-      else this._monsters.push({name,cr,hp,ac,count:1});
-      this._searchQ='';this._searchOpen=false;this._save();this._render();
-    }));
+    searchInp.addEventListener('input',e=>{
+      this._searchQ=e.target.value;
+      this._searchOpen=true;
+      this._renderSearchDropdown();
+    });
+    searchInp.addEventListener('focus',()=>{
+      this._searchOpen=true;
+      this._renderSearchDropdown();
+    });
+    // Initial dropdown render (handles the case where _render was triggered with a query)
+    this._renderSearchDropdown();
     // Push to combat
     b.querySelector('#enc-push-combat').addEventListener('click',()=>{
       let pushed=0;
-      this._monsters.forEach(m=>{for(let i=0;i<(m.count||1);i++){panelDefs.combat.addMonster({name:m.name,hp:m.hp,hpMax:m.hp,ac:m.ac,dex:10});pushed++;}});
+      this._monsters.forEach(m=>{for(let i=0;i<(m.count||1);i++){panelDefs.combat.addMonster({name:m.name,hp:m.hp,hpMax:m.hp,ac:m.ac,dex:m.dex||10});pushed++;}});
       showToast(`${pushed} combatant(s) added`);
       if(!layout.combat?.open)openPanel('combat');
     });

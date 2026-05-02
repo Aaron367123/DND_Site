@@ -71,9 +71,14 @@ registerPanel('party',{
       +'</div>'
       // Resources
       +resHtml
-      // Inspiration
-      +'<div class="inspiration-row '+(c.inspiration?'has-inspiration':'')+'" data-act="insp" data-idx="'+i+'">'
-        +'<div class="inspiration-toggle"></div><span>Inspiration</span>'
+      // Inspiration row: Heroic (the original generic toggle) + Bardic
+      +'<div class="inspiration-pair">'
+        +'<div class="inspiration-row '+(c.inspiration?'has-inspiration':'')+'" data-act="insp" data-idx="'+i+'" title="Heroic Inspiration">'
+          +'<div class="inspiration-toggle"></div><span>Heroic</span>'
+        +'</div>'
+        +'<div class="inspiration-row '+(c.bardicInspiration?'has-inspiration bardic':'')+'" data-act="bardic-insp" data-idx="'+i+'" title="Bardic Inspiration">'
+          +'<div class="inspiration-toggle"></div><span>Bardic</span>'
+        +'</div>'
       +'</div>'
     +'</div>';
   },
@@ -120,6 +125,7 @@ registerPanel('party',{
           .then(r=>{if(r===null)return;state.party.splice(i,1);save();this._render();});
       }
       else if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
+      else if(act==='bardic-insp'){state.party[i]={...state.party[i],bardicInspiration:!state.party[i].bardicInspiration};save();this._render();}
       else if(act==='add'){
         state.party.push({id:uid(),name:'New Character',cls:'fighter',icon:'⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,gp:0,inspiration:false,resources:[]});
         save();this._render();
@@ -139,7 +145,8 @@ registerPanel('party',{
         inp.addEventListener('change',async ev=>{
           const f=ev.target.files[0]; if(!f) return;
           try {
-            const dataUrl = await fileToIconDataUrl(f, 96);
+            const dataUrl = await showCropModal(f, {size:96, shape:'circle', title:'Crop character icon'});
+            if (!dataUrl) return; // user cancelled
             state.party[i]={...state.party[i],icon:dataUrl};
             this._pickerOpen=null; save(); this._render();
             showToast('Icon uploaded');
@@ -165,7 +172,10 @@ registerPanel('party',{
         showModal('Add Resource',[
           {id:'name',label:'Name',type:'text',value:'',placeholder:'Spell Slots L1, Rage, Focus Points...'},
           {id:'max', label:'Max uses',type:'number',value:4,min:1,max:99},
-          {id:'type',label:'Type (pool/toggle)',type:'text',value:'pool',placeholder:'pool or toggle'},
+          {id:'type',label:'Type',type:'select',value:'pool',options:[
+            {value:'pool',  label:'Pool (multiple uses, click pips to spend)'},
+            {value:'toggle',label:'Toggle (single on/off)'},
+          ]},
         ],'Add').then(r=>{
           if(!r||!r.name)return;
           const res=[...(state.party[i].resources||[])];

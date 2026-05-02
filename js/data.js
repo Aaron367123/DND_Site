@@ -36,7 +36,7 @@ const DEFAULT_LAYOUT = {
   shop:       {x:354, y:412, w:720, h:400, open:false, minimized:false, z:3},
   notes:      {x:400, y:60,  w:560, h:520, open:false, minimized:false, z:4},
   battlemap:  {x:60,  y:60,  w:680, h:500, open:false, minimized:false, z:5},
-  npclib:     {x:100, y:80,  w:520, h:580, open:false, minimized:false, z:6},
+  npclib:     {x:100, y:80,  w:760, h:660, open:false, minimized:false, z:6},
   npcgen:     {x:160, y:100, w:480, h:540, open:false, minimized:false, z:7},
   loot:       {x:200, y:100, w:480, h:480, open:false, minimized:false, z:8},
   encounter:   {x:150, y:80,  w:700, h:520, open:false, minimized:false, z:8},
@@ -45,7 +45,7 @@ const DEFAULT_LAYOUT = {
   time:        {x:560, y:120, w:300, h:520, open:false, minimized:false, z:11},
 };
 
-const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true};
+const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,combatNameOptions:['spear','hands','rock','small']};
 
 const ITEM_CATALOG = {
   'Blacksmith/Armory':[

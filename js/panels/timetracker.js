@@ -9,6 +9,11 @@ const TIME_MONTHS = [
   'Hammer', 'Alturiak', 'Ches', 'Tarsakh', 'Mirtul', 'Kythorn',
   'Flamerule', 'Eleasis', 'Eleint', 'Marpenoth', 'Uktar', 'Frostwane',
 ];
+// Real-world month each Forgotten Realms month corresponds to.
+const TIME_MONTHS_REAL = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 const TIME_DAYS_PER_MONTH = 30;
 
 function _timeHydrate() {
@@ -98,6 +103,7 @@ registerPanel('time', {
     const b = this._body; if(!b) return;
     const t = this._data;
     const monthName = TIME_MONTHS[t.month] || 'Unknown';
+    const realMonth = TIME_MONTHS_REAL[t.month] || '';
     b.style.cssText = 'padding:14px;overflow-y:auto;height:100%;display:flex;flex-direction:column;align-items:center';
     const monthOpts = TIME_MONTHS.map((m,i) =>
       `<option value="${i}"${i===t.month?' selected':''}>${esc(m)}</option>`).join('');
@@ -106,7 +112,7 @@ registerPanel('time', {
         ${_timeRingSvg(t.hour)}
         <div class="time-center">
           <div class="time-hour" data-edit="hour" title="Click to edit">Hr ${t.hour}</div>
-          <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${t.day}</div>
+          <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${realMonth?`<span class="time-date-real">(${esc(realMonth)})</span> `:''}${t.day}</div>
           <div class="time-year" data-edit="year" title="Click to edit">${t.year||0} DR</div>
         </div>
       </div>

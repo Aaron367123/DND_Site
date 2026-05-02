@@ -1,83 +1,364 @@
 // ============================================================
 // NPC LIBRARY PANEL
 // ============================================================
-const DEFAULT_NPCS=[
-  {id:'n1',name:'King Hekaton',role:'Storm King · Maelstrom',hp:230,ac:16,cr:'CR 13',attitude:'Imprisoned',tags:['giant','plot'],notes:'Ruler of the storm giants. Imprisoned by his daughters.',quirks:'Regal, weary, desperate to reclaim the ordning.',secret:'His scepter was stolen — whoever holds it commands his loyalty.'},
-  {id:'n2',name:'Iymrith',role:'Ancient Blue Dragon · Antagonist',hp:481,ac:22,cr:'CR 22',attitude:'Hostile',tags:['dragon','bbeg'],notes:'Disguised as a storm giant elder. Orchestrated Hekaton\'s capture.',quirks:'Patient, manipulative, ancient cunning.',secret:'Has an alias as "the Doom of the Desert" among desert tribes.'},
-  {id:'n3',name:'Zephyros',role:'Cloud Giant Wizard',hp:200,ac:14,cr:'CR 9',attitude:'Friendly',tags:['giant','ally'],notes:'Eccentric cloud giant who offers the party a ride in his tower.',quirks:'Distracted, talks to invisible spirits, generous.',secret:'His divinations have been deliberately clouded by Iymrith.'},
+// Two-column layout: searchable group list on the left, full-detail
+// editor on the right with header, stats, tags, description, notes,
+// and image gallery.
+
+const NPC_DEFAULT_GROUP = 'Unfiled';
+const NPC_ATTITUDES = ['Ally','Friendly','Neutral','Hostile','Imprisoned','Unknown'];
+
+const DEFAULT_NPCS_V2 = [
+  {id:'n1', name:'Skarn',   role:'Cook',         group:'Rhea',     attitude:'Ally',    hp:13, ac:3, init:6, tags:['Old'],            description:'Age 67\nHums funeral dirges when it rains.', notes:'', images:[]},
+  {id:'n2', name:'Xaerion', role:'Glacier',      group:'Rhea',     attitude:'Ally',    hp:42, ac:14,init:2, tags:['Frost'],          description:'', notes:'', images:[]},
+  {id:'n3', name:'Aravia',  role:'Stoneherd',    group:'Rhea',     attitude:'Ally',    hp:31, ac:13,init:1, tags:[],                 description:'', notes:'', images:[]},
+  {id:'n4', name:'Aerja',   role:'Tutor',        group:'Rhea',     attitude:'Friendly',hp:18, ac:11,init:0, tags:['Scholar'],        description:'', notes:'', images:[]},
+  {id:'n5', name:'Brakka',  role:'Watchman',     group:'Petra',    attitude:'Neutral', hp:24, ac:14,init:1, tags:[],                 description:'', notes:'', images:[]},
+  {id:'n6', name:'Dricen',  role:'Chancellor',   group:'Petra',    attitude:'Neutral', hp:22, ac:12,init:0, tags:['Politician'],     description:'', notes:'', images:[]},
+  {id:'n7', name:'Margrim', role:'Scribe',       group:'Flahgfall',attitude:'Friendly',hp:16, ac:11,init:0, tags:[],                 description:'', notes:'', images:[]},
 ];
-registerPanel('npclib',{
-  title:'NPC Library',icon:'👤',
-  _npcs:null,_expanded:null,
+
+function _npcInitials(name) {
+  return (name||'?').split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
+}
+
+function _npcGroups(npcs) {
+  const groups = {};
+  npcs.forEach(n => {
+    const g = n.group || NPC_DEFAULT_GROUP;
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(n);
+  });
+  // Stable order: known groups first by insertion, Unfiled last
+  const order = [];
+  npcs.forEach(n => {
+    const g = n.group || NPC_DEFAULT_GROUP;
+    if (g !== NPC_DEFAULT_GROUP && !order.includes(g)) order.push(g);
+  });
+  if (groups[NPC_DEFAULT_GROUP]) order.push(NPC_DEFAULT_GROUP);
+  return order.map(name => ({ name, npcs: groups[name] }));
+}
+
+registerPanel('npclib', {
+  title:'NPC Library', icon:'👤',
+  _npcs:null, _selectedId:null, _searchQ:'', _collapsed:null,
+
   mount(body){
-    this._body=body;
-    if(!this._npcs){try{const r=localStorage.getItem('skt-npcs-v1');this._npcs=r?JSON.parse(r):JSON.parse(JSON.stringify(DEFAULT_NPCS));}catch(e){this._npcs=JSON.parse(JSON.stringify(DEFAULT_NPCS));}}
+    this._body = body;
+    if (!this._npcs) {
+      try {
+        const r = localStorage.getItem('skt-npcs-v2');
+        if (r) this._npcs = JSON.parse(r);
+        else {
+          // Migrate from v1 if present
+          const v1 = localStorage.getItem('skt-npcs-v1');
+          if (v1) {
+            this._npcs = JSON.parse(v1).map(n => ({
+              id: n.id||uid(), name: n.name||'New NPC', role: n.role||'',
+              group: n.group || NPC_DEFAULT_GROUP,
+              attitude: n.attitude || 'Neutral',
+              hp: n.hp||0, ac: n.ac||10, init: n.init||0,
+              tags: n.tags||[], description: n.description||n.quirks||'',
+              notes: n.notes||'', images: [],
+            }));
+          } else {
+            this._npcs = JSON.parse(JSON.stringify(DEFAULT_NPCS_V2));
+          }
+        }
+      } catch(e) { this._npcs = JSON.parse(JSON.stringify(DEFAULT_NPCS_V2)); }
+    }
+    if (!this._collapsed) this._collapsed = {};
+    if (!this._selectedId && this._npcs.length) this._selectedId = this._npcs[0].id;
     this._render();
   },
-  unmount(){this._body=null;},
-  _save(){try{localStorage.setItem('skt-npcs-v1',JSON.stringify(this._npcs));}catch(e){}},
-  _render(){
-    const b=this._body;if(!b)return;
-    b.innerHTML=`
-      <div style="display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border)">
-        <input type="text" id="npc-search" placeholder="Search NPCs..." style="font-size:11px">
-        <button class="btn small primary" id="npc-add">+ New NPC</button>
-      </div>
-      <div class="npc-list" id="npc-list">${this._renderList()}</div>`;
-    b.querySelector('#npc-add').addEventListener('click',()=>{
-      const n={id:uid(),name:'New NPC',role:'',hp:30,ac:12,cr:'CR 1',attitude:'Neutral',tags:[],notes:'',quirks:'',secret:''};
-      this._npcs.unshift(n);this._expanded=n.id;this._save();this._render();
-    });
-    b.querySelector('#npc-search').addEventListener('input',e=>{
-      const q=e.target.value.toLowerCase();
-      b.querySelectorAll('.npc-card').forEach(card=>{card.style.display=card.dataset.name.includes(q)?'':'none';});
-    });
-    b.querySelectorAll('.npc-card').forEach(card=>{
-      const id=card.dataset.id;
-      card.querySelector('.npc-header').addEventListener('click',()=>{this._expanded=this._expanded===id?null:id;this._render();});
-      if(this._expanded===id){
-        const n=this._npcs.find(x=>x.id===id);if(!n)return;
-        const wire=(sel,field,isNum)=>{const el=card.querySelector(sel);if(el)el.addEventListener('change',e=>{n[field]=isNum?(parseInt(e.target.value)||0):e.target.value;this._save();});};
-        wire('#npc-name-'+id,'name');wire('#npc-role-'+id,'role');wire('#npc-hp-'+id,'hp',true);wire('#npc-ac-'+id,'ac',true);wire('#npc-cr-'+id,'cr');wire('#npc-att-'+id,'attitude');wire('#npc-notes-'+id,'notes');wire('#npc-quirks-'+id,'quirks');wire('#npc-secret-'+id,'secret');
-        card.querySelector('#npc-tags-'+id)?.addEventListener('change',e=>{n.tags=e.target.value.split(',').map(t=>t.trim()).filter(Boolean);this._save();});
-        card.querySelector('#npc-del-'+id)?.addEventListener('click',()=>{showModal('Delete NPC?',[],`Delete ${n.name}`).then(r=>{if(!r)return;this._npcs=this._npcs.filter(x=>x.id!==id);this._expanded=null;this._save();this._render();});});
-        card.querySelector('#npc-to-combat-'+id)?.addEventListener('click',()=>{panelDefs.combat.addMonster({name:n.name,hp:n.hp,hpMax:n.hp,ac:n.ac,dex:10});showToast(`${n.name} added to combat`);});
-      }
-    });
+  unmount(){ this._body = null; },
+
+  _save(){ try { localStorage.setItem('skt-npcs-v2', JSON.stringify(this._npcs)); } catch(e){} },
+
+  _selected(){ return this._npcs.find(n => n.id === this._selectedId); },
+
+  _newNpc(){
+    const n = {
+      id: uid(), name:'New NPC', role:'', group: NPC_DEFAULT_GROUP,
+      attitude:'Neutral', hp:10, ac:10, init:0, tags:[], description:'', notes:'', images:[],
+    };
+    this._npcs.unshift(n);
+    this._selectedId = n.id;
+    this._save();
+    this._render();
   },
-  _renderList(){
-    return this._npcs.map(n=>{
-      const exp=this._expanded===n.id;
-      return`<div class="npc-card ${exp?'expanded':''}" data-id="${n.id}" data-name="${esc(n.name.toLowerCase())} ${esc((n.role||'').toLowerCase())}">
-        <div class="npc-header">
-          <div><div class="npc-name">${esc(n.name)}</div><div class="npc-role">${esc(n.role||'')}</div></div>
-          <div style="display:flex;gap:4px;align-items:center">
-            <span class="npc-tag">${esc(n.attitude||'')}</span>
-            <span class="npc-tag">${esc(n.cr||'')}</span>
-          </div>
+
+  _render(){
+    const b = this._body; if (!b) return;
+    const groups = _npcGroups(this._npcs);
+    const sel = this._selected();
+    const q = this._searchQ.toLowerCase();
+    b.innerHTML = `<div class="npclib-root">
+      <div class="npclib-left">
+        <div class="npclib-toolbar">
+          <input type="search" id="npclib-search" placeholder="🔎 Search NPCs..." value="${esc(this._searchQ)}">
+          <button class="icon-btn npclib-tool-btn" id="npclib-add" title="New NPC">+</button>
         </div>
-        <div class="npc-tags">${(n.tags||[]).map(t=>`<span class="npc-tag">${esc(t)}</span>`).join('')}</div>
-        ${exp?`<div class="npc-body">
-          <div class="npc-field"><label>Name</label><input type="text" id="npc-name-${n.id}" value="${esc(n.name)}" style="font-size:11px"></div>
-          <div class="npc-field"><label>Role / Description</label><input type="text" id="npc-role-${n.id}" value="${esc(n.role||'')}" style="font-size:11px"></div>
-          <div class="npc-stat-row">
-            <div class="npc-stat-mini"><div class="l">HP</div><input type="number" id="npc-hp-${n.id}" value="${n.hp}" style="width:100%;background:transparent;border:none;text-align:center;font-weight:600;font-size:13px"></div>
-            <div class="npc-stat-mini"><div class="l">AC</div><input type="number" id="npc-ac-${n.id}" value="${n.ac}" style="width:100%;background:transparent;border:none;text-align:center;font-weight:600;font-size:13px"></div>
-            <div class="npc-stat-mini"><div class="l">CR</div><input type="text" id="npc-cr-${n.id}" value="${esc(n.cr||'')}" style="width:100%;background:transparent;border:none;text-align:center;font-weight:600;font-size:12px"></div>
-          </div>
-          <div class="npc-field"><label>Attitude</label>
-            <select id="npc-att-${n.id}" style="font-size:11px"><option ${n.attitude==='Friendly'?'selected':''}>Friendly</option><option ${n.attitude==='Neutral'?'selected':''}>Neutral</option><option ${n.attitude==='Hostile'?'selected':''}>Hostile</option><option ${n.attitude==='Imprisoned'?'selected':''}>Imprisoned</option><option ${n.attitude==='Unknown'?'selected':''}>Unknown</option></select>
-          </div>
-          <div class="npc-field"><label>Tags (comma separated)</label><input type="text" id="npc-tags-${n.id}" value="${esc((n.tags||[]).join(', '))}" style="font-size:11px"></div>
-          <div class="npc-field"><label>Notes</label><textarea id="npc-notes-${n.id}" style="min-height:60px">${esc(n.notes||'')}</textarea></div>
-          <div class="npc-field"><label>Quirks / Personality</label><textarea id="npc-quirks-${n.id}" style="min-height:40px">${esc(n.quirks||'')}</textarea></div>
-          <div class="npc-field"><label>🔒 Secret (DM only)</label><textarea id="npc-secret-${n.id}" style="min-height:40px;border-color:rgba(212,165,116,.3)">${esc(n.secret||'')}</textarea></div>
-          <div style="display:flex;gap:6px;margin-top:6px">
-            <button class="btn small primary" id="npc-to-combat-${n.id}">+ Add to combat</button>
-            <button class="btn small danger" id="npc-del-${n.id}">Delete NPC</button>
-          </div>
-        </div>`:''}
-      </div>`;
-    }).join('');
+        <div class="npclib-groups" id="npclib-groups">
+          ${groups.map(g => this._renderGroup(g, q)).join('')}
+        </div>
+      </div>
+      <div class="npclib-right">
+        ${sel ? this._renderDetail(sel) : '<div class="empty-state" style="padding:30px">Select an NPC, or click + to add one.</div>'}
+      </div>
+    </div>`;
+    this._wire();
+  },
+
+  _renderGroup(g, q) {
+    const collapsed = this._collapsed[g.name] === true;
+    const filtered = g.npcs.filter(n =>
+      !q || (n.name+' '+(n.role||'')+' '+(n.tags||[]).join(' ')).toLowerCase().includes(q)
+    );
+    if (q && !filtered.length) return ''; // hide empty groups during search
+    return `<div class="npclib-group">
+      <div class="npclib-group-head" data-group="${esc(g.name)}">
+        <span class="caret">${collapsed?'▸':'▾'}</span>
+        <span class="group-name">${esc(g.name)}</span>
+        <span class="group-count">${filtered.length}</span>
+      </div>
+      ${collapsed ? '' : `<div class="npclib-group-body">${filtered.map(n => this._renderCard(n)).join('')}</div>`}
+    </div>`;
+  },
+
+  _renderCard(n){
+    const sel = n.id === this._selectedId;
+    return `<div class="npclib-card${sel?' selected':''}" data-id="${n.id}">
+      <div class="npclib-avatar">${n.avatar
+        ? `<img src="${esc(n.avatar)}" alt="" onerror="this.parentNode.textContent='${esc(_npcInitials(n.name))}'">`
+        : esc(_npcInitials(n.name))}</div>
+      <div class="npclib-card-meta">
+        <div class="npclib-card-name">${esc(n.name)}</div>
+        <div class="npclib-card-role">${esc(n.role||'')}</div>
+      </div>
+    </div>`;
+  },
+
+  _renderDetail(n){
+    const tags = (n.tags||[]).map(t => `<span class="npc-tag-chip" data-tag="${esc(t)}">${esc(t)} <button class="tag-rm" data-rmtag="${esc(t)}">×</button></span>`).join('');
+    return `<div class="npclib-detail">
+      <div class="npclib-detail-head">
+        <div class="npclib-detail-avatar" data-act="upload-avatar">${n.avatar
+          ? `<img src="${esc(n.avatar)}" alt="">`
+          : esc(_npcInitials(n.name))}</div>
+        <div class="npclib-detail-id">
+          <input class="npclib-name-input" type="text" value="${esc(n.name)}" data-field="name" placeholder="Name">
+          <input class="npclib-role-input" type="text" value="${esc(n.role||'')}" data-field="role" placeholder="Role / subtitle">
+        </div>
+        <div class="npclib-detail-badges">
+          <button class="npc-badge group-badge" data-act="edit-group" title="Change group">${esc((n.group||NPC_DEFAULT_GROUP).toUpperCase())}</button>
+          <button class="npc-badge attitude-badge attitude-${esc((n.attitude||'Neutral').toLowerCase())}" data-act="edit-attitude" title="Change attitude">${esc((n.attitude||'NEUTRAL').toUpperCase())}</button>
+          <button class="icon-btn" data-act="delete" title="Delete NPC">×</button>
+        </div>
+      </div>
+
+      <div class="npclib-stats">
+        <div class="npclib-stat"><div class="lab">♥</div><input type="number" value="${n.hp||0}" data-field="hp"></div>
+        <div class="npclib-stat"><div class="lab">⛨</div><input type="number" value="${n.ac||0}" data-field="ac"></div>
+        <div class="npclib-stat"><div class="lab">⚡</div><input type="number" value="${n.init||0}" data-field="init"></div>
+      </div>
+
+      <div class="npclib-section-label">TAGS</div>
+      <div class="npclib-tags">
+        ${tags}
+        <button class="npc-tag-chip new-tag" data-act="new-tag">+ New Tag</button>
+      </div>
+
+      <div class="npclib-section-label">DESCRIPTION</div>
+      <textarea class="npclib-desc" data-field="description" placeholder="Quick description...">${esc(n.description||'')}</textarea>
+
+      <div class="npclib-section-label">NOTES</div>
+      <div class="npclib-notes-toolbar">
+        <button data-fmt="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+        <button data-fmt="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+        <button data-fmt="strikeThrough" title="Strikethrough"><s>S</s></button>
+        <button data-fmt="quote" title="Quote">&ldquo;</button>
+        <button data-fmt="code" title="Inline code">&lt;/&gt;</button>
+        <button data-fmt="insertUnorderedList" title="Bullet list">• List</button>
+      </div>
+      <div class="npclib-notes" contenteditable="true" data-field="notes" data-placeholder="Click here to start typing.">${n.notes||''}</div>
+
+      <div class="npclib-section-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>IMAGES</span>
+        <button class="icon-btn" data-act="add-image" title="Add image">+</button>
+      </div>
+      <div class="npclib-images">
+        ${(n.images||[]).map((img,ii) => `<div class="npclib-image-tile">
+          <img src="${esc(img)}" alt="">
+          <button class="image-rm" data-rmimg="${ii}" title="Remove">×</button>
+        </div>`).join('')}
+      </div>
+
+      <div class="npclib-detail-actions">
+        <button class="btn small primary" data-act="to-combat">+ Add to combat</button>
+      </div>
+    </div>`;
+  },
+
+  _wire(){
+    const b = this._body; if (!b) return;
+
+    // Search
+    const search = b.querySelector('#npclib-search');
+    search.addEventListener('input', e => {
+      this._searchQ = e.target.value;
+      // Only re-render the groups column to keep search-input focus
+      const groupsHost = b.querySelector('#npclib-groups');
+      const groups = _npcGroups(this._npcs);
+      const q = this._searchQ.toLowerCase();
+      groupsHost.innerHTML = groups.map(g => this._renderGroup(g, q)).join('');
+      this._wireLeft();
+    });
+
+    // Add NPC
+    b.querySelector('#npclib-add').addEventListener('click', () => this._newNpc());
+
+    this._wireLeft();
+    this._wireRight();
+  },
+
+  _wireLeft(){
+    const b = this._body;
+    // Group collapse
+    b.querySelectorAll('.npclib-group-head').forEach(h => h.addEventListener('click', () => {
+      const g = h.dataset.group;
+      this._collapsed[g] = !this._collapsed[g];
+      this._render();
+    }));
+    // Card select
+    b.querySelectorAll('.npclib-card').forEach(c => c.addEventListener('click', () => {
+      this._selectedId = c.dataset.id;
+      this._render();
+    }));
+  },
+
+  _wireRight(){
+    const b = this._body;
+    const n = this._selected(); if (!n) return;
+
+    // Field bindings (text inputs, number inputs, textarea)
+    b.querySelectorAll('.npclib-detail [data-field]').forEach(el => {
+      el.addEventListener('change', e => {
+        const f = el.dataset.field;
+        let v = e.target.value;
+        if (f === 'hp' || f === 'ac' || f === 'init') v = parseInt(v) || 0;
+        n[f] = v;
+        this._save();
+        // Light-touch refresh of left column when name/role change so card updates
+        if (f === 'name' || f === 'role') this._render();
+      });
+    });
+
+    // contenteditable notes
+    const notesEl = b.querySelector('.npclib-notes');
+    if (notesEl) {
+      notesEl.addEventListener('input', () => { n.notes = notesEl.innerHTML; this._save(); });
+      notesEl.addEventListener('keydown', e => {
+        if ((e.ctrlKey||e.metaKey) && (e.key==='b'||e.key==='i')) {
+          e.preventDefault();
+          document.execCommand(e.key==='b'?'bold':'italic');
+          n.notes = notesEl.innerHTML; this._save();
+        }
+      });
+    }
+    b.querySelectorAll('.npclib-notes-toolbar button').forEach(btn => btn.addEventListener('click', e => {
+      e.preventDefault();
+      const cmd = btn.dataset.fmt;
+      notesEl.focus();
+      if (cmd === 'quote') { document.execCommand('formatBlock', false, 'blockquote'); }
+      else if (cmd === 'code') { document.execCommand('insertHTML', false, '<code>'+(window.getSelection().toString()||'code')+'</code>'); }
+      else { document.execCommand(cmd, false, null); }
+      n.notes = notesEl.innerHTML; this._save();
+    }));
+
+    // Tag add / remove
+    b.querySelectorAll('.tag-rm').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = btn.dataset.rmtag;
+      n.tags = (n.tags||[]).filter(x => x !== t);
+      this._save(); this._render();
+    }));
+    b.querySelector('[data-act="new-tag"]')?.addEventListener('click', () => {
+      showModal('Add Tag', [{id:'tag', label:'Tag', type:'text', value:'', placeholder:'e.g. Merchant'}], 'Add').then(r => {
+        if (!r || !r.tag) return;
+        n.tags = [...(n.tags||[]), r.tag.trim()];
+        this._save(); this._render();
+      });
+    });
+
+    // Group / Attitude editors
+    b.querySelector('[data-act="edit-group"]')?.addEventListener('click', () => {
+      const existing = [...new Set(this._npcs.map(x => x.group||NPC_DEFAULT_GROUP))];
+      showModal('Change Group', [{id:'group', label:'Group ('+existing.join(', ')+')', type:'text', value:n.group||NPC_DEFAULT_GROUP}], 'Save').then(r => {
+        if (!r) return;
+        n.group = (r.group||NPC_DEFAULT_GROUP).trim() || NPC_DEFAULT_GROUP;
+        this._save(); this._render();
+      });
+    });
+    b.querySelector('[data-act="edit-attitude"]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      const items = NPC_ATTITUDES.map(a => ({label:a, checked: n.attitude===a, onClick: () => {
+        n.attitude = a; this._save(); this._render();
+      }}));
+      showContextMenu(e.clientX, e.clientY, items);
+    });
+
+    // Avatar upload (click big avatar in header)
+    b.querySelector('[data-act="upload-avatar"]')?.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type='file'; inp.accept='image/*';
+      inp.addEventListener('change', async ev => {
+        const f = ev.target.files[0]; if (!f) return;
+        try {
+          const dataUrl = await showCropModal(f, {size:128, shape:'circle', title:'Crop NPC avatar'});
+          if (!dataUrl) return;
+          n.avatar = dataUrl; this._save(); this._render();
+        } catch(err){ showToast('Upload failed: '+err.message); }
+      });
+      inp.click();
+    });
+
+    // Add image gallery item
+    b.querySelector('[data-act="add-image"]')?.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type='file'; inp.accept='image/*';
+      inp.addEventListener('change', async ev => {
+        const f = ev.target.files[0]; if (!f) return;
+        try {
+          const dataUrl = await showCropModal(f, {size:256, shape:'square', title:'Crop gallery image'});
+          if (!dataUrl) return;
+          n.images = [...(n.images||[]), dataUrl];
+          this._save(); this._render();
+        } catch(err){ showToast('Upload failed: '+err.message); }
+      });
+      inp.click();
+    });
+    b.querySelectorAll('[data-rmimg]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const ii = +btn.dataset.rmimg;
+      n.images = (n.images||[]).filter((_,i) => i !== ii);
+      this._save(); this._render();
+    }));
+
+    // Delete NPC
+    b.querySelector('[data-act="delete"]')?.addEventListener('click', () => {
+      showModal('Delete '+n.name+'?', [], 'Delete').then(r => {
+        if (!r) return;
+        this._npcs = this._npcs.filter(x => x.id !== n.id);
+        this._selectedId = this._npcs[0]?.id || null;
+        this._save(); this._render();
+      });
+    });
+
+    // Push to combat
+    b.querySelector('[data-act="to-combat"]')?.addEventListener('click', () => {
+      panelDefs.combat.addMonster({ name:n.name, hp:n.hp||10, hpMax:n.hp||10, ac:n.ac||10, dex:10, _img: n.avatar });
+      showToast(n.name+' added to combat');
+    });
   },
 });

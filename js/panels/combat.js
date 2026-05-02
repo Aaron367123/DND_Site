@@ -49,7 +49,21 @@ registerPanel('combat',{
         +'</div>'
         +'<div class="portrait '+(isPC?'pc':'npc')+'" style="font-size:'+(isPC?'16':'')+'px" data-act="upload-portrait" data-idx="'+i+'" title="Click to upload custom portrait">'+renderIcon(portrait, c.name)+'</div>'
         +'<div class="info">'
-          +'<div class="name">'+esc(c.name)+(active?'<span class="turn-marker">◀</span>':'')+'</div>'
+          +(isPC
+            ? '<div class="name">'+esc(c.name)+(active?'<span class="turn-marker">◀</span>':'')+'</div>'
+            : '<div class="name-row">'
+                +'<input class="combatant-name-input" type="text" value="'+esc(c.name)+'" data-ci="'+i+'" data-cf="name" title="Edit name">'
+                +(()=>{
+                  const opts = (state.settings && state.settings.combatNameOptions) || ['spear','hands','rock','small'];
+                  return '<select class="combatant-name-quick" data-ci="'+i+'" title="Quick-pick name">'
+                    +'<option value="">⌄</option>'
+                    + opts.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('')
+                    +'<option disabled style="color:var(--text-dim)">─────</option>'
+                    +'<option value="__manage__">⚙ Manage options…</option>'
+                  +'</select>';
+                })()
+                +(active?'<span class="turn-marker">◀</span>':'')
+              +'</div>')
           +'<div class="stat-row">'
             +'<div class="stat-pill">♥ <input type="number" value="'+c.hp+'" data-ci="'+i+'" data-cf="hp"><span style="color:var(--text-dim)">/'+(c.hpMax||'?')+'</span></div>'
             +'<div class="stat-pill">⛨ <input type="number" value="'+c.ac+'" data-ci="'+i+'" data-cf="ac"></div>'
@@ -112,15 +126,15 @@ registerPanel('combat',{
       this._quickAdd(n,+h,+a,+im);
     }));
 
-    // Combatant stat inputs (hp, ac, initiative)
+    // Combatant stat inputs (hp, ac, initiative, name)
     b.querySelectorAll('input[data-cf]').forEach(inp=>{
       inp.addEventListener('change',e=>{
         const i=+e.target.dataset.ci, f=e.target.dataset.cf;
-        const val=parseInt(e.target.value)||0;
+        const isText = f === 'name';
+        const val = isText ? String(e.target.value).trim() : (parseInt(e.target.value)||0);
         state.combatants[i]={...state.combatants[i],[f]:val};
         if(f==='initiative') state.combatants.sort((a,b2)=>b2.initiative-a.initiative);
         save();
-        // Sync HP/AC back to party card if this is a PC
         if((f==='hp'||f==='ac')&&state.combatants[i]?.isPC) syncCombatToParty(state.combatants[i].id);
         this._render();
       });
@@ -137,6 +151,26 @@ registerPanel('combat',{
           showToast((state.combatants[i]?.name||'')+(': rolled '+newInit));
         });
       }
+    });
+
+    // Quick-pick name dropdown (NPC-only) — picking an option sets the name
+    // directly. Dropdown is stateless: it always resets to the placeholder ⌄.
+    b.querySelectorAll('select.combatant-name-quick').forEach(sel=>{
+      sel.addEventListener('change',e=>{
+        e.stopPropagation();
+        const v = e.target.value;
+        if (!v) return;
+        if (v === '__manage__') {
+          e.target.value = ''; // reset so it doesn't stay selected
+          this._manageQuickNames();
+          return;
+        }
+        const i = +e.target.dataset.ci;
+        state.combatants[i] = {...state.combatants[i], name: v};
+        save();
+        this._render();
+      });
+      sel.addEventListener('click',e=>e.stopPropagation());
     });
 
     // Right-click on a combatant row → conditions menu
@@ -282,6 +316,81 @@ registerPanel('combat',{
     showToast(`${cond} → ${state.combatants[i].name}`);return true;
   },
 
+  // Manage the quick-pick name list. Stored in state.settings.combatNameOptions
+  // so it syncs to the rest of the campaign via skt-workspace-v1.
+  _manageQuickNames(){
+    if (!state.settings.combatNameOptions) state.settings.combatNameOptions = ['spear','hands','rock','small'];
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const renderList = () => {
+      return state.settings.combatNameOptions.map((v,i) =>
+        `<div class="qn-row">
+          <input class="qn-input" data-i="${i}" value="${esc(v)}">
+          <button class="btn icon-btn danger" data-rm="${i}" title="Remove">×</button>
+        </div>`
+      ).join('') || '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No options yet — add one below.</div>';
+    };
+    const renderModal = () => {
+      backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="min-width:320px">
+        <h3>Quick-pick Name Options</h3>
+        <p style="color:var(--text-muted);font-size:11px;margin:0 0 10px">Used by the dropdown next to combatant names. Edit or remove existing options, or add new ones below.</p>
+        <div class="qn-list">${renderList()}</div>
+        <div class="qn-add-row">
+          <input class="qn-add-input" placeholder="New option (e.g. axe, bow, mage)" autocomplete="off">
+          <button class="btn primary" id="qn-add-btn">+ Add</button>
+        </div>
+        <div class="modal-actions" style="margin-top:14px">
+          <button class="btn" id="qn-reset">Reset to defaults</button>
+          <button class="btn primary" id="qn-done">Done</button>
+        </div>
+      </div>`;
+      wire();
+    };
+    const wire = () => {
+      backdrop.querySelectorAll('input.qn-input').forEach(inp => inp.addEventListener('change', e => {
+        const i = +e.target.dataset.i;
+        const v = String(e.target.value).trim();
+        if (!v) { state.settings.combatNameOptions.splice(i,1); }
+        else    { state.settings.combatNameOptions[i] = v; }
+        save();
+        renderModal();
+      }));
+      backdrop.querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        state.settings.combatNameOptions.splice(+btn.dataset.rm, 1);
+        save();
+        renderModal();
+      }));
+      const addInp = backdrop.querySelector('.qn-add-input');
+      const addBtn = backdrop.querySelector('#qn-add-btn');
+      const doAdd = () => {
+        const v = String(addInp.value).trim();
+        if (!v) return;
+        if (state.settings.combatNameOptions.includes(v)) { addInp.value=''; return; }
+        state.settings.combatNameOptions.push(v);
+        save();
+        renderModal();
+        // refocus the now-blank add input so the user can keep typing
+        backdrop.querySelector('.qn-add-input')?.focus();
+      };
+      addBtn.addEventListener('click', doAdd);
+      addInp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
+      backdrop.querySelector('#qn-reset').addEventListener('click', () => {
+        state.settings.combatNameOptions = ['spear','hands','rock','small'];
+        save();
+        renderModal();
+      });
+      backdrop.querySelector('#qn-done').addEventListener('click', () => {
+        backdrop.remove();
+        this._render();
+      });
+    };
+    document.body.appendChild(backdrop);
+    renderModal();
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) { backdrop.remove(); this._render(); }});
+    setTimeout(() => backdrop.querySelector('.qn-add-input')?.focus(), 30);
+  },
+
   // Click an NPC's portrait to upload a custom image for that combatant only.
   _uploadPortrait(i){
     const c = state.combatants[i]; if(!c) return;
@@ -290,7 +399,8 @@ registerPanel('combat',{
     inp.addEventListener('change', async ev => {
       const f = ev.target.files[0]; if(!f) return;
       try {
-        const dataUrl = await fileToIconDataUrl(f, 96);
+        const dataUrl = await showCropModal(f, {size:96, shape:'circle', title:'Crop combatant portrait'});
+        if (!dataUrl) return;
         state.combatants[i] = {...state.combatants[i], portrait: dataUrl};
         save(); this._render();
         showToast('Portrait uploaded');

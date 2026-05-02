@@ -51,7 +51,7 @@ function genNPC(overrides){
 
 registerPanel('npcgen',{
   title:'NPC Generator',icon:'🎲',
-  _npc:null, _filters:{race:'',gender:'',role:'',attitude:''},
+  _npc:null, _filters:{race:'',gender:'',role:'',attitude:''}, _secretRevealed:false,
   mount(body){this._body=body;if(!this._npc)this._npc=genNPC({});this._render();},
   unmount(){this._body=null;},
 
@@ -89,28 +89,50 @@ registerPanel('npcgen',{
     if(n){
       html+='<div style="flex:1;overflow-y:auto;padding:12px">';
 
-      // Name & identity
+      // Name & identity (editable)
       html+='<div style="margin-bottom:12px">'
-        +'<div style="font-size:18px;font-weight:700;color:var(--accent);margin-bottom:2px">'+esc(n.name)+'</div>'
-        +'<div style="font-size:12px;color:var(--text-muted)">'+esc(n.gender)+' '+esc(n.race)+', '+n.age+' years old · '+esc(n.role)+'</div>'
+        +'<input class="npcgen-name" data-nf="name" value="'+esc(n.name)+'" style="width:100%;font-size:18px;font-weight:700;color:var(--accent);background:transparent;border:1px solid transparent;padding:2px 4px;border-radius:3px;margin-bottom:2px">'
+        +'<div class="npcgen-identity" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">'
+          +'<input data-nf="gender" value="'+esc(n.gender)+'" class="npcgen-inline" placeholder="Gender">'
+          +'<input data-nf="race" value="'+esc(n.race)+'" class="npcgen-inline" placeholder="Race">'
+          +'<span>·</span>'
+          +'<input type="number" data-nf="age" value="'+n.age+'" class="npcgen-inline" style="width:46px" min="1" max="999" title="Age">'
+          +'<span>yrs</span>'
+          +'<span>·</span>'
+          +'<input data-nf="role" value="'+esc(n.role)+'" class="npcgen-inline" placeholder="Role">'
+        +'</div>'
       +'</div>';
 
-      // Stats
-      html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">'
-        +'<div style="background:var(--panel-2);padding:6px 8px;border-radius:4px;text-align:center"><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Attitude</div><div style="font-size:12px;font-weight:600">'+esc(n.attitude)+'</div></div>'
-        +'<div style="background:var(--panel-2);padding:6px 8px;border-radius:4px;text-align:center"><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">HP</div><div style="font-size:14px;font-weight:700">'+n.hp+'</div></div>'
-        +'<div style="background:var(--panel-2);padding:6px 8px;border-radius:4px;text-align:center"><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">AC</div><div style="font-size:14px;font-weight:700">'+n.ac+'</div></div>'
+      // Stats (editable)
+      const statBox=(lab,key,val,big)=>'<div class="npcgen-stat-box">'
+        +'<div class="npcgen-stat-lab">'+lab+'</div>'
+        +'<input data-nf="'+key+'" value="'+esc(val)+'" class="npcgen-stat-input"'+(big?' type="number"':'')+'>'
+      +'</div>';
+      html+='<div class="npcgen-stat-row">'
+        +statBox('Attitude','attitude',n.attitude,false)
+        +statBox('HP','hp',n.hp,true)
+        +statBox('AC','ac',n.ac,true)
       +'</div>';
 
-      const field=(label,val,col)=>'<div style="margin-bottom:8px">'
-        +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:'+(col||'var(--text-muted)')+';margin-bottom:3px">'+label+'</div>'
-        +'<div style="font-size:12px;line-height:1.5;color:var(--text);background:var(--panel-2);padding:6px 8px;border-radius:4px;border-left:2px solid '+(col||'var(--border)')+'">'+esc(val)+'</div>'
-      +'</div>';
+      const field=(label,key,val,col,isSecret)=>{
+        const hidden = isSecret && !this._secretRevealed;
+        const reveal = isSecret
+          ? '<button class="btn small npcgen-reveal" data-act="toggle-secret" style="margin-left:auto;font-size:10px">'
+              +(this._secretRevealed?'🙈 Hide':'👁 Reveal')
+            +'</button>'
+          : '';
+        return '<div class="npcgen-field" style="margin-bottom:8px">'
+          +'<div style="display:flex;align-items:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:'+(col||'var(--text-muted)')+';margin-bottom:3px">'
+            +'<span>'+label+'</span>'+reveal
+          +'</div>'
+          +'<textarea data-nf="'+key+'" rows="2" class="npcgen-field-input'+(hidden?' redacted':'')+'" style="border-left:2px solid '+(col||'var(--border)')+'">'+esc(val||'')+'</textarea>'
+        +'</div>';
+      };
 
-      html+=field('Quirk',n.quirk,'var(--info)');
-      html+=field('Also',n.quirk2,'var(--info)');
-      html+=field('Motivation',n.motivation,'var(--warning)');
-      html+=field('🔒 Secret',n.secret,'var(--danger)');
+      html+=field('Quirk','quirk',n.quirk,'var(--info)',false);
+      html+=field('Also','quirk2',n.quirk2,'var(--info)',false);
+      html+=field('Motivation','motivation',n.motivation,'var(--warning)',false);
+      html+=field('🔒 Secret','secret',n.secret,'var(--danger)',true);
 
       html+='</div>';
     }
@@ -122,8 +144,26 @@ registerPanel('npcgen',{
       this._filters[e.target.dataset.fkey]=e.target.value;
     }));
 
+    // Editable NPC field bindings — store back onto this._npc without re-rendering
+    // (re-render would lose focus / cursor position).
+    b.querySelectorAll('[data-nf]').forEach(el=>{
+      el.addEventListener('input',e=>{
+        const f=el.dataset.nf;
+        const v=el.value;
+        this._npc[f] = (f==='hp'||f==='ac'||f==='age') ? (parseInt(v)||0) : v;
+      });
+    });
+
+    // Secret reveal toggle
+    b.querySelector('[data-act="toggle-secret"]')?.addEventListener('click',()=>{
+      this._secretRevealed = !this._secretRevealed;
+      this._render();
+    });
+
     b.querySelector('#npcgen-roll').addEventListener('click',()=>{
-      this._npc=genNPC(this._filters);this._render();
+      this._npc=genNPC(this._filters);
+      this._secretRevealed=false;
+      this._render();
     });
 
     b.querySelector('#npcgen-save').addEventListener('click',()=>{

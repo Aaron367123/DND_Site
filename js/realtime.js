@@ -34,7 +34,7 @@ const SKT_SYNC_KEYS = [
   'skt-enc-v1',        // encounter builder
   'skt-loot-v1',       // loot tracker
   'skt-notes-v1',      // session notes
-  'skt-npcs-v1',       // NPC library
+  'skt-npcs-v2',       // NPC library
 ];
 
 // Firebase keys cannot contain hyphens or dots — convert to underscores

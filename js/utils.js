@@ -61,6 +61,147 @@ function fileToIconDataUrl(file, size) {
   });
 }
 
+// Interactive crop modal. Loads the file, lets the user pan + zoom inside a
+// square viewport, then exports a `size`-pixel JPEG of the visible area.
+// opts: { size: 96, shape: 'circle'|'square', title: '...' }
+// Resolves with the data URL on Save, or null on Cancel.
+function showCropModal(file, opts) {
+  opts = opts || {};
+  const size = opts.size || 96;
+  const shape = opts.shape || 'circle';
+  const title = opts.title || 'Crop image';
+  return new Promise((resolve) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) { resolve(null); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => _runCrop(img, size, shape, title, resolve);
+      img.onerror = () => resolve(null);
+      img.src = reader.result;
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
+function _runCrop(img, outSize, shape, title, resolve) {
+  // Viewport is a fixed on-screen square; the image is positioned inside via
+  // CSS transform. We track translate (tx, ty) in viewport pixels and a uniform
+  // scale (s) where s=1 means "cover-fit". The user can zoom up to 5×.
+  const VP = 320; // viewport size in screen pixels
+
+  // Cover-fit: scale the image so the smaller dimension fills the viewport
+  const coverScale = Math.max(VP / img.naturalWidth, VP / img.naturalHeight);
+
+  let s = 1;             // 1 = cover-fit, ranges [1, 5]
+  let tx = 0, ty = 0;    // translation, 0 = centered
+
+  const overlay = document.createElement('div');
+  overlay.className = 'crop-overlay';
+  overlay.innerHTML = `
+    <div class="crop-modal">
+      <div class="crop-title">${esc(title)}</div>
+      <div class="crop-viewport ${shape==='circle'?'shape-circle':'shape-square'}">
+        <img class="crop-img" alt="">
+        <div class="crop-mask"></div>
+      </div>
+      <div class="crop-zoom">
+        <span class="crop-z-icon">−</span>
+        <input type="range" class="crop-z-slider" min="1" max="5" step="0.01" value="1">
+        <span class="crop-z-icon">+</span>
+      </div>
+      <div class="crop-actions">
+        <button class="btn" data-act="cancel">Cancel</button>
+        <button class="btn primary" data-act="save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const imgEl = overlay.querySelector('.crop-img');
+  imgEl.src = img.src;
+  imgEl.style.width  = (img.naturalWidth  * coverScale) + 'px';
+  imgEl.style.height = (img.naturalHeight * coverScale) + 'px';
+
+  function applyTransform() {
+    imgEl.style.transform = `translate(-50%,-50%) translate(${tx}px,${ty}px) scale(${s})`;
+  }
+  applyTransform();
+
+  // Pan
+  let drag = null;
+  imgEl.addEventListener('mousedown', e => {
+    e.preventDefault();
+    drag = { sx: e.clientX, sy: e.clientY, ox: tx, oy: ty };
+  });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  function onMove(e) {
+    if (!drag) return;
+    tx = drag.ox + (e.clientX - drag.sx);
+    ty = drag.oy + (e.clientY - drag.sy);
+    applyTransform();
+  }
+  function onUp() { drag = null; }
+
+  // Zoom — wheel + slider
+  const slider = overlay.querySelector('.crop-z-slider');
+  function setZoom(newS, pivotClientX, pivotClientY) {
+    newS = Math.max(1, Math.min(5, newS));
+    if (Math.abs(newS - s) < 0.001) return;
+    // Keep the point under the pivot stationary while zooming
+    if (pivotClientX != null) {
+      const r = imgEl.parentElement.getBoundingClientRect();
+      const cx = pivotClientX - (r.left + r.width / 2);
+      const cy = pivotClientY - (r.top  + r.height / 2);
+      tx = cx - (cx - tx) * (newS / s);
+      ty = cy - (cy - ty) * (newS / s);
+    }
+    s = newS;
+    slider.value = String(s);
+    applyTransform();
+  }
+  slider.addEventListener('input', e => setZoom(parseFloat(e.target.value)));
+  overlay.querySelector('.crop-viewport').addEventListener('wheel', e => {
+    e.preventDefault();
+    setZoom(s + (e.deltaY < 0 ? 0.1 : -0.1), e.clientX, e.clientY);
+  }, { passive: false });
+
+  function cleanup() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    overlay.remove();
+  }
+
+  overlay.querySelector('[data-act="cancel"]').addEventListener('click', () => { cleanup(); resolve(null); });
+  overlay.addEventListener('click', e => { if (e.target === overlay) { cleanup(); resolve(null); } });
+  document.addEventListener('keydown', function escHandler(e) {
+    if (e.key === 'Escape') { document.removeEventListener('keydown', escHandler); cleanup(); resolve(null); }
+  });
+
+  overlay.querySelector('[data-act="save"]').addEventListener('click', () => {
+    // The viewport shows the rectangle of the displayed image around its center,
+    // shifted by (tx, ty) and scaled by s relative to the cover-fit baseline.
+    // Convert back to source-image pixel coordinates:
+    const totalScale = coverScale * s;          // src px → screen px
+    const halfVP = VP / 2;
+    // viewport center in source coords:
+    const cxSrc = (img.naturalWidth  / 2) - (tx / totalScale);
+    const cySrc = (img.naturalHeight / 2) - (ty / totalScale);
+    const srcW = VP / totalScale;
+    const srcH = VP / totalScale;
+    const srcX = cxSrc - srcW / 2;
+    const srcY = cySrc - srcH / 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = outSize;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outSize, outSize);
+    const url = canvas.toDataURL('image/jpeg', 0.85);
+    cleanup();
+    resolve(url);
+  });
+}
+
 function d20(){return Math.floor(Math.random()*20)+1}
 function mod(s){return Math.floor((s-10)/2)}
 function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),1800)}
@@ -76,14 +217,27 @@ function showModal(title, fields, confirmLabel) {
 
     var fieldHtml = '';
     fields.forEach(function(f) {
-      var minAttr = f.min !== undefined ? ' min="' + f.min + '"' : '';
-      var maxAttr = f.max !== undefined ? ' max="' + f.max + '"' : '';
+      var control;
+      if (f.type === 'select') {
+        // f.options can be ['pool','toggle'] or [{value:'pool',label:'Pool'}, ...]
+        var optsHtml = (f.options || []).map(function(o) {
+          var v = (typeof o === 'string') ? o : o.value;
+          var l = (typeof o === 'string') ? o : (o.label || o.value);
+          var sel = (f.value !== undefined && String(f.value) === String(v)) ? ' selected' : '';
+          return '<option value="' + esc(v) + '"' + sel + '>' + esc(l) + '</option>';
+        }).join('');
+        control = '<select id="mf-' + f.id + '">' + optsHtml + '</select>';
+      } else {
+        var minAttr = f.min !== undefined ? ' min="' + f.min + '"' : '';
+        var maxAttr = f.max !== undefined ? ' max="' + f.max + '"' : '';
+        control = '<input id="mf-' + f.id + '" type="' + (f.type||'text') + '"'
+          + ' value="' + (f.value !== undefined ? f.value : '') + '"'
+          + ' placeholder="' + (f.placeholder||'') + '"'
+          + minAttr + maxAttr + ' autocomplete="off">';
+      }
       fieldHtml += '<div class="modal-field">'
         + '<label>' + (f.label||'') + '</label>'
-        + '<input id="mf-' + f.id + '" type="' + (f.type||'text') + '"'
-        + ' value="' + (f.value !== undefined ? f.value : '') + '"'
-        + ' placeholder="' + (f.placeholder||'') + '"'
-        + minAttr + maxAttr + ' autocomplete="off">'
+        + control
         + '</div>';
     });
 
@@ -102,7 +256,7 @@ function showModal(title, fields, confirmLabel) {
       + '</div>';
 
     document.body.appendChild(backdrop);
-    setTimeout(function(){ var inp = backdrop.querySelector('input'); if(inp) inp.focus(); }, 30);
+    setTimeout(function(){ var inp = backdrop.querySelector('input,select'); if(inp) inp.focus(); }, 30);
 
     var close = function(result) { backdrop.remove(); resolve(result); };
 
@@ -197,7 +351,14 @@ function createFloatingWindow(opts) {
       +'<div class="window-actions"><button class="btn" data-wact="close">✕</button></div>'
     +'</div>'
     +'<div class="window-body"></div>'
-    +'<div class="window-resize"></div>';
+    +'<div class="rh rh-n"  data-rh="n"></div>'
+    +'<div class="rh rh-s"  data-rh="s"></div>'
+    +'<div class="rh rh-e"  data-rh="e"></div>'
+    +'<div class="rh rh-w"  data-rh="w"></div>'
+    +'<div class="rh rh-ne" data-rh="ne"></div>'
+    +'<div class="rh rh-nw" data-rh="nw"></div>'
+    +'<div class="rh rh-se" data-rh="se"></div>'
+    +'<div class="rh rh-sw" data-rh="sw"></div>';
 
   var body = el.querySelector('.window-body');
   if (typeof opts.html === 'string') body.innerHTML = opts.html;
@@ -230,23 +391,40 @@ function createFloatingWindow(opts) {
     e.preventDefault();
   });
 
-  // Resize (bottom-right corner)
-  var resizer = el.querySelector('.window-resize');
-  resizer.addEventListener('mousedown', function(e) {
-    e.stopPropagation();
-    var ow = parseInt(el.style.width), oh = parseInt(el.style.height);
-    var sx = e.clientX, sy = e.clientY;
-    function move(ev) {
-      el.style.width  = Math.max(240, ow + ev.clientX - sx) + 'px';
-      el.style.height = Math.max(120, oh + ev.clientY - sy) + 'px';
-    }
-    function up() {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-    }
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
-    e.preventDefault();
+  // Resize from any edge or corner
+  el.querySelectorAll('.rh').forEach(function(handle) {
+    handle.addEventListener('mousedown', function(e) {
+      e.stopPropagation();
+      var dir = handle.dataset.rh;
+      var ox = parseInt(el.style.left), oy = parseInt(el.style.top);
+      var ow = parseInt(el.style.width), oh = parseInt(el.style.height);
+      var sx = e.clientX, sy = e.clientY;
+      function move(ev) {
+        var dx = ev.clientX - sx, dy = ev.clientY - sy;
+        var nx = ox, ny = oy, nw = ow, nh = oh;
+        if (dir.indexOf('e') >= 0) nw = Math.max(240, ow + dx);
+        if (dir.indexOf('s') >= 0) nh = Math.max(120, oh + dy);
+        if (dir.indexOf('w') >= 0) {
+          var w2 = Math.max(240, ow - dx);
+          nx = ox + (ow - w2);
+          nw = w2;
+        }
+        if (dir.indexOf('n') >= 0) {
+          var h2 = Math.max(120, oh - dy);
+          ny = oy + (oh - h2);
+          nh = h2;
+        }
+        el.style.left = nx + 'px'; el.style.top = ny + 'px';
+        el.style.width = nw + 'px'; el.style.height = nh + 'px';
+      }
+      function up() {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+      e.preventDefault();
+    });
   });
 
   function close() { el.remove(); }
