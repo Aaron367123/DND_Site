@@ -264,6 +264,8 @@ function _resolveCopy(monster, byKey, depth) {
 function _convertMonster(d) {
   return {
     name: d.name, index: _toIndex(d.name), _source: d.source,
+    reprintedAs: d.reprintedAs,
+    page: d.page,
     size:  _SIZE[d.size?.[0]] || d.size?.[0] || 'Medium',
     type:  _parseType(d.type),
     armor_class: _parseAC(d.ac),
@@ -337,6 +339,8 @@ function _convertSpell(d) {
   const castTime = t.number ? `${t.number} ${t.unit}${(t.condition?`, ${_stripTags(t.condition)}`:'')}` : '—';
   return {
     name: d.name, index: _toIndex(d.name), _source: d.source,
+    reprintedAs: d.reprintedAs,
+    page: d.page,
     level: d.level||0,
     school: {name: _SCHOOL[d.school]||d.school||''},
     casting_time: castTime,
@@ -360,7 +364,7 @@ function _convertCondition(d) {
     else if (e.type==='list') (e.items||[]).forEach(i=>descs.push('• '+_parseEntries([i])));
     else descs.push(_parseEntries([e]));
   });
-  return {name:d.name, index:_toIndex(d.name), _source:d.source, desc:descs};
+  return {name:d.name, index:_toIndex(d.name), _source:d.source, reprintedAs:d.reprintedAs, page:d.page, desc:descs};
 }
 
 // ─── Item converter ─────────────────────────────────────────────────────────────
@@ -372,6 +376,8 @@ function _convertItem(d) {
     : null;
   return {
     name: d.name, index: _toIndex(d.name), _source: d.source,
+    reprintedAs: d.reprintedAs,
+    page: d.page,
     rarity,
     requires_attunement: attune,
     desc: desc ? [desc] : [],
@@ -391,6 +397,8 @@ function _convertFeat(d) {
   const desc = _parseEntries(d.entries || []);
   return {
     name: d.name, index: _toIndex(d.name), _source: d.source,
+    reprintedAs: d.reprintedAs,
+    page: d.page,
     prerequisite: prereq,
     desc: desc ? [desc] : [],
   };

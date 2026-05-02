@@ -41,6 +41,8 @@ const DEFAULT_LAYOUT = {
   loot:       {x:200, y:100, w:480, h:480, open:false, minimized:false, z:8},
   encounter:   {x:150, y:80,  w:700, h:520, open:false, minimized:false, z:8},
   soundboard:  {x:200, y:100, w:580, h:500, open:false, minimized:false, z:9},
+  weather:     {x:240, y:120, w:300, h:520, open:false, minimized:false, z:10},
+  time:        {x:560, y:120, w:300, h:520, open:false, minimized:false, z:11},
 };
 
 const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all'};

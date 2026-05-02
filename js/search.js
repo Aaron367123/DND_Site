@@ -105,21 +105,193 @@ function renderPsionicFull(d) {
   return html;
 }
 
-// Vehicle: creature capacity, travel pace, then weapons block.
+// Deity: most entries (347/563) have NO body — they rely entirely on
+// alignment/category/domains/pantheon/symbol/province structured fields.
+const _ALIGN = {L:'Lawful',N:'Neutral',C:'Chaotic',G:'Good',E:'Evil',U:'Unaligned',A:'Any'};
+function renderDeityFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  if (r.title) html += `<div class="detail-statrow" style="font-style:italic;color:var(--text-muted);margin-bottom:6px">${esc(r.title)}</div>`;
+  if (r.alignment) {
+    const a = Array.isArray(r.alignment) ? r.alignment.map(x => _ALIGN[x]||x).join(' ') : r.alignment;
+    html += _statRow('Alignment', esc(a));
+  }
+  if (r.category) html += _statRow('Category', esc(r.category));
+  if (Array.isArray(r.domains) && r.domains.length) html += _statRow('Domains', esc(r.domains.join(', ')));
+  if (r.pantheon)    html += _statRow('Pantheon', esc(r.pantheon));
+  if (r.province)    html += _statRow('Province', esc(r.province));
+  if (r.symbol)      html += _statRow('Symbol', esc(r.symbol));
+  if (Array.isArray(r.altNames) && r.altNames.length) html += _statRow('Alternate Names', esc(r.altNames.join(', ')));
+  html += '</div>';
+  if (d.desc) html += renderEntriesText(d.desc);
+  return html;
+}
+
+// Race: ability/size/speed/languages even when entries are missing.
+function _abilityScoresStr(abilArr) {
+  if (!Array.isArray(abilArr) || !abilArr.length) return '';
+  return abilArr.map(a => {
+    if (a.choose) return `Choose ${a.choose.amount||1} from ${(a.choose.from||[]).map(s=>s.toUpperCase()).join('/')}+${a.choose.count||1}`;
+    return Object.entries(a).filter(([k])=>!['choose'].includes(k)).map(([k,v])=>`${k.toUpperCase()} ${v>=0?'+':''}${v}`).join(', ');
+  }).join('; ');
+}
+function renderRaceFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  const abil = _abilityScoresStr(r.ability);
+  if (abil) html += _statRow('Ability Scores', esc(abil));
+  if (r.size) html += _statRow('Size', esc((Array.isArray(r.size)?r.size:[r.size]).map(s=>({T:'Tiny',S:'Small',M:'Medium',L:'Large'}[s]||s)).join(' or ')));
+  if (Array.isArray(r.speed)) html += _statRow('Speed', esc(r.speed.join(', ')));
+  else if (typeof r.speed==='number') html += _statRow('Speed', r.speed+' ft.');
+  else if (r.speed && typeof r.speed==='object') {
+    const parts = Object.entries(r.speed).filter(([,v])=>v).map(([k,v])=>k+' '+(v===true?'30':v)+' ft.');
+    if (parts.length) html += _statRow('Speed', esc(parts.join(', ')));
+  }
+  if (Array.isArray(r.languageProficiencies) && r.languageProficiencies.length) {
+    const lang = r.languageProficiencies.map(lp => {
+      if (lp.anyStandard) return `Choose ${lp.anyStandard} standard language(s)`;
+      return Object.keys(lp).filter(k=>lp[k]).map(k=>k.charAt(0).toUpperCase()+k.slice(1)).join(', ');
+    }).filter(Boolean).join('; ');
+    if (lang) html += _statRow('Languages', esc(lang));
+  }
+  html += '</div>';
+  if (d.desc) html += renderEntriesText(d.desc);
+  return html;
+}
+
+// Background: ability, skill/tool/language proficiencies, equipment, feats.
+function renderBackgroundFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  if (Array.isArray(r.skillProficiencies) && r.skillProficiencies.length) {
+    const sp = r.skillProficiencies[0];
+    const skills = Object.keys(sp).filter(k => sp[k]===true).map(k => k.charAt(0).toUpperCase()+k.slice(1));
+    if (sp.choose) skills.push(`choose ${sp.choose.count||1} from ${(sp.choose.from||[]).map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(', ')}`);
+    if (skills.length) html += _statRow('Skill Proficiencies', esc(skills.join(', ')));
+  }
+  if (Array.isArray(r.toolProficiencies) && r.toolProficiencies.length) {
+    const tp = r.toolProficiencies[0];
+    const tools = Object.keys(tp).filter(k => tp[k]===true).map(k => k.charAt(0).toUpperCase()+k.slice(1));
+    if (tools.length) html += _statRow('Tool Proficiencies', esc(tools.join(', ')));
+  }
+  if (Array.isArray(r.languageProficiencies) && r.languageProficiencies.length) {
+    const lp = r.languageProficiencies[0];
+    const n = lp.anyStandard || lp.any;
+    if (n) html += _statRow('Languages', `Any ${n}`);
+  }
+  if (Array.isArray(r.feats) && r.feats.length) {
+    const fs = r.feats.map(f => Object.keys(f).map(k=>k.split('|')[0]).join(', ')).join('; ');
+    if (fs) html += _statRow('Feats', esc(fs));
+  }
+  if (r.ability) {
+    const abil = _abilityScoresStr(r.ability);
+    if (abil) html += _statRow('Ability Scores', esc(abil));
+  }
+  html += '</div>';
+  if (d.desc) html += renderEntriesText(d.desc);
+  return html;
+}
+
+// Object: stat-block-like rendering for Large/Huge objects with HP, AC, etc.
+function renderObjectFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  const sz = (Array.isArray(r.size)?r.size[0]:r.size);
+  const sizeName = {T:'Tiny',S:'Small',M:'Medium',L:'Large',H:'Huge',G:'Gargantuan'}[sz]||sz;
+  if (sizeName||r.objectType) html += `<div class="detail-statrow" style="font-style:italic;color:var(--text-muted);margin-bottom:6px">${esc([sizeName,r.objectType||'object'].filter(Boolean).join(' '))}</div>`;
+  if (r.ac) html += _statRow('Armor Class', esc(typeof r.ac==='object'?(r.ac[0]?.ac||r.ac):String(r.ac)));
+  if (r.hp) html += _statRow('Hit Points', esc(typeof r.hp==='object'?(r.hp.average||r.hp.formula||''):String(r.hp)));
+  if (r.speed != null) {
+    const sp = typeof r.speed==='number' ? r.speed+' ft.' : (typeof r.speed==='object'?Object.entries(r.speed).map(([k,v])=>(k==='walk'?'':k+' ')+(typeof v==='number'?v:v.number||0)+' ft.').join(', '):String(r.speed));
+    html += _statRow('Speed', esc(sp));
+  }
+  if (r.str||r.dex||r.con||r.int||r.wis||r.cha) {
+    const ab = ['str','dex','con','int','wis','cha'].filter(k=>r[k]!=null).map(k=>{
+      const v=r[k]; const m=Math.floor((v-10)/2);
+      return `${k.toUpperCase()} ${v} (${m>=0?'+':''}${m})`;
+    }).join(', ');
+    html += _statRow('Ability Scores', esc(ab));
+  }
+  if (Array.isArray(r.immune) && r.immune.length) html += _statRow('Damage Immunities', esc(r.immune.map(i=>typeof i==='string'?i:i.immune?.join('/')||'').filter(Boolean).join(', ')));
+  if (r.senses) html += _statRow('Senses', esc(Array.isArray(r.senses)?r.senses.join(', '):String(r.senses)));
+  html += '</div>';
+  if (d.desc) html += renderEntriesText(d.desc);
+  // Action entries (e.g. "Claw" attacks)
+  if (Array.isArray(r.actionEntries) && r.actionEntries.length) {
+    html += '<h3 class="detail-header">Actions</h3>';
+    r.actionEntries.forEach(a => {
+      html += `<div class="detail-section"><strong class="detail-label">${esc(a.name||'')}.</strong> ${_renderInline(esc(_parseEntries_local(a.entries||[])))}</div>`;
+    });
+  }
+  return html;
+}
+// Light-weight in-renderer parser (when data-loader isn't accessible from here).
+function _parseEntries_local(arr) {
+  if (!Array.isArray(arr)) return '';
+  return arr.map(e => typeof e === 'string' ? e.replace(/\{@\w+\s+([^|}]+)[^}]*\}/g,'$1').replace(/\{@[^}]*\}/g,'') : '').join('\n\n');
+}
+
+// Bastion facility: prerequisite, space, hirelings, order.
+function renderFacilityFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  if (r.level||r.facilityType) html += `<div class="detail-statrow" style="font-style:italic;color:var(--text-muted);margin-bottom:6px">${esc([r.level?'Level '+r.level:'',r.facilityType?r.facilityType+' Bastion Facility':''].filter(Boolean).join(' '))}</div>`;
+  if (r.prerequisite) html += _statRow('Prerequisite', esc(typeof r.prerequisite==='string'?r.prerequisite:JSON.stringify(r.prerequisite)));
+  if (r.space) html += _statRow('Space', esc(Array.isArray(r.space)?r.space.join(', '):r.space));
+  if (r.hirelings != null) html += _statRow('Hirelings', esc(typeof r.hirelings==='object'?(r.hirelings[0]?.exact||r.hirelings[0]?.min+'-'+r.hirelings[0]?.max||''):String(r.hirelings)));
+  if (Array.isArray(r.orders) && r.orders.length) html += _statRow('Order', esc(r.orders.join(', ')));
+  html += '</div>';
+  if (d.desc) html += renderEntriesText(d.desc);
+  return html;
+}
+
+// Language: most languages have no entries — show typicalSpeakers/script.
+function renderLanguageFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  if (r.type) html += _statRow('Type', esc(r.type.charAt(0).toUpperCase()+r.type.slice(1)));
+  if (r.script) html += _statRow('Script', esc(r.script));
+  if (Array.isArray(r.typicalSpeakers) && r.typicalSpeakers.length) html += _statRow('Typical Speakers', esc(r.typicalSpeakers.join(', ')));
+  if (Array.isArray(r.dialects) && r.dialects.length) html += _statRow('Dialects', esc(r.dialects.join(', ')));
+  html += '</div>';
+  if (d.desc) html += renderEntriesText(d.desc);
+  return html;
+}
+
+// Skill: ability score association.
+function renderSkillFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  if (r.ability) html += _statRow('Ability', esc(r.ability.toUpperCase()));
+  html += '</div>';
+  if (d.desc) html += renderEntriesText(d.desc);
+  return html;
+}
+
+// Vehicle: 36/39 vehicles have NO entries — they're stat-block-only.
 function renderVehicleFull(d) {
   const r = d._raw || {};
   let html = '<div class="detail-statblock">';
-  if (r.capCreature || r.capPassenger) {
+  const sz = (Array.isArray(r.size)?r.size[0]:r.size);
+  const sizeName = {T:'Tiny',S:'Small',M:'Medium',L:'Large',H:'Huge',G:'Gargantuan'}[sz]||sz;
+  const subtitle = [sizeName, r.vehicleType||'vehicle', r.dimensions?`(${r.dimensions.join(' by ')})`:''].filter(Boolean).join(' ');
+  if (subtitle) html += `<div class="detail-statrow" style="font-style:italic;color:var(--text-muted);margin-bottom:6px">${esc(subtitle)}</div>`;
+  if (r.capCrew || r.capPassenger) {
     const parts = [];
     if (r.capCrew) parts.push(r.capCrew + ' crew');
     if (r.capPassenger) parts.push(r.capPassenger + ' passengers');
     if (parts.length) html += _statRow('Creature Capacity', esc(parts.join(', ')));
   }
-  if (r.capCargo) html += _statRow('Cargo Capacity', esc(String(r.capCargo) + ' tons'));
+  if (r.capCargo != null) html += _statRow('Cargo Capacity', esc(String(r.capCargo) + (typeof r.capCargo==='number'?' tons':'')));
   if (r.pace) html += _statRow('Travel Pace', esc(String(r.pace) + ' miles per hour'));
-  if (r.speed) html += _statRow('Speed', esc(String(r.speed) + ' ft.'));
-  if (r.ac) html += _statRow('Armor Class', esc(String(r.ac)));
-  if (r.hp) html += _statRow('Hit Points', esc(typeof r.hp==='object'?(r.hp.hp||''):String(r.hp)));
+  if (r.speed != null) {
+    const sp = typeof r.speed==='number' ? r.speed+' ft.' : (typeof r.speed==='object'?Object.entries(r.speed).map(([k,v])=>(k==='walk'?'':k+' ')+(typeof v==='number'?v:v.number||0)+' ft.').join(', '):String(r.speed));
+    html += _statRow('Speed', esc(sp));
+  }
+  if (r.ac != null) html += _statRow('Armor Class', esc(typeof r.ac==='object'?(r.ac[0]?.ac||r.ac):String(r.ac)));
+  if (r.hp != null) html += _statRow('Hit Points', esc(typeof r.hp==='object'?(r.hp.hp||r.hp.average||r.hp.formula||''):String(r.hp)));
+  if (Array.isArray(r.terrain) && r.terrain.length) html += _statRow('Terrain', esc(r.terrain.join(', ')));
+  if (Array.isArray(r.immune) && r.immune.length) html += _statRow('Damage Immunities', esc(r.immune.map(i=>typeof i==='string'?i:i.immune?.join('/')||'').filter(Boolean).join(', ')));
   html += '</div>';
   html += renderEntriesText(d.desc || '');
   return html;
@@ -314,14 +486,33 @@ function _catMatches(cat, sel) {
   return cat === sel;
 }
 
+// Normalize a string for fuzzy matching: lowercase, collapse all non-alphanumeric
+// runs (spaces, hyphens, apostrophes, slashes, punctuation) to a single space.
+// So "All-Purpose Tool", "all purpose tool", and "all  purpose  tool" all match.
+function _normSearch(s) {
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
+
 function doSearch(){
-  const q=(state.searchState.query||'').trim().toLowerCase();
+  const qRaw=(state.searchState.query||'').trim().toLowerCase();
+  const q=_normSearch(qRaw);
   let pool=getSearchPool();
   const sel=state.searchState.category;
   if(sel!=='all')pool=pool.filter(r=>_catMatches(r.cat, sel));
   if(q){
-    pool=pool.filter(r=>r.name.toLowerCase().includes(q)||(r.meta||'').toLowerCase().includes(q));
-    pool.sort((a,b)=>(a.name.toLowerCase().startsWith(q)?0:1)-(b.name.toLowerCase().startsWith(q)?0:1)||a.name.localeCompare(b.name));
+    // Multi-token: every whitespace-separated token must appear somewhere in
+    // the normalized name or meta. So "frost gnt" still finds "Frost Giant".
+    const tokens = q.split(' ').filter(Boolean);
+    pool = pool.filter(r => {
+      const hay = _normSearch(r.name) + ' ' + _normSearch(r.meta||'');
+      return tokens.every(t => hay.includes(t));
+    });
+    pool.sort((a,b) => {
+      const an = _normSearch(a.name), bn = _normSearch(b.name);
+      const aStarts = an.startsWith(q) ? 0 : 1;
+      const bStarts = bn.startsWith(q) ? 0 : 1;
+      return aStarts - bStarts || a.name.localeCompare(b.name);
+    });
   }else pool.sort((a,b)=>a.name.localeCompare(b.name));
   return pool.slice(0,80);
 }
@@ -427,6 +618,13 @@ function buildDetailBody(d) {
     if(d.cat==='table')     return renderTableFull(d);
     if(d.cat==='psionic')   return renderPsionicFull(d);
     if(d.cat==='vehicle')   return renderVehicleFull(d);
+    if(d.cat==='deity')     return renderDeityFull(d);
+    if(d.cat==='race')      return renderRaceFull(d);
+    if(d.cat==='background')return renderBackgroundFull(d);
+    if(d.cat==='object')    return renderObjectFull(d);
+    if(d.cat==='facility')  return renderFacilityFull(d);
+    if(d.cat==='language')  return renderLanguageFull(d);
+    if(d.cat==='skill')     return renderSkillFull(d);
     // All the long-tail reference categories (background, race, class, deity,
     // object, vehicle, action, skill, chapter, etc.) share a generic
     // entries→paragraphs render.
