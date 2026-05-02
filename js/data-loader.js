@@ -404,7 +404,10 @@ async function load5eData() {
   const results = [];
 
   function addMonster(d) {
-    const key = 'monster:'+d.name.toLowerCase();
+    // Dedup by name|source (not name alone) so 2014 and 2024 versions of the
+    // same creature both make it into the search pool. The reprintPolicy filter
+    // in search.js handles which set the user actually sees.
+    const key = 'monster:'+d.name.toLowerCase()+'|'+(d.source||'').toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertMonster(d);
@@ -423,7 +426,7 @@ async function load5eData() {
   }
 
   function addSpell(d) {
-    const key = 'spell:'+d.name.toLowerCase();
+    const key = 'spell:'+d.name.toLowerCase()+'|'+(d.source||'').toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertSpell(d);
@@ -454,7 +457,7 @@ async function load5eData() {
   }
 
   function addCondition(d) {
-    const key = 'condition:'+d.name.toLowerCase();
+    const key = 'condition:'+d.name.toLowerCase()+'|'+(d.source||'').toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertCondition(d);
@@ -468,7 +471,7 @@ async function load5eData() {
 
   function addItem(d) {
     if (!d.rarity || d.rarity === 'none') return; // skip mundane items
-    const key = 'item:'+d.name.toLowerCase();
+    const key = 'item:'+d.name.toLowerCase()+'|'+(d.source||'').toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertItem(d);
@@ -483,7 +486,7 @@ async function load5eData() {
   }
 
   function addFeat(d) {
-    const key = 'feat:'+d.name.toLowerCase();
+    const key = 'feat:'+d.name.toLowerCase()+'|'+(d.source||'').toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertFeat(d);
@@ -504,7 +507,10 @@ async function load5eData() {
     if (!d || !d.name) return;
     opts = opts || {};
     const dedupeName = opts.dedupeKey || d.name;
-    const key = cat + ':' + dedupeName.toLowerCase();
+    // Same dedup-by-source rule as addMonster/addSpell so reprints coexist.
+    // Callers that synthesize a dedupeKey to disambiguate (e.g. subclasses)
+    // already include enough uniqueness, so adding source is harmless there.
+    const key = cat + ':' + dedupeName.toLowerCase() + '|' + ((d.source||'').toLowerCase());
     if (seen.has(key)) return;
     seen.add(key);
     const row = {
@@ -574,8 +580,6 @@ async function load5eData() {
     {path:'data/trapshazards.json',        arr:'hazard',       cat:'hazard'},
     {path:'data/variantrules.json',        arr:'variantrule',  cat:'variantrule'},
     {path:'data/tables.json',              arr:'table',        cat:'table'},
-    {path:'data/recipes.json',             arr:'recipe',       cat:'recipe'},
-    {path:'data/decks.json',               arr:'deck',         cat:'deck'},
     {path:'data/bastions.json',            arr:'facility',     cat:'facility'},
     {path:'data/languages.json',           arr:'language',     cat:'language'},
     {path:'data/cultsboons.json',          arr:'cult',         cat:'cult'},
@@ -605,7 +609,6 @@ async function load5eData() {
     {path:'data/fluff-rewards.json',            arr:'rewardFluff',           cat:'reward'},
     {path:'data/fluff-conditionsdiseases.json', arr:'conditionFluff',        cat:'condition'},
     {path:'data/fluff-languages.json',          arr:'languageFluff',         cat:'language'},
-    {path:'data/fluff-recipes.json',            arr:'recipeFluff',           cat:'recipe'},
     {path:'data/fluff-charcreationoptions.json',arr:'charoptionFluff',       cat:'charoption'},
   ];
   const _fluffUniquePaths = [...new Set(_FLUFF_SPECS.map(s => s.path))];
@@ -782,7 +785,7 @@ async function load5eData() {
         : '';
       const meta = ['Adventure', lvl, adv.storyline, adv.published].filter(Boolean).join(' · ');
 
-      const advKey = 'adventure:' + adv.name.toLowerCase();
+      const advKey = 'adventure:' + adv.name.toLowerCase() + '|' + (adv.source||'').toLowerCase();
       if (!seen.has(advKey)) {
         seen.add(advKey);
         results.push({

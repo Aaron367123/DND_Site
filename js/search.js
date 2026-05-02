@@ -121,7 +121,7 @@ function renderAdventureFull(d) {
   return html;
 }
 
-// Fallback renderer for any reference entry (background, race, deity, table, etc.)
+// Fallback renderer for any reference entry (background, race, deity, etc.)
 // that just has parsed `desc` text — splits into paragraphs, preserves line breaks.
 function renderRefFull(d) {
   const text = d.desc || '';
@@ -130,6 +130,46 @@ function renderRefFull(d) {
   return paragraphs.map(p =>
     `<div class="detail-section" style="line-height:1.7;white-space:pre-wrap">${esc(p)}</div>`
   ).join('');
+}
+
+// Tables ship with caption + colLabels + rows[], not free-text entries, so the
+// generic renderRefFull would always say "No description available." This
+// renderer pulls those fields and emits a real <table>. Cell strings can carry
+// 5etools inline tags ({@item ...}, {@damage ...}) — strip them via esc()
+// after running them through _strip if available; the loader's _stripTags is
+// not in scope here, so we do a light regex inline.
+function _stripCell(s) {
+  if (typeof s !== 'string') {
+    if (s && typeof s === 'object' && s.roll && s.roll.exact != null) return String(s.roll.exact);
+    if (s && typeof s === 'object' && s.roll && s.roll.min != null) return s.roll.min + '–' + s.roll.max;
+    return '';
+  }
+  return s
+    .replace(/\{@(?:b|bold|i|italic|s|strike|u|sup|sub|kbd|code)\s+([^}]+)\}/g, '$1')
+    .replace(/\{@(?:damage|dice|scaledice|scaledamage|chance|hit|dc)\s+([^|}]+)[^}]*\}/g, '$1')
+    .replace(/\{@\w+\s+([^|}]+)[^}]*\}/g, '$1')
+    .replace(/\{@[^}]*\}/g, '');
+}
+function renderTableFull(d) {
+  const r = d._raw || {};
+  const caption = r.caption || '';
+  const cols = Array.isArray(r.colLabels) ? r.colLabels : [];
+  const rows = Array.isArray(r.rows) ? r.rows : [];
+  if (!cols.length && !rows.length) {
+    // Some tables are just a wrapper around `entries[]` text — fall back to ref.
+    return renderRefFull(d);
+  }
+  let html = '';
+  if (caption) html += `<div class="detail-section" style="font-style:italic;color:var(--text-muted)">${esc(caption)}</div>`;
+  html += '<div class="detail-section" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
+  if (cols.length) {
+    html += '<thead><tr>' + cols.map(c => `<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);color:var(--text-muted);font-weight:500">${esc(_stripCell(c))}</th>`).join('') + '</tr></thead>';
+  }
+  html += '<tbody>' + rows.map(row => {
+    const cells = Array.isArray(row) ? row : [row];
+    return '<tr>' + cells.map(c => `<td style="padding:4px 6px;border-bottom:1px solid var(--panel-3);vertical-align:top">${esc(_stripCell(c))}</td>`).join('') + '</tr>';
+  }).join('') + '</tbody></table></div>';
+  return html;
 }
 
 // Spell link click from monster detail — find in local data
@@ -177,12 +217,24 @@ function renderSearchTabs(){
     action:'Actions',facility:'Bastions',deity:'Deities',language:'Languages',
     reward:'Gifts & Rewards',psionic:'Psionics',vehicle:'Vehicles',adventure:'Adventures',
     'cult,boon':'Cults & Boons',object:'Objects','trap,hazard':'Traps & Hazards'};
+  const sel=state.searchState.category;
+  let activeIsSecondary=false;
   document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>{
+    if(tab.classList.contains('more-toggle'))return; // handled separately below
     const cat=tab.dataset.cats||tab.dataset.cat;
     const count=cat==='all'?pool.length:pool.filter(r=>_catMatches(r.cat, cat)).length;
     tab.innerHTML=`${labels[cat]||cat} <span class="count">${count}</span>`;
-    tab.classList.toggle('active',state.searchState.category===cat);
+    const isActive=sel===cat;
+    tab.classList.toggle('active',isActive);
+    if(isActive && tab.classList.contains('secondary'))activeIsSecondary=true;
   });
+  // Auto-expand the More section whenever a secondary category is selected so
+  // the user can see the active state without an extra click.
+  const tabsRoot=document.getElementById('search-tabs');
+  if(activeIsSecondary)tabsRoot.classList.add('expanded');
+  // Highlight the More toggle when its hidden contents include the active cat.
+  const moreBtn=document.getElementById('search-more-toggle');
+  if(moreBtn)moreBtn.classList.toggle('has-active-secondary', activeIsSecondary);
 }
 
 function renderSearchResults(){
@@ -222,27 +274,15 @@ function renderSearchResults(){
   }));
 }
 
-// <img> tag for an entry's hero image. For monsters, prefers the local
-// 5etools image pack (img/bestiary/{SOURCE}/{Name}.webp) with a dnd5eapi
-// fallback for SRD entries. For every other category that has _img populated
-// from the per-category fluff files (vehicles, objects, items, bastions, etc.),
-// renders that image directly. Hides on 404.
+// <img> tag for an entry's hero image. Sources only the local 5etools image
+// pack — no remote fallback. Monster fluff stores paths relative to img/
+// (e.g. "bestiary/MM/Goblin.webp"), while the per-category fluff loader
+// already prefixes 'img/' when populating _img on non-monster rows. If no
+// local image exists, render nothing.
 function _detailImgTag(d) {
-  if (d.cat === 'monster') {
-    // Monster _img from bestiary fluff is a path under img/, not yet prefixed.
-    const local    = d._img ? 'img/' + d._img : '';
-    const fallback = `https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png`;
-    const initial  = local || fallback;
-    const onerr = local
-      ? `this.onerror=function(){this.style.display='none'};this.src='${fallback}'`
-      : `this.style.display='none'`;
-    return `<img class="detail-img" src="${initial}" onerror="${onerr}" alt="${esc(d.name)}">`;
-  }
-  if (d._img) {
-    // For non-monster categories, _img is already a fully-prefixed 'img/...' path.
-    return `<img class="detail-img" src="${esc(d._img)}" onerror="this.style.display='none'" alt="${esc(d.name)}">`;
-  }
-  return '';
+  if (!d._img) return '';
+  const src = d.cat === 'monster' ? 'img/' + d._img : d._img;
+  return `<img class="detail-img" src="${esc(src)}" onerror="this.style.display='none'" alt="${esc(d.name)}">`;
 }
 
 // Builds just the inner stat-block / description HTML for any search entry.
@@ -267,9 +307,10 @@ function buildDetailBody(d) {
     if(isCond)    return renderConditionFull(d);
     if(isFeat)    return renderFeatFull(d);
     if(d.cat==='adventure') return renderAdventureFull(d);
+    if(d.cat==='table')     return renderTableFull(d);
     // All the long-tail reference categories (background, race, class, deity,
-    // object, vehicle, table, recipe, action, skill, chapter, etc.) share a
-    // generic entries→paragraphs render.
+    // object, vehicle, action, skill, chapter, etc.) share a generic
+    // entries→paragraphs render.
     return renderRefFull(d);
   }
   // Fallback for old SEARCH_DATA entries without _raw
@@ -385,7 +426,16 @@ function initSearch(){
     else if(e.key==='ArrowUp'){e.preventDefault();state.searchState.focused=Math.max(state.searchState.focused-1,0);renderSearchResults();document.querySelector('.search-result.focused')?.scrollIntoView({block:'nearest'});}
     else if(e.key==='Enter'){const r=state.searchState.focused>=0?list[state.searchState.focused]:list[0];if(r){state.searchState.detail=r;renderSearchResults();}}
   });
-  document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>tab.addEventListener('click',()=>{state.searchState.category=tab.dataset.cats||tab.dataset.cat;state.searchState.focused=-1;state.searchState.detail=null;renderSearchTabs();renderSearchResults();inp.focus();}));
+  document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>{
+    if(tab.classList.contains('more-toggle'))return; // wired separately below
+    tab.addEventListener('click',()=>{state.searchState.category=tab.dataset.cats||tab.dataset.cat;state.searchState.focused=-1;state.searchState.detail=null;renderSearchTabs();renderSearchResults();inp.focus();});
+  });
+  // The "More" button just toggles visibility of the secondary tab row — it
+  // doesn't change the search category itself.
+  document.getElementById('search-more-toggle')?.addEventListener('click', () => {
+    document.getElementById('search-tabs').classList.toggle('expanded');
+    inp.focus();
+  });
   let _insideSearch = false;
   document.querySelector('.search-wrap').addEventListener('mousedown', () => { _insideSearch = true; });
   document.addEventListener('mousedown', () => { if(!_insideSearch)closeSearch(); _insideSearch=false; });
