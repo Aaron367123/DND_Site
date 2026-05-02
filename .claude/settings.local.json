@@ -5,7 +5,10 @@
       "Bash(python -c ' *)",
       "Bash(node --check \"D:/Downloads/DND_Site/js/data-loader.js\")",
       "Bash(node --check \"D:/Downloads/DND_Site/js/search.js\")",
-      "Bash(node --check \"D:/Downloads/DND_Site/js/utils.js\")"
+      "Bash(node --check \"D:/Downloads/DND_Site/js/utils.js\")",
+      "Bash(python *)",
+      "Bash(node --check \"D:/Downloads/DND_Site/js/window-manager.js\")",
+      "Bash(node --check \"D:/Downloads/DND_Site/js/settings.js\")"
     ]
   }
 }
