@@ -1,15 +1,41 @@
 // ============================================================
 // SOUND BOARD
 // ============================================================
-// Upload your own audio. Left-click = play once. Right-click = loop.
-// Session-only — re-upload after page refresh.
+// Two sources of sounds:
+//   • Shared — listed in audio/manifest.json, hosted in the repo,
+//     visible to every player. Curated by editing the manifest + git push.
+//   • Personal — uploaded in-browser, kept in RAM only. Same model as before.
+// Left-click = play once. Right-click = loop.
 
-const _sb = { sounds:[], playing:{}, vol:0.7 };
+const _sb = { shared:[], personal:[], playing:{}, volumes:{}, vol:0.7, manifestLoaded:false };
 
 registerPanel('soundboard', {
   title:'Sound Board', icon:'🔊',
-  mount(body){ this._body=body; this._render(); },
+  mount(body){
+    this._body = body;
+    this._render();
+    if (!_sb.manifestLoaded){
+      fetch('audio/manifest.json')
+        .then(r => r.ok ? r.json() : {sounds:[]})
+        .then(j => {
+          _sb.shared = (j.sounds||[]).map(s => ({...s, source:'shared'}));
+          _sb.manifestLoaded = true;
+          if (this._body) this._render();
+        })
+        .catch(() => { _sb.manifestLoaded = true; });
+    }
+  },
   unmount(){ this._stopAll(); this._body=null; },
+
+  _findSound(id){
+    return _sb.shared.find(s=>s.id===id) || _sb.personal.find(s=>s.id===id);
+  },
+
+  // Final playback volume = master × per-tile. Per-tile defaults to 1.0
+  // (no attenuation) so behavior is unchanged for tiles the user hasn't touched.
+  _volumeFor(id){
+    return _sb.vol * (_sb.volumes[id] != null ? _sb.volumes[id] : 1);
+  },
 
   _render(){
     const b=this._body; if(!b)return;
@@ -29,7 +55,7 @@ registerPanel('soundboard', {
     if(playing.length){
       html+='<div class="sb-playing-bar"><span class="sb-now-playing">Now playing:</span>';
       playing.forEach(id=>{
-        const s=_sb.sounds.find(x=>x.id===id);
+        const s=this._findSound(id);
         const loop=_sb.playing[id]&&_sb.playing[id].loop;
         html+='<span class="sb-active-chip" data-stop="'+id+'">'
           +esc(s?s.name:'?')+' '+(loop?'↺ ':'')+'×</span>';
@@ -37,26 +63,34 @@ registerPanel('soundboard', {
       html+='</div>';
     }
 
-    // Sound grid
+    // Combined grid: shared first, then personal. Each entry carries a `source`
+    // tag so the renderer can show the right badge and decide whether the × is
+    // visible.
     html+='<div style="flex:1;overflow-y:auto"><div class="sb-grid">';
-    if(!_sb.sounds.length){
-      html+='<div class="empty-state" style="grid-column:1/-1;padding:40px 20px">No sounds yet.<br><br>Upload MP3, WAV, or OGG files below.</div>';
+    const all = [..._sb.shared, ..._sb.personal];
+    if(!all.length){
+      html+='<div class="empty-state" style="grid-column:1/-1;padding:40px 20px">No sounds yet.<br><br>Upload MP3, WAV, or OGG files below — or add shared sounds in audio/manifest.json.</div>';
     } else {
-      _sb.sounds.forEach(s=>{
+      all.forEach(s=>{
         const isPlaying=!!_sb.playing[s.id];
         const isLoop=isPlaying&&_sb.playing[s.id].loop;
+        const tv = _sb.volumes[s.id] != null ? _sb.volumes[s.id] : 1;
+        const pct = Math.round(tv*100);
         html+='<div class="sb-btn '+(isPlaying?'playing ':'')+(isLoop?'loop-on':'')+'" data-sid="'+s.id+'">'
-          +'<span class="sb-icon">🎵</span>'
-          +'<span class="sb-name">'+esc(s.name)+'</span>'
-          +'<span class="sb-loop-badge">LOOP</span>'
-          +(isLoop?'<div class="sb-bar"></div>':'')
-          +'<button class="sb-x" data-del="'+s.id+'" title="Remove">×</button>'
-          +'</div>';
+          +'<div class="sb-tile-head"><span class="sb-name">'+esc(s.name)+'</span></div>'
+          +'<div class="sb-tile-pct">'+pct+'%</div>'
+          +'<input type="range" class="sb-tile-vol" data-vol="'+s.id+'" min="0" max="1" step="0.01" value="'+tv+'">'
+          +'<div class="sb-tile-foot">'
+            +'<span class="sb-loop-icon" title="Looping">∞</span>'
+            +'<span class="sb-source-badge sb-'+s.source+'">'+(s.source==='shared'?'shared':'yours')+'</span>'
+            +(s.source==='personal' ? '<button class="sb-x" data-del="'+s.id+'" title="Remove">×</button>' : '<span class="sb-foot-spacer"></span>')
+          +'</div>'
+        +'</div>';
       });
     }
     html+='</div></div>';
 
-    // Upload row
+    // Upload row — affects only this client's personal list.
     html+='<div class="sb-upload-row">'
       +'<label class="btn" style="cursor:pointer;flex-shrink:0">📁 Upload sounds'
         +'<input type="file" id="sb-upload" accept="audio/*" multiple style="display:none">'
@@ -74,7 +108,7 @@ registerPanel('soundboard', {
     b.querySelector('#sb-mvol')?.addEventListener('input',e=>{
       _sb.vol=parseFloat(e.target.value);
       b.querySelector('#sb-mpct').textContent=Math.round(_sb.vol*100)+'%';
-      Object.values(_sb.playing).forEach(p=>{if(p.audio)p.audio.volume=_sb.vol;});
+      Object.entries(_sb.playing).forEach(([id,p])=>{ if(p.audio) p.audio.volume=this._volumeFor(id); });
     });
 
     b.querySelector('#sb-stop-all')?.addEventListener('click',e=>{
@@ -102,12 +136,29 @@ registerPanel('soundboard', {
       });
     });
 
-    // Delete buttons
+    // Per-tile volume sliders — adjusts only this sound, not master.
+    b.querySelectorAll('input[data-vol]').forEach(slider=>{
+      // Don't let dragging the slider toggle play/stop on the parent tile.
+      ['mousedown','click','dblclick','contextmenu'].forEach(ev =>
+        slider.addEventListener(ev, e => e.stopPropagation()));
+      slider.addEventListener('input', e=>{
+        const id = e.target.dataset.vol;
+        const v  = parseFloat(e.target.value);
+        _sb.volumes[id] = v;
+        const p = _sb.playing[id];
+        if (p && p.audio) p.audio.volume = this._volumeFor(id);
+        const tile = e.target.closest('.sb-btn');
+        const pctEl = tile && tile.querySelector('.sb-tile-pct');
+        if (pctEl) pctEl.textContent = Math.round(v*100)+'%';
+      });
+    });
+
+    // Delete buttons — only present on personal sounds
     b.querySelectorAll('[data-del]').forEach(el=>el.addEventListener('click',e=>{
       e.stopPropagation();
       const id=el.dataset.del;
       this._stop(id);
-      _sb.sounds=_sb.sounds.filter(s=>s.id!==id);
+      _sb.personal=_sb.personal.filter(s=>s.id!==id);
       this._render();
     }));
 
@@ -120,9 +171,11 @@ registerPanel('soundboard', {
 
   _play(id,loop){
     this._stop(id);
-    const s=_sb.sounds.find(x=>x.id===id); if(!s||!s.url)return;
-    const audio=new Audio(s.url);
-    audio.volume=_sb.vol;
+    const s=this._findSound(id); if(!s) return;
+    const src = s.source === 'shared' ? s.path : s.url;
+    if (!src) return;
+    const audio=new Audio(src);
+    audio.volume=this._volumeFor(id);
     audio.loop=loop;
     audio.play().catch(()=>{});
     _sb.playing[id]={audio,loop};
@@ -141,7 +194,7 @@ registerPanel('soundboard', {
   _load(file){
     const url=URL.createObjectURL(file);
     const name=file.name.replace(/\.[^.]+$/,'').slice(0,28);
-    _sb.sounds.push({id:'s_'+uid(), name, url});
+    _sb.personal.push({id:'p_'+uid(), name, url, source:'personal'});
     showToast('Loaded: '+name);
     this._render();
   },
