@@ -93,8 +93,12 @@ registerPanel('npclib', {
     const groups = _npcGroups(this._npcs);
     const sel = this._selected();
     const q = this._searchQ.toLowerCase();
+    if (this._leftWidth == null) {
+      try { const v = parseFloat(localStorage.getItem('skt-npclib-leftw')); if (!isNaN(v)) this._leftWidth = v; } catch(e){}
+    }
+    const leftStyle = this._leftWidth != null ? `style="width:${this._leftWidth}px;flex:0 0 ${this._leftWidth}px"` : '';
     b.innerHTML = `<div class="npclib-root">
-      <div class="npclib-left">
+      <div class="npclib-left" ${leftStyle}>
         <div class="npclib-toolbar">
           <input type="search" id="npclib-search" placeholder="🔎 Search NPCs..." value="${esc(this._searchQ)}">
           <button class="icon-btn npclib-tool-btn" id="npclib-add" title="New NPC">+</button>
@@ -103,11 +107,46 @@ registerPanel('npclib', {
           ${groups.map(g => this._renderGroup(g, q)).join('')}
         </div>
       </div>
+      <div class="npclib-divider" id="npclib-divider" title="Drag to resize"></div>
       <div class="npclib-right">
         ${sel ? this._renderDetail(sel) : '<div class="empty-state" style="padding:30px">Select an NPC, or click + to add one.</div>'}
       </div>
     </div>`;
     this._wire();
+    this._wireDivider();
+  },
+
+  // Drag the column divider. Width is stored in pixels and persisted to
+  // localStorage so the user's preferred ratio survives reloads.
+  _wireDivider(){
+    const b = this._body; if (!b) return;
+    const divider = b.querySelector('#npclib-divider');
+    const left    = b.querySelector('.npclib-left');
+    const root    = b.querySelector('.npclib-root');
+    if (!divider || !left || !root) return;
+    let drag = null;
+    divider.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      drag = { sx: e.clientX, ow: left.getBoundingClientRect().width };
+      document.body.style.cursor = 'ew-resize';
+    });
+    document.addEventListener('mousemove', e => {
+      if (!drag) return;
+      const z = (typeof getZoom==='function') ? getZoom() : 1;
+      const rootW = root.getBoundingClientRect().width / z;
+      const min = 200, max = Math.max(min + 100, rootW - 280);
+      let w = drag.ow + (e.clientX - drag.sx) / z;
+      w = Math.max(min, Math.min(max, w));
+      left.style.flex = `0 0 ${w}px`;
+      left.style.width = w + 'px';
+      this._leftWidth = w;
+    });
+    document.addEventListener('mouseup', () => {
+      if (!drag) return;
+      drag = null;
+      document.body.style.cursor = '';
+      try { localStorage.setItem('skt-npclib-leftw', String(this._leftWidth)); } catch(e){}
+    });
   },
 
   _renderGroup(g, q) {

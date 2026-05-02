@@ -34,7 +34,7 @@ const DEFAULT_LAYOUT = {
   combat:     {x:16,  y:16,  w:320, h:560, open:true,  minimized:false, z:1},
   party:      {x:354, y:16,  w:720, h:380, open:true,  minimized:false, z:2},
   shop:       {x:354, y:412, w:720, h:400, open:false, minimized:false, z:3},
-  notes:      {x:400, y:60,  w:560, h:520, open:false, minimized:false, z:4},
+  notes:      {x:400, y:60,  w:820, h:640, open:false, minimized:false, z:4},
   battlemap:  {x:60,  y:60,  w:680, h:500, open:false, minimized:false, z:5},
   npclib:     {x:100, y:80,  w:760, h:660, open:false, minimized:false, z:6},
   npcgen:     {x:160, y:100, w:480, h:540, open:false, minimized:false, z:7},

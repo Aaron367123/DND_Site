@@ -54,7 +54,7 @@ registerPanel('encounter',{
         .filter(d => d.cat==='monster')
         .filter(d => tokens.every(t => (d.name+' '+(d.meta||'')).toLowerCase().includes(t)))
         .slice(0, 30)
-        .map(d => ({ name:d.name, cr:d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d._raw?.dexterity||10, _img:d._img }));
+        .map(d => ({ name:d.name, cr:d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d._raw?.dexterity||10, _img:d._img, _source:d._source }));
     }
     return MONSTER_LIST.filter(m => m.name.toLowerCase().includes(q.toLowerCase())).slice(0, 12);
   },
@@ -64,15 +64,20 @@ registerPanel('encounter',{
     const results = this._searchQ ? this._searchPool(this._searchQ) : [];
     const open = this._searchOpen && results.length;
     drop.classList.toggle('open', !!open);
-    drop.innerHTML = results.map(m =>
-      `<div class="enc-search-result" data-mname="${esc(m.name)}" data-mcr="${esc(String(m.cr))}" data-mhp="${m.hp}" data-mac="${m.ac}" data-mdex="${m.dex||10}">
-        <span>${esc(m.name)}</span><span class="enc-cr-badge">CR ${esc(String(m.cr))} · ${CR_XP[m.cr]||'?'} XP</span>
-      </div>`).join('');
+    drop.innerHTML = results.map(m => {
+      const srcDisplay = m._source ? (typeof _formatSource==='function' ? _formatSource(m._source) : m._source) : '';
+      const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
+      return `<div class="enc-search-result" data-mname="${esc(m.name)}" data-mcr="${esc(String(m.cr))}" data-mhp="${m.hp}" data-mac="${m.ac}" data-mdex="${m.dex||10}" data-msrc="${esc(m._source||'')}">
+        <span class="enc-result-name">${esc(m.name)}${srcBadge}</span>
+        <span class="enc-cr-badge">CR ${esc(String(m.cr))} · ${CR_XP[m.cr]||'?'} XP</span>
+      </div>`;
+    }).join('');
     drop.querySelectorAll('.enc-search-result').forEach(el => el.addEventListener('click', () => {
-      const name = el.dataset.mname, cr = el.dataset.mcr, hp = +el.dataset.mhp, ac = +el.dataset.mac, dex = +el.dataset.mdex;
-      const existing = this._monsters.find(m => m.name === name);
+      const name = el.dataset.mname, cr = el.dataset.mcr, hp = +el.dataset.mhp, ac = +el.dataset.mac, dex = +el.dataset.mdex, _source = el.dataset.msrc || null;
+      // Match by name+source so a 2014 and 2024 entry of the same monster are treated as different rows.
+      const existing = this._monsters.find(m => m.name === name && (m._source||null) === _source);
       if (existing) existing.count = (existing.count||1) + 1;
-      else this._monsters.push({ name, cr, hp, ac, dex, count: 1 });
+      else this._monsters.push({ name, cr, hp, ac, dex, _source, count: 1 });
       this._searchQ = ''; this._searchOpen = false; this._save();
       this._render();
     }));
@@ -96,12 +101,16 @@ registerPanel('encounter',{
           <h3>Monsters</h3>
           <div class="enc-monsters-list" id="enc-monster-list">
             ${!this._monsters.length?'<div style="font-size:11px;color:var(--text-dim)">Search and add monsters below.</div>':
-              this._monsters.map((m,i)=>`<div class="enc-monster-row">
-                <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" style="width:38px;font-size:11px;padding:2px 4px">
-                <span class="enc-name" title="${esc(m.name)}">${esc(m.name)}</span>
-                <span class="enc-cr">CR ${m.cr}</span>
-                <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" style="padding:2px 5px;font-size:11px">×</button>
-              </div>`).join('')}
+              this._monsters.map((m,i)=>{
+                const srcDisplay = m._source ? (typeof _formatSource==='function' ? _formatSource(m._source) : m._source) : '';
+                const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
+                return `<div class="enc-monster-row">
+                  <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" style="width:38px;font-size:11px;padding:2px 4px">
+                  <span class="enc-name" title="${esc(m.name)}">${esc(m.name)}${srcBadge}</span>
+                  <span class="enc-cr">CR ${m.cr}</span>
+                  <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" style="padding:2px 5px;font-size:11px">×</button>
+                </div>`;
+              }).join('')}
           </div>
           <div class="enc-add-input">
             <input type="text" id="enc-search" placeholder="Search monster..." style="font-size:11px">

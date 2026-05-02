@@ -137,6 +137,7 @@ registerPanel('party',{
       else if(act==='set-icon'){
         state.party[i]={...state.party[i],icon:el.dataset.icon};
         this._pickerOpen=null;save();this._render();
+        panelDefs.combat?._render?.();
       }
       else if(act==='upload-icon'){
         // Trigger a hidden file input — keep picker open until upload finishes
@@ -149,6 +150,7 @@ registerPanel('party',{
             if (!dataUrl) return; // user cancelled
             state.party[i]={...state.party[i],icon:dataUrl};
             this._pickerOpen=null; save(); this._render();
+            panelDefs.combat?._render?.();
             showToast('Icon uploaded');
           } catch(err){ showToast('Upload failed: '+err.message); }
         });

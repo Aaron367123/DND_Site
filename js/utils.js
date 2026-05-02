@@ -327,13 +327,28 @@ function showContextMenu(x, y, items) {
 // opts: { title, icon, html, w, h, x, y }  → returns { el, body, close }
 function createFloatingWindow(opts) {
   opts = opts || {};
-  var ws = document.getElementById('workspace');
+  // Append into the same canvas as the registered windows so they share one
+  // stacking context. Otherwise the canvas's `transform: scale()` (used for
+  // zoom) creates a separate stacking layer and the popout can never sink
+  // behind a docked panel no matter what z-index a click sets.
+  var canvas = document.getElementById('workspace-canvas') || document.getElementById('workspace');
   var w = opts.w || 360, h = opts.h || 460;
   // Cascade successive popouts a bit so they don't perfectly stack
   createFloatingWindow._n = (createFloatingWindow._n || 0) + 1;
   var off = (createFloatingWindow._n - 1) * 24;
-  var defaultX = Math.max(20, Math.round(window.innerWidth/2  - w/2)) + (off % 200);
-  var defaultY = Math.max(20, Math.round(window.innerHeight/2 - h/2)) + ((off/2) % 120);
+  // Default position: viewport center, but converted into canvas-space so it
+  // lands where the user is currently looking even if they've zoomed/scrolled.
+  var defaultX, defaultY;
+  if (typeof clientToCanvas === 'function') {
+    var cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    var p = clientToCanvas(cx, cy);
+    var z = (typeof getZoom === 'function') ? getZoom() : 1;
+    defaultX = Math.max(20, Math.round(p.x - (w/2)/z)) + (off % 200);
+    defaultY = Math.max(20, Math.round(p.y - (h/2)/z)) + ((off/2) % 120);
+  } else {
+    defaultX = Math.max(20, Math.round(window.innerWidth/2  - w/2)) + (off % 200);
+    defaultY = Math.max(20, Math.round(window.innerHeight/2 - h/2)) + ((off/2) % 120);
+  }
   var x = opts.x != null ? opts.x : defaultX;
   var y = opts.y != null ? opts.y : defaultY;
 
@@ -363,7 +378,7 @@ function createFloatingWindow(opts) {
   var body = el.querySelector('.window-body');
   if (typeof opts.html === 'string') body.innerHTML = opts.html;
 
-  ws.appendChild(el);
+  canvas.appendChild(el);
 
   // Bring to front on any mousedown inside the window
   el.addEventListener('mousedown', function() {
@@ -379,8 +394,9 @@ function createFloatingWindow(opts) {
     var ox = parseInt(el.style.left), oy = parseInt(el.style.top);
     var sx = e.clientX, sy = e.clientY;
     function move(ev) {
-      el.style.left = Math.max(0, ox + ev.clientX - sx) + 'px';
-      el.style.top  = Math.max(0, oy + ev.clientY - sy) + 'px';
+      var z = (typeof getZoom === 'function') ? getZoom() : 1;
+      el.style.left = Math.max(0, ox + (ev.clientX - sx) / z) + 'px';
+      el.style.top  = Math.max(0, oy + (ev.clientY - sy) / z) + 'px';
     }
     function up() {
       document.removeEventListener('mousemove', move);
@@ -400,7 +416,8 @@ function createFloatingWindow(opts) {
       var ow = parseInt(el.style.width), oh = parseInt(el.style.height);
       var sx = e.clientX, sy = e.clientY;
       function move(ev) {
-        var dx = ev.clientX - sx, dy = ev.clientY - sy;
+        var z = (typeof getZoom === 'function') ? getZoom() : 1;
+        var dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
         var nx = ox, ny = oy, nw = ow, nh = oh;
         if (dir.indexOf('e') >= 0) nw = Math.max(240, ow + dx);
         if (dir.indexOf('s') >= 0) nh = Math.max(120, oh + dy);
