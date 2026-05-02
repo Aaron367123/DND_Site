@@ -27,8 +27,8 @@ function _stripTags(str) {
     .replace(/\{@chance (\d+)[^}]*\}/g, '$1%')
     .replace(/\{@(?:damage|dice|scaledice|scaledamage)\s+([^|}]+)[^}]*\}/g, '$1')
     .replace(/\{@(?:condition|spell|creature|item|sense|skill|action|ability|race|class|feat|background|disease|status|object|vehicle|reward|hazard|encounter|table|area|filter)\s+([^|}]+)[^}]*\}/gi, (_, p) => p.charAt(0).toUpperCase()+p.slice(1))
-    .replace(/\{@(?:b|bold)\s+([^}]+)\}/g,   '$1')
-    .replace(/\{@(?:i|italic)\s+([^}]+)\}/g, '$1')
+    .replace(/\{@(?:b|bold)\s+([^}]+)\}/g,   '\x06$1\x06')
+    .replace(/\{@(?:i|italic)\s+([^}]+)\}/g, '\x05$1\x05')
     .replace(/\{@(?:s|strike|u|sup|sub|kbd|code)\s+([^}]+)\}/g, '$1')
     .replace(/\{@note\s+([^}]+)\}/g,  '($1)')
     .replace(/\{@quickref\s+([^|}]+)[^}]*\}/g, '$1')
@@ -39,7 +39,16 @@ function _stripTags(str) {
 }
 
 // ─── Entries parser ────────────────────────────────────────────────────────────
-function _parseEntries(entries) {
+// Emits a flat string with control-char markers that the renderer post-processes:
+//   \x01header\n\n  → section header (h3)
+//   \x02...\x02     → inset box (callout)
+//   \x03...\x03     → quote block
+//   \x04label\x04   → bold inline label (item name)
+//   \x05text\x05    → italic
+//   \x06text\x06    → bold
+//   \x07table-json\x07 → embedded table
+function _parseEntries(entries, sep) {
+  if (sep == null) sep = '\n\n';
   if (!entries) return '';
   if (typeof entries === 'string') return _stripTags(entries);
   if (!Array.isArray(entries)) return '';
@@ -49,17 +58,33 @@ function _parseEntries(entries) {
     switch (e.type) {
       case 'entries':
       case 'section':
-        return (e.name ? e.name + '.\n' : '') + _parseEntries(e.entries);
+        return (e.name ? '\x01' + e.name + '\n\n' : '') + _parseEntries(e.entries);
       case 'list':
-        return (e.items||[]).map(i => '• ' + (typeof i==='string' ? _stripTags(i) : _parseEntries(i.entries||[i]))).join('\n');
+        return (e.items||[])
+          .map(i => '• ' + (typeof i==='string' ? _stripTags(i) : _parseEntries([i], '\n')))
+          .join('\n');
       case 'table':
-        return ''; // skip tables
+        try {
+          const t = {
+            caption: e.caption ? _stripTags(e.caption) : '',
+            cols: (e.colLabels||[]).map(_stripTags),
+            rows: (e.rows||[]).map(r => (Array.isArray(r)?r:[r]).map(c => {
+              if (typeof c === 'string') return _stripTags(c);
+              if (c && c.roll && c.roll.exact != null) return String(c.roll.exact);
+              if (c && c.roll && c.roll.min != null) return c.roll.min + '–' + c.roll.max;
+              if (c && c.type) return _parseEntries([c], '\n');
+              return '';
+            })),
+          };
+          return '\x07' + JSON.stringify(t) + '\x07';
+        } catch (_) { return ''; }
       case 'item':
-        return (e.name ? e.name + ': ' : '') + _parseEntries(e.entries || (e.entry ? [e.entry] : []));
+        return '\x04' + (e.name||'') + '\x04 ' + _parseEntries(e.entries || (e.entry ? [e.entry] : []), '\n');
       case 'inset':
       case 'insetReadaloud':
+        return '\x02' + (e.name ? '\x06' + e.name + '\x06\n' : '') + _parseEntries(e.entries || [], '\n') + '\x02';
       case 'quote':
-        return _parseEntries(e.entries || []);
+        return '\x03' + _parseEntries(e.entries || [], '\n') + '\x03';
       case 'abilityDc':
         return `Spell save DC = 8 + proficiency bonus + ${e.attributes?.[0]||'ability'} modifier`;
       case 'abilityAttackMod':
@@ -67,7 +92,7 @@ function _parseEntries(entries) {
       default:
         return _parseEntries(e.entries || []);
     }
-  }).filter(Boolean).join('\n');
+  }).filter(Boolean).join(sep);
 }
 
 // ─── Conversion helpers ────────────────────────────────────────────────────────

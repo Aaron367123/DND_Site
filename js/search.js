@@ -49,31 +49,79 @@ function renderMonsterFull(d, localData) {
   return html;
 }
 
+function _statRow(label, val) {
+  if (val == null || val === '' || val === '—') return '';
+  return `<div class="detail-statrow"><strong>${esc(label)}:</strong> ${val}</div>`;
+}
+
 function renderSpellFull(d) {
   const r = d._raw || {};
   const components = Array.isArray(r.components) ? r.components.join(', ')+(r.material?' ('+r.material+')':'') : (d.components||'—');
   const desc = Array.isArray(r.desc) ? r.desc.join('\n\n') : (r.desc||d.desc||'');
   const higherLevel = Array.isArray(r.higher_level) ? r.higher_level.join('\n\n') : (r.higher_level||'');
   const classes = r.classes?.map(c=>c.name).join(', ') || '';
-  let html = `<div class="detail-stats">
-    <div class="stat-block"><div class="lab">Cast</div><div class="val">${esc(r.casting_time||d.cast||'—')}</div></div>
-    <div class="stat-block"><div class="lab">Range</div><div class="val">${esc(r.range||d.range||'—')}</div></div>
-    <div class="stat-block"><div class="lab">Duration</div><div class="val">${esc(r.duration||d.duration||'—')}</div></div>
-  </div>`;
-  html += `<div class="detail-section"><strong>Components.</strong> ${esc(components)}</div>`;
-  if(r.concentration)html+=`<div class="detail-section" style="color:var(--warning)">⚡ Requires Concentration</div>`;
-  if(r.ritual)html+=`<div class="detail-section" style="color:var(--accent)">📿 Ritual</div>`;
-  html += `<div class="detail-section" style="line-height:1.7">${esc(desc)}</div>`;
-  if(higherLevel)html+=`<div class="detail-section"><strong>At Higher Levels.</strong> ${esc(higherLevel)}</div>`;
-  if(classes)html+=`<div class="detail-section" style="color:var(--text-muted);font-size:11px">Classes: ${esc(classes)}</div>`;
+  let html = '<div class="detail-statblock">';
+  html += _statRow('Casting Time', esc(r.casting_time||d.cast||'—'));
+  html += _statRow('Range', esc(r.range||d.range||'—'));
+  html += _statRow('Components', esc(components));
+  html += _statRow('Duration', esc(r.duration||d.duration||'—'));
+  html += '</div>';
+  if(r.concentration||r.ritual){
+    const tags = [];
+    if(r.concentration) tags.push('<span style="color:var(--warning)">⚡ Concentration</span>');
+    if(r.ritual)        tags.push('<span style="color:var(--accent)">📿 Ritual</span>');
+    html += `<div class="detail-section" style="font-size:11px">${tags.join(' · ')}</div>`;
+  }
+  html += renderEntriesText(desc);
+  if(higherLevel)html+=`<div class="detail-section"><strong class="detail-label">At Higher Levels.</strong> ${_renderInline(esc(higherLevel))}</div>`;
+  if(classes)html+=`<div class="detail-statrow"><strong>Classes:</strong> ${esc(classes)}</div>`;
   return html;
 }
 
 function renderItemFull(d) {
   const r = d._raw || {};
   const desc = Array.isArray(r.desc) ? r.desc.join('\n\n') : (r.desc||d.desc||'');
-  let html = `<div class="detail-section" style="line-height:1.7">${esc(desc)}</div>`;
-  if(r.requires_attunement)html=`<div class="detail-section" style="color:var(--warning)">🔗 Requires Attunement${typeof r.requires_attunement==='string'?' '+esc(r.requires_attunement):''}</div>`+html;
+  let html = '<div class="detail-statblock">';
+  if (r.value != null) html += _statRow('Cost', esc(String(r.value)+' GP'));
+  if (r.weight != null) html += _statRow('Weight', esc(String(r.weight)+' lb.'));
+  if (r.rarity && r.rarity !== 'unknown') html += _statRow('Rarity', esc(r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)));
+  if (r.requires_attunement) html += _statRow('Attunement', typeof r.requires_attunement==='string'?esc(r.requires_attunement):'Required');
+  html += '</div>';
+  html += renderEntriesText(desc);
+  return html;
+}
+
+// Psionic: Manifestation Time / Range / Duration / Target stats up top.
+function renderPsionicFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  // 5etools psionic structure: top-level entries[] usually has body text plus
+  // a list of {type:'item', name:'...', entries:[...]} for the meta lines.
+  // The discipline header row uses focus + order, but those aren't always present.
+  if (r.focus) html += _statRow('Psionic Focus', esc(r.focus));
+  html += '</div>';
+  // The body already contains the manifestation stats and the modes (\x04 markers).
+  html += renderEntriesText(d.desc || '');
+  return html;
+}
+
+// Vehicle: creature capacity, travel pace, then weapons block.
+function renderVehicleFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  if (r.capCreature || r.capPassenger) {
+    const parts = [];
+    if (r.capCrew) parts.push(r.capCrew + ' crew');
+    if (r.capPassenger) parts.push(r.capPassenger + ' passengers');
+    if (parts.length) html += _statRow('Creature Capacity', esc(parts.join(', ')));
+  }
+  if (r.capCargo) html += _statRow('Cargo Capacity', esc(String(r.capCargo) + ' tons'));
+  if (r.pace) html += _statRow('Travel Pace', esc(String(r.pace) + ' miles per hour'));
+  if (r.speed) html += _statRow('Speed', esc(String(r.speed) + ' ft.'));
+  if (r.ac) html += _statRow('Armor Class', esc(String(r.ac)));
+  if (r.hp) html += _statRow('Hit Points', esc(typeof r.hp==='object'?(r.hp.hp||''):String(r.hp)));
+  html += '</div>';
+  html += renderEntriesText(d.desc || '');
   return html;
 }
 
@@ -81,16 +129,15 @@ function renderFeatFull(d) {
   const r = d._raw || {};
   const desc = Array.isArray(r.desc) ? r.desc.join('\n\n') : (r.desc || d.desc || '');
   let html = '';
-  if (r.prerequisite) html += `<div class="detail-section" style="color:var(--text-dim)"><strong>Prerequisite.</strong> ${esc(r.prerequisite)}</div>`;
-  html += `<div class="detail-section" style="line-height:1.7">${esc(desc)}</div>`;
+  if (r.prerequisite) html += `<div class="detail-section"><strong class="detail-label">Prerequisite.</strong> ${esc(r.prerequisite)}</div>`;
+  html += renderEntriesText(desc);
   return html;
 }
 
 function renderConditionFull(d) {
   const r = d._raw || {};
-  // dnd5eapi returns desc as string[], Open5e returned [{desc:string}]
   const descs = Array.isArray(r.desc) ? r.desc.map(p=>typeof p==='string'?p:(p.desc||'')) : (d.desc?[d.desc]:[]);
-  return `<div class="detail-section" style="line-height:1.7">${descs.map(p=>`<p style="margin:0 0 8px">${esc(p)}</p>`).join('')}</div>`;
+  return renderEntriesText(descs.join('\n\n')) || '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
 }
 
 // Adventure detail: cover image (if installed), level range, storyline, published
@@ -122,14 +169,10 @@ function renderAdventureFull(d) {
 }
 
 // Fallback renderer for any reference entry (background, race, deity, etc.)
-// that just has parsed `desc` text — splits into paragraphs, preserves line breaks.
 function renderRefFull(d) {
   const text = d.desc || '';
-  if (!text.trim()) return '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
-  const paragraphs = text.split(/\n{2,}/).filter(p => p.trim());
-  return paragraphs.map(p =>
-    `<div class="detail-section" style="line-height:1.7;white-space:pre-wrap">${esc(p)}</div>`
-  ).join('');
+  const html = renderEntriesText(text);
+  return html || '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
 }
 
 // Tables ship with caption + colLabels + rows[], not free-text entries, so the
@@ -170,6 +213,80 @@ function renderTableFull(d) {
     return '<tr>' + cells.map(c => `<td style="padding:4px 6px;border-bottom:1px solid var(--panel-3);vertical-align:top">${esc(_stripCell(c))}</td>`).join('') + '</tr>';
   }).join('') + '</tbody></table></div>';
   return html;
+}
+
+// Convert inline markers in already-esc()'d text to HTML (italic/bold/labels).
+// Block markers (\x01 \x02 \x03 \x07) are handled at the paragraph level.
+function _renderInline(s) {
+  return s
+    .replace(/\x06([^\x06]+)\x06/g, '<strong>$1</strong>')
+    .replace(/\x05([^\x05]+)\x05/g, '<i>$1</i>')
+    .replace(/\x04([^\x04]+)\x04/g, '<strong class="detail-label">$1.</strong>');
+}
+
+// Render a fenced table emitted by _parseEntries (\x07JSON\x07).
+function _renderEmbeddedTable(json) {
+  let t; try { t = JSON.parse(json); } catch (_) { return ''; }
+  let html = '<div class="detail-section" style="overflow-x:auto"><table class="detail-table">';
+  if (t.caption) html += `<caption>${_renderInline(esc(t.caption))}</caption>`;
+  if (t.cols && t.cols.length) {
+    html += '<thead><tr>' + t.cols.map(c => `<th>${_renderInline(esc(c))}</th>`).join('') + '</tr></thead>';
+  }
+  if (t.rows && t.rows.length) {
+    html += '<tbody>' + t.rows.map(r =>
+      '<tr>' + r.map(c => `<td>${_renderInline(esc(c))}</td>`).join('') + '</tr>'
+    ).join('') + '</tbody>';
+  }
+  return html + '</table></div>';
+}
+
+// Split a flat _parseEntries string into rendered HTML, handling section
+// headers, inset/quote blocks, embedded tables, and inline markers.
+function renderEntriesText(text) {
+  if (!text || !text.trim()) return '';
+  // First, extract block markers (insets, quotes, tables) so they survive paragraph splitting.
+  const blocks = [];
+  text = text.replace(/\x07([\s\S]+?)\x07/g, (_, j) => {
+    blocks.push({kind:'table', body:j});
+    return '\x00B' + (blocks.length-1) + '\x00';
+  });
+  text = text.replace(/\x02([\s\S]+?)\x02/g, (_, b) => {
+    blocks.push({kind:'inset', body:b});
+    return '\x00B' + (blocks.length-1) + '\x00';
+  });
+  text = text.replace(/\x03([\s\S]+?)\x03/g, (_, b) => {
+    blocks.push({kind:'quote', body:b});
+    return '\x00B' + (blocks.length-1) + '\x00';
+  });
+
+  const out = [];
+  text.split(/\n{2,}/).forEach(p => {
+    p = p.trim();
+    if (!p) return;
+    if (p.startsWith('\x01')) {
+      out.push(`<h3 class="detail-header">${esc(p.slice(1).trimEnd())}</h3>`);
+      return;
+    }
+    const blk = p.match(/^\x00B(\d+)\x00$/);
+    if (blk) {
+      const b = blocks[+blk[1]];
+      if (b.kind === 'table') out.push(_renderEmbeddedTable(b.body));
+      else if (b.kind === 'inset') {
+        out.push(`<div class="detail-inset">${_renderInline(esc(b.body)).replace(/\n/g,'<br>')}</div>`);
+      } else if (b.kind === 'quote') {
+        out.push(`<blockquote class="detail-quote">${_renderInline(esc(b.body)).replace(/\n/g,'<br>')}</blockquote>`);
+      }
+      return;
+    }
+    // Bullet list paragraph (single \n separated lines starting with •)
+    if (p.split('\n').every(l => l.trim().startsWith('•'))) {
+      const items = p.split('\n').map(l => l.replace(/^\s*•\s*/, '').trim()).filter(Boolean);
+      out.push('<ul class="detail-list">' + items.map(i => `<li>${_renderInline(esc(i))}</li>`).join('') + '</ul>');
+      return;
+    }
+    out.push(`<div class="detail-section">${_renderInline(esc(p)).replace(/\n/g,'<br>')}</div>`);
+  });
+  return out.join('');
 }
 
 // Spell link click from monster detail — find in local data
@@ -308,6 +425,8 @@ function buildDetailBody(d) {
     if(isFeat)    return renderFeatFull(d);
     if(d.cat==='adventure') return renderAdventureFull(d);
     if(d.cat==='table')     return renderTableFull(d);
+    if(d.cat==='psionic')   return renderPsionicFull(d);
+    if(d.cat==='vehicle')   return renderVehicleFull(d);
     // All the long-tail reference categories (background, race, class, deity,
     // object, vehicle, action, skill, chapter, etc.) share a generic
     // entries→paragraphs render.
@@ -335,13 +454,24 @@ function buildDetailCard(d, idSuffix) {
     actionsHtml += '</div>';
   }
   return `<div class="search-detail">
-    ${srcBadge?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${srcBadge}</div>`:''}
-    <h4>${esc(d.name)}</h4>
+    <div class="detail-title-row">
+      <h4 class="detail-title">${esc(d.name)}</h4>
+      ${d._source?`<span class="detail-source-badge">${esc(d._source)}</span>`:''}
+    </div>
     <div class="detail-meta">${esc(d.meta||'')}</div>
     ${_detailImgTag(d)}
     <div>${buildDetailBody(d)}</div>
+    ${_sourceFootHtml(d)}
     ${actionsHtml}
   </div>`;
+}
+
+// Bottom-of-card source citation, e.g. "Source: PHB'24, page 361".
+function _sourceFootHtml(d) {
+  const src = d._source || (d._raw && d._raw.source);
+  if (!src) return '';
+  const page = (d._raw && d._raw.page) || null;
+  return `<div class="detail-source-foot"><strong>Source:</strong> <i>${esc(src)}</i>${page?`, page ${esc(String(page))}`:''}</div>`;
 }
 
 // Wire the action buttons inside a detail card. onAfterAction is called once
@@ -378,15 +508,18 @@ function renderSearchDetail(){
   const suffix = '';
 
   container.innerHTML=`<div class="search-detail">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px">
       <button class="detail-back" id="detail-back">← Back</button>
       <button class="detail-back" id="detail-popout" title="Open in its own window">⧉ Pop out</button>
     </div>
-    <h4>${esc(d.name)}</h4>
+    <div class="detail-title-row">
+      <h4 class="detail-title">${esc(d.name)}</h4>
+      ${d._source?`<span class="detail-source-badge">${esc(d._source)}</span>`:''}
+    </div>
     <div class="detail-meta">${esc(d.meta||'')}</div>
-    ${d._source?`<div style="margin:4px 0"><span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(d._source)}</span></div>`:''}
     ${_detailImgTag(d)}
     <div id="detail-body">${buildDetailBody(d)}</div>
+    ${_sourceFootHtml(d)}
     ${d.cat==='party' ? '' : (function(){
       let h='<div class="detail-actions">';
       if(d.cat==='monster')   h+=`<button class="btn small primary" id="det-add-monster${suffix}">+ Add to combat</button>`;
