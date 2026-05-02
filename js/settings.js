@@ -3,8 +3,19 @@
 // ============================================================
 function initSettings(){
   const drawer=document.getElementById('settings-drawer');
-  document.getElementById('settings-btn').addEventListener('click',()=>drawer.classList.add('open'));
+  const settingsBtn=document.getElementById('settings-btn');
+  settingsBtn.addEventListener('click',e=>{e.stopPropagation();drawer.classList.add('open');});
   document.getElementById('close-drawer').addEventListener('click',()=>drawer.classList.remove('open'));
+  // Click outside the drawer closes it. stopPropagation on the open click and
+  // on clicks inside the drawer keeps this from immediately re-closing.
+  drawer.addEventListener('mousedown',e=>e.stopPropagation());
+  document.addEventListener('mousedown',()=>{
+    if(drawer.classList.contains('open')) drawer.classList.remove('open');
+  });
+  // Escape also closes
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape' && drawer.classList.contains('open')) drawer.classList.remove('open');
+  });
 
   const sym=document.getElementById('currency-symbol');
   const jit=document.getElementById('price-jitter');
@@ -38,6 +49,16 @@ function initSettings(){
   }
   meName.addEventListener('change', _persistMe);
   meColor.addEventListener('change', _persistMe);
+
+  // Window-snapping toggle.
+  const snap = document.getElementById('snap-windows');
+  if (snap) {
+    snap.checked = state.settings.snapWindows !== false;
+    snap.addEventListener('change', () => {
+      state.settings.snapWindows = snap.checked;
+      save();
+    });
+  }
 
   // Reprint policy — controls whether reprinted entries appear in search.
   const reprintPolicy = state.settings.reprintPolicy || 'all';

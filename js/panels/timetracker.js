@@ -99,14 +99,23 @@ registerPanel('time', {
     const t = this._data;
     const monthName = TIME_MONTHS[t.month] || 'Unknown';
     b.style.cssText = 'padding:14px;overflow-y:auto;height:100%;display:flex;flex-direction:column;align-items:center';
+    const monthOpts = TIME_MONTHS.map((m,i) =>
+      `<option value="${i}"${i===t.month?' selected':''}>${esc(m)}</option>`).join('');
     b.innerHTML = `
       <div class="time-dial">
         ${_timeRingSvg(t.hour)}
         <div class="time-center">
-          <div class="time-hour">Hr ${t.hour}</div>
-          <div class="time-date">${esc(monthName)} ${t.day}</div>
-          ${t.year ? `<div class="time-year">${t.year} DR</div>` : ''}
+          <div class="time-hour" data-edit="hour" title="Click to edit">Hr ${t.hour}</div>
+          <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${t.day}</div>
+          <div class="time-year" data-edit="year" title="Click to edit">${t.year||0} DR</div>
         </div>
+      </div>
+      <div class="time-edit-row" id="time-edit-row" style="display:none">
+        <select id="time-month" title="Month">${monthOpts}</select>
+        <input type="number" id="time-day" min="1" max="${TIME_DAYS_PER_MONTH}" value="${t.day}" title="Day">
+        <input type="number" id="time-year" value="${t.year||0}" title="Year">
+        <input type="number" id="time-hour" min="0" max="23" value="${t.hour}" title="Hour">
+        <button class="btn small primary" id="time-edit-done">✓</button>
       </div>
       <div class="time-advance-label">ADVANCE</div>
       <div class="time-buttons">
@@ -116,6 +125,38 @@ registerPanel('time', {
         <button class="btn time-btn" data-delta="24">+1d</button>
       </div>
     `;
+
+    // Click any of the center labels → reveal the edit row, focus the matching field
+    const editRow = b.querySelector('#time-edit-row');
+    const focusMap = { hour:'#time-hour', date:'#time-month', year:'#time-year' };
+    b.querySelectorAll('[data-edit]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation();
+      editRow.style.display = 'flex';
+      const sel = b.querySelector(focusMap[el.dataset.edit] || '#time-month');
+      if (sel) { sel.focus(); if (sel.select) sel.select(); }
+    }));
+
+    // Commit on ✓ click, Enter, or any field blur (with a short delay so
+    // tabbing between fields doesn't immediately close the row)
+    const commit = () => {
+      const m = parseInt(b.querySelector('#time-month').value);
+      const d = parseInt(b.querySelector('#time-day').value);
+      const y = parseInt(b.querySelector('#time-year').value);
+      const h = parseInt(b.querySelector('#time-hour').value);
+      this._data = {
+        month: isNaN(m) ? this._data.month : Math.max(0, Math.min(TIME_MONTHS.length-1, m)),
+        day:   isNaN(d) ? this._data.day   : Math.max(1, Math.min(TIME_DAYS_PER_MONTH, d)),
+        year:  isNaN(y) ? this._data.year  : Math.max(0, y),
+        hour:  isNaN(h) ? this._data.hour  : Math.max(0, Math.min(23, h)),
+      };
+      this._save();
+      this._render();
+    };
+    b.querySelector('#time-edit-done').addEventListener('click', commit);
+    editRow.querySelectorAll('input,select').forEach(inp => {
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+    });
+
     b.querySelectorAll('.time-btn').forEach(btn => btn.addEventListener('click', () => {
       this._advance(+btn.dataset.delta);
     }));

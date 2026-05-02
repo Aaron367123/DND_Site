@@ -4,21 +4,22 @@
 // Generates a believable weather snapshot for a chosen biome + season.
 // Stored under skt-weather-v1 so the rolled state survives reloads.
 
+// All units are metric: temperature °C, wind km/h, precipitation mm.
 const WEATHER_BIOMES = {
-  temperate: {label:'Temperate', tempBase:[35,80], windBase:[2,15],   humidBase:[40,75]},
-  arctic:    {label:'Arctic',    tempBase:[-30,30],windBase:[5,30],   humidBase:[30,65]},
-  desert:    {label:'Desert',    tempBase:[55,115],windBase:[3,18],   humidBase:[5,30]},
-  tropical:  {label:'Tropical',  tempBase:[68,95], windBase:[2,20],   humidBase:[60,95]},
-  coastal:   {label:'Coastal',   tempBase:[45,80], windBase:[5,25],   humidBase:[55,90]},
-  mountain:  {label:'Mountain',  tempBase:[20,60], windBase:[6,30],   humidBase:[35,70]},
-  swamp:     {label:'Swamp',     tempBase:[55,85], windBase:[1,8],    humidBase:[75,98]},
-  underdark: {label:'Underdark', tempBase:[55,68], windBase:[0,2],    humidBase:[65,90]},
+  temperate: {label:'Temperate', tempBase:[ 2, 27], windBase:[ 3, 24], humidBase:[40,75]},
+  arctic:    {label:'Arctic',    tempBase:[-34, -1],windBase:[ 8, 48], humidBase:[30,65]},
+  desert:    {label:'Desert',    tempBase:[13, 46], windBase:[ 5, 29], humidBase:[ 5,30]},
+  tropical:  {label:'Tropical',  tempBase:[20, 35], windBase:[ 3, 32], humidBase:[60,95]},
+  coastal:   {label:'Coastal',   tempBase:[ 7, 27], windBase:[ 8, 40], humidBase:[55,90]},
+  mountain:  {label:'Mountain',  tempBase:[-7, 16], windBase:[10, 48], humidBase:[35,70]},
+  swamp:     {label:'Swamp',     tempBase:[13, 29], windBase:[ 2, 13], humidBase:[75,98]},
+  underdark: {label:'Underdark', tempBase:[13, 20], windBase:[ 0,  3], humidBase:[65,90]},
 };
 const WEATHER_SEASONS = {
-  spring: {label:'Spring', tempShift: -5,  precipBoost: 1.4},
-  summer: {label:'Summer', tempShift: +10, precipBoost: 0.8},
-  autumn: {label:'Autumn', tempShift: -3,  precipBoost: 1.2},
-  winter: {label:'Winter', tempShift: -22, precipBoost: 1.0},
+  spring: {label:'Spring', tempShift: -3,  precipBoost: 1.4},
+  summer: {label:'Summer', tempShift: +6,  precipBoost: 0.8},
+  autumn: {label:'Autumn', tempShift: -2,  precipBoost: 1.2},
+  winter: {label:'Winter', tempShift:-12,  precipBoost: 1.0},
 };
 const WEATHER_CONDITIONS = [
   // [name, icon, cloudRange, precipChance]
@@ -45,25 +46,26 @@ function _rollWeather(biomeId, seasonId) {
   // Pick a condition weighted by season's precip boost and biome humidity
   const wantWet = Math.random() < (humid/100) * s.precipBoost * 0.6;
   const pool = WEATHER_CONDITIONS.filter(c => {
-    if (temp < 33 && c.name === 'Rain') return false;       // freezing → no rain
-    if (temp > 33 && c.name === 'Snow') return false;       // warm → no snow
+    if (temp < 1 && c.name === 'Rain') return false;        // freezing → no rain
+    if (temp > 1 && c.name === 'Snow') return false;        // above 1°C → no snow
     if (wantWet) return c.precip > 0.4;
     return c.precip < 0.5;
   });
   const cond = pool[_randInt(0, pool.length-1)] || WEATHER_CONDITIONS[0];
   const clouds = _randInt(cond.clouds[0], cond.clouds[1]);
-  // Precipitation amount: only meaningful on wet conditions
+  // Precipitation amount in mm — only meaningful on wet conditions
   let precipText = 'None';
   if (cond.precip > 0.5) {
-    const inches = +_rand(0.05, cond.name==='Storm'?2.0:0.8).toFixed(2);
-    precipText = inches + ' in';
+    const mm = +_rand(1, cond.name==='Storm'?50:20).toFixed(1);
+    precipText = mm + ' mm';
   } else if (cond.precip > 0.2 && Math.random() < 0.4) {
     precipText = 'Trace';
   }
-  // "Feels like" — wind chill for cold, humidity boost for hot
+  // "Feels like" — wind chill for cold (<10°C, wind >8 km/h),
+  // heat index for hot+humid (>24°C, humidity >60%)
   let feelsLike = temp;
-  if (temp < 50 && wind > 5) feelsLike -= Math.round(wind * 0.6);
-  if (temp > 75 && humid > 60) feelsLike += Math.round((humid-60) * 0.15);
+  if (temp < 10 && wind > 8)  feelsLike -= Math.round(wind * 0.18);
+  if (temp > 24 && humid > 60) feelsLike += Math.round((humid - 60) * 0.08);
   return {
     biome: biomeId, season: seasonId,
     condition: cond.name, icon: cond.icon,
@@ -73,7 +75,7 @@ function _rollWeather(biomeId, seasonId) {
 
 function _weatherHydrate() {
   try {
-    const raw = localStorage.getItem('skt-weather-v1');
+    const raw = localStorage.getItem('skt-weather-v2');
     if (raw) return JSON.parse(raw);
   } catch (e) {}
   return _rollWeather('temperate','summer');
@@ -90,7 +92,7 @@ registerPanel('weather', {
   },
   unmount(){ this._body = null; },
 
-  _save(){ try{ localStorage.setItem('skt-weather-v1', JSON.stringify(this._data)); }catch(e){} },
+  _save(){ try{ localStorage.setItem('skt-weather-v2', JSON.stringify(this._data)); }catch(e){} },
 
   _render(){
     const b = this._body; if(!b) return;
@@ -103,14 +105,14 @@ registerPanel('weather', {
     b.innerHTML = `
       <div class="weather-hero">
         <div class="weather-icon">${w.icon}</div>
-        <div class="weather-temp">${w.temp}°F</div>
+        <div class="weather-temp">${w.temp}°C</div>
       </div>
       <div class="weather-sub">
         <div class="weather-condition">${esc(w.condition)}</div>
-        <div class="weather-feels">Feels like ${w.feelsLike}°F</div>
+        <div class="weather-feels">Feels like ${w.feelsLike}°C</div>
       </div>
       <div class="weather-stats">
-        <div class="weather-stat"><div class="lab">💨 Wind</div><div class="val">${w.wind} mph</div></div>
+        <div class="weather-stat"><div class="lab">💨 Wind</div><div class="val">${w.wind} km/h</div></div>
         <div class="weather-stat"><div class="lab">💧 Precip.</div><div class="val">${esc(w.precip)}</div></div>
         <div class="weather-stat"><div class="lab">🌫 Humidity</div><div class="val">${w.humid}%</div></div>
         <div class="weather-stat"><div class="lab">☁ Cloud</div><div class="val">${w.clouds}%</div></div>

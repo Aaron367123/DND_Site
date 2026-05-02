@@ -36,13 +36,22 @@ registerPanel('shop',{
     const type=b.querySelector('#shop-type').value,price=b.querySelector('#shop-price').value,economy=b.querySelector('#shop-economy').value,assortment=b.querySelector('#shop-assort').value;
     const pm={Cheap:.7,Average:1,Expensive:1.3,Premium:1.6}[price];
     const em={Poor:.85,Average:1,Wealthy:1.15}[economy];
-    const target={Sparse:8,Standard:14,Abundant:22}[assortment];
+    // Target a FRACTION of the catalog rather than a fixed count, so different
+    // shop types yield genuinely different-sized inventories and there's always
+    // headroom for randomness. Was: fixed 8/14/22 — but most catalogs only have
+    // 5-17 items, so target == catalog.length and every shop showed everything.
+    const fraction={Sparse:0.45,Standard:0.7,Abundant:0.95}[assortment];
     const catalog=ITEM_CATALOG[type]||ITEM_CATALOG['General Store'];
-    const rw={Common:5,Uncommon:3,Rare:1,VeryRare:.3,Legendary:.1};
-    const pool=catalog.flatMap(item=>Array(Math.ceil(rw[item.rarity]||1)).fill(item));
-    const chosen=new Map();let att=0;
-    while(chosen.size<Math.min(target,catalog.length)&&att<200){const item=pool[Math.floor(Math.random()*pool.length)];if(!chosen.has(item.name))chosen.set(item.name,item);att++;}
-    const inventory=Array.from(chosen.values()).map(item=>{
+    const target=Math.max(3, Math.min(catalog.length, Math.round(catalog.length * fraction)));
+    const rw={Common:5,Uncommon:3,Rare:1.2,VeryRare:.4,Legendary:.15};
+    // Weighted shuffle: assign each item score = random * rarityWeight, sort
+    // descending, take top N. Rarer items rarely score high → end up rare.
+    const chosen = [...catalog]
+      .map(item => ({ item, score: Math.random() * (rw[item.rarity] || 1) }))
+      .sort((a,b) => b.score - a.score)
+      .slice(0, target)
+      .map(x => x.item);
+    const inventory=chosen.map(item=>{
       const j=state.settings.priceJitter/100,v=1+(Math.random()*2-1)*j;
       let p=item.basePrice*pm*em*v;const r=state.settings.rounding;
       if(r==='none')p=p<1?Math.round(p*100)/100:Math.round(p*10)/10;

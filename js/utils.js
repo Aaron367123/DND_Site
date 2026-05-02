@@ -19,6 +19,48 @@ function _getMe() {
   try { localStorage.setItem('skt-me-v1', JSON.stringify(fresh)); } catch(e) {}
   return fresh;
 }
+// Render an "icon" value (used by party / combatant portraits). Accepts:
+//   - data:image/...      → <img>
+//   - paths starting with img/ or http(s)/ → <img>
+//   - raw <svg…           → inlined SVG
+//   - everything else     → plain text (emoji, single char)
+function renderIcon(icon, alt) {
+  if (!icon) return '⚔';
+  const s = String(icon);
+  if (s.startsWith('data:image/') || s.startsWith('img/') || /^https?:\/\//.test(s)) {
+    return `<img class="icon-img" src="${esc(s)}" alt="${esc(alt||'')}" onerror="this.style.display='none'">`;
+  }
+  if (s.startsWith('<svg')) return s;          // already an SVG (CLASS_ICONS)
+  return esc(s);                                // emoji / character
+}
+
+// Resize an image File to a square thumbnail and return a base64 data URL.
+// We compress to keep localStorage usage reasonable (~10-30KB per icon).
+function fileToIconDataUrl(file, size) {
+  size = size || 96;
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) return reject(new Error('Not an image'));
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Image decode failed'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        // cover-fit: crop the longer dimension so the icon stays square
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w)/2, (size - h)/2, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function d20(){return Math.floor(Math.random()*20)+1}
 function mod(s){return Math.floor((s-10)/2)}
 function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),1800)}

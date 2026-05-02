@@ -47,7 +47,7 @@ registerPanel('party',{
     return '<div class="char-card" data-cidx="'+i+'">'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
-        +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+esc(icon)+'</button>'
+        +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
         +(this._pickerOpen===i?this._iconPicker(i):'')
         +'<input class="char-name" value="'+esc(c.name)+'" data-field="name" data-idx="'+i+'" placeholder="Character name">'
         +'<button class="btn icon-btn danger" data-act="remove" data-idx="'+i+'" title="Remove character" style="flex-shrink:0">×</button>'
@@ -80,6 +80,7 @@ registerPanel('party',{
 
   _iconPicker(i){
     return '<div class="icon-picker" data-picker="'+i+'">'
+      +'<button class="icon-upload-btn" data-act="upload-icon" data-idx="'+i+'" title="Upload custom image">📷</button>'
       +PARTY_ICONS.map(ic=>'<button data-act="set-icon" data-idx="'+i+'" data-icon="'+ic+'">'+ic+'</button>').join('')
       +'</div>';
   },
@@ -130,6 +131,21 @@ registerPanel('party',{
       else if(act==='set-icon'){
         state.party[i]={...state.party[i],icon:el.dataset.icon};
         this._pickerOpen=null;save();this._render();
+      }
+      else if(act==='upload-icon'){
+        // Trigger a hidden file input — keep picker open until upload finishes
+        const inp=document.createElement('input');
+        inp.type='file'; inp.accept='image/*';
+        inp.addEventListener('change',async ev=>{
+          const f=ev.target.files[0]; if(!f) return;
+          try {
+            const dataUrl = await fileToIconDataUrl(f, 96);
+            state.party[i]={...state.party[i],icon:dataUrl};
+            this._pickerOpen=null; save(); this._render();
+            showToast('Icon uploaded');
+          } catch(err){ showToast('Upload failed: '+err.message); }
+        });
+        inp.click();
       }
       else if(act==='pip'){
         const ri=+el.dataset.ri, pi=+el.dataset.pi;

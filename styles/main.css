@@ -134,8 +134,22 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .window-actions .btn{padding:2px 6px;font-size:11px;background:transparent;border-color:transparent;color:var(--text-muted)}
 .window-actions .btn:hover{background:var(--panel-3);color:var(--text)}
 .window-body{flex:1;overflow:auto;position:relative}
-.window-resize{position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--text-dim) 50%,var(--text-dim) 60%,transparent 60%,transparent 80%,var(--text-dim) 80%,var(--text-dim) 90%,transparent 90%);opacity:.5}
-.window-resize:hover{opacity:1}
+/* Resize handles — invisible hit zones around the window edges + corners */
+.rh{position:absolute;z-index:2}
+.rh-n{top:-3px;left:6px;right:6px;height:6px;cursor:ns-resize}
+.rh-s{bottom:-3px;left:6px;right:6px;height:6px;cursor:ns-resize}
+.rh-e{top:6px;right:-3px;bottom:6px;width:6px;cursor:ew-resize}
+.rh-w{top:6px;left:-3px;bottom:6px;width:6px;cursor:ew-resize}
+.rh-ne{top:-3px;right:-3px;width:10px;height:10px;cursor:nesw-resize}
+.rh-nw{top:-3px;left:-3px;width:10px;height:10px;cursor:nwse-resize}
+.rh-se{bottom:-3px;right:-3px;width:14px;height:14px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--text-dim) 50%,var(--text-dim) 60%,transparent 60%,transparent 80%,var(--text-dim) 80%,var(--text-dim) 90%,transparent 90%);opacity:.5}
+.rh-se:hover{opacity:1}
+.rh-sw{bottom:-3px;left:-3px;width:10px;height:10px;cursor:nesw-resize}
+/* Locked state: hide handles, show grab cursor as default, dim lock icon */
+.window.locked .rh{display:none}
+.window.locked .window-head{cursor:default}
+.window.locked .window-head:active{cursor:default}
+.window.locked{outline:1px solid rgba(212,165,116,.25)}
 
 /* COMBAT */
 .combat-controls{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -157,6 +171,12 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .combatant .portrait.pc{background:linear-gradient(135deg,#4a3d2a,#6b5439)}
 .combatant .portrait.npc{background:linear-gradient(135deg,#3d2a2a,#6b3939)}
 .combatant .portrait svg{width:22px;height:22px}
+.combatant .portrait{cursor:pointer;overflow:hidden;position:relative}
+.combatant .portrait:hover::after{content:'📷';position:absolute;font-size:11px;background:rgba(0,0,0,.65);color:#fff;width:100%;height:100%;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.icon-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.char-icon-btn .icon-img{width:34px;height:34px}
+.icon-upload-btn{font-size:16px!important;background:var(--panel-3)!important;grid-column:span 6;border-radius:3px;cursor:pointer;border:1px dashed var(--border)!important;width:auto!important;color:var(--accent)!important;margin-bottom:4px}
+.icon-upload-btn:hover{background:var(--panel-2)!important;border-color:var(--accent)!important}
 .combatant .info{min-width:0}
 .combatant .name{font-size:12px;font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .turn-marker{color:var(--accent);font-size:10px;margin-left:4px}
@@ -450,6 +470,13 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .time-advance-label{font-size:10px;color:var(--text-muted);letter-spacing:.2em;margin:8px 0 8px}
 .time-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}
 .time-btn{padding:8px 0;font-size:12px;text-align:center}
+.time-center [data-edit]{pointer-events:auto;cursor:pointer;padding:1px 4px;border-radius:3px;transition:background .12s}
+.time-center [data-edit]:hover{background:rgba(212,165,116,.1)}
+.time-edit-row{display:flex;gap:4px;margin:8px 0;width:100%;align-items:center}
+.time-edit-row select,.time-edit-row input{flex:1;min-width:0;font-size:11px;padding:4px 6px}
+.time-edit-row #time-day,.time-edit-row #time-hour{flex:0 0 42px}
+.time-edit-row #time-year{flex:0 0 60px}
+.time-edit-row .btn{flex:0 0 auto;padding:4px 8px}
 
 /* ============ WORKSPACE CONTEXT MENU ============ */
 .ctx-menu{position:fixed;display:none;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.6);min-width:240px;max-height:90vh;overflow-y:auto;z-index:9000;padding:6px 0;font-size:12px;user-select:none}

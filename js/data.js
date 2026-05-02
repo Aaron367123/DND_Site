@@ -45,7 +45,7 @@ const DEFAULT_LAYOUT = {
   time:        {x:560, y:120, w:300, h:520, open:false, minimized:false, z:11},
 };
 
-const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all'};
+const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true};
 
 const ITEM_CATALOG = {
   'Blacksmith/Armory':[

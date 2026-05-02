@@ -387,6 +387,20 @@ function renderTableFull(d) {
   return html;
 }
 
+// Format a 5etools source code for display:
+//   XPHB / XDMG / XMM  →  24PHB / 24DMG / 24MM   (2024 core reprints)
+//   PHB / DMG / MM      →  14PHB / 14DMG / 14MM   (2014 originals)
+// Everything else (XGE, MTF, CoS, SKT, …) passes through untouched.
+const _CORE_2014 = new Set(['PHB','DMG','MM']);
+const _CORE_2024 = new Set(['XPHB','XDMG','XMM']);
+function _formatSource(src) {
+  if (!src) return '';
+  const u = String(src).toUpperCase();
+  if (_CORE_2024.has(u)) return '24' + u.slice(1);
+  if (_CORE_2014.has(u)) return '14' + u;
+  return src;
+}
+
 // Convert inline markers in already-esc()'d text to HTML (italic/bold/labels).
 // Block markers (\x01 \x02 \x03 \x07) are handled at the paragraph level.
 function _renderInline(s) {
@@ -569,7 +583,7 @@ function renderSearchResults(){
       <div class="res-name">
         <span>${esc(r.name)}</span>
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
-          ${r._source?`<span style="font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px">${esc(r._source)}</span>`:''}
+          ${r._source?`<span style="font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(r._source))}</span>`:''}
           <span class="res-tag ${r.cat}">${r.cat}</span>
         </div>
       </div>
@@ -643,7 +657,7 @@ function buildDetailBody(d) {
 // idSuffix lets multiple instances coexist (search popup vs popped-out windows).
 function buildDetailCard(d, idSuffix) {
   const isMonster=d.cat==='monster', isCond=d.cat==='condition', isParty=d.cat==='party';
-  const srcBadge = d._source ? `<span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(d._source)}</span>` : '';
+  const srcBadge = d._source ? `<span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(d._source))}</span>` : '';
   let actionsHtml = '';
   if (!isParty) {
     actionsHtml = '<div class="detail-actions">';
@@ -654,7 +668,7 @@ function buildDetailCard(d, idSuffix) {
   return `<div class="search-detail">
     <div class="detail-title-row">
       <h4 class="detail-title">${esc(d.name)}</h4>
-      ${d._source?`<span class="detail-source-badge">${esc(d._source)}</span>`:''}
+      ${d._source?`<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>`:''}
     </div>
     <div class="detail-meta">${esc(d.meta||'')}</div>
     ${_detailImgTag(d)}
@@ -669,7 +683,7 @@ function _sourceFootHtml(d) {
   const src = d._source || (d._raw && d._raw.source);
   if (!src) return '';
   const page = (d._raw && d._raw.page) || null;
-  return `<div class="detail-source-foot"><strong>Source:</strong> <i>${esc(src)}</i>${page?`, page ${esc(String(page))}`:''}</div>`;
+  return `<div class="detail-source-foot"><strong>Source:</strong> <i>${esc(_formatSource(src))}</i>${page?`, page ${esc(String(page))}`:''}</div>`;
 }
 
 // Wire the action buttons inside a detail card. onAfterAction is called once
@@ -712,7 +726,7 @@ function renderSearchDetail(){
     </div>
     <div class="detail-title-row">
       <h4 class="detail-title">${esc(d.name)}</h4>
-      ${d._source?`<span class="detail-source-badge">${esc(d._source)}</span>`:''}
+      ${d._source?`<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>`:''}
     </div>
     <div class="detail-meta">${esc(d.meta||'')}</div>
     ${_detailImgTag(d)}

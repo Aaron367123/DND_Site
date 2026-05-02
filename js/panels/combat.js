@@ -33,7 +33,12 @@ registerPanel('combat',{
   _renderCombatants(){
     return state.combatants.map((c,i)=>{
       const active=c.id===state.activeCombatantId, dead=c.hp<=0;
-      const icon=c.isPC?(state.party.find(p=>p.id===c.id)?.icon||'⚔'):(CLASS_ICONS[c.cls]||CLASS_ICONS.enemy);
+      // Picking the portrait source: explicit `portrait` (from custom upload or
+      // monster image) wins; PCs fall back to their party icon; NPCs to the
+      // class-icon SVG by `cls`.
+      const portrait = c.portrait
+        || (c.isPC ? (state.party.find(p=>p.id===c.id)?.icon || '⚔')
+                   : (CLASS_ICONS[c.cls] || CLASS_ICONS.enemy));
       const isPC=c.isPC;
       const bonus=c.initBonus||0;
       const bonusStr=bonus>0?'+'+bonus:bonus<0?String(bonus):'';
@@ -42,7 +47,7 @@ registerPanel('combat',{
           +'<input class="init-input" type="number" value="'+c.initiative+'" data-ci="'+i+'" data-cf="initiative">'
           +(bonusStr?'<div class="init-bonus-tag">'+bonusStr+'</div>':'')
         +'</div>'
-        +'<div class="portrait '+(isPC?'pc':'npc')+'" style="font-size:'+(isPC?'16':'')+'px">'+(isPC?icon:icon)+'</div>'
+        +'<div class="portrait '+(isPC?'pc':'npc')+'" style="font-size:'+(isPC?'16':'')+'px" data-act="upload-portrait" data-idx="'+i+'" title="Click to upload custom portrait">'+renderIcon(portrait, c.name)+'</div>'
         +'<div class="info">'
           +'<div class="name">'+esc(c.name)+(active?'<span class="turn-marker">◀</span>':'')+'</div>'
           +'<div class="stat-row">'
@@ -60,7 +65,7 @@ registerPanel('combat',{
     if(!state.party.length) return '<div class="empty-state" style="padding:12px">No party members yet — add them in the Party Tracker.</div>';
     return state.party.map((p,i)=>{
       const inCombat=state.combatants.find(c=>c.isPC&&c.id===p.id);
-      const icon=p.icon||'⚔';
+      const icon=renderIcon(p.icon||'⚔', p.name);
       const bonus=p.init||0;
       const bonusStr=bonus>0?'+'+bonus:bonus<0?String(bonus):'±0';
       const displayInit=inCombat?inCombat.initiative:bonus;
@@ -97,6 +102,7 @@ registerPanel('combat',{
       else if(act==='rmcond')    this._removeCond(parseInt(el.dataset.idx),el.dataset.cond);
       else if(act==='add-pc')    this._addPartyToCombat(parseInt(el.dataset.pi));
       else if(act==='remove-pc') this._removeFromCombatById(el.dataset.pid);
+      else if(act==='upload-portrait') this._uploadPortrait(parseInt(el.dataset.idx));
     }));
 
     // Quick-add enemies
@@ -276,12 +282,34 @@ registerPanel('combat',{
     showToast(`${cond} → ${state.combatants[i].name}`);return true;
   },
 
+  // Click an NPC's portrait to upload a custom image for that combatant only.
+  _uploadPortrait(i){
+    const c = state.combatants[i]; if(!c) return;
+    const inp = document.createElement('input');
+    inp.type='file'; inp.accept='image/*';
+    inp.addEventListener('change', async ev => {
+      const f = ev.target.files[0]; if(!f) return;
+      try {
+        const dataUrl = await fileToIconDataUrl(f, 96);
+        state.combatants[i] = {...state.combatants[i], portrait: dataUrl};
+        save(); this._render();
+        showToast('Portrait uploaded');
+      } catch(err){ showToast('Upload failed: '+err.message); }
+    });
+    inp.click();
+  },
+
   addMonster(m){
     const initMod=m.dex?mod(m.dex):0;
     const existing=state.combatants.filter(c=>c.baseName===m.name).length;
     const displayName=existing?`${m.name} ${existing+1}`:m.name;
     if(existing===1){const oi=state.combatants.findIndex(c=>c.baseName===m.name);if(oi>=0)state.combatants[oi]={...state.combatants[oi],name:`${m.name} 1`};}
-    state.combatants.push({id:uid(),name:displayName,baseName:m.name,isPC:false,cls:'enemy',hp:m.hp,hpMax:m.hp,ac:m.ac,initBonus:initMod,initiative:d20()+initMod,conditions:[]});
+    // Use the monster's image as its portrait if 5etools fluff provided one.
+    // _img is already 'img/...'-relative for non-monsters; for monster fluff the
+    // path is bare (e.g. "bestiary/MM/Goblin.webp") and needs the prefix.
+    let portrait = null;
+    if (m._img) portrait = m._img.startsWith('img/') ? m._img : ('img/' + m._img);
+    state.combatants.push({id:uid(),name:displayName,baseName:m.name,isPC:false,cls:'enemy',hp:m.hp,hpMax:m.hp,ac:m.ac,initBonus:initMod,initiative:d20()+initMod,conditions:[],portrait});
     state.combatants.sort((a,b)=>b.initiative-a.initiative);save();this._render();showToast(`Added ${displayName}`);
   },
 });
