@@ -148,10 +148,20 @@ function getSearchPool(){
   return [...party, ...base];
 }
 
+// Tab category can be 'all', a single cat string, or a comma-joined list
+// (e.g. 'cult,boon') for tabs that union multiple cats. _catMatches centralizes
+// the comparison so doSearch and renderSearchTabs stay consistent.
+function _catMatches(cat, sel) {
+  if (sel === 'all') return true;
+  if (sel.indexOf(',') >= 0) return sel.split(',').includes(cat);
+  return cat === sel;
+}
+
 function doSearch(){
   const q=(state.searchState.query||'').trim().toLowerCase();
   let pool=getSearchPool();
-  if(state.searchState.category!=='all')pool=pool.filter(r=>r.cat===state.searchState.category);
+  const sel=state.searchState.category;
+  if(sel!=='all')pool=pool.filter(r=>_catMatches(r.cat, sel));
   if(q){
     pool=pool.filter(r=>r.name.toLowerCase().includes(q)||(r.meta||'').toLowerCase().includes(q));
     pool.sort((a,b)=>(a.name.toLowerCase().startsWith(q)?0:1)-(b.name.toLowerCase().startsWith(q)?0:1)||a.name.localeCompare(b.name));
@@ -162,10 +172,15 @@ function doSearch(){
 
 function renderSearchTabs(){
   const pool=getSearchPool();
-  const labels={all:'All',monster:'Monsters',spell:'Spells',item:'Items',condition:'Conditions',feat:'Feats',background:'Backgrounds',race:'Races',class:'Classes',party:'Party'};
+  const labels={all:'All',monster:'Monsters',spell:'Spells',item:'Items',condition:'Conditions',
+    feat:'Feats',background:'Backgrounds',race:'Races',class:'Classes',party:'Party',
+    action:'Actions',facility:'Bastions',deity:'Deities',language:'Languages',
+    reward:'Gifts & Rewards',psionic:'Psionics',vehicle:'Vehicles',adventure:'Adventures',
+    'cult,boon':'Cults & Boons',object:'Objects','trap,hazard':'Traps & Hazards'};
   document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>{
-    const cat=tab.dataset.cat,count=cat==='all'?pool.length:pool.filter(r=>r.cat===cat).length;
-    tab.innerHTML=`${labels[cat]} <span class="count">${count}</span>`;
+    const cat=tab.dataset.cats||tab.dataset.cat;
+    const count=cat==='all'?pool.length:pool.filter(r=>_catMatches(r.cat, cat)).length;
+    tab.innerHTML=`${labels[cat]||cat} <span class="count">${count}</span>`;
     tab.classList.toggle('active',state.searchState.category===cat);
   });
 }
@@ -207,19 +222,27 @@ function renderSearchResults(){
   }));
 }
 
-// <img> tag for a monster portrait. Prefers the local 5etools image pack
-// (img/bestiary/{SOURCE}/{Name}.webp from the fluff data) and falls back to
-// dnd5eapi for SRD monsters when the local file isn't installed.
-function _monsterImgTag(d) {
-  if (d.cat !== 'monster') return '';
-  const local    = d._img ? 'img/' + d._img : '';
-  const fallback = `https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png`;
-  const initial  = local || fallback;
-  // Two-stage onerror: if the local image misses, try dnd5eapi; if that misses too, hide.
-  const onerr = local
-    ? `this.onerror=function(){this.style.display='none'};this.src='${fallback}'`
-    : `this.style.display='none'`;
-  return `<img class="detail-img" src="${initial}" onerror="${onerr}" alt="${esc(d.name)}">`;
+// <img> tag for an entry's hero image. For monsters, prefers the local
+// 5etools image pack (img/bestiary/{SOURCE}/{Name}.webp) with a dnd5eapi
+// fallback for SRD entries. For every other category that has _img populated
+// from the per-category fluff files (vehicles, objects, items, bastions, etc.),
+// renders that image directly. Hides on 404.
+function _detailImgTag(d) {
+  if (d.cat === 'monster') {
+    // Monster _img from bestiary fluff is a path under img/, not yet prefixed.
+    const local    = d._img ? 'img/' + d._img : '';
+    const fallback = `https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png`;
+    const initial  = local || fallback;
+    const onerr = local
+      ? `this.onerror=function(){this.style.display='none'};this.src='${fallback}'`
+      : `this.style.display='none'`;
+    return `<img class="detail-img" src="${initial}" onerror="${onerr}" alt="${esc(d.name)}">`;
+  }
+  if (d._img) {
+    // For non-monster categories, _img is already a fully-prefixed 'img/...' path.
+    return `<img class="detail-img" src="${esc(d._img)}" onerror="this.style.display='none'" alt="${esc(d.name)}">`;
+  }
+  return '';
 }
 
 // Builds just the inner stat-block / description HTML for any search entry.
@@ -274,7 +297,7 @@ function buildDetailCard(d, idSuffix) {
     ${srcBadge?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${srcBadge}</div>`:''}
     <h4>${esc(d.name)}</h4>
     <div class="detail-meta">${esc(d.meta||'')}</div>
-    ${_monsterImgTag(d)}
+    ${_detailImgTag(d)}
     <div>${buildDetailBody(d)}</div>
     ${actionsHtml}
   </div>`;
@@ -321,7 +344,7 @@ function renderSearchDetail(){
     <h4>${esc(d.name)}</h4>
     <div class="detail-meta">${esc(d.meta||'')}</div>
     ${d._source?`<div style="margin:4px 0"><span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(d._source)}</span></div>`:''}
-    ${_monsterImgTag(d)}
+    ${_detailImgTag(d)}
     <div id="detail-body">${buildDetailBody(d)}</div>
     ${d.cat==='party' ? '' : (function(){
       let h='<div class="detail-actions">';
@@ -362,7 +385,7 @@ function initSearch(){
     else if(e.key==='ArrowUp'){e.preventDefault();state.searchState.focused=Math.max(state.searchState.focused-1,0);renderSearchResults();document.querySelector('.search-result.focused')?.scrollIntoView({block:'nearest'});}
     else if(e.key==='Enter'){const r=state.searchState.focused>=0?list[state.searchState.focused]:list[0];if(r){state.searchState.detail=r;renderSearchResults();}}
   });
-  document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>tab.addEventListener('click',()=>{state.searchState.category=tab.dataset.cat;state.searchState.focused=-1;state.searchState.detail=null;renderSearchTabs();renderSearchResults();inp.focus();}));
+  document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>tab.addEventListener('click',()=>{state.searchState.category=tab.dataset.cats||tab.dataset.cat;state.searchState.focused=-1;state.searchState.detail=null;renderSearchTabs();renderSearchResults();inp.focus();}));
   let _insideSearch = false;
   document.querySelector('.search-wrap').addEventListener('mousedown', () => { _insideSearch = true; });
   document.addEventListener('mousedown', () => { if(!_insideSearch)closeSearch(); _insideSearch=false; });

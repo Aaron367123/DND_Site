@@ -439,15 +439,31 @@ async function load5eData() {
     });
   }
 
+  // Lookup populated after fluff files load (see _FLUFF_SPECS below). Keyed by
+  // cat → 'name|source'.toLowerCase() → {desc, img}. Used by addCondition /
+  // addItem / addFeat / addRef to fill in the description text and hero image
+  // for entries whose primary data file is just stat-block info.
+  const _fluffByCatKey = {};
+  function _applyFluff(cat, name, source, target) {
+    const bucket = _fluffByCatKey[cat];
+    if (!bucket) return;
+    const f = bucket[((name||'') + '|' + (source||'')).toLowerCase()];
+    if (!f) return;
+    if (f.desc && (!target.desc || !target.desc.trim())) target.desc = f.desc;
+    if (f.img && !target._img) target._img = f.img;
+  }
+
   function addCondition(d) {
     const key = 'condition:'+d.name.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertCondition(d);
-    results.push({
+    const row = {
       cat:'condition', name:d.name, _slug:r.index, _fromLocal:true,
       meta:'Condition', _source:d.source, desc:r.desc.join('\n'), _raw:r,
-    });
+    };
+    _applyFluff('condition', d.name, d.source, row);
+    results.push(row);
   }
 
   function addItem(d) {
@@ -456,12 +472,14 @@ async function load5eData() {
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertItem(d);
-    results.push({
+    const row = {
       cat:'item', name:d.name, _slug:r.index, _fromLocal:true,
       meta: r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)+(r.requires_attunement?' · Attunement':''),
       _source:d.source,
       _raw:r,
-    });
+    };
+    _applyFluff('item', d.name, d.source, row);
+    results.push(row);
   }
 
   function addFeat(d) {
@@ -469,12 +487,14 @@ async function load5eData() {
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertFeat(d);
-    results.push({
+    const row = {
       cat:'feat', name:d.name, _slug:r.index, _fromLocal:true,
       meta: r.prerequisite ? 'Prerequisite: '+r.prerequisite : 'Feat',
       _source:d.source,
       _raw:r,
-    });
+    };
+    _applyFluff('feat', d.name, d.source, row);
+    results.push(row);
   }
 
   // Generic loader used for the long tail of reference categories. Most 5etools
@@ -487,14 +507,16 @@ async function load5eData() {
     const key = cat + ':' + dedupeName.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    results.push({
+    const row = {
       cat: cat, name: opts.displayName || d.name, _slug: _toIndex(opts.displayName || d.name),
       _fromLocal: true,
       meta: meta || cat,
       _source: d.source,
       desc: _parseEntries(d.entries || []),
       _raw: d,
-    });
+    };
+    _applyFluff(cat, d.name, d.source, row);
+    results.push(row);
   }
 
   const fetchFile = async (path) => {
@@ -565,8 +587,31 @@ async function load5eData() {
   ];
   const _refUniquePaths = [...new Set(_refSpecs.map(s => s.path))];
 
+  // Long-tail fluff files: each one mirrors a category's primary data file but
+  // contains the prose description + image references that 5etools splits out.
+  // The data-loader merges these into the main entries via _fluffByCatKey, so
+  // detail cards for vehicles, objects, items, etc. show pictures and text.
+  const _FLUFF_SPECS = [
+    {path:'data/fluff-vehicles.json',           arr:'vehicleFluff',          cat:'vehicle'},
+    {path:'data/fluff-objects.json',            arr:'objectFluff',           cat:'object'},
+    {path:'data/fluff-items.json',              arr:'itemFluff',             cat:'item'},
+    {path:'data/fluff-bastions.json',           arr:'facilityFluff',         cat:'facility'},
+    {path:'data/fluff-trapshazards.json',       arr:'trapFluff',             cat:'trap'},
+    {path:'data/fluff-trapshazards.json',       arr:'hazardFluff',           cat:'hazard'},
+    {path:'data/fluff-backgrounds.json',        arr:'backgroundFluff',       cat:'background'},
+    {path:'data/fluff-races.json',              arr:'raceFluff',             cat:'race'},
+    {path:'data/fluff-feats.json',              arr:'featFluff',             cat:'feat'},
+    {path:'data/fluff-optionalfeatures.json',   arr:'optionalfeatureFluff',  cat:'optionalfeature'},
+    {path:'data/fluff-rewards.json',            arr:'rewardFluff',           cat:'reward'},
+    {path:'data/fluff-conditionsdiseases.json', arr:'conditionFluff',        cat:'condition'},
+    {path:'data/fluff-languages.json',          arr:'languageFluff',         cat:'language'},
+    {path:'data/fluff-recipes.json',            arr:'recipeFluff',           cat:'recipe'},
+    {path:'data/fluff-charcreationoptions.json',arr:'charoptionFluff',       cat:'charoption'},
+  ];
+  const _fluffUniquePaths = [...new Set(_FLUFF_SPECS.map(s => s.path))];
+
   // Step 2: fetch all data files in parallel
-  const [bestiaries, spellbooks, classBooks, conditionFiles, itemFile, featFile, refFiles, bestiaryFluffs, adventureBooks] = await Promise.all([
+  const [bestiaries, spellbooks, classBooks, conditionFiles, itemFile, featFile, refFiles, bestiaryFluffs, adventureBooks, fluffFiles] = await Promise.all([
     Promise.all(bestiaryFiles.map(fetchFile)),
     Promise.all(spellFiles.map(fetchFile)),
     Promise.all(classFiles.map(fetchFile)),
@@ -576,9 +621,34 @@ async function load5eData() {
     Promise.all(_refUniquePaths.map(fetchFile)),
     Promise.all(bestiaryFluffFiles.map(fetchFile)),
     Promise.all(adventureFiles.map(fetchFile)),
+    Promise.all(_fluffUniquePaths.map(fetchFile)),
   ]);
   const _refByPath = {};
   _refUniquePaths.forEach((p, i) => { _refByPath[p] = refFiles[i]; });
+  const _fluffByPath = {};
+  _fluffUniquePaths.forEach((p, i) => { _fluffByPath[p] = fluffFiles[i]; });
+
+  // Build the {cat → name|source → {desc, img}} lookup used by _applyFluff.
+  // Skip any image whose imageType is 'map' or 'mapPlayer' so the hero portrait
+  // wins over deck plans / regional maps when present.
+  _FLUFF_SPECS.forEach(spec => {
+    const json = _fluffByPath[spec.path];
+    if (!json) return;
+    const arr = json[spec.arr] || [];
+    const bucket = _fluffByCatKey[spec.cat] = _fluffByCatKey[spec.cat] || {};
+    arr.forEach(f => {
+      if (!f || !f.name) return;
+      const k = ((f.name||'') + '|' + (f.source||'')).toLowerCase();
+      const desc = _parseEntries(f.entries || []);
+      let img = null;
+      if (Array.isArray(f.images)) {
+        const hero = f.images.find(im => im && im.href && im.href.path && im.imageType !== 'map' && im.imageType !== 'mapPlayer');
+        if (hero) img = 'img/' + hero.href.path;
+      }
+      if (!desc && !img) return;
+      bucket[k] = {desc, img};
+    });
+  });
 
   // Build image lookup: name|source.lower → first image path declared in fluff.
   // The 5etools image pack lives under img/ at the project root; paths in fluff
