@@ -44,7 +44,7 @@ registerPanel('party',{
       resHtml='<button class="btn small" data-act="add-res" data-idx="'+i+'" style="font-size:9px;padding:2px 6px;align-self:flex-start">+ Add resource</button>';
     }
 
-    return '<div class="char-card" data-cidx="'+i+'">'
+    return '<div class="char-card" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
@@ -92,6 +92,17 @@ registerPanel('party',{
 
   _wire(){
     const b=this._body;if(!b)return;
+    // Drag a party card → drop on Combat Tracker to add to combat. Suppress
+    // drag when grabbing inputs/buttons so text selection still works.
+    b.querySelectorAll('.char-card').forEach(card=>{
+      card.addEventListener('dragstart', e=>{
+        if (e.target.closest('input,select,textarea,button,.icon-picker,.pip')){ e.preventDefault(); return; }
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('application/x-skt-party-pi', card.dataset.cidx);
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+    });
     // Inputs
     b.querySelectorAll('input[data-field]').forEach(inp=>{
       inp.addEventListener('change',e=>{

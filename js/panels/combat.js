@@ -9,7 +9,11 @@
 
 registerPanel('combat',{
   title:'Combat Tracker',icon:'⚔',
-  mount(body){this._body=body;this._render();},
+  mount(body){
+    this._body=body;
+    this._wireBestiaryDrop();
+    this._render();
+  },
   unmount(){this._body=null;},
 
   _render(){
@@ -26,41 +30,16 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="settings" title="Manage quick-pick names">⚙</button>
       </div>
 
-      ${inCombat ? '<div class="combatant-list" id="combat-list">'+this._renderCombatants()+'</div>' : ''}
+      ${inCombat
+        ? '<div class="combatant-list" id="combat-list">'+this._renderCombatants()+'</div>'
+        : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}
 
-      <div class="combat-section-label">Party</div>
-      <div class="combatant-list" id="party-list">${this._renderParty()}</div>
-
-      <div class="combat-droptip" id="combat-droptip">Drag a monster from the Bestiary to add it</div>`;
+      <div class="combat-droptip" id="combat-droptip">Drop to add to combat</div>`;
     this._wire();
   },
 
   _renderCombatants(){
     return state.combatants.map((c,i)=>this._renderCard(c,i,false)).join('');
-  },
-
-  _renderParty(){
-    if(!state.party.length) return '<div class="empty-state" style="padding:12px">No party members yet — add them in the Party Tracker.</div>';
-    return state.party.map((p,i)=>{
-      const inCombat=state.combatants.find(c=>c.isPC&&c.id===p.id);
-      const icon=renderIcon(p.icon||'⚔', p.name);
-      return `<div class="combatant-card party-row pc ${inCombat?'in-combat':''}">
-        <div class="card-avatar pc">${icon}</div>
-        <div class="card-body">
-          <div class="card-name">${esc(p.name)}${inCombat?' <span class="in-combat-pill">IN COMBAT</span>':''}</div>
-          <div class="card-stats">
-            <div class="card-stat" title="HP"><span class="lab">♥</span><input type="number" value="${p.hp}" data-pi="${i}" data-pf="hp"></div>
-            <div class="card-stat" title="AC"><span class="lab">⛨</span><input type="number" value="${p.ac}" data-pi="${i}" data-pf="ac"></div>
-            <div class="card-stat" title="Init bonus"><span class="lab">⚡</span><input type="number" value="${p.init||0}" data-pi="${i}" data-pf="init"></div>
-          </div>
-        </div>
-        <div class="card-actions">
-          ${inCombat
-            ? `<button class="btn icon-btn danger" data-act="remove-pc" data-pid="${inCombat.id}" title="Remove from combat">×</button>`
-            : `<button class="btn icon-btn" data-act="add-pc" data-pi="${i}" title="Add to combat">+</button>`}
-        </div>
-      </div>`;
-    }).join('');
   },
 
   _renderCard(c, i, isParty){
@@ -118,8 +97,6 @@ registerPanel('combat',{
       else if(act==='remove')         this._remove(parseInt(el.dataset.idx));
       else if(act==='duplicate')      this._duplicate(parseInt(el.dataset.idx));
       else if(act==='rmcond')         this._removeCond(parseInt(el.dataset.idx),el.dataset.cond);
-      else if(act==='add-pc')         this._addPartyToCombat(parseInt(el.dataset.pi));
-      else if(act==='remove-pc')      this._removeFromCombatById(el.dataset.pid);
       else if(act==='upload-portrait')this._uploadPortrait(parseInt(el.dataset.idx));
     }));
 
@@ -154,7 +131,7 @@ registerPanel('combat',{
     });
 
     // Right-click: conditions menu
-    b.querySelectorAll('.combatant-card:not(.party-row)').forEach(card=>{
+    b.querySelectorAll('.combatant-card').forEach(card=>{
       card.addEventListener('contextmenu',e=>{
         if(e.target.matches('input,textarea,select')) return;
         e.preventDefault(); e.stopPropagation();
@@ -168,25 +145,7 @@ registerPanel('combat',{
       });
     });
 
-    // Party section stat inputs
-    b.querySelectorAll('input[data-pf]').forEach(inp=>{
-      inp.addEventListener('change',e=>{
-        const pi=+e.target.dataset.pi, f=e.target.dataset.pf;
-        const val=parseInt(e.target.value)||0;
-        state.party[pi]={...state.party[pi],[f]:val};
-        if((f==='hp'||f==='ac')&&state.party[pi]){
-          const cid=state.party[pi].id;
-          const ci=state.combatants.findIndex(c=>c.id===cid);
-          if(ci>=0) state.combatants[ci]={...state.combatants[ci],[f]:val};
-        }
-        panelDefs.party?._render?.();
-        save();this._render();
-      });
-      inp.addEventListener('click',e=>e.stopPropagation());
-    });
-
     this._wireDragReorder();
-    this._wireBestiaryDrop();
   },
 
   // HTML5 drag-and-drop — reorder combatant cards by dragging.
@@ -234,38 +193,45 @@ registerPanel('combat',{
     });
   },
 
-  // Bestiary → combat drop zone. Listens on the whole panel body so users
-  // can drop anywhere inside the tracker, not just on an existing card.
+  // External drop zone — accepts bestiary monsters and party members dragged
+  // in from their respective panels. Listens on the whole panel body so the
+  // user can drop anywhere inside the tracker, not just on an existing card.
+  // Wired exactly once per mount — _render() rebuilds innerHTML but keeps
+  // the body element, so re-attaching here on every render would stack
+  // duplicate listeners and a single drop would fire multiple times.
   _wireBestiaryDrop(){
     const b=this._body;if(!b)return;
+    if (b._bestiaryDropWired) return;
+    b._bestiaryDropWired = true;
+    const externalTypes = ['application/x-skt-bestiary-mid','application/x-skt-party-pi'];
+    const hasExternal = e => externalTypes.some(t => e.dataTransfer.types.includes(t));
     b.addEventListener('dragover', e=>{
-      if (!e.dataTransfer.types.includes('application/x-skt-bestiary-mid')) return;
+      if (!hasExternal(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       b.classList.add('drop-active');
     });
     b.addEventListener('dragleave', e=>{
-      // Only clear when leaving the panel boundary, not just moving over children
       if (e.target === b) b.classList.remove('drop-active');
     });
     b.addEventListener('drop', e=>{
-      const mid = e.dataTransfer.getData('application/x-skt-bestiary-mid');
       b.classList.remove('drop-active');
-      if (!mid) return;
-      e.preventDefault();
-      const bData = panelDefs.bestiary?._data;
-      const m = bData?.monsters.find(x=>x.id===mid);
-      if (!m){ showToast('Monster not found'); return; }
-      // Look up the full 5e entry for stats; fall back to bestiary snapshot
-      let entry = null;
-      if (typeof _5eData !== 'undefined' && _5eLoaded){
-        entry = _5eData.find(d => d.cat==='monster' && d._slug === m.slug);
-      }
-      if (entry){
-        this.addMonster(entry);
-      } else {
-        // Use the snapshot saved on the bestiary card
-        this.addMonster({name:m.name, hp:m.hp||10, ac:m.ac||10, dex:10, _img:m.img||null});
+      const mid = e.dataTransfer.getData('application/x-skt-bestiary-mid');
+      const pi  = e.dataTransfer.getData('application/x-skt-party-pi');
+      if (mid){
+        e.preventDefault();
+        const bData = panelDefs.bestiary?._data;
+        const m = bData?.monsters.find(x=>x.id===mid);
+        if (!m){ showToast('Monster not found'); return; }
+        let entry = null;
+        if (typeof _5eData !== 'undefined' && _5eLoaded){
+          entry = _5eData.find(d => d.cat==='monster' && d._slug === m.slug);
+        }
+        if (entry) this.addMonster(entry);
+        else       this.addMonster({name:m.name, hp:m.hp||10, ac:m.ac||10, dex:10, _img:m.img||null});
+      } else if (pi !== ''){
+        e.preventDefault();
+        this._addPartyToCombat(parseInt(pi));
       }
     });
   },
@@ -273,7 +239,7 @@ registerPanel('combat',{
   _addPartyToCombat(pi){
     const p=state.party[pi];
     if(state.combatants.find(c=>c.isPC&&c.id===p.id)){showToast(p.name+' already in combat');return;}
-    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus:p.init,initiative:0,conditions:[]});
+    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus:p.init,initiative:p.init||0,conditions:[]});
     if(!state.combatRound) state.combatRound=1;
     save();this._render();showToast(p.name+' added');
   },
@@ -521,7 +487,7 @@ registerPanel('combat',{
       hpMax: m.hp,
       ac: m.ac,
       initBonus: initMod,
-      initiative: 0,
+      initiative: initMod, // pre-fill with dex modifier; user can bump it before/during combat
       conditions: [],
       portrait,
     });

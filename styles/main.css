@@ -212,7 +212,9 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 /* PARTY */
 .party-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;padding:10px}
 /* PARTY CARD v2 */
-.char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:7px}
+.char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:7px;cursor:grab}
+.char-card:active{cursor:grabbing}
+.char-card.dragging{opacity:.4}
 .char-header{display:flex;align-items:center;gap:6px}
 .char-icon-btn{font-size:20px;background:var(--panel-3);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;position:relative}
 .char-icon-btn:hover{background:#404040;border-color:var(--accent-dark)}

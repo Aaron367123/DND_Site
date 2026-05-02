@@ -230,31 +230,31 @@ registerPanel('bestiary', {
 
   _openStatBlock(mid){
     const m = this._data.monsters.find(x=>x.id===mid); if (!m) return;
-    let html;
     let entry = null;
     if (typeof _5eData !== 'undefined' && _5eLoaded){
       entry = _5eData.find(d => d.cat==='monster' && d._slug === m.slug);
     }
-    if (entry && typeof buildDetailBody === 'function'){
-      const imgTag = (typeof _detailImgTag === 'function') ? _detailImgTag(entry) : '';
-      html = imgTag + buildDetailBody(entry);
-    } else if (typeof renderMonsterFull === 'function' && entry){
-      html = renderMonsterFull(entry, entry);
-    } else {
-      // Fallback before 5e data is loaded
-      html = `<div class="detail-stats">
+    if (entry && typeof popOutDetail === 'function'){
+      // Reuse the search popout — same header, image layout, source badge,
+      // and "+ Add to combat" button users get from the search dropdown.
+      popOutDetail(entry);
+      return;
+    }
+    // Fallback before 5e data is loaded — show the saved snapshot.
+    const html = `<div class="search-detail">
+      <div class="detail-title-row"><h4 class="detail-title">${esc(m.name)}</h4></div>
+      <div class="detail-meta">${esc(m.source||'')}</div>
+      <div class="detail-stats">
         <div class="stat-block"><div class="lab">HP</div><div class="val">${m.hp||'?'}</div></div>
         <div class="stat-block"><div class="lab">AC</div><div class="val">${m.ac||'?'}</div></div>
         <div class="stat-block"><div class="lab">CR</div><div class="val">${esc(String(m.cr??'?'))}</div></div>
-        </div>
-        <div class="detail-section" style="color:var(--text-muted)">Full stat block will load once the 5e dataset finishes loading.</div>`;
-    }
-    createFloatingWindow({
-      title: m.name,
-      icon: '🐲',
-      html: html,
-      w: 520, h: 640
-    });
+      </div>
+      <div class="detail-section" style="color:var(--text-muted)">Full stat block will load once the 5e dataset finishes loading.</div>
+    </div>`;
+    const win = createFloatingWindow({ title: m.name, icon: '🐲', w: 380, h: 500 });
+    win.body.innerHTML = html;
+    win.body.style.padding = '12px';
+    win.body.style.overflowY = 'auto';
   },
 
   _openMonsterPicker(){
