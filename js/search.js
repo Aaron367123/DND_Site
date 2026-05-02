@@ -93,6 +93,34 @@ function renderConditionFull(d) {
   return `<div class="detail-section" style="line-height:1.7">${descs.map(p=>`<p style="margin:0 0 8px">${esc(p)}</p>`).join('')}</div>`;
 }
 
+// Adventure detail: cover image (if installed), level range, storyline, published
+// date, author, and a chapter-name list. Chapters are themselves searchable as
+// their own entries so users can pull up the full text.
+function renderAdventureFull(d) {
+  const r = d._raw || {};
+  const lvl = r.level && r.level.start
+    ? `${r.level.start}${r.level.end!=null?'–'+r.level.end:''}`
+    : '';
+  const cover = r.cover && r.cover.path
+    ? `<img class="detail-img" src="img/${esc(r.cover.path)}" onerror="this.style.display='none'" alt="${esc(d.name)} cover">`
+    : '';
+  const stat = (label, val) => val
+    ? `<div class="stat-block"><div class="lab">${label}</div><div class="val">${esc(String(val))}</div></div>`
+    : '';
+  let html = cover + '<div class="detail-stats">'
+    + stat('Levels',   lvl)
+    + stat('Storyline', r.storyline)
+    + stat('Published', r.published)
+    + '</div>';
+  if (r.author) html += `<div class="detail-section"><strong>Author.</strong> ${esc(Array.isArray(r.author)?r.author.join(', '):r.author)}</div>`;
+  if (Array.isArray(r._chapters) && r._chapters.length) {
+    html += '<div class="detail-section"><strong>Chapters.</strong><ul style="margin:6px 0 0 0;padding-left:20px;line-height:1.7">'
+      + r._chapters.map(c => `<li>${esc(c)}</li>`).join('')
+      + '</ul></div>';
+  }
+  return html;
+}
+
 // Fallback renderer for any reference entry (background, race, deity, table, etc.)
 // that just has parsed `desc` text — splits into paragraphs, preserves line breaks.
 function renderRefFull(d) {
@@ -113,7 +141,10 @@ function searchForSpell(slug) {
 function getSearchPool(){
   const party = state.party.map(p=>({cat:'party',name:p.name,meta:(p.notes||'').split('\n')[0]||'Party member',partyData:p}));
   // Use 5etools data once loaded, otherwise fall back to built-in SEARCH_DATA
-  const base = _5eLoaded ? _5eData : SEARCH_DATA;
+  let base = _5eLoaded ? _5eData : SEARCH_DATA;
+  const policy = state.settings?.reprintPolicy || 'all';
+  if (policy === 'hide-legacy')   base = base.filter(r => !_isLegacyEntry(r));
+  else if (policy === 'hide-reprints') base = base.filter(r => !_isReprintEntry(r));
   return [...party, ...base];
 }
 
@@ -176,6 +207,21 @@ function renderSearchResults(){
   }));
 }
 
+// <img> tag for a monster portrait. Prefers the local 5etools image pack
+// (img/bestiary/{SOURCE}/{Name}.webp from the fluff data) and falls back to
+// dnd5eapi for SRD monsters when the local file isn't installed.
+function _monsterImgTag(d) {
+  if (d.cat !== 'monster') return '';
+  const local    = d._img ? 'img/' + d._img : '';
+  const fallback = `https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png`;
+  const initial  = local || fallback;
+  // Two-stage onerror: if the local image misses, try dnd5eapi; if that misses too, hide.
+  const onerr = local
+    ? `this.onerror=function(){this.style.display='none'};this.src='${fallback}'`
+    : `this.style.display='none'`;
+  return `<img class="detail-img" src="${initial}" onerror="${onerr}" alt="${esc(d.name)}">`;
+}
+
 // Builds just the inner stat-block / description HTML for any search entry.
 // Reused by both the in-popup detail view and the popped-out floating window.
 function buildDetailBody(d) {
@@ -197,9 +243,10 @@ function buildDetailBody(d) {
     if(isItem)    return renderItemFull(d);
     if(isCond)    return renderConditionFull(d);
     if(isFeat)    return renderFeatFull(d);
+    if(d.cat==='adventure') return renderAdventureFull(d);
     // All the long-tail reference categories (background, race, class, deity,
-    // object, vehicle, table, recipe, action, skill, etc.) share a generic
-    // entries→paragraphs render.
+    // object, vehicle, table, recipe, action, skill, chapter, etc.) share a
+    // generic entries→paragraphs render.
     return renderRefFull(d);
   }
   // Fallback for old SEARCH_DATA entries without _raw
@@ -227,7 +274,7 @@ function buildDetailCard(d, idSuffix) {
     ${srcBadge?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${srcBadge}</div>`:''}
     <h4>${esc(d.name)}</h4>
     <div class="detail-meta">${esc(d.meta||'')}</div>
-    ${isMonster?`<img class="detail-img" src="https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png" onerror="this.style.display='none'" alt="${esc(d.name)}">`:''}
+    ${_monsterImgTag(d)}
     <div>${buildDetailBody(d)}</div>
     ${actionsHtml}
   </div>`;
@@ -274,7 +321,7 @@ function renderSearchDetail(){
     <h4>${esc(d.name)}</h4>
     <div class="detail-meta">${esc(d.meta||'')}</div>
     ${d._source?`<div style="margin:4px 0"><span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(d._source)}</span></div>`:''}
-    ${d.cat==='monster'?`<img class="detail-img" src="https://www.dnd5eapi.co/api/images/monsters/${d._slug}.png" onerror="this.style.display='none'" alt="${esc(d.name)}">`:''}
+    ${_monsterImgTag(d)}
     <div id="detail-body">${buildDetailBody(d)}</div>
     ${d.cat==='party' ? '' : (function(){
       let h='<div class="detail-actions">';

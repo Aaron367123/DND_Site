@@ -91,6 +91,30 @@
     </div>
   </div>
   <div class="drawer-section">
+    <h3>Search</h3>
+    <div class="drawer-row">
+      <label>Reprints</label>
+      <div class="toggle-group" id="reprint-group">
+        <button class="active" data-val="all" title="Show every monster/spell/item — both 2014 and 2024 versions">Show all</button>
+        <button data-val="hide-legacy" title="Hide the older 2014 entry whenever a 2024 reprint exists (matches 5etools default)">Hide 2014</button>
+        <button data-val="hide-reprints" title="Hide the 2024 reprints, keep the 2014 versions (best for SKT and other 2014-era modules)">Hide 2024</button>
+      </div>
+    </div>
+    <p class="drawer-note" style="margin-top:6px">Affects search results and tab counts.</p>
+  </div>
+  <div class="drawer-section">
+    <h3>You</h3>
+    <div class="drawer-row">
+      <label>Display name</label>
+      <input type="text" id="me-name" maxlength="20" style="flex:1" placeholder="Player">
+    </div>
+    <div class="drawer-row">
+      <label>Your color</label>
+      <input type="color" id="me-color" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+    </div>
+    <p class="drawer-note" style="margin-top:6px">Lines you write in Session Notes are colored with this. Each browser has its own identity.</p>
+  </div>
+  <div class="drawer-section">
     <h3>Data</h3>
     <button class="btn small" id="export-btn">Export JSON</button>
     <button class="btn small" id="import-btn" style="margin-top:6px">Import JSON</button>

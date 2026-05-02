@@ -5,10 +5,28 @@ const panelDefs={};
 const mounted=new Set();
 let zCounter=10;
 
+// Returns the next z-index to use, guaranteed to be greater than every
+// currently-mounted window AND any saved panel z. This avoids a class of bugs
+// where, on page load, zCounter resets to 10 while saved panels carry higher
+// z values from a previous session — making freshly-focused windows sink
+// behind them.
+function _nextZ(){
+  let max = zCounter;
+  document.querySelectorAll('.window').forEach(el => {
+    const z = parseInt(el.style.zIndex);
+    if (!isNaN(z) && z > max) max = z;
+  });
+  Object.values(layout).forEach(l => {
+    if (l && typeof l.z === 'number' && l.z > max) max = l.z;
+  });
+  zCounter = max + 1;
+  return zCounter;
+}
+
 function registerPanel(id,def){panelDefs[id]=def;}
 
 function openPanel(id){
-  layout[id]={...layout[id],open:true,minimized:false,z:++zCounter};
+  layout[id]={...layout[id],open:true,minimized:false,z:_nextZ()};
   saveLayout();ensurePanel(id);updateDock();
 }
 function closePanel(id){
@@ -22,7 +40,7 @@ function togglePanel(id){
   if(layout[id]?.open&&!layout[id]?.minimized)closePanel(id);else openPanel(id);
 }
 function focusPanel(id){
-  layout[id]={...layout[id],z:++zCounter};saveLayout();
+  layout[id]={...layout[id],z:_nextZ()};saveLayout();
   document.querySelectorAll('.window').forEach(w=>w.classList.remove('focused'));
   const el=document.querySelector(`.window[data-panel="${id}"]`);
   if(el){el.classList.add('focused');el.style.zIndex=layout[id].z;}
@@ -35,7 +53,7 @@ function ensurePanel(id){
     return;
   }
   const def=panelDefs[id];if(!def)return;
-  const l=layout[id]||{x:40,y:40,w:320,h:400,z:++zCounter,minimized:false};
+  const l=layout[id]||{x:40,y:40,w:320,h:400,z:_nextZ(),minimized:false};
   const ws=document.getElementById('workspace');
   const el=document.createElement('div');
   el.className='window'+(l.minimized?' minimized':'');

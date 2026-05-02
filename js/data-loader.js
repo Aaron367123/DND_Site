@@ -92,7 +92,11 @@ function _parseSpeed(speed) {
 function _parseAC(ac) {
   if (!ac?.length) return [{value:10, type:''}];
   const a = ac[0];
-  return typeof a==='number' ? [{value:a,type:''}] : [{value:a.ac||10, type:(a.from||[]).join(', ')}];
+  if (typeof a === 'number') return [{value:a, type:''}];
+  // 5etools puts armor source refs in `from` as inline tags like
+  // "{@item studded leather armor|phb|studded leather}" — strip those for display.
+  const from = (a.from||[]).map(_stripTags).filter(Boolean).join(', ');
+  return [{value:a.ac||10, type:from + (a.condition?(from?' ':'')+_stripTags(a.condition):'')}];
 }
 
 function _parseSenses(senses, passive) {
@@ -113,7 +117,13 @@ function _parseProficiencies(d) {
 }
 
 function _damageArr(arr) {
-  return (arr||[]).map(v => typeof v==='string' ? v : (Array.isArray(v) ? v.join(', ') : (v.resist||v.immune||v.vulnerable||v.special||''))).filter(Boolean);
+  return (arr||[]).map(v => {
+    if (typeof v === 'string') return _stripTags(v);
+    if (Array.isArray(v)) return v.map(x => typeof x==='string'?_stripTags(x):'').filter(Boolean).join(', ');
+    const inner = v.resist||v.immune||v.vulnerable||v.special||'';
+    if (Array.isArray(inner)) return inner.map(x => typeof x==='string'?_stripTags(x):'').filter(Boolean).join(', ');
+    return _stripTags(inner);
+  }).filter(Boolean);
 }
 
 // ─── _copy resolution ──────────────────────────────────────────────────────────
@@ -243,7 +253,7 @@ function _convertMonster(d) {
     damage_immunities:      _damageArr(d.immune),
     condition_immunities:   (d.conditionImmune||[]).map(c=>({name:typeof c==='string'?c:(c.condition||'')})),
     senses:    _parseSenses(d.senses, d.passive),
-    languages: typeof d.languages==='string' ? d.languages : (d.languages||[]).join(', '),
+    languages: _stripTags(typeof d.languages==='string' ? d.languages : (d.languages||[]).join(', ')),
     challenge_rating: _parseCR(d.cr),
     xp:               _crToXP(d.cr),
     special_abilities: (d.trait    ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
@@ -362,10 +372,23 @@ function _convertFeat(d) {
 }
 
 // ─── State ─────────────────────────────────────────────────────────────────────
-let _5eData      = [];
-let _5eLoaded    = false;
-let _5eLoading   = false;
-let _5eCallbacks = [];
+let _5eData       = [];
+let _5eLoaded     = false;
+let _5eLoading    = false;
+let _5eCallbacks  = [];
+let _5eReprintTo  = new Set(); // lowercased "name|source" of every entry that is a reprint of an older one
+
+// True if this entry is the OLDER version that has been reprinted in a newer book (e.g. MM Goblin → XMM Goblin Warrior).
+function _isLegacyEntry(r) {
+  const rs = r && r._raw && r._raw.reprintedAs;
+  return Array.isArray(rs) && rs.length > 0;
+}
+// True if this entry IS the newer reprint of something older.
+function _isReprintEntry(r) {
+  if (!r) return false;
+  const key = (r.name + '|' + (r._source || '')).toLowerCase();
+  return _5eReprintTo.has(key);
+}
 
 function on5eLoaded(cb) {
   if (_5eLoaded) cb(_5eData);
@@ -385,6 +408,7 @@ async function load5eData() {
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertMonster(d);
+    const imgKey = ((d.name||'') + '|' + (d.source||'')).toLowerCase();
     results.push({
       cat:'monster', name:d.name, _slug:r.index, _fromLocal:true,
       meta:`${r.size} ${r.type} · CR ${r.challenge_rating}`.trim(),
@@ -393,6 +417,7 @@ async function load5eData() {
       speed:Object.entries(r.speed||{}).map(([k,v])=>k+' '+v).join(', ')||'—',
       str:r.strength, dex:r.dexterity, con:r.constitution,
       int:r.intelligence, wis:r.wisdom, cha:r.charisma,
+      _img: _monsterImg[imgKey] || null, // path under /img if 5etools image pack is installed
       _raw:r,
     });
   }
@@ -480,11 +505,15 @@ async function load5eData() {
     } catch { return null; }
   };
 
-  // Step 1: fetch index files to discover all available source files dynamically
-  const [bestiaryIdx, spellIdx, classIdx] = await Promise.all([
+  // Step 1: fetch index files to discover all available source files dynamically.
+  // adventures.json is the master list of published adventures; we use the `id`
+  // of each entry to construct the per-adventure content file path.
+  const [bestiaryIdx, spellIdx, classIdx, bestiaryFluffIdx, advIndex] = await Promise.all([
     fetchFile('data/bestiary/index.json'),
     fetchFile('data/spells/index.json'),
     fetchFile('data/class/index.json'),
+    fetchFile('data/bestiary/fluff-index.json'),
+    fetchFile('data/adventures.json'),
   ]);
 
   const _skipKeys = new Set(['fluff-index.json', 'index.json', 'sources.json', 'foundry.json']);
@@ -496,6 +525,16 @@ async function load5eData() {
     : [];
   const classFiles = classIdx
     ? Object.values(classIdx).filter(f => !_skipKeys.has(f)).map(f => `data/class/${f}`)
+    : [];
+  // Fluff files contain the image references (path under img/) that 5etools' image
+  // pack ships at. Loading these lets us point each monster card at its real portrait.
+  const bestiaryFluffFiles = bestiaryFluffIdx
+    ? Object.values(bestiaryFluffIdx).map(f => `data/bestiary/${f}`)
+    : [];
+  // Each published adventure has its full chapter content in a separate file
+  // named adventure-{id-lowercase}.json under data/adventure/.
+  const adventureFiles = advIndex && Array.isArray(advIndex.adventure)
+    ? advIndex.adventure.map(a => 'data/adventure/adventure-' + (a.id||'').toLowerCase() + '.json')
     : [];
 
   // Long tail of single-file reference categories
@@ -527,7 +566,7 @@ async function load5eData() {
   const _refUniquePaths = [...new Set(_refSpecs.map(s => s.path))];
 
   // Step 2: fetch all data files in parallel
-  const [bestiaries, spellbooks, classBooks, conditionFiles, itemFile, featFile, refFiles] = await Promise.all([
+  const [bestiaries, spellbooks, classBooks, conditionFiles, itemFile, featFile, refFiles, bestiaryFluffs, adventureBooks] = await Promise.all([
     Promise.all(bestiaryFiles.map(fetchFile)),
     Promise.all(spellFiles.map(fetchFile)),
     Promise.all(classFiles.map(fetchFile)),
@@ -535,9 +574,26 @@ async function load5eData() {
     fetchFile('data/items.json'),
     fetchFile('data/feats.json'),
     Promise.all(_refUniquePaths.map(fetchFile)),
+    Promise.all(bestiaryFluffFiles.map(fetchFile)),
+    Promise.all(adventureFiles.map(fetchFile)),
   ]);
   const _refByPath = {};
   _refUniquePaths.forEach((p, i) => { _refByPath[p] = refFiles[i]; });
+
+  // Build image lookup: name|source.lower → first image path declared in fluff.
+  // The 5etools image pack lives under img/ at the project root; paths in fluff
+  // data are relative to that (e.g. "bestiary/MM/Goblin.webp" → "img/bestiary/MM/Goblin.webp").
+  const _monsterImg = {};
+  bestiaryFluffs.forEach(json => {
+    if (!json) return;
+    (json.monsterFluff || []).forEach(m => {
+      if (!m || !m.images || !m.images.length) return;
+      const first = m.images.find(im => im && im.href && im.href.path);
+      if (!first) return;
+      const k = ((m.name||'') + '|' + (m.source||'')).toLowerCase();
+      _monsterImg[k] = first.href.path;
+    });
+  });
 
   // Two passes for monsters: first index every raw entry by name|source so _copy
   // references can be resolved across bestiary files (e.g. SKT's Xolkin → MM's
@@ -638,6 +694,60 @@ async function load5eData() {
         case 'charoption':  meta = 'Char option' + (d.optionType?' · '+d.optionType:''); break;
       }
       addRef(spec.cat, d, meta, {displayName: display, dedupeKey: dedupe});
+    });
+  });
+
+  // Adventures: master metadata entries + their top-level chapters as separate
+  // searchable entries. Sub-sections within chapters are intentionally not
+  // indexed — that would add tens of thousands of entries.
+  if (advIndex && Array.isArray(advIndex.adventure)) {
+    advIndex.adventure.forEach((adv, i) => {
+      if (!adv || !adv.name) return;
+      const file = adventureBooks[i];
+      const chapters = file && Array.isArray(file.data)
+        ? file.data.filter(ch => ch && ch.name).map(ch => ch.name)
+        : [];
+      const lvl = adv.level && adv.level.start
+        ? `L${adv.level.start}${adv.level.end!=null?'–'+adv.level.end:''}`
+        : '';
+      const meta = ['Adventure', lvl, adv.storyline, adv.published].filter(Boolean).join(' · ');
+
+      const advKey = 'adventure:' + adv.name.toLowerCase();
+      if (!seen.has(advKey)) {
+        seen.add(advKey);
+        results.push({
+          cat:'adventure', name:adv.name, _slug:_toIndex(adv.name), _fromLocal:true,
+          meta, _source:adv.source,
+          desc:'',
+          _raw:{...adv, _chapters:chapters},
+        });
+      }
+
+      // Top-level chapter entries (Chapter 1: …, Appendix A: …, etc.)
+      if (file && Array.isArray(file.data)) {
+        file.data.forEach(ch => {
+          if (!ch || !ch.name) return;
+          const display = `${ch.name} (${adv.id||adv.source||''})`;
+          addRef('chapter', ch, `Chapter · ${adv.name}`, {displayName:display, dedupeKey:display});
+        });
+      }
+    });
+  }
+
+  // Build the reprint-target index: for each entry that has a reprintedAs list,
+  // record the new (name|source) it points to. Used by the "Hide 2024 reprints"
+  // search-filter setting.
+  _5eReprintTo = new Set();
+  results.forEach(r => {
+    const rs = r._raw && r._raw.reprintedAs;
+    if (!Array.isArray(rs)) return;
+    rs.forEach(ref => {
+      if (typeof ref !== 'string') return;
+      // Format is usually "Name|SOURCE" (sometimes just "Name")
+      const parts = ref.split('|');
+      const name = (parts[0] || '').trim();
+      const src  = (parts[1] || '').trim();
+      _5eReprintTo.add((name + '|' + src).toLowerCase());
     });
   });
 

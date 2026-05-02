@@ -43,7 +43,7 @@ const DEFAULT_LAYOUT = {
   soundboard:  {x:200, y:100, w:580, h:500, open:false, minimized:false, z:9},
 };
 
-const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none'};
+const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all'};
 
 const ITEM_CATALOG = {
   'Blacksmith/Armory':[

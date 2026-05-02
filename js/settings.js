@@ -23,6 +23,38 @@ function initSettings(){
     btn.classList.add('active');state.settings.rounding=v;save();
   }));
 
+  // Per-user identity (local-only, drives per-line author coloring in Notes).
+  const meName = document.getElementById('me-name');
+  const meColor = document.getElementById('me-color');
+  const me = _getMe();
+  meName.value = me.name;
+  meColor.value = me.color;
+  function _persistMe(){
+    const updated = { id: me.id, name: (meName.value || 'Player').trim(), color: meColor.value };
+    me.name = updated.name; me.color = updated.color;
+    try { localStorage.setItem('skt-me-v1', JSON.stringify(updated)); } catch(e) {}
+    // Push the updated registry entry into the synced notes blob so other clients see it.
+    panelDefs.notes && panelDefs.notes._touchSelf && panelDefs.notes._touchSelf();
+  }
+  meName.addEventListener('change', _persistMe);
+  meColor.addEventListener('change', _persistMe);
+
+  // Reprint policy — controls whether reprinted entries appear in search.
+  const reprintPolicy = state.settings.reprintPolicy || 'all';
+  document.querySelectorAll('#reprint-group button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.val === reprintPolicy);
+  });
+  document.querySelectorAll('#reprint-group button').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('#reprint-group button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.settings.reprintPolicy = btn.dataset.val;
+    save();
+    // Refresh the search popup if it's open so the change is visible immediately
+    if (document.getElementById('search-popup')?.classList.contains('open')) {
+      renderSearchTabs(); renderSearchResults();
+    }
+  }));
+
   document.getElementById('export-btn').addEventListener('click',()=>{
     const blob=new Blob([JSON.stringify({party:state.party,combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId,shop:state.shop,settings:state.settings},null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob),a=Object.assign(document.createElement('a'),{href:url,download:`skt-${new Date().toISOString().slice(0,10)}.json`});

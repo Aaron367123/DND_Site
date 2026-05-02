@@ -3,6 +3,22 @@
 // ============================================================
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function uid(){return Math.random().toString(36).slice(2,9)}
+
+// Local-only per-browser identity used by the Notes panel for per-line author
+// coloring. Stored under skt-me-v1, intentionally NOT in SKT_SYNC_KEYS — same
+// pattern as skt-layout-v1 (each browser stays its own user).
+function _getMe() {
+  try {
+    const raw = localStorage.getItem('skt-me-v1');
+    if (raw) {
+      const m = JSON.parse(raw);
+      if (m && m.id) return m;
+    }
+  } catch(e) {}
+  const fresh = { id: 'u_' + uid(), name: 'Player', color: '#d4a574' };
+  try { localStorage.setItem('skt-me-v1', JSON.stringify(fresh)); } catch(e) {}
+  return fresh;
+}
 function d20(){return Math.floor(Math.random()*20)+1}
 function mod(s){return Math.floor((s-10)/2)}
 function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),1800)}
@@ -125,11 +141,11 @@ function createFloatingWindow(opts) {
   var x = opts.x != null ? opts.x : defaultX;
   var y = opts.y != null ? opts.y : defaultY;
 
-  zCounter++;
+  var z = _nextZ();
   var el = document.createElement('div');
   el.className = 'window focused';
   el.dataset.ephemeral = '1';
-  Object.assign(el.style, {position:'absolute', left:x+'px', top:y+'px', width:w+'px', height:h+'px', zIndex:zCounter});
+  Object.assign(el.style, {position:'absolute', left:x+'px', top:y+'px', width:w+'px', height:h+'px', zIndex:z});
   el.innerHTML =
     '<div class="window-head">'
       +'<div class="window-title">'
@@ -148,8 +164,7 @@ function createFloatingWindow(opts) {
 
   // Bring to front on any mousedown inside the window
   el.addEventListener('mousedown', function() {
-    zCounter++;
-    el.style.zIndex = zCounter;
+    el.style.zIndex = _nextZ();
     document.querySelectorAll('.window').forEach(function(w){ w.classList.remove('focused'); });
     el.classList.add('focused');
   });

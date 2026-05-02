@@ -101,7 +101,7 @@ function _reloadPanels() {
   // Panels that cache localStorage into their own property
   _remountPanel('npclib',    () => { panelDefs.npclib._npcs  = null; });
   _remountPanel('loot',      () => { panelDefs.loot._loot    = null; });
-  _remountPanel('notes',     () => { panelDefs.notes._pages  = null; });
+  _remountPanel('notes',     () => { panelDefs.notes._data   = null; });
   _remountPanel('encounter', () => { /* mount() always re-reads */ });
 
   // Battle map: update internal data directly to avoid duplicate BroadcastChannel
