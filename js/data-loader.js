@@ -659,6 +659,21 @@ async function load5eData() {
   // Build the {cat → name|source → {desc, img}} lookup used by _applyFluff.
   // Skip any image whose imageType is 'map' or 'mapPlayer' so the hero portrait
   // wins over deck plans / regional maps when present.
+  // Many fluff entries inherit from a base via {_copy:{name,source,_mod}} where
+  // _mod adds the images via prependArr/appendArr. We index every fluff entry
+  // across all files so copies can resolve into their parents.
+  const _fluffRawByCatKey = {};
+  _FLUFF_SPECS.forEach(spec => {
+    const json = _fluffByPath[spec.path];
+    if (!json) return;
+    const arr = json[spec.arr] || [];
+    const bucket = _fluffRawByCatKey[spec.cat] = _fluffRawByCatKey[spec.cat] || {};
+    arr.forEach(f => {
+      if (!f || !f.name) return;
+      const k = ((f.name||'') + '|' + (f.source||'')).toLowerCase();
+      bucket[k] = f;
+    });
+  });
   _FLUFF_SPECS.forEach(spec => {
     const json = _fluffByPath[spec.path];
     if (!json) return;
@@ -667,10 +682,11 @@ async function load5eData() {
     arr.forEach(f => {
       if (!f || !f.name) return;
       const k = ((f.name||'') + '|' + (f.source||'')).toLowerCase();
-      const desc = _parseEntries(f.entries || []);
+      const resolved = f._copy ? _resolveCopy(f, _fluffRawByCatKey[spec.cat] || {}, 0) : f;
+      const desc = _parseEntries(resolved.entries || []);
       let img = null;
-      if (Array.isArray(f.images)) {
-        const hero = f.images.find(im => im && im.href && im.href.path && im.imageType !== 'map' && im.imageType !== 'mapPlayer');
+      if (Array.isArray(resolved.images)) {
+        const hero = resolved.images.find(im => im && im.href && im.href.path && im.imageType !== 'map' && im.imageType !== 'mapPlayer');
         if (hero) img = 'img/' + hero.href.path;
       }
       if (!desc && !img) return;
@@ -678,19 +694,24 @@ async function load5eData() {
     });
   });
 
-  // Build image lookup: name|source.lower → first image path declared in fluff.
-  // The 5etools image pack lives under img/ at the project root; paths in fluff
-  // data are relative to that (e.g. "bestiary/MM/Goblin.webp" → "img/bestiary/MM/Goblin.webp").
+  // Monster fluff: same _copy resolution. Index everything first, then resolve
+  // each entry so MM Frost Giant (which inherits images from "Giants" via
+  // _copy._mod.images.prependArr) picks up its portrait.
   const _monsterImg = {};
+  const _monsterFluffByKey = {};
   bestiaryFluffs.forEach(json => {
     if (!json) return;
     (json.monsterFluff || []).forEach(m => {
-      if (!m || !m.images || !m.images.length) return;
-      const first = m.images.find(im => im && im.href && im.href.path);
-      if (!first) return;
+      if (!m || !m.name) return;
       const k = ((m.name||'') + '|' + (m.source||'')).toLowerCase();
-      _monsterImg[k] = first.href.path;
+      _monsterFluffByKey[k] = m;
     });
+  });
+  Object.entries(_monsterFluffByKey).forEach(([k, m]) => {
+    const resolved = m._copy ? _resolveCopy(m, _monsterFluffByKey, 0) : m;
+    if (!resolved.images || !resolved.images.length) return;
+    const first = resolved.images.find(im => im && im.href && im.href.path && im.imageType !== 'map' && im.imageType !== 'mapPlayer');
+    if (first) _monsterImg[k] = first.href.path;
   });
 
   // Two passes for monsters: first index every raw entry by name|source so _copy
