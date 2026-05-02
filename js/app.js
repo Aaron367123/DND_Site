@@ -31,6 +31,8 @@ function init(){
   updateDock();
   initSearch();
   initSettings();
+  initWorkspaceContextMenu();
+  initZoomPan();
 }
 
 init();

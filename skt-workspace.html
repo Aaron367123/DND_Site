@@ -74,7 +74,15 @@
   </div>
 
   <!-- WORKSPACE -->
-  <div class="workspace" id="workspace"></div>
+  <div class="workspace" id="workspace">
+    <div class="workspace-canvas" id="workspace-canvas"></div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoom-out" title="Zoom out (Ctrl+-)">−</button>
+      <button class="zoom-btn" id="zoom-reset" title="Reset zoom (Ctrl+0)">100%</button>
+      <button class="zoom-btn" id="zoom-in" title="Zoom in (Ctrl+=)">+</button>
+      <button class="zoom-btn" id="zoom-fit" title="Center on content">⊙</button>
+    </div>
+  </div>
 </div>
 
 <!-- SETTINGS DRAWER -->
@@ -171,6 +179,8 @@
 <script src="js/data-loader.js"></script>
 <script src="js/search.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/context-menu.js"></script>
+<script src="js/zoom-pan.js"></script>
 <script src="js/player-view.js"></script>
 <script src="js/realtime.js"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->

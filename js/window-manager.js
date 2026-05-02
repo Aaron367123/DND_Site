@@ -54,13 +54,13 @@ function ensurePanel(id){
   }
   const def=panelDefs[id];if(!def)return;
   const l=layout[id]||{x:40,y:40,w:320,h:400,z:_nextZ(),minimized:false};
-  const ws=document.getElementById('workspace');
+  const canvas=document.getElementById('workspace-canvas')||document.getElementById('workspace');
   const el=document.createElement('div');
   el.className='window'+(l.minimized?' minimized':'');
   el.dataset.panel=id;
   Object.assign(el.style,{left:l.x+'px',top:l.y+'px',width:l.w+'px',height:l.h+'px',zIndex:l.z});
   el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions"><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div><div class="window-resize"></div>`;
-  ws.appendChild(el);
+  canvas.appendChild(el);
   def.mount(el.querySelector('.window-body'));
   mounted.add(id);
   wireWindow(el,id);
@@ -73,8 +73,9 @@ function wireWindow(el,id){
   let drag=null,rs=null;
   head.addEventListener('mousedown',e=>{if(e.target.closest('button'))return;const l=layout[id];drag={sx:e.clientX,sy:e.clientY,ox:l.x,oy:l.y};e.preventDefault();});
   document.addEventListener('mousemove',e=>{
-    if(drag){const nx=Math.max(0,drag.ox+e.clientX-drag.sx),ny=Math.max(0,drag.oy+e.clientY-drag.sy);el.style.left=nx+'px';el.style.top=ny+'px';}
-    if(rs){const nw=Math.max(240,rs.ow+e.clientX-rs.sx),nh=Math.max(120,rs.oh+e.clientY-rs.sy);el.style.width=nw+'px';el.style.height=nh+'px';}
+    const z = (typeof getZoom==='function') ? getZoom() : 1;
+    if(drag){const nx=Math.max(0,drag.ox+(e.clientX-drag.sx)/z),ny=Math.max(0,drag.oy+(e.clientY-drag.sy)/z);el.style.left=nx+'px';el.style.top=ny+'px';}
+    if(rs){const nw=Math.max(240,rs.ow+(e.clientX-rs.sx)/z),nh=Math.max(120,rs.oh+(e.clientY-rs.sy)/z);el.style.width=nw+'px';el.style.height=nh+'px';}
   });
   document.addEventListener('mouseup',()=>{
     if(drag){layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top)};saveLayout();drag=null;}
