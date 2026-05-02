@@ -35,6 +35,7 @@ const SKT_SYNC_KEYS = [
   'skt-loot-v1',       // loot tracker
   'skt-notes-v1',      // session notes
   'skt-npcs-v2',       // NPC library
+  'skt-bestiary-v1',   // bestiary
 ];
 
 // Firebase keys cannot contain hyphens or dots — convert to underscores
@@ -99,9 +100,10 @@ function _reloadPanels() {
   });
 
   // Panels that cache localStorage into their own property
-  _remountPanel('npclib',    () => { panelDefs.npclib._npcs  = null; });
-  _remountPanel('loot',      () => { panelDefs.loot._loot    = null; });
-  _remountPanel('notes',     () => { panelDefs.notes._data   = null; });
+  _remountPanel('npclib',    () => { panelDefs.npclib._npcs    = null; });
+  _remountPanel('loot',      () => { panelDefs.loot._loot      = null; });
+  _remountPanel('notes',     () => { panelDefs.notes._data     = null; });
+  _remountPanel('bestiary',  () => { panelDefs.bestiary._data  = null; });
   _remountPanel('encounter', () => { /* mount() always re-reads */ });
 
   // Battle map: update internal data directly to avoid duplicate BroadcastChannel

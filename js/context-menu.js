@@ -6,8 +6,9 @@
 
 const CTX_PANEL_GROUPS = [
   { label: 'Combat Tools', items: [
-    { id: 'party',  name: 'Party Tracker' },
-    { id: 'combat', name: 'Combat Tracker' },
+    { id: 'party',    name: 'Party Tracker' },
+    { id: 'combat',   name: 'Combat Tracker' },
+    { id: 'bestiary', name: 'Bestiary' },
   ]},
   { label: 'NPC Management', items: [
     { id: 'npcgen', name: 'NPC Generator' },

@@ -15,6 +15,16 @@ registerPanel('battlemap',{
   _fogTool: false,   // true when in fog-paint mode
   _fogRadius: 1,     // brush radius in cells
   _isPainting: false,
+  // Path of the currently chosen 5etools adventure map (relative to img/),
+  // e.g. "adventure/DIP/004-map-phandalin.webp". Persisted; image is loaded
+  // on mount.
+  _bgMapPath: null,
+  // Whether to draw the grid overlay. Some 5etools maps already have a grid
+  // baked into the image — the user can hide ours so the two don't clash.
+  _showGrid: true,
+  // Picker caches — survive panel re-renders, populated lazily.
+  _adventures: null,
+  _mapsByAdv: {},
 
   mount(body){
     this._body=body;
@@ -22,9 +32,12 @@ registerPanel('battlemap',{
       const raw=localStorage.getItem('skt-battlemap-v1');
       if(raw){const d=JSON.parse(raw);this._tokens=d.tokens||[];this._cellSize=d.cellSize||50;this._cols=d.cols||24;this._rows=d.rows||18;this._bgColor=d.bgColor||'#1a2a1a';
         if(d.fog){this._fog=new Set(d.fog);}else{this._fog=null;}
+        this._bgMapPath = d.bgMapPath || null;
+        this._showGrid = d.showGrid !== false; // default on
       }
     }catch(e){}
     this._render();
+    if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath);
     this._startBroadcast();
   },
   unmount(){this._saveMap();this._stopBroadcast();this._body=null;},
@@ -32,9 +45,25 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid}));
     }catch(e){}
     this._broadcast();
+  },
+
+  // Load an image at img/{path} into _mapBgImage and refresh the canvas.
+  _loadBgFromPath(path){
+    const img = new Image();
+    img.onload = () => {
+      _mapBgImage = img;
+      const b = this._body; if (!b) return;
+      const stage = b.querySelector('#map-stage');
+      if (!stage) return;
+      const cs = this._cellSize;
+      this._applyBg(stage, this._cols*cs, this._rows*cs);
+      this._render();
+    };
+    img.onerror = () => { showToast('Could not load map image'); };
+    img.src = 'img/' + path;
   },
 
   // BroadcastChannel — lets a player view tab receive updates
@@ -58,6 +87,7 @@ registerPanel('battlemap',{
         cols:this._cols, rows:this._rows,
         bgColor:this._bgColor, fog:fogArr,
         bgImageData: _mapBgImage?'present':null,
+        bgMapPath: this._bgMapPath,
       });
     }catch(e){}
   },
@@ -89,8 +119,9 @@ registerPanel('battlemap',{
         +'<option value="80" '+(cs===80?'selected':'')+'>80px/10ft</option>'
       +'</select>'
       +'<input type="color" id="map-bg-color" value="'+this._bgColor+'" style="width:28px;height:24px;padding:1px;border-radius:3px;cursor:pointer;flex-shrink:0" title="Background color">'
-      +'<label class="btn" style="cursor:pointer;flex-shrink:0;margin:0">📷 Map<input type="file" id="map-img-upload" accept="image/*" style="display:none"></label>'
+      +'<button class="btn" data-mact="pick-map" style="flex-shrink:0">🗺 Map</button>'
       +(_mapBgImage?'<button class="btn danger" data-mact="clear-img" style="flex-shrink:0">✕ Map</button>':'')
+      +'<button class="btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Show/hide grid overlay">⊞ Grid</button>'
       +'<div style="flex:1"></div>'
       +'<button class="btn" data-mact="sync-combat" style="flex-shrink:0">↺ Sync</button>'
       +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
@@ -174,7 +205,9 @@ registerPanel('battlemap',{
       }
       else if(act==='sync-combat') this._syncParty();
       else if(act==='clear-tokens'){if(!confirm('Remove all tokens?'))return;this._tokens=[];this._selected=null;this._closePanel();this._renderTokens();this._saveMap();}
-      else if(act==='clear-img'){_mapBgImage=null;this._applyBg(stage,W,H);this._render();}
+      else if(act==='clear-img'){_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();}
+      else if(act==='pick-map'){this._openMapPicker();}
+      else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
       else if(act==='fog-toggle'){
         this._fog=this._fog!==null?null:new Set();
         if(this._fog!==null)this._fogTool=true;
@@ -222,28 +255,6 @@ registerPanel('battlemap',{
     // Update stage cursor when fog tool active
     if(this._fogTool) stage.style.cursor='crosshair';
     else stage.style.cursor='default';
-
-    // Image upload — load into an Image object, never touch localStorage
-    b.querySelector('#map-img-upload').addEventListener('change',e=>{
-      const file=e.target.files[0];if(!file)return;
-      if(file.size>20*1024*1024){showToast('Image too large (max 20MB)');e.target.value='';return;}
-      showToast('Loading image…');
-      const reader=new FileReader();
-      reader.onload=ev=>{
-        const img=new Image();
-        img.onload=()=>{
-          _mapBgImage=img;
-          this._applyBg(stage,W,H);
-          this._render(); // re-render toolbar to show ✕ button
-          showToast('Map image loaded');
-        };
-        img.onerror=()=>{showToast('Could not load image');};
-        img.src=ev.target.result;
-      };
-      reader.onerror=()=>showToast('Could not read file');
-      reader.readAsDataURL(file);
-      e.target.value='';
-    });
 
     // Canvas click = place token when in add-pc/add-npc mode
     canvas.addEventListener('click',e=>{
@@ -304,6 +315,119 @@ registerPanel('battlemap',{
     });
   },
 
+  // Map picker — adventures from data/adventures.json, maps extracted from
+  // each adventure's JSON by walking for {type:'image', imageType:'map'|'mapPlayer'}.
+  // Per-adventure JSON is fetched lazily on first selection and cached.
+  async _openMapPicker(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:680px;max-width:92vw">
+      <h3>Choose a Map</h3>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <select id="mapsel-adv" style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+          <option value="">Loading adventures…</option>
+        </select>
+      </div>
+      <div id="mapsel-grid" class="mapsel-grid"></div>
+      <div class="modal-actions" style="margin-top:10px">
+        ${this._bgMapPath ? '<button class="btn danger" id="mapsel-clear">Clear current map</button>' : ''}
+        <button class="btn" id="mapsel-close">Close</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+
+    const sel = backdrop.querySelector('#mapsel-adv');
+    const grid = backdrop.querySelector('#mapsel-grid');
+    const close = ()=>backdrop.remove();
+    backdrop.querySelector('#mapsel-close').addEventListener('click', close);
+    backdrop.querySelector('#mapsel-clear')?.addEventListener('click', ()=>{
+      _mapBgImage = null;
+      this._bgMapPath = null;
+      this._saveMap();
+      const stage = this._body?.querySelector('#map-stage');
+      if (stage){ const cs=this._cellSize; this._applyBg(stage, this._cols*cs, this._rows*cs); }
+      this._render();
+      close();
+    });
+    backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
+    backdrop.addEventListener('keydown', e=>{ if (e.key==='Escape') close(); });
+
+    // Load the adventure manifest once, sort, populate dropdown.
+    if (!this._adventures){
+      try {
+        const res = await fetch('data/adventures.json');
+        const j = await res.json();
+        this._adventures = (j.adventure || []).slice().sort((a,b)=>a.name.localeCompare(b.name));
+      } catch(e) {
+        sel.innerHTML = '<option value="">Failed to load adventures</option>';
+        return;
+      }
+    }
+    sel.innerHTML = '<option value="">Pick an adventure…</option>'
+      + this._adventures.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+
+    const renderMaps = (advId)=>{
+      const list = this._mapsByAdv[advId] || [];
+      if (!list.length){
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No maps in this adventure.</div>';
+        return;
+      }
+      grid.innerHTML = list.map(m=>`<div class="mapsel-card" data-path="${esc(m.path)}" title="${esc(m.title)}">
+        <img src="${esc('img/'+m.path)}" loading="lazy" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
+        <div class="mapsel-title">${esc(m.title)}</div>
+        <span class="mapsel-badge ${esc(m.type)}">${m.type==='mapPlayer'?'Player':'DM'}</span>
+      </div>`).join('');
+      grid.querySelectorAll('.mapsel-card').forEach(card=>{
+        card.addEventListener('click', ()=>{
+          const path = card.dataset.path;
+          const img = new Image();
+          img.onload = ()=>{
+            _mapBgImage = img;
+            this._bgMapPath = path;
+            this._saveMap();
+            const stage = this._body?.querySelector('#map-stage');
+            if (stage){ const cs=this._cellSize; this._applyBg(stage, this._cols*cs, this._rows*cs); }
+            this._render();
+            close();
+            showToast('Map loaded');
+          };
+          img.onerror = ()=>showToast('Could not load that map');
+          img.src = 'img/' + path;
+        });
+      });
+    };
+
+    sel.addEventListener('change', async e=>{
+      const advId = e.target.value;
+      if (!advId){ grid.innerHTML = ''; return; }
+      if (!this._mapsByAdv[advId]){
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Loading maps…</div>';
+        try {
+          const res = await fetch('data/adventure/adventure-' + advId.toLowerCase() + '.json');
+          const j = await res.json();
+          const found = [];
+          // Recursively walk every node looking for image entries with a map type.
+          const walk = (node)=>{
+            if (!node) return;
+            if (Array.isArray(node)){ node.forEach(walk); return; }
+            if (typeof node !== 'object') return;
+            if (node.type === 'image' && (node.imageType === 'map' || node.imageType === 'mapPlayer') && node.href?.path){
+              const path = node.href.path;
+              const fallback = path.split('/').pop().replace(/\.[^.]+$/, '');
+              found.push({ path, title: node.title || fallback, type: node.imageType });
+            }
+            for (const k in node) walk(node[k]);
+          };
+          walk(j);
+          this._mapsByAdv[advId] = found;
+        } catch(err) {
+          this._mapsByAdv[advId] = [];
+        }
+      }
+      renderMaps(advId);
+    });
+  },
+
   _applyBg(stage,W,H){
     if(_mapBgImage){
       // Draw the image into an offscreen canvas then set as CSS background
@@ -326,6 +450,9 @@ registerPanel('battlemap',{
     // Make sure canvas is sized correctly (fixes black area when resizing)
     canvas.width=W; canvas.height=H;
     ctx.clearRect(0,0,W,H);
+
+    // Grid hidden — still keep the canvas sized and let fog draw on top.
+    if (!this._showGrid){ this._drawFog(); return; }
 
     // Determine if background is light or dark for adaptive grid color
     let gridColor='rgba(255,255,255,0.18)';

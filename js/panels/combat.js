@@ -285,9 +285,12 @@ registerPanel('combat',{
     const list = backdrop.querySelector('#cmb-pick-list');
     const renderList = q=>{
       const qn=(q||'').toLowerCase().trim();
-      const pool = qn ? all.filter(d=>d.name.toLowerCase().includes(qn)||(d.meta||'').toLowerCase().includes(qn)).slice(0,200) : all.slice(0,200);
+      const pool = qn ? all.filter(d=>d.name.toLowerCase().includes(qn)||(d.meta||'').toLowerCase().includes(qn)||(d._source||'').toLowerCase().includes(qn)||(_formatSource(d._source)||'').toLowerCase().includes(qn)).slice(0,200) : all.slice(0,200);
       list.innerHTML = pool.map(d=>`<div class="bestiary-pick-row" data-slug="${esc(d._slug)}">
-        <span class="bestiary-pick-name">${esc(d.name)}</span>
+        <div class="bestiary-pick-left">
+          <span class="bestiary-pick-name">${esc(d.name)}</span>
+          ${d._source ? `<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>` : ''}
+        </div>
         <span class="bestiary-pick-meta">${esc(d.meta||'')}</span>
       </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No matches</div>';
     };
