@@ -43,6 +43,7 @@ const DEFAULT_LAYOUT = {
   soundboard:  {x:200, y:100, w:580, h:500, open:false, minimized:false, z:9},
   weather:     {x:240, y:120, w:300, h:520, open:false, minimized:false, z:10},
   time:        {x:560, y:120, w:300, h:520, open:false, minimized:false, z:11},
+  bestiary:    {x:140, y:90,  w:520, h:620, open:false, minimized:false, z:12},
 };
 
 const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,combatNameOptions:['spear','hands','rock','small']};

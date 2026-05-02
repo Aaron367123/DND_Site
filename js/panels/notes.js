@@ -152,8 +152,8 @@ registerPanel('notes', {
         <div class="notes-tree">
           <div class="notes-tree-head">
             <span class="notes-tree-title">📁 Notes</span>
-            <button class="icon-btn notes-tree-add" data-act="add-folder" title="New folder">📁+</button>
-            <button class="icon-btn notes-tree-add" data-act="add-file" title="New file">📄+</button>
+            <button class="btn icon-btn" data-act="add-folder" title="New folder">📁+</button>
+            <button class="btn icon-btn" data-act="add-file" title="New file">📄+</button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
           <div class="notes-tree-body">${this._renderTree(tree, null, 0)}</div>

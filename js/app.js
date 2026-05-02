@@ -2,7 +2,7 @@
 // INIT
 // ============================================================
 function initPanels(){
-  ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time'].forEach(id=>{
+  ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary'].forEach(id=>{
     const def=panelDefs[id];const b=document.getElementById('panel-body-'+id);
     if(b&&def)def.mount(b);
   });
@@ -21,7 +21,7 @@ function init(){
   document.getElementById('reset-layout-btn').addEventListener('click',()=>{
     if(!confirm('Reset window layout?'))return;
     layout=JSON.parse(JSON.stringify(DEFAULT_LAYOUT));saveLayout();
-    ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time'].forEach(id=>{
+    ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary'].forEach(id=>{
       const el=document.querySelector('.window[data-panel="'+id+'"]');
       if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
     });

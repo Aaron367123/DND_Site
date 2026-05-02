@@ -192,7 +192,7 @@ registerPanel('npclib', {
         <div class="npclib-detail-badges">
           <button class="npc-badge group-badge" data-act="edit-group" title="Change group">${esc((n.group||NPC_DEFAULT_GROUP).toUpperCase())}</button>
           <button class="npc-badge attitude-badge attitude-${esc((n.attitude||'Neutral').toLowerCase())}" data-act="edit-attitude" title="Change attitude">${esc((n.attitude||'NEUTRAL').toUpperCase())}</button>
-          <button class="icon-btn" data-act="delete" title="Delete NPC">×</button>
+          <button class="btn icon-btn danger" data-act="delete" title="Delete NPC">×</button>
         </div>
       </div>
 
@@ -224,7 +224,7 @@ registerPanel('npclib', {
 
       <div class="npclib-section-label" style="display:flex;align-items:center;justify-content:space-between">
         <span>IMAGES</span>
-        <button class="icon-btn" data-act="add-image" title="Add image">+</button>
+        <button class="btn icon-btn" data-act="add-image" title="Add image">+</button>
       </div>
       <div class="npclib-images">
         ${(n.images||[]).map((img,ii) => `<div class="npclib-image-tile">
