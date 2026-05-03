@@ -797,6 +797,27 @@ async function load5eData() {
       subFeatByKey[k] = f;
     });
 
+    // 5etools reference strings often elide trailing pipe segments and leave
+    // classSource/subclassSource empty (e.g. "Aberrant Mind|Sorcerer||Aberrant Mind|TCE|1"),
+    // implying the default source ("PHB"). Try the exact lookup first, then
+    // a small list of fallbacks.
+    const _findClassFeat = (name, className, source, lvl) => {
+      const tryKey = (n, c, s, l) => classFeatByKey[[n, c, s, l].map(x => String(x||'').toLowerCase()).join('|')];
+      return tryKey(name, className, source, lvl)
+        || (!source && tryKey(name, className, 'phb', lvl))
+        || (!source && tryKey(name, className, 'xphb', lvl))
+        || null;
+    };
+    const _findSubFeat = (name, className, classSource, scShort, scSource, lvl) => {
+      const tryKey = (n, cn, cs, sn, ss, l) => subFeatByKey[[n, cn, cs, sn, ss, l].map(x => String(x||'').toLowerCase()).join('|')];
+      return tryKey(name, className, classSource, scShort, scSource, lvl)
+        || (!classSource && tryKey(name, className, 'phb', scShort, scSource, lvl))
+        || (!classSource && tryKey(name, className, 'xphb', scShort, scSource, lvl))
+        || (!scSource && tryKey(name, className, classSource, scShort, 'phb', lvl))
+        || (!scSource && tryKey(name, className, classSource, scShort, 'xphb', lvl))
+        || null;
+    };
+
     (json.class||[]).forEach(d => {
       const hd = d.hd?.faces ? `Hit Die d${d.hd.faces}` : '';
       // Resolve classFeatures references → array of {name, level, entries}.
@@ -807,8 +828,7 @@ async function load5eData() {
         const refStr = typeof ref === 'string' ? ref : (ref.classFeature || '');
         if (!refStr) return;
         const [name, className, source, lvl] = refStr.split('|');
-        const k = [name, className, source, lvl].map(s => String(s||'').toLowerCase()).join('|');
-        const f = classFeatByKey[k];
+        const f = _findClassFeat(name, className, source, lvl);
         if (!f) return;
         resolved.push({
           name: f.name,
@@ -828,8 +848,7 @@ async function load5eData() {
       (d.subclassFeatures||[]).forEach(refStr => {
         if (typeof refStr !== 'string') return;
         const [name, className, classSource, scShort, scSource, lvl] = refStr.split('|');
-        const k = [name, className, classSource, scShort, scSource, lvl].map(s => String(s||'').toLowerCase()).join('|');
-        const f = subFeatByKey[k];
+        const f = _findSubFeat(name, className, classSource, scShort, scSource, lvl);
         if (!f) return;
         resolved.push({
           name: f.name,
