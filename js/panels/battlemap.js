@@ -474,7 +474,7 @@ registerPanel('battlemap',{
       }
     }));
 
-    b.querySelector('#map-size').addEventListener('change',e=>{
+    b.querySelector('#map-size')?.addEventListener('change',e=>{
       this._cellSize=parseInt(e.target.value);
       if (_mapBgImage){
         // Map loaded: keep grid tight to the image at the new cell size.
@@ -543,7 +543,7 @@ registerPanel('battlemap',{
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
-    b.querySelector('#map-bg-color').addEventListener('change',e=>{this._bgColor=e.target.value;this._applyBg(stage,W,H);this._saveMap();});
+    b.querySelector('#map-bg-color')?.addEventListener('change',e=>{this._bgColor=e.target.value;this._applyBg(stage,W,H);this._saveMap();});
     // Update stage cursor when fog tool active
     if(this._fogTool) stage.style.cursor='crosshair';
     else stage.style.cursor='default';
