@@ -264,7 +264,7 @@ registerPanel('battlemap',{
       if(onMap)return '';
       // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.
       const iconHtml = renderIcon(p.icon||'⚔', p.name);
-      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" style="font-size:10px;display:inline-flex;align-items:center;gap:4px">'
+      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at top-left, or drag onto the map for precise placement" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;cursor:grab">'
         +'<span class="map-party-icon">'+iconHtml+'</span>'
         +'<span>'+esc(p.name)+'</span>'
       +'</button>';
@@ -688,6 +688,75 @@ registerPanel('battlemap',{
     });
     // Suppress browser context menu so right-click drag is usable
     scrollEl.addEventListener('contextmenu', e => e.preventDefault());
+
+    // ─── Drop zone: drop a Party member, Bestiary monster, or quick-add ─────
+    // ─── button anywhere on the map to place a token at the cursor. ────────
+    const dropTypes = ['application/x-skt-party-pi', 'application/x-skt-bestiary-mid'];
+    const hasTokenDrop = (e) => dropTypes.some(t => e.dataTransfer.types.includes(t));
+    scrollEl.addEventListener('dragover', e => {
+      if (!hasTokenDrop(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      scrollEl.classList.add('map-drop-active');
+    });
+    scrollEl.addEventListener('dragleave', e => {
+      if (e.target === scrollEl) scrollEl.classList.remove('map-drop-active');
+    });
+    scrollEl.addEventListener('drop', e => {
+      scrollEl.classList.remove('map-drop-active');
+      if (!hasTokenDrop(e)) return;
+      e.preventDefault(); e.stopPropagation();
+      // Compute drop position in stage coordinates.
+      const stageEl = b.querySelector('#map-stage');
+      const sr = stageEl.getBoundingClientRect();
+      const cs2 = this._cellSize;
+      let x = e.clientX - sr.left;
+      let y = e.clientY - sr.top;
+      const wantSnap = e.shiftKey ? !this._snapToGrid : this._snapToGrid;
+      if (wantSnap){
+        x = Math.floor(x/cs2)*cs2 + cs2/2;
+        y = Math.floor(y/cs2)*cs2 + cs2/2;
+      }
+      // Clamp to stage bounds so a token can't be dropped off the map.
+      const stageW = this._cols*cs2, stageH = this._rows*cs2;
+      const half = cs2/2;
+      x = Math.max(half, Math.min(stageW - half, x));
+      y = Math.max(half, Math.min(stageH - half, y));
+
+      const pi  = e.dataTransfer.getData('application/x-skt-party-pi');
+      const mid = e.dataTransfer.getData('application/x-skt-bestiary-mid');
+      if (pi !== ''){
+        const p = state.party[parseInt(pi)];
+        if (!p) return;
+        if (this._tokens.find(t => t.label === p.name && t.isPC)){ showToast(p.name+' already on map'); return; }
+        this._tokens.push({id:uid(), label:p.name, x, y, isPC:true, color:'#696969', size:1, dead:false});
+        this._renderTokens(); this._saveMap();
+        this._render(); // refresh quick-add row (the dropped member disappears from it)
+      } else if (mid){
+        const bData = panelDefs.bestiary?._data;
+        const m = bData?.monsters.find(x=>x.id===mid);
+        if (!m){ showToast('Monster not found'); return; }
+        // Use the monster name; auto-number duplicates (Goblin → Goblin 2…).
+        const existing = this._tokens.filter(t => t.baseName === m.name || t.label === m.name).length;
+        const displayName = existing ? `${m.name} ${existing+1}` : m.name;
+        if (existing === 1){
+          const oi = this._tokens.findIndex(t => t.label === m.name);
+          if (oi >= 0) this._tokens[oi] = {...this._tokens[oi], label: m.name+' 1', baseName: m.name};
+        }
+        this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false});
+        this._renderTokens(); this._saveMap();
+      }
+    });
+
+    // Quick-party-add buttons in the toolbar are now also drag sources —
+    // drag onto the map for precise placement; the click handler still adds
+    // them at the top-left as a quick fallback.
+    b.querySelectorAll('[data-mact="add-party"]').forEach(btn => {
+      btn.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('application/x-skt-party-pi', btn.dataset.pi);
+      });
+    });
   },
 
   // Map picker — adventures from data/adventures.json, maps extracted from
