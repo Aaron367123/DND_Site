@@ -14,7 +14,8 @@
       "PowerShell(ls -Recurse \"D:\\\\Downloads\\\\DND_Site\\\\data\" -Directory | Select-Object -First 50 FullName | ForEach-Object { $_.FullName.Replace\\(\"D:\\\\Downloads\\\\DND_Site\\\\data\\\\\", \"\"\\) })",
       "PowerShell(ls \"D:\\\\Downloads\\\\DND_Site\\\\data\" | Where-Object { $_.PSIsContainer } | ForEach-Object { $_.Name })",
       "mcp__Claude_in_Chrome__tabs_context_mcp",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(node --check D:/Downloads/DND_Site/js/panels/combat.js)"
     ]
   }
 }

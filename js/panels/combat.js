@@ -139,6 +139,7 @@ registerPanel('combat',{
         }
         save(); this._render();
       }
+    }));
 
     // Combatant inputs (hp, ac, initiative, name) — no auto-sort
     b.querySelectorAll('input[data-cf]').forEach(inp=>{
