@@ -28,8 +28,16 @@ let _playerVisible = null; // populated in initPlayerView
 
 function _applySharedPanelsToPlayerView(){
   const shared = new Set(state.sharedPanels || []);
-  // First time: default to all shared panels visible.
-  if (_playerVisible == null) _playerVisible = new Set(shared);
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  // First time: default to first shared panel on mobile, all on desktop.
+  if (_playerVisible == null){
+    if (isMobile){
+      const first = [...shared][0];
+      _playerVisible = new Set(first ? [first] : []);
+    } else {
+      _playerVisible = new Set(shared);
+    }
+  }
   // Remove anything from _playerVisible that's no longer shared.
   for (const id of [..._playerVisible]) if (!shared.has(id)) _playerVisible.delete(id);
 
@@ -86,8 +94,20 @@ function _renderPlayerDock(){
   dock.querySelectorAll('[data-pv-toggle]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.pvToggle;
-      if (_playerVisible.has(id)) _playerVisible.delete(id);
-      else _playerVisible.add(id);
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      if (isMobile){
+        // Tab-bar behavior: tapping a chip shows ONLY that panel; tapping the
+        // active chip again hides it (back to empty state).
+        if (_playerVisible.has(id) && _playerVisible.size === 1) {
+          _playerVisible.delete(id);
+        } else {
+          _playerVisible = new Set([id]);
+        }
+      } else {
+        // Desktop: free toggle — multiple panels can coexist.
+        if (_playerVisible.has(id)) _playerVisible.delete(id);
+        else _playerVisible.add(id);
+      }
       _applySharedPanelsToPlayerView();
     });
   });
@@ -113,11 +133,23 @@ function initPlayerView(){
   load();
   initRealtime();
   initZoomPan();
-  // Settings drawer (theme picker, etc.) is useful in player view too.
   if (typeof initSettings === 'function'){
     try { initSettings(); } catch(e){ console.warn('initSettings failed in player view', e); }
   }
   _playerVisible = _readPlayerVisible();
   _patchClosePanelForPlayer();
   _applySharedPanelsToPlayerView();
+  // Re-apply on viewport flip (rotate, desktop⇄mobile breakpoint cross). When
+  // entering mobile mode, collapse to a single panel; when leaving, leave the
+  // current set alone (player can re-open whatever they want from the dock).
+  let _wasMobile = window.matchMedia('(max-width: 768px)').matches;
+  window.addEventListener('resize', () => {
+    const nowMobile = window.matchMedia('(max-width: 768px)').matches;
+    if (nowMobile && !_wasMobile && _playerVisible && _playerVisible.size > 1){
+      const first = [..._playerVisible][0];
+      _playerVisible = new Set([first]);
+      _applySharedPanelsToPlayerView();
+    }
+    _wasMobile = nowMobile;
+  });
 }

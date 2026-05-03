@@ -4,10 +4,14 @@
 function initSettings(){
   const drawer=document.getElementById('settings-drawer');
   const settingsBtn=document.getElementById('settings-btn');
-  settingsBtn.addEventListener('click',e=>{e.stopPropagation();drawer.classList.toggle('open');});
+  // Toggle on mousedown (not click) so the document-level "click outside to
+  // close" handler below sees stopPropagation in time. Otherwise the document
+  // closes the drawer first, then the button's click re-opens it on the same gesture.
+  settingsBtn.addEventListener('mousedown',e=>{
+    e.stopPropagation();
+    drawer.classList.toggle('open');
+  });
   document.getElementById('close-drawer').addEventListener('click',()=>drawer.classList.remove('open'));
-  // Click outside the drawer closes it. stopPropagation on the open click and
-  // on clicks inside the drawer keeps this from immediately re-closing.
   drawer.addEventListener('mousedown',e=>e.stopPropagation());
   document.addEventListener('mousedown',()=>{
     if(drawer.classList.contains('open')) drawer.classList.remove('open');
