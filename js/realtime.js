@@ -76,17 +76,19 @@ function _patchLocalStorage() {
   };
 }
 
-// Push only the keys that changed, in a single multi-path update() so it's one
-// atomic round trip even when several keys went dirty during the debounce window.
+// Push only the keys that changed. Originally used a single multi-path
+// `update()` call but at least one Firebase configuration delivers the
+// child-path `on('value')` listener inconsistently when the change comes
+// from a multi-path update. Per-key `set()` is one extra HTTP round-trip
+// per dirty key but reliably wakes each path's listener.
 function _flushDirtyKeys() {
   if (!_fbDb || _dirtyKeys.size === 0) return;
-  const updates = {};
-  _dirtyKeys.forEach(k => {
-    const val = localStorage.getItem(k);
-    updates['skt/' + _toFbKey(k)] = val != null ? val : null;
-  });
+  const keys = Array.from(_dirtyKeys);
   _dirtyKeys.clear();
-  _fbDb.ref().update(updates).catch(() => {});
+  keys.forEach(k => {
+    const val = localStorage.getItem(k);
+    _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).catch(() => {});
+  });
 }
 
 // ─── Apply one incoming remote key ────────────────────────────────────────────
@@ -240,4 +242,21 @@ function initRealtime() {
   _fbDb.ref('.info/connected').on('value', snap => {
     _setSyncStatus(snap.val() ? 'live' : 'offline');
   });
+
+  // Safety net: if the tab regains focus, re-pull every sync key once. This
+  // covers cases where the long-running on('value') listener missed events
+  // (background tab throttling, transient connection blips) so the UI never
+  // sits on stale data after the user comes back to the tab.
+  const _refreshAll = () => {
+    if (!_fbDb) return;
+    SKT_SYNC_KEYS.forEach(k => {
+      _fbDb.ref('skt/' + _toFbKey(k)).once('value').then(snap => {
+        if (snap.exists()) _applyRemoteKey(k, snap.val());
+      }).catch(()=>{});
+    });
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') _refreshAll();
+  });
+  window.addEventListener('focus', _refreshAll);
 }

@@ -170,7 +170,10 @@ body.player-mode #search-popup{display:none !important}
 .combat-controls .round-display{font-size:10px;color:var(--text-muted);padding:0 8px;text-transform:uppercase;letter-spacing:.5px}
 .combat-section-label{padding:6px 10px 4px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border)}
 .combatant-list{padding:8px;display:flex;flex-direction:column;gap:8px}
-.combat-droptip{display:none;text-align:center;padding:14px;margin:8px;border:2px dashed var(--accent);border-radius:6px;color:var(--accent);font-size:11px;background:rgba(212,165,116,.08);position:sticky;bottom:8px}
+/* Floats over the panel — position:absolute so showing/hiding it doesn't
+   reflow the panel content. pointer-events:none lets drag events pass
+   through, otherwise hovering the tip itself causes leave/enter flicker. */
+.combat-droptip{display:none;position:absolute;left:50%;bottom:14px;transform:translateX(-50%);text-align:center;padding:10px 16px;border:2px dashed var(--accent);border-radius:6px;color:var(--accent);font-size:11px;background:rgba(20,16,12,.92);pointer-events:none;z-index:6;white-space:nowrap}
 .window-body.drop-active{background:rgba(212,165,116,.04);outline:2px dashed var(--accent);outline-offset:-4px}
 .window-body.drop-active .combat-droptip{display:block}
 
