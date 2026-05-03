@@ -161,7 +161,7 @@ registerPanel('bestiary', {
       });
     });
 
-    // Card click — open stat block; right-click — menu; dragstart — to combat
+    // Card click — open stat block; right-click — menu; dragstart — to combat or another folder
     b.querySelectorAll('.bestiary-card').forEach(card=>{
       card.addEventListener('click', e=>{
         // Skip if the user clicked the × button (handled separately).
@@ -173,11 +173,39 @@ registerPanel('bestiary', {
         this._showCardMenu(e.clientX, e.clientY, card.dataset.mid);
       });
       card.addEventListener('dragstart', e=>{
-        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.effectAllowed = 'copyMove';
         e.dataTransfer.setData('application/x-skt-bestiary-mid', card.dataset.mid);
         card.classList.add('dragging');
       });
       card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+    });
+
+    // Folder drop target — drag a monster card onto a folder to move it there.
+    b.querySelectorAll('.bestiary-folder').forEach(folderEl => {
+      const folderId = folderEl.dataset.folder;
+      folderEl.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('application/x-skt-bestiary-mid')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        folderEl.classList.add('drop-target');
+      });
+      folderEl.addEventListener('dragleave', e => {
+        // Only clear if we actually left the folder (not just moved over a child).
+        if (!folderEl.contains(e.relatedTarget)) folderEl.classList.remove('drop-target');
+      });
+      folderEl.addEventListener('drop', e => {
+        folderEl.classList.remove('drop-target');
+        const mid = e.dataTransfer.getData('application/x-skt-bestiary-mid');
+        if (!mid) return;
+        e.preventDefault(); e.stopPropagation();
+        const m = this._data.monsters.find(x=>x.id===mid); if (!m) return;
+        // BESTIARY_UNFILED maps to folderId === null in the data model.
+        const target = (folderId === BESTIARY_UNFILED) ? null : folderId;
+        if (m.folderId === target) return; // no-op
+        m.folderId = target;
+        this._save();
+        this._render();
+      });
     });
 
     // × button on each card — visible on hover, removes the monster.

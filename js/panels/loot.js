@@ -63,7 +63,27 @@ registerPanel('loot',{
     b.querySelector('#loot-divvy').addEventListener('click',()=>{
       const n=state.party.length;if(!n){showToast('No party members');return;}
       const each=(parseFloat(totalGp)/n).toFixed(2);
-      alert(`Divide ${totalGp} gp total:\n\n${state.party.map(p=>`${p.name}: ${each} gp`).join('\n')}`);
+      const rows = state.party.map(p =>
+        `<div class="divvy-row"><span>${esc(p.name)}</span><span class="divvy-amt">${each} gp</span></div>`
+      ).join('');
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="min-width:300px">
+        <h3>Divvy up loot</h3>
+        <p style="color:var(--text-muted);font-size:11px;margin:0 0 10px">
+          <strong style="color:var(--accent)">${totalGp} gp</strong> split between
+          <strong>${n}</strong> party member${n===1?'':'s'} —
+          <strong style="color:var(--accent)">${each} gp</strong> each.
+        </p>
+        <div class="divvy-list">${rows}</div>
+        <div class="modal-actions" style="margin-top:14px"><button class="btn primary" id="divvy-ok">Done</button></div>
+      </div>`;
+      document.body.appendChild(backdrop);
+      const close = () => backdrop.remove();
+      backdrop.querySelector('#divvy-ok').addEventListener('click', close);
+      backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) close(); });
+      backdrop.addEventListener('keydown', e => { if (e.key==='Escape') close(); });
+      setTimeout(()=>backdrop.querySelector('#divvy-ok')?.focus(), 30);
     });
   },
 });

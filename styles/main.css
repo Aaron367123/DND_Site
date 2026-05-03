@@ -579,7 +579,8 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .bestiary-toolbar{display:flex;gap:6px;padding:10px;border-bottom:1px solid var(--border);align-items:center}
 .bestiary-toolbar input{flex:1;background:var(--panel-2);border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:5px;color:var(--text)}
 .bestiary-body{flex:1;overflow-y:auto;padding:10px}
-.bestiary-folder{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;margin-bottom:10px;overflow:hidden}
+.bestiary-folder{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;margin-bottom:10px;overflow:hidden;transition:border-color .12s,background .12s}
+.bestiary-folder.drop-target{border-color:var(--accent);background:rgba(212,165,116,.08)}
 .bestiary-folder-head{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;font-size:12px;color:var(--text);user-select:none;background:rgba(212,165,116,.04)}
 .bestiary-folder-head:hover{background:rgba(212,165,116,.08)}
 .bestiary-folder-head .caret{font-size:9px;color:var(--text-muted);width:10px;flex-shrink:0}
@@ -705,6 +706,10 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 /* MODAL */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:flex;align-items:center;justify-content:center}
 .modal{background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:8px;padding:22px 24px;min-width:300px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+.divvy-list{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;padding:6px 8px;background:var(--panel-2)}
+.divvy-row{display:flex;justify-content:space-between;align-items:center;padding:4px 6px;border-bottom:1px dotted var(--border);font-size:12px}
+.divvy-row:last-child{border-bottom:none}
+.divvy-amt{font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
 .modal h3{margin:0 0 18px;font-size:14px;font-weight:500;color:var(--accent);display:flex;align-items:center;gap:8px}
 .modal-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:20px}
 .modal-field label{display:block;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
@@ -744,7 +749,7 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .time-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
 .time-hour{font-size:24px;font-weight:600;color:var(--text);line-height:1.1}
 .time-date{font-size:12px;color:var(--accent);margin-top:4px;font-variant:small-caps;letter-spacing:.05em;text-align:center;line-height:1.2}
-.time-date-real{color:var(--text-muted);font-size:10px;font-variant:normal;letter-spacing:0}
+.time-date-real{color:var(--text-muted);font-size:10px;font-variant:normal;letter-spacing:0;text-align:center;margin-top:1px;cursor:pointer;line-height:1.2}
 .time-year{font-size:10px;color:var(--text-muted);margin-top:2px}
 .time-advance-label{font-size:10px;color:var(--text-muted);letter-spacing:.2em;margin:8px 0 8px}
 .time-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}
@@ -758,8 +763,10 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .time-edit-row .btn{flex:0 0 auto;padding:4px 8px}
 
 /* ============ WORKSPACE CONTEXT MENU ============ */
-.ctx-menu{position:fixed;display:none;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.6);min-width:240px;max-height:90vh;overflow-y:auto;z-index:9000;padding:6px 0;font-size:12px;user-select:none}
-.ctx-menu.open{display:block}
+/* Scoped to #workspace-ctx-menu so it doesn't override the generic .ctx-menu
+   used by showContextMenu() in utils.js (folder menus, token menus, etc.). */
+#workspace-ctx-menu{position:fixed;display:none;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.6);min-width:240px;max-height:90vh;overflow-y:auto;z-index:9000;padding:6px 0;font-size:12px;user-select:none}
+#workspace-ctx-menu.open{display:block}
 .ctx-section-label{padding:8px 14px 4px;font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.12em;font-weight:600}
 .ctx-item{display:flex;align-items:center;gap:10px;padding:6px 14px;cursor:pointer;color:var(--text);transition:background .1s}
 .ctx-item:hover{background:var(--panel-2)}

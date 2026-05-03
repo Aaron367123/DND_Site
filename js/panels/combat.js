@@ -26,6 +26,7 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
+        ${inCombat?'<button class="btn icon-btn danger" data-act="end" title="End combat (clears all combatants)">⏹ End</button>':''}
         <button class="btn icon-btn ${state.settings?.hideMonsterStats?'active':''}" data-act="toggle-hide-stats" title="Hide monster HP/AC from player view">🙈</button>
         <button class="btn icon-btn" data-act="settings" title="Manage quick-pick names">⚙</button>
       </div>
@@ -104,6 +105,17 @@ registerPanel('combat',{
       e.stopPropagation();
       const act=el.dataset.act;
       if(act==='next')                this._nextTurn();
+      else if(act==='end'){
+        showConfirm('End combat? All combatants will be removed.',
+          {title:'End combat', confirmLabel:'End', danger:true}).then(ok => {
+            if (!ok) return;
+            state.combatants = [];
+            state.combatRound = 0;
+            state.activeCombatantId = null;
+            save(); this._render();
+            showToast('Combat ended');
+          });
+      }
       else if(act==='add')            this._addPrompt();
       else if(act==='add-monster')    this._openMonsterPicker();
       else if(act==='settings')       this._manageQuickNames();

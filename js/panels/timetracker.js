@@ -112,7 +112,8 @@ registerPanel('time', {
         ${_timeRingSvg(t.hour)}
         <div class="time-center">
           <div class="time-hour" data-edit="hour" title="Click to edit">Hr ${t.hour}</div>
-          <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${realMonth?`<span class="time-date-real">(${esc(realMonth)})</span> `:''}${t.day}</div>
+          <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${t.day}</div>
+          ${realMonth ? `<div class="time-date-real" data-edit="date" title="Click to edit">(${esc(realMonth)})</div>` : ''}
           <div class="time-year" data-edit="year" title="Click to edit">${t.year||0} DR</div>
         </div>
       </div>
