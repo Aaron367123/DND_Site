@@ -182,7 +182,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-temp
     gap:8px;
     justify-content:flex-start;
     -webkit-overflow-scrolling:touch;
+    transition:transform .25s ease;
   }
+  /* Slide off-screen when the user is scrolling DOWN through panel content,
+     reappear on scroll up — frees up vertical space without losing the dock. */
+  body.player-mode .pv-dock.hidden-on-scroll{transform:translateY(100%)}
   body.player-mode .pv-dock-btn{
     width:48px;height:48px;
     font-size:20px;
@@ -201,13 +205,116 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-temp
   body.player-mode .drawer{width:100vw !important;max-width:100vw}
   /* Empty-state placeholder — center it above the dock */
   body.player-mode #pv-empty{padding-bottom:64px}
-  /* Bigger inline inputs/buttons inside panels for finger taps */
+  /* Bigger touch targets across the panel chrome and content. Apple's HIG
+     and Material both call out 44px as a minimum tap target — most things
+     here aim for that. */
   body.player-mode .window-body input[type="number"],
   body.player-mode .window-body input[type="text"],
-  body.player-mode .window-body select{
-    min-height:32px;font-size:13px;
+  body.player-mode .window-body select,
+  body.player-mode .window-body input[type="search"]{
+    min-height:38px;font-size:14px;padding:8px 10px;
   }
-  body.player-mode .window-body .btn{min-height:30px}
+  body.player-mode .window-body .btn{min-height:38px;padding:8px 14px;font-size:13px}
+  body.player-mode .window-body .btn.small{min-height:32px;padding:6px 10px;font-size:12px}
+  body.player-mode .window-body .btn.icon-btn{min-width:38px;min-height:38px;font-size:16px}
+
+  /* Resource pips — were 14px circles, easy to miss. Bump to 22px. */
+  body.player-mode .window-body .pip{
+    width:22px;height:22px;
+    margin:2px;
+  }
+  /* Hit-dice pips */
+  body.player-mode .window-body .hd-pip{width:18px;height:18px}
+  /* Death-save pips */
+  body.player-mode .window-body .ds-pip{width:22px;height:22px}
+  /* Spell slot pips */
+  body.player-mode .window-body .slot-pip{width:18px;height:18px}
+
+  /* × close buttons on cards (party, bestiary, resource rows) — the most
+     common "I hit the wrong thing" target. Make them clearly larger and
+     give them a stable hit area instead of opacity-on-hover. */
+  body.player-mode .window-body .char-card .btn.icon-btn.danger,
+  body.player-mode .window-body .bestiary-card-x{
+    width:30px;height:30px;
+    font-size:16px;
+    opacity:.9 !important;
+  }
+
+  /* Inspiration / Bardic toggle rows — bigger touch row. */
+  body.player-mode .window-body .inspiration-row{padding:8px 10px;font-size:13px}
+  body.player-mode .window-body .inspiration-toggle{width:18px;height:18px}
+
+  /* Sheet tab bar */
+  body.player-mode .window-body .sheet-tab{padding:10px 6px;font-size:11px}
+  body.player-mode .window-body .sheet-toggle{padding:8px;font-size:12px}
+
+  /* Combat tracker action buttons in card */
+  body.player-mode .window-body .combatant-card .btn{min-height:34px}
+
+  /* Stat row inputs (HP/AC/Init etc.) */
+  body.player-mode .window-body .char-stat input,
+  body.player-mode .window-body .char-hp-current,
+  body.player-mode .window-body .char-hp-max{
+    font-size:15px;min-height:30px;
+  }
+
+  /* Generic spacing — give cards a little more breathing room so adjacent
+     hit targets don't collide. */
+  body.player-mode .window-body .char-card{padding:10px;gap:7px}
+  body.player-mode .window-body .resource-row{padding:4px 0}
+  /* Allow vertical scroll (panel content can be tall), but lock horizontal
+     pan — the canvas is 5000px wide and there's nothing useful to the side
+     of a fullscreen panel. */
+  body.player-mode .workspace{overflow-x:hidden;overflow-y:auto}
+  body.player-mode .workspace-canvas{width:100vw}
+}
+
+/* ============ MOBILE LANDSCAPE PLAYER VIEW ============ */
+/* Phones in landscape have ~360-400px of vertical space — putting the dock
+   at the bottom eats too much. Pivot the dock to a vertical strip on the
+   right and let the panel use the full height. Best for the battle map.
+   Keys on viewport HEIGHT + orientation (not max-width) so it fires even on
+   landscape devices wider than the 768px portrait breakpoint. */
+@media (max-height: 500px) and (orientation: landscape){
+  body.player-mode .window{
+    left:0 !important; top:0 !important;
+    width:calc(100vw - 56px) !important;
+    height:100vh !important;
+    border:none;border-radius:0;box-shadow:none;
+  }
+  body.player-mode .rh{display:none}
+  body.player-mode .window-head{cursor:default;padding:6px 8px}
+
+  /* Dock pivots to a vertical strip on the right edge. */
+  body.player-mode .pv-dock{
+    flex-direction:column;
+    top:0;right:0;bottom:0;left:auto;
+    width:56px;height:100vh;
+    border-radius:0;
+    border-top:none;border-right:none;border-bottom:none;
+    padding:8px 6px;
+    overflow-x:hidden;overflow-y:auto;
+    gap:6px;
+    transition:transform .25s ease;
+  }
+  /* Override portrait's translateY hide — slide RIGHT in landscape. */
+  body.player-mode .pv-dock.hidden-on-scroll{transform:translateX(100%)}
+  body.player-mode .pv-dock-btn{
+    width:42px;height:42px;
+    font-size:18px;
+  }
+
+  /* Float toolbar — shift left of the dock so they don't overlap. */
+  body.player-mode .float-toolbar{
+    top:6px;right:64px;
+  }
+
+  /* No chrome overhead — panel fills the viewport exactly. */
+  body.player-mode .workspace{overflow:hidden}
+  body.player-mode .workspace-canvas{width:100vw;height:100vh}
+
+  /* Empty state shouldn't sit behind the right dock. */
+  body.player-mode #pv-empty{padding:0;padding-right:64px}
 }
 body.player-mode #reset-layout-btn{display:none}
 /* Hide DM-only window controls (share/lock) in player mode, but keep minimize and close. */

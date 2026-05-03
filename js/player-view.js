@@ -128,6 +128,38 @@ function _patchClosePanelForPlayer(){
   };
 }
 
+// Hide the bottom dock on scroll-down, reveal on scroll-up. Only active on
+// mobile breakpoint. Listens in capture phase because scroll events don't
+// bubble — this catches scrolls inside any .window-body in the player view.
+function _initMobileDockHideOnScroll(){
+  const dockSelector = () => document.getElementById('pv-dock');
+  // Per-element last-scroll-Y, so panels with independent scroll positions
+  // don't clobber each other when the user switches tabs.
+  const lastY = new WeakMap();
+  let ticking = false;
+  document.addEventListener('scroll', e => {
+    if (!window.matchMedia('(max-width: 768px)').matches) return;
+    const target = e.target;
+    if (!target || target.nodeType !== 1) return;
+    if (!target.classList || !target.classList.contains('window-body')) return;
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const cur = target.scrollTop;
+      const prev = lastY.get(target) ?? 0;
+      const dock = dockSelector();
+      if (dock){
+        // Always show when at the very top.
+        if (cur <= 4) dock.classList.remove('hidden-on-scroll');
+        else if (cur > prev + 6) dock.classList.add('hidden-on-scroll');
+        else if (cur < prev - 6) dock.classList.remove('hidden-on-scroll');
+      }
+      lastY.set(target, cur);
+      ticking = false;
+    });
+  }, true);
+}
+
 function initPlayerView(){
   document.body.classList.add('player-mode');
   load();
@@ -139,6 +171,7 @@ function initPlayerView(){
   _playerVisible = _readPlayerVisible();
   _patchClosePanelForPlayer();
   _applySharedPanelsToPlayerView();
+  _initMobileDockHideOnScroll();
   // Re-apply on viewport flip (rotate, desktop⇄mobile breakpoint cross). When
   // entering mobile mode, collapse to a single panel; when leaving, leave the
   // current set alone (player can re-open whatever they want from the dock).
