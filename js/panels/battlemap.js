@@ -32,6 +32,11 @@ registerPanel('battlemap',{
   // at the moment of the last token-scale adjustment, so `_scaleTokensTo` can
   // compute the correct ratio even across multiple scale changes.
   _lastTokenScale: 1,
+  // Pencil annotations. Each entry is { c:color, s:size, p:[x1,y1,x2,y2,...] }
+  // — a flat int array keeps the JSON small for Firebase/localStorage.
+  _drawings: [],
+  _drawColor: '#ff4040',
+  _drawSize: 4,
   // Natural dimensions of the loaded image — derived from the Image object,
   // not persisted (re-read on next load).
   _bgMapNaturalW: 0,
@@ -66,6 +71,8 @@ registerPanel('battlemap',{
       // Track the bg scale tokens are currently aligned to so future scale
       // changes can move them proportionally.
       this._lastTokenScale = this._bgMapScale || 1;
+      // Pencil annotations
+      this._drawings = Array.isArray(d.drawings) ? d.drawings : [];
     }catch(e){}
     this._render();
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath);
@@ -76,25 +83,32 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings}));
     }catch(e){}
     this._broadcast();
   },
 
   // Load an image at img/{path} into _mapBgImage and refresh the canvas.
-  _loadBgFromPath(path){
+  // When autoFit is true (called from the picker), also fit the loaded image
+  // to the panel viewport so the user gets a sensible default zoom.
+  _loadBgFromPath(path, autoFit){
     const img = new Image();
     img.onload = () => {
       _mapBgImage = img;
       this._bgMapNaturalW = img.naturalWidth;
       this._bgMapNaturalH = img.naturalHeight;
-      this._fitGridToBg();
-      const b = this._body; if (!b) return;
-      const stage = b.querySelector('#map-stage');
-      if (!stage){ this._render(); return; }
-      const cs = this._cellSize;
-      this._applyBg(stage, this._cols*cs, this._rows*cs);
-      this._render();
+      if (autoFit){
+        this._fitMapToView();
+      } else {
+        this._fitGridToBg();
+        const b = this._body;
+        const stage = b && b.querySelector('#map-stage');
+        if (stage){
+          const cs = this._cellSize;
+          this._applyBg(stage, this._cols*cs, this._rows*cs);
+        }
+        this._render();
+      }
     };
     img.onerror = () => { showToast('Could not load map image'); };
     img.src = 'img/' + path;
@@ -113,6 +127,36 @@ registerPanel('battlemap',{
     this._rows = Math.max(6, Math.ceil(dispH / cs));
   },
 
+  _drawAllStrokes(){
+    const b = this._body; if (!b) return;
+    const canvas = b.querySelector('#draw-canvas'); if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const scale = this._bgMapScale || 1;
+    (this._drawings||[]).forEach(s => {
+      if (!s.p || s.p.length < 2) return;
+      ctx.strokeStyle = s.c || '#ff4040';
+      ctx.lineWidth = (s.s || 4) * scale;
+      ctx.beginPath();
+      ctx.moveTo(s.p[0], s.p[1]);
+      for (let i = 2; i < s.p.length; i += 2) ctx.lineTo(s.p[i], s.p[i+1]);
+      ctx.stroke();
+    });
+  },
+  _drawStrokeIncremental(canvas, stroke){
+    const ctx = canvas.getContext('2d');
+    const p = stroke.p;
+    if (p.length < 4) return;
+    ctx.strokeStyle = stroke.c || '#ff4040';
+    ctx.lineWidth = (stroke.s || 4) * (this._bgMapScale || 1);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(p[p.length-4], p[p.length-3]);
+    ctx.lineTo(p[p.length-2], p[p.length-1]);
+    ctx.stroke();
+  },
+
   // Multiply every token's pixel position by (newScale / _lastTokenScale).
   // Keeps tokens in the same map-relative position when the bg image is
   // resized. _lastTokenScale tracks the scale tokens are currently aligned
@@ -124,6 +168,11 @@ registerPanel('battlemap',{
     this._tokens.forEach(t => {
       if (t.x != null) t.x *= ratio;
       if (t.y != null) t.y *= ratio;
+    });
+    // Drawings live in stage pixels too — scale them in lockstep.
+    (this._drawings||[]).forEach(s => {
+      if (!s.p) return;
+      for (let i = 0; i < s.p.length; i++) s.p[i] *= ratio;
     });
     this._lastTokenScale = newScale;
   },
@@ -196,6 +245,13 @@ registerPanel('battlemap',{
       +'<button class="btn '+(this._tool==='add-pc'?'active':'')+'" data-mact="tool-add-pc">+ PC</button>'
       +'<button class="btn '+(this._tool==='add-npc'?'active':'')+'" data-mact="tool-add-npc">+ NPC</button>'
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase">🗑 Erase</button>'
+      +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">🖊 Draw</button>'
+      +(this._tool==='draw' ? '<input type="color" id="draw-color" value="'+this._drawColor+'" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Brush color">' : '')
+      +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:11px;padding:2px 4px;flex-shrink:0">'
+        +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
+        +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
+        +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
+      +'</select>' : '')
       +'<div style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
       +'<select id="map-size" style="width:70px;font-size:11px;padding:2px 4px;flex-shrink:0">'
         +'<option value="40" '+(cs===40?'selected':'')+'>40px/5ft</option>'
@@ -214,6 +270,7 @@ registerPanel('battlemap',{
       +'<div style="flex:1"></div>'
       +'<button class="btn" data-mact="sync-combat" style="flex-shrink:0">↺ Sync</button>'
       +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
+      +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">🗑 Drawings</button>'
       // Fog of war controls
       +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
       +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">🌫 Fog</button>'
@@ -276,6 +333,21 @@ registerPanel('battlemap',{
 
     this._applyBg(stage,W,H);
     this._drawGrid(canvas,cs);
+    // Drawing canvas — sits between grid and tokens. pointer-events disabled
+    // unless the pencil tool is active so clicks pass through to the main
+    // canvas (placement) or tokens.
+    let drawCanvas = stage.querySelector('#draw-canvas');
+    if (!drawCanvas){
+      drawCanvas = document.createElement('canvas');
+      drawCanvas.id = 'draw-canvas';
+      // z-index 1 puts drawings between the bg/grid (default stacking) and
+      // tokens (which use inline z-index:2). Tokens always render on top.
+      drawCanvas.style.cssText = 'position:absolute;top:0;left:0;z-index:1';
+      stage.appendChild(drawCanvas);
+    }
+    drawCanvas.width = W; drawCanvas.height = H;
+    drawCanvas.style.pointerEvents = (this._tool === 'draw') ? 'auto' : 'none';
+    this._drawAllStrokes();
     this._renderTokens();
 
     // Default tool is now empty string — tokens are always draggable
@@ -298,6 +370,13 @@ registerPanel('battlemap',{
       else if(act==='pick-map'){this._openMapPicker();}
       else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
       else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
+      else if(act==='clear-draw'){
+        if (!this._drawings.length) return;
+        if (!confirm('Clear all drawings?')) return;
+        this._drawings = [];
+        this._saveMap();
+        this._render();
+      }
       else if(act==='fit-map'){this._fitMapToView();}
       else if(act==='fog-toggle'){
         this._fog=this._fog!==null?null:new Set();
@@ -368,6 +447,40 @@ registerPanel('battlemap',{
       this._render();
     });
     b.querySelector('#fog-radius')?.addEventListener('input',e=>{this._fogRadius=parseInt(e.target.value)||1;});
+    b.querySelector('#draw-color')?.addEventListener('input',e=>{this._drawColor=e.target.value;});
+    b.querySelector('#draw-size')?.addEventListener('change',e=>{this._drawSize=parseInt(e.target.value)||4;});
+
+    // Pencil — mousedown starts a stroke; subsequent mousemoves sample points
+    // and draw incrementally. Only active when the draw tool is selected
+    // (otherwise pointer-events:none on draw-canvas means we never see events).
+    let _curStroke = null;
+    drawCanvas.addEventListener('mousedown', e => {
+      if (this._tool !== 'draw' || e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const rect = drawCanvas.getBoundingClientRect();
+      const x = Math.round(e.clientX - rect.left);
+      const y = Math.round(e.clientY - rect.top);
+      _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
+      this._drawings.push(_curStroke);
+      const onMove = ev => {
+        if (!_curStroke) return;
+        const x2 = Math.round(ev.clientX - rect.left);
+        const y2 = Math.round(ev.clientY - rect.top);
+        const lp = _curStroke.p;
+        const lx = lp[lp.length-2], ly = lp[lp.length-1];
+        if (Math.abs(x2 - lx) + Math.abs(y2 - ly) < 3) return; // sample-down
+        lp.push(x2, y2);
+        this._drawStrokeIncremental(drawCanvas, _curStroke);
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        _curStroke = null;
+        this._saveMap();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
     b.querySelector('#map-bg-color').addEventListener('change',e=>{this._bgColor=e.target.value;this._applyBg(stage,W,H);this._saveMap();});
     // Update stage cursor when fog tool active
     if(this._fogTool) stage.style.cursor='crosshair';
@@ -496,28 +609,39 @@ registerPanel('battlemap',{
       }, 180);
     }, { passive:false });
 
-    // Middle-click or right-click drag to pan. Doesn't conflict with token
-    // dragging (left-click) or fog painting (also left-click only now).
-    let _pan = null;
-    scrollEl.addEventListener('mousedown', e => {
-      if (e.button !== 1 && e.button !== 2) return;
-      if (e.target.closest('.map-token')) return; // let token interactions own their right/middle click
+    // Pan: middle-click drag, right-click drag, or left-click drag on empty
+    // stage when no placement/draw/erase tool is active. Tokens stop event
+    // propagation themselves so they keep owning their own clicks.
+    const panStart = (e) => {
+      // Skip clicks on tokens (they have their own mousedown that calls
+      // stopPropagation, but defensive in case anything bubbles).
+      if (e.target.closest('.map-token')) return false;
       e.preventDefault();
-      _pan = { sx:e.clientX, sy:e.clientY, scrollX:scrollEl.scrollLeft, scrollY:scrollEl.scrollTop };
+      const startX = e.clientX, startY = e.clientY;
+      const startScrollX = scrollEl.scrollLeft, startScrollY = scrollEl.scrollTop;
+      let didMove = false;
       scrollEl.style.cursor = 'grabbing';
       const onMove = ev => {
-        if (!_pan) return;
-        scrollEl.scrollLeft = _pan.scrollX - (ev.clientX - _pan.sx);
-        scrollEl.scrollTop  = _pan.scrollY - (ev.clientY - _pan.sy);
+        const dx = ev.clientX - startX, dy = ev.clientY - startY;
+        if (!didMove && Math.abs(dx)+Math.abs(dy) < 3) return;
+        didMove = true;
+        scrollEl.scrollLeft = startScrollX - dx;
+        scrollEl.scrollTop  = startScrollY - dy;
       };
       const onUp = () => {
-        _pan = null;
         scrollEl.style.cursor = '';
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
+      return true;
+    };
+    scrollEl.addEventListener('mousedown', e => {
+      // Middle/right always pan
+      if (e.button === 1 || e.button === 2){ panStart(e); return; }
+      // Left-click pan only when no other tool wants the click
+      if (e.button === 0 && !this._tool && !this._fogTool){ panStart(e); }
     });
     // Suppress browser context menu so right-click drag is usable
     scrollEl.addEventListener('contextmenu', e => e.preventDefault());
@@ -607,19 +731,20 @@ registerPanel('battlemap',{
       grid.querySelectorAll('.mapsel-card').forEach(card=>{
         card.addEventListener('click', ()=>{
           const path = card.dataset.path;
-          const img = new Image();
-          img.onload = ()=>{
-            _mapBgImage = img;
-            this._bgMapPath = path;
-            this._saveMap();
-            const stage = this._body?.querySelector('#map-stage');
-            if (stage){ const cs=this._cellSize; this._applyBg(stage, this._cols*cs, this._rows*cs); }
-            this._render();
-            close();
-            showToast('Map loaded');
-          };
-          img.onerror = ()=>showToast('Could not load that map');
-          img.src = 'img/' + path;
+          this._bgMapPath = path;
+          // Picking a new map: reset scale to 1.0 so the auto-fit below has a
+          // clean baseline (the previous map's scale is meaningless for the
+          // new image's dimensions). Also calibrate _lastTokenScale to match
+          // so tokens don't drift during the auto-fit's _scaleTokensTo call.
+          this._bgMapScale = 1;
+          this._lastTokenScale = 1;
+          this._saveMap();
+          // _loadBgFromPath sets _bgMapNaturalW/H from the loaded image and
+          // calls _fitGridToBg + _render — fixing the previous bug where new
+          // maps inherited the prior map's natural dimensions and got squished.
+          this._loadBgFromPath(path, /*autoFit=*/true);
+          close();
+          showToast('Map loaded');
         });
       });
     };

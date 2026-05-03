@@ -106,9 +106,13 @@ function initZoomPan(){
     else              zoomOut(e.clientX, e.clientY);
   }, { passive: false });
 
-  // Pan: space-drag OR middle-mouse-drag on empty canvas
+  // Pan: space-drag, middle-mouse drag, or right-click drag on empty canvas.
+  // Right-click drag pans; a right-click without drag still opens the workspace
+  // context menu (handled in context-menu.js). The contextmenu event is
+  // suppressed during the same gesture if a drag occurred.
   let pan = null;
   let spaceHeld = false;
+  let suppressNextContextMenu = false;
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
       spaceHeld = true; ws.style.cursor = 'grab';
@@ -126,19 +130,38 @@ function initZoomPan(){
   ws.addEventListener('mousedown', e => {
     const insideWindow = e.target.closest('.window');
     const isMiddle = e.button === 1;
+    const isRight  = e.button === 2;
     const isSpaceDrag = spaceHeld && e.button === 0;
-    if (!isMiddle && !isSpaceDrag) return;
+    if (!isMiddle && !isRight && !isSpaceDrag) return;
+    // Inside a window: only middle-mouse pans (left/right belong to the window).
     if (insideWindow && !isMiddle) return;
     e.preventDefault();
-    pan = { sx: e.clientX, sy: e.clientY, sl: ws.scrollLeft, st: ws.scrollTop };
+    pan = { sx: e.clientX, sy: e.clientY, sl: ws.scrollLeft, st: ws.scrollTop, button: e.button, didDrag: false };
     ws.style.cursor = 'grabbing';
   });
   document.addEventListener('mousemove', e => {
     if (!pan) return;
-    ws.scrollLeft = pan.sl - (e.clientX - pan.sx);
-    ws.scrollTop  = pan.st - (e.clientY - pan.sy);
+    const dx = e.clientX - pan.sx, dy = e.clientY - pan.sy;
+    if (!pan.didDrag && Math.abs(dx)+Math.abs(dy) < 3) return; // dead-zone
+    pan.didDrag = true;
+    ws.scrollLeft = pan.sl - dx;
+    ws.scrollTop  = pan.st - dy;
   });
   document.addEventListener('mouseup', () => {
-    if (pan) { pan = null; ws.style.cursor = spaceHeld ? 'grab' : ''; }
+    if (!pan) return;
+    // If the gesture was right-click + drag, suppress the contextmenu event
+    // that's about to fire so the focus menu doesn't pop up at drag-end.
+    if (pan.button === 2 && pan.didDrag) suppressNextContextMenu = true;
+    pan = null;
+    ws.style.cursor = spaceHeld ? 'grab' : '';
   });
+  // Capture-phase contextmenu so this runs before the workspace-context-menu
+  // handler in context-menu.js (both attach to ws). When suppressed, we
+  // stopImmediatePropagation so the menu never opens.
+  ws.addEventListener('contextmenu', e => {
+    if (!suppressNextContextMenu) return;
+    suppressNextContextMenu = false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
 }
