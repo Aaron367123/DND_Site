@@ -259,7 +259,7 @@ registerPanel('battlemap',{
     const ft={40:5,50:5,64:5,80:10}[cs]||5;
     this._tool=this._tool==='move'?'add-pc':this._tool; // default to add-pc if somehow move
     // Always allow dragging regardless of tool — move is always active
-    b.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden';
+    b.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;position:relative';
 
     const partyBtns=state.party.map((p,pi)=>{
       const onMap=this._tokens.find(t=>t.label===p.name&&t.isPC);
@@ -679,7 +679,13 @@ registerPanel('battlemap',{
       // Skip clicks on tokens (they have their own mousedown that calls
       // stopPropagation, but defensive in case anything bubbles).
       if (e.target.closest('.map-token')) return false;
+      // Skip clicks on overlay buttons (e.g. the floating "Show toolbar" toggle).
+      if (e.target.closest('button')) return false;
       e.preventDefault();
+      // Once the user starts panning by hand, stop the resize observer from
+      // auto-refitting on subsequent layout changes (panel resize, click-back,
+      // toolbar toggle). The user clearly has a preferred view now.
+      this._isFitted = false;
       const startX = e.clientX, startY = e.clientY;
       const startScrollX = scrollEl.scrollLeft, startScrollY = scrollEl.scrollTop;
       let didMove = false;
