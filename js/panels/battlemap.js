@@ -274,7 +274,12 @@ registerPanel('battlemap',{
 
     let html='';
     if (this._toolbarHidden){
-      html += '<button class="btn small" data-mact="toggle-toolbar" style="position:absolute;top:6px;left:6px;z-index:30;padding:2px 8px;font-size:10px;opacity:.85" title="Show toolbar">▾ Tools</button>';
+      // Wrap the toggle in a small chip with pointer-events:none on the wrapper
+      // so right-click pan / token interactions on the map underneath aren't
+      // captured by the overlay. Only the button itself receives clicks.
+      html += '<div style="position:absolute;top:6px;left:6px;z-index:30;pointer-events:none">'
+        + '<button class="btn small" data-mact="toggle-toolbar" style="pointer-events:auto;padding:2px 8px;font-size:10px;opacity:.85" title="Show toolbar">▾ Tools</button>'
+        + '</div>';
     } else {
     html+='<div class="map-toolbar">'
       +'<button class="btn icon-btn" data-mact="toggle-toolbar" style="flex-shrink:0;padding:2px 5px" title="Hide toolbar (more map space)">▲</button>'
@@ -417,6 +422,9 @@ registerPanel('battlemap',{
       else if(act==='toggle-toolbar'){
         this._toolbarHidden = !this._toolbarHidden;
         try { localStorage.setItem('skt-bm-toolbar-hidden', this._toolbarHidden ? '1' : '0'); } catch(e){}
+        // Don't auto-refit on the resulting size change — the user wants the
+        // current view preserved, not snapped back to fit-from-top-left.
+        this._isFitted = false;
         this._render();
       }
       else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
@@ -1133,7 +1141,22 @@ registerPanel('battlemap',{
       el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:hidden;box-sizing:border-box`;
       el.textContent=t.label.length>7?t.label.slice(0,6)+'…':t.label;
 
+      // Right-click on a token opens the options panel (drag/select are left-click only).
+      el.addEventListener('contextmenu', e => {
+        e.preventDefault(); e.stopPropagation();
+        stage.querySelectorAll('.map-token').forEach(tok=>tok.classList.remove('selected'));
+        el.classList.add('selected');
+        this._selected = t.id;
+        this._showPanel(t);
+      });
+
       el.addEventListener('mousedown',e=>{
+        // Right-click is handled by the contextmenu listener above. Don't
+        // start a drag, but stop propagation so the map's pan handler doesn't
+        // grab right-click here.
+        if (e.button === 2){ e.stopPropagation(); return; }
+        // Only left-click drives drag/select.
+        if (e.button !== 0) return;
         e.stopPropagation();e.preventDefault();
 
         if(this._tool==='erase'){
@@ -1141,9 +1164,8 @@ registerPanel('battlemap',{
           if(i>=0){this._tokens.splice(i,1);this._selected=null;this._closePanel();this._renderTokens();this._saveMap();}
           return;
         }
-        // Always allow drag/select regardless of current placement tool
 
-        // Highlight immediately
+        // Highlight + select immediately (no panel — that's right-click only).
         stage.querySelectorAll('.map-token').forEach(tok=>tok.classList.remove('selected'));
         el.classList.add('selected');
         this._selected=t.id;
@@ -1168,16 +1190,12 @@ registerPanel('battlemap',{
           document.removeEventListener('mousemove',onMove);
           document.removeEventListener('mouseup',onUp);
           if(moved){
-            // Free drop by default. Snap if the toolbar toggle is on; Shift
-            // inverts (so a snap-on user can drop free with Shift, and vice
-            // versa). Snap aligns the token's center to a grid-cell center.
             let nx = curPx, ny = curPy;
             const wantSnap = ev && ev.shiftKey ? !this._snapToGrid : this._snapToGrid;
             if (wantSnap){
               nx = Math.round(nx/cs - size/2) * cs + size*cs/2;
               ny = Math.round(ny/cs - size/2) * cs + size*cs/2;
             }
-            // Clamp to stage bounds (so a token can't be dragged off into nothingness)
             const stageW = this._cols * cs, stageH = this._rows * cs;
             const half = (size*cs/2) * (this._bgMapScale || 1);
             t.x = Math.max(half, Math.min(stageW - half, nx));
@@ -1185,7 +1203,7 @@ registerPanel('battlemap',{
             this._saveMap();
             this._renderTokens();
           }
-          this._showPanel(t);
+          // Left-click no longer opens the options panel — right-click does.
         };
 
         document.addEventListener('mousemove',onMove);
