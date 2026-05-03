@@ -4,7 +4,7 @@
 function initSettings(){
   const drawer=document.getElementById('settings-drawer');
   const settingsBtn=document.getElementById('settings-btn');
-  settingsBtn.addEventListener('click',e=>{e.stopPropagation();drawer.classList.add('open');});
+  settingsBtn.addEventListener('click',e=>{e.stopPropagation();drawer.classList.toggle('open');});
   document.getElementById('close-drawer').addEventListener('click',()=>drawer.classList.remove('open'));
   // Click outside the drawer closes it. stopPropagation on the open click and
   // on clicks inside the drawer keeps this from immediately re-closing.
