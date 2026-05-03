@@ -158,8 +158,58 @@ registerPanel('party',{
       +   `<div class="sheet-stat-row"><span>AC</span><span class="sheet-stat-val">${c.ac ?? '—'}</span></div>`
       + '</div>'
       + '</div>'
-      + (sh.languages ? `<div class="sheet-block"><h5>Languages &amp; Other Proficiencies</h5><div class="sheet-text">${esc(sh.languages)}</div></div>` : '')
+      + (sh.languages ? this._renderLanguages(sh.languages) : '')
       + (sh.attacks?.length ? this._renderAttacks(sh.attacks) : '');
+  },
+
+  // Split a free-text "languages & proficiencies" blob into categorized chip
+  // groups. Recognizes either:
+  //   • Labelled lines: "Languages: Common, Elvish\nArmor: Light, Medium"
+  //   • Heuristic categorization based on known keywords for unlabelled text.
+  _renderLanguages(text){
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    // Try labelled-line format first.
+    const lines = raw.split(/\r?\n+/).map(l=>l.trim()).filter(Boolean);
+    const groups = {};
+    let usedLabelled = false;
+    lines.forEach(line => {
+      const m = line.match(/^([^:]+):\s*(.+)$/);
+      if (m){
+        usedLabelled = true;
+        const cat = m[1].trim();
+        const items = m[2].split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+        groups[cat] = (groups[cat]||[]).concat(items);
+      } else if (!usedLabelled){
+        // Defer; fall back to heuristic
+      }
+    });
+    if (!usedLabelled){
+      // Flatten everything to a single token list, then bucket by keyword.
+      const tokens = raw.split(/[,;\n]/).map(s=>s.trim()).filter(Boolean);
+      const buckets = { Languages:[], Armor:[], Weapons:[], Tools:[], Other:[] };
+      const KNOWN_LANGS = /^(common|dwarvish|elvish|giant|gnomish|goblin|halfling|orc|abyssal|celestial|draconic|deep speech|infernal|primordial|sylvan|undercommon|aarakocra|sign language|thieves|druidic|aquan|auran|ignan|terran)/i;
+      const ARMOR_KW = /armor|shield/i;
+      const WEAPON_KW = /weapon|crossbow|sword|bow|axe|hammer|spear|whip|mace|flail|club|dagger|firearm|simple|martial/i;
+      const TOOL_KW = /tools?|kit|instrument|gaming|smith|brewer|carpenter|cook|disguise|forgery|herbalism|navigator|painter|poisoner|tinker|pottery|jeweler|leatherworker|mason|cartographer|cobbler|glassblower|weaver|woodcarver|thieves'?\s*tools|musical/i;
+      tokens.forEach(t => {
+        if (!t) return;
+        if (KNOWN_LANGS.test(t)) buckets.Languages.push(t);
+        else if (ARMOR_KW.test(t)) buckets.Armor.push(t);
+        else if (WEAPON_KW.test(t)) buckets.Weapons.push(t);
+        else if (TOOL_KW.test(t)) buckets.Tools.push(t);
+        else buckets.Other.push(t);
+      });
+      Object.entries(buckets).forEach(([k, arr]) => { if (arr.length) groups[k] = arr; });
+    }
+    // Hide empty Other if there's at least one categorized group.
+    if (groups.Other && Object.keys(groups).length > 1 && !groups.Other.length) delete groups.Other;
+    if (!Object.keys(groups).length) return '';
+    const html = Object.entries(groups).map(([cat, arr]) => {
+      const chips = arr.map(x => `<span class="prof-chip">${esc(x)}</span>`).join('');
+      return `<div class="prof-group"><div class="prof-group-label">${esc(cat)}</div><div class="prof-chips">${chips}</div></div>`;
+    }).join('');
+    return `<div class="sheet-block"><h5>Languages &amp; Proficiencies</h5>${html}</div>`;
   },
 
   _renderAttacks(attacks){

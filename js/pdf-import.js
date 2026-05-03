@@ -254,8 +254,13 @@ function _fromFields(f){
     });
     if (invParts.length) inventory = invParts.join('\n');
   }
-  console.log('[PDF Import] inventory-related fields:',
-    Object.keys(f).filter(k => /equip|invent|gear|items|treasure|coin|cp|sp|gp|ep|pp/i.test(k)));
+  // Tight match: only fields whose name STARTS with one of these tokens.
+  const _invKeys = Object.keys(f).filter(k => /^(equip|invent|gear|items|treasure|attune)/i.test(k.trim()));
+  console.log('[PDF Import] inventory-related fields:', _invKeys);
+  // If the standard sweep missed and we found new keys here, use them.
+  if (!inventory && _invKeys.length){
+    inventory = _invKeys.map(k => String(f[k]||'').trim()).filter(Boolean).join('\n');
+  }
   const bio = {
     backstory: sStr('Backstory'),
     traits:    sStr('PersonalityTraits','Personality Traits'),
@@ -296,37 +301,86 @@ function _fromFields(f){
   const spellSaveDc = num('SpellSaveDC','Spell save DC','SpellSaveDc','Spell Save DC');
   const spellAtkBonus = num('SpellAtkBonus','Spell Attack Bonus','SpellAtk','Spell Atk Bonus');
 
-  // Spell list — DDB sheets use a few different naming conventions:
-  //   • Standard 5e form-fillable: "Spells 1014" → "Spells 1080" (numbered slot)
-  //   • Some DDB templates: "Spells 10148", "Spells 10149"
-  //   • Newer DDB: "spell-1-1" or "Spell Name 1", etc.
-  // Catch them all by sweeping every key that starts with "spell" (case-insensitive)
-  // and isn't a slot/DC/attack metadata field.
-  const spells = [];
-  const SPELL_META_KEYS = /^(spell\s*)?(slots?|save|atk|attack|casting|ability|class|mod|dc|bonus|level|name)\b/i;
+  // Spell list — try the indexed DDB format first ("spellName0", "spellName1"…),
+  // grouped by section markers in "spellHeader0/1/2…" ("=== CANTRIPS ===",
+  // "=== 1st LEVEL ===", etc.). Order in the PDF is: header, slot info, then
+  // a run of named spells until the next header.
+  let spells = [];
+  // Indexed DDB template: collect all spellNameN, plus walk spellHeaderN/spellSlotHeaderN to determine levels.
+  const indexedNames = [];
   Object.keys(f).forEach(k => {
-    const kt = k.replace(/\s+/g,' ').trim();
-    if (!/^spell/i.test(kt)) return;
-    if (SPELL_META_KEYS.test(kt)) return;
+    const m = k.match(/^spellName(\d+)$/);
+    if (!m) return;
+    const idx = parseInt(m[1]);
     const v = String(f[k] || '').trim();
-    // Skip pure numbers (those are slot counts not spell names)
-    if (!v || /^\d+$/.test(v)) return;
-    // Skip very short or very long values
-    if (v.length < 2 || v.length > 80) return;
-    spells.push(v);
+    if (v) indexedNames.push({ idx, name: v });
   });
-  // Also catch SlotsTotal-style fields with no "Spell" prefix that we missed.
-  // Dedupe.
+  if (indexedNames.length){
+    indexedNames.sort((a,b)=>a.idx-b.idx);
+    spells = indexedNames.map(x => x.name);
+  } else {
+    // Fall back to standard 5e form ("Spells 1014" etc.) — sweep any field whose
+    // name starts with "spell" (case-insensitive) and isn't a metadata field.
+    const SPELL_META_KEYS = /^(spell\s*)?(slots?|save|atk|attack|casting|ability|class|mod|dc|bonus|level|name|header|prepared|source|range|components|duration|page|notes|time|hit)\b/i;
+    Object.keys(f).forEach(k => {
+      const kt = k.replace(/\s+/g,' ').trim();
+      if (!/^spell/i.test(kt)) return;
+      if (SPELL_META_KEYS.test(kt)) return;
+      const v = String(f[k] || '').trim();
+      if (!v || /^\d+$/.test(v)) return;
+      if (v.length < 2 || v.length > 80) return;
+      spells.push(v);
+    });
+  }
   const spellsUniq = [...new Set(spells)];
 
-  // Diagnostic: log spell-related field count so user can see what the parser found.
+  // Spell slots — DDB indexed template stores per-section pip strings like
+  // "4 Slots OOOO" in spellSlotHeader0, spellSlotHeader1, etc. Section index
+  // doesn't directly equal spell level (section 0 is usually cantrips, no slots),
+  // so walk both spellHeader and spellSlotHeader together.
+  const slotHeaders = [];
+  Object.keys(f).forEach(k => {
+    const m = k.match(/^spellSlotHeader(\d+)$/);
+    if (!m) return;
+    const idx = parseInt(m[1]);
+    slotHeaders.push({ idx, raw: String(f[k]||'').trim(), header: String(f['spellHeader'+idx] || '').trim() });
+  });
+  if (slotHeaders.length && Object.keys(spellSlots).length === 0){
+    slotHeaders.sort((a,b)=>a.idx-b.idx);
+    slotHeaders.forEach(s => {
+      // Skip cantrip sections (no slots). Detect by header or empty slot string.
+      if (/cantrip/i.test(s.header)) return;
+      if (!s.raw) return;
+      // Pull total slots from leading number, expended from filled circles.
+      const m = s.raw.match(/(\d+)\s*Slot/i);
+      if (!m) return;
+      const total = parseInt(m[1]);
+      // Determine level from header text: "=== 1st LEVEL ===" → 1, "2nd" → 2, etc.
+      const lvlMatch = s.header.match(/(\d+)\s*(?:st|nd|rd|th)/i);
+      const lvl = lvlMatch ? parseInt(lvlMatch[1]) : null;
+      if (!lvl || lvl < 1 || lvl > 9) return;
+      // Filled vs empty pip count from the slot string. DDB uses "●" or "X" for
+      // expended and "O" / "○" for available; treat anything matching common
+      // "expended" glyphs as spent.
+      const expended = (s.raw.match(/[●Xx✓✔■▲]/g) || []).length;
+      spellSlots[lvl] = { total, expended: Math.min(expended, total) };
+    });
+  }
+
+  // Spellcasting metadata — DDB indexed template uses spellSaveDC0, spellAtkBonus0
+  let _spellSaveDc = spellSaveDc;
+  let _spellAtkBonus = spellAtkBonus;
+  if (_spellSaveDc == null) _spellSaveDc = num('spellSaveDC0','spellSaveDc0');
+  if (_spellAtkBonus == null) _spellAtkBonus = num('spellAtkBonus0','spellAtkBonus 0');
+
+  // Diagnostic.
   const spellLikeKeys = Object.keys(f).filter(k => /spell|slot/i.test(k));
-  console.log('[PDF Import] spell-related fields ('+spellLikeKeys.length+'):', spellLikeKeys);
-  console.log('[PDF Import] extracted spells ('+spellsUniq.length+'):', spellsUniq);
+  console.log('[PDF Import] spell-related fields ('+spellLikeKeys.length+'), extracted spells ('+spellsUniq.length+'), slots:', spellSlots);
 
   const sheet = {
     skills, saves, profBonus, passivePerception,
-    languages, inventory, attacks, spellSlots, spellSaveDc, spellAtkBonus,
+    languages, inventory, attacks, spellSlots,
+    spellSaveDc: _spellSaveDc, spellAtkBonus: _spellAtkBonus,
     spells: spellsUniq, bio,
   };
 

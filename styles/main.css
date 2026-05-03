@@ -27,25 +27,25 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .btn.primary:hover{background:#e0b582} .btn.danger{color:var(--danger)} .btn.small{padding:3px 7px;font-size:11px}
 
 /* APP SHELL */
-.app{height:100vh;display:grid;grid-template-rows:var(--top-bar-h) 1fr;grid-template-columns:var(--dock-w) 1fr;grid-template-areas:"topbar topbar" "dock workspace"}
+.app{height:100vh;display:grid;grid-template-rows:1fr;grid-template-columns:var(--dock-w) 1fr;grid-template-areas:"dock workspace"}
 
-/* TOP BAR */
-.top-bar{grid-area:topbar;display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--border);background:var(--panel)}
-.top-bar h1{margin:0;font-size:14px;font-weight:500;color:var(--accent);white-space:nowrap}
-.top-bar .spacer{flex:1}
-.sync-indicator{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);padding:4px 8px;border-radius:12px;background:var(--panel-2)}
+/* FLOATING TOOLBAR (top-right pill) */
+.float-toolbar{position:fixed;top:10px;right:14px;display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9000}
+.float-btn{background:transparent;border:none;color:var(--text-muted);width:30px;height:30px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .12s}
+.float-btn:hover{background:var(--panel-2);color:var(--text)}
+.float-btn:active{transform:scale(.95)}
+.sync-indicator{display:flex;align-items:center;justify-content:center;width:24px;height:30px;color:var(--text-muted)}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim)}
 .sync-dot.live{background:var(--success);animation:sync-pulse 2s ease-in-out infinite}
 .sync-dot.offline{background:var(--danger)}
 @keyframes sync-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
 /* SEARCH */
-.search-wrap{position:relative;flex:0 0 380px;max-width:380px}
-.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none;font-size:13px}
-.search-bar{width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 30px;border-radius:18px;font-size:12px}
+.search-wrap{position:relative;width:0;overflow:hidden;transition:width .18s ease}
+.search-wrap.open{width:300px;overflow:visible}
+.search-bar{width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:14px;font-size:12px}
 .search-bar:focus{outline:none;border-color:var(--accent)}
-.search-kbd{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:9px;color:var(--text-dim);background:var(--panel-3);padding:2px 5px;border-radius:3px;pointer-events:none;border:1px solid var(--border)}
-.search-popup{position:absolute;top:calc(100% + 6px);left:0;width:480px;max-height:460px;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden;display:none;z-index:450;flex-direction:column}
+.search-popup{position:absolute;top:calc(100% + 6px);right:0;width:480px;max-height:460px;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden;display:none;z-index:450;flex-direction:column}
 .search-popup.open{display:flex}
 .search-tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--panel-2)}
 .search-tab{flex:1;padding:7px 8px;background:transparent;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
@@ -140,7 +140,7 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
    keeps panel contents fully interactive. Player edits sync back to the DM
    the same way DM edits sync to the player (bidirectional via Firebase). */
 body.player-mode .panel-dock{display:none}
-body.player-mode .top-bar{display:none}
+body.player-mode .float-toolbar{display:none}
 body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-template-areas:"workspace"}
 body.player-mode #settings-btn{display:none}
 body.player-mode #player-view-btn{display:none}
@@ -324,6 +324,12 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .slot-count{font-size:10px;color:var(--text-dim);margin-left:auto;font-variant-numeric:tabular-nums}
 .sheet-spell-list{display:flex;flex-wrap:wrap;gap:4px}
 .sheet-spell-chip{background:var(--panel-3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:10px;color:var(--text)}
+/* Languages & proficiency chips (Stats tab) */
+.prof-group{margin-top:6px}
+.prof-group:first-child{margin-top:0}
+.prof-group-label{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;margin-bottom:3px}
+.prof-chips{display:flex;flex-wrap:wrap;gap:4px}
+.prof-chip{background:var(--panel-3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:10px;color:var(--text);white-space:nowrap}
 .char-stat{background:var(--panel-3);border-radius:4px;padding:3px 4px;text-align:center}
 .char-stat .l{font-size:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
 .char-stat input{background:transparent;border:none;text-align:center;padding:0;font-weight:600;font-size:12px;width:100%;color:var(--text)}

@@ -753,8 +753,16 @@ function renderSearchDetail(){
   wireDetailActions(d, container, suffix, closeSearch);
 }
 
-function openSearch(){document.getElementById('search-popup').classList.add('open');state.searchState.detail=null;renderSearchTabs();renderSearchResults();}
-function closeSearch(){document.getElementById('search-popup').classList.remove('open');state.searchState.detail=null;}
+function openSearch(){
+  document.getElementById('search-wrap')?.classList.add('open');
+  document.getElementById('search-popup').classList.add('open');
+  state.searchState.detail=null;renderSearchTabs();renderSearchResults();
+}
+function closeSearch(){
+  document.getElementById('search-popup').classList.remove('open');
+  document.getElementById('search-wrap')?.classList.remove('open');
+  state.searchState.detail=null;
+}
 function initSearch(){
   // Start loading 5etools data in the background immediately
   load5eData();
@@ -791,6 +799,18 @@ function initSearch(){
   });
   let _insideSearch = false;
   document.querySelector('.search-wrap').addEventListener('mousedown', () => { _insideSearch = true; });
+  // The 🔎 toggle button on the floating toolbar opens (and focuses) the input.
+  document.getElementById('float-search-btn')?.addEventListener('mousedown', e => {
+    _insideSearch = true;
+    e.stopPropagation();
+    const wrap = document.getElementById('search-wrap');
+    if (wrap?.classList.contains('open')) closeSearch();
+    else { openSearch(); setTimeout(()=>inp.focus(), 50); }
+  });
   document.addEventListener('mousedown', () => { if(!_insideSearch)closeSearch(); _insideSearch=false; });
-  document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)){e.preventDefault();inp.focus();}});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)){
+      e.preventDefault(); openSearch(); setTimeout(()=>inp.focus(), 50);
+    }
+  });
 }

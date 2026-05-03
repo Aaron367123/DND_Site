@@ -15,12 +15,10 @@
 
 <div class="app" id="app">
   <!-- TOP BAR -->
-  <div class="top-bar">
-    <h1>⚔ SKT Campaign</h1>
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
+  <div class="float-toolbar" id="float-toolbar">
+    <button class="float-btn" id="float-search-btn" title="Search (/)">🔎</button>
+    <div class="search-wrap" id="search-wrap">
       <input type="text" class="search-bar" id="search-input" placeholder="Search monsters, spells, items, conditions..." autocomplete="off">
-      <span class="search-kbd">/</span>
       <div class="search-popup" id="search-popup">
         <div class="search-tabs" id="search-tabs">
           <button class="search-tab active" data-cat="all">All</button>
@@ -49,10 +47,9 @@
         <div class="search-results" id="search-results"></div>
       </div>
     </div>
-    <div class="spacer"></div>
-    <div class="sync-indicator" id="sync-status"><span class="sync-dot"></span><span>Local</span></div>
-    <button class="btn small" id="player-view-btn" title="Open the player view in a new window">🖥 Player View</button>
-    <button class="btn small" id="settings-btn">⚙ Settings</button>
+    <div class="sync-indicator" id="sync-status" title="Sync status"><span class="sync-dot"></span></div>
+    <button class="float-btn" id="player-view-btn" title="Open the player view in a new window">🖥</button>
+    <button class="float-btn" id="settings-btn" title="Settings">⚙</button>
   </div>
 
   <!-- DOCK -->
