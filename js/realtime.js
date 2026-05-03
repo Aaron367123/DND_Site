@@ -46,6 +46,7 @@ let _remoteUpdate = false;        // true while applying remote changes → prev
 let _pushTimer    = null;         // debounce handle for outgoing writes
 let _fbDb         = null;         // Firebase database reference
 const _dirtyKeys  = new Set();    // sync keys that have changed since last flush
+const _justWrote  = {};           // {key: value} of our most recent push, used to suppress one echo
 
 // Which panels to refresh when a particular sync key changes. Avoids re-rendering
 // the whole world when a single subsystem updates.
@@ -87,6 +88,11 @@ function _flushDirtyKeys() {
   _dirtyKeys.clear();
   keys.forEach(k => {
     const val = localStorage.getItem(k);
+    // Remember exactly what we pushed so the listener can drop the one echo
+    // that comes back to us. (Don't use a `localStorage===fbVal` check for
+    // this — same-browser tabs share localStorage, which would falsely
+    // suppress legitimate cross-tab updates.)
+    _justWrote[k] = val;
     _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).catch(() => {});
   });
 }
@@ -95,21 +101,26 @@ function _flushDirtyKeys() {
 // Called per-listener when a single sync key changes on the server. Only the
 // panels that depend on that key get refreshed.
 function _applyRemoteKey(key, fbVal) {
-  // TEMP DIAGNOSTIC — remove once sync is confirmed working.
-  console.log('[SKT-SYNC]', key, 'received, type=', typeof fbVal, 'len=', (typeof fbVal === 'string' ? fbVal.length : '-'));
-  // Some Firebase configurations auto-decode JSON-looking strings into objects.
-  // Re-stringify defensively so the rest of the pipeline always sees a string.
-  if (fbVal == null) { console.log('[SKT-SYNC]', key, 'skip: null'); return; }
+  // Defensive: some Firebase configurations auto-decode JSON-looking strings
+  // into objects. Re-stringify so the rest of the pipeline always sees a string.
+  if (fbVal == null) return;
   if (typeof fbVal !== 'string'){
     try { fbVal = JSON.stringify(fbVal); }
-    catch(e){ console.log('[SKT-SYNC]', key, 'skip: cannot stringify', e); return; }
+    catch(e){ return; }
   }
-  if (localStorage.getItem(key) === fbVal) { console.log('[SKT-SYNC]', key, 'skip: identical to local'); return; }
+  // Echo suppression: if this matches the value we most recently pushed,
+  // drop exactly that one fire. Anything else (cross-tab write, edit from
+  // a different client, manual Firebase Console edit) always processes —
+  // we can't rely on "localStorage === fbVal" because same-browser tabs
+  // share localStorage and that would suppress legitimate updates.
+  if (_justWrote[key] === fbVal){
+    delete _justWrote[key];
+    return;
+  }
 
   _remoteUpdate = true;
   localStorage.setItem(key, fbVal);
   _remoteUpdate = false;
-  console.log('[SKT-SYNC]', key, 'applied to localStorage, dispatching panels');
 
   // skt-workspace-v1 backs the global `state` object — re-read it.
   if (key === 'skt-workspace-v1') load();
@@ -132,13 +143,7 @@ function _applyRemoteKey(key, fbVal) {
   }
 
   const panels = _PANELS_FOR_KEY[key] || [];
-  console.log('[SKT-SYNC]', key, '→ panels:', panels);
-  panels.forEach(id => {
-    const def = panelDefs[id];
-    console.log('[SKT-SYNC]   reload', id, 'mounted=', !!(def && def._body));
-    try { _reloadPanel(id); }
-    catch(err){ console.error('[SKT-SYNC] reload error for', id, err); }
-  });
+  panels.forEach(id => _reloadPanel(id));
 }
 
 // Per-panel reload. Panels that cache data into their own property need a
