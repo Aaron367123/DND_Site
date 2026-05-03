@@ -95,12 +95,21 @@ function _flushDirtyKeys() {
 // Called per-listener when a single sync key changes on the server. Only the
 // panels that depend on that key get refreshed.
 function _applyRemoteKey(key, fbVal) {
-  if (typeof fbVal !== 'string') return;
-  if (localStorage.getItem(key) === fbVal) return; // identical — skip work
+  // TEMP DIAGNOSTIC — remove once sync is confirmed working.
+  console.log('[SKT-SYNC]', key, 'received, type=', typeof fbVal, 'len=', (typeof fbVal === 'string' ? fbVal.length : '-'));
+  // Some Firebase configurations auto-decode JSON-looking strings into objects.
+  // Re-stringify defensively so the rest of the pipeline always sees a string.
+  if (fbVal == null) { console.log('[SKT-SYNC]', key, 'skip: null'); return; }
+  if (typeof fbVal !== 'string'){
+    try { fbVal = JSON.stringify(fbVal); }
+    catch(e){ console.log('[SKT-SYNC]', key, 'skip: cannot stringify', e); return; }
+  }
+  if (localStorage.getItem(key) === fbVal) { console.log('[SKT-SYNC]', key, 'skip: identical to local'); return; }
 
   _remoteUpdate = true;
   localStorage.setItem(key, fbVal);
   _remoteUpdate = false;
+  console.log('[SKT-SYNC]', key, 'applied to localStorage, dispatching panels');
 
   // skt-workspace-v1 backs the global `state` object — re-read it.
   if (key === 'skt-workspace-v1') load();
@@ -123,7 +132,13 @@ function _applyRemoteKey(key, fbVal) {
   }
 
   const panels = _PANELS_FOR_KEY[key] || [];
-  panels.forEach(id => _reloadPanel(id));
+  console.log('[SKT-SYNC]', key, '→ panels:', panels);
+  panels.forEach(id => {
+    const def = panelDefs[id];
+    console.log('[SKT-SYNC]   reload', id, 'mounted=', !!(def && def._body));
+    try { _reloadPanel(id); }
+    catch(err){ console.error('[SKT-SYNC] reload error for', id, err); }
+  });
 }
 
 // Per-panel reload. Panels that cache data into their own property need a
