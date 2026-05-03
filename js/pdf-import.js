@@ -191,6 +191,109 @@ function _fromFields(f){
   // class + level if the field isn't directly present.
   const hdTotalRaw = get('HDTotal', 'HD Total', 'Hit Dice', 'HitDice');
   const hd = _deriveHitDice(cls, level, hdTotalRaw);
+
+  // Skills — standard 5e Form-Fillable field names. Each is the total bonus.
+  const skillDefs = [
+    ['acrobatics','Acrobatics'],
+    ['animalHandling','Animal','AnimalHandling','Animal Handling'],
+    ['arcana','Arcana'],
+    ['athletics','Athletics'],
+    ['deception','Deception'],
+    ['history','History'],
+    ['insight','Insight'],
+    ['intimidation','Intimidation'],
+    ['investigation','Investigation'],
+    ['medicine','Medicine'],
+    ['nature','Nature'],
+    ['perception','Perception'],
+    ['performance','Performance'],
+    ['persuasion','Persuasion'],
+    ['religion','Religion'],
+    ['sleightOfHand','SleightofHand','Sleight of Hand'],
+    ['stealth','Stealth'],
+    ['survival','Survival'],
+  ];
+  const skills = {};
+  skillDefs.forEach(([key, ...aliases]) => {
+    const v = num(...aliases);
+    if (v != null) skills[key] = v;
+  });
+
+  // Saving throws
+  const saveDefs = [
+    ['str','ST Strength','STStrength','StrengthSave','Strength-save'],
+    ['dex','ST Dexterity','STDexterity','DexteritySave','Dexterity-save'],
+    ['con','ST Constitution','STConstitution','ConstitutionSave','Constitution-save'],
+    ['int','ST Intelligence','STIntelligence','IntelligenceSave','Intelligence-save'],
+    ['wis','ST Wisdom','STWisdom','WisdomSave','Wisdom-save'],
+    ['cha','ST Charisma','STCharisma','CharismaSave','Charisma-save'],
+  ];
+  const saves = {};
+  saveDefs.forEach(([key, ...aliases]) => {
+    const v = num(...aliases);
+    if (v != null) saves[key] = v;
+  });
+
+  const profBonus = num('ProfBonus', 'Proficiency Bonus', 'ProficiencyBonus');
+  const passivePerception = num('Passive', 'PassiveWisdom', 'Passive Wisdom (Perception)', 'PassivePerception');
+
+  // Free-text panels.
+  const sStr = (...aliases) => String(get(...aliases) || '').trim();
+  const languages = sStr('ProficienciesLang','Languages','Other Proficiencies & Languages','OtherProfs');
+  const inventory = sStr('Equipment','Inventory');
+  const bio = {
+    backstory: sStr('Backstory'),
+    traits:    sStr('PersonalityTraits','Personality Traits'),
+    ideals:    sStr('Ideals'),
+    bonds:     sStr('Bonds'),
+    flaws:     sStr('Flaws'),
+    allies:    sStr('Allies','AlliesOrgs','Allies & Organizations'),
+    features:  sStr('Feat+Traits','FeaturesandTraits','Features and Traits','Features+Traits'),
+  };
+
+  // Attacks — standard 5e form has 3 weapon slots ("Wpn Name", "Wpn Name 2", "Wpn Name 3").
+  const attacks = [];
+  for (let n = 1; n <= 3; n++){
+    const nameKey = n === 1 ? 'Wpn Name' : `Wpn Name ${n}`;
+    const aname = sStr(nameKey, `WpnName${n}`, `Weapon ${n} Name`);
+    if (!aname) continue;
+    attacks.push({
+      name: aname,
+      atkBonus: sStr(`Wpn${n} AtkBonus`, `Wpn${n}AtkBonus`, `Weapon ${n} Atk`),
+      damage:   sStr(`Wpn${n} Damage`, `Wpn${n}Damage`, `Weapon ${n} Damage`),
+    });
+  }
+
+  // Spell slots — DDB form uses "SlotsTotal 19" / "SlotsRemaining 19" pattern
+  // where suffix 19 = level 1, 20 = level 2, etc.
+  const spellSlots = {};
+  for (let lvl = 1; lvl <= 9; lvl++){
+    const t = num(`SlotsTotal ${18+lvl}`, `SpellSlots${lvl}Total`, `SpellSlotsTotal${lvl}`, `SpellSlots${lvl}`);
+    const r = num(`SlotsRemaining ${18+lvl}`, `SpellSlots${lvl}Remaining`, `SpellSlotsRemaining${lvl}`);
+    if (t != null && t > 0){
+      spellSlots[lvl] = { total: t, expended: r != null ? Math.max(0, t - r) : 0 };
+    }
+  }
+  const spellSaveDc = num('SpellSaveDC','Spell save DC','SpellSaveDc');
+  const spellAtkBonus = num('SpellAtkBonus','Spell Attack Bonus','SpellAtk');
+
+  // Spell list — DDB form has fields like "Spells 1014", "Spells 1015"... up to "Spells 1080" or so
+  // Each is a single spell name. Group all into a flat list keyed by name only;
+  // we don't know the level association reliably from field name alone.
+  const spells = [];
+  Object.keys(f).forEach(k => {
+    if (/^Spells\s*1\d{3}$/i.test(k.replace(/\s+/g,' '))){
+      const v = String(f[k] || '').trim();
+      if (v) spells.push(v);
+    }
+  });
+
+  const sheet = {
+    skills, saves, profBonus, passivePerception,
+    languages, inventory, attacks, spellSlots, spellSaveDc, spellAtkBonus,
+    spells, bio,
+  };
+
   return {
     name: String(name||''),
     cls, level,
@@ -200,6 +303,7 @@ function _fromFields(f){
     hp, hpMax, ac, init, speed,
     abilities,
     hitDice: hd,
+    sheet,
     _rawFields: f,
   };
 }

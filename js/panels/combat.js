@@ -26,9 +26,7 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
-        <button class="btn icon-btn ${state.settings?.autoRollInit?'active':''}" data-act="toggle-autoroll" title="Auto-roll initiative for new PCs (uses imported DEX modifier)">🎲</button>
         <button class="btn icon-btn ${state.settings?.hideMonsterStats?'active':''}" data-act="toggle-hide-stats" title="Hide monster HP/AC from player view">🙈</button>
-        <button class="btn icon-btn" data-act="player-view" title="Open player view">🖥</button>
         <button class="btn icon-btn" data-act="settings" title="Manage quick-pick names">⚙</button>
       </div>
 
@@ -108,14 +106,9 @@ registerPanel('combat',{
       if(act==='next')                this._nextTurn();
       else if(act==='add')            this._addPrompt();
       else if(act==='add-monster')    this._openMonsterPicker();
-      else if(act==='player-view')    this._openPlayerView();
       else if(act==='settings')       this._manageQuickNames();
       else if(act==='toggle-hide-stats'){
         state.settings.hideMonsterStats = !state.settings.hideMonsterStats;
-        save(); this._render();
-      }
-      else if(act==='toggle-autoroll'){
-        state.settings.autoRollInit = !state.settings.autoRollInit;
         save(); this._render();
       }
       else if(act==='remove')         this._remove(parseInt(el.dataset.idx));
@@ -293,16 +286,12 @@ registerPanel('combat',{
   _addPartyToCombat(pi){
     const p=state.party[pi];
     if(state.combatants.find(c=>c.isPC&&c.id===p.id)){showToast(p.name+' already in combat');return;}
-    // Compute initiative bonus: prefer party.init, fall back to imported DEX
-    // modifier from the abilities object.
     const dexMod = (p.abilities && typeof p.abilities.dex === 'number') ? Math.floor((p.abilities.dex - 10)/2) : null;
     const initBonus = (typeof p.init === 'number' ? p.init : null) ?? dexMod ?? 0;
-    // Auto-roll vs. manual entry. Toolbar 🎲 button toggles the setting.
-    const initial = state.settings?.autoRollInit ? (d20() + initBonus) : (p.init || 0);
-    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus,initiative:initial,conditions:[]});
+    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus,initiative:p.init||0,conditions:[]});
     if(!state.combatRound) state.combatRound=1;
     save();this._render();
-    showToast(state.settings?.autoRollInit ? `${p.name} added (init ${initial})` : `${p.name} added`);
+    showToast(`${p.name} added`);
   },
 
   _removeFromCombatById(id){
@@ -368,13 +357,6 @@ registerPanel('combat',{
       close();
     });
     setTimeout(()=>backdrop.querySelector('#cmb-pick-search').focus(), 30);
-  },
-
-  _openPlayerView(){
-    const url = window.location.href.split('?')[0]+'?player=1';
-    const w = window.open(url,'skt-player','width=1280,height=720');
-    if (!w) showToast('Allow popups to open player view');
-    else showToast('Player view opened');
   },
 
   _remove(i){state.combatants.splice(i,1);save();this._render();},

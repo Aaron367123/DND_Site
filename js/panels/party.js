@@ -6,6 +6,9 @@ const PARTY_ICONS=['⚔','🗡','🏹','🪄','🔮','🛡','🪓','👊','🌿'
 registerPanel('party',{
   title:'Party Tracker',icon:'♥',
   _pickerOpen:null, // idx of card with open icon picker
+  // UI-only state (not synced) keyed by character id.
+  _expanded:{},
+  _activeTab:{}, // 'stats' | 'skills' | 'spells' | 'inventory' | 'bio'
   mount(body){this._body=body;this._render();},
   unmount(){this._body=null;},
 
@@ -84,7 +87,181 @@ registerPanel('party',{
           +'<div class="inspiration-toggle"></div><span>Bardic</span>'
         +'</div>'
       +'</div>'
+      // Full character sheet — collapsed by default; expand to see tabs.
+      + this._sheetSection(c, i)
     +'</div>';
+  },
+
+  // ------------------------------------------------------------------
+  // Character sheet (Phase 2): tabbed view of skills / spells / inventory / bio
+  // ------------------------------------------------------------------
+  _sheetSection(c, i){
+    const has = !!c.sheet;
+    const expanded = !!this._expanded[c.id];
+    const toggleLabel = expanded ? '▲ Hide character sheet' : (has ? '▼ Show character sheet' : '▼ Show character sheet (no PDF imported)');
+    return '<button class="sheet-toggle" data-act="toggle-sheet" data-idx="'+i+'">'+toggleLabel+'</button>'
+      + (expanded ? this._sheetBody(c, i) : '');
+  },
+
+  _sheetBody(c, i){
+    const tabs = ['stats','skills','spells','inventory','bio'];
+    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', inventory:'Inventory', bio:'Bio'};
+    const active = this._activeTab[c.id] || 'stats';
+    const tabBar = tabs.map(t =>
+      `<button class="sheet-tab ${t===active?'active':''}" data-act="sheet-tab" data-idx="${i}" data-tab="${t}">${labels[t]}</button>`
+    ).join('');
+    let body = '';
+    if (active === 'stats')      body = this._tabStats(c);
+    else if (active === 'skills')body = this._tabSkills(c);
+    else if (active === 'spells')body = this._tabSpells(c);
+    else if (active === 'inventory') body = this._tabInventory(c);
+    else if (active === 'bio')   body = this._tabBio(c);
+    return `<div class="sheet-body">
+      <div class="sheet-tabs">${tabBar}</div>
+      <div class="sheet-content">${body}</div>
+    </div>`;
+  },
+
+  _abilityBlock(c){
+    const ab = c.abilities || {};
+    const order = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
+    return '<div class="sheet-abilities">' + order.map(([k,lbl])=>{
+      const v = ab[k];
+      const mod = (typeof v === 'number') ? Math.floor((v-10)/2) : null;
+      return `<div class="sheet-ab"><div class="sheet-ab-lbl">${lbl}</div><div class="sheet-ab-val">${v??'—'}</div><div class="sheet-ab-mod">${mod==null?'':(mod>=0?'+':'')+mod}</div></div>`;
+    }).join('') + '</div>';
+  },
+
+  _tabStats(c){
+    const sh = c.sheet || {};
+    const saveDefs = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
+    const ab = c.abilities || {};
+    const saves = sh.saves || {};
+    const saveRows = saveDefs.map(([k,lbl])=>{
+      // Prefer imported save bonus; else compute from ability mod.
+      let v = saves[k];
+      if (v == null && typeof ab[k]==='number') v = Math.floor((ab[k]-10)/2);
+      return `<div class="sheet-stat-row"><span>${lbl} Save</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
+    }).join('');
+    const prof = sh.profBonus;
+    const pp = sh.passivePerception;
+    const dexMod = (typeof ab.dex==='number') ? Math.floor((ab.dex-10)/2) : null;
+    const computedPP = (typeof ab.wis==='number') ? 10+Math.floor((ab.wis-10)/2) : null;
+    return this._abilityBlock(c)
+      + '<div class="sheet-grid2">'
+      + '<div class="sheet-col"><h5>Saving Throws</h5>'+saveRows+'</div>'
+      + '<div class="sheet-col"><h5>Vitals</h5>'
+      +   `<div class="sheet-stat-row"><span>Proficiency</span><span class="sheet-stat-val">${prof==null?'—':'+'+prof}</span></div>`
+      +   `<div class="sheet-stat-row"><span>Passive Perception</span><span class="sheet-stat-val">${pp ?? computedPP ?? '—'}</span></div>`
+      +   `<div class="sheet-stat-row"><span>Initiative</span><span class="sheet-stat-val">${(c.init>=0?'+':'')+(c.init??0)}</span></div>`
+      +   `<div class="sheet-stat-row"><span>Speed</span><span class="sheet-stat-val">${c.spd ?? '—'}</span></div>`
+      +   `<div class="sheet-stat-row"><span>AC</span><span class="sheet-stat-val">${c.ac ?? '—'}</span></div>`
+      + '</div>'
+      + '</div>'
+      + (sh.languages ? `<div class="sheet-block"><h5>Languages &amp; Other Proficiencies</h5><div class="sheet-text">${esc(sh.languages)}</div></div>` : '')
+      + (sh.attacks?.length ? this._renderAttacks(sh.attacks) : '');
+  },
+
+  _renderAttacks(attacks){
+    const rows = attacks.map(a =>
+      `<tr><td>${esc(a.name)}</td><td>${esc(a.atkBonus||'—')}</td><td>${esc(a.damage||'—')}</td></tr>`
+    ).join('');
+    return `<div class="sheet-block"><h5>Attacks</h5>
+      <table class="sheet-table">
+        <thead><tr><th>Name</th><th>Atk</th><th>Damage</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  },
+
+  _tabSkills(c){
+    const sh = c.sheet || {};
+    const skills = sh.skills || {};
+    const ab = c.abilities || {};
+    // Skill → governing ability (for the "fallback to ability mod" path)
+    const SKILL_AB = {
+      acrobatics:'dex', animalHandling:'wis', arcana:'int', athletics:'str',
+      deception:'cha', history:'int', insight:'wis', intimidation:'cha',
+      investigation:'int', medicine:'wis', nature:'int', perception:'wis',
+      performance:'cha', persuasion:'cha', religion:'int',
+      sleightOfHand:'dex', stealth:'dex', survival:'wis',
+    };
+    const LABELS = {
+      acrobatics:'Acrobatics (DEX)', animalHandling:'Animal Handling (WIS)',
+      arcana:'Arcana (INT)', athletics:'Athletics (STR)', deception:'Deception (CHA)',
+      history:'History (INT)', insight:'Insight (WIS)', intimidation:'Intimidation (CHA)',
+      investigation:'Investigation (INT)', medicine:'Medicine (WIS)', nature:'Nature (INT)',
+      perception:'Perception (WIS)', performance:'Performance (CHA)', persuasion:'Persuasion (CHA)',
+      religion:'Religion (INT)', sleightOfHand:'Sleight of Hand (DEX)',
+      stealth:'Stealth (DEX)', survival:'Survival (WIS)',
+    };
+    const keys = Object.keys(LABELS);
+    const rows = keys.map(k => {
+      let v = skills[k];
+      if (v == null){
+        const a = ab[SKILL_AB[k]];
+        v = (typeof a === 'number') ? Math.floor((a-10)/2) : null;
+      }
+      return `<div class="sheet-stat-row"><span>${LABELS[k]}</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
+    }).join('');
+    return '<div class="sheet-skills">'+rows+'</div>';
+  },
+
+  _tabSpells(c){
+    const sh = c.sheet || {};
+    const slots = sh.spellSlots || {};
+    const lvls = Object.keys(slots).map(n=>parseInt(n)).sort((a,b)=>a-b);
+    let slotsHtml = '';
+    if (lvls.length){
+      slotsHtml = '<div class="sheet-block"><h5>Spell Slots</h5><div class="sheet-slots">'
+        + lvls.map(l=>{
+            const s = slots[l];
+            const total = s.total||0, expended = s.expended||0;
+            let pips = '';
+            for (let n=1; n<=total; n++) pips += `<span class="slot-pip ${n<=total-expended?'available':'spent'}"></span>`;
+            return `<div class="sheet-slot-row"><span class="slot-lvl">L${l}</span>${pips}<span class="slot-count">${total-expended}/${total}</span></div>`;
+          }).join('')
+        + '</div></div>';
+    }
+    let metaHtml = '';
+    if (sh.spellSaveDc != null || sh.spellAtkBonus != null){
+      metaHtml = '<div class="sheet-block"><h5>Spellcasting</h5>'
+        + (sh.spellSaveDc!=null ? `<div class="sheet-stat-row"><span>Save DC</span><span class="sheet-stat-val">${sh.spellSaveDc}</span></div>` : '')
+        + (sh.spellAtkBonus!=null ? `<div class="sheet-stat-row"><span>Attack Bonus</span><span class="sheet-stat-val">${sh.spellAtkBonus>=0?'+':''}${sh.spellAtkBonus}</span></div>` : '')
+        + '</div>';
+    }
+    let listHtml = '';
+    if (sh.spells?.length){
+      listHtml = '<div class="sheet-block"><h5>Known Spells (' + sh.spells.length + ')</h5><div class="sheet-spell-list">'
+        + sh.spells.map(s=>`<span class="sheet-spell-chip">${esc(s)}</span>`).join('')
+        + '</div></div>';
+    }
+    if (!slotsHtml && !metaHtml && !listHtml){
+      return '<div class="sheet-empty">No spell data in the imported PDF.</div>';
+    }
+    return metaHtml + slotsHtml + listHtml;
+  },
+
+  _tabInventory(c){
+    const inv = c.sheet?.inventory;
+    if (!inv) return '<div class="sheet-empty">No inventory in the imported PDF.</div>';
+    return `<div class="sheet-block"><h5>Equipment</h5><div class="sheet-text sheet-text-pre">${esc(inv)}</div></div>`;
+  },
+
+  _tabBio(c){
+    const bio = c.sheet?.bio || {};
+    const blocks = [
+      ['Personality Traits', bio.traits],
+      ['Ideals', bio.ideals],
+      ['Bonds', bio.bonds],
+      ['Flaws', bio.flaws],
+      ['Backstory', bio.backstory],
+      ['Allies & Organizations', bio.allies],
+      ['Features &amp; Traits', bio.features],
+    ].filter(([_, v]) => v && v.trim());
+    if (!blocks.length) return '<div class="sheet-empty">No bio in the imported PDF.</div>';
+    return blocks.map(([h, v]) =>
+      `<div class="sheet-block"><h5>${h}</h5><div class="sheet-text sheet-text-pre">${esc(v)}</div></div>`
+    ).join('');
   },
 
   _iconPicker(i){
@@ -297,6 +474,16 @@ registerPanel('party',{
       else if(act==='import-pdf'){
         this._importPdf();
       }
+      else if(act==='toggle-sheet'){
+        const c = state.party[i]; if (!c) return;
+        this._expanded[c.id] = !this._expanded[c.id];
+        this._render();
+      }
+      else if(act==='sheet-tab'){
+        const c = state.party[i]; if (!c) return;
+        this._activeTab[c.id] = el.dataset.tab;
+        this._render();
+      }
       else if(act==='hd-spend'){
         const idx = +el.dataset.idx, n = +el.dataset.n;
         const c = state.party[idx]; if (!c || !c.hitDice) return;
@@ -458,6 +645,9 @@ registerPanel('party',{
         // Hit dice come straight from the parser — not exposed in the modal
         // since they're auto-derived from class + level.
         hitDice: data.hitDice || null,
+        // Full character sheet payload (skills, saves, attacks, spells, bio…)
+        // — surfaced via the expand-sheet toggle on each card.
+        sheet: data.sheet || null,
       };
       if (slot === 'new'){
         state.party.push({

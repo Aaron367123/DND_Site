@@ -835,6 +835,9 @@ registerPanel('battlemap',{
     };
 
     // Walk an adventure JSON tree and collect every {type:'image', imageType:'map'|'mapPlayer'} entry.
+    // Captures `id` (for parent linking) and `mapParent.id` so we can backfill
+    // player-version titles from their DM counterparts — 5etools data sets the
+    // player map's `title` to "Player Version" rather than the actual map name.
     const extractMaps = (node, out)=>{
       if (!node) return;
       if (Array.isArray(node)){ node.forEach(n => extractMaps(n, out)); return; }
@@ -842,9 +845,30 @@ registerPanel('battlemap',{
       if (node.type === 'image' && (node.imageType === 'map' || node.imageType === 'mapPlayer') && node.href?.path){
         const path = node.href.path;
         const fallback = path.split('/').pop().replace(/\.[^.]+$/, '');
-        out.push({ path, title: node.title || fallback, type: node.imageType });
+        out.push({
+          path,
+          title: node.title || fallback,
+          type: node.imageType,
+          id: node.id,
+          parentId: node.mapParent?.id,
+        });
       }
       for (const k in node) extractMaps(node[k], out);
+    };
+
+    // Backfill player-map titles from their parent DM map so search by name finds both.
+    const linkPlayerTitles = (maps)=>{
+      const byId = {};
+      maps.forEach(m => { if (m.id) byId[m.id] = m; });
+      maps.forEach(m => {
+        if (m.type === 'mapPlayer' && m.parentId && byId[m.parentId]){
+          const parentTitle = byId[m.parentId].title;
+          if (parentTitle && m.title === 'Player Version') m.title = parentTitle;
+          // Stash searchable parent title even if the player map already had a unique name.
+          m.searchTitle = parentTitle;
+        }
+      });
+      return maps;
     };
 
     // Fetch + extract maps for one adventure, cached.
@@ -855,7 +879,7 @@ registerPanel('battlemap',{
         const j = await res.json();
         const found = [];
         extractMaps(j, found);
-        this._mapsByAdv[advId] = found;
+        this._mapsByAdv[advId] = linkPlayerTitles(found);
       } catch(err){
         this._mapsByAdv[advId] = [];
       }
@@ -891,18 +915,29 @@ registerPanel('battlemap',{
       });
     };
 
-    // Eager fetch all adventures' maps in parallel — needed for the global
-    // search to work without prefiltering by adventure. Cached on the panel
-    // so the next picker open is instant.
+    // Eager fetch all adventures' maps for global search. Concurrency-limited
+    // (8 in flight) so parsing 100+ large 5etools JSON files doesn't block the
+    // UI thread or hammer the network. Cached on the panel so reopen is instant.
     let allMapsPromise = null;
     const ensureAllMaps = ()=>{
       if (this._allMaps) return Promise.resolve(this._allMaps);
       if (allMapsPromise) return allMapsPromise;
-      allMapsPromise = Promise.all(this._adventures.map(async a => {
-        const list = await loadOneAdvMaps(a.id);
-        return list.map(m => ({...m, advId: a.id, advName: a.name}));
-      })).then(flat => {
-        this._allMaps = flat.flat();
+      const advs = this._adventures;
+      const results = new Array(advs.length);
+      const CONCURRENCY = 8;
+      let cursor = 0;
+      const worker = async () => {
+        while (true){
+          const i = cursor++;
+          if (i >= advs.length) return;
+          const a = advs[i];
+          const list = await loadOneAdvMaps(a.id);
+          results[i] = list.map(m => ({...m, advId: a.id, advName: a.name}));
+        }
+      };
+      const workers = Array.from({length: Math.min(CONCURRENCY, advs.length)}, worker);
+      allMapsPromise = Promise.all(workers).then(() => {
+        this._allMaps = results.flat();
         return this._allMaps;
       });
       return allMapsPromise;
@@ -933,6 +968,7 @@ registerPanel('battlemap',{
       }
       const matches = this._allMaps.filter(m =>
         m.title.toLowerCase().includes(qn) ||
+        (m.searchTitle && m.searchTitle.toLowerCase().includes(qn)) ||
         (m.advName && m.advName.toLowerCase().includes(qn)) ||
         (m.advId && m.advId.toLowerCase().includes(qn))
       ).slice(0, 200);
