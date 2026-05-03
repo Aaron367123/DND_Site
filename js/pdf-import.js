@@ -240,7 +240,22 @@ function _fromFields(f){
   // Free-text panels.
   const sStr = (...aliases) => String(get(...aliases) || '').trim();
   const languages = sStr('ProficienciesLang','Languages','Other Proficiencies & Languages','OtherProfs');
-  const inventory = sStr('Equipment','Inventory');
+  // Inventory — try standard names first, then sweep any field whose name looks
+  // equipment-related and concatenate. Different DDB sheet templates split the
+  // equipment list across multiple fields ("Equipment", "Equipment 2", "Treasure", etc.).
+  let inventory = sStr('Equipment','Inventory','EquipmentList','Gear','Items');
+  if (!inventory){
+    const invParts = [];
+    Object.keys(f).forEach(k => {
+      if (/^(equipment|inventory|gear|items|treasure)/i.test(k.trim())){
+        const v = String(f[k] || '').trim();
+        if (v) invParts.push(v);
+      }
+    });
+    if (invParts.length) inventory = invParts.join('\n');
+  }
+  console.log('[PDF Import] inventory-related fields:',
+    Object.keys(f).filter(k => /equip|invent|gear|items|treasure|coin|cp|sp|gp|ep|pp/i.test(k)));
   const bio = {
     backstory: sStr('Backstory'),
     traits:    sStr('PersonalityTraits','Personality Traits'),
