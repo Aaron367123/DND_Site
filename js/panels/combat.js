@@ -125,8 +125,11 @@ registerPanel('combat',{
         const isText = f === 'name';
         const val = isText ? String(e.target.value).trim() : (parseInt(e.target.value)||0);
         state.combatants[i]={...state.combatants[i],[f]:val};
-        save();
+        // Mirror to the party slot BEFORE saving so localStorage (and the
+        // resulting Firebase push) captures both halves in one consistent
+        // write — see the matching comment in party.js.
         if((f==='hp'||f==='ac')&&state.combatants[i]?.isPC) syncCombatToParty(state.combatants[i].id);
+        save();
         this._render();
       });
       inp.addEventListener('click',e=>e.stopPropagation());

@@ -1033,10 +1033,11 @@ registerPanel('battlemap',{
     const ctx=fogCanvas.getContext('2d');
     ctx.clearRect(0,0,W,H);
     if(this._fog===null)return; // fog disabled
-    // DM view: translucent black so the DM can still see the map and tokens
-    // through the fog. Player view (player-view.js) draws its own fully
-    // opaque fog, so this only affects the DM's own panel.
-    ctx.fillStyle='rgba(0,0,0,0.55)';
+    // DM view: translucent so the DM can still see the map through the fog.
+    // Player view: fully opaque — players shouldn't see anything in unrevealed
+    // cells. Detected via the body class set by initPlayerView().
+    const isPlayer = document.body.classList.contains('player-mode');
+    ctx.fillStyle = isPlayer ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0.55)';
     ctx.fillRect(0,0,W,H);
     // Cut out revealed cells fully
     ctx.globalCompositeOperation='destination-out';
@@ -1055,12 +1056,22 @@ registerPanel('battlemap',{
     stage.querySelectorAll('.map-token').forEach(el=>el.remove());
 
     const tokScale = this._bgMapScale || 1;
+    // Player view: hide non-PC tokens that sit in unrevealed cells. The DM
+    // sees everything regardless. Fog set is keyed by "gx,gy" — derive cell
+    // from the token's pixel center.
+    const isPlayer = document.body.classList.contains('player-mode');
+    const fogSet = this._fog;
     this._tokens.forEach(t=>{
       const size=t.size||1;
       // Tokens store pixel coordinates (center). Default to middle of stage
       // for any token that's somehow missing them (shouldn't happen post-migration).
       if (t.x == null) t.x = cs * size / 2;
       if (t.y == null) t.y = cs * size / 2;
+      if (isPlayer && fogSet && !t.isPC){
+        const gx = Math.floor(t.x / cs);
+        const gy = Math.floor(t.y / cs);
+        if (!fogSet.has(gx+','+gy)) return; // cell still fogged → hide from player
+      }
       const px=t.x;
       const py=t.y;
       // Visual diameter scales with the bg image so tokens stay proportional

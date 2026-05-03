@@ -142,8 +142,12 @@ registerPanel('party',{
         let v=e.target.value;
         if(['hp','hpMax','ac','init','spd'].includes(f))v=parseInt(v)||0;
         state.party[i]={...state.party[i],[f]:v};
-        save();
+        // Mirror to the combat slot BEFORE saving so localStorage (and the
+        // resulting Firebase push) captures both halves in one write. If the
+        // sync happened after save(), the persisted value would be stale and
+        // a later save anywhere could push the old combatants back out.
         if(['hp','hpMax','ac'].includes(f))syncPartyToCombat(i);
+        save();
         // Re-render just this card's HP bar without full re-render
         if(f==='hp'||f==='hpMax'){
           const card=b.querySelector('[data-cidx="'+i+'"]');
