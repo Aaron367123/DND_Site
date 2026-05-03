@@ -603,8 +603,16 @@ function renderSearchResults(){
 // local image exists, render nothing.
 function _detailImgTag(d) {
   if (!d._img) return '';
-  const src = d.cat === 'monster' ? 'img/' + d._img : d._img;
-  return `<img class="detail-img" src="${esc(src)}" onerror="this.style.display='none'" alt="${esc(d.name)}">`;
+  if (d.cat === 'monster'){
+    // Prefer the token image (head-shot, cropped) over the full creature art.
+    // 5etools stores tokens at img/bestiary/tokens/<source>/<name>.webp — same
+    // path as the fluff art with "tokens/" inserted. Fall back to the full art
+    // if no token exists for this monster, then hide if neither loads.
+    const token = 'img/' + d._img.replace(/^bestiary\//, 'bestiary/tokens/');
+    const full  = 'img/' + d._img;
+    return `<img class="detail-img" src="${esc(token)}" data-fb="${esc(full)}" alt="${esc(d.name)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
+  }
+  return `<img class="detail-img" src="${esc(d._img)}" onerror="this.style.display='none'" alt="${esc(d.name)}">`;
 }
 
 // Builds just the inner stat-block / description HTML for any search entry.

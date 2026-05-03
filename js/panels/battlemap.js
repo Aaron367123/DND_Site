@@ -32,6 +32,11 @@ registerPanel('battlemap',{
   // at the moment of the last token-scale adjustment, so `_scaleTokensTo` can
   // compute the correct ratio even across multiple scale changes.
   _lastTokenScale: 1,
+  // True when the current scale was set by Fit/auto-fit (vs. wheel/slider).
+  // Used by the ResizeObserver to decide whether a panel resize should re-fit
+  // the map: if the user manually zoomed, don't yank them back to fit.
+  _isFitted: false,
+  _resizeObserver: null,
   // Pencil annotations. Each entry is { c:color, s:size, p:[x1,y1,x2,y2,...] }
   // — a flat int array keeps the JSON small for Firebase/localStorage.
   _drawings: [],
@@ -77,8 +82,27 @@ registerPanel('battlemap',{
     this._render();
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath);
     this._startBroadcast();
+    // Watch the panel body for size changes (window resize). When the map is
+    // currently in "fit" mode, re-fit on resize so it always fills the new
+    // viewport. Doesn't interfere with manual wheel/slider zoom — _isFitted
+    // is false in that case.
+    if (typeof ResizeObserver === 'function'){
+      if (this._resizeObserver) this._resizeObserver.disconnect();
+      let _resizeTimer = null;
+      this._resizeObserver = new ResizeObserver(() => {
+        if (!this._isFitted || !_mapBgImage) return;
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => this._fitMapToView(), 80);
+      });
+      this._resizeObserver.observe(body);
+    }
   },
-  unmount(){this._saveMap();this._stopBroadcast();this._body=null;},
+  unmount(){
+    if (this._resizeObserver){ this._resizeObserver.disconnect(); this._resizeObserver = null; }
+    this._saveMap();
+    this._stopBroadcast();
+    this._body = null;
+  },
 
   _saveMap(){
     try{
@@ -191,6 +215,7 @@ registerPanel('battlemap',{
     this._bgMapScale = Math.max(0.05, Math.min(3, Math.min(sx, sy)));
     this._scaleTokensTo(this._bgMapScale);
     this._fitGridToBg();
+    this._isFitted = true; // panel resize will re-fit until the user manually zooms
     this._saveMap();
     this._render();
   },
@@ -223,6 +248,11 @@ registerPanel('battlemap',{
 
   _render(){
     const b=this._body;if(!b)return;
+    // Snapshot scroll before innerHTML reset so wheel-zoom / slider release /
+    // any other re-render doesn't snap the view back to the top-left.
+    const oldScroll = b.querySelector('#map-scroll');
+    const savedSx = oldScroll ? oldScroll.scrollLeft : 0;
+    const savedSy = oldScroll ? oldScroll.scrollTop  : 0;
     const cs=this._cellSize;
     const ft={40:5,50:5,64:5,80:10}[cs]||5;
     this._tool=this._tool==='move'?'add-pc':this._tool; // default to add-pc if somehow move
@@ -319,6 +349,10 @@ registerPanel('battlemap',{
 
     b.innerHTML=html;
     this._setupMap();
+    // Restore scroll on the freshly-mounted #map-scroll so cursor-centered
+    // wheel-zoom doesn't reset to top-left when the debounced re-render fires.
+    const newScroll = b.querySelector('#map-scroll');
+    if (newScroll){ newScroll.scrollLeft = savedSx; newScroll.scrollTop = savedSy; }
   },
 
   _setupMap(){
@@ -395,7 +429,7 @@ registerPanel('battlemap',{
         const url=window.location.href.split('?')[0]+'?player=1';
         const w=window.open(url,'skt-player','width=1280,height=720');
         if(!w)showToast('Allow popups to open player view');
-        else showToast('Player view opened — share that window on your second screen');
+        else showToast('Player view opened');
       }
       else if(act==='add-party'){
         const pi=+btn.dataset.pi;
@@ -435,6 +469,7 @@ registerPanel('battlemap',{
     // grid lines catch up.
     b.querySelector('#map-bg-scale')?.addEventListener('input',e=>{
       this._bgMapScale = parseFloat(e.target.value);
+      this._isFitted = false; // manual zoom — panel resize should not re-fit
       const stageEl = b.querySelector('#map-stage');
       if (stageEl){ const cs2=this._cellSize; this._applyBg(stageEl, this._cols*cs2, this._rows*cs2); }
       const pct = b.querySelector('#map-bg-scale-pct');
@@ -572,6 +607,7 @@ registerPanel('battlemap',{
       const imgY = (scrollEl.scrollTop  + cy) / oldScale;
 
       this._bgMapScale = newScale;
+      this._isFitted = false; // manual zoom — panel resize should not re-fit
       // Update token positions in lockstep so they stay anchored to the map
       // during the wheel spin. _scaleTokensTo updates _lastTokenScale, so the
       // debounced refit below is idempotent.
@@ -655,6 +691,10 @@ registerPanel('battlemap',{
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:680px;max-width:92vw">
       <h3>Choose a Map</h3>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="mapsel-search" type="search" autocomplete="off" placeholder="🔎 Search maps across every adventure…"
+          style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+      </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
         <input id="mapsel-adv" list="mapsel-adv-list" autocomplete="off" placeholder="Loading adventures…" disabled
           style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
@@ -668,6 +708,7 @@ registerPanel('battlemap',{
     </div>`;
     document.body.appendChild(backdrop);
 
+    const searchInput = backdrop.querySelector('#mapsel-search');
     const sel = backdrop.querySelector('#mapsel-adv');
     const grid = backdrop.querySelector('#mapsel-grid');
     const close = ()=>backdrop.remove();
@@ -702,8 +743,8 @@ registerPanel('battlemap',{
     dlist.innerHTML = this._adventures
       .map(a=>`<option value="${esc(a.name)} (${esc(a.id)})"></option>`).join('');
     sel.disabled = false;
-    sel.placeholder = 'Pick an adventure… (type to search)';
-    sel.focus();
+    sel.placeholder = 'Or pick an adventure…';
+    searchInput.focus();
 
     // Resolve "Lost Mine of Phandelver (LMoP)" → adventure id "LMoP". Falls
     // back to a name-only match for users who hand-type without the id.
@@ -717,31 +758,56 @@ registerPanel('battlemap',{
       return this._adventures.find(a => a.name.toLowerCase() === typed.toLowerCase()) || null;
     };
 
-    const renderMaps = (advId)=>{
-      const list = this._mapsByAdv[advId] || [];
-      if (!list.length){
-        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No maps in this adventure.</div>';
+    // Walk an adventure JSON tree and collect every {type:'image', imageType:'map'|'mapPlayer'} entry.
+    const extractMaps = (node, out)=>{
+      if (!node) return;
+      if (Array.isArray(node)){ node.forEach(n => extractMaps(n, out)); return; }
+      if (typeof node !== 'object') return;
+      if (node.type === 'image' && (node.imageType === 'map' || node.imageType === 'mapPlayer') && node.href?.path){
+        const path = node.href.path;
+        const fallback = path.split('/').pop().replace(/\.[^.]+$/, '');
+        out.push({ path, title: node.title || fallback, type: node.imageType });
+      }
+      for (const k in node) extractMaps(node[k], out);
+    };
+
+    // Fetch + extract maps for one adventure, cached.
+    const loadOneAdvMaps = async (advId)=>{
+      if (this._mapsByAdv[advId]) return this._mapsByAdv[advId];
+      try {
+        const res = await fetch('data/adventure/adventure-' + advId.toLowerCase() + '.json');
+        const j = await res.json();
+        const found = [];
+        extractMaps(j, found);
+        this._mapsByAdv[advId] = found;
+      } catch(err){
+        this._mapsByAdv[advId] = [];
+      }
+      return this._mapsByAdv[advId];
+    };
+
+    const renderCards = (cards, opts={})=>{
+      if (!cards.length){
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">'+(opts.emptyMsg||'No maps.')+'</div>';
         return;
       }
-      grid.innerHTML = list.map(m=>`<div class="mapsel-card" data-path="${esc(m.path)}" title="${esc(m.title)}">
-        <img src="${esc('img/'+m.path)}" loading="lazy" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
-        <div class="mapsel-title">${esc(m.title)}</div>
-        <span class="mapsel-badge ${esc(m.type)}">${m.type==='mapPlayer'?'Player':'DM'}</span>
-      </div>`).join('');
+      grid.innerHTML = cards.map(m=>{
+        const tokenSrc = 'img/'+m.path;
+        const subtitle = opts.showAdv && m.advName ? `<div class="mapsel-sub">${esc(m.advName)}</div>` : '';
+        return `<div class="mapsel-card" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
+          <img src="${esc(tokenSrc)}" loading="lazy" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
+          <div class="mapsel-title">${esc(m.title)}</div>
+          ${subtitle}
+          <span class="mapsel-badge ${esc(m.type)}">${m.type==='mapPlayer'?'Player':'DM'}</span>
+        </div>`;
+      }).join('');
       grid.querySelectorAll('.mapsel-card').forEach(card=>{
         card.addEventListener('click', ()=>{
           const path = card.dataset.path;
           this._bgMapPath = path;
-          // Picking a new map: reset scale to 1.0 so the auto-fit below has a
-          // clean baseline (the previous map's scale is meaningless for the
-          // new image's dimensions). Also calibrate _lastTokenScale to match
-          // so tokens don't drift during the auto-fit's _scaleTokensTo call.
           this._bgMapScale = 1;
           this._lastTokenScale = 1;
           this._saveMap();
-          // _loadBgFromPath sets _bgMapNaturalW/H from the loaded image and
-          // calls _fitGridToBg + _render — fixing the previous bug where new
-          // maps inherited the prior map's natural dimensions and got squished.
           this._loadBgFromPath(path, /*autoFit=*/true);
           close();
           showToast('Map loaded');
@@ -749,36 +815,54 @@ registerPanel('battlemap',{
       });
     };
 
+    // Eager fetch all adventures' maps in parallel — needed for the global
+    // search to work without prefiltering by adventure. Cached on the panel
+    // so the next picker open is instant.
+    let allMapsPromise = null;
+    const ensureAllMaps = ()=>{
+      if (this._allMaps) return Promise.resolve(this._allMaps);
+      if (allMapsPromise) return allMapsPromise;
+      allMapsPromise = Promise.all(this._adventures.map(async a => {
+        const list = await loadOneAdvMaps(a.id);
+        return list.map(m => ({...m, advId: a.id, advName: a.name}));
+      })).then(flat => {
+        this._allMaps = flat.flat();
+        return this._allMaps;
+      });
+      return allMapsPromise;
+    };
+
     const handlePick = async () => {
+      // If user is currently searching, search results take precedence over
+      // adventure selection.
+      if (searchInput.value.trim()){ runSearch(searchInput.value); return; }
       const adv = resolveAdv(sel.value.trim());
       if (!adv){ grid.innerHTML = ''; return; }
       const advId = adv.id;
       if (!this._mapsByAdv[advId]){
         grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Loading maps…</div>';
-        try {
-          const res = await fetch('data/adventure/adventure-' + advId.toLowerCase() + '.json');
-          const j = await res.json();
-          const found = [];
-          // Recursively walk every node looking for image entries with a map type.
-          const walk = (node)=>{
-            if (!node) return;
-            if (Array.isArray(node)){ node.forEach(walk); return; }
-            if (typeof node !== 'object') return;
-            if (node.type === 'image' && (node.imageType === 'map' || node.imageType === 'mapPlayer') && node.href?.path){
-              const path = node.href.path;
-              const fallback = path.split('/').pop().replace(/\.[^.]+$/, '');
-              found.push({ path, title: node.title || fallback, type: node.imageType });
-            }
-            for (const k in node) walk(node[k]);
-          };
-          walk(j);
-          this._mapsByAdv[advId] = found;
-        } catch(err) {
-          this._mapsByAdv[advId] = [];
-        }
+        await loadOneAdvMaps(advId);
       }
-      renderMaps(advId);
+      renderCards(this._mapsByAdv[advId] || [], { emptyMsg: 'No maps in this adventure.' });
     };
+
+    const runSearch = async (q) => {
+      const qn = (q||'').toLowerCase().trim();
+      if (!qn){ handlePick(); return; }
+      if (!this._allMaps){
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Indexing every adventure for search…</div>';
+        await ensureAllMaps();
+        // Bail if the user has typed a different query while we were loading.
+        if (searchInput.value.trim().toLowerCase() !== qn) return;
+      }
+      const matches = this._allMaps.filter(m =>
+        m.title.toLowerCase().includes(qn) ||
+        (m.advName && m.advName.toLowerCase().includes(qn)) ||
+        (m.advId && m.advId.toLowerCase().includes(qn))
+      ).slice(0, 200);
+      renderCards(matches, { showAdv: true, emptyMsg: 'No maps match "'+esc(q)+'".' });
+    };
+    searchInput.addEventListener('input', e => runSearch(e.target.value));
     // 'change' fires on blur or when the user picks a suggestion from the
     // datalist dropdown. 'input' covers the case where typing produces an
     // exact match — without it, picking from the dropdown via mouse-click in
@@ -1016,6 +1100,6 @@ registerPanel('battlemap',{
       }
     });
     this._renderTokens();this._saveMap();
-    showToast(placed?`${placed} token(s) added`:'All party already on map');
+    showToast(placed?`${placed} token(s) added`:'Party already placed');
   },
 });

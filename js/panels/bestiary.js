@@ -97,7 +97,12 @@ registerPanel('bestiary', {
   },
 
   _renderCard(m){
-    const img = m.img ? `<img src="${esc('img/'+m.img)}" alt="" onerror="this.parentNode.textContent='${esc(_bestInitials(m.name))}'">` : esc(_bestInitials(m.name));
+    // Prefer the small token image; fall back to full art, then to initials.
+    const tokenSrc = m.img ? 'img/' + m.img.replace(/^bestiary\//, 'bestiary/tokens/') : null;
+    const fullSrc  = m.img ? 'img/' + m.img : null;
+    const img = m.img
+      ? `<img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.parentNode.textContent='${esc(_bestInitials(m.name))}';}">`
+      : esc(_bestInitials(m.name));
     return `<div class="bestiary-card" data-mid="${esc(m.id)}" draggable="true" title="Click for stat block · Drag to combat tracker">
       <div class="bestiary-card-avatar">${img}</div>
       <div class="bestiary-card-name">${esc(m.name)}</div>

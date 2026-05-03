@@ -479,7 +479,14 @@ registerPanel('combat',{
       if (oi >= 0) state.combatants[oi] = {...state.combatants[oi], name:`${m.name} 1`};
     }
     let portrait = null;
-    if (m._img) portrait = m._img.startsWith('img/') ? m._img : ('img/' + m._img);
+    if (m._img){
+      // Prefer the head-shot token over the full creature art for the small
+      // round portrait. Tokens live alongside the fluff at
+      // img/bestiary/tokens/<source>/<name>.webp.
+      const raw = m._img.startsWith('img/') ? m._img.slice(4) : m._img;
+      const token = raw.replace(/^bestiary\//, 'bestiary/tokens/');
+      portrait = 'img/' + token;
+    }
     state.combatants.push({
       id: uid(),
       name: displayName,
