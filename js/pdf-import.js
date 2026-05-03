@@ -140,6 +140,7 @@ async function pdfFormFields(file){
 // Pull values out of a {fieldName: value} map using a known list of D&D Beyond
 // Form-Fillable Character Sheet field names.
 function _fromFields(f){
+  console.log('[PDF Import] AcroForm fields:', Object.keys(f));
   // Look up a field by any of several aliases. Tolerates whitespace and case
   // variants — different sheet templates use "Class & Level" vs "ClassLevel".
   const norm = s => String(s).replace(/\s+/g,'').toLowerCase();
@@ -169,15 +170,22 @@ function _fromFields(f){
   const background = get('Background');
   const alignment  = get('Alignment');
   const ac         = num('AC', 'Armor Class', 'ArmorClass');
-  const init       = num('Initiative');
+  let init         = num('Initiative', 'Init', 'InitiativeBonus', 'Init Bonus',
+                         'InitiativeMod', 'InitMod');
   const speed      = num('Speed');
-  let hpMax = num('HPMax', 'HitPointMaximum', 'Hit Point Maximum');
-  let hp    = num('HPCurrent', 'HP', 'CurrentHitPoints', 'Current Hit Points');
+  let hpMax = num('HPMax', 'HitPointMaximum', 'Hit Point Maximum',
+                  'HP Max', 'MaxHP', 'MaximumHitPoints', 'HitPoints');
+  let hp    = num('HPCurrent', 'HP', 'CurrentHitPoints', 'Current Hit Points',
+                  'HP Current', 'CurrentHP', 'HitPointCurrent');
   if (hp == null && hpMax != null) hp = hpMax;
   const abilities = {
     str: num('STR'), dex: num('DEX'), con: num('CON'),
     int: num('INT'), wis: num('WIS'), cha: num('CHA'),
   };
+  // DEX-mod fallback for initiative (RAW for any non-Alert character).
+  if (init == null && abilities.dex != null){
+    init = Math.floor((abilities.dex - 10) / 2);
+  }
   // Hit dice — D&D Beyond uses "HDTotal" or "Hit Dice" for current pool,
   // and the die size is determined by class. Fall back to deriving from
   // class + level if the field isn't directly present.
@@ -272,7 +280,28 @@ async function _fromPositionalText(file){
 async function parseDDBeyondPdf(file){
   try {
     const fields = await pdfFormFields(file);
-    if (Object.keys(fields).length > 0) return _fromFields(fields);
+    if (Object.keys(fields).length > 0){
+      const result = _fromFields(fields);
+      // Per-field positional rescue: if AcroForm gave us most of the sheet
+      // but missed HP or initiative specifically, fall back to scanning the
+      // rendered text for just those fields rather than discarding the whole
+      // form-field result.
+      if (result.cls != null && (result.hp == null || result.init == null)){
+        try {
+          const items = await pdfTextItems(file);
+          if (result.hp == null){
+            if (result.hpMax == null) result.hpMax = _numNear(items, 'HIT POINT MAXIMUM', {page:1});
+            result.hp = _numNear(items, 'CURRENT HIT POINTS', {page:1});
+            if (result.hp == null) result.hp = result.hpMax;
+          }
+          if (result.init == null){
+            const v = _numNear(items, 'INITIATIVE', {page:1});
+            if (v != null) result.init = v;
+          }
+        } catch(e){ /* ignore rescue failure */ }
+      }
+      return result;
+    }
   } catch(e){ /* fall through */ }
   return _fromPositionalText(file);
 }
