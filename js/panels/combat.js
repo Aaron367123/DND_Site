@@ -26,6 +26,7 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
+        <button class="btn icon-btn ${state.settings?.hideMonsterStats?'active':''}" data-act="toggle-hide-stats" title="Hide monster HP/AC from player view">🙈</button>
         <button class="btn icon-btn" data-act="player-view" title="Open player view">🖥</button>
         <button class="btn icon-btn" data-act="settings" title="Manage quick-pick names">⚙</button>
       </div>
@@ -49,6 +50,17 @@ registerPanel('combat',{
     const portrait = c.portrait
       || (isPC ? (state.party.find(p=>p.id===c.id)?.icon || '⚔')
                : (CLASS_ICONS[c.cls] || CLASS_ICONS.enemy));
+    // Hide HP/AC for monsters in the player view when the DM has toggled it on.
+    // DM tab always shows real values regardless of the setting.
+    const hideStats = !isPC
+      && state.settings?.hideMonsterStats
+      && document.body.classList.contains('player-mode');
+    const hpField = hideStats
+      ? '<span class="card-stat-hidden">?</span>'
+      : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">`;
+    const acField = hideStats
+      ? '<span class="card-stat-hidden">?</span>'
+      : `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`;
     return `<div class="combatant-card ${active?'active':''} ${dead?'dead':''} ${isPC?'pc':'npc'}" data-idx="${i}" draggable="true">
       <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
       <div class="card-avatar ${isPC?'pc':'npc'}" data-act="upload-portrait" data-idx="${i}" title="Click to upload portrait">${renderIcon(portrait, c.name)}</div>
@@ -69,8 +81,8 @@ registerPanel('combat',{
               ${active?'<span class="turn-marker">◀</span>':''}
             </div>`}
         <div class="card-stats">
-          <div class="card-stat" title="HP"><span class="lab">♥</span><input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp"></div>
-          <div class="card-stat" title="AC"><span class="lab">⛨</span><input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac"></div>
+          <div class="card-stat" title="HP"><span class="lab">♥</span>${hpField}</div>
+          <div class="card-stat" title="AC"><span class="lab">⛨</span>${acField}</div>
           <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
         </div>
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
@@ -94,6 +106,10 @@ registerPanel('combat',{
       else if(act==='add-monster')    this._openMonsterPicker();
       else if(act==='player-view')    this._openPlayerView();
       else if(act==='settings')       this._manageQuickNames();
+      else if(act==='toggle-hide-stats'){
+        state.settings.hideMonsterStats = !state.settings.hideMonsterStats;
+        save(); this._render();
+      }
       else if(act==='remove')         this._remove(parseInt(el.dataset.idx));
       else if(act==='duplicate')      this._duplicate(parseInt(el.dataset.idx));
       else if(act==='rmcond')         this._removeCond(parseInt(el.dataset.idx),el.dataset.cond);

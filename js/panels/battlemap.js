@@ -399,17 +399,24 @@ registerPanel('battlemap',{
         b.querySelectorAll('[data-mact^="tool-"]').forEach(el=>el.classList.toggle('active',el.dataset.mact==='tool-'+this._tool));
       }
       else if(act==='sync-combat') this._syncParty();
-      else if(act==='clear-tokens'){if(!confirm('Remove all tokens?'))return;this._tokens=[];this._selected=null;this._closePanel();this._saveMap();this._render();}
+      else if(act==='clear-tokens'){
+        showConfirm('Remove all tokens from the battle map?', {title:'Clear tokens', confirmLabel:'Remove', danger:true}).then(ok=>{
+          if(!ok) return;
+          this._tokens=[]; this._selected=null; this._closePanel(); this._saveMap(); this._render();
+        });
+      }
       else if(act==='clear-img'){_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();}
       else if(act==='pick-map'){this._openMapPicker();}
       else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
       else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
       else if(act==='clear-draw'){
         if (!this._drawings.length) return;
-        if (!confirm('Clear all drawings?')) return;
-        this._drawings = [];
-        this._saveMap();
-        this._render();
+        showConfirm('Erase every pencil annotation on this map?', {title:'Clear drawings', confirmLabel:'Clear', danger:true}).then(ok=>{
+          if(!ok) return;
+          this._drawings = [];
+          this._saveMap();
+          this._render();
+        });
       }
       else if(act==='fit-map'){this._fitMapToView();}
       else if(act==='fog-toggle'){

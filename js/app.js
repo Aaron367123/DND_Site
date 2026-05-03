@@ -19,13 +19,15 @@ function init(){
   initRealtime();
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>btn.addEventListener('click',()=>togglePanel(btn.dataset.panel)));
   document.getElementById('reset-layout-btn').addEventListener('click',()=>{
-    if(!confirm('Reset window layout?'))return;
-    layout=JSON.parse(JSON.stringify(DEFAULT_LAYOUT));saveLayout();
-    ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary'].forEach(id=>{
-      const el=document.querySelector('.window[data-panel="'+id+'"]');
-      if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
+    showConfirm('Reset window layout to defaults?', {title:'Reset layout', confirmLabel:'Reset'}).then(ok=>{
+      if(!ok) return;
+      layout=JSON.parse(JSON.stringify(DEFAULT_LAYOUT));saveLayout();
+      ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary'].forEach(id=>{
+        const el=document.querySelector('.window[data-panel="'+id+'"]');
+        if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
+      });
+      Object.entries(layout).forEach(([id,l])=>{if(l.open)ensurePanel(id);});updateDock();
     });
-    Object.entries(layout).forEach(([id,l])=>{if(l.open)ensurePanel(id);});updateDock();
   });
   Object.entries(layout).forEach(([id,l])=>{if(l.open)ensurePanel(id);});
   updateDock();

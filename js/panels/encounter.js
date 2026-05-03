@@ -163,6 +163,11 @@ registerPanel('encounter',{
       showToast(`${pushed} combatant(s) added`);
       if(!layout.combat?.open)openPanel('combat');
     });
-    b.querySelector('#enc-clear').addEventListener('click',()=>{if(!confirm('Clear encounter?'))return;this._monsters=[];this._save();this._render();});
+    b.querySelector('#enc-clear').addEventListener('click',()=>{
+      showConfirm('Clear all monsters from this encounter?', {title:'Clear encounter', confirmLabel:'Clear', danger:true}).then(ok=>{
+        if(!ok) return;
+        this._monsters=[]; this._save(); this._render();
+      });
+    });
   },
 });

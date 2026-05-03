@@ -186,10 +186,12 @@ registerPanel('bestiary', {
         e.stopPropagation();
         const mid = btn.dataset.rmid;
         const m = this._data.monsters.find(x=>x.id===mid); if (!m) return;
-        if (!confirm(`Remove "${m.name}" from bestiary?`)) return;
-        this._data.monsters = this._data.monsters.filter(x=>x.id!==mid);
-        this._save();
-        this._render();
+        showConfirm(`Remove "${m.name}" from the bestiary?`, {title:'Remove monster', confirmLabel:'Remove', danger:true}).then(ok=>{
+          if(!ok) return;
+          this._data.monsters = this._data.monsters.filter(x=>x.id!==mid);
+          this._save();
+          this._render();
+        });
       });
     });
   },
@@ -226,11 +228,16 @@ registerPanel('bestiary', {
   _deleteFolder(folderId){
     const f = this._data.folders.find(x=>x.id===folderId); if (!f) return;
     const count = this._data.monsters.filter(m=>m.folderId===folderId).length;
-    if (count && !confirm(`Delete "${f.name}"? Its ${count} monster(s) will move to Unfiled.`)) return;
-    this._data.monsters.forEach(m=>{ if (m.folderId===folderId) m.folderId = null; });
-    this._data.folders = this._data.folders.filter(x=>x.id!==folderId);
-    delete this._data.collapsed[folderId];
-    this._save(); this._render();
+    const doDelete = () => {
+      this._data.monsters.forEach(m=>{ if (m.folderId===folderId) m.folderId = null; });
+      this._data.folders = this._data.folders.filter(x=>x.id!==folderId);
+      delete this._data.collapsed[folderId];
+      this._save(); this._render();
+    };
+    if (!count) return doDelete();
+    showConfirm(`Delete "${f.name}"? Its ${count} monster(s) will move to Unfiled.`, {title:'Delete folder', confirmLabel:'Delete', danger:true}).then(ok=>{
+      if (ok) doDelete();
+    });
   },
 
   _showCardMenu(x, y, mid){

@@ -46,7 +46,7 @@ const DEFAULT_LAYOUT = {
   bestiary:    {x:140, y:90,  w:520, h:620, open:false, minimized:false, z:12},
 };
 
-const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,combatNameOptions:['spear','hands','rock','small']};
+const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,combatNameOptions:['spear','hands','rock','small'],hideMonsterStats:false};
 
 const ITEM_CATALOG = {
   'Blacksmith/Armory':[

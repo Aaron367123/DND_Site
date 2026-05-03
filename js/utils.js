@@ -278,6 +278,41 @@ function showModal(title, fields, confirmLabel) {
   });
 }
 
+// Themed replacement for the browser's native confirm() dialog. Resolves
+// to true (OK / Enter) or false (Cancel / Esc / backdrop click).
+//   showConfirm('Remove all tokens?')           — basic
+//   showConfirm('Delete X?', {danger:true})     — red confirm button
+//   showConfirm('…', {title:'Heads up', confirmLabel:'Delete'})
+function showConfirm(message, opts){
+  opts = opts || {};
+  var title = opts.title || 'Confirm';
+  var confirmLabel = opts.confirmLabel || 'OK';
+  var danger = !!opts.danger;
+  return new Promise(function(resolve){
+    var backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true">'
+      + '<h3>' + esc(title) + '</h3>'
+      + '<p style="color:var(--text-muted);font-size:13px;margin:0 0 20px;line-height:1.5">' + esc(message) + '</p>'
+      + '<div class="modal-actions">'
+      + '<button class="btn" id="conf-cancel">Cancel</button>'
+      + '<button class="btn ' + (danger ? 'danger' : 'primary') + '" id="conf-ok">' + esc(confirmLabel) + '</button>'
+      + '</div>'
+      + '</div>';
+    document.body.appendChild(backdrop);
+    var ok = backdrop.querySelector('#conf-ok');
+    setTimeout(function(){ if(ok) ok.focus(); }, 30);
+    var close = function(result){ backdrop.remove(); resolve(result); };
+    backdrop.querySelector('#conf-cancel').addEventListener('click', function(){ close(false); });
+    ok.addEventListener('click', function(){ close(true); });
+    backdrop.addEventListener('keydown', function(e){
+      if (e.key === 'Enter')  { e.preventDefault(); close(true); }
+      if (e.key === 'Escape') { close(false); }
+    });
+    backdrop.addEventListener('mousedown', function(e){ if (e.target === backdrop) close(false); });
+  });
+}
+
 // Lightweight context menu — shown at (x, y) with a list of {label, onClick, checked?} items.
 // Closes on item click, outside mousedown, Esc, or scroll. Auto-clamps to viewport.
 function showContextMenu(x, y, items) {
