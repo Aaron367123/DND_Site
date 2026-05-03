@@ -230,6 +230,24 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .conditions{display:flex;gap:3px;flex-wrap:wrap;margin-top:2px;justify-content:center}
 .condition-tag{background:rgba(194,84,80,.2);color:#d97a76;padding:1px 6px;border-radius:3px;font-size:9px;cursor:pointer}
 
+/* Death-save tracker — shown on PC combat cards at 0 HP */
+.death-saves{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:9px;color:var(--text-muted)}
+.death-saves .ds-label{flex-shrink:0;text-transform:uppercase;letter-spacing:.04em}
+.death-saves .ds-row{display:inline-flex;gap:3px}
+.ds-pip{width:10px;height:10px;border-radius:50%;border:1px solid var(--border);cursor:pointer;display:inline-block;transition:background .12s}
+.ds-pip.success.on{background:#6b9e6b;border-color:#6b9e6b}
+.ds-pip.fail.on{background:#c25450;border-color:#c25450}
+.ds-pip:hover{transform:scale(1.15)}
+
+/* PC quick-reference popout — right-click PC combat card */
+.pc-quickref{position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.55);z-index:9999;min-width:180px;font-size:11px;color:var(--text)}
+.pc-quickref-name{font-size:13px;font-weight:600;color:var(--accent);margin-bottom:6px}
+.pc-quickref-row{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dotted var(--border)}
+.pc-quickref-row:last-child{border-bottom:none}
+.pc-quickref-row span:first-child{color:var(--text-muted)}
+.pc-quickref-section{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 2px}
+.pc-quickref-empty{font-size:10px;color:var(--text-muted);font-style:italic;margin-top:6px}
+
 /* PARTY */
 .party-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;padding:10px}
 /* PARTY CARD v2 */
@@ -255,6 +273,14 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .hp-bar-fill{height:100%;border-radius:3px;transition:width .3s,background .3s}
 /* Stats row */
 .char-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.hd-row{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:10px;color:var(--text-muted)}
+.hd-row .hd-label{font-weight:600;color:var(--text)}
+.hd-row .hd-pips{display:inline-flex;gap:3px;flex:1;flex-wrap:wrap}
+.hd-row .hd-pip{width:10px;height:10px;border-radius:3px;border:1px solid var(--border);background:transparent;cursor:default;transition:transform .12s}
+.hd-row .hd-pip.filled{background:var(--accent);border-color:var(--accent);cursor:pointer}
+.hd-row .hd-pip.filled:hover{transform:scale(1.2)}
+.hd-row .hd-count{font-size:10px;color:var(--text-dim);min-width:32px;text-align:right}
+.hd-row .btn{font-size:10px;padding:2px 6px}
 .char-stat{background:var(--panel-3);border-radius:4px;padding:3px 4px;text-align:center}
 .char-stat .l{font-size:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
 .char-stat input{background:transparent;border:none;text-align:center;padding:0;font-weight:600;font-size:12px;width:100%;color:var(--text)}

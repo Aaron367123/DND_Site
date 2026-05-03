@@ -113,32 +113,125 @@ function _numNear(items, label, opts={}){
   return null;
 }
 
-// Parse a D&D Beyond PDF into a structured character object. Field extraction
-// is best-effort — D&D Beyond's layout is consistent for the default template
-// but the user can correct anything in the preview modal before applying.
-async function parseDDBeyondPdf(file){
+// Read every AcroForm widget on every page and return a {fieldName: value} map.
+// Empty values and non-Widget annotations are skipped.
+async function pdfFormFields(file){
+  const pdfjs = await loadPdfJs();
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({data: new Uint8Array(buf)}).promise;
+  const fields = {};
+  for (let i = 1; i <= doc.numPages; i++){
+    const page = await doc.getPage(i);
+    const annots = await page.getAnnotations();
+    annots.forEach(a => {
+      if (a.subtype !== 'Widget') return;
+      if (!a.fieldName) return;
+      const v = a.fieldValue;
+      if (v == null || v === '') return;
+      // Some fields hold arrays (multi-select) or booleans (checkboxes); skip
+      // those for now — we want simple text/number values.
+      if (typeof v === 'object') return;
+      fields[a.fieldName] = v;
+    });
+  }
+  return fields;
+}
+
+// Pull values out of a {fieldName: value} map using a known list of D&D Beyond
+// Form-Fillable Character Sheet field names.
+function _fromFields(f){
+  // Look up a field by any of several aliases. Tolerates whitespace and case
+  // variants — different sheet templates use "Class & Level" vs "ClassLevel".
+  const norm = s => String(s).replace(/\s+/g,'').toLowerCase();
+  const keyNorm = {};
+  Object.keys(f).forEach(k => { keyNorm[norm(k)] = k; });
+  const get = (...names) => {
+    for (const n of names){
+      const real = keyNorm[norm(n)];
+      if (real != null) return f[real];
+    }
+    return null;
+  };
+  const num = (...names) => {
+    const v = get(...names); if (v == null) return null;
+    const m = String(v).match(/-?\d+/); return m ? parseInt(m[0]) : null;
+  };
+
+  const name = get('CharacterName', 'Character Name');
+  const classLevel = get('ClassLevel', 'CLASS & LEVEL', 'Class & Level', 'Class and Level');
+  let cls = null, level = null;
+  if (classLevel){
+    const m = String(classLevel).match(/^([A-Za-z ]+?)\s+(\d{1,2})/);
+    if (m){ cls = m[1].trim(); level = parseInt(m[2]); }
+    else { cls = String(classLevel).trim(); }
+  }
+  const race       = get('Race');
+  const background = get('Background');
+  const alignment  = get('Alignment');
+  const ac         = num('AC', 'Armor Class', 'ArmorClass');
+  const init       = num('Initiative');
+  const speed      = num('Speed');
+  let hpMax = num('HPMax', 'HitPointMaximum', 'Hit Point Maximum');
+  let hp    = num('HPCurrent', 'HP', 'CurrentHitPoints', 'Current Hit Points');
+  if (hp == null && hpMax != null) hp = hpMax;
+  const abilities = {
+    str: num('STR'), dex: num('DEX'), con: num('CON'),
+    int: num('INT'), wis: num('WIS'), cha: num('CHA'),
+  };
+  // Hit dice — D&D Beyond uses "HDTotal" or "Hit Dice" for current pool,
+  // and the die size is determined by class. Fall back to deriving from
+  // class + level if the field isn't directly present.
+  const hdTotalRaw = get('HDTotal', 'HD Total', 'Hit Dice', 'HitDice');
+  const hd = _deriveHitDice(cls, level, hdTotalRaw);
+  return {
+    name: String(name||''),
+    cls, level,
+    race: String(race||''),
+    background: String(background||''),
+    alignment: String(alignment||''),
+    hp, hpMax, ac, init, speed,
+    abilities,
+    hitDice: hd,
+    _rawFields: f,
+  };
+}
+
+// 5e hit-die size by class (default d8 for unknowns/multiclass).
+const _HD_BY_CLASS = {
+  barbarian:'d12', fighter:'d10', paladin:'d10', ranger:'d10',
+  bard:'d8', cleric:'d8', druid:'d8', monk:'d8', rogue:'d8', warlock:'d8', artificer:'d8',
+  sorcerer:'d6', wizard:'d6',
+};
+function _deriveHitDice(cls, level, hdRaw){
+  const dieType = cls ? (_HD_BY_CLASS[cls.toLowerCase()] || 'd8') : 'd8';
+  const max = level || 1;
+  // hdRaw might be "5d8" or "5" or null. Try to parse a leading number.
+  let current = max;
+  if (hdRaw){
+    const m = String(hdRaw).match(/(\d+)/);
+    if (m) current = Math.min(max, parseInt(m[1]));
+  }
+  return { current, max, dieType };
+}
+
+// Positional fallback for non-fillable PDFs that nonetheless render the
+// 5e default sheet layout. Less reliable than form-field extraction, but
+// handles PDFs where someone "printed to PDF" and lost the form fields.
+async function _fromPositionalText(file){
   const items = await pdfTextItems(file);
   const fullText = items.map(it => it.str).join(' ');
 
-  // ── Identity ────────────────────────────────────────────────────────────
-  // The character name is the largest text near the top of page 1, usually
-  // appearing right after a small "Character Name" label or as a stylized
-  // header. We use a label proximity match first, then fall back.
   let name = _valueNear(items, 'CHARACTER NAME', {page:1, maxBelow:40, maxDx:140});
   if (!name){
-    // Heuristic fallback: take the top-most text on page 1 that's not a label
-    // and isn't all-caps.
     const top = items
       .filter(it => it.page === 1)
-      .sort((a,b) => b.y - a.y) // highest y first
+      .sort((a,b) => b.y - a.y)
       .find(it => it.str.length >= 3 && !/^[A-Z\s]+$/.test(it.str));
     if (top) name = top.str;
   }
 
-  // Class & Level usually appears as "Rogue 5" or "Wizard 3 / Fighter 2".
   let classLevel = _valueNear(items, 'CLASS & LEVEL', {page:1});
   if (!classLevel){
-    // Look for the pattern "Class N" near the top
     const m = fullText.match(/\b(Barbarian|Bard|Cleric|Druid|Fighter|Monk|Paladin|Ranger|Rogue|Sorcerer|Warlock|Wizard|Artificer|Blood Hunter)\s+(\d{1,2})\b/);
     if (m) classLevel = m[0];
   }
@@ -148,24 +241,17 @@ async function parseDDBeyondPdf(file){
     if (m){ cls = m[1].trim(); level = parseInt(m[2]); }
   }
 
-  const race = _valueNear(items, 'RACE', {page:1});
+  const race       = _valueNear(items, 'RACE', {page:1});
   const background = _valueNear(items, 'BACKGROUND', {page:1});
-  const alignment = _valueNear(items, 'ALIGNMENT', {page:1});
-
-  // ── Combat stats ────────────────────────────────────────────────────────
+  const alignment  = _valueNear(items, 'ALIGNMENT', {page:1});
   const ac    = _numNear(items, 'ARMOR CLASS', {page:1});
   const init  = _numNear(items, 'INITIATIVE', {page:1});
   const speed = _numNear(items, 'SPEED', {page:1, maxBelow:30});
-
-  // HP — D&D Beyond labels this "Hit Point Maximum" and current HP separately.
   let hpMax = _numNear(items, 'HIT POINT MAXIMUM', {page:1});
   if (hpMax == null) hpMax = _numNear(items, 'HIT POINTS', {page:1});
   let hp = _numNear(items, 'CURRENT HIT POINTS', {page:1});
   if (hp == null) hp = hpMax;
 
-  // ── Ability scores ──────────────────────────────────────────────────────
-  // Each ability appears as a column with the abbreviation header (STR/DEX/…)
-  // and the score directly below it.
   const abilities = {};
   ['STR','DEX','CON','INT','WIS','CHA'].forEach(ab => {
     const v = _numNear(items, ab, {page:1, maxBelow:50, maxDx:30});
@@ -173,14 +259,20 @@ async function parseDDBeyondPdf(file){
   });
 
   return {
-    name: name || '',
-    cls,
-    level,
-    race: race || '',
-    background: background || '',
-    alignment: alignment || '',
+    name: name || '', cls, level,
+    race: race || '', background: background || '', alignment: alignment || '',
     hp, hpMax, ac, init, speed,
     abilities,
     _rawText: fullText,
   };
+}
+
+// Main entry point. Tries AcroForm field extraction first (the canonical
+// D&D Beyond export format), falls back to positional text matching.
+async function parseDDBeyondPdf(file){
+  try {
+    const fields = await pdfFormFields(file);
+    if (Object.keys(fields).length > 0) return _fromFields(fields);
+  } catch(e){ /* fall through */ }
+  return _fromPositionalText(file);
 }

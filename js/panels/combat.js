@@ -26,6 +26,7 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
+        <button class="btn icon-btn ${state.settings?.autoRollInit?'active':''}" data-act="toggle-autoroll" title="Auto-roll initiative for new PCs (uses imported DEX modifier)">🎲</button>
         <button class="btn icon-btn ${state.settings?.hideMonsterStats?'active':''}" data-act="toggle-hide-stats" title="Hide monster HP/AC from player view">🙈</button>
         <button class="btn icon-btn" data-act="player-view" title="Open player view">🖥</button>
         <button class="btn icon-btn" data-act="settings" title="Manage quick-pick names">⚙</button>
@@ -88,6 +89,7 @@ registerPanel('combat',{
           <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
         </div>
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
+        ${(isPC && (c.hp||0) <= 0) ? this._renderDeathSaves(i, c) : ''}
       </div>
       <div class="card-actions">
         <button class="btn icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>
@@ -112,11 +114,31 @@ registerPanel('combat',{
         state.settings.hideMonsterStats = !state.settings.hideMonsterStats;
         save(); this._render();
       }
+      else if(act==='toggle-autoroll'){
+        state.settings.autoRollInit = !state.settings.autoRollInit;
+        save(); this._render();
+      }
       else if(act==='remove')         this._remove(parseInt(el.dataset.idx));
       else if(act==='duplicate')      this._duplicate(parseInt(el.dataset.idx));
       else if(act==='rmcond')         this._removeCond(parseInt(el.dataset.idx),el.dataset.cond);
       else if(act==='upload-portrait')this._uploadPortrait(parseInt(el.dataset.idx));
-    }));
+      else if(act==='death-save'){
+        const i = parseInt(el.dataset.idx);
+        const kind = el.dataset.kind; // 'success' | 'fail'
+        const n = parseInt(el.dataset.n);
+        const c = state.combatants[i]; if (!c) return;
+        const ds = {...(c.deathSaves || {success:0, fail:0})};
+        // Click N: if already at >=N, set to N-1 (un-click); else set to N.
+        ds[kind] = (ds[kind] >= n) ? (n-1) : n;
+        state.combatants[i] = {...c, deathSaves: ds};
+        if (ds.success >= 3){
+          state.combatants[i].deathSaves = {success:0, fail:0};
+          showToast(c.name + ' stabilized');
+        } else if (ds.fail >= 3){
+          showToast(c.name + ' has died');
+        }
+        save(); this._render();
+      }
 
     // Combatant inputs (hp, ac, initiative, name) — no auto-sort
     b.querySelectorAll('input[data-cf]').forEach(inp=>{
@@ -125,6 +147,10 @@ registerPanel('combat',{
         const isText = f === 'name';
         const val = isText ? String(e.target.value).trim() : (parseInt(e.target.value)||0);
         state.combatants[i]={...state.combatants[i],[f]:val};
+        // PC came back above 0 HP — clear death-save tracker.
+        if (f === 'hp' && state.combatants[i].isPC && val > 0 && state.combatants[i].deathSaves){
+          state.combatants[i] = {...state.combatants[i], deathSaves: undefined};
+        }
         // Mirror to the party slot BEFORE saving so localStorage (and the
         // resulting Firebase push) captures both halves in one consistent
         // write — see the matching comment in party.js.
@@ -158,6 +184,12 @@ registerPanel('combat',{
         e.preventDefault(); e.stopPropagation();
         const i=+card.dataset.idx;
         const c=state.combatants[i]; if(!c) return;
+        // PCs → quick-reference popout (saves, passive perception, etc).
+        // NPCs/monsters → conditions menu (prior behavior).
+        if (c.isPC){
+          this._showPcQuickRef(c, e.clientX, e.clientY);
+          return;
+        }
         const have=new Set(c.conditions||[]);
         const items=SEARCH_DATA
           .filter(d=>d.cat==='condition')
@@ -260,9 +292,16 @@ registerPanel('combat',{
   _addPartyToCombat(pi){
     const p=state.party[pi];
     if(state.combatants.find(c=>c.isPC&&c.id===p.id)){showToast(p.name+' already in combat');return;}
-    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus:p.init,initiative:p.init||0,conditions:[]});
+    // Compute initiative bonus: prefer party.init, fall back to imported DEX
+    // modifier from the abilities object.
+    const dexMod = (p.abilities && typeof p.abilities.dex === 'number') ? Math.floor((p.abilities.dex - 10)/2) : null;
+    const initBonus = (typeof p.init === 'number' ? p.init : null) ?? dexMod ?? 0;
+    // Auto-roll vs. manual entry. Toolbar 🎲 button toggles the setting.
+    const initial = state.settings?.autoRollInit ? (d20() + initBonus) : (p.init || 0);
+    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus,initiative:initial,conditions:[]});
     if(!state.combatRound) state.combatRound=1;
-    save();this._render();showToast(p.name+' added');
+    save();this._render();
+    showToast(state.settings?.autoRollInit ? `${p.name} added (init ${initial})` : `${p.name} added`);
   },
 
   _removeFromCombatById(id){
@@ -379,6 +418,65 @@ registerPanel('combat',{
   _removeCond(i,cond){
     state.combatants[i]={...state.combatants[i],conditions:(state.combatants[i].conditions||[]).filter(x=>x!==cond)};
     save();this._render();
+  },
+
+  _renderDeathSaves(i, c){
+    const ds = c.deathSaves || {success:0, fail:0};
+    const pip = (filled, kind, n) =>
+      `<span class="ds-pip ${kind} ${filled?'on':''}" data-act="death-save" data-idx="${i}" data-kind="${kind}" data-n="${n}"></span>`;
+    return `<div class="death-saves">
+      <span class="ds-label">Saves</span>
+      <span class="ds-row ds-success">${[1,2,3].map(n=>pip(ds.success>=n,'success',n)).join('')}</span>
+      <span class="ds-row ds-fail">${[1,2,3].map(n=>pip(ds.fail>=n,'fail',n)).join('')}</span>
+    </div>`;
+  },
+
+  // Show a small popout near (x,y) with the PC's saves and passive Perception.
+  // Reads from the matched party member's imported abilities.
+  _showPcQuickRef(combatant, x, y){
+    // Remove any prior popout.
+    document.querySelectorAll('.pc-quickref').forEach(el => el.remove());
+    const p = state.party.find(pp => pp.id === combatant.id);
+    const ab = (p && p.abilities) || null;
+    const fmtMod = m => (m >= 0 ? '+' : '') + m;
+    const modOf = score => score == null ? null : Math.floor((score - 10) / 2);
+    const row = (label, val) => `<div class="pc-quickref-row"><span>${esc(label)}</span><span>${esc(val)}</span></div>`;
+    let html = `<div class="pc-quickref-name">${esc(combatant.name)}${p && p.cls ? ' <span style="color:var(--text-dim);font-weight:400">'+esc(p.cls)+(p.level?' '+p.level:'')+'</span>' : ''}</div>`;
+    html += row('AC', combatant.ac ?? p?.ac ?? '?');
+    html += row('HP', `${combatant.hp ?? '?'} / ${combatant.hpMax ?? p?.hpMax ?? '?'}`);
+    html += row('Speed', (p && p.spd) ? p.spd + ' ft' : '—');
+    if (ab){
+      html += '<div class="pc-quickref-section">Saves</div>';
+      ['str','dex','con','int','wis','cha'].forEach(k => {
+        const m = modOf(ab[k]);
+        html += row(k.toUpperCase(), m == null ? '—' : fmtMod(m));
+      });
+      const wisMod = modOf(ab.wis);
+      if (wisMod != null) html += row('Passive Perception', 10 + wisMod);
+    } else {
+      html += '<div class="pc-quickref-empty">No imported abilities. Use 📄 Import PDF on the party tracker for save bonuses and passive perception.</div>';
+    }
+    const div = document.createElement('div');
+    div.className = 'pc-quickref';
+    div.innerHTML = html;
+    document.body.appendChild(div);
+    // Position with viewport clamping.
+    const rect = div.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    div.style.left = Math.min(x, vw - rect.width - 8) + 'px';
+    div.style.top  = Math.min(y, vh - rect.height - 8) + 'px';
+    // Dismiss on outside click or Escape.
+    const dismiss = (ev) => {
+      if (ev && ev.type === 'mousedown' && div.contains(ev.target)) return;
+      div.remove();
+      document.removeEventListener('mousedown', dismiss);
+      document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (ev) => { if (ev.key === 'Escape') dismiss(); };
+    setTimeout(() => {
+      document.addEventListener('mousedown', dismiss);
+      document.addEventListener('keydown', onKey);
+    }, 0);
   },
 
   _toggleCondAtIdx(i,cond){

@@ -71,11 +71,13 @@ registerPanel('party',{
         +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
       +'</div>'
+      // Hit dice — only shown when the character has hitDice info from PDF import.
+      +this._hitDiceRow(c,i)
       // Resources
       +resHtml
       // Inspiration row: Heroic (the original generic toggle) + Bardic
       +'<div class="inspiration-pair">'
-        +'<div class="inspiration-row '+(c.inspiration?'has-inspiration':'')+'" data-act="insp" data-idx="'+i+'" title="Heroic Inspiration">'
+        +'<div class="inspiration-row '+(c.inspiration?'has-inspiration':'')+'" data-act="insp" data-idx="'+i+'" title="Heroic Inspiration · right-click for award reasons">'
           +'<div class="inspiration-toggle"></div><span>Heroic</span>'
         +'</div>'
         +'<div class="inspiration-row '+(c.bardicInspiration?'has-inspiration bardic':'')+'" data-act="bardic-insp" data-idx="'+i+'" title="Bardic Inspiration">'
@@ -92,6 +94,103 @@ registerPanel('party',{
       +'</div>';
   },
 
+  // Modal to manage the list of inspiration award reasons. Reasons are stored
+  // in state.settings.inspirationReasons and synced via the workspace key.
+  _manageInspirationReasons(){
+    if (!state.settings.inspirationReasons) state.settings.inspirationReasons = [];
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const renderList = () => state.settings.inspirationReasons.map((r,i) =>
+      `<div class="qn-row"><input class="qn-input" data-i="${i}" value="${esc(r)}"><button class="btn icon-btn danger" data-rm="${i}" title="Remove">×</button></div>`
+    ).join('') || '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No reasons yet — add one below.</div>';
+    const renderModal = () => {
+      backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="min-width:340px">
+        <h3>Inspiration Award Reasons</h3>
+        <p style="color:var(--text-muted);font-size:11px;margin:0 0 10px">Right-click the Heroic Inspiration toggle on a party card to pick from this list. Award reasons are reminders for you — they show up as a toast when used.</p>
+        <div class="qn-list">${renderList()}</div>
+        <div class="qn-add-row">
+          <input class="qn-add-input" placeholder="New reason (e.g. Saved an NPC)" autocomplete="off">
+          <button class="btn primary" id="qn-add-btn">+ Add</button>
+        </div>
+        <div class="modal-actions" style="margin-top:14px">
+          <button class="btn" id="qn-done">Done</button>
+        </div>
+      </div>`;
+      wire();
+    };
+    const wire = () => {
+      backdrop.querySelectorAll('input.qn-input').forEach(inp => inp.addEventListener('change', e => {
+        const i = +e.target.dataset.i;
+        const v = String(e.target.value).trim();
+        if (!v) state.settings.inspirationReasons.splice(i,1);
+        else    state.settings.inspirationReasons[i] = v;
+        save();
+        renderModal();
+      }));
+      backdrop.querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        state.settings.inspirationReasons.splice(+btn.dataset.rm, 1);
+        save();
+        renderModal();
+      }));
+      const addInp = backdrop.querySelector('.qn-add-input');
+      const addBtn = backdrop.querySelector('#qn-add-btn');
+      const doAdd = () => {
+        const v = String(addInp.value).trim();
+        if (!v) return;
+        if (state.settings.inspirationReasons.includes(v)){ addInp.value=''; return; }
+        state.settings.inspirationReasons.push(v);
+        save();
+        renderModal();
+        backdrop.querySelector('.qn-add-input')?.focus();
+      };
+      addBtn.addEventListener('click', doAdd);
+      addInp.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); doAdd(); } });
+      backdrop.querySelector('#qn-done').addEventListener('click', () => backdrop.remove());
+    };
+    document.body.appendChild(backdrop);
+    renderModal();
+    backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) backdrop.remove(); });
+    setTimeout(() => backdrop.querySelector('.qn-add-input')?.focus(), 30);
+  },
+
+  _spendHitDie(i){
+    const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return;
+    const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
+    const sides = parseInt(String(c.hitDice.dieType||'d8').replace('d','')) || 8;
+    showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? You'll roll ${c.hitDice.dieType||'d8'} + ${conMod>=0?'+':''}${conMod} (CON) and heal that much.`,
+      {title:'Spend hit die', confirmLabel:'Roll & Heal'}).then(ok => {
+        if (!ok) return;
+        const roll = Math.floor(Math.random()*sides) + 1;
+        const heal = Math.max(1, roll + conMod); // can't go below 1 even with negative CON
+        c.hitDice.current -= 1;
+        c.hp = Math.min(c.hpMax, (c.hp||0) + heal);
+        save();
+        syncPartyToCombat(i);
+        this._render();
+        showToast(`Rolled ${roll}+${conMod>=0?'+':''}${conMod} = ${heal} HP`);
+      });
+  },
+
+  // Render the hit-dice pip row when the character has imported hit dice.
+  // Pips left-to-right represent current → max. Click a filled pip to spend
+  // one (rolls dieType + CON modifier and adds to current HP).
+  _hitDiceRow(c, i){
+    const hd = c.hitDice;
+    if (!hd || !hd.max) return '';
+    const cur = Math.max(0, Math.min(hd.max, hd.current ?? hd.max));
+    let pips = '';
+    for (let n = 1; n <= hd.max; n++){
+      pips += `<span class="hd-pip ${n<=cur?'filled':''}" data-act="hd-spend" data-idx="${i}" data-n="${n}" title="${n<=cur?'Spend a hit die':'Already spent'}"></span>`;
+    }
+    return `<div class="hd-row">
+      <span class="hd-label">🎲 ${esc(hd.dieType||'d8')}</span>
+      <span class="hd-pips">${pips}</span>
+      <span class="hd-count">${cur}/${hd.max}</span>
+      <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest — restore hit dice">🛌 Rest</button>
+    </div>`;
+  },
+
   _wire(){
     const b=this._body;if(!b)return;
     // Drag a party card → drop on Combat Tracker to add to combat. Suppress
@@ -104,6 +203,24 @@ registerPanel('party',{
         card.classList.add('dragging');
       });
       card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+      // Right-click the Heroic Inspiration row to award via a pre-set reason.
+      const inspRow = card.querySelector('[data-act="insp"]');
+      inspRow?.addEventListener('contextmenu', e => {
+        e.preventDefault(); e.stopPropagation();
+        const idx = +card.dataset.cidx;
+        const reasons = state.settings?.inspirationReasons || [];
+        const items = reasons.map(r => ({
+          label: r,
+          onClick: () => {
+            state.party[idx] = {...state.party[idx], inspiration: true};
+            save();
+            this._render();
+            showToast('Inspiration: ' + r);
+          },
+        }));
+        items.push({ label: '✏ Edit reasons…', onClick: () => this._manageInspirationReasons() });
+        showContextMenu(e.clientX, e.clientY, items);
+      });
       // Drag-reorder: dropping a party card onto another party card
       // moves it to that position. The same drag still works for cross-panel
       // drops (combat tracker, battle map) — those panels listen on their own
@@ -179,6 +296,21 @@ registerPanel('party',{
       }
       else if(act==='import-pdf'){
         this._importPdf();
+      }
+      else if(act==='hd-spend'){
+        const idx = +el.dataset.idx, n = +el.dataset.n;
+        const c = state.party[idx]; if (!c || !c.hitDice) return;
+        if (n > c.hitDice.current) return; // empty pip — ignore
+        this._spendHitDie(idx);
+      }
+      else if(act==='hd-rest'){
+        const idx = +el.dataset.idx;
+        const c = state.party[idx]; if (!c || !c.hitDice) return;
+        c.hitDice.current = c.hitDice.max;
+        c.hp = c.hpMax; // long rest also restores HP fully
+        save(); this._render();
+        syncPartyToCombat(idx);
+        showToast(c.name + ' took a long rest');
       }
       else if(act==='icon-btn'){
         this._pickerOpen=this._pickerOpen===i?null:i;
@@ -323,6 +455,9 @@ registerPanel('party',{
           str: num('pdf-str'), dex: num('pdf-dex'), con: num('pdf-con'),
           int: num('pdf-int'), wis: num('pdf-wis'), cha: num('pdf-cha'),
         },
+        // Hit dice come straight from the parser — not exposed in the modal
+        // since they're auto-derived from class + level.
+        hitDice: data.hitDice || null,
       };
       if (slot === 'new'){
         state.party.push({
