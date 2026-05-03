@@ -104,8 +104,8 @@ registerPanel('party',{
   },
 
   _sheetBody(c, i){
-    const tabs = ['stats','skills','spells','inventory'];
-    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', inventory:'Inventory'};
+    const tabs = ['stats','skills','spells'];
+    const labels = {stats:'Stats', skills:'Skills', spells:'Spells'};
     let active = this._activeTab[c.id] || 'stats';
     if (!tabs.includes(active)) active = 'stats';
     const tabBar = tabs.map(t =>
@@ -115,7 +115,6 @@ registerPanel('party',{
     if (active === 'stats')      body = this._tabStats(c);
     else if (active === 'skills')body = this._tabSkills(c);
     else if (active === 'spells')body = this._tabSpells(c);
-    else if (active === 'inventory') body = this._tabInventory(c);
     return `<div class="sheet-body">
       <div class="sheet-tabs">${tabBar}</div>
       <div class="sheet-content">${body}</div>
@@ -186,7 +185,11 @@ registerPanel('party',{
     });
     if (!usedLabelled){
       // Flatten everything to a single token list, then bucket by keyword.
-      const tokens = raw.split(/[,;\n]/).map(s=>s.trim()).filter(Boolean);
+      // Strip out section-marker tokens like "=== LANGUAGES ===" — the chip
+      // group labels already serve as headers.
+      const tokens = raw.split(/[,;\n]/).map(s=>s.trim())
+        .filter(Boolean)
+        .filter(t => !/^=+\s*.+?\s*=+$/.test(t));
       const buckets = { Languages:[], Armor:[], Weapons:[], Tools:[], Other:[] };
       const KNOWN_LANGS = /^(common|dwarvish|elvish|giant|gnomish|goblin|halfling|orc|abyssal|celestial|draconic|deep speech|infernal|primordial|sylvan|undercommon|aarakocra|sign language|thieves|druidic|aquan|auran|ignan|terran)/i;
       const ARMOR_KW = /armor|shield/i;
@@ -291,11 +294,6 @@ registerPanel('party',{
     return metaHtml + slotsHtml + listHtml;
   },
 
-  _tabInventory(c){
-    const inv = c.sheet?.inventory;
-    if (!inv) return '<div class="sheet-empty">No inventory in the imported PDF.</div>';
-    return `<div class="sheet-block"><h5>Equipment</h5><div class="sheet-text sheet-text-pre">${esc(inv)}</div></div>`;
-  },
 
 
   _iconPicker(i){

@@ -37,6 +37,8 @@ registerPanel('battlemap',{
   // the map: if the user manually zoomed, don't yank them back to fit.
   _isFitted: false,
   _resizeObserver: null,
+  // Whether the toolbar is hidden to maximize map space. Persisted in localStorage.
+  _toolbarHidden: (function(){ try { return localStorage.getItem('skt-bm-toolbar-hidden') === '1'; } catch(e){ return false; } })(),
   // Pencil annotations. Each entry is { c:color, s:size, p:[x1,y1,x2,y2,...] }
   // — a flat int array keeps the JSON small for Firebase/localStorage.
   _drawings: [],
@@ -271,7 +273,11 @@ registerPanel('battlemap',{
     }).join('');
 
     let html='';
+    if (this._toolbarHidden){
+      html += '<button class="btn small" data-mact="toggle-toolbar" style="position:absolute;top:6px;left:6px;z-index:30;padding:2px 8px;font-size:10px;opacity:.85" title="Show toolbar">▾ Tools</button>';
+    } else {
     html+='<div class="map-toolbar">'
+      +'<button class="btn icon-btn" data-mact="toggle-toolbar" style="flex-shrink:0;padding:2px 5px" title="Hide toolbar (more map space)">▲</button>'
       +'<button class="btn '+(this._tool==='add-pc'?'active':'')+'" data-mact="tool-add-pc">+ PC</button>'
       +'<button class="btn '+(this._tool==='add-npc'?'active':'')+'" data-mact="tool-add-npc">+ NPC</button>'
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase">🗑 Erase</button>'
@@ -316,6 +322,7 @@ registerPanel('battlemap',{
       html+='<div style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap;align-items:center">'
         +'<span style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
     }
+    } // end !_toolbarHidden
 
     html+='<div id="map-scroll" style="flex:1;overflow:auto;background:#111;position:relative">'
       +'<div id="map-stage" style="position:relative;display:inline-block">'
@@ -407,6 +414,11 @@ registerPanel('battlemap',{
       }
       else if(act==='clear-img'){_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();}
       else if(act==='pick-map'){this._openMapPicker();}
+      else if(act==='toggle-toolbar'){
+        this._toolbarHidden = !this._toolbarHidden;
+        try { localStorage.setItem('skt-bm-toolbar-hidden', this._toolbarHidden ? '1' : '0'); } catch(e){}
+        this._render();
+      }
       else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
       else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
       else if(act==='clear-draw'){

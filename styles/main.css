@@ -140,12 +140,22 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
    keeps panel contents fully interactive. Player edits sync back to the DM
    the same way DM edits sync to the player (bidirectional via Firebase). */
 body.player-mode .panel-dock{display:none}
-body.player-mode .float-toolbar{display:none}
+/* Hide DM-only items in the float-toolbar; keep sync indicator + settings. */
+body.player-mode #float-search-btn,
+body.player-mode #search-wrap,
+body.player-mode #player-view-btn{display:none}
 body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-template-areas:"workspace"}
+/* Player-view floating dock — chips for the DM-shared panels */
+.pv-dock{position:fixed;left:14px;top:14px;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9000}
+.pv-dock-btn{width:34px;height:34px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text-muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s}
+.pv-dock-btn:hover{background:var(--panel-3);color:var(--text)}
+.pv-dock-btn.active{background:var(--accent);color:#1a1a1a;border-color:var(--accent)}
 body.player-mode #settings-btn{display:none}
 body.player-mode #player-view-btn{display:none}
 body.player-mode #reset-layout-btn{display:none}
-body.player-mode .window-actions{display:none}
+/* Hide DM-only window controls (share/lock) in player mode, but keep minimize and close. */
+body.player-mode .window-actions [data-wact="share"],
+body.player-mode .window-actions [data-wact="lock"]{display:none}
 body.player-mode #search-popup{display:none !important}
 .window-body{flex:1;overflow:auto;position:relative}
 /* Resize handles — invisible hit zones around the window edges + corners */
@@ -585,8 +595,10 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .bestiary-card-x:hover{background:rgba(194,84,80,.85)}
 .bestiary-card:hover{border-color:var(--accent);transform:translateY(-1px)}
 .bestiary-card.dragging{opacity:.4}
-.bestiary-card-avatar{width:54px;height:54px;border-radius:8px;background:linear-gradient(135deg,#3d2a2a,#6b3939);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden;flex-shrink:0}
-.bestiary-card-avatar img{width:100%;height:100%;object-fit:cover}
+.bestiary-card-avatar{width:54px;height:54px;border-radius:50%;background:transparent;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden;flex-shrink:0}
+.bestiary-card-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+/* When the avatar holds an image (token), drop the placeholder gradient backdrop. */
+.bestiary-card-avatar:has(img){background:none}
 .bestiary-card-name{font-size:11px;font-weight:500;color:var(--text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .bestiary-card-stats{display:flex;gap:6px;font-size:9px;color:var(--text-muted);flex-wrap:wrap;justify-content:center}
 .mapsel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;max-height:60vh;overflow-y:auto;padding:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px}

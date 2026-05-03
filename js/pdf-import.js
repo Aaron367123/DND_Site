@@ -140,7 +140,11 @@ async function pdfFormFields(file){
 // Pull values out of a {fieldName: value} map using a known list of D&D Beyond
 // Form-Fillable Character Sheet field names.
 function _fromFields(f){
-  console.log('[PDF Import] AcroForm fields:', Object.keys(f));
+  // Stash the full field list on window so user can inspect any field by name
+  // even if the console truncates the array printout.
+  window._pdfFields = f;
+  const _allKeys = Object.keys(f);
+  console.log('[PDF Import] AcroForm fields ('+_allKeys.length+') — try `_pdfFields` in console to inspect any field. All keys:', _allKeys.join(' | '));
   // Look up a field by any of several aliases. Tolerates whitespace and case
   // variants — different sheet templates use "Class & Level" vs "ClassLevel".
   const norm = s => String(s).replace(/\s+/g,'').toLowerCase();
@@ -240,27 +244,6 @@ function _fromFields(f){
   // Free-text panels.
   const sStr = (...aliases) => String(get(...aliases) || '').trim();
   const languages = sStr('ProficienciesLang','Languages','Other Proficiencies & Languages','OtherProfs');
-  // Inventory — try standard names first, then sweep any field whose name looks
-  // equipment-related and concatenate. Different DDB sheet templates split the
-  // equipment list across multiple fields ("Equipment", "Equipment 2", "Treasure", etc.).
-  let inventory = sStr('Equipment','Inventory','EquipmentList','Gear','Items');
-  if (!inventory){
-    const invParts = [];
-    Object.keys(f).forEach(k => {
-      if (/^(equipment|inventory|gear|items|treasure)/i.test(k.trim())){
-        const v = String(f[k] || '').trim();
-        if (v) invParts.push(v);
-      }
-    });
-    if (invParts.length) inventory = invParts.join('\n');
-  }
-  // Tight match: only fields whose name STARTS with one of these tokens.
-  const _invKeys = Object.keys(f).filter(k => /^(equip|invent|gear|items|treasure|attune)/i.test(k.trim()));
-  console.log('[PDF Import] inventory-related fields:', _invKeys);
-  // If the standard sweep missed and we found new keys here, use them.
-  if (!inventory && _invKeys.length){
-    inventory = _invKeys.map(k => String(f[k]||'').trim()).filter(Boolean).join('\n');
-  }
   const bio = {
     backstory: sStr('Backstory'),
     traits:    sStr('PersonalityTraits','Personality Traits'),
@@ -379,7 +362,7 @@ function _fromFields(f){
 
   const sheet = {
     skills, saves, profBonus, passivePerception,
-    languages, inventory, attacks, spellSlots,
+    languages, attacks, spellSlots,
     spellSaveDc: _spellSaveDc, spellAtkBonus: _spellAtkBonus,
     spells: spellsUniq, bio,
   };
