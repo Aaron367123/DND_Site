@@ -22,6 +22,13 @@ registerPanel('battlemap',{
   // Whether to draw the grid overlay. Some 5etools maps already have a grid
   // baked into the image — the user can hide ours so the two don't clash.
   _showGrid: true,
+  // Map image scale (1 = natural pixel size). Persisted; the toolbar slider
+  // adjusts it. Aspect ratio is always preserved.
+  _bgMapScale: 1,
+  // Natural dimensions of the loaded image — derived from the Image object,
+  // not persisted (re-read on next load).
+  _bgMapNaturalW: 0,
+  _bgMapNaturalH: 0,
   // Picker caches — survive panel re-renders, populated lazily.
   _adventures: null,
   _mapsByAdv: {},
@@ -34,6 +41,7 @@ registerPanel('battlemap',{
         if(d.fog){this._fog=new Set(d.fog);}else{this._fog=null;}
         this._bgMapPath = d.bgMapPath || null;
         this._showGrid = d.showGrid !== false; // default on
+        this._bgMapScale = d.bgMapScale || 1;
       }
     }catch(e){}
     this._render();
@@ -45,7 +53,7 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale}));
     }catch(e){}
     this._broadcast();
   },
@@ -55,15 +63,31 @@ registerPanel('battlemap',{
     const img = new Image();
     img.onload = () => {
       _mapBgImage = img;
+      this._bgMapNaturalW = img.naturalWidth;
+      this._bgMapNaturalH = img.naturalHeight;
+      this._fitGridToBg();
       const b = this._body; if (!b) return;
       const stage = b.querySelector('#map-stage');
-      if (!stage) return;
+      if (!stage){ this._render(); return; }
       const cs = this._cellSize;
       this._applyBg(stage, this._cols*cs, this._rows*cs);
       this._render();
     };
     img.onerror = () => { showToast('Could not load map image'); };
     img.src = 'img/' + path;
+  },
+
+  // Grow/shrink _cols and _rows so the grid covers the map at its current
+  // displayed size. Called whenever a map is picked, the scale changes, or
+  // the cell size changes. No-op when there's no map.
+  _fitGridToBg(){
+    if (!_mapBgImage || !this._bgMapNaturalW) return;
+    const scale = this._bgMapScale || 1;
+    const dispW = this._bgMapNaturalW * scale;
+    const dispH = this._bgMapNaturalH * scale;
+    const cs = this._cellSize;
+    this._cols = Math.max(8, Math.ceil(dispW / cs));
+    this._rows = Math.max(6, Math.ceil(dispH / cs));
   },
 
   // BroadcastChannel — lets a player view tab receive updates
@@ -103,7 +127,12 @@ registerPanel('battlemap',{
     const partyBtns=state.party.map((p,pi)=>{
       const onMap=this._tokens.find(t=>t.label===p.name&&t.isPC);
       if(onMap)return '';
-      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" style="font-size:10px">'+(p.icon||'⚔')+' '+esc(p.name)+'</button>';
+      // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.
+      const iconHtml = renderIcon(p.icon||'⚔', p.name);
+      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" style="font-size:10px;display:inline-flex;align-items:center;gap:4px">'
+        +'<span class="map-party-icon">'+iconHtml+'</span>'
+        +'<span>'+esc(p.name)+'</span>'
+      +'</button>';
     }).join('');
 
     let html='';
@@ -121,6 +150,8 @@ registerPanel('battlemap',{
       +'<input type="color" id="map-bg-color" value="'+this._bgColor+'" style="width:28px;height:24px;padding:1px;border-radius:3px;cursor:pointer;flex-shrink:0" title="Background color">'
       +'<button class="btn" data-mact="pick-map" style="flex-shrink:0">🗺 Map</button>'
       +(_mapBgImage?'<button class="btn danger" data-mact="clear-img" style="flex-shrink:0">✕ Map</button>':'')
+      +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.25" max="2" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
+      +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +'<button class="btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Show/hide grid overlay">⊞ Grid</button>'
       +'<div style="flex:1"></div>'
       +'<button class="btn" data-mact="sync-combat" style="flex-shrink:0">↺ Sync</button>'
@@ -204,7 +235,7 @@ registerPanel('battlemap',{
         b.querySelectorAll('[data-mact^="tool-"]').forEach(el=>el.classList.toggle('active',el.dataset.mact==='tool-'+this._tool));
       }
       else if(act==='sync-combat') this._syncParty();
-      else if(act==='clear-tokens'){if(!confirm('Remove all tokens?'))return;this._tokens=[];this._selected=null;this._closePanel();this._renderTokens();this._saveMap();}
+      else if(act==='clear-tokens'){if(!confirm('Remove all tokens?'))return;this._tokens=[];this._selected=null;this._closePanel();this._saveMap();this._render();}
       else if(act==='clear-img'){_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();}
       else if(act==='pick-map'){this._openMapPicker();}
       else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
@@ -242,13 +273,35 @@ registerPanel('battlemap',{
 
     b.querySelector('#map-size').addEventListener('change',e=>{
       this._cellSize=parseInt(e.target.value);
-      const scroll=b.querySelector('#map-scroll');
-      if(scroll){
-        const cs2=this._cellSize;
-        this._cols=Math.max(16,Math.floor(scroll.clientWidth/cs2));
-        this._rows=Math.max(12,Math.floor(scroll.clientHeight/cs2));
+      if (_mapBgImage){
+        // Map loaded: keep grid tight to the image at the new cell size.
+        this._fitGridToBg();
+      } else {
+        const scroll=b.querySelector('#map-scroll');
+        if(scroll){
+          const cs2=this._cellSize;
+          this._cols=Math.max(16,Math.floor(scroll.clientWidth/cs2));
+          this._rows=Math.max(12,Math.floor(scroll.clientHeight/cs2));
+        }
       }
       this._saveMap();this._render();
+    });
+    // Map size slider — only present when an image is loaded.
+    // `input` fires continuously while dragging — keep it cheap (just resize
+    // the bg-image and update the % label). `change` fires once on release —
+    // that's when we refit the grid to the new image size and re-render so
+    // grid lines catch up.
+    b.querySelector('#map-bg-scale')?.addEventListener('input',e=>{
+      this._bgMapScale = parseFloat(e.target.value);
+      const stageEl = b.querySelector('#map-stage');
+      if (stageEl){ const cs2=this._cellSize; this._applyBg(stageEl, this._cols*cs2, this._rows*cs2); }
+      const pct = b.querySelector('#map-bg-scale-pct');
+      if (pct) pct.textContent = Math.round(this._bgMapScale*100)+'%';
+    });
+    b.querySelector('#map-bg-scale')?.addEventListener('change',()=>{
+      this._fitGridToBg();
+      this._saveMap();
+      this._render();
     });
     b.querySelector('#fog-radius')?.addEventListener('input',e=>{this._fogRadius=parseInt(e.target.value)||1;});
     b.querySelector('#map-bg-color').addEventListener('change',e=>{this._bgColor=e.target.value;this._applyBg(stage,W,H);this._saveMap();});
@@ -429,18 +482,22 @@ registerPanel('battlemap',{
   },
 
   _applyBg(stage,W,H){
-    if(_mapBgImage){
-      // Draw the image into an offscreen canvas then set as CSS background
-      // This avoids blocking the main canvas and is instant
-      const off=document.createElement('canvas');
-      off.width=W;off.height=H;
-      off.getContext('2d').drawImage(_mapBgImage,0,0,W,H);
-      stage.style.backgroundImage=`url(${off.toDataURL()})`;
-      stage.style.backgroundSize=`${W}px ${H}px`;
-      stage.style.backgroundColor='';
+    if (_mapBgImage && this._bgMapPath){
+      // Render the image at natural × scale — never stretch. The grid was
+      // already grown to cover this size in _fitGridToBg.
+      const scale = this._bgMapScale || 1;
+      const dispW = (this._bgMapNaturalW || _mapBgImage.naturalWidth) * scale;
+      const dispH = (this._bgMapNaturalH || _mapBgImage.naturalHeight) * scale;
+      stage.style.backgroundImage = `url('img/${this._bgMapPath}')`;
+      stage.style.backgroundSize = `${dispW}px ${dispH}px`;
+      stage.style.backgroundRepeat = 'no-repeat';
+      stage.style.backgroundPosition = '0 0';
+      stage.style.backgroundColor = '';
     } else {
-      stage.style.backgroundImage='none';
-      stage.style.backgroundColor=this._bgColor;
+      stage.style.backgroundImage = 'none';
+      stage.style.backgroundRepeat = '';
+      stage.style.backgroundPosition = '';
+      stage.style.backgroundColor = this._bgColor;
     }
   },
 
