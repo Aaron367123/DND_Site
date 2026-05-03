@@ -104,9 +104,10 @@ registerPanel('party',{
   },
 
   _sheetBody(c, i){
-    const tabs = ['stats','skills','spells','inventory','bio'];
-    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', inventory:'Inventory', bio:'Bio'};
-    const active = this._activeTab[c.id] || 'stats';
+    const tabs = ['stats','skills','spells','inventory'];
+    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', inventory:'Inventory'};
+    let active = this._activeTab[c.id] || 'stats';
+    if (!tabs.includes(active)) active = 'stats';
     const tabBar = tabs.map(t =>
       `<button class="sheet-tab ${t===active?'active':''}" data-act="sheet-tab" data-idx="${i}" data-tab="${t}">${labels[t]}</button>`
     ).join('');
@@ -115,7 +116,6 @@ registerPanel('party',{
     else if (active === 'skills')body = this._tabSkills(c);
     else if (active === 'spells')body = this._tabSpells(c);
     else if (active === 'inventory') body = this._tabInventory(c);
-    else if (active === 'bio')   body = this._tabBio(c);
     return `<div class="sheet-body">
       <div class="sheet-tabs">${tabBar}</div>
       <div class="sheet-content">${body}</div>
@@ -247,22 +247,6 @@ registerPanel('party',{
     return `<div class="sheet-block"><h5>Equipment</h5><div class="sheet-text sheet-text-pre">${esc(inv)}</div></div>`;
   },
 
-  _tabBio(c){
-    const bio = c.sheet?.bio || {};
-    const blocks = [
-      ['Personality Traits', bio.traits],
-      ['Ideals', bio.ideals],
-      ['Bonds', bio.bonds],
-      ['Flaws', bio.flaws],
-      ['Backstory', bio.backstory],
-      ['Allies & Organizations', bio.allies],
-      ['Features &amp; Traits', bio.features],
-    ].filter(([_, v]) => v && v.trim());
-    if (!blocks.length) return '<div class="sheet-empty">No bio in the imported PDF.</div>';
-    return blocks.map(([h, v]) =>
-      `<div class="sheet-block"><h5>${h}</h5><div class="sheet-text sheet-text-pre">${esc(v)}</div></div>`
-    ).join('');
-  },
 
   _iconPicker(i){
     return '<div class="icon-picker" data-picker="'+i+'">'

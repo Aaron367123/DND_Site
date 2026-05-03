@@ -50,6 +50,9 @@ function initSettings(){
   meName.addEventListener('change', _persistMe);
   meColor.addEventListener('change', _persistMe);
 
+  // Theme picker (presets + custom). Local-only, lives in localStorage.
+  if (typeof initThemeControls === 'function') initThemeControls();
+
   // Window-snapping toggle.
   const snap = document.getElementById('snap-windows');
   if (snap) {

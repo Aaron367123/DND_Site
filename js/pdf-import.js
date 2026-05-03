@@ -265,33 +265,54 @@ function _fromFields(f){
   }
 
   // Spell slots — DDB form uses "SlotsTotal 19" / "SlotsRemaining 19" pattern
-  // where suffix 19 = level 1, 20 = level 2, etc.
+  // where suffix 19 = level 1, 20 = level 2, etc. Some templates use suffixes
+  // 28..35 for the L1..L9 expended row (or vice versa). Fall back to scanning
+  // every "SlotsTotal N" key and assigning them in order.
   const spellSlots = {};
   for (let lvl = 1; lvl <= 9; lvl++){
-    const t = num(`SlotsTotal ${18+lvl}`, `SpellSlots${lvl}Total`, `SpellSlotsTotal${lvl}`, `SpellSlots${lvl}`);
-    const r = num(`SlotsRemaining ${18+lvl}`, `SpellSlots${lvl}Remaining`, `SpellSlotsRemaining${lvl}`);
+    const t = num(`SlotsTotal ${18+lvl}`, `SpellSlots${lvl}Total`, `SpellSlotsTotal${lvl}`, `SpellSlots${lvl}`,
+                  `Slots Total ${lvl}`, `L${lvl}SlotsTotal`, `${lvl}stLvlSlotsTotal`);
+    const r = num(`SlotsRemaining ${18+lvl}`, `SpellSlots${lvl}Remaining`, `SpellSlotsRemaining${lvl}`,
+                  `Slots Remaining ${lvl}`, `L${lvl}SlotsExpended`, `${lvl}stLvlSlotsRemaining`);
     if (t != null && t > 0){
       spellSlots[lvl] = { total: t, expended: r != null ? Math.max(0, t - r) : 0 };
     }
   }
-  const spellSaveDc = num('SpellSaveDC','Spell save DC','SpellSaveDc');
-  const spellAtkBonus = num('SpellAtkBonus','Spell Attack Bonus','SpellAtk');
+  const spellSaveDc = num('SpellSaveDC','Spell save DC','SpellSaveDc','Spell Save DC');
+  const spellAtkBonus = num('SpellAtkBonus','Spell Attack Bonus','SpellAtk','Spell Atk Bonus');
 
-  // Spell list — DDB form has fields like "Spells 1014", "Spells 1015"... up to "Spells 1080" or so
-  // Each is a single spell name. Group all into a flat list keyed by name only;
-  // we don't know the level association reliably from field name alone.
+  // Spell list — DDB sheets use a few different naming conventions:
+  //   • Standard 5e form-fillable: "Spells 1014" → "Spells 1080" (numbered slot)
+  //   • Some DDB templates: "Spells 10148", "Spells 10149"
+  //   • Newer DDB: "spell-1-1" or "Spell Name 1", etc.
+  // Catch them all by sweeping every key that starts with "spell" (case-insensitive)
+  // and isn't a slot/DC/attack metadata field.
   const spells = [];
+  const SPELL_META_KEYS = /^(spell\s*)?(slots?|save|atk|attack|casting|ability|class|mod|dc|bonus|level|name)\b/i;
   Object.keys(f).forEach(k => {
-    if (/^Spells\s*1\d{3}$/i.test(k.replace(/\s+/g,' '))){
-      const v = String(f[k] || '').trim();
-      if (v) spells.push(v);
-    }
+    const kt = k.replace(/\s+/g,' ').trim();
+    if (!/^spell/i.test(kt)) return;
+    if (SPELL_META_KEYS.test(kt)) return;
+    const v = String(f[k] || '').trim();
+    // Skip pure numbers (those are slot counts not spell names)
+    if (!v || /^\d+$/.test(v)) return;
+    // Skip very short or very long values
+    if (v.length < 2 || v.length > 80) return;
+    spells.push(v);
   });
+  // Also catch SlotsTotal-style fields with no "Spell" prefix that we missed.
+  // Dedupe.
+  const spellsUniq = [...new Set(spells)];
+
+  // Diagnostic: log spell-related field count so user can see what the parser found.
+  const spellLikeKeys = Object.keys(f).filter(k => /spell|slot/i.test(k));
+  console.log('[PDF Import] spell-related fields ('+spellLikeKeys.length+'):', spellLikeKeys);
+  console.log('[PDF Import] extracted spells ('+spellsUniq.length+'):', spellsUniq);
 
   const sheet = {
     skills, saves, profBonus, passivePerception,
     languages, inventory, attacks, spellSlots, spellSaveDc, spellAtkBonus,
-    spells, bio,
+    spells: spellsUniq, bio,
   };
 
   return {

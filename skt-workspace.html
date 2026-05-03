@@ -135,6 +135,28 @@
     <p class="drawer-note" style="margin-top:6px">When dragging or resizing, edges snap to nearby windows within 8 px.</p>
   </div>
   <div class="drawer-section">
+    <h3>Theme</h3>
+    <div class="drawer-row">
+      <label for="theme-select">Color scheme</label>
+      <select id="theme-select" style="flex:1"></select>
+    </div>
+    <div class="drawer-row" id="theme-custom-row" style="display:none;flex-direction:column;align-items:stretch;gap:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="flex:1">Accent</label>
+        <input type="color" id="theme-accent" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="flex:1">Background</label>
+        <input type="color" id="theme-bg" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="flex:1">Panel</label>
+        <input type="color" id="theme-panel" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+      </div>
+    </div>
+    <p class="drawer-note" style="margin-top:6px">Saved per browser. Doesn't sync to other players.</p>
+  </div>
+  <div class="drawer-section">
     <h3>You</h3>
     <div class="drawer-row">
       <label>Display name</label>
@@ -166,6 +188,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <!-- 1. Data (no deps) -->
 <script src="js/data.js"></script>
+<!-- 1b. Theme (no deps; applies CSS vars before any panels render) -->
+<script src="js/theme.js"></script>
 <!-- 2. Pure utilities (no deps) -->
 <script src="js/utils.js"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
