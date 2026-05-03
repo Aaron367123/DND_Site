@@ -306,6 +306,63 @@ function renderFeatFull(d) {
   return html;
 }
 
+// Class detail: hit die, saving-throw proficiencies, starting proficiencies
+// (armor/weapons/tools/skills), spellcasting ability, then the fluff text.
+// 5etools class JSON splits class info across multiple structured fields
+// rather than putting it all in `entries`, so the generic renderer comes up
+// blank without this.
+function renderClassFull(d) {
+  const r = d._raw || {};
+  let html = '<div class="detail-statblock">';
+  const ABS = {str:'Strength',dex:'Dexterity',con:'Constitution',int:'Intelligence',wis:'Wisdom',cha:'Charisma'};
+  const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : '';
+
+  // Header stats grid
+  const stats = [];
+  if (r.hd) stats.push(['Hit Die', `d${r.hd.faces}` + (r.hd.number > 1 ? ` × ${r.hd.number}` : '')]);
+  if (Array.isArray(r.proficiency) && r.proficiency.length){
+    stats.push(['Saving Throws', r.proficiency.map(p => ABS[p]||cap(p)).join(', ')]);
+  }
+  if (r.spellcastingAbility) stats.push(['Spellcasting', ABS[r.spellcastingAbility] || cap(r.spellcastingAbility)]);
+  if (r.casterProgression && !r.spellcastingAbility) stats.push(['Caster', cap(r.casterProgression)]);
+  stats.forEach(([label, val]) => { html += _statRow(label, esc(String(val))); });
+
+  // Starting proficiencies
+  const sp = r.startingProficiencies;
+  if (sp) {
+    const _flat = arr => Array.isArray(arr) ? arr.map(x => typeof x === 'string'
+      ? x.replace(/\{@\w+\s+([^|}]+)[^}]*\}/g, '$1')
+      : (x.proficiency || x.name || '')
+    ).filter(Boolean) : [];
+    const armor = _flat(sp.armor);
+    const weapons = _flat(sp.weapons);
+    const tools = _flat(sp.tools);
+    if (armor.length) html += _statRow('Armor', esc(armor.join(', ')));
+    if (weapons.length) html += _statRow('Weapons', esc(weapons.join(', ')));
+    if (tools.length) html += _statRow('Tools', esc(tools.join(', ')));
+    // Skills: choose N from list, or "any"
+    if (Array.isArray(sp.skills) && sp.skills.length) {
+      const sk = sp.skills[0];
+      let txt = '';
+      if (sk && sk.choose && sk.choose.from) {
+        const n = sk.choose.count || 2;
+        const from = Array.isArray(sk.choose.from) ? sk.choose.from.map(cap).join(', ') : '';
+        txt = `Choose ${n} from ${from}`;
+      } else if (sk && sk.any) {
+        txt = `Choose ${sk.any} any skills`;
+      }
+      if (txt) html += _statRow('Skills', esc(txt));
+    }
+  }
+
+  html += '</div>';
+
+  // Fluff description (loaded from data/class/fluff-class-*.json into d.desc).
+  if (d.desc) html += renderEntriesText(d.desc);
+  else html += '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
+  return html;
+}
+
 function renderConditionFull(d) {
   const r = d._raw || {};
   const descs = Array.isArray(r.desc) ? r.desc.map(p=>typeof p==='string'?p:(p.desc||'')) : (d.desc?[d.desc]:[]);
@@ -647,6 +704,7 @@ function buildDetailBody(d) {
     if(d.cat==='facility')  return renderFacilityFull(d);
     if(d.cat==='language')  return renderLanguageFull(d);
     if(d.cat==='skill')     return renderSkillFull(d);
+    if(d.cat==='class')     return renderClassFull(d);
     // All the long-tail reference categories (background, race, class, deity,
     // object, vehicle, action, skill, chapter, etc.) share a generic
     // entries→paragraphs render.

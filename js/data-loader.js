@@ -587,6 +587,11 @@ async function load5eData() {
   const classFiles = classIdx
     ? Object.values(classIdx).filter(f => !_skipKeys.has(f)).map(f => `data/class/${f}`)
     : [];
+  // Class fluff files mirror class data files: data/class/fluff-class-*.json.
+  // They carry the prose description + multiclassing notes.
+  const classFluffFiles = classIdx
+    ? Object.values(classIdx).filter(f => !_skipKeys.has(f)).map(f => `data/class/fluff-${f}`)
+    : [];
   // Fluff files contain the image references (path under img/) that 5etools' image
   // pack ships at. Loading these lets us point each monster card at its real portrait.
   const bestiaryFluffFiles = bestiaryFluffIdx
@@ -647,10 +652,11 @@ async function load5eData() {
   const _fluffUniquePaths = [...new Set(_FLUFF_SPECS.map(s => s.path))];
 
   // Step 2: fetch all data files in parallel
-  const [bestiaries, spellbooks, classBooks, conditionFiles, itemFile, featFile, refFiles, bestiaryFluffs, adventureBooks, fluffFiles] = await Promise.all([
+  const [bestiaries, spellbooks, classBooks, classFluffBooks, conditionFiles, itemFile, featFile, refFiles, bestiaryFluffs, adventureBooks, fluffFiles] = await Promise.all([
     Promise.all(bestiaryFiles.map(fetchFile)),
     Promise.all(spellFiles.map(fetchFile)),
     Promise.all(classFiles.map(fetchFile)),
+    Promise.all(classFluffFiles.map(fetchFile)),
     Promise.all(_CONDITION_FILES.map(fetchFile)),
     fetchFile('data/items.json'),
     fetchFile('data/feats.json'),
@@ -699,6 +705,33 @@ async function load5eData() {
       }
       if (!desc && !img) return;
       bucket[k] = {desc, img};
+    });
+  });
+
+  // Class fluff: each class has its own fluff file (fluff-class-*.json) with
+  // the prose description. Merge into _fluffByCatKey['class'] so addRef('class')
+  // picks up the desc.
+  const classBucket = _fluffByCatKey['class'] = _fluffByCatKey['class'] || {};
+  classFluffBooks.forEach(json => {
+    if (!json) return;
+    (json.classFluff || []).forEach(f => {
+      if (!f || !f.name) return;
+      const k = ((f.name||'') + '|' + (f.source||'')).toLowerCase();
+      const desc = _parseEntries(f.entries || []);
+      let img = null;
+      if (Array.isArray(f.images)) {
+        const hero = f.images.find(im => im && im.href && im.href.path && im.imageType !== 'map' && im.imageType !== 'mapPlayer');
+        if (hero) img = 'img/' + hero.href.path;
+      }
+      if (desc || img) classBucket[k] = { desc, img };
+    });
+    // Subclass fluff lives in the same file under "subclassFluff".
+    (json.subclassFluff || []).forEach(f => {
+      if (!f || !f.name) return;
+      const display = f.name + (f.className ? ` (${f.className})` : '');
+      const k = (display + '|' + (f.source||'')).toLowerCase();
+      const desc = _parseEntries(f.entries || []);
+      if (desc) classBucket[k] = { desc, img: null };
     });
   });
 
