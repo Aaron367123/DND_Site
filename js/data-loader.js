@@ -555,6 +555,9 @@ async function load5eData() {
       _raw: d,
     };
     _applyFluff(cat, d.name, d.source, row);
+    // Subclasses have no entries on the class object and no fluff text — fall
+    // back to the resolved feature descriptions so the card isn't empty.
+    if ((!row.desc || !row.desc.trim()) && d._featureDesc) row.desc = d._featureDesc;
     results.push(row);
   }
 
@@ -774,17 +777,76 @@ async function load5eData() {
   if (itemFile) (itemFile.item||[]).forEach(addItem);
   if (featFile) (featFile.feat||[]).forEach(addFeat);
 
-  // Classes, subclasses, and class/subclass features
+  // Classes, subclasses, and class/subclass features.
+  // For each class file we build feature lookup tables, then attach the
+  // resolved feature list to each class/subclass row's _raw so the renderer
+  // can show the per-level progression without doing async lookups.
   classBooks.forEach(json => {
     if (!json) return;
+    // Build feature lookup tables for this file. Class features are keyed by
+    // "name|className|source|level"; subclass features add subclassShortName + subclassSource.
+    const classFeatByKey = {};
+    (json.classFeature||[]).forEach(f => {
+      const k = [f.name, f.className, f.source, f.level].map(s => String(s||'').toLowerCase()).join('|');
+      classFeatByKey[k] = f;
+    });
+    const subFeatByKey = {};
+    (json.subclassFeature||[]).forEach(f => {
+      const k = [f.name, f.className, f.classSource, f.subclassShortName, f.subclassSource, f.level]
+        .map(s => String(s||'').toLowerCase()).join('|');
+      subFeatByKey[k] = f;
+    });
+
     (json.class||[]).forEach(d => {
       const hd = d.hd?.faces ? `Hit Die d${d.hd.faces}` : '';
+      // Resolve classFeatures references → array of {name, level, entries}.
+      const resolved = [];
+      (d.classFeatures||[]).forEach(ref => {
+        // Reference is either a string "Name|Class|Source|Level" or
+        // {classFeature:"Name|Class|Source|Level", gainSubclassFeature?:bool}
+        const refStr = typeof ref === 'string' ? ref : (ref.classFeature || '');
+        if (!refStr) return;
+        const [name, className, source, lvl] = refStr.split('|');
+        const k = [name, className, source, lvl].map(s => String(s||'').toLowerCase()).join('|');
+        const f = classFeatByKey[k];
+        if (!f) return;
+        resolved.push({
+          name: f.name,
+          level: parseInt(f.level) || 0,
+          source: f.source,
+          entries: f.entries || [],
+        });
+      });
+      resolved.sort((a,b)=>a.level - b.level);
+      d._resolvedFeatures = resolved;
       addRef('class', d, ['Class', hd].filter(Boolean).join(' · '));
     });
+
     (json.subclass||[]).forEach(d => {
       const display = d.name + (d.className?` (${d.className})`:'');
+      const resolved = [];
+      (d.subclassFeatures||[]).forEach(refStr => {
+        if (typeof refStr !== 'string') return;
+        const [name, className, classSource, scShort, scSource, lvl] = refStr.split('|');
+        const k = [name, className, classSource, scShort, scSource, lvl].map(s => String(s||'').toLowerCase()).join('|');
+        const f = subFeatByKey[k];
+        if (!f) return;
+        resolved.push({
+          name: f.name,
+          level: parseInt(f.level) || 0,
+          source: f.source,
+          entries: f.entries || [],
+        });
+      });
+      resolved.sort((a,b)=>a.level - b.level);
+      d._resolvedFeatures = resolved;
+      // Build a description from concatenated feature entries so subclass cards
+      // show prose immediately under the header (subclass fluff has none).
+      const flatEntries = resolved.flatMap(f => f.entries);
+      d._featureDesc = _parseEntries(flatEntries);
       addRef('class', d, 'Subclass · '+(d.className||''), {displayName: display, dedupeKey: display});
     });
+
     (json.classFeature||[]).forEach(d => {
       const meta = `${d.className||''} feature${d.level?(' · L'+d.level):''}`;
       const dedupe = `${d.className||''}-${d.name}`;

@@ -306,11 +306,102 @@ function renderFeatFull(d) {
   return html;
 }
 
+// Strip 5etools `{@tag arg}` wrappers to plain text. Used when rendering
+// classTableGroups headers/cells where the full hyperlink machinery isn't
+// worth the complexity for the small subset of tags that appear.
+function _stripTags(s) {
+  return String(s || '').replace(/\{@\w+\s+([^|}]+)[^}]*\}/g, '$1');
+}
+
+// Compute proficiency bonus for a level (5e RAW: +2 at L1, +1 every 4 levels).
+function _profBonus(lvl) { return 2 + Math.floor((lvl - 1) / 4); }
+
+// Render the class progression table from r.classTableGroups[]. Output is
+// one wide table: Level | Prof Bonus | Features | (group columns…).
+// Features column is computed from _resolvedFeatures: feature names at that level joined.
+function _renderClassTable(r, resolvedFeatures) {
+  const groups = Array.isArray(r.classTableGroups) ? r.classTableGroups : [];
+  // Group features by level (no ASI placeholder rows — they're already in the
+  // 5etools data so no need to skip).
+  const featuresByLevel = {};
+  (resolvedFeatures || []).forEach(f => {
+    if (!f.level) return;
+    if (!featuresByLevel[f.level]) featuresByLevel[f.level] = [];
+    featuresByLevel[f.level].push(f.name);
+  });
+
+  // Compose column headers
+  const headers = ['Level', 'Prof. Bonus', 'Features'];
+  const groupHeaderCols = [];
+  groups.forEach(g => {
+    if (Array.isArray(g.colLabels)) {
+      g.colLabels.forEach(lbl => groupHeaderCols.push(_stripTags(lbl)));
+    } else if (g.rowsSpellProgression) {
+      // Spell progression grid: header per slot level (1st, 2nd, …)
+      const cols = (g.rowsSpellProgression[0] || []).length;
+      for (let i = 0; i < cols; i++) groupHeaderCols.push(['1st','2nd','3rd','4th','5th','6th','7th','8th','9th'][i] || '');
+    }
+  });
+  headers.push(...groupHeaderCols);
+
+  let html = '<div class="detail-section" style="overflow-x:auto"><table class="detail-table">';
+  html += '<thead><tr>' + headers.map(h => `<th>${esc(h)}</th>`).join('') + '</tr></thead><tbody>';
+
+  for (let lvl = 1; lvl <= 20; lvl++) {
+    const cells = [String(lvl), '+'+_profBonus(lvl)];
+    cells.push((featuresByLevel[lvl] || ['—']).join(', '));
+    groups.forEach(g => {
+      if (Array.isArray(g.rows) && g.rows[lvl-1]) {
+        const row = g.rows[lvl-1];
+        row.forEach(cell => {
+          if (cell && typeof cell === 'object') {
+            // {type:"bonus", value:N} or {type:"dice", toRoll:[{number,faces}]}
+            if (cell.type === 'bonus') cells.push((cell.value>=0?'+':'')+cell.value);
+            else if (cell.type === 'bonusSpeed') cells.push('+'+cell.value+' ft.');
+            else if (cell.type === 'dice' && Array.isArray(cell.toRoll)) {
+              cells.push(cell.toRoll.map(r => `${r.number}d${r.faces}`).join('+'));
+            } else cells.push(_stripTags(cell.entry || cell.value || ''));
+          } else {
+            cells.push(_stripTags(String(cell ?? '')));
+          }
+        });
+      } else if (Array.isArray(g.rowsSpellProgression) && g.rowsSpellProgression[lvl-1]) {
+        const row = g.rowsSpellProgression[lvl-1];
+        row.forEach(n => cells.push(n > 0 ? String(n) : '—'));
+      }
+    });
+    html += '<tr>' + cells.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>';
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// Render the per-level feature descriptions list. One <h3> per feature, with
+// the full entries text below.
+function _renderFeatureList(resolvedFeatures) {
+  if (!Array.isArray(resolvedFeatures) || !resolvedFeatures.length) return '';
+  let html = '<h3 class="detail-header">Features</h3>';
+  // Group by level for readability.
+  const byLvl = {};
+  resolvedFeatures.forEach(f => {
+    if (!byLvl[f.level]) byLvl[f.level] = [];
+    byLvl[f.level].push(f);
+  });
+  Object.keys(byLvl).map(n=>parseInt(n)).sort((a,b)=>a-b).forEach(lvl => {
+    html += `<div class="detail-section" style="font-weight:600;color:var(--accent);margin-top:12px">Level ${lvl}</div>`;
+    byLvl[lvl].forEach(f => {
+      html += `<div class="detail-section"><strong class="detail-label">${esc(f.name)}.</strong> `;
+      const text = _parseEntries_local(f.entries || []);
+      html += renderEntriesText(text);
+      html += '</div>';
+    });
+  });
+  return html;
+}
+
 // Class detail: hit die, saving-throw proficiencies, starting proficiencies
-// (armor/weapons/tools/skills), spellcasting ability, then the fluff text.
-// 5etools class JSON splits class info across multiple structured fields
-// rather than putting it all in `entries`, so the generic renderer comes up
-// blank without this.
+// (armor/weapons/tools/skills), spellcasting ability, level progression
+// table, then per-level feature descriptions, then the fluff text.
 function renderClassFull(d) {
   const r = d._raw || {};
   let html = '<div class="detail-statblock">';
@@ -359,7 +450,40 @@ function renderClassFull(d) {
 
   // Fluff description (loaded from data/class/fluff-class-*.json into d.desc).
   if (d.desc) html += renderEntriesText(d.desc);
-  else html += '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
+
+  // Level progression table — built from r.classTableGroups + resolved features.
+  if (Array.isArray(r.classTableGroups) && r.classTableGroups.length){
+    html += '<h3 class="detail-header">Class Progression</h3>';
+    html += _renderClassTable(r, r._resolvedFeatures);
+  }
+
+  // Per-level feature descriptions.
+  html += _renderFeatureList(r._resolvedFeatures);
+
+  if (!d.desc && (!r._resolvedFeatures || !r._resolvedFeatures.length) && !r.classTableGroups){
+    html += '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
+  }
+  return html;
+}
+
+// Subclass detail: header + per-level feature list. Subclass fluff doesn't
+// carry feature text, so this is built entirely from r._resolvedFeatures
+// (populated at load time in data-loader.js).
+function renderSubclassFull(d) {
+  const r = d._raw || {};
+  let html = '';
+  // Subclass intro line — Source · Class
+  const parent = r.className || '';
+  if (parent) {
+    html += `<div class="detail-statblock"><div class="detail-statrow" style="font-style:italic;color:var(--text-muted)">${esc(parent)} subclass</div></div>`;
+  }
+  if (Array.isArray(r._resolvedFeatures) && r._resolvedFeatures.length){
+    html += _renderFeatureList(r._resolvedFeatures);
+  } else if (d.desc) {
+    html += renderEntriesText(d.desc);
+  } else {
+    html += '<div class="detail-section" style="color:var(--text-muted);font-style:italic">No description available.</div>';
+  }
   return html;
 }
 
@@ -607,11 +731,11 @@ function renderSearchTabs(){
     tab.classList.toggle('active',isActive);
     if(isActive && tab.classList.contains('secondary'))activeIsSecondary=true;
   });
-  // Auto-expand the More section whenever a secondary category is selected so
-  // the user can see the active state without an extra click.
-  const tabsRoot=document.getElementById('search-tabs');
-  if(activeIsSecondary)tabsRoot.classList.add('expanded');
   // Highlight the More toggle when its hidden contents include the active cat.
+  // Note: the More section's expanded state is now controlled solely by the
+  // user clicking the toggle (and openSearch() opens it once if a secondary
+  // is active). Re-running renderSearchTabs after a user collapse used to
+  // reopen it via the auto-expand line that lived here — gone now.
   const moreBtn=document.getElementById('search-more-toggle');
   if(moreBtn)moreBtn.classList.toggle('has-active-secondary', activeIsSecondary);
 }
@@ -704,7 +828,12 @@ function buildDetailBody(d) {
     if(d.cat==='facility')  return renderFacilityFull(d);
     if(d.cat==='language')  return renderLanguageFull(d);
     if(d.cat==='skill')     return renderSkillFull(d);
-    if(d.cat==='class')     return renderClassFull(d);
+    if(d.cat==='class') {
+      // Subclasses have classSource + subclassFeatures; classes have classFeatures.
+      const r = d._raw || {};
+      if (r.subclassFeatures || r.classSource) return renderSubclassFull(d);
+      return renderClassFull(d);
+    }
     // All the long-tail reference categories (background, race, class, deity,
     // object, vehicle, action, skill, chapter, etc.) share a generic
     // entries→paragraphs render.
@@ -815,6 +944,13 @@ function openSearch(){
   document.getElementById('search-wrap')?.classList.add('open');
   document.getElementById('search-popup').classList.add('open');
   state.searchState.detail=null;renderSearchTabs();renderSearchResults();
+  // First-paint convenience: if the stored category lives in the More row,
+  // expand it so the highlight is visible. After this point, the user's
+  // toggle clicks are the only thing that opens/closes the row.
+  const tabsRoot = document.getElementById('search-tabs');
+  if (tabsRoot && tabsRoot.querySelector('.search-tab.secondary.active')){
+    tabsRoot.classList.add('expanded');
+  }
 }
 function closeSearch(){
   document.getElementById('search-popup').classList.remove('open');
