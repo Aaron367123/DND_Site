@@ -12,7 +12,10 @@ registerPanel('party',{
   _render(){
     const b=this._body;if(!b)return;
     b.innerHTML='<div class="party-grid">'+state.party.map((c,i)=>this._card(c,i)).join('')+'</div>'
-      +'<div style="padding:0 10px 10px"><button class="btn small" data-act="add">+ Add character</button></div>';
+      +'<div style="padding:0 10px 10px;display:flex;gap:6px">'
+      +'<button class="btn small" data-act="add">+ Add character</button>'
+      +'<button class="btn small" data-act="import-pdf" title="Import a D&D Beyond character sheet">📄 Import PDF</button>'
+      +'</div>';
     this._wire();
   },
 
@@ -67,7 +70,6 @@ registerPanel('party',{
         +'<div class="char-stat"><div class="l">⛨ AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
-        +'<div class="char-stat"><div class="l">GP</div><input type="number" value="'+(c.gp||0)+'" data-field="gp" data-idx="'+i+'"></div>'
       +'</div>'
       // Resources
       +resHtml
@@ -102,13 +104,43 @@ registerPanel('party',{
         card.classList.add('dragging');
       });
       card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+      // Drag-reorder: dropping a party card onto another party card
+      // moves it to that position. The same drag still works for cross-panel
+      // drops (combat tracker, battle map) — those panels listen on their own
+      // bodies, so a drop on a .char-card never reaches them.
+      card.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('application/x-skt-party-pi')) return;
+        e.preventDefault();
+        const r = card.getBoundingClientRect();
+        const before = (e.clientY - r.top) < r.height / 2;
+        card.classList.toggle('drop-before', before);
+        card.classList.toggle('drop-after', !before);
+      });
+      card.addEventListener('dragleave', () => card.classList.remove('drop-before','drop-after'));
+      card.addEventListener('drop', e => {
+        card.classList.remove('drop-before','drop-after');
+        const fromStr = e.dataTransfer.getData('application/x-skt-party-pi');
+        if (!fromStr) return;
+        const from = parseInt(fromStr);
+        const to0 = parseInt(card.dataset.cidx);
+        const r = card.getBoundingClientRect();
+        const before = (e.clientY - r.top) < r.height / 2;
+        let to = to0 + (before ? 0 : 1);
+        // Ignore no-op drops (onto self or on the immediate boundary)
+        if (from === to0 || from === to0 + (before ? -1 : 0)) return;
+        if (from < to) to -= 1; // splice-from-earlier-index correction
+        e.preventDefault(); e.stopPropagation();
+        const [moved] = state.party.splice(from, 1);
+        state.party.splice(to, 0, moved);
+        save(); this._render();
+      });
     });
     // Inputs
     b.querySelectorAll('input[data-field]').forEach(inp=>{
       inp.addEventListener('change',e=>{
         const i=+e.target.dataset.idx, f=e.target.dataset.field;
         let v=e.target.value;
-        if(['hp','hpMax','ac','init','spd','gp'].includes(f))v=parseInt(v)||0;
+        if(['hp','hpMax','ac','init','spd'].includes(f))v=parseInt(v)||0;
         state.party[i]={...state.party[i],[f]:v};
         save();
         if(['hp','hpMax','ac'].includes(f))syncPartyToCombat(i);
@@ -138,8 +170,11 @@ registerPanel('party',{
       else if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
       else if(act==='bardic-insp'){state.party[i]={...state.party[i],bardicInspiration:!state.party[i].bardicInspiration};save();this._render();}
       else if(act==='add'){
-        state.party.push({id:uid(),name:'New Character',cls:'fighter',icon:'⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,gp:0,inspiration:false,resources:[]});
+        state.party.push({id:uid(),name:'New Character',cls:'fighter',icon:'⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,inspiration:false,resources:[]});
         save();this._render();
+      }
+      else if(act==='import-pdf'){
+        this._importPdf();
       }
       else if(act==='icon-btn'){
         this._pickerOpen=this._pickerOpen===i?null:i;
@@ -200,5 +235,111 @@ registerPanel('party',{
 
     // Close icon picker when clicking outside
     b.addEventListener('click',()=>{if(this._pickerOpen!==null){this._pickerOpen=null;this._render();}});
+  },
+
+  // PDF import flow: file picker → parseDDBeyondPdf → preview modal → apply.
+  // Pulls in fields from a D&D Beyond character sheet PDF and writes them to
+  // an existing or new party slot. The preview modal is fully editable so the
+  // user can correct any mis-extracted fields before saving.
+  _importPdf(){
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'application/pdf';
+    inp.addEventListener('change', async ev => {
+      const f = ev.target.files[0]; if (!f) return;
+      showToast('Reading PDF…');
+      try {
+        const data = await parseDDBeyondPdf(f);
+        this._showPdfPreview(data);
+      } catch(err){
+        console.error(err);
+        showToast('PDF parse failed: ' + (err?.message || 'unknown'));
+      }
+    });
+    inp.click();
+  },
+
+  _showPdfPreview(data){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const slotOptions = state.party.map((p,i) =>
+      `<option value="${i}"${(data.name && p.name.toLowerCase() === data.name.toLowerCase()) ? ' selected' : ''}>${esc(p.name)}</option>`
+    ).join('') + '<option value="new">— New character —</option>';
+    const ab = data.abilities || {};
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:92vw">
+      <h3>Import character sheet</h3>
+      <p style="color:var(--text-muted);font-size:11px;margin:0 0 12px">Review the values pulled from the PDF and pick which party slot to apply them to. Anything that didn't extract cleanly can be edited before saving.</p>
+      <div class="modal-fields">
+        <div class="modal-field"><label>Apply to</label><select id="pdf-slot">${slotOptions}</select></div>
+        <div class="modal-field"><label>Name</label><input id="pdf-name" type="text" value="${esc(data.name||'')}"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="modal-field"><label>Class</label><input id="pdf-cls" type="text" value="${esc(data.cls||'')}"></div>
+          <div class="modal-field"><label>Level</label><input id="pdf-lvl" type="number" value="${data.level||1}" min="1" max="20"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="modal-field"><label>Race</label><input id="pdf-race" type="text" value="${esc(data.race||'')}"></div>
+          <div class="modal-field"><label>Background</label><input id="pdf-bg" type="text" value="${esc(data.background||'')}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+          <div class="modal-field"><label>HP</label><input id="pdf-hp" type="number" value="${data.hp??''}"></div>
+          <div class="modal-field"><label>HP Max</label><input id="pdf-hpmax" type="number" value="${data.hpMax??''}"></div>
+          <div class="modal-field"><label>AC</label><input id="pdf-ac" type="number" value="${data.ac??''}"></div>
+          <div class="modal-field"><label>Speed</label><input id="pdf-spd" type="number" value="${data.speed??''}"></div>
+        </div>
+        <div class="modal-field"><label>Initiative bonus</label><input id="pdf-init" type="number" value="${data.init??''}"></div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
+          ${['str','dex','con','int','wis','cha'].map(k=>`<div class="modal-field"><label>${k.toUpperCase()}</label><input id="pdf-${k}" type="number" value="${ab[k]??''}"></div>`).join('')}
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="pdf-cancel">Cancel</button>
+        <button class="btn primary" id="pdf-apply">Apply</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const close = ()=>backdrop.remove();
+    backdrop.querySelector('#pdf-cancel').addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
+    backdrop.addEventListener('keydown', e=>{ if (e.key==='Escape') close(); });
+    backdrop.querySelector('#pdf-apply').addEventListener('click', () => {
+      const get = id => backdrop.querySelector('#'+id).value;
+      const num = id => parseInt(get(id)) || 0;
+      const slot = get('pdf-slot');
+      const data2 = {
+        name: get('pdf-name').trim() || 'New Character',
+        cls: get('pdf-cls').trim().toLowerCase() || 'fighter',
+        level: num('pdf-lvl') || 1,
+        race: get('pdf-race').trim(),
+        background: get('pdf-bg').trim(),
+        hp: num('pdf-hp'),
+        hpMax: num('pdf-hpmax') || num('pdf-hp'),
+        ac: num('pdf-ac') || 10,
+        spd: num('pdf-spd') || 30,
+        init: num('pdf-init'),
+        abilities: {
+          str: num('pdf-str'), dex: num('pdf-dex'), con: num('pdf-con'),
+          int: num('pdf-int'), wis: num('pdf-wis'), cha: num('pdf-cha'),
+        },
+      };
+      if (slot === 'new'){
+        state.party.push({
+          id: uid(),
+          icon: '⚔',
+          pp: 10,
+          inspiration: false, resources: [],
+          ...data2,
+        });
+      } else {
+        const i = parseInt(slot);
+        const existing = state.party[i] || {};
+        state.party[i] = { ...existing, ...data2 };
+      }
+      save();
+      close();
+      this._render();
+      // Mirror HP/AC into combat slot if this PC is currently in combat.
+      const idx = state.party.findIndex(p => p.name === data2.name);
+      if (idx >= 0) syncPartyToCombat(idx);
+      showToast('Imported: ' + data2.name);
+    });
   },
 });

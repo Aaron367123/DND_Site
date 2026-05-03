@@ -31,6 +31,8 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="settings" title="Manage quick-pick names">⚙</button>
       </div>
 
+      ${state.settings?.hideMonsterStats ? '<div class="combat-hide-banner">🙈 Monster HP &amp; AC hidden from players</div>' : ''}
+
       ${inCombat
         ? '<div class="combatant-list" id="combat-list">'+this._renderCombatants()+'</div>'
         : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}

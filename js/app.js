@@ -18,6 +18,12 @@ function init(){
   load();
   initRealtime();
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>btn.addEventListener('click',()=>togglePanel(btn.dataset.panel)));
+  document.getElementById('player-view-btn')?.addEventListener('click',()=>{
+    const url=window.location.href.split('?')[0]+'?player=1';
+    const w=window.open(url,'skt-player','width=1280,height=720');
+    if(!w) showToast('Allow popups to open player view');
+    else   showToast('Player view opened');
+  });
   document.getElementById('reset-layout-btn').addEventListener('click',()=>{
     showConfirm('Reset window layout to defaults?', {title:'Reset layout', confirmLabel:'Reset'}).then(ok=>{
       if(!ok) return;

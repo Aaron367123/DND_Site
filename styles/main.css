@@ -136,21 +136,15 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .window-actions [data-wact="share"]{font-size:13px}
 .window-actions [data-wact="share"]:hover{color:var(--accent)}
 
-/* PLAYER MODE — strip DM controls and disable editing across all panels.
-   Players can still drag/move windows and zoom-pan, just can't change data. */
+/* PLAYER MODE — hides DM-only chrome (dock, settings, share toggles) but
+   keeps panel contents fully interactive. Player edits sync back to the DM
+   the same way DM edits sync to the player (bidirectional via Firebase). */
 body.player-mode .panel-dock{display:none}
 body.player-mode #settings-btn{display:none}
+body.player-mode #player-view-btn{display:none}
 body.player-mode #reset-layout-btn{display:none}
 body.player-mode .window-actions{display:none}
 body.player-mode #search-popup{display:none !important}
-body.player-mode .window-body input,
-body.player-mode .window-body button,
-body.player-mode .window-body select,
-body.player-mode .window-body textarea,
-body.player-mode .window-body [contenteditable="true"]{
-  pointer-events:none;
-  opacity:.92;
-}
 .window-body{flex:1;overflow:auto;position:relative}
 /* Resize handles — invisible hit zones around the window edges + corners */
 .rh{position:absolute;z-index:2}
@@ -221,6 +215,11 @@ body.player-mode .window-body [contenteditable="true"]{
 .card-stat input:focus{outline:none;background:rgba(255,255,255,.05);border-radius:2px}
 .card-stat input::-webkit-outer-spin-button,.card-stat input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .card-stat-hidden{font-size:13px;font-weight:600;color:var(--text-muted);text-align:center;line-height:1}
+/* Banner the combat tracker shows when the DM has the hide-monster-stats
+   toggle on. Slimmer on the DM side (informational), more prominent on the
+   player side so players know stats are intentionally redacted. */
+.combat-hide-banner{padding:5px 10px;font-size:10px;color:var(--text-muted);background:var(--panel-2);border-bottom:1px solid var(--border);text-align:center;letter-spacing:.02em}
+body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(--accent);background:rgba(212,165,116,.08);border-bottom:1px solid rgba(212,165,116,.4)}
 
 .card-actions{display:flex;flex-direction:column;gap:3px;align-self:flex-start}
 .card-actions .btn{padding:1px 5px;font-size:13px;line-height:1.2;min-width:22px}
@@ -234,6 +233,8 @@ body.player-mode .window-body [contenteditable="true"]{
 .char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:7px;cursor:grab}
 .char-card:active{cursor:grabbing}
 .char-card.dragging{opacity:.4}
+.char-card.drop-before{box-shadow:0 -2px 0 var(--accent) inset}
+.char-card.drop-after{box-shadow:0 2px 0 var(--accent) inset}
 .char-header{display:flex;align-items:center;gap:6px}
 .char-icon-btn{font-size:20px;background:var(--panel-3);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;position:relative}
 .char-icon-btn:hover{background:#404040;border-color:var(--accent-dark)}
@@ -250,7 +251,7 @@ body.player-mode .window-body [contenteditable="true"]{
 .hp-bar-wrap{width:100%;height:5px;background:rgba(0,0,0,.3);border-radius:3px;overflow:hidden}
 .hp-bar-fill{height:100%;border-radius:3px;transition:width .3s,background .3s}
 /* Stats row */
-.char-stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.char-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 .char-stat{background:var(--panel-3);border-radius:4px;padding:3px 4px;text-align:center}
 .char-stat .l{font-size:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
 .char-stat input{background:transparent;border:none;text-align:center;padding:0;font-weight:600;font-size:12px;width:100%;color:var(--text)}
