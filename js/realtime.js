@@ -36,6 +36,7 @@ const SKT_SYNC_KEYS = [
   'skt-notes-v1',      // session notes
   'skt-npcs-v2',       // NPC library
   'skt-bestiary-v1',   // bestiary
+  'skt-shared-panels-v1', // which panels the DM is sharing with players
 ];
 
 // Firebase keys cannot contain hyphens or dots — convert to underscores
@@ -56,6 +57,8 @@ const _PANELS_FOR_KEY = {
   'skt-notes-v1':     ['notes'],
   'skt-npcs-v2':      ['npclib'],
   'skt-bestiary-v1':  ['bestiary'],
+  // skt-shared-panels-v1 has no per-panel render — it's dispatched manually
+  // in _applyRemoteKey so the player view can mount/unmount whole panels.
 };
 
 // ─── Intercept localStorage writes ────────────────────────────────────────────
@@ -99,6 +102,23 @@ function _applyRemoteKey(key, fbVal) {
 
   // skt-workspace-v1 backs the global `state` object — re-read it.
   if (key === 'skt-workspace-v1') load();
+
+  // Shared-panels list is its own little world — apply it to the player tab
+  // by mounting/unmounting panels, and refresh the DM tab's share toggles.
+  if (key === 'skt-shared-panels-v1'){
+    try { state.sharedPanels = JSON.parse(fbVal) || []; } catch(_){ state.sharedPanels = []; }
+    if (typeof _applySharedPanelsToPlayerView === 'function' && document.body.classList.contains('player-mode')){
+      _applySharedPanelsToPlayerView();
+    } else {
+      // DM tab — refresh share-button icon on each open window.
+      document.querySelectorAll('.window').forEach(el => {
+        const id = el.dataset.panel;
+        const btn = el.querySelector('[data-wact="share"]');
+        if (id && btn) btn.textContent = (state.sharedPanels||[]).includes(id) ? '👁' : '◌';
+      });
+    }
+    return;
+  }
 
   const panels = _PANELS_FOR_KEY[key] || [];
   panels.forEach(id => _reloadPanel(id));

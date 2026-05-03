@@ -25,6 +25,13 @@ registerPanel('battlemap',{
   // Map image scale (1 = natural pixel size). Persisted; the toolbar slider
   // adjusts it. Aspect ratio is always preserved.
   _bgMapScale: 1,
+  // Whether token drops snap to the cellSize grid. Default off — free movement
+  // works better with maps that have their own printed grids. Persisted.
+  _snapToGrid: false,
+  // Bg scale that token positions are currently aligned to. Tracks _bgMapScale
+  // at the moment of the last token-scale adjustment, so `_scaleTokensTo` can
+  // compute the correct ratio even across multiple scale changes.
+  _lastTokenScale: 1,
   // Natural dimensions of the loaded image — derived from the Image object,
   // not persisted (re-read on next load).
   _bgMapNaturalW: 0,
@@ -42,7 +49,23 @@ registerPanel('battlemap',{
         this._bgMapPath = d.bgMapPath || null;
         this._showGrid = d.showGrid !== false; // default on
         this._bgMapScale = d.bgMapScale || 1;
+        this._snapToGrid = !!d.snapToGrid;
       }
+      // Migrate any tokens that still use grid-cell coords (gx, gy) to pixel
+      // coords (x, y). New code stores tokens in stage pixels; the cellSize
+      // grid is now optional/decorative.
+      const cs0 = this._cellSize;
+      this._tokens.forEach(t => {
+        if (t.x == null && t.gx != null){
+          const sz = t.size || 1;
+          t.x = (t.gx + sz/2) * cs0;
+          t.y = (t.gy + sz/2) * cs0;
+        }
+        delete t.gx; delete t.gy;
+      });
+      // Track the bg scale tokens are currently aligned to so future scale
+      // changes can move them proportionally.
+      this._lastTokenScale = this._bgMapScale || 1;
     }catch(e){}
     this._render();
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath);
@@ -53,7 +76,7 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid}));
     }catch(e){}
     this._broadcast();
   },
@@ -88,6 +111,39 @@ registerPanel('battlemap',{
     const cs = this._cellSize;
     this._cols = Math.max(8, Math.ceil(dispW / cs));
     this._rows = Math.max(6, Math.ceil(dispH / cs));
+  },
+
+  // Multiply every token's pixel position by (newScale / _lastTokenScale).
+  // Keeps tokens in the same map-relative position when the bg image is
+  // resized. _lastTokenScale tracks the scale tokens are currently aligned
+  // to, so repeated calls compose correctly.
+  _scaleTokensTo(newScale){
+    const old = this._lastTokenScale != null ? this._lastTokenScale : (this._bgMapScale || 1);
+    if (!newScale || !old || newScale === old) { this._lastTokenScale = newScale || old; return; }
+    const ratio = newScale / old;
+    this._tokens.forEach(t => {
+      if (t.x != null) t.x *= ratio;
+      if (t.y != null) t.y *= ratio;
+    });
+    this._lastTokenScale = newScale;
+  },
+
+  // Fit-to-view: pick the largest scale that makes the map fully fit inside
+  // the current panel viewport, then refit grid + render.
+  _fitMapToView(){
+    if (!_mapBgImage || !this._bgMapNaturalW) return;
+    const scrollEl = this._body?.querySelector('#map-scroll');
+    if (!scrollEl) return;
+    const vw = scrollEl.clientWidth - 4;   // small margin so edges aren't flush
+    const vh = scrollEl.clientHeight - 4;
+    if (vw <= 0 || vh <= 0) return;
+    const sx = vw / this._bgMapNaturalW;
+    const sy = vh / this._bgMapNaturalH;
+    this._bgMapScale = Math.max(0.05, Math.min(3, Math.min(sx, sy)));
+    this._scaleTokensTo(this._bgMapScale);
+    this._fitGridToBg();
+    this._saveMap();
+    this._render();
   },
 
   // BroadcastChannel — lets a player view tab receive updates
@@ -150,9 +206,11 @@ registerPanel('battlemap',{
       +'<input type="color" id="map-bg-color" value="'+this._bgColor+'" style="width:28px;height:24px;padding:1px;border-radius:3px;cursor:pointer;flex-shrink:0" title="Background color">'
       +'<button class="btn" data-mact="pick-map" style="flex-shrink:0">🗺 Map</button>'
       +(_mapBgImage?'<button class="btn danger" data-mact="clear-img" style="flex-shrink:0">✕ Map</button>':'')
-      +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.25" max="2" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
+      +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
       +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
+      +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
       +'<button class="btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Show/hide grid overlay">⊞ Grid</button>'
+      +'<button class="btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">🧲 Snap</button>'
       +'<div style="flex:1"></div>'
       +'<button class="btn" data-mact="sync-combat" style="flex-shrink:0">↺ Sync</button>'
       +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
@@ -239,6 +297,8 @@ registerPanel('battlemap',{
       else if(act==='clear-img'){_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();}
       else if(act==='pick-map'){this._openMapPicker();}
       else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
+      else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
+      else if(act==='fit-map'){this._fitMapToView();}
       else if(act==='fog-toggle'){
         this._fog=this._fog!==null?null:new Set();
         if(this._fog!==null)this._fogTool=true;
@@ -262,10 +322,13 @@ registerPanel('battlemap',{
         const pi=+btn.dataset.pi;
         const p=state.party[pi];
         if(!p)return;
-        // Place at first empty row-0 slot
-        const usedX=new Set(this._tokens.filter(t=>t.gy===0).map(t=>t.gx));
-        let gx=0; while(usedX.has(gx))gx++;
-        this._tokens.push({id:uid(),label:p.name,gx,gy:0,isPC:true,color:'#696969',size:1,dead:false});
+        // Place at first empty slot in the top row, in pixel coords. We treat
+        // "row 0" as anything with y < cellSize.
+        const cs2=this._cellSize;
+        const usedCols=new Set(this._tokens.filter(t=>t.y!=null && t.y<cs2).map(t=>Math.round(t.x/cs2 - 0.5)));
+        let col=0; while(usedCols.has(col))col++;
+        const newX=(col + 0.5)*cs2, newY=cs2/2;
+        this._tokens.push({id:uid(),label:p.name,x:newX,y:newY,isPC:true,color:'#696969',size:1,dead:false});
         this._renderTokens();this._saveMap();
         this._render(); // refresh party quick-add row
       }
@@ -299,6 +362,7 @@ registerPanel('battlemap',{
       if (pct) pct.textContent = Math.round(this._bgMapScale*100)+'%';
     });
     b.querySelector('#map-bg-scale')?.addEventListener('change',()=>{
+      this._scaleTokensTo(this._bgMapScale);
       this._fitGridToBg();
       this._saveMap();
       this._render();
@@ -314,16 +378,22 @@ registerPanel('battlemap',{
       if(this._drag?.moved) return;
       if(!this._tool||this._tool==='erase') return;
       const r=canvas.getBoundingClientRect();
-      const gx=Math.floor((e.clientX-r.left)/cs);
-      const gy=Math.floor((e.clientY-r.top)/cs);
-      if(gx<0||gy<0||gx>=this._cols||gy>=this._rows) return;
-      if(this._tokens.find(t=>t.gx===gx&&t.gy===gy)) return;
+      let cx=e.clientX-r.left, cy=e.clientY-r.top;
+      if(cx<0||cy<0||cx>this._cols*cs||cy>this._rows*cs) return;
+      // Snap to grid cell center if snap is on (Shift inverts).
+      const wantSnap = e.shiftKey ? !this._snapToGrid : this._snapToGrid;
+      if (wantSnap){
+        cx = Math.floor(cx/cs)*cs + cs/2;
+        cy = Math.floor(cy/cs)*cs + cs/2;
+      }
+      // Dedupe: don't place a new token directly on top of an existing one.
+      if(this._tokens.find(t => Math.abs((t.x||0)-cx) < cs/2 && Math.abs((t.y||0)-cy) < cs/2)) return;
       const isPC=this._tool==='add-pc';
       showModal((isPC?'Place PC':'Place NPC'),[
         {id:'label',label:'Name',type:'text',value:'',placeholder:isPC?'PC name':'Enemy name'}
       ],'Place').then(r2=>{
         if(!r2||!r2.label)return;
-        this._tokens.push({id:uid(),label:r2.label,gx,gy,isPC,color:'#696969',size:1,dead:false});
+        this._tokens.push({id:uid(),label:r2.label,x:cx,y:cy,isPC,color:'#696969',size:1,dead:false});
         this._renderTokens();this._saveMap();
       });
     });
@@ -348,6 +418,7 @@ registerPanel('battlemap',{
       if(changed){this._drawFog();this._broadcast();}
     };
     canvas.addEventListener('mousedown',e=>{
+      if (e.button !== 0) return; // middle/right click handled by pan logic below
       if(!this._fogTool||this._tool==='add-pc'||this._tool==='add-npc')return;
       e.stopPropagation();e.preventDefault();
       this._isPainting=true;
@@ -366,6 +437,90 @@ registerPanel('battlemap',{
       if(this._drag?.moved) return;
       this._selected=null;this._closePanel();this._renderTokens();
     });
+
+    // ─── Map zoom/pan inside the panel ──────────────────────────────────────
+    const scrollEl = b.querySelector('#map-scroll');
+    // Wheel = zoom map content (cursor-centered). Ctrl+wheel still bubbles
+    // up to zoom-pan.js for whole-workspace zoom.
+    let _wheelTimer = null;
+    scrollEl.addEventListener('wheel', e => {
+      if (e.ctrlKey) return; // hand off to workspace zoom
+      if (!_mapBgImage) return; // nothing to zoom without a map
+      e.preventDefault();
+      const oldScale = this._bgMapScale || 1;
+      const factor = e.deltaY < 0 ? 1.1 : (1/1.1);
+      const newScale = Math.max(0.1, Math.min(3, oldScale * factor));
+      if (newScale === oldScale) return;
+
+      const rect = scrollEl.getBoundingClientRect();
+      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+      // Image-space point under cursor before zoom
+      const imgX = (scrollEl.scrollLeft + cx) / oldScale;
+      const imgY = (scrollEl.scrollTop  + cy) / oldScale;
+
+      this._bgMapScale = newScale;
+      // Update token positions in lockstep so they stay anchored to the map
+      // during the wheel spin. _scaleTokensTo updates _lastTokenScale, so the
+      // debounced refit below is idempotent.
+      this._scaleTokensTo(newScale);
+
+      // Cheap update: resize the bg image and the slider/% display in place,
+      // then restore scroll so the same point stays under the cursor.
+      const stageEl = b.querySelector('#map-stage');
+      if (stageEl) this._applyBg(stageEl, this._cols*this._cellSize, this._rows*this._cellSize);
+      scrollEl.scrollLeft = imgX * newScale - cx;
+      scrollEl.scrollTop  = imgY * newScale - cy;
+      const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = newScale;
+      const pct    = b.querySelector('#map-bg-scale-pct'); if (pct) pct.textContent = Math.round(newScale*100)+'%';
+      // Live-update token DOM positions and sizes so they don't drift or
+      // mis-scale during the wheel.
+      b.querySelectorAll('.map-token').forEach(el => {
+        const t = this._tokens.find(x => x.id === el.dataset.tid);
+        if (!t || t.x == null) return;
+        el.style.left = t.x+'px';
+        el.style.top  = t.y+'px';
+        const sz  = t.size || 1;
+        const dim = (sz*this._cellSize - 4) * newScale;
+        el.style.width  = dim+'px';
+        el.style.height = dim+'px';
+      });
+
+      // Heavy work — refit grid, save, full re-render — debounced so a
+      // continuous wheel-scroll doesn't thrash innerHTML on every tick.
+      clearTimeout(_wheelTimer);
+      _wheelTimer = setTimeout(() => {
+        this._scaleTokensTo(this._bgMapScale);
+        this._fitGridToBg();
+        this._saveMap();
+        this._render();
+      }, 180);
+    }, { passive:false });
+
+    // Middle-click or right-click drag to pan. Doesn't conflict with token
+    // dragging (left-click) or fog painting (also left-click only now).
+    let _pan = null;
+    scrollEl.addEventListener('mousedown', e => {
+      if (e.button !== 1 && e.button !== 2) return;
+      if (e.target.closest('.map-token')) return; // let token interactions own their right/middle click
+      e.preventDefault();
+      _pan = { sx:e.clientX, sy:e.clientY, scrollX:scrollEl.scrollLeft, scrollY:scrollEl.scrollTop };
+      scrollEl.style.cursor = 'grabbing';
+      const onMove = ev => {
+        if (!_pan) return;
+        scrollEl.scrollLeft = _pan.scrollX - (ev.clientX - _pan.sx);
+        scrollEl.scrollTop  = _pan.scrollY - (ev.clientY - _pan.sy);
+      };
+      const onUp = () => {
+        _pan = null;
+        scrollEl.style.cursor = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    // Suppress browser context menu so right-click drag is usable
+    scrollEl.addEventListener('contextmenu', e => e.preventDefault());
   },
 
   // Map picker — adventures from data/adventures.json, maps extracted from
@@ -377,9 +532,9 @@ registerPanel('battlemap',{
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:680px;max-width:92vw">
       <h3>Choose a Map</h3>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <select id="mapsel-adv" style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
-          <option value="">Loading adventures…</option>
-        </select>
+        <input id="mapsel-adv" list="mapsel-adv-list" autocomplete="off" placeholder="Loading adventures…" disabled
+          style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+        <datalist id="mapsel-adv-list"></datalist>
       </div>
       <div id="mapsel-grid" class="mapsel-grid"></div>
       <div class="modal-actions" style="margin-top:10px">
@@ -405,19 +560,38 @@ registerPanel('battlemap',{
     backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
     backdrop.addEventListener('keydown', e=>{ if (e.key==='Escape') close(); });
 
-    // Load the adventure manifest once, sort, populate dropdown.
+    const dlist = backdrop.querySelector('#mapsel-adv-list');
+
+    // Load the adventure manifest once, sort, populate datalist.
     if (!this._adventures){
       try {
         const res = await fetch('data/adventures.json');
         const j = await res.json();
         this._adventures = (j.adventure || []).slice().sort((a,b)=>a.name.localeCompare(b.name));
       } catch(e) {
-        sel.innerHTML = '<option value="">Failed to load adventures</option>';
+        sel.placeholder = 'Failed to load adventures';
         return;
       }
     }
-    sel.innerHTML = '<option value="">Pick an adventure…</option>'
-      + this._adventures.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+    // Datalist option label = display name. Also include the id in parentheses
+    // so duplicates (rare, but possible) stay disambiguated.
+    dlist.innerHTML = this._adventures
+      .map(a=>`<option value="${esc(a.name)} (${esc(a.id)})"></option>`).join('');
+    sel.disabled = false;
+    sel.placeholder = 'Pick an adventure… (type to search)';
+    sel.focus();
+
+    // Resolve "Lost Mine of Phandelver (LMoP)" → adventure id "LMoP". Falls
+    // back to a name-only match for users who hand-type without the id.
+    const resolveAdv = (typed) => {
+      if (!typed) return null;
+      const m = typed.match(/\(([^)]+)\)\s*$/);
+      if (m){
+        const found = this._adventures.find(a => a.id === m[1]);
+        if (found) return found;
+      }
+      return this._adventures.find(a => a.name.toLowerCase() === typed.toLowerCase()) || null;
+    };
 
     const renderMaps = (advId)=>{
       const list = this._mapsByAdv[advId] || [];
@@ -450,9 +624,10 @@ registerPanel('battlemap',{
       });
     };
 
-    sel.addEventListener('change', async e=>{
-      const advId = e.target.value;
-      if (!advId){ grid.innerHTML = ''; return; }
+    const handlePick = async () => {
+      const adv = resolveAdv(sel.value.trim());
+      if (!adv){ grid.innerHTML = ''; return; }
+      const advId = adv.id;
       if (!this._mapsByAdv[advId]){
         grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Loading maps…</div>';
         try {
@@ -478,6 +653,17 @@ registerPanel('battlemap',{
         }
       }
       renderMaps(advId);
+    };
+    // 'change' fires on blur or when the user picks a suggestion from the
+    // datalist dropdown. 'input' covers the case where typing produces an
+    // exact match — without it, picking from the dropdown via mouse-click in
+    // some browsers doesn't reliably fire 'change' until they tab away.
+    sel.addEventListener('change', handlePick);
+    sel.addEventListener('input', () => {
+      // Only resolve if the typed value matches an adventure exactly — that's
+      // the case where the user picked from the suggestion list. Otherwise
+      // wait for them to keep typing.
+      if (resolveAdv(sel.value.trim())) handlePick();
     });
   },
 
@@ -562,10 +748,12 @@ registerPanel('battlemap',{
     const ctx=fogCanvas.getContext('2d');
     ctx.clearRect(0,0,W,H);
     if(this._fog===null)return; // fog disabled
-    // Fill everything with fully opaque fog
-    ctx.fillStyle='#000000';
+    // DM view: translucent black so the DM can still see the map and tokens
+    // through the fog. Player view (player-view.js) draws its own fully
+    // opaque fog, so this only affects the DM's own panel.
+    ctx.fillStyle='rgba(0,0,0,0.55)';
     ctx.fillRect(0,0,W,H);
-    // Cut out revealed cells
+    // Cut out revealed cells fully
     ctx.globalCompositeOperation='destination-out';
     ctx.fillStyle='rgba(0,0,0,1)';
     this._fog.forEach(key=>{
@@ -581,16 +769,23 @@ registerPanel('battlemap',{
     const cs=this._cellSize;
     stage.querySelectorAll('.map-token').forEach(el=>el.remove());
 
+    const tokScale = this._bgMapScale || 1;
     this._tokens.forEach(t=>{
       const size=t.size||1;
-      const px=(t.gx+size/2)*cs;
-      const py=(t.gy+size/2)*cs;
-      const dim=size*cs-4;
+      // Tokens store pixel coordinates (center). Default to middle of stage
+      // for any token that's somehow missing them (shouldn't happen post-migration).
+      if (t.x == null) t.x = cs * size / 2;
+      if (t.y == null) t.y = cs * size / 2;
+      const px=t.x;
+      const py=t.y;
+      // Visual diameter scales with the bg image so tokens stay proportional
+      // to the map at any zoom level.
+      const dim=(size*cs-4) * tokScale;
 
       const el=document.createElement('div');
       el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}`;
       el.dataset.tid=t.id;
-      const fontSize=size>1?13:Math.max(8,11-(t.label.length>5?2:0));
+      const fontSize=(size>1?13:Math.max(8,11-(t.label.length>5?2:0))) * tokScale;
       el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:hidden;box-sizing:border-box`;
       el.textContent=t.label.length>7?t.label.slice(0,6)+'…':t.label;
 
@@ -625,14 +820,24 @@ registerPanel('battlemap',{
           el.style.top=curPy+'px';
         };
 
-        const onUp=()=>{
+        const onUp=ev=>{
           document.removeEventListener('mousemove',onMove);
           document.removeEventListener('mouseup',onUp);
           if(moved){
-            // Snap to nearest grid cell on release
-            const newGx=Math.max(0,Math.min(this._cols-size,Math.round(curPx/cs-size/2)));
-            const newGy=Math.max(0,Math.min(this._rows-size,Math.round(curPy/cs-size/2)));
-            t.gx=newGx;t.gy=newGy;
+            // Free drop by default. Snap if the toolbar toggle is on; Shift
+            // inverts (so a snap-on user can drop free with Shift, and vice
+            // versa). Snap aligns the token's center to a grid-cell center.
+            let nx = curPx, ny = curPy;
+            const wantSnap = ev && ev.shiftKey ? !this._snapToGrid : this._snapToGrid;
+            if (wantSnap){
+              nx = Math.round(nx/cs - size/2) * cs + size*cs/2;
+              ny = Math.round(ny/cs - size/2) * cs + size*cs/2;
+            }
+            // Clamp to stage bounds (so a token can't be dragged off into nothingness)
+            const stageW = this._cols * cs, stageH = this._rows * cs;
+            const half = (size*cs/2) * (this._bgMapScale || 1);
+            t.x = Math.max(half, Math.min(stageW - half, nx));
+            t.y = Math.max(half, Math.min(stageH - half, ny));
             this._saveMap();
             this._renderTokens();
           }
@@ -673,11 +878,15 @@ registerPanel('battlemap',{
 
   _syncParty(){
     let placed=0;
+    const cs=this._cellSize;
     const source=state.combatants.filter(c=>c.isPC).length?state.combatants.filter(c=>c.isPC):state.party;
     source.forEach((c,i)=>{
       const name=c.name||c.label;
       if(!this._tokens.find(t=>t.label===name&&t.isPC)){
-        this._tokens.push({id:uid(),label:name,gx:i%this._cols,gy:Math.floor(i/this._cols),isPC:true,color:'#696969',size:1,dead:(c.hp||0)<=0});
+        // Lay them out on a virtual top-row grid using cellSize as spacing.
+        const col = i % this._cols, row = Math.floor(i / this._cols);
+        const x = (col + 0.5) * cs, y = (row + 0.5) * cs;
+        this._tokens.push({id:uid(),label:name,x,y,isPC:true,color:'#696969',size:1,dead:(c.hp||0)<=0});
         placed++;
       }
     });

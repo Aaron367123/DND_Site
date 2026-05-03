@@ -133,6 +133,24 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .window-actions{display:flex;gap:2px}
 .window-actions .btn{padding:2px 6px;font-size:11px;background:transparent;border-color:transparent;color:var(--text-muted)}
 .window-actions .btn:hover{background:var(--panel-3);color:var(--text)}
+.window-actions [data-wact="share"]{font-size:13px}
+.window-actions [data-wact="share"]:hover{color:var(--accent)}
+
+/* PLAYER MODE — strip DM controls and disable editing across all panels.
+   Players can still drag/move windows and zoom-pan, just can't change data. */
+body.player-mode .panel-dock{display:none}
+body.player-mode #settings-btn{display:none}
+body.player-mode #reset-layout-btn{display:none}
+body.player-mode .window-actions{display:none}
+body.player-mode #search-popup{display:none !important}
+body.player-mode .window-body input,
+body.player-mode .window-body button,
+body.player-mode .window-body select,
+body.player-mode .window-body textarea,
+body.player-mode .window-body [contenteditable="true"]{
+  pointer-events:none;
+  opacity:.92;
+}
 .window-body{flex:1;overflow:auto;position:relative}
 /* Resize handles — invisible hit zones around the window edges + corners */
 .rh{position:absolute;z-index:2}

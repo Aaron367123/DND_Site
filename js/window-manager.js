@@ -60,7 +60,11 @@ function ensurePanel(id){
   el.dataset.panel=id;
   Object.assign(el.style,{left:l.x+'px',top:l.y+'px',width:l.w+'px',height:l.h+'px',zIndex:l.z});
   const lockIcon = l.locked ? '🔒' : '🔓';
-  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions"><button class="btn icon-btn" data-wact="lock" title="Lock window">${lockIcon}</button><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div>
+  const shared = (state.sharedPanels||[]).includes(id);
+  // Share button is a DM-only toggle that adds/removes this panel from the
+  // player view. Hidden in player mode via CSS (`body.player-mode .window-actions`).
+  const shareBtn = `<button class="btn icon-btn" data-wact="share" title="Share with player view">${shared?'👁':'◌'}</button>`;
+  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions">${shareBtn}<button class="btn icon-btn" data-wact="lock" title="Lock window">${lockIcon}</button><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div>
     <div class="rh rh-n"  data-rh="n"></div>
     <div class="rh rh-s"  data-rh="s"></div>
     <div class="rh rh-e"  data-rh="e"></div>
@@ -205,6 +209,12 @@ function wireWindow(el,id){
       rs={sx:e.clientX,sy:e.clientY,ox:l.x,oy:l.y,ow:l.w,oh:l.h,dir:handle.dataset.rh};
       e.preventDefault();
     });
+  });
+  el.querySelector('[data-wact="share"]')?.addEventListener('click',e=>{
+    e.stopPropagation();
+    togglePanelShare(id);
+    const shared = (state.sharedPanels||[]).includes(id);
+    e.currentTarget.textContent = shared ? '👁' : '◌';
   });
   el.querySelector('[data-wact="lock"]').addEventListener('click',e=>{
     e.stopPropagation();
