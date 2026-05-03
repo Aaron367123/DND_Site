@@ -316,6 +316,65 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-temp
   /* Empty state shouldn't sit behind the right dock. */
   body.player-mode #pv-empty{padding:0;padding-right:64px}
 }
+
+/* ============ MOBILE BATTLE MAP TOUCH BEHAVIOR ============ */
+/* Tell the browser our scripts handle pinch + pan so it doesn't pre-empt
+   them with native page-zoom on the battle map area. Only inside the
+   battlemap panel — other panels keep normal scroll/zoom. */
+@media (max-width: 768px), (max-height: 500px) and (orientation: landscape){
+  body.player-mode .window[data-panel="battlemap"] #map-scroll{
+    touch-action: none;
+  }
+  /* Token tap targets — keep token visual size scaled with the map but ensure
+     the hit area is at least 32px even at very low zoom. */
+  body.player-mode .window[data-panel="battlemap"] .map-token{
+    min-width: 32px;
+    min-height: 32px;
+  }
+}
+
+/* ============ MOBILE — OTHER PANEL TWEAKS ============ */
+@media (max-width: 768px){
+  /* Notes — stack tree + editor vertically. Tree becomes a short top section. */
+  body.player-mode .window[data-panel="notes"] .notes-panel{flex-direction:column}
+  body.player-mode .window[data-panel="notes"] .notes-tree{
+    flex:0 0 auto;width:100%;max-height:30vh;
+    border-right:none;border-bottom:1px solid var(--border);
+  }
+
+  /* Loot — divvy modal stays inside the viewport. */
+  body.player-mode .modal{
+    width:calc(100vw - 24px);
+    max-width:420px;
+    min-width:0;
+  }
+
+  /* Combat tracker — bigger condition tags so they're tappable. */
+  body.player-mode .window[data-panel="combat"] .condition-tag{
+    min-height:24px;padding:3px 9px;font-size:11px;
+  }
+
+  /* Party tracker — icon picker drops to 4 columns instead of cramped 6. */
+  body.player-mode .window[data-panel="party"] .icon-picker{
+    grid-template-columns:repeat(4, 1fr) !important;
+  }
+  body.player-mode .window[data-panel="party"] .icon-picker button{
+    min-width:36px;min-height:36px;
+  }
+
+  /* Hint that long-press opens menus on tap-and-hold targets. iOS otherwise
+     shows a ghost text-selection overlay on long press. */
+  body.player-mode .combatant-card,
+  body.player-mode .char-card,
+  body.player-mode .bestiary-card,
+  body.player-mode .bestiary-folder-head,
+  body.player-mode .sb-btn,
+  body.player-mode [data-act="insp"]{
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+}
 body.player-mode #reset-layout-btn{display:none}
 /* Hide DM-only window controls (share/lock) in player mode, but keep minimize and close. */
 body.player-mode .window-actions [data-wact="share"],

@@ -412,10 +412,9 @@ registerPanel('party',{
         card.classList.add('dragging');
       });
       card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
-      // Right-click the Heroic Inspiration row to award via a pre-set reason.
+      // Right-click (or long-press on mobile) the Heroic Inspiration row to award via a pre-set reason.
       const inspRow = card.querySelector('[data-act="insp"]');
-      inspRow?.addEventListener('contextmenu', e => {
-        e.preventDefault(); e.stopPropagation();
+      const openInspMenu = (x, y) => {
         const idx = +card.dataset.cidx;
         const reasons = state.settings?.inspirationReasons || [];
         const items = reasons.map(r => ({
@@ -428,8 +427,13 @@ registerPanel('party',{
           },
         }));
         items.push({ label: '✏ Edit reasons…', onClick: () => this._manageInspirationReasons() });
-        showContextMenu(e.clientX, e.clientY, items);
+        showContextMenu(x, y, items);
+      };
+      inspRow?.addEventListener('contextmenu', e => {
+        e.preventDefault(); e.stopPropagation();
+        openInspMenu(e.clientX, e.clientY);
       });
+      if (inspRow) addLongPress(inspRow, openInspMenu);
       // Drag-reorder: dropping a party card onto another party card
       // moves it to that position. The same drag still works for cross-panel
       // drops (combat tracker, battle map) — those panels listen on their own

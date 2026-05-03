@@ -152,6 +152,12 @@ registerPanel('bestiary', {
         e.preventDefault(); e.stopPropagation();
         this._showFolderMenu(e.clientX, e.clientY, folder);
       });
+      // Long-press on the folder header opens the same options menu on mobile.
+      addLongPress(head, (x, y) => {
+        const folder = head.parentElement.dataset.folder;
+        if (folder === BESTIARY_UNFILED) return;
+        this._showFolderMenu(x, y, folder);
+      });
     });
     b.querySelectorAll('.folder-menu').forEach(btn=>{
       btn.addEventListener('click', e=>{
@@ -172,6 +178,8 @@ registerPanel('bestiary', {
         e.preventDefault(); e.stopPropagation();
         this._showCardMenu(e.clientX, e.clientY, card.dataset.mid);
       });
+      // Long-press on mobile = card menu (replaces right-click).
+      addLongPress(card, (x, y) => this._showCardMenu(x, y, card.dataset.mid));
       card.addEventListener('dragstart', e=>{
         e.dataTransfer.effectAllowed = 'copyMove';
         e.dataTransfer.setData('application/x-skt-bestiary-mid', card.dataset.mid);

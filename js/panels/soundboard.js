@@ -210,6 +210,12 @@ registerPanel('soundboard', {
         if(_sb.playing[sid]){ this._stop(sid); this._render(); }
         else this._play(sid,true);
       });
+      // Long-press on mobile = loop the sound (substitute for right-click).
+      addLongPress(btn, () => {
+        const sid = btn.dataset.sid;
+        if(_sb.playing[sid]){ this._stop(sid); this._render(); }
+        else this._play(sid, true);
+      });
     });
 
     // Per-tile volume sliders

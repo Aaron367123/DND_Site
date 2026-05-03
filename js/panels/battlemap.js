@@ -715,6 +715,92 @@ registerPanel('battlemap',{
     // Suppress browser context menu so right-click drag is usable
     scrollEl.addEventListener('contextmenu', e => e.preventDefault());
 
+    // ─── Touch support: 1-finger pan, 2-finger pinch-zoom ──────────────────
+    // Only fires if the touch began on the map background (not a token —
+    // those have their own touchstart that calls stopPropagation).
+    let _touchPan = null;     // { startX, startY, startScrollX, startScrollY }
+    let _touchPinch = null;   // { startDist, startScale, anchorX, anchorY }
+    const touchDistance = (a, b) => Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+    const touchMidpoint = (a, b, rect) => ({
+      x: (a.clientX + b.clientX)/2 - rect.left,
+      y: (a.clientY + b.clientY)/2 - rect.top,
+    });
+    scrollEl.addEventListener('touchstart', e => {
+      // Skip if a tool is engaged (draw/erase/fog) — those need direct touches.
+      if (this._tool || this._fogTool) return;
+      if (e.touches.length === 1){
+        const t = e.touches[0];
+        _touchPan = {
+          startX: t.clientX, startY: t.clientY,
+          startScrollX: scrollEl.scrollLeft, startScrollY: scrollEl.scrollTop,
+          didMove: false,
+        };
+      } else if (e.touches.length === 2){
+        e.preventDefault();
+        const rect = scrollEl.getBoundingClientRect();
+        const mid = touchMidpoint(e.touches[0], e.touches[1], rect);
+        _touchPan = null; // pinch supersedes pan
+        _touchPinch = {
+          startDist: touchDistance(e.touches[0], e.touches[1]),
+          startScale: this._bgMapScale || 1,
+          anchorX: mid.x, anchorY: mid.y,
+          // Image-space point under the pinch center, captured at the start
+          imgX: (scrollEl.scrollLeft + mid.x) / (this._bgMapScale || 1),
+          imgY: (scrollEl.scrollTop  + mid.y) / (this._bgMapScale || 1),
+        };
+        this._isFitted = false;
+      }
+    }, { passive: false });
+    scrollEl.addEventListener('touchmove', e => {
+      if (_touchPinch && e.touches.length === 2){
+        e.preventDefault();
+        const dist = touchDistance(e.touches[0], e.touches[1]);
+        const ratio = dist / _touchPinch.startDist;
+        const newScale = Math.max(0.1, Math.min(3, _touchPinch.startScale * ratio));
+        if (!_mapBgImage) return;
+        this._bgMapScale = newScale;
+        this._scaleTokensTo(newScale);
+        const stageEl = b.querySelector('#map-stage');
+        if (stageEl) this._applyBg(stageEl, this._cols*this._cellSize, this._rows*this._cellSize);
+        scrollEl.scrollLeft = _touchPinch.imgX * newScale - _touchPinch.anchorX;
+        scrollEl.scrollTop  = _touchPinch.imgY * newScale - _touchPinch.anchorY;
+        // Re-position tokens visually in lockstep so they don't drift.
+        b.querySelectorAll('.map-token').forEach(el => {
+          const tok = this._tokens.find(x => x.id === el.dataset.tid);
+          if (!tok || tok.x == null) return;
+          el.style.left = tok.x+'px';
+          el.style.top  = tok.y+'px';
+          const sz  = tok.size || 1;
+          const dim = (sz*this._cellSize - 4) * newScale;
+          el.style.width  = dim+'px';
+          el.style.height = dim+'px';
+        });
+      } else if (_touchPan && e.touches.length === 1){
+        const t = e.touches[0];
+        const dx = t.clientX - _touchPan.startX, dy = t.clientY - _touchPan.startY;
+        if (!_touchPan.didMove && Math.abs(dx)+Math.abs(dy) < 6) return;
+        _touchPan.didMove = true;
+        this._isFitted = false;
+        e.preventDefault();
+        scrollEl.scrollLeft = _touchPan.startScrollX - dx;
+        scrollEl.scrollTop  = _touchPan.startScrollY - dy;
+      }
+    }, { passive: false });
+    const endTouch = () => {
+      if (_touchPinch){
+        // Commit the new scale: refit the grid + save + final render so token
+        // positions snap into place at the new scale.
+        this._scaleTokensTo(this._bgMapScale);
+        this._fitGridToBg();
+        this._saveMap();
+        this._render();
+      }
+      _touchPan = null;
+      _touchPinch = null;
+    };
+    scrollEl.addEventListener('touchend', endTouch);
+    scrollEl.addEventListener('touchcancel', endTouch);
+
     // ─── Drop zone: drop a Party member, Bestiary monster, or quick-add ─────
     // ─── button anywhere on the map to place a token at the cursor. ────────
     const dropTypes = ['application/x-skt-party-pi', 'application/x-skt-bestiary-mid'];
@@ -1215,6 +1301,74 @@ registerPanel('battlemap',{
         document.addEventListener('mousemove',onMove);
         document.addEventListener('mouseup',onUp);
       });
+
+      // ── Touch support for mobile ─────────────────────────────────────────
+      // Tap-and-drag = move the token. Long-press (500ms without movement) =
+      // open the options panel (mobile substitute for right-click).
+      el.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) return; // pinch / multi-touch handled at map level
+        e.stopPropagation(); e.preventDefault();
+        const touch = e.touches[0];
+
+        if(this._tool==='erase'){
+          const i=this._tokens.findIndex(x=>x.id===t.id);
+          if(i>=0){this._tokens.splice(i,1);this._selected=null;this._closePanel();this._renderTokens();this._saveMap();}
+          return;
+        }
+
+        stage.querySelectorAll('.map-token').forEach(tok=>tok.classList.remove('selected'));
+        el.classList.add('selected');
+        this._selected=t.id;
+
+        const startX=touch.clientX, startY=touch.clientY;
+        const startPx=px, startPy=py;
+        let curPx=px, curPy=py;
+        let moved=false;
+        let longPressFired=false;
+        this._drag={moved:false};
+        const longPressTimer = setTimeout(() => {
+          if (moved) return;
+          longPressFired = true;
+          this._showPanel(t);
+        }, 500);
+
+        const onMove = ev => {
+          if (ev.touches.length !== 1) return;
+          const tt = ev.touches[0];
+          const dx = tt.clientX-startX, dy = tt.clientY-startY;
+          if (!moved && Math.abs(dx)<6 && Math.abs(dy)<6) return;
+          moved = true; this._drag.moved = true;
+          clearTimeout(longPressTimer);
+          if (longPressFired) return; // already opened panel; ignore drag
+          ev.preventDefault();
+          curPx = startPx+dx; curPy = startPy+dy;
+          el.style.left = curPx+'px';
+          el.style.top  = curPy+'px';
+        };
+        const onEnd = ev => {
+          clearTimeout(longPressTimer);
+          document.removeEventListener('touchmove', onMove);
+          document.removeEventListener('touchend', onEnd);
+          document.removeEventListener('touchcancel', onEnd);
+          if (longPressFired) return;
+          if (moved){
+            let nx = curPx, ny = curPy;
+            if (this._snapToGrid){
+              nx = Math.round(nx/cs - size/2) * cs + size*cs/2;
+              ny = Math.round(ny/cs - size/2) * cs + size*cs/2;
+            }
+            const stageW = this._cols * cs, stageH = this._rows * cs;
+            const half = (size*cs/2) * (this._bgMapScale || 1);
+            t.x = Math.max(half, Math.min(stageW - half, nx));
+            t.y = Math.max(half, Math.min(stageH - half, ny));
+            this._saveMap();
+            this._renderTokens();
+          }
+        };
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onEnd);
+        document.addEventListener('touchcancel', onEnd);
+      }, { passive: false });
 
       stage.appendChild(el);
     });

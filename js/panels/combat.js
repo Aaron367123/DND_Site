@@ -183,25 +183,25 @@ registerPanel('combat',{
       sel.addEventListener('mousedown',e=>e.stopPropagation());
     });
 
-    // Right-click: conditions menu
+    // Right-click (or long-press on mobile): conditions menu / PC quick-ref
     b.querySelectorAll('.combatant-card').forEach(card=>{
-      card.addEventListener('contextmenu',e=>{
-        if(e.target.matches('input,textarea,select')) return;
-        e.preventDefault(); e.stopPropagation();
+      const openMenu = (x, y) => {
         const i=+card.dataset.idx;
         const c=state.combatants[i]; if(!c) return;
-        // PCs → quick-reference popout (saves, passive perception, etc).
-        // NPCs/monsters → conditions menu (prior behavior).
-        if (c.isPC){
-          this._showPcQuickRef(c, e.clientX, e.clientY);
-          return;
-        }
+        if (c.isPC){ this._showPcQuickRef(c, x, y); return; }
         const have=new Set(c.conditions||[]);
         const items=SEARCH_DATA
           .filter(d=>d.cat==='condition')
           .map(d=>({label:d.name, checked:have.has(d.name), onClick:()=>this._toggleCondAtIdx(i,d.name)}));
-        showContextMenu(e.clientX, e.clientY, items);
+        showContextMenu(x, y, items);
+      };
+      card.addEventListener('contextmenu',e=>{
+        if(e.target.matches('input,textarea,select')) return;
+        e.preventDefault(); e.stopPropagation();
+        openMenu(e.clientX, e.clientY);
       });
+      // Long-press on touch devices (no right-click).
+      addLongPress(card, (x, y) => openMenu(x, y));
     });
 
     this._wireDragReorder();

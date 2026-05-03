@@ -313,6 +313,39 @@ function showConfirm(message, opts){
   });
 }
 
+// Wire `el` so a long-press (touch held still for `holdMs` ms) fires
+// `handler(x, y)` where x/y are the touch's clientX/Y. Movement >6px cancels.
+// Mobile substitute for right-click. Returns a cleanup function.
+function addLongPress(el, handler, holdMs) {
+  if (!el) return function(){};
+  holdMs = holdMs || 500;
+  var timer = null, sx = 0, sy = 0;
+  function clear(){ if (timer){ clearTimeout(timer); timer = null; } }
+  function onStart(e){
+    if (!e.touches || e.touches.length !== 1) return;
+    var t = e.touches[0]; sx = t.clientX; sy = t.clientY;
+    clear();
+    timer = setTimeout(function(){ timer = null; handler(sx, sy, e); }, holdMs);
+  }
+  function onMove(e){
+    if (!timer || !e.touches || !e.touches[0]) return;
+    var t = e.touches[0];
+    if (Math.abs(t.clientX - sx) + Math.abs(t.clientY - sy) > 6) clear();
+  }
+  function onEnd(){ clear(); }
+  el.addEventListener('touchstart', onStart, { passive: true });
+  el.addEventListener('touchmove',  onMove,  { passive: true });
+  el.addEventListener('touchend',   onEnd);
+  el.addEventListener('touchcancel',onEnd);
+  return function cleanup(){
+    el.removeEventListener('touchstart', onStart);
+    el.removeEventListener('touchmove',  onMove);
+    el.removeEventListener('touchend',   onEnd);
+    el.removeEventListener('touchcancel',onEnd);
+    clear();
+  };
+}
+
 // Lightweight context menu — shown at (x, y) with a list of {label, onClick, checked?} items.
 // Closes on item click, outside mousedown, Esc, or scroll. Auto-clamps to viewport.
 function showContextMenu(x, y, items) {
