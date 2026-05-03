@@ -104,6 +104,7 @@ registerPanel('bestiary', {
       ? `<img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.parentNode.textContent='${esc(_bestInitials(m.name))}';}">`
       : esc(_bestInitials(m.name));
     return `<div class="bestiary-card" data-mid="${esc(m.id)}" draggable="true" title="Click for stat block · Drag to combat tracker">
+      <button class="bestiary-card-x" data-rmid="${esc(m.id)}" title="Remove from bestiary">×</button>
       <div class="bestiary-card-avatar">${img}</div>
       <div class="bestiary-card-name">${esc(m.name)}</div>
       <div class="bestiary-card-stats">
@@ -162,7 +163,11 @@ registerPanel('bestiary', {
 
     // Card click — open stat block; right-click — menu; dragstart — to combat
     b.querySelectorAll('.bestiary-card').forEach(card=>{
-      card.addEventListener('click', ()=>this._openStatBlock(card.dataset.mid));
+      card.addEventListener('click', e=>{
+        // Skip if the user clicked the × button (handled separately).
+        if (e.target.closest('.bestiary-card-x')) return;
+        this._openStatBlock(card.dataset.mid);
+      });
       card.addEventListener('contextmenu', e=>{
         e.preventDefault(); e.stopPropagation();
         this._showCardMenu(e.clientX, e.clientY, card.dataset.mid);
@@ -173,6 +178,19 @@ registerPanel('bestiary', {
         card.classList.add('dragging');
       });
       card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+    });
+
+    // × button on each card — visible on hover, removes the monster.
+    b.querySelectorAll('.bestiary-card-x').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        const mid = btn.dataset.rmid;
+        const m = this._data.monsters.find(x=>x.id===mid); if (!m) return;
+        if (!confirm(`Remove "${m.name}" from bestiary?`)) return;
+        this._data.monsters = this._data.monsters.filter(x=>x.id!==mid);
+        this._save();
+        this._render();
+      });
     });
   },
 

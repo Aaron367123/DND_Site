@@ -498,7 +498,10 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .bestiary-folder-head .folder-count{font-size:10px;color:var(--text-dim);background:var(--panel-3);padding:1px 6px;border-radius:8px}
 .bestiary-folder-head .folder-menu{padding:2px 6px;font-size:13px;color:var(--text-muted)}
 .bestiary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;padding:10px}
-.bestiary-card{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:border-color .12s,transform .12s}
+.bestiary-card{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:border-color .12s,transform .12s;position:relative}
+.bestiary-card-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s,background .12s;padding:0}
+.bestiary-card:hover .bestiary-card-x{opacity:1}
+.bestiary-card-x:hover{background:rgba(194,84,80,.85)}
 .bestiary-card:hover{border-color:var(--accent);transform:translateY(-1px)}
 .bestiary-card.dragging{opacity:.4}
 .bestiary-card-avatar{width:64px;height:64px;border-radius:8px;background:linear-gradient(135deg,#3d2a2a,#6b3939);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;overflow:hidden;flex-shrink:0}
