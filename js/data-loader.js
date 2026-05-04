@@ -14,13 +14,20 @@ const _CONDITION_FILES = [
 function _stripTags(str) {
   if (typeof str !== 'string') return String(str ?? '');
   return str
-    .replace(/\{@atk mw,rw\}/g,   'Melee or Ranged Weapon Attack:')
-    .replace(/\{@atk mw\}/g,       'Melee Weapon Attack:')
-    .replace(/\{@atk rw\}/g,       'Ranged Weapon Attack:')
-    .replace(/\{@atk ms\}/g,       'Melee Spell Attack:')
-    .replace(/\{@atk rs\}/g,       'Ranged Spell Attack:')
+    .replace(/\{@atk ([^}]+)\}/g, (_, t) => {
+      const parts = t.split(',').map(p=>p.trim());
+      const melee = parts.some(p=>p==='mw'||p==='ms');
+      const ranged = parts.some(p=>p==='rw'||p==='rs');
+      const spell = parts.some(p=>p==='ms'||p==='rs');
+      const weapon = !spell;
+      if (melee && ranged) return (weapon ? 'Melee or Ranged Weapon' : 'Melee or Ranged Spell') + ' Attack:';
+      if (melee) return (spell ? 'Melee Spell' : 'Melee Weapon') + ' Attack:';
+      if (ranged) return (spell ? 'Ranged Spell' : 'Ranged Weapon') + ' Attack:';
+      return 'Attack:';
+    })
+    .replace(/\{@hom\}/g,          'Hit or Miss: ')
     .replace(/\{@h\}/g,            'Hit: ')
-    .replace(/\{@hit (\d+)\}/g,   '+$1')
+    .replace(/\{@hit ([+-]?\d+)\}/g, (_, n) => (parseInt(n) >= 0 ? '+' : '') + n)
     .replace(/\{@dc (\d+)\}/g,    'DC $1')
     .replace(/\{@recharge ([^}]+)\}/g, '(Recharge $1–6)')
     .replace(/\{@recharge\}/g,         '(Recharge 6)')
@@ -285,8 +292,10 @@ function _convertMonster(d) {
     xp:               _crToXP(d.cr),
     special_abilities: (d.trait    ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
     actions:           (d.action   ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
+    bonus_actions:     (d.bonus    ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
     legendary_actions: (d.legendary||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
     reactions:         (d.reaction ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
+    mythic_actions:    (d.mythic   ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
   };
 }
 

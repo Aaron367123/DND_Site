@@ -188,7 +188,6 @@ registerPanel('combat',{
       const openMenu = (x, y) => {
         const i=+card.dataset.idx;
         const c=state.combatants[i]; if(!c) return;
-        if (c.isPC){ this._showPcQuickRef(c, x, y); return; }
         const have=new Set(c.conditions||[]);
         const items=SEARCH_DATA
           .filter(d=>d.cat==='condition')

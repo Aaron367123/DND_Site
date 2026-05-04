@@ -336,11 +336,12 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-temp
 /* ============ MOBILE — OTHER PANEL TWEAKS ============ */
 @media (max-width: 768px){
   /* Notes — stack tree + editor vertically. Tree becomes a short top section. */
-  body.player-mode .window[data-panel="notes"] .notes-panel{flex-direction:column}
-  body.player-mode .window[data-panel="notes"] .notes-tree{
+  .window[data-panel="notes"] .notes-shell{flex-direction:column}
+  .window[data-panel="notes"] .notes-tree{
     flex:0 0 auto;width:100%;max-height:30vh;
     border-right:none;border-bottom:1px solid var(--border);
   }
+  .window[data-panel="notes"] .notes-divider{display:none}
 
   /* Loot — divvy modal stays inside the viewport. */
   body.player-mode .modal{

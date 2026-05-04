@@ -15,7 +15,7 @@ function renderMonsterFull(d, localData) {
   const section=(label,text)=>text?`<div class="detail-section"><strong>${label}.</strong> ${esc(text)}</div>`:'';
   const actions=(label,arr)=>{
     if(!arr||!arr.length)return'';
-    const rows=arr.map(a=>'<em>'+esc(a.name||'')+'</em> '+esc(a.desc||'')).join('<br><br>');
+    const rows=arr.map(a=>'<em>'+esc(a.name||'')+'</em> '+_renderInline(esc(a.desc||''))).join('<br><br>');
     return'<div class="action-block"><strong>'+label+'.</strong><br>'+rows+'</div>';
   };
   let html = '';
@@ -44,8 +44,10 @@ function renderMonsterFull(d, localData) {
   html+='<div class="detail-section"><strong>CR.</strong> '+esc(String(r.challenge_rating??'?'))+' &nbsp; <strong>XP.</strong> '+(r.xp?.toLocaleString()||'?')+'</div>';
   if(r.special_abilities?.length)html+=actions('Traits',r.special_abilities);
   if(r.actions?.length)html+=actions('Actions',r.actions);
-  if(r.legendary_actions?.length)html+=actions('Legendary Actions',r.legendary_actions);
+  if(r.bonus_actions?.length)html+=actions('Bonus Actions',r.bonus_actions);
   if(r.reactions?.length)html+=actions('Reactions',r.reactions);
+  if(r.legendary_actions?.length)html+=actions('Legendary Actions',r.legendary_actions);
+  if(r.mythic_actions?.length)html+=actions('Mythic Actions',r.mythic_actions);
   return html;
 }
 
@@ -225,10 +227,29 @@ function renderObjectFull(d) {
   }
   return html;
 }
-// Light-weight in-renderer parser (when data-loader isn't accessible from here).
 function _parseEntries_local(arr) {
-  if (!Array.isArray(arr)) return '';
-  return arr.map(e => typeof e === 'string' ? e.replace(/\{@\w+\s+([^|}]+)[^}]*\}/g,'$1').replace(/\{@[^}]*\}/g,'') : '').join('\n\n');
+  if (!Array.isArray(arr)) return typeof arr === 'string' ? _stripTagsLocal(arr) : '';
+  return arr.map(e => {
+    if (typeof e === 'string') return _stripTagsLocal(e);
+    if (e && typeof e === 'object') {
+      const sub = e.entries || (e.entry ? [e.entry] : null);
+      if (sub) return (e.name ? e.name + ': ' : '') + _parseEntries_local(sub);
+    }
+    return '';
+  }).filter(Boolean).join('\n\n');
+}
+function _stripTagsLocal(s) {
+  if (typeof _stripTags === 'function') return _stripTags(s);
+  // fallback if data-loader not yet loaded
+  return s
+    .replace(/\{@atk [^}]+\}/g, 'Attack:')
+    .replace(/\{@hom\}/g, 'Hit or Miss: ')
+    .replace(/\{@h\}/g, 'Hit: ')
+    .replace(/\{@hit ([+-]?\d+)\}/g, (_, n) => (parseInt(n) >= 0 ? '+' : '') + n)
+    .replace(/\{@dc (\d+)\}/g, 'DC $1')
+    .replace(/\{@(?:damage|dice)\s+([^|}]+)[^}]*\}/g, '$1')
+    .replace(/\{@\w+\s+([^|}]+)[^}]*\}/g, '$1')
+    .replace(/\{@[^}]*\}/g, '');
 }
 
 // Bastion facility: prerequisite, space, hirelings, order.
