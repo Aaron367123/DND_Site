@@ -330,8 +330,10 @@ function renderFeatFull(d) {
 // Strip 5etools `{@tag arg}` wrappers to plain text. Used when rendering
 // classTableGroups headers/cells where the full hyperlink machinery isn't
 // worth the complexity for the small subset of tags that appear.
-function _stripTags(s) {
-  return String(s || '').replace(/\{@\w+\s+([^|}]+)[^}]*\}/g, '$1');
+// NOTE: Named distinctly to avoid shadowing data-loader.js's _stripTags
+// (which is the proper, full-featured version used by _parseEntries).
+function _stripTagsTable(s) {
+  return String(s || '').replace(/\{@\w+\s+([^|}]+)[^}]*\}/g, '$1').replace(/\{@[^}]*\}/g, '');
 }
 
 // Compute proficiency bonus for a level (5e RAW: +2 at L1, +1 every 4 levels).
@@ -356,7 +358,7 @@ function _renderClassTable(r, resolvedFeatures) {
   const groupHeaderCols = [];
   groups.forEach(g => {
     if (Array.isArray(g.colLabels)) {
-      g.colLabels.forEach(lbl => groupHeaderCols.push(_stripTags(lbl)));
+      g.colLabels.forEach(lbl => groupHeaderCols.push(_stripTagsTable(lbl)));
     } else if (g.rowsSpellProgression) {
       // Spell progression grid: header per slot level (1st, 2nd, …)
       const cols = (g.rowsSpellProgression[0] || []).length;
@@ -381,9 +383,9 @@ function _renderClassTable(r, resolvedFeatures) {
             else if (cell.type === 'bonusSpeed') cells.push('+'+cell.value+' ft.');
             else if (cell.type === 'dice' && Array.isArray(cell.toRoll)) {
               cells.push(cell.toRoll.map(r => `${r.number}d${r.faces}`).join('+'));
-            } else cells.push(_stripTags(cell.entry || cell.value || ''));
+            } else cells.push(_stripTagsTable(cell.entry || cell.value || ''));
           } else {
-            cells.push(_stripTags(String(cell ?? '')));
+            cells.push(_stripTagsTable(String(cell ?? '')));
           }
         });
       } else if (Array.isArray(g.rowsSpellProgression) && g.rowsSpellProgression[lvl-1]) {
