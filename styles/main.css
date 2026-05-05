@@ -976,6 +976,27 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .ctx-menu-item:hover{background:var(--panel-2);color:var(--accent)}
 .ctx-menu-item.checked{color:var(--accent)}
 
+/* ============ TUTORIAL ============ */
+.tutorial-modal{max-width:560px;width:92%;padding:0;display:flex;flex-direction:column;max-height:82vh;overflow:hidden}
+.tutorial-progress{height:3px;background:var(--panel-3);width:100%;flex-shrink:0}
+.tutorial-progress-fill{height:100%;background:var(--accent);transition:width .25s ease}
+.tutorial-head{display:flex;align-items:center;gap:12px;padding:18px 22px 6px}
+.tutorial-icon{font-size:26px;line-height:1;flex-shrink:0}
+.tutorial-head h3{font-size:16px;color:var(--accent);margin:0}
+.tutorial-counter{font-size:10px;color:var(--text-dim);background:var(--panel-3);padding:2px 8px;border-radius:10px;letter-spacing:.05em;flex-shrink:0}
+.tutorial-body{padding:8px 22px 18px;overflow-y:auto;flex:1;font-size:13px;line-height:1.65;color:var(--text)}
+.tutorial-body p{margin:0 0 10px}
+.tutorial-body ul{margin:0 0 10px;padding-left:22px}
+.tutorial-body li{margin-bottom:4px}
+.tutorial-body strong{color:var(--text)}
+.tutorial-body code{background:var(--panel-3);padding:1px 5px;border-radius:3px;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;color:var(--accent)}
+.tutorial-body kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border);border-bottom-width:2px;padding:1px 6px;border-radius:3px;font-family:'Cascadia Code',Consolas,monospace;font-size:10px;color:var(--text);font-weight:600;line-height:1.4}
+.tutorial-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 22px;border-top:1px solid var(--border);background:var(--panel-2);flex-shrink:0}
+.tutorial-dontshow{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);cursor:pointer;user-select:none}
+.tutorial-dontshow input{margin:0;cursor:pointer}
+.tutorial-nav{display:flex;gap:6px}
+.tutorial-nav .btn:disabled{opacity:.4;cursor:not-allowed}
+
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);color:var(--text);padding:8px 16px;border-radius:4px;font-size:12px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-track{background:var(--bg)}
