@@ -856,8 +856,35 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .loot-item .loot-val{width:60px;text-align:right;font-size:11px;color:var(--warning);padding:2px 4px}
 .loot-item .loot-claimed{font-size:10px;color:var(--text-muted);background:var(--panel-3);padding:2px 6px;border-radius:8px;cursor:pointer}
 .loot-item .loot-claimed.done{color:var(--success);background:rgba(107,158,107,.15)}
-.loot-add-row{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border)}
+.loot-add-row{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border);align-items:center}
 .loot-add-row input{font-size:11px}
+.loot-add-row #loot-new-qty{width:48px}
+.loot-add-row #loot-new-val{width:60px}
+.loot-search-wrap{position:relative;flex:1;min-width:0}
+.loot-search-wrap input{width:100%}
+.loot-search-dropdown{display:none;position:absolute;top:100%;left:0;right:0;margin-top:2px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;max-height:260px;overflow-y:auto;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.loot-search-dropdown.open{display:block}
+.loot-search-result{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--panel-3);font-size:11px}
+.loot-search-result:last-child{border-bottom:none}
+.loot-search-result:hover{background:var(--panel-3)}
+.loot-search-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.loot-search-src{font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px;flex-shrink:0}
+.loot-search-meta{font-size:10px;color:var(--text-muted);flex-shrink:0}
+.loot-view-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0}
+.loot-view-tab{padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.loot-view-tab:hover{color:var(--text)}
+.loot-view-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.loot-item .loot-assign{width:120px;font-size:10px;padding:2px 4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer}
+.loot-item.assigned{border-left:3px solid var(--accent)}
+.loot-assigned-pill{display:inline-block;font-size:10px;color:var(--accent);background:rgba(212,165,116,.12);padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:500}
+.loot-group{margin-bottom:10px}
+.loot-group-head{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel-2);border-radius:4px 4px 0 0;border:1px solid var(--border);border-bottom:none;margin-bottom:0}
+.loot-group-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--panel-3);font-size:11px;flex-shrink:0;overflow:hidden}
+.loot-group-icon img{width:100%;height:100%;object-fit:cover}
+.loot-group-name{flex:1;font-weight:600;font-size:12px;color:var(--accent)}
+.loot-group-meta{font-size:10px;color:var(--text-muted)}
+.loot-group .loot-item{border-radius:0;margin-bottom:0;border-top:none}
+.loot-group .loot-item:last-child{border-radius:0 0 4px 4px}
 /* ENCOUNTER */
 .enc-panel{display:flex;height:100%}
 .enc-left{width:220px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
