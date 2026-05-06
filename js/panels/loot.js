@@ -96,7 +96,10 @@ registerPanel('loot',{
   _itemRow(item, i){
     const assignedName = this._memberName(item.assignedTo);
     return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}">
-      <div class="loot-name">${esc(item.name)}${assignedName?` <span class="loot-assigned-pill">→ ${esc(assignedName)}</span>`:''}</div>
+      <div class="loot-name">
+        <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="Click to rename" spellcheck="false">
+        ${assignedName?`<span class="loot-assigned-pill">→ ${esc(assignedName)}</span>`:''}
+      </div>
       <input type="number" class="loot-qty" value="${item.qty||1}" min="1" data-lfield="qty" data-li="${i}" title="Quantity">
       <input type="text" class="loot-val" value="${esc(item.value||'')}" data-lfield="value" data-li="${i}" placeholder="gp val" title="Value">
       ${this._assignSelect(item, i)}
@@ -177,6 +180,11 @@ registerPanel('loot',{
 
   _render(){
     const b=this._body;if(!b)return;
+    // Snapshot the items-list scroll position before innerHTML wipes the DOM,
+    // so editing qty/assignment (which triggers a re-render) doesn't fling
+    // the user back to the top of the list.
+    const oldList = b.querySelector('.loot-items');
+    const savedScroll = oldList ? oldList.scrollTop : 0;
     const totalGp=((this._loot.cp||0)/100+(this._loot.sp||0)/10+(this._loot.ep||0)/2+(this._loot.gp||0)+(this._loot.pp||0)*10).toFixed(2);
     const view = this._view;
     b.innerHTML=`<div class="loot-panel">
@@ -282,17 +290,35 @@ registerPanel('loot',{
       }
     }));
 
-    // Field changes (qty, value, assignedTo)
+    // Field changes (name, qty, value, assignedTo)
     b.querySelectorAll('[data-lfield]').forEach(inp=>{
       inp.addEventListener('change', e => {
         const i=+e.target.dataset.li, f=e.target.dataset.lfield;
         let v = e.target.value;
         if (f==='qty') v = Math.max(1, parseInt(v)||1);
         else if (f==='assignedTo') v = v || null;
+        else if (f==='name'){
+          const trimmed = String(v||'').trim();
+          // Empty name → restore the old value rather than persisting blank.
+          if (!trimmed){ e.target.value = this._loot.items[i].name; return; }
+          v = trimmed;
+        }
         this._loot.items[i][f]=v;
         this._save();
         // Re-render so pills / counts / totals refresh.
         if (f==='assignedTo' || f==='qty') this._render();
+      });
+    });
+    // Enter on the name input commits + moves focus off (so it feels like a
+    // proper rename); Escape restores the previous value.
+    b.querySelectorAll('.loot-name-input').forEach(inp=>{
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
+        else if (e.key === 'Escape'){
+          const i = +inp.dataset.li;
+          inp.value = this._loot.items[i].name;
+          inp.blur();
+        }
       });
     });
 
@@ -322,5 +348,10 @@ registerPanel('loot',{
       backdrop.addEventListener('keydown', e => { if (e.key==='Escape') close(); });
       setTimeout(()=>backdrop.querySelector('#divvy-ok')?.focus(), 30);
     });
+
+    // Restore the items-list scroll position after the new DOM is wired up,
+    // so re-renders (qty / assignment change) feel in-place.
+    const newList = b.querySelector('.loot-items');
+    if (newList) newList.scrollTop = savedScroll;
   },
 });

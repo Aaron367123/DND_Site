@@ -849,14 +849,17 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .bestiary-pick-meta{color:var(--text-muted);font-size:10px;text-align:right}
 
 /* LOOT */
-.loot-panel{display:flex;flex-direction:column;height:100%}
+.loot-panel{display:flex;flex-direction:column;height:100%;min-width:0;overflow:hidden}
 .loot-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px;border-bottom:1px solid var(--border);background:var(--panel-2)}
 .loot-coin{background:var(--panel-3);border-radius:4px;padding:6px 8px;text-align:center}
 .loot-coin .l{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
 .loot-coin input{background:transparent;border:none;text-align:center;font-weight:600;font-size:14px;padding:2px 0;width:100%}
-.loot-items{flex:1;overflow-y:auto;padding:8px}
-.loot-item{background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.loot-item .loot-name{flex:1;font-size:12px}
+.loot-items{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px;min-width:0}
+.loot-item{background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;min-width:0}
+.loot-item .loot-name{flex:1 1 140px;font-size:12px;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.loot-item .loot-name-input{flex:1 1 100px;min-width:0;font-size:12px;color:var(--text);background:transparent;border:1px solid transparent;padding:3px 6px;border-radius:3px;font-family:inherit;font-weight:500;text-transform:inherit}
+.loot-item .loot-name-input:hover{border-color:var(--border);background:var(--panel-3)}
+.loot-item .loot-name-input:focus{outline:none;border-color:var(--accent);background:var(--panel)}
 .loot-item .loot-qty{width:40px;text-align:center;font-size:11px;padding:2px 4px}
 .loot-item .loot-val{width:60px;text-align:right;font-size:11px;color:var(--warning);padding:2px 4px}
 .loot-item .loot-claimed{font-size:10px;color:var(--text-muted);background:var(--panel-3);padding:2px 6px;border-radius:8px;cursor:pointer}
@@ -875,8 +878,8 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .loot-search-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .loot-search-src{font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px;flex-shrink:0}
 .loot-search-meta{font-size:10px;color:var(--text-muted);flex-shrink:0}
-.loot-view-tabs{display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
-.loot-view-tab{padding:3px 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;min-height:24px}
+.loot-view-tabs{display:flex;flex-wrap:wrap;gap:3px;padding:5px 6px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0}
+.loot-view-tab{padding:3px 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;min-height:24px;max-width:100%}
 .loot-view-tab:hover{color:var(--text);background:var(--panel-3)}
 .loot-view-tab.active{color:var(--accent);background:var(--panel-3);border-color:rgba(212,165,116,.3)}
 .loot-tab-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;font-size:11px;line-height:1;flex-shrink:0;background:var(--panel-3);overflow:hidden}
@@ -886,7 +889,7 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .loot-tab-name{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .loot-tab-count{font-size:9px;color:var(--text-dim);background:var(--panel);padding:0 5px;border-radius:8px;font-weight:600;letter-spacing:.02em;line-height:14px;min-width:14px;text-align:center}
 .loot-view-tab.active .loot-tab-count{color:var(--accent);background:rgba(212,165,116,.12)}
-.loot-item .loot-assign{width:120px;font-size:10px;padding:2px 4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer}
+.loot-item .loot-assign{width:120px;max-width:100%;font-size:10px;padding:2px 4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer}
 .loot-item.assigned{border-left:3px solid var(--accent)}
 .loot-assigned-pill{display:inline-block;font-size:10px;color:var(--accent);background:rgba(212,165,116,.12);padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:500}
 .loot-group{margin-bottom:10px}
