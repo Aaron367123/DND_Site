@@ -130,7 +130,7 @@ registerPanel('battlemap',{
         const b = this._body;
         const stage = b && b.querySelector('#map-stage');
         if (stage){
-          const cs = this._cellSize;
+          const cs = this._csScreen();
           this._applyBg(stage, this._cols*cs, this._rows*cs);
         }
         this._render();
@@ -143,14 +143,20 @@ registerPanel('battlemap',{
   // Grow/shrink _cols and _rows so the grid covers the map at its current
   // displayed size. Called whenever a map is picked, the scale changes, or
   // the cell size changes. No-op when there's no map.
+  // Cell count is anchored to the NATURAL image size — independent of zoom.
+  // That way each grid cell continues to represent the same patch of map at
+  // any scale; it just gets bigger or smaller on screen with the image.
   _fitGridToBg(){
     if (!_mapBgImage || !this._bgMapNaturalW) return;
-    const scale = this._bgMapScale || 1;
-    const dispW = this._bgMapNaturalW * scale;
-    const dispH = this._bgMapNaturalH * scale;
     const cs = this._cellSize;
-    this._cols = Math.max(8, Math.ceil(dispW / cs));
-    this._rows = Math.max(6, Math.ceil(dispH / cs));
+    this._cols = Math.max(8, Math.ceil(this._bgMapNaturalW / cs));
+    this._rows = Math.max(6, Math.ceil(this._bgMapNaturalH / cs));
+  },
+
+  // On-screen pixel size of one grid cell at the current zoom level. When no
+  // map is loaded, scale is 1.0 (grid is drawn at the natural cellSize).
+  _csScreen(){
+    return this._cellSize * (_mapBgImage ? (this._bgMapScale || 1) : 1);
   },
 
   _drawAllStrokes(){
@@ -294,11 +300,19 @@ registerPanel('battlemap',{
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
       +'<div style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
-      +'<select id="map-size" style="width:70px;font-size:11px;padding:2px 4px;flex-shrink:0">'
-        +'<option value="40" '+(cs===40?'selected':'')+'>40px/5ft</option>'
-        +'<option value="50" '+(cs===50?'selected':'')+'>50px/5ft</option>'
-        +'<option value="64" '+(cs===64?'selected':'')+'>64px/5ft</option>'
-        +'<option value="80" '+(cs===80?'selected':'')+'>80px/10ft</option>'
+      +'<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'
+      +'<input type="number" id="map-size" min="8" max="400" step="1" value="'+cs+'" style="width:54px;font-size:11px;padding:2px 4px;flex-shrink:0" title="Cell size in pixels (try 30, 50, 64, 80, 100, 120…)">'
+      +'<select id="map-size-preset" style="width:34px;font-size:11px;padding:2px 1px;flex-shrink:0" title="Common sizes">'
+        +'<option value="">…</option>'
+        +'<option value="30">30</option>'
+        +'<option value="40">40</option>'
+        +'<option value="50">50</option>'
+        +'<option value="64">64</option>'
+        +'<option value="75">75</option>'
+        +'<option value="80">80</option>'
+        +'<option value="100">100</option>'
+        +'<option value="120">120</option>'
+        +'<option value="150">150</option>'
       +'</select>'
       +'<input type="color" id="map-bg-color" value="'+this._bgColor+'" style="width:28px;height:24px;padding:1px;border-radius:3px;cursor:pointer;flex-shrink:0" title="Background color">'
       +'<button class="btn" data-mact="pick-map" style="flex-shrink:0">🗺 Map</button>'
@@ -371,7 +385,9 @@ registerPanel('battlemap',{
     const b=this._body;if(!b)return;
     const canvas=b.querySelector('#map-canvas');
     const stage=b.querySelector('#map-stage');
-    const cs=this._cellSize;
+    // Use the on-screen cell size (scales with zoom) so the canvas, grid, and
+    // bg image always line up in the same coordinate space.
+    const cs=this._csScreen();
     const W=this._cols*cs, H=this._rows*cs;
 
     canvas.width=W; canvas.height=H;
@@ -462,9 +478,9 @@ registerPanel('battlemap',{
         const pi=+btn.dataset.pi;
         const p=state.party[pi];
         if(!p)return;
-        // Place at first empty slot in the top row, in pixel coords. We treat
-        // "row 0" as anything with y < cellSize.
-        const cs2=this._cellSize;
+        // Place at first empty slot in the top row, in stage-pixel coords.
+        // Use on-screen cellSize so placement scales with the current zoom.
+        const cs2=this._csScreen();
         const usedCols=new Set(this._tokens.filter(t=>t.y!=null && t.y<cs2).map(t=>Math.round(t.x/cs2 - 0.5)));
         let col=0; while(usedCols.has(col))col++;
         const newX=(col + 0.5)*cs2, newY=cs2/2;
@@ -474,8 +490,10 @@ registerPanel('battlemap',{
       }
     }));
 
-    b.querySelector('#map-size')?.addEventListener('change',e=>{
-      this._cellSize=parseInt(e.target.value);
+    const applySize = (val) => {
+      const n = parseInt(val);
+      if (!n || n < 8 || n > 400) return;
+      this._cellSize = n;
       if (_mapBgImage){
         // Map loaded: keep grid tight to the image at the new cell size.
         this._fitGridToBg();
@@ -488,6 +506,10 @@ registerPanel('battlemap',{
         }
       }
       this._saveMap();this._render();
+    };
+    b.querySelector('#map-size')?.addEventListener('change',e=>applySize(e.target.value));
+    b.querySelector('#map-size-preset')?.addEventListener('change',e=>{
+      if (e.target.value) applySize(e.target.value);
     });
     // Map size slider — only present when an image is loaded.
     // `input` fires continuously while dragging — keep it cheap (just resize
@@ -498,7 +520,7 @@ registerPanel('battlemap',{
       this._bgMapScale = parseFloat(e.target.value);
       this._isFitted = false; // manual zoom — panel resize should not re-fit
       const stageEl = b.querySelector('#map-stage');
-      if (stageEl){ const cs2=this._cellSize; this._applyBg(stageEl, this._cols*cs2, this._rows*cs2); }
+      if (stageEl){ const cs2=this._csScreen(); this._applyBg(stageEl, this._cols*cs2, this._rows*cs2); }
       const pct = b.querySelector('#map-bg-scale-pct');
       if (pct) pct.textContent = Math.round(this._bgMapScale*100)+'%';
     });
@@ -554,15 +576,16 @@ registerPanel('battlemap',{
       if(!this._tool||this._tool==='erase') return;
       const r=canvas.getBoundingClientRect();
       let cx=e.clientX-r.left, cy=e.clientY-r.top;
-      if(cx<0||cy<0||cx>this._cols*cs||cy>this._rows*cs) return;
+      const csClick = this._csScreen();
+      if(cx<0||cy<0||cx>this._cols*csClick||cy>this._rows*csClick) return;
       // Snap to grid cell center if snap is on (Shift inverts).
       const wantSnap = e.shiftKey ? !this._snapToGrid : this._snapToGrid;
       if (wantSnap){
-        cx = Math.floor(cx/cs)*cs + cs/2;
-        cy = Math.floor(cy/cs)*cs + cs/2;
+        cx = Math.floor(cx/csClick)*csClick + csClick/2;
+        cy = Math.floor(cy/csClick)*csClick + csClick/2;
       }
       // Dedupe: don't place a new token directly on top of an existing one.
-      if(this._tokens.find(t => Math.abs((t.x||0)-cx) < cs/2 && Math.abs((t.y||0)-cy) < cs/2)) return;
+      if(this._tokens.find(t => Math.abs((t.x||0)-cx) < csClick/2 && Math.abs((t.y||0)-cy) < csClick/2)) return;
       const isPC=this._tool==='add-pc';
       showModal((isPC?'Place PC':'Place NPC'),[
         {id:'label',label:'Name',type:'text',value:'',placeholder:isPC?'PC name':'Enemy name'}
@@ -643,7 +666,10 @@ registerPanel('battlemap',{
       // Cheap update: resize the bg image and the slider/% display in place,
       // then restore scroll so the same point stays under the cursor.
       const stageEl = b.querySelector('#map-stage');
-      if (stageEl) this._applyBg(stageEl, this._cols*this._cellSize, this._rows*this._cellSize);
+      if (stageEl){
+        const csNow = this._csScreen();
+        this._applyBg(stageEl, this._cols*csNow, this._rows*csNow);
+      }
       scrollEl.scrollLeft = imgX * newScale - cx;
       scrollEl.scrollTop  = imgY * newScale - cy;
       const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = newScale;
@@ -761,7 +787,10 @@ registerPanel('battlemap',{
         this._bgMapScale = newScale;
         this._scaleTokensTo(newScale);
         const stageEl = b.querySelector('#map-stage');
-        if (stageEl) this._applyBg(stageEl, this._cols*this._cellSize, this._rows*this._cellSize);
+        if (stageEl){
+          const csNow = this._csScreen();
+          this._applyBg(stageEl, this._cols*csNow, this._rows*csNow);
+        }
         scrollEl.scrollLeft = _touchPinch.imgX * newScale - _touchPinch.anchorX;
         scrollEl.scrollTop  = _touchPinch.imgY * newScale - _touchPinch.anchorY;
         // Re-position tokens visually in lockstep so they don't drift.
@@ -821,7 +850,9 @@ registerPanel('battlemap',{
       // Compute drop position in stage coordinates.
       const stageEl = b.querySelector('#map-stage');
       const sr = stageEl.getBoundingClientRect();
-      const cs2 = this._cellSize;
+      // On-screen cell size — scales with zoom so snap and bounds match the
+      // visible grid.
+      const cs2 = this._csScreen();
       let x = e.clientX - sr.left;
       let y = e.clientY - sr.top;
       const wantSnap = e.shiftKey ? !this._snapToGrid : this._snapToGrid;
@@ -906,7 +937,7 @@ registerPanel('battlemap',{
       this._bgMapPath = null;
       this._saveMap();
       const stage = this._body?.querySelector('#map-stage');
-      if (stage){ const cs=this._cellSize; this._applyBg(stage, this._cols*cs, this._rows*cs); }
+      if (stage){ const cs=this._csScreen(); this._applyBg(stage, this._cols*cs, this._rows*cs); }
       this._render();
       close();
     });
@@ -1169,7 +1200,8 @@ registerPanel('battlemap',{
     // Use a dedicated fog canvas layered above the grid canvas
     const stage=b.querySelector('#map-stage');if(!stage)return;
     let fogCanvas=stage.querySelector('#fog-canvas');
-    const cs=this._cellSize;
+    // Fog canvas matches the on-screen stage so cells overlay the visible grid.
+    const cs=this._csScreen();
     const W=this._cols*cs, H=this._rows*cs;
     if(!fogCanvas){
       fogCanvas=document.createElement('canvas');
@@ -1200,10 +1232,14 @@ registerPanel('battlemap',{
   _renderTokens(){
     const b=this._body;if(!b)return;
     const stage=b.querySelector('#map-stage');if(!stage)return;
-    const cs=this._cellSize;
+    // For fog-cell mapping and default placement we want the on-screen cell
+    // size (tokens are stored in stage-pixel coords). Visual diameter still
+    // uses the natural cellSize × scale via tokScale below.
+    const cs=this._csScreen();
     stage.querySelectorAll('.map-token').forEach(el=>el.remove());
 
     const tokScale = this._bgMapScale || 1;
+    const csNat = this._cellSize;
     // Player view: hide non-PC tokens that sit in unrevealed cells. The DM
     // sees everything regardless. Fog set is keyed by "gx,gy" — derive cell
     // from the token's pixel center.
@@ -1224,7 +1260,7 @@ registerPanel('battlemap',{
       const py=t.y;
       // Visual diameter scales with the bg image so tokens stay proportional
       // to the map at any zoom level.
-      const dim=(size*cs-4) * tokScale;
+      const dim=(size*csNat-4) * tokScale;
 
       const el=document.createElement('div');
       el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}`;
@@ -1400,7 +1436,9 @@ registerPanel('battlemap',{
 
   _syncParty(){
     let placed=0;
-    const cs=this._cellSize;
+    // Layout positions are in stage pixels — use the on-screen cell size so
+    // newly placed tokens land at the visible grid spacing.
+    const cs=this._csScreen();
     const source=state.combatants.filter(c=>c.isPC).length?state.combatants.filter(c=>c.isPC):state.party;
     source.forEach((c,i)=>{
       const name=c.name||c.label;
