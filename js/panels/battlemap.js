@@ -1139,12 +1139,14 @@ registerPanel('battlemap',{
       return allMapsPromise;
     };
 
-    const handlePick = async () => {
-      // If user is currently searching, search results take precedence over
-      // adventure selection.
-      if (searchInput.value.trim()){ runSearch(searchInput.value); return; }
+    // Load + render maps for whatever adventure is currently typed/picked.
+    // Always prefers an explicit adventure pick over a stale search query.
+    const loadPickedAdventure = async () => {
       const adv = resolveAdv(sel.value.trim());
       if (!adv){ grid.innerHTML = ''; return; }
+      // An explicit adventure pick should win over a leftover search query —
+      // clear the search box so the user sees that adventure's maps directly.
+      if (searchInput.value) searchInput.value = '';
       const advId = adv.id;
       if (!this._mapsByAdv[advId]){
         grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Loading maps…</div>';
@@ -1152,6 +1154,10 @@ registerPanel('battlemap',{
       }
       renderCards(this._mapsByAdv[advId] || [], { emptyMsg: 'No maps in this adventure.' });
     };
+    // Convenience wrapper used by the adventure-input listeners. Older code
+    // routed through handlePick which had a search-priority bail; we want
+    // explicit adventure picks to always work.
+    const handlePick = loadPickedAdventure;
 
     const runSearch = async (q) => {
       const qn = (q||'').toLowerCase().trim();
