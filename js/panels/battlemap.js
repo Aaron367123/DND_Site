@@ -8,6 +8,11 @@ registerPanel('battlemap',{
   title:'Battle Map',icon:'🗺',
   _tokens:[], _tool:'', _selected:null,
   _cellSize:50, _cols:24, _rows:18,
+  // Grid alignment offset (image-pixel space at scale 1). Lets the overlay
+  // grid line up with a printed grid on the loaded map. Two-click alignment
+  // tool sets these.
+  _gridOffsetX:0, _gridOffsetY:0,
+  _alignFirstClick:null,   // {ix, iy} in natural image-pixel coords
   _bgColor:'#1a2a1a',
   _drag:null,
   // Fog of war: Set of "col,row" strings that are REVEALED
@@ -62,6 +67,8 @@ registerPanel('battlemap',{
         this._showGrid = d.showGrid !== false; // default on
         this._bgMapScale = d.bgMapScale || 1;
         this._snapToGrid = !!d.snapToGrid;
+        this._gridOffsetX = d.gridOffsetX || 0;
+        this._gridOffsetY = d.gridOffsetY || 0;
       }
       // Migrate any tokens that still use grid-cell coords (gx, gy) to pixel
       // coords (x, y). New code stores tokens in stage pixels; the cellSize
@@ -109,7 +116,7 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY}));
     }catch(e){}
     this._broadcast();
   },
@@ -187,6 +194,48 @@ registerPanel('battlemap',{
     ctx.moveTo(p[p.length-4], p[p.length-3]);
     ctx.lineTo(p[p.length-2], p[p.length-1]);
     ctx.stroke();
+  },
+
+  // Distance from point (px,py) to the line segment (x1,y1)→(x2,y2).
+  _distToSegment(px, py, x1, y1, x2, y2){
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx*dx + dy*dy;
+    if (len2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = x1 + t * dx, cy = y1 + t * dy;
+    return Math.hypot(px - cx, py - cy);
+  },
+
+  // Eraser hit-test: walk every stored stroke, check the cursor against each
+  // segment. The first stroke whose closest segment is within the brush
+  // radius gets removed and the canvas is repainted. Returns true on a hit.
+  _eraseStrokeAt(x, y){
+    if (!this._drawings || !this._drawings.length) return false;
+    // Hit radius scales with the stroke width so thicker lines are also
+    // easier to grab. Floor of 8 screen-pixels regardless of zoom.
+    for (let i = this._drawings.length - 1; i >= 0; i--){
+      const s = this._drawings[i];
+      const p = s.p; if (!p || p.length < 2) continue;
+      const radius = Math.max(8, ((s.s || 4) * (this._bgMapScale || 1)) / 2 + 6);
+      let hit = false;
+      if (p.length === 2){
+        // Single-point stroke (a dot).
+        hit = Math.hypot(p[0] - x, p[1] - y) <= radius;
+      } else {
+        for (let j = 2; j < p.length; j += 2){
+          if (this._distToSegment(x, y, p[j-2], p[j-1], p[j], p[j+1]) <= radius){
+            hit = true; break;
+          }
+        }
+      }
+      if (hit){
+        this._drawings.splice(i, 1);
+        this._drawAllStrokes();
+        return true;
+      }
+    }
+    return false;
   },
 
   // Multiply every token's pixel position by (newScale / _lastTokenScale).
@@ -327,6 +376,24 @@ registerPanel('battlemap',{
   },
   _stopBroadcast(){try{this._bc?.close();}catch(e){}},
 
+  // Tiny circular marker shown at the first click during grid-align mode so
+  // the user can see what they anchored to before placing the second click.
+  _showAlignMarker(x, y){
+    const stage = this._body?.querySelector('#map-stage'); if (!stage) return;
+    this._removeAlignMarker();
+    const m = document.createElement('div');
+    m.id = 'align-marker';
+    m.style.cssText = 'position:absolute;left:'+x+'px;top:'+y+'px;width:14px;height:14px;'
+      + 'border:2px solid var(--accent);border-radius:50%;background:rgba(212,165,116,.25);'
+      + 'transform:translate(-50%,-50%);z-index:25;pointer-events:none;'
+      + 'box-shadow:0 0 8px rgba(212,165,116,.6)';
+    stage.appendChild(m);
+  },
+  _removeAlignMarker(){
+    const m = this._body?.querySelector('#align-marker');
+    if (m) m.remove();
+  },
+
   _broadcast(){
     try{
       if(!this._bc)return;
@@ -348,6 +415,10 @@ registerPanel('battlemap',{
     const oldScroll = b.querySelector('#map-scroll');
     const savedSx = oldScroll ? oldScroll.scrollLeft : 0;
     const savedSy = oldScroll ? oldScroll.scrollTop  : 0;
+    // Player-view detection — used to hide DM-only toolbar controls (fog,
+    // open-player) since players receive fog state via the broadcast and
+    // shouldn't be able to toggle/paint it.
+    const _isPlayer = document.body.classList.contains('player-mode');
     const cs=this._cellSize;
     const ft={40:5,50:5,64:5,80:10}[cs]||5;
     this._tool=this._tool==='move'?'add-pc':this._tool; // default to add-pc if somehow move
@@ -409,19 +480,25 @@ registerPanel('battlemap',{
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
       +'<button class="btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Show/hide grid overlay">⊞ Grid</button>'
       +'<button class="btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">🧲 Snap</button>'
+      +(_mapBgImage?'<button class="btn '+(this._tool==='align'?'active':'')+'" data-mact="tool-align" style="flex-shrink:0" title="Align grid to printed map grid: click two opposite corners of one cell">📐 Align</button>':'')
+      +((this._gridOffsetX||this._gridOffsetY)?'<button class="btn" data-mact="reset-align" style="flex-shrink:0" title="Reset grid alignment (offset back to 0,0)">↺</button>':'')
       +'<div style="flex:1"></div>'
       +'<button class="btn" data-mact="sync-combat" style="flex-shrink:0">↺ Sync</button>'
       +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
       +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">🗑 Drawings</button>'
-      // Fog of war controls
-      +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
-      +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">🌫 Fog</button>'
-      +(this._fog!==null?'<button class="btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">🖌 Reveal</button>':'')
-      +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:60px;flex-shrink:0" title="Brush size">':'')
-      +(this._fog!==null?'<button class="btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide everything">◼ Hide All</button>':'')
-      +(this._fog!==null?'<button class="btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal everything">◻ Show All</button>':'')
-      +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
-      +'<button class="btn" data-mact="open-player" style="flex-shrink:0" title="Open player view in new tab">📺 Player View</button>'
+      // Fog of war controls — DM-only. Players just receive the fog state
+      // through the broadcast/sync; they shouldn't be able to paint or
+      // toggle it themselves.
+      +(!_isPlayer
+        ? '<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
+          +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">🌫 Fog</button>'
+          +(this._fog!==null?'<button class="btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">🖌 Reveal</button>':'')
+          +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:60px;flex-shrink:0" title="Brush size">':'')
+          +(this._fog!==null?'<button class="btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide everything">◼ Hide All</button>':'')
+          +(this._fog!==null?'<button class="btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal everything">◻ Show All</button>':'')
+          +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
+          +'<button class="btn" data-mact="open-player" style="flex-shrink:0" title="Open player view in new tab">📺 Player View</button>'
+        : '')
     +'</div>';
 
     if(partyBtns){
@@ -495,7 +572,9 @@ registerPanel('battlemap',{
       stage.appendChild(drawCanvas);
     }
     drawCanvas.width = W; drawCanvas.height = H;
-    drawCanvas.style.pointerEvents = (this._tool === 'draw') ? 'auto' : 'none';
+    // Draw canvas needs to receive clicks for the pencil AND for the eraser
+    // (to remove strokes). Other tools/no-tool let clicks pass through.
+    drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase') ? 'auto' : 'none';
     this._drawAllStrokes();
     this._renderTokens();
 
@@ -511,6 +590,13 @@ registerPanel('battlemap',{
         const t=act.slice(5);
         // Toggle off if already active
         this._tool=this._tool===t?'':t;
+        // Reset alignment-tool transient state when leaving the mode.
+        if (this._tool !== 'align'){
+          this._alignFirstClick = null;
+          this._removeAlignMarker();
+        } else if (typeof showToast === 'function') {
+          showToast('Click two opposite corners of one cell on the printed grid.');
+        }
         // Full re-render so the toolbar reveals/hides tool-specific controls
         // (e.g. the draw color/size pickers) AND the draw canvas's
         // pointer-events flag flips with the new tool state. Without this the
@@ -537,6 +623,13 @@ registerPanel('battlemap',{
       }
       else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
       else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
+      else if(act==='reset-align'){
+        this._gridOffsetX=0; this._gridOffsetY=0;
+        this._alignFirstClick=null;
+        this._saveMap();
+        this._render();
+        if (typeof showToast==='function') showToast('Grid offset reset');
+      }
       else if(act==='clear-draw'){
         if (!this._drawings.length) return;
         showConfirm('Erase every pencil annotation on this map?', {title:'Clear drawings', confirmLabel:'Clear', danger:true}).then(ok=>{
@@ -625,16 +718,39 @@ registerPanel('battlemap',{
     b.querySelector('#draw-color')?.addEventListener('input',e=>{this._drawColor=e.target.value;});
     b.querySelector('#draw-size')?.addEventListener('change',e=>{this._drawSize=parseInt(e.target.value)||4;});
 
-    // Pencil — mousedown starts a stroke; subsequent mousemoves sample points
-    // and draw incrementally. Only active when the draw tool is selected
-    // (otherwise pointer-events:none on draw-canvas means we never see events).
+    // Pencil + eraser — mousedown starts an action; subsequent mousemoves
+    // continue it. Only active when draw/erase is selected (otherwise
+    // pointer-events:none on draw-canvas means we never see events).
     let _curStroke = null;
     drawCanvas.addEventListener('mousedown', e => {
-      if (this._tool !== 'draw' || e.button !== 0) return;
-      e.preventDefault(); e.stopPropagation();
+      if (e.button !== 0) return;
       const rect = drawCanvas.getBoundingClientRect();
       const x = Math.round(e.clientX - rect.left);
       const y = Math.round(e.clientY - rect.top);
+
+      if (this._tool === 'erase'){
+        e.preventDefault(); e.stopPropagation();
+        // Erase any stroke under the click. If nothing is hit, fall through
+        // (return) — token erasing is handled by token mousedown handlers.
+        let removed = this._eraseStrokeAt(x, y);
+        // Drag-to-erase: keep removing strokes the cursor passes over.
+        const onMove = ev => {
+          const mx = Math.round(ev.clientX - rect.left);
+          const my = Math.round(ev.clientY - rect.top);
+          if (this._eraseStrokeAt(mx, my)) removed = true;
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          if (removed) this._saveMap();
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        return;
+      }
+
+      if (this._tool !== 'draw') return;
+      e.preventDefault(); e.stopPropagation();
       _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
       this._drawings.push(_curStroke);
       const onMove = ev => {
@@ -658,15 +774,44 @@ registerPanel('battlemap',{
     });
     b.querySelector('#map-bg-color')?.addEventListener('change',e=>{this._bgColor=e.target.value;this._applyBg(stage,W,H);this._saveMap();});
     // Update stage cursor when fog tool active
-    if(this._fogTool) stage.style.cursor='crosshair';
+    if(this._fogTool || this._tool==='align') stage.style.cursor='crosshair';
     else stage.style.cursor='default';
 
     // Canvas click = place token when in add-pc/add-npc mode
     canvas.addEventListener('click',e=>{
       if(this._drag?.moved) return;
-      if(!this._tool||this._tool==='erase') return;
       const r=canvas.getBoundingClientRect();
       let cx=e.clientX-r.left, cy=e.clientY-r.top;
+      // Two-click grid alignment mode — click two opposite corners of one
+      // cell on the printed map grid; we infer cell size + offset from that.
+      if (this._tool === 'align' && _mapBgImage){
+        const scale = this._bgMapScale || 1;
+        const ix = cx / scale, iy = cy / scale; // image-pixel space
+        if (!this._alignFirstClick){
+          this._alignFirstClick = { ix, iy, cx, cy };
+          this._showAlignMarker(cx, cy);
+          if (typeof showToast === 'function') showToast('Now click the opposite corner of the same cell.');
+          return;
+        }
+        const a = this._alignFirstClick;
+        const dxImg = Math.abs(ix - a.ix), dyImg = Math.abs(iy - a.iy);
+        // Average so the user can pick imperfectly opposite corners. Round
+        // to integer pixels for a clean cellSize.
+        const newCs = Math.max(8, Math.round((dxImg + dyImg) / 2));
+        const minIx = Math.min(ix, a.ix), minIy = Math.min(iy, a.iy);
+        this._cellSize = newCs;
+        this._gridOffsetX = ((minIx % newCs) + newCs) % newCs;
+        this._gridOffsetY = ((minIy % newCs) + newCs) % newCs;
+        this._alignFirstClick = null;
+        this._tool = '';
+        this._removeAlignMarker();
+        this._fitGridToBg();
+        this._saveMap();
+        this._render();
+        if (typeof showToast === 'function') showToast('Grid aligned: ' + newCs + 'px cells');
+        return;
+      }
+      if(!this._tool||this._tool==='erase') return;
       const csClick = this._csScreen();
       if(cx<0||cy<0||cx>this._cols*csClick||cy>this._rows*csClick) return;
       // Snap to grid cell center if snap is on (Shift inverts).
@@ -1103,6 +1248,10 @@ registerPanel('battlemap',{
           this._bgMapPath = path;
           this._bgMapScale = 1;
           this._lastTokenScale = 1;
+          // Different maps have different printed grids — reset any previous
+          // alignment so the new map starts at the canonical origin.
+          this._gridOffsetX = 0;
+          this._gridOffsetY = 0;
           this._saveMap();
           this._loadBgFromPath(path, /*autoFit=*/true);
           close();
@@ -1244,11 +1393,15 @@ registerPanel('battlemap',{
 
     ctx.strokeStyle=gridColor;
     ctx.lineWidth=1;
-    for(let x=0;x<=this._cols;x++){
-      ctx.beginPath();ctx.moveTo(x*cs+.5,0);ctx.lineTo(x*cs+.5,H);ctx.stroke();
+    // Offsets are stored in image-pixel space; convert to on-screen pixels.
+    const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
+    const offX = (((this._gridOffsetX || 0) * scale) % cs + cs) % cs;
+    const offY = (((this._gridOffsetY || 0) * scale) % cs + cs) % cs;
+    for (let x = offX; x <= W + .01; x += cs){
+      ctx.beginPath(); ctx.moveTo(Math.round(x)+.5, 0); ctx.lineTo(Math.round(x)+.5, H); ctx.stroke();
     }
-    for(let y=0;y<=this._rows;y++){
-      ctx.beginPath();ctx.moveTo(0,y*cs+.5);ctx.lineTo(W,y*cs+.5);ctx.stroke();
+    for (let y = offY; y <= H + .01; y += cs){
+      ctx.beginPath(); ctx.moveTo(0, Math.round(y)+.5); ctx.lineTo(W, Math.round(y)+.5); ctx.stroke();
     }
     // Draw fog on top of grid
     this._drawFog();
