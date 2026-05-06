@@ -4,13 +4,14 @@
 registerPanel('loot',{
   title:'Loot Tracker',icon:'💰',
   _loot:null,
-  _view:'all',          // 'all' | 'member:<id>' | 'unassigned'
+  _view:'all',          // 'all' | 'member:<id>' | 'unassigned' | 'tabgroup:<id>'
   _searchQ:'',          // current text in the name/search input
   _searchOpen:false,    // dropdown visibility
   mount(body){
     this._body=body;
-    if(!this._loot){try{const r=localStorage.getItem('skt-loot-v1');this._loot=r?JSON.parse(r):{cp:0,sp:0,ep:0,gp:0,pp:0,items:[]};}catch(e){this._loot={cp:0,sp:0,ep:0,gp:0,pp:0,items:[]}}
+    if(!this._loot){try{const r=localStorage.getItem('skt-loot-v1');this._loot=r?JSON.parse(r):{cp:0,sp:0,ep:0,gp:0,pp:0,items:[],tabGroups:[]};}catch(e){this._loot={cp:0,sp:0,ep:0,gp:0,pp:0,items:[],tabGroups:[]}}
     if(!this._loot.items)this._loot.items=[];
+    if(!Array.isArray(this._loot.tabGroups))this._loot.tabGroups=[];
     // Migrate items to current shape: `claimed` → `assignedTo`. Drop the old
     // `group` text-tag field that no longer exists in the UI.
     this._loot.items.forEach(it => {
@@ -93,10 +94,146 @@ registerPanel('loot',{
       .concat(state.party.map(p => `<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`));
     return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Assign to party member">${opts.join('')}</select>`;
   },
+  // ── Custom tab groups (named bundles of party members) ────────────────────
+  _findTabGroup(id){ return (this._loot.tabGroups||[]).find(g => g.id === id) || null; },
+  // Items belonging to this tab group: those assigned to any of its members.
+  _itemsForTabGroup(group){
+    const set = new Set(group.memberIds||[]);
+    const out = [];
+    this._loot.items.forEach((item, i) => { if (set.has(item.assignedTo)) out.push({item, idx:i}); });
+    return out;
+  },
+  _renderTabGroupView(groupId){
+    const g = this._findTabGroup(groupId);
+    if (!g) return '<div class="empty-state">Group not found.</div>';
+    const matched = this._itemsForTabGroup(g);
+    if (!matched.length){
+      return `<div class="empty-state">No items assigned to anyone in <strong>${esc(g.name)}</strong> yet.</div>`;
+    }
+    const totalVal = matched.reduce((sum, {item}) => {
+      const q = parseInt(item.qty)||1;
+      return sum + this._parseGp(item.value) * q;
+    }, 0);
+    return `<div class="loot-group">
+      <div class="loot-group-head">
+        <span class="loot-group-icon">👥</span>
+        <span class="loot-group-name">${esc(g.name)}</span>
+        <span class="loot-group-meta">${matched.length} item${matched.length===1?'':'s'}${totalVal?` · ${totalVal.toFixed(2)} gp`:''}</span>
+      </div>
+      ${matched.map(({item, idx}) => this._itemRow(item, idx)).join('')}
+    </div>`;
+  },
+
+  // Modal: create or edit a tab group. Pass groupId to edit, or null to create.
+  _openTabGroupModal(groupId){
+    const editing = groupId ? this._findTabGroup(groupId) : null;
+    const initialName = editing?.name || '';
+    const initialMembers = new Set(editing?.memberIds || []);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const memberRows = state.party.length
+      ? state.party.map(p => `
+          <label class="cg-member">
+            <input type="checkbox" data-pid="${esc(p.id)}" ${initialMembers.has(p.id)?'checked':''}>
+            <span>${esc(p.name)}</span>
+          </label>`).join('')
+      : '<div style="font-size:11px;color:var(--text-muted)">Add party members in the Party panel first.</div>';
+
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:380px;max-width:92vw">
+      <h3>${editing?'Edit Custom Tab':'New Custom Tab'}</h3>
+      <div class="modal-fields">
+        <div class="modal-field">
+          <label>Tab name</label>
+          <input id="cg-name" type="text" value="${esc(initialName)}" placeholder="e.g. Frontline" autocomplete="off">
+        </div>
+        <div class="modal-field">
+          <label>Members in this tab</label>
+          <div class="cg-members">${memberRows}</div>
+        </div>
+      </div>
+      <div class="modal-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:14px">
+        ${editing ? '<button class="btn danger" id="cg-del" style="margin-right:auto">Delete</button>' : ''}
+        <button class="btn" id="cg-cancel">Cancel</button>
+        <button class="btn primary" id="cg-save">${editing?'Save':'Create'}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    setTimeout(()=> backdrop.querySelector('#cg-name')?.focus(), 30);
+
+    const saveAction = () => {
+      const name = (backdrop.querySelector('#cg-name')?.value||'').trim();
+      if (!name){ backdrop.querySelector('#cg-name')?.focus(); return; }
+      const memberIds = [...backdrop.querySelectorAll('.cg-members input[type=checkbox]:checked')]
+        .map(cb => cb.dataset.pid);
+      if (editing){
+        editing.name = name;
+        editing.memberIds = memberIds;
+      } else {
+        const id = 'tg_' + (typeof uid==='function' ? uid() : Math.random().toString(36).slice(2,10));
+        this._loot.tabGroups.push({ id, name, memberIds });
+        this._view = 'tabgroup:'+id;
+      }
+      this._save();
+      close();
+      this._render();
+    };
+    backdrop.querySelector('#cg-save').addEventListener('click', saveAction);
+    backdrop.querySelector('#cg-cancel').addEventListener('click', close);
+    backdrop.querySelector('#cg-del')?.addEventListener('click', () => {
+      this._loot.tabGroups = this._loot.tabGroups.filter(g => g.id !== editing.id);
+      if (this._view === 'tabgroup:'+editing.id) this._view = 'all';
+      this._save();
+      close();
+      this._render();
+    });
+    backdrop.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type === 'text'){
+        e.preventDefault(); saveAction();
+      } else if (e.key === 'Escape') close();
+    });
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+  },
+
+  // Find the matching 5e item entry for a given user-typed loot name. Tries
+  // an exact match against the top-level item list AND any of its bonus
+  // variants (+1/+2/+3) so "+1 Longsword" finds the Longsword entry.
+  _findFiveItem(name){
+    if (typeof _5eLoaded === 'undefined' || !_5eLoaded || !Array.isArray(_5eData)) return null;
+    const lower = (name||'').trim().toLowerCase();
+    if (!lower) return null;
+    for (const d of _5eData){
+      if (d.cat !== 'item') continue;
+      if (d.name.toLowerCase() === lower) return d;
+      if (d._variants){
+        for (const v of d._variants){
+          if (v.name && v.name.toLowerCase() === lower) return d;
+        }
+      }
+    }
+    return null;
+  },
+
+  // Open the same detail popout the global search uses. Falls back to a tiny
+  // toast for custom items the 5e library doesn't know about.
+  _openItemDetail(idx){
+    const item = this._loot.items[idx]; if (!item) return;
+    const match = this._findFiveItem(item.name);
+    if (match && typeof popOutDetail === 'function'){
+      popOutDetail(match);
+      return;
+    }
+    if (typeof showToast === 'function'){
+      showToast(`No 5e entry for "${item.name}" — custom item.`);
+    }
+  },
+
   _itemRow(item, i){
     const assignedName = this._memberName(item.assignedTo);
     return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}">
       <div class="loot-name">
+        <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">📖</button>
         <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="Click to rename" spellcheck="false">
         ${assignedName?`<span class="loot-assigned-pill">→ ${esc(assignedName)}</span>`:''}
       </div>
@@ -219,6 +356,17 @@ registerPanel('loot',{
             : `<span class="loot-tab-icon emoji">${esc(icon)}</span>`;
           return `<button class="loot-view-tab ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(p.name)}">${iconHtml}<span class="loot-tab-name">${esc(short)}</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         }).join('')}
+        ${(this._loot.tabGroups||[]).map(g => {
+          const cnt = this._itemsForTabGroup(g).length;
+          const key = 'tabgroup:'+g.id;
+          return `<button class="loot-view-tab tabgroup ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(g.name)} — ${(g.memberIds||[]).length} member(s)">
+            <span class="loot-tab-icon emoji">👥</span>
+            <span class="loot-tab-name">${esc(g.name)}</span>
+            ${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}
+            <span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">⚙</span>
+          </button>`;
+        }).join('')}
+        <button class="loot-view-tab loot-tab-add" data-tg-add="1" title="Create a custom tab grouping party members"><span class="loot-tab-icon emoji">＋</span><span class="loot-tab-name">Tab</span></button>
         ${(() => {
           // "Group" tab = shared / unassigned loot (treats items pointing at a
           // deleted party member as unassigned too).
@@ -230,6 +378,7 @@ registerPanel('loot',{
         ${(() => {
           if (view === 'unassigned') return this._renderMemberView('__unassigned__');
           if (view.startsWith('member:')) return this._renderMemberView(view.slice(7));
+          if (view.startsWith('tabgroup:')) return this._renderTabGroupView(view.slice(9));
           return this._renderAllView();
         })()}
       </div>
@@ -238,8 +387,20 @@ registerPanel('loot',{
     // Coins
     ['cp','sp','ep','gp','pp'].forEach(c=>{b.querySelector(`#loot-${c}`).addEventListener('change',e=>{this._loot[c]=parseInt(e.target.value)||0;this._save();this._render();});});
 
-    // View tabs
-    b.querySelectorAll('.loot-view-tab').forEach(tab=>tab.addEventListener('click',()=>{
+    // View tabs — including the "+ Tab" button (opens new-group modal) and the
+    // ⚙ icon inside each custom-tab chip (opens the edit modal for that tab).
+    b.querySelectorAll('.loot-view-tab').forEach(tab=>tab.addEventListener('click',e=>{
+      // ⚙ edit click — handle first so it doesn't also switch tabs.
+      const editBadge = e.target.closest('[data-tg-edit]');
+      if (editBadge){
+        e.stopPropagation();
+        this._openTabGroupModal(editBadge.dataset.tgEdit);
+        return;
+      }
+      if (tab.dataset.tgAdd){
+        this._openTabGroupModal(null);
+        return;
+      }
       this._view = tab.dataset.view; this._render();
     }));
 
@@ -280,13 +441,15 @@ registerPanel('loot',{
     // Initial dropdown paint (handles re-render after picking from dropdown)
     if (this._searchQ && this._searchOpen) this._renderSearchDropdown();
 
-    // Item delete
+    // Item actions: delete + info popup
     b.querySelectorAll('[data-lact]').forEach(el=>el.addEventListener('click',e=>{
       e.stopPropagation();
+      const i=+el.dataset.li;
       if(el.dataset.lact==='del'){
-        const i=+el.dataset.li;
         this._loot.items.splice(i,1);
         this._save();this._render();
+      } else if (el.dataset.lact==='info'){
+        this._openItemDetail(i);
       }
     }));
 
