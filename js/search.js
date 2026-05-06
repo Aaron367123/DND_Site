@@ -80,17 +80,73 @@ function renderSpellFull(d) {
   return html;
 }
 
-function renderItemFull(d) {
-  const r = d._raw || {};
-  const desc = Array.isArray(r.desc) ? r.desc.join('\n\n') : (r.desc||d.desc||'');
+// Renders just the stat-block + description for one item (the base or one of
+// its bonus variants). Used both standalone and as the tab body in
+// renderItemFull.
+function _renderItemBody(raw, fallbackDesc){
+  const r = raw || {};
+  const desc = Array.isArray(r.desc) ? r.desc.join('\n\n') : (r.desc||fallbackDesc||'');
   let html = '<div class="detail-statblock">';
-  if (r.value != null) html += _statRow('Cost', esc(String(r.value)+' GP'));
-  if (r.weight != null) html += _statRow('Weight', esc(String(r.weight)+' lb.'));
-  if (r.rarity && r.rarity !== 'unknown') html += _statRow('Rarity', esc(r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)));
+  if (r.value != null) html += _statRow('Cost', esc(String(r.value)));
+  if (r.weight != null) html += _statRow('Weight', esc(r.weight + (r.weight === 1 ? ' lb.' : ' lbs.')));
+  if (r.rarity && r.rarity !== 'unknown' && r.rarity !== 'none') html += _statRow('Rarity', esc(r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)));
   if (r.requires_attunement) html += _statRow('Attunement', typeof r.requires_attunement==='string'?esc(r.requires_attunement):'Required');
   html += '</div>';
   html += renderEntriesText(desc);
   return html;
+}
+
+function renderItemFull(d) {
+  const variants = d._variants || [];
+  // Tab payloads: base + each variant. Each entry has {label, raw, fallbackDesc}.
+  const tabs = [
+    { label: 'Base', raw: d._raw, fallbackDesc: d.desc },
+    ...variants.map(v => ({ label: v.label, raw: v._raw, fallbackDesc: '' })),
+  ];
+  if (tabs.length === 1){
+    // No variants — render just the stat block (no tab strip).
+    return _renderItemBody(d._raw, d.desc);
+  }
+  // Encode each variant body up-front and stash on data attributes so a tiny
+  // inline script can swap them on tab click without round-tripping through
+  // the search controller.
+  const bodies = tabs.map(t => _renderItemBody(t.raw, t.fallbackDesc));
+  // Use a unique id so multiple item detail views (search popup + popped-out
+  // window) don't clobber each other's tabs.
+  const id = 'itab-' + (renderItemFull._n = (renderItemFull._n || 0) + 1);
+  let html = `<div class="item-tabs" data-itab-root="${id}">`;
+  tabs.forEach((t, i) => {
+    html += `<button class="item-tab${i===0?' active':''}" data-itab="${id}" data-i="${i}">${esc(t.label)}</button>`;
+  });
+  html += '</div>';
+  html += `<div class="item-tab-body" id="${id}-body">${bodies[0]}</div>`;
+  // Stash bodies as base64 in a hidden script tag so a delegated click handler
+  // (wired below) can read them out.
+  html += `<script type="application/json" id="${id}-data">${JSON.stringify(bodies).replace(/</g,'\\u003c')}</script>`;
+  return html;
+}
+
+// One global click delegate handles every item-tab strip (search popup and
+// any popped-out windows). Tab click → swap the body element's HTML with the
+// stashed pre-rendered body for the clicked variant.
+if (!window._itemTabsWired){
+  window._itemTabsWired = true;
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.item-tab');
+    if (!btn) return;
+    const id = btn.dataset.itab; if (!id) return;
+    const idx = +btn.dataset.i;
+    const dataEl = document.getElementById(id + '-data');
+    const bodyEl = document.getElementById(id + '-body');
+    if (!dataEl || !bodyEl) return;
+    let bodies; try { bodies = JSON.parse(dataEl.textContent); } catch(_){ return; }
+    if (!bodies[idx]) return;
+    bodyEl.innerHTML = bodies[idx];
+    // Update active class on sibling tabs.
+    document.querySelectorAll(`.item-tab[data-itab="${id}"]`).forEach(el => {
+      el.classList.toggle('active', +el.dataset.i === idx);
+    });
+  });
 }
 
 // Psionic: Manifestation Time / Range / Duration / Target stats up top.
@@ -722,7 +778,14 @@ function doSearch(){
     // the normalized name or meta. So "frost gnt" still finds "Frost Giant".
     const tokens = q.split(' ').filter(Boolean);
     pool = pool.filter(r => {
-      const hay = _normSearch(r.name) + ' ' + _normSearch(r.meta||'');
+      let hay = _normSearch(r.name) + ' ' + _normSearch(r.meta||'');
+      // Items group their +1/+2/+3 enchantments under the base entry as
+      // _variants. Include those variant names in the searchable haystack so
+      // "+1 longsword" still finds the Longsword row (the user can then tab
+      // to the +1 view inside the detail).
+      if (r._variants && r._variants.length){
+        hay += ' ' + r._variants.map(v => _normSearch(v.name||'')).join(' ');
+      }
       return tokens.every(t => hay.includes(t));
     });
     pool.sort((a,b) => {

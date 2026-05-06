@@ -34,10 +34,23 @@ registerPanel('loot',{
   _searchItems(q){
     if (!q || typeof _5eLoaded === 'undefined' || !_5eLoaded || !Array.isArray(_5eData)) return [];
     const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-    return _5eData
-      .filter(d => d.cat === 'item')
-      .filter(d => tokens.every(t => (d.name+' '+(d.meta||'')).toLowerCase().includes(t)))
-      .slice(0, 20);
+    const matches = (name, meta) =>
+      tokens.every(t => (name+' '+(meta||'')).toLowerCase().includes(t));
+    const out = [];
+    for (const d of _5eData){
+      if (d.cat !== 'item') continue;
+      if (matches(d.name, d.meta)) out.push({name:d.name, meta:d.meta, _source:d._source});
+      // Items with bonus variants (+1, +2, +3) — include each variant as its
+      // own selectable row so the user can drop "+2 Longsword" directly
+      // into loot without having to retype the prefix.
+      if (d._variants){
+        for (const v of d._variants){
+          if (matches(v.name, v.meta)) out.push({name:v.name, meta:v.meta, _source:v._source||d._source});
+        }
+      }
+      if (out.length >= 20) break;
+    }
+    return out.slice(0, 20);
   },
 
   _renderSearchDropdown(){

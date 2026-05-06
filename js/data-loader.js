@@ -383,12 +383,23 @@ function _convertItem(d) {
   const attune = d.reqAttune
     ? (typeof d.reqAttune === 'string' ? d.reqAttune : 'attunement required')
     : null;
+  // 5etools stores value in copper pieces; render in the largest unit that
+  // doesn't lose precision (gp / sp / cp) for the stat block.
+  let valueStr = null;
+  if (typeof d.value === 'number'){
+    if (d.value >= 100 && d.value % 100 === 0) valueStr = (d.value/100) + ' gp';
+    else if (d.value >= 10 && d.value % 10 === 0) valueStr = (d.value/10) + ' sp';
+    else valueStr = d.value + ' cp';
+  }
   return {
     name: d.name, index: _toIndex(d.name), _source: d.source,
     reprintedAs: d.reprintedAs,
     page: d.page,
     rarity,
     requires_attunement: attune,
+    value: valueStr,
+    weight: d.weight != null ? d.weight : null,
+    type: d.type || null,
     desc: desc ? [desc] : [],
   };
 }
@@ -511,20 +522,147 @@ async function load5eData() {
     results.push(row);
   }
 
-  function addItem(d) {
-    if (!d.rarity || d.rarity === 'none') return; // skip mundane items
+  // Human-readable label for the 5etools single-letter item type code.
+  // Used to build the search meta line for mundane items (where rarity is
+  // "none" and "Rarity: None" would be useless).
+  const _ITEM_TYPE_LABEL = {
+    '$':'Treasure', 'A':'Ammunition', 'AF':'Ammunition (Futuristic)',
+    'AIR':'Vehicle (Air)', 'AT':"Artisan's Tools", 'EM':'Eldritch Machine',
+    'EXP':'Explosive', 'FD':'Food & Drink', 'G':'Adventuring Gear',
+    'GS':'Gaming Set', 'HA':'Heavy Armor', 'IDG':'Illegal Drug',
+    'INS':'Instrument', 'LA':'Light Armor', 'M':'Melee Weapon',
+    'MA':'Medium Armor', 'MNT':'Mount', 'OTH':'Other', 'P':'Potion',
+    'R':'Ranged Weapon', 'RD':'Rod', 'RG':'Ring', 'S':'Shield',
+    'SC':'Scroll', 'SCF':'Spellcasting Focus', 'SHP':'Vehicle (Water)',
+    'T':'Tool', 'TAH':'Tack & Harness', 'TG':'Trade Good',
+    'VEH':'Vehicle (Land)', 'WD':'Wand',
+  };
+  function _itemMeta(d, r){
+    // Magic items: show rarity (capitalized) + attunement marker.
+    if (r.rarity && r.rarity !== 'none' && r.rarity !== 'unknown'){
+      return r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)
+        + (r.requires_attunement?' · Attunement':'');
+    }
+    // Mundane items: show item type. Strip any "|SOURCE" suffix on type codes.
+    const typeCode = (d.type || '').split('|')[0];
+    return _ITEM_TYPE_LABEL[typeCode] || 'Item';
+  }
+  function addItem(d, variants) {
     const key = 'item:'+d.name.toLowerCase()+'|'+(d.source||'').toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertItem(d);
     const row = {
       cat:'item', name:d.name, _slug:r.index, _fromLocal:true,
-      meta: r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)+(r.requires_attunement?' · Attunement':''),
+      meta: _itemMeta(d, r),
       _source:d.source,
       _raw:r,
     };
+    // Bonus-enchantment variants (+1 / +2 / +3) live alongside the base under
+    // the same search entry. Each `_variants` element stores a label, full
+    // raw data, and meta so the detail view can render tabs and swap the
+    // stat block in place.
+    if (variants && variants.length){
+      row._variants = variants.map(v => {
+        const cr = _convertItem(v.merged);
+        return {
+          label: v.label,
+          name: v.merged.name,
+          _source: v.merged.source,
+          _raw: cr,
+          meta: _itemMeta(v.merged, cr),
+        };
+      });
+    }
     _applyFluff('item', d.name, d.source, row);
     results.push(row);
+  }
+
+  // ─── Magic variant generator ─────────────────────────────────────────────
+  // 5etools generates magic items dynamically by combining base items from
+  // items-base.json with templates from magicvariants.json (e.g. "+1
+  // Longsword" = base "Longsword" + variant "+1 Weapon (Melee)"). We mirror
+  // a simplified version of that pipeline so the search picks up the
+  // thousands of pre-named magic-weapon/magic-armor variants players actually
+  // expect to see.
+  function _variantMatchesBase(req, base){
+    // req is one entry from variant.requires[]. Each key must match base.
+    // Keys we care about: type ("M"/"R"/"HA"/etc.), weapon, weaponCategory,
+    // armor, etc. Type can include a "|SOURCE" filter.
+    for (const k in req){
+      const want = req[k];
+      let have = base[k];
+      if (k === 'type'){
+        // type may be "HA" or "HA|XPHB". Plain code matches any source.
+        const [wType, wSrc] = String(want).split('|');
+        const [bType] = String(have||'').split('|');
+        if (wType !== bType) return false;
+        if (wSrc && (base.source||'').toUpperCase() !== wSrc.toUpperCase()) return false;
+      } else if (typeof want === 'boolean'){
+        if (!!have !== want) return false;
+      } else if (Array.isArray(want)){
+        if (!want.includes(have)) return false;
+      } else {
+        if (have !== want) return false;
+      }
+    }
+    return true;
+  }
+  function _applyVariant(base, variant){
+    // Merge variant.inherits into a clone of base; apply name prefix/suffix.
+    const inh = variant.inherits || {};
+    const merged = { ...base, ...inh };
+    delete merged.namePrefix; delete merged.nameSuffix;
+    const namePrefix = inh.namePrefix || '';
+    const nameSuffix = inh.nameSuffix || '';
+    merged.name = namePrefix + base.name + nameSuffix;
+    // Variant's source wins; keep base's type/properties otherwise.
+    merged.source = inh.source || base.source;
+    // 5etools entry templates use {=propName} to splice merged properties
+    // into descriptions (e.g. "{=bonusWeapon}" → "+1"). Resolve them here so
+    // the rendered description reads cleanly.
+    const sub = (s) => String(s).replace(/\{=(\w+)(?:\/[^}]*)?\}/g,
+      (_, p) => (merged[p] != null ? String(merged[p]) : ''));
+    const walk = (e) => {
+      if (typeof e === 'string') return sub(e);
+      if (Array.isArray(e)) return e.map(walk);
+      if (e && typeof e === 'object'){
+        const out = {};
+        for (const k in e) out[k] = walk(e[k]);
+        return out;
+      }
+      return e;
+    };
+    if (merged.entries) merged.entries = walk(merged.entries);
+    return merged;
+  }
+  function expandMagicVariants(baseItems, variants){
+    const out = [];
+    (variants || []).forEach(v => {
+      const reqs = Array.isArray(v.requires) ? v.requires : [];
+      if (!reqs.length || !v.inherits) return;
+      // 5etools `excludes` is sometimes a single object, sometimes an array
+      // of objects. Each entry, ANY key match → exclude. Keys here use
+      // arrays-as-OR rather than the AND semantics of `requires`.
+      const excludesList = Array.isArray(v.excludes) ? v.excludes
+                         : (v.excludes ? [v.excludes] : []);
+      const isExcluded = (b) => excludesList.some(ex => {
+        for (const k in ex){
+          const want = ex[k];
+          const have = b[k];
+          if (Array.isArray(want)){ if (want.includes(have)) return true; }
+          else if (have === want) return true;
+        }
+        return false;
+      });
+      baseItems.forEach(b => {
+        if (isExcluded(b)) return;
+        if (reqs.some(r => _variantMatchesBase(r, b))){
+          out.push(_applyVariant(b, v));
+        }
+      });
+    });
+    return out;
   }
 
   function addFeat(d) {
@@ -664,13 +802,15 @@ async function load5eData() {
   const _fluffUniquePaths = [...new Set(_FLUFF_SPECS.map(s => s.path))];
 
   // Step 2: fetch all data files in parallel
-  const [bestiaries, spellbooks, classBooks, classFluffBooks, conditionFiles, itemFile, featFile, refFiles, bestiaryFluffs, adventureBooks, fluffFiles] = await Promise.all([
+  const [bestiaries, spellbooks, classBooks, classFluffBooks, conditionFiles, itemFile, baseItemFile, magicVariantFile, featFile, refFiles, bestiaryFluffs, adventureBooks, fluffFiles] = await Promise.all([
     Promise.all(bestiaryFiles.map(fetchFile)),
     Promise.all(spellFiles.map(fetchFile)),
     Promise.all(classFiles.map(fetchFile)),
     Promise.all(classFluffFiles.map(fetchFile)),
     Promise.all(_CONDITION_FILES.map(fetchFile)),
     fetchFile('data/items.json'),
+    fetchFile('data/items-base.json'),
+    fetchFile('data/magicvariants.json'),
     fetchFile('data/feats.json'),
     Promise.all(_refUniquePaths.map(fetchFile)),
     Promise.all(bestiaryFluffFiles.map(fetchFile)),
@@ -783,7 +923,57 @@ async function load5eData() {
   _allRawMonsters.forEach(d => addMonster(d._copy ? _resolveCopy(d, _monsterByKey, 0) : d));
   spellbooks.forEach(json     => json && (json.spell      ||[]).forEach(addSpell));
   conditionFiles.forEach(json => { if (!json) return; (json.condition||[]).forEach(addCondition); });
-  if (itemFile) (itemFile.item||[]).forEach(addItem);
+  if (itemFile) (itemFile.item||[]).forEach(d => addItem(d));
+  // Base items: mundane gear / weapons / armor / tools.
+  const baseItems = (baseItemFile?.baseitem) || [];
+
+  if (magicVariantFile){
+    const allVariants = magicVariantFile.magicvariant || [];
+    // Split bonus enchantments ("+1 …", "+2 …", "+3 …") from named variants
+    // (Adamantine, Mariner's, etc.). Bonus variants get attached as tabs to
+    // their base item; named variants become standalone search entries.
+    const bonusRe = /^\+\d+\s/;
+    const bonusVariants = allVariants.filter(v => bonusRe.test(v.name||''));
+    const namedVariants = allVariants.filter(v => !bonusRe.test(v.name||''));
+
+    // Add each base item with its matching bonus variants attached as tabs.
+    baseItems.forEach(b => {
+      // Dedupe by tab label — both DMG and XDMG carry "+1 Weapon", but the
+      // user only wants one "+1" tab. The first match wins.
+      const byLabel = new Map();
+      bonusVariants.forEach(v => {
+        const reqs = Array.isArray(v.requires) ? v.requires : [];
+        if (!reqs.length || !v.inherits) return;
+        const excludesList = Array.isArray(v.excludes) ? v.excludes
+                           : (v.excludes ? [v.excludes] : []);
+        const excluded = excludesList.some(ex => {
+          for (const k in ex){
+            const want = ex[k]; const have = b[k];
+            if (Array.isArray(want)){ if (want.includes(have)) return true; }
+            else if (have === want) return true;
+          }
+          return false;
+        });
+        if (excluded) return;
+        if (!reqs.some(r => _variantMatchesBase(r, b))) return;
+        // Pull the "+N" label out of the variant name (e.g. "+1 Weapon" → "+1").
+        const m = (v.name||'').match(/^(\+\d+)/);
+        const label = m ? m[1] : v.name;
+        if (byLabel.has(label)) return;
+        byLabel.set(label, { label, merged: _applyVariant(b, v) });
+      });
+      // Sort tabs ascending: +1, +2, +3, etc.
+      const matched = [...byLabel.values()].sort(
+        (a,b) => parseInt(a.label) - parseInt(b.label)
+      );
+      addItem(b, matched);
+    });
+
+    // Standalone named variants (Adamantine Weapon, Mariner's Armor, etc.).
+    expandMagicVariants(baseItems, namedVariants).forEach(d => addItem(d));
+  } else {
+    baseItems.forEach(d => addItem(d));
+  }
   if (featFile) (featFile.feat||[]).forEach(addFeat);
 
   // Classes, subclasses, and class/subclass features.

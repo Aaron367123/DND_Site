@@ -51,6 +51,11 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .search-tab{flex:1;padding:7px 8px;background:transparent;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
 .search-tab:hover{color:var(--text)} .search-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .search-tab .count{color:var(--text-dim);font-size:10px;margin-left:3px}
+/* Item-detail variant tabs — Base / +1 / +2 / +3 strip above the stat block. */
+.item-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--panel-2);margin-bottom:10px;border-radius:4px 4px 0 0;overflow:hidden;flex-wrap:wrap}
+.item-tab{padding:6px 12px;background:transparent;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;font-weight:500;letter-spacing:.02em}
+.item-tab:hover{color:var(--text);background:var(--panel-3)}
+.item-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--panel-3)}
 .search-tab.secondary{display:none}
 .search-tabs.expanded .search-tab.secondary{display:block;flex:1 0 25%}
 .search-tab.more-toggle{flex:0 0 auto;padding:7px 12px;color:var(--text-muted)}

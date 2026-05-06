@@ -209,6 +209,55 @@ registerPanel('battlemap',{
     this._lastTokenScale = newScale;
   },
 
+  // Resize the stage + every canvas in place and redraw the grid/strokes/fog/
+  // tokens at the given scale. Used by the wheel/pinch zoom paths so a live
+  // zoom is glitch-free without forcing an innerHTML rebuild.
+  // Caller is responsible for already having set this._bgMapScale and run
+  // _scaleTokensTo so token coords are at the new scale.
+  _applyZoomTransform(scale){
+    const b = this._body; if (!b) return;
+    const stage  = b.querySelector('#map-stage'); if (!stage) return;
+    const grid   = b.querySelector('#map-canvas');
+    const drawC  = b.querySelector('#draw-canvas');
+    const csNow  = this._csScreen();
+    const W      = this._cols * csNow;
+    const H      = this._rows * csNow;
+
+    stage.style.width  = W + 'px';
+    stage.style.height = H + 'px';
+    this._applyBg(stage, W, H);
+
+    if (grid){
+      grid.width = W; grid.height = H;
+      this._drawGrid(grid, csNow);
+    }
+    if (drawC){
+      drawC.width = W; drawC.height = H;
+      this._drawAllStrokes();
+    }
+    if (this._fog !== null) this._drawFog();
+
+    // Token DOM positions/sizes — tokens use stage-pixel coords (already
+    // scaled in _scaleTokensTo) and visual diameter = natural cellSize × scale.
+    const csNat = this._cellSize;
+    b.querySelectorAll('.map-token').forEach(el => {
+      const t = this._tokens.find(x => x.id === el.dataset.tid);
+      if (!t || t.x == null) return;
+      el.style.left = t.x + 'px';
+      el.style.top  = t.y + 'px';
+      const sz = t.size || 1;
+      const dim = (sz * csNat - 4) * scale;
+      const fontSize = (sz > 1 ? 13 : Math.max(8, 11 - (t.label.length > 5 ? 2 : 0))) * scale;
+      el.style.width  = dim + 'px';
+      el.style.height = dim + 'px';
+      el.style.fontSize = fontSize + 'px';
+    });
+
+    // Keep the toolbar slider/% display in sync.
+    const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = scale;
+    const pct    = b.querySelector('#map-bg-scale-pct'); if (pct) pct.textContent = Math.round(scale*100)+'%';
+  },
+
   // Fit-to-view: pick the largest scale that makes the map fully fit inside
   // the current panel viewport, then refit grid + render.
   _fitMapToView(){
@@ -225,16 +274,54 @@ registerPanel('battlemap',{
     this._fitGridToBg();
     this._isFitted = true; // panel resize will re-fit until the user manually zooms
     this._saveMap();
-    this._render();
+    // Glitch-free fit: in-place size every layer instead of an innerHTML
+    // rebuild that would briefly flash the empty stage.
+    this._applyZoomTransform(this._bgMapScale);
   },
 
-  // BroadcastChannel — lets a player view tab receive updates
+  // BroadcastChannel — lets a player view tab receive live updates from the
+  // DM tab in the same browser. Faster than the Firebase localStorage path
+  // (which only fires on _saveMap, i.e. fog mouseup), so fog reveals while
+  // dragging show up frame-by-frame in the player view.
   _bc: null,
   _startBroadcast(){
     try{
       this._bc=new BroadcastChannel('skt-battlemap');
-      this._bc.onmessage=ev=>{
-        // DM view ignores incoming — only sends
+      const isPlayer = document.body.classList.contains('player-mode');
+      this._bc.onmessage = ev => {
+        if (!isPlayer) return; // DM tab only sends; ignore its own echoes
+        const msg = ev.data; if (!msg) return;
+        // Apply incoming state directly. Avoid a full _render() — that would
+        // tear down the canvas and cause a visible flicker on every fog
+        // sample. For typical paint events we just need the fog canvas and
+        // the token positions repainted in place.
+        const prevPath = this._bgMapPath;
+        if (msg.tokens)   this._tokens   = msg.tokens;
+        if (msg.cellSize) this._cellSize = msg.cellSize;
+        if (msg.cols)     this._cols     = msg.cols;
+        if (msg.rows)     this._rows     = msg.rows;
+        if (msg.bgColor)  this._bgColor  = msg.bgColor;
+        this._fog = msg.fog ? new Set(msg.fog) : null;
+        if (msg.bgMapPath !== undefined) this._bgMapPath = msg.bgMapPath;
+
+        // Map path changed → reload the bg image, then full re-render so the
+        // canvas is sized to the new map.
+        if (msg.bgMapPath && msg.bgMapPath !== prevPath){
+          if (this._loadBgFromPath) this._loadBgFromPath(this._bgMapPath);
+          return; // _loadBgFromPath triggers _render() on image load
+        }
+        // Map was cleared on the DM side → drop the cached image and re-render
+        // so the player sees the empty background instead of stale art.
+        if (!msg.bgMapPath && prevPath){
+          _mapBgImage = null;
+          if (this._render) this._render();
+          return;
+        }
+        // Lightweight repaint — fog + tokens only. No flicker.
+        if (this._body){
+          this._drawFog();
+          this._renderTokens();
+        }
       };
     }catch(e){}
   },
@@ -424,7 +511,12 @@ registerPanel('battlemap',{
         const t=act.slice(5);
         // Toggle off if already active
         this._tool=this._tool===t?'':t;
-        b.querySelectorAll('[data-mact^="tool-"]').forEach(el=>el.classList.toggle('active',el.dataset.mact==='tool-'+this._tool));
+        // Full re-render so the toolbar reveals/hides tool-specific controls
+        // (e.g. the draw color/size pickers) AND the draw canvas's
+        // pointer-events flag flips with the new tool state. Without this the
+        // pencil tool can't catch clicks because the canvas above it stays
+        // pointer-events:none.
+        this._render();
       }
       else if(act==='sync-combat') this._syncParty();
       else if(act==='clear-tokens'){
@@ -512,23 +604,22 @@ registerPanel('battlemap',{
       if (e.target.value) applySize(e.target.value);
     });
     // Map size slider — only present when an image is loaded.
-    // `input` fires continuously while dragging — keep it cheap (just resize
-    // the bg-image and update the % label). `change` fires once on release —
-    // that's when we refit the grid to the new image size and re-render so
-    // grid lines catch up.
+    // `input` fires continuously while dragging; `change` fires on release.
+    // Both run the same comprehensive in-place update — no innerHTML thrash,
+    // so the slider drag stays smooth and there's no settle-flicker.
     b.querySelector('#map-bg-scale')?.addEventListener('input',e=>{
-      this._bgMapScale = parseFloat(e.target.value);
-      this._isFitted = false; // manual zoom — panel resize should not re-fit
-      const stageEl = b.querySelector('#map-stage');
-      if (stageEl){ const cs2=this._csScreen(); this._applyBg(stageEl, this._cols*cs2, this._rows*cs2); }
+      const newScale = parseFloat(e.target.value);
+      this._isFitted = false;
+      this._scaleTokensTo(newScale);
+      this._bgMapScale = newScale;
+      this._applyZoomTransform(newScale);
       const pct = b.querySelector('#map-bg-scale-pct');
-      if (pct) pct.textContent = Math.round(this._bgMapScale*100)+'%';
+      if (pct) pct.textContent = Math.round(newScale*100)+'%';
     });
     b.querySelector('#map-bg-scale')?.addEventListener('change',()=>{
-      this._scaleTokensTo(this._bgMapScale);
-      this._fitGridToBg();
+      // Persist on release. _applyZoomTransform during the drag already kept
+      // every visual layer in sync.
       this._saveMap();
-      this._render();
     });
     b.querySelector('#fog-radius')?.addEventListener('input',e=>{this._fogRadius=parseInt(e.target.value)||1;});
     b.querySelector('#draw-color')?.addEventListener('input',e=>{this._drawColor=e.target.value;});
@@ -659,43 +750,22 @@ registerPanel('battlemap',{
       this._bgMapScale = newScale;
       this._isFitted = false; // manual zoom — panel resize should not re-fit
       // Update token positions in lockstep so they stay anchored to the map
-      // during the wheel spin. _scaleTokensTo updates _lastTokenScale, so the
-      // debounced refit below is idempotent.
+      // during the wheel spin.
       this._scaleTokensTo(newScale);
 
-      // Cheap update: resize the bg image and the slider/% display in place,
-      // then restore scroll so the same point stays under the cursor.
-      const stageEl = b.querySelector('#map-stage');
-      if (stageEl){
-        const csNow = this._csScreen();
-        this._applyBg(stageEl, this._cols*csNow, this._rows*csNow);
-      }
+      // Comprehensive in-place update: resize stage + every canvas + redraw
+      // the grid, strokes, fog, tokens. No innerHTML thrash, so the zoom is
+      // fluid and there's no settle-flicker when the wheel timer fires.
+      this._applyZoomTransform(newScale);
       scrollEl.scrollLeft = imgX * newScale - cx;
       scrollEl.scrollTop  = imgY * newScale - cy;
       const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = newScale;
       const pct    = b.querySelector('#map-bg-scale-pct'); if (pct) pct.textContent = Math.round(newScale*100)+'%';
-      // Live-update token DOM positions and sizes so they don't drift or
-      // mis-scale during the wheel.
-      b.querySelectorAll('.map-token').forEach(el => {
-        const t = this._tokens.find(x => x.id === el.dataset.tid);
-        if (!t || t.x == null) return;
-        el.style.left = t.x+'px';
-        el.style.top  = t.y+'px';
-        const sz  = t.size || 1;
-        const dim = (sz*this._cellSize - 4) * newScale;
-        el.style.width  = dim+'px';
-        el.style.height = dim+'px';
-      });
 
-      // Heavy work — refit grid, save, full re-render — debounced so a
-      // continuous wheel-scroll doesn't thrash innerHTML on every tick.
+      // Just persist the new state on settle — no full _render needed since
+      // every visual layer was already updated above.
       clearTimeout(_wheelTimer);
-      _wheelTimer = setTimeout(() => {
-        this._scaleTokensTo(this._bgMapScale);
-        this._fitGridToBg();
-        this._saveMap();
-        this._render();
-      }, 180);
+      _wheelTimer = setTimeout(() => { this._saveMap(); }, 180);
     }, { passive:false });
 
     // Pan: middle-click drag, right-click drag, or left-click drag on empty
@@ -786,24 +856,10 @@ registerPanel('battlemap',{
         if (!_mapBgImage) return;
         this._bgMapScale = newScale;
         this._scaleTokensTo(newScale);
-        const stageEl = b.querySelector('#map-stage');
-        if (stageEl){
-          const csNow = this._csScreen();
-          this._applyBg(stageEl, this._cols*csNow, this._rows*csNow);
-        }
+        // Same in-place comprehensive update as the wheel path.
+        this._applyZoomTransform(newScale);
         scrollEl.scrollLeft = _touchPinch.imgX * newScale - _touchPinch.anchorX;
         scrollEl.scrollTop  = _touchPinch.imgY * newScale - _touchPinch.anchorY;
-        // Re-position tokens visually in lockstep so they don't drift.
-        b.querySelectorAll('.map-token').forEach(el => {
-          const tok = this._tokens.find(x => x.id === el.dataset.tid);
-          if (!tok || tok.x == null) return;
-          el.style.left = tok.x+'px';
-          el.style.top  = tok.y+'px';
-          const sz  = tok.size || 1;
-          const dim = (sz*this._cellSize - 4) * newScale;
-          el.style.width  = dim+'px';
-          el.style.height = dim+'px';
-        });
       } else if (_touchPan && e.touches.length === 1){
         const t = e.touches[0];
         const dx = t.clientX - _touchPan.startX, dy = t.clientY - _touchPan.startY;
@@ -817,12 +873,9 @@ registerPanel('battlemap',{
     }, { passive: false });
     const endTouch = () => {
       if (_touchPinch){
-        // Commit the new scale: refit the grid + save + final render so token
-        // positions snap into place at the new scale.
-        this._scaleTokensTo(this._bgMapScale);
-        this._fitGridToBg();
+        // Persist the new scale. No full _render — _applyZoomTransform during
+        // the pinch already updated every visual layer.
         this._saveMap();
-        this._render();
       }
       _touchPan = null;
       _touchPinch = null;
