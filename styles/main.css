@@ -875,11 +875,16 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .loot-search-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .loot-search-src{font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px;flex-shrink:0}
 .loot-search-meta{font-size:10px;color:var(--text-muted);flex-shrink:0}
-.loot-view-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0}
-.loot-view-tab{padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.loot-view-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
+.loot-view-tab{padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:5px}
 .loot-view-tab:hover{color:var(--text)}
 .loot-view-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.loot-tab-count{font-size:9px;color:var(--text-dim);background:var(--panel-3);padding:1px 5px;border-radius:8px;font-weight:600;letter-spacing:.02em}
+.loot-view-tab.active .loot-tab-count{color:var(--accent);background:rgba(212,165,116,.12)}
+.loot-item .loot-grp{width:80px;font-size:10px;padding:2px 6px;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:3px}
 .loot-item .loot-assign{width:120px;font-size:10px;padding:2px 4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer}
+.loot-group-pill{display:inline-block;font-size:10px;color:var(--text-muted);background:var(--panel-3);padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:500;border:1px solid var(--border)}
+.loot-add-row #loot-new-grp{width:80px}
 .loot-item.assigned{border-left:3px solid var(--accent)}
 .loot-assigned-pill{display:inline-block;font-size:10px;color:var(--accent);background:rgba(212,165,116,.12);padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:500}
 .loot-group{margin-bottom:10px}
