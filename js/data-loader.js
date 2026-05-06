@@ -33,7 +33,16 @@ function _stripTags(str) {
     .replace(/\{@recharge\}/g,         '(Recharge 6)')
     .replace(/\{@chance (\d+)[^}]*\}/g, '$1%')
     .replace(/\{@(?:damage|dice|scaledice|scaledamage)\s+([^|}]+)[^}]*\}/g, '$1')
-    .replace(/\{@(?:condition|spell|creature|item|sense|skill|action|ability|race|class|feat|background|disease|status|object|vehicle|reward|hazard|encounter|table|area|filter)\s+([^|}]+)[^}]*\}/gi, (_, p) => p.charAt(0).toUpperCase()+p.slice(1))
+    .replace(/\{@(?:condition|spell|creature|item|sense|skill|action|ability|race|class|feat|background|disease|status|object|vehicle|reward|hazard|encounter|table|area|filter)\s+([^}]+)\}/gi, (_, body) => {
+      // 5etools "link" tags use a {@tag NAME|SOURCE|DISPLAY} pipe format. If
+      // an explicit display text is given (3rd segment, non-empty), prefer
+      // that — e.g. "{@creature Blink Dog||blink dogs}" → "blink dogs".
+      const parts = body.split('|');
+      const display = (parts[2] || '').trim();
+      if (display) return display;
+      const name = (parts[0] || '').trim();
+      return name ? name.charAt(0).toUpperCase()+name.slice(1) : '';
+    })
     .replace(/\{@(?:b|bold)\s+([^}]+)\}/g,   '\x06$1\x06')
     .replace(/\{@(?:i|italic)\s+([^}]+)\}/g, '\x05$1\x05')
     .replace(/\{@(?:s|strike|u|sup|sub|kbd|code)\s+([^}]+)\}/g, '$1')
@@ -400,6 +409,22 @@ function _convertItem(d) {
     value: valueStr,
     weight: d.weight != null ? d.weight : null,
     type: d.type || null,
+    // Type-specific stats — surfaced in the stat block when present.
+    // Weapons: damage dice, damage type, property codes, weapon class.
+    dmg1: d.dmg1 || null,
+    dmg2: d.dmg2 || null,
+    dmgType: d.dmgType || null,
+    property: Array.isArray(d.property) ? d.property : null,
+    weaponCategory: d.weaponCategory || null,
+    range: d.range || null,
+    // Armor: AC, stealth disadvantage, minimum strength requirement.
+    ac: d.ac != null ? d.ac : null,
+    armor: d.armor || null,
+    stealth: d.stealth || null,
+    strength: d.strength || null,
+    // Mounts / vehicles / containers.
+    speed: d.speed != null ? d.speed : null,
+    carryingCapacity: d.carryingCapacity != null ? d.carryingCapacity : null,
     desc: desc ? [desc] : [],
   };
 }

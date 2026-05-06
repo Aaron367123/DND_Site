@@ -80,6 +80,18 @@ function renderSpellFull(d) {
   return html;
 }
 
+// 5etools weapon-property single-letter codes → human label.
+const _ITEM_PROP_LABEL = {
+  'A':'Ammunition','AF':'Ammunition (Futuristic)','BF':'Burst Fire','F':'Finesse',
+  'H':'Heavy','L':'Light','LD':'Loading','R':'Reach','RLD':'Reload','S':'Special',
+  'T':'Thrown','2H':'Two-Handed','V':'Versatile','RN':'Range','M':'Mounted',
+};
+const _ITEM_DMG_TYPE_LABEL = {
+  'A':'acid','B':'bludgeoning','C':'cold','F':'fire','O':'force','L':'lightning',
+  'N':'necrotic','P':'piercing','I':'poison','Y':'psychic','R':'radiant','S':'slashing',
+  'T':'thunder',
+};
+
 // Renders just the stat-block + description for one item (the base or one of
 // its bonus variants). Used both standalone and as the tab body in
 // renderItemFull.
@@ -91,6 +103,41 @@ function _renderItemBody(raw, fallbackDesc){
   if (r.weight != null) html += _statRow('Weight', esc(r.weight + (r.weight === 1 ? ' lb.' : ' lbs.')));
   if (r.rarity && r.rarity !== 'unknown' && r.rarity !== 'none') html += _statRow('Rarity', esc(r.rarity.charAt(0).toUpperCase()+r.rarity.slice(1)));
   if (r.requires_attunement) html += _statRow('Attunement', typeof r.requires_attunement==='string'?esc(r.requires_attunement):'Required');
+
+  // Weapons: damage dice + type, properties, range.
+  if (r.dmg1 || r.dmg2 || r.dmgType){
+    const dmgType = r.dmgType ? (_ITEM_DMG_TYPE_LABEL[r.dmgType] || r.dmgType) : '';
+    const parts = [];
+    if (r.dmg1) parts.push(r.dmg1 + (dmgType ? ' '+dmgType : ''));
+    if (r.dmg2) parts.push('('+r.dmg2+(dmgType ? ' '+dmgType : '')+', versatile)');
+    html += _statRow('Damage', esc(parts.join(' ')));
+  }
+  if (r.weaponCategory) {
+    html += _statRow('Weapon', esc(r.weaponCategory.charAt(0).toUpperCase()+r.weaponCategory.slice(1)));
+  }
+  if (r.range) html += _statRow('Range', esc(r.range + ' ft.'));
+  if (Array.isArray(r.property) && r.property.length){
+    const labels = r.property.map(p => {
+      const code = String(p).split('|')[0]; // strip "|SOURCE" suffix
+      return _ITEM_PROP_LABEL[code] || code;
+    });
+    html += _statRow('Properties', esc(labels.join(', ')));
+  }
+
+  // Armor: AC, stealth disadvantage, strength requirement.
+  // Shields list their AC as a bonus (+2); armor lists it as the value (16).
+  if (r.ac != null){
+    const typeCode = (r.type||'').split('|')[0];
+    const isShield = typeCode === 'S';
+    html += _statRow('Armor Class', esc(isShield ? '+'+r.ac : String(r.ac)));
+  }
+  if (r.strength) html += _statRow('Min. Strength', esc('Str ' + r.strength));
+  if (r.stealth) html += _statRow('Stealth', 'Disadvantage');
+
+  // Mounts, vehicles, animals: speed and carrying capacity.
+  if (r.speed != null) html += _statRow('Speed', esc(r.speed + ' ft.'));
+  if (r.carryingCapacity != null) html += _statRow('Carrying Capacity', esc(r.carryingCapacity + ' lb.'));
+
   html += '</div>';
   html += renderEntriesText(desc);
   return html;
@@ -328,8 +375,11 @@ function renderLanguageFull(d) {
   let html = '<div class="detail-statblock">';
   if (r.type) html += _statRow('Type', esc(r.type.charAt(0).toUpperCase()+r.type.slice(1)));
   if (r.script) html += _statRow('Script', esc(r.script));
-  if (Array.isArray(r.typicalSpeakers) && r.typicalSpeakers.length) html += _statRow('Typical Speakers', esc(r.typicalSpeakers.join(', ')));
-  if (Array.isArray(r.dialects) && r.dialects.length) html += _statRow('Dialects', esc(r.dialects.join(', ')));
+  // typicalSpeakers/dialects come straight from the raw 5etools data and may
+  // contain {@creature ...} link tags — strip those to plain text first.
+  const stripper = (typeof _stripTags === 'function') ? _stripTags : (s => String(s||''));
+  if (Array.isArray(r.typicalSpeakers) && r.typicalSpeakers.length) html += _statRow('Typical Speakers', esc(r.typicalSpeakers.map(stripper).join(', ')));
+  if (Array.isArray(r.dialects) && r.dialects.length) html += _statRow('Dialects', esc(r.dialects.map(stripper).join(', ')));
   html += '</div>';
   if (d.desc) html += renderEntriesText(d.desc);
   return html;
@@ -1021,6 +1071,10 @@ function renderSearchDetail(){
     })()}
   </div>`;
 
+  // Scroll back to the top so the detail view always starts at the title,
+  // never at whatever position the user had scrolled the result list to.
+  container.scrollTop = 0;
+
   document.getElementById('detail-back')?.addEventListener('click',()=>{state.searchState.detail=null;renderSearchResults();});
   document.getElementById('detail-popout')?.addEventListener('click',()=>popOutDetail(d));
   wireDetailActions(d, container, suffix, closeSearch);
@@ -1042,6 +1096,11 @@ function closeSearch(){
   document.getElementById('search-popup').classList.remove('open');
   document.getElementById('search-wrap')?.classList.remove('open');
   state.searchState.detail=null;
+  // Clear the previous query so re-opening the search starts blank.
+  state.searchState.query='';
+  state.searchState.focused=-1;
+  const inp = document.getElementById('search-input');
+  if (inp) inp.value='';
 }
 function initSearch(){
   // Start loading 5etools data in the background immediately

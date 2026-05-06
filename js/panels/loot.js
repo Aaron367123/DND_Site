@@ -4,17 +4,18 @@
 registerPanel('loot',{
   title:'Loot Tracker',icon:'💰',
   _loot:null,
-  _view:'all',          // 'all' | 'byMember' | 'byGroup'
+  _view:'all',          // 'all' | 'member:<id>' | 'unassigned'
   _searchQ:'',          // current text in the name/search input
   _searchOpen:false,    // dropdown visibility
   mount(body){
     this._body=body;
     if(!this._loot){try{const r=localStorage.getItem('skt-loot-v1');this._loot=r?JSON.parse(r):{cp:0,sp:0,ep:0,gp:0,pp:0,items:[]};}catch(e){this._loot={cp:0,sp:0,ep:0,gp:0,pp:0,items:[]}}
     if(!this._loot.items)this._loot.items=[];
-    // Migrate items to current shape: `claimed` → `assignedTo`, ensure `group`.
+    // Migrate items to current shape: `claimed` → `assignedTo`. Drop the old
+    // `group` text-tag field that no longer exists in the UI.
     this._loot.items.forEach(it => {
       if (it.assignedTo === undefined) it.assignedTo = null;
-      if (it.group === undefined) it.group = '';
+      if ('group' in it) delete it.group;
     });}
     this._render();
     // Refresh the dropdown once 5e data finishes loading so suggestions appear
@@ -92,19 +93,12 @@ registerPanel('loot',{
       .concat(state.party.map(p => `<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`));
     return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Assign to party member">${opts.join('')}</select>`;
   },
-  // Distinct group names already in use, for the autocomplete datalist.
-  _groupNames(){
-    const set = new Set();
-    (this._loot.items||[]).forEach(it => { if (it.group) set.add(it.group); });
-    return [...set].sort();
-  },
   _itemRow(item, i){
     const assignedName = this._memberName(item.assignedTo);
     return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}">
-      <div class="loot-name">${esc(item.name)}${assignedName?` <span class="loot-assigned-pill">→ ${esc(assignedName)}</span>`:''}${item.group?` <span class="loot-group-pill">${esc(item.group)}</span>`:''}</div>
+      <div class="loot-name">${esc(item.name)}${assignedName?` <span class="loot-assigned-pill">→ ${esc(assignedName)}</span>`:''}</div>
       <input type="number" class="loot-qty" value="${item.qty||1}" min="1" data-lfield="qty" data-li="${i}" title="Quantity">
       <input type="text" class="loot-val" value="${esc(item.value||'')}" data-lfield="value" data-li="${i}" placeholder="gp val" title="Value">
-      <input type="text" class="loot-grp" list="loot-group-list" value="${esc(item.group||'')}" data-lfield="group" data-li="${i}" placeholder="Group" title="Group / category">
       ${this._assignSelect(item, i)}
       <button class="btn icon-btn danger" data-lact="del" data-li="${i}" title="Remove">×</button>
     </div>`;
@@ -135,18 +129,18 @@ registerPanel('loot',{
   // showing the count + total gp value.
   _renderMemberView(memberId){
     const member = memberId === '__unassigned__'
-      ? {name:'Unassigned', icon:'❔'}
+      ? {name:'Group (shared loot)', icon:'📦'}
       : state.party.find(p => p.id === memberId);
     if (!member) return '<div class="empty-state">Member not found.</div>';
     const matched = [];
     this._loot.items.forEach((item, i) => {
-      // Items assigned to a deleted/missing party member fall through to
-      // "Unassigned" so they don't disappear from the UI entirely.
+      // Items assigned to a deleted/missing party member fall through to the
+      // shared/group bucket so they don't disappear from the UI entirely.
       const key = this._isAssignedTo(item.assignedTo) ? item.assignedTo : '__unassigned__';
       if (key === memberId) matched.push({item, idx:i});
     });
     if (!matched.length){
-      return `<div class="empty-state">No items ${memberId==='__unassigned__'?'unassigned':'assigned to '+esc(member.name)}.</div>`;
+      return `<div class="empty-state">${memberId==='__unassigned__'?'No shared/group loot — all items are assigned.':'No items assigned to '+esc(member.name)+'.'}</div>`;
     }
     const totalVal = matched.reduce((sum, {item}) => {
       const q = parseInt(item.qty)||1;
@@ -165,53 +159,17 @@ registerPanel('loot',{
     </div>`;
   },
 
-  _renderByGroupView(){
-    if (!this._loot.items.length) return '<div class="empty-state">No items yet. Add loot above.</div>';
-    // Bucket items by their `group` field. Empty group → "Ungrouped".
-    const groups = new Map();
-    this._loot.items.forEach((item, i) => {
-      const key = (item.group||'').trim() || '__ungrouped__';
-      if (!groups.has(key)) groups.set(key, {name: key === '__ungrouped__' ? 'Ungrouped' : item.group, items: []});
-      groups.get(key).items.push({item, idx:i});
-    });
-    // Stable order: named groups alphabetically, "Ungrouped" last.
-    const sortedKeys = [...groups.keys()].sort((a, b) => {
-      if (a === '__ungrouped__') return 1;
-      if (b === '__ungrouped__') return -1;
-      return a.localeCompare(b);
-    });
-    let out = '';
-    sortedKeys.forEach(key => {
-      const g = groups.get(key);
-      const totalVal = g.items.reduce((sum, {item}) => {
-        const q = parseInt(item.qty)||1;
-        return sum + this._parseGp(item.value) * q;
-      }, 0);
-      out += `<div class="loot-group">
-        <div class="loot-group-head">
-          <span class="loot-group-icon">📦</span>
-          <span class="loot-group-name">${esc(g.name)}</span>
-          <span class="loot-group-meta">${g.items.length} item${g.items.length===1?'':'s'}${totalVal?` · ${totalVal.toFixed(2)} gp`:''}</span>
-        </div>
-        ${g.items.map(({item, idx}) => this._itemRow(item, idx)).join('')}
-      </div>`;
-    });
-    return out;
-  },
-
   // ── Add an item (manual or from search) ──────────────────────────────────────
   _addManualItem(){
     const b = this._body; if (!b) return;
     const nameInp = b.querySelector('#loot-new-name');
     const qtyInp  = b.querySelector('#loot-new-qty');
     const valInp  = b.querySelector('#loot-new-val');
-    const grpInp  = b.querySelector('#loot-new-grp');
     const name = (nameInp?.value||'').trim();
     if (!name) { nameInp?.focus(); return; }
     const qty = Math.max(1, parseInt(qtyInp?.value)||1);
     const value = (valInp?.value||'').trim();
-    const group = (grpInp?.value||'').trim();
-    this._loot.items.push({id:uid(), name, qty, value, group, assignedTo:null});
+    this._loot.items.push({id:uid(), name, qty, value, assignedTo:null});
     this._save();
     this._searchQ = ''; this._searchOpen = false;
     this._render();
@@ -230,7 +188,6 @@ registerPanel('loot',{
         Per party member: <strong style="color:var(--warning)">${state.party.length?(totalGp/state.party.length).toFixed(2):totalGp} gp</strong>
         <button class="btn small" id="loot-divvy" style="float:right;margin-top:-2px">Divvy up</button>
       </div>
-      <datalist id="loot-group-list">${this._groupNames().map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
       <div class="loot-add-row">
         <div class="loot-search-wrap">
           <input type="text" id="loot-new-name" placeholder="Item name or 🔎 search 5e items..." autocomplete="off" value="${esc(this._searchQ)}">
@@ -238,26 +195,31 @@ registerPanel('loot',{
         </div>
         <input type="number" id="loot-new-qty" value="1" min="1" placeholder="Qty">
         <input type="text" id="loot-new-val" placeholder="Value">
-        <input type="text" id="loot-new-grp" list="loot-group-list" placeholder="Group">
         <button class="btn small primary" id="loot-add-item">Add</button>
       </div>
       <div class="loot-view-tabs">
-        <button class="loot-view-tab ${view==='all'?'active':''}" data-view="all">All (${this._loot.items.length})</button>
+        <button class="loot-view-tab ${view==='all'?'active':''}" data-view="all" title="All items">All${this._loot.items.length?` <span class="loot-tab-count">${this._loot.items.length}</span>`:''}</button>
         ${state.party.map(p => {
           const cnt = this._loot.items.filter(it => it.assignedTo === p.id).length;
           const key = 'member:'+p.id;
-          return `<button class="loot-view-tab ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(p.name)}">${esc(p.name)}${cnt?` <span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          // Trim long names down to just the first word ("Zindle 'Deathwhistle'
+          // Farrago" → "Zindle"). Full name lives on the title attribute.
+          const short = (p.name||'').split(/\s+/)[0] || p.name;
+          const icon = p.icon || '👤';
+          const iconHtml = typeof icon==='string' && icon.startsWith('data:')
+            ? `<img class="loot-tab-icon" src="${esc(icon)}">`
+            : `<span class="loot-tab-icon emoji">${esc(icon)}</span>`;
+          return `<button class="loot-view-tab ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(p.name)}">${iconHtml}<span class="loot-tab-name">${esc(short)}</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         }).join('')}
         ${(() => {
-          // Treat items assigned to a deleted member as unassigned for counting.
+          // "Group" tab = shared / unassigned loot (treats items pointing at a
+          // deleted party member as unassigned too).
           const cnt = this._loot.items.filter(it => !this._isAssignedTo(it.assignedTo)).length;
-          return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned">Unassigned${cnt?` <span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Shared / group loot"><span class="loot-tab-icon emoji">📦</span><span class="loot-tab-name">Group</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         })()}
-        <button class="loot-view-tab ${view==='byGroup'?'active':''}" data-view="byGroup">By Group</button>
       </div>
       <div class="loot-items">
         ${(() => {
-          if (view === 'byGroup') return this._renderByGroupView();
           if (view === 'unassigned') return this._renderMemberView('__unassigned__');
           if (view.startsWith('member:')) return this._renderMemberView(view.slice(7));
           return this._renderAllView();
@@ -320,18 +282,17 @@ registerPanel('loot',{
       }
     }));
 
-    // Field changes (qty, value, group, assignedTo)
+    // Field changes (qty, value, assignedTo)
     b.querySelectorAll('[data-lfield]').forEach(inp=>{
       inp.addEventListener('change', e => {
         const i=+e.target.dataset.li, f=e.target.dataset.lfield;
         let v = e.target.value;
         if (f==='qty') v = Math.max(1, parseInt(v)||1);
         else if (f==='assignedTo') v = v || null;
-        else if (f==='group') v = (v||'').trim();
         this._loot.items[i][f]=v;
         this._save();
-        // Re-render so pills / grouping / totals refresh.
-        if (f==='assignedTo' || f==='qty' || f==='group') this._render();
+        // Re-render so pills / counts / totals refresh.
+        if (f==='assignedTo' || f==='qty') this._render();
       });
     });
 
