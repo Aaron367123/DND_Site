@@ -94,6 +94,63 @@ registerPanel('loot',{
       .concat(state.party.map(p => `<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`));
     return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Assign to party member">${opts.join('')}</select>`;
   },
+  // ── Drag-to-reorder ──────────────────────────────────────────────────────
+  // Wires HTML5 drag events on every visible item row so the user can drag a
+  // row up or down to change its position in the underlying items list. Works
+  // in any view (All / per-member / per-group / custom-tab) because every row
+  // carries its absolute index in `data-i`.
+  _wireRowDrag(){
+    const b = this._body; if (!b) return;
+    b.querySelectorAll('.loot-item').forEach(row => {
+      row.addEventListener('dragstart', e => {
+        // Don't start a drag if the user grabbed an editable control —
+        // they're trying to interact with it, not move the row.
+        if (e.target.closest('input,select,textarea,button')) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/x-skt-loot-idx', row.dataset.i);
+        row.classList.add('dragging');
+      });
+      row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        b.querySelectorAll('.loot-item.drop-before,.loot-item.drop-after')
+          .forEach(el => el.classList.remove('drop-before','drop-after'));
+      });
+      row.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('application/x-skt-loot-idx')) return;
+        e.preventDefault();
+        const r = row.getBoundingClientRect();
+        const before = e.clientY < r.top + r.height/2;
+        row.classList.toggle('drop-before', before);
+        row.classList.toggle('drop-after', !before);
+      });
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drop-before','drop-after');
+      });
+      row.addEventListener('drop', e => {
+        const fromStr = e.dataTransfer.getData('application/x-skt-loot-idx');
+        if (!fromStr) return;
+        e.preventDefault();
+        const from = parseInt(fromStr);
+        const targetIdx = parseInt(row.dataset.i);
+        row.classList.remove('drop-before','drop-after');
+        if (isNaN(from) || isNaN(targetIdx) || from === targetIdx) return;
+        const r = row.getBoundingClientRect();
+        const before = e.clientY < r.top + r.height/2;
+        let insertAt = before ? targetIdx : targetIdx + 1;
+        // Removing the source first shifts every later index down by one.
+        if (from < insertAt) insertAt--;
+        const arr = this._loot.items;
+        const [moved] = arr.splice(from, 1);
+        arr.splice(insertAt, 0, moved);
+        this._save();
+        this._render();
+      });
+    });
+  },
+
   // ── Custom tab groups (named bundles of party members) ────────────────────
   _findTabGroup(id){ return (this._loot.tabGroups||[]).find(g => g.id === id) || null; },
   // Items belonging to this tab group: those assigned to any of its members.
@@ -231,7 +288,8 @@ registerPanel('loot',{
 
   _itemRow(item, i){
     const assignedName = this._memberName(item.assignedTo);
-    return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}">
+    return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}" draggable="true">
+      <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
       <div class="loot-name">
         <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">📖</button>
         <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="Click to rename" spellcheck="false">
@@ -511,6 +569,9 @@ registerPanel('loot',{
       backdrop.addEventListener('keydown', e => { if (e.key==='Escape') close(); });
       setTimeout(()=>backdrop.querySelector('#divvy-ok')?.focus(), 30);
     });
+
+    // Drag-to-reorder on every item row.
+    this._wireRowDrag();
 
     // Restore the items-list scroll position after the new DOM is wired up,
     // so re-renders (qty / assignment change) feel in-place.
