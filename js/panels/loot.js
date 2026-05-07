@@ -27,10 +27,26 @@ registerPanel('loot',{
   unmount(){this._body=null;},
   _save(){try{localStorage.setItem('skt-loot-v1',JSON.stringify(this._loot));}catch(e){}},
 
+  // Resolve an `assignedTo` id to a display name. Works for both party-member
+  // ids and custom tab-group ids; returns null for unassigned / orphaned.
   _memberName(id){
     if (!id) return null;
     const p = state.party.find(p => p.id === id);
-    return p ? p.name : null;
+    if (p) return p.name;
+    const g = (this._loot.tabGroups||[]).find(g => g.id === id);
+    return g ? g.name : null;
+  },
+  // True if assigning to this id is a custom tab group (vs a party member).
+  _assignedToGroup(id){
+    return !!(this._loot.tabGroups||[]).find(g => g.id === id);
+  },
+  // Does this item belong in the given member's tab? Either directly assigned
+  // to them, or assigned to a custom group that contains them.
+  _itemBelongsToMember(item, memberId){
+    if (!memberId) return false;
+    if (item.assignedTo === memberId) return true;
+    const g = (this._loot.tabGroups||[]).find(g => g.id === item.assignedTo);
+    return !!(g && Array.isArray(g.memberIds) && g.memberIds.includes(memberId));
   },
 
   // ── 5e item search ───────────────────────────────────────────────────────────
@@ -90,9 +106,19 @@ registerPanel('loot',{
 
   // ── List rendering ───────────────────────────────────────────────────────────
   _assignSelect(item, idx){
-    const opts = ['<option value="">— Unassigned —</option>']
-      .concat(state.party.map(p => `<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`));
-    return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Assign to party member">${opts.join('')}</select>`;
+    const opts = ['<option value="">— Unassigned —</option>'];
+    state.party.forEach(p => {
+      opts.push(`<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`);
+    });
+    const groups = this._loot.tabGroups || [];
+    if (groups.length){
+      opts.push('<optgroup label="Custom groups">');
+      groups.forEach(g => {
+        opts.push(`<option value="${esc(g.id)}"${item.assignedTo===g.id?' selected':''}>👥 ${esc(g.name)}</option>`);
+      });
+      opts.push('</optgroup>');
+    }
+    return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Assign to party member or custom group">${opts.join('')}</select>`;
   },
   // ── Drag-to-reorder ──────────────────────────────────────────────────────
   // Wires HTML5 drag events on every visible item row so the user can drag a
@@ -153,11 +179,16 @@ registerPanel('loot',{
 
   // ── Custom tab groups (named bundles of party members) ────────────────────
   _findTabGroup(id){ return (this._loot.tabGroups||[]).find(g => g.id === id) || null; },
-  // Items belonging to this tab group: those assigned to any of its members.
+  // Items belonging to this tab group: directly assigned to the group, OR
+  // assigned to any of its member ids.
   _itemsForTabGroup(group){
-    const set = new Set(group.memberIds||[]);
+    const memberSet = new Set(group.memberIds||[]);
     const out = [];
-    this._loot.items.forEach((item, i) => { if (set.has(item.assignedTo)) out.push({item, idx:i}); });
+    this._loot.items.forEach((item, i) => {
+      if (item.assignedTo === group.id || memberSet.has(item.assignedTo)){
+        out.push({item, idx:i});
+      }
+    });
     return out;
   },
   _renderTabGroupView(groupId){
@@ -319,9 +350,13 @@ registerPanel('loot',{
     if (!this._loot.items.length) return '<div class="empty-state">No items yet. Add loot above.</div>';
     return this._loot.items.map((item,i)=>this._itemRow(item,i)).join('');
   },
-  // True if this assignedTo value still points at a current party member.
+  // True if this assignedTo value still resolves to a current party member or
+  // a custom tab group (i.e. it's a real, non-orphan assignment).
   _isAssignedTo(assignedTo){
-    return !!assignedTo && state.party.some(p => p.id === assignedTo);
+    if (!assignedTo) return false;
+    if (state.party.some(p => p.id === assignedTo)) return true;
+    if ((this._loot.tabGroups||[]).some(g => g.id === assignedTo)) return true;
+    return false;
   },
   // One-member view: just the rows assigned to that member, with a header
   // showing the count + total gp value.
@@ -332,10 +367,13 @@ registerPanel('loot',{
     if (!member) return '<div class="empty-state">Member not found.</div>';
     const matched = [];
     this._loot.items.forEach((item, i) => {
-      // Items assigned to a deleted/missing party member fall through to the
-      // shared/group bucket so they don't disappear from the UI entirely.
-      const key = this._isAssignedTo(item.assignedTo) ? item.assignedTo : '__unassigned__';
-      if (key === memberId) matched.push({item, idx:i});
+      // Unassigned bucket: any item that doesn't resolve to a real assignee.
+      if (memberId === '__unassigned__'){
+        if (!this._isAssignedTo(item.assignedTo)) matched.push({item, idx:i});
+        return;
+      }
+      // Member tab: item is for them directly, OR for a custom group they're in.
+      if (this._itemBelongsToMember(item, memberId)) matched.push({item, idx:i});
     });
     if (!matched.length){
       return `<div class="empty-state">${memberId==='__unassigned__'?'No shared/group loot — all items are assigned.':'No items assigned to '+esc(member.name)+'.'}</div>`;
@@ -403,7 +441,7 @@ registerPanel('loot',{
       <div class="loot-view-tabs">
         <button class="loot-view-tab ${view==='all'?'active':''}" data-view="all" title="All items">All${this._loot.items.length?` <span class="loot-tab-count">${this._loot.items.length}</span>`:''}</button>
         ${state.party.map(p => {
-          const cnt = this._loot.items.filter(it => it.assignedTo === p.id).length;
+          const cnt = this._loot.items.filter(it => this._itemBelongsToMember(it, p.id)).length;
           const key = 'member:'+p.id;
           // Trim long names down to just the first word ("Zindle 'Deathwhistle'
           // Farrago" → "Zindle"). Full name lives on the title attribute.
