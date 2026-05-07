@@ -887,13 +887,7 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .loot-search-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .loot-search-src{font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px;flex-shrink:0}
 .loot-search-meta{font-size:10px;color:var(--text-muted);flex-shrink:0}
-.loot-view-tabs{display:flex;flex-wrap:wrap;gap:6px;padding:5px 6px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0;align-items:center}
-/* Each section keeps its own tabs clustered (and wraps internally if too wide
-   instead of mixing with adjacent sections' tabs on a single line). */
-.loot-tab-section{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
-.loot-tab-section.party{padding:0 6px;background:rgba(255,255,255,.02);border-radius:4px;border:1px dashed var(--border)}
-.loot-tab-section.custom{padding:0 4px}
-.loot-tab-section + .loot-tab-section::before{content:'';display:none}
+.loot-view-tabs{display:flex;flex-wrap:wrap;gap:3px;padding:5px 6px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0}
 .loot-view-tab{padding:3px 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;min-height:24px;max-width:100%}
 .loot-view-tab:hover{color:var(--text);background:var(--panel-3)}
 .loot-view-tab.active{color:var(--accent);background:var(--panel-3);border-color:rgba(212,165,116,.3)}
