@@ -15,9 +15,10 @@ registerPanel('party',{
   _render(){
     const b=this._body;if(!b)return;
     b.innerHTML='<div class="party-grid">'+state.party.map((c,i)=>this._card(c,i)).join('')+'</div>'
-      +'<div style="padding:0 10px 10px;display:flex;gap:6px">'
+      +'<div style="padding:0 10px 10px;display:flex;gap:6px;flex-wrap:wrap">'
       +'<button class="btn small" data-act="add">+ Add character</button>'
       +'<button class="btn small" data-act="import-pdf" title="Import a D&D Beyond character sheet">📄 Import PDF</button>'
+      +(state.party.length?'<button class="btn small" data-act="party-skills" title="See who is proficient, half-proficient, or has expertise in each skill">📊 Party Skills</button>':'')
       +'</div>';
     this._wire();
   },
@@ -285,7 +286,7 @@ registerPanel('party',{
     let listHtml = '';
     if (sh.spells?.length){
       listHtml = '<div class="sheet-block"><h5>Known Spells (' + sh.spells.length + ')</h5><div class="sheet-spell-list">'
-        + sh.spells.map(s=>`<span class="sheet-spell-chip">${esc(s)}</span>`).join('')
+        + sh.spells.map(s => `<span class="sheet-spell-chip" data-act="spell-open" data-spell="${esc(s)}" title="Click to view ${esc(s)}">${esc(s)}</span>`).join('')
         + '</div></div>';
     }
     if (!slotsHtml && !metaHtml && !listHtml){
@@ -510,6 +511,12 @@ registerPanel('party',{
       else if(act==='import-pdf'){
         this._importPdf();
       }
+      else if(act==='party-skills'){
+        this._openPartySkills();
+      }
+      else if(act==='spell-open'){
+        this._openSpellDetail(el.dataset.spell);
+      }
       else if(act==='toggle-sheet'){
         const c = state.party[i]; if (!c) return;
         this._expanded[c.id] = !this._expanded[c.id];
@@ -594,6 +601,142 @@ registerPanel('party',{
 
     // Close icon picker when clicking outside
     b.addEventListener('click',()=>{if(this._pickerOpen!==null){this._pickerOpen=null;this._render();}});
+  },
+
+  // ── Spell quick-view ────────────────────────────────────────────────────
+  // Resolves a spell name to its 5e entry and opens the standard popout
+  // detail (same window the global search uses). Falls back to a toast if
+  // the 5e dataset isn't loaded yet or the name doesn't match.
+  _openSpellDetail(name){
+    if (!name) return;
+    if (typeof _5eLoaded === 'undefined' || !_5eLoaded || !Array.isArray(_5eData)){
+      showToast?.('5e data still loading — try again in a moment'); return;
+    }
+    const lower = name.trim().toLowerCase();
+    // Exact match first; if the PDF saved the name with an "(Concentration)"
+    // / "(Ritual)" suffix or extra whitespace, retry against the prefix only.
+    let match = _5eData.find(d => d.cat === 'spell' && d.name.toLowerCase() === lower);
+    if (!match){
+      const stripped = lower.replace(/\s*\(.*\)\s*$/, '').trim();
+      if (stripped !== lower){
+        match = _5eData.find(d => d.cat === 'spell' && d.name.toLowerCase() === stripped);
+      }
+    }
+    if (!match){
+      // Fuzzy startsWith fallback so "Cure Wo…" still finds Cure Wounds.
+      match = _5eData.find(d => d.cat === 'spell' && d.name.toLowerCase().startsWith(lower));
+    }
+    if (match && typeof popOutDetail === 'function'){ popOutDetail(match); return; }
+    showToast?.(`No 5e entry for "${name}"`);
+  },
+
+  // ── Party-wide skills overview ──────────────────────────────────────────
+  // Inspects each character's saved skill modifier and infers proficiency
+  // level by comparing it against (ability mod) + (k × prof bonus). Returns
+  // 'expert' / 'proficient' / 'half' / null per skill per character.
+  _classifyCharSkill(c, skillKey){
+    const sh = c.sheet || {};
+    const skills = sh.skills || {};
+    const ab = c.abilities || {};
+    const SKILL_AB = {
+      acrobatics:'dex', animalHandling:'wis', arcana:'int', athletics:'str',
+      deception:'cha', history:'int', insight:'wis', intimidation:'cha',
+      investigation:'int', medicine:'wis', nature:'int', perception:'wis',
+      performance:'cha', persuasion:'cha', religion:'int',
+      sleightOfHand:'dex', stealth:'dex', survival:'wis',
+    };
+    const skillMod = skills[skillKey];
+    if (typeof skillMod !== 'number') return null;
+    const abVal = ab[SKILL_AB[skillKey]];
+    if (typeof abVal !== 'number') return null;
+    const abMod = Math.floor((abVal - 10) / 2);
+    // Default proficiency bonus if the sheet doesn't carry one — derive from
+    // any saved level, fall back to +2.
+    let prof = sh.profBonus;
+    if (typeof prof !== 'number'){
+      const lvl = c.level || sh.level || 1;
+      prof = 2 + Math.floor((Math.max(1, lvl) - 1) / 4);
+    }
+    const diff = skillMod - abMod;
+    if (diff <= 0) return null;                           // no proficiency
+    if (diff === Math.floor(prof / 2)) return 'half';     // Jack of All Trades
+    if (diff === prof) return 'proficient';
+    if (diff >= prof * 2) return 'expert';
+    // Off-by-one or partial bonuses (e.g. magic items): treat as proficient.
+    if (diff < prof) return 'half';
+    return 'proficient';
+  },
+
+  _openPartySkills(){
+    const SKILL_LABELS = {
+      acrobatics:'Acrobatics (DEX)', animalHandling:'Animal Handling (WIS)',
+      arcana:'Arcana (INT)', athletics:'Athletics (STR)', deception:'Deception (CHA)',
+      history:'History (INT)', insight:'Insight (WIS)', intimidation:'Intimidation (CHA)',
+      investigation:'Investigation (INT)', medicine:'Medicine (WIS)', nature:'Nature (INT)',
+      perception:'Perception (WIS)', performance:'Performance (CHA)', persuasion:'Persuasion (CHA)',
+      religion:'Religion (INT)', sleightOfHand:'Sleight of Hand (DEX)',
+      stealth:'Stealth (DEX)', survival:'Survival (WIS)',
+    };
+    const skillKeys = Object.keys(SKILL_LABELS);
+
+    // Gather { skillKey: [{character, level}] } in alphabetical character order.
+    const bySkill = {};
+    skillKeys.forEach(k => bySkill[k] = []);
+    state.party.forEach(c => {
+      skillKeys.forEach(k => {
+        const lvl = this._classifyCharSkill(c, k);
+        if (lvl) bySkill[k].push({c, lvl});
+      });
+    });
+    // Skills no one has → list separately at the end.
+    const covered = skillKeys.filter(k => bySkill[k].length);
+    const uncovered = skillKeys.filter(k => !bySkill[k].length);
+
+    const LEVEL_RANK = { expert:0, proficient:1, half:2 };
+    const LEVEL_BADGE = {
+      expert:     '<span class="ps-badge expert" title="Expertise (×2 prof)">◉ Expert</span>',
+      proficient: '<span class="ps-badge prof"   title="Proficient">● Prof</span>',
+      half:       '<span class="ps-badge half"   title="Half proficiency (Jack of All Trades / Remarkable Athlete)">◐ Half</span>',
+    };
+
+    const renderRow = (k) => {
+      const entries = bySkill[k].slice().sort((a,b) =>
+        LEVEL_RANK[a.lvl] - LEVEL_RANK[b.lvl] || a.c.name.localeCompare(b.c.name)
+      );
+      const chips = entries.map(({c, lvl}) =>
+        `<span class="ps-chip ${lvl}"><span class="ps-chip-name">${esc(c.name)}</span>${LEVEL_BADGE[lvl]}</span>`
+      ).join('');
+      return `<div class="ps-row">
+        <div class="ps-skill-name">${esc(SKILL_LABELS[k])}</div>
+        <div class="ps-chips">${chips || '<span class="ps-empty">— No one</span>'}</div>
+      </div>`;
+    };
+
+    const coveredHtml = covered.map(renderRow).join('');
+    const uncoveredHtml = uncovered.length
+      ? '<div class="ps-uncovered-head">Skills no one has trained:</div>'
+        + '<div class="ps-uncovered">' + uncovered.map(k => esc(SKILL_LABELS[k])).join(', ') + '</div>'
+      : '';
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:94vw;max-height:82vh;display:flex;flex-direction:column;padding:18px 20px">
+      <h3 style="margin:0 0 4px">Party Skills</h3>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
+        Inferred from each character's skill modifier vs ability score and proficiency bonus.
+        <span class="ps-badge expert" style="margin:0 2px">◉ Expert</span>
+        <span class="ps-badge prof"   style="margin:0 2px">● Prof</span>
+        <span class="ps-badge half"   style="margin:0 2px">◐ Half</span>
+      </div>
+      <div class="ps-list" style="flex:1;overflow-y:auto;padding-right:4px">${coveredHtml}${uncoveredHtml}</div>
+      <div class="modal-actions" style="margin-top:14px"><button class="btn primary" id="ps-close">Close</button></div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#ps-close').addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    setTimeout(() => backdrop.querySelector('#ps-close')?.focus(), 30);
   },
 
   // PDF import flow: file picker → parseDDBeyondPdf → preview modal → apply.

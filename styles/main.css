@@ -570,7 +570,8 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .slot-pip.spent{background:transparent}
 .slot-count{font-size:10px;color:var(--text-dim);margin-left:auto;font-variant-numeric:tabular-nums}
 .sheet-spell-list{display:flex;flex-wrap:wrap;gap:4px}
-.sheet-spell-chip{background:var(--panel-3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:10px;color:var(--text)}
+.sheet-spell-chip{background:var(--panel-3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:10px;color:var(--text);cursor:pointer;transition:border-color .12s,color .12s,background .12s}
+.sheet-spell-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
 /* Languages & proficiency chips (Stats tab) */
 .prof-group{margin-top:6px}
 .prof-group:first-child{margin-top:0}
@@ -1044,6 +1045,23 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);color:var(--text);padding:8px 16px;border-radius:4px;font-size:12px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
+/* ============ PARTY SKILLS MODAL ============ */
+.ps-row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px}
+.ps-row:last-child{border-bottom:none}
+.ps-skill-name{color:var(--text);font-weight:500}
+.ps-chips{display:flex;flex-wrap:wrap;gap:5px}
+.ps-chip{display:inline-flex;align-items:center;gap:5px;background:var(--panel-2);border:1px solid var(--border);padding:2px 7px;border-radius:11px;font-size:11px;color:var(--text)}
+.ps-chip.expert{border-color:rgba(212,165,116,.5);background:rgba(212,165,116,.10)}
+.ps-chip.proficient{border-color:rgba(122,168,122,.5);background:rgba(122,168,122,.10)}
+.ps-chip.half{border-color:rgba(180,180,180,.4);background:rgba(255,255,255,.04)}
+.ps-chip-name{font-weight:500}
+.ps-badge{font-size:9px;font-weight:700;letter-spacing:.04em;padding:1px 5px;border-radius:8px;display:inline-block}
+.ps-badge.expert{background:rgba(212,165,116,.18);color:var(--accent)}
+.ps-badge.prof{background:rgba(122,168,122,.18);color:#7aa87a}
+.ps-badge.half{background:rgba(160,160,160,.18);color:var(--text-muted)}
+.ps-empty{font-size:11px;color:var(--text-dim);font-style:italic}
+.ps-uncovered-head{margin-top:14px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+.ps-uncovered{font-size:11px;color:var(--text-dim);line-height:1.6;padding:4px 0}
 ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px} ::-webkit-scrollbar-thumb:hover{background:var(--panel-3)}
 
