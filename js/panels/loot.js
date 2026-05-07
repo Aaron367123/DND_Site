@@ -439,36 +439,44 @@ registerPanel('loot',{
         <button class="btn small primary" id="loot-add-item">Add</button>
       </div>
       <div class="loot-view-tabs">
-        <button class="loot-view-tab ${view==='all'?'active':''}" data-view="all" title="All items">All${this._loot.items.length?` <span class="loot-tab-count">${this._loot.items.length}</span>`:''}</button>
-        ${state.party.map(p => {
-          const cnt = this._loot.items.filter(it => this._itemBelongsToMember(it, p.id)).length;
-          const key = 'member:'+p.id;
-          // Trim long names down to just the first word ("Zindle 'Deathwhistle'
-          // Farrago" → "Zindle"). Full name lives on the title attribute.
-          const short = (p.name||'').split(/\s+/)[0] || p.name;
-          const icon = p.icon || '👤';
-          const iconHtml = typeof icon==='string' && icon.startsWith('data:')
-            ? `<img class="loot-tab-icon" src="${esc(icon)}">`
-            : `<span class="loot-tab-icon emoji">${esc(icon)}</span>`;
-          return `<button class="loot-view-tab ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(p.name)}">${iconHtml}<span class="loot-tab-name">${esc(short)}</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
-        }).join('')}
-        ${(this._loot.tabGroups||[]).map(g => {
-          const cnt = this._itemsForTabGroup(g).length;
-          const key = 'tabgroup:'+g.id;
-          return `<button class="loot-view-tab tabgroup ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(g.name)} — ${(g.memberIds||[]).length} member(s)">
-            <span class="loot-tab-icon emoji">👥</span>
-            <span class="loot-tab-name">${esc(g.name)}</span>
-            ${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}
-            <span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">⚙</span>
-          </button>`;
-        }).join('')}
-        <button class="loot-view-tab loot-tab-add" data-tg-add="1" title="Create a custom tab grouping party members"><span class="loot-tab-icon emoji">＋</span><span class="loot-tab-name">Tab</span></button>
-        ${(() => {
-          // "Group" tab = shared / unassigned loot (treats items pointing at a
-          // deleted party member as unassigned too).
-          const cnt = this._loot.items.filter(it => !this._isAssignedTo(it.assignedTo)).length;
-          return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Shared / group loot"><span class="loot-tab-icon emoji">📦</span><span class="loot-tab-name">Group</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
-        })()}
+        <div class="loot-tab-section">
+          <button class="loot-view-tab ${view==='all'?'active':''}" data-view="all" title="All items">All${this._loot.items.length?` <span class="loot-tab-count">${this._loot.items.length}</span>`:''}</button>
+        </div>
+        ${state.party.length ? `<div class="loot-tab-section party" title="Party members">${
+          state.party.map(p => {
+            const cnt = this._loot.items.filter(it => this._itemBelongsToMember(it, p.id)).length;
+            const key = 'member:'+p.id;
+            // Trim long names down to just the first word ("Zindle 'Deathwhistle'
+            // Farrago" → "Zindle"). Full name lives on the title attribute.
+            const short = (p.name||'').split(/\s+/)[0] || p.name;
+            const icon = p.icon || '👤';
+            const iconHtml = typeof icon==='string' && icon.startsWith('data:')
+              ? `<img class="loot-tab-icon" src="${esc(icon)}">`
+              : `<span class="loot-tab-icon emoji">${esc(icon)}</span>`;
+            return `<button class="loot-view-tab ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(p.name)}">${iconHtml}<span class="loot-tab-name">${esc(short)}</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          }).join('')
+        }</div>` : ''}
+        <div class="loot-tab-section custom" title="Custom tabs">
+          ${(this._loot.tabGroups||[]).map(g => {
+            const cnt = this._itemsForTabGroup(g).length;
+            const key = 'tabgroup:'+g.id;
+            return `<button class="loot-view-tab tabgroup ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(g.name)} — ${(g.memberIds||[]).length} member(s)">
+              <span class="loot-tab-icon emoji">👥</span>
+              <span class="loot-tab-name">${esc(g.name)}</span>
+              ${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}
+              <span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">⚙</span>
+            </button>`;
+          }).join('')}
+          <button class="loot-view-tab loot-tab-add" data-tg-add="1" title="Create a custom tab grouping party members"><span class="loot-tab-icon emoji">＋</span><span class="loot-tab-name">Tab</span></button>
+        </div>
+        <div class="loot-tab-section">
+          ${(() => {
+            // "Group" tab = shared / unassigned loot (treats items pointing at
+            // a deleted party member as unassigned too).
+            const cnt = this._loot.items.filter(it => !this._isAssignedTo(it.assignedTo)).length;
+            return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Shared / group loot"><span class="loot-tab-icon emoji">📦</span><span class="loot-tab-name">Group</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          })()}
+        </div>
       </div>
       <div class="loot-items">
         ${(() => {
