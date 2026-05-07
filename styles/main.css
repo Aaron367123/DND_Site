@@ -151,10 +151,18 @@ body.player-mode #search-wrap,
 body.player-mode #player-view-btn{display:none}
 body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-template-areas:"workspace"}
 /* Player-view floating dock — chips for the DM-shared panels */
-.pv-dock{position:fixed;left:14px;top:14px;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9000}
+.pv-dock{position:fixed;left:14px;top:14px;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9000;transition:opacity .2s ease}
 .pv-dock-btn{width:34px;height:34px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text-muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s}
 .pv-dock-btn:hover{background:var(--panel-3);color:var(--text)}
 .pv-dock-btn.active{background:var(--accent);color:#1a1a1a;border-color:var(--accent)}
+/* Desktop player-view: dock fades out when not in use so it doesn't crowd
+   the shared panels. Hover (or focus-within for keyboard users) brings it
+   back to full visibility. Mobile/landscape mobile keep their own rules. */
+@media (min-width: 769px){
+  body.player-mode .pv-dock{opacity:.18}
+  body.player-mode .pv-dock:hover,
+  body.player-mode .pv-dock:focus-within{opacity:1}
+}
 
 /* ============ MOBILE PLAYER VIEW (≤768px) ============ */
 /* Mobile players see one fullscreen panel at a time, with the pv-dock
