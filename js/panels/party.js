@@ -250,47 +250,44 @@ registerPanel('party',{
     };
     const keys = Object.keys(LABELS);
 
-    // Compute the *other* party members' proficiency status for each skill,
-    // so each row can show a small "also proficient" indicator next to the
-    // mod. Lets a player tell at a glance who else is good at this check.
-    const others = state.party.filter(p => p.id !== c.id);
-    const LEVEL_RANK = { expert:0, proficient:1, half:2 };
-    const LEVEL_GLYPH = { expert:'◉', proficient:'●', half:'◐' };
-    const LEVEL_TITLE = { expert:'Expertise', proficient:'Proficient', half:'Half proficiency' };
-
-    const rows = keys.map(k => {
+    // Bucket this character's own skills by proficiency level. Anything they
+    // aren't trained in falls into a small "Untrained" group at the bottom.
+    const groups = { expert:[], proficient:[], half:[], none:[] };
+    keys.forEach(k => {
       let v = skills[k];
       if (v == null){
         const a = ab[SKILL_AB[k]];
         v = (typeof a === 'number') ? Math.floor((a-10)/2) : null;
       }
-      // Inline party chips for OTHER members proficient in this skill.
-      const others_prof = others
-        .map(p => ({p, lvl: this._classifyCharSkill(p, k)}))
-        .filter(x => x.lvl)
-        .sort((a,b) => LEVEL_RANK[a.lvl] - LEVEL_RANK[b.lvl] || a.p.name.localeCompare(b.p.name));
-      const chipsHtml = others_prof.map(({p, lvl}) =>
-        `<span class="sheet-skill-chip ${lvl}" title="${esc(p.name)} — ${LEVEL_TITLE[lvl]}">${LEVEL_GLYPH[lvl]}</span>`
-      ).join('');
-      return `<div class="sheet-stat-row sheet-skill-row">
-        <span class="sheet-skill-label">${LABELS[k]}</span>
-        <span class="sheet-skill-others">${chipsHtml}</span>
-        <span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span>
-      </div>`;
-    }).join('');
+      const lvl = this._classifyCharSkill(c, k) || 'none';
+      groups[lvl].push({ k, label: LABELS[k], v });
+    });
 
-    // Tiny legend so the glyphs aren't a mystery — explains the colored
-    // markers in the "others" column. Shown only when there's another party
-    // member to compare against.
-    const legend = others.length
-      ? `<div class="sheet-skill-legend" style="grid-column:1/-1;font-size:10px;color:var(--text-muted);margin:0 0 4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <span><span class="sheet-skill-chip expert">◉</span> Expertise</span>
-          <span><span class="sheet-skill-chip proficient">●</span> Proficient</span>
-          <span><span class="sheet-skill-chip half">◐</span> Half</span>
-          <span style="color:var(--text-dim)">— other party members; hover for name</span>
-        </div>`
+    const SECTIONS = [
+      { key:'expert',     title:'Expertise',          glyph:'◉' },
+      { key:'proficient', title:'Proficient',         glyph:'●' },
+      { key:'half',       title:'Half-proficiency',   glyph:'◐' },
+    ];
+    const renderRow = ({ label, v }) =>
+      `<div class="sheet-stat-row"><span>${label}</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
+    const renderSection = (sec) => {
+      const list = groups[sec.key];
+      if (!list.length) return '';
+      return `<div class="sheet-block sheet-prof-section ${sec.key}">
+        <h5><span class="sheet-skill-chip ${sec.key}">${sec.glyph}</span> ${sec.title} <span class="sheet-prof-count">${list.length}</span></h5>
+        ${list.map(renderRow).join('')}
+      </div>`;
+    };
+
+    const trainedHtml = SECTIONS.map(renderSection).join('');
+    const untrainedHtml = groups.none.length
+      ? `<details class="sheet-prof-untrained"><summary>Untrained (${groups.none.length})</summary>${groups.none.map(renderRow).join('')}</details>`
       : '';
-    return '<div class="sheet-skills">'+legend+rows+'</div>';
+
+    if (!trainedHtml && !untrainedHtml){
+      return '<div class="sheet-empty">No skill data available.</div>';
+    }
+    return '<div class="sheet-skills-prof">'+(trainedHtml || '<div class="sheet-empty">No skill proficiencies on this character.</div>')+untrainedHtml+'</div>';
   },
 
   _tabSpells(c){
