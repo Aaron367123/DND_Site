@@ -249,15 +249,48 @@ registerPanel('party',{
       stealth:'Stealth (DEX)', survival:'Survival (WIS)',
     };
     const keys = Object.keys(LABELS);
+
+    // Compute the *other* party members' proficiency status for each skill,
+    // so each row can show a small "also proficient" indicator next to the
+    // mod. Lets a player tell at a glance who else is good at this check.
+    const others = state.party.filter(p => p.id !== c.id);
+    const LEVEL_RANK = { expert:0, proficient:1, half:2 };
+    const LEVEL_GLYPH = { expert:'◉', proficient:'●', half:'◐' };
+    const LEVEL_TITLE = { expert:'Expertise', proficient:'Proficient', half:'Half proficiency' };
+
     const rows = keys.map(k => {
       let v = skills[k];
       if (v == null){
         const a = ab[SKILL_AB[k]];
         v = (typeof a === 'number') ? Math.floor((a-10)/2) : null;
       }
-      return `<div class="sheet-stat-row"><span>${LABELS[k]}</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
+      // Inline party chips for OTHER members proficient in this skill.
+      const others_prof = others
+        .map(p => ({p, lvl: this._classifyCharSkill(p, k)}))
+        .filter(x => x.lvl)
+        .sort((a,b) => LEVEL_RANK[a.lvl] - LEVEL_RANK[b.lvl] || a.p.name.localeCompare(b.p.name));
+      const chipsHtml = others_prof.map(({p, lvl}) =>
+        `<span class="sheet-skill-chip ${lvl}" title="${esc(p.name)} — ${LEVEL_TITLE[lvl]}">${LEVEL_GLYPH[lvl]}</span>`
+      ).join('');
+      return `<div class="sheet-stat-row sheet-skill-row">
+        <span class="sheet-skill-label">${LABELS[k]}</span>
+        <span class="sheet-skill-others">${chipsHtml}</span>
+        <span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span>
+      </div>`;
     }).join('');
-    return '<div class="sheet-skills">'+rows+'</div>';
+
+    // Tiny legend so the glyphs aren't a mystery — explains the colored
+    // markers in the "others" column. Shown only when there's another party
+    // member to compare against.
+    const legend = others.length
+      ? `<div class="sheet-skill-legend" style="grid-column:1/-1;font-size:10px;color:var(--text-muted);margin:0 0 4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <span><span class="sheet-skill-chip expert">◉</span> Expertise</span>
+          <span><span class="sheet-skill-chip proficient">●</span> Proficient</span>
+          <span><span class="sheet-skill-chip half">◐</span> Half</span>
+          <span style="color:var(--text-dim)">— other party members; hover for name</span>
+        </div>`
+      : '';
+    return '<div class="sheet-skills">'+legend+rows+'</div>';
   },
 
   _tabSpells(c){
