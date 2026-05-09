@@ -444,6 +444,29 @@ registerPanel('battlemap',{
       html += '<div style="position:absolute;top:6px;left:6px;z-index:30;pointer-events:none">'
         + '<button class="btn small" data-mact="toggle-toolbar" style="pointer-events:auto;padding:2px 8px;font-size:10px;opacity:.85" title="Show toolbar">▾ Tools</button>'
         + '</div>';
+    } else if (_isPlayer) {
+    // Player-view toolbar — minimal: Draw + Erase tools, zoom, Clear
+    // (tokens) and Drawings (clear all pencil). Everything DM-only is
+    // omitted entirely.
+    html+='<div class="map-toolbar">'
+      +'<button class="btn icon-btn" data-mact="toggle-toolbar" style="flex-shrink:0;padding:2px 5px" title="Hide toolbar (more map space)">▲</button>'
+      +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">🖊 Draw</button>'
+      +(this._tool==='draw' ? '<input type="color" id="draw-color" value="'+this._drawColor+'" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Brush color">' : '')
+      +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:11px;padding:2px 4px;flex-shrink:0">'
+        +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
+        +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
+        +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
+      +'</select>' : '')
+      +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase">🗑 Erase</button>'
+      // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
+      +(_mapBgImage?'<div style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>':'')
+      +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Zoom">':'')
+      +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
+      +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
+      +'<div style="flex:1"></div>'
+      +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">🗑 Drawings</button>'
+      +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
+    +'</div>';
     } else {
     html+='<div class="map-toolbar">'
       +'<button class="btn icon-btn" data-mact="toggle-toolbar" style="flex-shrink:0;padding:2px 5px" title="Hide toolbar (more map space)">▲</button>'
@@ -486,22 +509,20 @@ registerPanel('battlemap',{
       +'<button class="btn" data-mact="sync-combat" style="flex-shrink:0">↺ Sync</button>'
       +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
       +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">🗑 Drawings</button>'
-      // Fog of war controls — DM-only. Players just receive the fog state
-      // through the broadcast/sync; they shouldn't be able to paint or
-      // toggle it themselves.
-      +(!_isPlayer
-        ? '<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
-          +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">🌫 Fog</button>'
-          +(this._fog!==null?'<button class="btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">🖌 Reveal</button>':'')
-          +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:60px;flex-shrink:0" title="Brush size">':'')
-          +(this._fog!==null?'<button class="btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide everything">◼ Hide All</button>':'')
-          +(this._fog!==null?'<button class="btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal everything">◻ Show All</button>':'')
-          +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
-          +'<button class="btn" data-mact="open-player" style="flex-shrink:0" title="Open player view in new tab">📺 Player View</button>'
-        : '')
+      // Fog of war + open-player launch — DM-only.
+      +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
+      +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">🌫 Fog</button>'
+      +(this._fog!==null?'<button class="btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">🖌 Reveal</button>':'')
+      +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:60px;flex-shrink:0" title="Brush size">':'')
+      +(this._fog!==null?'<button class="btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide everything">◼ Hide All</button>':'')
+      +(this._fog!==null?'<button class="btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal everything">◻ Show All</button>':'')
+      +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
+      +'<button class="btn" data-mact="open-player" style="flex-shrink:0" title="Open player view in new tab">📺 Player View</button>'
     +'</div>';
 
-    if(partyBtns){
+    // The "Party:" quick-add row is DM-only (lets the DM drop PCs onto the
+    // map). Players already see the placed tokens via sync.
+    if (partyBtns && !_isPlayer){
       html+='<div style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap;align-items:center">'
         +'<span style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
     }
