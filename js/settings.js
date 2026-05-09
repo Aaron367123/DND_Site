@@ -70,22 +70,47 @@ function initSettings(){
     });
   }
 
-  // Display font-scale slider — globally zooms the app via CSS `zoom`. Writes
-  // a "live preview" while the user drags, then commits the value on release.
-  const fs = document.getElementById('font-scale');
-  const fsv = document.getElementById('font-scale-val');
-  if (fs && fsv){
+  // Display font-scale — slider for the common range (80–150%) + number
+  // input for arbitrary values (50–200%). Either control drives the other,
+  // and both call applyFontScale via CSS `zoom`. The slider provides a live
+  // preview during drag; release / blur commits to state.
+  const fs  = document.getElementById('font-scale');
+  const fsn = document.getElementById('font-scale-num');
+  if (fs && fsn){
+    const SLIDER_MIN = 80, SLIDER_MAX = 150;
+    const NUM_MIN = 50, NUM_MAX = 200;
     const initPct = Math.round(((state.settings.fontScale ?? 1) * 100));
-    fs.value = String(initPct);
-    fsv.textContent = initPct + '%';
-    fs.addEventListener('input', () => {
-      fsv.textContent = fs.value + '%';
-      applyFontScale(parseInt(fs.value)/100);
+    fs.value  = String(Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, initPct)));
+    fsn.value = String(initPct);
+
+    // Mirror current value into both controls without re-firing each other.
+    let _muting = false;
+    const setBoth = (pct, opts={}) => {
+      const clampedNum = Math.max(NUM_MIN, Math.min(NUM_MAX, pct));
+      _muting = true;
+      fsn.value = String(clampedNum);
+      fs.value  = String(Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, clampedNum)));
+      _muting = false;
+      applyFontScale(clampedNum / 100);
+      if (opts.commit){
+        state.settings.fontScale = clampedNum / 100;
+        save();
+      }
+    };
+
+    // Slider: preview on input, commit on change.
+    fs.addEventListener('input', () => { if (_muting) return; setBoth(parseInt(fs.value)); });
+    fs.addEventListener('change', () => { if (_muting) return; setBoth(parseInt(fs.value), {commit:true}); });
+    // Number input: preview as user types, commit on blur / Enter.
+    fsn.addEventListener('input', () => {
+      if (_muting) return;
+      const v = parseInt(fsn.value);
+      if (!isNaN(v)) setBoth(v);
     });
-    fs.addEventListener('change', () => {
-      state.settings.fontScale = parseInt(fs.value)/100;
-      save();
-      applyFontScale(state.settings.fontScale);
+    fsn.addEventListener('change', () => {
+      if (_muting) return;
+      const v = parseInt(fsn.value);
+      if (!isNaN(v)) setBoth(v, {commit:true});
     });
   }
 

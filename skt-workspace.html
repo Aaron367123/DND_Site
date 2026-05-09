@@ -116,9 +116,10 @@
     <div class="drawer-row">
       <label>Font size</label>
       <input type="range" id="font-scale" min="80" max="150" step="5" value="100">
-      <span id="font-scale-val" style="font-size:11px;width:38px;text-align:right">100%</span>
+      <input type="number" id="font-scale-num" min="50" max="200" step="1" value="100" style="width:54px" title="Type any value 50–200">
+      <span style="font-size:11px;color:var(--text-muted)">%</span>
     </div>
-    <p class="drawer-note" style="margin-top:6px">Scales every panel — text, controls, and window dimensions all grow together so content stays visible.</p>
+    <p class="drawer-note" style="margin-top:6px">Drag the slider for the common range, or type any value 50–200% in the box. Scales every panel — text, controls, and window dimensions all grow together so content stays visible.</p>
   </div>
   <div class="drawer-section">
     <h3>Theme</h3>
