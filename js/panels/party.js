@@ -6,6 +6,7 @@ const PARTY_ICONS=['⚔','🗡','🏹','🪄','🔮','🛡','🪓','👊','🌿'
 registerPanel('party',{
   title:'Party Tracker',icon:'♥',
   _pickerOpen:null, // idx of card with open icon picker
+  _settingsOpen:false, // bottom settings drawer (add/import/party-skills)
   // UI-only state (not synced) keyed by character id.
   _expanded:{},
   _activeTab:{}, // 'stats' | 'skills' | 'spells' | 'inventory' | 'bio'
@@ -14,11 +15,17 @@ registerPanel('party',{
 
   _render(){
     const b=this._body;if(!b)return;
+    const settingsBody = this._settingsOpen
+      ? '<div class="party-settings-body">'
+        +'<button class="btn small" data-act="manage-party" title="Edit every character\'s stats in a table">📋 Manage Party</button>'
+        +'<button class="btn small" data-act="import-pdf" title="Import a D&D Beyond character sheet">📄 Import PDF</button>'
+        +(state.party.length?'<button class="btn small" data-act="party-skills" title="See who is proficient, half-proficient, or has expertise in each skill">📊 Party Skills</button>':'')
+        +'</div>'
+      : '';
     b.innerHTML='<div class="party-grid">'+state.party.map((c,i)=>this._card(c,i)).join('')+'</div>'
-      +'<div style="padding:0 10px 10px;display:flex;gap:6px;flex-wrap:wrap">'
-      +'<button class="btn small" data-act="add">+ Add character</button>'
-      +'<button class="btn small" data-act="import-pdf" title="Import a D&D Beyond character sheet">📄 Import PDF</button>'
-      +(state.party.length?'<button class="btn small" data-act="party-skills" title="See who is proficient, half-proficient, or has expertise in each skill">📊 Party Skills</button>':'')
+      +'<div class="party-settings">'
+      +'<button class="btn small" data-act="toggle-settings" title="Party settings">'+(this._settingsOpen?'▲':'▼')+' ⚙ Settings</button>'
+      +settingsBody
       +'</div>';
     this._wire();
   },
@@ -394,6 +401,275 @@ registerPanel('party',{
     setTimeout(() => backdrop.querySelector('.qn-add-input')?.focus(), 30);
   },
 
+  // Manage Party: table modal with inline editing of every character's core stats.
+  _openManageParty(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const cols = [
+      {key:'name',  label:'NAME',        type:'text',   w:160},
+      {key:'hp',    label:'HP',          type:'number', w:60},
+      {key:'hpMax', label:'MAX HP',      type:'number', w:70},
+      {key:'ac',    label:'AC',          type:'number', w:55},
+      {key:'init',  label:'INIT',        type:'number', w:55},
+      {key:'spd',   label:'SPD',         type:'number', w:55},
+      {key:'pp',    label:'PP',          type:'number', w:55},
+      {key:'resources',   label:'RESOURCES',   type:'resources', w:180},
+      {key:'inspiration', label:'INSPIRATION', type:'bool',      w:90},
+    ];
+    const resSummary = c => {
+      const rs = c.resources || [];
+      if (!rs.length) return '<span class="mp-res-empty">+ Add</span>';
+      return rs.map(r => r.type === 'toggle'
+        ? `<span class="mp-res-chip">${esc(r.name)} ${r.current?'✓':'—'}</span>`
+        : `<span class="mp-res-chip">${esc(r.name)} ${r.current}/${r.max}</span>`
+      ).join(' ');
+    };
+    const renderRows = () => state.party.map((c,i) => {
+      const cells = cols.map(col => {
+        if (col.type === 'bool'){
+          return `<td class="mp-cell mp-cell-bool"><button class="mp-bool ${c[col.key]?'on':''}" data-act="mp-bool" data-i="${i}" data-k="${col.key}">${c[col.key]?'Yes':'No'}</button></td>`;
+        }
+        if (col.type === 'resources'){
+          return `<td class="mp-cell mp-cell-resources" data-act="mp-res" data-i="${i}" title="Click to edit resources">${resSummary(c)}</td>`;
+        }
+        const v = c[col.key]==null?'':c[col.key];
+        return `<td class="mp-cell"><input class="mp-input" type="${col.type}" data-i="${i}" data-k="${col.key}" value="${esc(String(v))}"></td>`;
+      }).join('');
+      return `<tr>
+        <td class="mp-cell mp-cell-icon">${renderIcon(c.icon||'⚔', c.name)}</td>
+        ${cells}
+        <td class="mp-cell mp-cell-details"><button class="btn icon-btn" data-act="mp-details" data-i="${i}" title="Edit class, level, race, abilities, hit dice">✎</button></td>
+        <td class="mp-cell mp-cell-del"><button class="btn icon-btn danger" data-act="mp-del" data-i="${i}" title="Remove character">🗑</button></td>
+      </tr>`;
+    }).join('');
+    const renderModal = () => {
+      backdrop.innerHTML = `<div class="modal mp-modal" role="dialog" aria-modal="true">
+        <div class="mp-head">
+          <h3 style="margin:0">Manage Party</h3>
+          <button class="btn icon-btn" data-act="mp-close" title="Close">×</button>
+        </div>
+        <div class="mp-table-wrap">
+          <table class="mp-table">
+            <thead><tr>
+              <th></th>
+              ${cols.map(col => `<th style="min-width:${col.w}px">${col.label}</th>`).join('')}
+              <th></th>
+              <th></th>
+            </tr></thead>
+            <tbody>${renderRows()}</tbody>
+          </table>
+        </div>
+        <div class="mp-foot">
+          <span class="mp-count">${state.party.length} member${state.party.length===1?'':'s'}</span>
+          <button class="btn primary" data-act="mp-add">+ Add Member</button>
+        </div>
+      </div>`;
+      wire();
+    };
+    const wire = () => {
+      backdrop.querySelectorAll('input.mp-input').forEach(inp => {
+        inp.addEventListener('change', e => {
+          const i = +e.target.dataset.i, k = e.target.dataset.k;
+          const c = state.party[i]; if (!c) return;
+          let v = e.target.value;
+          if (e.target.type === 'number') v = v === '' ? 0 : Number(v);
+          state.party[i] = {...c, [k]: v};
+          save();
+          this._render();
+        });
+      });
+      backdrop.querySelectorAll('[data-act="mp-bool"]').forEach(btn => btn.addEventListener('click', e => {
+        const i = +e.currentTarget.dataset.i, k = e.currentTarget.dataset.k;
+        const c = state.party[i]; if (!c) return;
+        state.party[i] = {...c, [k]: !c[k]};
+        save();
+        this._render();
+        renderModal();
+      }));
+      backdrop.querySelectorAll('[data-act="mp-res"]').forEach(td => td.addEventListener('click', e => {
+        const i = +e.currentTarget.dataset.i;
+        this._openResourcesEditor(i, () => renderModal());
+      }));
+      backdrop.querySelectorAll('[data-act="mp-details"]').forEach(btn => btn.addEventListener('click', e => {
+        const i = +e.currentTarget.dataset.i;
+        this._openCharDetailsEditor(i, () => renderModal());
+      }));
+      backdrop.querySelectorAll('[data-act="mp-del"]').forEach(btn => btn.addEventListener('click', e => {
+        const i = +e.currentTarget.dataset.i;
+        const c = state.party[i]; if (!c) return;
+        showConfirm(`Remove ${c.name}?`, {title:'Remove character', confirmLabel:'Remove'}).then(ok => {
+          if (!ok) return;
+          state.party.splice(i,1);
+          save();
+          this._render();
+          renderModal();
+        });
+      }));
+      backdrop.querySelector('[data-act="mp-add"]')?.addEventListener('click', () => {
+        state.party.push({id:uid(),name:'New Character',cls:'fighter',icon:'⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,inspiration:false,resources:[]});
+        save();
+        this._render();
+        renderModal();
+      });
+      backdrop.querySelector('[data-act="mp-close"]')?.addEventListener('click', () => backdrop.remove());
+    };
+    document.body.appendChild(backdrop);
+    renderModal();
+    backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) backdrop.remove(); });
+  },
+
+  // Per-character resources editor (popup over Manage Party).
+  _openResourcesEditor(i, onClose){
+    const c = state.party[i]; if (!c) return;
+    if (!c.resources) c.resources = [];
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const renderRows = () => (c.resources.length
+      ? c.resources.map((r, ri) => `
+          <div class="mp-res-row">
+            <input class="mp-input" data-ri="${ri}" data-k="name" value="${esc(r.name||'')}" placeholder="Name" style="flex:1">
+            <select class="mp-input" data-ri="${ri}" data-k="type" style="width:90px">
+              <option value="pool"${r.type==='pool'?' selected':''}>Pool</option>
+              <option value="toggle"${r.type==='toggle'?' selected':''}>Toggle</option>
+            </select>
+            ${r.type==='toggle'
+              ? `<button class="mp-bool ${r.current?'on':''}" data-rk-toggle="${ri}">${r.current?'On':'Off'}</button>`
+              : `<input class="mp-input" type="number" data-ri="${ri}" data-k="current" value="${r.current}" style="width:60px">
+                 <span style="color:var(--text-dim)">/</span>
+                 <input class="mp-input" type="number" data-ri="${ri}" data-k="max" value="${r.max}" style="width:60px">`}
+            <button class="btn icon-btn danger" data-rm="${ri}" title="Remove resource">×</button>
+          </div>`).join('')
+      : '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No resources yet — add one below.</div>');
+    const renderModal = () => {
+      backdrop.innerHTML = `<div class="modal mp-edit-modal" role="dialog" aria-modal="true">
+        <div class="mp-head"><h3 style="margin:0">Resources — ${esc(c.name)}</h3><button class="btn icon-btn" data-close>×</button></div>
+        <div class="mp-edit-body"><div class="mp-res-list">${renderRows()}</div>
+          <div style="margin-top:10px"><button class="btn primary" data-add>+ Add resource</button></div>
+        </div>
+        <div class="mp-foot"><span></span><button class="btn" data-close>Done</button></div>
+      </div>`;
+      wire();
+    };
+    const wire = () => {
+      backdrop.querySelectorAll('input.mp-input,select.mp-input').forEach(el => el.addEventListener('change', e => {
+        const ri = +e.target.dataset.ri, k = e.target.dataset.k;
+        const r = c.resources[ri]; if (!r) return;
+        let v = e.target.value;
+        if (e.target.type === 'number') v = v === '' ? 0 : Number(v);
+        r[k] = v;
+        if (k === 'type'){
+          if (v === 'toggle'){ r.current = r.current ? 1 : 0; r.max = 1; }
+          else if (!r.max) { r.max = 1; r.current = Math.min(r.current, r.max); }
+        }
+        if (k === 'max') r.current = Math.min(r.current, r.max);
+        save();
+        this._render();
+        renderModal();
+      }));
+      backdrop.querySelectorAll('[data-rk-toggle]').forEach(btn => btn.addEventListener('click', e => {
+        const ri = +e.currentTarget.dataset.rkToggle;
+        const r = c.resources[ri]; if (!r) return;
+        r.current = r.current ? 0 : 1;
+        save(); this._render(); renderModal();
+      }));
+      backdrop.querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', e => {
+        const ri = +e.currentTarget.dataset.rm;
+        c.resources.splice(ri, 1);
+        save(); this._render(); renderModal();
+      }));
+      backdrop.querySelector('[data-add]').addEventListener('click', () => {
+        c.resources.push({name:'New Resource', type:'pool', current:1, max:1});
+        save(); this._render(); renderModal();
+      });
+      backdrop.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
+    };
+    const close = () => { backdrop.remove(); if (onClose) onClose(); };
+    document.body.appendChild(backdrop);
+    renderModal();
+    backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) close(); });
+  },
+
+  // Per-character details editor: class, level, race, background, abilities, hit dice.
+  _openCharDetailsEditor(i, onClose){
+    const c = state.party[i]; if (!c) return;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const abKeys = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
+    const renderModal = () => {
+      const ab = c.abilities || {};
+      const hd = c.hitDice;
+      backdrop.innerHTML = `<div class="modal mp-edit-modal" role="dialog" aria-modal="true">
+        <div class="mp-head"><h3 style="margin:0">Edit details — ${esc(c.name)}</h3><button class="btn icon-btn" data-close>×</button></div>
+        <div class="mp-edit-body">
+          <div class="mp-edit-section">
+            <div class="mp-edit-grid">
+              <label>Class<input class="mp-input" data-k="cls" value="${esc(c.cls||'')}"></label>
+              <label>Level<input class="mp-input" type="number" data-k="level" value="${c.level==null?'':c.level}"></label>
+              <label>Race<input class="mp-input" data-k="race" value="${esc(c.race||'')}"></label>
+              <label>Background<input class="mp-input" data-k="background" value="${esc(c.background||'')}"></label>
+            </div>
+          </div>
+          <div class="mp-edit-section">
+            <div class="mp-edit-section-head">Abilities</div>
+            <div class="mp-ability-grid">
+              ${abKeys.map(([k,lbl]) => `<label>${lbl}<input class="mp-input" type="number" data-ak="${k}" value="${ab[k]==null?'':ab[k]}"></label>`).join('')}
+            </div>
+          </div>
+          <div class="mp-edit-section">
+            <div class="mp-edit-section-head">Hit dice</div>
+            ${hd
+              ? `<div class="mp-edit-grid mp-edit-grid-3">
+                   <label>Die type<select class="mp-input" data-hd="dieType">
+                     ${['d6','d8','d10','d12'].map(d => `<option value="${d}"${(hd.dieType||'d8')===d?' selected':''}>${d}</option>`).join('')}
+                   </select></label>
+                   <label>Current<input class="mp-input" type="number" data-hd="current" value="${hd.current}"></label>
+                   <label>Max<input class="mp-input" type="number" data-hd="max" value="${hd.max}"></label>
+                 </div>`
+              : `<button class="btn" data-hd-init>+ Initialize hit dice</button>`}
+          </div>
+        </div>
+        <div class="mp-foot"><span></span><button class="btn" data-close>Done</button></div>
+      </div>`;
+      wire();
+    };
+    const wire = () => {
+      backdrop.querySelectorAll('input.mp-input[data-k],select.mp-input[data-k]').forEach(el => el.addEventListener('change', e => {
+        const k = e.target.dataset.k;
+        let v = e.target.value;
+        if (e.target.type === 'number') v = v === '' ? 0 : Number(v);
+        state.party[i] = {...state.party[i], [k]: v};
+        save(); this._render();
+      }));
+      backdrop.querySelectorAll('[data-ak]').forEach(el => el.addEventListener('change', e => {
+        const k = e.target.dataset.ak;
+        const ab = {...(state.party[i].abilities || {})};
+        ab[k] = e.target.value === '' ? 0 : Number(e.target.value);
+        state.party[i] = {...state.party[i], abilities: ab};
+        save(); this._render();
+      }));
+      backdrop.querySelectorAll('[data-hd]').forEach(el => el.addEventListener('change', e => {
+        const k = e.target.dataset.hd;
+        const hd = {...(state.party[i].hitDice || {dieType:'d8',current:0,max:0})};
+        let v = e.target.value;
+        if (e.target.type === 'number') v = v === '' ? 0 : Number(v);
+        hd[k] = v;
+        if (k === 'max') hd.current = Math.min(hd.current, hd.max);
+        state.party[i] = {...state.party[i], hitDice: hd};
+        save(); this._render();
+      }));
+      backdrop.querySelector('[data-hd-init]')?.addEventListener('click', () => {
+        const lvl = state.party[i].level || 1;
+        state.party[i] = {...state.party[i], hitDice: {dieType:'d8', current:lvl, max:lvl}};
+        save(); this._render(); renderModal();
+      });
+      backdrop.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
+    };
+    const close = () => { backdrop.remove(); if (onClose) onClose(); };
+    document.body.appendChild(backdrop);
+    renderModal();
+    backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) close(); });
+  },
+
   _spendHitDie(i){
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return;
     const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
@@ -540,6 +816,12 @@ registerPanel('party',{
       }
       else if(act==='import-pdf'){
         this._importPdf();
+      }
+      else if(act==='toggle-settings'){
+        this._settingsOpen=!this._settingsOpen;this._render();
+      }
+      else if(act==='manage-party'){
+        this._openManageParty();
       }
       else if(act==='party-skills'){
         this._openPartySkills();
