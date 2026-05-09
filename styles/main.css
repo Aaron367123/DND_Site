@@ -1075,6 +1075,11 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 /* Translucent preview shown while dragging a window into a viewport edge — hints
    where the snap will land if the user releases the mouse here. */
 #drag-snap-preview{position:fixed;display:none;background:rgba(212,165,116,.18);border:2px solid var(--accent);border-radius:6px;pointer-events:none;z-index:1050;transition:left .12s ease,top .12s ease,width .12s ease,height .12s ease;box-shadow:0 0 24px rgba(212,165,116,.35)}
+/* Per-window overflow menu (⋯ button → list of secondary actions) */
+.window-menu{position:fixed;z-index:1100;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:5px;box-shadow:0 8px 24px rgba(0,0,0,.55);padding:4px;min-width:220px}
+.window-menu-item{display:block;width:100%;padding:7px 12px;background:transparent;border:none;color:var(--text);font-size:11px;cursor:pointer;text-align:left;font-family:inherit;border-radius:3px;white-space:nowrap}
+.window-menu-item:hover{background:var(--panel-3);color:var(--accent)}
+.window-menu-item + .window-menu-item{margin-top:1px}
 /* ============ PARTY SKILLS MODAL ============ */
 .ps-row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px}
 .ps-row:last-child{border-bottom:none}

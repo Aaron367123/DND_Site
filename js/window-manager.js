@@ -59,12 +59,10 @@ function ensurePanel(id){
   el.className='window'+(l.minimized?' minimized':'')+(l.locked?' locked':'');
   el.dataset.panel=id;
   Object.assign(el.style,{left:l.x+'px',top:l.y+'px',width:l.w+'px',height:l.h+'px',zIndex:l.z});
-  const lockIcon = l.locked ? '🔒' : '🔓';
-  const shared = (state.sharedPanels||[]).includes(id);
-  // Share button is a DM-only toggle that adds/removes this panel from the
-  // player view. Hidden in player mode via CSS (`body.player-mode .window-actions`).
-  const shareBtn = `<button class="btn icon-btn" data-wact="share" title="Share with player view">${shared?'👁':'◌'}</button>`;
-  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions">${shareBtn}<button class="btn icon-btn" data-wact="lock" title="Lock window">${lockIcon}</button><button class="btn icon-btn" data-wact="snap" title="Snap to layout">▢</button><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div>
+  // Share / lock / snap collapse into a single ⋯ overflow menu so the title
+  // bar stays uncluttered; only minimize and close are always-visible. The
+  // current share/lock states are surfaced inside the menu items themselves.
+  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions"><button class="btn icon-btn" data-wact="menu" title="Window options">⋯</button><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div>
     <div class="rh rh-n"  data-rh="n"></div>
     <div class="rh rh-s"  data-rh="s"></div>
     <div class="rh rh-e"  data-rh="e"></div>
@@ -226,24 +224,9 @@ function wireWindow(el,id){
       e.preventDefault();
     });
   });
-  el.querySelector('[data-wact="share"]')?.addEventListener('click',e=>{
+  el.querySelector('[data-wact="menu"]').addEventListener('click',e=>{
     e.stopPropagation();
-    togglePanelShare(id);
-    const shared = (state.sharedPanels||[]).includes(id);
-    e.currentTarget.textContent = shared ? '👁' : '◌';
-  });
-  el.querySelector('[data-wact="lock"]').addEventListener('click',e=>{
-    e.stopPropagation();
-    const cur = !!layout[id]?.locked;
-    layout[id] = {...layout[id], locked: !cur};
-    saveLayout();
-    el.classList.toggle('locked', !cur);
-    e.currentTarget.textContent = !cur ? '🔒' : '🔓';
-    e.currentTarget.title = !cur ? 'Unlock window' : 'Lock window';
-  });
-  el.querySelector('[data-wact="snap"]').addEventListener('click',e=>{
-    e.stopPropagation();
-    openSnapLayoutsPicker(id, e.currentTarget);
+    openWindowMenu(id, e.currentTarget);
   });
   el.querySelector('[data-wact="min"]').addEventListener('click',e=>{e.stopPropagation();const cur=layout[id]?.minimized;layout[id]={...layout[id],minimized:!cur};saveLayout();el.classList.toggle('minimized',!cur);});
   el.querySelector('[data-wact="close"]').addEventListener('click',e=>{e.stopPropagation();closePanel(id);});
@@ -470,5 +453,84 @@ function openSnapLayoutsPicker(id, anchorBtn){
   setTimeout(() => {
     document.addEventListener('mousedown', _snapPickerOutside, true);
     document.addEventListener('keydown',   _snapPickerEsc,    true);
+  }, 0);
+}
+
+// ─── Per-window overflow menu (⋯) ────────────────────────────────────────────
+// Holds the secondary actions that used to be standalone buttons in the title
+// bar (share / lock / snap) so the title bar stays clean. Two always-visible
+// actions remain: minimize and close.
+let _windowMenuEl = null;
+function _closeWindowMenu(){
+  if (_windowMenuEl){ _windowMenuEl.remove(); _windowMenuEl = null; }
+  document.removeEventListener('mousedown', _windowMenuOutside, true);
+  document.removeEventListener('keydown', _windowMenuEsc, true);
+}
+function _windowMenuOutside(e){
+  if (_windowMenuEl && !_windowMenuEl.contains(e.target)) _closeWindowMenu();
+}
+function _windowMenuEsc(e){ if (e.key === 'Escape') _closeWindowMenu(); }
+
+function openWindowMenu(id, anchorBtn){
+  _closeWindowMenu();
+  _closeSnapPicker();
+  const l = layout[id] || {};
+  const isPlayer = document.body.classList.contains('player-mode');
+  const isShared = (state.sharedPanels || []).includes(id);
+  const isLocked = !!l.locked;
+
+  // Build menu items. Share + Lock are DM-only (player tab can still snap).
+  const items = [];
+  if (!isPlayer){
+    items.push({ act:'share', label: (isShared?'👁':'◌')+' '+(isShared?'Shared with players (click to unshare)':'Share with player view') });
+    items.push({ act:'lock',  label: (isLocked?'🔒':'🔓')+' '+(isLocked?'Locked (click to unlock)':'Lock window') });
+  }
+  items.push({ act:'snap',  label:'▢ Snap to layout…' });
+
+  const menu = document.createElement('div');
+  menu.className = 'window-menu';
+  menu.innerHTML = items.map(it =>
+    `<button class="window-menu-item" data-act="${it.act}">${it.label}</button>`
+  ).join('');
+  document.body.appendChild(menu);
+  _windowMenuEl = menu;
+
+  // Position under the anchor button, right-aligned. Flip up if it would clip
+  // the bottom of the viewport.
+  const r = anchorBtn.getBoundingClientRect();
+  const mw = menu.offsetWidth || 220;
+  const mh = menu.offsetHeight || 100;
+  let top = r.bottom + 4;
+  if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 4);
+  let left = r.right - mw;
+  left = Math.max(8, Math.min(window.innerWidth - mw - 8, left));
+  menu.style.top  = top  + 'px';
+  menu.style.left = left + 'px';
+
+  menu.querySelectorAll('.window-menu-item').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const act = btn.dataset.act;
+      if (act === 'share'){
+        togglePanelShare(id);
+      } else if (act === 'lock'){
+        const cur = !!layout[id]?.locked;
+        layout[id] = { ...layout[id], locked: !cur };
+        saveLayout();
+        const winEl = document.querySelector(`.window[data-panel="${id}"]`);
+        if (winEl) winEl.classList.toggle('locked', !cur);
+      } else if (act === 'snap'){
+        // Hand off to the layout picker, anchored at the same ⋯ button.
+        _closeWindowMenu();
+        openSnapLayoutsPicker(id, anchorBtn);
+        return;
+      }
+      _closeWindowMenu();
+    });
+  });
+
+  setTimeout(() => {
+    document.addEventListener('mousedown', _windowMenuOutside, true);
+    document.addEventListener('keydown',   _windowMenuEsc,    true);
   }, 0);
 }
