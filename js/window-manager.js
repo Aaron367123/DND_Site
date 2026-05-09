@@ -64,7 +64,7 @@ function ensurePanel(id){
   // Share button is a DM-only toggle that adds/removes this panel from the
   // player view. Hidden in player mode via CSS (`body.player-mode .window-actions`).
   const shareBtn = `<button class="btn icon-btn" data-wact="share" title="Share with player view">${shared?'👁':'◌'}</button>`;
-  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions">${shareBtn}<button class="btn icon-btn" data-wact="lock" title="Lock window">${lockIcon}</button><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div>
+  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions">${shareBtn}<button class="btn icon-btn" data-wact="lock" title="Lock window">${lockIcon}</button><button class="btn icon-btn" data-wact="snap" title="Snap to layout">▢</button><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div>
     <div class="rh rh-n"  data-rh="n"></div>
     <div class="rh rh-s"  data-rh="s"></div>
     <div class="rh rh-e"  data-rh="e"></div>
@@ -225,6 +225,10 @@ function wireWindow(el,id){
     e.currentTarget.textContent = !cur ? '🔒' : '🔓';
     e.currentTarget.title = !cur ? 'Unlock window' : 'Lock window';
   });
+  el.querySelector('[data-wact="snap"]').addEventListener('click',e=>{
+    e.stopPropagation();
+    openSnapLayoutsPicker(id, e.currentTarget);
+  });
   el.querySelector('[data-wact="min"]').addEventListener('click',e=>{e.stopPropagation();const cur=layout[id]?.minimized;layout[id]={...layout[id],minimized:!cur};saveLayout();el.classList.toggle('minimized',!cur);});
   el.querySelector('[data-wact="close"]').addEventListener('click',e=>{e.stopPropagation();closePanel(id);});
 }
@@ -257,4 +261,140 @@ function syncCombatToParty(combatantId){
     state.party[pi]={...state.party[pi],hp:c.hp,hpMax:c.hpMax,ac:c.ac};
     panelDefs.party?._render?.();
   }
+}
+
+// ─── Windows-11-style snap layouts ────────────────────────────────────────────
+// A small popover triggered by the ▢ title-bar button. Shows the same six
+// layout previews Windows 11 surfaces on hover-over-maximize, except they snap
+// the panel into a zone of the WORKSPACE (not the OS screen).
+//
+// Each layout is a list of zones expressed as fractional bounds {x,y,w,h} of
+// the workspace canvas (0–1). Click a zone to snap the active panel there;
+// click any non-active zone in a layout that has more than one zone and you'll
+// just see the preview — actual snap targets the zone that was clicked.
+const SNAP_LAYOUTS = [
+  // Side-by-side 50/50
+  { id:'split2', zones:[
+    {x:0,    y:0, w:1/2,  h:1},
+    {x:1/2,  y:0, w:1/2,  h:1},
+  ]},
+  // 1/3 + 2/3
+  { id:'third13', zones:[
+    {x:0,    y:0, w:1/3,  h:1},
+    {x:1/3,  y:0, w:2/3,  h:1},
+  ]},
+  // 2/3 + 1/3
+  { id:'third23', zones:[
+    {x:0,    y:0, w:2/3,  h:1},
+    {x:2/3,  y:0, w:1/3,  h:1},
+  ]},
+  // 4 quadrants
+  { id:'quad', zones:[
+    {x:0,    y:0,    w:1/2, h:1/2},
+    {x:1/2,  y:0,    w:1/2, h:1/2},
+    {x:0,    y:1/2,  w:1/2, h:1/2},
+    {x:1/2,  y:1/2,  w:1/2, h:1/2},
+  ]},
+  // 3 columns
+  { id:'col3', zones:[
+    {x:0,    y:0, w:1/3, h:1},
+    {x:1/3,  y:0, w:1/3, h:1},
+    {x:2/3,  y:0, w:1/3, h:1},
+  ]},
+  // 50% + 2 quarters (left half + top-right + bottom-right)
+  { id:'mix', zones:[
+    {x:0,    y:0,    w:1/2, h:1},
+    {x:1/2,  y:0,    w:1/2, h:1/2},
+    {x:1/2,  y:1/2,  w:1/2, h:1/2},
+  ]},
+];
+
+// Returns the workspace's pixel rect (in unzoomed coords) so the snap math is
+// independent of current zoom level.
+function _workspaceRect(){
+  const canvas = document.getElementById('workspace-canvas') || document.getElementById('workspace');
+  if (!canvas) return { w: window.innerWidth, h: window.innerHeight };
+  const z = (typeof getZoom === 'function') ? getZoom() : 1;
+  // clientWidth/Height is the on-screen size; divide by zoom to get the
+  // logical/unzoomed workspace size that window x/y/w/h are stored in.
+  return { w: canvas.clientWidth / z, h: canvas.clientHeight / z };
+}
+
+function snapWindowToZone(id, zone){
+  const ws = _workspaceRect();
+  const x = Math.round(zone.x * ws.w);
+  const y = Math.round(zone.y * ws.h);
+  const w = Math.round(zone.w * ws.w);
+  const h = Math.round(zone.h * ws.h);
+  // Bump z so the snapped window comes to the front of any overlapping ones.
+  const z = _nextZ();
+  layout[id] = { ...layout[id], x, y, w, h, z, minimized: false };
+  saveLayout();
+  // Apply to the live element if mounted.
+  const el = document.querySelector(`.window[data-panel="${id}"]`);
+  if (el){
+    el.classList.remove('minimized');
+    Object.assign(el.style, { left:x+'px', top:y+'px', width:w+'px', height:h+'px', zIndex:z });
+  }
+}
+
+let _snapPickerEl = null;
+function _closeSnapPicker(){
+  if (_snapPickerEl){ _snapPickerEl.remove(); _snapPickerEl = null; }
+  document.removeEventListener('mousedown', _snapPickerOutside, true);
+  document.removeEventListener('keydown', _snapPickerEsc, true);
+}
+function _snapPickerOutside(e){
+  if (_snapPickerEl && !_snapPickerEl.contains(e.target)) _closeSnapPicker();
+}
+function _snapPickerEsc(e){ if (e.key === 'Escape') _closeSnapPicker(); }
+
+function openSnapLayoutsPicker(id, anchorBtn){
+  _closeSnapPicker();
+  const pop = document.createElement('div');
+  pop.className = 'snap-picker';
+  pop.innerHTML = SNAP_LAYOUTS.map(L => `
+    <div class="snap-layout" data-layout="${L.id}">
+      ${L.zones.map((z, zi) => `
+        <button class="snap-zone" data-li="${L.id}" data-zi="${zi}"
+          style="left:${z.x*100}%;top:${z.y*100}%;width:${z.w*100}%;height:${z.h*100}%"
+          title="Snap here"></button>
+      `).join('')}
+    </div>
+  `).join('');
+  document.body.appendChild(pop);
+  _snapPickerEl = pop;
+
+  // Position the popover under the anchor button.
+  const r = anchorBtn.getBoundingClientRect();
+  // Default below button; flip up if it would clip the viewport.
+  const popH = pop.offsetHeight || 130;
+  const popW = pop.offsetWidth  || 280;
+  let top = r.bottom + 6;
+  if (top + popH > window.innerHeight - 8) top = Math.max(8, r.top - popH - 6);
+  let left = r.right - popW;
+  left = Math.max(8, Math.min(window.innerWidth - popW - 8, left));
+  pop.style.top  = top  + 'px';
+  pop.style.left = left + 'px';
+
+  // Wire zone clicks.
+  pop.querySelectorAll('.snap-zone').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const layoutId = btn.dataset.li;
+      const zi = +btn.dataset.zi;
+      const L = SNAP_LAYOUTS.find(l => l.id === layoutId);
+      if (L && L.zones[zi]){
+        snapWindowToZone(id, L.zones[zi]);
+      }
+      _closeSnapPicker();
+    });
+  });
+
+  // Outside-click + Esc dismisses. Capture phase + a tick of delay so the
+  // click that opened the picker doesn't immediately close it.
+  setTimeout(() => {
+    document.addEventListener('mousedown', _snapPickerOutside, true);
+    document.addEventListener('keydown',   _snapPickerEsc,    true);
+  }, 0);
 }

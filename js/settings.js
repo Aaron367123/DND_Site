@@ -21,22 +21,9 @@ function initSettings(){
     if(e.key==='Escape' && drawer.classList.contains('open')) drawer.classList.remove('open');
   });
 
-  const sym=document.getElementById('currency-symbol');
-  const jit=document.getElementById('price-jitter');
-  const jval=document.getElementById('jitter-val');
-  sym.value=state.settings.currencySymbol;
-  jit.value=state.settings.priceJitter;
-  jval.textContent=state.settings.priceJitter+'%';
-  document.querySelectorAll('#rounding-group button').forEach(b=>b.classList.toggle('active',String(state.settings.rounding)===b.dataset.val));
-
-  sym.addEventListener('change',()=>{state.settings.currencySymbol=sym.value||'gp';save();});
-  jit.addEventListener('input',()=>{jval.textContent=jit.value+'%';});
-  jit.addEventListener('change',()=>{state.settings.priceJitter=parseInt(jit.value);save();});
-  document.querySelectorAll('#rounding-group button').forEach(btn=>btn.addEventListener('click',()=>{
-    const v=btn.dataset.val==='none'?'none':parseInt(btn.dataset.val);
-    document.querySelectorAll('#rounding-group button').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');state.settings.rounding=v;save();
-  }));
+  // Shop generator controls (currency symbol, price jitter, rounding) used to
+  // live in this drawer; they were moved into the Shop Generator panel itself
+  // via a small ⚙ button so the settings drawer focuses on global preferences.
 
   // Per-user identity (local-only, drives per-line author coloring in Notes).
   const meName = document.getElementById('me-name');

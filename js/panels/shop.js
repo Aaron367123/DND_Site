@@ -10,6 +10,10 @@ registerPanel('shop',{
     const types=Object.keys(ITEM_CATALOG);
     b.innerHTML=`<div class="shop-layout">
       <div class="shop-controls">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px">
+          <span class="field-label" style="margin:0">Shop</span>
+          <button class="btn icon-btn" data-act="settings" title="Pricing settings (currency, jitter, rounding)" style="padding:2px 6px;font-size:13px;line-height:1">⚙</button>
+        </div>
         <div><label class="field-label">Shop Type</label><select id="shop-type">${types.map(t=>`<option ${state.shop?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div><label class="field-label">Shop Price</label><select id="shop-price"><option>Cheap</option><option selected>Average</option><option>Expensive</option><option>Premium</option></select></div>
         <div><label class="field-label">Town Economy</label><select id="shop-economy"><option>Poor</option><option selected>Average</option><option>Wealthy</option></select></div>
@@ -19,6 +23,63 @@ registerPanel('shop',{
       <div class="shop-display" id="shop-display">${this._renderDisplay()}</div>
     </div>`;
     b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._generate();});
+    b.querySelector('[data-act="settings"]').addEventListener('click',e=>{e.stopPropagation();this._openSettings();});
+  },
+
+  // Pricing settings popover — currency symbol, price jitter, rounding step.
+  // These used to live in the global ⚙ Settings drawer but are scoped to the
+  // shop generator, so we surface them here on a dedicated button instead.
+  _openSettings(){
+    const backdrop=document.createElement('div');
+    backdrop.className='modal-backdrop';
+    const cur = state.settings.currencySymbol || 'gp';
+    const jit = state.settings.priceJitter ?? 20;
+    const rnd = state.settings.rounding ?? 'none';
+    backdrop.innerHTML=`<div class="modal" role="dialog" aria-modal="true" style="width:340px;max-width:92vw">
+      <h3>Shop pricing</h3>
+      <div class="modal-fields">
+        <div class="modal-field">
+          <label>Currency symbol</label>
+          <input type="text" id="shop-cur" value="${esc(cur)}" maxlength="6" autocomplete="off">
+        </div>
+        <div class="modal-field">
+          <label>Price jitter <span id="shop-jit-val" style="float:right;color:var(--text-muted);font-size:11px">${jit}%</span></label>
+          <input type="range" id="shop-jit" min="0" max="50" value="${jit}">
+        </div>
+        <div class="modal-field">
+          <label>Rounding</label>
+          <div class="toggle-group" id="shop-rnd">
+            <button data-val="none" class="${rnd==='none'?'active':''}">None</button>
+            <button data-val="1" class="${String(rnd)==='1'?'active':''}">1</button>
+            <button data-val="5" class="${String(rnd)==='5'?'active':''}">5</button>
+            <button data-val="10" class="${String(rnd)==='10'?'active':''}">10</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn primary" id="shop-cfg-close">Done</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const close=()=>backdrop.remove();
+    backdrop.querySelector('#shop-cfg-close').addEventListener('click',close);
+    backdrop.addEventListener('mousedown',e=>{ if(e.target===backdrop) close(); });
+    backdrop.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+
+    const sym=backdrop.querySelector('#shop-cur');
+    const slider=backdrop.querySelector('#shop-jit');
+    const sliderVal=backdrop.querySelector('#shop-jit-val');
+    sym.addEventListener('change',()=>{ state.settings.currencySymbol=sym.value.trim()||'gp'; save(); this._render(); });
+    slider.addEventListener('input',()=>{ sliderVal.textContent=slider.value+'%'; });
+    slider.addEventListener('change',()=>{ state.settings.priceJitter=parseInt(slider.value); save(); });
+    backdrop.querySelectorAll('#shop-rnd button').forEach(btn=>btn.addEventListener('click',()=>{
+      const v=btn.dataset.val==='none'?'none':parseInt(btn.dataset.val);
+      backdrop.querySelectorAll('#shop-rnd button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.settings.rounding=v;
+      save();
+    }));
+    setTimeout(()=>sym.focus(),30);
   },
   _renderDisplay(){
     if(!state.shop)return'<div class="empty-state">Configure settings and click Generate Shop.</div>';
