@@ -947,6 +947,83 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .bestiary-folder-head .folder-name{flex:1;font-weight:500;color:var(--accent)}
 .bestiary-folder-head .folder-count{font-size:10px;color:var(--text-dim);background:var(--panel-3);padding:1px 6px;border-radius:8px}
 .bestiary-folder-head .folder-menu{padding:2px 6px;font-size:13px;color:var(--text-muted)}
+/* ─── Adventures panel ─────────────────────────────────────────────────────── */
+.adv-panel{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
+.adv-panel-detail{height:100%}
+.adv-list-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0}
+.adv-list-head input[type=search]{flex:1;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:4px 8px;font-size:11px;border-radius:4px}
+.adv-list-count{font-size:10px;color:var(--text-dim);white-space:nowrap}
+.adv-list{flex:1;overflow-y:auto;padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-content:start}
+.adv-card{display:flex;flex-direction:column;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:0;cursor:pointer;text-align:left;font-family:inherit;color:var(--text);overflow:hidden;transition:border-color .12s,transform .12s}
+.adv-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.adv-card-img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:var(--panel-3)}
+.adv-card-nopic{width:100%;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;font-size:48px;background:var(--panel-3);color:var(--text-muted)}
+.adv-card-body{padding:8px 10px}
+.adv-card-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px;line-height:1.25}
+.adv-card-meta{font-size:10px;color:var(--text-muted);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+/* Detail view: chapter sidebar + content */
+.adv-head{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-shrink:0}
+.adv-head-title{font-size:14px;font-weight:600;color:var(--accent);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adv-head-meta{font-size:10px;color:var(--text-dim);font-style:italic;flex-shrink:0}
+.adv-body{flex:1;display:flex;min-height:0;overflow:hidden}
+.adv-toc{flex:0 0 220px;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--panel)}
+.adv-toc-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;padding:10px 12px 6px;border-bottom:1px solid var(--border)}
+.adv-toc-list{flex:1;overflow-y:auto;padding:4px 0}
+.adv-chapter{display:flex;align-items:flex-start;gap:8px;width:100%;padding:7px 12px;background:transparent;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;text-align:left;font-family:inherit;line-height:1.4;border-left:2px solid transparent;transition:background .12s,color .12s}
+.adv-chapter:hover{background:var(--panel-2);color:var(--text)}
+.adv-chapter.active{background:var(--panel-3);color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.adv-chapter-num{flex-shrink:0;font-size:9px;color:var(--text-dim);min-width:18px;font-weight:600;text-align:right;padding-top:2px}
+.adv-chapter.active .adv-chapter-num{color:var(--accent)}
+.adv-chapter-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adv-content{flex:1;min-width:0;overflow-y:auto;padding:18px 26px;font-size:13px;line-height:1.7;color:var(--text)}
+.adv-content-title{font-size:22px;color:var(--accent);font-weight:700;margin:0 0 14px;letter-spacing:.01em}
+.adv-content h3.detail-header{font-size:16px;color:var(--accent);margin:18px 0 6px;font-weight:600}
+.adv-content .detail-section{margin:0 0 10px}
+.adv-content .detail-table{margin:10px 0}
+.adv-content .detail-quote{border-left:3px solid var(--accent);background:rgba(212,165,116,.04);padding:8px 12px;margin:10px 0;color:var(--text-muted);font-style:italic}
+.adv-content .detail-inset{background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px 14px;margin:10px 0}
+.adv-content .detail-list{margin:6px 0 12px;padding-left:20px}
+/* Adventure-renderer output */
+.adv-content p{margin:0 0 10px}
+.adv-content .adv-section{margin:0 0 14px}
+.adv-content .adv-section-head{font-size:16px;color:var(--accent);font-weight:600;margin:18px 0 6px;letter-spacing:.01em}
+.adv-content .adv-section .adv-section .adv-section-head{font-size:14px;color:var(--text);margin-top:14px}
+.adv-content .adv-list{margin:6px 0 12px;padding-left:22px;line-height:1.65}
+.adv-content .adv-list li{margin-bottom:4px}
+.adv-content .adv-item{margin-bottom:8px}
+.adv-content .adv-item strong{color:var(--text)}
+/* Tables */
+.adv-table-wrap{overflow-x:auto;margin:10px 0}
+.adv-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px}
+.adv-table caption{padding:6px 8px;font-style:italic;color:var(--text-muted);text-align:left;background:var(--panel-3);border-bottom:1px solid var(--border)}
+.adv-table th{padding:6px 10px;background:var(--panel-3);color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em;text-align:left;border-bottom:1px solid var(--border)}
+.adv-table td{padding:5px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.adv-table tr:last-child td{border-bottom:none}
+.adv-table tr:hover td{background:rgba(255,255,255,.025)}
+/* Insets / read-aloud / quotes */
+.adv-content .adv-inset{background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px 14px;margin:12px 0}
+.adv-content .adv-inset-readaloud{background:rgba(212,165,116,.06);border-color:rgba(212,165,116,.35)}
+.adv-content .adv-inset-head{font-weight:600;font-size:13px;color:var(--accent);margin-bottom:6px}
+.adv-content .adv-quote{border-left:3px solid var(--accent);background:rgba(212,165,116,.04);padding:8px 14px;margin:10px 0;color:var(--text-muted);font-style:italic}
+.adv-content .adv-quote .adv-quote-by{display:block;margin-top:6px;font-style:normal;font-size:11px;color:var(--text-dim)}
+/* Images */
+.adv-figure{margin:12px 0;text-align:center}
+.adv-figure img{max-width:100%;height:auto;border-radius:4px;background:var(--panel-2);border:1px solid var(--border)}
+.adv-figure figcaption{margin-top:4px;font-size:11px;color:var(--text-muted);font-style:italic;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.adv-img-credit{font-size:10px;color:var(--text-dim);font-style:normal}
+.adv-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:14px 0}
+.adv-gallery .adv-figure{margin:0}
+/* Statblock reference */
+.adv-statblock-ref{background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:3px;padding:6px 12px;margin:10px 0;font-size:12px;color:var(--text-muted)}
+.adv-statblock-ref strong{color:var(--text)}
+.adv-statblock-src{font-size:10px;color:var(--text-dim)}
+/* Flowcharts */
+.adv-flowchart{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:10px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px}
+.adv-flowblock{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:8px 12px}
+.adv-flowblock-head{font-weight:600;color:var(--accent);font-size:12px;margin-bottom:4px}
+.adv-flowblock p{font-size:12px;line-height:1.55;margin:0}
+.adv-spellcasting{background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px 14px;margin:10px 0}
+
 .bestiary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;padding:8px}
 .bestiary-card{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;transition:border-color .12s,transform .12s;position:relative;min-width:0}
 .bestiary-card-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s,background .12s;padding:0}

@@ -139,16 +139,19 @@ function initSettings(){
     // Slider: preview on input, commit on change.
     fs.addEventListener('input', () => { if (_muting) return; setBoth(parseInt(fs.value)); });
     fs.addEventListener('change', () => { if (_muting) return; setBoth(parseInt(fs.value), {commit:true}); });
-    // Number input: preview as user types, commit on blur / Enter.
-    fsn.addEventListener('input', () => {
-      if (_muting) return;
-      const v = parseInt(fsn.value);
-      if (!isNaN(v)) setBoth(v);
-    });
+    // Number input: only apply on blur / Enter, NOT on every keystroke. If
+    // we previewed on `input`, typing "1" while replacing "200" with "100"
+    // would briefly scale the page to 1% and make the input unreachable.
+    // `change` fires on blur or Enter so the user can finish typing first.
     fsn.addEventListener('change', () => {
       if (_muting) return;
       const v = parseInt(fsn.value);
       if (!isNaN(v)) setBoth(v, {commit:true});
+    });
+    // Pressing Enter inside the number input should immediately commit
+    // (without waiting for blur, which is what `change` would normally need).
+    fsn.addEventListener('keydown', e => {
+      if (e.key === 'Enter') fsn.blur();
     });
   }
 

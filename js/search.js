@@ -822,6 +822,9 @@ function getSearchPool(){
   const policy = state.settings?.reprintPolicy || 'all';
   if (policy === 'hide-legacy')   base = base.filter(r => !_isLegacyEntry(r));
   else if (policy === 'hide-reprints') base = base.filter(r => !_isReprintEntry(r));
+  // Adventures + their chapters are no longer in search — they have their
+  // own dedicated panel (Adventures 📖) with a chapter-tree browser.
+  base = base.filter(r => r.cat !== 'adventure' && r.cat !== 'chapter');
   return [...party, ...base];
 }
 
