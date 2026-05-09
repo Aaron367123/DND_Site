@@ -647,17 +647,76 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .rarity-Legendary{background:rgba(212,165,116,.15);color:#d4a574}
 
 /* DRAWER */
-.drawer{position:fixed;top:0;right:0;height:100vh;width:360px;background:var(--panel);border-left:1px solid var(--border);transform:translateX(100%);transition:transform .2s;z-index:700;overflow-y:auto;padding:16px}
+/* ─── Settings drawer ─────────────────────────────────────────────────────── */
+.drawer{position:fixed;top:0;right:0;height:100vh;width:380px;background:var(--panel);border-left:1px solid var(--border-strong,#4a4a4a);transform:translateX(100%);transition:transform .2s;z-index:700;overflow-y:auto;padding:18px;box-shadow:-12px 0 32px rgba(0,0,0,.35)}
 .drawer.open{transform:translateX(0)}
-.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.drawer h2{margin:0;font-size:14px;font-weight:500}
-.drawer-section{margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border)}
-.drawer-section:last-child{border-bottom:none}
-.drawer-section h3{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin:0 0 10px}
-.drawer-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
-.drawer-row label{font-size:11px;color:var(--text-muted);flex:0 0 auto}
-.drawer-row input[type="range"]{flex:1;max-width:140px}
-.drawer-note{font-size:11px;color:var(--text-dim);line-height:1.5;margin:8px 0 0}
+/* Header — bigger title + subtitle, hairline below */
+.drawer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.drawer-head-titles{flex:1;min-width:0}
+.drawer h2{margin:0;font-size:16px;font-weight:600;letter-spacing:.01em;color:var(--text);display:flex;align-items:center;gap:6px}
+.drawer-sub{margin:2px 0 0;font-size:11px;color:var(--text-muted);line-height:1.4}
+/* Sections become subtle cards instead of dividers */
+.drawer-section{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:14px 14px 12px;margin-bottom:12px}
+.drawer-section:last-child{margin-bottom:0}
+.drawer-section h3{font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--text);text-transform:none;margin:0 0 10px;display:flex;align-items:center;gap:7px}
+.drawer-sec-icon{font-size:13px;line-height:1;flex-shrink:0;opacity:.9}
+/* Rows */
+.drawer-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;min-height:30px}
+.drawer-row:last-child{margin-bottom:0}
+.drawer-row label{font-size:12px;color:var(--text);font-weight:500;flex:0 0 auto}
+/* Unify form controls inside the drawer */
+.drawer input[type="text"],
+.drawer input[type="number"],
+.drawer select{height:28px;padding:4px 8px;border-radius:4px;font-size:12px;background:var(--panel);border:1px solid var(--border);color:var(--text);outline:none;transition:border-color .12s,box-shadow .12s}
+.drawer input[type="text"]:focus,
+.drawer input[type="number"]:focus,
+.drawer select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(212,165,116,.18)}
+/* Color swatches — rounded chips with subtle inner shadow */
+.drawer input[type="color"]{width:30px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);transition:border-color .12s,transform .12s}
+.drawer input[type="color"]:hover{border-color:var(--accent);transform:scale(1.05)}
+.drawer-color-row{display:flex;align-items:center;gap:8px;min-height:28px}
+.drawer-color-row label{flex:1;font-size:12px;color:var(--text);font-weight:500}
+/* Sliders */
+.drawer input[type="range"]{flex:1;height:18px;background:transparent;-webkit-appearance:none;appearance:none;cursor:pointer}
+.drawer input[type="range"]::-webkit-slider-runnable-track{height:3px;background:var(--panel-3);border-radius:2px}
+.drawer input[type="range"]::-moz-range-track{height:3px;background:var(--panel-3);border-radius:2px}
+.drawer input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);border:none;margin-top:-5px;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .12s,box-shadow .12s}
+.drawer input[type="range"]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:none;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.drawer input[type="range"]:focus::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(212,165,116,.25)}
+.drawer input[type="range"]:focus::-moz-range-thumb{box-shadow:0 0 0 3px rgba(212,165,116,.25)}
+/* Toggle group inside the drawer (Reprints) — overrides the base .toggle-group
+   so buttons sit edge-to-edge inside a rounded container instead of having
+   the inset chip look. */
+.drawer .toggle-group{display:inline-flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;background:var(--panel);padding:0}
+.drawer .toggle-group button{padding:5px 10px;background:transparent;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;border-right:1px solid var(--border);transition:background .12s,color .12s}
+.drawer .toggle-group button:last-child{border-right:none}
+.drawer .toggle-group button:hover{color:var(--text);background:var(--panel-3)}
+.drawer .toggle-group button.active{color:var(--accent);background:rgba(212,165,116,.12);font-weight:600}
+/* Notes — small ℹ tip row */
+.drawer-note{font-size:11px;color:var(--text-dim);line-height:1.5;margin:8px 0 0;padding-left:18px;position:relative}
+.drawer-note::before{content:'ℹ';position:absolute;left:2px;top:0;color:var(--text-muted);font-style:normal;font-size:11px;font-weight:600}
+/* Display section: slider + number + % as one cluster */
+.font-scale-controls{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.font-scale-controls input[type="range"]{flex:1;min-width:0}
+.font-scale-controls input[type="number"]{width:56px;text-align:center}
+.font-scale-unit{font-size:11px;color:var(--text-muted);flex-shrink:0}
+/* Data section: side-by-side equal-width buttons */
+.drawer-data-row{display:flex;gap:6px;margin-bottom:0}
+.drawer-data-row .btn{flex:1}
+/* Danger zone callout */
+.danger-callout{background:rgba(194,84,80,.08);border:1px solid rgba(194,84,80,.4);border-radius:5px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.danger-callout-text{margin:0;font-size:11px;color:var(--text-muted);line-height:1.5}
+.danger-callout .btn{align-self:flex-start}
+/* Subtle stagger when the drawer opens */
+.drawer.open .drawer-section{animation:drawerSectionIn .25s ease-out backwards}
+.drawer.open .drawer-section:nth-child(2){animation-delay:.04s}
+.drawer.open .drawer-section:nth-child(3){animation-delay:.08s}
+.drawer.open .drawer-section:nth-child(4){animation-delay:.12s}
+.drawer.open .drawer-section:nth-child(5){animation-delay:.16s}
+.drawer.open .drawer-section:nth-child(6){animation-delay:.2s}
+.drawer.open .drawer-section:nth-child(7){animation-delay:.24s}
+.drawer.open .drawer-section:nth-child(8){animation-delay:.28s}
+@keyframes drawerSectionIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 input[type="range"]{-webkit-appearance:none;appearance:none;height:4px;background:var(--panel-3);border:none;padding:0}
 input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer}
 input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:none}

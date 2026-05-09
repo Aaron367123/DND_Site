@@ -88,11 +88,14 @@
 <!-- SETTINGS DRAWER -->
 <div class="drawer" id="settings-drawer">
   <div class="drawer-head">
-    <h2>Settings</h2>
+    <div class="drawer-head-titles">
+      <h2>⚙ Settings</h2>
+      <p class="drawer-sub">Workspace preferences · saved to this browser</p>
+    </div>
     <button class="btn icon-btn" id="close-drawer">✕</button>
   </div>
   <div class="drawer-section">
-    <h3>Search</h3>
+    <h3><span class="drawer-sec-icon">🔎</span>Search</h3>
     <div class="drawer-row">
       <label>Reprints</label>
       <div class="toggle-group" id="reprint-group">
@@ -101,70 +104,77 @@
         <button data-val="hide-reprints" title="Hide the 2024 reprints, keep the 2014 versions (best for SKT and other 2014-era modules)">Hide 2024</button>
       </div>
     </div>
-    <p class="drawer-note" style="margin-top:6px">Affects search results and tab counts.</p>
+    <p class="drawer-note">Affects search results and tab counts.</p>
   </div>
   <div class="drawer-section">
-    <h3>Workspace</h3>
+    <h3><span class="drawer-sec-icon">🖥</span>Workspace</h3>
     <div class="drawer-row">
       <label for="snap-windows">Snap windows together</label>
       <input type="checkbox" id="snap-windows" style="width:auto">
     </div>
-    <p class="drawer-note" style="margin-top:6px">When dragging or resizing, edges snap to nearby windows within 8 px.</p>
+    <p class="drawer-note">When dragging or resizing, edges snap to nearby windows within 8 px.</p>
   </div>
   <div class="drawer-section">
-    <h3>Display</h3>
+    <h3><span class="drawer-sec-icon">🔠</span>Display</h3>
     <div class="drawer-row">
       <label>Font size</label>
-      <input type="range" id="font-scale" min="80" max="150" step="5" value="100">
-      <input type="number" id="font-scale-num" min="50" max="200" step="1" value="100" style="width:54px" title="Type any value 50–200">
-      <span style="font-size:11px;color:var(--text-muted)">%</span>
+      <div class="font-scale-controls">
+        <input type="range" id="font-scale" min="80" max="150" step="5" value="100">
+        <input type="number" id="font-scale-num" min="50" max="200" step="1" value="100" title="Type any value 50–200">
+        <span class="font-scale-unit">%</span>
+      </div>
     </div>
-    <p class="drawer-note" style="margin-top:6px">Drag the slider for the common range, or type any value 50–200% in the box. Scales every panel — text, controls, and window dimensions all grow together so content stays visible.</p>
+    <p class="drawer-note">Drag the slider for the common range, or type any value 50–200% in the box. Scales every panel so text, controls, and window dimensions grow together.</p>
   </div>
   <div class="drawer-section">
-    <h3>Theme</h3>
+    <h3><span class="drawer-sec-icon">🎨</span>Theme</h3>
     <div class="drawer-row">
       <label for="theme-select">Color scheme</label>
       <select id="theme-select" style="flex:1"></select>
     </div>
     <div class="drawer-row" id="theme-custom-row" style="display:none;flex-direction:column;align-items:stretch;gap:6px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="flex:1">Accent</label>
-        <input type="color" id="theme-accent" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+      <div class="drawer-color-row">
+        <label>Accent</label>
+        <input type="color" id="theme-accent">
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="flex:1">Background</label>
-        <input type="color" id="theme-bg" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+      <div class="drawer-color-row">
+        <label>Background</label>
+        <input type="color" id="theme-bg">
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="flex:1">Panel</label>
-        <input type="color" id="theme-panel" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+      <div class="drawer-color-row">
+        <label>Panel</label>
+        <input type="color" id="theme-panel">
       </div>
     </div>
-    <p class="drawer-note" style="margin-top:6px">Saved per browser. Doesn't sync to other players.</p>
+    <p class="drawer-note">Saved per browser. Doesn't sync to other players.</p>
   </div>
   <div class="drawer-section">
-    <h3>You</h3>
+    <h3><span class="drawer-sec-icon">👤</span>You</h3>
     <div class="drawer-row">
       <label>Display name</label>
       <input type="text" id="me-name" maxlength="20" style="flex:1" placeholder="Player">
     </div>
     <div class="drawer-row">
       <label>Your color</label>
-      <input type="color" id="me-color" style="width:48px;height:28px;padding:0;border:1px solid var(--border);background:none;cursor:pointer">
+      <input type="color" id="me-color">
     </div>
-    <p class="drawer-note" style="margin-top:6px">Lines you write in Session Notes are colored with this. Each browser has its own identity.</p>
+    <p class="drawer-note">Lines you write in Session Notes are colored with this. Each browser has its own identity.</p>
   </div>
   <div class="drawer-section">
-    <h3>Data</h3>
-    <button class="btn small" id="export-btn">Export JSON</button>
-    <button class="btn small" id="import-btn" style="margin-top:6px">Import JSON</button>
+    <h3><span class="drawer-sec-icon">💾</span>Data</h3>
+    <div class="drawer-data-row">
+      <button class="btn small" id="export-btn">📤 Export JSON</button>
+      <button class="btn small" id="import-btn">📥 Import JSON</button>
+    </div>
     <input type="file" id="import-file" accept=".json" style="display:none">
-    <p class="drawer-note" style="margin-top:10px">Your data auto-saves to this browser. Use Export/Import to back up or move to another device.</p>
+    <p class="drawer-note">Your data auto-saves to this browser. Use Export/Import to back up or move to another device.</p>
   </div>
   <div class="drawer-section">
-    <h3>Danger zone</h3>
-    <button class="btn small danger" id="reset-data-btn">Reset to defaults</button>
+    <h3><span class="drawer-sec-icon">⚠</span>Danger zone</h3>
+    <div class="danger-callout">
+      <p class="danger-callout-text">This wipes party, combat, notes, bestiary, loot, and settings — everything in this browser.</p>
+      <button class="btn small danger" id="reset-data-btn">Reset to defaults</button>
+    </div>
   </div>
 </div>
 
