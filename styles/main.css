@@ -145,6 +145,15 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
    keeps panel contents fully interactive. Player edits sync back to the DM
    the same way DM edits sync to the player (bidirectional via Firebase). */
 body.player-mode .panel-dock{display:none}
+/* Per-user UI visibility toggles (driven from Settings → Visibility).
+   Each `body.hide-*` class hides one chrome element; the dock toggle also
+   collapses the .app grid to a single column so the workspace expands. */
+body.hide-dock .panel-dock{display:none}
+body.hide-dock .app{grid-template-columns:1fr;grid-template-areas:"workspace"}
+body.hide-player-view #player-view-btn{display:none}
+body.hide-sync-status #sync-status{display:none}
+body.hide-tutorial-btn #tutorial-btn{display:none}
+body.hide-zoom-controls .zoom-controls{display:none}
 /* Hide DM-only items in the float-toolbar; keep sync indicator + settings. */
 body.player-mode #float-search-btn,
 body.player-mode #search-wrap,

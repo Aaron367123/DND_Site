@@ -13,10 +13,24 @@ function applyFontScale(scale){
   document.body.style.zoom = s;
 }
 
+// Apply per-element visibility toggles by setting body classes that the CSS
+// uses to hide the matching widget. Settings (⚙) and search (🔎) intentionally
+// stay visible so the user can always return to this drawer.
+function applyUiHide(uiHide){
+  const u = uiHide || {};
+  document.body.classList.toggle('hide-dock',          !!u.dock);
+  document.body.classList.toggle('hide-player-view',   !!u.playerView);
+  document.body.classList.toggle('hide-sync-status',   !!u.syncStatus);
+  document.body.classList.toggle('hide-tutorial-btn',  !!u.tutorialBtn);
+  document.body.classList.toggle('hide-zoom-controls', !!u.zoomControls);
+}
+
 function initSettings(){
   // Apply the saved font scale immediately, before any UI shows up, so the
   // page renders at the right size from the first paint.
   applyFontScale(state.settings.fontScale ?? 1);
+  // Apply saved UI-visibility toggles too.
+  applyUiHide(state.settings.uiHide || {});
 
   const drawer=document.getElementById('settings-drawer');
   const settingsBtn=document.getElementById('settings-btn');
@@ -69,6 +83,28 @@ function initSettings(){
       save();
     });
   }
+
+  // Visibility toggles for chrome elements (sidebar, top-bar buttons, status).
+  // Stored as `state.settings.uiHide.<key>` (true = hidden). Each checkbox
+  // shows the OPPOSITE state to the user (checked = visible).
+  const uiHide = state.settings.uiHide = state.settings.uiHide || {};
+  const visControls = [
+    { id:'show-dock',           key:'dock' },
+    { id:'show-player-view',    key:'playerView' },
+    { id:'show-sync-status',    key:'syncStatus' },
+    { id:'show-tutorial-btn',   key:'tutorialBtn' },
+    { id:'show-zoom-controls',  key:'zoomControls' },
+  ];
+  visControls.forEach(({id, key}) => {
+    const cb = document.getElementById(id);
+    if (!cb) return;
+    cb.checked = !uiHide[key];
+    cb.addEventListener('change', () => {
+      uiHide[key] = !cb.checked;
+      save();
+      applyUiHide(uiHide);
+    });
+  });
 
   // Display font-scale — slider for the common range (80–150%) + number
   // input for arbitrary values (50–200%). Either control drives the other,
@@ -139,14 +175,14 @@ function initSettings(){
   document.getElementById('import-file').addEventListener('change',e=>{
     const f=e.target.files[0];if(!f)return;
     const reader=new FileReader();
-    reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(Array.isArray(d.party))state.party=d.party;if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;state.shop=d.shop??null;if(d.settings)state.settings={...state.settings,...d.settings};save();applyFontScale(state.settings.fontScale??1);initPanels();showToast('Imported');}catch(err){alert('Invalid JSON: '+err.message);}};
+    reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(Array.isArray(d.party))state.party=d.party;if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;state.shop=d.shop??null;if(d.settings)state.settings={...state.settings,...d.settings};save();applyFontScale(state.settings.fontScale??1);applyUiHide(state.settings.uiHide||{});initPanels();showToast('Imported');}catch(err){alert('Invalid JSON: '+err.message);}};
     reader.readAsText(f);e.target.value='';
   });
   document.getElementById('reset-data-btn').addEventListener('click',()=>{
     showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{
       if(r===null)return;
       state.party=JSON.parse(JSON.stringify(DEFAULT_PARTY));state.combatants=[];state.combatRound=0;state.activeCombatantId=null;state.shop=null;state.settings={...DEFAULT_SETTINGS};
-      save();applyFontScale(state.settings.fontScale??1);initPanels();showToast('Reset to defaults');
+      save();applyFontScale(state.settings.fontScale??1);applyUiHide(state.settings.uiHide||{});initPanels();showToast('Reset to defaults');
     });
   });
 } // end initSettings
