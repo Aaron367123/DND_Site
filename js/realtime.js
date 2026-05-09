@@ -159,6 +159,7 @@ function _reloadPanel(id) {
       const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
       def._tokens     = d.tokens   || [];
       def._fog        = d.fog      ? new Set(d.fog) : null;
+      def._drawings   = Array.isArray(d.drawings) ? d.drawings : [];
       def._bgColor    = d.bgColor  || def._bgColor;
       def._cellSize   = d.cellSize || def._cellSize;
       def._cols       = d.cols     || def._cols;

@@ -5,7 +5,9 @@
 // on a user's first visit (gated by localStorage). Each page is
 // a self-contained chunk of HTML; navigation is prev/next.
 
-const TUTORIAL_KEY = 'skt-tutorial-seen-v1';
+// Bumped when the tour content meaningfully changes so returning users see
+// the updated walk-through once more.
+const TUTORIAL_KEY = 'skt-tutorial-seen-v2';
 
 const TUTORIAL_PAGES = [
   {
@@ -29,11 +31,16 @@ const TUTORIAL_PAGES = [
       It searches the full 5etools dataset:</p>
       <ul>
         <li><strong>Monsters</strong>, <strong>spells</strong>, <strong>magic items</strong>, <strong>conditions</strong></li>
+        <li><strong>Base items</strong> — every weapon, armor, tool, and adventuring-gear entry, with proper damage / AC / weight / cost in the stat block.</li>
         <li>Plus feats, races, classes, backgrounds, deities, traps, vehicles, adventures, and more under the <strong>More ▾</strong> row.</li>
       </ul>
       <p>Click any result to view its full stat block. From a monster, you can
       <strong>+ Add to combat</strong>; from a condition, <strong>+ Apply to active combatant</strong>.
       Press <kbd>⧉ Pop out</kbd> to keep a stat block open in its own floating window.</p>
+      <p><strong>Tabbed magic variants:</strong> open a base weapon or armor (e.g. Longsword) and the detail
+      shows a tab strip — <strong>Base / +1 / +2 / +3</strong> — so you can flip between every enhancement
+      bonus version in one entry. Searching "+1 longsword" still finds the base.</p>
+      <p>Closing the search clears it — pressing <kbd>/</kbd> again starts fresh.</p>
     `,
   },
   {
@@ -66,7 +73,7 @@ const TUTORIAL_PAGES = [
         <li>Clicking <strong>+ Add</strong> for a quick custom combatant.</li>
       </ul>
       <p>Per-card you can edit HP, AC, initiative, upload a portrait, and toggle death saves (PCs).
-      <strong>Right-click any tile</strong> to open the conditions menu — pick from the full
+      <strong>Right-click any tile</strong> (PC or NPC) to open the conditions menu — pick from the full
       5e condition list to apply or remove.</p>
       <p>Drag tiles to reorder turn order manually. Use the round counter and turn arrows
       to advance. <strong>Hide Monster Stats</strong> in settings hides HP/AC from the Player View.</p>
@@ -80,12 +87,17 @@ const TUTORIAL_PAGES = [
       passive perception, and gold. Click into a card for the full sheet:</p>
       <ul>
         <li><strong>Stats</strong> tab — abilities, saves, proficiencies, hit dice.</li>
-        <li><strong>Skills</strong> tab — full skill list with modifiers.</li>
-        <li><strong>Spells</strong> tab — spell slots and known/prepared spells.</li>
+        <li><strong>Skills</strong> tab — grouped by <strong>◉ Expertise / ● Proficient / ◐ Half</strong>;
+          untrained skills tucked into a collapsible footer.</li>
+        <li><strong>Spells</strong> tab — slot pips, known spells. <strong>Click any spell name</strong>
+          to pop open its full description in a floating window.</li>
       </ul>
       <p>Toggle <strong>Heroic Inspiration</strong> or <strong>Bardic Inspiration</strong> right from the card.
-      Click <strong>Import PDF</strong> to parse a D&amp;D Beyond character sheet, or build one manually.
+      Click <strong>📄 Import PDF</strong> to parse a D&amp;D Beyond character sheet, or build one manually.
       Drag a party card to the Combat Tracker to add the PC to combat.</p>
+      <p><strong>📊 Party Skills</strong> button at the bottom opens a modal showing every skill and exactly
+      who is proficient / has expertise / has half-prof — instantly answers "who should make this check?"
+      and surfaces the party's blind spots.</p>
     `,
   },
   {
@@ -117,14 +129,22 @@ const TUTORIAL_PAGES = [
     title: 'Loot Tracker 💰',
     icon: '💰',
     body: `
-      <p>Track party treasure across:</p>
+      <p>Track party treasure with rich per-item state.</p>
       <ul>
-        <li><strong>Coins</strong> in CP/SP/EP/GP/PP — totals are auto-converted to gp equivalent.</li>
-        <li><strong>Items</strong> — type a name (or <strong>search the 5e item database</strong>)
-        and click an entry to add it. Set qty and value, and <strong>assign each item to a party member</strong>.</li>
+        <li><strong>Coins</strong> — CP/SP/EP/GP/PP, auto-totaled in gp. <strong>Divvy up</strong> splits evenly.</li>
+        <li><strong>Add items</strong> — type a name to live-search the full 5e item library
+          (including base weapons / armor / tools and "+1/+2/+3" variants). Click a result to add
+          with the <strong>cost auto-filled</strong> from the 5e data. Or just type a custom name.</li>
+        <li><strong>Edit inline</strong> — click the item name to rename, edit qty/value, swap
+          assignment. Click <strong>📖</strong> next to a name to pop open the 5e detail.</li>
+        <li><strong>Drag-to-reorder</strong> — grab the <strong>⋮⋮</strong> handle on any row.</li>
       </ul>
-      <p>Switch between <strong>All Items</strong> and <strong>By Party Member</strong> view to see who
-      gets what. The <strong>Divvy up</strong> button splits coin equally across the party.</p>
+      <p><strong>Tabs</strong> across the top: <strong>All</strong>, a single <strong>👤 Party</strong>
+      tab (every member as a section), any <strong>👥 Custom Tabs</strong> you create, the
+      <strong>＋ Tab</strong> button to make a new one (pick a name + which party members it groups),
+      and a <strong>📦 Group</strong> tab for shared / unassigned loot.</p>
+      <p>Assigning an item to a custom group makes it appear in every member's section in that group's
+      tab — perfect for "Frontline" loot that the warriors share.</p>
     `,
   },
   {
@@ -158,14 +178,24 @@ const TUTORIAL_PAGES = [
     title: 'Battle Map 🗺',
     icon: '🗺',
     body: `
-      <p>Tactical canvas with grid, tokens, and fog of war.</p>
+      <p>Tactical canvas with grid, tokens, fog of war, and freehand annotations.</p>
       <ul>
-        <li><strong>Upload</strong> any image or pick a 5etools adventure map.</li>
-        <li>Drop tokens for creatures and objects; drag to move.</li>
-        <li><strong>Fog of war</strong> — paint over to hide, paint to reveal; adjustable brush radius.</li>
-        <li><strong>Draw</strong> annotations in colored pencil; toggle the grid; auto-fit or snap-to-grid.</li>
+        <li><strong>🗺 Map</strong> picks any 5etools adventure map (search across every adventure).</li>
+        <li>Drop tokens for creatures and objects; drag to move. Drag from the
+          <strong>Party:</strong> bar or Bestiary card straight onto the map.</li>
+        <li><strong>🌫 Fog of war</strong> — paint to hide, 🖌 reveal as players explore;
+          adjustable brush radius. Players see fog updates in real time.</li>
+        <li><strong>🖊 Draw</strong> annotations in colored pencil. <strong>🗑 Erase</strong> now also
+          removes pencil strokes (drag across them) in addition to tokens.</li>
+        <li><strong>Custom grid sizes</strong> — type any pixel value in the Grid input, or pick
+          a preset (30 / 50 / 64 / 80 / 100 / 120 / 150).</li>
+        <li><strong>📐 Align</strong> — click two opposite corners of one cell on a printed map
+          grid; the overlay grid snaps to match the map's printed cell size and offset.</li>
+        <li><strong>Smooth zoom</strong> — wheel, slider, pinch, or ⊙ Fit. The grid stays anchored
+          to the map content at every zoom level.</li>
       </ul>
-      <p>State persists across refreshes. Share the map window to show it to players.</p>
+      <p>Strokes, fog, and tokens all sync to the player view in real time. State persists across
+      refreshes. Share the map window to show it on the player tab.</p>
     `,
   },
   {
@@ -201,6 +231,12 @@ const TUTORIAL_PAGES = [
       <p>Click <strong>🖥 Player View</strong> in the top toolbar to open a separate window
       that mirrors only the windows you've marked with the <strong>👁 share</strong> icon —
       perfect for a TV at the table or a streamed call.</p>
+      <p>The player tab is <strong>read-only by design</strong>: the battle-map toolbar there is
+      trimmed down to just <strong>Draw / Erase / Zoom / Drawings (clear) / Clear (tokens)</strong>
+      — no fog, map-picker, or grid-editing controls. Fog state, tokens, and pencil strokes still
+      sync from the DM in real time via BroadcastChannel.</p>
+      <p>The floating panel dock fades to nearly invisible when not in use and brightens on hover,
+      so it doesn't crowd the shared windows.</p>
       <p>If realtime sync is configured, players can also view the shared workspace
       from their own device. Combatant HP/AC can be hidden via the
       <strong>Hide Monster Stats</strong> setting.</p>
@@ -230,6 +266,10 @@ const TUTORIAL_PAGES = [
         <li>Right-click the workspace to manage panels and save layouts.</li>
         <li>Right-click a combatant tile to apply conditions.</li>
         <li>Drag cards (party, bestiary, NPC library) onto the Combat Tracker to add them.</li>
+        <li>Drag the <strong>⋮⋮</strong> handle in loot rows to reorder items.</li>
+        <li>Click a spell name on a character sheet to pop up its full description.</li>
+        <li>Use <strong>📐 Align</strong> on the battle map to lock the grid to a printed map.</li>
+        <li>Use <strong>📊 Party Skills</strong> to see who's good at what at a glance.</li>
         <li>Re-open this tour any time from the <strong>❓</strong> button.</li>
       </ul>
       <p style="color:var(--text-muted)">Happy running.</p>

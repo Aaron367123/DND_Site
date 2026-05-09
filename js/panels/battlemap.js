@@ -351,6 +351,7 @@ registerPanel('battlemap',{
         if (msg.rows)     this._rows     = msg.rows;
         if (msg.bgColor)  this._bgColor  = msg.bgColor;
         this._fog = msg.fog ? new Set(msg.fog) : null;
+        if (Array.isArray(msg.drawings)) this._drawings = msg.drawings;
         if (msg.bgMapPath !== undefined) this._bgMapPath = msg.bgMapPath;
 
         // Map path changed → reload the bg image, then full re-render so the
@@ -366,9 +367,10 @@ registerPanel('battlemap',{
           if (this._render) this._render();
           return;
         }
-        // Lightweight repaint — fog + tokens only. No flicker.
+        // Lightweight repaint — fog + drawings + tokens only. No flicker.
         if (this._body){
           this._drawFog();
+          if (Array.isArray(msg.drawings)) this._drawAllStrokes();
           this._renderTokens();
         }
       };
@@ -404,6 +406,9 @@ registerPanel('battlemap',{
         bgColor:this._bgColor, fog:fogArr,
         bgImageData: _mapBgImage?'present':null,
         bgMapPath: this._bgMapPath,
+        // Pencil annotations — players see strokes as the DM commits them
+        // (mouseup) and as the eraser removes them.
+        drawings: this._drawings || [],
       });
     }catch(e){}
   },
@@ -520,9 +525,7 @@ registerPanel('battlemap',{
       +'<button class="btn" data-mact="open-player" style="flex-shrink:0" title="Open player view in new tab">📺 Player View</button>'
     +'</div>';
 
-    // The "Party:" quick-add row is DM-only (lets the DM drop PCs onto the
-    // map). Players already see the placed tokens via sync.
-    if (partyBtns && !_isPlayer){
+    if (partyBtns){
       html+='<div style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap;align-items:center">'
         +'<span style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
     }
