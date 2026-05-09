@@ -38,8 +38,7 @@ registerPanel('party',{
 
     let resHtml='';
     if(resources.length){
-      resHtml='<div class="resource-section"><div class="resource-section-head"><span>Resources</span>'
-        +'<button class="btn small" data-act="add-res" data-idx="'+i+'" style="font-size:9px;padding:1px 5px">+ Add</button></div>';
+      resHtml='<div class="resource-section"><div class="resource-section-head"><span>Resources</span></div>';
       resources.forEach((r,ri)=>{
         const pips=r.type==='pool'?r.max:1;
         let pipHtml='<div class="resource-pips">';
@@ -50,12 +49,9 @@ registerPanel('party',{
         resHtml+='<div class="resource-row">'
           +'<span class="resource-label" title="'+esc(r.name)+'">'+esc(r.name)+'</span>'
           +pipHtml
-          +'<button class="btn icon-btn" data-act="del-res" data-idx="'+i+'" data-ri="'+ri+'" style="font-size:10px;padding:0 4px;opacity:.5">×</button>'
           +'</div>';
       });
       resHtml+='</div>';
-    } else {
-      resHtml='<button class="btn small" data-act="add-res" data-idx="'+i+'" style="font-size:9px;padding:2px 6px;align-self:flex-start">+ Add resource</button>';
     }
 
     return '<div class="char-card" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
@@ -64,7 +60,6 @@ registerPanel('party',{
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
         +(this._pickerOpen===i?this._iconPicker(i):'')
         +'<input class="char-name" value="'+esc(c.name)+'" data-field="name" data-idx="'+i+'" placeholder="Character name">'
-        +'<button class="btn icon-btn danger" data-act="remove" data-idx="'+i+'" title="Remove character" style="flex-shrink:0">×</button>'
       +'</div>'
       // HP block
       +'<div class="char-hp-block">'
