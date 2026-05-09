@@ -11,7 +11,26 @@ function renderMonsterFull(d, localData) {
   const speed = Object.entries(r.speed||{}).map(([k,v])=>k+' '+v).join(', ') || localData?.speed || '—';
   const str=r.strength||10,dex=r.dexterity||10,con=r.constitution||10;
   const int=r.intelligence||10,wis=r.wisdom||10,cha=r.charisma||10;
-  const ab=(l,s)=>`<div class="ability"><div class="ab-name">${l}</div><div class="ab-val">${s}</div><div class="ab-mod">${mod(s)>=0?'+':''}${mod(s)}</div></div>`;
+  // Map of saves the creature is proficient in (5etools stores them on
+  // d.save → moved into proficiencies by _parseProficiencies). Every ability
+  // cell shows BOTH the mod and the save; non-proficient saves equal the mod
+  // and are still rendered so the layout matches 5etools' MOD/SAVE columns.
+  const profSaves = new Map();
+  (r.proficiencies||[])
+    .filter(p => p.proficiency.name.startsWith('Saving Throw:'))
+    .forEach(p => profSaves.set(p.proficiency.name.replace('Saving Throw: ',''), p.value));
+  const fmtMod = n => (n >= 0 ? '+' : '') + n;
+  const ab = (l, s) => {
+    const m = mod(s);
+    const sv = profSaves.has(l) ? profSaves.get(l) : m;
+    const isProf = profSaves.has(l);
+    return `<div class="ability">
+      <div class="ab-name">${l}</div>
+      <div class="ab-val">${s}</div>
+      <div class="ab-mod">${fmtMod(m)}</div>
+      <div class="ab-save${isProf?' is-prof':''}" title="${isProf?'Proficient saving throw':'Saving throw'}">save ${fmtMod(sv)}</div>
+    </div>`;
+  };
   const section=(label,text)=>text?`<div class="detail-section"><strong>${label}.</strong> ${esc(text)}</div>`:'';
   const actions=(label,arr)=>{
     if(!arr||!arr.length)return'';
@@ -25,11 +44,9 @@ function renderMonsterFull(d, localData) {
     + '<div class="stat-block"><div class="lab">Speed</div><div class="val">'+esc(speed)+'</div></div>'
     + '</div>';
   html += '<div class="ability-grid">'+ab('STR',str)+ab('DEX',dex)+ab('CON',con)+ab('INT',int)+ab('WIS',wis)+ab('CHA',cha)+'</div>';
-  // Saving throws and skills from proficiencies array
+  // Skills from the proficiencies array. (Saves are now rendered inline
+  // inside each ability cell above, so we don't repeat them here.)
   if(r.proficiencies?.length){
-    const saves=r.proficiencies.filter(p=>p.proficiency.name.startsWith('Saving Throw:'))
-      .map(p=>p.proficiency.name.replace('Saving Throw: ','')+(p.value>=0?' +'+(p.value):' '+p.value));
-    if(saves.length)html+='<div class="detail-section"><strong>Saving Throws.</strong> '+saves.join(', ')+'</div>';
     const skills=r.proficiencies.filter(p=>p.proficiency.name.startsWith('Skill:'))
       .map(p=>p.proficiency.name.replace('Skill: ','')+(p.value>=0?' +'+(p.value):' '+p.value));
     if(skills.length)html+='<div class="detail-section"><strong>Skills.</strong> '+skills.join(', ')+'</div>';
@@ -41,7 +58,14 @@ function renderMonsterFull(d, localData) {
   const senses=Object.entries(r.senses||{}).filter(([k])=>k!=='passive_perception').map(([k,v])=>k.replace(/_/g,' ')+' '+v).join(', ');
   if(senses)html+=section('Senses',senses+(r.senses?.passive_perception!=null?', passive Perception '+r.senses.passive_perception:''));
   if(r.languages)html+=section('Languages',r.languages);
-  html+='<div class="detail-section"><strong>CR.</strong> '+esc(String(r.challenge_rating??'?'))+' &nbsp; <strong>XP.</strong> '+(r.xp?.toLocaleString()||'?')+'</div>';
+  // CR display: 5etools shows "None" for roleplay-only NPCs with no CR.
+  // _parseCR already normalizes nulls to "None"; we just zero the XP for
+  // those rows so we don't show "XP 10" by accident on a CR-less stat block.
+  const _crRaw = r.challenge_rating;
+  const _crBlank = _crRaw == null || _crRaw === '' || _crRaw === 'None' || _crRaw === '—' || _crRaw === '?';
+  const crText = _crBlank ? 'None' : String(_crRaw);
+  const xpText = _crBlank ? '0' : (r.xp != null ? r.xp.toLocaleString() : '0');
+  html+='<div class="detail-section"><strong>CR.</strong> '+esc(crText)+' &nbsp; <strong>XP.</strong> '+xpText+'</div>';
   if(r.special_abilities?.length)html+=actions('Traits',r.special_abilities);
   if(r.actions?.length)html+=actions('Actions',r.actions);
   if(r.bonus_actions?.length)html+=actions('Bonus Actions',r.bonus_actions);

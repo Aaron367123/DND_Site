@@ -117,9 +117,39 @@ const _SIZE   = {F:'Fine',D:'Diminutive',T:'Tiny',S:'Small',M:'Medium',L:'Large'
 const _CR_XP  = {'0':10,'1/8':25,'1/4':50,'1/2':100,'1':200,'2':450,'3':700,'4':1100,'5':1800,'6':2300,'7':2900,'8':3900,'9':5000,'10':5900,'11':7200,'12':8400,'13':10000,'14':11500,'15':13000,'16':15000,'17':18000,'18':20000,'19':22000,'20':25000,'21':33000,'22':41000,'23':50000,'24':62000,'25':75000,'26':90000,'27':105000,'28':120000,'29':135000,'30':155000};
 
 function _toIndex(name) { return (name||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
-function _parseCR(cr)   { return cr==null?'?':(typeof cr==='object'?String(cr.cr??'?'):String(cr)); }
-function _crToXP(cr)    { const k=typeof cr==='object'?cr.cr:String(cr||0); return _CR_XP[k]||0; }
-function _parseType(t)  { if(!t)return''; if(typeof t==='string')return t; return (t.swarmSize?`swarm of ${_SIZE[t.swarmSize]||t.swarmSize} ${t.type}s`:t.type||'')+(t.tags?.length?` (${t.tags.join(', ')})`:'')||''; }
+function _parseCR(cr){
+  if (cr == null) return 'None';
+  if (typeof cr === 'object') return String(cr.cr ?? 'None');
+  return String(cr);
+}
+function _crToXP(cr){
+  if (cr == null) return 0;
+  const k = typeof cr === 'object' ? cr.cr : String(cr);
+  if (k == null || k === '' || k === '—') return 0;
+  return _CR_XP[k] || 0;
+}
+// Render a 5etools type field. Tags can be plain strings ("human") or
+// objects ({tag:"human", prefix:"Chondathan"}); previous code blindly
+// joined an array of objects which produced "[object Object]". Now we
+// stringify each tag explicitly.
+function _parseType(t){
+  if (!t) return '';
+  if (typeof t === 'string') return t;
+  const base = t.swarmSize
+    ? `swarm of ${_SIZE[t.swarmSize]||t.swarmSize} ${t.type}s`
+    : (t.type||'');
+  const tags = (t.tags||[]).map(tag => {
+    if (typeof tag === 'string') return tag;
+    if (tag && typeof tag === 'object'){
+      const name = tag.tag || '';
+      const cap  = name.charAt(0).toUpperCase() + name.slice(1);
+      const pre  = tag.prefix ? tag.prefix + ' ' : '';
+      return pre + cap;
+    }
+    return String(tag);
+  }).filter(Boolean);
+  return base + (tags.length ? ` (${tags.join(', ')})` : '');
+}
 
 function _parseSpeed(speed) {
   if (!speed) return {};

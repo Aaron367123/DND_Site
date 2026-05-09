@@ -104,6 +104,8 @@ label.field-label{display:block;font-size:10px;color:var(--text-muted);text-tran
 .ability-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:12px;background:var(--panel-2);padding:8px;border-radius:4px}
 .ability{text-align:center;font-size:10px} .ability .ab-name{color:var(--text-muted);text-transform:uppercase;font-size:9px}
 .ability .ab-val{font-weight:500;font-size:12px} .ability .ab-mod{color:var(--text-dim);font-size:10px}
+.ability .ab-save{color:var(--text-dim);font-size:9px;margin-top:1px;letter-spacing:.02em;font-variant:small-caps}
+.ability .ab-save.is-prof{color:var(--accent);font-weight:600}
 .detail-section{margin-bottom:10px;font-size:12px;line-height:1.5} .detail-section strong{font-weight:500}
 .action-block{border-top:1px solid var(--border);padding-top:8px;margin-top:8px;font-size:11px;line-height:1.5}
 .detail-actions{display:flex;gap:6px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
