@@ -14,7 +14,8 @@ const _CONDITION_FILES = [
 function _stripTags(str) {
   if (typeof str !== 'string') return String(str ?? '');
   return str
-    .replace(/\{@atk ([^}]+)\}/g, (_, t) => {
+    // Combat / dice / save semantics — replaced with human-readable text.
+    .replace(/\{@(?:atk|atkr) ([^}]+)\}/g, (_, t) => {
       const parts = t.split(',').map(p=>p.trim());
       const melee = parts.some(p=>p==='mw'||p==='ms');
       const ranged = parts.some(p=>p==='rw'||p==='rs');
@@ -32,26 +33,56 @@ function _stripTags(str) {
     .replace(/\{@recharge ([^}]+)\}/g, '(Recharge $1–6)')
     .replace(/\{@recharge\}/g,         '(Recharge 6)')
     .replace(/\{@chance (\d+)[^}]*\}/g, '$1%')
+    // 5e 2024 "actSave" family — prints the save ability and pulls display
+    // text out of the trailing pipe segments when present.
+    .replace(/\{@(?:actSave|actSaveFail|actSaveSuccess|actSaveSuccessOrFail|actTrigger|actResponse)\s+([^}]+)\}/g, (_, body) => {
+      const parts = body.split('|');
+      const display = (parts[parts.length - 1] || '').trim();
+      // The trailing display, if multiple pipes, is the formatted text.
+      return display && parts.length > 1 ? display : (parts[0] || '').trim();
+    })
+    .replace(/\{@hitYourSpellAttack\}/g, 'your spell attack modifier')
+    .replace(/\{@hitYourSpellAttack\s+([^}]+)\}/g, (_, body) => {
+      const parts = body.split('|');
+      return (parts[parts.length-1] || 'your spell attack modifier').trim();
+    })
+    // Dice / damage tags — keep just the dice expression.
     .replace(/\{@(?:damage|dice|scaledice|scaledamage)\s+([^|}]+)[^}]*\}/g, '$1')
-    .replace(/\{@(?:condition|spell|creature|item|sense|skill|action|ability|race|class|feat|background|disease|status|object|vehicle|reward|hazard|encounter|table|area|filter)\s+([^}]+)\}/gi, (_, body) => {
-      // 5etools "link" tags use a {@tag NAME|SOURCE|DISPLAY} pipe format. If
-      // an explicit display text is given (3rd segment, non-empty), prefer
-      // that — e.g. "{@creature Blink Dog||blink dogs}" → "blink dogs".
+    // Inline color: {@color text|hex} → text.
+    .replace(/\{@color\s+([^|}]+)[^}]*\}/g, '$1')
+    // Link-style "reference" tags. Format: {@tag NAME|SOURCE|DISPLAY|...}.
+    // We honor an explicit display text (3rd segment) when given, otherwise
+    // we capitalize the first segment as the rendered text.
+    .replace(/\{@(?:condition|spell|creature|item|sense|skill|action|ability|race|class|feat|background|disease|status|object|vehicle|reward|hazard|encounter|table|area|filter|deity|deck|card|variantrule|itemProperty|itemMastery|classFeature|subclassFeature|optfeature|recipe|adventure|book|charoption|psionic|trap|cult|boon|language|hazard|legroup)\s+([^}]+)\}/gi, (_, body) => {
       const parts = body.split('|');
       const display = (parts[2] || '').trim();
       if (display) return display;
       const name = (parts[0] || '').trim();
       return name ? name.charAt(0).toUpperCase()+name.slice(1) : '';
     })
+    // Inline formatting markers — turned into control chars that
+    // _renderInline later converts to <strong>/<i>/etc.
     .replace(/\{@(?:b|bold)\s+([^}]+)\}/g,   '\x06$1\x06')
     .replace(/\{@(?:i|italic)\s+([^}]+)\}/g, '\x05$1\x05')
-    .replace(/\{@(?:s|strike|u|sup|sub|kbd|code)\s+([^}]+)\}/g, '$1')
+    .replace(/\{@(?:s|strike|u|sup|sub|kbd|code|comicH1|comicH2|comicH3|comicH4|comicNote)\s+([^}]+)\}/g, '$1')
     .replace(/\{@note\s+([^}]+)\}/g,  '($1)')
     .replace(/\{@quickref\s+([^|}]+)[^}]*\}/g, '$1')
     .replace(/\{@5etools\s+([^|}]+)[^}]*\}/g, '$1')
+    .replace(/\{@5etoolsImg\s+([^|}]+)[^}]*\}/g, '$1')
     .replace(/\{@link\s+([^|}]+)[^}]*\}/g, '$1')
-    .replace(/\{@\w+\s+([^|}]+)[^}]*\}/g, '$1') // generic: grab text before first |
-    .replace(/\{@[^}]*\}/g, '');                 // catch-all: remove anything remaining
+    // Generic fallback: any remaining {@tag content} — prefer a 3rd-segment
+    // display text if present, otherwise the first segment. This makes
+    // unknown / future tag types degrade gracefully to readable text
+    // instead of disappearing or showing a raw name.
+    .replace(/\{@\w+\s+([^}]+)\}/g, (_, body) => {
+      const parts = body.split('|');
+      const display = (parts[2] || '').trim();
+      if (display) return display;
+      return (parts[0] || '').trim();
+    })
+    // Catch-all: tags with no content (e.g. {@foo}) — drop them entirely
+    // since there's nothing to render.
+    .replace(/\{@[^}]*\}/g, '');
 }
 
 // ─── Entries parser ────────────────────────────────────────────────────────────
@@ -415,9 +446,76 @@ function _convertCondition(d) {
   return {name:d.name, index:_toIndex(d.name), _source:d.source, reprintedAs:d.reprintedAs, page:d.page, desc:descs};
 }
 
+// ─── Item-entry templates ──────────────────────────────────────────────────────
+// 5etools items often contain "{#itemEntry Name|Source}" references that
+// expand to a shared description template (defined in items-base.json's
+// itemEntry array). Each template has an `entriesTemplate` with `{{item.X}}`
+// placeholders that get filled from the referencing item's properties (e.g.
+// {{item.detail1}} → "green", {{item.resist}} → "acid"). We index every
+// known template by "name|source" lowercase and expand refs before parsing
+// the entries — otherwise the user sees the literal "{#itemEntry ...}" text
+// in the rendered description.
+let _ITEM_ENTRY_BY_KEY = {};
+function _findItemEntry(name, source){
+  const key = ((name||'') + '|' + (source||'')).toLowerCase();
+  return _ITEM_ENTRY_BY_KEY[key] || null;
+}
+function _substituteItemPlaceholders(node, item){
+  if (typeof node === 'string'){
+    return node.replace(/\{\{item\.(\w+)\}\}/g, (_, prop) => {
+      const v = item[prop];
+      if (v == null) return '';
+      if (Array.isArray(v)) return v.join(', ');
+      return String(v);
+    });
+  }
+  if (Array.isArray(node)) return node.map(n => _substituteItemPlaceholders(n, item));
+  if (node && typeof node === 'object'){
+    const out = {};
+    for (const k in node) out[k] = _substituteItemPlaceholders(node[k], item);
+    return out;
+  }
+  return node;
+}
+function _expandItemRefs(entries, item){
+  if (!Array.isArray(entries)) return entries;
+  const out = [];
+  entries.forEach(e => {
+    if (typeof e !== 'string'){ out.push(e); return; }
+    // Whole-entry case: "{#itemEntry Name|Source}" replaces this entry with
+    // every entry of the template (after substitution).
+    const m = e.match(/^\{#itemEntry\s+([^|}]+)(?:\|([^}]+))?\}$/);
+    if (m){
+      const tpl = _findItemEntry(m[1].trim(), (m[2]||'').trim());
+      if (tpl && Array.isArray(tpl.entriesTemplate)){
+        tpl.entriesTemplate.forEach(t => out.push(_substituteItemPlaceholders(t, item)));
+        return;
+      }
+    }
+    // Inline case: replace any {#itemEntry ...} found mid-string with its
+    // template's flattened text.
+    const replaced = e.replace(/\{#itemEntry\s+([^|}]+)(?:\|([^}]+))?\}/g, (full, n, s) => {
+      const tpl = _findItemEntry(n.trim(), (s||'').trim());
+      if (tpl && Array.isArray(tpl.entriesTemplate)){
+        return tpl.entriesTemplate
+          .filter(t => typeof t === 'string')
+          .map(t => _substituteItemPlaceholders(t, item))
+          .join(' ');
+      }
+      return full;
+    });
+    out.push(replaced);
+  });
+  return out;
+}
+
 // ─── Item converter ─────────────────────────────────────────────────────────────
 function _convertItem(d) {
-  const desc = _parseEntries(d.entries || d.entriesTemplate || []);
+  // Expand any {#itemEntry Name|Source} references the item carries before
+  // running the entries through _parseEntries so the resolved text feeds
+  // the {{item.X}} substitutions and gets tag-stripped normally.
+  const expanded = _expandItemRefs(d.entries || d.entriesTemplate || [], d);
+  const desc = _parseEntries(expanded);
   const rarity = d.rarity || 'unknown';
   const attune = d.reqAttune
     ? (typeof d.reqAttune === 'string' ? d.reqAttune : 'attunement required')
@@ -978,6 +1076,15 @@ async function load5eData() {
   _allRawMonsters.forEach(d => addMonster(d._copy ? _resolveCopy(d, _monsterByKey, 0) : d));
   spellbooks.forEach(json     => json && (json.spell      ||[]).forEach(addSpell));
   conditionFiles.forEach(json => { if (!json) return; (json.condition||[]).forEach(addCondition); });
+  // Index every itemEntry template (e.g. "Absorbing Tattoo|TCE") so items
+  // that reference one via {#itemEntry …} can have it resolved during
+  // _convertItem. Must run before the items.json + baseitem passes.
+  _ITEM_ENTRY_BY_KEY = {};
+  ((baseItemFile?.itemEntry) || []).forEach(t => {
+    if (!t || !t.name) return;
+    _ITEM_ENTRY_BY_KEY[(t.name + '|' + (t.source||'')).toLowerCase()] = t;
+  });
+
   if (itemFile) (itemFile.item||[]).forEach(d => addItem(d));
   // Base items: mundane gear / weapons / armor / tools.
   const baseItems = (baseItemFile?.baseitem) || [];
