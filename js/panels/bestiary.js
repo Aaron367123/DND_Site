@@ -64,7 +64,7 @@ registerPanel('bestiary', {
     b.innerHTML = `<div class="bestiary-root">
       <div class="bestiary-toolbar">
         <input type="search" id="best-search" placeholder="🔎 Search bestiary..." value="${esc(this._searchQ)}">
-        <button class="btn icon-btn" id="best-add-folder" title="New folder">📁+</button>
+        <button class="btn icon-btn" id="best-add-folder" title="New folder">📁</button>
         <button class="btn primary small" id="best-add-monster" title="${ready?'Add monster':'Loading 5e data…'}" ${ready?'':'disabled'}>+ Add</button>
       </div>
       <div class="bestiary-body">
