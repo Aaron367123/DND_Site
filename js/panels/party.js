@@ -6,27 +6,27 @@ const PARTY_ICONS=['⚔','🗡','🏹','🪄','🔮','🛡','🪓','👊','🌿'
 registerPanel('party',{
   title:'Party Tracker',icon:'♥',
   _pickerOpen:null, // idx of card with open icon picker
-  _settingsOpen:false, // bottom settings drawer (add/import/party-skills)
   // UI-only state (not synced) keyed by character id.
   _expanded:{},
   _activeTab:{}, // 'stats' | 'skills' | 'spells' | 'inventory' | 'bio'
   mount(body){this._body=body;this._render();},
   unmount(){this._body=null;},
+  // Items added to the window's ⋯ menu. Evaluated each time the menu opens
+  // so labels/visibility can react to current party state.
+  menuItems(){
+    const items = [
+      { label:'📋 Manage Party', run: () => this._openManageParty() },
+      { label:'📄 Import PDF',   run: () => this._importPdf() },
+    ];
+    if (state.party.length){
+      items.push({ label:'📊 Party Skills', run: () => this._openPartySkills() });
+    }
+    return items;
+  },
 
   _render(){
     const b=this._body;if(!b)return;
-    const settingsBody = this._settingsOpen
-      ? '<div class="party-settings-body">'
-        +'<button class="btn small" data-act="manage-party" title="Edit every character\'s stats in a table">📋 Manage Party</button>'
-        +'<button class="btn small" data-act="import-pdf" title="Import a D&D Beyond character sheet">📄 Import PDF</button>'
-        +(state.party.length?'<button class="btn small" data-act="party-skills" title="See who is proficient, half-proficient, or has expertise in each skill">📊 Party Skills</button>':'')
-        +'</div>'
-      : '';
-    b.innerHTML='<div class="party-grid">'+state.party.map((c,i)=>this._card(c,i)).join('')+'</div>'
-      +'<div class="party-settings">'
-      +'<button class="btn small" data-act="toggle-settings" title="Party settings">'+(this._settingsOpen?'▲':'▼')+' ⚙ Settings</button>'
-      +settingsBody
-      +'</div>';
+    b.innerHTML='<div class="party-grid">'+state.party.map((c,i)=>this._card(c,i)).join('')+'</div>';
     this._wire();
   },
 
@@ -811,12 +811,6 @@ registerPanel('party',{
       }
       else if(act==='import-pdf'){
         this._importPdf();
-      }
-      else if(act==='toggle-settings'){
-        this._settingsOpen=!this._settingsOpen;this._render();
-      }
-      else if(act==='manage-party'){
-        this._openManageParty();
       }
       else if(act==='party-skills'){
         this._openPartySkills();

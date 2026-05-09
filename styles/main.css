@@ -1309,6 +1309,7 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .window-menu-item{display:block;width:100%;padding:7px 12px;background:transparent;border:none;color:var(--text);font-size:11px;cursor:pointer;text-align:left;font-family:inherit;border-radius:3px;white-space:nowrap}
 .window-menu-item:hover{background:var(--panel-3);color:var(--accent)}
 .window-menu-item + .window-menu-item{margin-top:1px}
+.window-menu-sep{height:1px;background:var(--border);margin:4px 6px}
 /* ============ PARTY SKILLS MODAL ============ */
 .ps-row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px}
 .ps-row:last-child{border-bottom:none}

@@ -526,10 +526,28 @@ function openWindowMenu(id, anchorBtn){
   }
   items.push({ act:'snap',  label:'▢ Snap to layout…' });
 
+  // Panel-specific items, registered via panelDefs[id].menuItems (array or
+  // function returning an array). Each item: { label, run() } — `act` is
+  // synthesized as `panel:<n>` so the click handler can dispatch back.
+  const def = panelDefs[id] || {};
+  let panelItems = [];
+  if (typeof def.menuItems === 'function')      panelItems = def.menuItems() || [];
+  else if (Array.isArray(def.menuItems))        panelItems = def.menuItems;
+  if (panelItems.length){
+    items.push({ act:'__sep' });
+    panelItems.forEach((it, idx) => {
+      if (it && it.label && typeof it.run === 'function'){
+        items.push({ act:'panel:'+idx, label: it.label, _run: it.run });
+      }
+    });
+  }
+
   const menu = document.createElement('div');
   menu.className = 'window-menu';
   menu.innerHTML = items.map(it =>
-    `<button class="window-menu-item" data-act="${it.act}">${it.label}</button>`
+    it.act === '__sep'
+      ? '<div class="window-menu-sep"></div>'
+      : `<button class="window-menu-item" data-act="${it.act}">${it.label}</button>`
   ).join('');
   document.body.appendChild(menu);
   _windowMenuEl = menu;
@@ -563,6 +581,12 @@ function openWindowMenu(id, anchorBtn){
         _closeWindowMenu();
         openSnapLayoutsPicker(id, anchorBtn);
         return;
+      } else if (act.startsWith('panel:')){
+        const idx = parseInt(act.slice(6), 10);
+        const item = items.find(i => i.act === 'panel:'+idx);
+        if (item && typeof item._run === 'function'){
+          try { item._run(); } catch(err){ console.error(err); }
+        }
       }
       _closeWindowMenu();
     });
