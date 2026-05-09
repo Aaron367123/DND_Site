@@ -176,6 +176,11 @@ function wireWindow(el,id){
       const snapped = _snapMove(id, nx, ny, layout[id].w, layout[id].h);
       nx = snapped.x; ny = snapped.y;
       el.style.left=nx+'px'; el.style.top=ny+'px';
+      // Edge-snap detection: if cursor is at a viewport edge / corner, queue
+      // a snap-zone for mouseup and show a preview overlay.
+      drag.pending = _detectEdgeSnap(e.clientX, e.clientY);
+      if (drag.pending) _showSnapPreview(drag.pending.zone);
+      else _hideSnapPreview();
     }
     if(rs){
       const dx=(e.clientX-rs.sx)/z, dy=(e.clientY-rs.sy)/z;
@@ -198,7 +203,18 @@ function wireWindow(el,id){
     }
   });
   document.addEventListener('mouseup',()=>{
-    if(drag){layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top)};saveLayout();drag=null;}
+    if(drag){
+      if (drag.pending){
+        // Cursor was at an edge/corner on release — apply that snap zone
+        // instead of the dragged position.
+        snapWindowToZone(id, drag.pending.zone);
+      } else {
+        layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top)};
+        saveLayout();
+      }
+      _hideSnapPreview();
+      drag=null;
+    }
     if(rs){layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top),w:parseInt(el.style.width),h:parseInt(el.style.height)};saveLayout();rs=null;}
   });
   el.querySelectorAll('.rh').forEach(handle => {
@@ -309,23 +325,81 @@ const SNAP_LAYOUTS = [
   ]},
 ];
 
-// Returns the workspace's pixel rect (in unzoomed coords) so the snap math is
-// independent of current zoom level.
-function _workspaceRect(){
-  const canvas = document.getElementById('workspace-canvas') || document.getElementById('workspace');
-  if (!canvas) return { w: window.innerWidth, h: window.innerHeight };
+// ─── Drag-to-edge snap detection (Windows-style) ─────────────────────────────
+// While dragging a window, if the cursor is within `_EDGE_T` of a viewport
+// edge we propose a snap zone (left half, right half, maximize, or one of the
+// four corners). On mouseup the proposed zone — if any — is applied via
+// snapWindowToZone(). A translucent preview rectangle floats over the target
+// area while the cursor is in the snap region.
+const _EDGE_T = 8;     // px from a viewport edge that triggers an edge snap
+const _CORNER_SPAN = 80; // along the top/bottom edge, this many px from a side
+                         // upgrades the edge snap to a corner (quarter) snap
+
+function _detectEdgeSnap(clientX, clientY){
+  const ws = document.getElementById('workspace');
+  if (!ws) return null;
+  const r = ws.getBoundingClientRect();
+  // Cursor must be over the workspace area to trigger snap previews.
+  if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return null;
+  const dl = clientX - r.left, dt = clientY - r.top;
+  const dr = r.right - clientX, db = r.bottom - clientY;
+  const atTop = dt < _EDGE_T, atBottom = db < _EDGE_T;
+  const atLeft = dl < _EDGE_T, atRight = dr < _EDGE_T;
+  // Corners are detected as edge-touch + within CORNER_SPAN of the side.
+  if (atTop    && dl < _CORNER_SPAN) return { zone:{x:0,    y:0,    w:1/2, h:1/2}, kind:'tl' };
+  if (atTop    && dr < _CORNER_SPAN) return { zone:{x:1/2,  y:0,    w:1/2, h:1/2}, kind:'tr' };
+  if (atBottom && dl < _CORNER_SPAN) return { zone:{x:0,    y:1/2,  w:1/2, h:1/2}, kind:'bl' };
+  if (atBottom && dr < _CORNER_SPAN) return { zone:{x:1/2,  y:1/2,  w:1/2, h:1/2}, kind:'br' };
+  if (atTop)   return { zone:{x:0,   y:0, w:1,   h:1}, kind:'max'   };
+  if (atLeft)  return { zone:{x:0,   y:0, w:1/2, h:1}, kind:'left'  };
+  if (atRight) return { zone:{x:1/2, y:0, w:1/2, h:1}, kind:'right' };
+  return null;
+}
+
+// Floating translucent rectangle that previews the snap target while dragging.
+function _showSnapPreview(zone){
+  const ws = document.getElementById('workspace'); if (!ws) return;
+  const r = ws.getBoundingClientRect();
+  let p = document.getElementById('drag-snap-preview');
+  if (!p){
+    p = document.createElement('div');
+    p.id = 'drag-snap-preview';
+    document.body.appendChild(p);
+  }
+  p.style.left   = (r.left + zone.x * r.width)  + 'px';
+  p.style.top    = (r.top  + zone.y * r.height) + 'px';
+  p.style.width  = (zone.w * r.width)  + 'px';
+  p.style.height = (zone.h * r.height) + 'px';
+  p.style.display = 'block';
+}
+function _hideSnapPreview(){
+  const p = document.getElementById('drag-snap-preview');
+  if (p) p.style.display = 'none';
+}
+
+// The CURRENTLY VISIBLE area of the workspace in canvas-space (un-zoomed,
+// un-scrolled) coordinates — i.e. what the user can actually see right now.
+// Snap layouts are computed inside this rect rather than the whole 5000-px
+// canvas so "left half" means "left half of what's on screen", regardless of
+// zoom or pan.
+function _viewportRect(){
+  const ws = document.getElementById('workspace');
+  if (!ws) return { x:0, y:0, w: window.innerWidth, h: window.innerHeight };
   const z = (typeof getZoom === 'function') ? getZoom() : 1;
-  // clientWidth/Height is the on-screen size; divide by zoom to get the
-  // logical/unzoomed workspace size that window x/y/w/h are stored in.
-  return { w: canvas.clientWidth / z, h: canvas.clientHeight / z };
+  return {
+    x: ws.scrollLeft / z,
+    y: ws.scrollTop  / z,
+    w: ws.clientWidth  / z,
+    h: ws.clientHeight / z,
+  };
 }
 
 function snapWindowToZone(id, zone){
-  const ws = _workspaceRect();
-  const x = Math.round(zone.x * ws.w);
-  const y = Math.round(zone.y * ws.h);
-  const w = Math.round(zone.w * ws.w);
-  const h = Math.round(zone.h * ws.h);
+  const v = _viewportRect();
+  const x = Math.round(v.x + zone.x * v.w);
+  const y = Math.round(v.y + zone.y * v.h);
+  const w = Math.round(zone.w * v.w);
+  const h = Math.round(zone.h * v.h);
   // Bump z so the snapped window comes to the front of any overlapping ones.
   const z = _nextZ();
   layout[id] = { ...layout[id], x, y, w, h, z, minimized: false };

@@ -1072,6 +1072,9 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .snap-zone + .snap-zone{border-left-width:1px}
 .snap-layout:hover .snap-zone{background:rgba(255,255,255,.04)}
 .snap-zone:hover{background:var(--accent)!important;border-color:var(--accent)}
+/* Translucent preview shown while dragging a window into a viewport edge — hints
+   where the snap will land if the user releases the mouse here. */
+#drag-snap-preview{position:fixed;display:none;background:rgba(212,165,116,.18);border:2px solid var(--accent);border-radius:6px;pointer-events:none;z-index:1050;transition:left .12s ease,top .12s ease,width .12s ease,height .12s ease;box-shadow:0 0 24px rgba(212,165,116,.35)}
 /* ============ PARTY SKILLS MODAL ============ */
 .ps-row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px}
 .ps-row:last-child{border-bottom:none}
