@@ -9,6 +9,22 @@ const _CONDITION_FILES = [
   'data/conditionsdiseases.json',
 ];
 
+// 5etools single-letter / short item-type code → human label. Used to build
+// the search-meta line for mundane items AND consumed by the shop generator
+// to label categories. Hoisted to module scope so other panels can read it.
+const _ITEM_TYPE_LABEL = {
+  '$':'Treasure', 'A':'Ammunition', 'AF':'Ammunition (Futuristic)',
+  'AIR':'Vehicle (Air)', 'AT':"Artisan's Tools", 'EM':'Eldritch Machine',
+  'EXP':'Explosive', 'FD':'Food & Drink', 'G':'Adventuring Gear',
+  'GS':'Gaming Set', 'HA':'Heavy Armor', 'IDG':'Illegal Drug',
+  'INS':'Instrument', 'LA':'Light Armor', 'M':'Melee Weapon',
+  'MA':'Medium Armor', 'MNT':'Mount', 'OTH':'Other', 'P':'Potion',
+  'R':'Ranged Weapon', 'RD':'Rod', 'RG':'Ring', 'S':'Shield',
+  'SC':'Scroll', 'SCF':'Spellcasting Focus', 'SHP':'Vehicle (Water)',
+  'T':'Tool', 'TAH':'Tack & Harness', 'TG':'Trade Good',
+  'VEH':'Vehicle (Land)', 'WD':'Wand',
+};
+
 // ─── Tag stripper ──────────────────────────────────────────────────────────────
 // Converts 5etools inline tags like {@damage 8d6} → plain text
 function _stripTags(str) {
@@ -521,9 +537,12 @@ function _convertItem(d) {
     ? (typeof d.reqAttune === 'string' ? d.reqAttune : 'attunement required')
     : null;
   // 5etools stores value in copper pieces; render in the largest unit that
-  // doesn't lose precision (gp / sp / cp) for the stat block.
+  // doesn't lose precision (gp / sp / cp) for the stat block. We also retain
+  // the raw cp value so the shop generator can apply price-band multipliers.
   let valueStr = null;
+  let valueCp  = null;
   if (typeof d.value === 'number'){
+    valueCp = d.value;
     if (d.value >= 100 && d.value % 100 === 0) valueStr = (d.value/100) + ' gp';
     else if (d.value >= 10 && d.value % 10 === 0) valueStr = (d.value/10) + ' sp';
     else valueStr = d.value + ' cp';
@@ -535,6 +554,7 @@ function _convertItem(d) {
     rarity,
     requires_attunement: attune,
     value: valueStr,
+    value_cp: valueCp,
     weight: d.weight != null ? d.weight : null,
     type: d.type || null,
     // Type-specific stats — surfaced in the stat block when present.
@@ -676,20 +696,6 @@ async function load5eData() {
   }
 
   // Human-readable label for the 5etools single-letter item type code.
-  // Used to build the search meta line for mundane items (where rarity is
-  // "none" and "Rarity: None" would be useless).
-  const _ITEM_TYPE_LABEL = {
-    '$':'Treasure', 'A':'Ammunition', 'AF':'Ammunition (Futuristic)',
-    'AIR':'Vehicle (Air)', 'AT':"Artisan's Tools", 'EM':'Eldritch Machine',
-    'EXP':'Explosive', 'FD':'Food & Drink', 'G':'Adventuring Gear',
-    'GS':'Gaming Set', 'HA':'Heavy Armor', 'IDG':'Illegal Drug',
-    'INS':'Instrument', 'LA':'Light Armor', 'M':'Melee Weapon',
-    'MA':'Medium Armor', 'MNT':'Mount', 'OTH':'Other', 'P':'Potion',
-    'R':'Ranged Weapon', 'RD':'Rod', 'RG':'Ring', 'S':'Shield',
-    'SC':'Scroll', 'SCF':'Spellcasting Focus', 'SHP':'Vehicle (Water)',
-    'T':'Tool', 'TAH':'Tack & Harness', 'TG':'Trade Good',
-    'VEH':'Vehicle (Land)', 'WD':'Wand',
-  };
   function _itemMeta(d, r){
     // Magic items: show rarity (capitalized) + attunement marker.
     if (r.rarity && r.rarity !== 'none' && r.rarity !== 'unknown'){

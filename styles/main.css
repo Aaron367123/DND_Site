@@ -156,6 +156,10 @@ body.hide-player-view #player-view-btn{display:none}
 body.hide-sync-status #sync-status{display:none}
 body.hide-tutorial-btn #tutorial-btn{display:none}
 body.hide-zoom-controls .zoom-controls{display:none}
+/* Visibility: focused-window highlight. When the toggle is on (i.e. body has
+   `hide-window-focus`), reset the focused style back to the resting border
+   and shadow so the active panel doesn't visually stand out. */
+body.hide-window-focus .window.focused{border-color:var(--border);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 /* Hide DM-only items in the float-toolbar; keep sync indicator + settings. */
 body.player-mode #float-search-btn,
 body.player-mode #search-wrap,
@@ -650,6 +654,18 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .shop-table td{padding:7px 10px;border-bottom:1px solid var(--border)}
 .shop-table tr:last-child td{border-bottom:none}
 .shop-table tr:hover td{background:rgba(255,255,255,.02)}
+/* Shop settings popover — filter sections */
+.shop-filter-section{margin-bottom:12px;padding:10px 12px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px}
+.shop-filter-head{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.shop-filter-head > span:last-child{display:flex;gap:4px}
+.shop-filter-mini{padding:1px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text-muted);font-size:10px;cursor:pointer;border-radius:3px;text-transform:none;letter-spacing:0;font-weight:500;transition:color .12s,border-color .12s}
+.shop-filter-mini:hover{color:var(--accent);border-color:var(--accent)}
+.shop-filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px}
+.shop-filter-chk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);cursor:pointer;padding:2px 4px;border-radius:3px;user-select:none}
+.shop-filter-chk:hover{background:var(--panel-3)}
+.shop-filter-chk input[type="checkbox"]{margin:0;cursor:pointer;width:auto}
+.shop-filter-note{font-size:10px;color:var(--text-dim);line-height:1.45;margin:6px 0 0;padding-left:18px;position:relative}
+.shop-filter-note::before{content:'ℹ';position:absolute;left:2px;top:0;color:var(--text-muted);font-style:normal;font-size:11px;font-weight:600}
 .rarity-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
 .rarity-Common{background:rgba(176,176,176,.15);color:#b0b0b0}
 .rarity-Uncommon{background:rgba(76,175,80,.15);color:#4caf50}

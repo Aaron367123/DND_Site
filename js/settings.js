@@ -23,6 +23,7 @@ function applyUiHide(uiHide){
   document.body.classList.toggle('hide-sync-status',   !!u.syncStatus);
   document.body.classList.toggle('hide-tutorial-btn',  !!u.tutorialBtn);
   document.body.classList.toggle('hide-zoom-controls', !!u.zoomControls);
+  document.body.classList.toggle('hide-window-focus',  !!u.windowFocus);
 }
 
 function initSettings(){
@@ -94,6 +95,7 @@ function initSettings(){
     { id:'show-sync-status',    key:'syncStatus' },
     { id:'show-tutorial-btn',   key:'tutorialBtn' },
     { id:'show-zoom-controls',  key:'zoomControls' },
+    { id:'show-window-focus',   key:'windowFocus' },
   ];
   visControls.forEach(({id, key}) => {
     const cb = document.getElementById(id);

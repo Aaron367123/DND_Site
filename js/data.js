@@ -46,7 +46,7 @@ const DEFAULT_LAYOUT = {
   bestiary:    {x:140, y:90,  w:520, h:620, open:false, minimized:false, z:12},
 };
 
-const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,fontScale:1,uiHide:{dock:false,playerView:false,syncStatus:false,tutorialBtn:false,zoomControls:false},combatNameOptions:['spear','hands','rock','small'],hideMonsterStats:false,autoRollInit:false,inspirationReasons:['Critical hit','Critical miss','Roleplay moment','Helped a teammate','Clever idea','Heroic sacrifice']};
+const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,fontScale:1,uiHide:{dock:false,playerView:false,syncStatus:false,tutorialBtn:false,zoomControls:false,windowFocus:false},shopFilters:{rarity:{Common:true,Uncommon:true,Rare:true,VeryRare:true,Legendary:true},categories:{weapons:true,ammo:true,armor:true,tools:true,potions:true,wondrous:true,rodsWands:true,rings:true,scrolls:true,foci:true,treasure:true,foodDrink:true,other:true},includeMagic:true,includeMundane:true},combatNameOptions:['spear','hands','rock','small'],hideMonsterStats:false,autoRollInit:false,inspirationReasons:['Critical hit','Critical miss','Roleplay moment','Helped a teammate','Clever idea','Heroic sacrifice']};
 
 const ITEM_CATALOG = {
   'Blacksmith/Armory':[
