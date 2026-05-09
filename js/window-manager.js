@@ -35,6 +35,7 @@ function closePanel(id){
   const el=document.querySelector(`.window[data-panel="${id}"]`);
   if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
   updateDock();
+  _updateToolbarOcclusion();
 }
 function togglePanel(id){
   if(layout[id]?.open&&!layout[id]?.minimized)closePanel(id);else openPanel(id);
@@ -44,7 +45,36 @@ function focusPanel(id){
   document.querySelectorAll('.window').forEach(w=>w.classList.remove('focused'));
   const el=document.querySelector(`.window[data-panel="${id}"]`);
   if(el){el.classList.add('focused');el.style.zIndex=layout[id].z;}
+  _updateToolbarOcclusion();
 }
+
+// Toolbar-occlusion helper: when any open window's title bar overlaps the
+// floating top-right toolbar, fade the toolbar via a body class so the
+// window's ⋯ _ ✕ controls are usable. CSS handles the actual opacity +
+// hover-restore. This function is cheap (a few rect reads) so we call it on
+// every event that could move a title bar (drag, resize, open/close/focus,
+// scroll, zoom).
+function _updateToolbarOcclusion(){
+  const tb = document.getElementById('float-toolbar');
+  if (!tb) return;
+  const r = tb.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0){
+    document.body.classList.remove('toolbar-occluded');
+    return;
+  }
+  let occluded = false;
+  document.querySelectorAll('.window:not(.minimized)').forEach(w => {
+    if (occluded) return;
+    const head = w.querySelector('.window-head');
+    if (!head) return;
+    const h = head.getBoundingClientRect();
+    if (h.right > r.left && h.left < r.right && h.bottom > r.top && h.top < r.bottom){
+      occluded = true;
+    }
+  });
+  document.body.classList.toggle('toolbar-occluded', occluded);
+}
+window._updateToolbarOcclusion = _updateToolbarOcclusion;
 
 function ensurePanel(id){
   if(mounted.has(id)){
@@ -75,6 +105,7 @@ function ensurePanel(id){
   def.mount(el.querySelector('.window-body'));
   mounted.add(id);
   wireWindow(el,id);
+  _updateToolbarOcclusion();
 }
 
 // Snap a moving rect to nearby static rects + the workspace top/left edge.
@@ -179,6 +210,7 @@ function wireWindow(el,id){
       drag.pending = _detectEdgeSnap(e.clientX, e.clientY);
       if (drag.pending) _showSnapPreview(drag.pending.zone);
       else _hideSnapPreview();
+      _updateToolbarOcclusion();
     }
     if(rs){
       const dx=(e.clientX-rs.sx)/z, dy=(e.clientY-rs.sy)/z;
@@ -198,6 +230,7 @@ function wireWindow(el,id){
       const snapped = _snapResize(id, x, y, w, h, rs.dir);
       el.style.left=snapped.x+'px'; el.style.top=snapped.y+'px';
       el.style.width=snapped.w+'px'; el.style.height=snapped.h+'px';
+      _updateToolbarOcclusion();
     }
   });
   document.addEventListener('mouseup',()=>{
@@ -212,8 +245,14 @@ function wireWindow(el,id){
       }
       _hideSnapPreview();
       drag=null;
+      _updateToolbarOcclusion();
     }
-    if(rs){layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top),w:parseInt(el.style.width),h:parseInt(el.style.height)};saveLayout();rs=null;}
+    if(rs){
+      layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top),w:parseInt(el.style.width),h:parseInt(el.style.height)};
+      saveLayout();
+      rs=null;
+      _updateToolbarOcclusion();
+    }
   });
   el.querySelectorAll('.rh').forEach(handle => {
     handle.addEventListener('mousedown', e => {

@@ -62,27 +62,31 @@ registerPanel('adventures', {
       b.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center">No adventures available.</div>';
       return;
     }
-    const filterQ = (this._searchQ || '').toLowerCase();
-    const visible = filterQ
-      ? this._adventures.filter(a => (a.name+' '+(a.storyline||'')+' '+(a.id||'')).toLowerCase().includes(filterQ))
-      : this._adventures;
-    const cards = visible.map(a => {
+    const cardHtml = a => {
       const lvl = a.level && a.level.start
         ? `L${a.level.start}${a.level.end!=null?'–'+a.level.end:''}`
         : '';
       const meta = [lvl, a.storyline, a.published].filter(Boolean).join(' · ');
       const coverPath = a.cover && a.cover.path ? 'img/' + a.cover.path : '';
       const cover = coverPath
-        ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" onerror="this.style.display='none';this.parentNode.insertBefore(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖'}),this);">`
+        ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖'}))">`
         : `<div class="adv-card-nopic">📖</div>`;
       return `<button class="adv-card" data-aid="${esc(a.id)}" title="${esc(a.name)}">
-        ${cover}
+        <div class="adv-card-imgwrap">
+          ${cover}
+          <div class="adv-card-titleover">${esc(a.name)}</div>
+        </div>
         <div class="adv-card-body">
-          <div class="adv-card-title">${esc(a.name)}</div>
           <div class="adv-card-meta">${esc(meta)}</div>
         </div>
       </button>`;
-    }).join('');
+    };
+    this._cardHtml = cardHtml;
+    const filterQ = (this._searchQ || '').toLowerCase();
+    const visible = filterQ
+      ? this._adventures.filter(a => (a.name+' '+(a.storyline||'')+' '+(a.id||'')).toLowerCase().includes(filterQ))
+      : this._adventures;
+    const cards = visible.map(cardHtml).join('');
 
     b.innerHTML = `
       <div class="adv-panel">
@@ -104,15 +108,7 @@ registerPanel('adventures', {
         const arr = q
           ? this._adventures.filter(a => (a.name+' '+(a.storyline||'')+' '+(a.id||'')).toLowerCase().includes(q))
           : this._adventures;
-        list.innerHTML = arr.map(a => {
-          const lvl = a.level && a.level.start ? `L${a.level.start}${a.level.end!=null?'–'+a.level.end:''}` : '';
-          const meta = [lvl, a.storyline, a.published].filter(Boolean).join(' · ');
-          const coverPath = a.cover && a.cover.path ? 'img/' + a.cover.path : '';
-          const cover = coverPath
-            ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖'}))">`
-            : `<div class="adv-card-nopic">📖</div>`;
-          return `<button class="adv-card" data-aid="${esc(a.id)}" title="${esc(a.name)}">${cover}<div class="adv-card-body"><div class="adv-card-title">${esc(a.name)}</div><div class="adv-card-meta">${esc(meta)}</div></div></button>`;
-        }).join('') || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>';
+        list.innerHTML = arr.map(cardHtml).join('') || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>';
         if (count) count.textContent = `${arr.length} / ${this._adventures.length}`;
         this._wireCards();
       });

@@ -21,6 +21,9 @@ function _applyZoom(){
   const lbl = document.getElementById('zoom-reset');
   if (lbl) lbl.textContent = Math.round(_zoom*100)+'%';
   try { localStorage.setItem('skt-zoom-v1', String(_zoom)); } catch(e){}
+  // Zoom changes screen positions of every window; re-evaluate whether any
+  // title bar now overlaps the floating top-right toolbar.
+  if (typeof _updateToolbarOcclusion === 'function') _updateToolbarOcclusion();
 }
 
 // Set zoom while keeping the point under the cursor (or viewport center)
@@ -97,6 +100,16 @@ function initZoomPan(){
   document.getElementById('zoom-out')?.addEventListener('click', () => zoomOut());
   document.getElementById('zoom-reset')?.addEventListener('click', () => zoomReset());
   document.getElementById('zoom-fit')?.addEventListener('click', () => zoomFitContent());
+
+  // Panning the workspace shifts every window's screen position relative to
+  // the fixed top-right toolbar — re-check overlap on every scroll tick.
+  ws.addEventListener('scroll', () => {
+    if (typeof _updateToolbarOcclusion === 'function') _updateToolbarOcclusion();
+  });
+  // Browser window resize moves the fixed toolbar in screen space too.
+  window.addEventListener('resize', () => {
+    if (typeof _updateToolbarOcclusion === 'function') _updateToolbarOcclusion();
+  });
 
   // Ctrl + wheel = zoom (centered on cursor)
   ws.addEventListener('wheel', e => {

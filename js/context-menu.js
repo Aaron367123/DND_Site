@@ -10,6 +10,9 @@ const CTX_PANEL_GROUPS = [
     { id: 'combat',   name: 'Combat Tracker' },
     { id: 'bestiary', name: 'Bestiary' },
   ]},
+  { label: 'References', items: [
+    { id: 'adventures', name: 'Adventures' },
+  ]},
   { label: 'NPC Management', items: [
     { id: 'npcgen', name: 'NPC Generator' },
     { id: 'npclib', name: 'NPC Library' },
