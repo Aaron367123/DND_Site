@@ -1,7 +1,23 @@
 // ============================================================
 // SETTINGS DRAWER
 // ============================================================
+
+// Apply a global UI scale factor to everything inside the app shell using the
+// CSS `zoom` property. This is the cleanest way to make text + buttons +
+// windows all grow together: the browser handles every measurement (paddings,
+// border widths, viewport coords) so no per-element math is needed. We
+// deliberately set this on the body rather than `.app` so the settings
+// drawer, modals, and popovers (which live outside `.app`) also scale.
+function applyFontScale(scale){
+  const s = Math.max(0.5, Math.min(2, scale || 1));
+  document.body.style.zoom = s;
+}
+
 function initSettings(){
+  // Apply the saved font scale immediately, before any UI shows up, so the
+  // page renders at the right size from the first paint.
+  applyFontScale(state.settings.fontScale ?? 1);
+
   const drawer=document.getElementById('settings-drawer');
   const settingsBtn=document.getElementById('settings-btn');
   // Toggle on mousedown (not click) so the document-level "click outside to
@@ -54,6 +70,25 @@ function initSettings(){
     });
   }
 
+  // Display font-scale slider — globally zooms the app via CSS `zoom`. Writes
+  // a "live preview" while the user drags, then commits the value on release.
+  const fs = document.getElementById('font-scale');
+  const fsv = document.getElementById('font-scale-val');
+  if (fs && fsv){
+    const initPct = Math.round(((state.settings.fontScale ?? 1) * 100));
+    fs.value = String(initPct);
+    fsv.textContent = initPct + '%';
+    fs.addEventListener('input', () => {
+      fsv.textContent = fs.value + '%';
+      applyFontScale(parseInt(fs.value)/100);
+    });
+    fs.addEventListener('change', () => {
+      state.settings.fontScale = parseInt(fs.value)/100;
+      save();
+      applyFontScale(state.settings.fontScale);
+    });
+  }
+
   // Reprint policy — controls whether reprinted entries appear in search.
   const reprintPolicy = state.settings.reprintPolicy || 'all';
   document.querySelectorAll('#reprint-group button').forEach(b=>{
@@ -79,14 +114,14 @@ function initSettings(){
   document.getElementById('import-file').addEventListener('change',e=>{
     const f=e.target.files[0];if(!f)return;
     const reader=new FileReader();
-    reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(Array.isArray(d.party))state.party=d.party;if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;state.shop=d.shop??null;if(d.settings)state.settings={...state.settings,...d.settings};save();initPanels();showToast('Imported');}catch(err){alert('Invalid JSON: '+err.message);}};
+    reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(Array.isArray(d.party))state.party=d.party;if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;state.shop=d.shop??null;if(d.settings)state.settings={...state.settings,...d.settings};save();applyFontScale(state.settings.fontScale??1);initPanels();showToast('Imported');}catch(err){alert('Invalid JSON: '+err.message);}};
     reader.readAsText(f);e.target.value='';
   });
   document.getElementById('reset-data-btn').addEventListener('click',()=>{
     showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{
       if(r===null)return;
       state.party=JSON.parse(JSON.stringify(DEFAULT_PARTY));state.combatants=[];state.combatRound=0;state.activeCombatantId=null;state.shop=null;state.settings={...DEFAULT_SETTINGS};
-      save();initPanels();showToast('Reset to defaults');
+      save();applyFontScale(state.settings.fontScale??1);initPanels();showToast('Reset to defaults');
     });
   });
 } // end initSettings
