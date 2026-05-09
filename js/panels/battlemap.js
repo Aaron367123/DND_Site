@@ -337,9 +337,26 @@ registerPanel('battlemap',{
     try{
       this._bc=new BroadcastChannel('skt-battlemap');
       const isPlayer = document.body.classList.contains('player-mode');
+      // Player tabs also subscribe to the cross-device live-stroke channel so
+      // strokes drawn on a remote DM machine show up here in near-real time.
+      // Same-browser tabs already get instant updates via BroadcastChannel
+      // above; this Firebase listener only matters for cross-device players.
+      if (isPlayer && window.realtimeLive){
+        try { if (this._unsubLive) this._unsubLive(); } catch(e){}
+        this._unsubLive = window.realtimeLive.listen('skt_battlemap_live_v1', val => {
+          if (!val || !val.stroke){ this._clearPreviewStroke(); return; }
+          this._applyPreviewStroke(val.stroke);
+        });
+      }
       this._bc.onmessage = ev => {
         if (!isPlayer) return; // DM tab only sends; ignore its own echoes
         const msg = ev.data; if (!msg) return;
+        // Live-drawing messages — applied to a transient preview that doesn't
+        // touch _drawings. Once the DM finishes the stroke, a full state push
+        // arrives (with the stroke now in _drawings) and the preview is
+        // cleared.
+        if (msg.kind === 'strokeTick'){ this._applyPreviewStroke(msg.stroke); return; }
+        if (msg.kind === 'strokeEnd'){ this._clearPreviewStroke(); return; }
         // Apply incoming state directly. Avoid a full _render() — that would
         // tear down the canvas and cause a visible flicker on every fog
         // sample. For typical paint events we just need the fog canvas and
@@ -370,13 +387,22 @@ registerPanel('battlemap',{
         // Lightweight repaint — fog + drawings + tokens only. No flicker.
         if (this._body){
           this._drawFog();
-          if (Array.isArray(msg.drawings)) this._drawAllStrokes();
+          if (Array.isArray(msg.drawings)){
+            // Stroke now committed → drop the live preview (whichever client's
+            // tick last painted it) and redraw from canonical state.
+            this._previewStroke = null;
+            this._drawAllStrokes();
+          }
           this._renderTokens();
         }
       };
     }catch(e){}
   },
-  _stopBroadcast(){try{this._bc?.close();}catch(e){}},
+  _stopBroadcast(){
+    try { this._bc?.close(); } catch(e){}
+    try { if (this._unsubLive) this._unsubLive(); } catch(e){}
+    this._unsubLive = null;
+  },
 
   // Tiny circular marker shown at the first click during grid-align mode so
   // the user can see what they anchored to before placing the second click.
@@ -411,6 +437,48 @@ registerPanel('battlemap',{
         drawings: this._drawings || [],
       });
     }catch(e){}
+  },
+
+  // Live-stroke broadcast — emits the active stroke to (a) the BroadcastChannel
+  // for same-browser tabs and (b) Firebase via realtimeLive for cross-device
+  // players. Throttled by the caller (10 fps in the draw mousemove handler) to
+  // keep Firebase write traffic reasonable.
+  _broadcastStrokeTick(stroke){
+    try { if (this._bc) this._bc.postMessage({ kind:'strokeTick', stroke }); } catch(e){}
+    try { if (window.realtimeLive) window.realtimeLive.push('skt_battlemap_live_v1', { stroke, ts: Date.now() }); } catch(e){}
+  },
+  _broadcastStrokeEnd(){
+    try { if (this._bc) this._bc.postMessage({ kind:'strokeEnd' }); } catch(e){}
+    try { if (window.realtimeLive) window.realtimeLive.clear('skt_battlemap_live_v1'); } catch(e){}
+  },
+
+  // Preview-stroke layer (player view only). Lives on the existing draw-canvas
+  // — we repaint the committed strokes plus the in-progress one on top.
+  _applyPreviewStroke(stroke){
+    if (!stroke) return;
+    this._previewStroke = stroke;
+    this._renderPreview();
+  },
+  _clearPreviewStroke(){
+    if (!this._previewStroke) return;
+    this._previewStroke = null;
+    this._renderPreview();
+  },
+  _renderPreview(){
+    const b = this._body; if (!b) return;
+    const drawC = b.querySelector('#draw-canvas'); if (!drawC) return;
+    // Repaint committed drawings, then layer the active stroke on top.
+    this._drawAllStrokes();
+    const s = this._previewStroke;
+    if (!s || !s.p || s.p.length < 2) return;
+    const ctx = drawC.getContext('2d');
+    ctx.strokeStyle = s.c || '#ff4040';
+    ctx.lineWidth = (s.s || 4) * (this._bgMapScale || 1);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(s.p[0], s.p[1]);
+    for (let i = 2; i < s.p.length; i += 2) ctx.lineTo(s.p[i], s.p[i+1]);
+    ctx.stroke();
   },
 
   _render(){
@@ -777,6 +845,17 @@ registerPanel('battlemap',{
       e.preventDefault(); e.stopPropagation();
       _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
       this._drawings.push(_curStroke);
+      // Live broadcast throttle — push a stroke-tick to player tabs at most
+      // 10 fps. Keeps Firebase write traffic minimal while still feeling live.
+      let _lastTick = 0;
+      const tickIfDue = () => {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (now - _lastTick < 100) return;
+        _lastTick = now;
+        this._broadcastStrokeTick(_curStroke);
+      };
+      // Send the initial point so a freshly-joined player sees the dot.
+      this._broadcastStrokeTick(_curStroke);
       const onMove = ev => {
         if (!_curStroke) return;
         const x2 = Math.round(ev.clientX - rect.left);
@@ -786,11 +865,15 @@ registerPanel('battlemap',{
         if (Math.abs(x2 - lx) + Math.abs(y2 - ly) < 3) return; // sample-down
         lp.push(x2, y2);
         this._drawStrokeIncremental(drawCanvas, _curStroke);
+        tickIfDue();
       };
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
         _curStroke = null;
+        // Clear the live preview slot, then push the canonical state with
+        // the new stroke now in _drawings.
+        this._broadcastStrokeEnd();
         this._saveMap();
       };
       document.addEventListener('mousemove', onMove);

@@ -33,7 +33,7 @@ const SKT_SYNC_KEYS = [
   'skt-battlemap-v1',  // battle map tokens & fog
   'skt-enc-v1',        // encounter builder
   'skt-loot-v1',       // loot tracker
-  'skt-notes-v1',      // session notes
+  'skt-notes-v2',      // session notes
   'skt-npcs-v2',       // NPC library
   'skt-bestiary-v1',   // bestiary
   'skt-shared-panels-v1', // which panels the DM is sharing with players
@@ -55,7 +55,7 @@ const _PANELS_FOR_KEY = {
   'skt-battlemap-v1': ['battlemap'],
   'skt-enc-v1':       ['encounter'],
   'skt-loot-v1':      ['loot'],
-  'skt-notes-v1':     ['notes'],
+  'skt-notes-v2':     ['notes'],
   'skt-npcs-v2':      ['npclib'],
   'skt-bestiary-v1':  ['bestiary'],
   // skt-shared-panels-v1 has no per-panel render — it's dispatched manually
@@ -281,3 +281,31 @@ function initRealtime() {
   });
   window.addEventListener('focus', _refreshAll);
 }
+
+// ─── Live ephemeral channels ─────────────────────────────────────────────────
+// Bypass the localStorage-mirrored sync queue for high-frequency, transient
+// data (e.g. an in-progress pencil stroke being broadcast at ~10fps). These
+// writes hit Firebase directly and are NOT persisted in localStorage — they're
+// meant to be overwritten or cleared a moment later. A connected client uses
+// `listen(path, cb)` to subscribe and `push(path, val)` / `clear(path)` to
+// emit. No-ops gracefully when Firebase isn't configured.
+window.realtimeLive = {
+  push(path, value){
+    if (!_fbDb) return;
+    try { _fbDb.ref(path).set(value).catch(()=>{}); } catch(e){}
+  },
+  clear(path){
+    if (!_fbDb) return;
+    try { _fbDb.ref(path).remove().catch(()=>{}); } catch(e){}
+  },
+  listen(path, callback){
+    if (!_fbDb) return () => {};
+    try {
+      const ref = _fbDb.ref(path);
+      const handler = ref.on('value', snap => {
+        try { callback(snap.val()); } catch(e){}
+      });
+      return () => { try { ref.off('value', handler); } catch(e){} };
+    } catch(e){ return () => {}; }
+  },
+};
