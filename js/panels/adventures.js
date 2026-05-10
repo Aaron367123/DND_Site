@@ -71,7 +71,7 @@ registerPanel('adventures', {
       const cover = coverPath
         ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖'}))">`
         : `<div class="adv-card-nopic">📖</div>`;
-      return `<button class="adv-card" data-aid="${esc(a.id)}" title="${esc(a.name)}">
+      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}">
         <div class="adv-card-imgwrap">
           ${cover}
           <div class="adv-card-titleover">${esc(a.name)}</div>
@@ -79,7 +79,7 @@ registerPanel('adventures', {
         <div class="adv-card-body">
           <div class="adv-card-meta">${esc(meta)}</div>
         </div>
-      </button>`;
+      </div>`;
     };
     this._cardHtml = cardHtml;
     const filterQ = (this._searchQ || '').toLowerCase();
@@ -118,15 +118,21 @@ registerPanel('adventures', {
 
   _wireCards(){
     const b = this._body; if (!b) return;
-    b.querySelectorAll('.adv-card').forEach(c => c.addEventListener('click', async () => {
-      this._currentAdvId = c.dataset.aid;
-      this._currentChapterIdx = 0;
-      this._loading = true;
-      this._render();
-      await this._loadAdventure(this._currentAdvId);
-      this._loading = false;
-      this._render();
-    }));
+    b.querySelectorAll('.adv-card').forEach(c => {
+      const open = async () => {
+        this._currentAdvId = c.dataset.aid;
+        this._currentChapterIdx = 0;
+        this._loading = true;
+        this._render();
+        await this._loadAdventure(this._currentAdvId);
+        this._loading = false;
+        this._render();
+      };
+      c.addEventListener('click', open);
+      c.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); }
+      });
+    });
   },
 
   // ── Adventure view: chapter sidebar + content ──────────────────────────────
