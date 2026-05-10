@@ -69,10 +69,10 @@ registerPanel('adventures', {
       const meta = [lvl, a.storyline, a.published].filter(Boolean).join(' · ');
       const coverPath = a.cover && a.cover.path ? 'img/' + a.cover.path : '';
       const cover = coverPath
-        ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖'}))">`
-        : `<div class="adv-card-nopic">📖</div>`;
-      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}">
-        <div class="adv-card-imgwrap">
+        ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖',style:'cssText:width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px'}))">`
+        : `<div class="adv-card-nopic" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px">📖</div>`;
+      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" style="display:flex;flex-direction:column">
+        <div class="adv-card-imgwrap" style="position:relative;width:100%;height:220px;overflow:hidden;background:var(--panel-3);flex:0 0 220px">
           ${cover}
           <div class="adv-card-titleover">${esc(a.name)}</div>
         </div>
