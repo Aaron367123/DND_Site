@@ -42,11 +42,30 @@ function _ctxSaveFocuses(list){
   try { localStorage.setItem(CTX_FOCUS_KEY, JSON.stringify(list)); } catch(e) {}
 }
 
-// Snapshot the current open panels + their positions/sizes.
+// Snapshot the current open panels + their positions/sizes. Pulls live
+// position from each window's inline style when available — `layout[id]`
+// can lag behind the DOM by a few pixels right after a drag/resize,
+// which is why focuses used to load slightly off.
 function _ctxSnapshot(){
   const snap = {};
   Object.entries(layout).forEach(([id, l]) => {
-    if (l && l.open) snap[id] = { x:l.x, y:l.y, w:l.w, h:l.h, minimized:!!l.minimized };
+    if (!l || !l.open) return;
+    const el = document.querySelector('.window[data-panel="'+id+'"]');
+    const px = (str, fb) => {
+      const n = parseFloat(str);
+      return Number.isFinite(n) ? Math.round(n) : Math.round(fb);
+    };
+    if (el){
+      snap[id] = {
+        x: px(el.style.left,   l.x),
+        y: px(el.style.top,    l.y),
+        w: px(el.style.width,  l.w),
+        h: px(el.style.height, l.h),
+        minimized: el.classList.contains('minimized'),
+      };
+    } else {
+      snap[id] = { x:Math.round(l.x), y:Math.round(l.y), w:Math.round(l.w), h:Math.round(l.h), minimized:!!l.minimized };
+    }
   });
   return snap;
 }
@@ -196,14 +215,19 @@ function initWorkspaceContextMenu(){
     }
     if (item.dataset.focusAct === 'save') {
       _ctxClose();
-      const name = prompt('Name this focus:', 'My Layout');
-      if (!name) return;
-      const focuses = _ctxLoadFocuses();
-      const f = { id: 'f_'+Date.now(), name: name.trim(), snap: _ctxSnapshot() };
-      focuses.push(f);
-      _ctxSaveFocuses(focuses);
-      _ctxLastFocusId = f.id;
-      showToast('Saved focus: '+f.name);
+      // Snapshot BEFORE the modal opens — once we await the prompt the user
+      // could drag a window and the saved layout would no longer match what
+      // they had on screen when they clicked Save.
+      const snap = _ctxSnapshot();
+      showModal('Save focus', [{id:'name', label:'Name', value:'My Layout', placeholder:'e.g. Combat, Roleplay, Travel'}], 'Save').then(r => {
+        if (!r || !r.name || !r.name.trim()) return;
+        const focuses = _ctxLoadFocuses();
+        const f = { id: 'f_'+Date.now(), name: r.name.trim(), snap };
+        focuses.push(f);
+        _ctxSaveFocuses(focuses);
+        _ctxLastFocusId = f.id;
+        showToast('Saved focus: '+f.name);
+      });
       return;
     }
   });
