@@ -439,6 +439,14 @@ registerPanel('party',{
     }).join('');
     const renderModal = () => {
       backdrop.innerHTML = `<div class="modal mp-modal" role="dialog" aria-modal="true">
+        <div class="rh rh-n"  data-rh="n"></div>
+        <div class="rh rh-s"  data-rh="s"></div>
+        <div class="rh rh-e"  data-rh="e"></div>
+        <div class="rh rh-w"  data-rh="w"></div>
+        <div class="rh rh-ne" data-rh="ne"></div>
+        <div class="rh rh-nw" data-rh="nw"></div>
+        <div class="rh rh-se" data-rh="se"></div>
+        <div class="rh rh-sw" data-rh="sw"></div>
         <div class="mp-head">
           <h3 style="margin:0">Manage Party</h3>
           <button class="btn icon-btn" data-act="mp-close" title="Close">×</button>
@@ -507,10 +515,58 @@ registerPanel('party',{
         renderModal();
       });
       backdrop.querySelector('[data-act="mp-close"]')?.addEventListener('click', () => backdrop.remove());
+      this._wireMpResize();
     };
     document.body.appendChild(backdrop);
     renderModal();
     backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) backdrop.remove(); });
+  },
+
+  // 8-direction edge/corner resize for the Manage Party modal. Unlike the
+  // built-in CSS `resize:both` (corner only), these handles let the user
+  // pull from any edge or corner. Applies width/height inline; the modal's
+  // flex centering keeps it visually centered while resizing.
+  _wireMpResize(){
+    const modal = document.querySelector('.mp-modal');
+    if (!modal) return;
+    const MIN_W = 520, MIN_H = 280;
+    let rs = null;
+    const onDown = e => {
+      const handle = e.target.closest('[data-rh]');
+      if (!handle || !modal.contains(handle)) return;
+      e.preventDefault(); e.stopPropagation();
+      const r = modal.getBoundingClientRect();
+      rs = { dir: handle.dataset.rh, sx: e.clientX, sy: e.clientY, w: r.width, h: r.height };
+    };
+    const onMove = e => {
+      if (!rs) return;
+      const dx = e.clientX - rs.sx, dy = e.clientY - rs.sy;
+      let w = rs.w, h = rs.h;
+      // Centered modal: dragging east OR west grows/shrinks symmetrically by
+      // 2× the cursor delta so the cursor stays under the dragged edge.
+      if (rs.dir.includes('e')) w = rs.w + dx * 2;
+      if (rs.dir.includes('w')) w = rs.w - dx * 2;
+      if (rs.dir.includes('s')) h = rs.h + dy * 2;
+      if (rs.dir.includes('n')) h = rs.h - dy * 2;
+      w = Math.max(MIN_W, Math.min(window.innerWidth  - 20, w));
+      h = Math.max(MIN_H, Math.min(window.innerHeight - 20, h));
+      modal.style.width  = w + 'px';
+      modal.style.height = h + 'px';
+    };
+    const onUp = () => { rs = null; };
+    modal.addEventListener('mousedown', onDown);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    // Clean up the document-level listeners when the modal closes. The
+    // backdrop is removed via .remove() — observe its removal to detach.
+    const obs = new MutationObserver(() => {
+      if (!document.body.contains(modal)){
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        obs.disconnect();
+      }
+    });
+    obs.observe(document.body, { childList:true, subtree:true });
   },
 
   // Per-character resources editor (popup over Manage Party).

@@ -537,7 +537,8 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .party-settings{padding:0 10px 10px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .party-settings-body{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;width:100%;box-sizing:border-box}
 /* MANAGE PARTY modal */
-.mp-modal{width:min(1400px,96vw);height:92vh;max-height:92vh;display:flex;flex-direction:column;padding:0}
+.mp-modal{position:relative;width:min(1600px,96vw);max-width:96vw;height:auto;max-height:92vh;display:flex;flex-direction:column;padding:0;overflow:hidden;min-width:520px;min-height:280px}
+.mp-modal .rh{z-index:1}
 .mp-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
 .mp-table-wrap{flex:1;overflow:auto;padding:8px 12px}
 .mp-table{width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
