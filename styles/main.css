@@ -592,8 +592,11 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .char-hp-sep{font-size:14px;color:var(--text-dim);flex-shrink:0}
 .char-hp-max{font-size:13px;color:var(--text-muted);background:transparent;border:none;padding:0;width:36px}
 .char-hp-max:focus{background:rgba(255,255,255,.05);border-radius:3px;outline:none}
-.hp-bar-wrap{width:100%;height:5px;background:rgba(0,0,0,.3);border-radius:3px;overflow:hidden}
+.hp-bar-wrap{width:100%;height:5px;background:rgba(0,0,0,.3);border-radius:3px;overflow:hidden;transition:box-shadow .3s}
 .hp-bar-fill{height:100%;border-radius:3px;transition:width .3s,background .3s}
+/* Surplus: HP exceeds max (Aid, Heroes' Feast, temp-as-overflow). The bar
+   is full and tinted blue; a soft glow signals "over-cap" at a glance. */
+.hp-bar-wrap.hp-surplus{box-shadow:0 0 6px rgba(74,142,201,.7),inset 0 0 0 1px rgba(74,142,201,.5)}
 /* Stats row */
 .char-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 .hd-row{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:10px;color:var(--text-muted)}

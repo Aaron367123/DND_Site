@@ -30,10 +30,22 @@ registerPanel('party',{
     this._wire();
   },
 
+  // HP bar visual: clamp 0–100% normally, but flag a "surplus" state when
+  // current HP exceeds max (Aid spell, Heroes' Feast, temp HP added to total,
+  // etc.) so the player sees they're over-cap. Surplus uses a cool-blue fill
+  // so it's visually distinct from the green/yellow/red ladder of normal HP.
+  _hpBarStyle(c){
+    if (!(c.hpMax > 0)) return { pct:0, color:'#c25450', surplus:false };
+    if (c.hp > c.hpMax) return { pct:100, color:'#4a8ec9', surplus:true };
+    const pct = Math.max(0, Math.min(100, (c.hp / c.hpMax) * 100));
+    const color = pct > 50 ? '#6b9e6b' : pct > 25 ? '#c9a050' : '#c25450';
+    return { pct, color, surplus:false };
+  },
+
   _card(c,i){
     const icon=c.icon||'⚔';
-    const hpPct=c.hpMax>0?Math.max(0,Math.min(100,(c.hp/c.hpMax)*100)):0;
-    const hpColor=hpPct>50?'#6b9e6b':hpPct>25?'#c9a050':'#c25450';
+    const hp=this._hpBarStyle(c);
+    const hpPct=hp.pct, hpColor=hp.color;
     const resources=c.resources||[];
 
     let resHtml='';
@@ -69,7 +81,7 @@ registerPanel('party',{
           +'<input class="char-hp-max" type="number" value="'+c.hpMax+'" data-field="hpMax" data-idx="'+i+'" title="Max HP">'
           +'<span style="font-size:10px;color:var(--text-dim);margin-left:auto">HP</span>'
         +'</div>'
-        +'<div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:'+hpPct+'%;background:'+hpColor+'"></div></div>'
+        +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+'"><div class="hp-bar-fill" style="width:'+hpPct+'%;background:'+hpColor+'"></div></div>'
       +'</div>'
       // Stats: AC, Init, Spd, PP
       +'<div class="char-stats-row">'
@@ -841,10 +853,11 @@ registerPanel('party',{
           const card=b.querySelector('[data-cidx="'+i+'"]');
           if(card){
             const p=state.party[i];
-            const pct=p.hpMax>0?Math.max(0,Math.min(100,(p.hp/p.hpMax)*100)):0;
-            const col=pct>50?'#6b9e6b':pct>25?'#c9a050':'#c25450';
+            const hp=this._hpBarStyle(p);
+            const wrap=card.querySelector('.hp-bar-wrap');
             const bar=card.querySelector('.hp-bar-fill');
-            if(bar){bar.style.width=pct+'%';bar.style.background=col;}
+            if(wrap) wrap.classList.toggle('hp-surplus', hp.surplus);
+            if(bar){bar.style.width=hp.pct+'%';bar.style.background=hp.color;}
           }
         }
       });
