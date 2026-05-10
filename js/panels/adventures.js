@@ -1,6 +1,7 @@
 // ============================================================
-// ADVENTURES PANEL
+// ADVENTURES PANEL — build 20260509-E
 // ============================================================
+console.log('adventures.js build 20260509-E loaded');
 // Lists every published adventure; clicking one opens the full content with
 // a chapter-tree sidebar on the left and the rendered text on the right —
 // 5etools-style. Adventure files live at `data/adventure/adventure-<id>.json`
@@ -71,8 +72,8 @@ registerPanel('adventures', {
       const cover = coverPath
         ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖',style:'cssText:width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px'}))">`
         : `<div class="adv-card-nopic" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px">📖</div>`;
-      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" style="display:flex;flex-direction:column">
-        <div class="adv-card-imgwrap" style="position:relative;width:100%;height:220px;overflow:hidden;background:var(--panel-3);flex:0 0 220px">
+      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px">
+        <div class="adv-card-imgwrap" data-build="E" style="position:relative;width:100%;height:220px;min-height:220px;overflow:hidden;background:#444;flex:0 0 220px">
           ${cover}
           <div class="adv-card-titleover">${esc(a.name)}</div>
         </div>
