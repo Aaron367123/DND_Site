@@ -173,6 +173,15 @@ body.player-mode #player-view-btn{display:none}
 body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-template-areas:"workspace"}
 /* Player-view floating dock — chips for the DM-shared panels */
 .pv-dock{position:fixed;left:14px;top:14px;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9000;transition:opacity .2s ease}
+/* Player view: strip per-window controls so it reads like a fixed sidebar
+   layout. Players can't drag/resize/close panels or open the ⋯ settings
+   menu — anything they could change about the panel is removed. They use
+   the floating left dock to toggle which shared panels are visible. */
+body.player-mode .window-actions [data-wact="menu"],
+body.player-mode .window-actions [data-wact="min"],
+body.player-mode .window-actions [data-wact="close"]{display:none}
+body.player-mode .window-head{cursor:default}
+body.player-mode .window .rh{display:none}
 .pv-dock-btn{width:34px;height:34px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text-muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s}
 .pv-dock-btn:hover{background:var(--panel-3);color:var(--text)}
 .pv-dock-btn.active{background:var(--accent);color:#1a1a1a;border-color:var(--accent)}

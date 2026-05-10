@@ -31,7 +31,10 @@ registerPanel('combat',{
   },
 
   // Items added to the window's ⋯ menu. Evaluated each time the menu opens.
+  // All entries are DM-only — players have no business changing what their
+  // own view shows or editing combat structure.
   menuItems(){
+    if (document.body.classList.contains('player-mode')) return [];
     const m = this._statsMode();
     const dot = active => active ? '●' : '○';
     return [
@@ -80,6 +83,9 @@ registerPanel('combat',{
       </div>
 
       ${(() => {
+        // DM-only: the banner is a status reminder for the DM about what
+        // players are seeing. Players themselves don't need to see it.
+        if (document.body.classList.contains('player-mode')) return '';
         const m = this._statsMode();
         if (m === 'hide')    return '<div class="combat-hide-banner">🙈 Monster HP &amp; AC hidden from players</div>';
         if (m === 'conceal') return '<div class="combat-hide-banner">👁 Monster HP shown as health tier (Healthy / Bloodied / …) to players</div>';
@@ -145,8 +151,8 @@ registerPanel('combat',{
         ${(isPC && (c.hp||0) <= 0) ? this._renderDeathSaves(i, c) : ''}
       </div>
       <div class="card-actions">
-        <button class="btn icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>
-        ${isPC?'':`<button class="btn icon-btn" data-act="duplicate" data-idx="${i}" title="Duplicate">⎘</button>`}
+        ${isPlayerView ? '' : `<button class="btn icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>`}
+        ${(isPC || isPlayerView) ? '' : `<button class="btn icon-btn" data-act="duplicate" data-idx="${i}" title="Duplicate">⎘</button>`}
       </div>
     </div>`;
   },
