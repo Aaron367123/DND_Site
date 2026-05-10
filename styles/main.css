@@ -170,26 +170,26 @@ body.hide-window-focus .window.focused{border-color:var(--border);box-shadow:0 8
 body.player-mode #float-search-btn,
 body.player-mode #search-wrap,
 body.player-mode #player-view-btn{display:none}
-body.player-mode .app{grid-template-rows:1fr;grid-template-columns:1fr;grid-template-areas:"workspace"}
+body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w) 1fr;grid-template-areas:". workspace"}
 /* Player-view floating dock — chips for the DM-shared panels */
-.pv-dock{position:fixed;left:14px;top:14px;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9000;transition:opacity .2s ease}
-/* Player view: strip per-window controls so it reads like a fixed sidebar
-   layout. Players can't drag/resize/close panels or open the ⋯ settings
-   menu — anything they could change about the panel is removed. They use
-   the floating left dock to toggle which shared panels are visible. */
-body.player-mode .window-actions [data-wact="menu"],
-body.player-mode .window-actions [data-wact="min"],
-body.player-mode .window-actions [data-wact="close"]{display:none}
-body.player-mode .window-head{cursor:default}
-body.player-mode .window .rh{display:none}
-.pv-dock-btn{width:34px;height:34px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text-muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s}
-.pv-dock-btn:hover{background:var(--panel-3);color:var(--text)}
-.pv-dock-btn.active{background:var(--accent);color:#1a1a1a;border-color:var(--accent)}
-/* Desktop player-view: dock fades out when not in use so it doesn't crowd
-   the shared panels. Hover (or focus-within for keyboard users) brings it
-   back to full visibility. Mobile/landscape mobile keep their own rules. */
+/* Player dock: styled to match the DM's left-edge panel-dock — full-height
+   strip flush against the left edge, transparent buttons that highlight on
+   hover/active. The workspace canvas already starts at the viewport edge in
+   player mode, so we leave that grid alone and just float this strip
+   on top in the same physical place the DM dock sits. */
+.pv-dock{position:fixed;left:0;top:0;bottom:0;width:var(--dock-w);display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--panel);border-right:1px solid var(--border);border-radius:0;padding:8px 0;box-shadow:none;z-index:9000;transition:opacity .2s ease}
+/* Player view: only the DM-only settings (⋯) menu is hidden — players keep
+   their min / close / drag / resize controls so they can arrange their
+   workspace. The panel-specific options (which would let them clear tokens,
+   edit party, etc.) live behind the ⋯ button, which is the one we hide. */
+body.player-mode .window-actions [data-wact="menu"]{display:none}
+.pv-dock-btn{width:32px;height:32px;background:transparent;border:1px solid transparent;border-radius:5px;color:var(--text-muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.pv-dock-btn:hover{background:var(--panel-3);color:var(--text);border-color:var(--border)}
+.pv-dock-btn.active{background:var(--panel-3);color:var(--accent);border-color:var(--accent)}
+/* Desktop player-view: dock is a full-height left-edge sidebar matching the
+   DM, so leave it fully visible (no fade). Mobile rules below override. */
 @media (min-width: 769px){
-  body.player-mode .pv-dock{opacity:.18}
+  body.player-mode .pv-dock{opacity:1}
   body.player-mode .pv-dock:hover,
   body.player-mode .pv-dock:focus-within{opacity:1}
 }

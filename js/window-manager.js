@@ -193,7 +193,6 @@ function wireWindow(el,id){
   head.addEventListener('mousedown',e=>{
     if(e.target.closest('button')) return;
     if(layout[id]?.locked) return;       // locked → no drag
-    if(document.body.classList.contains('player-mode')) return; // player view → no drag
     const l=layout[id];
     drag={sx:e.clientX,sy:e.clientY,ox:l.x,oy:l.y};
     e.preventDefault();
