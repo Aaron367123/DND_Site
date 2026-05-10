@@ -41,22 +41,29 @@ registerPanel('combat',{
         run: () => this._setStatsMode('conceal') },
       { label: dot(m==='hide')    + ' Monster HP/AC: Hide',
         run: () => this._setStatsMode('hide') },
+      { label: '🩺 Manage health tiers…',
+        run: () => this._manageHealthTiers() },
       { label: '⚙ Manage quick-pick names…',
         run: () => this._manageQuickNames() },
     ];
   },
 
-  // Qualitative HP tier for "Conceal" mode. Thresholds are HP% floors.
+  // Qualitative HP tier for "Conceal" mode. Tiers are user-configurable
+  // via "Manage health tiers…" — array of {threshold, label} where threshold
+  // is the HP% FLOOR for that label. Walks the list highest→lowest and uses
+  // the first one whose threshold ≤ current pct.
   _hpTier(c){
     const max = c.hpMax || 0;
     if (max <= 0) return '—';
     const pct = (c.hp / max) * 100;
-    if (c.hp <= 0) return 'Defeated';
-    if (pct >= 100) return 'Healthy';
-    if (pct >= 76)  return 'Scratched';
-    if (pct >= 51)  return 'Bloodied';
-    if (pct >= 26)  return 'Wounded';
-    return 'Near Death';
+    const tiers = (state.settings && Array.isArray(state.settings.healthTiers) && state.settings.healthTiers.length)
+      ? state.settings.healthTiers
+      : DEFAULT_SETTINGS.healthTiers;
+    const sorted = [...tiers].sort((a,b) => (b.threshold||0) - (a.threshold||0));
+    for (const t of sorted){
+      if (pct >= (t.threshold ?? 0)) return t.label || '?';
+    }
+    return sorted.length ? (sorted[sorted.length-1].label || '?') : '—';
   },
 
   _render(){
@@ -531,6 +538,73 @@ registerPanel('combat',{
     const conds=state.combatants[i].conditions||[];
     if(!conds.includes(cond)){state.combatants[i]={...state.combatants[i],conditions:[...conds,cond]};save();this._render();}
     showToast(`${cond} → ${state.combatants[i].name}`);return true;
+  },
+
+  // Editor for the "Conceal" health-tier labels. Each row is {threshold%, label}.
+  // Threshold is the HP% floor — walked highest→lowest; first match wins.
+  _manageHealthTiers(){
+    if (!Array.isArray(state.settings.healthTiers) || !state.settings.healthTiers.length){
+      state.settings.healthTiers = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.healthTiers));
+    }
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const sortTiers = () => state.settings.healthTiers.sort((a,b) => (b.threshold||0) - (a.threshold||0));
+    const renderRows = () => {
+      sortTiers();
+      return state.settings.healthTiers.map((t,i) => `
+        <div class="ht-row">
+          <input class="ht-th" type="number" min="0" max="100" data-i="${i}" data-k="threshold" value="${t.threshold}">
+          <span class="ht-pct">%</span>
+          <input class="ht-lb" type="text" data-i="${i}" data-k="label" value="${esc(t.label||'')}" placeholder="Label">
+          <button class="btn icon-btn danger" data-rm="${i}" title="Remove tier">×</button>
+        </div>`).join('');
+    };
+    const renderModal = () => {
+      backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:380px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;padding:18px 20px">
+        <h3 style="margin:0 0 6px">Health tiers</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 12px">Used in <strong>Conceal</strong> mode. Each row is the HP% floor for the label — the highest matching tier is shown to players.</p>
+        <div class="ht-list" style="flex:1;overflow-y:auto">${renderRows()}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:space-between">
+          <button class="btn" id="ht-add">+ Add Tier</button>
+          <button class="btn" id="ht-reset" title="Restore defaults">↺ Reset</button>
+        </div>
+        <div class="modal-actions" style="margin-top:14px"><button class="btn primary" id="ht-done">Done</button></div>
+      </div>`;
+      wire();
+    };
+    const wire = () => {
+      backdrop.querySelectorAll('input.ht-th, input.ht-lb').forEach(el => el.addEventListener('change', e => {
+        const i = +e.target.dataset.i, k = e.target.dataset.k;
+        const t = state.settings.healthTiers[i]; if (!t) return;
+        if (k === 'threshold'){
+          let n = parseInt(e.target.value); if (!Number.isFinite(n)) n = 0;
+          t.threshold = Math.max(0, Math.min(100, n));
+        } else {
+          t.label = String(e.target.value).trim() || '?';
+        }
+        save();
+        this._render();
+        renderModal();
+      }));
+      backdrop.querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', e => {
+        const i = +e.currentTarget.dataset.rm;
+        state.settings.healthTiers.splice(i,1);
+        save(); this._render(); renderModal();
+      }));
+      backdrop.querySelector('#ht-add').addEventListener('click', () => {
+        state.settings.healthTiers.push({threshold:50, label:'New Tier'});
+        save(); this._render(); renderModal();
+      });
+      backdrop.querySelector('#ht-reset').addEventListener('click', () => {
+        state.settings.healthTiers = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.healthTiers));
+        save(); this._render(); renderModal();
+      });
+      backdrop.querySelector('#ht-done').addEventListener('click', () => backdrop.remove());
+    };
+    document.body.appendChild(backdrop);
+    renderModal();
+    backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) backdrop.remove(); });
+    backdrop.addEventListener('keydown',   e => { if (e.key==='Escape') backdrop.remove(); });
   },
 
   _manageQuickNames(){

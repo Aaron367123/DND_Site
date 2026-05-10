@@ -489,6 +489,10 @@ body.player-mode #search-popup{display:none !important}
 .card-stat input::-webkit-outer-spin-button,.card-stat input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .card-stat-hidden{font-size:13px;font-weight:600;color:var(--text-muted);text-align:center;line-height:1}
 .card-stat-tier{font-size:10px;font-weight:600;color:var(--accent);text-align:center;line-height:1.1;letter-spacing:.02em;white-space:nowrap}
+.ht-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.ht-row .ht-th{width:60px;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:5px 8px;font-size:12px;border-radius:4px;font-family:inherit;text-align:right}
+.ht-row .ht-pct{font-size:11px;color:var(--text-muted);width:14px}
+.ht-row .ht-lb{flex:1;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:5px 8px;font-size:12px;border-radius:4px;font-family:inherit}
 /* Banner the combat tracker shows when the DM has the hide-monster-stats
    toggle on. Slimmer on the DM side (informational), more prominent on the
    player side so players know stats are intentionally redacted. */
