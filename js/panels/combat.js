@@ -16,6 +16,49 @@ registerPanel('combat',{
   },
   unmount(){this._body=null;},
 
+  // Tri-state monster stats reveal: show (real numbers), conceal (qualitative
+  // tier like "Bloodied"), hide ("?"). Reads old hideMonsterStats=true as 'hide'
+  // for backward-compat.
+  _statsMode(){
+    const m = state.settings?.monsterStatsMode;
+    if (m === 'show' || m === 'conceal' || m === 'hide') return m;
+    return state.settings?.hideMonsterStats ? 'hide' : 'show';
+  },
+  _setStatsMode(mode){
+    state.settings.monsterStatsMode = mode;
+    state.settings.hideMonsterStats = (mode === 'hide'); // keep legacy field in sync
+    save(); this._render();
+  },
+
+  // Items added to the window's ⋯ menu. Evaluated each time the menu opens.
+  menuItems(){
+    const m = this._statsMode();
+    const dot = active => active ? '●' : '○';
+    return [
+      { label: dot(m==='show')    + ' Monster HP/AC: Show',
+        run: () => this._setStatsMode('show') },
+      { label: dot(m==='conceal') + ' Monster HP/AC: Conceal (Bloodied / Wounded / …)',
+        run: () => this._setStatsMode('conceal') },
+      { label: dot(m==='hide')    + ' Monster HP/AC: Hide',
+        run: () => this._setStatsMode('hide') },
+      { label: '⚙ Manage quick-pick names…',
+        run: () => this._manageQuickNames() },
+    ];
+  },
+
+  // Qualitative HP tier for "Conceal" mode. Thresholds are HP% floors.
+  _hpTier(c){
+    const max = c.hpMax || 0;
+    if (max <= 0) return '—';
+    const pct = (c.hp / max) * 100;
+    if (c.hp <= 0) return 'Defeated';
+    if (pct >= 100) return 'Healthy';
+    if (pct >= 76)  return 'Scratched';
+    if (pct >= 51)  return 'Bloodied';
+    if (pct >= 26)  return 'Wounded';
+    return 'Near Death';
+  },
+
   _render(){
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
@@ -27,11 +70,14 @@ registerPanel('combat',{
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
         ${inCombat?'<button class="btn icon-btn danger" data-act="end" title="End combat (clears all combatants)">⏹ End</button>':''}
-        <button class="btn icon-btn ${state.settings?.hideMonsterStats?'active':''}" data-act="toggle-hide-stats" title="Hide monster HP/AC from player view">🙈</button>
-        <button class="btn icon-btn" data-act="settings" title="Manage quick-pick names">⚙</button>
       </div>
 
-      ${state.settings?.hideMonsterStats ? '<div class="combat-hide-banner">🙈 Monster HP &amp; AC hidden from players</div>' : ''}
+      ${(() => {
+        const m = this._statsMode();
+        if (m === 'hide')    return '<div class="combat-hide-banner">🙈 Monster HP &amp; AC hidden from players</div>';
+        if (m === 'conceal') return '<div class="combat-hide-banner">👁 Monster HP shown as health tier (Healthy / Bloodied / …) to players</div>';
+        return '';
+      })()}
 
       ${inCombat
         ? '<div class="combatant-list" id="combat-list">'+this._renderCombatants()+'</div>'
@@ -52,17 +98,18 @@ registerPanel('combat',{
     const portrait = c.portrait
       || (isPC ? (state.party.find(p=>p.id===c.id)?.icon || '⚔')
                : (CLASS_ICONS[c.cls] || CLASS_ICONS.enemy));
-    // Hide HP/AC for monsters in the player view when the DM has toggled it on.
+    // Tri-state reveal for monsters in player view: show / conceal / hide.
     // DM tab always shows real values regardless of the setting.
-    const hideStats = !isPC
-      && state.settings?.hideMonsterStats
-      && document.body.classList.contains('player-mode');
-    const hpField = hideStats
+    const isPlayerView = document.body.classList.contains('player-mode');
+    const mode = (!isPC && isPlayerView) ? this._statsMode() : 'show';
+    const hpField = mode === 'hide'
       ? '<span class="card-stat-hidden">?</span>'
-      : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">`;
-    const acField = hideStats
-      ? '<span class="card-stat-hidden">?</span>'
-      : `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`;
+      : mode === 'conceal'
+        ? `<span class="card-stat-tier" title="Concealed health">${esc(this._hpTier(c))}</span>`
+        : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">`;
+    const acField = mode === 'show'
+      ? `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`
+      : '<span class="card-stat-hidden">?</span>';
     return `<div class="combatant-card ${active?'active':''} ${dead?'dead':''} ${isPC?'pc':'npc'}" data-idx="${i}" draggable="true">
       <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
       <div class="card-avatar ${isPC?'pc':'npc'}" data-act="upload-portrait" data-idx="${i}" title="Click to upload portrait">${renderIcon(portrait, c.name)}</div>
@@ -118,11 +165,6 @@ registerPanel('combat',{
       }
       else if(act==='add')            this._addPrompt();
       else if(act==='add-monster')    this._openMonsterPicker();
-      else if(act==='settings')       this._manageQuickNames();
-      else if(act==='toggle-hide-stats'){
-        state.settings.hideMonsterStats = !state.settings.hideMonsterStats;
-        save(); this._render();
-      }
       else if(act==='remove')         this._remove(parseInt(el.dataset.idx));
       else if(act==='duplicate')      this._duplicate(parseInt(el.dataset.idx));
       else if(act==='rmcond')         this._removeCond(parseInt(el.dataset.idx),el.dataset.cond);
