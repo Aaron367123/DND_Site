@@ -47,7 +47,11 @@ registerPanel('shop',{
     if (!state.settings.shopFilters){
       state.settings.shopFilters = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.shopFilters));
     }
+    if (!state.settings.shopAssortmentCounts){
+      state.settings.shopAssortmentCounts = {...DEFAULT_SETTINGS.shopAssortmentCounts};
+    }
     const sf = state.settings.shopFilters;
+    const sac = state.settings.shopAssortmentCounts;
     sf.rarity = sf.rarity || {};
     sf.categories = sf.categories || {};
     const RARITIES = [
@@ -95,6 +99,16 @@ registerPanel('shop',{
             <button data-val="5" class="${String(rnd)==='5'?'active':''}">5</button>
             <button data-val="10" class="${String(rnd)==='10'?'active':''}">10</button>
           </div>
+        </div>
+
+        <div class="shop-filter-section">
+          <div class="shop-filter-head"><span>Items per assortment</span></div>
+          <div class="shop-assort-grid">
+            <label>Sparse<input type="number" min="1" max="200" id="shop-sac-sparse" value="${sac.Sparse}"></label>
+            <label>Standard<input type="number" min="1" max="200" id="shop-sac-standard" value="${sac.Standard}"></label>
+            <label>Abundant<input type="number" min="1" max="200" id="shop-sac-abundant" value="${sac.Abundant}"></label>
+          </div>
+          <p class="shop-filter-note" style="margin-top:6px">Caps at the catalog size if the shop type has fewer items available.</p>
         </div>
 
         <div class="shop-filter-section">
@@ -160,6 +174,20 @@ registerPanel('shop',{
       state.settings.rounding=v;
       save();
     }));
+
+    // Items-per-assortment inputs.
+    const wireSac = (id, key) => {
+      const el = backdrop.querySelector('#'+id);
+      el.addEventListener('change', () => {
+        const n = Math.max(1, parseInt(el.value)||1);
+        el.value = n;
+        sac[key] = n;
+        save();
+      });
+    };
+    wireSac('shop-sac-sparse',   'Sparse');
+    wireSac('shop-sac-standard', 'Standard');
+    wireSac('shop-sac-abundant', 'Abundant');
 
     // Magic / mundane toggles.
     backdrop.querySelector('#shop-magic').addEventListener('change', e => { sf.includeMagic   = e.target.checked; save(); });
@@ -439,14 +467,14 @@ registerPanel('shop',{
     const type=b.querySelector('#shop-type').value,price=b.querySelector('#shop-price').value,economy=b.querySelector('#shop-economy').value,assortment=b.querySelector('#shop-assort').value;
     const pm={Cheap:.7,Average:1,Expensive:1.3,Premium:1.6}[price];
     const em={Poor:.85,Average:1,Wealthy:1.15}[economy];
-    // Target a FRACTION of the catalog rather than a fixed count, so different
-    // shop types yield genuinely different-sized inventories and there's always
-    // headroom for randomness.
-    const fraction={Sparse:0.45,Standard:0.7,Abundant:0.95}[assortment];
     // Catalog now comes from the full 5e dataset when loaded; falls back to
     // the hand-curated ITEM_CATALOG before _5eLoaded fires.
     const catalog=this._catalogFor(type);
-    const target=Math.max(3, Math.min(catalog.length, Math.round(catalog.length * fraction)));
+    // Items per assortment is now configurable in shop settings; default
+    // counts are Sparse:8, Standard:18, Abundant:32. Cap at catalog size.
+    const sac = (state.settings && state.settings.shopAssortmentCounts) || DEFAULT_SETTINGS.shopAssortmentCounts;
+    const desired = Math.max(1, parseInt(sac[assortment]) || DEFAULT_SETTINGS.shopAssortmentCounts[assortment]);
+    const target = Math.max(1, Math.min(catalog.length, desired));
     const rw={Common:5,Uncommon:3,Rare:1.2,VeryRare:.4,Legendary:.15};
     // Weighted shuffle: assign each item score = random * rarityWeight, sort
     // descending, take top N. Rarer items rarely score high → end up rare.

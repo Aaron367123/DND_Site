@@ -706,6 +706,9 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .shop-filter-mini{padding:1px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text-muted);font-size:10px;cursor:pointer;border-radius:3px;text-transform:none;letter-spacing:0;font-weight:500;transition:color .12s,border-color .12s}
 .shop-filter-mini:hover{color:var(--accent);border-color:var(--accent)}
 .shop-filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px}
+.shop-assort-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.shop-assort-grid label{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.shop-assort-grid input{font-size:13px;padding:5px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400}
 .shop-filter-chk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);cursor:pointer;padding:2px 4px;border-radius:3px;user-select:none}
 .shop-filter-chk:hover{background:var(--panel-3)}
 .shop-filter-chk input[type="checkbox"]{margin:0;cursor:pointer;width:auto}

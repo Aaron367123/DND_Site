@@ -6,6 +6,38 @@ let _mapBgImage = null; // holds the Image object
 
 registerPanel('battlemap',{
   title:'Battle Map',icon:'🗺',
+
+  // Items added to the window's ⋯ menu — secondary/destructive actions live
+  // here so the toolbar can stay focused on tools the DM uses every turn.
+  menuItems(){
+    return [
+      { label: '📺 Open player view in new tab', run: () => {
+        const url = window.location.href.split('?')[0]+'?player=1';
+        const w = window.open(url,'skt-player','width=1280,height=720');
+        if (!w && typeof showToast==='function') showToast('Allow popups to open player view');
+        else if (typeof showToast==='function') showToast('Player view opened');
+      } },
+      { label: '↺ Sync tokens from Combat tracker', run: () => this._syncParty() },
+      { label: '🗑 Clear all drawings', run: () => {
+        if (!this._drawings.length) return;
+        showConfirm('Erase every pencil annotation on this map?', {title:'Clear drawings', confirmLabel:'Clear', danger:true}).then(ok=>{
+          if (!ok) return;
+          this._drawings = [];
+          this._saveMap();
+          this._render();
+        });
+      } },
+      { label: '✕ Clear all tokens', run: () => {
+        showConfirm('Remove all tokens from the battle map?', {title:'Clear tokens', confirmLabel:'Remove', danger:true}).then(ok=>{
+          if (!ok) return;
+          this._tokens = []; this._selected = null;
+          if (typeof this._closePanel === 'function') this._closePanel();
+          this._saveMap(); this._render();
+        });
+      } },
+    ];
+  },
+
   _tokens:[], _tool:'', _selected:null,
   _cellSize:50, _cols:24, _rows:18,
   // Grid alignment offset (image-pixel space at scale 1). Lets the overlay
@@ -574,23 +606,19 @@ registerPanel('battlemap',{
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
       +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
-      +'<button class="btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Show/hide grid overlay">⊞ Grid</button>'
-      +'<button class="btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">🧲 Snap</button>'
-      +(_mapBgImage?'<button class="btn '+(this._tool==='align'?'active':'')+'" data-mact="tool-align" style="flex-shrink:0" title="Align grid to printed map grid: click two opposite corners of one cell">📐 Align</button>':'')
-      +((this._gridOffsetX||this._gridOffsetY)?'<button class="btn" data-mact="reset-align" style="flex-shrink:0" title="Reset grid alignment (offset back to 0,0)">↺</button>':'')
-      +'<div style="flex:1"></div>'
-      +'<button class="btn" data-mact="sync-combat" style="flex-shrink:0">↺ Sync</button>'
-      +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
-      +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">🗑 Drawings</button>'
-      // Fog of war + open-player launch — DM-only.
-      +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
+      +'<button class="btn icon-btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Show/hide grid overlay">⊞</button>'
+      +'<button class="btn icon-btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">🧲</button>'
+      +(_mapBgImage?'<button class="btn icon-btn '+(this._tool==='align'?'active':'')+'" data-mact="tool-align" style="flex-shrink:0" title="Align grid to printed map grid: click two opposite corners of one cell">📐</button>':'')
+      +((this._gridOffsetX||this._gridOffsetY)?'<button class="btn icon-btn" data-mact="reset-align" style="flex-shrink:0" title="Reset grid alignment (offset back to 0,0)">↺</button>':'')
+      // Fog cluster — only the toggle is visible by default. When fog is on,
+      // its sub-controls (paint mode, brush radius, hide/show all) appear.
+      +'<div style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
       +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">🌫 Fog</button>'
-      +(this._fog!==null?'<button class="btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">🖌 Reveal</button>':'')
-      +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:60px;flex-shrink:0" title="Brush size">':'')
-      +(this._fog!==null?'<button class="btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide everything">◼ Hide All</button>':'')
-      +(this._fog!==null?'<button class="btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal everything">◻ Show All</button>':'')
-      +'<div style="width:1px;background:var(--border);height:18px;margin:0 2px;flex-shrink:0"></div>'
-      +'<button class="btn" data-mact="open-player" style="flex-shrink:0" title="Open player view in new tab">📺 Player View</button>'
+      +(this._fog!==null?'<button class="btn icon-btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">🖌</button>':'')
+      +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:50px;flex-shrink:0" title="Brush size">':'')
+      +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide everything">◼</button>':'')
+      +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal everything">◻</button>':'')
+      +'<div style="flex:1"></div>'
     +'</div>';
 
     if (partyBtns){
