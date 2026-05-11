@@ -9,7 +9,11 @@ registerPanel('battlemap',{
 
   // Items added to the window's ⋯ menu — secondary/destructive actions live
   // here so the toolbar can stay focused on tools the DM uses every turn.
+  // Player view sees only the non-destructive "Sync tokens" entry.
   menuItems(){
+    const isPlayer = document.body.classList.contains('player-mode');
+    const syncItem = { label: '↺ Sync tokens from Combat tracker', run: () => this._syncParty() };
+    if (isPlayer) return [syncItem];
     return [
       { label: '📺 Open player view in new tab', run: () => {
         const url = window.location.href.split('?')[0]+'?player=1';
@@ -17,7 +21,7 @@ registerPanel('battlemap',{
         if (!w && typeof showToast==='function') showToast('Allow popups to open player view');
         else if (typeof showToast==='function') showToast('Player view opened');
       } },
-      { label: '↺ Sync tokens from Combat tracker', run: () => this._syncParty() },
+      syncItem,
       { label: '🗑 Clear all drawings', run: () => {
         if (!this._drawings.length) return;
         showConfirm('Erase every pencil annotation on this map?', {title:'Clear drawings', confirmLabel:'Clear', danger:true}).then(ok=>{
