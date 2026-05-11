@@ -178,11 +178,10 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
    player mode, so we leave that grid alone and just float this strip
    on top in the same physical place the DM dock sits. */
 .pv-dock{position:fixed;left:0;top:0;bottom:0;width:var(--dock-w);display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--panel);border-right:1px solid var(--border);border-radius:0;padding:8px 0;box-shadow:none;z-index:9000;transition:opacity .2s ease}
-/* Player view: only the DM-only settings (⋯) menu is hidden — players keep
-   their min / close / drag / resize controls so they can arrange their
-   workspace. The panel-specific options (which would let them clear tokens,
-   edit party, etc.) live behind the ⋯ button, which is the one we hide. */
-body.player-mode .window-actions [data-wact="menu"]{display:none}
+/* Player view: window controls (drag, resize, min, close, ⋯) stay
+   available so players can arrange their workspace. The ⋯ menu shows
+   Snap to layout + Lock + any panel-specific items each panel exposes;
+   the DM-only "Share with players" item is filtered out by openWindowMenu. */
 .pv-dock-btn{width:32px;height:32px;background:transparent;border:1px solid transparent;border-radius:5px;color:var(--text-muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
 .pv-dock-btn:hover{background:var(--panel-3);color:var(--text);border-color:var(--border)}
 .pv-dock-btn.active{background:var(--panel-3);color:var(--accent);border-color:var(--accent)}

@@ -621,11 +621,14 @@ registerPanel('battlemap',{
       +'<div style="flex:1"></div>'
     +'</div>';
 
-    if (partyBtns){
+    } // end !_toolbarHidden
+    // Party bar — list of party members not yet placed on the map. Visible
+    // in both DM and player toolbars (when the toolbar isn't collapsed) so
+    // players can see their party-icon row mirrored from the DM view.
+    if (partyBtns && !this._toolbarHidden){
       html+='<div style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap;align-items:center">'
         +'<span style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
     }
-    } // end !_toolbarHidden
 
     html+='<div id="map-scroll" style="flex:1;overflow:auto;background:#111;position:relative">'
       +'<div id="map-stage" style="position:relative;display:inline-block">'

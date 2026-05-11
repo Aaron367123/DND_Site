@@ -518,12 +518,14 @@ function openWindowMenu(id, anchorBtn){
   const isShared = (state.sharedPanels || []).includes(id);
   const isLocked = !!l.locked;
 
-  // Build menu items. Share + Lock are DM-only (player tab can still snap).
+  // Build menu items. Share is DM-only ("with players" makes no sense from
+  // the player side); Lock + Snap are available to both since they only
+  // affect this tab's layout.
   const items = [];
   if (!isPlayer){
     items.push({ act:'share', label: (isShared?'👁':'◌')+' '+(isShared?'Shared with players (click to unshare)':'Share with player view') });
-    items.push({ act:'lock',  label: (isLocked?'🔒':'🔓')+' '+(isLocked?'Locked (click to unlock)':'Lock window') });
   }
+  items.push({ act:'lock',  label: (isLocked?'🔒':'🔓')+' '+(isLocked?'Locked (click to unlock)':'Lock window') });
   items.push({ act:'snap',  label:'▢ Snap to layout…' });
 
   // Panel-specific items, registered via panelDefs[id].menuItems (array or
