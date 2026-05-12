@@ -118,17 +118,35 @@ registerPanel('notes', {
         if (!this._editing && this._body) this._render();
       };
       window.notesSync.startPolling(() => this._data);
-      // If a vault is already connected from a prior session, skip the
-      // picker and land directly in the local-folder view.
-      if (window.notesSync.isConnected && window.notesSync.isConnected()){
-        this._view = 'local';
-      }
+    }
+    // Source preference order on mount:
+    //  1. Dropbox if a token is configured (the "always logged in" shared
+    //     account) — auto-skips the picker entirely.
+    //  2. Local folder if a vault from a prior session is still connected.
+    //  3. Otherwise show the picker.
+    if (window.dropboxSync && window.dropboxSync.isConfigured()){
+      this._initDropbox();
+      this._view = 'dropbox';
+    } else if (window.notesSync && window.notesSync.isConnected && window.notesSync.isConnected()){
+      this._view = 'local';
     }
     this._render();
   },
+
+  // Wire the Dropbox adapter — mirrors the notesSync init dance.
+  _initDropbox(){
+    const ds = window.dropboxSync; if (!ds) return;
+    ds.init(() => this._editing);
+    ds.onStatus(() => { if (this._body) this._renderVaultPill(); });
+    ds._onPullCallback = () => { if (!this._editing && this._body) this._render(); };
+    ds.startPolling(() => this._data);
+    // Bring the vault tree into the in-memory model on first connect.
+    ds.fullSync(this._data, { force: true }).catch(() => {});
+  },
   unmount(){
     this._commitEditing();
-    if (window.notesSync) { window.notesSync.stopPolling(); window.notesSync._onPullCallback = null; }
+    if (window.notesSync)   { window.notesSync.stopPolling();   window.notesSync._onPullCallback   = null; }
+    if (window.dropboxSync) { window.dropboxSync.stopPolling(); window.dropboxSync._onPullCallback = null; }
     this._body = null;
   },
 
@@ -168,11 +186,39 @@ registerPanel('notes', {
   _render(){
     const b = this._body; if (!b) return;
     b.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
-    if (this._view === 'local') this._renderLocalView();
-    else                         this._renderPickerView();
+    if      (this._view === 'dropbox') this._renderDropboxView();
+    else if (this._view === 'local')   this._renderLocalView();
+    else                                this._renderPickerView();
     this._editing = false;
     this._applyViewSettings();
     this._wire();
+  },
+
+  // Dropbox view — identical structure to local view; only the header label
+  // differs. The same tree, editor, toolbar, undo stack, settings popover,
+  // etc. all keep working unchanged.
+  _renderDropboxView(){
+    const b = this._body;
+    const sel = this._selected();
+    const tree = this._buildTree();
+    b.innerHTML = `
+      <div class="notes-shell">
+        <div class="notes-tree">
+          <div class="notes-tree-head">
+            <button class="btn icon-btn" data-act="back-to-picker" title="Choose a different source">←</button>
+            <span class="notes-tree-title">DROPBOX</span>
+            <span style="flex:1"></span>
+            <button class="btn icon-btn" data-act="add-folder" title="New folder">📁+</button>
+            <button class="btn icon-btn" data-act="add-file" title="New file">📄+</button>
+            <span class="notes-vault-pill" id="notes-vault-pill"></span>
+          </div>
+          <div class="notes-tree-body">${this._renderTree(tree, null, 0)}</div>
+        </div>
+        <div class="notes-divider" id="notes-divider" title="Drag to resize"></div>
+        <div class="notes-editor">
+          ${sel ? this._renderEditor(sel) : '<div class="empty-state" style="padding:40px;text-align:center">Select a file, or click 📄+ to create one.</div>'}
+        </div>
+      </div>`;
   },
 
   // Read-write the per-tab display preferences (text size %, content width %).
@@ -212,11 +258,17 @@ registerPanel('notes', {
   _renderPickerView(){
     const b = this._body;
     const chromiumOnly = window.notesSync && !window.notesSync.isSupported();
+    const dropboxConfigured = window.dropboxSync && window.dropboxSync.isConfigured();
     b.innerHTML = `
       <div class="notes-picker-shell">
         <aside class="notes-picker-side">
           <div class="notes-picker-head">SELECT NOTE SOURCE</div>
           <div class="notes-picker-tiles">
+            <button class="notes-source-tile${dropboxConfigured?'':' disabled'}" data-act="src-dropbox"${dropboxConfigured?'':' disabled title="Dropbox not configured — paste a token in js/dropbox-config.js"'}>
+              <span class="tile-icon">📦</span>
+              <span class="tile-label">DROPBOX</span>
+              ${dropboxConfigured?'':'<span class="tile-coming">Not configured</span>'}
+            </button>
             <button class="notes-source-tile${chromiumOnly?' disabled':''}" data-act="src-local"${chromiumOnly?' disabled title="Local Folder requires Chromium (Chrome/Edge/Opera)"':''}>
               <span class="tile-icon">📁</span>
               <span class="tile-label">LOCAL FOLDER</span>
@@ -516,8 +568,10 @@ registerPanel('notes', {
       const me = _getMe();
       file.lineAuthors = _notesUpdateLineAuthors(oldContent, file.lineAuthors, newContent, me.id);
       file.content = newContent;
-      // Push to vault (debounced inside notesSync)
-      if (window.notesSync && window.notesSync.isConnected()) {
+      // Push to the active adapter (debounced inside each sync module).
+      if (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured()) {
+        window.dropboxSync.pushFile(file, this._data.items);
+      } else if (window.notesSync && window.notesSync.isConnected()) {
         window.notesSync.pushFile(file, this._data.items);
       }
     }
@@ -682,6 +736,15 @@ registerPanel('notes', {
     });
 
     // Source-picker tiles (only present when _view === 'picker')
+    b.querySelector('[data-act="src-dropbox"]')?.addEventListener('click', () => {
+      if (!window.dropboxSync || !window.dropboxSync.isConfigured()){
+        showToast('Dropbox not configured — paste a token in js/dropbox-config.js');
+        return;
+      }
+      this._initDropbox();
+      this._view = 'dropbox';
+      this._render();
+    });
     b.querySelector('[data-act="src-local"]')?.addEventListener('click', async () => {
       if (!window.notesSync){ showToast('Notes sync unavailable'); return; }
       if (!window.notesSync.isSupported()){ showToast('Local Folder requires Chromium (Chrome/Edge/Opera)'); return; }
@@ -706,14 +769,15 @@ registerPanel('notes', {
       this._render();
     });
 
-    // Manual sync from disk (the ↻ button next to the gear).
+    // Manual sync (the ↻ button next to the gear). Pulls from the active
+    // adapter — Dropbox or local vault.
     b.querySelector('[data-act="notes-refresh"]')?.addEventListener('click', async () => {
-      if (!window.notesSync || !window.notesSync.isConnected()){
-        showToast('No vault connected');
-        return;
-      }
+      const adapter = (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured())
+        ? window.dropboxSync
+        : (window.notesSync && window.notesSync.isConnected() ? window.notesSync : null);
+      if (!adapter){ showToast('No source connected'); return; }
       try {
-        await window.notesSync.fullSync(this._data, { force:true });
+        await adapter.fullSync(this._data, { force:true });
         this._render();
         showToast('Sync complete');
       } catch(e){ showToast('Sync failed'); }
@@ -738,6 +802,41 @@ registerPanel('notes', {
   _renderVaultPill(){
     const pill = this._body && this._body.querySelector('#notes-vault-pill');
     if (!pill) return;
+    // Pick the adapter that matches the current view. Dropbox pill is
+    // simpler since there's no "connect" step — it's configured or not.
+    if (this._view === 'dropbox'){
+      const ds = window.dropboxSync;
+      if (!ds){ pill.style.display='none'; return; }
+      const s = ds.getStatus();
+      pill.style.display = '';
+      if (!s.configured){
+        pill.className = 'notes-vault-pill unsupported';
+        pill.textContent = '⚠ No token';
+        pill.title = 'Set accessToken in js/dropbox-config.js';
+        pill.onclick = null;
+        return;
+      }
+      if (s.busy){
+        pill.className = 'notes-vault-pill syncing';
+        pill.textContent = '⟳ Syncing…';
+        pill.title = ''; pill.onclick = null;
+        return;
+      }
+      if (!s.connected){
+        pill.className = 'notes-vault-pill disconnected';
+        pill.textContent = '⚠ ' + (s.error || 'Disconnected');
+        pill.title = s.error || 'Dropbox unreachable';
+        pill.onclick = null;
+        return;
+      }
+      pill.className = 'notes-vault-pill connected';
+      pill.textContent = '📦 ' + (s.vaultName || 'Dropbox');
+      const ago = s.lastSync ? Math.round((Date.now() - s.lastSync)/1000) : null;
+      pill.title = ago != null ? ('Last synced '+ago+'s ago') : '';
+      pill.onclick = null;
+      return;
+    }
+    // Local-folder pill (original behavior, untouched)
     if (!window.notesSync) { pill.style.display='none'; return; }
     const s = window.notesSync.getStatus();
     pill.style.display = '';
@@ -826,6 +925,12 @@ registerPanel('notes', {
   // ─── Tree mutations ───────────────────────────────────────────────────────
 
   _syncAfter(){
+    // Tree mutations (add/rename/delete) need to push the new shape to the
+    // active adapter — only one is in use at a time per the current _view.
+    if (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured()){
+      window.dropboxSync.fullSync(this._data, { force: true });
+      return;
+    }
     if (window.notesSync && window.notesSync.isConnected()) {
       window.notesSync.fullSync(this._data, { force: true });
     }

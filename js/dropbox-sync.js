@@ -1,0 +1,418 @@
+// ============================================================
+// NOTES — DROPBOX SYNC (single shared account, HTTP API)
+// ============================================================
+// Mirrors the public API surface of notes-sync.js so the Session
+// Notes panel can call either adapter with the same method names.
+//
+// Auth model: one long-lived access token pasted into
+// js/dropbox-config.js. There is no per-user OAuth — every browser
+// that loads the page is "logged in" as the shared account.
+//
+// Sync model: same as notes-sync.js — last-write-wins, 8 s poll for
+// incoming changes, 800 ms debounce for outgoing edits.
+
+(function() {
+  'use strict';
+
+  const STATE_KEY = 'skt-dropbox-sync-v1';
+  const POLL_MS = 8000;
+  const PUSH_DEBOUNCE_MS = 800;
+  const API  = 'https://api.dropboxapi.com/2';
+  const CONT = 'https://content.dropboxapi.com/2';
+
+  // ─── State ────────────────────────────────────────────────────────────────
+  let _state = {
+    cursor: null,       // for list_folder/continue incremental polling
+    fileRevs: {},       // path_lower → Dropbox rev string
+    lastSync: 0,
+  };
+  let _pushTimers = new Map();
+  let _pollTimer = null;
+  let _statusListeners = new Set();
+  let _busy = false;
+  let _editingProvider = null;
+  let _connectError = null;  // string explaining the last hard failure
+
+  function _loadState() {
+    try {
+      const raw = localStorage.getItem(STATE_KEY);
+      if (raw) _state = Object.assign(_state, JSON.parse(raw));
+    } catch(e){}
+  }
+  function _saveState() {
+    try { localStorage.setItem(STATE_KEY, JSON.stringify(_state)); } catch(e){}
+  }
+  function _emit() { _statusListeners.forEach(fn => { try { fn(getStatus()); } catch(e){} }); }
+
+  function _token() {
+    return (window.DROPBOX_CONFIG && window.DROPBOX_CONFIG.accessToken) || '';
+  }
+  function _notesPath() {
+    let p = (window.DROPBOX_CONFIG && window.DROPBOX_CONFIG.notesPath) || '';
+    if (p && !p.startsWith('/')) p = '/' + p;
+    if (p.endsWith('/')) p = p.slice(0, -1);
+    return p; // '' or '/sub'
+  }
+
+  // ─── Public state helpers ─────────────────────────────────────────────────
+  function isConfigured() {
+    const t = _token();
+    return !!t && t !== 'PASTE_YOUR_TOKEN_HERE';
+  }
+  function isConnected() {
+    // No persistent connect step — configured ⇒ connected (until a 401).
+    return isConfigured() && !_connectError;
+  }
+  function isSupported() { return true; } // works in any modern browser
+  function getStatus() {
+    return {
+      configured: isConfigured(),
+      supported: true,
+      connected: isConnected(),
+      busy: _busy,
+      lastSync: _state.lastSync,
+      vaultName: 'Dropbox' + (_notesPath() || ''),
+      error: _connectError,
+    };
+  }
+  function onStatus(cb) { _statusListeners.add(cb); return () => _statusListeners.delete(cb); }
+  function init(isEditingFn) {
+    _editingProvider = (typeof isEditingFn === 'function') ? isEditingFn : null;
+    _loadState();
+  }
+
+  // ─── HTTP helpers ─────────────────────────────────────────────────────────
+  async function _api(endpoint, body) {
+    if (!isConfigured()) throw new Error('Dropbox not configured');
+    const res = await fetch(API + endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + _token(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body || null),
+    });
+    if (res.status === 401) {
+      _connectError = 'Dropbox token rejected';
+      _emit();
+      if (typeof showToast === 'function') showToast('Dropbox token rejected — check js/dropbox-config.js');
+      throw new Error('Dropbox 401');
+    }
+    if (res.status === 429) {
+      const retry = parseInt(res.headers.get('Retry-After')) || 5;
+      await new Promise(r => setTimeout(r, retry * 1000));
+      return _api(endpoint, body);
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error('Dropbox ' + endpoint + ' ' + res.status + ': ' + text);
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  }
+  async function _download(path) {
+    if (!isConfigured()) throw new Error('Dropbox not configured');
+    const res = await fetch(CONT + '/files/download', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + _token(),
+        'Dropbox-API-Arg': JSON.stringify({ path }),
+      },
+    });
+    if (res.status === 409) return null; // not found
+    if (!res.ok) throw new Error('download ' + res.status);
+    return res.text();
+  }
+  async function _upload(path, content) {
+    if (!isConfigured()) throw new Error('Dropbox not configured');
+    const res = await fetch(CONT + '/files/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + _token(),
+        'Content-Type': 'application/octet-stream',
+        'Dropbox-API-Arg': JSON.stringify({
+          path,
+          mode: 'overwrite',
+          autorename: false,
+          mute: true,
+          strict_conflict: false,
+        }),
+      },
+      body: content,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error('upload ' + res.status + ': ' + text);
+    }
+    return res.json(); // returns the new entry with `rev`
+  }
+
+  // ─── Path / item helpers ──────────────────────────────────────────────────
+  function _buildPath(item, items, ext) {
+    // Walk up ancestors to build /<notesPath>/folder/folder/name(.md)
+    const parts = [];
+    let cur = item;
+    const byId = new Map(items.map(i => [i.id, i]));
+    while (cur) {
+      parts.unshift(cur.name);
+      cur = cur.parent ? byId.get(cur.parent) : null;
+    }
+    const base = _notesPath();
+    let path = (base ? base : '') + '/' + parts.join('/');
+    if (ext && !path.toLowerCase().endsWith(ext)) path += ext;
+    return path;
+  }
+  function _findItemByPath(path, items) {
+    // path is like '/Sessions/Session 1.md' or '/Sessions' (folder)
+    const np = _notesPath();
+    let rel = path;
+    if (np && path.toLowerCase().startsWith(np.toLowerCase())) rel = path.slice(np.length);
+    rel = rel.replace(/^\/+/, '');
+    const parts = rel.split('/');
+    if (!parts.length) return null;
+    const byId = new Map(items.map(i => [i.id, i]));
+    let parent = null;
+    for (let i = 0; i < parts.length; i++) {
+      const name = parts[i];
+      const isLast = i === parts.length - 1;
+      // Files: last part may have .md; strip for the item name match
+      const baseName = isLast ? name.replace(/\.md$/i, '') : name;
+      const match = items.find(it =>
+        (it.parent || null) === (parent ? parent.id : null) &&
+        it.name === baseName);
+      if (!match) return null;
+      if (isLast) return match;
+      parent = match;
+    }
+    return null;
+  }
+  function _ensureFolderChain(parts, items) {
+    // Ensure folder items exist for each segment in `parts`. Mutates items[].
+    let parentId = null;
+    for (const name of parts) {
+      let folder = items.find(it => it.type === 'folder' && it.name === name && (it.parent || null) === parentId);
+      if (!folder) {
+        folder = { id: 'f_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
+                   type: 'folder', name, parent: parentId, expanded: true };
+        items.push(folder);
+      }
+      parentId = folder.id;
+    }
+    return parentId;
+  }
+
+  // ─── Full sync (initial connect + refresh) ────────────────────────────────
+  async function fullSync(data, opts) {
+    if (!isConfigured()) return;
+    if (_busy && !(opts && opts.force)) return;
+    _busy = true; _emit();
+    try {
+      _connectError = null;
+      const np = _notesPath();
+      let entries = [];
+      let cursor = null, hasMore = true, path = np || '';
+      // Recursive listing
+      let resp;
+      try {
+        resp = await _api('/files/list_folder', { path, recursive: true, include_deleted: false });
+      } catch(e) {
+        // Folder doesn't exist yet — treat as empty.
+        if (String(e.message).includes('not_found')) {
+          resp = { entries: [], cursor: null, has_more: false };
+        } else {
+          throw e;
+        }
+      }
+      entries = entries.concat(resp.entries || []);
+      cursor = resp.cursor; hasMore = resp.has_more;
+      while (hasMore) {
+        resp = await _api('/files/list_folder/continue', { cursor });
+        entries = entries.concat(resp.entries || []);
+        cursor = resp.cursor; hasMore = resp.has_more;
+      }
+      // Rebuild the items[] from Dropbox truth. Preserve selectedId target if
+      // possible.
+      const oldSel = data.selectedId;
+      const newItems = [];
+      const fileRevs = {};
+      // Pre-pass: folders before files so paths can resolve.
+      const folders = entries.filter(e => e['.tag'] === 'folder');
+      const files   = entries.filter(e => e['.tag'] === 'file' && /\.md$/i.test(e.name));
+      const byPath  = {};
+      for (const f of folders) {
+        const rel = f.path_display.slice((np || '').length).replace(/^\//, '');
+        const parts = rel ? rel.split('/') : [];
+        if (!parts.length) continue;
+        const parentParts = parts.slice(0, -1);
+        const parentId = parentParts.length ? _ensureFolderChain(parentParts, newItems) : null;
+        const item = {
+          id: 'f_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
+          type: 'folder', name: parts[parts.length-1], parent: parentId, expanded: true,
+        };
+        newItems.push(item);
+        byPath[f.path_lower] = item;
+      }
+      // Download file contents in parallel (capped) and create file items.
+      const filesToFetch = files.map(f => {
+        const rel = f.path_display.slice((np || '').length).replace(/^\//, '');
+        const parts = rel.split('/');
+        const parentParts = parts.slice(0, -1);
+        const parentId = parentParts.length ? _ensureFolderChain(parentParts, newItems) : null;
+        const baseName = parts[parts.length-1].replace(/\.md$/i, '');
+        const item = {
+          id: 'n_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
+          type: 'file', name: baseName, parent: parentId, content: '', lineAuthors: [],
+          _dropboxPath: f.path_lower,
+          _matchKey: (parentId ? parentId+'/' : '/') + baseName,
+        };
+        newItems.push(item);
+        fileRevs[f.path_lower] = f.rev;
+        return { item, path: f.path_lower };
+      });
+      // Fetch content for each file (bounded concurrency).
+      const CONCURRENCY = 5;
+      let cursor2 = 0;
+      async function worker() {
+        while (cursor2 < filesToFetch.length) {
+          const idx = cursor2++;
+          const { item, path } = filesToFetch[idx];
+          try {
+            const text = await _download(path);
+            if (text != null) item.content = text;
+          } catch(e) { /* leave content empty on failure */ }
+        }
+      }
+      await Promise.all(Array.from({length: Math.min(CONCURRENCY, filesToFetch.length)}, worker));
+      // Replace the items[] in place. Keep selectedId if the file still exists.
+      data.items = newItems;
+      if (oldSel) {
+        const stillThere = newItems.find(i => i.id === oldSel);
+        if (!stillThere) {
+          data.selectedId = (newItems.find(i => i.type === 'file') || {}).id || null;
+        }
+      } else {
+        data.selectedId = (newItems.find(i => i.type === 'file') || {}).id || null;
+      }
+      _state.cursor = cursor;
+      _state.fileRevs = fileRevs;
+      _state.lastSync = Date.now();
+      _saveState();
+      // Persist the rebuilt model to local storage too.
+      try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); } catch(e){}
+    } finally {
+      _busy = false; _emit();
+    }
+  }
+
+  // ─── Incremental poll ─────────────────────────────────────────────────────
+  async function _pollOnce(getData) {
+    if (!isConfigured() || !_state.cursor) return;
+    if (_editingProvider && _editingProvider()) return; // skip — user mid-edit
+    const data = getData(); if (!data || !Array.isArray(data.items)) return;
+    let resp;
+    try {
+      resp = await _api('/files/list_folder/continue', { cursor: _state.cursor });
+    } catch(e) {
+      // Cursor expired or other failure — recover with a full sync next tick.
+      _state.cursor = null; _saveState();
+      return;
+    }
+    let changed = false;
+    for (const entry of (resp.entries || [])) {
+      const tag = entry['.tag'];
+      if (tag === 'deleted') {
+        // Remove items whose path matches.
+        const item = _findItemByPath(entry.path_display, data.items);
+        if (item) {
+          const toDelete = new Set([item.id]);
+          // Sweep descendants
+          let more = true;
+          while (more) {
+            more = false;
+            data.items.forEach(x => {
+              if (x.parent && toDelete.has(x.parent) && !toDelete.has(x.id)) { toDelete.add(x.id); more = true; }
+            });
+          }
+          data.items = data.items.filter(x => !toDelete.has(x.id));
+          delete _state.fileRevs[(entry.path_lower || '')];
+          changed = true;
+        }
+      } else if (tag === 'folder') {
+        const existing = _findItemByPath(entry.path_display, data.items);
+        if (!existing) {
+          const np = _notesPath();
+          const rel = entry.path_display.slice((np || '').length).replace(/^\//, '');
+          const parts = rel.split('/');
+          _ensureFolderChain(parts, data.items);
+          changed = true;
+        }
+      } else if (tag === 'file' && /\.md$/i.test(entry.name)) {
+        const prevRev = _state.fileRevs[entry.path_lower];
+        if (prevRev === entry.rev) continue; // already current
+        let item = _findItemByPath(entry.path_display, data.items);
+        if (!item) {
+          // New file from outside — create item under its folder chain.
+          const np = _notesPath();
+          const rel = entry.path_display.slice((np || '').length).replace(/^\//, '');
+          const parts = rel.split('/');
+          const parentParts = parts.slice(0, -1);
+          const parentId = parentParts.length ? _ensureFolderChain(parentParts, data.items) : null;
+          const baseName = parts[parts.length-1].replace(/\.md$/i, '');
+          item = {
+            id: 'n_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
+            type: 'file', name: baseName, parent: parentId, content: '', lineAuthors: [],
+          };
+          data.items.push(item);
+        }
+        try {
+          const text = await _download(entry.path_lower);
+          if (text != null) item.content = text;
+        } catch(e) {}
+        _state.fileRevs[entry.path_lower] = entry.rev;
+        changed = true;
+      }
+    }
+    _state.cursor = resp.cursor || _state.cursor;
+    _state.lastSync = Date.now();
+    _saveState();
+    if (changed) {
+      try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); } catch(e){}
+      if (typeof window.dropboxSync._onPullCallback === 'function') {
+        try { window.dropboxSync._onPullCallback(); } catch(e){}
+      }
+    }
+  }
+
+  function startPolling(getData) {
+    stopPolling();
+    if (!isConfigured()) return;
+    _pollTimer = setInterval(() => { _pollOnce(getData).catch(() => {}); }, POLL_MS);
+  }
+  function stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
+  // ─── Push (single file upload, debounced) ─────────────────────────────────
+  function pushFile(file, items) {
+    if (!isConfigured() || !file) return;
+    if (_pushTimers.has(file.id)) clearTimeout(_pushTimers.get(file.id));
+    const t = setTimeout(async () => {
+      _pushTimers.delete(file.id);
+      try {
+        const path = _buildPath(file, items, '.md');
+        const res = await _upload(path, file.content || '');
+        if (res && res.rev) _state.fileRevs[(res.path_lower || path.toLowerCase())] = res.rev;
+        _state.lastSync = Date.now();
+        _saveState();
+      } catch(e) { /* swallow — next sync tick will retry indirectly */ }
+    }, PUSH_DEBOUNCE_MS);
+    _pushTimers.set(file.id, t);
+  }
+
+  // ─── Expose ───────────────────────────────────────────────────────────────
+  window.dropboxSync = {
+    init, isConfigured, isConnected, isSupported, getStatus, onStatus,
+    fullSync, pushFile, startPolling, stopPolling,
+    _onPullCallback: null,
+  };
+})();
