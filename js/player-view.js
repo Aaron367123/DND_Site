@@ -48,7 +48,11 @@ function _applySharedPanelsToPlayerView(){
   desired.forEach(id => {
     if (!open.has(id) && panelDefs[id]){
       if (!layout[id]) layout[id] = (DEFAULT_LAYOUT[id] ? {...DEFAULT_LAYOUT[id]} : {x:40,y:40,w:480,h:520,open:true,minimized:false,z:1});
-      layout[id] = {...layout[id], open:true, minimized:false};
+      // Fresh open from the player dock → put this window on top of every
+      // currently-visible window. Without bumping z, a panel reopened from
+      // the dock would inherit its previous (possibly low) z value and
+      // appear behind already-open windows.
+      layout[id] = {...layout[id], open:true, minimized:false, z:_nextZ()};
       ensurePanel(id);
     }
   });
