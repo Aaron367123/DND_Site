@@ -74,12 +74,24 @@ function _notesMdLine(line){
   else if(/^# (.+)$/.test(h))   { block='h1'; h=h.replace(/^# /,''); }
   else if(/^> (.+)$/.test(h))   { block='blockquote'; h=h.replace(/^> /,''); }
   else if(/^---+$/.test(h))     return '<hr>';
-  else if(/^[-*] (.+)$/.test(h)){ block='li'; h=h.replace(/^[-*] /,''); }
+  else if(/^[-*] (.+)$/.test(h))     { block='li';  h=h.replace(/^[-*] /,''); }
+  else if(/^\d+\.\s(.+)$/.test(h))   { block='oli'; h=h.replace(/^\d+\.\s/,''); }
+  else if(/^(\s{2,})[-*] (.+)$/.test(h)){
+    const m = h.match(/^(\s+)[-*] (.+)$/);
+    const depth = Math.min(4, Math.floor(m[1].length/2));
+    block = 'li-indent-'+depth; h = m[2];
+  }
   h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  h = h.replace(/~~(.+?)~~/g,'<del>$1</del>');
   h = h.replace(/\*(.+?)\*/g,'<em>$1</em>');
   h = h.replace(/_(.+?)_/g,'<em>$1</em>');
   h = h.replace(/`(.+?)`/g,'<code>$1</code>');
-  if (block === 'li') return '<ul><li>'+h+'</li></ul>';
+  if (block === 'li')  return '<ul><li>'+h+'</li></ul>';
+  if (block === 'oli') return '<ol><li>'+h+'</li></ol>';
+  if (block && block.indexOf('li-indent-') === 0){
+    const d = +block.slice('li-indent-'.length);
+    return '<ul class="md-li-indent-'+d+'"><li>'+h+'</li></ul>';
+  }
   if (block) return '<'+block+'>'+h+'</'+block+'>';
   return h;
 }
@@ -87,6 +99,12 @@ function _notesMdLine(line){
 registerPanel('notes', {
   title:'Session Notes', icon:'📝',
   _data:null, _editing:false, _editingOriginal:null,
+  // 'picker' = source-selector screen, 'local' = current tree+editor pinned
+  // to a connected vault. Future: 'onenote'.
+  _view: 'picker',
+  // Per-file content-history stacks for undo/redo. Keyed by file id.
+  _undoStacks: {},
+  _redoStacks: {},
 
   mount(body){
     this._body = body;
@@ -100,6 +118,11 @@ registerPanel('notes', {
         if (!this._editing && this._body) this._render();
       };
       window.notesSync.startPolling(() => this._data);
+      // If a vault is already connected from a prior session, skip the
+      // picker and land directly in the local-folder view.
+      if (window.notesSync.isConnected && window.notesSync.isConnected()){
+        this._view = 'local';
+      }
     }
     this._render();
   },
@@ -145,13 +168,83 @@ registerPanel('notes', {
   _render(){
     const b = this._body; if (!b) return;
     b.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
+    if (this._view === 'local') this._renderLocalView();
+    else                         this._renderPickerView();
+    this._editing = false;
+    this._applyViewSettings();
+    this._wire();
+  },
+
+  // Read-write the per-tab display preferences (text size %, content width %).
+  // Persisted in localStorage so each user's reading preference is theirs and
+  // doesn't sync to other party members.
+  _getViewSettings(){
+    try {
+      const raw = localStorage.getItem('skt-notes-view-v1');
+      if (raw){
+        const o = JSON.parse(raw) || {};
+        return { textSize: Math.max(50, Math.min(300, +o.textSize||110)),
+                 contentWidth: Math.max(0, Math.min(100, +o.contentWidth||73)) };
+      }
+    } catch(_){}
+    return { textSize: 110, contentWidth: 73 };
+  },
+  _saveViewSettings(s){
+    try { localStorage.setItem('skt-notes-view-v1', JSON.stringify(s)); } catch(_){}
+  },
+  _applyViewSettings(){
+    const area = this._body && this._body.querySelector('.notes-edit-area');
+    if (!area) return;
+    const s = this._getViewSettings();
+    // Font-size scales the entire preview; 100 % = 13px (the base from CSS).
+    area.style.fontSize = (13 * s.textSize / 100).toFixed(1) + 'px';
+    // Content width: 0 % narrow (~420 px), 100 % full (no cap). We use max-width
+    // so very wide panels still cap content for comfortable reading.
+    const minW = 420, maxW = 1200;
+    const w = minW + (maxW - minW) * (s.contentWidth / 100);
+    area.style.maxWidth = s.contentWidth >= 100 ? 'none' : (w.toFixed(0) + 'px');
+    area.style.marginLeft = 'auto'; area.style.marginRight = 'auto';
+  },
+
+  // Source-picker screen — left rail with two source tiles, right pane
+  // empty placeholder. Picking Local Folder calls notesSync.connect() and
+  // swaps the view to 'local'. OneNote tile is disabled (coming soon).
+  _renderPickerView(){
+    const b = this._body;
+    const chromiumOnly = window.notesSync && !window.notesSync.isSupported();
+    b.innerHTML = `
+      <div class="notes-picker-shell">
+        <aside class="notes-picker-side">
+          <div class="notes-picker-head">SELECT NOTE SOURCE</div>
+          <div class="notes-picker-tiles">
+            <button class="notes-source-tile${chromiumOnly?' disabled':''}" data-act="src-local"${chromiumOnly?' disabled title="Local Folder requires Chromium (Chrome/Edge/Opera)"':''}>
+              <span class="tile-icon">📁</span>
+              <span class="tile-label">LOCAL FOLDER</span>
+              ${chromiumOnly?'<span class="tile-coming">Chromium only</span>':''}
+            </button>
+            <button class="notes-source-tile disabled" data-act="src-onenote" disabled title="OneNote integration coming soon">
+              <span class="tile-icon">📘</span>
+              <span class="tile-label">ONENOTE</span>
+              <span class="tile-coming">Coming soon</span>
+            </button>
+          </div>
+        </aside>
+        <div class="notes-picker-empty">Select a note source on the left to begin.</div>
+      </div>`;
+  },
+
+  // Tree + editor view, scoped to the local-folder source.
+  _renderLocalView(){
+    const b = this._body;
     const sel = this._selected();
     const tree = this._buildTree();
     b.innerHTML = `
       <div class="notes-shell">
         <div class="notes-tree">
           <div class="notes-tree-head">
-            <span class="notes-tree-title">📁 Notes</span>
+            <button class="btn icon-btn" data-act="back-to-picker" title="Choose a different source">←</button>
+            <span class="notes-tree-title">LOCAL FOLDER</span>
+            <span style="flex:1"></span>
             <button class="btn icon-btn" data-act="add-folder" title="New folder">📁+</button>
             <button class="btn icon-btn" data-act="add-file" title="New file">📄+</button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
@@ -163,8 +256,6 @@ registerPanel('notes', {
           ${sel ? this._renderEditor(sel) : '<div class="empty-state" style="padding:40px;text-align:center">Select a file, or click 📄+ to create one.</div>'}
         </div>
       </div>`;
-    this._editing = false;
-    this._wire();
   },
 
   _renderTree(tree, parentId, depth){
@@ -201,32 +292,163 @@ registerPanel('notes', {
         <span class="notes-file-tag">MARKDOWN</span>
         <span style="flex:1"></span>
         <button class="btn small" id="note-download" title="Save to desktop">💾</button>
+        <button class="btn icon-btn" data-act="notes-refresh" title="Sync now (pull latest from disk)">↻</button>
+        <button class="btn icon-btn" data-act="notes-settings" title="Display settings">⚙</button>
       </div>
       <div class="notes-toolbar-2">
-        <button class="btn" data-nact="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+        <button class="btn" data-nact="bold"   title="Bold (Ctrl+B)"><b>B</b></button>
         <button class="btn" data-nact="italic" title="Italic (Ctrl+I)"><i>I</i></button>
-        <button class="btn" data-nact="quote" title="Quote">&ldquo;</button>
+        <button class="btn" data-nact="strike" title="Strikethrough"><span style="text-decoration:line-through">S</span></button>
+        <button class="btn" data-nact="code"   title="Inline code">&lt;/&gt;</button>
         <span class="notes-tb-sep"></span>
-        <button class="btn" data-nact="h1" title="H1">H1</button>
-        <button class="btn" data-nact="h2" title="H2">H2</button>
-        <button class="btn" data-nact="h3" title="H3">H3</button>
+        <button class="btn" data-nact="h1" title="Heading 1">H1</button>
+        <button class="btn" data-nact="h2" title="Heading 2">H2</button>
+        <button class="btn" data-nact="h3" title="Heading 3">H3</button>
         <span class="notes-tb-sep"></span>
-        <button class="btn" data-nact="bullet" title="Bullet list">•</button>
-        <button class="btn" data-nact="hr" title="Divider">—</button>
+        <button class="btn" data-nact="bullet" title="Bullet list">≡</button>
+        <button class="btn" data-nact="numlist" title="Numbered list">1.</button>
+        <button class="btn" data-nact="indent" title="Indent list item">→</button>
+        <span class="notes-tb-sep"></span>
+        <button class="btn" data-nact="quote"     title="Blockquote">&ldquo;</button>
+        <button class="btn" data-nact="codeblock" title="Code block">{ }</button>
+        <button class="btn" data-nact="hr"        title="Horizontal rule">—</button>
+        <button class="btn" data-nact="table"     title="Insert table">▦</button>
+        <span class="notes-tb-sep"></span>
+        <button class="btn" data-nact="undo" title="Undo (Ctrl+Z)">↶</button>
+        <button class="btn" data-nact="redo" title="Redo (Ctrl+Shift+Z)">↷</button>
       </div>
       <div class="notes-edit-area" id="note-edit-area">${this._renderColored(file)}</div>`;
+  },
+
+  // Floating settings popover anchored under the ⚙ button. Holds the
+  // per-tab "how should this notes panel look" controls — text size and
+  // content width — both as range sliders that update the preview live.
+  _openViewSettingsPopover(anchor){
+    // If already open, close (toggle).
+    const existing = document.getElementById('notes-view-settings-pop');
+    if (existing){ existing.remove(); return; }
+    const s = this._getViewSettings();
+    const pop = document.createElement('div');
+    pop.id = 'notes-view-settings-pop';
+    pop.className = 'notes-settings-pop';
+    pop.innerHTML = `
+      <div class="nvs-head">
+        <span class="nvs-title">Settings</span>
+        <button class="btn icon-btn" id="nvs-close" title="Close">×</button>
+      </div>
+      <p class="nvs-blurb">Controls for how your notes are displayed.</p>
+      <div class="nvs-field">
+        <div class="nvs-row"><span class="nvs-label">Text size</span><span class="nvs-val" id="nvs-text-val">${s.textSize}%</span></div>
+        <input id="nvs-text" type="range" min="50" max="300" step="5" value="${s.textSize}">
+        <div class="nvs-scale"><span>50%</span><span>175%</span><span>300%</span></div>
+      </div>
+      <div class="nvs-field">
+        <div class="nvs-row"><span class="nvs-label">Content width</span><span class="nvs-val" id="nvs-width-val">${s.contentWidth}%</span></div>
+        <input id="nvs-width" type="range" min="0" max="100" step="1" value="${s.contentWidth}">
+        <div class="nvs-scale"><span>Narrow</span><span>${s.contentWidth}%</span><span>Full</span></div>
+      </div>
+      <div class="nvs-actions">
+        <button class="btn" id="nvs-reset">Reset</button>
+        <button class="btn primary" id="nvs-done">Done</button>
+      </div>`;
+    document.body.appendChild(pop);
+    // Position under the anchor button (right-aligned).
+    const r = anchor.getBoundingClientRect();
+    const pw = pop.offsetWidth || 300, ph = pop.offsetHeight || 240;
+    let left = r.right - pw, top = r.bottom + 6;
+    if (left < 8) left = 8;
+    if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 6);
+    pop.style.left = left + 'px';
+    pop.style.top  = top + 'px';
+    const txt = pop.querySelector('#nvs-text');
+    const wid = pop.querySelector('#nvs-width');
+    const txtVal = pop.querySelector('#nvs-text-val');
+    const widVal = pop.querySelector('#nvs-width-val');
+    const widLabel = pop.querySelectorAll('.nvs-scale')[1].children[1];
+    const apply = () => {
+      const next = { textSize: +txt.value, contentWidth: +wid.value };
+      txtVal.textContent = next.textSize + '%';
+      widVal.textContent = next.contentWidth + '%';
+      if (widLabel) widLabel.textContent = next.contentWidth + '%';
+      this._saveViewSettings(next);
+      this._applyViewSettings();
+    };
+    txt.addEventListener('input', apply);
+    wid.addEventListener('input', apply);
+    pop.querySelector('#nvs-reset').addEventListener('click', () => {
+      txt.value = 110; wid.value = 73; apply();
+    });
+    const close = () => pop.remove();
+    pop.querySelector('#nvs-close').addEventListener('click', close);
+    pop.querySelector('#nvs-done').addEventListener('click', close);
+    // Close when clicking outside.
+    setTimeout(() => {
+      document.addEventListener('mousedown', function outside(e){
+        if (!pop.contains(e.target) && e.target !== anchor){
+          close();
+          document.removeEventListener('mousedown', outside, true);
+        }
+      }, true);
+    }, 0);
   },
 
   _renderColored(file){
     const lines = (file.content || '').split('\n');
     const authorsMap = this._data.authors || {};
+    // Pre-scan to flag lines that are inside fenced code blocks OR part of a
+    // GFM table. Code blocks: between matching ``` lines (inclusive of fences).
+    // Tables: a run of 2+ contiguous `|`-led lines where line 2 is a separator
+    // row (|---|---|...). Flagged lines are still rendered as individual
+    // .nl divs (so author-color + click-to-edit still work) but their HTML
+    // contents come from a block-aware renderer.
+    const flags = new Array(lines.length).fill(null);
+    let inCode = false;
+    for (let i = 0; i < lines.length; i++){
+      const ln = lines[i];
+      if (/^```/.test(ln.trim())){
+        flags[i] = {type:'code-fence'};
+        inCode = !inCode;
+        continue;
+      }
+      if (inCode){ flags[i] = {type:'code-body'}; continue; }
+      // Table detection: only kicks off on a header row followed by a separator.
+      if (flags[i] == null && /^\s*\|.+\|\s*$/.test(ln) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i+1]||'')){
+        // Find the run.
+        let j = i;
+        while (j < lines.length && /^\s*\|.+\|\s*$/.test(lines[j])) j++;
+        flags[i]   = {type:'table-head'};
+        flags[i+1] = {type:'table-sep'};
+        for (let k = i+2; k < j; k++) flags[k] = {type:'table-row'};
+        i = j - 1;
+      }
+    }
+    const renderTableCell = c => '<td>'+_notesMdLine(c.trim())+'</td>';
+    const renderTableHead = c => '<th>'+_notesMdLine(c.trim())+'</th>';
+    const splitCells = ln => ln.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|');
     return lines.map((line, i) => {
       const aId = file.lineAuthors && file.lineAuthors[i];
       const author = aId && authorsMap[aId];
       const color = author && author.color ? author.color : '';
       const tip = author && author.name ? ' title="'+esc(author.name)+'"' : '';
-      const html = _notesMdLine(line) || '&nbsp;';
       const styleAttr = color ? ' style="color:'+esc(color)+'"' : '';
+      const flag = flags[i];
+      let html;
+      if (flag){
+        if (flag.type === 'code-fence'){
+          // Show the bare fence line; visually subtle so the user sees the block boundary.
+          html = '<span class="md-code-fence">'+esc(line)+'</span>';
+        } else if (flag.type === 'code-body'){
+          html = '<pre class="md-code">'+esc(line || ' ')+'</pre>';
+        } else if (flag.type === 'table-head'){
+          html = '<table class="md-table"><thead><tr>'+splitCells(line).map(renderTableHead).join('')+'</tr></thead></table>';
+        } else if (flag.type === 'table-sep'){
+          html = '<span class="md-table-sep">'+esc(line)+'</span>';
+        } else if (flag.type === 'table-row'){
+          html = '<table class="md-table"><tbody><tr>'+splitCells(line).map(renderTableCell).join('')+'</tr></tbody></table>';
+        }
+      } else {
+        html = _notesMdLine(line) || '&nbsp;';
+      }
       return '<div class="nl" data-line="'+i+'"'+styleAttr+tip+'>'+html+'</div>';
     }).join('');
   },
@@ -258,9 +480,13 @@ registerPanel('notes', {
         ta.selectionStart = ta.selectionEnd = s + 2;
       }
       if ((e.ctrlKey||e.metaKey) && !e.shiftKey) {
-        if (e.key === 'b') { e.preventDefault(); this._insert(ta,'bold'); }
-        if (e.key === 'i') { e.preventDefault(); this._insert(ta,'italic'); }
+        if (e.key === 'b') { e.preventDefault(); this._pushUndo(); this._insert(ta,'bold'); }
+        if (e.key === 'i') { e.preventDefault(); this._pushUndo(); this._insert(ta,'italic'); }
         if (e.key === 's') { e.preventDefault(); this._download(); }
+        if (e.key === 'z') { e.preventDefault(); this._undo(); }
+      }
+      if ((e.ctrlKey||e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault(); this._redo();
       }
     });
     ta.addEventListener('blur', () => this._exitEdit());
@@ -299,10 +525,12 @@ registerPanel('notes', {
   },
 
   _insert(ta, act){
+    if (act === 'undo'){ this._undo(); return; }
+    if (act === 'redo'){ this._redo(); return; }
     const s = ta.selectionStart, end = ta.selectionEnd;
     const selected = ta.value.slice(s, end);
-    const wrap = {bold:'**', italic:'_'}[act];
-    const prefix = {h1:'# ', h2:'## ', h3:'### ', hr:'---', bullet:'- ', quote:'> '}[act];
+    const wrap   = {bold:'**', italic:'_', strike:'~~', code:'`'}[act];
+    const prefix = {h1:'# ', h2:'## ', h3:'### ', hr:'---', bullet:'- ', numlist:'1. ', indent:'  ', quote:'> '}[act];
     let newCursor = s;
     if (wrap) {
       const insert = wrap + (selected||'') + wrap;
@@ -312,9 +540,66 @@ registerPanel('notes', {
       const lineStart = ta.value.lastIndexOf('\n', s-1) + 1;
       ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
       newCursor = s + prefix.length;
+    } else if (act === 'codeblock') {
+      // Wrap selection (or empty cursor) with triple-backtick fences on their
+      // own lines. Insert a blank line inside if the selection was empty.
+      const body = selected || '';
+      const insert = '```\n' + (body || '') + (body ? '\n' : '') + '```\n';
+      ta.value = ta.value.slice(0,s) + insert + ta.value.slice(end);
+      newCursor = s + 4; // place caret on the empty line between the fences
+    } else if (act === 'table') {
+      // 3×3 GFM table template at the start of the current line.
+      const lineStart = ta.value.lastIndexOf('\n', s-1) + 1;
+      const template =
+        '| Header 1 | Header 2 | Header 3 |\n'+
+        '|----------|----------|----------|\n'+
+        '| Row 1 c1 | Row 1 c2 | Row 1 c3 |\n'+
+        '| Row 2 c1 | Row 2 c2 | Row 2 c3 |\n';
+      ta.value = ta.value.slice(0, lineStart) + template + ta.value.slice(lineStart);
+      newCursor = lineStart + 2; // first header cell
     }
     ta.focus();
     ta.setSelectionRange(newCursor, newCursor);
+  },
+
+  // Per-file content-history stacks. We snapshot the current textarea value
+  // (when in edit mode) or the saved file content into _undoStacks before
+  // each mutating action. Capped at 50 entries; oldest dropped first.
+  _pushUndo(){
+    const file = this._selected(); if (!file) return;
+    const id = file.id;
+    const ta = this._body && this._body.querySelector('#note-textarea');
+    const cur = ta ? ta.value : (file.content || '');
+    if (!this._undoStacks[id]) this._undoStacks[id] = [];
+    const stack = this._undoStacks[id];
+    if (stack.length && stack[stack.length-1] === cur) return; // no-op duplicates
+    stack.push(cur);
+    if (stack.length > 50) stack.shift();
+    this._redoStacks[id] = [];
+  },
+  _undo(){
+    const file = this._selected(); if (!file) return;
+    const id = file.id;
+    const stack = this._undoStacks[id] || [];
+    if (!stack.length) return;
+    const ta = this._body && this._body.querySelector('#note-textarea');
+    const cur = ta ? ta.value : (file.content || '');
+    const prev = stack.pop();
+    (this._redoStacks[id] = this._redoStacks[id] || []).push(cur);
+    if (ta){ ta.value = prev; ta.focus(); }
+    else { file.content = prev; this._save(); this._render(); }
+  },
+  _redo(){
+    const file = this._selected(); if (!file) return;
+    const id = file.id;
+    const stack = this._redoStacks[id] || [];
+    if (!stack.length) return;
+    const ta = this._body && this._body.querySelector('#note-textarea');
+    const cur = ta ? ta.value : (file.content || '');
+    const next = stack.pop();
+    (this._undoStacks[id] = this._undoStacks[id] || []).push(cur);
+    if (ta){ ta.value = next; ta.focus(); }
+    else { file.content = next; this._save(); this._render(); }
   },
 
   _wire(){
@@ -380,14 +665,64 @@ registerPanel('notes', {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const act = btn.dataset.nact;
+        // Undo/redo can run without entering edit mode (operate on saved content).
+        if (act === 'undo'){ this._undo(); return; }
+        if (act === 'redo'){ this._redo(); return; }
         if (!this._editing) {
           const file = this._selected();
           const total = ((file && file.content) || '').split('\n').length;
           this._enterEdit(Math.max(0, total - 1));
         }
         const ta = b.querySelector('#note-textarea');
-        if (ta) this._insert(ta, act);
+        if (ta){
+          this._pushUndo();
+          this._insert(ta, act);
+        }
       });
+    });
+
+    // Source-picker tiles (only present when _view === 'picker')
+    b.querySelector('[data-act="src-local"]')?.addEventListener('click', async () => {
+      if (!window.notesSync){ showToast('Notes sync unavailable'); return; }
+      if (!window.notesSync.isSupported()){ showToast('Local Folder requires Chromium (Chrome/Edge/Opera)'); return; }
+      let connected = window.notesSync.isConnected && window.notesSync.isConnected();
+      if (!connected){
+        connected = await window.notesSync.connect();
+      }
+      if (connected){
+        try { await window.notesSync.fullSync(this._data, {force:true}); } catch(_){}
+        this._view = 'local';
+        this._render();
+      }
+    });
+    b.querySelector('[data-act="src-onenote"]')?.addEventListener('click', () => {
+      showToast('OneNote integration coming soon');
+    });
+
+    // Back-to-picker arrow (only present in local view)
+    b.querySelector('[data-act="back-to-picker"]')?.addEventListener('click', () => {
+      this._commitEditing();
+      this._view = 'picker';
+      this._render();
+    });
+
+    // Manual sync from disk (the ↻ button next to the gear).
+    b.querySelector('[data-act="notes-refresh"]')?.addEventListener('click', async () => {
+      if (!window.notesSync || !window.notesSync.isConnected()){
+        showToast('No vault connected');
+        return;
+      }
+      try {
+        await window.notesSync.fullSync(this._data, { force:true });
+        this._render();
+        showToast('Sync complete');
+      } catch(e){ showToast('Sync failed'); }
+    });
+
+    // Settings popover (the ⚙ button next to refresh).
+    b.querySelector('[data-act="notes-settings"]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      this._openViewSettingsPopover(e.currentTarget);
     });
 
     // Download

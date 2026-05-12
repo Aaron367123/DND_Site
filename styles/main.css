@@ -908,6 +908,44 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .notes-edit-area hr{border:none;border-top:1px solid var(--border);margin:8px 0}
 .notes-edit-area code{background:var(--panel-3);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:11px}
 .notes-edit-area blockquote{border-left:3px solid var(--accent);margin:0;padding-left:10px;display:inline-block}
+.notes-edit-area del{text-decoration:line-through;opacity:.7}
+.notes-edit-area ol{margin:0;padding-left:22px;display:inline-block}
+.notes-edit-area .md-li-indent-1{padding-left:18px}
+.notes-edit-area .md-li-indent-2{padding-left:36px}
+.notes-edit-area .md-li-indent-3{padding-left:54px}
+.notes-edit-area .md-li-indent-4{padding-left:72px}
+.notes-edit-area .md-code-fence{color:var(--text-dim);font-family:monospace;font-size:11px;opacity:.6}
+.notes-edit-area pre.md-code{margin:0;padding:0 8px;font-family:monospace;font-size:12px;color:var(--text);background:var(--panel-3);border-radius:0;display:block;white-space:pre}
+.notes-edit-area .nl:has(pre.md-code){padding:0}
+.notes-edit-area .nl:has(.md-code-fence){padding:0}
+.notes-edit-area table.md-table{border-collapse:collapse;display:inline-table;margin:1px 0}
+.notes-edit-area table.md-table th,.notes-edit-area table.md-table td{border:1px solid var(--border);padding:3px 8px;font-size:12px}
+.notes-edit-area table.md-table th{background:var(--panel-3);color:var(--accent);font-weight:600}
+.notes-edit-area .md-table-sep{color:var(--text-dim);font-family:monospace;font-size:10px;opacity:.4}
+/* SESSION VIEWER — source picker (entry screen before a vault is connected) */
+.notes-picker-shell{display:flex;flex:1;min-height:0;overflow:hidden}
+.notes-picker-side{flex:0 0 220px;width:220px;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--panel);padding:14px 0}
+.notes-picker-head{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--text-muted);padding:0 16px 16px;text-transform:uppercase}
+.notes-picker-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px;align-content:center;flex:1}
+.notes-source-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:18px 8px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .12s,background .12s,transform .12s}
+.notes-source-tile:hover:not(:disabled){border-color:var(--accent);background:var(--panel-3);transform:translateY(-1px)}
+.notes-source-tile.disabled,.notes-source-tile:disabled{opacity:.45;cursor:not-allowed}
+.notes-source-tile .tile-icon{font-size:28px;line-height:1}
+.notes-source-tile .tile-label{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--text)}
+.notes-source-tile .tile-coming{font-size:9px;color:var(--text-dim);font-style:italic;margin-top:2px}
+.notes-picker-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;background:var(--panel)}
+/* Notes display-settings popover (anchored under the ⚙ button in the editor head) */
+.notes-settings-pop{position:fixed;width:300px;background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.6);padding:14px 16px;z-index:10000;color:var(--text);font-size:12px}
+.notes-settings-pop .nvs-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.notes-settings-pop .nvs-title{font-size:14px;font-weight:600;color:var(--text)}
+.notes-settings-pop .nvs-blurb{font-size:11px;color:var(--text-muted);margin:0 0 14px;line-height:1.5}
+.notes-settings-pop .nvs-field{margin-bottom:14px}
+.notes-settings-pop .nvs-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.notes-settings-pop .nvs-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.notes-settings-pop .nvs-val{font-size:11px;color:var(--text);font-weight:600}
+.notes-settings-pop input[type="range"]{width:100%;accent-color:var(--accent)}
+.notes-settings-pop .nvs-scale{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:2px}
+.notes-settings-pop .nvs-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px;border-top:1px solid var(--border);padding-top:12px}
 /* BATTLE MAP */
 .map-toolbar{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--panel-2);align-items:center;flex-wrap:wrap;flex-shrink:0}
 .map-party-icon{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center;flex-shrink:0;line-height:1}

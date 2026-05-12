@@ -107,12 +107,25 @@ function _renderPlayerDock(){
         } else {
           _playerVisible = new Set([id]);
         }
-      } else {
-        // Desktop: free toggle — multiple panels can coexist.
-        if (_playerVisible.has(id)) _playerVisible.delete(id);
-        else _playerVisible.add(id);
+        _applySharedPanelsToPlayerView();
+        return;
       }
+      // Desktop: a chip click means "I want this panel in focus." If it's
+      // already open, bring it to the front (z-bump) instead of closing it
+      // — that previously caused the "panel ends up behind another window"
+      // complaint, since the only way to raise z was clicking the window
+      // itself (which can be impossible if it's fully obscured). Close
+      // happens via the window's × button.
+      const el = document.querySelector('.window[data-panel="'+id+'"]');
+      const alreadyOpen = !!el && _playerVisible.has(id);
+      if (alreadyOpen){
+        if (typeof focusPanel === 'function') focusPanel(id);
+        return;
+      }
+      _playerVisible.add(id);
       _applySharedPanelsToPlayerView();
+      // Belt-and-suspenders: after the panel mounts, make sure it's on top.
+      if (typeof focusPanel === 'function') focusPanel(id);
     });
   });
 }
