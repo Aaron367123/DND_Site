@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dropbox auth — one-time refresh-token helper</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{
+    --bg:#0a0a0a; --panel:#141414; --panel-2:#1a1a1a; --panel-3:#222;
+    --border:#2a2a2a; --text:#e0e0e0; --text-muted:#888; --text-dim:#555;
+    --accent:#d4a574; --accent-dark:#a67c4f;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
+    background:var(--bg); color:var(--text);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .card{
+    width:100%; max-width:640px; background:var(--panel);
+    border:1px solid var(--border); border-radius:10px; padding:28px 32px;
+    box-shadow:0 16px 60px rgba(0,0,0,.6);
+  }
+  h1{margin:0 0 6px; font-size:18px; color:var(--accent); font-weight:600}
+  .blurb{font-size:12px; color:var(--text-muted); margin:0 0 22px; line-height:1.6}
+  .step{font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; font-weight:600; margin:18px 0 6px}
+  label{display:block; font-size:11px; color:var(--text-muted); margin-bottom:6px}
+  input[type=text]{
+    width:100%; padding:9px 12px; background:var(--panel-2);
+    border:1px solid var(--border); border-radius:5px; color:var(--text);
+    font-family:inherit; font-size:13px;
+  }
+  input:focus{outline:none; border-color:var(--accent); background:var(--panel-3)}
+  button.primary{
+    background:var(--accent); color:#1a1a1a; border:none; padding:9px 18px;
+    border-radius:5px; cursor:pointer; font-family:inherit; font-size:13px;
+    font-weight:600; transition:background .15s;
+  }
+  button.primary:hover{background:#e0b582}
+  button.primary:disabled{opacity:.4; cursor:not-allowed}
+  .out{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:5px;
+    padding:12px 14px; font-family:ui-monospace,Menlo,monospace; font-size:11px;
+    color:var(--text); white-space:pre; overflow-x:auto; margin-top:8px;
+  }
+  .ok{color:#7aa87a}
+  .err{color:#c25450}
+  .copy-row{display:flex; gap:8px; align-items:center; margin-top:6px}
+  .copy-btn{
+    background:var(--panel-3); color:var(--text); border:1px solid var(--border);
+    padding:6px 12px; border-radius:4px; cursor:pointer; font-family:inherit; font-size:11px;
+  }
+  .copy-btn:hover{border-color:var(--accent); color:var(--accent)}
+  .hint{font-size:11px; color:var(--text-dim); margin-top:4px; line-height:1.5}
+  a{color:var(--accent)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Dropbox auth helper</h1>
+  <p class="blurb">
+    One-time setup. Dropbox no longer issues long-lived access tokens via the Generate button, so the
+    notes app uses the refresh-token flow instead. This page runs that flow in your browser once and gives
+    you the refresh token to paste into <code>js/dropbox-config.js</code>.
+  </p>
+
+  <div id="phase-start">
+    <div class="step">Step 1 — Add this page as a redirect URI</div>
+    <p class="hint">
+      Go to <a href="https://www.dropbox.com/developers/apps" target="_blank">developers.dropbox.com/apps</a> →
+      your app → <strong>Settings</strong>. Under <strong>OAuth 2 → Redirect URIs</strong>, paste the URL
+      below and click <strong>Add</strong>.
+    </p>
+    <div class="out" id="this-url"></div>
+
+    <div class="step">Step 2 — Paste your App key</div>
+    <label for="app-key">From the same Settings page, copy "App key" and paste it here:</label>
+    <input id="app-key" type="text" placeholder="e.g. ysu0fs14fekzne0" autocomplete="off">
+    <p class="hint">The app key is public information — it just identifies your app to Dropbox.</p>
+
+    <div style="margin-top:18px">
+      <button class="primary" id="go-btn">Authorize with Dropbox</button>
+    </div>
+  </div>
+
+  <div id="phase-exchange" class="hidden">
+    <p class="hint">Exchanging code for refresh token…</p>
+  </div>
+
+  <div id="phase-done" class="hidden">
+    <div class="step">Step 3 — Copy these into <code>js/dropbox-config.js</code></div>
+    <p class="hint ok">✓ Success. Paste the snippet below into <code>js/dropbox-config.js</code>, replacing the entire <code>window.DROPBOX_CONFIG = {...}</code> block. Commit and push.</p>
+    <div class="out" id="config-snippet"></div>
+    <div class="copy-row">
+      <button class="copy-btn" id="copy-snippet">Copy snippet</button>
+      <span id="copy-feedback" style="font-size:11px; color:var(--text-dim)"></span>
+    </div>
+    <p class="hint">
+      You can close this tab now. Future page loads of the main workspace
+      will use the refresh token automatically — no further interactive auth.
+    </p>
+  </div>
+
+  <div id="phase-error" class="hidden">
+    <p class="err" id="error-msg"></p>
+    <p class="hint">Reload this page to try again.</p>
+  </div>
+</div>
+
+<script>
+(async function(){
+  const REDIRECT_URI = window.location.origin + window.location.pathname;
+  document.getElementById('this-url').textContent = REDIRECT_URI;
+
+  // ── Phase: returning from Dropbox with ?code= ────────────────────────────
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const error = params.get('error');
+  const stored = sessionStorage.getItem('dropbox-auth-state');
+
+  if (error){
+    showError('Dropbox returned an error: ' + error + ' — ' + (params.get('error_description') || ''));
+    return;
+  }
+
+  if (code && stored){
+    show('phase-exchange');
+    const state = JSON.parse(stored);
+    sessionStorage.removeItem('dropbox-auth-state');
+    try {
+      const body = new URLSearchParams({
+        code,
+        grant_type: 'authorization_code',
+        client_id: state.appKey,
+        code_verifier: state.verifier,
+        redirect_uri: REDIRECT_URI,
+      });
+      const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: {'Content-Type':'application/x-www-form-urlencoded'},
+        body: body.toString(),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.refresh_token){
+        showError('Token exchange failed: ' + (j.error_description || j.error || JSON.stringify(j)));
+        return;
+      }
+      showDone(state.appKey, j.refresh_token);
+      // Clean the URL so a refresh doesn't try to re-exchange the (now-used) code.
+      history.replaceState({}, '', REDIRECT_URI);
+    } catch(e){
+      showError('Network error: ' + e.message);
+    }
+    return;
+  }
+
+  // ── Phase: initial visit ─────────────────────────────────────────────────
+  document.getElementById('go-btn').addEventListener('click', async () => {
+    const appKey = document.getElementById('app-key').value.trim();
+    if (!appKey){ alert('Paste your App key first.'); return; }
+    const verifier = randomString(96);
+    const challenge = await sha256base64url(verifier);
+    sessionStorage.setItem('dropbox-auth-state', JSON.stringify({ appKey, verifier }));
+    const url = 'https://www.dropbox.com/oauth2/authorize' +
+      '?client_id=' + encodeURIComponent(appKey) +
+      '&response_type=code' +
+      '&token_access_type=offline' +
+      '&code_challenge=' + encodeURIComponent(challenge) +
+      '&code_challenge_method=S256' +
+      '&redirect_uri=' + encodeURIComponent(REDIRECT_URI);
+    window.location.href = url;
+  });
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function show(id){
+    ['phase-start','phase-exchange','phase-done','phase-error'].forEach(p =>
+      document.getElementById(p).classList.toggle('hidden', p !== id));
+  }
+  function showError(msg){
+    document.getElementById('error-msg').textContent = msg;
+    show('phase-error');
+  }
+  function showDone(appKey, refreshToken){
+    const snippet =
+`window.DROPBOX_CONFIG = {
+  appKey: '${appKey}',
+  refreshToken: '${refreshToken}',
+  notesPath: '',
+};`;
+    document.getElementById('config-snippet').textContent = snippet;
+    document.getElementById('copy-snippet').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(snippet);
+        document.getElementById('copy-feedback').textContent = '✓ Copied';
+      } catch(e){
+        document.getElementById('copy-feedback').textContent = 'Copy failed — select manually.';
+      }
+    });
+    show('phase-done');
+  }
+  function randomString(len){
+    const arr = new Uint8Array(Math.ceil(len * 3 / 4));
+    crypto.getRandomValues(arr);
+    return btoa(String.fromCharCode(...arr))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'').slice(0, len);
+  }
+  async function sha256base64url(str){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return btoa(String.fromCharCode(...new Uint8Array(buf)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+})();
+</script>
+</body>
+</html>

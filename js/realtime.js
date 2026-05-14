@@ -33,7 +33,10 @@ const SKT_SYNC_KEYS = [
   'skt-battlemap-v1',  // battle map tokens & fog
   'skt-enc-v1',        // encounter builder
   'skt-loot-v1',       // loot tracker
-  'skt-notes-v2',      // session notes
+  // 'skt-notes-v2'  — session notes ride on Dropbox (or local-folder vault
+  // sync) instead of Firebase. Notes payloads can be the biggest single key
+  // in the workspace (200 KB+ for a chatty campaign × every commit × every
+  // listener) and Dropbox already covers cross-device updates within ~8 s.
   'skt-npcs-v2',       // NPC library
   'skt-bestiary-v1',   // bestiary
   'skt-shared-panels-v1', // which panels the DM is sharing with players
@@ -55,7 +58,7 @@ const _PANELS_FOR_KEY = {
   'skt-battlemap-v1': ['battlemap'],
   'skt-enc-v1':       ['encounter'],
   'skt-loot-v1':      ['loot'],
-  'skt-notes-v2':     ['notes'],
+  // 'skt-notes-v2' deliberately omitted — notes sync via Dropbox/local FS.
   'skt-npcs-v2':      ['npclib'],
   'skt-bestiary-v1':  ['bestiary'],
   // skt-shared-panels-v1 has no per-panel render — it's dispatched manually

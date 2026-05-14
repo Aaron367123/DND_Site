@@ -32,6 +32,11 @@
   let _busy = false;
   let _editingProvider = null;
   let _connectError = null;  // string explaining the last hard failure
+  // Cached short-lived access token + its expiry timestamp (ms). Minted
+  // from the refresh token on demand and re-minted ~30 s before expiry.
+  let _accessToken = null;
+  let _accessTokenExpiry = 0;
+  let _refreshPromise = null; // dedupe concurrent refreshes
 
   function _loadState() {
     try {
@@ -44,8 +49,11 @@
   }
   function _emit() { _statusListeners.forEach(fn => { try { fn(getStatus()); } catch(e){} }); }
 
-  function _token() {
-    return (window.DROPBOX_CONFIG && window.DROPBOX_CONFIG.accessToken) || '';
+  function _appKey() {
+    return (window.DROPBOX_CONFIG && window.DROPBOX_CONFIG.appKey) || '';
+  }
+  function _refreshToken() {
+    return (window.DROPBOX_CONFIG && window.DROPBOX_CONFIG.refreshToken) || '';
   }
   function _notesPath() {
     let p = (window.DROPBOX_CONFIG && window.DROPBOX_CONFIG.notesPath) || '';
@@ -56,12 +64,51 @@
 
   // ─── Public state helpers ─────────────────────────────────────────────────
   function isConfigured() {
-    const t = _token();
-    return !!t && t !== 'PASTE_YOUR_TOKEN_HERE';
+    const k = _appKey();
+    const r = _refreshToken();
+    return !!k && !!r &&
+           k !== 'PASTE_YOUR_APP_KEY_HERE' &&
+           r !== 'PASTE_YOUR_REFRESH_TOKEN_HERE';
   }
   function isConnected() {
     // No persistent connect step — configured ⇒ connected (until a 401).
     return isConfigured() && !_connectError;
+  }
+
+  // Trade the refresh token for a fresh access token. Cached for ~3.5 h.
+  // Concurrent callers share one in-flight refresh via _refreshPromise.
+  async function _ensureAccessToken() {
+    if (!isConfigured()) throw new Error('Dropbox not configured');
+    const now = Date.now();
+    if (_accessToken && now < _accessTokenExpiry - 30_000) return _accessToken;
+    if (_refreshPromise) return _refreshPromise;
+    _refreshPromise = (async () => {
+      const body = new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: _refreshToken(),
+        client_id: _appKey(),
+      });
+      const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        _connectError = 'Dropbox token refresh failed (' + res.status + ')';
+        _emit();
+        if (typeof showToast === 'function') showToast('Dropbox auth failed — re-run dropbox-auth.html');
+        throw new Error('refresh ' + res.status + ': ' + text);
+      }
+      const j = await res.json();
+      _accessToken = j.access_token;
+      _accessTokenExpiry = Date.now() + (j.expires_in || 14400) * 1000;
+      _connectError = null;
+      _emit();
+      return _accessToken;
+    })();
+    try { return await _refreshPromise; }
+    finally { _refreshPromise = null; }
   }
   function isSupported() { return true; } // works in any modern browser
   function getStatus() {
@@ -82,20 +129,32 @@
   }
 
   // ─── HTTP helpers ─────────────────────────────────────────────────────────
+  // A 401 mid-flight means the cached access token expired between our
+  // freshness check and the actual request — refresh once and retry.
+  async function _retryOn401(makeReq) {
+    let res = await makeReq();
+    if (res.status === 401) {
+      _accessToken = null; _accessTokenExpiry = 0;
+      await _ensureAccessToken();
+      res = await makeReq();
+    }
+    return res;
+  }
   async function _api(endpoint, body) {
     if (!isConfigured()) throw new Error('Dropbox not configured');
-    const res = await fetch(API + endpoint, {
+    await _ensureAccessToken();
+    const res = await _retryOn401(() => fetch(API + endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + _token(),
+        'Authorization': 'Bearer ' + _accessToken,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body || null),
-    });
+    }));
     if (res.status === 401) {
       _connectError = 'Dropbox token rejected';
       _emit();
-      if (typeof showToast === 'function') showToast('Dropbox token rejected — check js/dropbox-config.js');
+      if (typeof showToast === 'function') showToast('Dropbox token rejected — re-run dropbox-auth.html');
       throw new Error('Dropbox 401');
     }
     if (res.status === 429) {
@@ -112,23 +171,25 @@
   }
   async function _download(path) {
     if (!isConfigured()) throw new Error('Dropbox not configured');
-    const res = await fetch(CONT + '/files/download', {
+    await _ensureAccessToken();
+    const res = await _retryOn401(() => fetch(CONT + '/files/download', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + _token(),
+        'Authorization': 'Bearer ' + _accessToken,
         'Dropbox-API-Arg': JSON.stringify({ path }),
       },
-    });
+    }));
     if (res.status === 409) return null; // not found
     if (!res.ok) throw new Error('download ' + res.status);
     return res.text();
   }
   async function _upload(path, content) {
     if (!isConfigured()) throw new Error('Dropbox not configured');
-    const res = await fetch(CONT + '/files/upload', {
+    await _ensureAccessToken();
+    const res = await _retryOn401(() => fetch(CONT + '/files/upload', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + _token(),
+        'Authorization': 'Bearer ' + _accessToken,
         'Content-Type': 'application/octet-stream',
         'Dropbox-API-Arg': JSON.stringify({
           path,
@@ -139,7 +200,7 @@
         }),
       },
       body: content,
-    });
+    }));
     if (!res.ok) {
       const text = await res.text();
       throw new Error('upload ' + res.status + ': ' + text);

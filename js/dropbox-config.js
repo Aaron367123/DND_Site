@@ -1,25 +1,46 @@
 // ============================================================
 // DROPBOX CONFIG — shared, public, single account
 // ============================================================
-// Anyone who loads the site can read this file and use the token.
+// Dropbox no longer issues long-lived access tokens via the UI Generate
+// button (they all expire after 4 hours). To get a session that survives
+// past 4 h, we use the OAuth refresh-token flow:
+//
+//   1. You authenticate *once* through dropbox-auth.html (a helper page
+//      bundled in this repo) → it gives you a refresh token.
+//   2. The refresh token is stored below — it has no expiry.
+//   3. On every page load, the app trades that refresh token for a fresh
+//      4-hour access token. No user interaction.
+//
+// The refresh token is publicly visible to anyone who loads the site.
 // That is intentional — every player connects to the same Dropbox
 // account with no per-user login. App-folder scope limits the blast
-// radius to one isolated folder in the chosen Dropbox account.
+// radius to one isolated folder.
 //
-// To enable:
-//   1. Go to https://www.dropbox.com/developers/apps and create a
-//      Scoped-access / App-folder app.
-//   2. Settings tab: set "Access token expiration" to "No expiration".
-//   3. Permissions tab: tick files.content.read/write,
-//      files.metadata.read/write. Submit.
-//   4. Settings tab → Generated access token → click Generate. Copy.
-//   5. Paste below, commit, push. Done.
+// To set up (one-time):
+//   1. https://www.dropbox.com/developers/apps → your app → Settings.
+//   2. Under OAuth 2 → Redirect URIs, add:
+//        https://<your-github-pages-domain>/DND_Site/dropbox-auth.html
+//      (or whichever URL hosts dropbox-auth.html). Click Add.
+//   3. Permissions tab → tick files.metadata.read/write,
+//      files.content.read/write → Submit.
+//   4. Open dropbox-auth.html in your browser (e.g.
+//      https://aaron367123.github.io/DND_Site/dropbox-auth.html).
+//      Paste the App key (also from the Settings tab). Click Authorize.
+//      Dropbox prompts you, returns to the page, displays the refresh
+//      token. Copy.
+//   5. Paste the App key and refresh token below, commit, push.
 //
-// To revoke at any time: same Settings page → click Disable on the
-// generated token. The site will immediately fail to read/write.
+// To revoke at any time: in your Dropbox account at
+// https://www.dropbox.com/account/connected_apps, find the app and
+// disconnect it. The refresh token becomes invalid immediately.
 window.DROPBOX_CONFIG = {
-  // Long-lived access token. Replace the placeholder below.
-  accessToken: 'PASTE_YOUR_TOKEN_HERE',
+  // App key from developers.dropbox.com → your app → Settings → "App key"
+  // (this is public and safe to commit; it's used to identify the app
+  // during the refresh-token exchange).
+  appKey: 'PASTE_YOUR_APP_KEY_HERE',
+
+  // Long-lived refresh token obtained via dropbox-auth.html (one-time).
+  refreshToken: 'PASTE_YOUR_REFRESH_TOKEN_HERE',
 
   // Optional subfolder inside the App folder where notes live. Leave
   // empty for the root of the App folder. Must start with '/' if set.
