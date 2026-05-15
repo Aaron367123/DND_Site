@@ -34,16 +34,7 @@
 // https://www.dropbox.com/account/connected_apps, find the app and
 // disconnect it. The refresh token becomes invalid immediately.
 window.DROPBOX_CONFIG = {
-  // App key from developers.dropbox.com → your app → Settings → "App key"
-  // (this is public and safe to commit; it's used to identify the app
-  // during the refresh-token exchange).
-  appKey: 'PASTE_YOUR_APP_KEY_HERE',
-
-  // Long-lived refresh token obtained via dropbox-auth.html (one-time).
-  refreshToken: 'PASTE_YOUR_REFRESH_TOKEN_HERE',
-
-  // Optional subfolder inside the App folder where notes live. Leave
-  // empty for the root of the App folder. Must start with '/' if set.
-  // Example: '/sessions'
+  appKey: 'ysu0fsl4fekzne0',
+  refreshToken: 'UMXrH5TOY3gAAAAAAAAAAdg_IX077NgKaoDvBmzC5_BuVoFyFpJa8qoVdxB2UQMu',
   notesPath: '',
 };
