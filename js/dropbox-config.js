@@ -35,6 +35,6 @@
 // disconnect it. The refresh token becomes invalid immediately.
 window.DROPBOX_CONFIG = {
   appKey: 'ysu0fsl4fekzne0',
-  refreshToken: 'UMXrH5TOY3gAAAAAAAAAAdg_IX077NgKaoDvBmzC5_BuVoFyFpJa8qoVdxB2UQMu',
+  refreshToken: '5QwLYJGhulsAAAAAAAAAAa2jU2MZ0WMoMwRlEzrpfnYJ1UWLz6IP1d3kBbpSxc2v',
   notesPath: '',
 };
