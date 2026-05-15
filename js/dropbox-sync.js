@@ -164,6 +164,10 @@
     }
     if (!res.ok) {
       const text = await res.text();
+      // Surface the body to the console so 400s tell us *why* Dropbox said no
+      // (path format, missing param, scope mismatch, etc.). The throw still
+      // propagates for callers that want to handle specific cases.
+      console.error('[dropboxSync] ' + endpoint + ' ' + res.status + ':', text, 'body sent:', body);
       throw new Error('Dropbox ' + endpoint + ' ' + res.status + ': ' + text);
     }
     if (res.status === 204) return null;
