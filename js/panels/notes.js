@@ -109,27 +109,21 @@ registerPanel('notes', {
   mount(body){
     this._body = body;
     if (!this._data) this._data = _notesHydrate();
-    // Wire vault sync — provides "is editing?" hint so polls don't clobber an in-flight edit.
-    if (window.notesSync) {
-      window.notesSync.init(() => this._editing);
-      window.notesSync.onStatus(() => { if (this._body) this._renderVaultPill(); });
-      window.notesSync._onPullCallback = () => {
-        // Disk → app brought in changes; refresh the tree + preview.
-        if (!this._editing && this._body) this._render();
-      };
-      window.notesSync.startPolling(() => this._data);
-    }
     // Source preference order on mount:
     //  1. Dropbox if a token is configured (the "always logged in" shared
-    //     account) — auto-skips the picker entirely.
+    //     account) — auto-skips the picker entirely. notesSync is NOT
+    //     started in this branch so the browser doesn't prompt for File
+    //     System Access permission for a stale local-vault handle.
     //  2. Local folder if a vault from a prior session is still connected.
     //  3. Otherwise show the picker.
     if (window.dropboxSync && window.dropboxSync.isConfigured()){
       this._initDropbox();
       this._view = 'dropbox';
     } else if (window.notesSync && window.notesSync.isConnected && window.notesSync.isConnected()){
+      this._initLocalSync();
       this._view = 'local';
     }
+    // Else: picker view — neither adapter is started until the user picks one.
     this._render();
   },
 
@@ -142,6 +136,17 @@ registerPanel('notes', {
     ds.startPolling(() => this._data);
     // Bring the vault tree into the in-memory model on first connect.
     ds.fullSync(this._data, { force: true }).catch(() => {});
+  },
+
+  // Wire the local-folder adapter. Idempotent — only attaches once.
+  _initLocalSync(){
+    if (this._localSyncWired) return;
+    const ns = window.notesSync; if (!ns) return;
+    this._localSyncWired = true;
+    ns.init(() => this._editing);
+    ns.onStatus(() => { if (this._body) this._renderVaultPill(); });
+    ns._onPullCallback = () => { if (!this._editing && this._body) this._render(); };
+    ns.startPolling(() => this._data);
   },
   unmount(){
     this._commitEditing();
@@ -753,6 +758,10 @@ registerPanel('notes', {
         connected = await window.notesSync.connect();
       }
       if (connected){
+        // User explicitly opted into Local Folder — safe to start the
+        // polling loop now (it may trigger an FS permission prompt, which
+        // is expected at this point because they just clicked the tile).
+        this._initLocalSync();
         try { await window.notesSync.fullSync(this._data, {force:true}); } catch(_){}
         this._view = 'local';
         this._render();
@@ -927,8 +936,17 @@ registerPanel('notes', {
   _syncAfter(){
     // Tree mutations (add/rename/delete) need to push the new shape to the
     // active adapter — only one is in use at a time per the current _view.
+    //
+    // Dropbox path: pushFile each file individually so adds/renames go up
+    // without triggering a destructive fullSync (which rebuilds items[]
+    // from Dropbox truth and would clobber locally-added files that
+    // haven't been uploaded yet). Folders are created implicitly when
+    // their contained files upload.
     if (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured()){
-      window.dropboxSync.fullSync(this._data, { force: true });
+      const items = this._data.items || [];
+      items.forEach(it => {
+        if (it.type === 'file') window.dropboxSync.pushFile(it, items);
+      });
       return;
     }
     if (window.notesSync && window.notesSync.isConnected()) {

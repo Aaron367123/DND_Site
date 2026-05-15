@@ -291,74 +291,110 @@
         entries = entries.concat(resp.entries || []);
         cursor = resp.cursor; hasMore = resp.has_more;
       }
-      // Rebuild the items[] from Dropbox truth. Preserve selectedId target if
-      // possible.
-      const oldSel = data.selectedId;
-      const newItems = [];
-      const fileRevs = {};
-      // Pre-pass: folders before files so paths can resolve.
+      // Merge Dropbox truth into the existing local items, instead of
+      // replacing wholesale. This is critical on first connect when the
+      // user already has local files: replacing would wipe them before
+      // they ever get uploaded. The rules:
+      //   1. For each Dropbox folder/file, ensure a matching local item
+      //      exists (create if missing).
+      //   2. For each Dropbox file, if its rev changed (or it's new),
+      //      download content and apply.
+      //   3. After merging Dropbox-in, push any local files that Dropbox
+      //      didn't have up to Dropbox — they're presumed to be locally
+      //      created and not yet synced.
+      if (!Array.isArray(data.items)) data.items = [];
+      const items = data.items;
       const folders = entries.filter(e => e['.tag'] === 'folder');
       const files   = entries.filter(e => e['.tag'] === 'file' && /\.md$/i.test(e.name));
-      const byPath  = {};
+      const fileRevs = Object.assign({}, _state.fileRevs || {});
+      const seenLocalIds = new Set(); // local items confirmed present in Dropbox
+
+      // Pass 1: ensure Dropbox folders exist locally.
       for (const f of folders) {
         const rel = f.path_display.slice((np || '').length).replace(/^\//, '');
         const parts = rel ? rel.split('/') : [];
         if (!parts.length) continue;
         const parentParts = parts.slice(0, -1);
-        const parentId = parentParts.length ? _ensureFolderChain(parentParts, newItems) : null;
-        const item = {
-          id: 'f_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
-          type: 'folder', name: parts[parts.length-1], parent: parentId, expanded: true,
-        };
-        newItems.push(item);
-        byPath[f.path_lower] = item;
+        const parentId = parentParts.length ? _ensureFolderChain(parentParts, items) : null;
+        const name = parts[parts.length - 1];
+        let existing = items.find(it => it.type === 'folder' && it.name === name && (it.parent || null) === parentId);
+        if (!existing) {
+          existing = {
+            id: 'f_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
+            type: 'folder', name, parent: parentId, expanded: true,
+          };
+          items.push(existing);
+        }
+        seenLocalIds.add(existing.id);
       }
-      // Download file contents in parallel (capped) and create file items.
-      const filesToFetch = files.map(f => {
+
+      // Pass 2: ensure Dropbox files exist locally + download fresh content
+      // when their rev has changed. Collect work to download in parallel.
+      const filesToFetch = [];
+      for (const f of files) {
         const rel = f.path_display.slice((np || '').length).replace(/^\//, '');
         const parts = rel.split('/');
         const parentParts = parts.slice(0, -1);
-        const parentId = parentParts.length ? _ensureFolderChain(parentParts, newItems) : null;
-        const baseName = parts[parts.length-1].replace(/\.md$/i, '');
-        const item = {
-          id: 'n_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
-          type: 'file', name: baseName, parent: parentId, content: '', lineAuthors: [],
-          _dropboxPath: f.path_lower,
-          _matchKey: (parentId ? parentId+'/' : '/') + baseName,
-        };
-        newItems.push(item);
-        fileRevs[f.path_lower] = f.rev;
-        return { item, path: f.path_lower };
-      });
-      // Fetch content for each file (bounded concurrency).
+        const parentId = parentParts.length ? _ensureFolderChain(parentParts, items) : null;
+        const baseName = parts[parts.length - 1].replace(/\.md$/i, '');
+        let existing = items.find(it => it.type === 'file' && it.name === baseName && (it.parent || null) === parentId);
+        if (!existing) {
+          existing = {
+            id: 'n_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)),
+            type: 'file', name: baseName, parent: parentId, content: '', lineAuthors: [],
+          };
+          items.push(existing);
+        }
+        seenLocalIds.add(existing.id);
+        // Track that we've seen the folder chain too so they don't get
+        // misclassified as local-only later.
+        let p = existing.parent;
+        while (p){
+          const f2 = items.find(it => it.id === p);
+          if (!f2) break;
+          seenLocalIds.add(f2.id);
+          p = f2.parent;
+        }
+        const prevRev = _state.fileRevs && _state.fileRevs[f.path_lower];
+        if (prevRev !== f.rev) {
+          filesToFetch.push({ item: existing, path: f.path_lower, rev: f.rev });
+        } else {
+          fileRevs[f.path_lower] = f.rev;
+        }
+      }
       const CONCURRENCY = 5;
       let cursor2 = 0;
       async function worker() {
         while (cursor2 < filesToFetch.length) {
           const idx = cursor2++;
-          const { item, path } = filesToFetch[idx];
+          const { item, path, rev } = filesToFetch[idx];
           try {
             const text = await _download(path);
             if (text != null) item.content = text;
-          } catch(e) { /* leave content empty on failure */ }
+            fileRevs[path] = rev;
+          } catch(e) { /* leave existing content on failure */ }
         }
       }
       await Promise.all(Array.from({length: Math.min(CONCURRENCY, filesToFetch.length)}, worker));
-      // Replace the items[] in place. Keep selectedId if the file still exists.
-      data.items = newItems;
-      if (oldSel) {
-        const stillThere = newItems.find(i => i.id === oldSel);
-        if (!stillThere) {
-          data.selectedId = (newItems.find(i => i.type === 'file') || {}).id || null;
-        }
-      } else {
-        data.selectedId = (newItems.find(i => i.type === 'file') || {}).id || null;
+
+      // Pass 3: push local-only files up to Dropbox. These are files that
+      // exist locally but don't appear in the Dropbox listing — typically
+      // created in this app session before Dropbox was reachable. Folders
+      // get created implicitly when their files upload.
+      const localOnlyFiles = items.filter(it => it.type === 'file' && !seenLocalIds.has(it.id));
+      for (const f of localOnlyFiles) {
+        pushFile(f, items); // debounced individually; fires within 800 ms
+      }
+
+      // Ensure selectedId still points at a real file.
+      if (!data.selectedId || !items.find(i => i.id === data.selectedId)){
+        data.selectedId = (items.find(i => i.type === 'file') || {}).id || null;
       }
       _state.cursor = cursor;
       _state.fileRevs = fileRevs;
       _state.lastSync = Date.now();
       _saveState();
-      // Persist the rebuilt model to local storage too.
+      // Persist the merged model to local storage too.
       try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); } catch(e){}
     } finally {
       _busy = false; _emit();
