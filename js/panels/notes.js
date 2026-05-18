@@ -249,16 +249,17 @@ registerPanel('notes', {
     const s = this._getViewSettings();
     // Font-size scales the entire preview; 100 % = 13px (the base from CSS).
     area.style.fontSize = (13 * s.textSize / 100).toFixed(1) + 'px';
-    // Content width: 0 % narrow (~420 px), 100 % full (no cap). Anchored to
-    // the LEFT edge of the editor pane so text starts where the eye expects
-    // — narrowing the slider just shortens the line, it doesn't shove the
-    // whole block toward the centre of the panel.
-    const minW = 420, maxW = 1200;
-    const w = minW + (maxW - minW) * (s.contentWidth / 100);
-    area.style.maxWidth = s.contentWidth >= 100 ? 'none' : (w.toFixed(0) + 'px');
-    area.style.marginLeft = '0';
-    area.style.marginRight = 'auto';
-    area.style.textAlign = 'left';
+    // Content width: constrain each LINE (.nl) via a CSS variable, not the
+    // whole edit area. That way the editable surface always fills the pane
+    // (clicking anywhere on the right works), but text wraps at the
+    // requested column width. A 30 % floor keeps the column readable.
+    const pct = s.contentWidth >= 100 ? 100 : Math.max(30, s.contentWidth);
+    area.style.setProperty('--note-line-width', pct + '%');
+    // Clear any leftover max-width from earlier revisions.
+    area.style.maxWidth = '';
+    area.style.marginLeft = '';
+    area.style.marginRight = '';
+    area.style.textAlign = '';
   },
 
   // Source-picker screen — left rail with two source tiles, right pane
