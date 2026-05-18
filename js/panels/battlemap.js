@@ -1420,6 +1420,8 @@ registerPanel('battlemap',{
       <div id="mapsel-grid" class="mapsel-grid"></div>
       <div class="modal-actions" style="margin-top:10px">
         ${this._bgMapPath ? '<button class="btn danger" id="mapsel-clear">Clear current map</button>' : ''}
+        <button class="btn" id="mapsel-upload-btn">📷 Upload image…</button>
+        <input type="file" id="mapsel-upload-input" accept="image/*" style="display:none">
         <button class="btn" id="mapsel-close">Close</button>
       </div>
     </div>`;
@@ -1430,6 +1432,45 @@ registerPanel('battlemap',{
     const grid = backdrop.querySelector('#mapsel-grid');
     const close = ()=>backdrop.remove();
     backdrop.querySelector('#mapsel-close').addEventListener('click', close);
+
+    // Upload a custom image as the battlemap background. Session-only —
+    // the image lives in `_mapBgImage` and is intentionally never persisted
+    // to localStorage (data URLs of 5–20 MB images would blow the quota).
+    const uploadBtn = backdrop.querySelector('#mapsel-upload-btn');
+    const uploadInput = backdrop.querySelector('#mapsel-upload-input');
+    uploadBtn.addEventListener('click', ()=>uploadInput.click());
+    uploadInput.addEventListener('change', e=>{
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (file.size > 20*1024*1024){ showToast('Image too large (max 20MB)'); e.target.value=''; return; }
+      showToast('Loading image…');
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = new Image();
+        img.onload = () => {
+          _mapBgImage = img;
+          this._bgMapNaturalW = img.naturalWidth;
+          this._bgMapNaturalH = img.naturalHeight;
+          // Uploaded images aren't 5etools paths — clear any prior path so
+          // _saveMap() doesn't try to reload a stale one on next mount.
+          this._bgMapPath = null;
+          this._bgMapScale = 1;
+          this._lastTokenScale = 1;
+          this._gridOffsetX = 0;
+          this._gridOffsetY = 0;
+          this._saveMap();
+          this._fitMapToView();
+          close();
+          showToast('Map loaded — this session only');
+        };
+        img.onerror = () => showToast('Could not load image');
+        img.src = ev.target.result;
+      };
+      reader.onerror = () => showToast('Could not read file');
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    });
+
     backdrop.querySelector('#mapsel-clear')?.addEventListener('click', ()=>{
       _mapBgImage = null;
       this._bgMapPath = null;
