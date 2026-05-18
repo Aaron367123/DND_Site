@@ -67,7 +67,12 @@ registerPanel('npclib', {
         }
       } catch(e) { this._npcs = JSON.parse(JSON.stringify(DEFAULT_NPCS_V2)); }
     }
-    if (!this._collapsed) this._collapsed = {};
+    if (!this._collapsed){
+      // Persist collapse state per-browser. Group-name keys aren't synced;
+      // the user's preference for which sections are folded is purely UI.
+      try { this._collapsed = JSON.parse(localStorage.getItem('skt-npcs-collapsed') || '{}') || {}; }
+      catch(e){ this._collapsed = {}; }
+    }
     if (!this._selectedId && this._npcs.length) this._selectedId = this._npcs[0].id;
     // One-time cleanup: gallery feature was removed; drop the field so it
     // stops round-tripping through Firebase on every save.
@@ -257,10 +262,11 @@ registerPanel('npclib', {
 
   _wireLeft(){
     const b = this._body;
-    // Group collapse
+    // Group collapse — persisted per-browser (key 'skt-npcs-collapsed').
     b.querySelectorAll('.npclib-group-head').forEach(h => h.addEventListener('click', () => {
       const g = h.dataset.group;
       this._collapsed[g] = !this._collapsed[g];
+      try { localStorage.setItem('skt-npcs-collapsed', JSON.stringify(this._collapsed)); } catch(e){}
       this._render();
     }));
     // Card select
@@ -287,25 +293,64 @@ registerPanel('npclib', {
       });
     });
 
-    // contenteditable notes
+    // contenteditable notes — formatting via Selection API where possible
+    // (document.execCommand is deprecated and may stop working in future
+    // Chrome versions). Inline wraps use a manual Range.surroundContents path
+    // and fall through to execCommand only for block-level commands that are
+    // harder to implement by hand.
+    const wrapInline = (tag) => {
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return false;
+      const range = sel.getRangeAt(0);
+      const el = document.createElement(tag);
+      if (range.collapsed){
+        el.appendChild(document.createTextNode('​'));
+        range.insertNode(el);
+        const r = document.createRange();
+        r.setStart(el.firstChild, 1);
+        r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r);
+      } else {
+        try {
+          el.appendChild(range.extractContents());
+          range.insertNode(el);
+          const r = document.createRange();
+          r.selectNodeContents(el);
+          sel.removeAllRanges(); sel.addRange(r);
+        } catch(err){ return false; }
+      }
+      return true;
+    };
+    const applyFormat = (cmd) => {
+      const inlineMap = { bold:'b', italic:'i', strikeThrough:'s', code:'code' };
+      if (inlineMap[cmd]){
+        if (wrapInline(inlineMap[cmd])) return;
+      }
+      // Block-level + list — fall back to execCommand. Wrapped in try so a
+      // future browser removal of execCommand just no-ops instead of
+      // crashing the click handler.
+      try {
+        if (cmd === 'quote')      document.execCommand('formatBlock', false, 'blockquote');
+        else                       document.execCommand(cmd, false, null);
+      } catch(e){
+        console.warn('[npc-library] formatting unsupported in this browser:', cmd);
+      }
+    };
     const notesEl = b.querySelector('.npclib-notes');
     if (notesEl) {
       notesEl.addEventListener('input', () => { n.notes = notesEl.innerHTML; this._save(); });
       notesEl.addEventListener('keydown', e => {
         if ((e.ctrlKey||e.metaKey) && (e.key==='b'||e.key==='i')) {
           e.preventDefault();
-          document.execCommand(e.key==='b'?'bold':'italic');
+          applyFormat(e.key==='b' ? 'bold' : 'italic');
           n.notes = notesEl.innerHTML; this._save();
         }
       });
     }
     b.querySelectorAll('.npclib-notes-toolbar button').forEach(btn => btn.addEventListener('click', e => {
       e.preventDefault();
-      const cmd = btn.dataset.fmt;
       notesEl.focus();
-      if (cmd === 'quote') { document.execCommand('formatBlock', false, 'blockquote'); }
-      else if (cmd === 'code') { document.execCommand('insertHTML', false, '<code>'+(window.getSelection().toString()||'code')+'</code>'); }
-      else { document.execCommand(cmd, false, null); }
+      applyFormat(btn.dataset.fmt);
       n.notes = notesEl.innerHTML; this._save();
     }));
 

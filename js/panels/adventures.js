@@ -14,13 +14,30 @@ registerPanel('adventures', {
   _currentAdvId: null,      // null = list view; otherwise one adventure
   _currentChapterIdx: 0,
   _loading: false,
+  // Bookmarks: { [advId]: { chapterIdx, ts } } — persisted per-browser.
+  // Lets the DM jump back to where they left off in each adventure without
+  // having to remember chapter numbers. Auto-set on every chapter change.
+  _bookmarks: null,
 
   mount(body){
     this._body = body;
+    if (!this._bookmarks){
+      try { this._bookmarks = JSON.parse(localStorage.getItem('skt-adv-bookmarks-v1') || '{}') || {}; }
+      catch(e){ this._bookmarks = {}; }
+    }
     this._render();
     this._loadIndex();
   },
   unmount(){ this._body = null; },
+
+  // Persist bookmark for the current adventure + chapter. Called whenever the
+  // user switches chapters so "last visited" reflects what the DM actually
+  // read most recently, not just the first chapter they opened.
+  _bumpBookmark(){
+    if (!this._currentAdvId) return;
+    this._bookmarks[this._currentAdvId] = { chapterIdx: this._currentChapterIdx, ts: Date.now() };
+    try { localStorage.setItem('skt-adv-bookmarks-v1', JSON.stringify(this._bookmarks)); } catch(e){}
+  },
 
   async _loadIndex(){
     if (this._adventures) return;
@@ -72,10 +89,17 @@ registerPanel('adventures', {
       const cover = coverPath
         ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖',style:'cssText:width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px'}))">`
         : `<div class="adv-card-nopic" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px">📖</div>`;
+      // Resume badge — shown only when the user has a bookmark and the
+      // bookmarked chapter isn't 0 (chapter 0 = "haven't really started").
+      const bm = this._bookmarks && this._bookmarks[a.id];
+      const resumeBadge = (bm && bm.chapterIdx > 0)
+        ? `<div class="adv-card-resume" title="Last visited: chapter ${bm.chapterIdx + 1}">↪ Resume ch. ${bm.chapterIdx + 1}</div>`
+        : '';
       return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px">
         <div class="adv-card-imgwrap" data-build="E" style="position:relative;width:100%;height:220px;min-height:220px;overflow:hidden;background:#444;flex:0 0 220px">
           ${cover}
           <div class="adv-card-titleover">${esc(a.name)}</div>
+          ${resumeBadge}
         </div>
         <div class="adv-card-body">
           <div class="adv-card-meta">${esc(meta)}</div>
@@ -122,7 +146,9 @@ registerPanel('adventures', {
     b.querySelectorAll('.adv-card').forEach(c => {
       const open = async () => {
         this._currentAdvId = c.dataset.aid;
-        this._currentChapterIdx = 0;
+        // Restore last-visited chapter for this adventure if we have one.
+        const bm = this._bookmarks && this._bookmarks[this._currentAdvId];
+        this._currentChapterIdx = (bm && Number.isInteger(bm.chapterIdx)) ? bm.chapterIdx : 0;
         this._loading = true;
         this._render();
         await this._loadAdventure(this._currentAdvId);
@@ -194,6 +220,7 @@ registerPanel('adventures', {
     });
     b.querySelectorAll('.adv-chapter').forEach(btn => btn.addEventListener('click', () => {
       this._currentChapterIdx = +btn.dataset.ci;
+      this._bumpBookmark();
       this._render();
       // Scroll the new chapter content to the top.
       const c = this._body?.querySelector('#adv-content');

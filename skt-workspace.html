@@ -234,6 +234,12 @@
       <span class="drawer-group-caret">▾</span>
     </summary>
     <div class="drawer-group-body">
+      <h4 class="drawer-subhead">Sync</h4>
+      <div class="drawer-data-row">
+        <button class="btn small" id="sync-now-btn" title="Push pending changes to Firebase/Dropbox and pull latest">↻ Sync now</button>
+        <span id="sync-now-status" class="drawer-note" style="margin:0;align-self:center">—</span>
+      </div>
+
       <h4 class="drawer-subhead">Backup</h4>
       <div class="drawer-data-row">
         <button class="btn small" id="export-btn">📤 Export JSON</button>
@@ -241,6 +247,9 @@
       </div>
       <input type="file" id="import-file" accept=".json" style="display:none">
       <p class="drawer-note">Your data auto-saves to this browser. Use Export/Import to back up or move to another device.</p>
+
+      <h4 class="drawer-subhead">Storage</h4>
+      <div id="storage-usage" class="drawer-note" style="margin:4px 0 12px"></div>
 
       <h4 class="drawer-subhead">⚠ Danger zone</h4>
       <div class="danger-callout">

@@ -16,8 +16,18 @@ function _notesHydrate(){
         authors: d.authors || {},
         selectedId: d.selectedId || (d.items.find(i => i.type==='file')?.id || null),
       };
+      // Stored value exists but is malformed — keep a backup so the user can
+      // recover by hand if the auto-default below isn't what they wanted.
+      try { localStorage.setItem('skt-notes-v2-corrupt-backup', raw); } catch(e2){}
+      console.warn('[notes] skt-notes-v2 parsed but had no items array; keeping a corrupt-backup copy and resetting to default.');
     }
-  } catch(e){}
+  } catch(e){
+    try {
+      const raw = localStorage.getItem('skt-notes-v2');
+      if (raw) localStorage.setItem('skt-notes-v2-corrupt-backup', raw);
+    } catch(e2){}
+    console.warn('[notes] Failed to parse skt-notes-v2 — original value preserved under skt-notes-v2-corrupt-backup. Error:', e);
+  }
   // Migrate from v1 (pages array)
   try {
     const v1 = localStorage.getItem('skt-notes-v1');
@@ -914,6 +924,18 @@ registerPanel('notes', {
           await window.notesSync.fullSync(this._data, { force: true });
           this._render();
           showToast('Sync complete');
+        }},
+      { label: '📁 Switch vault…', onClick: async () => {
+          // Disconnect first so the new directory picker doesn't try to
+          // reconcile with the old handle's stored state. The user picks
+          // a fresh folder; we then trigger a fullSync to populate it.
+          await window.notesSync.disconnect();
+          const ok = await window.notesSync.connect();
+          if (ok){
+            await window.notesSync.fullSync(this._data, { force: true });
+            this._render();
+          }
+          this._renderVaultPill();
         }},
       { label: '🔌 Disconnect', onClick: async () => {
           await window.notesSync.disconnect();

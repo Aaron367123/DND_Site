@@ -99,6 +99,38 @@ registerPanel('time', {
     this._render();
   },
 
+  // Hours until the next occurrence of a target hour (0–23). Used by the
+  // "to next sunrise/sunset" buttons so the user doesn't have to count.
+  _hoursUntilHour(targetHour){
+    const cur = this._data.hour;
+    if (targetHour <= cur) return 24 - cur + targetHour;
+    return targetHour - cur;
+  },
+
+  // Moon phase as a fraction 0..1 (0 = new moon, 0.5 = full). Uses a simple
+  // 28-day lunar cycle anchored to absolute day count — this is fantasy time,
+  // so exact astronomical accuracy isn't the goal; consistency is.
+  _moonPhase(){
+    const t = this._data;
+    const totalDays = t.year * TIME_MONTHS.length * TIME_DAYS_PER_MONTH
+                    + t.month * TIME_DAYS_PER_MONTH
+                    + (t.day - 1);
+    return (totalDays % 28) / 28;
+  },
+  _moonIcon(){
+    const p = this._moonPhase();
+    // 8 named phases at 1/8 intervals — clean visual progression.
+    if (p < 1/16) return { ic:'🌑', name:'New moon' };
+    if (p < 3/16) return { ic:'🌒', name:'Waxing crescent' };
+    if (p < 5/16) return { ic:'🌓', name:'First quarter' };
+    if (p < 7/16) return { ic:'🌔', name:'Waxing gibbous' };
+    if (p < 9/16) return { ic:'🌕', name:'Full moon' };
+    if (p < 11/16) return { ic:'🌖', name:'Waning gibbous' };
+    if (p < 13/16) return { ic:'🌗', name:'Last quarter' };
+    if (p < 15/16) return { ic:'🌘', name:'Waning crescent' };
+    return { ic:'🌑', name:'New moon' };
+  },
+
   _render(){
     const b = this._body; if(!b) return;
     const t = this._data;
@@ -107,6 +139,9 @@ registerPanel('time', {
     b.style.cssText = 'padding:14px;overflow-y:auto;height:100%;display:flex;flex-direction:column;align-items:center';
     const monthOpts = TIME_MONTHS.map((m,i) =>
       `<option value="${i}"${i===t.month?' selected':''}>${esc(m)}</option>`).join('');
+    const moon = this._moonIcon();
+    const toSunrise = this._hoursUntilHour(6);   // dawn at hour 6
+    const toSunset  = this._hoursUntilHour(18);  // dusk at hour 18
     b.innerHTML = `
       <div class="time-dial">
         ${_timeRingSvg(t.hour)}
@@ -115,6 +150,7 @@ registerPanel('time', {
           <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${t.day}</div>
           ${realMonth ? `<div class="time-date-real" data-edit="date" title="Click to edit">(${esc(realMonth)})</div>` : ''}
           <div class="time-year" data-edit="year" title="Click to edit">${t.year||0} DR</div>
+          <div class="time-moon" title="${esc(moon.name)} (28-day cycle)">${moon.ic} <span style="font-size:9px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase">${esc(moon.name)}</span></div>
         </div>
       </div>
       <div class="time-edit-row" id="time-edit-row" style="display:none">
@@ -130,6 +166,13 @@ registerPanel('time', {
         <button class="btn time-btn" data-delta="-1">−1h</button>
         <button class="btn time-btn" data-delta="1">+1h</button>
         <button class="btn time-btn" data-delta="24">+1d</button>
+      </div>
+      <div class="time-advance-label" style="margin-top:10px">FAST-FORWARD</div>
+      <div class="time-buttons" style="flex-wrap:wrap">
+        <button class="btn time-btn" data-delta="${toSunrise}" title="Advance ${toSunrise}h to dawn (hour 6)">🌅 Sunrise</button>
+        <button class="btn time-btn" data-delta="${toSunset}" title="Advance ${toSunset}h to dusk (hour 18)">🌇 Sunset</button>
+        <button class="btn time-btn" data-delta="8" title="Long rest — 8 hours">🛌 Long rest</button>
+        <button class="btn time-btn" data-delta="1" title="Short rest — 1 hour">⏳ Short rest</button>
       </div>
     `;
 

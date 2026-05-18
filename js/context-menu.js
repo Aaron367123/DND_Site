@@ -131,6 +131,14 @@ function _ctxRender(menu){
     <span class="ctx-radio-icon">+</span>
     <span class="ctx-item-label">Save Current as Focus…</span>
   </div>`;
+  // Smart-arrange: workspace-wide tile of all open windows. Sits at the
+  // bottom because it's a one-shot action, not a stored preference.
+  html += `<div class="ctx-divider"></div>`;
+  html += `<div class="ctx-item" data-ctx-act="smart-arrange">
+    <span class="ctx-radio-icon">▦</span>
+    <span class="ctx-item-label">Smart arrange (auto-tile)</span>
+    <span class="ctx-shortcut" style="margin-left:auto;font-size:9px;color:var(--text-dim);letter-spacing:.04em">Ctrl+Shift+A</span>
+  </div>`;
   menu.innerHTML = html;
 }
 
@@ -198,6 +206,11 @@ function initWorkspaceContextMenu(){
     if (item.dataset.panel) {
       togglePanel(item.dataset.panel);
       _ctxRender(menu);  // redraw so the radio updates
+      return;
+    }
+    if (item.dataset.ctxAct === 'smart-arrange') {
+      if (typeof window.smartArrange === 'function') window.smartArrange();
+      _ctxClose();
       return;
     }
     if (item.dataset.focusI != null) {

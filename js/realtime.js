@@ -85,6 +85,12 @@ function _patchLocalStorage() {
 // child-path `on('value')` listener inconsistently when the change comes
 // from a multi-path update. Per-key `set()` is one extra HTTP round-trip
 // per dirty key but reliably wakes each path's listener.
+// Retry state keyed by sync key. Tracks how many attempts have been made
+// for each in-flight push so we don't loop forever on a persistent failure
+// (auth expired, server unreachable). Capped at MAX_RETRIES — after that
+// the key sits dirty again and the next user write re-enqueues it.
+const _retryCounts = {};
+const _MAX_RETRIES = 4;
 function _flushDirtyKeys() {
   if (!_fbDb || _dirtyKeys.size === 0) return;
   const keys = Array.from(_dirtyKeys);
@@ -96,7 +102,26 @@ function _flushDirtyKeys() {
     // this — same-browser tabs share localStorage, which would falsely
     // suppress legitimate cross-tab updates.)
     _justWrote[k] = val;
-    _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).catch(() => {});
+    _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).then(() => {
+      // Success — clear retry counter so a future failure starts fresh.
+      delete _retryCounts[k];
+    }).catch((err) => {
+      // Failure — re-mark the key dirty + bump retry counter so the next
+      // debounce tick (300ms) tries again. After _MAX_RETRIES attempts give
+      // up silently rather than spinning. The next user edit re-enqueues it.
+      const n = (_retryCounts[k] || 0) + 1;
+      _retryCounts[k] = n;
+      if (n <= _MAX_RETRIES){
+        _dirtyKeys.add(k);
+        // Exponential-ish backoff: 300ms × 2^(n-1) capped at 5s.
+        const delay = Math.min(5000, 300 * Math.pow(2, n - 1));
+        setTimeout(_flushDirtyKeys, delay);
+        console.warn('[realtime] Push failed for ' + k + ' (retry ' + n + '/' + _MAX_RETRIES + ' in ' + delay + 'ms)', err);
+      } else {
+        console.error('[realtime] Push gave up for ' + k + ' after ' + _MAX_RETRIES + ' retries', err);
+        delete _retryCounts[k];
+      }
+    });
   });
 }
 
@@ -292,6 +317,16 @@ function initRealtime() {
 // meant to be overwritten or cleared a moment later. A connected client uses
 // `listen(path, cb)` to subscribe and `push(path, val)` / `clear(path)` to
 // emit. No-ops gracefully when Firebase isn't configured.
+// Expose a "force flush" hook for the Settings drawer's "Sync now" button.
+// Returns true if Firebase is configured and a flush ran (even if there was
+// nothing to flush); false otherwise so the UI can tell the user "no sync
+// configured" instead of pretending it worked.
+window.realtimeFlush = function(){
+  if (!_fbDb) return false;
+  try { _flushDirtyKeys(); } catch(e){ return false; }
+  return true;
+};
+
 window.realtimeLive = {
   push(path, value){
     if (!_fbDb) return;

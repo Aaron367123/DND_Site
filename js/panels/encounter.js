@@ -20,14 +20,20 @@ const MONSTER_LIST=[
 registerPanel('encounter',{
   title:'Encounter Builder',icon:'⚡',
   _monsters:[],_partyLevel:6,_partySize:5,_searchQ:'',_searchOpen:false,
+  // Library of saved encounters — each is {id, name, monsters, ts}. Lets
+  // the DM stage two or three fights for a session and switch between them.
+  _saved:[],
   mount(body){
     this._body=body;
-    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;}}catch(e){}
+    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];}}catch(e){}
     this._partySize=state.party.length||this._partySize;
     this._render();
   },
-  unmount(){this._body=null;},
-  _save(){try{localStorage.setItem('skt-enc-v1',JSON.stringify({monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize}));}catch(e){}},
+  unmount(){
+    if (this._encDocDown){ document.removeEventListener('mousedown', this._encDocDown); this._encDocDown = null; }
+    this._body=null;
+  },
+  _save(){try{localStorage.setItem('skt-enc-v1',JSON.stringify({monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved}));}catch(e){}},
   _calcXP(){
     const total=this._monsters.reduce((sum,m)=>{const xp=CR_XP[m.cr]||0;return sum+(xp*(m.count||1));},0);
     const count=this._monsters.reduce((s,m)=>s+(m.count||1),0);
@@ -127,11 +133,38 @@ registerPanel('encounter',{
             <div class="enc-stat-box"><div class="l">Difficulty</div><div class="v ${diff.cls}">${diff.label}</div></div>
             <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
           </div>
+          ${this._renderDifficultyGauge(xp.adjusted)}
           <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">Thresholds (full party)</h3>
           ${(()=>{const l=Math.min(Math.max(this._partyLevel,1),20)-1;const t=XP_THRESH[l]||XP_THRESH[0];return`<div class="enc-stat-grid">${['Easy','Medium','Hard','Deadly'].map((lab,i)=>`<div class="enc-stat-box"><div class="l">${lab}</div><div class="v" style="font-size:12px">${(t[i]*this._partySize).toLocaleString()} XP</div></div>`).join('')}</div>`;})()}
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Scale to:</label>
+            <select id="enc-scale-target" style="font-size:11px;padding:3px 6px;flex:0 0 auto;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
+              <option value="">—</option>
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+              <option value="Deadly">Deadly</option>
+            </select>
+            <span style="font-size:10px;color:var(--text-dim)">multiplies counts</span>
+          </div>
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn small primary" id="enc-push-combat">▶ Push to Combat Tracker</button>
+            <button class="btn small primary" id="enc-push-combat" ${!this._monsters.length?'disabled':''}>▶ Push to Combat Tracker</button>
             <button class="btn small danger" id="enc-clear">Clear encounter</button>
+          </div>
+          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:14px 0 8px">Saved encounters</h3>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+            <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>💾 Save current…</button>
+          </div>
+          <div id="enc-saved-list" style="display:flex;flex-direction:column;gap:4px">
+            ${!this._saved.length
+              ? '<div style="font-size:11px;color:var(--text-dim)">No saved encounters yet.</div>'
+              : this._saved.map(s => {
+                  const count = (s.monsters||[]).reduce((n,m)=>n+(m.count||1),0);
+                  return `<div class="enc-saved-row" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
+                    <button class="btn small" data-eact="load-enc" data-eid="${esc(s.id)}" style="flex:1;text-align:left;justify-content:flex-start" title="Load this encounter">${esc(s.name)} <span style="color:var(--text-dim);font-size:10px">· ${count} mon</span></button>
+                    <button class="btn icon-btn danger" data-eact="del-enc" data-eid="${esc(s.id)}" title="Delete saved encounter" style="padding:2px 5px;font-size:11px">×</button>
+                  </div>`;
+                }).join('')}
           </div>
         </div>
       </div>
@@ -154,14 +187,76 @@ registerPanel('encounter',{
       this._searchOpen=true;
       this._renderSearchDropdown();
     });
+    // Blur close — short delay so a result click registers before we hide the
+    // dropdown. Pointer-events on the dropdown also stay live during that
+    // window so fast clicks aren't lost.
+    searchInp.addEventListener('blur',()=>{
+      setTimeout(()=>{
+        if (document.activeElement === searchInp) return;
+        this._searchOpen=false;
+        const drop=b.querySelector('#enc-search-results');
+        if (drop) drop.classList.remove('open');
+      }, 180);
+    });
+    // Click anywhere outside the search row also closes the dropdown.
+    const onDocDown = (ev)=>{
+      if (!this._searchOpen) return;
+      if (ev.target === searchInp) return;
+      if (ev.target.closest && ev.target.closest('#enc-search-results')) return;
+      this._searchOpen=false;
+      const drop=b.querySelector('#enc-search-results');
+      if (drop) drop.classList.remove('open');
+    };
+    if (this._encDocDown) document.removeEventListener('mousedown', this._encDocDown);
+    this._encDocDown = onDocDown;
+    document.addEventListener('mousedown', onDocDown);
     // Initial dropdown render (handles the case where _render was triggered with a query)
     this._renderSearchDropdown();
-    // Push to combat
-    b.querySelector('#enc-push-combat').addEventListener('click',()=>{
-      let pushed=0;
-      this._monsters.forEach(m=>{for(let i=0;i<(m.count||1);i++){panelDefs.combat.addMonster({name:m.name,hp:m.hp,hpMax:m.hp,ac:m.ac,dex:m.dex||10});pushed++;}});
-      showToast(`${pushed} combatant(s) added`);
-      if(!layout.combat?.open)openPanel('combat');
+    // Push to combat — flash the button to confirm the action, open the
+    // combat panel if it's not already up, and use a richer toast that names
+    // a few of the monsters added (instead of just a count).
+    b.querySelector('#enc-push-combat').addEventListener('click', e => {
+      if (!this._monsters.length) return;
+      const btn = e.currentTarget;
+      let pushed = 0;
+      const summaryParts = [];
+      this._monsters.forEach(m => {
+        const n = m.count || 1;
+        for (let k=0;k<n;k++){
+          panelDefs.combat.addMonster({name:m.name,hp:m.hp,hpMax:m.hp,ac:m.ac,dex:m.dex||10});
+          pushed++;
+        }
+        summaryParts.push(n>1 ? `${n}× ${m.name}` : m.name);
+      });
+      // Visual confirmation on the button itself — class toggled briefly so
+      // the user gets feedback even if their cursor is far from a toast.
+      btn.classList.add('enc-flash');
+      setTimeout(() => btn.classList.remove('enc-flash'), 600);
+      const wasOpen = !!layout.combat?.open;
+      if (!wasOpen) openPanel('combat');
+      const tail = summaryParts.length > 3 ? ' + ' + (summaryParts.length-3) + ' more' : '';
+      const summary = summaryParts.slice(0,3).join(', ') + tail;
+      showToast(`Added ${pushed} to combat: ${summary}${wasOpen ? '' : ' · opened tracker'}`);
+    });
+    // Scale-to-target: multiply every monster's count by the smallest integer
+    // factor that puts adjusted XP into the target tier. Picks the threshold's
+    // midpoint as the anchor so the result lands cleanly inside the zone
+    // rather than at its edge.
+    b.querySelector('#enc-scale-target')?.addEventListener('change', e => {
+      const target = e.target.value;
+      if (!target || !this._monsters.length){ e.target.value=''; return; }
+      const factor = this._findScaleFactor(target);
+      if (factor === null){
+        showToast('Already past Deadly — clear or reduce monsters first');
+        e.target.value=''; return;
+      }
+      if (factor === 1){
+        showToast('Already in ' + target + ' range');
+        e.target.value=''; return;
+      }
+      this._monsters.forEach(m => { m.count = Math.max(1, Math.round((m.count||1) * factor)); });
+      this._save(); this._render();
+      showToast('Scaled counts ×' + factor.toFixed(2) + ' → ' + target);
     });
     b.querySelector('#enc-clear').addEventListener('click',()=>{
       showConfirm('Clear all monsters from this encounter?', {title:'Clear encounter', confirmLabel:'Clear', danger:true}).then(ok=>{
@@ -169,5 +264,111 @@ registerPanel('encounter',{
         this._monsters=[]; this._save(); this._render();
       });
     });
+    // Save current encounter under a name
+    b.querySelector('#enc-save-current')?.addEventListener('click', () => {
+      if (!this._monsters.length) return;
+      showModal('Save encounter', [
+        { id:'name', label:'Encounter name', type:'text', value: this._suggestEncName() }
+      ], 'Save').then(r => {
+        if (!r) return;
+        const name = (r.name||'').trim();
+        if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
+        // Replace if a saved encounter already has this name (case-insensitive)
+        const lc = name.toLowerCase();
+        this._saved = this._saved.filter(s => (s.name||'').toLowerCase() !== lc);
+        this._saved.unshift({
+          id: 'enc_' + (typeof uid==='function' ? uid() : Date.now().toString(36)),
+          name,
+          monsters: JSON.parse(JSON.stringify(this._monsters)),
+          ts: Date.now()
+        });
+        // Cap the list so it doesn't grow forever
+        if (this._saved.length > 30) this._saved.length = 30;
+        this._save(); this._render();
+        if (typeof showToast==='function') showToast('Saved "' + name + '"');
+      });
+    });
+    // Load a saved encounter — replaces current monsters in place
+    b.querySelectorAll('[data-eact="load-enc"]').forEach(btn => btn.addEventListener('click', () => {
+      const s = this._saved.find(x => x.id === btn.dataset.eid);
+      if (!s) return;
+      this._monsters = JSON.parse(JSON.stringify(s.monsters||[]));
+      this._save(); this._render();
+      if (typeof showToast==='function') showToast('Loaded "' + s.name + '"');
+    }));
+    // Delete a saved encounter
+    b.querySelectorAll('[data-eact="del-enc"]').forEach(btn => btn.addEventListener('click', () => {
+      const s = this._saved.find(x => x.id === btn.dataset.eid);
+      if (!s) return;
+      showConfirm('Delete saved encounter "' + s.name + '"?',
+        {title:'Delete encounter', confirmLabel:'Delete', danger:true}).then(ok => {
+          if (!ok) return;
+          this._saved = this._saved.filter(x => x.id !== s.id);
+          this._save(); this._render();
+        });
+    }));
+  },
+  // Difficulty gauge — horizontal bar split into Easy / Medium / Hard / Deadly
+  // zones at the party's thresholds, with a marker showing where the current
+  // adjusted XP sits. Gives an at-a-glance read of "how close to the next tier
+  // am I?" without doing the math by hand.
+  _renderDifficultyGauge(adjXP){
+    const level = Math.min(Math.max(this._partyLevel,1),20)-1;
+    const t = (XP_THRESH[level]||XP_THRESH[0]).map(x => x * this._partySize);
+    // Zones: [0, easy), [easy, med), [med, hard), [hard, deadly), [deadly, 2×deadly)
+    const maxX = Math.max(adjXP, t[3]) * 1.15 || 100;
+    const pct = (v) => Math.max(0, Math.min(100, (v / maxX) * 100));
+    const zoneStops = [0, t[0], t[1], t[2], t[3], maxX];
+    const markerPct = pct(adjXP);
+    return '<div class="enc-gauge">'
+      + '<div class="enc-gauge-bar">'
+      + '<div class="enc-gauge-zone trivial" style="left:0%;width:'+pct(t[0])+'%" title="Trivial · 0–'+t[0].toLocaleString()+' XP"></div>'
+      + '<div class="enc-gauge-zone easy"    style="left:'+pct(t[0])+'%;width:'+(pct(t[1])-pct(t[0]))+'%" title="Easy · '+t[0].toLocaleString()+'–'+t[1].toLocaleString()+' XP"></div>'
+      + '<div class="enc-gauge-zone medium"  style="left:'+pct(t[1])+'%;width:'+(pct(t[2])-pct(t[1]))+'%" title="Medium · '+t[1].toLocaleString()+'–'+t[2].toLocaleString()+' XP"></div>'
+      + '<div class="enc-gauge-zone hard"    style="left:'+pct(t[2])+'%;width:'+(pct(t[3])-pct(t[2]))+'%" title="Hard · '+t[2].toLocaleString()+'–'+t[3].toLocaleString()+' XP"></div>'
+      + '<div class="enc-gauge-zone deadly"  style="left:'+pct(t[3])+'%;width:'+(100-pct(t[3]))+'%" title="Deadly · '+t[3].toLocaleString()+'+ XP"></div>'
+      + '<div class="enc-gauge-marker" style="left:'+markerPct+'%" title="Current: '+adjXP.toLocaleString()+' XP"></div>'
+      + '</div>'
+      + '<div class="enc-gauge-axis"><span>Trivial</span><span>Easy</span><span>Med</span><span>Hard</span><span>Deadly</span></div>'
+      + '</div>';
+  },
+
+  // Smallest factor (≥1, multiples of 0.25) that puts adjusted XP into the
+  // target zone's midpoint. Returns 1 when already at/above target's lower
+  // bound, or null when even unbounded scaling can't reach the target (only
+  // happens with a totally empty monster list).
+  _findScaleFactor(target){
+    if (!this._monsters.length) return null;
+    const level = Math.min(Math.max(this._partyLevel,1),20)-1;
+    const t = (XP_THRESH[level]||XP_THRESH[0]).map(x => x * this._partySize);
+    const targetMin = { Easy:t[0], Medium:t[1], Hard:t[2], Deadly:t[3] }[target];
+    if (targetMin == null) return null;
+    // Adjusted XP grows non-linearly with count (the multiplier table jumps).
+    // Brute-force search over factors 0.25–10 picks the cheapest that clears
+    // the threshold; if scaling DOWN gets us there, we still return 1 because
+    // the user explicitly asked to "scale to fit" not "reduce."
+    const baseCount = this._monsters.reduce((n,m)=>n+(m.count||1),0);
+    const baseXP    = this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*(m.count||1),0);
+    const xpAt = (f) => {
+      const count = this._monsters.reduce((n,m)=>n+Math.max(1,Math.round((m.count||1)*f)),0);
+      const xp    = this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*Math.max(1,Math.round((m.count||1)*f)),0);
+      const mults = [1,1.5,2,2,2,3,3,3,4,4,4,4,5];
+      return xp * (mults[Math.min(count,12)] || 5);
+    };
+    if (xpAt(1) >= targetMin) return 1;
+    for (let f = 1.25; f <= 10; f += 0.25){
+      if (xpAt(f) >= targetMin) return f;
+    }
+    return null;
+  },
+
+  // Default name for the Save dialog — combine the highest-CR monster's name
+  // with the monster count so the user gets a sensible suggestion.
+  _suggestEncName(){
+    if (!this._monsters.length) return '';
+    const sorted = [...this._monsters].sort((a,b) => (CR_XP[b.cr]||0) - (CR_XP[a.cr]||0));
+    const lead = sorted[0]?.name || 'Encounter';
+    const count = this._monsters.reduce((n,m)=>n+(m.count||1),0);
+    return count > 1 ? `${lead} & friends (${count})` : lead;
   },
 });

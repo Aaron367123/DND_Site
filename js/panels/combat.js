@@ -166,15 +166,21 @@ registerPanel('combat',{
       const act=el.dataset.act;
       if(act==='next')                this._nextTurn();
       else if(act==='end'){
-        showConfirm('End combat? All combatants will be removed.',
-          {title:'End combat', confirmLabel:'End', danger:true}).then(ok => {
-            if (!ok) return;
-            state.combatants = [];
-            state.combatRound = 0;
-            state.activeCombatantId = null;
-            save(); this._render();
-            showToast('Combat ended');
-          });
+        const proceed = ok => {
+          if (!ok) return;
+          state.combatants = [];
+          state.combatRound = 0;
+          state.activeCombatantId = null;
+          save(); this._render();
+          if (typeof showToast === 'function') showToast('Combat ended');
+        };
+        if (typeof showConfirm === 'function'){
+          showConfirm('End combat? All combatants will be removed.',
+            {title:'End combat', confirmLabel:'End', danger:true}).then(proceed);
+        } else {
+          // Fallback if utils.js failed to load — at least don't crash.
+          proceed(window.confirm('End combat? All combatants will be removed.'));
+        }
       }
       else if(act==='add')            this._addPrompt();
       else if(act==='add-monster')    this._openMonsterPicker();
@@ -202,11 +208,27 @@ registerPanel('combat',{
     }));
 
     // Combatant inputs (hp, ac, initiative, name) — no auto-sort
+    // Numeric fields are clamped to sane ranges to prevent fat-finger inputs
+    // (e.g. typing -9999 into HP) and 9-digit overflow values from sticking.
+    const CLAMP = {
+      hp:         {min:-9999, max: 99999},  // negative HP allowed: downed PCs can dip below 0 from massive hits
+      hpMax:      {min:    1, max: 99999},
+      ac:         {min:    0, max:    99},
+      initiative: {min:  -99, max:    99},
+      initBonus:  {min:  -20, max:    20},
+    };
     b.querySelectorAll('input[data-cf]').forEach(inp=>{
       inp.addEventListener('change',e=>{
         const i=+e.target.dataset.ci, f=e.target.dataset.cf;
         const isText = f === 'name';
-        const val = isText ? String(e.target.value).trim() : (parseInt(e.target.value)||0);
+        let val = isText ? String(e.target.value).trim() : (parseInt(e.target.value)||0);
+        if (!isText && CLAMP[f]){
+          const {min, max} = CLAMP[f];
+          if (val < min) val = min;
+          if (val > max) val = max;
+          // Reflect the clamp in the field so the user sees what was actually saved.
+          if (String(val) !== e.target.value) e.target.value = val;
+        }
         state.combatants[i]={...state.combatants[i],[f]:val};
         // PC came back above 0 HP — clear death-save tracker.
         if (f === 'hp' && state.combatants[i].isPC && val > 0 && state.combatants[i].deathSaves){
@@ -535,6 +557,10 @@ registerPanel('combat',{
     const next=has?conds.filter(x=>x!==cond):[...conds,cond];
     state.combatants[i]={...c,conditions:next};
     save();this._render();
+    // Mirror to the party panel so PC condition chips stay in sync without
+    // waiting for the next party-panel render. Safe when party is closed —
+    // the optional-chain no-ops.
+    if (c.isPC) panelDefs.party?._render?.();
     showToast(has?(cond+' removed from '+c.name):(cond+' → '+c.name));
   },
 

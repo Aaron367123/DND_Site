@@ -58,13 +58,13 @@ registerPanel('loot',{
     const out = [];
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
-      if (matches(d.name, d.meta)) out.push({name:d.name, meta:d.meta, _source:d._source, value:d._raw?.value || ''});
+      if (matches(d.name, d.meta)) out.push({name:d.name, meta:d.meta, _source:d._source, value:d._raw?.value || '', rarity:d._raw?.rarity || null});
       // Items with bonus variants (+1, +2, +3) — include each variant as its
       // own selectable row so the user can drop "+2 Longsword" directly
       // into loot without having to retype the prefix.
       if (d._variants){
         for (const v of d._variants){
-          if (matches(v.name, v.meta)) out.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:v._raw?.value || ''});
+          if (matches(v.name, v.meta)) out.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:v._raw?.value || '', rarity:v._raw?.rarity || d._raw?.rarity || null});
         }
       }
       if (out.length >= 20) break;
@@ -82,26 +82,39 @@ registerPanel('loot',{
     drop.innerHTML = results.map(d => {
       const srcDisplay = d._source && typeof _formatSource === 'function' ? _formatSource(d._source) : (d._source||'');
       const srcBadge = srcDisplay ? `<span class="loot-search-src">${esc(srcDisplay)}</span>` : '';
+      // Rarity chip — colored to match the shop panel's rarity scale so the
+      // user gets an at-a-glance feel for what they're picking up. Skipped for
+      // mundane/none items so the row stays compact.
+      const r = (d.rarity || '').toLowerCase();
+      const rarityChip = (!r || r === 'none' || r === 'unknown')
+        ? ''
+        : `<span class="loot-rarity-chip rarity-${r.replace(/\s+/g,'')}">${esc(d.rarity)}</span>`;
       const metaText = [d.meta, d.value].filter(Boolean).join(' · ');
       return `<div class="loot-search-result" data-iname="${esc(d.name)}" data-isrc="${esc(d._source||'')}" data-ival="${esc(d.value||'')}">
-        <span class="loot-search-name">${esc(d.name)}${srcBadge}</span>
+        <span class="loot-search-name">${esc(d.name)}${rarityChip}${srcBadge}</span>
         <span class="loot-search-meta">${esc(metaText)}</span>
       </div>`;
     }).join('');
-    drop.querySelectorAll('.loot-search-result').forEach(el => el.addEventListener('click', () => {
-      const name = el.dataset.iname;
-      // Prefer the qty already typed by the user; default to 1.
-      const qtyInp = b.querySelector('#loot-new-qty');
-      const valInp = b.querySelector('#loot-new-val');
-      const qty = parseInt(qtyInp?.value)||1;
-      // Value priority: user-typed value > 5e item's listed value > empty.
-      const typed = (valInp?.value||'').trim();
-      const value = typed || (el.dataset.ival || '');
-      this._loot.items.push({id:uid(), name, qty, value, assignedTo:null});
-      this._save();
-      this._searchQ = ''; this._searchOpen = false;
-      this._render();
-    }));
+    drop.querySelectorAll('.loot-search-result').forEach(el => {
+      // Prevent the input from blurring while the user is picking a row —
+      // mousedown fires before blur, and preventDefault keeps focus on the
+      // input. This removes the fragile 180ms blur-close race.
+      el.addEventListener('mousedown', e => e.preventDefault());
+      el.addEventListener('click', () => {
+        const name = el.dataset.iname;
+        // Prefer the qty already typed by the user; default to 1.
+        const qtyInp = b.querySelector('#loot-new-qty');
+        const valInp = b.querySelector('#loot-new-val');
+        const qty = parseInt(qtyInp?.value)||1;
+        // Value priority: user-typed value > 5e item's listed value > empty.
+        const typed = (valInp?.value||'').trim();
+        const value = typed || (el.dataset.ival || '');
+        this._loot.items.push({id:uid(), name, qty, value, assignedTo:null});
+        this._save();
+        this._searchQ = ''; this._searchOpen = false;
+        this._render();
+      });
+    });
   },
 
   // ── List rendering ───────────────────────────────────────────────────────────
@@ -319,12 +332,17 @@ registerPanel('loot',{
 
   _itemRow(item, i){
     const assignedName = this._memberName(item.assignedTo);
-    return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}" draggable="true">
+    const paid = !!item.paid;
+    const paidTitle = paid && item.paidTs
+      ? 'Marked paid · ' + new Date(item.paidTs).toLocaleString()
+      : 'Mark as paid / collected';
+    return `<div class="loot-item ${item.assignedTo?'assigned':''} ${paid?'paid':''}" data-i="${i}" draggable="true">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
+      <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?'✓':'○'}</button>
       <div class="loot-name">
         <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">📖</button>
         <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="Click to rename" spellcheck="false">
-        ${assignedName?`<span class="loot-assigned-pill">→ ${esc(assignedName)}</span>`:''}
+        ${assignedName?`<span class="loot-assigned-pill" title="${esc(assignedName)}">→ ${esc(assignedName)}</span>`:''}
       </div>
       <input type="number" class="loot-qty" value="${item.qty||1}" min="1" data-lfield="qty" data-li="${i}" title="Quantity">
       <input type="text" class="loot-val" value="${esc(item.value||'')}" data-lfield="value" data-li="${i}" placeholder="gp val" title="Value">
@@ -541,18 +559,21 @@ registerPanel('loot',{
         this._renderSearchDropdown();
       }
     });
-    // Close dropdown when the input loses focus. Delay so a click on a
-    // dropdown result registers before the dropdown disappears.
+    // Close dropdown when the input loses focus. The 180ms delay only exists
+    // as a safety net now — result rows use mousedown.preventDefault() to
+    // keep focus on the input, so blur typically only fires when the user
+    // tabs/clicks somewhere outside the dropdown entirely.
     nameInp.addEventListener('blur', () => {
       setTimeout(() => {
-        if (this._searchOpen) { this._searchOpen = false; this._renderSearchDropdown(); }
-      }, 180);
+        if (document.activeElement === nameInp) return; // refocused before timer
+        if (this._searchOpen){ this._searchOpen = false; this._renderSearchDropdown(); }
+      }, 80);
     });
 
     // Initial dropdown paint (handles re-render after picking from dropdown)
     if (this._searchQ && this._searchOpen) this._renderSearchDropdown();
 
-    // Item actions: delete + info popup
+    // Item actions: delete + info popup + paid toggle
     b.querySelectorAll('[data-lact]').forEach(el=>el.addEventListener('click',e=>{
       e.stopPropagation();
       const i=+el.dataset.li;
@@ -561,6 +582,13 @@ registerPanel('loot',{
         this._save();this._render();
       } else if (el.dataset.lact==='info'){
         this._openItemDetail(i);
+      } else if (el.dataset.lact==='paid'){
+        // Toggle paid/collected status with a timestamp. Hover the ✓ to see
+        // when it was marked. Toggling off clears the timestamp.
+        const it = this._loot.items[i]; if (!it) return;
+        if (it.paid){ delete it.paid; delete it.paidTs; }
+        else { it.paid = true; it.paidTs = Date.now(); }
+        this._save(); this._render();
       }
     }));
 

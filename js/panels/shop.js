@@ -3,8 +3,15 @@
 // ============================================================
 registerPanel('shop',{
   title:'Shop Generator',icon:'$',
+  // Inventory display cap — large catalogs (50+ items) become an unscrollable
+  // wall otherwise. User clicks "Show more" to expand 20 at a time.
+  _invLimit:20,
+  // Saved shops library: [{id, name, ts, shop}]. Lets the DM keep a town's
+  // shops between sessions instead of regenerating each time.
+  _saved:[],
   mount(body){
     this._body=body;
+    try { const r = localStorage.getItem('skt-shops-v1'); if (r){ const d = JSON.parse(r); if (Array.isArray(d.saved)) this._saved = d.saved; } } catch(e){}
     this._render();
     // Kick off the 5e dataset load early so the catalog is full by the time
     // the user clicks Generate. Generate still works (cold-start fallback)
@@ -12,6 +19,7 @@ registerPanel('shop',{
     if (typeof load5eData === 'function') load5eData();
   },
   unmount(){this._body=null;},
+  _saveShops(){ try { localStorage.setItem('skt-shops-v1', JSON.stringify({saved:this._saved})); } catch(e){} },
   _render(){
     const b=this._body;if(!b)return;
     const types=Object.keys(ITEM_CATALOG);
@@ -26,11 +34,120 @@ registerPanel('shop',{
         <div><label class="field-label">Town Economy</label><select id="shop-economy"><option>Poor</option><option selected>Average</option><option>Wealthy</option></select></div>
         <div><label class="field-label">Assortment</label><select id="shop-assort"><option>Sparse</option><option selected>Standard</option><option>Abundant</option></select></div>
         <button class="btn primary" data-act="gen" style="margin-top:4px">Generate Shop</button>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn small" data-act="save-shop" style="flex:1" ${!state.shop?'disabled title="Generate a shop first"':''}>💾 Save</button>
+        </div>
+        ${this._renderSavedShops()}
       </div>
       <div class="shop-display" id="shop-display">${this._renderDisplay()}</div>
     </div>`;
-    b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._generate();});
+    b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._invLimit=20;this._generate();});
     b.querySelector('[data-act="settings"]').addEventListener('click',e=>{e.stopPropagation();this._openSettings();});
+    b.querySelector('[data-act="save-shop"]')?.addEventListener('click', () => this._saveCurrentShop());
+    b.querySelectorAll('[data-act="load-shop"]').forEach(btn => btn.addEventListener('click', () => {
+      const s = this._saved.find(x => x.id === btn.dataset.sid); if (!s) return;
+      state.shop = JSON.parse(JSON.stringify(s.shop));
+      save();
+      this._invLimit = 20;
+      this._render();
+      if (typeof showToast==='function') showToast('Loaded "' + s.name + '"');
+    }));
+    b.querySelectorAll('[data-act="del-shop"]').forEach(btn => btn.addEventListener('click', () => {
+      const s = this._saved.find(x => x.id === btn.dataset.sid); if (!s) return;
+      showConfirm('Delete saved shop "' + s.name + '"?',
+        {title:'Delete shop', confirmLabel:'Delete', danger:true}).then(ok => {
+          if (!ok) return;
+          this._saved = this._saved.filter(x => x.id !== s.id);
+          this._saveShops(); this._render();
+        });
+    }));
+    this._wireDisplay();
+  },
+
+  _renderSavedShops(){
+    if (!this._saved.length) return '';
+    return '<div style="margin-top:10px"><div class="field-label">Saved shops</div>'
+      + '<div style="display:flex;flex-direction:column;gap:3px;max-height:160px;overflow-y:auto">'
+      + this._saved.map(s => `<div style="display:flex;align-items:center;gap:4px;background:var(--panel-2);border:1px solid var(--border);border-radius:3px;padding:3px 5px;font-size:11px">
+          <button class="btn small" data-act="load-shop" data-sid="${esc(s.id)}" style="flex:1;text-align:left;padding:2px 6px;font-size:11px;justify-content:flex-start" title="Load — ${esc(s.shop?.type||'')}">${esc(s.name)}</button>
+          <button class="btn icon-btn danger" data-act="del-shop" data-sid="${esc(s.id)}" title="Delete saved shop" style="padding:1px 4px;font-size:10px">×</button>
+        </div>`).join('')
+      + '</div></div>';
+  },
+
+  _saveCurrentShop(){
+    if (!state.shop) return;
+    const suggested = state.shop.name || (state.shop.type + ' shop');
+    showModal('Save shop', [
+      { id:'name', label:'Save as', type:'text', value: suggested }
+    ], 'Save').then(r => {
+      if (!r) return;
+      const name = (r.name||'').trim();
+      if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
+      // Replace existing entry with the same name
+      const lc = name.toLowerCase();
+      this._saved = this._saved.filter(s => (s.name||'').toLowerCase() !== lc);
+      this._saved.unshift({
+        id: 'shop_' + (typeof uid==='function' ? uid() : Date.now().toString(36)),
+        name,
+        ts: Date.now(),
+        shop: JSON.parse(JSON.stringify(state.shop)),
+      });
+      if (this._saved.length > 30) this._saved.length = 30;
+      this._saveShops(); this._render();
+      if (typeof showToast==='function') showToast('Saved "' + name + '"');
+    });
+  },
+
+  // Wire the per-row Buy buttons + Show-more pagination on the inventory.
+  _wireDisplay(){
+    const b = this._body; if (!b) return;
+    b.querySelectorAll('[data-act="buy-item"]').forEach(btn => btn.addEventListener('click', () => {
+      const i = +btn.dataset.idx;
+      const inv = state.shop?.inventory; if (!inv || !inv[i]) return;
+      if ((inv[i].stock||0) <= 0) return;
+      inv[i].stock = inv[i].stock - 1;
+      save();
+      // Mirror to the Loot tracker if it has been opened at least once this
+      // session (which initialised its localStorage). Writes directly to
+      // localStorage so a closed panel still receives the entry.
+      this._pushToLoot(inv[i]);
+      const sd = b.querySelector('#shop-display'); if (sd){ sd.innerHTML = this._renderDisplay(); this._wireDisplay(); }
+      if (typeof showToast === 'function'){
+        const left = inv[i].stock;
+        showToast('Bought ' + inv[i].name + (left>0 ? ' · ' + left + ' left' : ' · last one'));
+      }
+    }));
+    b.querySelectorAll('[data-act="show-more-inv"]').forEach(btn => btn.addEventListener('click', () => {
+      const all = btn.dataset.mode === 'all';
+      const inv = state.shop?.inventory || [];
+      this._invLimit = all ? inv.length : Math.min(inv.length, (this._invLimit||20) + 20);
+      const sd = b.querySelector('#shop-display'); if (sd){ sd.innerHTML = this._renderDisplay(); this._wireDisplay(); }
+    }));
+  },
+
+  // Add a purchased item to the Loot tracker. Reads-merges-writes localStorage
+  // so it works whether the Loot panel is mounted or not, and triggers a
+  // re-render if it is.
+  _pushToLoot(item){
+    try {
+      const cur = JSON.parse(localStorage.getItem('skt-loot-v1') || '{"cp":0,"sp":0,"ep":0,"gp":0,"pp":0,"items":[],"tabGroups":[]}');
+      if (!Array.isArray(cur.items)) cur.items = [];
+      const newId = (typeof uid === 'function' ? uid() : String(Math.random()).slice(2,9));
+      cur.items.push({
+        id: newId,
+        name: item.name,
+        qty: 1,
+        value: this._fmtPrice(item.price),
+        assignedTo: null,
+      });
+      localStorage.setItem('skt-loot-v1', JSON.stringify(cur));
+      // If the panel is mounted, refresh it directly from the stored value.
+      if (panelDefs.loot && panelDefs.loot._loot){
+        panelDefs.loot._loot = cur;
+        panelDefs.loot._render?.();
+      }
+    } catch(e){ console.warn('[shop] failed to push to loot', e); }
   },
 
   // Pricing settings popover — currency symbol, price jitter, rounding step.
@@ -236,14 +353,35 @@ registerPanel('shop',{
   _renderDisplay(){
     if(!state.shop)return'<div class="empty-state">Configure settings and click Generate Shop.</div>';
     const s=state.shop;
+    const inv = s.inventory || [];
+    const limit = Math.max(0, Math.min(this._invLimit || 20, inv.length));
+    const shown = inv.slice(0, limit);
+    const remaining = inv.length - limit;
+    const rowsHtml = shown.map((item, i) => {
+      const out = (item.stock||0) <= 0;
+      return `<tr class="${out?'shop-out':''}">
+        <td>${esc(item.name)}</td>
+        <td>${esc(item.category)}</td>
+        <td><span class="rarity-badge rarity-${item.rarity.replace(/\s/,'')}">${item.rarity}</span></td>
+        <td>${this._fmtPrice(item.price)}</td>
+        <td>${out ? '<span style="color:var(--text-dim);font-size:11px">out</span>' : '×'+item.stock}</td>
+        <td style="text-align:right;padding-right:14px">
+          <button class="btn small" data-act="buy-item" data-idx="${i}" ${out?'disabled title="Out of stock"':'title="Buy one (decrements stock, adds to Loot tracker)"'} style="padding:1px 8px;font-size:11px">Buy</button>
+        </td>
+      </tr>`;
+    }).join('');
     return`<div class="shop-section"><div class="shop-name">${esc(s.name)} <span class="shop-type">(${esc(s.type)})</span></div><div class="meta-line" style="margin-top:4px">Wealth: ${s.meta.economy} · Band: ${s.meta.price} · Assortment: ${s.meta.assortment}</div></div>
     <div class="shop-section"><h3>Shopkeeper</h3><div><strong>${esc(s.keeper)}</strong> · ${esc(s.tone)}</div><div class="meta-line" style="margin-top:4px">Quirks: ${s.quirks.map(esc).join(', ')}</div></div>
     <div class="shop-section"><h3>Aesthetic</h3><div class="meta-line" style="font-style:italic">${esc(s.aesthetic)}</div></div>
     <div class="shop-section" style="padding:0"><h3 style="padding:12px 14px 6px">Inventory</h3>
-    ${s.inventory.length
-      ? `<table class="shop-table"><thead><tr><th>Item</th><th>Category</th><th>Rarity</th><th>Price</th><th>Stock</th></tr></thead>
-         <tbody>${s.inventory.map(item=>`<tr><td>${esc(item.name)}</td><td>${esc(item.category)}</td><td><span class="rarity-badge rarity-${item.rarity.replace(/\s/,'')}">${item.rarity}</span></td><td>${this._fmtPrice(item.price)}</td><td>×${item.stock}</td></tr>`).join('')}</tbody></table>
-         <div style="padding:8px 14px;font-size:11px;color:var(--text-muted)">Showing ${s.inventory.length} item(s)</div>`
+    ${inv.length
+      ? `<table class="shop-table"><thead><tr><th>Item</th><th>Category</th><th>Rarity</th><th>Price</th><th>Stock</th><th></th></tr></thead>
+         <tbody>${rowsHtml}</tbody></table>
+         <div style="padding:8px 14px;font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:10px">
+           <span>Showing ${shown.length} of ${inv.length} item(s)</span>
+           ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" style="padding:2px 8px;font-size:11px">Show ${Math.min(20, remaining)} more</button>` : ''}
+           ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" data-mode="all" style="padding:2px 8px;font-size:11px">Show all</button>` : ''}
+         </div>`
       : `<div style="padding:18px 14px;font-size:12px;color:var(--text-muted);text-align:center">No items match the active filters. Open <strong>⚙</strong> to allow more rarities or categories.</div>`
     }
     </div>`;
@@ -495,9 +633,38 @@ registerPanel('shop',{
     const sfxMap={'Blacksmith/Armory':['Foundry','Anvil','Smithy'],'General Store':['Sundries','Trading Post','Provisions'],'Alchemist':['Apothecary','Cauldron','Reagents'],'Magic Shop':['Curios','Arcanum','Enchantments'],'Tavern':['Tankard','Hearth','Inn'],'Jeweler':['Gemworks','Treasury'],'Bookshop':['Folio','Tome','Library'],'Fletcher':['Bowyer','Quiver']};
     const sfx=(sfxMap[type]||['Shop']);
     const name=`${prefixes[Math.floor(Math.random()*prefixes.length)]} ${sfx[Math.floor(Math.random()*sfx.length)]}`;
-    state.shop={type,name,keeper:SHOPKEEPER_NAMES[Math.floor(Math.random()*SHOPKEEPER_NAMES.length)],tone:TONES[Math.floor(Math.random()*TONES.length)],quirks:[QUIRKS[Math.floor(Math.random()*QUIRKS.length)],QUIRKS[Math.floor(Math.random()*QUIRKS.length)]].filter((v,i,a)=>a.indexOf(v)===i),aesthetic:(AESTHETICS[type]||AESTHETICS['General Store'])[Math.floor(Math.random()*3)],inventory,meta:{price,economy,assortment}};
+    // Defensive picks — fall back to literal strings if data-loader hasn't
+    // populated these globals (or they failed to load). Without this guard,
+    // Math.floor(Math.random() * undefined.length) throws and the whole
+    // Generate Shop button is dead.
+    const pick = (arr, fallback) => {
+      if (!Array.isArray(arr) || arr.length === 0) return fallback;
+      return arr[Math.floor(Math.random() * arr.length)];
+    };
+    const keeperList    = (typeof SHOPKEEPER_NAMES !== 'undefined') ? SHOPKEEPER_NAMES : null;
+    const toneList      = (typeof TONES            !== 'undefined') ? TONES            : null;
+    const quirksList    = (typeof QUIRKS           !== 'undefined') ? QUIRKS           : null;
+    const aestheticsMap = (typeof AESTHETICS       !== 'undefined') ? AESTHETICS       : null;
+    const aesthetic = aestheticsMap
+      ? pick(aestheticsMap[type] || aestheticsMap['General Store'] || [], 'A quiet shop.')
+      : 'A quiet shop.';
+    const q1 = pick(quirksList, '');
+    const q2 = pick(quirksList, '');
+    state.shop={
+      type, name,
+      keeper: pick(keeperList, 'Shopkeeper'),
+      tone:   pick(toneList,   'Cordial'),
+      quirks: [q1, q2].filter((v,i,a) => v && a.indexOf(v)===i),
+      aesthetic,
+      inventory, meta:{price,economy,assortment}
+    };
     save();
-    const sd=b.querySelector('#shop-display');if(sd)sd.innerHTML=this._renderDisplay();
+    this._invLimit = 20;
+    const sd=b.querySelector('#shop-display');
+    if(sd){ sd.innerHTML = this._renderDisplay(); this._wireDisplay(); }
+    // The Save button gates on state.shop — re-render the controls column
+    // header on Generate so the button (and saved-shops list ordering) refresh.
+    this._render();
   },
   _fmtPrice(amt){const sym=state.settings.currencySymbol||'gp';if(amt<1)return`${amt.toFixed(2)}${sym}`;return`${Number.isInteger(amt)?amt:amt.toFixed(2)}${sym}`;}
 });

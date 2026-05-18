@@ -52,8 +52,24 @@ function genNPC(overrides){
 registerPanel('npcgen',{
   title:'NPC Generator',icon:'🎲',
   _npc:null, _filters:{race:'',gender:'',role:'',attitude:''}, _secretRevealed:false,
+  // Per-field locks — when true, "Generate" preserves that field's current
+  // value instead of re-rolling it. Lets the DM keep e.g. an NPC's name and
+  // race while re-rolling their personality.
+  _locks:{},
   mount(body){this._body=body;if(!this._npc)this._npc=genNPC({});this._render();},
   unmount(){this._body=null;},
+
+  // Roll a fresh NPC, then merge locked fields back from the current one so
+  // they survive. Shared by single + bulk generate paths.
+  _rollRespectingLocks(){
+    const fresh = genNPC(this._filters);
+    if (!this._npc) return fresh;
+    const merged = {...fresh};
+    Object.keys(this._locks).forEach(k => {
+      if (this._locks[k] && this._npc[k] != null) merged[k] = this._npc[k];
+    });
+    return merged;
+  },
 
   _render(){
     const b=this._body;if(!b)return;
@@ -80,26 +96,38 @@ registerPanel('npcgen',{
       +sel('Attitude','attitude',NPC_GEN_DATA.attitudes)
     +'</div>';
 
-    html+='<div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px">'
-      +'<button class="btn primary" id="npcgen-roll" style="flex:1">🎲 Generate NPC</button>'
-      +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Save to NPC Library">💾 Save to Library</button>'
+    const anyLocked = Object.values(this._locks).some(Boolean);
+    html+='<div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+      +'<button class="btn primary" id="npcgen-roll" style="flex:1;min-width:140px" title="'+(anyLocked?'Re-roll only unlocked fields':'Re-roll every field')+'">🎲 '+(anyLocked?'Reroll unlocked':'Generate NPC')+'</button>'
+      +'<button class="btn" id="npcgen-bulk" style="flex-shrink:0" title="Generate 5 NPCs straight into the NPC Library">+5 to Library</button>'
+      +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Save to NPC Library and open the entry">💾 Save</button>'
       +'<button class="btn" id="npcgen-combat" style="flex-shrink:0" title="Add to combat">⚔ Combat</button>'
     +'</div>';
 
     if(n){
       html+='<div style="flex:1;overflow-y:auto;padding:12px">';
 
+      // Tiny lock toggle helper — sits next to any field that should be
+      // pinnable across generates. Filled icon = locked, outline = unlocked.
+      const lock = (key) => {
+        const on = !!this._locks[key];
+        return '<button class="npcgen-lock '+(on?'on':'')+'" data-lock-key="'+key+'" title="'+(on?'Locked — preserved on re-roll. Click to unlock.':'Click to lock this field')+'">'+(on?'🔒':'🔓')+'</button>';
+      };
+
       // Name & identity (editable)
       html+='<div style="margin-bottom:12px">'
-        +'<input class="npcgen-name" data-nf="name" value="'+esc(n.name)+'" style="width:100%;font-size:18px;font-weight:700;color:var(--accent);background:transparent;border:1px solid transparent;padding:2px 4px;border-radius:3px;margin-bottom:2px">'
+        +'<div style="display:flex;align-items:center;gap:4px">'
+          +'<input class="npcgen-name" data-nf="name" value="'+esc(n.name)+'" style="flex:1;font-size:18px;font-weight:700;color:var(--accent);background:transparent;border:1px solid transparent;padding:2px 4px;border-radius:3px;margin-bottom:2px">'
+          +lock('name')
+        +'</div>'
         +'<div class="npcgen-identity" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">'
-          +'<input data-nf="gender" value="'+esc(n.gender)+'" class="npcgen-inline" placeholder="Gender">'
-          +'<input data-nf="race" value="'+esc(n.race)+'" class="npcgen-inline" placeholder="Race">'
+          +'<input data-nf="gender" value="'+esc(n.gender)+'" class="npcgen-inline" placeholder="Gender">'+lock('gender')
+          +'<input data-nf="race" value="'+esc(n.race)+'" class="npcgen-inline" placeholder="Race">'+lock('race')
           +'<span>·</span>'
-          +'<input type="number" data-nf="age" value="'+n.age+'" class="npcgen-inline" style="width:46px" min="1" max="999" title="Age">'
+          +'<input type="number" data-nf="age" value="'+n.age+'" class="npcgen-inline" style="width:46px" min="1" max="999" title="Age">'+lock('age')
           +'<span>yrs</span>'
           +'<span>·</span>'
-          +'<input data-nf="role" value="'+esc(n.role)+'" class="npcgen-inline" placeholder="Role">'
+          +'<input data-nf="role" value="'+esc(n.role)+'" class="npcgen-inline" placeholder="Role">'+lock('role')
         +'</div>'
       +'</div>';
 
@@ -121,9 +149,10 @@ registerPanel('npcgen',{
               +(this._secretRevealed?'🙈 Hide':'👁 Reveal')
             +'</button>'
           : '';
+        const lockBtn = '<button class="npcgen-lock '+(this._locks[key]?'on':'')+'" data-lock-key="'+key+'" title="'+(this._locks[key]?'Locked — preserved on re-roll':'Lock this field')+'" style="margin-left:auto;'+(isSecret?'margin-right:6px':'')+'">'+(this._locks[key]?'🔒':'🔓')+'</button>';
         return '<div class="npcgen-field" style="margin-bottom:8px">'
-          +'<div style="display:flex;align-items:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:'+(col||'var(--text-muted)')+';margin-bottom:3px">'
-            +'<span>'+label+'</span>'+reveal
+          +'<div style="display:flex;align-items:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:'+(col||'var(--text-muted)')+';margin-bottom:3px;gap:4px">'
+            +'<span>'+label+'</span>'+lockBtn+reveal
           +'</div>'
           +'<textarea data-nf="'+key+'" rows="2" class="npcgen-field-input'+(hidden?' redacted':'')+'" style="border-left:2px solid '+(col||'var(--border)')+'">'+esc(val||'')+'</textarea>'
         +'</div>';
@@ -160,24 +189,79 @@ registerPanel('npcgen',{
       this._render();
     });
 
+    // Per-field lock toggles
+    b.querySelectorAll('[data-lock-key]').forEach(btn => btn.addEventListener('click', () => {
+      const k = btn.dataset.lockKey;
+      this._locks[k] = !this._locks[k];
+      this._render();
+    }));
+
     b.querySelector('#npcgen-roll').addEventListener('click',()=>{
-      this._npc=genNPC(this._filters);
+      this._npc = this._rollRespectingLocks();
       this._secretRevealed=false;
       this._render();
     });
 
+    // Build a v2-shape NPC Library entry from a generator NPC. Centralised so
+    // single-save and bulk-save use the exact same mapping.
+    const toLibraryEntry = (g) => ({
+      id: (typeof uid==='function' ? uid() : 'n_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)),
+      name: g.name || 'New NPC',
+      role: g.role || '',
+      group: (typeof NPC_DEFAULT_GROUP !== 'undefined') ? NPC_DEFAULT_GROUP : 'Unfiled',
+      attitude: g.attitude || 'Neutral',
+      hp: g.hp || 0,
+      ac: g.ac || 10,
+      init: 0,
+      tags: [g.race, g.role, g.gender].filter(Boolean),
+      // Visible description — the player-facing flavor.
+      description: [g.gender, g.race, 'aged ' + g.age + '.', g.quirk, g.quirk2].filter(Boolean).join(' '),
+      // DM-only notes — motivation + secret stashed here so the library is the
+      // single source of truth for plotty stuff.
+      notes: 'Motivation: ' + (g.motivation||'—') + '\nSecret: ' + (g.secret||'—'),
+    });
+
+    // Push one entry into the library, persisting under v2 (the library's
+    // current schema). Mounts the panel if it's not already open so the user
+    // sees the new entry immediately, and selects it for editing.
+    const saveOneToLibrary = (g) => {
+      const lib = panelDefs.npclib;
+      const entry = toLibraryEntry(g);
+      if (lib){
+        if (!Array.isArray(lib._npcs)) lib._npcs = [];
+        lib._npcs.unshift(entry);
+        try { localStorage.setItem('skt-npcs-v2', JSON.stringify(lib._npcs)); } catch(e){}
+        lib._selectedId = entry.id;
+        if (lib._body && typeof lib._render === 'function') lib._render();
+      } else {
+        // Library panel not mounted — write directly to localStorage so it
+        // shows up next time the panel opens.
+        let cur;
+        try { cur = JSON.parse(localStorage.getItem('skt-npcs-v2') || '[]'); } catch(e){ cur = []; }
+        if (!Array.isArray(cur)) cur = [];
+        cur.unshift(entry);
+        try { localStorage.setItem('skt-npcs-v2', JSON.stringify(cur)); } catch(e){}
+      }
+      return entry;
+    };
+
     b.querySelector('#npcgen-save').addEventListener('click',()=>{
       if(!n)return;
-      const lib=panelDefs.npclib;
-      if(lib){
-        const entry={id:uid(),name:n.name,role:n.role+' · '+n.race,hp:n.hp,ac:n.ac,cr:'',attitude:n.attitude,tags:[n.race,n.role],notes:'Age: '+n.age,quirks:n.quirk+'. '+n.quirk2,secret:n.secret};
-        if(!lib._npcs)lib._npcs=[];
-        lib._npcs.unshift(entry);
-        try{localStorage.setItem('skt-npcs-v1',JSON.stringify(lib._npcs));}catch(e){}
-        lib._expanded=entry.id;
-        if(lib._body)lib._render();
-        showToast(n.name+' saved to NPC Library');
-      } else showToast('Open NPC Library first');
+      const entry = saveOneToLibrary(n);
+      // Open the NPC Library panel so the user lands in the editor.
+      if (typeof openPanel === 'function' && !layout.npclib?.open) openPanel('npclib');
+      if (typeof showToast === 'function') showToast(entry.name + ' saved · opened Library');
+    });
+
+    // Bulk generate — respects filters; ignores locks so each NPC is fully
+    // fresh. Useful for staging crowd scenes (tavern, market, court).
+    b.querySelector('#npcgen-bulk')?.addEventListener('click', () => {
+      const N = 5;
+      for (let k = 0; k < N; k++){
+        saveOneToLibrary(genNPC(this._filters));
+      }
+      if (typeof openPanel === 'function' && !layout.npclib?.open) openPanel('npclib');
+      if (typeof showToast === 'function') showToast('Added ' + N + ' NPCs to Library');
     });
 
     b.querySelector('#npcgen-combat').addEventListener('click',()=>{

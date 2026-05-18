@@ -32,6 +32,10 @@ function openPanel(id){
 function closePanel(id){
   layout[id]={...layout[id],open:false};
   saveLayout();
+  // Drop any in-progress drag/resize for this window so a mid-drag close
+  // doesn't leave orphaned state in the global mousemove handler.
+  if (typeof _wmDrag   !== 'undefined') _wmDrag.delete(id);
+  if (typeof _wmResize !== 'undefined') _wmResize.delete(id);
   const el=document.querySelector(`.window[data-panel="${id}"]`);
   if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
   updateDock();
@@ -186,80 +190,99 @@ function _snapResize(id, x, y, w, h, dir) {
   return {x, y, w, h};
 }
 
+// ─── Module-level drag/resize registries ──────────────────────────────────
+// Previously every wireWindow() call attached its own anonymous mousemove +
+// mouseup handlers to `document`, with the per-window drag/rs state captured
+// in closures. Those listeners were never removed, so opening N windows over
+// the page lifetime meant 2N global handlers all firing on every mouse event.
+// Now we register one pair of handlers for the whole page and look up the
+// affected window by id at dispatch time.
+const _wmDrag   = new Map(); // id → { sx, sy, ox, oy, pending? }
+const _wmResize = new Map(); // id → { sx, sy, ox, oy, ow, oh, dir }
+let   _wmGlobalsWired = false;
+
+function _wmOnMove(e){
+  if (!_wmDrag.size && !_wmResize.size) return;
+  const z = (typeof getZoom==='function') ? getZoom() : 1;
+  _wmDrag.forEach((drag, id) => {
+    const el = document.querySelector(`.window[data-panel="${id}"]`);
+    if (!el || !layout[id]){ _wmDrag.delete(id); return; }
+    let nx = Math.max(0, drag.ox + (e.clientX - drag.sx) / z);
+    let ny = Math.max(0, drag.oy + (e.clientY - drag.sy) / z);
+    const snapped = _snapMove(id, nx, ny, layout[id].w, layout[id].h);
+    nx = snapped.x; ny = snapped.y;
+    el.style.left = nx + 'px'; el.style.top = ny + 'px';
+    drag.pending = _detectEdgeSnap(e.clientX, e.clientY);
+    if (drag.pending) _showSnapPreview(drag.pending.zone);
+    else _hideSnapPreview();
+    _updateToolbarOcclusion();
+  });
+  _wmResize.forEach((rs, id) => {
+    const el = document.querySelector(`.window[data-panel="${id}"]`);
+    if (!el || !layout[id]){ _wmResize.delete(id); return; }
+    const dx = (e.clientX - rs.sx) / z, dy = (e.clientY - rs.sy) / z;
+    let x = rs.ox, y = rs.oy, w = rs.ow, h = rs.oh;
+    if (rs.dir.includes('e')) w = Math.max(240, rs.ow + dx);
+    if (rs.dir.includes('s')) h = Math.max(120, rs.oh + dy);
+    if (rs.dir.includes('w')){ const nw = Math.max(240, rs.ow - dx); x = rs.ox + (rs.ow - nw); w = nw; }
+    if (rs.dir.includes('n')){ const nh = Math.max(120, rs.oh - dy); y = rs.oy + (rs.oh - nh); h = nh; }
+    const snapped = _snapResize(id, x, y, w, h, rs.dir);
+    el.style.left = snapped.x + 'px'; el.style.top = snapped.y + 'px';
+    el.style.width = snapped.w + 'px'; el.style.height = snapped.h + 'px';
+    _updateToolbarOcclusion();
+  });
+}
+
+function _wmOnUp(){
+  if (!_wmDrag.size && !_wmResize.size) return;
+  _wmDrag.forEach((drag, id) => {
+    const el = document.querySelector(`.window[data-panel="${id}"]`);
+    if (!el || !layout[id]) return;
+    if (drag.pending){
+      snapWindowToZone(id, drag.pending.zone);
+    } else {
+      layout[id] = { ...layout[id], x:parseInt(el.style.left), y:parseInt(el.style.top) };
+      saveLayout();
+    }
+    _hideSnapPreview();
+  });
+  _wmDrag.clear();
+  _wmResize.forEach((rs, id) => {
+    const el = document.querySelector(`.window[data-panel="${id}"]`);
+    if (!el || !layout[id]) return;
+    layout[id] = { ...layout[id],
+      x: parseInt(el.style.left), y: parseInt(el.style.top),
+      w: parseInt(el.style.width), h: parseInt(el.style.height) };
+    saveLayout();
+  });
+  _wmResize.clear();
+  _updateToolbarOcclusion();
+}
+
+function _ensureWmGlobalHandlers(){
+  if (_wmGlobalsWired) return;
+  _wmGlobalsWired = true;
+  document.addEventListener('mousemove', _wmOnMove);
+  document.addEventListener('mouseup',   _wmOnUp);
+}
+
 function wireWindow(el,id){
+  _ensureWmGlobalHandlers();
   el.addEventListener('mousedown',()=>focusPanel(id));
   const head=el.querySelector('.window-head');
-  let drag=null,rs=null;
   head.addEventListener('mousedown',e=>{
     if(e.target.closest('button')) return;
     if(layout[id]?.locked) return;       // locked → no drag
     const l=layout[id];
-    drag={sx:e.clientX,sy:e.clientY,ox:l.x,oy:l.y};
+    _wmDrag.set(id, { sx:e.clientX, sy:e.clientY, ox:l.x, oy:l.y });
     e.preventDefault();
-  });
-  document.addEventListener('mousemove',e=>{
-    const z = (typeof getZoom==='function') ? getZoom() : 1;
-    if(drag){
-      let nx=Math.max(0,drag.ox+(e.clientX-drag.sx)/z);
-      let ny=Math.max(0,drag.oy+(e.clientY-drag.sy)/z);
-      const snapped = _snapMove(id, nx, ny, layout[id].w, layout[id].h);
-      nx = snapped.x; ny = snapped.y;
-      el.style.left=nx+'px'; el.style.top=ny+'px';
-      // Edge-snap detection: if cursor is at a viewport edge / corner, queue
-      // a snap-zone for mouseup and show a preview overlay.
-      drag.pending = _detectEdgeSnap(e.clientX, e.clientY);
-      if (drag.pending) _showSnapPreview(drag.pending.zone);
-      else _hideSnapPreview();
-      _updateToolbarOcclusion();
-    }
-    if(rs){
-      const dx=(e.clientX-rs.sx)/z, dy=(e.clientY-rs.sy)/z;
-      let x=rs.ox, y=rs.oy, w=rs.ow, h=rs.oh;
-      if(rs.dir.includes('e')) w = Math.max(240, rs.ow + dx);
-      if(rs.dir.includes('s')) h = Math.max(120, rs.oh + dy);
-      if(rs.dir.includes('w')) {
-        const nw = Math.max(240, rs.ow - dx);
-        x = rs.ox + (rs.ow - nw);
-        w = nw;
-      }
-      if(rs.dir.includes('n')) {
-        const nh = Math.max(120, rs.oh - dy);
-        y = rs.oy + (rs.oh - nh);
-        h = nh;
-      }
-      const snapped = _snapResize(id, x, y, w, h, rs.dir);
-      el.style.left=snapped.x+'px'; el.style.top=snapped.y+'px';
-      el.style.width=snapped.w+'px'; el.style.height=snapped.h+'px';
-      _updateToolbarOcclusion();
-    }
-  });
-  document.addEventListener('mouseup',()=>{
-    if(drag){
-      if (drag.pending){
-        // Cursor was at an edge/corner on release — apply that snap zone
-        // instead of the dragged position.
-        snapWindowToZone(id, drag.pending.zone);
-      } else {
-        layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top)};
-        saveLayout();
-      }
-      _hideSnapPreview();
-      drag=null;
-      _updateToolbarOcclusion();
-    }
-    if(rs){
-      layout[id]={...layout[id],x:parseInt(el.style.left),y:parseInt(el.style.top),w:parseInt(el.style.width),h:parseInt(el.style.height)};
-      saveLayout();
-      rs=null;
-      _updateToolbarOcclusion();
-    }
   });
   el.querySelectorAll('.rh').forEach(handle => {
     handle.addEventListener('mousedown', e => {
       e.stopPropagation();
       if(layout[id]?.locked) return;     // locked → no resize
       const l=layout[id];
-      rs={sx:e.clientX,sy:e.clientY,ox:l.x,oy:l.y,ow:l.w,oh:l.h,dir:handle.dataset.rh};
+      _wmResize.set(id, { sx:e.clientX, sy:e.clientY, ox:l.x, oy:l.y, ow:l.w, oh:l.h, dir:handle.dataset.rh });
       e.preventDefault();
     });
   });
@@ -433,6 +456,37 @@ function snapWindowToZone(id, zone){
     Object.assign(el.style, { left:x+'px', top:y+'px', width:w+'px', height:h+'px', zIndex:z });
   }
 }
+
+// Smart-arrange — auto-tile every open, non-minimized panel into a clean
+// grid sized to the workspace. The grid shape adapts to panel count so 2
+// panels split horizontally, 4 form a 2×2, 9 form a 3×3, etc. Order
+// follows the z-stack (most recently focused goes to the top-left cell)
+// so the user's "current" panel stays where their eyes are.
+function smartArrange(){
+  const open = Object.entries(layout)
+    .filter(([id, l]) => l && l.open && !l.minimized)
+    .sort(([, a], [, b]) => (b.z||0) - (a.z||0))   // highest z first → top-left
+    .map(([id]) => id);
+  if (!open.length){ if (typeof showToast === 'function') showToast('No windows to arrange'); return; }
+  // Pick rows × cols just-big-enough for the count. Prefers more columns
+  // than rows (wide aspect ratios are more common than tall).
+  const n = open.length;
+  let cols = Math.ceil(Math.sqrt(n));
+  let rows = Math.ceil(n / cols);
+  // Special-case small counts for a tighter look:
+  if (n === 2){ cols = 2; rows = 1; }
+  else if (n === 3){ cols = 3; rows = 1; }
+  else if (n === 4){ cols = 2; rows = 2; }
+  const cellW = 1 / cols, cellH = 1 / rows;
+  open.forEach((id, i) => {
+    const cx = i % cols;
+    const cy = Math.floor(i / cols);
+    snapWindowToZone(id, { x: cx*cellW, y: cy*cellH, w: cellW, h: cellH });
+  });
+  if (typeof showToast === 'function') showToast('Arranged ' + n + ' window' + (n===1?'':'s') + ' into ' + cols + '×' + rows);
+}
+// Expose globally so the context menu, keyboard handler, and console can hit it.
+window.smartArrange = smartArrange;
 
 let _snapPickerEl = null;
 function _closeSnapPicker(){

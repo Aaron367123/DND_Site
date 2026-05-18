@@ -14,9 +14,26 @@ let _zoom = 1.0;
 
 function getZoom(){ return _zoom; }
 
+// Per-call hint: when true, the next _applyZoom adds a brief CSS transition
+// so button/keyboard zoom changes ease instead of snapping. Wheel zoom
+// keeps it false because cursor-anchor scroll math needs the new transform
+// to be effective immediately or the point under the cursor drifts.
+let _zoomSmoothNext = false;
+let _zoomSmoothClearTimer = null;
 function _applyZoom(){
   const canvas = document.getElementById('workspace-canvas');
   if (!canvas) return;
+  if (_zoomSmoothNext){
+    canvas.style.transition = 'transform .18s cubic-bezier(.22,.61,.36,1)';
+    _zoomSmoothNext = false;
+    if (_zoomSmoothClearTimer) clearTimeout(_zoomSmoothClearTimer);
+    _zoomSmoothClearTimer = setTimeout(() => {
+      // Strip the transition after the animation completes so subsequent
+      // wheel-zooms remain instant for the cursor-anchor math.
+      if (canvas) canvas.style.transition = '';
+      _zoomSmoothClearTimer = null;
+    }, 220);
+  }
   canvas.style.transform = `scale(${_zoom})`;
   const lbl = document.getElementById('zoom-reset');
   if (lbl) lbl.textContent = Math.round(_zoom*100)+'%';
@@ -47,9 +64,12 @@ function setZoom(target, pivotClientX, pivotClientY){
   ws.scrollTop  = cy * _zoom - (pivotClientY - r.top);
 }
 
-function zoomIn(px, py){  setZoom(_zoom + ZOOM_STEP, px, py); }
-function zoomOut(px, py){ setZoom(_zoom - ZOOM_STEP, px, py); }
-function zoomReset(){     setZoom(1.0); }
+// Button/keyboard zoom paths — flag the next _applyZoom call to animate so
+// the user gets a feel of "zooming" rather than a hard snap. `px`/`py` only
+// supplied by wheel handlers, which skip this path.
+function zoomIn(px, py){  _zoomSmoothNext = (px == null); setZoom(_zoom + ZOOM_STEP, px, py); }
+function zoomOut(px, py){ _zoomSmoothNext = (px == null); setZoom(_zoom - ZOOM_STEP, px, py); }
+function zoomReset(){     _zoomSmoothNext = true; setZoom(1.0); }
 
 // Smooth-scroll the workspace so the bounding box of all open panels is
 // centered. Useful when zoom or panning has lost the windows off-screen.
@@ -135,6 +155,12 @@ function initZoomPan(){
       if (e.key === '0') { e.preventDefault(); zoomReset(); }
       if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomIn(); }
       if (e.key === '-') { e.preventDefault(); zoomOut(); }
+      // Ctrl+Shift+A → auto-tile all open windows into a clean grid.
+      // Defined on the global by window-manager.js.
+      if (e.shiftKey && (e.key === 'A' || e.key === 'a') && typeof window.smartArrange === 'function'){
+        e.preventDefault();
+        window.smartArrange();
+      }
     }
   });
   document.addEventListener('keyup', e => {

@@ -124,6 +124,7 @@ registerPanel('bestiary', {
       const body = b.querySelector('.bestiary-body');
       const q = this._searchQ.toLowerCase();
       const filterMon = m => !q || m.name.toLowerCase().includes(q) || (m.source||'').toLowerCase().includes(q);
+      const matched = this._data.monsters.filter(filterMon);
       const sections = this._data.folders.map(f => {
         const monsters = this._data.monsters.filter(m => m.folderId === f.id).filter(filterMon);
         if (q && !monsters.length) return '';
@@ -131,7 +132,16 @@ registerPanel('bestiary', {
       });
       const unfiled = this._data.monsters.filter(m => !m.folderId).filter(filterMon);
       if (unfiled.length) sections.push(this._renderFolder(BESTIARY_UNFILED, 'Unfiled', unfiled));
-      body.innerHTML = sections.join('') || '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)">No matches</div>';
+      // Match-count strip — gives the user immediate feedback while typing.
+      const countStrip = q
+        ? `<div class="bestiary-match-count">${matched.length} match${matched.length===1?'':'es'} for "${esc(this._searchQ)}"</div>`
+        : '';
+      body.innerHTML = countStrip + (sections.join('') ||
+        `<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)">
+          <div style="font-size:28px;margin-bottom:6px">🔎</div>
+          <div>No monsters match "${esc(this._searchQ)}".</div>
+          <div style="font-size:11px;margin-top:4px;color:var(--text-dim)">Try fewer terms, or click <strong>+ Add</strong> to add this monster.</div>
+        </div>`);
     });
 
     b.querySelector('#best-add-folder').addEventListener('click', ()=>this._addFolder());
@@ -278,7 +288,10 @@ registerPanel('bestiary', {
 
   _showCardMenu(x, y, mid){
     const m = this._data.monsters.find(x=>x.id===mid); if (!m) return;
-    const items = [{label:'Open stat block', onClick:()=>this._openStatBlock(mid)}];
+    const items = [
+      {label:'Open stat block', onClick:()=>this._openStatBlock(mid)},
+      {label:'✎ Edit HP / AC / CR…', onClick:()=>this._editSnapshot(mid)},
+    ];
     // Move-to submenu via flat list of folders
     if (this._data.folders.length){
       this._data.folders.forEach(f=>{
@@ -292,6 +305,25 @@ registerPanel('bestiary', {
       this._save(); this._render();
     }});
     showContextMenu(x, y, items);
+  },
+
+  // Edit the per-card HP/AC/CR snapshot without dropping and re-adding the
+  // monster. Useful when the DM tweaks a creature's stats for the encounter
+  // (e.g. an elite Goblin with +HP). Empty fields leave the existing value.
+  _editSnapshot(mid){
+    const m = this._data.monsters.find(x=>x.id===mid); if (!m) return;
+    showModal('Edit "' + m.name + '" snapshot', [
+      {id:'hp', label:'HP', type:'number', value: m.hp ?? '', min:1, max:9999},
+      {id:'ac', label:'AC', type:'number', value: m.ac ?? '', min:0, max:99},
+      {id:'cr', label:'CR', type:'text',   value: m.cr ?? '', placeholder:'e.g. 1/4, 2, 17'},
+    ], 'Save').then(r => {
+      if (!r) return;
+      if (r.hp !== '' && r.hp != null) m.hp = parseInt(r.hp) || m.hp;
+      if (r.ac !== '' && r.ac != null) m.ac = parseInt(r.ac) || m.ac;
+      if (r.cr !== '' && r.cr != null) m.cr = String(r.cr).trim() || m.cr;
+      this._save(); this._render();
+      if (typeof showToast === 'function') showToast('Updated ' + m.name);
+    });
   },
 
   _openStatBlock(mid){

@@ -903,6 +903,36 @@ function renderSearchTabs(){
   if(moreBtn)moreBtn.classList.toggle('has-active-secondary', activeIsSecondary);
 }
 
+// Wrap every case-insensitive occurrence of `q` inside `text` with <mark>.
+// Operates on already-escaped HTML so it's safe to inject. Empty query →
+// returns the input unchanged.
+function _highlightMatch(escapedText, q){
+  if (!q) return escapedText;
+  // Escape regex specials so user input doesn't break the pattern.
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try {
+    return escapedText.replace(new RegExp('('+safe+')', 'gi'), '<mark class="search-hit">$1</mark>');
+  } catch(e){ return escapedText; }
+}
+
+// Recent-searches helpers. Backed by localStorage so the strip survives
+// reloads. Capped at 8 so the chip row stays compact.
+const _RECENT_KEY = 'skt-search-recent-v1';
+function _searchGetRecent(){
+  try { return JSON.parse(localStorage.getItem(_RECENT_KEY) || '[]') || []; }
+  catch(e){ return []; }
+}
+function _searchSaveRecent(q){
+  q = (q||'').trim(); if (!q || q.length < 2) return;
+  let cur = _searchGetRecent().filter(x => x.toLowerCase() !== q.toLowerCase());
+  cur.unshift(q);
+  if (cur.length > 8) cur = cur.slice(0, 8);
+  try { localStorage.setItem(_RECENT_KEY, JSON.stringify(cur)); } catch(e){}
+}
+function _searchClearRecent(){
+  try { localStorage.removeItem(_RECENT_KEY); } catch(e){}
+}
+
 function renderSearchResults(){
   const container=document.getElementById('search-results');
   if(state.searchState.detail){renderSearchDetail();return;}
@@ -913,7 +943,24 @@ function renderSearchResults(){
     const hint = !_5eLoaded
       ? '<div style="font-size:11px;color:var(--text-dim);margin-top:4px">Loading 5etools data…</div>'
       : '';
-    container.innerHTML=`<div class="search-empty">Type to search monsters, spells, items, conditions, or your party.${hint}</div>`;
+    const recent = _searchGetRecent();
+    const recentHtml = recent.length
+      ? `<div class="search-recent">
+          <div class="search-recent-head">Recent searches
+            <button class="search-recent-clear" data-act="clear-recent" title="Clear recent searches">clear</button>
+          </div>
+          <div class="search-recent-pills">${recent.map(r => `<button class="search-recent-pill" data-recent="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+        </div>`
+      : '';
+    container.innerHTML=`<div class="search-empty">Type to search monsters, spells, items, conditions, or your party.${hint}</div>${recentHtml}`;
+    // Wire recent pills + clear
+    container.querySelectorAll('[data-recent]').forEach(btn => btn.addEventListener('click', () => {
+      const inp = document.getElementById('search-input');
+      if (inp){ inp.value = btn.dataset.recent; state.searchState.query = btn.dataset.recent; renderSearchResults(); inp.focus(); }
+    }));
+    container.querySelector('[data-act="clear-recent"]')?.addEventListener('click', () => {
+      _searchClearRecent(); renderSearchResults();
+    });
     return;
   }
   if(!results.length){
@@ -925,17 +972,20 @@ function renderSearchResults(){
   container.innerHTML = results.map((r,i)=>`
     <div class="search-result ${i===state.searchState.focused?'focused':''}" data-idx="${i}">
       <div class="res-name">
-        <span>${esc(r.name)}</span>
+        <span>${_highlightMatch(esc(r.name), q)}</span>
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
           ${r._source?`<span style="font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(r._source))}</span>`:''}
           <span class="res-tag ${r.cat}">${r.cat}</span>
         </div>
       </div>
-      <div class="res-meta">${esc(r.meta||'')}</div>
+      <div class="res-meta">${_highlightMatch(esc(r.meta||''), q)}</div>
     </div>`).join('');
   container.querySelectorAll('.search-result').forEach((el,i)=>el.addEventListener('click', e => {
     e.stopPropagation();
     state.searchState.detail=results[i];
+    // Commit this query to the recent-searches list since the user just
+    // committed to a specific result.
+    _searchSaveRecent(state.searchState.query);
     renderSearchResults();
   }));
 }
@@ -1139,19 +1189,25 @@ function initSearch(){
 
   const inp=document.getElementById('search-input');
   inp.addEventListener('focus',openSearch);
+  // Debounce result rendering — the search dataset can be 5k+ entries, and
+  // re-rendering on every keystroke noticeably lags fast typists. 80ms keeps
+  // the UI responsive (well under perception threshold) while collapsing a
+  // 5-character burst into one render instead of five.
+  let _searchInputTimer = null;
   inp.addEventListener('input',e=>{
     state.searchState.query=e.target.value;
     state.searchState.focused=-1;
     state.searchState.detail=null;
     if(!document.getElementById('search-popup').classList.contains('open'))openSearch();
-    renderSearchResults();
+    if (_searchInputTimer) clearTimeout(_searchInputTimer);
+    _searchInputTimer = setTimeout(() => { _searchInputTimer = null; renderSearchResults(); }, 80);
   });
   inp.addEventListener('keydown',e=>{
     const list=doSearch();
     if(e.key==='Escape'){if(state.searchState.detail){state.searchState.detail=null;renderSearchResults();}else{inp.blur();closeSearch();}}
     else if(e.key==='ArrowDown'){e.preventDefault();state.searchState.focused=Math.min(state.searchState.focused+1,list.length-1);renderSearchResults();document.querySelector('.search-result.focused')?.scrollIntoView({block:'nearest'});}
     else if(e.key==='ArrowUp'){e.preventDefault();state.searchState.focused=Math.max(state.searchState.focused-1,0);renderSearchResults();document.querySelector('.search-result.focused')?.scrollIntoView({block:'nearest'});}
-    else if(e.key==='Enter'){const r=state.searchState.focused>=0?list[state.searchState.focused]:list[0];if(r){state.searchState.detail=r;renderSearchResults();}}
+    else if(e.key==='Enter'){const r=state.searchState.focused>=0?list[state.searchState.focused]:list[0];if(r){state.searchState.detail=r;_searchSaveRecent(state.searchState.query);renderSearchResults();}}
   });
   document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>{
     if(tab.classList.contains('more-toggle'))return; // wired separately below

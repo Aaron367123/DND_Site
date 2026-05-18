@@ -51,6 +51,9 @@ registerPanel('battlemap',{
   _gridOpacity:60,               // 0–100 → grid line alpha
   _tokensVisible:true, _namesVisible:true, _pcsVisible:true, _npcsVisible:true,
   _fogPaintMode:'reveal',        // 'reveal' | 'hide' — replaces the boolean _fogTool
+  _fogBrushMode:'grid',          // 'grid' (snap to cells) | 'free' (pixel-level)
+  _fogBrushShape:'square',       // 'square' | 'circle'
+  _fogStrokes:[],                // free-mode strokes, cell-fraction coords
   // Grid alignment offset (image-pixel space at scale 1). Lets the overlay
   // grid line up with a printed grid on the loaded map. Two-click alignment
   // tool sets these.
@@ -121,6 +124,13 @@ registerPanel('battlemap',{
         this._pcsVisible    = d.pcsVisible    !== false;
         this._npcsVisible   = d.npcsVisible   !== false;
         this._fogPaintMode  = d.fogPaintMode || 'reveal';
+        // Brush behavior: 'grid' snaps to cells (existing); 'free' is pixel-level.
+        // Shape applies to both modes — 'square' keeps the original block stamp.
+        this._fogBrushMode  = d.fogBrushMode  || 'grid';
+        this._fogBrushShape = d.fogBrushShape || 'square';
+        // Free-mode strokes — stored in cell-fraction coords so they survive zoom.
+        // {xc, yc, r, op:'reveal'|'hide', shape:'square'|'circle'}
+        this._fogStrokes    = Array.isArray(d.fogStrokes) ? d.fogStrokes : [];
       }
       // Migrate any tokens that still use grid-cell coords (gx, gy) to pixel
       // coords (x, y). New code stores tokens in stage pixels; the cellSize
@@ -168,7 +178,7 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){}
     this._broadcast();
   },
@@ -435,7 +445,8 @@ registerPanel('battlemap',{
         if (msg.rows)     this._rows     = msg.rows;
         if (msg.bgColor)  this._bgColor  = msg.bgColor;
         this._fog = msg.fog ? new Set(msg.fog) : null;
-        if (Array.isArray(msg.drawings)) this._drawings = msg.drawings;
+        if (Array.isArray(msg.drawings))   this._drawings   = msg.drawings;
+        if (Array.isArray(msg.fogStrokes)) this._fogStrokes = msg.fogStrokes;
         if (msg.bgMapPath !== undefined) this._bgMapPath = msg.bgMapPath;
 
         // Map path changed → reload the bg image, then full re-render so the
@@ -502,6 +513,8 @@ registerPanel('battlemap',{
         // Pencil annotations — players see strokes as the DM commits them
         // (mouseup) and as the eraser removes them.
         drawings: this._drawings || [],
+        // Free-mode fog strokes (pixel-level, cell-fraction coords).
+        fogStrokes: this._fogStrokes || [],
       });
     }catch(e){}
   },
@@ -1030,13 +1043,35 @@ registerPanel('battlemap',{
     const fogPaint=(e)=>{
       if(!this._fogTool||this._fog===null)return;
       const r=canvas.getBoundingClientRect();
+      const radius=this._fogRadius||1;
+      const mode  = this._fogPaintMode  || 'reveal';
+      const shape = this._fogBrushShape || 'square';
+      // Free mode — record a pixel-level stroke in cell-fraction coords so it
+      // survives zoom. The fog canvas redraw paints these on top of the
+      // cell-based reveal pass.
+      if ((this._fogBrushMode || 'grid') === 'free'){
+        const xc = (e.clientX - r.left) / cs;
+        const yc = (e.clientY - r.top)  / cs;
+        // Free brush radius (in cells): matches grid coverage roughly —
+        // radius=1 → 0.5 cell radius (1-cell diameter), radius=5 → 4.5 cell radius.
+        const rCells = Math.max(0.25, radius - 0.5);
+        this._fogStrokes.push({xc, yc, r:rCells, op:mode, shape});
+        // Repaint locally every move so the DM gets immediate feedback.
+        // Defer the broadcast until mouseup (handled below) to avoid
+        // hammering BroadcastChannel/Firebase at 60fps with full payloads.
+        this._drawFog();
+        this._fogStrokeDirty = true;
+        return;
+      }
+      // Grid mode — snap to cells. Optional circle shape skips corner cells
+      // outside (radius - 0.5)² distance from the brush center.
       const gx=Math.floor((e.clientX-r.left)/cs);
       const gy=Math.floor((e.clientY-r.top)/cs);
-      const radius=this._fogRadius||1;
-      const mode = this._fogPaintMode || 'reveal';
+      const r2 = (radius - 0.5) * (radius - 0.5);
       let changed=false;
       for(let dx=-radius+1;dx<radius;dx++){
         for(let dy=-radius+1;dy<radius;dy++){
+          if (shape === 'circle' && (dx*dx + dy*dy) > r2) continue;
           const nx=gx+dx, ny=gy+dy;
           if(nx>=0&&ny>=0&&nx<this._cols&&ny<this._rows){
             const key=nx+','+ny;
@@ -1061,7 +1096,16 @@ registerPanel('battlemap',{
       if(this._isPainting&&this._fogTool)fogPaint(e);
     });
     document.addEventListener('mouseup',()=>{
-      if(this._isPainting){this._isPainting=false;this._saveMap();}
+      if(this._isPainting){
+        this._isPainting=false;
+        this._saveMap();
+        // Free-mode painting deferred broadcast for performance — flush
+        // a single payload now so players see the completed stroke.
+        if (this._fogStrokeDirty){
+          this._fogStrokeDirty = false;
+          this._broadcast();
+        }
+      }
     });
 
     // Click empty stage = deselect
@@ -1328,14 +1372,22 @@ registerPanel('battlemap',{
         // Reveal everything (clear fog)
         const all=new Set();
         for(let x=0;x<this._cols;x++)for(let y=0;y<this._rows;y++)all.add(x+','+y);
-        this._fog=all;this._saveMap();this._drawFog();this._broadcast();
+        this._fog=all;this._fogStrokes=[];this._saveMap();this._drawFog();this._broadcast();
         return;
       }
       if (k === 'fog-fill'){
-        this._fog = new Set(); this._saveMap(); this._drawFog(); this._broadcast(); return;
+        this._fog = new Set(); this._fogStrokes=[]; this._saveMap(); this._drawFog(); this._broadcast(); return;
       }
       if (k === 'grid-square'){ this._showGrid = true;  this._saveMap(); this._render(); return; }
       if (k === 'grid-none'){   this._showGrid = false; this._saveMap(); this._render(); return; }
+      if (k === 'fog-mode-grid' || k === 'fog-mode-free'){
+        this._fogBrushMode = k === 'fog-mode-free' ? 'free' : 'grid';
+        this._saveMap(); this._render(); return;
+      }
+      if (k === 'fog-shape-square' || k === 'fog-shape-circle'){
+        this._fogBrushShape = k === 'fog-shape-circle' ? 'circle' : 'square';
+        this._saveMap(); this._render(); return;
+      }
       if (k === 'tok-all'){   this._tokensVisible = !this._tokensVisible; this._saveMap(); this._render(); return; }
       if (k === 'tok-names'){ this._namesVisible  = !this._namesVisible;  this._saveMap(); this._render(); return; }
       if (k === 'tok-pcs'){   this._pcsVisible    = !this._pcsVisible;    this._saveMap(); this._render(); return; }
@@ -1681,13 +1733,16 @@ registerPanel('battlemap',{
   },
 
   _applyBg(stage,W,H){
-    if (_mapBgImage && this._bgMapPath){
+    if (_mapBgImage){
       // Render the image at natural × scale — never stretch. The grid was
-      // already grown to cover this size in _fitGridToBg.
+      // already grown to cover this size in _fitGridToBg. URL source is the
+      // 5etools relative path when available; otherwise the in-memory data
+      // URL (for custom uploads, which don't have a path).
       const scale = this._bgMapScale || 1;
       const dispW = (this._bgMapNaturalW || _mapBgImage.naturalWidth) * scale;
       const dispH = (this._bgMapNaturalH || _mapBgImage.naturalHeight) * scale;
-      stage.style.backgroundImage = `url('img/${this._bgMapPath}')`;
+      const url = this._bgMapPath ? `img/${this._bgMapPath}` : _mapBgImage.src;
+      stage.style.backgroundImage = `url("${url}")`;
       stage.style.backgroundSize = `${dispW}px ${dispH}px`;
       stage.style.backgroundRepeat = 'no-repeat';
       stage.style.backgroundPosition = '0 0';
@@ -1782,7 +1837,24 @@ registerPanel('battlemap',{
       const [gx,gy]=key.split(',').map(Number);
       ctx.fillRect(gx*cs,gy*cs,cs,cs);
     });
+    // Free-mode strokes — two passes: reveals (destination-out, punches more
+    // holes) then hides (source-over, repaints fog over previously revealed
+    // areas). Stroke coords are in cell fractions, scaled to the current cs.
+    const strokes = this._fogStrokes || [];
+    const stamp = (s, alpha) => {
+      const x = s.xc * cs, y = s.yc * cs, rad = s.r * cs;
+      if (s.shape === 'circle'){
+        ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillRect(x - rad, y - rad, rad*2, rad*2);
+      }
+    };
+    // Reveal pass
+    strokes.forEach(s => { if (s.op === 'reveal') stamp(s); });
+    // Hide pass — repaint fog at the same opacity as the base layer.
     ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle = isPlayer ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0.55)';
+    strokes.forEach(s => { if (s.op === 'hide') stamp(s); });
     // Apply per-user hardness (0% = sharp cells, 100% = blurred fog edges).
     this._applyFogBlur();
   },
@@ -1829,6 +1901,18 @@ registerPanel('battlemap',{
       +   tile('fog-hide',    'Hide',   '', fogOn && paint==='hide',   {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
       +   tile('fog-clear',   'Clear',  '', false,                    {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
       +   tile('fog-fill',    'Fill',   '', false,                    {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      + '</div>'
+
+      + '<div class="bm-set-section-head">BRUSH MODE</div>'
+      + '<div class="bm-set-tiles">'
+      +   tile('fog-mode-grid', 'Grid', 'Snap to cells', this._fogBrushMode==='grid', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      +   tile('fog-mode-free', 'Free', 'Pixel-level',   this._fogBrushMode==='free', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      + '</div>'
+
+      + '<div class="bm-set-section-head">BRUSH SHAPE</div>'
+      + '<div class="bm-set-tiles">'
+      +   tile('fog-shape-square', 'Square', '', this._fogBrushShape==='square', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      +   tile('fog-shape-circle', 'Circle', '', this._fogBrushShape==='circle', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
       + '</div>'
 
       + '<div class="bm-set-section-head">FOG SLIDERS</div>'

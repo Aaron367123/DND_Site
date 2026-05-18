@@ -126,7 +126,9 @@ registerPanel('soundboard', {
 
     // Spectrum visualizer — taps the master output via Web Audio. Canvas
     // internal resolution stays fixed; CSS scales to whatever width the panel is.
-    html+='<div class="sb-viz-wrap"><canvas id="sb-viz-canvas" width="600" height="64"></canvas></div>';
+    // No intrinsic width/height — _resizeVizCanvas sets them to match the
+    // displayed size × devicePixelRatio so the bars stay crisp at any zoom.
+    html+='<div class="sb-viz-wrap"><canvas id="sb-viz-canvas" style="width:100%;height:64px;display:block"></canvas></div>';
 
     // Now playing chips
     if(playing.length){
@@ -278,6 +280,22 @@ registerPanel('soundboard', {
     } catch(e) { /* ignore (already connected, CORS-tainted, etc) */ }
   },
 
+  // Resize the visualizer canvas to match its CSS-displayed size at the
+  // device's pixel density. Without this the canvas renders at its 600×64
+  // intrinsic resolution and the browser stretches it — blurry bars on any
+  // HiDPI screen. Cheap to call every frame because `width=` is only re-set
+  // when the actual displayed size changes.
+  _resizeVizCanvas(canvas){
+    const dpr = window.devicePixelRatio || 1;
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(r.width  * dpr));
+    const h = Math.max(1, Math.floor(r.height * dpr));
+    if (canvas.width !== w || canvas.height !== h){
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  },
+
   _startVisualizer(){
     if (_sb.vizRunning) return;
     if (!_sb.analyser) return;
@@ -286,6 +304,7 @@ registerPanel('soundboard', {
       if (!_sb.vizRunning) return;
       const canvas = this._body && this._body.querySelector('#sb-viz-canvas');
       if (!canvas){ _sb.vizRunning = false; return; }
+      this._resizeVizCanvas(canvas);
       // Stop animating once nothing is playing (CPU friendly)
       if (Object.keys(_sb.playing).length === 0){
         this._drawVizFlat(canvas);
@@ -351,6 +370,20 @@ registerPanel('soundboard', {
   _stopAll(){ Object.keys(_sb.playing).forEach(id=>this._stop(id)); },
 
   _load(file){
+    // Hard cap on personal uploads — IndexedDB has plenty of room, but a
+    // 200MB+ WAV is almost never what the user intended and saving it
+    // silently bloats local storage forever. Reject up front with a clear
+    // message so the user can re-encode/trim and retry.
+    const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+    if (file.size > MAX_BYTES){
+      const mb = (file.size / 1024 / 1024).toFixed(1);
+      showToast('"' + file.name + '" is ' + mb + 'MB — max is 25MB. Re-encode and try again.');
+      return;
+    }
+    if (!file.type.startsWith('audio/')){
+      showToast('"' + file.name + '" doesn\'t look like an audio file');
+      return;
+    }
     const id = 'p_'+uid();
     const name = file.name.replace(/\.[^.]+$/,'').slice(0,28);
     const url = URL.createObjectURL(file);

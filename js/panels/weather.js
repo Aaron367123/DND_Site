@@ -66,11 +66,32 @@ function _rollWeather(biomeId, seasonId) {
   let feelsLike = temp;
   if (temp < 10 && wind > 8)  feelsLike -= Math.round(wind * 0.18);
   if (temp > 24 && humid > 60) feelsLike += Math.round((humid - 60) * 0.08);
+  // Wind direction — 8 compass points. Picked uniformly; pressure is rolled
+  // separately and biased to match condition (storms = low pressure, clear =
+  // high pressure) for flavour rather than meteorological accuracy.
+  const WIND_DIRS = ['N','NE','E','SE','S','SW','W','NW'];
+  const windDir = WIND_DIRS[Math.floor(Math.random() * WIND_DIRS.length)];
+  // Pressure in hPa — sea-level baseline 1013, ±30 hPa range nudged by clouds.
+  // Clear/sunny → 1015–1030 (high), Storm/Rain → 988–1005 (low), default mid.
+  let pBase = 1013;
+  if (cond.name === 'Clear' || cond.name === 'Sunny') pBase = 1020;
+  else if (cond.name === 'Storm' || cond.name === 'Rain' || cond.name === 'Snow') pBase = 995;
+  const pressure = Math.round(pBase + _rand(-8, 8));
   return {
     biome: biomeId, season: seasonId,
     condition: cond.name, icon: cond.icon,
-    temp, feelsLike, wind, humid, clouds, precip: precipText,
+    temp, feelsLike, wind, windDir, pressure, humid, clouds, precip: precipText,
   };
+}
+
+// Northern-hemisphere season mapping for the Forgotten Realms calendar used
+// by the Time Tracker panel. Months are 0-indexed (Hammer = 0 = January).
+function _seasonForTimeMonth(monthIdx){
+  if (monthIdx <= 1)  return 'winter';   // Hammer, Alturiak (Jan–Feb)
+  if (monthIdx <= 4)  return 'spring';   // Ches, Tarsakh, Mirtul (Mar–May)
+  if (monthIdx <= 7)  return 'summer';   // Kythorn, Flamerule, Eleasis (Jun–Aug)
+  if (monthIdx <= 10) return 'autumn';   // Eleint, Marpenoth, Uktar (Sep–Nov)
+  return 'winter';                       // Frostwane (Dec)
 }
 
 function _weatherHydrate() {
@@ -112,10 +133,11 @@ registerPanel('weather', {
         <div class="weather-feels">Feels like ${w.feelsLike}°C</div>
       </div>
       <div class="weather-stats">
-        <div class="weather-stat"><div class="lab">💨 Wind</div><div class="val">${w.wind} km/h</div></div>
+        <div class="weather-stat"><div class="lab">💨 Wind</div><div class="val">${w.wind} km/h${w.windDir?' '+esc(w.windDir):''}</div></div>
         <div class="weather-stat"><div class="lab">💧 Precip.</div><div class="val">${esc(w.precip)}</div></div>
         <div class="weather-stat"><div class="lab">🌫 Humidity</div><div class="val">${w.humid}%</div></div>
         <div class="weather-stat"><div class="lab">☁ Cloud</div><div class="val">${w.clouds}%</div></div>
+        <div class="weather-stat"><div class="lab">🌡 Pressure</div><div class="val">${w.pressure?w.pressure+' hPa':'—'}</div></div>
       </div>
       <div class="weather-controls">
         <label class="field-label">Biome
@@ -125,7 +147,10 @@ registerPanel('weather', {
           <select id="weather-season">${seasonOpts}</select>
         </label>
       </div>
-      <button class="btn primary weather-reroll" id="weather-reroll">🎲 Reroll Weather</button>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn primary weather-reroll" id="weather-reroll" style="flex:1">🎲 Reroll Weather</button>
+        <button class="btn" id="weather-sync-season" title="Read the current in-game month from the Time Tracker and match the season">🔗 Sync season</button>
+      </div>
     `;
     this._wire();
   },
@@ -143,6 +168,25 @@ registerPanel('weather', {
     b.querySelector('#weather-reroll').addEventListener('click', () => {
       this._data = _rollWeather(this._data.biome, this._data.season);
       this._save(); this._render();
+    });
+    b.querySelector('#weather-sync-season')?.addEventListener('click', () => {
+      // Read the Time Tracker's current month from localStorage so we don't
+      // require its panel to be mounted. Falls back to the current season if
+      // the time tracker has never been used.
+      let monthIdx = null;
+      try {
+        const t = JSON.parse(localStorage.getItem('skt-time-v1') || 'null');
+        if (t && typeof t.month === 'number') monthIdx = t.month;
+      } catch(e){}
+      if (monthIdx == null){
+        if (typeof showToast === 'function') showToast('No in-game date set — open the Time Tracker first');
+        return;
+      }
+      const newSeason = _seasonForTimeMonth(monthIdx);
+      this._data = _rollWeather(this._data.biome, newSeason);
+      this._save(); this._render();
+      const seasonLabel = WEATHER_SEASONS[newSeason]?.label || newSeason;
+      if (typeof showToast === 'function') showToast('Season synced → ' + seasonLabel);
     });
   },
 });

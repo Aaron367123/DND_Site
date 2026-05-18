@@ -30,6 +30,21 @@ registerPanel('party',{
     this._wire();
   },
 
+  // Pull active conditions from the matching combat slot. PCs that aren't in
+  // combat won't have a combatant entry — return empty in that case. Returns
+  // empty string if there's nothing to show so it adds zero visual weight.
+  _conditionsRow(c){
+    if (!c || !c.id) return '';
+    const co = (typeof state !== 'undefined' && state.combatants)
+      ? state.combatants.find(x => x.id === c.id)
+      : null;
+    const conds = co?.conditions || [];
+    if (!conds.length) return '';
+    return '<div class="char-conditions" title="Active conditions (set in Combat Tracker)">'
+      + conds.map(name => `<span class="cond-chip">${esc(name)}</span>`).join('')
+      + '</div>';
+  },
+
   // HP bar visual: clamp 0–100% normally, but flag a "surplus" state when
   // current HP exceeds max (Aid spell, Heroes' Feast, temp HP added to total,
   // etc.) so the player sees they're over-cap. Surplus uses a cool-blue fill
@@ -53,11 +68,23 @@ registerPanel('party',{
       resHtml='<div class="resource-section"><div class="resource-section-head"><span>Resources</span></div>';
       resources.forEach((r,ri)=>{
         const pips=r.type==='pool'?r.max:1;
-        let pipHtml='<div class="resource-pips">';
-        for(let p=0;p<pips;p++){
-          pipHtml+='<div class="pip '+(p<r.current?'filled':'')+'" data-act="pip" data-idx="'+i+'" data-ri="'+ri+'" data-pi="'+p+'"></div>';
+        let pipHtml='';
+        // Compact "−/+ N of M" badge for large pools where 13+ pips would wrap
+        // into multiple cramped rows. Click the number to step it up/down via
+        // the same data-act='pip' handler with synthetic pi indices.
+        if (pips > 12){
+          pipHtml = '<div class="resource-pips compact">'
+            + '<button class="pip-step" data-act="pip-step" data-idx="'+i+'" data-ri="'+ri+'" data-dir="-1" title="Spend one">−</button>'
+            + '<span class="pip-count">'+r.current+' / '+pips+'</span>'
+            + '<button class="pip-step" data-act="pip-step" data-idx="'+i+'" data-ri="'+ri+'" data-dir="+1" title="Restore one">+</button>'
+            + '</div>';
+        } else {
+          pipHtml = '<div class="resource-pips">';
+          for(let p=0;p<pips;p++){
+            pipHtml+='<div class="pip '+(p<r.current?'filled':'')+'" data-act="pip" data-idx="'+i+'" data-ri="'+ri+'" data-pi="'+p+'"></div>';
+          }
+          pipHtml+='</div>';
         }
-        pipHtml+='</div>';
         resHtml+='<div class="resource-row">'
           +'<span class="resource-label" title="'+esc(r.name)+'">'+esc(r.name)+'</span>'
           +pipHtml
@@ -73,15 +100,22 @@ registerPanel('party',{
         +(this._pickerOpen===i?this._iconPicker(i):'')
         +'<input class="char-name" value="'+esc(c.name)+'" data-field="name" data-idx="'+i+'" placeholder="Character name">'
       +'</div>'
-      // HP block
+      // HP block — current / max with an optional Temp HP badge. Temp HP
+      // sits visually beside the HP fields and edits inline like the others.
+      // The HP bar gains a small overlay segment when temp > 0 so the
+      // surplus is visible at a glance, even if c.hp itself isn't full.
       +'<div class="char-hp-block">'
         +'<div class="char-hp-row">'
           +'<input class="char-hp-current" type="number" value="'+c.hp+'" data-field="hp" data-idx="'+i+'" title="Current HP">'
           +'<span class="char-hp-sep">/</span>'
           +'<input class="char-hp-max" type="number" value="'+c.hpMax+'" data-field="hpMax" data-idx="'+i+'" title="Max HP">'
+          +'<input class="char-hp-temp" type="number" value="'+(c.tempHp||0)+'" data-field="tempHp" data-idx="'+i+'" title="Temporary HP (absorbs damage first)" min="0">'
           +'<span style="font-size:10px;color:var(--text-dim);margin-left:auto">HP</span>'
         +'</div>'
-        +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+'"><div class="hp-bar-fill" style="width:'+hpPct+'%;background:'+hpColor+'"></div></div>'
+        +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+'">'
+          +'<div class="hp-bar-fill" style="width:'+hpPct+'%;background:'+hpColor+'"></div>'
+          +(c.tempHp>0 ? '<div class="hp-bar-temp" title="Temp HP: '+c.tempHp+'"></div>' : '')
+        +'</div>'
       +'</div>'
       // Stats: AC, Init, Spd, PP
       +'<div class="char-stats-row">'
@@ -89,6 +123,10 @@ registerPanel('party',{
         +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
       +'</div>'
+      // Active-conditions chip row — cross-references the matching combatant
+      // by id (PCs in combat carry their condition list on state.combatants,
+      // not on state.party). Hidden when no conditions are active.
+      + this._conditionsRow(c)
       // Hit dice — only shown when the character has hitDice info from PDF import.
       +this._hitDiceRow(c,i)
       // Resources
@@ -840,7 +878,11 @@ registerPanel('party',{
       inp.addEventListener('change',e=>{
         const i=+e.target.dataset.idx, f=e.target.dataset.field;
         let v=e.target.value;
-        if(['hp','hpMax','ac','init','spd'].includes(f))v=parseInt(v)||0;
+        if(['hp','hpMax','ac','init','spd','tempHp'].includes(f))v=parseInt(v)||0;
+        // Temp HP can never go negative — taking damage just zeroes it out
+        // before any further damage hits real HP, but the field itself
+        // shouldn't display a negative buffer.
+        if (f === 'tempHp' && v < 0) v = 0;
         state.party[i]={...state.party[i],[f]:v};
         // Mirror to the combat slot BEFORE saving so localStorage (and the
         // resulting Firebase push) captures both halves in one write. If the
@@ -849,7 +891,7 @@ registerPanel('party',{
         if(['hp','hpMax','ac'].includes(f))syncPartyToCombat(i);
         save();
         // Re-render just this card's HP bar without full re-render
-        if(f==='hp'||f==='hpMax'){
+        if(f==='hp'||f==='hpMax'||f==='tempHp'){
           const card=b.querySelector('[data-cidx="'+i+'"]');
           if(card){
             const p=state.party[i];
@@ -944,6 +986,16 @@ registerPanel('party',{
         const r={...res[ri]};
         // Toggle: clicking a filled pip unfills it and all after; clicking empty fills up to it
         r.current=pi<r.current?pi:pi+1;
+        res[ri]=r;
+        state.party[i]={...state.party[i],resources:res};
+        save();this._render();
+      }
+      else if(act==='pip-step'){
+        // Compact-mode +/- button on large pools. Clamps to [0, max].
+        const ri=+el.dataset.ri, dir=parseInt(el.dataset.dir,10)||0;
+        const res=[...state.party[i].resources];
+        const r={...res[ri]};
+        r.current = Math.max(0, Math.min(r.max||0, (r.current||0) + dir));
         res[ri]=r;
         state.party[i]={...state.party[i],resources:res};
         save();this._render();
