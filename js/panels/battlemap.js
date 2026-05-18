@@ -1643,7 +1643,15 @@ registerPanel('battlemap',{
 
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
-          if(i>=0){this._tokens.splice(i,1);this._selected=null;this._closePanel();this._renderTokens();this._saveMap();}
+          if(i>=0){
+            const wasPC = !!this._tokens[i].isPC;
+            this._tokens.splice(i,1);
+            this._selected=null;
+            this._closePanel();
+            this._saveMap();
+            // PCs come back to the party-quick-bar on removal → full render.
+            if (wasPC) this._render(); else this._renderTokens();
+          }
           return;
         }
 
@@ -1659,7 +1667,13 @@ registerPanel('battlemap',{
         this._drag={moved:false};
 
         const onMove=ev=>{
-          const dx=ev.clientX-startX, dy=ev.clientY-startY;
+          // Token positions are stored in stage-pixel coords, but the cursor
+          // delta comes back in screen pixels. The workspace-canvas has a
+          // CSS transform: scale(zoom), so one stage pixel == `zoom` screen
+          // pixels. Divide the delta by zoom to keep the token under the
+          // cursor at any zoom level.
+          const z = (typeof getZoom === 'function') ? getZoom() : 1;
+          const dx=(ev.clientX-startX)/z, dy=(ev.clientY-startY)/z;
           if(!moved&&Math.abs(dx)<4&&Math.abs(dy)<4) return;
           moved=true;this._drag.moved=true;
           el.style.cursor='grabbing';
@@ -1702,7 +1716,14 @@ registerPanel('battlemap',{
 
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
-          if(i>=0){this._tokens.splice(i,1);this._selected=null;this._closePanel();this._renderTokens();this._saveMap();}
+          if(i>=0){
+            const wasPC = !!this._tokens[i].isPC;
+            this._tokens.splice(i,1);
+            this._selected=null;
+            this._closePanel();
+            this._saveMap();
+            if (wasPC) this._render(); else this._renderTokens();
+          }
           return;
         }
 
@@ -1725,7 +1746,9 @@ registerPanel('battlemap',{
         const onMove = ev => {
           if (ev.touches.length !== 1) return;
           const tt = ev.touches[0];
-          const dx = tt.clientX-startX, dy = tt.clientY-startY;
+          // Same zoom-correction as the mouse drag handler above.
+          const z = (typeof getZoom === 'function') ? getZoom() : 1;
+          const dx = (tt.clientX-startX)/z, dy = (tt.clientY-startY)/z;
           if (!moved && Math.abs(dx)<6 && Math.abs(dy)<6) return;
           moved = true; this._drag.moved = true;
           clearTimeout(longPressTimer);
@@ -1782,7 +1805,15 @@ registerPanel('battlemap',{
     rewire('#tp-color','change',e=>{t.color=e.target.value;this._saveMap();this._renderTokens();});
     rewire('#tp-size','change',e=>{t.size=Math.max(1,Math.min(6,parseInt(e.target.value)||1));this._saveMap();this._renderTokens();});
     rewire('#tp-kill','click',()=>{t.dead=!t.dead;this._saveMap();this._renderTokens();});
-    rewire('#tp-del','click',()=>{const i=this._tokens.findIndex(x=>x.id===t.id);if(i>=0)this._tokens.splice(i,1);this._selected=null;this._closePanel();this._renderTokens();this._saveMap();});
+    rewire('#tp-del','click',()=>{
+      const i=this._tokens.findIndex(x=>x.id===t.id);
+      let wasPC = false;
+      if (i>=0){ wasPC = !!this._tokens[i].isPC; this._tokens.splice(i,1); }
+      this._selected=null;
+      this._closePanel();
+      this._saveMap();
+      if (wasPC) this._render(); else this._renderTokens();
+    });
     rewire('#tp-close','click',()=>{this._selected=null;this._closePanel();this._renderTokens();});
   },
 
