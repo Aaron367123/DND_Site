@@ -1002,8 +1002,22 @@ registerPanel('notes', {
     const it = this._data.items.find(x => x.id === id); if (!it) return;
     showModal('Rename '+it.type, [{id:'name', label:'Name', type:'text', value:it.name}], 'Save').then(r => {
       if (!r || !r.name) return;
+      // Capture OLD Dropbox path before mutating the name — once renamed,
+      // _buildPath would give the new path. Dropbox's move_v2 handles
+      // folder moves with all descendants in one server-side call.
+      let oldPath = null;
+      const isDropbox = this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured();
+      if (isDropbox && window.dropboxSync.buildPath){
+        oldPath = window.dropboxSync.buildPath(it, this._data.items, it.type === 'folder' ? '' : '.md');
+      }
       it.name = r.name.trim();
-      this._save(); this._render(); this._syncAfter();
+      this._save(); this._render();
+      if (isDropbox && oldPath){
+        const newPath = window.dropboxSync.buildPath(it, this._data.items, it.type === 'folder' ? '' : '.md');
+        if (newPath && newPath !== oldPath) window.dropboxSync.movePath(oldPath, newPath);
+      } else {
+        this._syncAfter();
+      }
     });
   },
 
@@ -1013,6 +1027,15 @@ registerPanel('notes', {
     const desc = isFolder ? 'Folder and ALL its contents' : 'File';
     showModal('Delete '+desc+'?', [], 'Delete '+it.name).then(r => {
       if (!r) return;
+      // Compute the Dropbox path BEFORE mutating items[] — once the item
+      // (and its parent chain) is removed, _buildPath can't walk it.
+      // Folder deletes cascade server-side, so we only need the top-level
+      // item's path.
+      let dropboxPath = null;
+      const isDropbox = this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured();
+      if (isDropbox && window.dropboxSync.buildPath){
+        dropboxPath = window.dropboxSync.buildPath(it, this._data.items, isFolder ? '' : '.md');
+      }
       const toDelete = new Set([id]);
       if (isFolder) {
         // BFS through children
@@ -1030,7 +1053,12 @@ registerPanel('notes', {
       if (toDelete.has(this._data.selectedId)) {
         this._data.selectedId = this._data.items.find(x => x.type==='file')?.id || null;
       }
-      this._save(); this._render(); this._syncAfter();
+      this._save(); this._render();
+      if (isDropbox && dropboxPath){
+        window.dropboxSync.deletePath(dropboxPath);
+      } else {
+        this._syncAfter();
+      }
     });
   },
 

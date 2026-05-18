@@ -510,10 +510,48 @@
     _pushTimers.set(file.id, t);
   }
 
+  // ─── Delete / move (propagate panel mutations to Dropbox) ─────────────────
+  async function deletePath(path) {
+    if (!isConfigured() || !path) return;
+    try {
+      await _api('/files/delete_v2', { path });
+      delete _state.fileRevs[path.toLowerCase()];
+      _saveState();
+    } catch (e) {
+      // path/not_found means the file was already gone — silent success.
+      if (!String(e.message).includes('not_found')) {
+        console.error('[dropboxSync] delete failed', path, e.message);
+      }
+    }
+  }
+  async function movePath(fromPath, toPath) {
+    if (!isConfigured() || !fromPath || !toPath || fromPath === toPath) return;
+    try {
+      const res = await _api('/files/move_v2', {
+        from_path: fromPath, to_path: toPath,
+        allow_shared_folder: false, autorename: false, allow_ownership_transfer: false,
+      });
+      const oldKey = fromPath.toLowerCase(), newKey = toPath.toLowerCase();
+      if (_state.fileRevs[oldKey]){
+        _state.fileRevs[newKey] = _state.fileRevs[oldKey];
+        delete _state.fileRevs[oldKey];
+      } else if (res && res.metadata && res.metadata.rev){
+        _state.fileRevs[newKey] = res.metadata.rev;
+      }
+      _saveState();
+    } catch (e) {
+      console.error('[dropboxSync] move failed', fromPath, '→', toPath, e.message);
+    }
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   window.dropboxSync = {
     init, isConfigured, isConnected, isSupported, getStatus, onStatus,
-    fullSync, pushFile, startPolling, stopPolling,
+    fullSync, pushFile, deletePath, movePath, startPolling, stopPolling,
+    // buildPath is useful for callers that need to compute a Dropbox path
+    // from an item + items[] (e.g. notes panel capturing path before
+    // deletion). Exposes the same private helper used internally.
+    buildPath: (item, items, ext) => _buildPath(item, items, ext),
     _onPullCallback: null,
   };
 })();
