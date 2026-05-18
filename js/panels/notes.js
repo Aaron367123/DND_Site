@@ -249,12 +249,16 @@ registerPanel('notes', {
     const s = this._getViewSettings();
     // Font-size scales the entire preview; 100 % = 13px (the base from CSS).
     area.style.fontSize = (13 * s.textSize / 100).toFixed(1) + 'px';
-    // Content width: 0 % narrow (~420 px), 100 % full (no cap). We use max-width
-    // so very wide panels still cap content for comfortable reading.
+    // Content width: 0 % narrow (~420 px), 100 % full (no cap). Anchored to
+    // the LEFT edge of the editor pane so text starts where the eye expects
+    // — narrowing the slider just shortens the line, it doesn't shove the
+    // whole block toward the centre of the panel.
     const minW = 420, maxW = 1200;
     const w = minW + (maxW - minW) * (s.contentWidth / 100);
     area.style.maxWidth = s.contentWidth >= 100 ? 'none' : (w.toFixed(0) + 'px');
-    area.style.marginLeft = 'auto'; area.style.marginRight = 'auto';
+    area.style.marginLeft = '0';
+    area.style.marginRight = 'auto';
+    area.style.textAlign = 'left';
   },
 
   // Source-picker screen — left rail with two source tiles, right pane
