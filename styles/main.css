@@ -1124,23 +1124,39 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .adv-content .adv-section{margin:0 0 14px}
 .adv-content .adv-section-head{font-size:16px;color:var(--accent);font-weight:600;margin:18px 0 6px;letter-spacing:.01em}
 .adv-content .adv-section .adv-section .adv-section-head{font-size:14px;color:var(--text);margin-top:14px}
-/* Hoverable refs ({@creature}, {@spell}, {@item}, {@condition}) */
+/* Hoverable refs ({@creature}, {@spell}, {@item}, {@condition}, etc.).
+   Solid accent-color underline + subtle text shadow so they pop against
+   the body text without screaming. Hover background fills in for an
+   obvious "this is clickable / hoverable" affordance. */
 .adv-content .adv-tag{
   color:var(--accent);
-  border-bottom:1px dotted var(--accent-dark,var(--accent));
+  border-bottom:1px solid var(--accent);
   cursor:help;
-  transition:background .12s,color .12s;
+  font-weight:500;
+  transition:background .12s,color .12s,border-color .12s;
 }
-.adv-content .adv-tag:hover{background:rgba(212,165,116,.12);color:var(--text);border-bottom-color:var(--accent)}
+.adv-content .adv-tag:hover{
+  background:rgba(212,165,116,.18);
+  color:#fff;
+  border-bottom-color:#fff;
+}
+/* Area links (click to jump) — same prominence as tags but use a brighter
+   underline so they read as a navigation link rather than a hover-card. */
 .adv-content .adv-link.adv-area{
-  color:var(--accent); text-decoration:none;
-  border-bottom:1px solid rgba(212,165,116,.4);
+  color:var(--accent);
+  text-decoration:none;
+  border-bottom:1px solid var(--accent);
   cursor:pointer;
+  font-weight:500;
 }
-.adv-content .adv-link.adv-area:hover{color:var(--text);border-bottom-color:var(--accent)}
+.adv-content .adv-link.adv-area:hover{color:#fff;border-bottom-color:#fff;background:rgba(212,165,116,.18)}
+/* Source refs ({@book}, {@adventure}) — italic, not hoverable, but still
+   readable. Previously used --text-dim which faded into the body text. */
 .adv-content .adv-link-source{
-  color:var(--text-dim); font-style:italic; cursor:default;
-  border-bottom:1px dotted rgba(212,165,116,.25);
+  color:var(--accent-dark,#a67c4f);
+  font-style:italic;
+  cursor:default;
+  border-bottom:1px dotted rgba(212,165,116,.55);
 }
 /* Hover popover that sits over everything else */
 #adv-hover-pop{

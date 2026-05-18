@@ -341,6 +341,9 @@ registerPanel('battlemap',{
     // Token DOM positions/sizes — tokens use stage-pixel coords (already
     // scaled in _scaleTokensTo) and visual diameter = natural cellSize × scale.
     const csNat = this._cellSize;
+    // Track each token's current diameter so we can place its name label
+    // below it (labels are siblings of .map-token, not children).
+    const tokenDim = new Map();
     b.querySelectorAll('.map-token').forEach(el => {
       const t = this._tokens.find(x => x.id === el.dataset.tid);
       if (!t || t.x == null) return;
@@ -352,6 +355,18 @@ registerPanel('battlemap',{
       el.style.width  = dim + 'px';
       el.style.height = dim + 'px';
       el.style.fontSize = fontSize + 'px';
+      tokenDim.set(t.id, dim);
+    });
+    // Reposition the name labels (siblings of .map-token) to track their
+    // tokens through the zoom. Without this they stick at their pre-zoom
+    // y-coordinate and drift away from the circle.
+    b.querySelectorAll('.map-token-name').forEach(el => {
+      const t = this._tokens.find(x => x.id === el.dataset.tid);
+      if (!t || t.x == null) return;
+      const dim = tokenDim.get(t.id) || ((t.size||1) * csNat - 4) * scale;
+      el.style.left = t.x + 'px';
+      el.style.top  = (t.y + dim/2 + 4) + 'px';
+      el.style.fontSize = (10 * scale).toFixed(0) + 'px';
     });
 
     // Keep the toolbar slider/% display in sync.
