@@ -428,13 +428,22 @@ registerPanel('adventures', {
   },
 
   // Build the HTML body for a tooltip pop given the span's dataset.
-  // Creature and spell get specialised statblock renderers; everything else
-  // routes through the generic entries renderer.
+  // Creature / spell / item get specialised renderers from search.js since
+  // their data shape is non-trivial (items have `desc` as a parsed control-
+  // char string rather than an `entries` array, and the rich card needs the
+  // weapon/armor stats too). Everything else uses the generic entries path.
   _renderAdvPop(tag, name, source){
     const d = this._lookup(tag, name, source);
     if (!d) return '<div class="adv-pop-empty"><strong>' + esc(name) + '</strong><br><span style="color:var(--text-dim);font-size:11px">Reference unavailable (no local data)</span></div>';
-    if (tag === 'creature' && typeof renderMonsterFull === 'function') return renderMonsterFull(d, {});
-    if (tag === 'spell'    && typeof renderSpellFull   === 'function') return renderSpellFull(d);
+    // Pre-render the name header so every card has the title up top —
+    // the search-panel renderers (creature/spell/item) don't include one
+    // because the search UI shows the name separately above the card.
+    const sub = d.meta ? '<div class="adv-pop-sub">' + esc(d.meta) + '</div>' : '';
+    const head = '<div class="adv-pop-head"><strong>' + esc(d.name) + '</strong>' + sub + '</div>';
+    if (tag === 'creature' && typeof renderMonsterFull === 'function') return head + renderMonsterFull(d, {});
+    if (tag === 'spell'    && typeof renderSpellFull   === 'function') return head + renderSpellFull(d);
+    if (d.cat === 'item'   && typeof renderItemFull    === 'function') return head + renderItemFull(d);
+    // _renderGenericCard already emits its own head — don't double up.
     return this._renderGenericCard(d);
   },
 
