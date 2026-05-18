@@ -882,7 +882,7 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .notes-divider:hover,.notes-divider:active{background:var(--accent)}
 .notes-divider::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:1px;height:24px;background:var(--text-dim);opacity:.6}
 
-.notes-editor{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.notes-editor{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;background:var(--panel)}
 .notes-editor-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel-2)}
 .notes-file-title{font-size:18px;font-weight:600;color:var(--text);background:transparent;border:1px solid transparent;padding:3px 6px;border-radius:3px;flex:0 1 auto;width:auto;min-width:120px}
 .notes-file-title:hover{border-color:var(--border);background:var(--panel)}
