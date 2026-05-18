@@ -199,16 +199,243 @@ registerPanel('adventures', {
       const c = this._body?.querySelector('#adv-content');
       if (c) c.scrollTop = 0;
     }));
+
+    // Hover popovers for {@creature}, {@spell}, {@item}, {@condition}.
+    this._wireAdvHover();
+
+    // Area links: click to scroll to the matching section.
+    b.querySelectorAll('.adv-link.adv-area').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      const id = a.dataset.chapter;
+      if (!id) return;
+      const target = b.querySelector('#adv-section-' + CSS.escape(id));
+      const scroller = b.querySelector('#adv-content');
+      if (target && scroller){
+        // Use offsetTop relative to the scroller, not scrollIntoView (which
+        // scrolls the wrong ancestor when nested in the workspace).
+        scroller.scrollTo({ top: target.offsetTop - 8, behavior: 'smooth' });
+      }
+    }));
   },
 
-  // Inline string → HTML. Pipes through the existing _stripTags (which
-  // honors 5etools {@…} link-text and emits control-char markers) and then
-  // _renderInline to convert those control chars into <strong>/<i>/etc.
+  // Event-delegate hover behaviour. One popover element exists at document
+  // level; we just point it at the currently-hovered .adv-tag span.
+  _wireAdvHover(){
+    const b = this._body; if (!b) return;
+    if (!this._advHover){
+      this._advHover = { enterTimer: null, leaveTimer: null, currentEl: null, pop: null };
+    }
+    const H = this._advHover;
+    // Tear down any previous listeners on this panel body (we re-wire every
+    // render).
+    if (H._handlers){
+      b.removeEventListener('mouseover', H._handlers.over, true);
+      b.removeEventListener('mouseout',  H._handlers.out,  true);
+      b.removeEventListener('scroll',    H._handlers.scroll, true);
+    }
+    const ensurePop = () => {
+      if (H.pop && document.body.contains(H.pop)) return H.pop;
+      const p = document.createElement('div');
+      p.id = 'adv-hover-pop';
+      p.style.display = 'none';
+      p.addEventListener('mouseenter', () => { clearTimeout(H.leaveTimer); H.leaveTimer = null; });
+      p.addEventListener('mouseleave', scheduleHide);
+      document.body.appendChild(p);
+      H.pop = p;
+      return p;
+    };
+    const hide = () => {
+      const p = H.pop; if (p) p.style.display = 'none';
+      H.currentEl = null;
+    };
+    const scheduleHide = () => {
+      clearTimeout(H.leaveTimer);
+      H.leaveTimer = setTimeout(hide, 150);
+    };
+    const positionPop = (anchorRect) => {
+      const p = H.pop;
+      // Render off-screen first to measure.
+      p.style.left = '-9999px'; p.style.top = '-9999px';
+      p.style.display = 'block';
+      const pw = p.offsetWidth || 360;
+      const ph = p.offsetHeight || 220;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      let left = anchorRect.right + 8;
+      let top  = anchorRect.top;
+      if (left + pw > vw - 8) left = Math.max(8, anchorRect.left - pw - 8); // flip to the left
+      if (top + ph > vh - 8)  top  = Math.max(8, vh - ph - 8);
+      if (top < 8) top = 8;
+      p.style.left = left + 'px';
+      p.style.top  = top + 'px';
+    };
+    const show = (el) => {
+      const pop = ensurePop();
+      H.currentEl = el;
+      pop.innerHTML = this._renderAdvPop(el.dataset.tag, el.dataset.name, el.dataset.source);
+      positionPop(el.getBoundingClientRect());
+    };
+    const onOver = e => {
+      const el = e.target.closest && e.target.closest('.adv-tag');
+      if (!el || !b.contains(el)) return;
+      clearTimeout(H.leaveTimer); H.leaveTimer = null;
+      if (H.currentEl === el) return;
+      clearTimeout(H.enterTimer);
+      H.enterTimer = setTimeout(() => show(el), 250);
+    };
+    const onOut = e => {
+      const el = e.target.closest && e.target.closest('.adv-tag');
+      if (!el) return;
+      clearTimeout(H.enterTimer); H.enterTimer = null;
+      scheduleHide();
+    };
+    const onScroll = () => { clearTimeout(H.enterTimer); hide(); };
+    b.addEventListener('mouseover', onOver, true);
+    b.addEventListener('mouseout',  onOut,  true);
+    // The chapter content scroller emits scroll on its own element, not the
+    // body. Capture-phase listener on the body sees it bubble.
+    b.addEventListener('scroll', onScroll, true);
+    H._handlers = { over:onOver, out:onOut, scroll:onScroll };
+    // Esc to dismiss.
+    if (!H._escWired){
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+      H._escWired = true;
+    }
+  },
+
+  // Inline string → HTML. The default pipeline strips 5etools tags to plain
+  // text. For the adventure panel we want creature/spell/item/condition refs
+  // to render as hoverable spans and area refs as click-to-jump links. We
+  // capture those tags BEFORE _stripTags sees them, swap in safe placeholder
+  // sentinels (`\x10N\x10`), run the original strip/escape/render pipeline,
+  // then substitute the sentinels with the real HTML.
   _inline(str){
     if (typeof _stripTags !== 'function' || typeof _renderInline !== 'function'){
       return esc(String(str ?? ''));
     }
-    return _renderInline(esc(_stripTags(String(str ?? ''))));
+    const s = String(str ?? '');
+    const placeholders = [];
+    // Hoverable reference tags + the few link-style ones (area, adventure,
+    // book). Everything else continues to flow through _stripTags as-is.
+    const TAGS_RE = /\{@(creature|spell|item|itemProperty|itemMastery|condition|status|disease|background|race|feat|optfeature|class|classFeature|subclassFeature|deity|object|vehicle|reward|psionic|trap|hazard|variantrule|table|language|cult|boon|action|skill|sense|charoption|facility|deck|encounter|recipe|area|adventure|book)\s+([^}]+)\}/gi;
+    const marked = s.replace(TAGS_RE, (_full, tag, body) => {
+      const idx = placeholders.length;
+      placeholders.push({ tag: tag.toLowerCase(), body });
+      return '\x10' + idx + '\x10';
+    });
+    let html = _renderInline(esc(_stripTags(marked)));
+    html = html.replace(/\x10(\d+)\x10/g, (_m, idxStr) => {
+      const ph = placeholders[+idxStr];
+      return ph ? this._renderAdvTag(ph.tag, ph.body) : '';
+    });
+    return html;
+  },
+
+  // Tag → _5eData.cat lookup map. Covers every category the loader knows
+  // about. Tags whose intended target is a specialised file (e.g. status
+  // = condition) fold into the right cat here.
+  _ADV_TAG_CAT: {
+    creature:'monster', spell:'spell',
+    item:'item', itemProperty:'item', itemMastery:'item',
+    condition:'condition', status:'condition', disease:'condition',
+    background:'background', race:'race', feat:'feat',
+    optfeature:'optionalfeature',
+    class:'class', classFeature:'classFeature', subclassFeature:'classFeature',
+    deity:'deity', object:'object', vehicle:'vehicle', reward:'reward',
+    psionic:'psionic', trap:'trap', hazard:'hazard',
+    variantrule:'variantrule', table:'table', language:'language',
+    cult:'cult', boon:'boon',
+    action:'action', skill:'skill', sense:'sense',
+    charoption:'charoption', facility:'facility',
+    deck:'deck', encounter:'encounter', recipe:'recipe',
+  },
+
+  // Wrap a captured {@…} reference as either a hover span (creature/spell/
+  // item/condition) or a click-to-jump link (area). `body` is the raw text
+  // between the tag name and the closing brace, pipe-delimited:
+  //   {@creature Goblin Warrior|MM|goblin}
+  //   {@area area 1|001|x}
+  _renderAdvTag(tag, body){
+    const parts = body.split('|').map(p => p.trim());
+    if (tag === 'area'){
+      const display = parts[0] || 'area';
+      const chapter = parts[1] || '';
+      return '<a class="adv-link adv-area" href="javascript:void(0)" data-chapter="'
+        + esc(chapter) + '">' + esc(display) + '</a>';
+    }
+    if (tag === 'adventure' || tag === 'book'){
+      // Meta refs to source books/adventures — no popover. Show as a subtle
+      // styled span so the user can tell it's a reference, not body text.
+      const display = parts[2] || parts[0] || '';
+      const titleAttr = parts[0] ? ' title="' + esc(parts[0]) + '"' : '';
+      return '<span class="adv-link-source"' + titleAttr + '>' + esc(display) + '</span>';
+    }
+    const name    = parts[0] || '';
+    const source  = parts[1] || '';
+    const display = parts[2] || name;
+    return '<span class="adv-tag" data-tag="' + esc(tag)
+      + '" data-name="' + esc(name) + '" data-source="' + esc(source)
+      + '">' + esc(display) + '</span>';
+  },
+
+  // Find a 5etools entry by category + name (+ optional source). Returns
+  // null if data isn't loaded yet or no match found. Uses the _ADV_TAG_CAT
+  // map to translate the tag name into the actual `cat` value the loader
+  // stores entries under (so e.g. {@status} hits cat='condition').
+  _lookup(tag, name, source){
+    if (typeof _5eData === 'undefined' || !_5eData) return null;
+    if (typeof _5eLoaded !== 'undefined' && !_5eLoaded) return null;
+    const cat = this._ADV_TAG_CAT[tag];
+    if (!cat || !name) return null;
+    const nlow = name.toLowerCase();
+    const slow = (source||'').toLowerCase();
+    let best = null;
+    for (const d of _5eData){
+      if (d.cat !== cat) continue;
+      if ((d.name||'').toLowerCase() !== nlow) continue;
+      if (slow && (d._source||'').toLowerCase() === slow) return d;
+      if (!best) best = d;
+    }
+    return best;
+  },
+
+  // Generic card renderer. Works for any category whose loader stores the
+  // raw 5etools JSON under d._raw (every category does). Renders the name,
+  // an optional meta line, and the entries array. Because _renderNode
+  // recurses through _inline → _renderAdvTag, tags inside the popover are
+  // themselves hoverable.
+  _renderGenericCard(d){
+    const r = d && d._raw; if (!r) return '<div class="adv-pop-empty">No data.</div>';
+    const sub = d.meta ? '<div class="adv-pop-sub">' + esc(d.meta) + '</div>' : '';
+    let head = '<div class="adv-pop-head"><strong>' + esc(d.name) + '</strong>' + sub + '</div>';
+    // Item-specific extras: rarity / attunement aren't in `entries`.
+    if (d.cat === 'item'){
+      const rarity = r.rarity && r.rarity !== 'none' ? r.rarity : '';
+      const attune = r.reqAttune
+        ? ' (requires attunement' + (typeof r.reqAttune === 'string' && r.reqAttune !== true ? ' ' + r.reqAttune : '') + ')'
+        : '';
+      if (rarity || attune){
+        head = '<div class="adv-pop-head"><strong>' + esc(d.name) + '</strong>'
+          + '<div class="adv-pop-sub">' + esc(rarity) + esc(attune) + '</div></div>';
+      }
+    }
+    const entries = Array.isArray(r.entries) ? r.entries : [];
+    const body = entries.length
+      ? entries.map(e => typeof e === 'string'
+          ? '<p>' + this._inline(e) + '</p>'
+          : this._renderNode(e)).join('')
+      : (d.desc ? '<p>' + esc(d.desc) + '</p>' : '<div class="adv-pop-empty">No description.</div>');
+    return head + '<div class="adv-pop-body">' + body + '</div>';
+  },
+
+  // Build the HTML body for a tooltip pop given the span's dataset.
+  // Creature and spell get specialised statblock renderers; everything else
+  // routes through the generic entries renderer.
+  _renderAdvPop(tag, name, source){
+    const d = this._lookup(tag, name, source);
+    if (!d) return '<div class="adv-pop-empty"><strong>' + esc(name) + '</strong><br><span style="color:var(--text-dim);font-size:11px">Reference unavailable (no local data)</span></div>';
+    if (tag === 'creature' && typeof renderMonsterFull === 'function') return renderMonsterFull(d, {});
+    if (tag === 'spell'    && typeof renderSpellFull   === 'function') return renderSpellFull(d);
+    return this._renderGenericCard(d);
   },
 
   // Recursively render any 5etools entry node to HTML. Adventures use the
@@ -232,7 +459,8 @@ registerPanel('adventures', {
       case 'inlineBlock':
       case 'internal': {
         const head = node.name ? `<h3 class="adv-section-head">${this._inline(node.name)}</h3>` : '';
-        return `<section class="adv-section">${head}${renderChildren(node.entries)}</section>`;
+        const idAttr = node.id ? ` id="adv-section-${esc(String(node.id))}"` : '';
+        return `<section class="adv-section"${idAttr}>${head}${renderChildren(node.entries)}</section>`;
       }
       case 'item': {
         // 5etools "item" inside a list → bold name + inline body.

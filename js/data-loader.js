@@ -935,6 +935,9 @@ async function load5eData() {
     {path:'data/skills.json',              arr:'skill',        cat:'skill'},
     {path:'data/senses.json',              arr:'sense',        cat:'sense'},
     {path:'data/charcreationoptions.json', arr:'charoption',   cat:'charoption'},
+    {path:'data/decks.json',               arr:'deck',         cat:'deck'},
+    {path:'data/recipes.json',             arr:'recipe',       cat:'recipe'},
+    {path:'data/encounters.json',          arr:'encounter',    cat:'encounter'},
   ];
   const _refUniquePaths = [...new Set(_refSpecs.map(s => s.path))];
 

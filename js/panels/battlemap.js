@@ -44,6 +44,13 @@ registerPanel('battlemap',{
 
   _tokens:[], _tool:'', _selected:null,
   _cellSize:50, _cols:24, _rows:18,
+  // Settings sidebar state — toggles persisted via _saveMap.
+  _settingsOpen:false,
+  _mapRotation:0,                // 0 / 90 / 180 / 270
+  _fogHardness:50,               // 0–100 → blur on fog canvas
+  _gridOpacity:60,               // 0–100 → grid line alpha
+  _tokensVisible:true, _namesVisible:true, _pcsVisible:true, _npcsVisible:true,
+  _fogPaintMode:'reveal',        // 'reveal' | 'hide' — replaces the boolean _fogTool
   // Grid alignment offset (image-pixel space at scale 1). Lets the overlay
   // grid line up with a printed grid on the loaded map. Two-click alignment
   // tool sets these.
@@ -105,6 +112,15 @@ registerPanel('battlemap',{
         this._snapToGrid = !!d.snapToGrid;
         this._gridOffsetX = d.gridOffsetX || 0;
         this._gridOffsetY = d.gridOffsetY || 0;
+        // Settings sidebar state (new in v2 — defaults preserve old look).
+        this._mapRotation   = d.mapRotation   || 0;
+        this._fogHardness   = (d.fogHardness   != null) ? d.fogHardness   : 50;
+        this._gridOpacity   = (d.gridOpacity   != null) ? d.gridOpacity   : 60;
+        this._tokensVisible = d.tokensVisible !== false;
+        this._namesVisible  = d.namesVisible  !== false;
+        this._pcsVisible    = d.pcsVisible    !== false;
+        this._npcsVisible   = d.npcsVisible   !== false;
+        this._fogPaintMode  = d.fogPaintMode || 'reveal';
       }
       // Migrate any tokens that still use grid-cell coords (gx, gy) to pixel
       // coords (x, y). New code stores tokens in stage pixels; the cellSize
@@ -152,7 +168,7 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode}));
     }catch(e){}
     this._broadcast();
   },
@@ -623,6 +639,7 @@ registerPanel('battlemap',{
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide entire map (fog everything)">🚫</button>':'')
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal entire map">👁</button>':'')
       +'<div style="flex:1"></div>'
+      +'<button class="btn icon-btn '+(this._settingsOpen?'active':'')+'" data-mact="toggle-settings" style="flex-shrink:0" title="Map settings">⚙</button>'
     +'</div>';
 
     } // end !_toolbarHidden
@@ -634,10 +651,24 @@ registerPanel('battlemap',{
         +'<span style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
     }
 
-    html+='<div id="map-scroll" style="flex:1;overflow:auto;background:#111;position:relative">'
-      +'<div id="map-stage" style="position:relative;display:inline-block">'
+    // Map area + settings sidebar side-by-side. Settings sidebar is rendered
+    // outside the scrollable map area so the map keeps panning/zooming without
+    // affecting the controls.
+    html+='<div class="bm-main" style="flex:1;display:flex;min-height:0;overflow:hidden;position:relative">'
+      +'<div id="map-scroll" style="flex:1;overflow:auto;background:#111;position:relative;'
+        + (this._tokensVisible?'':'--bm-hide-tokens:1;')+'">'
+      +'<div id="map-stage" class="'
+        + (this._tokensVisible?'':'hide-tokens ')
+        + (this._namesVisible?'':'hide-names ')
+        + (this._pcsVisible?'':'hide-pcs ')
+        + (this._npcsVisible?'':'hide-npcs ')
+        + '" style="position:relative;display:inline-block'
+        + (this._mapRotation ? `;transform-origin:50% 50%;transform:rotate(${this._mapRotation}deg)` : '')
+        + '">'
         +'<canvas id="map-canvas" style="display:block;position:relative;z-index:1"></canvas>'
       +'</div>'
+      +'</div>'
+      + (this._settingsOpen ? this._renderSettingsSidebar() : '')
     +'</div>';
 
     html+='<div style="padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-2);font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-shrink:0">'
@@ -732,6 +763,10 @@ registerPanel('battlemap',{
         this._render();
       }
       else if(act==='sync-combat') this._syncParty();
+      else if(act==='toggle-settings'){
+        this._settingsOpen = !this._settingsOpen;
+        this._render();
+      }
       else if(act==='clear-tokens'){
         showConfirm('Remove all tokens from the battle map?', {title:'Clear tokens', confirmLabel:'Remove', danger:true}).then(ok=>{
           if(!ok) return;
@@ -796,7 +831,7 @@ registerPanel('battlemap',{
         const usedCols=new Set(this._tokens.filter(t=>t.y!=null && t.y<cs2).map(t=>Math.round(t.x/cs2 - 0.5)));
         let col=0; while(usedCols.has(col))col++;
         const newX=(col + 0.5)*cs2, newY=cs2/2;
-        this._tokens.push({id:uid(),label:p.name,x:newX,y:newY,isPC:true,color:'#696969',size:1,dead:false});
+        this._tokens.push({id:uid(),label:p.name,x:newX,y:newY,isPC:true,color:'#696969',size:1,dead:false,icon:p.icon||'⚔',portrait:p.portrait||null});
         this._renderTokens();this._saveMap();
         this._render(); // refresh party quick-add row
       }
@@ -974,20 +1009,27 @@ registerPanel('battlemap',{
       });
     });
 
-    // Fog painting — mousedown + drag
+    // Fog painting — mousedown + drag. _fog holds REVEALED cells. Reveal
+    // mode adds to the set (clears fog), Hide mode removes from the set
+    // (re-fogs cells the player had seen).
     const fogPaint=(e)=>{
       if(!this._fogTool||this._fog===null)return;
       const r=canvas.getBoundingClientRect();
       const gx=Math.floor((e.clientX-r.left)/cs);
       const gy=Math.floor((e.clientY-r.top)/cs);
       const radius=this._fogRadius||1;
+      const mode = this._fogPaintMode || 'reveal';
       let changed=false;
       for(let dx=-radius+1;dx<radius;dx++){
         for(let dy=-radius+1;dy<radius;dy++){
           const nx=gx+dx, ny=gy+dy;
           if(nx>=0&&ny>=0&&nx<this._cols&&ny<this._rows){
             const key=nx+','+ny;
-            if(!this._fog.has(key)){this._fog.add(key);changed=true;}
+            if (mode === 'hide'){
+              if (this._fog.has(key)){ this._fog.delete(key); changed=true; }
+            } else {
+              if (!this._fog.has(key)){ this._fog.add(key); changed=true; }
+            }
           }
         }
       }
@@ -1212,7 +1254,7 @@ registerPanel('battlemap',{
         const p = state.party[parseInt(pi)];
         if (!p) return;
         if (this._tokens.find(t => t.label === p.name && t.isPC)){ showToast(p.name+' already on map'); return; }
-        this._tokens.push({id:uid(), label:p.name, x, y, isPC:true, color:'#696969', size:1, dead:false});
+        this._tokens.push({id:uid(), label:p.name, x, y, isPC:true, color:'#696969', size:1, dead:false, icon:p.icon||'⚔', portrait:p.portrait||null});
         this._renderTokens(); this._saveMap();
         this._render(); // refresh quick-add row (the dropped member disappears from it)
       } else if (mid){
@@ -1226,7 +1268,8 @@ registerPanel('battlemap',{
           const oi = this._tokens.findIndex(t => t.label === m.name);
           if (oi >= 0) this._tokens[oi] = {...this._tokens[oi], label: m.name+' 1', baseName: m.name};
         }
-        this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false});
+        const npcIcon = (typeof CLASS_ICONS !== 'undefined' ? (CLASS_ICONS[m.cls] || CLASS_ICONS.enemy) : null) || '🐲';
+        this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false, icon:npcIcon, portrait:m.portrait||null});
         this._renderTokens(); this._saveMap();
       }
     });
@@ -1240,6 +1283,106 @@ registerPanel('battlemap',{
         e.dataTransfer.setData('application/x-skt-party-pi', btn.dataset.pi);
       });
     });
+
+    // Settings sidebar wiring.
+    this._wireSettingsSidebar();
+  },
+
+  _wireSettingsSidebar(){
+    const b = this._body; if (!b) return;
+    // Tile buttons
+    b.querySelectorAll('[data-bmset]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      const k = btn.dataset.bmset;
+      if (k === 'close'){ this._settingsOpen = false; this._render(); return; }
+      if (k === 'pick-map'){ this._openMapPicker(); return; }
+      if (k === 'fog-toggle'){
+        this._fog = this._fog!==null ? null : new Set();
+        if (this._fog!==null) this._fogTool = true;
+        else this._fogTool = false;
+        this._saveMap(); this._render(); return;
+      }
+      if (k === 'rotate'){
+        this._mapRotation = ((this._mapRotation || 0) + 90) % 360;
+        this._saveMap(); this._render(); return;
+      }
+      if (k === 'fog-reveal'){ this._fogPaintMode = 'reveal'; this._fogTool = true; this._saveMap(); this._render(); return; }
+      if (k === 'fog-hide'){   this._fogPaintMode = 'hide';   this._fogTool = true; this._saveMap(); this._render(); return; }
+      if (k === 'fog-clear'){
+        // Reveal everything (clear fog)
+        const all=new Set();
+        for(let x=0;x<this._cols;x++)for(let y=0;y<this._rows;y++)all.add(x+','+y);
+        this._fog=all;this._saveMap();this._drawFog();this._broadcast();
+        return;
+      }
+      if (k === 'fog-fill'){
+        this._fog = new Set(); this._saveMap(); this._drawFog(); this._broadcast(); return;
+      }
+      if (k === 'grid-square'){ this._showGrid = true;  this._saveMap(); this._render(); return; }
+      if (k === 'grid-none'){   this._showGrid = false; this._saveMap(); this._render(); return; }
+      if (k === 'tok-all'){   this._tokensVisible = !this._tokensVisible; this._saveMap(); this._render(); return; }
+      if (k === 'tok-names'){ this._namesVisible  = !this._namesVisible;  this._saveMap(); this._render(); return; }
+      if (k === 'tok-pcs'){   this._pcsVisible    = !this._pcsVisible;    this._saveMap(); this._render(); return; }
+      if (k === 'tok-npcs'){  this._npcsVisible   = !this._npcsVisible;   this._saveMap(); this._render(); return; }
+      if (k === 'load-init'){ this._syncParty(); return; }
+    }));
+    // Sliders
+    const brushEl = b.querySelector('#bm-set-brush');
+    if (brushEl){
+      brushEl.addEventListener('input', e => {
+        // Map 0-100% → 1-5 cells.
+        const r = Math.max(1, Math.min(5, Math.round(1 + (parseInt(e.target.value)/100) * 4)));
+        this._fogRadius = r;
+        const out = b.querySelector('#bm-set-brush-val');
+        if (out) out.textContent = e.target.value + '%';
+      });
+      brushEl.addEventListener('change', () => this._saveMap());
+    }
+    const hardEl = b.querySelector('#bm-set-hardness');
+    if (hardEl){
+      hardEl.addEventListener('input', e => {
+        this._fogHardness = parseInt(e.target.value) || 0;
+        const out = b.querySelector('#bm-set-hardness-val');
+        if (out) out.textContent = this._fogHardness + '%';
+        this._applyFogBlur();
+      });
+      hardEl.addEventListener('change', () => this._saveMap());
+    }
+    const csEl = b.querySelector('#bm-set-cellsize');
+    if (csEl){
+      csEl.addEventListener('input', e => {
+        const out = b.querySelector('#bm-set-cellsize-val');
+        if (out) out.textContent = e.target.value + 'px';
+      });
+      csEl.addEventListener('change', e => {
+        const n = Math.max(8, Math.min(400, parseInt(e.target.value)||50));
+        this._cellSize = n;
+        if (_mapBgImage) this._fitGridToBg();
+        this._saveMap(); this._render();
+      });
+    }
+    const opEl = b.querySelector('#bm-set-opacity');
+    if (opEl){
+      opEl.addEventListener('input', e => {
+        this._gridOpacity = parseInt(e.target.value) || 0;
+        const out = b.querySelector('#bm-set-opacity-val');
+        if (out) out.textContent = this._gridOpacity + '%';
+        const grid = b.querySelector('#map-canvas');
+        if (grid) this._drawGrid(grid, this._csScreen());
+      });
+      opEl.addEventListener('change', () => this._saveMap());
+    }
+  },
+
+  // Apply CSS blur to the fog canvas based on _fogHardness (0% = sharp,
+  // 100% = soft feathered edges). Cheap visual effect; nothing else changes.
+  _applyFogBlur(){
+    const b = this._body; if (!b) return;
+    const fogCanvas = b.querySelector('#fog-canvas');
+    if (!fogCanvas) return;
+    const px = (this._fogHardness / 100) * 12; // 0–12 px blur
+    fogCanvas.style.filter = px > 0.1 ? 'blur(' + px.toFixed(1) + 'px)' : '';
   },
 
   // Map picker — adventures from data/adventures.json, maps extracted from
@@ -1511,8 +1654,11 @@ registerPanel('battlemap',{
     // Grid hidden — still keep the canvas sized and let fog draw on top.
     if (!this._showGrid){ this._drawFog(); return; }
 
+    // Per-user grid opacity (0–100 from the sidebar). Scales the base alpha.
+    const op = (this._gridOpacity != null ? this._gridOpacity : 60) / 100;
+
     // Determine if background is light or dark for adaptive grid color
-    let gridColor='rgba(255,255,255,0.18)';
+    let gridColor='rgba(255,255,255,'+(0.18*op).toFixed(3)+')';
     if(_mapBgImage){
       // Sample corners of the image to estimate brightness
       const off=document.createElement('canvas');off.width=4;off.height=4;
@@ -1521,7 +1667,7 @@ registerPanel('battlemap',{
         const d=octx.getImageData(0,0,4,4).data;
         let lum=0;for(let i=0;i<d.length;i+=4)lum+=(d[i]*299+d[i+1]*587+d[i+2]*114)/1000;
         lum/=16;
-        gridColor=lum>128?'rgba(0,0,0,0.35)':'rgba(255,255,255,0.25)';
+        gridColor=lum>128?'rgba(0,0,0,'+(0.35*op).toFixed(3)+')':'rgba(255,255,255,'+(0.25*op).toFixed(3)+')';
       }catch(e){}
     } else {
       // Parse bgColor hex to check brightness
@@ -1529,7 +1675,7 @@ registerPanel('battlemap',{
       if(hex.length===6){
         const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),bv=parseInt(hex.slice(4,6),16);
         const lum=(r*299+g*587+bv*114)/1000;
-        gridColor=lum>128?'rgba(0,0,0,0.4)':'rgba(255,255,255,0.18)';
+        gridColor=lum>128?'rgba(0,0,0,'+(0.4*op).toFixed(3)+')':'rgba(255,255,255,'+(0.18*op).toFixed(3)+')';
       }
     }
 
@@ -1581,6 +1727,78 @@ registerPanel('battlemap',{
       ctx.fillRect(gx*cs,gy*cs,cs,cs);
     });
     ctx.globalCompositeOperation='source-over';
+    // Apply per-user hardness (0% = sharp cells, 100% = blurred fog edges).
+    this._applyFogBlur();
+  },
+
+  // Right-side Settings drawer. Renders only when this._settingsOpen.
+  // Wires up in _wire alongside the toolbar buttons.
+  _renderSettingsSidebar(){
+    const mapName = this._bgMapPath ? this._bgMapPath.split('/').pop().replace(/\.(webp|jpg|jpeg|png)$/i, '') : 'No map';
+    const fogOn = this._fog !== null;
+    const paint = this._fogPaintMode;
+    // Brush size slider in screenshot is 0–100; map to internal 1–5 cells.
+    const brushPct = Math.round(((this._fogRadius||1) - 1) / 4 * 100);
+    const tile = (key, label, sub, on, extra) => {
+      const cls = 'bm-set-tile' + (on?' active':'') + (extra && extra.disabled ? ' disabled' : '');
+      const dis = extra && extra.disabled ? ' disabled' : '';
+      const title = extra && extra.title ? ' title="' + esc(extra.title) + '"' : '';
+      return '<button class="' + cls + '" data-bmset="' + key + '"' + dis + title + '>'
+        + '<span class="bm-set-tile-label">' + esc(label) + '</span>'
+        + (sub ? '<span class="bm-set-tile-sub">' + esc(sub) + '</span>' : '')
+        + '</button>';
+    };
+    const slider = (key, label, value, suffix, min, max) => {
+      min = min!=null?min:0; max = max!=null?max:100;
+      return '<div class="bm-set-slider">'
+        + '<div class="bm-set-slider-row"><span>' + esc(label) + '</span>'
+        + '<span class="bm-set-slider-val" id="bm-set-' + key + '-val">' + esc(value+suffix) + '</span></div>'
+        + '<input type="range" id="bm-set-' + key + '" min="' + min + '" max="' + max + '" value="' + value + '">'
+        + '</div>';
+    };
+    return ''
+      + '<aside class="bm-settings">'
+      + '<div class="bm-set-head"><span>Settings</span><button class="btn icon-btn" data-bmset="close" title="Close">×</button></div>'
+
+      + '<div class="bm-set-section-head">MAP</div>'
+      + '<div class="bm-set-tiles">'
+      +   tile('pick-map',    'Battlemap',  mapName,          !!this._bgMapPath, {})
+      +   tile('fog-toggle',  'Fog of War', fogOn?'On':'Off', fogOn,             {})
+      +   tile('rotate',      'Rotate',     (this._mapRotation||0)+'°', !!this._mapRotation, {})
+      + '</div>'
+
+      + '<div class="bm-set-section-head">FOG OF WAR</div>'
+      + '<div class="bm-set-tiles four">'
+      +   tile('fog-reveal',  'Reveal', '', fogOn && paint==='reveal', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      +   tile('fog-hide',    'Hide',   '', fogOn && paint==='hide',   {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      +   tile('fog-clear',   'Clear',  '', false,                    {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      +   tile('fog-fill',    'Fill',   '', false,                    {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
+      + '</div>'
+
+      + '<div class="bm-set-section-head">FOG SLIDERS</div>'
+      + slider('brush',    'Brush Size', brushPct,          '%', 0, 100)
+      + slider('hardness', 'Hardness',   this._fogHardness, '%', 0, 100)
+
+      + '<div class="bm-set-section-head">GRID</div>'
+      + '<div class="bm-set-tiles four">'
+      +   tile('grid-square', 'Square', '', this._showGrid !== false, {})
+      +   tile('grid-hex',    'Hex',    '', false, {disabled:true, title:'Hex grid coming soon'})
+      +   tile('grid-none',   'None',   '', this._showGrid === false, {})
+      +   tile('grid-cell',   'Cell',   '', false, {disabled:true, title:'Cell highlight mode coming soon'})
+      + '</div>'
+      + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)
+      + slider('opacity',  'Opacity',   this._gridOpacity, '%', 0, 100)
+
+      + '<div class="bm-set-section-head">TOKENS</div>'
+      + '<div class="bm-set-tiles four">'
+      +   tile('tok-all',   'Tokens', '', this._tokensVisible, {})
+      +   tile('tok-names', 'Names',  '', this._namesVisible,  {})
+      +   tile('tok-pcs',   'PCs',    '', this._pcsVisible,    {})
+      +   tile('tok-npcs',  'NPCs',   '', this._npcsVisible,   {})
+      + '</div>'
+
+      + '<button class="btn primary bm-set-load-init" data-bmset="load-init">Load Initiative</button>'
+      + '</aside>';
   },
 
   _renderTokens(){
@@ -1590,7 +1808,7 @@ registerPanel('battlemap',{
     // size (tokens are stored in stage-pixel coords). Visual diameter still
     // uses the natural cellSize × scale via tokScale below.
     const cs=this._csScreen();
-    stage.querySelectorAll('.map-token').forEach(el=>el.remove());
+    stage.querySelectorAll('.map-token, .map-token-name').forEach(el=>el.remove());
 
     const tokScale = this._bgMapScale || 1;
     const csNat = this._cellSize;
@@ -1617,11 +1835,27 @@ registerPanel('battlemap',{
       const dim=(size*csNat-4) * tokScale;
 
       const el=document.createElement('div');
-      el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}`;
+      const hasIcon = !!(t.icon || t.portrait);
+      el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}`;
       el.dataset.tid=t.id;
       const fontSize=(size>1?13:Math.max(8,11-(t.label.length>5?2:0))) * tokScale;
       el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:hidden;box-sizing:border-box`;
-      el.textContent=t.label.length>7?t.label.slice(0,6)+'…':t.label;
+      if (hasIcon){
+        const iconSource = t.portrait || t.icon;
+        el.innerHTML = (typeof renderIcon === 'function')
+          ? renderIcon(iconSource, t.label)
+          : esc(t.label.slice(0,2));
+      } else {
+        el.textContent = t.label.length>7?t.label.slice(0,6)+'…':t.label;
+      }
+      // Name label rendered as a sibling so it sits BELOW the token circle
+      // (the circle has overflow:hidden which would clip an inner label).
+      const nameEl = document.createElement('div');
+      nameEl.className = 'map-token-name' + (t.isPC ? ' pc' : ' npc-t');
+      nameEl.dataset.tid = t.id;
+      nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${(10*tokScale).toFixed(0)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600`;
+      nameEl.textContent = t.label;
+      stage.appendChild(nameEl);
 
       // Right-click on a token opens the options panel (drag/select are left-click only).
       el.addEventListener('contextmenu', e => {
@@ -1837,7 +2071,12 @@ registerPanel('battlemap',{
         // Lay them out on a virtual top-row grid using cellSize as spacing.
         const col = i % this._cols, row = Math.floor(i / this._cols);
         const x = (col + 0.5) * cs, y = (row + 0.5) * cs;
-        this._tokens.push({id:uid(),label:name,x,y,isPC:true,color:'#696969',size:1,dead:(c.hp||0)<=0});
+        // Pull the icon from the matching party member so tokens carry the
+        // same glyph the user picked in the Party Tracker.
+        const partyMatch = state.party.find(p => p.name === name);
+        const icon = (c.icon || (partyMatch && partyMatch.icon) || '⚔');
+        const portrait = c.portrait || (partyMatch && partyMatch.portrait) || null;
+        this._tokens.push({id:uid(),label:name,x,y,isPC:true,color:'#696969',size:1,dead:(c.hp||0)<=0,icon,portrait});
         placed++;
       }
     });
