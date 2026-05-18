@@ -1661,8 +1661,12 @@ registerPanel('battlemap',{
         this._selected=t.id;
 
         const startX=e.clientX, startY=e.clientY;
-        const startPx=px, startPy=py;
-        let curPx=px, curPy=py;
+        // Read t.x / t.y CURRENT, not the closure snapshot from _renderTokens.
+        // The closure copy becomes stale after _scaleTokensTo() (which fires
+        // on bg-map zoom), making the token jump to its pre-zoom position
+        // on the next drag.
+        const startPx=t.x, startPy=t.y;
+        let curPx=t.x, curPy=t.y;
         let moved=false;
         this._drag={moved:false};
 
@@ -1732,8 +1736,10 @@ registerPanel('battlemap',{
         this._selected=t.id;
 
         const startX=touch.clientX, startY=touch.clientY;
-        const startPx=px, startPy=py;
-        let curPx=px, curPy=py;
+        // Same as the mouse-drag handler: read CURRENT t.x/t.y to avoid
+        // a stale closure value after bg-map zoom.
+        const startPx=t.x, startPy=t.y;
+        let curPx=t.x, curPy=t.y;
         let moved=false;
         let longPressFired=false;
         this._drag={moved:false};

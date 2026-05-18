@@ -152,6 +152,7 @@ registerPanel('notes', {
     this._commitEditing();
     if (window.notesSync)   { window.notesSync.stopPolling();   window.notesSync._onPullCallback   = null; }
     if (window.dropboxSync) { window.dropboxSync.stopPolling(); window.dropboxSync._onPullCallback = null; }
+    if (this._paneObserver){ this._paneObserver.disconnect(); this._paneObserver = null; }
     this._body = null;
   },
 
@@ -196,6 +197,7 @@ registerPanel('notes', {
     else                                this._renderPickerView();
     this._editing = false;
     this._applyViewSettings();
+    this._observePaneResize();
     this._wire();
   },
 
@@ -253,13 +255,31 @@ registerPanel('notes', {
     // whole edit area. That way the editable surface always fills the pane
     // (clicking anywhere on the right works), but text wraps at the
     // requested column width. A 30 % floor keeps the column readable.
-    const pct = s.contentWidth >= 100 ? 100 : Math.max(30, s.contentWidth);
-    area.style.setProperty('--note-line-width', pct + '%');
+    //
+    // Auto-disable when the pane itself is narrow — below 500 px the slider
+    // would only make already-cramped text narrower, so we just fill the
+    // pane regardless of slider position.
+    const paneW = area.getBoundingClientRect().width;
+    const effective = (paneW < 500 || s.contentWidth >= 100)
+      ? 100
+      : Math.max(30, s.contentWidth);
+    area.style.setProperty('--note-line-width', effective + '%');
     // Clear any leftover max-width from earlier revisions.
     area.style.maxWidth = '';
     area.style.marginLeft = '';
     area.style.marginRight = '';
     area.style.textAlign = '';
+  },
+
+  // Watch the editor pane for size changes (window resize, divider drag)
+  // and re-run _applyViewSettings so the narrow-pane threshold flips at
+  // the right moment without needing a re-render.
+  _observePaneResize(){
+    if (this._paneObserver){ this._paneObserver.disconnect(); this._paneObserver = null; }
+    const editor = this._body && this._body.querySelector('.notes-editor');
+    if (!editor || typeof ResizeObserver === 'undefined') return;
+    this._paneObserver = new ResizeObserver(() => this._applyViewSettings());
+    this._paneObserver.observe(editor);
   },
 
   // Source-picker screen — left rail with two source tiles, right pane
