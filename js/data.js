@@ -45,6 +45,7 @@ const DEFAULT_LAYOUT = {
   time:        {x:560, y:120, w:300, h:520, open:false, minimized:false, z:11},
   bestiary:    {x:140, y:90,  w:520, h:620, open:false, minimized:false, z:12},
   adventures:  {x:160, y:100, w:880, h:660, open:false, minimized:false, z:13},
+  books:       {x:180, y:120, w:880, h:660, open:false, minimized:false, z:14},
 };
 
 const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,fontScale:1,uiHide:{dock:false,playerView:false,syncStatus:false,tutorialBtn:false,zoomControls:false,windowFocus:false},shopFilters:{rarity:{Common:true,Uncommon:true,Rare:true,VeryRare:true,Legendary:true},categories:{weapons:true,ammo:true,armor:true,tools:true,potions:true,wondrous:true,rodsWands:true,rings:true,scrolls:true,foci:true,treasure:true,foodDrink:true,other:true},includeMagic:true,includeMundane:true},shopAssortmentCounts:{Sparse:8,Standard:18,Abundant:32},healthTiers:[{threshold:100,label:'Healthy'},{threshold:76,label:'Scratched'},{threshold:50,label:'Bloodied'},{threshold:25,label:'Wounded'},{threshold:1,label:'Near Death'},{threshold:0,label:'Defeated'}],combatNameOptions:['spear','hands','rock','small'],hideMonsterStats:false,autoRollInit:false,inspirationReasons:['Critical hit','Critical miss','Roleplay moment','Helped a teammate','Clever idea','Heroic sacrifice']};

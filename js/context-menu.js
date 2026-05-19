@@ -12,6 +12,7 @@ const CTX_PANEL_GROUPS = [
   ]},
   { label: 'References', items: [
     { id: 'adventures', name: 'Adventures' },
+    { id: 'books',      name: 'Books' },
   ]},
   { label: 'NPC Management', items: [
     { id: 'npcgen', name: 'NPC Generator' },
