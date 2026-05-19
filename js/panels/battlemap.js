@@ -108,6 +108,11 @@ registerPanel('battlemap',{
   // rebuilding each one. Persisted under its own localStorage key so it
   // doesn't bloat the active-map blob.
   _savedMaps: [],
+  // Set of 5etools map paths the user has starred. Lets the DM build a
+  // personal quick-access list of favorite adventure maps without scrolling
+  // through 100+ adventures every session. Persisted as an array under its
+  // own localStorage key.
+  _starredMaps: null,
 
   mount(body){
     this._body=body;
@@ -165,6 +170,13 @@ registerPanel('battlemap',{
         if (Array.isArray(d.saved)) this._savedMaps = d.saved;
       }
     } catch(e){}
+    // Starred adventure-map paths — separate key; stored as an array but
+    // held as a Set in memory for O(1) lookup during render.
+    try {
+      const raw = localStorage.getItem('skt-battlemap-starred-v1');
+      const arr = raw ? JSON.parse(raw) : [];
+      this._starredMaps = new Set(Array.isArray(arr) ? arr : []);
+    } catch(e){ this._starredMaps = new Set(); }
     this._render();
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath);
     this._startBroadcast();
@@ -331,6 +343,60 @@ registerPanel('battlemap',{
     // if they want "Brody" they can rename via the token options panel.
     const first = String(t.label).trim().split(/\s+/)[0];
     return first || t.label;
+  },
+
+  _saveStarredMaps(){
+    try {
+      localStorage.setItem('skt-battlemap-starred-v1', JSON.stringify([...(this._starredMaps || [])]));
+    } catch(e){}
+  },
+
+  // Toggle the starred state of a 5etools map path. Returns the new state
+  // (true = now starred). Caller is responsible for updating the visual.
+  _toggleStarredMap(path){
+    if (!this._starredMaps) this._starredMaps = new Set();
+    let nowStarred;
+    if (this._starredMaps.has(path)){ this._starredMaps.delete(path); nowStarred = false; }
+    else { this._starredMaps.add(path); nowStarred = true; }
+    this._saveStarredMaps();
+    return nowStarred;
+  },
+
+  // Render the "Starred" quick-access section in the map picker. Pulls map
+  // metadata from `_allMaps` if it's already been indexed; otherwise renders
+  // just the paths (title falls back to the filename slug). Returns '' when
+  // nothing is starred yet so the modal stays compact for first-time users.
+  _renderStarredMapsSection(){
+    const set = this._starredMaps;
+    if (!set || !set.size) return '';
+    // Resolve each starred path to its full metadata if possible.
+    const meta = new Map();
+    if (Array.isArray(this._allMaps)){
+      this._allMaps.forEach(m => meta.set(m.path, m));
+    } else {
+      // Fall back to whatever per-adventure caches happen to be populated.
+      Object.values(this._mapsByAdv || {}).forEach(list => {
+        (list || []).forEach(m => { if (!meta.has(m.path)) meta.set(m.path, m); });
+      });
+    }
+    const cards = [...set].map(path => {
+      const m = meta.get(path) || { path, title: path.split('/').pop().replace(/\.[^.]+$/, ''), type:'map' };
+      const tokenSrc = 'img/' + m.path;
+      return `<div class="mapsel-card starred" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
+        <button class="mapsel-star on" data-mapsel-star="${esc(m.path)}" title="Unstar">★</button>
+        <img src="${esc(tokenSrc)}" loading="lazy" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
+        <div class="mapsel-title">${esc(m.title)}</div>
+        ${m.advName ? `<div class="mapsel-sub">${esc(m.advName)}</div>` : ''}
+        <span class="mapsel-badge ${esc(m.type || 'map')}">${m.type==='mapPlayer'?'Player':'DM'}</span>
+      </div>`;
+    }).join('');
+    return `<div id="mapsel-starred-host" style="margin-bottom:14px">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        <span>★ Starred maps</span>
+        <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400">${set.size}</span>
+      </div>
+      <div class="mapsel-grid mapsel-starred-grid">${cards}</div>
+    </div>`;
   },
 
   // Render the "Saved maps" section that sits at the top of the picker
@@ -1630,6 +1696,7 @@ registerPanel('battlemap',{
       <h3 style="margin:0 0 10px">Choose a Map</h3>
       <div style="flex:1;overflow-y:auto;padding-right:4px">
         ${this._renderSavedMapsSection()}
+        ${this._renderStarredMapsSection()}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
           <input id="mapsel-search" type="search" autocomplete="off" placeholder="🔎 Search maps across every adventure…"
             style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
@@ -1859,10 +1926,13 @@ registerPanel('battlemap',{
         grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">'+(opts.emptyMsg||'No maps.')+'</div>';
         return;
       }
+      const starred = this._starredMaps || new Set();
       grid.innerHTML = cards.map(m=>{
         const tokenSrc = 'img/'+m.path;
         const subtitle = opts.showAdv && m.advName ? `<div class="mapsel-sub">${esc(m.advName)}</div>` : '';
-        return `<div class="mapsel-card" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
+        const isStarred = starred.has(m.path);
+        return `<div class="mapsel-card${isStarred?' starred':''}" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
+          <button class="mapsel-star ${isStarred?'on':''}" data-mapsel-star="${esc(m.path)}" title="${isStarred?'Unstar':'Star (quick-access)'}">${isStarred?'★':'☆'}</button>
           <img src="${esc(tokenSrc)}" loading="lazy" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
           <div class="mapsel-title">${esc(m.title)}</div>
           ${subtitle}
@@ -1870,7 +1940,10 @@ registerPanel('battlemap',{
         </div>`;
       }).join('');
       grid.querySelectorAll('.mapsel-card').forEach(card=>{
-        card.addEventListener('click', ()=>{
+        card.addEventListener('click', e => {
+          // Star toggle has its own click handler that stops propagation;
+          // anything else on the card opens the map.
+          if (e.target.closest('.mapsel-star')) return;
           const path = card.dataset.path;
           this._bgMapPath = path;
           this._bgMapScale = 1;
@@ -1885,7 +1958,94 @@ registerPanel('battlemap',{
           showToast('Map loaded');
         });
       });
+      // Star toggles — works both for cards in the main grid AND for the
+      // starred-strip render at the top of the modal (same data attribute).
+      // Wires once at the modal root so re-renders pick up new buttons.
+      grid.querySelectorAll('[data-mapsel-star]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const path = btn.dataset.mapselStar;
+        const nowStarred = this._toggleStarredMap(path);
+        // Update the local card's visual without a full re-render so the
+        // user's scroll position / typed search stays put.
+        btn.textContent = nowStarred ? '★' : '☆';
+        btn.classList.toggle('on', nowStarred);
+        btn.title = nowStarred ? 'Unstar' : 'Star (quick-access)';
+        btn.closest('.mapsel-card')?.classList.toggle('starred', nowStarred);
+        // Refresh the starred strip at the top so it reflects the new state
+        // (added/removed). Re-rendering only that host keeps everything else
+        // intact.
+        const oldHost = backdrop.querySelector('#mapsel-starred-host');
+        const newHtml = this._renderStarredMapsSection();
+        if (oldHost && newHtml){
+          // Replace in place.
+          const wrap = document.createElement('div');
+          wrap.innerHTML = newHtml;
+          oldHost.replaceWith(wrap.firstElementChild);
+          wireStarredStrip();
+        } else if (oldHost && !newHtml){
+          oldHost.remove();
+        } else if (!oldHost && newHtml){
+          // Insert before the search row (first sibling of the scroll wrapper)
+          const scroller = backdrop.querySelector('.modal > div[style*="overflow-y"]');
+          const savedHost = backdrop.querySelector('#mapsel-saved-host');
+          const wrap = document.createElement('div');
+          wrap.innerHTML = newHtml;
+          const newHost = wrap.firstElementChild;
+          if (savedHost) savedHost.after(newHost);
+          else scroller?.prepend(newHost);
+          wireStarredStrip();
+        }
+      }));
     };
+
+    // Wire click handlers for the starred-maps strip cards (separate from
+    // renderCards because the strip lives outside the main grid). Called
+    // once after the initial modal render and again whenever the strip is
+    // rebuilt in response to a star toggle.
+    const wireStarredStrip = () => {
+      backdrop.querySelectorAll('#mapsel-starred-host .mapsel-card').forEach(card => {
+        card.addEventListener('click', e => {
+          if (e.target.closest('.mapsel-star')) return;
+          const path = card.dataset.path;
+          this._bgMapPath = path;
+          this._bgMapScale = 1;
+          this._lastTokenScale = 1;
+          this._gridOffsetX = 0;
+          this._gridOffsetY = 0;
+          this._saveMap();
+          this._loadBgFromPath(path, /*autoFit=*/true);
+          close();
+          showToast('Map loaded');
+        });
+      });
+      backdrop.querySelectorAll('#mapsel-starred-host [data-mapsel-star]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const path = btn.dataset.mapselStar;
+        this._toggleStarredMap(path);
+        // Always unstars (the strip only shows starred items), so the row
+        // should vanish from the strip and re-sync the main grid card too.
+        const oldHost = backdrop.querySelector('#mapsel-starred-host');
+        const newHtml = this._renderStarredMapsSection();
+        if (oldHost && newHtml){
+          const wrap = document.createElement('div');
+          wrap.innerHTML = newHtml;
+          oldHost.replaceWith(wrap.firstElementChild);
+          wireStarredStrip();
+        } else if (oldHost){
+          oldHost.remove();
+        }
+        // Sync the main-grid card visual if it's showing.
+        const gridBtn = backdrop.querySelector(`#mapsel-grid [data-mapsel-star="${esc(path)}"]`);
+        if (gridBtn){
+          gridBtn.textContent = '☆';
+          gridBtn.classList.remove('on');
+          gridBtn.title = 'Star (quick-access)';
+          gridBtn.closest('.mapsel-card')?.classList.remove('starred');
+        }
+      }));
+    };
+    // Initial wire for any starred-strip cards rendered with the modal.
+    wireStarredStrip();
 
     // Eager fetch all adventures' maps for global search. Concurrency-limited
     // (8 in flight) so parsing 100+ large 5etools JSON files doesn't block the

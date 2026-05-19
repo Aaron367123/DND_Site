@@ -69,6 +69,35 @@ registerPanel('combat',{
     return sorted.length ? (sorted[sorted.length-1].label || '?') : '—';
   },
 
+  // Render the collapsible round-log strip at the bottom of the panel.
+  // Shown only when there's at least one entry; persists `_logOpen` on
+  // the panel so the user's open/closed preference survives re-renders.
+  _renderLog(){
+    const log = Array.isArray(state.combatLog) ? state.combatLog : [];
+    if (!log.length) return '';
+    const open = this._logOpen !== false; // default open
+    // Show newest at the bottom (chronological), tail-trimmed to 25 most
+    // recent so the strip doesn't dominate the panel. Click "Show all" in
+    // the header to bypass the cap.
+    const showAll = !!this._logShowAll;
+    const recent = showAll ? log : log.slice(-25);
+    const rows = recent.map(e => `<div class="combat-log-row">
+      <span class="combat-log-round">R${e.round || '·'}</span>
+      <span class="combat-log-text">${esc(e.text)}</span>
+    </div>`).join('');
+    return `<div class="combat-log ${open?'open':'collapsed'}">
+      <div class="combat-log-head" data-act="toggle-log">
+        <span class="combat-log-caret">${open?'▾':'▸'}</span>
+        <span class="combat-log-title">Round log</span>
+        <span class="combat-log-count">${log.length}</span>
+        <span style="flex:1"></span>
+        ${(open && log.length > 25) ? `<button class="combat-log-mini" data-act="log-toggle-all" title="${showAll?'Show only the last 25':'Show every entry'}">${showAll?'Show recent':'Show all'}</button>` : ''}
+        ${open ? '<button class="combat-log-mini" data-act="log-clear" title="Clear the log">Clear</button>' : ''}
+      </div>
+      ${open ? `<div class="combat-log-body">${rows}</div>` : ''}
+    </div>`;
+  },
+
   _render(){
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
@@ -96,6 +125,8 @@ registerPanel('combat',{
         ? '<div class="combatant-list" id="combat-list">'+this._renderCombatants()+'</div>'
         : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}
 
+      ${inCombat ? this._renderLog() : ''}
+
       <div class="combat-droptip" id="combat-droptip">Drop to add to combat</div>`;
     this._wire();
   },
@@ -115,11 +146,23 @@ registerPanel('combat',{
     // DM tab always shows real values regardless of the setting.
     const isPlayerView = document.body.classList.contains('player-mode');
     const mode = (!isPC && isPlayerView) ? this._statsMode() : 'show';
+    // Temp HP for PCs is mirrored from state.party (the party tracker owns
+    // the field). Shown as a small "+N" pill next to the HP value when > 0.
+    const partyMatch = isPC ? state.party.find(p => p.id === c.id) : null;
+    const tempHp = partyMatch?.tempHp || 0;
+    const dmgWidget = (mode !== 'show')
+      ? ''
+      : `<div class="hp-dmg-widget" data-idx="${i}">
+          <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Apply as damage (drains temp HP first)">−</button>
+          <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Damage / heal amount">
+          <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Apply as healing (clamped to max HP)">+</button>
+        </div>`;
+    const tempBadge = tempHp > 0 ? `<span class="hp-temp-badge" title="Temporary HP (absorbs damage first)">+${tempHp}</span>` : '';
     const hpField = mode === 'hide'
       ? '<span class="card-stat-hidden">?</span>'
       : mode === 'conceal'
         ? `<span class="card-stat-tier" title="Concealed health">${esc(this._hpTier(c))}</span>`
-        : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">`;
+        : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">${tempBadge}${dmgWidget}`;
     const acField = mode === 'show'
       ? `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`
       : '<span class="card-stat-hidden">?</span>';
@@ -148,6 +191,7 @@ registerPanel('combat',{
           <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
         </div>
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
+        ${(!isPC && (c.legendaryMax || c.legendaryMax === 0)) ? this._renderLegendary(i, c) : ''}
         ${(isPC && (c.hp||0) <= 0) ? this._renderDeathSaves(i, c) : ''}
       </div>
       <div class="card-actions">
@@ -188,6 +232,49 @@ registerPanel('combat',{
       else if(act==='duplicate')      this._duplicate(parseInt(el.dataset.idx));
       else if(act==='rmcond')         this._removeCond(parseInt(el.dataset.idx),el.dataset.cond);
       else if(act==='upload-portrait')this._uploadPortrait(parseInt(el.dataset.idx));
+      else if(act==='toggle-log'){
+        // Toggle when clicking the header — but not when clicking one of
+        // the inline action buttons inside the header (which have their
+        // own data-act values).
+        if (e.target.closest('.combat-log-mini')) return;
+        this._logOpen = !(this._logOpen !== false);
+        this._render();
+      }
+      else if(act==='log-toggle-all'){
+        this._logShowAll = !this._logShowAll;
+        this._render();
+      }
+      else if(act==='log-clear'){
+        if (typeof showConfirm === 'function'){
+          showConfirm('Clear the round log? This can\'t be undone.', {title:'Clear log', confirmLabel:'Clear', danger:true}).then(ok => {
+            if (!ok) return;
+            state.combatLog = [];
+            save(); this._render();
+          });
+        } else {
+          state.combatLog = [];
+          save(); this._render();
+        }
+      }
+      else if(act==='legendary-pip'){
+        const i = parseInt(el.dataset.idx);
+        const n = parseInt(el.dataset.n);
+        const c = state.combatants[i]; if (!c || !c.legendaryMax) return;
+        const used = c.legendaryUsed || 0;
+        // Clicking pip N: if it's empty (N >= used), spend up to & including N
+        // (used = N+1). If it's filled (N < used), refund (used = N).
+        c.legendaryUsed = n < used ? n : (n + 1);
+        save(); this._render();
+      }
+      else if(act==='hp-damage' || act==='hp-heal'){
+        const i = parseInt(el.dataset.idx);
+        const card = el.closest('.combatant-card');
+        const amtInp = card?.querySelector('.hp-dmg-amt');
+        const amt = Math.max(0, parseInt(amtInp?.value) || 0);
+        if (!amt) return;
+        this._lastDmgAmount = amt;
+        this._applyHpDelta(i, act === 'hp-damage' ? -amt : +amt);
+      }
       else if(act==='death-save'){
         const i = parseInt(el.dataset.idx);
         const kind = el.dataset.kind; // 'success' | 'fail'
@@ -206,6 +293,17 @@ registerPanel('combat',{
         save(); this._render();
       }
     }));
+
+    // Damage/heal amount inputs shouldn't trigger card click or drag.
+    b.querySelectorAll('.hp-dmg-amt').forEach(inp => {
+      inp.addEventListener('click', e => e.stopPropagation());
+      inp.addEventListener('mousedown', e => e.stopPropagation());
+      // Persist the typed value so the next render starts from it.
+      inp.addEventListener('change', () => {
+        const v = parseInt(inp.value) || 0;
+        if (v > 0) this._lastDmgAmount = v;
+      });
+    });
 
     // Combatant inputs (hp, ac, initiative, name) — no auto-sort
     // Numeric fields are clamped to sane ranges to prevent fat-finger inputs
@@ -266,9 +364,39 @@ registerPanel('combat',{
         const i=+card.dataset.idx;
         const c=state.combatants[i]; if(!c) return;
         const have=new Set(c.conditions||[]);
-        const items=SEARCH_DATA
+        const items = [];
+        // Monsters get a "Legendary actions" sub-section at the top: enable
+        // with a default of 3, or adjust to 0/1/2/3/4/5 once enabled.
+        if (!c.isPC){
+          if (c.legendaryMax == null){
+            items.push({ label:'➕ Enable legendary actions (3/turn)', onClick:()=>{
+              state.combatants[i] = {...c, legendaryMax:3, legendaryUsed:0};
+              save(); this._render();
+            }});
+          } else {
+            items.push({ label:'⚜ Legendary uses ─────', disabled:true });
+            for (let n = 0; n <= 5; n++){
+              items.push({
+                label: '   ' + n + ' / turn',
+                checked: c.legendaryMax === n,
+                onClick: () => {
+                  state.combatants[i] = {...c, legendaryMax:n, legendaryUsed:Math.min(c.legendaryUsed||0, n)};
+                  save(); this._render();
+                }
+              });
+            }
+            items.push({ label:'✕ Disable legendary tracker', onClick:()=>{
+              state.combatants[i] = {...c};
+              delete state.combatants[i].legendaryMax;
+              delete state.combatants[i].legendaryUsed;
+              save(); this._render();
+            }});
+            items.push({ label:'─────', disabled:true });
+          }
+        }
+        SEARCH_DATA
           .filter(d=>d.cat==='condition')
-          .map(d=>({label:d.name, checked:have.has(d.name), onClick:()=>this._toggleCondAtIdx(i,d.name)}));
+          .forEach(d => items.push({label:d.name, checked:have.has(d.name), onClick:()=>this._toggleCondAtIdx(i,d.name)}));
         showContextMenu(x, y, items);
       };
       card.addEventListener('contextmenu',e=>{
@@ -470,6 +598,9 @@ registerPanel('combat',{
       baseName: base,
       hp: c.hpMax || c.hp,
       conditions: [],
+      // Fresh legendary pool on the duplicate — the original's spent count
+      // shouldn't carry over to the new instance.
+      legendaryUsed: c.legendaryMax ? 0 : c.legendaryUsed,
     });
     save(); this._render();
   },
@@ -477,13 +608,78 @@ registerPanel('combat',{
   _nextTurn(){
     if(!state.combatants.length){ showToast('No combatants yet'); return; }
     let id=state.activeCombatantId,round=state.combatRound;
+    let newRound = false;
     if(!id){id=state.combatants[0].id;round=Math.max(1,round);}
     else{
       let ni=state.combatants.findIndex(c=>c.id===id)+1;
-      if(ni>=state.combatants.length){ni=0;round++;showToast(`Round ${round}`);}
+      if(ni>=state.combatants.length){ni=0;round++;newRound=true;showToast(`Round ${round}`);}
       id=state.combatants[ni].id;
     }
-    state.activeCombatantId=id;state.combatRound=round;save();this._render();
+    state.activeCombatantId=id;state.combatRound=round;
+    if (newRound){
+      this._log('— Round ' + round + ' —');
+      // Refresh legendary action pools at the start of every round (5e rule).
+      state.combatants.forEach(c => {
+        if (c.legendaryMax){ c.legendaryUsed = 0; }
+      });
+    }
+    save();this._render();
+  },
+
+  // Append an entry to the shared combat log. Capped at 200 entries so the
+  // log doesn't grow unbounded across long sessions. Persisted via the
+  // normal save() path so refreshing preserves history.
+  _log(text){
+    if (!Array.isArray(state.combatLog)) state.combatLog = [];
+    state.combatLog.push({ts: Date.now(), round: state.combatRound || 0, text: String(text)});
+    if (state.combatLog.length > 200) state.combatLog = state.combatLog.slice(-200);
+  },
+
+  // Apply +/- HP to combatant `i`. Negative delta = damage; drains the PC's
+  // temporary HP first (mirrored from the Party tracker) before chipping
+  // into real HP. Positive delta = heal, clamped to hpMax. Mirrors to party
+  // afterward so HP bars stay in sync.
+  _applyHpDelta(i, delta){
+    const c = state.combatants[i]; if (!c) return;
+    let remaining = delta;
+    let logParts = [];
+    if (delta < 0){
+      // Damage path — temp HP first (PC only)
+      if (c.isPC){
+        const partyIdx = state.party.findIndex(p => p.id === c.id);
+        const partySlot = partyIdx >= 0 ? state.party[partyIdx] : null;
+        if (partySlot && (partySlot.tempHp || 0) > 0){
+          const drain = Math.min(partySlot.tempHp, -remaining);
+          partySlot.tempHp -= drain;
+          remaining += drain; // remaining is negative → becomes less negative
+          if (drain) logParts.push(drain + ' temp');
+        }
+      }
+      if (remaining < 0){
+        const taken = -remaining;
+        c.hp = (c.hp || 0) - taken;
+        logParts.push(taken + ' HP');
+        // PC dropped to 0 — initialize death saves if not already there.
+        if (c.isPC && c.hp <= 0 && !c.deathSaves){
+          c.deathSaves = {success:0, fail:0};
+        }
+      }
+      this._log(c.name + ' took ' + logParts.join(' + ') + ' damage');
+    } else if (delta > 0){
+      const before = c.hp || 0;
+      const cap = c.hpMax || c.hp || 0;
+      c.hp = Math.min(cap, before + delta);
+      const actual = c.hp - before;
+      // PC healed above 0 — clear death-save tracker.
+      if (c.isPC && c.hp > 0 && c.deathSaves){ delete c.deathSaves; }
+      this._log(c.name + ' healed ' + actual + ' HP');
+    }
+    save();
+    // Mirror HP changes to the party tracker for PCs (party.js does the
+    // reverse via syncPartyToCombat).
+    if (c.isPC && typeof syncCombatToParty === 'function') syncCombatToParty(c.id);
+    if (c.isPC) panelDefs.party?._render?.();
+    this._render();
   },
 
   _removeCond(i,cond){
@@ -495,6 +691,26 @@ registerPanel('combat',{
     // the chip lingers on the party card until something else triggers a
     // party re-render. Same fix already exists in _toggleCondAtIdx.
     if (c && c.isPC) panelDefs.party?._render?.();
+  },
+
+  // Per-monster legendary action tracker — N pip dots that toggle as the
+  // DM spends each one between turns. Pool refreshes automatically at the
+  // start of every new round (5e rule). Pip clicks both spend and refund
+  // — clicking a filled pip empties it, clicking an empty pip spends one.
+  _renderLegendary(i, c){
+    const max = c.legendaryMax || 0;
+    if (!max) return '';
+    const used = Math.min(c.legendaryUsed || 0, max);
+    let pips = '';
+    for (let n = 0; n < max; n++){
+      const spent = n < used;
+      pips += `<span class="legendary-pip ${spent?'spent':'available'}" data-act="legendary-pip" data-idx="${i}" data-n="${n}" title="${spent?'Refund':'Spend'} legendary action ${n+1}"></span>`;
+    }
+    return `<div class="legendary-row" title="Legendary actions — pool refreshes each round">
+      <span class="legendary-label">⚜ Legendary</span>
+      ${pips}
+      <span class="legendary-count">${max-used}/${max}</span>
+    </div>`;
   },
 
   _renderDeathSaves(i, c){
@@ -759,6 +975,14 @@ registerPanel('combat',{
       const token = raw.replace(/^bestiary\//, 'bestiary/tokens/');
       portrait = 'img/' + token;
     }
+    // Auto-detect legendary actions from the 5etools entry. 5etools data
+    // exposes them at m._raw.legendary_actions (array). Default count is 3
+    // per 5e baseline; if the stat block declares more in its description
+    // we just stop at 3 — DM can bump via the right-click menu.
+    const hasLegendary = m && m._raw && Array.isArray(m._raw.legendary_actions) && m._raw.legendary_actions.length > 0;
+    const legendaryFields = hasLegendary
+      ? { legendaryMax: 3, legendaryUsed: 0 }
+      : {};
     state.combatants.push({
       id: uid(),
       name: displayName,
@@ -772,6 +996,7 @@ registerPanel('combat',{
       initiative: initMod, // pre-fill with dex modifier; user can bump it before/during combat
       conditions: [],
       portrait,
+      ...legendaryFields,
     });
     if (!state.combatRound) state.combatRound = 1;
     save(); this._render();

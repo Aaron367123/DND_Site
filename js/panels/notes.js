@@ -96,6 +96,16 @@ function _notesMdLine(line){
   h = h.replace(/\*(.+?)\*/g,'<em>$1</em>');
   h = h.replace(/_(.+?)_/g,'<em>$1</em>');
   h = h.replace(/`(.+?)`/g,'<code>$1</code>');
+  // Wiki-style backlinks — `[[Note Name]]` becomes a clickable chip that
+  // jumps to the matching note. Resolution happens at click time so the
+  // link survives note renames (matched by name, case-insensitive). The
+  // `[[` text was already entity-escaped above so we match `&#91;&#91;` —
+  // but the input is already-escaped, so `[[` is literal. The data-attr
+  // carries the raw target name; click handler in _wire dispatches.
+  h = h.replace(/\[\[([^\]\n]+?)\]\]/g, (_m, target) => {
+    const safe = target.replace(/"/g, '&quot;');
+    return '<a class="note-wiki-link" data-wiki-target="'+safe+'" href="#" title="Jump to note &quot;'+safe+'&quot;">'+target+'</a>';
+  });
   if (block === 'li')  return '<ul><li>'+h+'</li></ul>';
   if (block === 'oli') return '<ol><li>'+h+'</li></ol>';
   if (block && block.indexOf('li-indent-') === 0){
@@ -183,7 +193,58 @@ registerPanel('notes', {
     return this._data.items.find(i => i.id === this._data.selectedId && i.type === 'file');
   },
 
-  // Build a sorted tree from the flat items list.
+  // True when `descId` is `ancestorId` or sits anywhere under it. Used by
+  // the drag handler to reject moving a folder into one of its own
+  // descendants (which would orphan the subtree).
+  _isDescendant(descId, ancestorId){
+    if (descId === ancestorId) return true;
+    let cur = this._data.items.find(x => x.id === descId);
+    while (cur && cur.parent){
+      if (cur.parent === ancestorId) return true;
+      cur = this._data.items.find(x => x.id === cur.parent);
+    }
+    return false;
+  },
+
+  // Recompute `order` values on the siblings under `parentId`. Two modes:
+  //   • `end:true` → put `movedId` at the bottom of its new siblings.
+  //   • `end:false, anchorId, before` → insert `movedId` immediately
+  //     before/after `anchorId` among its siblings.
+  // Order values are renumbered 10, 20, 30… so future inserts have room
+  // without renumbering everyone.
+  _reorderSiblings(parentId, movedId, end, anchorId, before){
+    const all = this._data.items.filter(x => (x.parent || null) === (parentId || null));
+    // Keep current sort (folders first, then by existing order then alpha)
+    // before we insert/move so the user sees a stable result.
+    all.sort((a,b) => {
+      if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+      const ao = (typeof a.order === 'number') ? a.order : Infinity;
+      const bo = (typeof b.order === 'number') ? b.order : Infinity;
+      if (ao !== bo) return ao - bo;
+      return a.name.localeCompare(b.name);
+    });
+    // Pull the moved item out of its current position.
+    const withoutMoved = all.filter(x => x.id !== movedId);
+    const moved = this._data.items.find(x => x.id === movedId);
+    if (!moved) return;
+    let next;
+    if (end || !anchorId){
+      next = withoutMoved.concat([moved]);
+    } else {
+      const ai = withoutMoved.findIndex(x => x.id === anchorId);
+      if (ai < 0) next = withoutMoved.concat([moved]);
+      else {
+        const insertAt = before ? ai : ai + 1;
+        next = withoutMoved.slice(0, insertAt).concat([moved]).concat(withoutMoved.slice(insertAt));
+      }
+    }
+    next.forEach((it, i) => { it.order = (i + 1) * 10; });
+  },
+
+  // Build a sorted tree from the flat items list. Items with an explicit
+  // `order` number sort by that first (manual drag-reorder); anything
+  // without falls back to alphabetical. Folders always cluster before files
+  // so the visual hierarchy stays clean even after manual ordering.
   _buildTree(){
     const byParent = new Map();
     this._data.items.forEach(it => {
@@ -192,8 +253,10 @@ registerPanel('notes', {
       byParent.get(k).push(it);
     });
     byParent.forEach(arr => arr.sort((a,b) => {
-      // folders first, then files; within group alphabetical
       if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+      const ao = (typeof a.order === 'number') ? a.order : Infinity;
+      const bo = (typeof b.order === 'number') ? b.order : Infinity;
+      if (ao !== bo) return ao - bo;
       return a.name.localeCompare(b.name);
     }));
     return byParent;
@@ -355,7 +418,7 @@ registerPanel('notes', {
     return kids.map(it => {
       if (it.type === 'folder') {
         const expanded = it.expanded !== false;
-        return `<div class="notes-tree-row notes-folder" data-id="${it.id}" data-act="toggle-folder" style="padding-left:${8+depth*14}px">
+        return `<div class="notes-tree-row notes-folder" data-id="${it.id}" data-act="toggle-folder" draggable="true" style="padding-left:${8+depth*14}px">
             <span class="caret">${expanded?'▾':'▸'}</span>
             <span class="notes-tree-name">${esc(it.name)}</span>
             <span class="notes-tree-actions">
@@ -367,7 +430,7 @@ registerPanel('notes', {
           ${expanded ? this._renderTree(tree, it.id, depth+1) : ''}`;
       } else {
         const sel = it.id === this._data.selectedId ? ' selected' : '';
-        return `<div class="notes-tree-row notes-file${sel}" data-id="${it.id}" data-act="select-file" style="padding-left:${8+depth*14+12}px">
+        return `<div class="notes-tree-row notes-file${sel}" data-id="${it.id}" data-act="select-file" draggable="true" style="padding-left:${8+depth*14+12}px">
           <span class="notes-tree-name">${esc(it.name)}.md</span>
           <span class="notes-tree-actions">
             <button class="icon-btn" data-act="rename" data-id="${it.id}" title="Rename">✎</button>
@@ -415,6 +478,37 @@ registerPanel('notes', {
   // Floating settings popover anchored under the ⚙ button. Holds the
   // per-tab "how should this notes panel look" controls — text size and
   // content width — both as range sliders that update the preview live.
+  // Render the per-author color list that goes inside the settings popover.
+  // Each line is `<swatch> <name input> <delete>` so the user can rename
+  // / recolor their own entry and remove stale collaborator entries. The
+  // "me" row is highlighted and its swatch writes back to skt-me-v1 (the
+  // global identity), which the rest of the app reads from too.
+  _renderAuthorsSection(){
+    const authors = this._data?.authors || {};
+    const meId = (typeof _getMe === 'function') ? _getMe().id : null;
+    const ids = Object.keys(authors);
+    if (!ids.length){
+      return `<div class="nvs-field"><div class="nvs-row"><span class="nvs-label">Authors</span></div>
+        <p style="font-size:10px;color:var(--text-dim);margin:2px 0 0">No collaborators yet — each browser that edits a note will appear here with its identity color.</p>
+      </div>`;
+    }
+    // Put "me" first.
+    ids.sort((a, b) => (a === meId ? -1 : b === meId ? 1 : 0));
+    const rows = ids.map(id => {
+      const a = authors[id] || {};
+      const isMe = id === meId;
+      return `<div class="nvs-author-row" data-author-id="${esc(id)}">
+        <input type="color" class="nvs-author-color" value="${esc(a.color || '#888888')}" title="Color">
+        <input type="text"  class="nvs-author-name"  value="${esc(a.name || 'Anonymous')}" ${isMe ? '' : 'readonly'} title="${isMe ? 'Your display name' : 'Read-only — other collaborator'}">
+        ${isMe ? '<span class="nvs-author-tag">you</span>' : '<button class="nvs-author-del" data-author-del="'+esc(id)+'" title="Remove this collaborator from the legend">×</button>'}
+      </div>`;
+    }).join('');
+    return `<div class="nvs-field">
+      <div class="nvs-row"><span class="nvs-label">Authors</span></div>
+      <div class="nvs-authors-list">${rows}</div>
+    </div>`;
+  },
+
   _openViewSettingsPopover(anchor){
     // If already open, close (toggle).
     const existing = document.getElementById('notes-view-settings-pop');
@@ -439,6 +533,7 @@ registerPanel('notes', {
         <input id="nvs-width" type="range" min="0" max="100" step="1" value="${s.contentWidth}">
         <div class="nvs-scale"><span>Narrow</span><span>${s.contentWidth}%</span><span>Full</span></div>
       </div>
+      ${this._renderAuthorsSection()}
       <div class="nvs-actions">
         <button class="btn" id="nvs-reset">Reset</button>
         <button class="btn primary" id="nvs-done">Done</button>
@@ -469,6 +564,49 @@ registerPanel('notes', {
     wid.addEventListener('input', apply);
     pop.querySelector('#nvs-reset').addEventListener('click', () => {
       txt.value = 110; wid.value = 73; apply();
+    });
+
+    // Author rows — "me" row edits color/name (and writes back to the
+    // global identity via _getMe → localStorage). Other rows let the user
+    // delete the entry from the legend (which doesn't unattribute the
+    // existing per-line colors — those are baked into lineAuthors arrays).
+    const meId = (typeof _getMe === 'function') ? _getMe().id : null;
+    pop.querySelectorAll('.nvs-author-row').forEach(row => {
+      const id = row.dataset.authorId;
+      const colorInp = row.querySelector('.nvs-author-color');
+      const nameInp  = row.querySelector('.nvs-author-name');
+      const delBtn   = row.querySelector('.nvs-author-del');
+      const writeBack = () => {
+        if (!this._data.authors) this._data.authors = {};
+        this._data.authors[id] = this._data.authors[id] || {};
+        this._data.authors[id].color = colorInp.value;
+        this._data.authors[id].name  = nameInp.value;
+        // For "me", also update the global identity so other panels (and
+        // future writes) use the new values.
+        if (id === meId){
+          try {
+            const me = JSON.parse(localStorage.getItem('skt-me-v1') || '{}') || {};
+            me.color = colorInp.value;
+            me.name  = nameInp.value;
+            localStorage.setItem('skt-me-v1', JSON.stringify(me));
+          } catch(e){}
+        }
+        this._save();
+        // Re-render the editor so existing colored lines pick up the new
+        // palette immediately.
+        if (this._body && !this._editing) this._refreshPreview();
+      };
+      colorInp.addEventListener('input', writeBack);
+      if (id === meId) nameInp.addEventListener('change', writeBack);
+      delBtn?.addEventListener('click', () => {
+        if (!this._data.authors) return;
+        delete this._data.authors[id];
+        this._save();
+        // Re-render the popover content so the row disappears immediately.
+        const list = pop.querySelector('.nvs-authors-list');
+        if (list) row.remove();
+        if (this._body && !this._editing) this._refreshPreview();
+      });
     });
     const close = () => pop.remove();
     pop.querySelector('#nvs-close').addEventListener('click', close);
@@ -734,10 +872,102 @@ registerPanel('notes', {
     b.querySelector('[data-act="add-folder"]')?.addEventListener('click', e => { e.stopPropagation(); this._addFolder(null); });
     b.querySelector('[data-act="add-file"]')  ?.addEventListener('click', e => { e.stopPropagation(); this._addFile(null); });
 
+    // ── Drag-to-reorder / reparent ─────────────────────────────────────────
+    // HTML5 drag-and-drop on tree rows. dragstart stamps the source id;
+    // dragover highlights drop-before / drop-after / drop-into based on
+    // cursor Y relative to the row midpoint (and on folders, top/bottom
+    // 1/3 reorders while middle 1/3 reparents). drop applies the change.
+    b.querySelectorAll('.notes-tree-row').forEach(row => {
+      row.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('application/x-skt-note-id', row.dataset.id);
+        e.dataTransfer.effectAllowed = 'move';
+        row.classList.add('dragging');
+      });
+      row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        b.querySelectorAll('.notes-tree-row').forEach(r => r.classList.remove('drop-before','drop-after','drop-into'));
+      });
+      row.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('application/x-skt-note-id')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const r = row.getBoundingClientRect();
+        const y = e.clientY - r.top;
+        const isFolder = row.classList.contains('notes-folder');
+        row.classList.remove('drop-before','drop-after','drop-into');
+        if (isFolder && y > r.height/3 && y < r.height*2/3){
+          row.classList.add('drop-into');
+        } else if (y < r.height/2){
+          row.classList.add('drop-before');
+        } else {
+          row.classList.add('drop-after');
+        }
+      });
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drop-before','drop-after','drop-into');
+      });
+      row.addEventListener('drop', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const fromId = e.dataTransfer.getData('application/x-skt-note-id');
+        const toId   = row.dataset.id;
+        if (!fromId || fromId === toId) return;
+        const from = this._data.items.find(x => x.id === fromId);
+        const to   = this._data.items.find(x => x.id === toId);
+        if (!from || !to) return;
+        // Reject moving a folder into its own descendant.
+        if (from.type === 'folder' && this._isDescendant(toId, fromId)){
+          if (typeof showToast === 'function') showToast("Can't move a folder into itself");
+          row.classList.remove('drop-before','drop-after','drop-into');
+          return;
+        }
+        const dropInto = row.classList.contains('drop-into');
+        const dropBefore = row.classList.contains('drop-before');
+        row.classList.remove('drop-before','drop-after','drop-into');
+        if (dropInto && to.type === 'folder'){
+          // Move into folder. Place at the end of that folder's children.
+          from.parent = to.id;
+          to.expanded = true; // reveal the new contents
+          this._reorderSiblings(to.id, from.id, /*end*/true);
+        } else {
+          // Reorder among siblings of `to`. Reparent to `to.parent` if
+          // different, then insert before/after `to`.
+          from.parent = to.parent;
+          this._reorderSiblings(to.parent, from.id, /*end*/false, to.id, dropBefore);
+        }
+        this._save();
+        this._render();
+      });
+    });
+
+    // Wiki-link clicks: [[Note Name]] resolves to a note in this._data.items
+    // (case-insensitive name match). Jumps to the target by selecting it.
+    // Falls back to a toast if no matching note exists. Wired at the panel
+    // level so the click handler survives editor re-renders.
+    b.querySelectorAll('.note-wiki-link').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const target = (a.dataset.wikiTarget || '').trim();
+      if (!target) return;
+      const lc = target.toLowerCase();
+      const hit = (this._data.items || []).find(it => it.type === 'file' && (it.name||'').toLowerCase() === lc);
+      if (hit){
+        this._commitEditing();
+        this._data.selectedId = hit.id;
+        this._save();
+        this._render();
+      } else if (typeof showToast === 'function'){
+        showToast('No note named "' + target + '"');
+      }
+    }));
+
     // Editor area
     const area = b.querySelector('#note-edit-area');
     if (area) area.addEventListener('click', e => {
       if (this._editing) return;
+      // Ignore clicks on wiki-links — their own handler dispatched first;
+      // letting this fire would also flip the line into edit mode.
+      if (e.target.closest('.note-wiki-link')) return;
       const lineDiv = e.target.closest('.nl');
       const file = this._selected();
       const total = ((file && file.content) || '').split('\n').length;
