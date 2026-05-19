@@ -10,8 +10,22 @@
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;overflow:hidden}
 
 /* INPUTS */
-input,select,textarea{background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;width:100%}
+input,select,textarea{background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;width:100%;transition:border-color .12s,background .12s}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+input:hover:not(:focus),textarea:hover:not(:focus){border-color:var(--text-dim)}
+/* Native <select> — strip the browser chevron and draw our own SVG so the
+   control reads as part of the theme instead of a system widget. Padding-
+   right makes room for the chevron; hover + focus get a slightly brighter
+   border so the user has feedback on every interaction. */
+select{appearance:none;-webkit-appearance:none;-moz-appearance:none;padding-right:26px;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
+select:hover:not(:focus){border-color:var(--text-dim);background-color:var(--panel-3)}
+select:focus{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23d4a574' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
+/* Native <option> styling — most browsers (Chrome on Windows especially)
+   draw the open dropdown with default light colors. color-scheme:dark on
+   :root tells Chromium to use dark-themed popups; the explicit option bg
+   covers Firefox and older browsers. */
+:root{color-scheme:dark}
+select option{background:var(--panel);color:var(--text)}
 input[type="number"]{-moz-appearance:textfield}
 input[type="number"]::-webkit-outer-spin-button,input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 input[type="checkbox"]{width:auto}
@@ -498,8 +512,13 @@ body.player-mode #search-popup{display:none !important}
 .card-name-input{flex:1;min-width:0;background:transparent;border:1px solid transparent;color:var(--text);font-size:13px;font-weight:600;padding:2px 4px;border-radius:3px;text-align:center}
 .card-name-input:hover{border-color:var(--border);background:var(--panel-3)}
 .card-name-input:focus{outline:none;border-color:var(--accent);background:var(--panel-3)}
-.card-name-quick{flex:0 0 auto;font-size:10px;padding:2px 4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);border-radius:3px;cursor:pointer;display:none}
-.card-name-quick:hover{border-color:var(--accent-dark);color:var(--text)}
+/* Compact inline quick-pick — overrides the global select styling
+   (chevron SVG + padding-right:26px) which would blow this pill out. The
+   ⌄ character in its placeholder option doubles as the chevron, so no
+   background-image needed. */
+.card-name-quick{flex:0 0 auto;font-size:10px;padding:2px 4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);border-radius:3px;cursor:pointer;display:none;background-image:none;padding-right:4px;width:auto;min-width:24px}
+.card-name-quick:hover{border-color:var(--accent-dark);color:var(--text);background-color:var(--panel-3)}
+.card-name-quick:focus{background-image:none}
 .card-name-row:focus-within .card-name-quick{display:inline-block}
 .in-combat-pill{font-size:9px;color:var(--accent);font-weight:500;letter-spacing:.05em;margin-left:4px}
 .turn-marker{color:var(--accent);font-size:11px;margin-left:4px}

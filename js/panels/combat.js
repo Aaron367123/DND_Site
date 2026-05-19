@@ -487,8 +487,14 @@ registerPanel('combat',{
   },
 
   _removeCond(i,cond){
-    state.combatants[i]={...state.combatants[i],conditions:(state.combatants[i].conditions||[]).filter(x=>x!==cond)};
-    save();this._render();
+    const c = state.combatants[i];
+    state.combatants[i] = {...c, conditions:(c.conditions||[]).filter(x => x !== cond)};
+    save(); this._render();
+    // Party panel renders condition chips by cross-referencing combatants by
+    // id, but it doesn't subscribe to combat changes — without this nudge,
+    // the chip lingers on the party card until something else triggers a
+    // party re-render. Same fix already exists in _toggleCondAtIdx.
+    if (c && c.isPC) panelDefs.party?._render?.();
   },
 
   _renderDeathSaves(i, c){
@@ -568,7 +574,12 @@ registerPanel('combat',{
     if(!state.activeCombatantId){showToast('No active combatant');return false;}
     const i=state.combatants.findIndex(c=>c.id===state.activeCombatantId);if(i<0)return false;
     const conds=state.combatants[i].conditions||[];
-    if(!conds.includes(cond)){state.combatants[i]={...state.combatants[i],conditions:[...conds,cond]};save();this._render();}
+    if(!conds.includes(cond)){
+      state.combatants[i]={...state.combatants[i],conditions:[...conds,cond]};
+      save();this._render();
+      // Mirror to the party panel so PC condition chips appear instantly.
+      if (state.combatants[i].isPC) panelDefs.party?._render?.();
+    }
     showToast(`${cond} → ${state.combatants[i].name}`);return true;
   },
 

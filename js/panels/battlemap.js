@@ -304,6 +304,20 @@ registerPanel('battlemap',{
   // Keeps tokens in the same map-relative position when the bg image is
   // resized. _lastTokenScale tracks the scale tokens are currently aligned
   // to, so repeated calls compose correctly.
+  // Display label for a token — strips multi-word PC names down to the
+  // first name so "Zindle \"Deathwhistle\" Farrago" reads as just "Zindle"
+  // on the map. The full label stays on t.label for party↔token matching
+  // and the rename input in the token options panel.
+  _tokenDisplayLabel(t){
+    if (!t || t.label == null) return '';
+    if (!t.isPC) return t.label;
+    // Split on whitespace, drop empties, take the first chunk. Names like
+    // "Sir Brody" still show "Sir" (the player's first word of choice);
+    // if they want "Brody" they can rename via the token options panel.
+    const first = String(t.label).trim().split(/\s+/)[0];
+    return first || t.label;
+  },
+
   _scaleTokensTo(newScale){
     const old = this._lastTokenScale != null ? this._lastTokenScale : (this._bgMapScale || 1);
     if (!newScale || !old || newScale === old) { this._lastTokenScale = newScale || old; return; }
@@ -312,6 +326,15 @@ registerPanel('battlemap',{
       if (t.x != null) t.x *= ratio;
       if (t.y != null) t.y *= ratio;
     });
+    // If a token drag is in progress, the drag's anchor (this._drag.startPx /
+    // startPy) was captured in pre-zoom stage pixels. Scale it in lockstep
+    // with t.x/t.y so the next mousemove computes against the new
+    // coordinate system instead of teleporting the token to its pre-zoom
+    // location.
+    if (this._drag && this._drag.startPx != null){
+      this._drag.startPx *= ratio;
+      this._drag.startPy *= ratio;
+    }
     // Drawings live in stage pixels too — scale them in lockstep.
     (this._drawings||[]).forEach(s => {
       if (!s.p) return;
@@ -361,7 +384,7 @@ registerPanel('battlemap',{
       el.style.top  = t.y + 'px';
       const sz = t.size || 1;
       const dim = (sz * csNat - 4) * scale;
-      const fontSize = (sz > 1 ? 13 : Math.max(8, 11 - (t.label.length > 5 ? 2 : 0))) * scale;
+      const fontSize = (sz > 1 ? 13 : Math.max(8, 11 - (this._tokenDisplayLabel(t).length > 5 ? 2 : 0))) * scale;
       el.style.width  = dim + 'px';
       el.style.height = dim + 'px';
       el.style.fontSize = fontSize + 'px';
@@ -1328,7 +1351,16 @@ registerPanel('battlemap',{
           if (oi >= 0) this._tokens[oi] = {...this._tokens[oi], label: m.name+' 1', baseName: m.name};
         }
         const npcIcon = (typeof CLASS_ICONS !== 'undefined' ? (CLASS_ICONS[m.cls] || CLASS_ICONS.enemy) : null) || '🐲';
-        this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false, icon:npcIcon, portrait:m.portrait||null});
+        // Use the bestiary's token-cropped head-shot if the monster has one,
+        // so monsters get the same visual treatment as PCs (round portrait
+        // inside the token ring) instead of a generic class-icon emoji.
+        // 5etools ships images under bestiary/<source>/ with token-cropped
+        // versions under bestiary/tokens/<source>/ — we mirror the path
+        // mapping the Bestiary panel itself uses. Falls back to the existing
+        // portrait field, then to the class-icon glyph.
+        const tokenImg = m.img ? 'img/' + m.img.replace(/^bestiary\//, 'bestiary/tokens/') : null;
+        const portrait = m.portrait || tokenImg || null;
+        this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false, icon:npcIcon, portrait});
         this._renderTokens(); this._saveMap();
       }
     });
@@ -1976,17 +2008,20 @@ registerPanel('battlemap',{
 
       const el=document.createElement('div');
       const hasIcon = !!(t.icon || t.portrait);
+      // PCs only show their first name on the map ("Zindle" instead of the
+      // full "Zindle \"Deathwhistle\" Farrago"). NPCs keep their full label.
+      const displayLabel = this._tokenDisplayLabel(t);
       el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}`;
       el.dataset.tid=t.id;
-      const fontSize=(size>1?13:Math.max(8,11-(t.label.length>5?2:0))) * tokScale;
+      const fontSize=(size>1?13:Math.max(8,11-(displayLabel.length>5?2:0))) * tokScale;
       el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:hidden;box-sizing:border-box`;
       if (hasIcon){
         const iconSource = t.portrait || t.icon;
         el.innerHTML = (typeof renderIcon === 'function')
-          ? renderIcon(iconSource, t.label)
-          : esc(t.label.slice(0,2));
+          ? renderIcon(iconSource, displayLabel)
+          : esc(displayLabel.slice(0,2));
       } else {
-        el.textContent = t.label.length>7?t.label.slice(0,6)+'…':t.label;
+        el.textContent = displayLabel.length>7?displayLabel.slice(0,6)+'…':displayLabel;
       }
       // Name label rendered as a sibling so it sits BELOW the token circle
       // (the circle has overflow:hidden which would clip an inner label).
@@ -1994,7 +2029,7 @@ registerPanel('battlemap',{
       nameEl.className = 'map-token-name' + (t.isPC ? ' pc' : ' npc-t');
       nameEl.dataset.tid = t.id;
       nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${(10*tokScale).toFixed(0)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600`;
-      nameEl.textContent = t.label;
+      nameEl.textContent = displayLabel;
       stage.appendChild(nameEl);
 
       // Right-click on a token opens the options panel (drag/select are left-click only).
@@ -2035,14 +2070,14 @@ registerPanel('battlemap',{
         this._selected=t.id;
 
         const startX=e.clientX, startY=e.clientY;
-        // Read t.x / t.y CURRENT, not the closure snapshot from _renderTokens.
-        // The closure copy becomes stale after _scaleTokensTo() (which fires
-        // on bg-map zoom), making the token jump to its pre-zoom position
-        // on the next drag.
-        const startPx=t.x, startPy=t.y;
         let curPx=t.x, curPy=t.y;
         let moved=false;
-        this._drag={moved:false};
+        // Drag anchor lives on this._drag (not in the closure) so
+        // _scaleTokensTo() can rescale it when the user zooms mid-drag.
+        // A pure-closure copy would go stale: t.x/t.y get multiplied by the
+        // new zoom ratio while the closure's startPx/startPy don't,
+        // teleporting the token on the next mousemove.
+        this._drag = { moved:false, startPx:t.x, startPy:t.y };
 
         const onMove=ev=>{
           // Token positions are stored in stage-pixel coords, but the cursor
@@ -2055,7 +2090,8 @@ registerPanel('battlemap',{
           if(!moved&&Math.abs(dx)<4&&Math.abs(dy)<4) return;
           moved=true;this._drag.moved=true;
           el.style.cursor='grabbing';
-          curPx=startPx+dx; curPy=startPy+dy;
+          curPx = this._drag.startPx + dx;
+          curPy = this._drag.startPy + dy;
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
         };
@@ -2110,13 +2146,13 @@ registerPanel('battlemap',{
         this._selected=t.id;
 
         const startX=touch.clientX, startY=touch.clientY;
-        // Same as the mouse-drag handler: read CURRENT t.x/t.y to avoid
-        // a stale closure value after bg-map zoom.
-        const startPx=t.x, startPy=t.y;
         let curPx=t.x, curPy=t.y;
         let moved=false;
         let longPressFired=false;
-        this._drag={moved:false};
+        // Drag anchor lives on this._drag so _scaleTokensTo can rescale it
+        // when the user pinch-zooms mid-drag. See mouse handler above for
+        // full rationale.
+        this._drag = { moved:false, startPx:t.x, startPy:t.y };
         const longPressTimer = setTimeout(() => {
           if (moved) return;
           longPressFired = true;
@@ -2134,7 +2170,8 @@ registerPanel('battlemap',{
           clearTimeout(longPressTimer);
           if (longPressFired) return; // already opened panel; ignore drag
           ev.preventDefault();
-          curPx = startPx+dx; curPy = startPy+dy;
+          curPx = this._drag.startPx + dx;
+          curPy = this._drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
         };
