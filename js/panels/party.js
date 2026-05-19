@@ -174,13 +174,93 @@ registerPanel('party',{
     </div>`;
   },
 
+  // Roll a d20 with an integer modifier. opts.mode: 'normal'|'adv'|'dis'.
+  // Returns the result object the Stats tab renders in its "Last roll"
+  // strip. Uses the global d20() helper from utils.js. Crit/fumble are
+  // detected on the natural d20 (not the modified total).
+  _rollD20(mod, opts){
+    const mode = (opts && opts.mode) || 'normal';
+    if (mode === 'adv' || mode === 'dis'){
+      const a = d20(), b = d20();
+      const used = (mode === 'adv') ? Math.max(a, b) : Math.min(a, b);
+      return {
+        natural: used,
+        rolls: [a, b],
+        kept: (mode === 'adv') ? (a >= b ? 0 : 1) : (a <= b ? 0 : 1),
+        mod: mod || 0,
+        total: used + (mod || 0),
+        crit: used === 20,
+        fumble: used === 1,
+        mode,
+        label: opts?.label || '',
+      };
+    }
+    const n = d20();
+    return {
+      natural: n,
+      rolls: [n],
+      kept: 0,
+      mod: mod || 0,
+      total: n + (mod || 0),
+      crit: n === 20,
+      fumble: n === 1,
+      mode: 'normal',
+      label: opts?.label || '',
+    };
+  },
+
+  // Render the "Last roll" strip shown above the ability block. Returns ''
+  // when this character hasn't rolled anything this session. The strip is
+  // ephemeral (held on the panel, not persisted) so opening the sheet on
+  // a fresh page load starts clean.
+  _renderLastRoll(c){
+    const r = this._lastRoll && this._lastRoll[c.id];
+    if (!r) return '';
+    const modText = (r.mod >= 0 ? '+' : '') + r.mod;
+    const modeChip = r.mode === 'adv' ? '<span class="roll-chip adv">ADV</span>'
+                    : r.mode === 'dis' ? '<span class="roll-chip dis">DIS</span>'
+                    : '';
+    const dice = r.rolls.map((x, i) =>
+      `<span class="roll-die${i === r.kept ? ' kept' : ' dropped'}${x === 20 ? ' crit' : x === 1 ? ' fumble' : ''}">${x}</span>`
+    ).join('');
+    const status = r.crit ? '<span class="roll-status crit">CRIT 20!</span>'
+                  : r.fumble ? '<span class="roll-status fumble">Nat 1</span>'
+                  : '';
+    return `<div class="roll-strip ${r.crit?'crit':''}${r.fumble?' fumble':''}">
+      <span class="roll-label">${esc(r.label || 'Roll')}</span>
+      ${modeChip}
+      <span class="roll-dice">${dice}</span>
+      <span class="roll-eq">${modText}</span>
+      <span class="roll-total">${r.total}</span>
+      ${status}
+      <span class="roll-hint" title="Shift-click any ability or save for advantage · Alt-click for disadvantage">?</span>
+    </div>`;
+  },
+
+  // Persist the result of a roll on the panel and re-render the active
+  // character's sheet so the strip updates. The map is keyed by character
+  // id so each PC keeps their own most-recent roll.
+  _setLastRoll(c, result){
+    if (!this._lastRoll) this._lastRoll = {};
+    this._lastRoll[c.id] = result;
+    this._render();
+  },
+
   _abilityBlock(c){
     const ab = c.abilities || {};
     const order = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
     return '<div class="sheet-abilities">' + order.map(([k,lbl])=>{
       const v = ab[k];
       const mod = (typeof v === 'number') ? Math.floor((v-10)/2) : null;
-      return `<div class="sheet-ab"><div class="sheet-ab-lbl">${lbl}</div><div class="sheet-ab-val">${v??'—'}</div><div class="sheet-ab-mod">${mod==null?'':(mod>=0?'+':'')+mod}</div></div>`;
+      const rollable = mod != null;
+      // Clickable when the ability score is set. data-roll-ability/data-mod
+      // carry everything needed for the click handler; the visible body is
+      // unchanged from the read-only render.
+      const cls = 'sheet-ab' + (rollable ? ' rollable' : '');
+      const dataAttrs = rollable
+        ? ` data-act="roll-check" data-cid="${esc(c.id)}" data-ability="${k}" data-mod="${mod}" title="Click to roll d20${(mod>=0?'+':'')+mod} (Shift = adv · Alt = dis)"`
+        : '';
+      return `<div class="${cls}"${dataAttrs}><div class="sheet-ab-lbl">${lbl}</div><div class="sheet-ab-val">${v??'—'}</div><div class="sheet-ab-mod">${mod==null?'':(mod>=0?'+':'')+mod}</div></div>`;
     }).join('') + '</div>';
   },
 
@@ -193,19 +273,25 @@ registerPanel('party',{
       // Prefer imported save bonus; else compute from ability mod.
       let v = saves[k];
       if (v == null && typeof ab[k]==='number') v = Math.floor((ab[k]-10)/2);
-      return `<div class="sheet-stat-row"><span>${lbl} Save</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
+      const rollable = v != null;
+      const extra = rollable
+        ? ` data-act="roll-save" data-cid="${esc(c.id)}" data-ability="${k}" data-mod="${v}" title="Click to roll d20${(v>=0?'+':'')+v} save (Shift = adv · Alt = dis)" style="cursor:pointer"`
+        : '';
+      const cls = 'sheet-stat-row' + (rollable ? ' rollable' : '');
+      return `<div class="${cls}"${extra}><span>${lbl} Save</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
     }).join('');
     const prof = sh.profBonus;
     const pp = sh.passivePerception;
     const dexMod = (typeof ab.dex==='number') ? Math.floor((ab.dex-10)/2) : null;
     const computedPP = (typeof ab.wis==='number') ? 10+Math.floor((ab.wis-10)/2) : null;
-    return this._abilityBlock(c)
+    return this._renderLastRoll(c)
+      + this._abilityBlock(c)
       + '<div class="sheet-grid2">'
       + '<div class="sheet-col"><h5>Saving Throws</h5>'+saveRows+'</div>'
       + '<div class="sheet-col"><h5>Vitals</h5>'
       +   `<div class="sheet-stat-row"><span>Proficiency</span><span class="sheet-stat-val">${prof==null?'—':'+'+prof}</span></div>`
       +   `<div class="sheet-stat-row"><span>Passive Perception</span><span class="sheet-stat-val">${pp ?? computedPP ?? '—'}</span></div>`
-      +   `<div class="sheet-stat-row"><span>Initiative</span><span class="sheet-stat-val">${(c.init>=0?'+':'')+(c.init??0)}</span></div>`
+      +   `<div class="sheet-stat-row rollable" data-act="roll-init" data-cid="${esc(c.id)}" data-mod="${c.init??0}" title="Click to roll initiative (Shift = adv · Alt = dis)" style="cursor:pointer"><span>Initiative</span><span class="sheet-stat-val">${(c.init>=0?'+':'')+(c.init??0)}</span></div>`
       +   `<div class="sheet-stat-row"><span>Speed</span><span class="sheet-stat-val">${c.spd ?? '—'}</span></div>`
       +   `<div class="sheet-stat-row"><span>AC</span><span class="sheet-stat-val">${c.ac ?? '—'}</span></div>`
       + '</div>'
@@ -320,8 +406,17 @@ registerPanel('party',{
       { key:'proficient', title:'Proficient',         glyph:'●' },
       { key:'half',       title:'Half-proficiency',   glyph:'◐' },
     ];
-    const renderRow = ({ label, v }) =>
-      `<div class="sheet-stat-row"><span>${label}</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
+    // Skill rows are clickable to roll d20 + skill modifier. The lookup at
+    // click time keys off c.id so reordering the party can't desync the
+    // handler. Skipped when there's no usable modifier (no ability score).
+    const renderRow = ({ label, v, k }) => {
+      const rollable = v != null;
+      const extra = rollable
+        ? ` data-act="roll-skill" data-cid="${esc(c.id)}" data-skill="${esc(k)}" data-skill-label="${esc(label)}" data-mod="${v}" title="Click to roll ${esc(label)}: d20${(v>=0?'+':'')+v} (Shift = adv · Alt = dis)" style="cursor:pointer"`
+        : '';
+      const cls = 'sheet-stat-row' + (rollable ? ' rollable' : '');
+      return `<div class="${cls}"${extra}><span>${label}</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
+    };
     const renderSection = (sec) => {
       const list = groups[sec.key];
       if (!list.length) return '';
@@ -337,9 +432,9 @@ registerPanel('party',{
       : '';
 
     if (!trainedHtml && !untrainedHtml){
-      return '<div class="sheet-empty">No skill data available.</div>';
+      return this._renderLastRoll(c) + '<div class="sheet-empty">No skill data available.</div>';
     }
-    return '<div class="sheet-skills-prof">'+(trainedHtml || '<div class="sheet-empty">No skill proficiencies on this character.</div>')+untrainedHtml+'</div>';
+    return this._renderLastRoll(c) + '<div class="sheet-skills-prof">'+(trainedHtml || '<div class="sheet-empty">No skill proficiencies on this character.</div>')+untrainedHtml+'</div>';
   },
 
   _tabSpells(c){
@@ -938,6 +1033,22 @@ registerPanel('party',{
         const c = state.party[i]; if (!c) return;
         this._activeTab[c.id] = el.dataset.tab;
         this._render();
+      }
+      else if(act==='roll-check' || act==='roll-save' || act==='roll-init' || act==='roll-skill'){
+        // d20 roller — Shift = advantage, Alt = disadvantage.
+        const cid = el.dataset.cid;
+        const c = state.party.find(p => p.id === cid);
+        if (!c) return;
+        const mod = parseInt(el.dataset.mod) || 0;
+        const mode = e.shiftKey ? 'adv' : e.altKey ? 'dis' : 'normal';
+        const abilityLabel = (el.dataset.ability || '').toUpperCase();
+        let label;
+        if (act === 'roll-init')        label = c.name + ' · Initiative';
+        else if (act === 'roll-save')   label = c.name + ' · ' + abilityLabel + ' Save';
+        else if (act === 'roll-skill')  label = c.name + ' · ' + (el.dataset.skillLabel || 'Skill');
+        else                             label = c.name + ' · ' + abilityLabel + ' Check';
+        const result = this._rollD20(mod, { mode, label });
+        this._setLastRoll(c, result);
       }
       else if(act==='hd-spend'){
         const idx = +el.dataset.idx, n = +el.dataset.n;

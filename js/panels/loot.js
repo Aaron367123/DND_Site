@@ -58,13 +58,13 @@ registerPanel('loot',{
     const out = [];
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
-      if (matches(d.name, d.meta)) out.push({name:d.name, meta:d.meta, _source:d._source, value:d._raw?.value || '', rarity:d._raw?.rarity || null});
+      if (matches(d.name, d.meta)) out.push({name:d.name, meta:d.meta, _source:d._source, value:d._raw?.value || '', rarity:d._raw?.rarity || null, weight: d._raw?.weight ?? null});
       // Items with bonus variants (+1, +2, +3) — include each variant as its
       // own selectable row so the user can drop "+2 Longsword" directly
       // into loot without having to retype the prefix.
       if (d._variants){
         for (const v of d._variants){
-          if (matches(v.name, v.meta)) out.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:v._raw?.value || '', rarity:v._raw?.rarity || d._raw?.rarity || null});
+          if (matches(v.name, v.meta)) out.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:v._raw?.value || '', rarity:v._raw?.rarity || d._raw?.rarity || null, weight: v._raw?.weight ?? d._raw?.weight ?? null});
         }
       }
       if (out.length >= 20) break;
@@ -90,7 +90,8 @@ registerPanel('loot',{
         ? ''
         : `<span class="loot-rarity-chip rarity-${r.replace(/\s+/g,'')}">${esc(d.rarity)}</span>`;
       const metaText = [d.meta, d.value].filter(Boolean).join(' · ');
-      return `<div class="loot-search-result" data-iname="${esc(d.name)}" data-isrc="${esc(d._source||'')}" data-ival="${esc(d.value||'')}">
+      const weightAttr = (d.weight != null) ? ` data-iwt="${esc(String(d.weight))}"` : '';
+      return `<div class="loot-search-result" data-iname="${esc(d.name)}" data-isrc="${esc(d._source||'')}" data-ival="${esc(d.value||'')}"${weightAttr}>
         <span class="loot-search-name">${esc(d.name)}${rarityChip}${srcBadge}</span>
         <span class="loot-search-meta">${esc(metaText)}</span>
       </div>`;
@@ -109,7 +110,14 @@ registerPanel('loot',{
         // Value priority: user-typed value > 5e item's listed value > empty.
         const typed = (valInp?.value||'').trim();
         const value = typed || (el.dataset.ival || '');
-        this._loot.items.push({id:uid(), name, qty, value, assignedTo:null});
+        // Pull weight from the 5e entry when known. Stored even if the
+        // encumbrance toggle is off, so flipping it on later picks up
+        // accurate weights without re-adding everything.
+        const wRaw = el.dataset.iwt;
+        const weight = (wRaw != null && wRaw !== '') ? parseFloat(wRaw) : undefined;
+        const newItem = {id:uid(), name, qty, value, assignedTo:null};
+        if (weight != null && !isNaN(weight)) newItem.weight = weight;
+        this._loot.items.push(newItem);
         this._save();
         this._searchQ = ''; this._searchOpen = false;
         this._render();
@@ -336,6 +344,13 @@ registerPanel('loot',{
     const paidTitle = paid && item.paidTs
       ? 'Marked paid · ' + new Date(item.paidTs).toLocaleString()
       : 'Mark as paid / collected';
+    // Weight column only renders when the user has flipped on the
+    // encumbrance toggle. When hidden, the field is omitted entirely so
+    // existing flex layout stays clean.
+    const showWeight = !!(state.settings && state.settings.lootEncumbrance);
+    const weightInp = showWeight
+      ? `<input type="number" step="0.1" min="0" class="loot-wt" value="${item.weight!=null?esc(String(item.weight)):''}" data-lfield="weight" data-li="${i}" placeholder="lb" title="Weight per item (lbs)">`
+      : '';
     return `<div class="loot-item ${item.assignedTo?'assigned':''} ${paid?'paid':''}" data-i="${i}" draggable="true">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
       <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?'✓':'○'}</button>
@@ -346,6 +361,7 @@ registerPanel('loot',{
       </div>
       <input type="number" class="loot-qty" value="${item.qty||1}" min="1" data-lfield="qty" data-li="${i}" title="Quantity">
       <input type="text" class="loot-val" value="${esc(item.value||'')}" data-lfield="value" data-li="${i}" placeholder="gp val" title="Value">
+      ${weightInp}
       ${this._assignSelect(item, i)}
       <button class="btn icon-btn danger" data-lact="del" data-li="${i}" title="Remove">×</button>
     </div>`;
@@ -406,14 +422,38 @@ registerPanel('loot',{
       const q = parseInt(item.qty)||1;
       return sum + this._parseGp(item.value) * q;
     }, 0);
+    const showWeight = !!(state.settings && state.settings.lootEncumbrance);
     const icon = member.icon || '👤';
     const iconHtml = typeof icon === 'string' && icon.startsWith('data:')
       ? `<img src="${esc(icon)}">` : esc(icon);
+    // Encumbrance subtotal — sum weight × qty across items in this section.
+    // Capacity follows the 5e variant rule: STR × 15 = lbs carrying capacity.
+    // When the section is for a custom group or the "Group (shared loot)"
+    // bucket, capacity is omitted (no single STR to use).
+    let weightHtml = '';
+    if (showWeight){
+      const totalWt = matched.reduce((sum, {item}) => {
+        const q = parseInt(item.qty)||1;
+        const w = parseFloat(item.weight);
+        return sum + (isNaN(w) ? 0 : w * q);
+      }, 0);
+      const str = member.abilities?.str;
+      const capacity = (typeof str === 'number') ? str * 15 : null;
+      const over = capacity != null && totalWt > capacity;
+      const enc = capacity != null && totalWt > str * 5;
+      const enc2 = capacity != null && totalWt > str * 10;
+      const wtCls = over ? 'over' : enc2 ? 'heavy' : enc ? 'enc' : '';
+      const tooltip = capacity != null
+        ? `STR ${str} · normal ≤${str*5} lb · encumbered ${str*5+1}–${str*10} lb · heavily ${str*10+1}–${capacity} lb · max ${capacity} lb`
+        : 'No STR score available for capacity calc';
+      const capPart = capacity != null ? ` / ${capacity} lb` : ' lb';
+      weightHtml = ` · <span class="loot-weight-meta ${wtCls}" title="${esc(tooltip)}">${totalWt.toFixed(1)}${capPart}</span>`;
+    }
     return `<div class="loot-group">
       <div class="loot-group-head">
         <span class="loot-group-icon">${iconHtml}</span>
         <span class="loot-group-name">${esc(member.name)}</span>
-        <span class="loot-group-meta">${matched.length} item${matched.length===1?'':'s'}${totalVal?` · ${totalVal.toFixed(2)} gp`:''}</span>
+        <span class="loot-group-meta">${matched.length} item${matched.length===1?'':'s'}${totalVal?` · ${totalVal.toFixed(2)} gp`:''}${weightHtml}</span>
       </div>
       ${matched.map(({item, idx}) => this._itemRow(item, idx)).join('')}
     </div>`;
@@ -465,10 +505,15 @@ registerPanel('loot',{
       <div class="loot-summary">
         ${['cp','sp','ep','gp','pp'].map(c=>`<div class="loot-coin"><div class="l">${c.toUpperCase()}</div><input type="number" id="loot-${c}" value="${this._loot[c]||0}" min="0"></div>`).join('')}
       </div>
-      <div style="padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted)">
-        Total: <strong style="color:var(--warning)">${totalGp} gp</strong> equivalent &nbsp;·&nbsp;
-        Per party member: <strong style="color:var(--warning)">${state.party.length?(totalGp/state.party.length).toFixed(2):totalGp} gp</strong>
-        <button class="btn small" id="loot-divvy" style="float:right;margin-top:-2px">Divvy up</button>
+      <div style="padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span>Total: <strong style="color:var(--warning)">${totalGp} gp</strong> equivalent</span>
+        <span>· Per party member: <strong style="color:var(--warning)">${state.party.length?(totalGp/state.party.length).toFixed(2):totalGp} gp</strong></span>
+        <label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
+          <input type="checkbox" id="loot-encumbrance-toggle" ${state.settings?.lootEncumbrance?'checked':''}>
+          <span>⚖ Weight</span>
+        </label>
+        <span style="flex:1"></span>
+        <button class="btn small" id="loot-divvy">Divvy up</button>
       </div>
       <div class="loot-add-row">
         <div class="loot-search-wrap">
@@ -532,6 +577,17 @@ registerPanel('loot',{
       }
       this._view = tab.dataset.view; this._render();
     }));
+
+    // Encumbrance toggle — flips state.settings.lootEncumbrance and
+    // re-renders so item rows grow/lose the weight column and member
+    // section headers gain/lose the lb subtotal. Persisted via the
+    // shared settings save() so it survives reloads + syncs to Firebase.
+    b.querySelector('#loot-encumbrance-toggle')?.addEventListener('change', e => {
+      if (!state.settings) state.settings = {};
+      state.settings.lootEncumbrance = !!e.target.checked;
+      if (typeof save === 'function') save();
+      this._render();
+    });
 
     // Add (manual / Enter on name input)
     b.querySelector('#loot-add-item').addEventListener('click', () => this._addManualItem());
@@ -599,6 +655,16 @@ registerPanel('loot',{
         let v = e.target.value;
         if (f==='qty') v = Math.max(1, parseInt(v)||1);
         else if (f==='assignedTo') v = v || null;
+        else if (f==='weight'){
+          // Empty string → clear (undefined) so the row shows the
+          // placeholder again instead of "0". Numeric values are clamped
+          // to non-negative; decimals allowed for fractional lbs.
+          const trimmed = String(v||'').trim();
+          if (!trimmed){ delete this._loot.items[i].weight; this._save(); this._render(); return; }
+          const num = parseFloat(trimmed);
+          if (isNaN(num) || num < 0){ delete this._loot.items[i].weight; this._save(); this._render(); return; }
+          v = num;
+        }
         else if (f==='name'){
           const trimmed = String(v||'').trim();
           // Empty name → restore the old value rather than persisting blank.
@@ -608,7 +674,7 @@ registerPanel('loot',{
         this._loot.items[i][f]=v;
         this._save();
         // Re-render so pills / counts / totals refresh.
-        if (f==='assignedTo' || f==='qty') this._render();
+        if (f==='assignedTo' || f==='qty' || f==='weight') this._render();
       });
     });
     // Enter on the name input commits + moves focus off (so it feels like a

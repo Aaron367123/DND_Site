@@ -150,9 +150,13 @@ registerPanel('combat',{
     // the field). Shown as a small "+N" pill next to the HP value when > 0.
     const partyMatch = isPC ? state.party.find(p => p.id === c.id) : null;
     const tempHp = partyMatch?.tempHp || 0;
+    // Damage/heal widget — hidden by default, revealed on card hover so
+    // resting cards stay compact. Single tight row: [−][amt][+]. Buttons
+    // are tiny and live in the HP card-stat cell without forcing a second
+    // row taller than the HP value itself.
     const dmgWidget = (mode !== 'show')
       ? ''
-      : `<div class="hp-dmg-widget" data-idx="${i}">
+      : `<div class="hp-dmg-widget" data-idx="${i}" title="Hover-only · type an amount, click − to damage / + to heal">
           <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Apply as damage (drains temp HP first)">−</button>
           <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Damage / heal amount">
           <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Apply as healing (clamped to max HP)">+</button>

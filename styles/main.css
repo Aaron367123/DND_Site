@@ -529,17 +529,28 @@ body.player-mode #search-popup{display:none !important}
 .card-stat input{background:transparent;border:none;text-align:center;padding:0;font-size:13px;font-weight:600;color:var(--text);width:100%;-moz-appearance:textfield}
 .card-stat input:focus{outline:none;background:rgba(255,255,255,.05);border-radius:2px}
 .card-stat input::-webkit-outer-spin-button,.card-stat input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-/* Damage / heal widget — small −[amt]+ row tucked under the HP value.
-   Keeps everything in the HP card-stat cell so layout stays tight. */
-.hp-dmg-widget{display:flex;gap:2px;align-items:center;margin-top:3px;justify-content:center}
-.hp-dmg-widget .hp-dmg-amt{width:32px;font-size:10px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:1px 0;border-radius:3px;text-align:center;-moz-appearance:textfield}
+/* Damage / heal widget — hidden by default so resting cards stay clean.
+   Reveals on card hover or when the HP cell itself has focus inside.
+   Positioned absolutely so the card height doesn't change when it
+   appears — the widget floats just under the HP value without pushing
+   the AC / Init / SPD cells around. */
+.card-stat{position:relative}
+.hp-dmg-widget{display:flex;gap:2px;align-items:center;justify-content:center;position:absolute;left:-2px;right:-2px;top:100%;margin-top:1px;padding:2px 0;background:var(--panel);border:1px solid var(--border);border-radius:3px;box-shadow:0 2px 6px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .12s;z-index:5}
+.combatant-card:hover .hp-dmg-widget,
+.hp-dmg-widget:focus-within{opacity:1;pointer-events:auto}
+.hp-dmg-widget .hp-dmg-amt{width:28px;font-size:10px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;height:16px}
 .hp-dmg-widget .hp-dmg-amt::-webkit-outer-spin-button,
 .hp-dmg-widget .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.hp-dmg-widget .hp-dmg-btn{width:18px;height:18px;font-size:11px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:3px;cursor:pointer;font-family:inherit;font-weight:700}
+.hp-dmg-widget .hp-dmg-btn{width:16px;height:16px;font-size:11px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .hp-dmg-widget .hp-dmg-btn.dmg{color:#c25450}
-.hp-dmg-widget .hp-dmg-btn.dmg:hover{background:rgba(194,84,80,.18);border-color:rgba(194,84,80,.6)}
+.hp-dmg-widget .hp-dmg-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
 .hp-dmg-widget .hp-dmg-btn.heal{color:#6b9e6b}
-.hp-dmg-widget .hp-dmg-btn.heal:hover{background:rgba(107,158,107,.18);border-color:rgba(107,158,107,.6)}
+.hp-dmg-widget .hp-dmg-btn.heal:hover{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.6)}
+/* Touch devices have no hover — keep the widget visible at low opacity so
+   it stays accessible without making desktop cards crowded. */
+@media (hover:none){
+  .hp-dmg-widget{position:static;opacity:.85;pointer-events:auto;background:transparent;border:none;box-shadow:none;padding:1px 0;margin-top:2px}
+}
 /* Temp HP badge next to current HP value. */
 .hp-temp-badge{display:inline-block;font-size:9px;font-weight:600;color:#9ad1ff;background:rgba(74,142,201,.18);border:1px solid rgba(74,142,201,.4);padding:0 4px;border-radius:6px;margin-left:2px;vertical-align:middle}
 /* Legendary action pip row, drawn under conditions/death-saves. */
@@ -707,7 +718,33 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .sheet-stat-row:last-child{border-bottom:none}
 .sheet-stat-val{font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
 .sheet-abilities{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:6px}
-.sheet-ab{background:var(--panel-3);border:1px solid var(--border);border-radius:4px;padding:4px 2px;text-align:center}
+.sheet-ab{background:var(--panel-3);border:1px solid var(--border);border-radius:4px;padding:4px 2px;text-align:center;transition:border-color .12s,background .12s}
+.sheet-ab.rollable{cursor:pointer}
+.sheet-ab.rollable:hover{border-color:var(--accent);background:rgba(212,165,116,.12)}
+.sheet-ab.rollable:active{transform:scale(.97)}
+.sheet-stat-row.rollable:hover{background:rgba(212,165,116,.1);border-radius:3px}
+.sheet-stat-row.rollable:hover .sheet-stat-val{color:var(--accent)}
+/* Last-roll strip — pinned above the ability block on Stats / Skills tabs. */
+.roll-strip{display:flex;align-items:center;gap:6px;background:var(--panel-3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;margin-bottom:8px;font-size:11px;transition:border-color .2s,background .2s;animation:rollPulse .5s ease-out}
+.roll-strip.crit{border-color:#6b9e6b;background:rgba(107,158,107,.15)}
+.roll-strip.fumble{border-color:#c25450;background:rgba(194,84,80,.15)}
+@keyframes rollPulse { 0%{transform:scale(.96);box-shadow:0 0 0 0 var(--accent)} 60%{box-shadow:0 0 0 6px rgba(212,165,116,0)} 100%{transform:scale(1);box-shadow:0 0 0 0 rgba(0,0,0,0)} }
+.roll-strip .roll-label{font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.roll-strip .roll-chip{font-size:9px;font-weight:700;letter-spacing:.05em;padding:1px 5px;border-radius:8px;text-transform:uppercase}
+.roll-strip .roll-chip.adv{background:rgba(107,158,107,.25);color:#9ad19a;border:1px solid rgba(107,158,107,.4)}
+.roll-strip .roll-chip.dis{background:rgba(194,84,80,.25);color:#e0a8a6;border:1px solid rgba(194,84,80,.4)}
+.roll-strip .roll-dice{display:inline-flex;gap:3px}
+.roll-die{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid var(--border);border-radius:4px;font-size:11px;font-weight:600;background:var(--panel-2);color:var(--text);font-variant-numeric:tabular-nums}
+.roll-die.kept{border-color:var(--accent);color:var(--accent);background:rgba(212,165,116,.12)}
+.roll-die.dropped{opacity:.45;text-decoration:line-through}
+.roll-die.crit{border-color:#6b9e6b;color:#9ad19a;background:rgba(107,158,107,.18)}
+.roll-die.fumble{border-color:#c25450;color:#e0a8a6;background:rgba(194,84,80,.18)}
+.roll-strip .roll-eq{color:var(--text-muted);font-variant-numeric:tabular-nums;font-size:11px}
+.roll-strip .roll-total{font-weight:700;font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums;min-width:24px;text-align:right}
+.roll-strip .roll-status{font-size:10px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:8px;text-transform:uppercase}
+.roll-strip .roll-status.crit{background:rgba(107,158,107,.25);color:#9ad19a}
+.roll-strip .roll-status.fumble{background:rgba(194,84,80,.25);color:#e0a8a6}
+.roll-strip .roll-hint{font-size:10px;color:var(--text-dim);cursor:help;border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;line-height:1}
 .sheet-ab-lbl{font-size:9px;color:var(--text-muted);font-weight:700;letter-spacing:.05em}
 .sheet-ab-val{font-size:14px;font-weight:700;color:var(--text)}
 .sheet-ab-mod{font-size:10px;color:var(--accent);font-weight:600}
@@ -1416,6 +1453,23 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .loot-item.drop-after{box-shadow:inset 0 -2px 0 var(--accent)}
 .loot-item .loot-qty{width:40px;text-align:center;font-size:11px;padding:2px 4px}
 .loot-item .loot-val{width:60px;text-align:right;font-size:11px;color:var(--warning);padding:2px 4px}
+/* Weight column — only present when state.settings.lootEncumbrance is on. */
+.loot-item .loot-wt{width:46px;text-align:right;font-size:10px;padding:2px 4px;color:#9ad1ff;background:var(--panel-3);border:1px solid var(--border)}
+.loot-item .loot-wt:focus{outline:none;border-color:var(--accent)}
+.loot-item .loot-wt::-webkit-outer-spin-button,.loot-item .loot-wt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.loot-item .loot-wt{-moz-appearance:textfield}
+/* Encumbrance toggle pill in the totals row. */
+.loot-encumbrance-toggle{display:inline-flex;align-items:center;gap:5px;cursor:pointer;background:var(--panel-3);border:1px solid var(--border);border-radius:14px;padding:2px 10px;font-size:11px;color:var(--text-muted);user-select:none}
+.loot-encumbrance-toggle:hover{border-color:var(--accent);color:var(--text)}
+.loot-encumbrance-toggle input{accent-color:var(--accent);width:13px;height:13px;margin:0}
+.loot-encumbrance-toggle input:checked + span{color:var(--accent)}
+/* Weight subtotal in member section headers — colored by load level.
+   Encumbered (>STR×5) = warning yellow, heavily encumbered (>STR×10) = orange,
+   over capacity (>STR×15) = danger red. */
+.loot-weight-meta{font-variant-numeric:tabular-nums}
+.loot-weight-meta.enc{color:#c9a050}
+.loot-weight-meta.heavy{color:#d68a4a}
+.loot-weight-meta.over{color:var(--danger);font-weight:600}
 .loot-item .loot-claimed{font-size:10px;color:var(--text-muted);background:var(--panel-3);padding:2px 6px;border-radius:8px;cursor:pointer}
 .loot-item .loot-claimed.done{color:var(--success);background:rgba(107,158,107,.15)}
 .loot-add-row{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border);align-items:center}
