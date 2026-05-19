@@ -196,6 +196,10 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 .pv-dock-btn{width:32px;height:32px;background:transparent;border:1px solid transparent;border-radius:5px;color:var(--text-muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
 .pv-dock-btn:hover{background:var(--panel-3);color:var(--text);border-color:var(--border)}
 .pv-dock-btn.active{background:var(--panel-3);color:var(--accent);border-color:var(--accent)}
+/* Mobile-only one-time hint that points to the player dock. Fades in, sits
+   above the dock chips, auto-dismisses after 6s or on first dock interaction. */
+#pv-dock-hint{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:rgba(212,165,116,.95);color:#1a1a1a;font-size:12px;font-weight:600;padding:8px 14px;border-radius:18px;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:9100;animation:pvHintIn .25s ease-out;pointer-events:none}
+@keyframes pvHintIn { from{opacity:0;transform:translate(-50%,8px)} to{opacity:1;transform:translate(-50%,0)} }
 /* Desktop player-view: dock is a full-height left-edge sidebar matching the
    DM, so leave it fully visible (no fade). Mobile rules below override. */
 @media (min-width: 769px){
@@ -1504,6 +1508,23 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);color:var(--text);padding:8px 16px;border-radius:4px;font-size:12px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
+/* Stacking toast host — column of recent notifications. New toasts slide up
+   from below; capped at 3 by the showToast() implementation. */
+#toast-host{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;z-index:200;pointer-events:none}
+.toast-item{background:var(--panel);border:1px solid var(--accent);color:var(--text);padding:8px 16px;border-radius:4px;font-size:12px;opacity:0;transform:translateY(6px);transition:opacity .2s ease,transform .2s ease;pointer-events:auto;display:inline-flex;align-items:center;gap:10px;max-width:80vw;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.toast-item.show{opacity:1;transform:translateY(0)}
+.toast-action{background:var(--accent);color:#1a1a1a;border:none;border-radius:3px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:.02em}
+.toast-action:hover{filter:brightness(1.1)}
+/* Keyboard-shortcut help overlay (triggered by `?`). Two-column grid of
+   shortcut groups for quick scanning. */
+.help-modal{width:560px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;padding:18px 20px}
+.help-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 22px;overflow-y:auto;padding-right:4px}
+@media (max-width:560px){ .help-grid{grid-template-columns:1fr} }
+.help-group-title{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--border)}
+.help-row{display:flex;align-items:baseline;gap:10px;font-size:11px;color:var(--text-muted);margin-bottom:5px}
+.help-keys{flex-shrink:0;font-family:'Cascadia Code',Consolas,monospace;color:var(--text)}
+.help-desc{flex:1;line-height:1.4}
+kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border);border-bottom-width:2px;border-radius:3px;padding:1px 6px;font-family:inherit;font-size:10px;color:var(--text);letter-spacing:.02em;line-height:1.2}
 /* ============ SNAP-LAYOUTS PICKER ============ */
 /* Windows-11-style popover: a row of small layout previews, each with
    clickable zones that snap the panel into that fraction of the workspace. */

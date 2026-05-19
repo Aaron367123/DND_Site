@@ -204,7 +204,121 @@ function _runCrop(img, outSize, shape, title, resolve) {
 
 function d20(){return Math.floor(Math.random()*20)+1}
 function mod(s){return Math.floor((s-10)/2)}
-function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),1800)}
+// Stacking toast system — up to 3 simultaneous toasts so fast repeat calls
+// don't overwrite each other (the previous single-element implementation
+// would clobber an "X saved" notification when the next one fired 100ms
+// later, leaving users uncertain what actually happened).
+//
+// `opts.action` is { label, run } — when set, the toast gains a clickable
+// action chip (e.g. an Undo button) and stays open longer so the user has
+// time to react.
+function showToast(msg, opts){
+  let host = document.getElementById('toast-host');
+  if (!host){
+    host = document.createElement('div');
+    host.id = 'toast-host';
+    document.body.appendChild(host);
+  }
+  // Cap to 3 — pop the oldest if needed before adding the new one.
+  while (host.children.length >= 3) host.firstElementChild.remove();
+  const t = document.createElement('div');
+  t.className = 'toast-item';
+  const safeMsg = typeof msg === 'string' ? msg : String(msg ?? '');
+  let timeoutMs = 1800;
+  if (opts && opts.action && typeof opts.action.run === 'function'){
+    timeoutMs = 5000;
+    const span = document.createElement('span');
+    span.textContent = safeMsg;
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = opts.action.label || 'Action';
+    btn.addEventListener('click', () => {
+      try { opts.action.run(); } catch(e){ console.warn('[toast action]', e); }
+      t.classList.remove('show');
+      setTimeout(() => t.remove(), 200);
+    });
+    t.appendChild(span);
+    t.appendChild(btn);
+  } else {
+    t.textContent = safeMsg;
+  }
+  host.appendChild(t);
+  // Force reflow so the .show transition fires for the newly inserted node.
+  void t.offsetWidth;
+  t.classList.add('show');
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 200);
+  }, timeoutMs);
+}
+
+// Keyboard-shortcut cheatsheet overlay. Triggered by pressing `?` (no
+// modifier). Renders a single modal listing every documented shortcut so the
+// user doesn't have to dig through the tutorial. Idempotent — calling twice
+// just closes the existing one.
+function showHelpOverlay(){
+  const existing = document.getElementById('help-overlay');
+  if (existing){ existing.remove(); return; }
+  const SHORTCUTS = [
+    { group: 'Search', items: [
+      ['/',                'Open / focus search'],
+      ['↑ ↓',              'Browse results'],
+      ['Enter',            'Open selected result'],
+      ['Escape',           'Close detail / search'],
+    ]},
+    { group: 'Workspace zoom', items: [
+      ['Ctrl + Wheel',     'Zoom centered on cursor'],
+      ['Ctrl + + / − / 0', 'Zoom in / out / reset'],
+      ['Space + drag',     'Pan workspace'],
+      ['Middle-mouse drag','Pan workspace'],
+      ['Right-click drag', 'Pan workspace'],
+    ]},
+    { group: 'Windows', items: [
+      ['Ctrl + Shift + A', 'Smart arrange — auto-tile all open panels'],
+      ['Right-click empty workspace', 'Toggle panels / restore focuses'],
+    ]},
+    { group: 'Player view (DM)', items: [
+      ['Shift-click player-view button', 'Copy player link without opening tab'],
+      ['Right-click player-view button', 'Copy player link'],
+      ['👁 in window menu',  'Share / unshare panel with players'],
+    ]},
+    { group: 'Help', items: [
+      ['?',                'Show this overlay'],
+      ['Esc',              'Close this overlay'],
+    ]},
+  ];
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop';
+  back.id = 'help-overlay';
+  const groupHtml = SHORTCUTS.map(g => `
+    <div class="help-group">
+      <div class="help-group-title">${esc(g.group)}</div>
+      ${g.items.map(([k, desc]) => `
+        <div class="help-row">
+          <span class="help-keys">${k.split(/\s+\+\s+|\s+\/\s+/).map(x => '<kbd>'+esc(x)+'</kbd>').join(k.includes('+') ? ' + ' : k.includes('/') ? ' / ' : ' ')}</span>
+          <span class="help-desc">${esc(desc)}</span>
+        </div>`).join('')}
+    </div>`).join('');
+  back.innerHTML = `<div class="modal help-modal" role="dialog" aria-modal="true">
+    <h3 style="margin:0 0 4px">Keyboard shortcuts</h3>
+    <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted)">Press <kbd>?</kbd> any time to toggle this overlay.</p>
+    <div class="help-grid">${groupHtml}</div>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn primary" id="help-close">Close (Esc)</button></div>
+  </div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.querySelector('#help-close').addEventListener('click', close);
+  back.addEventListener('mousedown', e => { if (e.target === back) close(); });
+  const onKey = (e) => {
+    if (e.key === 'Escape' || e.key === '?'){
+      e.preventDefault();
+      close();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+}
+window.showHelpOverlay = showHelpOverlay;
 
 // Themed modal — replaces browser prompt/confirm
 // fields: [{id, label, type='text', value='', placeholder='', min, max}]

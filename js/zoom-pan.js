@@ -150,6 +150,18 @@ function initZoomPan(){
     if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
       spaceHeld = true; ws.style.cursor = 'grab';
     }
+    // `?` opens the keyboard-shortcut overlay. Ignored while typing in an
+    // input/textarea/contenteditable so users can still type the literal
+    // character in notes etc.
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey){
+      const ae = document.activeElement;
+      const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+      if (!typing && typeof window.showHelpOverlay === 'function'){
+        e.preventDefault();
+        window.showHelpOverlay();
+        return;
+      }
+    }
     // Ctrl+0 / Ctrl+= / Ctrl+-
     if (e.ctrlKey || e.metaKey) {
       if (e.key === '0') { e.preventDefault(); zoomReset(); }

@@ -304,6 +304,15 @@ function initSettings(){
   if (drawer){
     new MutationObserver(updateStorageUsage).observe(drawer, { attributes:true, attributeFilter:['class','style'] });
   }
+  // Help & about: open the shortcut overlay from settings (parity with `?`
+  // key), and let the user re-trigger the tutorial from here too.
+  document.getElementById('open-help-overlay')?.addEventListener('click', () => {
+    if (typeof window.showHelpOverlay === 'function') window.showHelpOverlay();
+  });
+  document.getElementById('open-tutorial-btn')?.addEventListener('click', () => {
+    if (typeof window.openTutorial === 'function') window.openTutorial(0);
+  });
+
   document.getElementById('reset-data-btn').addEventListener('click',()=>{
     showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{
       if(r===null)return;

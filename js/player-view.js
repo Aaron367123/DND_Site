@@ -95,6 +95,28 @@ function _renderPlayerDock(){
     const visible = _playerVisible.has(id);
     return `<button class="pv-dock-btn ${visible?'active':''}" data-pv-toggle="${id}" title="${def.title}">${def.icon || '◇'}</button>`;
   }).join('');
+  // First-run discoverability hint on mobile — if the DM has shared multiple
+  // panels but the player can only see one at a time, surface a one-time
+  // "tap a chip to switch" tip so they don't miss the other shared panels.
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const HINT_KEY = 'skt-pv-dock-hint-seen';
+  if (isMobile && shared.length > 1){
+    let seen = false;
+    try { seen = localStorage.getItem(HINT_KEY) === '1'; } catch(e){}
+    if (!seen && !document.getElementById('pv-dock-hint')){
+      const hint = document.createElement('div');
+      hint.id = 'pv-dock-hint';
+      hint.textContent = '↓ Tap an icon below to switch panels';
+      document.body.appendChild(hint);
+      // Dismiss after 6s or on first interaction with any dock button.
+      const dismiss = () => {
+        hint.remove();
+        try { localStorage.setItem(HINT_KEY, '1'); } catch(e){}
+      };
+      setTimeout(dismiss, 6000);
+      dock.addEventListener('click', dismiss, { once:true });
+    }
+  }
   dock.querySelectorAll('[data-pv-toggle]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.pvToggle;
@@ -189,15 +211,26 @@ function initPlayerView(){
   _patchClosePanelForPlayer();
   _applySharedPanelsToPlayerView();
   _initMobileDockHideOnScroll();
-  // Re-apply on viewport flip (rotate, desktop⇄mobile breakpoint cross). When
-  // entering mobile mode, collapse to a single panel; when leaving, leave the
-  // current set alone (player can re-open whatever they want from the dock).
+  // Re-apply on viewport flip (rotate, desktop⇄mobile breakpoint cross).
+  // - Entering mobile: collapse to the single currently-visible panel so the
+  //   player isn't fighting tiny stacked windows.
+  // - Leaving mobile: restore every shared panel so the desktop user gets the
+  //   full view they had before. Previously this was a one-way ratchet —
+  //   rotating an iPad back to landscape left the player stuck on one panel.
   let _wasMobile = window.matchMedia('(max-width: 768px)').matches;
   window.addEventListener('resize', () => {
     const nowMobile = window.matchMedia('(max-width: 768px)').matches;
     if (nowMobile && !_wasMobile && _playerVisible && _playerVisible.size > 1){
       const first = [..._playerVisible][0];
       _playerVisible = new Set([first]);
+      _applySharedPanelsToPlayerView();
+    } else if (!nowMobile && _wasMobile){
+      // Coming back to desktop — restore the full shared set if the player
+      // hadn't deliberately closed any panels. We approximate "deliberately"
+      // as "_playerVisible contains every shared panel" — since on mobile
+      // we always trim to one, the post-rotate state would otherwise look
+      // like the player asked to close everything else.
+      _playerVisible = new Set(state.sharedPanels || []);
       _applySharedPanelsToPlayerView();
     }
     _wasMobile = nowMobile;
