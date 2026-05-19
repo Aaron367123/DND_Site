@@ -186,7 +186,14 @@ function initZoomPan(){
     if (!isMiddle && !isRight && !isSpaceDrag) return;
     // Inside a window: only middle-mouse pans (left/right belong to the window).
     if (insideWindow && !isMiddle) return;
-    e.preventDefault();
+    // Skip preventDefault for right-click — in some browsers (Firefox, certain
+    // Chrome configs) calling preventDefault on a right-click mousedown
+    // cancels the subsequent contextmenu event entirely, which kills the
+    // workspace right-click menu. The contextmenu handler at the bottom
+    // already has its own drag-suppression flag, so we don't need it here.
+    // Middle-click still needs preventDefault to block the browser's
+    // autoscroll cursor; space-drag needs it to block text selection.
+    if (!isRight) e.preventDefault();
     pan = { sx: e.clientX, sy: e.clientY, sl: ws.scrollLeft, st: ws.scrollTop, button: e.button, didDrag: false };
     ws.style.cursor = 'grabbing';
   });

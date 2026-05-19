@@ -1480,7 +1480,10 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .modal-actions .btn{padding:7px 20px;font-size:13px}
 
 /* CONTEXT MENU */
-.ctx-menu{position:fixed;z-index:600;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:5px;box-shadow:0 6px 18px rgba(0,0,0,.55);padding:4px 0;min-width:150px;max-height:70vh;overflow-y:auto;font-family:inherit}
+/* Context menus must float above every panel window. _nextZ() in
+   window-manager.js increments freely as panels get focused, so windows
+   easily reach z-index 600+. 99999 keeps the menu reliably on top. */
+.ctx-menu{position:fixed;z-index:99999;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:5px;box-shadow:0 6px 18px rgba(0,0,0,.55);padding:4px 0;min-width:150px;max-height:70vh;overflow-y:auto;font-family:inherit}
 .ctx-menu-item{display:block;width:100%;padding:5px 12px;background:transparent;border:none;text-align:left;color:var(--text);font-size:12px;cursor:pointer;font-family:inherit;white-space:pre}
 .ctx-menu-item:hover{background:var(--panel-2);color:var(--accent)}
 .ctx-menu-item.checked{color:var(--accent)}
@@ -1528,7 +1531,7 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 /* ============ SNAP-LAYOUTS PICKER ============ */
 /* Windows-11-style popover: a row of small layout previews, each with
    clickable zones that snap the panel into that fraction of the workspace. */
-.snap-picker{position:fixed;z-index:1100;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:6px;box-shadow:0 12px 36px rgba(0,0,0,.55)}
+.snap-picker{position:fixed;z-index:99998;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:6px;box-shadow:0 12px 36px rgba(0,0,0,.55)}
 .snap-layout{position:relative;width:78px;height:48px;background:var(--panel-3);border:1px solid var(--border);border-radius:4px;overflow:hidden}
 .snap-zone{position:absolute;background:transparent;border:1px solid var(--text-dim);box-sizing:border-box;cursor:pointer;padding:0;border-radius:2px;transition:background .12s,border-color .12s}
 .snap-zone + .snap-zone{border-left-width:1px}
@@ -1538,7 +1541,7 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
    where the snap will land if the user releases the mouse here. */
 #drag-snap-preview{position:fixed;display:none;background:rgba(212,165,116,.18);border:2px solid var(--accent);border-radius:6px;pointer-events:none;z-index:1050;transition:left .12s ease,top .12s ease,width .12s ease,height .12s ease;box-shadow:0 0 24px rgba(212,165,116,.35)}
 /* Per-window overflow menu (⋯ button → list of secondary actions) */
-.window-menu{position:fixed;z-index:1100;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:5px;box-shadow:0 8px 24px rgba(0,0,0,.55);padding:4px;min-width:220px}
+.window-menu{position:fixed;z-index:99998;background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:5px;box-shadow:0 8px 24px rgba(0,0,0,.55);padding:4px;min-width:220px}
 .window-menu-item{display:block;width:100%;padding:7px 12px;background:transparent;border:none;color:var(--text);font-size:11px;cursor:pointer;text-align:left;font-family:inherit;border-radius:3px;white-space:nowrap}
 .window-menu-item:hover{background:var(--panel-3);color:var(--accent)}
 .window-menu-item + .window-menu-item{margin-top:1px}
@@ -1603,7 +1606,7 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 /* ============ WORKSPACE CONTEXT MENU ============ */
 /* Scoped to #workspace-ctx-menu so it doesn't override the generic .ctx-menu
    used by showContextMenu() in utils.js (folder menus, token menus, etc.). */
-#workspace-ctx-menu{position:fixed;display:none;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.6);min-width:240px;max-height:90vh;overflow-y:auto;z-index:9000;padding:6px 0;font-size:12px;user-select:none}
+#workspace-ctx-menu{position:fixed;display:none;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.6);min-width:240px;max-height:90vh;overflow-y:auto;z-index:99999;padding:6px 0;font-size:12px;user-select:none}
 #workspace-ctx-menu.open{display:block}
 .ctx-section-label{padding:8px 14px 4px;font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.12em;font-weight:600}
 .ctx-item{display:flex;align-items:center;gap:10px;padding:6px 14px;cursor:pointer;color:var(--text);transition:background .1s}
