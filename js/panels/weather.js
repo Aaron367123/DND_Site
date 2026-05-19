@@ -97,23 +97,110 @@ function _seasonForTimeMonth(monthIdx){
 function _weatherHydrate() {
   try {
     const raw = localStorage.getItem('skt-weather-v2');
-    if (raw) return JSON.parse(raw);
+    if (raw){
+      const d = JSON.parse(raw);
+      // Migrate: older saves had no history array. Ensure it exists so
+      // the renderer doesn't have to null-check on every paint.
+      if (!Array.isArray(d.history)) d.history = [];
+      return d;
+    }
   } catch (e) {}
-  return _rollWeather('temperate','summer');
+  const fresh = _rollWeather('temperate','summer');
+  fresh.history = [];
+  return fresh;
+}
+
+// Read the current in-game date from the Time Tracker's localStorage blob.
+// Returns null when the user has never opened that panel. Used for the
+// auto-tick: if the date has moved on since our last roll, the weather
+// should reflect a fresh day naturally.
+// Local copy of the Forgotten Realms month names — kept here so the
+// weather panel can format history-entry dates without taking a hard
+// dependency on the Time Tracker panel module being loaded.
+const TIME_MONTHS_FOR_LABEL = [
+  'Hammer','Alturiak','Ches','Tarsakh','Mirtul','Kythorn',
+  'Flamerule','Eleasis','Eleint','Marpenoth','Uktar','Frostwane',
+];
+
+function _weatherReadInGameDate(){
+  try {
+    const t = JSON.parse(localStorage.getItem('skt-time-v1') || 'null');
+    if (!t || typeof t.day !== 'number') return null;
+    return { year: t.year||0, month: t.month||0, day: t.day };
+  } catch(e){ return null; }
+}
+function _weatherSameDate(a, b){
+  return !!a && !!b && a.year===b.year && a.month===b.month && a.day===b.day;
 }
 
 registerPanel('weather', {
   title:'Weather Tool', icon:'☁',
   _data:null,
+  // Cap on history entries — generous enough for a session's worth of
+  // in-game days while keeping the localStorage payload bounded.
+  _historyCap: 30,
 
   mount(body){
     this._body = body;
     if (!this._data) this._data = _weatherHydrate();
+    // Auto-tick: if the in-game date has moved on since our last roll,
+    // snapshot the old weather into history and roll fresh. This runs
+    // every time the panel mounts so reopening the panel after time-
+    // tracker advances naturally produces fresh weather.
+    this._maybeAutoTick();
     this._render();
   },
   unmount(){ this._body = null; },
 
   _save(){ try{ localStorage.setItem('skt-weather-v2', JSON.stringify(this._data)); }catch(e){} },
+
+  // Push a copy of the current weather (minus its own history) into the
+  // history array, then trim to cap. Records the in-game date at the time
+  // of the snapshot so history entries are placeable on a timeline.
+  _pushHistory(){
+    const w = this._data; if (!w) return;
+    const stamp = _weatherReadInGameDate();
+    const entry = {
+      condition: w.condition, icon: w.icon, temp: w.temp, feelsLike: w.feelsLike,
+      wind: w.wind, windDir: w.windDir, humid: w.humid, clouds: w.clouds,
+      precip: w.precip, pressure: w.pressure, biome: w.biome, season: w.season,
+      stamp,                     // in-game date or null
+      ts: Date.now(),            // real-world ts (fallback ordering)
+    };
+    if (!Array.isArray(w.history)) w.history = [];
+    w.history.unshift(entry);
+    if (w.history.length > this._historyCap) w.history.length = this._historyCap;
+  },
+
+  // Roll a new weather state, push the OLD one into history first, and
+  // stamp the new one with the current in-game date so the auto-tick
+  // detector can tell when the date moves on again. The single entry
+  // point used by manual reroll, biome/season swaps, sync-season, and
+  // the new tick-day / auto-tick paths.
+  _rollAndKeepHistory(biome, season){
+    this._pushHistory();
+    const next = _rollWeather(biome, season);
+    next.history = this._data.history;
+    next.lastRollDate = _weatherReadInGameDate();
+    this._data = next;
+    this._save();
+  },
+
+  _maybeAutoTick(){
+    const now = _weatherReadInGameDate();
+    if (!now) return; // no time tracker → nothing to compare
+    const last = this._data.lastRollDate;
+    if (!last){
+      // First time we've seen a date — anchor without rolling.
+      this._data.lastRollDate = now;
+      this._save();
+      return;
+    }
+    if (!_weatherSameDate(now, last)){
+      // Date advanced — roll fresh against the current biome+season.
+      this._rollAndKeepHistory(this._data.biome, this._data.season);
+    }
+  },
 
   _render(){
     const b = this._body; if(!b) return;
@@ -147,32 +234,66 @@ registerPanel('weather', {
           <select id="weather-season">${seasonOpts}</select>
         </label>
       </div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn primary weather-reroll" id="weather-reroll" style="flex:1">🎲 Reroll Weather</button>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn primary weather-reroll" id="weather-reroll" style="flex:1;min-width:140px">🎲 Reroll Weather</button>
+        <button class="btn" id="weather-tick-day" title="Push the current weather to history and roll fresh — like the in-game day rolled over">📅 Tick day</button>
         <button class="btn" id="weather-sync-season" title="Read the current in-game month from the Time Tracker and match the season">🔗 Sync season</button>
       </div>
+      ${this._renderHistoryStrip()}
     `;
     this._wire();
+  },
+
+  // Render a horizontal timeline of past weather snapshots. Each chip shows
+  // the icon + temp + in-game date (or relative real time if no in-game
+  // date was set when the snapshot was made). Click a chip → restore that
+  // weather (current gets pushed back into history first so it's not lost).
+  _renderHistoryStrip(){
+    const h = (this._data && this._data.history) || [];
+    if (!h.length) return '';
+    const items = h.slice(0, 14).map((e, i) => {
+      const date = e.stamp
+        ? `${(TIME_MONTHS_FOR_LABEL[e.stamp.month] || ('M'+(e.stamp.month+1)))} ${e.stamp.day}`
+        : new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+      return `<button class="weather-hist-chip" data-hist="${i}" title="${esc(e.condition || '')} · ${e.temp}°C · ${esc(WEATHER_BIOMES[e.biome]?.label || e.biome || '')} · ${esc(WEATHER_SEASONS[e.season]?.label || e.season || '')}\nClick to restore this snapshot">
+        <span class="weather-hist-icon">${e.icon || '·'}</span>
+        <span class="weather-hist-temp">${e.temp}°</span>
+        <span class="weather-hist-date">${esc(date)}</span>
+      </button>`;
+    }).join('');
+    return `<div class="weather-history">
+      <div class="weather-history-head">
+        <span>📜 History · ${h.length}</span>
+        <span style="flex:1"></span>
+        <button class="btn small" id="weather-history-clear" title="Clear the entire weather history">Clear</button>
+      </div>
+      <div class="weather-history-strip">${items}</div>
+    </div>`;
   },
 
   _wire(){
     const b = this._body;
     b.querySelector('#weather-biome').addEventListener('change', e => {
-      this._data = _rollWeather(e.target.value, this._data.season);
-      this._save(); this._render();
+      this._rollAndKeepHistory(e.target.value, this._data.season);
+      this._render();
     });
     b.querySelector('#weather-season').addEventListener('change', e => {
-      this._data = _rollWeather(this._data.biome, e.target.value);
-      this._save(); this._render();
+      this._rollAndKeepHistory(this._data.biome, e.target.value);
+      this._render();
     });
     b.querySelector('#weather-reroll').addEventListener('click', () => {
-      this._data = _rollWeather(this._data.biome, this._data.season);
-      this._save(); this._render();
+      this._rollAndKeepHistory(this._data.biome, this._data.season);
+      this._render();
+    });
+    // Manual "tick day forward" — same as reroll but reads as "day moved
+    // on" in the user's mental model. Useful when the DM advances time
+    // outside this panel but wants fresh weather without changing biome.
+    b.querySelector('#weather-tick-day')?.addEventListener('click', () => {
+      this._rollAndKeepHistory(this._data.biome, this._data.season);
+      this._render();
+      if (typeof showToast === 'function') showToast('Day ticked — fresh weather rolled');
     });
     b.querySelector('#weather-sync-season')?.addEventListener('click', () => {
-      // Read the Time Tracker's current month from localStorage so we don't
-      // require its panel to be mounted. Falls back to the current season if
-      // the time tracker has never been used.
       let monthIdx = null;
       try {
         const t = JSON.parse(localStorage.getItem('skt-time-v1') || 'null');
@@ -183,10 +304,40 @@ registerPanel('weather', {
         return;
       }
       const newSeason = _seasonForTimeMonth(monthIdx);
-      this._data = _rollWeather(this._data.biome, newSeason);
-      this._save(); this._render();
+      this._rollAndKeepHistory(this._data.biome, newSeason);
+      this._render();
       const seasonLabel = WEATHER_SEASONS[newSeason]?.label || newSeason;
       if (typeof showToast === 'function') showToast('Season synced → ' + seasonLabel);
+    });
+
+    // History chip click — restore that snapshot. The current state is
+    // pushed into history first, then replaced. The clicked entry is
+    // removed from history (it's the new current state).
+    b.querySelectorAll('[data-hist]').forEach(btn => btn.addEventListener('click', () => {
+      const i = parseInt(btn.dataset.hist);
+      const hist = this._data.history || [];
+      const entry = hist[i]; if (!entry) return;
+      // Snapshot current → history at the front.
+      this._pushHistory();
+      // Pull the clicked entry out of history (now at index i+1 because
+      // pushHistory added one in front).
+      this._data.history.splice(i + 1, 1);
+      // Apply the entry's fields onto the current weather.
+      const { stamp, ts, ...rest } = entry;
+      Object.assign(this._data, rest);
+      this._data.lastRollDate = _weatherReadInGameDate();
+      this._save(); this._render();
+      if (typeof showToast === 'function') showToast('Restored ' + entry.condition + ' · ' + entry.temp + '°C');
+    }));
+    b.querySelector('#weather-history-clear')?.addEventListener('click', () => {
+      const proceed = ok => {
+        if (!ok) return;
+        this._data.history = [];
+        this._save(); this._render();
+      };
+      if (typeof showConfirm === 'function'){
+        showConfirm('Clear all weather history? This can\'t be undone.', {title:'Clear history', confirmLabel:'Clear', danger:true}).then(proceed);
+      } else proceed(window.confirm('Clear weather history?'));
     });
   },
 });

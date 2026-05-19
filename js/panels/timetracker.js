@@ -19,25 +19,49 @@ const TIME_DAYS_PER_MONTH = 30;
 function _timeHydrate() {
   try {
     const raw = localStorage.getItem('skt-time-v1');
-    if (raw) return JSON.parse(raw);
+    if (raw){
+      const d = JSON.parse(raw);
+      // Migrate: older saves only had hour. Default minute/second to 0
+      // so existing time states load cleanly with the new precision.
+      d.minute = (typeof d.minute === 'number') ? d.minute : 0;
+      d.second = (typeof d.second === 'number') ? d.second : 0;
+      return d;
+    }
   } catch (e) {}
-  return { day: 9, month: 11 /* Frostwane */, year: 1492, hour: 15 };
+  return { day: 9, month: 11 /* Frostwane */, year: 1492, hour: 15, minute: 0, second: 0 };
 }
 
+// All-precision advance — accepts a delta in seconds and recomputes
+// year/month/day/hour/minute/second. Backed by a single 64-bit "total
+// seconds since year 0 epoch" so wraparound math is straightforward.
+// Kept as a free function (not a panel method) so other panels and the
+// weather sync helper can read/derive from it without coupling.
+function _timeAdvanceSeconds(t, deltaSeconds) {
+  const M = TIME_MONTHS.length, D = TIME_DAYS_PER_MONTH;
+  const cur = (t.year * M * D * 86400)
+            + (t.month * D * 86400)
+            + ((t.day - 1) * 86400)
+            + (t.hour||0) * 3600
+            + (t.minute||0) * 60
+            + (t.second||0)
+            + Math.round(deltaSeconds);
+  const total = Math.max(0, cur);
+  const second = total % 60;
+  const totalMin = Math.floor(total / 60);
+  const minute = totalMin % 60;
+  const totalHour = Math.floor(totalMin / 60);
+  const hour = totalHour % 24;
+  const days = Math.floor(totalHour / 24);
+  const day = (days % D) + 1;
+  const months = Math.floor(days / D);
+  const month = months % M;
+  const year = Math.floor(months / M);
+  return { year, month, day, hour, minute, second };
+}
+
+// Backwards-compatible wrapper — old callers passed integer hours.
 function _timeAdvance(t, deltaHours) {
-  let total = (t.year * TIME_MONTHS.length * TIME_DAYS_PER_MONTH * 24)
-            + (t.month * TIME_DAYS_PER_MONTH * 24)
-            + ((t.day - 1) * 24)
-            + t.hour
-            + deltaHours;
-  if (total < 0) total = 0;
-  const hour  = ((total % 24) + 24) % 24;
-  const days  = Math.floor(total / 24);
-  const day   = (days % TIME_DAYS_PER_MONTH) + 1;
-  const months = Math.floor(days / TIME_DAYS_PER_MONTH);
-  const month = months % TIME_MONTHS.length;
-  const year  = Math.floor(months / TIME_MONTHS.length);
-  return { hour, day, month, year };
+  return _timeAdvanceSeconds(t, deltaHours * 3600);
 }
 
 // Build a 24-segment SVG ring colored by time-of-day. Segment for the current
@@ -99,12 +123,21 @@ registerPanel('time', {
     this._render();
   },
 
-  // Hours until the next occurrence of a target hour (0–23). Used by the
-  // "to next sunrise/sunset" buttons so the user doesn't have to count.
-  _hoursUntilHour(targetHour){
-    const cur = this._data.hour;
-    if (targetHour <= cur) return 24 - cur + targetHour;
-    return targetHour - cur;
+  // Generic seconds-precision advance — used by minute/second buttons.
+  _advanceSeconds(deltaSeconds){
+    this._data = _timeAdvanceSeconds(this._data, deltaSeconds);
+    this._save();
+    this._render();
+  },
+
+  // Seconds until the next occurrence of a target hour:minute. Used by the
+  // fast-forward "next sunrise/sunset" buttons. Snaps to :00 of the
+  // target hour so fast-forward always lands on a clean hour boundary.
+  _secondsUntilHour(targetHour){
+    const cur = (this._data.hour||0) * 3600 + (this._data.minute||0) * 60 + (this._data.second||0);
+    const target = targetHour * 3600;
+    const diff = target - cur;
+    return diff > 0 ? diff : (24*3600 + diff);
   },
 
   // Moon phase as a fraction 0..1 (0 = new moon, 0.5 = full). Uses a simple
@@ -140,13 +173,19 @@ registerPanel('time', {
     const monthOpts = TIME_MONTHS.map((m,i) =>
       `<option value="${i}"${i===t.month?' selected':''}>${esc(m)}</option>`).join('');
     const moon = this._moonIcon();
-    const toSunrise = this._hoursUntilHour(6);   // dawn at hour 6
-    const toSunset  = this._hoursUntilHour(18);  // dusk at hour 18
+    // Fast-forward target seconds → snap to clean :00 of the next sunrise/sunset hour.
+    const toSunriseSec = this._secondsUntilHour(6);
+    const toSunsetSec  = this._secondsUntilHour(18);
+    // Display: HH:MM, optionally :SS if seconds are non-zero (keeps the
+    // readout tidy at minute precision while still surfacing seconds when
+    // they're meaningful).
+    const mm = String(t.minute||0).padStart(2,'0');
+    const ss = (t.second||0) > 0 ? ':' + String(t.second).padStart(2,'0') : '';
     b.innerHTML = `
       <div class="time-dial">
         ${_timeRingSvg(t.hour)}
         <div class="time-center">
-          <div class="time-hour" data-edit="hour" title="Click to edit">Hr ${t.hour}</div>
+          <div class="time-hour" data-edit="hour" title="Click to edit">${t.hour}:${mm}${ss}</div>
           <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${t.day}</div>
           ${realMonth ? `<div class="time-date-real" data-edit="date" title="Click to edit">(${esc(realMonth)})</div>` : ''}
           <div class="time-year" data-edit="year" title="Click to edit">${t.year||0} DR</div>
@@ -158,21 +197,29 @@ registerPanel('time', {
         <input type="number" id="time-day" min="1" max="${TIME_DAYS_PER_MONTH}" value="${t.day}" title="Day">
         <input type="number" id="time-year" value="${t.year||0}" title="Year">
         <input type="number" id="time-hour" min="0" max="23" value="${t.hour}" title="Hour">
+        <input type="number" id="time-minute" min="0" max="59" value="${t.minute||0}" title="Minute">
+        <input type="number" id="time-second" min="0" max="59" value="${t.second||0}" title="Second">
         <button class="btn small primary" id="time-edit-done">✓</button>
       </div>
       <div class="time-advance-label">ADVANCE</div>
       <div class="time-buttons">
-        <button class="btn time-btn" data-delta="-24">−1d</button>
-        <button class="btn time-btn" data-delta="-1">−1h</button>
-        <button class="btn time-btn" data-delta="1">+1h</button>
-        <button class="btn time-btn" data-delta="24">+1d</button>
+        <button class="btn time-btn" data-delta-h="-24">−1d</button>
+        <button class="btn time-btn" data-delta-h="-1">−1h</button>
+        <button class="btn time-btn" data-delta-h="1">+1h</button>
+        <button class="btn time-btn" data-delta-h="24">+1d</button>
+      </div>
+      <div class="time-buttons" style="margin-top:6px">
+        <button class="btn time-btn" data-delta-m="-10" title="Back 10 minutes">−10m</button>
+        <button class="btn time-btn" data-delta-m="-1"  title="Back 1 minute">−1m</button>
+        <button class="btn time-btn" data-delta-m="1"   title="Forward 1 minute">+1m</button>
+        <button class="btn time-btn" data-delta-m="10"  title="Forward 10 minutes">+10m</button>
       </div>
       <div class="time-advance-label" style="margin-top:10px">FAST-FORWARD</div>
       <div class="time-buttons" style="flex-wrap:wrap">
-        <button class="btn time-btn" data-delta="${toSunrise}" title="Advance ${toSunrise}h to dawn (hour 6)">🌅 Sunrise</button>
-        <button class="btn time-btn" data-delta="${toSunset}" title="Advance ${toSunset}h to dusk (hour 18)">🌇 Sunset</button>
-        <button class="btn time-btn" data-delta="8" title="Long rest — 8 hours">🛌 Long rest</button>
-        <button class="btn time-btn" data-delta="1" title="Short rest — 1 hour">⏳ Short rest</button>
+        <button class="btn time-btn" data-delta-s="${toSunriseSec}" title="Advance to dawn (hour 6:00) — ${Math.round(toSunriseSec/3600*10)/10}h away">🌅 Sunrise</button>
+        <button class="btn time-btn" data-delta-s="${toSunsetSec}" title="Advance to dusk (hour 18:00) — ${Math.round(toSunsetSec/3600*10)/10}h away">🌇 Sunset</button>
+        <button class="btn time-btn" data-delta-h="8" title="Long rest — 8 hours">🛌 Long rest</button>
+        <button class="btn time-btn" data-delta-h="1" title="Short rest — 1 hour">⏳ Short rest</button>
       </div>
     `;
 
@@ -186,18 +233,22 @@ registerPanel('time', {
       if (sel) { sel.focus(); if (sel.select) sel.select(); }
     }));
 
-    // Commit on ✓ click, Enter, or any field blur (with a short delay so
-    // tabbing between fields doesn't immediately close the row)
+    // Commit on ✓ click or Enter — picks up every field including the
+    // new minute/second inputs.
     const commit = () => {
-      const m = parseInt(b.querySelector('#time-month').value);
-      const d = parseInt(b.querySelector('#time-day').value);
-      const y = parseInt(b.querySelector('#time-year').value);
-      const h = parseInt(b.querySelector('#time-hour').value);
+      const m  = parseInt(b.querySelector('#time-month').value);
+      const d  = parseInt(b.querySelector('#time-day').value);
+      const y  = parseInt(b.querySelector('#time-year').value);
+      const h  = parseInt(b.querySelector('#time-hour').value);
+      const mi = parseInt(b.querySelector('#time-minute').value);
+      const ss = parseInt(b.querySelector('#time-second').value);
       this._data = {
-        month: isNaN(m) ? this._data.month : Math.max(0, Math.min(TIME_MONTHS.length-1, m)),
-        day:   isNaN(d) ? this._data.day   : Math.max(1, Math.min(TIME_DAYS_PER_MONTH, d)),
-        year:  isNaN(y) ? this._data.year  : Math.max(0, y),
-        hour:  isNaN(h) ? this._data.hour  : Math.max(0, Math.min(23, h)),
+        month:  isNaN(m)  ? this._data.month  : Math.max(0, Math.min(TIME_MONTHS.length-1, m)),
+        day:    isNaN(d)  ? this._data.day    : Math.max(1, Math.min(TIME_DAYS_PER_MONTH, d)),
+        year:   isNaN(y)  ? this._data.year   : Math.max(0, y),
+        hour:   isNaN(h)  ? this._data.hour   : Math.max(0, Math.min(23, h)),
+        minute: isNaN(mi) ? (this._data.minute||0) : Math.max(0, Math.min(59, mi)),
+        second: isNaN(ss) ? (this._data.second||0) : Math.max(0, Math.min(59, ss)),
       };
       this._save();
       this._render();
@@ -207,8 +258,15 @@ registerPanel('time', {
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
     });
 
+    // Advance buttons — three variants on the data attribute:
+    //   data-delta-h  → integer hours
+    //   data-delta-m  → integer minutes
+    //   data-delta-s  → integer seconds (used by fast-forward to snap
+    //                   exactly to a :00 sunrise/sunset)
     b.querySelectorAll('.time-btn').forEach(btn => btn.addEventListener('click', () => {
-      this._advance(+btn.dataset.delta);
+      if (btn.dataset.deltaH != null)      this._advance(+btn.dataset.deltaH);
+      else if (btn.dataset.deltaM != null) this._advanceSeconds((+btn.dataset.deltaM) * 60);
+      else if (btn.dataset.deltaS != null) this._advanceSeconds(+btn.dataset.deltaS);
     }));
   },
 });

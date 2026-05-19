@@ -222,4 +222,47 @@ function initZoomPan(){
     e.preventDefault();
     e.stopImmediatePropagation();
   }, true);
+
+  // ── Touch / pinch-zoom ──────────────────────────────────────────────────
+  // Two-finger pinch on the workspace (outside any window) zooms in/out
+  // about the midpoint of the two fingers, mirroring desktop Ctrl+Wheel
+  // semantics. Single-finger touch is left alone so it stays available
+  // for tapping panel buttons / scrolling inside panels.
+  let pinch = null;
+  ws.addEventListener('touchstart', e => {
+    if (e.touches.length !== 2) return;
+    // Don't intercept pinches that started on top of a window — let the
+    // panel (battlemap, notes, etc.) handle its own touch gesture.
+    const t0 = e.touches[0], t1 = e.touches[1];
+    const target = document.elementFromPoint((t0.clientX + t1.clientX)/2, (t0.clientY + t1.clientY)/2);
+    if (target && target.closest('.window')) return;
+    e.preventDefault();
+    const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+    pinch = {
+      startDist: Math.hypot(dx, dy),
+      startZoom: (typeof getZoom === 'function') ? getZoom() : 1,
+      // Use the geometric midpoint as the zoom pivot so the point under
+      // the user's fingers stays under their fingers.
+      cx: (t0.clientX + t1.clientX) / 2,
+      cy: (t0.clientY + t1.clientY) / 2,
+    };
+  }, { passive: false });
+  ws.addEventListener('touchmove', e => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const t0 = e.touches[0], t1 = e.touches[1];
+    const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+    const dist = Math.hypot(dx, dy);
+    if (pinch.startDist < 10) return; // ignore degenerate
+    const ratio = dist / pinch.startDist;
+    // Update midpoint each frame so the user can "drift" the focal point
+    // as they spread/squeeze without re-anchoring at the start.
+    const cx = (t0.clientX + t1.clientX) / 2;
+    const cy = (t0.clientY + t1.clientY) / 2;
+    if (typeof setZoom === 'function') setZoom(pinch.startZoom * ratio, cx, cy);
+  }, { passive: false });
+  ws.addEventListener('touchend', e => {
+    if (e.touches.length < 2) pinch = null;
+  });
+  ws.addEventListener('touchcancel', () => { pinch = null; });
 }

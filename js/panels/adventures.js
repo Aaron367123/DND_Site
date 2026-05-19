@@ -204,6 +204,8 @@ registerPanel('adventures', {
           <button class="btn small" data-act="back">← All adventures</button>
           <span class="adv-head-title">${esc(adv.name)}</span>
           <span class="adv-head-meta">${esc((adv.source||'')+(adv.published?(' · '+adv.published):''))}</span>
+          <span style="flex:1"></span>
+          <button class="btn small" data-act="print" title="Open a print-friendly view (chapter picker + browser Print → save as PDF)">🖨 Print / Export</button>
         </div>
         <div class="adv-body">
           <div class="adv-toc">
@@ -218,6 +220,7 @@ registerPanel('adventures', {
       this._currentAdvId = null;
       this._render();
     });
+    b.querySelector('[data-act="print"]')?.addEventListener('click', () => this._openPrintPicker(adv, file));
     b.querySelectorAll('.adv-chapter').forEach(btn => btn.addEventListener('click', () => {
       this._currentChapterIdx = +btn.dataset.ci;
       this._bumpBookmark();
@@ -606,5 +609,183 @@ registerPanel('adventures', {
       return '<div class="empty-state" style="padding:20px;color:var(--text-muted)">No content.</div>';
     }
     return ch.entries.map(e => this._renderNode(e)).join('');
+  },
+
+  // Open a chapter-picker modal for print/export. User checks which
+  // chapters to include and clicks "Open print view" — we open a new
+  // tab/window containing self-contained HTML (TOC + each chapter as a
+  // print-page). The user then File → Print → Save as PDF from the new
+  // window. Avoids embedding any PDF dependency.
+  _openPrintPicker(adv, file){
+    const chapters = (file && file.data) || [];
+    if (!chapters.length){
+      if (typeof showToast === 'function') showToast('No chapters to print');
+      return;
+    }
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:92vw;max-height:90vh;display:flex;flex-direction:column">
+      <h3 style="margin:0 0 4px">Print "${esc(adv.name||'Adventure')}"</h3>
+      <p style="margin:0 0 12px;font-size:11px;color:var(--text-muted)">Pick chapters → opens a print-friendly view. Use your browser's File → Print to save as PDF.</p>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="btn small" id="adv-print-all">Select all</button>
+        <button class="btn small" id="adv-print-none">Select none</button>
+        <span style="flex:1"></span>
+        <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="adv-print-images" checked> Include images
+        </label>
+      </div>
+      <div style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:5px;padding:6px;background:var(--panel-2)">
+        ${chapters.map((c, i) => `
+          <label class="adv-print-row" style="display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:12px;cursor:pointer;border-radius:3px">
+            <input type="checkbox" class="adv-print-chk" data-ci="${i}" checked>
+            <span style="color:var(--text-dim);min-width:24px">${i+1}.</span>
+            <span style="flex:1;color:var(--text)">${esc(c.name || 'Untitled')}</span>
+          </label>
+        `).join('')}
+      </div>
+      <div class="modal-actions" style="margin-top:10px">
+        <span id="adv-print-count" style="font-size:11px;color:var(--text-muted);align-self:center">${chapters.length} chapters selected</span>
+        <span style="flex:1"></span>
+        <button class="btn" id="adv-print-close">Cancel</button>
+        <button class="btn primary" id="adv-print-go">Open print view</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#adv-print-close').addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+    const checks = backdrop.querySelectorAll('.adv-print-chk');
+    const countEl = backdrop.querySelector('#adv-print-count');
+    const refresh = () => {
+      const n = [...checks].filter(c => c.checked).length;
+      countEl.textContent = n + ' chapter' + (n===1?'':'s') + ' selected';
+      backdrop.querySelector('#adv-print-go').disabled = n === 0;
+    };
+    checks.forEach(c => c.addEventListener('change', refresh));
+    backdrop.querySelector('#adv-print-all').addEventListener('click', () => {
+      checks.forEach(c => c.checked = true); refresh();
+    });
+    backdrop.querySelector('#adv-print-none').addEventListener('click', () => {
+      checks.forEach(c => c.checked = false); refresh();
+    });
+    backdrop.querySelector('#adv-print-go').addEventListener('click', () => {
+      const picks = [...checks].filter(c => c.checked).map(c => +c.dataset.ci);
+      if (!picks.length) return;
+      const includeImages = backdrop.querySelector('#adv-print-images').checked;
+      this._openPrintWindow(adv, file, picks, { includeImages });
+      close();
+    });
+  },
+
+  // Build a self-contained HTML document for the chosen chapters and open
+  // it in a new tab. Reuses the same `_renderChapterEntries` HTML so
+  // tables / read-aloud boxes / lists look identical to the live panel.
+  // Adds a print stylesheet that swaps to black-on-white and ensures
+  // chapter breaks land on new pages.
+  _openPrintWindow(adv, file, chapterIndices, opts){
+    const includeImages = opts?.includeImages !== false;
+    const chapters = (file && file.data) || [];
+    const tocItems = chapterIndices.map((i, n) => `
+      <li><a href="#chap-${i}"><span class="num">${n+1}.</span> ${esc(chapters[i]?.name || 'Untitled')}</a></li>
+    `).join('');
+    const chaptersHtml = chapterIndices.map(i => {
+      const ch = chapters[i]; if (!ch) return '';
+      let body = this._renderChapterEntries(ch);
+      // Strip <img> tags if the user opted out of images. Cheap regex —
+      // accepted because our output is generated by us and never contains
+      // image-look-alikes in plain text.
+      if (!includeImages) body = body.replace(/<img\b[^>]*>/g, '');
+      return `<section class="chap" id="chap-${i}">
+        <h1 class="chap-title">${esc(ch.name || 'Untitled')}</h1>
+        ${body}
+      </section>`;
+    }).join('');
+
+    // Pull a few theme colors so the on-screen preview matches the app,
+    // but the @print rules override to high-contrast paper styling.
+    const css = `
+      *,*::before,*::after{box-sizing:border-box}
+      html,body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+      body{background:#1a1a1a;color:#e8e8e8;font-size:13px;line-height:1.55;padding:30px 50px;max-width:900px;margin:0 auto}
+      h1.title{font-size:34px;margin:0 0 4px;color:#d4a574}
+      h1.title + .meta{color:#999;font-size:13px;margin-bottom:30px}
+      h2.toc-title{margin:30px 0 8px;font-size:18px;border-bottom:1px solid #3a3a3a;padding-bottom:5px}
+      ol.toc{list-style:none;padding:0;margin:0 0 30px}
+      ol.toc li{padding:3px 0;font-size:13px}
+      ol.toc a{color:#d4a574;text-decoration:none}
+      ol.toc a:hover{text-decoration:underline}
+      ol.toc .num{display:inline-block;width:30px;color:#999;font-variant-numeric:tabular-nums}
+      .chap{page-break-before:always;break-before:page;padding-top:20px}
+      .chap-title{font-size:26px;border-bottom:2px solid #d4a574;padding-bottom:6px;margin:0 0 14px}
+      .chap p{margin:0 0 10px}
+      .chap h3,.chap h4,.chap h5{color:#d4a574;margin:18px 0 6px}
+      .chap ul,.chap ol{margin:0 0 10px;padding-left:24px}
+      .chap li{margin:2px 0}
+      .chap table{border-collapse:collapse;margin:10px 0;width:100%;font-size:12px}
+      .chap th,.chap td{border:1px solid #3a3a3a;padding:5px 9px;text-align:left}
+      .chap th{background:#2a2a2a;color:#d4a574}
+      .chap img{max-width:100%;height:auto;display:block;margin:10px 0;border-radius:4px}
+      .chap blockquote,.chap .inset{background:rgba(212,165,116,0.08);border-left:3px solid #d4a574;margin:10px 0;padding:8px 14px}
+      .chap .read-aloud,.chap .inset-readaloud{background:#2a2a2a;border:1px solid #3a3a3a;border-radius:4px;padding:10px 14px;font-style:italic;margin:10px 0}
+      .adv-tag{color:#d4a574}
+      .toolbar{position:sticky;top:0;background:#1a1a1a;border-bottom:1px solid #3a3a3a;padding:10px 0;margin:-30px 0 20px;display:flex;gap:8px;align-items:center;z-index:10}
+      .toolbar button{background:#333;border:1px solid #3a3a3a;color:#e8e8e8;padding:6px 14px;font-size:13px;border-radius:4px;cursor:pointer;font-family:inherit}
+      .toolbar button:hover{background:#444}
+      .toolbar .primary{background:#d4a574;color:#1a1a1a;border-color:#d4a574;font-weight:600}
+      .toolbar .meta{color:#999;font-size:12px;flex:1;text-align:right}
+      @media print{
+        body{background:#fff;color:#000;padding:0;font-size:11pt;max-width:none}
+        .toolbar{display:none}
+        h1.title{color:#5a3a14}
+        h1.title + .meta{color:#444}
+        h2.toc-title{border-color:#000}
+        ol.toc a{color:#000;text-decoration:none}
+        ol.toc .num{color:#666}
+        .chap-title{color:#5a3a14;border-color:#5a3a14}
+        .chap h3,.chap h4,.chap h5{color:#5a3a14}
+        .chap th{background:#f0e8d8;color:#5a3a14}
+        .chap th,.chap td{border-color:#aaa}
+        .chap blockquote,.chap .inset{background:#f7f0e0;border-color:#5a3a14}
+        .chap .read-aloud,.chap .inset-readaloud{background:#f0f0f0;border-color:#aaa}
+        .adv-tag{color:#000}
+        @page{margin:1.5cm}
+      }
+    `;
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(adv.name||'Adventure')} — Print</title>
+  <base href="${esc(location.origin + location.pathname.replace(/[^/]+$/, ''))}">
+  <style>${css}</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button onclick="window.close()">Close</button>
+    <span class="meta">${esc(adv.name||'Adventure')} · ${chapterIndices.length} chapter${chapterIndices.length===1?'':'s'}</span>
+  </div>
+  <h1 class="title">${esc(adv.name || 'Adventure')}</h1>
+  <div class="meta">${esc((adv.source||'') + (adv.published?(' · '+adv.published):''))}</div>
+  <h2 class="toc-title">Contents</h2>
+  <ol class="toc">${tocItems}</ol>
+  ${chaptersHtml}
+</body>
+</html>`;
+
+    // Open the new tab and write the document. Some popup blockers reject
+    // this — show a toast in that case so the user knows to allow popups.
+    const win = window.open('', '_blank');
+    if (!win){
+      if (typeof showToast === 'function') showToast('Pop-up blocked — allow pop-ups for this site to use print export.');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    if (typeof showToast === 'function') showToast('Print view opened — use File → Print in the new tab');
   },
 });

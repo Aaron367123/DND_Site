@@ -62,6 +62,7 @@ function init(){
   initSettings();
   initWorkspaceContextMenu();
   initZoomPan();
+  if (typeof initOnboarding === 'function') initOnboarding();
 }
 
 init();

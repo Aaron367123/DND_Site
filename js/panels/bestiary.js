@@ -10,6 +10,34 @@
 const BESTIARY_STORAGE_KEY = 'skt-bestiary-v1';
 const BESTIARY_UNFILED = '__unfiled__';
 
+// Curated folder templates surfaced by the "+ 📁" picker. Flat array of
+// {group, name} so future maintainers can reorder / extend without
+// touching the picker layout — the renderer just groups by `group`.
+const BESTIARY_FOLDER_TEMPLATES = [
+  // By encounter role
+  { group:'Role',  name:'Mooks' },
+  { group:'Role',  name:'Lieutenants' },
+  { group:'Role',  name:'Bosses' },
+  { group:'Role',  name:'Solo bosses' },
+  { group:'Role',  name:'Recurring villains' },
+  { group:'Role',  name:'Friendly NPCs' },
+  // By creature type
+  { group:'Type',  name:'Humanoids' },
+  { group:'Type',  name:'Beasts' },
+  { group:'Type',  name:'Undead' },
+  { group:'Type',  name:'Dragons' },
+  { group:'Type',  name:'Fiends' },
+  { group:'Type',  name:'Aberrations' },
+  { group:'Type',  name:'Fey' },
+  { group:'Type',  name:'Constructs' },
+  { group:'Type',  name:'Giants' },
+  // By tier
+  { group:'Tier',  name:'Tier 1 (Lv 1-4)' },
+  { group:'Tier',  name:'Tier 2 (Lv 5-10)' },
+  { group:'Tier',  name:'Tier 3 (Lv 11-16)' },
+  { group:'Tier',  name:'Tier 4 (Lv 17-20)' },
+];
+
 function _bestInitials(name){
   return (name||'?').split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
 }
@@ -72,6 +100,7 @@ registerPanel('bestiary', {
           ? `<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)">
               <div style="font-size:32px;margin-bottom:8px">🐲</div>
               <div>Click <strong>+ Add</strong> to put a monster in your bestiary.</div>
+              <div style="font-size:11px;margin-top:10px"><a href="#" id="best-template-link" style="color:var(--accent);text-decoration:none;border-bottom:1px dashed rgba(212,165,116,.5)">📁 Or start with template folders</a></div>
               ${ready?'':'<div style="font-size:11px;margin-top:6px;color:var(--text-dim)">Loading 5e data…</div>'}
             </div>`
           : folderSections.join('')}
@@ -145,6 +174,12 @@ registerPanel('bestiary', {
     });
 
     b.querySelector('#best-add-folder').addEventListener('click', ()=>this._addFolder());
+    // First-run hint link inside the empty state — same picker as the
+    // toolbar 📁 button.
+    b.querySelector('#best-template-link')?.addEventListener('click', e => {
+      e.preventDefault();
+      this._addFolder();
+    });
     const addBtn = b.querySelector('#best-add-monster');
     addBtn.addEventListener('click', ()=>{ if (!addBtn.disabled) this._openMonsterPicker(); });
 
@@ -242,13 +277,111 @@ registerPanel('bestiary', {
     });
   },
 
+  // Multi-select picker for new folders. Offers ~20 curated templates
+  // grouped by Role / Type / Tier plus a freeform custom-name field.
+  // Selected templates + a trimmed custom name all become new folders
+  // in a single Create action. Templates that already exist as folders
+  // show a muted "already exists" state and are unselectable.
   _addFolder(){
-    showModal('New Folder', [
-      {id:'name', label:'Folder name', type:'text', value:'', placeholder:'Boss fights, Forest, …'}
-    ], 'Create').then(r=>{
-      if (!r || !r.name) return;
-      this._data.folders.push({id:uid(), name:r.name});
-      this._save(); this._render();
+    // Build the set of existing folder names (case-insensitive) so we can
+    // disable already-created template chips and prevent duplicates.
+    const existing = new Set((this._data.folders || []).map(f => (f.name||'').toLowerCase()));
+
+    // Group templates by their .group key so the modal can render section
+    // headers in order. Preserves the order of BESTIARY_FOLDER_TEMPLATES.
+    const groups = [];
+    const seenGroup = new Set();
+    BESTIARY_FOLDER_TEMPLATES.forEach(t => {
+      if (!seenGroup.has(t.group)){
+        seenGroup.add(t.group);
+        groups.push({ key: t.group, items: [] });
+      }
+      groups.find(g => g.key === t.group).items.push(t);
+    });
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:92vw;max-height:90vh;display:flex;flex-direction:column">
+      <h3 style="margin:0 0 4px">New folders</h3>
+      <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted)">Pick one or more templates, or type a custom name. All selected become new folders.</p>
+      <div style="flex:1;overflow-y:auto;padding-right:4px">
+        ${groups.map(g => `
+          <div class="best-template-section">
+            <div class="best-template-section-head">${esc(g.key)}</div>
+            <div class="best-template-pills">
+              ${g.items.map(t => {
+                const taken = existing.has(t.name.toLowerCase());
+                return `<button class="best-template-pill${taken?' taken':''}" data-template="${esc(t.name)}" ${taken?'disabled title="Already exists"':''}>${taken?'✓ ':''}${esc(t.name)}</button>`;
+              }).join('')}
+            </div>
+          </div>
+        `).join('')}
+        <div class="best-template-section">
+          <div class="best-template-section-head">Custom</div>
+          <input type="text" id="best-template-custom" placeholder="Type a one-off folder name…" autocomplete="off" style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:5px;font-size:12px">
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:10px">
+        <span style="font-size:11px;color:var(--text-muted);align-self:center" id="best-template-count">0 folders selected</span>
+        <span style="flex:1"></span>
+        <button class="btn" id="best-template-close">Cancel</button>
+        <button class="btn primary" id="best-template-create" disabled>Create</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#best-template-close').addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+    const customInp = backdrop.querySelector('#best-template-custom');
+    const countEl   = backdrop.querySelector('#best-template-count');
+    const createBtn = backdrop.querySelector('#best-template-create');
+    const pills     = backdrop.querySelectorAll('.best-template-pill:not(.taken)');
+
+    // Recompute the selected-count + button state after any pill toggle
+    // or custom-name input change. Drives the footer label as well.
+    const refresh = () => {
+      const picks = [...pills].filter(p => p.classList.contains('on')).map(p => p.dataset.template);
+      const custom = (customInp.value || '').trim();
+      if (custom) picks.push(custom);
+      countEl.textContent = picks.length
+        ? `${picks.length} folder${picks.length===1?'':'s'} selected`
+        : '0 folders selected';
+      createBtn.disabled = picks.length === 0;
+      createBtn.textContent = picks.length > 0 ? `Create ${picks.length} folder${picks.length===1?'':'s'}` : 'Create';
+    };
+    pills.forEach(p => p.addEventListener('click', () => {
+      p.classList.toggle('on');
+      refresh();
+    }));
+    customInp.addEventListener('input', refresh);
+    customInp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !createBtn.disabled){ e.preventDefault(); createBtn.click(); }
+    });
+
+    createBtn.addEventListener('click', () => {
+      const picks = [...pills].filter(p => p.classList.contains('on')).map(p => p.dataset.template);
+      const custom = (customInp.value || '').trim();
+      if (custom && !existing.has(custom.toLowerCase())) picks.push(custom);
+      // Dedupe against existing one more time (defensive in case data
+      // shifted under us) and within picks themselves.
+      const seen = new Set(existing);
+      const toAdd = [];
+      picks.forEach(name => {
+        const lc = name.toLowerCase();
+        if (seen.has(lc)) return;
+        seen.add(lc);
+        toAdd.push(name);
+      });
+      if (!toAdd.length){ close(); return; }
+      toAdd.forEach(name => this._data.folders.push({ id: uid(), name }));
+      this._save();
+      this._render();
+      close();
+      if (typeof showToast === 'function'){
+        showToast('Created ' + toAdd.length + ' folder' + (toAdd.length===1?'':'s'));
+      }
     });
   },
 

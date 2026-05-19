@@ -87,6 +87,277 @@ registerPanel('npclib', {
 
   _selected(){ return this._npcs.find(n => n.id === this._selectedId); },
 
+  // Bulk-select state. _bulkMode flips per-card checkboxes on and shows the
+  // bulk action bar; _bulkSelected is the Set of ids currently checked.
+  // Kept in memory (not persisted) — a fresh session starts clean.
+  _bulkMode: false,
+  _bulkSelected: null,
+  _bulkSet(){ if (!this._bulkSelected) this._bulkSelected = new Set(); return this._bulkSelected; },
+
+  // Render the bulk action bar pinned to the bottom of the left column.
+  // Shows nothing when bulk mode is off OR when nothing is checked yet.
+  _renderBulkBar(){
+    if (!this._bulkMode) return '';
+    const set = this._bulkSet();
+    const n = set.size;
+    // Collect known groups + tags from the library so the user can pick
+    // existing ones instead of typing.
+    const groups = [...new Set((this._npcs || []).map(x => x.group || NPC_DEFAULT_GROUP))].sort();
+    const allTags = [...new Set((this._npcs || []).flatMap(x => x.tags || []))].sort();
+    const groupOpts = groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    const tagOpts = allTags.length
+      ? '<datalist id="npclib-bulk-taglist">' + allTags.map(t => `<option value="${esc(t)}"></option>`).join('') + '</datalist>'
+      : '';
+    if (!n){
+      return `<div class="npclib-bulk-bar">
+        <span class="npclib-bulk-count">0 selected</span>
+        <button class="btn small" id="npclib-bulk-all" title="Select every NPC currently visible">Select all visible</button>
+        <span style="flex:1"></span>
+        <button class="btn small" id="npclib-bulk-exit" title="Exit bulk-select mode">Done</button>
+      </div>`;
+    }
+    return `<div class="npclib-bulk-bar active">
+      <span class="npclib-bulk-count"><strong>${n}</strong> selected</span>
+      <select id="npclib-bulk-move" title="Move every selected NPC to this group">
+        <option value="">Move to group…</option>
+        ${groupOpts}
+        <option value="__new__">+ New group…</option>
+      </select>
+      <input type="text" id="npclib-bulk-add-tag" list="npclib-bulk-taglist" placeholder="+ Add tag…" title="Add this tag to every selected NPC (Enter to apply)">
+      ${tagOpts}
+      <button class="btn small danger" id="npclib-bulk-delete" title="Delete every selected NPC">Delete ${n}</button>
+      <span style="flex:1"></span>
+      <button class="btn small" id="npclib-bulk-clear">Deselect</button>
+      <button class="btn small" id="npclib-bulk-exit">Done</button>
+    </div>`;
+  },
+
+  // Export the current NPC as a PNG card image suitable for Discord etc.
+  // Hand-rolls a canvas draw rather than html-to-image so it has no extra
+  // dependency. Layout: 480×620, themed dark bg, circular avatar at top,
+  // name + role, stats row, tags, wrapped description. Avatar loads
+  // asynchronously (data URL or http) before drawing.
+  async _exportNpcImage(n){
+    if (!n) return;
+    const W = 480, H = 620, DPR = window.devicePixelRatio || 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(DPR, DPR);
+
+    // Read theme colors from the live CSS so the export matches whatever
+    // palette the user is running. Falls back to hardcoded defaults.
+    const css = getComputedStyle(document.documentElement);
+    const v = (name, fallback) => (css.getPropertyValue(name).trim() || fallback);
+    const bg     = v('--bg', '#1a1a1a');
+    const panel  = v('--panel', '#232323');
+    const panel2 = v('--panel-2', '#2a2a2a');
+    const panel3 = v('--panel-3', '#333');
+    const border = v('--border', '#3a3a3a');
+    const text   = v('--text', '#e8e8e8');
+    const muted  = v('--text-muted', '#999');
+    const dim    = v('--text-dim', '#666');
+    const accent = v('--accent', '#d4a574');
+
+    // Background card
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = panel;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    const card = { x: 14, y: 14, w: W - 28, h: H - 28, r: 10 };
+    const rr = (x,y,w,h,r) => {
+      ctx.beginPath();
+      ctx.moveTo(x+r, y);
+      ctx.arcTo(x+w, y, x+w, y+h, r);
+      ctx.arcTo(x+w, y+h, x, y+h, r);
+      ctx.arcTo(x, y+h, x, y, r);
+      ctx.arcTo(x, y, x+w, y, r);
+      ctx.closePath();
+    };
+    rr(card.x, card.y, card.w, card.h, card.r);
+    ctx.fill(); ctx.stroke();
+
+    // Accent stripe along the top of the card
+    ctx.fillStyle = accent;
+    rr(card.x, card.y, card.w, 6, card.r);
+    ctx.fill();
+
+    // Load avatar (returns null on failure — we'll fall back to initials)
+    const loadImage = (src) => new Promise(resolve => {
+      if (!src){ resolve(null); return; }
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+    const avatarImg = await loadImage(n.avatar);
+
+    // Avatar — circular, centered horizontally, 96px diameter
+    const ax = W / 2, ay = card.y + 40 + 48;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ax, ay, 50, 0, Math.PI * 2);
+    ctx.fillStyle = panel3;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = accent;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ax, ay, 48, 0, Math.PI * 2);
+    ctx.clip();
+    if (avatarImg){
+      ctx.drawImage(avatarImg, ax-48, ay-48, 96, 96);
+    } else {
+      ctx.fillStyle = text;
+      ctx.font = 'bold 36px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(_npcInitials(n.name), ax, ay);
+    }
+    ctx.restore();
+
+    // Name
+    ctx.fillStyle = text;
+    ctx.font = 'bold 22px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(n.name || 'Unnamed', ax, ay + 60);
+
+    // Role
+    if (n.role){
+      ctx.fillStyle = muted;
+      ctx.font = '13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      ctx.fillText(n.role, ax, ay + 90);
+    }
+
+    // Group + attitude pills (centered row)
+    const drawPill = (txt, x, y, fg, bgc, brd) => {
+      ctx.font = 'bold 10px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      const tw = ctx.measureText(txt).width;
+      const padX = 8, padY = 4;
+      const pw = tw + padX*2, ph = 18;
+      ctx.fillStyle = bgc;
+      ctx.strokeStyle = brd;
+      rr(x - pw/2, y, pw, ph, 9);
+      ctx.fill();
+      if (brd) ctx.stroke();
+      ctx.fillStyle = fg;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, x, y + ph/2 + 1);
+      return pw;
+    };
+    const grpTxt = (n.group || NPC_DEFAULT_GROUP).toUpperCase();
+    const attTxt = (n.attitude || 'Neutral').toUpperCase();
+    const pillY = ay + 115;
+    ctx.font = 'bold 10px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+    const gw = ctx.measureText(grpTxt).width + 16;
+    const aw = ctx.measureText(attTxt).width + 16;
+    const gap = 8;
+    const total = gw + aw + gap;
+    drawPill(grpTxt, ax - total/2 + gw/2, pillY, accent, 'rgba(212,165,116,0.12)', accent);
+    drawPill(attTxt, ax + total/2 - aw/2, pillY, text, panel3, border);
+
+    // Stats row — HP / AC / Init
+    const statY = pillY + 36;
+    const statW = 110, statH = 50, statGap = 12;
+    const totalStatW = statW * 3 + statGap * 2;
+    const statStartX = (W - totalStatW) / 2;
+    const stats = [
+      { label: 'HP',  glyph: '♥', val: n.hp ?? 0 },
+      { label: 'AC',  glyph: '⛨', val: n.ac ?? 0 },
+      { label: 'INIT',glyph: '⚡', val: (n.init >= 0 ? '+' : '') + (n.init ?? 0) },
+    ];
+    stats.forEach((s, i) => {
+      const sx = statStartX + i * (statW + statGap);
+      ctx.fillStyle = panel2;
+      ctx.strokeStyle = border;
+      rr(sx, statY, statW, statH, 6);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = muted;
+      ctx.font = 'bold 9px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(s.glyph + ' ' + s.label, sx + statW/2, statY + 6);
+      ctx.fillStyle = text;
+      ctx.font = 'bold 22px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(s.val), sx + statW/2, statY + statH/2 + 8);
+    });
+
+    // Tags row
+    const tagY = statY + statH + 16;
+    const tags = (n.tags || []).slice(0, 8); // cap so it doesn't overflow
+    if (tags.length){
+      ctx.font = 'bold 9px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      ctx.fillStyle = dim;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('TAGS', card.x + 16, tagY);
+      let tx = card.x + 16, ty = tagY + 14;
+      ctx.font = '11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      tags.forEach(t => {
+        const tw = ctx.measureText(t).width + 14;
+        if (tx + tw > card.x + card.w - 16){ tx = card.x + 16; ty += 22; }
+        ctx.fillStyle = panel3;
+        ctx.strokeStyle = border;
+        rr(tx, ty, tw, 18, 9);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = text;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(t, tx + tw/2, ty + 10);
+        tx += tw + 6;
+      });
+    }
+    const afterTagsY = tags.length ? (tagY + 32) : tagY;
+
+    // Description — wrapped paragraph
+    if (n.description){
+      ctx.fillStyle = dim;
+      ctx.font = 'bold 9px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('DESCRIPTION', card.x + 16, afterTagsY + 8);
+
+      ctx.fillStyle = text;
+      ctx.font = '13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      const maxW = card.w - 32;
+      const words = String(n.description).split(/\s+/);
+      let line = '', y = afterTagsY + 26;
+      const lineH = 18;
+      const maxY = card.y + card.h - 16;
+      for (const word of words){
+        const trial = line ? line + ' ' + word : word;
+        if (ctx.measureText(trial).width > maxW){
+          if (y + lineH > maxY){ ctx.fillText(line + '…', card.x + 16, y); line = ''; break; }
+          ctx.fillText(line, card.x + 16, y);
+          y += lineH;
+          line = word;
+        } else {
+          line = trial;
+        }
+      }
+      if (line && y + lineH <= maxY) ctx.fillText(line, card.x + 16, y);
+    }
+
+    // Trigger download
+    canvas.toBlob(blob => {
+      if (!blob) { if (typeof showToast === 'function') showToast('Image export failed'); return; }
+      const url = URL.createObjectURL(blob);
+      const safe = (n.name || 'npc').replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
+      const a = Object.assign(document.createElement('a'), { href: url, download: 'npc-' + safe + '.png' });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+      if (typeof showToast === 'function') showToast('Exported ' + (n.name || 'NPC') + ' as PNG');
+    }, 'image/png');
+  },
+
   _newNpc(){
     const n = {
       id: uid(), name:'New NPC', role:'', group: NPC_DEFAULT_GROUP,
@@ -111,11 +382,13 @@ registerPanel('npclib', {
       <div class="npclib-left" ${leftStyle}>
         <div class="npclib-toolbar">
           <input type="search" id="npclib-search" placeholder="🔎 Search NPCs..." value="${esc(this._searchQ)}">
+          <button class="icon-btn npclib-tool-btn ${this._bulkMode?'active':''}" id="npclib-bulk-toggle" title="${this._bulkMode?'Exit bulk-select mode':'Bulk-select mode (checkboxes + bulk actions)'}">${this._bulkMode?'✓':'☐'}</button>
           <button class="icon-btn npclib-tool-btn" id="npclib-add" title="New NPC">+</button>
         </div>
         <div class="npclib-groups" id="npclib-groups">
           ${groups.map(g => this._renderGroup(g, q)).join('')}
         </div>
+        ${this._renderBulkBar()}
       </div>
       <div class="npclib-divider" id="npclib-divider" title="Drag to resize"></div>
       <div class="npclib-right">
@@ -177,7 +450,10 @@ registerPanel('npclib', {
 
   _renderCard(n){
     const sel = n.id === this._selectedId;
-    return `<div class="npclib-card${sel?' selected':''}" data-id="${n.id}">
+    const inBulk = this._bulkMode;
+    const checked = inBulk && this._bulkSet().has(n.id);
+    return `<div class="npclib-card${sel?' selected':''}${checked?' bulk-checked':''}" data-id="${n.id}">
+      ${inBulk ? `<input type="checkbox" class="npclib-bulk-check" data-bulk-id="${esc(n.id)}" ${checked?'checked':''} title="Select for bulk action">` : ''}
       <div class="npclib-avatar">${n.avatar
         ? `<img src="${esc(n.avatar)}" alt="" onerror="this.parentNode.textContent='${esc(_npcInitials(n.name))}'">`
         : esc(_npcInitials(n.name))}</div>
@@ -202,6 +478,7 @@ registerPanel('npclib', {
         <div class="npclib-detail-badges">
           <button class="npc-badge group-badge" data-act="edit-group" title="Change group">${esc((n.group||NPC_DEFAULT_GROUP).toUpperCase())}</button>
           <button class="npc-badge attitude-badge attitude-${esc((n.attitude||'Neutral').toLowerCase())}" data-act="edit-attitude" title="Change attitude">${esc((n.attitude||'NEUTRAL').toUpperCase())}</button>
+          <button class="btn icon-btn" data-act="export-image" title="Export as PNG image (for Discord / share)">📷</button>
           <button class="btn icon-btn danger" data-act="delete" title="Delete NPC">×</button>
         </div>
       </div>
@@ -256,8 +533,111 @@ registerPanel('npclib', {
     // Add NPC
     b.querySelector('#npclib-add').addEventListener('click', () => this._newNpc());
 
+    // Bulk-mode toggle — flips per-card checkboxes on/off and reveals the
+    // bulk action bar. Exiting clears any current selection.
+    b.querySelector('#npclib-bulk-toggle')?.addEventListener('click', () => {
+      this._bulkMode = !this._bulkMode;
+      if (!this._bulkMode) this._bulkSelected = new Set();
+      this._render();
+    });
+    this._wireBulkBar();
+
     this._wireLeft();
     this._wireRight();
+  },
+
+  _wireBulkBar(){
+    const b = this._body; if (!b) return;
+    if (!this._bulkMode) return;
+    b.querySelector('#npclib-bulk-exit')?.addEventListener('click', () => {
+      this._bulkMode = false;
+      this._bulkSelected = new Set();
+      this._render();
+    });
+    b.querySelector('#npclib-bulk-clear')?.addEventListener('click', () => {
+      this._bulkSelected = new Set();
+      this._render();
+    });
+    b.querySelector('#npclib-bulk-all')?.addEventListener('click', () => {
+      // Select every NPC matching the current search filter.
+      const q = (this._searchQ || '').toLowerCase();
+      const set = this._bulkSet();
+      (this._npcs || []).forEach(n => {
+        if (!q || (n.name + ' ' + (n.role||'') + ' ' + (n.tags||[]).join(' ')).toLowerCase().includes(q)){
+          set.add(n.id);
+        }
+      });
+      this._render();
+    });
+    b.querySelector('#npclib-bulk-move')?.addEventListener('change', e => {
+      const val = e.target.value;
+      if (!val) return;
+      const apply = (groupName) => {
+        const set = this._bulkSet();
+        (this._npcs || []).forEach(n => { if (set.has(n.id)) n.group = groupName; });
+        this._save();
+        if (typeof showToast === 'function') showToast('Moved ' + set.size + ' NPC' + (set.size===1?'':'s') + ' → ' + groupName);
+        this._bulkSelected = new Set();
+        this._render();
+      };
+      if (val === '__new__'){
+        if (typeof showModal === 'function'){
+          showModal('Move to new group', [
+            {id:'name', label:'New group name', type:'text', value:''}
+          ], 'Move').then(r => {
+            if (!r) { e.target.value = ''; return; }
+            const name = (r.name || '').trim();
+            if (!name){ e.target.value = ''; return; }
+            apply(name);
+          });
+        } else {
+          const name = window.prompt('New group name');
+          if (name) apply(name.trim());
+          else e.target.value = '';
+        }
+      } else {
+        apply(val);
+      }
+    });
+    const addTagInp = b.querySelector('#npclib-bulk-add-tag');
+    addTagInp?.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const tag = (e.target.value || '').trim();
+      if (!tag) return;
+      const set = this._bulkSet();
+      let added = 0;
+      (this._npcs || []).forEach(n => {
+        if (!set.has(n.id)) return;
+        if (!Array.isArray(n.tags)) n.tags = [];
+        if (!n.tags.includes(tag)){ n.tags.push(tag); added++; }
+      });
+      this._save();
+      if (typeof showToast === 'function') showToast('Added "' + tag + '" to ' + added + ' NPC' + (added===1?'':'s'));
+      e.target.value = '';
+      this._render();
+    });
+    b.querySelector('#npclib-bulk-delete')?.addEventListener('click', () => {
+      const set = this._bulkSet();
+      if (!set.size) return;
+      const proceed = (ok) => {
+        if (!ok) return;
+        const ids = new Set(set);
+        this._npcs = (this._npcs || []).filter(n => !ids.has(n.id));
+        if (this._selectedId && ids.has(this._selectedId)){
+          this._selectedId = this._npcs[0]?.id || null;
+        }
+        this._save();
+        if (typeof showToast === 'function') showToast('Deleted ' + ids.size + ' NPC' + (ids.size===1?'':'s'));
+        this._bulkSelected = new Set();
+        this._render();
+      };
+      const msg = 'Delete ' + set.size + ' selected NPC' + (set.size===1?'':'s') + '? This can\'t be undone.';
+      if (typeof showConfirm === 'function'){
+        showConfirm(msg, {title:'Delete NPCs', confirmLabel:'Delete', danger:true}).then(proceed);
+      } else {
+        proceed(window.confirm(msg));
+      }
+    });
   },
 
   _wireLeft(){
@@ -269,8 +649,40 @@ registerPanel('npclib', {
       try { localStorage.setItem('skt-npcs-collapsed', JSON.stringify(this._collapsed)); } catch(e){}
       this._render();
     }));
-    // Card select
-    b.querySelectorAll('.npclib-card').forEach(c => c.addEventListener('click', () => {
+    // Bulk checkbox per card — independent of the card click handler so
+    // toggling the checkbox doesn't also open the detail view.
+    b.querySelectorAll('.npclib-bulk-check').forEach(cb => {
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.bulkId;
+        const set = this._bulkSet();
+        if (cb.checked) set.add(id); else set.delete(id);
+        // Just toggle the card-level class + bar count without a full
+        // re-render — keeps scroll / focus / search input intact.
+        const card = cb.closest('.npclib-card');
+        if (card) card.classList.toggle('bulk-checked', cb.checked);
+        // Bar count needs to refresh because 0→1 toggles which buttons are
+        // shown. Cheaper than full _render(); just rebuild the bar.
+        const bar = b.querySelector('.npclib-bulk-bar');
+        if (bar){
+          const wrap = document.createElement('div');
+          wrap.innerHTML = this._renderBulkBar();
+          bar.replaceWith(wrap.firstElementChild);
+          this._wireBulkBar();
+        }
+      });
+    });
+
+    // Card select — opens detail UNLESS we're in bulk mode (then toggles
+    // the checkbox instead so clicking the row body is symmetric with
+    // clicking the checkbox).
+    b.querySelectorAll('.npclib-card').forEach(c => c.addEventListener('click', e => {
+      if (this._bulkMode){
+        if (e.target.closest('.npclib-bulk-check')) return; // checkbox handled its own click
+        const cb = c.querySelector('.npclib-bulk-check');
+        if (cb){ cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
+        return;
+      }
       this._selectedId = c.dataset.id;
       this._render();
     }));
@@ -400,6 +812,10 @@ registerPanel('npclib', {
       });
       inp.click();
     });
+
+    // Export as PNG image — hand-rolled canvas drawing of the NPC card so
+    // the output is self-contained (no html-to-image dependency).
+    b.querySelector('[data-act="export-image"]')?.addEventListener('click', () => this._exportNpcImage(n));
 
     // Delete NPC
     b.querySelector('[data-act="delete"]')?.addEventListener('click', () => {

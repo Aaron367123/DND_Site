@@ -166,6 +166,14 @@ registerPanel('notes', {
     ns.init(() => this._editing);
     ns.onStatus(() => { if (this._body) this._renderVaultPill(); });
     ns._onPullCallback = () => { if (!this._editing && this._body) this._render(); };
+    // Conflict subscription — when notes-sync detects a two-sided change,
+    // surface a banner so the user can review and choose a winner.
+    if (typeof ns.onConflict === 'function'){
+      ns.onConflict(list => {
+        this._pendingConflicts = list || [];
+        if (this._body) this._render();
+      });
+    }
     ns.startPolling(() => this._data);
   },
   unmount(){
@@ -393,6 +401,12 @@ registerPanel('notes', {
     const b = this._body;
     const sel = this._selected();
     const tree = this._buildTree();
+    const conflicts = this._pendingConflicts || [];
+    const conflictBanner = conflicts.length
+      ? `<div class="notes-conflict-banner" data-act="open-conflicts" title="Review the differences and pick a winner">
+           ⚠ ${conflicts.length} sync conflict${conflicts.length===1?'':'s'} — click to resolve
+         </div>`
+      : '';
     b.innerHTML = `
       <div class="notes-shell">
         <div class="notes-tree">
@@ -404,6 +418,7 @@ registerPanel('notes', {
             <button class="btn icon-btn" data-act="add-file" title="New file">📄+</button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
+          ${conflictBanner}
           <div class="notes-tree-body">${this._renderTree(tree, null, 0)}</div>
         </div>
         <div class="notes-divider" id="notes-divider" title="Drag to resize"></div>
@@ -872,6 +887,11 @@ registerPanel('notes', {
     b.querySelector('[data-act="add-folder"]')?.addEventListener('click', e => { e.stopPropagation(); this._addFolder(null); });
     b.querySelector('[data-act="add-file"]')  ?.addEventListener('click', e => { e.stopPropagation(); this._addFile(null); });
 
+    // Conflict banner — opens the per-file resolve modal for the first
+    // pending conflict. After resolution, fresh conflicts (if any remain)
+    // surface via the onConflict subscription and re-render the banner.
+    b.querySelector('[data-act="open-conflicts"]')?.addEventListener('click', () => this._openConflictResolver());
+
     // ── Drag-to-reorder / reparent ─────────────────────────────────────────
     // HTML5 drag-and-drop on tree rows. dragstart stamps the source id;
     // dragover highlights drop-before / drop-after / drop-into based on
@@ -1146,6 +1166,65 @@ registerPanel('notes', {
     const ago = s.lastSync ? Math.round((Date.now() - s.lastSync)/1000) : null;
     pill.title = ago != null ? ('Last synced '+ago+'s ago — click for options') : 'Click for options';
     pill.onclick = (e) => this._showVaultMenu(e.clientX, e.clientY);
+  },
+
+  // Open the conflict-resolution modal for the first pending sync conflict.
+  // Shows both versions side-by-side with three resolve buttons and an
+  // optional manual-merge text area. After resolving one, if more remain,
+  // the user can click the banner again — the next one comes up.
+  _openConflictResolver(){
+    const c = (this._pendingConflicts || [])[0];
+    if (!c) return;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:760px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
+      <h3 style="margin:0 0 4px">⚠ Sync conflict — "${esc(c.name)}"</h3>
+      <p style="margin:0 0 12px;font-size:11px;color:var(--text-muted)">Both the app and the file on disk changed since the last sync. Pick which version wins, or merge by hand.</p>
+      <div style="flex:1;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:200px">
+        <div style="display:flex;flex-direction:column;min-height:0">
+          <div style="font-size:10px;color:var(--accent);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">📱 App version</div>
+          <pre id="notes-conflict-app" style="flex:1;overflow:auto;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px;margin:0;font-size:11px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word">${esc(c.appContent || '')}</pre>
+        </div>
+        <div style="display:flex;flex-direction:column;min-height:0">
+          <div style="font-size:10px;color:#9ad1ff;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">💾 Disk version</div>
+          <pre id="notes-conflict-disk" style="flex:1;overflow:auto;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px;margin:0;font-size:11px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word">${esc(c.diskContent || '')}</pre>
+        </div>
+      </div>
+      <details style="margin-top:8px;font-size:11px">
+        <summary style="cursor:pointer;color:var(--text-muted)">✎ Manual merge — edit a combined version</summary>
+        <textarea id="notes-conflict-manual" style="width:100%;height:140px;margin-top:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:8px;font-size:11px;font-family:'Cascadia Code',Consolas,monospace;resize:vertical">${esc(c.appContent || '')}</textarea>
+      </details>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn" id="notes-conflict-cancel">Decide later</button>
+        <span style="flex:1"></span>
+        <button class="btn" id="notes-conflict-disk-btn" title="Replace the app version with what's on disk">Use disk</button>
+        <button class="btn" id="notes-conflict-app-btn" title="Overwrite disk with the app version">Use app</button>
+        <button class="btn primary" id="notes-conflict-manual-btn" title="Use the manual-merge text (open the section below first)">Use merged</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#notes-conflict-cancel').addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+    const apply = async (choice) => {
+      let opts = { data: this._data };
+      if (choice === 'manual'){
+        const v = backdrop.querySelector('#notes-conflict-manual').value;
+        opts.manualContent = v;
+      }
+      if (window.notesSync && typeof window.notesSync.resolveConflict === 'function'){
+        await window.notesSync.resolveConflict(c.itemId, choice, opts);
+      }
+      this._save();
+      this._render();
+      close();
+      if (typeof showToast === 'function') showToast('Conflict resolved');
+    };
+    backdrop.querySelector('#notes-conflict-app-btn').addEventListener('click', () => apply('app'));
+    backdrop.querySelector('#notes-conflict-disk-btn').addEventListener('click', () => apply('disk'));
+    backdrop.querySelector('#notes-conflict-manual-btn').addEventListener('click', () => apply('manual'));
   },
 
   _showVaultMenu(x, y){

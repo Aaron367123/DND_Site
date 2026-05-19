@@ -48,7 +48,7 @@ function _ctxSaveFocuses(list){
 // can lag behind the DOM by a few pixels right after a drag/resize,
 // which is why focuses used to load slightly off.
 function _ctxSnapshot(){
-  const snap = {};
+  const panels = {};
   Object.entries(layout).forEach(([id, l]) => {
     if (!l || !l.open) return;
     const el = document.querySelector('.window[data-panel="'+id+'"]');
@@ -57,7 +57,7 @@ function _ctxSnapshot(){
       return Number.isFinite(n) ? Math.round(n) : Math.round(fb);
     };
     if (el){
-      snap[id] = {
+      panels[id] = {
         x: px(el.style.left,   l.x),
         y: px(el.style.top,    l.y),
         w: px(el.style.width,  l.w),
@@ -65,25 +65,45 @@ function _ctxSnapshot(){
         minimized: el.classList.contains('minimized'),
       };
     } else {
-      snap[id] = { x:Math.round(l.x), y:Math.round(l.y), w:Math.round(l.w), h:Math.round(l.h), minimized:!!l.minimized };
+      panels[id] = { x:Math.round(l.x), y:Math.round(l.y), w:Math.round(l.w), h:Math.round(l.h), minimized:!!l.minimized };
     }
   });
-  return snap;
+  // Wrap in a snapshot envelope so we can carry per-focus metadata
+  // alongside the panel positions. Today: workspace zoom. Future: scroll
+  // position, shared-panels filter, etc.
+  return {
+    panels,
+    zoom: (typeof getZoom === 'function') ? getZoom() : 1,
+  };
+}
+
+// True when an old-style snapshot — a flat {panelId: {x,y,w,h}} map saved
+// before we wrapped them. Legacy focuses load and apply transparently.
+function _ctxIsLegacySnap(snap){
+  return snap && typeof snap === 'object' && !snap.panels;
 }
 
 // Apply a snapshot: close panels not in the snapshot, open + position those that are.
 function _ctxApplyFocus(snap){
+  if (!snap) return;
+  const panels = _ctxIsLegacySnap(snap) ? snap : (snap.panels || {});
   // Close panels that aren't in the snapshot
   Object.keys(layout).forEach(id => {
-    if (layout[id] && layout[id].open && !snap[id]) closePanel(id);
+    if (layout[id] && layout[id].open && !panels[id]) closePanel(id);
   });
   // Open + position the ones that are
-  Object.entries(snap).forEach(([id, pos]) => {
+  Object.entries(panels).forEach(([id, pos]) => {
     layout[id] = { ...(layout[id]||{}), ...pos, open: true, z: _nextZ() };
     ensurePanel(id);
   });
   saveLayout();
   updateDock();
+  // Restore zoom if the snapshot carried one. Skips the smooth animation
+  // because focus-loading is a "snap into place" action, not a deliberate
+  // zoom gesture. Falls back to no-op if zoom-pan.js isn't available.
+  if (!_ctxIsLegacySnap(snap) && typeof snap.zoom === 'number' && typeof setZoom === 'function'){
+    setZoom(snap.zoom);
+  }
 }
 
 // Build the menu DOM. Mounted lazily on first right-click.

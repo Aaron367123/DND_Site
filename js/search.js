@@ -844,6 +844,36 @@ function _normSearch(s) {
   return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 }
 
+// Damerau-Levenshtein (OSA variant) — counts a transposition of two
+// adjacent characters as a single edit, on top of standard insert/
+// delete/substitute. Catches finger-fumble typos like "fyer" → "fire"
+// or "drangon" → "dragon" with a low distance threshold. Used only on
+// the fuzzy-fallback path so exact substring matches always win.
+function _editDistance(a, b){
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = [];
+  for (let i = 0; i <= m; i++){ dp[i] = new Array(n + 1); dp[i][0] = i; }
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++){
+    for (let j = 1; j <= n; j++){
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i-1][j] + 1,           // delete
+        dp[i][j-1] + 1,           // insert
+        dp[i-1][j-1] + cost       // substitute (or match)
+      );
+      // Adjacent transposition (OSA)
+      if (i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1]){
+        dp[i][j] = Math.min(dp[i][j], dp[i-2][j-2] + 1);
+      }
+    }
+  }
+  return dp[m][n];
+}
+
 function doSearch(){
   const qRaw=(state.searchState.query||'').trim().toLowerCase();
   const q=_normSearch(qRaw);
@@ -871,6 +901,44 @@ function doSearch(){
       const bStarts = bn.startsWith(q) ? 0 : 1;
       return aStarts - bStarts || a.name.localeCompare(b.name);
     });
+    // Fuzzy fallback — only kicks in for single-token queries of 3+ chars
+    // when strict results are thin. Compares the query against each word
+    // of every candidate's name with Damerau-Levenshtein, keeps anything
+    // within a small threshold, and appends those at the end so exact
+    // matches always lead. Marked with `_fuzzy:true` for renderer styling.
+    if (tokens.length === 1 && q.length >= 3 && pool.length < 5){
+      const maxDist = q.length <= 3 ? 1 : 2;
+      const seen = new Set(pool.map(r => r.name + '|' + (r._source||'')));
+      const fullPool = (sel === 'all')
+        ? getSearchPool()
+        : getSearchPool().filter(r => _catMatches(r.cat, sel));
+      const candidates = [];
+      for (const r of fullPool){
+        const key = r.name + '|' + (r._source||'');
+        if (seen.has(key)) continue;
+        const name = _normSearch(r.name);
+        if (!name) continue;
+        // Cheap early-out on overall length difference.
+        if (Math.abs(name.length - q.length) > maxDist + 4) continue;
+        // Match against individual words in the name so multi-word names
+        // can still hit a single-word typo ("dragn" → "Red Dragon").
+        const words = name.split(/\s+/);
+        let best = Infinity;
+        for (const w of words){
+          if (Math.abs(w.length - q.length) > maxDist) continue;
+          const d = _editDistance(w, q);
+          if (d < best){ best = d; if (best === 0) break; }
+        }
+        if (best <= maxDist){
+          candidates.push({ r, dist: best });
+        }
+      }
+      candidates.sort((a, b) => a.dist - b.dist || a.r.name.localeCompare(b.r.name));
+      const room = 80 - pool.length;
+      if (room > 0){
+        pool = pool.concat(candidates.slice(0, room).map(c => Object.assign({ _fuzzy:true }, c.r)));
+      }
+    }
   }else pool.sort((a,b)=>a.name.localeCompare(b.name));
   return pool.slice(0,80);
 }
@@ -970,10 +1038,11 @@ function renderSearchResults(){
   }
 
   container.innerHTML = results.map((r,i)=>`
-    <div class="search-result ${i===state.searchState.focused?'focused':''}" data-idx="${i}">
+    <div class="search-result ${i===state.searchState.focused?'focused':''} ${r._fuzzy?'fuzzy':''}" data-idx="${i}">
       <div class="res-name">
         <span>${_highlightMatch(esc(r.name), q)}</span>
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+          ${r._fuzzy?'<span class="res-fuzzy" title="Approximate match — your query didn\'t exactly match this entry">~</span>':''}
           ${r._source?`<span style="font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(r._source))}</span>`:''}
           <span class="res-tag ${r.cat}">${r.cat}</span>
         </div>

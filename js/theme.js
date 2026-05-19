@@ -66,21 +66,47 @@ const THEME_PRESETS = {
 
 const THEME_KEY = 'skt-theme-v1';
 
+// Auto-mode defaults — which concrete preset to use when prefers-color-
+// scheme is dark vs light. User can override either side via the settings
+// drawer; persisted alongside the main `id` in localStorage.
+const THEME_AUTO_DARK_DEFAULT  = 'default';
+const THEME_AUTO_LIGHT_DEFAULT = 'parchment';
+
 function _readThemePref(){
   try {
     const raw = localStorage.getItem(THEME_KEY);
-    if (!raw) return { id:'default', custom:null };
+    if (!raw) return { id:'default', custom:null, autoDark:THEME_AUTO_DARK_DEFAULT, autoLight:THEME_AUTO_LIGHT_DEFAULT };
     const j = JSON.parse(raw);
-    return { id: j.id || 'default', custom: j.custom || null };
-  } catch(e){ return { id:'default', custom:null }; }
+    return {
+      id: j.id || 'default',
+      custom: j.custom || null,
+      autoDark:  j.autoDark  || THEME_AUTO_DARK_DEFAULT,
+      autoLight: j.autoLight || THEME_AUTO_LIGHT_DEFAULT,
+    };
+  } catch(e){ return { id:'default', custom:null, autoDark:THEME_AUTO_DARK_DEFAULT, autoLight:THEME_AUTO_LIGHT_DEFAULT }; }
 }
 
 function _writeThemePref(pref){
   try { localStorage.setItem(THEME_KEY, JSON.stringify(pref)); } catch(e){}
 }
 
-function applyTheme(id, custom){
+// Auto-mode: when id === 'auto', resolve which concrete preset to apply
+// from the OS prefers-color-scheme media query. Lets the workspace flip
+// dark/light automatically when the user changes system settings.
+function _resolveAutoTarget(pref){
+  const wantsDark = !window.matchMedia || window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (wantsDark) return (pref && pref.autoDark)  || THEME_AUTO_DARK_DEFAULT;
+  return            (pref && pref.autoLight) || THEME_AUTO_LIGHT_DEFAULT;
+}
+
+function applyTheme(id, custom, pref){
   const root = document.documentElement;
+  // Auto mode → recurse with the resolved concrete preset id.
+  if (id === 'auto'){
+    const target = _resolveAutoTarget(pref || _readThemePref());
+    applyTheme(target, null, null);
+    return;
+  }
   let vars;
   if (id === 'custom' && custom){
     vars = { ...THEME_PRESETS.default.vars, ...custom };
@@ -93,7 +119,20 @@ function applyTheme(id, custom){
 // Apply on script load so the page paints with the right colors.
 (function(){
   const pref = _readThemePref();
-  applyTheme(pref.id, pref.custom);
+  applyTheme(pref.id, pref.custom, pref);
+  // When the user has chosen 'auto', listen for OS theme changes so the
+  // workspace flips live (e.g. macOS auto-dark at sunset). The listener
+  // is registered once and only re-applies if the current pref still says
+  // 'auto' — switching to a concrete preset stops responding.
+  if (window.matchMedia){
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => {
+      const cur = _readThemePref();
+      if (cur.id === 'auto') applyTheme('auto', null, cur);
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq.addListener) mq.addListener(onChange); // Safari fallback
+  }
 })();
 
 // Wires up the theme controls in the Settings drawer. Called from initSettings.
@@ -105,10 +144,14 @@ function initThemeControls(){
   const panelInp  = document.getElementById('theme-panel');
   if (!sel) return;
 
-  // Populate select
-  sel.innerHTML = Object.entries(THEME_PRESETS).map(([id, p]) =>
-    `<option value="${id}">${p.label}</option>`
-  ).join('') + '<option value="custom">Custom…</option>';
+  // Populate select — Auto at the top, then every concrete preset, then
+  // Custom at the bottom. The auto option keeps its own sub-row visible
+  // for picking which dark/light presets it should snap to.
+  const presetOptions = Object.entries(THEME_PRESETS).map(([id, p]) =>
+    `<option value="${id}">${p.label}</option>`).join('');
+  sel.innerHTML = '<option value="auto">Auto (follow OS dark/light)</option>'
+                + presetOptions
+                + '<option value="custom">Custom…</option>';
 
   const pref = _readThemePref();
   sel.value = pref.id;
@@ -122,18 +165,52 @@ function initThemeControls(){
   panelInp.value  = custom['--panel']  || '#232323';
   customRow.style.display = pref.id === 'custom' ? '' : 'none';
 
+  // Auto-mode sub-row — two selects letting the user choose which preset
+  // gets used for dark / light system preference. Created dynamically (so
+  // we don't have to touch the HTML), inserted right after the main theme
+  // select. Visible only when the user's chosen 'auto'.
+  let autoRow = document.getElementById('theme-auto-row');
+  if (!autoRow){
+    autoRow = document.createElement('div');
+    autoRow.id = 'theme-auto-row';
+    autoRow.style.cssText = 'display:flex;gap:6px;margin-top:6px;flex-wrap:wrap';
+    autoRow.innerHTML = `
+      <label style="flex:1;min-width:120px;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:3px">
+        🌙 When OS is dark
+        <select id="theme-auto-dark">${presetOptions}</select>
+      </label>
+      <label style="flex:1;min-width:120px;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:3px">
+        ☀ When OS is light
+        <select id="theme-auto-light">${presetOptions}</select>
+      </label>`;
+    sel.parentNode.insertBefore(autoRow, sel.nextSibling);
+  }
+  const autoDarkSel  = document.getElementById('theme-auto-dark');
+  const autoLightSel = document.getElementById('theme-auto-light');
+  autoDarkSel.value  = pref.autoDark  || THEME_AUTO_DARK_DEFAULT;
+  autoLightSel.value = pref.autoLight || THEME_AUTO_LIGHT_DEFAULT;
+  autoRow.style.display = pref.id === 'auto' ? '' : 'none';
+
+  const persist = () => {
+    const id = sel.value;
+    const next = {
+      id,
+      custom: id === 'custom' ? _gatherCustom() : null,
+      autoDark:  autoDarkSel.value,
+      autoLight: autoLightSel.value,
+    };
+    _writeThemePref(next);
+    applyTheme(id, next.custom, next);
+  };
+
   sel.addEventListener('change', () => {
     const id = sel.value;
     customRow.style.display = id === 'custom' ? '' : 'none';
-    if (id === 'custom'){
-      const c = _gatherCustom();
-      _writeThemePref({ id, custom: c });
-      applyTheme(id, c);
-    } else {
-      _writeThemePref({ id, custom: null });
-      applyTheme(id, null);
-    }
+    autoRow.style.display   = id === 'auto'   ? '' : 'none';
+    persist();
   });
+  autoDarkSel.addEventListener('change', () => { if (sel.value === 'auto') persist(); else persist(); });
+  autoLightSel.addEventListener('change', () => { if (sel.value === 'auto') persist(); else persist(); });
 
   function _gatherCustom(){
     // Build a derived palette: accent shades follow accent; panel shades follow panel.
@@ -153,9 +230,7 @@ function initThemeControls(){
   [accentInp, bgInp, panelInp].forEach(inp => {
     inp.addEventListener('input', () => {
       if (sel.value !== 'custom') return;
-      const c = _gatherCustom();
-      _writeThemePref({ id:'custom', custom: c });
-      applyTheme('custom', c);
+      persist();
     });
   });
 }

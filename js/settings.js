@@ -312,6 +312,12 @@ function initSettings(){
   document.getElementById('open-tutorial-btn')?.addEventListener('click', () => {
     if (typeof window.openTutorial === 'function') window.openTutorial(0);
   });
+  document.getElementById('open-changelog-btn')?.addEventListener('click', () => {
+    if (typeof window.openChangelog === 'function') window.openChangelog(false);
+  });
+  document.getElementById('open-demo-btn')?.addEventListener('click', () => {
+    if (typeof window.runDemoScenario === 'function') window.runDemoScenario();
+  });
 
   document.getElementById('reset-data-btn').addEventListener('click',()=>{
     showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{

@@ -97,6 +97,11 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
 /* Match highlight — kept subtle so it doesn't visually overwhelm the result
    name. <mark> normally has yellow bg; restyled to mute into the theme. */
 .search-result mark.search-hit{background:rgba(212,165,116,.22);color:var(--accent);padding:0 2px;border-radius:2px}
+/* Fuzzy-match rows — appended after the exact substring matches when the
+   user's query was a near-miss. Subtle tilde badge + slightly dimmed text. */
+.search-result.fuzzy{opacity:.78}
+.search-result.fuzzy:hover,.search-result.fuzzy.focused{opacity:1}
+.res-fuzzy{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(212,165,116,.18);color:var(--accent);font-size:11px;font-weight:700;line-height:1;font-family:monospace}
 /* Recent searches strip shown beneath the empty-state prompt. */
 .search-recent{padding:8px 14px 14px}
 .search-recent-head{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center;gap:8px}
@@ -982,6 +987,10 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .notes-tree-head{display:flex;align-items:center;gap:4px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--panel-2)}
 .notes-tree-title{flex:1;font-size:11px;color:var(--accent);font-variant:small-caps;letter-spacing:.05em;font-weight:600}
 .notes-vault-pill{font-size:9px;padding:2px 7px;border-radius:10px;cursor:pointer;letter-spacing:.03em;white-space:nowrap;font-weight:600;border:1px solid var(--border);background:var(--panel-3);color:var(--text-muted);user-select:none;transition:all .12s}
+/* Sync-conflict banner pinned under the tree head when notes-sync queues
+   files that need manual resolution. Click to open the resolver modal. */
+.notes-conflict-banner{margin:6px 10px;padding:6px 10px;background:rgba(194,84,80,.18);border:1px solid rgba(194,84,80,.55);color:#e0a8a6;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;text-align:center;transition:background .12s}
+.notes-conflict-banner:hover{background:rgba(194,84,80,.28);color:#fff}
 .notes-vault-pill.disconnected{border-style:dashed;color:var(--text-dim)}
 .notes-vault-pill.disconnected:hover{border-color:var(--accent);color:var(--accent);border-style:solid}
 .notes-vault-pill.connected{background:rgba(212,165,116,.12);border-color:rgba(212,165,116,.4);color:var(--accent)}
@@ -1180,6 +1189,18 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .npclib-group-head .group-count{font-size:10px;color:var(--text-dim);background:var(--panel-3);padding:1px 6px;border-radius:8px}
 .npclib-group-body{padding:6px;display:flex;flex-direction:column;gap:4px}
 .npclib-card{display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg);border:1px solid transparent;border-radius:5px;cursor:pointer;transition:border-color .12s}
+.npclib-card.bulk-checked{background:rgba(212,165,116,.1);border-color:rgba(212,165,116,.45)}
+.npclib-bulk-check{accent-color:var(--accent);width:16px;height:16px;cursor:pointer;flex-shrink:0;margin:0}
+/* Bulk-action bar pinned to the bottom of the left column. */
+.npclib-bulk-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--panel);border-top:1px solid var(--border);box-shadow:0 -4px 12px rgba(0,0,0,.35);flex-wrap:wrap;z-index:5}
+.npclib-bulk-bar.active{background:rgba(212,165,116,.06)}
+.npclib-bulk-count{font-size:11px;color:var(--text-muted);min-width:80px}
+.npclib-bulk-count strong{color:var(--accent)}
+.npclib-bulk-bar select,
+.npclib-bulk-bar input[type="text"]{font-size:11px;padding:3px 6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px;height:24px;width:auto}
+.npclib-bulk-bar input[type="text"]{flex:1;min-width:100px;max-width:160px}
+.npclib-bulk-bar .btn.small{padding:3px 8px;font-size:11px}
+.npclib-tool-btn.active{background:rgba(212,165,116,.18);color:var(--accent);border-color:var(--accent)}
 .npclib-card:hover{border-color:var(--border)}
 .npclib-card.selected{border-color:var(--accent);background:var(--panel-2)}
 .npclib-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3d2a2a,#6b3939);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;overflow:hidden}
@@ -1237,6 +1258,15 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 /* BESTIARY */
 .bestiary-root{display:flex;flex-direction:column;height:100%;overflow:hidden}
 .bestiary-toolbar{display:flex;gap:6px;padding:10px;border-bottom:1px solid var(--border);align-items:center}
+/* Folder-template picker — pill grid by category. */
+.best-template-section{margin-bottom:14px}
+.best-template-section-head{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--border)}
+.best-template-pills{display:flex;flex-wrap:wrap;gap:5px}
+.best-template-pill{background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:5px 11px;font-size:11px;border-radius:14px;cursor:pointer;font-family:inherit;transition:all .12s}
+.best-template-pill:hover{background:var(--panel-3);border-color:var(--accent)}
+.best-template-pill.on{background:rgba(212,165,116,.2);border-color:var(--accent);color:var(--accent);font-weight:600}
+.best-template-pill.taken{opacity:.4;cursor:not-allowed;color:var(--text-dim);background:var(--panel-2)}
+.best-template-pill.taken:hover{background:var(--panel-2);border-color:var(--border)}
 .bestiary-toolbar input{flex:1;background:var(--panel-2);border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:5px;color:var(--text)}
 .bestiary-toolbar #best-add-folder{opacity:.65;font-size:13px;transition:opacity .12s}
 .bestiary-toolbar #best-add-folder:hover{opacity:1}
@@ -1600,6 +1630,22 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .sb-btn{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:border-color .15s,background .15s;position:relative;min-height:110px;font-family:inherit;text-align:left}
 .sb-btn:hover{border-color:var(--accent-dark);background:var(--panel-3)}
 .sb-btn.playing{border-color:var(--accent);background:rgba(212,165,116,.08);box-shadow:0 0 12px rgba(212,165,116,.15)}
+.sb-btn.ambient{border-left:3px solid #9ad1ff}
+/* Ambient toggle — top-right corner of each tile. Outline 🌙 when off,
+   filled tint when on. Doesn't trigger play/stop on the parent tile. */
+.sb-ambient-toggle{position:absolute;top:6px;right:6px;width:20px;height:20px;border:none;background:rgba(0,0,0,.45);color:#fff;border-radius:50%;font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;opacity:.45;transition:opacity .12s,background .12s,color .12s;z-index:2}
+.sb-btn:hover .sb-ambient-toggle{opacity:.85}
+.sb-ambient-toggle:hover{opacity:1!important;background:rgba(74,142,201,.55);color:#fff}
+.sb-ambient-toggle.on{opacity:1;background:rgba(74,142,201,.85);color:#fff}
+@media (hover:none){ .sb-ambient-toggle{opacity:.75} }
+/* Scenes bar — sits between the now-playing strip and the tile grid. */
+.sb-scenes{display:flex;align-items:center;gap:6px;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap}
+.sb-scenes-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-right:4px}
+.sb-scene-chip{background:var(--panel-3);border:1px solid var(--border);color:var(--text);font-size:11px;padding:3px 10px;border-radius:11px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px;transition:all .12s}
+.sb-scene-chip:hover{border-color:var(--accent);background:var(--panel)}
+.sb-scene-chip.active{background:rgba(212,165,116,.2);border-color:var(--accent);color:var(--accent);font-weight:600}
+.sb-scene-del{font-size:11px;color:var(--text-dim);padding:0 3px;border-radius:3px;line-height:1}
+.sb-scene-del:hover{color:var(--danger);background:rgba(194,84,80,.18)}
 .sb-btn.loop-on{border-color:var(--success);background:rgba(107,158,107,.08)}
 .sb-tile-head{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
 .sb-btn .sb-name{font-size:13px;font-weight:600;color:var(--accent);line-height:1.2;word-break:break-word;flex:1}
@@ -1651,6 +1697,46 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 
 /* ============ TUTORIAL ============ */
 .tutorial-modal{max-width:560px;width:92%;padding:0;display:flex;flex-direction:column;max-height:82vh;overflow:hidden}
+/* Spotlight cutout — overlays the workspace, dims everything except the
+   target element with a giant box-shadow trick (huge spread + transparent
+   inside = "punch a hole"). Click-through so the user can still see the
+   highlighted UI even though the spotlight sits above it visually. */
+.tutorial-spotlight{
+  position:fixed;
+  pointer-events:none;
+  border-radius:6px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.65), 0 0 0 3px var(--accent), 0 0 24px rgba(212,165,116,.55);
+  z-index:9998;
+  transition:left .2s ease,top .2s ease,width .2s ease,height .2s ease;
+}
+/* When the tutorial card pins to a corner (because a spotlight is active),
+   we override the default modal-backdrop centering and shrink the
+   backdrop's own dim so the spotlight provides the only darkening. */
+.modal-backdrop:has(.tutorial-modal-corner){background:transparent}
+.tutorial-modal-corner{
+  position:fixed!important;
+  max-width:420px;
+  width:auto;
+  margin:0!important;
+  z-index:9999;
+  box-shadow:0 12px 36px rgba(0,0,0,.65);
+}
+/* Demo-scenario banner — pinned to the top of the workspace while a demo
+   is loaded so the user always has a one-click exit / "your data is safe"
+   reminder. Stays clear of the float-toolbar by sitting top-center. */
+#onb-demo-banner{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:9100;background:rgba(212,165,116,.95);color:#1a1a1a;font-size:12px;font-weight:600;padding:7px 14px;border-radius:16px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+#onb-demo-banner .btn{background:#1a1a1a;color:#fff;border:1px solid #1a1a1a}
+#onb-demo-banner .btn:hover{background:#000}
+/* Changelog modal — version-stamped sections, newest first. */
+.changelog-section{padding:10px 0;border-bottom:1px dashed var(--border)}
+.changelog-section:last-child{border-bottom:none}
+.changelog-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.changelog-version{font-family:'Cascadia Code',Consolas,monospace;font-size:11px;color:var(--text-dim);background:var(--panel-3);padding:1px 6px;border-radius:3px}
+.changelog-latest{font-size:9px;text-transform:uppercase;letter-spacing:.06em;background:var(--accent);color:#1a1a1a;padding:1px 6px;border-radius:8px;font-weight:700}
+.changelog-title{color:var(--accent);font-weight:600;font-size:13px}
+.changelog-items{margin:0;padding-left:20px;font-size:12px;line-height:1.55;color:var(--text)}
+.changelog-items li{margin-bottom:4px}
+.changelog-section.latest .changelog-items li::marker{color:var(--accent)}
 .tutorial-progress{height:3px;background:var(--panel-3);width:100%;flex-shrink:0}
 .tutorial-progress-fill{height:100%;background:var(--accent);transition:width .25s ease}
 .tutorial-head{display:flex;align-items:center;gap:12px;padding:18px 22px 6px}
@@ -1740,6 +1826,15 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .weather-stat .val{font-size:14px;font-weight:500;color:var(--text)}
 .weather-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 .weather-controls .field-label{font-size:10px}
+/* Weather history timeline — horizontal strip of past snapshots. */
+.weather-history{margin-top:14px;border-top:1px solid var(--border);padding-top:10px}
+.weather-history-head{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px}
+.weather-history-strip{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
+.weather-hist-chip{display:inline-flex;flex-direction:column;align-items:center;gap:1px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:5px 7px;cursor:pointer;min-width:54px;flex-shrink:0;color:var(--text);font-family:inherit;transition:all .12s}
+.weather-hist-chip:hover{border-color:var(--accent);background:var(--panel-3)}
+.weather-hist-icon{font-size:18px;line-height:1}
+.weather-hist-temp{font-size:11px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.weather-hist-date{font-size:9px;color:var(--text-dim);letter-spacing:.02em;white-space:nowrap}
 .weather-reroll{width:100%;padding:10px;font-size:13px}
 
 /* ============ TIME TRACKER ============ */
@@ -1758,9 +1853,9 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 /* Moon phase chip under the year — small, calm, doesn't fight the dial's
    primary readouts. */
 .time-moon{margin-top:6px;font-size:16px;line-height:1;display:inline-flex;align-items:center;gap:6px}
-.time-edit-row{display:flex;gap:4px;margin:8px 0;width:100%;align-items:center}
+.time-edit-row{display:flex;gap:4px;margin:8px 0;width:100%;align-items:center;flex-wrap:wrap}
 .time-edit-row select,.time-edit-row input{flex:1;min-width:0;font-size:11px;padding:4px 6px}
-.time-edit-row #time-day,.time-edit-row #time-hour{flex:0 0 42px}
+.time-edit-row #time-day,.time-edit-row #time-hour,.time-edit-row #time-minute,.time-edit-row #time-second{flex:0 0 42px}
 .time-edit-row #time-year{flex:0 0 60px}
 .time-edit-row .btn{flex:0 0 auto;padding:4px 8px}
 

@@ -16,7 +16,36 @@ const _sb = {
   // Web Audio (created lazily on first play — browsers block AudioContext
   // construction outside a user gesture)
   ctx:null, analyser:null, vizData:null, vizRunning:false,
+  // Set of sound ids flagged as "ambient" — ambient tracks duck (drop to
+  // 30% volume) when any non-ambient effect plays, then restore. Persisted
+  // in localStorage so the flag survives reloads.
+  ambient: new Set(),
+  // Saved scenes — captures of currently-looping sounds the DM can recall
+  // with one click. [{id, name, ts, sounds:[{id, loop, ambient}]}]
+  scenes: [],
+  // Currently active scene id (last loaded) — purely visual; helps the user
+  // see which preset is in effect.
+  activeSceneId: null,
 };
+
+function _sbSaveAmbient(){
+  try { localStorage.setItem('skt-sb-ambient-v1', JSON.stringify([..._sb.ambient])); } catch(e){}
+}
+function _sbLoadAmbient(){
+  try {
+    const arr = JSON.parse(localStorage.getItem('skt-sb-ambient-v1') || '[]');
+    _sb.ambient = new Set(Array.isArray(arr) ? arr : []);
+  } catch(e){ _sb.ambient = new Set(); }
+}
+function _sbSaveScenes(){
+  try { localStorage.setItem('skt-sb-scenes-v1', JSON.stringify(_sb.scenes)); } catch(e){}
+}
+function _sbLoadScenes(){
+  try {
+    const arr = JSON.parse(localStorage.getItem('skt-sb-scenes-v1') || '[]');
+    _sb.scenes = Array.isArray(arr) ? arr : [];
+  } catch(e){ _sb.scenes = []; }
+}
 
 // ─── IndexedDB persistence for personal uploads ──────────────────────────────
 // Audio files are too big for localStorage (5-10 MB cap, plus base64 inflation).
@@ -64,6 +93,8 @@ registerPanel('soundboard', {
   title:'Sound Board', icon:'🔊',
   mount(body){
     this._body = body;
+    _sbLoadAmbient();
+    _sbLoadScenes();
     this._render();
 
     // Load shared list from manifest (one-time per page load)
@@ -104,10 +135,32 @@ registerPanel('soundboard', {
     return _sb.shared.find(s=>s.id===id) || _sb.personal.find(s=>s.id===id);
   },
 
-  // Final playback volume = master × per-tile. Per-tile defaults to 1.0
-  // (no attenuation) so behavior is unchanged for tiles the user hasn't touched.
+  // Final playback volume = master × per-tile × duck-factor. Per-tile
+  // defaults to 1.0 (no attenuation). Duck factor is 0.3 when this is an
+  // ambient sound AND a non-ambient effect is currently playing — fades
+  // ambient down so an effect punches through without the DM scrambling
+  // for the master slider.
   _volumeFor(id){
-    return _sb.vol * (_sb.volumes[id] != null ? _sb.volumes[id] : 1);
+    const base = _sb.vol * (_sb.volumes[id] != null ? _sb.volumes[id] : 1);
+    if (!_sb.ambient || !_sb.ambient.has(id)) return base;
+    // Look for any non-ambient sound currently playing — if found, duck.
+    for (const playingId of Object.keys(_sb.playing)){
+      if (!_sb.ambient.has(playingId)) return base * 0.3;
+    }
+    return base;
+  },
+
+  // Re-evaluate every currently-playing audio's effective volume. Called
+  // when a sound starts/stops (so ducking kicks in immediately) or when
+  // the ambient flag toggles on/off mid-playback.
+  _updateLiveVolumes(){
+    Object.entries(_sb.playing).forEach(([id, p]) => {
+      if (p && p.audio){
+        // Quick easing — set target volume directly; browsers smooth it
+        // perceptually for short changes anyway.
+        p.audio.volume = this._volumeFor(id);
+      }
+    });
   },
 
   _render(){
@@ -142,6 +195,26 @@ registerPanel('soundboard', {
       html+='</div>';
     }
 
+    // Scenes — saved sets of currently-looping sounds. Bar of clickable
+    // chips that one-click-restore a configured ambience. Only rendered
+    // when at least one scene has been saved OR something is currently
+    // looping (so the "Save scene" button has a target).
+    const hasLoops = playing.some(id => _sb.playing[id]?.loop);
+    if ((_sb.scenes && _sb.scenes.length) || hasLoops){
+      html += '<div class="sb-scenes">';
+      html += '<span class="sb-scenes-label">🎬 Scenes</span>';
+      (_sb.scenes || []).forEach(sc => {
+        const active = sc.id === _sb.activeSceneId;
+        html += '<button class="sb-scene-chip'+(active?' active':'')+'" data-scene="'+esc(sc.id)+'" title="'+(sc.sounds||[]).length+' track'+((sc.sounds||[]).length===1?'':'s')+' — click to load (replaces current playback)">'+esc(sc.name)
+          +' <span class="sb-scene-del" data-scene-del="'+esc(sc.id)+'" title="Delete scene">×</span>'
+          +'</button>';
+      });
+      if (hasLoops){
+        html += '<button class="btn small" id="sb-save-scene" title="Save the currently-looping sounds as a named scene">💾 Save scene…</button>';
+      }
+      html += '</div>';
+    }
+
     // Combined grid: shared first, then personal.
     html+='<div style="flex:1;overflow-y:auto"><div class="sb-grid">';
     const all = [..._sb.shared, ..._sb.personal];
@@ -151,9 +224,11 @@ registerPanel('soundboard', {
       all.forEach(s=>{
         const isPlaying=!!_sb.playing[s.id];
         const isLoop=isPlaying&&_sb.playing[s.id].loop;
+        const isAmbient = _sb.ambient && _sb.ambient.has(s.id);
         const tv = _sb.volumes[s.id] != null ? _sb.volumes[s.id] : 1;
         const pct = Math.round(tv*100);
-        html+='<div class="sb-btn '+(isPlaying?'playing ':'')+(isLoop?'loop-on':'')+'" data-sid="'+s.id+'">'
+        html+='<div class="sb-btn '+(isPlaying?'playing ':'')+(isLoop?'loop-on ':'')+(isAmbient?'ambient':'')+'" data-sid="'+s.id+'">'
+          +'<button class="sb-ambient-toggle '+(isAmbient?'on':'')+'" data-ambient="'+s.id+'" title="'+(isAmbient?'Ambient — ducks when effects play. Click to un-mark.':'Mark as ambient (ducks under effects)')+'">🌙</button>'
           +'<div class="sb-tile-head"><span class="sb-name">'+esc(s.name)+'</span></div>'
           +'<div class="sb-tile-pct">'+pct+'%</div>'
           +'<input type="range" class="sb-tile-vol" data-vol="'+s.id+'" min="0" max="1" step="0.01" value="'+tv+'">'
@@ -201,7 +276,10 @@ registerPanel('soundboard', {
     b.querySelectorAll('[data-sid]').forEach(btn=>{
       btn.addEventListener('click',e=>{
         e.stopPropagation();
+        // Skip if the click landed on a sub-control (delete, ambient
+        // toggle) — those have their own handlers above.
         if(e.target.dataset.del) return;
+        if(e.target.closest('[data-ambient]')) return;
         const sid=btn.dataset.sid;
         if(_sb.playing[sid]){ this._stop(sid); this._render(); }
         else this._play(sid,false);
@@ -245,7 +323,101 @@ registerPanel('soundboard', {
       if (removed?.url) try { URL.revokeObjectURL(removed.url); } catch(_){}
       _sb.personal = _sb.personal.filter(s=>s.id!==id);
       _sbIdbDel(id).catch(()=>{});
+      // Also strip the deleted sound from any saved scene.
+      _sb.scenes = _sb.scenes.map(sc => ({...sc, sounds: (sc.sounds||[]).filter(s => s.id !== id)})).filter(sc => sc.sounds.length);
+      _sbSaveScenes();
       this._render();
+    }));
+
+    // Ambient toggle per tile — flips the ambient flag and persists. Doesn't
+    // open/close the tile or interfere with click-to-play.
+    b.querySelectorAll('[data-ambient]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = el.dataset.ambient;
+      if (_sb.ambient.has(id)) _sb.ambient.delete(id);
+      else _sb.ambient.add(id);
+      _sbSaveAmbient();
+      // Re-evaluate live volumes (newly ambient sounds may need to duck;
+      // un-marked sounds should pop back to full volume).
+      this._updateLiveVolumes();
+      this._render();
+    }));
+
+    // Save current loops as a scene
+    b.querySelector('#sb-save-scene')?.addEventListener('click', () => {
+      const looping = Object.entries(_sb.playing)
+        .filter(([id, p]) => p && p.loop)
+        .map(([id]) => ({ id, loop: true, ambient: _sb.ambient.has(id) }));
+      if (!looping.length) return;
+      const suggested = 'Scene ' + (_sb.scenes.length + 1);
+      const promptIt = (defaultName, applyFn) => {
+        if (typeof showModal === 'function'){
+          showModal('Save scene', [
+            { id:'name', label:'Scene name', type:'text', value: defaultName }
+          ], 'Save').then(r => {
+            if (!r) return;
+            const name = (r.name || '').trim();
+            if (!name) return;
+            applyFn(name);
+          });
+        } else {
+          const name = window.prompt('Scene name', defaultName);
+          if (name && name.trim()) applyFn(name.trim());
+        }
+      };
+      promptIt(suggested, name => {
+        // Replace existing scene with same name (case-insensitive)
+        const lc = name.toLowerCase();
+        _sb.scenes = _sb.scenes.filter(sc => (sc.name||'').toLowerCase() !== lc);
+        const sceneId = 'scene_' + (typeof uid === 'function' ? uid() : Date.now().toString(36));
+        _sb.scenes.unshift({ id: sceneId, name, ts: Date.now(), sounds: looping });
+        _sb.activeSceneId = sceneId;
+        if (_sb.scenes.length > 30) _sb.scenes.length = 30;
+        _sbSaveScenes();
+        if (typeof showToast === 'function') showToast('Saved "' + name + '" with ' + looping.length + ' track' + (looping.length===1?'':'s'));
+        this._render();
+      });
+    });
+
+    // Load a scene — stops all current playback, then re-plays each
+    // saved track. Ambient flags are restored too so ducking works on
+    // first play.
+    b.querySelectorAll('[data-scene]').forEach(btn => btn.addEventListener('click', e => {
+      // Skip if the user clicked the inline delete × inside the chip.
+      if (e.target.closest('[data-scene-del]')) return;
+      const sceneId = btn.dataset.scene;
+      const sc = _sb.scenes.find(x => x.id === sceneId);
+      if (!sc) return;
+      this._stopAll();
+      // Restore ambient flags for the scene's sounds (additive — doesn't
+      // remove ambient state from sounds not in this scene).
+      (sc.sounds || []).forEach(s => {
+        if (s.ambient) _sb.ambient.add(s.id);
+        else _sb.ambient.delete(s.id);
+      });
+      _sbSaveAmbient();
+      // Play each sound. The first play kicks the audio context so
+      // subsequent ones don't get blocked.
+      (sc.sounds || []).forEach(s => this._play(s.id, !!s.loop));
+      _sb.activeSceneId = sceneId;
+      if (typeof showToast === 'function') showToast('Loaded "' + sc.name + '"');
+      this._render();
+    }));
+    b.querySelectorAll('[data-scene-del]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const sceneId = btn.dataset.sceneDel;
+      const sc = _sb.scenes.find(x => x.id === sceneId);
+      if (!sc) return;
+      const proceed = ok => {
+        if (!ok) return;
+        _sb.scenes = _sb.scenes.filter(x => x.id !== sceneId);
+        if (_sb.activeSceneId === sceneId) _sb.activeSceneId = null;
+        _sbSaveScenes();
+        this._render();
+      };
+      if (typeof showConfirm === 'function'){
+        showConfirm('Delete scene "' + sc.name + '"?', {title:'Delete scene', confirmLabel:'Delete', danger:true}).then(proceed);
+      } else proceed(window.confirm('Delete scene "' + sc.name + '"?'));
     }));
 
     // Upload
@@ -350,13 +522,21 @@ registerPanel('soundboard', {
     const src = s.source === 'shared' ? s.path : s.url;
     if (!src) return;
     const audio=new Audio(src);
-    audio.volume=this._volumeFor(id);
     audio.loop=loop;
     this._wireAudioToAnalyser(audio);
     if (_sb.ctx?.state === 'suspended') _sb.ctx.resume();
     audio.play().catch(()=>{});
     _sb.playing[id]={audio,loop};
-    if(!loop) audio.addEventListener('ended',()=>{ delete _sb.playing[id]; this._render(); },{once:true});
+    // Volume must be set AFTER inserting into _sb.playing so the duck
+    // calculation in _volumeFor sees this sound's playing status.
+    audio.volume=this._volumeFor(id);
+    if(!loop) audio.addEventListener('ended',()=>{
+      delete _sb.playing[id];
+      this._updateLiveVolumes(); // ambient may now un-duck
+      this._render();
+    },{once:true});
+    // Existing ambient sounds may need to duck now that an effect started.
+    this._updateLiveVolumes();
     this._startVisualizer();
     this._render();
   },
@@ -365,6 +545,8 @@ registerPanel('soundboard', {
     const p=_sb.playing[id]; if(!p)return;
     try{ p.audio.pause(); p.audio.currentTime=0; }catch(e){}
     delete _sb.playing[id];
+    // Other still-playing ambient sounds may need to un-duck now.
+    this._updateLiveVolumes();
   },
 
   _stopAll(){ Object.keys(_sb.playing).forEach(id=>this._stop(id)); },

@@ -66,8 +66,16 @@
   let _pushTimers = new Map(); // id → setTimeout handle (debouncing)
   let _pollTimer = null;
   let _statusListeners = new Set();
+  let _conflictListeners = new Set();
   let _busy = false;           // syncing right now
   let _editingProvider = null; // function returning whether the user is mid-edit
+
+  // Outstanding conflicts the user needs to resolve. Kept in-memory only —
+  // a fresh page-load forces a re-sync that re-detects them, so we don't
+  // bother persisting (and risk surfacing stale ones). Each entry:
+  //   {itemId, path, name, appContent, diskContent, diskMtime, ts}
+  let _conflicts = [];
+  function _emitConflicts(){ _conflictListeners.forEach(cb => { try { cb([..._conflicts]); } catch(e){} }); }
 
   function _loadState() {
     try {
@@ -321,23 +329,53 @@
           _state.pathToId[path] = newId;
           changed = true;
         } else {
-          // Both sides have it → reconcile
+          // Both sides have it → reconcile.
+          // The last-known-good state for this file is `meta` — what we
+          // recorded the last time the two sides agreed. Three independent
+          // signals tell us what changed since then:
+          //   diskChanged = disk hash differs from meta hash
+          //   appChanged  = app hash differs from meta hash
+          //   diskNewer   = file mtime moved forward past the recorded one
           const meta = _state.fileMeta[existingItem.id] || { mtime: 0, hash: '' };
           const diskHash = _hash(df.content);
           const appHash  = _hash(existingItem.content || '');
-          if (diskHash === appHash) {
+          const diskChanged = diskHash !== meta.hash;
+          const appChanged  = appHash  !== meta.hash;
+          const diskNewer   = df.mtime > meta.mtime + 500;
+
+          // Skip files the user already has a pending conflict on — don't
+          // re-process until they resolve it.
+          if (_conflicts.some(c => c.itemId === existingItem.id)){
+            // pass
+          } else if (diskHash === appHash) {
+            // No-op: both sides match, just refresh meta.
             _state.fileMeta[existingItem.id] = { mtime: df.mtime, hash: diskHash, path };
             _state.pathToId[path] = existingItem.id;
-          } else if (df.mtime > meta.mtime + 500) {
-            // Disk is newer than last sync → take disk version
+          } else if (diskChanged && appChanged) {
+            // Both sides edited since last agreement — this is the
+            // genuine conflict case. Queue it for the UI to resolve and
+            // skip auto-merge so neither side gets clobbered.
+            _conflicts.push({
+              itemId: existingItem.id,
+              path,
+              name: existingItem.name || path.split('/').pop().replace(/\.md$/, ''),
+              appContent: existingItem.content || '',
+              diskContent: df.content,
+              diskMtime: df.mtime,
+              ts: Date.now(),
+            });
+            console.warn('[notes-sync] conflict queued for', path);
+          } else if (diskChanged || diskNewer) {
+            // Only disk changed (or mtime says disk wins for first-touch
+            // cases where meta is fresh) → take disk version.
             existingItem.content = df.content;
             existingItem.lineAuthors = []; // no author info from disk
             _state.fileMeta[existingItem.id] = { mtime: df.mtime, hash: diskHash, path };
             _state.pathToId[path] = existingItem.id;
             changed = true;
             console.info('[notes-sync] disk → app:', path);
-          } else if (appHash !== meta.hash) {
-            // App changed since last sync → push to disk
+          } else if (appChanged) {
+            // Only app changed → push to disk.
             const newMtime = await _writeFile(path, existingItem.content || '');
             _state.fileMeta[existingItem.id] = { mtime: newMtime, hash: appHash, path };
             _state.pathToId[path] = existingItem.id;
@@ -352,6 +390,7 @@
       console.error('[notes-sync] fullSync failed', e);
     } finally {
       _busy = false; _emit();
+      _emitConflicts();
     }
     return changed;
   }
@@ -400,11 +439,56 @@
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   }
 
+  // Subscribe to conflict-list changes. Callback receives a snapshot
+  // array on subscribe + every change. Returns unsubscribe.
+  function onConflict(cb){
+    _conflictListeners.add(cb);
+    try { cb([..._conflicts]); } catch(e){}
+    return () => _conflictListeners.delete(cb);
+  }
+
+  function getConflicts(){ return [..._conflicts]; }
+
+  // Resolve a queued conflict. `choice` is 'app' (keep current in-app
+  // content and overwrite disk), 'disk' (take disk version and replace
+  // app content), or 'manual' (caller provides `manualContent` which
+  // overwrites both sides). After resolution the conflict is removed
+  // from the queue and the chosen content is written through normally.
+  async function resolveConflict(itemId, choice, opts){
+    const c = _conflicts.find(x => x.itemId === itemId);
+    if (!c) return false;
+    const data = opts && opts.data;            // notes data ref to mutate the item directly
+    const item = data && data.items && data.items.find(i => i.id === itemId);
+    let finalContent;
+    if (choice === 'app')         finalContent = c.appContent;
+    else if (choice === 'manual') finalContent = (opts && typeof opts.manualContent === 'string') ? opts.manualContent : c.appContent;
+    else                          finalContent = c.diskContent;
+    if (item){
+      item.content = finalContent;
+      if (choice === 'disk') item.lineAuthors = [];
+    }
+    // Push the resolved content to disk and update meta so future syncs
+    // start fresh.
+    try {
+      if (!(await _ensurePermission())) return false;
+      const mtime = await _writeFile(c.path, finalContent);
+      _state.fileMeta[itemId] = { mtime, hash: _hash(finalContent), path: c.path };
+      _state.pathToId[c.path] = itemId;
+      _state.lastSync = Date.now();
+      _saveState();
+    } catch(e){ console.error('[notes-sync] resolveConflict write failed', e); }
+    _conflicts = _conflicts.filter(x => x.itemId !== itemId);
+    _emitConflicts();
+    _emit();
+    return true;
+  }
+
   // Expose
   window.notesSync = {
     init, isSupported, isConnected, getStatus, onStatus,
     connect, disconnect, fullSync, pushFile,
     startPolling, stopPolling,
+    onConflict, getConflicts, resolveConflict,
     _onPullCallback: null,         // notes panel sets this to re-render after disk → app
   };
 })();

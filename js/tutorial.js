@@ -26,6 +26,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Search bar',
     icon: '🔎',
+    target: '#search-input',
     body: `
       <p>Press <kbd>/</kbd> any time to focus the search bar (top-left).
       It searches the full 5etools dataset:</p>
@@ -46,6 +47,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'The dock & floating windows',
     icon: '🪟',
+    target: '.dock',
     body: `
       <p>The <strong>dock on the left</strong> opens panels. Each panel becomes a floating
       window you can:</p>
@@ -65,6 +67,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Combat Tracker ⚔',
     icon: '⚔',
+    target: '[data-panel="combat"]',
     body: `
       <p>Run encounters here. Add combatants by:</p>
       <ul>
@@ -82,6 +85,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Party Tracker ♥',
     icon: '♥',
+    target: '[data-panel="party"]',
     body: `
       <p>Cards for your PCs. Each card shows HP/Max HP (with a bar), AC, initiative, speed,
       passive perception, and gold. Click into a card for the full sheet:</p>
@@ -103,6 +107,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Bestiary 🐲',
     icon: '🐲',
+    target: '[data-panel="bestiary"]',
     body: `
       <p>Your personal monster shelf. Use it to bookmark monsters you'll need this session
       so you don't have to search for them again.</p>
@@ -116,6 +121,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'NPC Library 👤 & Generator 🎲',
     icon: '👤',
+    target: '[data-panel="npclib"]',
     body: `
       <p><strong>NPC Library</strong> stores recurring characters with name, role, group,
       attitude (Ally / Friendly / Neutral / Hostile / Imprisoned / Unknown), HP/AC, tags,
@@ -128,6 +134,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Loot Tracker 💰',
     icon: '💰',
+    target: '[data-panel="loot"]',
     body: `
       <p>Track party treasure with rich per-item state.</p>
       <ul>
@@ -150,6 +157,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Encounter Builder ⚡',
     icon: '⚡',
+    target: '[data-panel="encounter"]',
     body: `
       <p>Plan a balanced fight before pushing it to combat. Set your party level and size,
       then add monsters with counts. The panel calculates:</p>
@@ -165,6 +173,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Session Notes 📝',
     icon: '📝',
+    target: '[data-panel="notes"]',
     body: `
       <p>Markdown notes with a folder tree. Click any line to edit; the toolbar provides
       bold, italic, headings, lists, quotes, and dividers. Use <kbd>Ctrl</kbd>+<kbd>B</kbd> /
@@ -177,6 +186,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Battle Map 🗺',
     icon: '🗺',
+    target: '[data-panel="battlemap"]',
     body: `
       <p>Tactical canvas with grid, tokens, fog of war, and freehand annotations.</p>
       <ul>
@@ -214,6 +224,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Soundboard 🔊',
     icon: '🔊',
+    target: '[data-panel="soundboard"]',
     body: `
       <p>Ambient sound during sessions. Two libraries:</p>
       <ul>
@@ -226,6 +237,7 @@ const TUTORIAL_PAGES = [
   },
   {
     title: 'Player View & sharing',
+    target: '#player-view-btn, .float-toolbar',
     icon: '🖥',
     body: `
       <p>Click <strong>🖥 Player View</strong> in the top toolbar to open a separate window
@@ -244,6 +256,7 @@ const TUTORIAL_PAGES = [
   },
   {
     title: 'Settings & themes ⚙',
+    target: '#settings-btn',
     icon: '⚙',
     body: `
       <p>The <strong>⚙</strong> button in the top toolbar opens settings:</p>
@@ -317,6 +330,25 @@ function openTutorial(startIdx) {
   // Reflect current state of "seen" → preset the checkbox.
   try { dontShow.checked = localStorage.getItem(TUTORIAL_KEY) === '1'; } catch(e){}
 
+  // Spotlight overlay — a small fixed-position div sized over the page's
+  // target element, with a huge translucent box-shadow that dims the rest
+  // of the workspace. Reused across pages by mutating its style.
+  const modal = backdrop.querySelector('.tutorial-modal');
+  let spotlight = null;
+  const ensureSpotlight = () => {
+    if (spotlight) return spotlight;
+    spotlight = document.createElement('div');
+    spotlight.className = 'tutorial-spotlight';
+    document.body.appendChild(spotlight);
+    return spotlight;
+  };
+  const clearSpotlight = () => {
+    if (spotlight) spotlight.style.display = 'none';
+    // Restore default centered modal position.
+    modal.classList.remove('tutorial-modal-corner');
+    modal.style.left = modal.style.top = modal.style.right = modal.style.bottom = '';
+  };
+
   const paint = () => {
     const p = TUTORIAL_PAGES[idx];
     iconEl.textContent = p.icon;
@@ -327,8 +359,45 @@ function openTutorial(startIdx) {
     prevBtn.disabled = idx === 0;
     nextBtn.textContent = idx === TUTORIAL_PAGES.length - 1 ? 'Done' : 'Next ›';
     bodyEl.scrollTop = 0;
+
+    // Spotlight handling — only kicks in when the page declares a target
+    // and that target is currently in the DOM and visible. Otherwise the
+    // default centered-modal-over-darkened-backdrop layout takes over.
+    clearSpotlight();
+    if (p.target){
+      const el = document.querySelector(p.target);
+      if (el){
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0){
+          const pad = 6;
+          const s = ensureSpotlight();
+          s.style.display = 'block';
+          s.style.left   = (r.left   - pad) + 'px';
+          s.style.top    = (r.top    - pad) + 'px';
+          s.style.width  = (r.width  + pad*2) + 'px';
+          s.style.height = (r.height + pad*2) + 'px';
+          // Pin the modal to the corner furthest from the target so it
+          // doesn't cover the highlighted element.
+          modal.classList.add('tutorial-modal-corner');
+          const vw = window.innerWidth, vh = window.innerHeight;
+          const tx = r.left + r.width / 2, ty = r.top + r.height / 2;
+          const right  = tx < vw / 2; // target on left → modal goes right
+          const bottom = ty < vh / 2; // target on top → modal goes bottom
+          modal.style[right ? 'right' : 'left'] = '24px';
+          modal.style[bottom ? 'bottom' : 'top'] = '24px';
+        }
+      }
+    }
   };
   paint();
+  // Spotlight needs to track if the window resizes (or the user changes
+  // zoom). Throttled via rAF so it stays smooth.
+  let resizeRaf = 0;
+  const onResize = () => {
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; paint(); });
+  };
+  window.addEventListener('resize', onResize);
 
   const close = () => {
     try {
@@ -336,6 +405,8 @@ function openTutorial(startIdx) {
       else localStorage.removeItem(TUTORIAL_KEY);
     } catch(e){}
     backdrop.remove();
+    if (spotlight) spotlight.remove();
+    window.removeEventListener('resize', onResize);
     document.removeEventListener('keydown', onKey);
   };
   const onKey = (e) => {
