@@ -303,10 +303,40 @@ function updateDock(){
 // ============================================================
 // PARTY <-> COMBAT SYNC HELPERS
 // ============================================================
+// Normalize a PC name so "Zoey(Rogue)", "Zoey (rogue)", and "Zoey " all
+// match each other as the same character. Used by the party↔combat sync
+// helpers as a fallback when ids don't match (e.g. the combatant was
+// added by hand with a class-tagged name instead of dragged from party).
+function _normalizePcName(s){
+  return String(s || '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+}
+
+// Find the combatant matching a party member. First tries id (the strong
+// match when the combatant was dragged from party); falls back to
+// normalized name match for manually-added "Zoey(Rogue)" style names.
+function _findCombatantForPartyMember(p){
+  if (!p) return -1;
+  let ci = state.combatants.findIndex(c => c.isPC && c.id === p.id);
+  if (ci >= 0) return ci;
+  const want = _normalizePcName(p.name);
+  if (!want) return -1;
+  return state.combatants.findIndex(c => c.isPC && _normalizePcName(c.name) === want);
+}
+
+// Reverse — find a party member matching a combatant.
+function _findPartyMemberForCombatant(c){
+  if (!c) return -1;
+  let pi = state.party.findIndex(p => p.id === c.id);
+  if (pi >= 0) return pi;
+  const want = _normalizePcName(c.name);
+  if (!want) return -1;
+  return state.party.findIndex(p => _normalizePcName(p.name) === want);
+}
+
 function syncPartyToCombat(partyIdx){
   // When party HP/AC changes, mirror to their combat slot if in combat
   const p=state.party[partyIdx];
-  const ci=state.combatants.findIndex(c=>c.isPC&&c.id===p.id);
+  const ci=_findCombatantForPartyMember(p);
   if(ci>=0){
     state.combatants[ci]={...state.combatants[ci],hp:p.hp,hpMax:p.hpMax,ac:p.ac};
     panelDefs.combat?._render?.();
@@ -317,7 +347,7 @@ function syncCombatToParty(combatantId){
   // When combat HP/AC changes, mirror to party card
   const c=state.combatants.find(x=>x.id===combatantId);
   if(!c||!c.isPC)return;
-  const pi=state.party.findIndex(p=>p.id===c.id);
+  const pi=_findPartyMemberForCombatant(c);
   if(pi>=0){
     state.party[pi]={...state.party[pi],hp:c.hp,hpMax:c.hpMax,ac:c.ac};
     panelDefs.party?._render?.();
