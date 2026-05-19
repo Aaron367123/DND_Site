@@ -165,9 +165,15 @@ function initWorkspaceContextMenu(){
   if (!ws) return;
 
   ws.addEventListener('contextmenu', e => {
-    // Only fire when the click target is the workspace surface itself (not
-    // inside an existing window — those have their own native menus).
-    if (e.target.closest('.window')) return;
+    // Skip ONLY when the click is on a form field / contenteditable / canvas
+    // — those are where the browser's native menu is genuinely useful
+    // (Copy/Paste, Save image, etc.). Right-clicking on a window's blank
+    // chrome still pops our workspace menu so the user can reach
+    // focuses/panels from anywhere, not just from the sliver of literal
+    // empty canvas between panels.
+    if (e.target.closest('input, textarea, select, [contenteditable="true"], canvas, img, video, a')) return;
+    // Panels can opt out per-element by tagging anything with data-allow-native-menu.
+    if (e.target.closest('[data-allow-native-menu]')) return;
     e.preventDefault();
     _ctxOpen(e.clientX, e.clientY);
   });

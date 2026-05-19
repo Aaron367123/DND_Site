@@ -299,8 +299,8 @@ function initSettings(){
   };
   updateStorageUsage();
   // Also refresh when the drawer opens — easy hook is the visibility class
-  // toggling on the drawer container.
-  const drawer = document.getElementById('settings-drawer') || document.querySelector('.settings-drawer');
+  // toggling on the drawer container. (Reuses the `drawer` already declared
+  // at the top of initSettings.)
   if (drawer){
     new MutationObserver(updateStorageUsage).observe(drawer, { attributes:true, attributeFilter:['class','style'] });
   }
