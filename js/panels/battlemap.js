@@ -102,6 +102,12 @@ registerPanel('battlemap',{
   // Picker caches — survive panel re-renders, populated lazily.
   _adventures: null,
   _mapsByAdv: {},
+  // Saved-maps library: [{id, name, ts, snapshot:{...}}]. Lets the DM keep
+  // multiple full map states (tokens, fog, drawings, grid offset, etc.) and
+  // bounce between them — tavern → ambush → dungeon → boss room — without
+  // rebuilding each one. Persisted under its own localStorage key so it
+  // doesn't bloat the active-map blob.
+  _savedMaps: [],
 
   mount(body){
     this._body=body;
@@ -150,6 +156,15 @@ registerPanel('battlemap',{
       // Pencil annotations
       this._drawings = Array.isArray(d.drawings) ? d.drawings : [];
     }catch(e){}
+    // Saved-maps library — separate key so it survives independent of the
+    // active-map blob. Stays an empty array on first run / corrupt JSON.
+    try {
+      const raw = localStorage.getItem('skt-battlemap-saved-v1');
+      if (raw){
+        const d = JSON.parse(raw);
+        if (Array.isArray(d.saved)) this._savedMaps = d.saved;
+      }
+    } catch(e){}
     this._render();
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath);
     this._startBroadcast();
@@ -316,6 +331,120 @@ registerPanel('battlemap',{
     // if they want "Brody" they can rename via the token options panel.
     const first = String(t.label).trim().split(/\s+/)[0];
     return first || t.label;
+  },
+
+  // Render the "Saved maps" section that sits at the top of the picker
+  // modal. Returns empty string when the library is empty so the section
+  // doesn't take up vertical space for first-time users.
+  _renderSavedMapsSection(){
+    if (!this._savedMaps || !this._savedMaps.length) return '';
+    const rows = this._savedMaps.map(s => {
+      const tokenN = (s.snapshot?.tokens || []).length;
+      const fogN   = (s.snapshot?.fog || []).length;
+      const drawingN = (s.snapshot?.drawings || []).length;
+      const bgLabel = s.snapshot?.bgMapPath
+        ? s.snapshot.bgMapPath.split('/').pop().replace(/\.[^.]+$/, '')
+        : (s.snapshot?.hadUploadedImage ? '⚠ Upload (no bg)' : 'No background');
+      const stats = [
+        tokenN   ? tokenN + ' tok'  : null,
+        fogN     ? fogN + ' fog'    : null,
+        drawingN ? drawingN + ' drw' : null,
+      ].filter(Boolean).join(' · ');
+      return `<div class="mapsel-saved-row" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:12px">
+        <button data-savedmap-load="${esc(s.id)}" style="flex:1;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:12px;cursor:pointer;text-align:left;padding:2px 4px;display:flex;flex-direction:column;gap:1px" title="Load this saved map">
+          <span style="font-weight:600">${esc(s.name)}</span>
+          <span style="font-size:10px;color:var(--text-dim)">${esc(bgLabel)}${stats ? ' · ' + esc(stats) : ''}</span>
+        </button>
+        <button class="btn icon-btn danger" data-savedmap-del="${esc(s.id)}" title="Delete this saved map" style="padding:2px 6px;font-size:11px">×</button>
+      </div>`;
+    }).join('');
+    return `<div id="mapsel-saved-host" style="margin-bottom:14px">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px">Saved maps</div>
+      <div style="max-height:200px;overflow-y:auto">${rows}</div>
+    </div>`;
+  },
+
+  // ─── Saved-maps library ──────────────────────────────────────────────────
+  // Persist the saved-map list under its own key. Same try/catch shape as
+  // the active-map save — quota errors are swallowed (rare for this list
+  // since each entry is small, just metadata + token/fog state).
+  _saveSavedMaps(){
+    try { localStorage.setItem('skt-battlemap-saved-v1', JSON.stringify({saved:this._savedMaps})); }
+    catch(e){}
+  },
+
+  // Snapshot the full per-map state into a plain JSON object suitable for
+  // long-term storage. Deliberately omits the uploaded-image data URL (too
+  // big for localStorage) and any session-only flags (visibility toggles).
+  _snapshotMap(){
+    return {
+      bgMapPath:    this._bgMapPath || null,
+      bgMapScale:   this._bgMapScale || 1,
+      mapRotation:  this._mapRotation || 0,
+      gridOffsetX:  this._gridOffsetX || 0,
+      gridOffsetY:  this._gridOffsetY || 0,
+      cellSize:     this._cellSize,
+      cols:         this._cols,
+      rows:         this._rows,
+      bgColor:      this._bgColor,
+      showGrid:     this._showGrid !== false,
+      snapToGrid:   !!this._snapToGrid,
+      tokens:       JSON.parse(JSON.stringify(this._tokens || [])),
+      fog:          this._fog ? Array.from(this._fog) : null,
+      fogStrokes:   JSON.parse(JSON.stringify(this._fogStrokes || [])),
+      fogPaintMode: this._fogPaintMode || 'reveal',
+      fogBrushMode: this._fogBrushMode || 'grid',
+      fogBrushShape:this._fogBrushShape || 'square',
+      fogHardness:  this._fogHardness,
+      gridOpacity:  this._gridOpacity,
+      drawings:     JSON.parse(JSON.stringify(this._drawings || [])),
+      // Flag uploaded-image state — restore-time we can warn the user that
+      // the background needs re-uploading. The path field stays null.
+      hadUploadedImage: !this._bgMapPath && !!_mapBgImage,
+    };
+  },
+
+  // Apply a saved snapshot to the panel. Replaces every per-map field, then
+  // either re-fetches the bg image (5etools path) or clears the in-memory
+  // image (upload — can't restore without re-upload). Triggers a re-render.
+  _restoreMapSnapshot(snap){
+    if (!snap) return;
+    this._bgMapPath    = snap.bgMapPath || null;
+    this._bgMapScale   = snap.bgMapScale || 1;
+    this._mapRotation  = snap.mapRotation || 0;
+    this._gridOffsetX  = snap.gridOffsetX || 0;
+    this._gridOffsetY  = snap.gridOffsetY || 0;
+    this._cellSize     = snap.cellSize || this._cellSize;
+    this._cols         = snap.cols || this._cols;
+    this._rows         = snap.rows || this._rows;
+    this._bgColor      = snap.bgColor || this._bgColor;
+    this._showGrid     = snap.showGrid !== false;
+    this._snapToGrid   = !!snap.snapToGrid;
+    this._tokens       = Array.isArray(snap.tokens) ? JSON.parse(JSON.stringify(snap.tokens)) : [];
+    this._fog          = Array.isArray(snap.fog) ? new Set(snap.fog) : null;
+    this._fogStrokes   = Array.isArray(snap.fogStrokes) ? JSON.parse(JSON.stringify(snap.fogStrokes)) : [];
+    this._fogPaintMode = snap.fogPaintMode || 'reveal';
+    this._fogBrushMode = snap.fogBrushMode || 'grid';
+    this._fogBrushShape= snap.fogBrushShape || 'square';
+    if (snap.fogHardness != null) this._fogHardness = snap.fogHardness;
+    if (snap.gridOpacity != null) this._gridOpacity = snap.gridOpacity;
+    this._drawings     = Array.isArray(snap.drawings) ? JSON.parse(JSON.stringify(snap.drawings)) : [];
+    this._lastTokenScale = this._bgMapScale;
+    // Bg image: either reload via 5etools path, or drop any stale in-memory
+    // image (uploads can't survive). The user gets a one-shot toast warning
+    // when an upload state is restored without its image.
+    if (this._bgMapPath){
+      _mapBgImage = null;
+      this._loadBgFromPath(this._bgMapPath);
+    } else {
+      _mapBgImage = null;
+      this._render();
+      if (snap.hadUploadedImage && typeof showToast === 'function'){
+        showToast('Loaded — re-upload the background image (uploads are session-only)');
+      }
+    }
+    this._saveMap();
+    this._broadcast();
   },
 
   _scaleTokensTo(newScale){
@@ -740,6 +869,13 @@ registerPanel('battlemap',{
       +'<input type="color" id="tp-color" style="width:100%;height:26px;margin-bottom:6px;cursor:pointer">'
       +'<label class="field-label">Size (cells)</label>'
       +'<input type="number" id="tp-size" min="1" max="6" value="1" style="margin-bottom:8px;font-size:11px">'
+      +'<label class="field-label">Facing</label>'
+      +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
+        +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:11px">↺</button>'
+        +'<input type="range" id="tp-rot" min="0" max="359" step="5" value="0" style="flex:1">'
+        +'<button class="btn icon-btn" id="tp-rot-right" title="Rotate +45°" style="padding:1px 6px;font-size:11px">↻</button>'
+        +'<span id="tp-rot-val" style="font-size:10px;color:var(--text-muted);min-width:30px;text-align:right">0°</span>'
+      +'</div>'
       +'<div style="display:flex;gap:4px">'
         +'<button class="btn small" id="tp-kill" style="flex:1">☠</button>'
         +'<button class="btn small danger" id="tp-del" style="flex:1">Del</button>'
@@ -1490,19 +1626,23 @@ registerPanel('battlemap',{
   async _openMapPicker(){
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
-    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:680px;max-width:92vw">
-      <h3>Choose a Map</h3>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-        <input id="mapsel-search" type="search" autocomplete="off" placeholder="🔎 Search maps across every adventure…"
-          style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:680px;max-width:92vw;max-height:90vh;display:flex;flex-direction:column">
+      <h3 style="margin:0 0 10px">Choose a Map</h3>
+      <div style="flex:1;overflow-y:auto;padding-right:4px">
+        ${this._renderSavedMapsSection()}
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input id="mapsel-search" type="search" autocomplete="off" placeholder="🔎 Search maps across every adventure…"
+            style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <input id="mapsel-adv" list="mapsel-adv-list" autocomplete="off" placeholder="Loading adventures…" disabled
+            style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+          <datalist id="mapsel-adv-list"></datalist>
+        </div>
+        <div id="mapsel-grid" class="mapsel-grid"></div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <input id="mapsel-adv" list="mapsel-adv-list" autocomplete="off" placeholder="Loading adventures…" disabled
-          style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
-        <datalist id="mapsel-adv-list"></datalist>
-      </div>
-      <div id="mapsel-grid" class="mapsel-grid"></div>
       <div class="modal-actions" style="margin-top:10px">
+        ${(this._bgMapPath || _mapBgImage || (this._tokens||[]).length) ? '<button class="btn" id="mapsel-save">💾 Save current as…</button>' : ''}
         ${this._bgMapPath ? '<button class="btn danger" id="mapsel-clear">Clear current map</button>' : ''}
         <button class="btn" id="mapsel-upload-btn">📷 Upload image…</button>
         <input type="file" id="mapsel-upload-input" accept="image/*" style="display:none">
@@ -1510,6 +1650,68 @@ registerPanel('battlemap',{
       </div>
     </div>`;
     document.body.appendChild(backdrop);
+
+    // Wire saved-maps load/delete clicks (rendered above the adventure section)
+    backdrop.querySelectorAll('[data-savedmap-load]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.dataset.savedmapLoad;
+      const entry = this._savedMaps.find(s => s.id === id);
+      if (!entry) return;
+      this._restoreMapSnapshot(entry.snapshot);
+      close();
+      if (typeof showToast === 'function') showToast('Loaded "' + entry.name + '"');
+    }));
+    backdrop.querySelectorAll('[data-savedmap-del]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.savedmapDel;
+      const entry = this._savedMaps.find(s => s.id === id);
+      if (!entry) return;
+      const doDelete = () => {
+        this._savedMaps = this._savedMaps.filter(s => s.id !== id);
+        this._saveSavedMaps();
+        // Remove the row from the DOM in place. If the list is now empty,
+        // also remove the section header so the picker doesn't show a stale
+        // "Saved maps" with nothing under it.
+        const row = btn.closest('.mapsel-saved-row');
+        if (row) row.remove();
+        if (!this._savedMaps.length){
+          backdrop.querySelector('#mapsel-saved-host')?.remove();
+        }
+      };
+      if (typeof showConfirm === 'function'){
+        showConfirm('Delete saved map "' + entry.name + '"?', {title:'Delete map', confirmLabel:'Delete', danger:true}).then(ok => {
+          if (ok) doDelete();
+        });
+      } else { doDelete(); }
+    }));
+    backdrop.querySelector('#mapsel-save')?.addEventListener('click', () => {
+      const suggested = this._bgMapPath
+        ? (this._bgMapPath.split('/').pop().replace(/\.[^.]+$/, '') + ((this._tokens||[]).length ? ' — saved' : ''))
+        : (_mapBgImage ? 'Uploaded map' : 'Map ' + (this._savedMaps.length + 1));
+      showModal('Save map', [
+        { id:'name', label:'Map name', type:'text', value: suggested }
+      ], 'Save').then(r => {
+        if (!r) return;
+        const name = (r.name || '').trim();
+        if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
+        // Replace any existing entry with the same case-insensitive name so
+        // re-saving overwrites instead of cluttering the list.
+        const lc = name.toLowerCase();
+        this._savedMaps = this._savedMaps.filter(s => (s.name||'').toLowerCase() !== lc);
+        this._savedMaps.unshift({
+          id: 'map_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
+          name,
+          ts: Date.now(),
+          snapshot: this._snapshotMap(),
+        });
+        // Cap library so quota doesn't creep over time. Saved-map snapshots
+        // can be 20-50 KB each with lots of tokens/fog; 40 caps the list at
+        // about 1-2 MB worst case.
+        if (this._savedMaps.length > 40) this._savedMaps.length = 40;
+        this._saveSavedMaps();
+        close();
+        if (typeof showToast === 'function') showToast('Saved "' + name + '"');
+      });
+    });
 
     const searchInput = backdrop.querySelector('#mapsel-search');
     const sel = backdrop.querySelector('#mapsel-adv');
@@ -2023,6 +2225,18 @@ registerPanel('battlemap',{
       } else {
         el.textContent = displayLabel.length>7?displayLabel.slice(0,6)+'…':displayLabel;
       }
+      // Facing indicator — only rendered when t.rotation is set and non-zero
+      // so unrotated tokens don't grow a permanent "pointing north" arrow.
+      // 0° = north, increases clockwise. Drawn as a sibling so the token's
+      // overflow:hidden doesn't clip it and the portrait inside stays
+      // upright while the indicator rotates.
+      if (t.rotation){
+        const facing = document.createElement('div');
+        facing.className = 'map-token-facing' + (t.isPC ? ' pc' : ' npc-t');
+        facing.dataset.tid = t.id;
+        facing.style.cssText = `left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;position:absolute;transform:translate(-50%,-50%) rotate(${t.rotation}deg);pointer-events:none;z-index:2`;
+        stage.appendChild(facing);
+      }
       // Name label rendered as a sibling so it sits BELOW the token circle
       // (the circle has overflow:hidden which would clip an inner label).
       const nameEl = document.createElement('div');
@@ -2218,9 +2432,25 @@ registerPanel('battlemap',{
     b.querySelector('#tp-label').value=t.label;
     b.querySelector('#tp-color').value=t.color;
     b.querySelector('#tp-size').value=t.size||1;
+    // Sync rotation controls — slider + label show the current angle, with
+    // ↺ / ↻ buttons stepping by 45° for quick cardinal/diagonal directions.
+    const rot0 = t.rotation || 0;
+    b.querySelector('#tp-rot').value = rot0;
+    b.querySelector('#tp-rot-val').textContent = rot0 + '°';
+    const applyRot = (deg) => {
+      const norm = ((deg % 360) + 360) % 360;
+      t.rotation = norm;
+      b.querySelector('#tp-rot').value = norm;
+      b.querySelector('#tp-rot-val').textContent = norm + '°';
+      this._saveMap();
+      this._renderTokens();
+    };
     rewire('#tp-label','change',e=>{t.label=e.target.value;b.querySelector('#tp-name').textContent=t.label;this._saveMap();this._renderTokens();});
     rewire('#tp-color','change',e=>{t.color=e.target.value;this._saveMap();this._renderTokens();});
     rewire('#tp-size','change',e=>{t.size=Math.max(1,Math.min(6,parseInt(e.target.value)||1));this._saveMap();this._renderTokens();});
+    rewire('#tp-rot','input',e=>applyRot(parseInt(e.target.value)||0));
+    rewire('#tp-rot-left','click',()=>applyRot((t.rotation || 0) - 45));
+    rewire('#tp-rot-right','click',()=>applyRot((t.rotation || 0) + 45));
     rewire('#tp-kill','click',()=>{t.dead=!t.dead;this._saveMap();this._renderTokens();});
     rewire('#tp-del','click',()=>{
       const i=this._tokens.findIndex(x=>x.id===t.id);
