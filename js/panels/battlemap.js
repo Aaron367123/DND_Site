@@ -2495,7 +2495,7 @@ registerPanel('battlemap',{
       +   tile('grid-square', 'Square', '', this._gridType === 'square', {})
       +   tile('grid-hex',    'Hex',    '', this._gridType === 'hex',    {})
       +   tile('grid-none',   'None',   '', this._gridType === 'none',   {})
-      +   tile('grid-cell',   'Cell',   'Hover highlight', !!this._cellHighlight, {})
+      +   tile('grid-cell',   'Cell',   '', !!this._cellHighlight, {title:'Hover highlight'})
       + '</div>'
       + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)
       + slider('opacity',  'Opacity',   this._gridOpacity, '%', 0, 100)
