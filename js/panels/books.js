@@ -499,10 +499,34 @@ registerPanel('books', {
         return `<section class="adv-section"${idAttr}>${head}${renderChildren(node.entries)}</section>`;
       }
       case 'item': {
-        // 5etools "item" inside a list → bold name + inline body.
-        const name = node.name ? `<strong>${this._inline(node.name)}.</strong> ` : '';
-        const body = (node.entries||[]).map(e => typeof e==='string' ? this._inline(e) : this._renderNode(e)).join(' ');
+        // 5etools "item" inside a list → bold name + inline body. The shape
+        // varies — 3000+ items in the book corpus use `entry` (singular
+        // string) instead of `entries` (array). Honor both so single-line
+        // definitions don't render as just a bold name with no body.
+        const name = node.name ? `<strong>${this._inline(node.name)}${node.nameDot===false?'':'.'}</strong> ` : '';
+        let body = '';
+        if (typeof node.entry === 'string'){
+          body = this._inline(node.entry);
+        } else if (Array.isArray(node.entries)){
+          body = node.entries.map(e => typeof e==='string' ? this._inline(e) : this._renderNode(e)).join(' ');
+        }
         return `<p class="adv-item">${name}${body}</p>`;
+      }
+      case 'abilityGeneric': {
+        // Tiny "10 + modifiers" style rule lines. The whole entry lives in
+        // node.text — there's no entries array — so we render it inline with
+        // an optional bold name prefix.
+        const name = node.name ? `<strong>${this._inline(node.name)}.</strong> ` : '';
+        return `<p class="adv-item">${name}${this._inline(node.text||'')}</p>`;
+      }
+      case 'hr':
+        return '<hr class="adv-hr">';
+      case 'variantInner':
+      case 'variant': {
+        // Inline variant rule callout. variantInner has the name + nested
+        // entries; without the name fallback users lose the heading.
+        const head = node.name ? `<h4 class="adv-variant-head">${this._inline(node.name)}</h4>` : '';
+        return `<aside class="adv-variant">${head}${renderChildren(node.entries)}</aside>`;
       }
       case 'list': {
         const items = (node.items||[]).map(it => {
@@ -526,6 +550,9 @@ registerPanel('books', {
             if (typeof c === 'string') return `<td>${this._inline(c)}</td>`;
             if (c && c.roll && c.roll.exact != null) return `<td>${c.roll.exact}</td>`;
             if (c && c.roll && c.roll.min != null) return `<td>${c.roll.min}–${c.roll.max}</td>`;
+            // Cell objects carry their text in `entry` (singular). Without
+            // this, ~145 tables in the book corpus rendered empty cells.
+            if (c && c.type === 'cell' && typeof c.entry === 'string') return `<td>${this._inline(c.entry)}</td>`;
             if (c && c.type) return `<td>${this._renderNode(c)}</td>`;
             return '<td></td>';
           }).join('');
