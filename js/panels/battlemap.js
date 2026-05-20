@@ -73,6 +73,16 @@ registerPanel('battlemap',{
   // Whether to draw the grid overlay. Some 5etools maps already have a grid
   // baked into the image — the user can hide ours so the two don't clash.
   _showGrid: true,
+  // Grid style: 'square' (classic) | 'hex' (flat-top hexagons) | 'none'.
+  // Persisted; back-compat — loaded from `showGrid` when absent.
+  _gridType: 'square',
+  // Cell-highlight overlay: when true, paints a translucent fill on the cell
+  // under the cursor (square or hex). Helps the DM call out the targeted
+  // square in theater-of-the-mind moments. Persisted.
+  _cellHighlight: false,
+  // Runtime-only hover cell tracker (not persisted). For square grids this is
+  // {col,row}; for hex grids it's {q,r} axial coords.
+  _hoverCell: null,
   // Map image scale (1 = natural pixel size). Persisted; the toolbar slider
   // adjusts it. Aspect ratio is always preserved.
   _bgMapScale: 1,
@@ -122,6 +132,11 @@ registerPanel('battlemap',{
         if(d.fog){this._fog=new Set(d.fog);}else{this._fog=null;}
         this._bgMapPath = d.bgMapPath || null;
         this._showGrid = d.showGrid !== false; // default on
+        // gridType new in v3 — fall back to legacy showGrid (square or none).
+        this._gridType = d.gridType || (this._showGrid ? 'square' : 'none');
+        // Keep the two in sync — 'square' or 'hex' both imply showGrid=true.
+        this._showGrid = this._gridType !== 'none';
+        this._cellHighlight = !!d.cellHighlight;
         this._bgMapScale = d.bgMapScale || 1;
         this._snapToGrid = !!d.snapToGrid;
         this._gridOffsetX = d.gridOffsetX || 0;
@@ -205,7 +220,7 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){}
     this._broadcast();
   },
@@ -454,6 +469,8 @@ registerPanel('battlemap',{
       rows:         this._rows,
       bgColor:      this._bgColor,
       showGrid:     this._showGrid !== false,
+      gridType:     this._gridType || 'square',
+      cellHighlight:!!this._cellHighlight,
       snapToGrid:   !!this._snapToGrid,
       tokens:       JSON.parse(JSON.stringify(this._tokens || [])),
       fog:          this._fog ? Array.from(this._fog) : null,
@@ -485,6 +502,9 @@ registerPanel('battlemap',{
     this._rows         = snap.rows || this._rows;
     this._bgColor      = snap.bgColor || this._bgColor;
     this._showGrid     = snap.showGrid !== false;
+    this._gridType     = snap.gridType || (this._showGrid ? 'square' : 'none');
+    this._showGrid     = this._gridType !== 'none';
+    this._cellHighlight= !!snap.cellHighlight;
     this._snapToGrid   = !!snap.snapToGrid;
     this._tokens       = Array.isArray(snap.tokens) ? JSON.parse(JSON.stringify(snap.tokens)) : [];
     this._fog          = Array.isArray(snap.fog) ? new Set(snap.fog) : null;
@@ -662,6 +682,7 @@ registerPanel('battlemap',{
         if (msg.cols)     this._cols     = msg.cols;
         if (msg.rows)     this._rows     = msg.rows;
         if (msg.bgColor)  this._bgColor  = msg.bgColor;
+        if (msg.gridType){ this._gridType = msg.gridType; this._showGrid = msg.gridType !== 'none'; }
         this._fog = msg.fog ? new Set(msg.fog) : null;
         if (Array.isArray(msg.drawings))   this._drawings   = msg.drawings;
         if (Array.isArray(msg.fogStrokes)) this._fogStrokes = msg.fogStrokes;
@@ -682,6 +703,10 @@ registerPanel('battlemap',{
         }
         // Lightweight repaint — fog + drawings + tokens only. No flicker.
         if (this._body){
+          // Redraw grid canvas so gridType changes (square/hex/none) reflect
+          // on the player side without waiting for a full re-render.
+          const _gridC = this._body.querySelector('#map-canvas');
+          if (_gridC) this._drawGrid(_gridC, this._csScreen());
           this._drawFog();
           if (Array.isArray(msg.drawings)){
             // Stroke now committed → drop the live preview (whichever client's
@@ -726,6 +751,7 @@ registerPanel('battlemap',{
         tokens:this._tokens, cellSize:this._cellSize,
         cols:this._cols, rows:this._rows,
         bgColor:this._bgColor, fog:fogArr,
+        gridType: this._gridType || 'square',
         bgImageData: _mapBgImage?'present':null,
         bgMapPath: this._bgMapPath,
         // Pencil annotations — players see strokes as the DM commits them
@@ -872,7 +898,7 @@ registerPanel('battlemap',{
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
       +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
-      +'<button class="btn icon-btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Show/hide grid overlay">⊞</button>'
+      +'<button class="btn icon-btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Grid style: cycle square → hex → none">⊞</button>'
       +'<button class="btn icon-btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">🧲</button>'
       +(_mapBgImage?'<button class="btn icon-btn '+(this._tool==='align'?'active':'')+'" data-mact="tool-align" style="flex-shrink:0" title="Align grid to printed map grid: click two opposite corners of one cell">📐</button>':'')
       +((this._gridOffsetX||this._gridOffsetY)?'<button class="btn icon-btn" data-mact="reset-align" style="flex-shrink:0" title="Reset grid alignment (offset back to 0,0)">↺</button>':'')
@@ -1036,7 +1062,12 @@ registerPanel('battlemap',{
         this._isFitted = false;
         this._render();
       }
-      else if(act==='toggle-grid'){this._showGrid=!this._showGrid;this._saveMap();this._render();}
+      else if(act==='toggle-grid'){
+        // Cycle square → hex → none → square
+        const next = this._gridType === 'square' ? 'hex' : (this._gridType === 'hex' ? 'none' : 'square');
+        this._gridType = next; this._showGrid = next !== 'none';
+        this._saveMap(); this._render();
+      }
       else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
       else if(act==='reset-align'){
         this._gridOffsetX=0; this._gridOffsetY=0;
@@ -1319,6 +1350,27 @@ registerPanel('battlemap',{
     });
     canvas.addEventListener('mousemove',e=>{
       if(this._isPainting&&this._fogTool)fogPaint(e);
+      // Cell-highlight hover tracking. Cheap: only updates when the cell
+      // under the cursor actually changes, then repaints the grid canvas.
+      if (this._cellHighlight){
+        const rr = canvas.getBoundingClientRect();
+        const cell = this._cellAtPx(e.clientX - rr.left, e.clientY - rr.top);
+        const prev = this._hoverCell;
+        const same = prev && cell && (
+          (cell.col!=null && prev.col===cell.col && prev.row===cell.row) ||
+          (cell.q!=null   && prev.q===cell.q     && prev.r===cell.r)
+        );
+        if (!same){
+          this._hoverCell = cell;
+          this._drawGrid(canvas, this._csScreen());
+        }
+      }
+    });
+    canvas.addEventListener('mouseleave',()=>{
+      if (this._cellHighlight && this._hoverCell){
+        this._hoverCell = null;
+        this._drawGrid(canvas, this._csScreen());
+      }
     });
     document.addEventListener('mouseup',()=>{
       if(this._isPainting){
@@ -1612,8 +1664,10 @@ registerPanel('battlemap',{
       if (k === 'fog-fill'){
         this._fog = new Set(); this._fogStrokes=[]; this._saveMap(); this._drawFog(); this._broadcast(); return;
       }
-      if (k === 'grid-square'){ this._showGrid = true;  this._saveMap(); this._render(); return; }
-      if (k === 'grid-none'){   this._showGrid = false; this._saveMap(); this._render(); return; }
+      if (k === 'grid-square'){ this._gridType = 'square'; this._showGrid = true;  this._saveMap(); this._render(); return; }
+      if (k === 'grid-hex'){    this._gridType = 'hex';    this._showGrid = true;  this._saveMap(); this._render(); return; }
+      if (k === 'grid-none'){   this._gridType = 'none';   this._showGrid = false; this._saveMap(); this._render(); return; }
+      if (k === 'grid-cell'){   this._cellHighlight = !this._cellHighlight; if (!this._cellHighlight) this._hoverCell = null; this._saveMap(); this._render(); return; }
       if (k === 'fog-mode-grid' || k === 'fog-mode-free'){
         this._fogBrushMode = k === 'fog-mode-free' ? 'free' : 'grid';
         this._saveMap(); this._render(); return;
@@ -2156,8 +2210,15 @@ registerPanel('battlemap',{
     canvas.width=W; canvas.height=H;
     ctx.clearRect(0,0,W,H);
 
-    // Grid hidden — still keep the canvas sized and let fog draw on top.
-    if (!this._showGrid){ this._drawFog(); return; }
+    const gt = this._gridType || (this._showGrid ? 'square' : 'none');
+
+    // Grid hidden — still keep the canvas sized, paint the optional hover
+    // highlight, then let fog draw on top.
+    if (gt === 'none' || !this._showGrid){
+      if (this._cellHighlight) this._drawCellHighlight(ctx, cs, gt);
+      this._drawFog();
+      return;
+    }
 
     // Per-user grid opacity (0–100 from the sidebar). Scales the base alpha.
     const op = (this._gridOpacity != null ? this._gridOpacity : 60) / 100;
@@ -2190,14 +2251,130 @@ registerPanel('battlemap',{
     const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
     const offX = (((this._gridOffsetX || 0) * scale) % cs + cs) % cs;
     const offY = (((this._gridOffsetY || 0) * scale) % cs + cs) % cs;
-    for (let x = offX; x <= W + .01; x += cs){
-      ctx.beginPath(); ctx.moveTo(Math.round(x)+.5, 0); ctx.lineTo(Math.round(x)+.5, H); ctx.stroke();
+
+    if (gt === 'hex'){
+      this._drawHexGrid(ctx, cs, W, H, offX, offY);
+    } else {
+      for (let x = offX; x <= W + .01; x += cs){
+        ctx.beginPath(); ctx.moveTo(Math.round(x)+.5, 0); ctx.lineTo(Math.round(x)+.5, H); ctx.stroke();
+      }
+      for (let y = offY; y <= H + .01; y += cs){
+        ctx.beginPath(); ctx.moveTo(0, Math.round(y)+.5); ctx.lineTo(W, Math.round(y)+.5); ctx.stroke();
+      }
     }
-    for (let y = offY; y <= H + .01; y += cs){
-      ctx.beginPath(); ctx.moveTo(0, Math.round(y)+.5); ctx.lineTo(W, Math.round(y)+.5); ctx.stroke();
-    }
+
+    // Cell-highlight overlay (above grid lines, below fog).
+    if (this._cellHighlight) this._drawCellHighlight(ctx, cs, gt);
+
     // Draw fog on top of grid
     this._drawFog();
+  },
+
+  // Flat-top hex tiling. `cs` is the cell size (also the hex's corner-to-corner
+  // width). Columns are spaced by 3/4·cs horizontally; even columns are offset
+  // by half a hex height vertically. Honors gridOffsetX/Y the same way the
+  // square grid does so the two-click align tool keeps working on hex maps.
+  _drawHexGrid(ctx, cs, W, H, offX, offY){
+    const s = cs / 2;                   // corner radius
+    const h = s * Math.sqrt(3);          // flat-to-flat height
+    const colStep = s * 1.5;             // horizontal spacing between columns
+    // Build the six corner deltas once.
+    const corners = [];
+    for (let i=0;i<6;i++){
+      const a = i * Math.PI/3;           // 0, 60, 120, …
+      corners.push([Math.cos(a)*s, Math.sin(a)*s]);
+    }
+    // Start one column / one row off-canvas so partial hexes on the edges
+    // still draw. The offset wrap keeps the pattern aligned with the square
+    // grid the alignment tool produced.
+    const startCol = Math.floor(-offX / colStep) - 1;
+    const endCol   = Math.ceil((W - offX) / colStep) + 1;
+    for (let c = startCol; c <= endCol; c++){
+      const cx = offX + c * colStep;
+      const yShift = (c & 1) ? h/2 : 0;  // odd columns offset
+      const startRow = Math.floor((-offY - yShift) / h) - 1;
+      const endRow   = Math.ceil((H - offY - yShift) / h) + 1;
+      for (let r = startRow; r <= endRow; r++){
+        const cy = offY + yShift + r * h + h/2;
+        ctx.beginPath();
+        ctx.moveTo(cx + corners[0][0], cy + corners[0][1]);
+        for (let i=1;i<6;i++) ctx.lineTo(cx + corners[i][0], cy + corners[i][1]);
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+  },
+
+  // Paint a translucent fill on the cell currently under the cursor. Works
+  // for square and hex; no-op when no hover or when the cursor is outside
+  // the stage.
+  _drawCellHighlight(ctx, cs, gt){
+    const hc = this._hoverCell;
+    if (!hc) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(212,165,116,0.22)';      // soft accent tint
+    ctx.strokeStyle = 'rgba(212,165,116,0.85)';
+    ctx.lineWidth = 2;
+    const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
+    const offX = (((this._gridOffsetX || 0) * scale) % cs + cs) % cs;
+    const offY = (((this._gridOffsetY || 0) * scale) % cs + cs) % cs;
+    if (gt === 'hex'){
+      const s = cs / 2;
+      const h = s * Math.sqrt(3);
+      const colStep = s * 1.5;
+      const cx = offX + hc.q * colStep;
+      const cy = offY + ((hc.q & 1) ? h/2 : 0) + hc.r * h + h/2;
+      ctx.beginPath();
+      for (let i=0;i<6;i++){
+        const a = i * Math.PI/3;
+        const x = cx + Math.cos(a)*s, y = cy + Math.sin(a)*s;
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+    } else {
+      // square (or grid-less — still uses the cellSize box).
+      const x = offX + hc.col * cs, y = offY + hc.row * cs;
+      ctx.beginPath();
+      ctx.rect(x, y, cs, cs);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  },
+
+  // Convert stage-pixel coordinates to the hovered cell. Returns null when
+  // outside the cols×rows envelope. Square → {col,row}; hex → {q,r}.
+  _cellAtPx(px, py){
+    const cs = this._csScreen();
+    const gt = this._gridType || 'square';
+    const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
+    const offX = (((this._gridOffsetX || 0) * scale) % cs + cs) % cs;
+    const offY = (((this._gridOffsetY || 0) * scale) % cs + cs) % cs;
+    if (gt === 'hex'){
+      const s = cs / 2, h = s * Math.sqrt(3), colStep = s * 1.5;
+      // Coarse column candidate, then check neighbors to find the hex whose
+      // center is closest (axis-aligned distance is fine for flat-top tiling).
+      const x = px - offX, y = py - offY;
+      const approxQ = Math.round(x / colStep);
+      let best = null, bestD = Infinity;
+      for (let dq = -1; dq <= 1; dq++){
+        const q = approxQ + dq;
+        const yShift = (q & 1) ? h/2 : 0;
+        const approxR = Math.round((y - yShift - h/2) / h);
+        for (let dr = -1; dr <= 1; dr++){
+          const r = approxR + dr;
+          const cx = q * colStep;
+          const cy = yShift + r * h + h/2;
+          const d = (cx-x)*(cx-x) + (cy-y)*(cy-y);
+          if (d < bestD){ bestD = d; best = {q, r}; }
+        }
+      }
+      return best;
+    }
+    const col = Math.floor((px - offX) / cs);
+    const row = Math.floor((py - offY) / cs);
+    if (col < 0 || row < 0 || col >= this._cols || row >= this._rows) return null;
+    return {col, row};
   },
 
   _drawFog(){
@@ -2315,10 +2492,10 @@ registerPanel('battlemap',{
 
       + '<div class="bm-set-section-head">GRID</div>'
       + '<div class="bm-set-tiles four">'
-      +   tile('grid-square', 'Square', '', this._showGrid !== false, {})
-      +   tile('grid-hex',    'Hex',    '', false, {disabled:true, title:'Hex grid coming soon'})
-      +   tile('grid-none',   'None',   '', this._showGrid === false, {})
-      +   tile('grid-cell',   'Cell',   '', false, {disabled:true, title:'Cell highlight mode coming soon'})
+      +   tile('grid-square', 'Square', '', this._gridType === 'square', {})
+      +   tile('grid-hex',    'Hex',    '', this._gridType === 'hex',    {})
+      +   tile('grid-none',   'None',   '', this._gridType === 'none',   {})
+      +   tile('grid-cell',   'Cell',   'Hover highlight', !!this._cellHighlight, {})
       + '</div>'
       + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)
       + slider('opacity',  'Opacity',   this._gridOpacity, '%', 0, 100)
