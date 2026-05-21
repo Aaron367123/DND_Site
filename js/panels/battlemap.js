@@ -1756,9 +1756,10 @@ registerPanel('battlemap',{
             style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-          <input id="mapsel-adv" list="mapsel-adv-list" autocomplete="off" placeholder="Loading adventures…" disabled
+          <select id="mapsel-adv" disabled
             style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
-          <datalist id="mapsel-adv-list"></datalist>
+            <option value="">Loading adventures…</option>
+          </select>
         </div>
         <div id="mapsel-grid" class="mapsel-grid"></div>
       </div>
@@ -1890,37 +1891,28 @@ registerPanel('battlemap',{
     backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
     backdrop.addEventListener('keydown', e=>{ if (e.key==='Escape') close(); });
 
-    const dlist = backdrop.querySelector('#mapsel-adv-list');
-
-    // Load the adventure manifest once, sort, populate datalist.
+    // Load the adventure manifest once, sort, populate the <select>.
     if (!this._adventures){
       try {
         const res = await fetch('data/adventures.json');
         const j = await res.json();
         this._adventures = (j.adventure || []).slice().sort((a,b)=>a.name.localeCompare(b.name));
       } catch(e) {
-        sel.placeholder = 'Failed to load adventures';
+        sel.innerHTML = '<option value="">Failed to load adventures</option>';
         return;
       }
     }
-    // Datalist option label = display name. Also include the id in parentheses
-    // so duplicates (rare, but possible) stay disambiguated.
-    dlist.innerHTML = this._adventures
-      .map(a=>`<option value="${esc(a.name)} (${esc(a.id)})"></option>`).join('');
+    // <select> options keyed by adventure id so picks are unambiguous.
+    sel.innerHTML = '<option value="">— Pick an adventure —</option>'
+      + this._adventures.map(a => `<option value="${esc(a.id)}">${esc(a.name)} (${esc(a.id)})</option>`).join('');
     sel.disabled = false;
-    sel.placeholder = 'Or pick an adventure…';
     searchInput.focus();
 
-    // Resolve "Lost Mine of Phandelver (LMoP)" → adventure id "LMoP". Falls
-    // back to a name-only match for users who hand-type without the id.
+    // Resolve a select value (= adventure id) to the manifest entry.
     const resolveAdv = (typed) => {
-      if (!typed) return null;
-      const m = typed.match(/\(([^)]+)\)\s*$/);
-      if (m){
-        const found = this._adventures.find(a => a.id === m[1]);
-        if (found) return found;
-      }
-      return this._adventures.find(a => a.name.toLowerCase() === typed.toLowerCase()) || null;
+      const id = (typed || '').trim();
+      if (!id) return null;
+      return this._adventures.find(a => a.id === id) || null;
     };
 
     // Walk an adventure JSON tree and collect every {type:'image', imageType:'map'|'mapPlayer'} entry.
@@ -2167,17 +2159,8 @@ registerPanel('battlemap',{
       renderCards(matches, { showAdv: true, emptyMsg: 'No maps match "'+esc(q)+'".' });
     };
     searchInput.addEventListener('input', e => runSearch(e.target.value));
-    // 'change' fires on blur or when the user picks a suggestion from the
-    // datalist dropdown. 'input' covers the case where typing produces an
-    // exact match — without it, picking from the dropdown via mouse-click in
-    // some browsers doesn't reliably fire 'change' until they tab away.
+    // <select> reliably emits 'change' the moment the user picks an option.
     sel.addEventListener('change', handlePick);
-    sel.addEventListener('input', () => {
-      // Only resolve if the typed value matches an adventure exactly — that's
-      // the case where the user picked from the suggestion list. Otherwise
-      // wait for them to keep typing.
-      if (resolveAdv(sel.value.trim())) handlePick();
-    });
   },
 
   _applyBg(stage,W,H){
