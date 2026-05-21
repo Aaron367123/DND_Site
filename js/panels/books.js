@@ -26,6 +26,12 @@ registerPanel('books', {
     }
     this._render();
     this._loadIndex();
+    // When the 5etools side data finishes loading, re-render the open chapter
+    // so injected class/race/spell/etc. content fills in. One-shot per mount.
+    if (typeof on5eLoaded === 'function' && !this._sideDataHook){
+      this._sideDataHook = true;
+      on5eLoaded(() => { if (this._body && this._currentAdvId) this._render(); });
+    }
   },
   unmount(){ this._body = null; },
 
@@ -191,8 +197,9 @@ registerPanel('books', {
         <span class="adv-chapter-name">${esc(c.name||'Untitled')}</span>
       </button>`).join('');
 
+    const extraHtml = ch ? this._injectChapterReferenceContent(ch, adv) : '';
     const contentHtml = ch
-      ? `<h2 class="adv-content-title">${esc(ch.name||'')}</h2>${this._renderChapterEntries(ch)}`
+      ? `<h2 class="adv-content-title">${esc(ch.name||'')}</h2>${this._renderChapterEntries(ch)}${extraHtml}`
       : '<div class="empty-state" style="padding:30px">Empty chapter.</div>';
 
     b.innerHTML = `
@@ -633,6 +640,141 @@ registerPanel('books', {
       return '<div class="empty-state" style="padding:20px;color:var(--text-muted)">No content.</div>';
     }
     return ch.entries.map(e => this._renderNode(e)).join('');
+  },
+
+  // Many 5etools books — most notably the PHB / DMG — store only chapter
+  // intros and rules text. The actual class/race/spell/item/etc. content
+  // lives in separate side files (data/class/*, data/spells/*, etc.) and is
+  // referenced via {@class Foo} tags. Without this injection step the user
+  // sees "Classes" with three paragraphs of intro and nothing else.
+  //
+  // We detect intent from the chapter name, pull matching rows from _5eData
+  // filtered by the book's id (= source), and render them with the existing
+  // detail renderers from search.js. Result: each class chapter shows full
+  // class progression + every subclass; each spell chapter shows every spell.
+  _injectChapterReferenceContent(chapter, book){
+    if (typeof _5eData === 'undefined' || !_5eLoaded || !chapter || !book) return '';
+    const name = String(chapter.name || '').toLowerCase();
+    const bookId = String(book.id || '').toLowerCase();
+    if (!bookId) return '';
+    const matchSource = d => String(d._source || '').toLowerCase() === bookId;
+
+    // Pretty-print a list of rows under a single category. `renderer(d)`
+    // returns HTML; we wrap each with its name + meta header so the page
+    // reads like a normal book chapter.
+    const renderRows = (rows, renderer, headingLvl) => {
+      const tag = 'h' + (headingLvl || 3);
+      return rows.map(d => {
+        const meta = d.meta ? `<div class="adv-ref-meta">${esc(d.meta)}</div>` : '';
+        let body = '';
+        try { body = renderer(d) || ''; } catch(e){ body = ''; }
+        if (!body) return '';
+        return `<section class="adv-ref-block">
+          <${tag} class="adv-ref-head">${esc(d.name)}</${tag}>
+          ${meta}
+          <div class="adv-ref-body">${body}</div>
+        </section>`;
+      }).join('');
+    };
+
+    let out = '';
+
+    // ─── Classes (+ subclasses nested under each parent) ─────────────────────
+    if (/^(classes?|character classes)/.test(name)){
+      // Parent classes have classFeatures[] in _raw; subclasses have
+      // subclassFeatures[]. Bucket and pair them by className.
+      const all = _5eData.filter(d => d.cat === 'class' && matchSource(d));
+      const parents = all.filter(d => d._raw && Array.isArray(d._raw.classFeatures));
+      const subsByClass = {};
+      all.filter(d => d._raw && Array.isArray(d._raw.subclassFeatures)).forEach(d => {
+        const cn = String(d._raw.className||'').toLowerCase();
+        (subsByClass[cn] = subsByClass[cn] || []).push(d);
+      });
+      parents.sort((a,b) => a.name.localeCompare(b.name));
+      parents.forEach(p => {
+        let body = '';
+        try { body = (typeof renderClassFull === 'function') ? renderClassFull(p) : ''; } catch(e){}
+        out += `<section class="adv-ref-block adv-ref-class">
+          <h2 class="adv-ref-head">${esc(p.name)}</h2>
+          <div class="adv-ref-body">${body}</div>`;
+        const subs = subsByClass[p.name.toLowerCase()] || [];
+        if (subs.length){
+          subs.sort((a,b) => a.name.localeCompare(b.name));
+          out += `<h3 class="adv-ref-subhead">${esc(p.name)} Subclasses</h3>`;
+          subs.forEach(s => {
+            let sb = '';
+            try { sb = (typeof renderSubclassFull === 'function') ? renderSubclassFull(s) : ''; } catch(e){}
+            out += `<section class="adv-ref-block adv-ref-subclass">
+              <h4 class="adv-ref-head">${esc(s.name)}</h4>
+              <div class="adv-ref-body">${sb}</div>
+            </section>`;
+          });
+        }
+        out += '</section>';
+      });
+    }
+
+    // ─── Races (+ subraces grouped under each parent race) ───────────────────
+    else if (/^(races?|character races)/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'race' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      out += renderRows(rows, renderRaceFull, 2);
+    }
+
+    // ─── Spells ──────────────────────────────────────────────────────────────
+    else if (/^spells?$/.test(name) || /^spell\s*lists?$/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'spell' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      out += renderRows(rows, renderSpellFull, 3);
+    }
+
+    // ─── Equipment / Items ───────────────────────────────────────────────────
+    else if (/^(equipment|magic items?|items?|treasure|magical items?)/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'item' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      out += renderRows(rows, renderItemFull, 3);
+    }
+
+    // ─── Backgrounds ─────────────────────────────────────────────────────────
+    else if (/(personality and background|backgrounds?)/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'background' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      out += renderRows(rows, renderBackgroundFull, 3);
+    }
+
+    // ─── Feats (PHB calls the chapter "Customization Options") ───────────────
+    else if (/(feats?|customization options)/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'feat' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      out += renderRows(rows, renderFeatFull, 3);
+    }
+
+    // ─── Conditions ──────────────────────────────────────────────────────────
+    else if (/^conditions?$/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'condition' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      out += renderRows(rows, renderConditionFull, 3);
+    }
+
+    // ─── Deities ─────────────────────────────────────────────────────────────
+    else if (/(gods of the multiverse|deities|pantheons?)/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'deity' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      out += renderRows(rows, renderDeityFull, 3);
+    }
+
+    // ─── Monsters / Bestiary ─────────────────────────────────────────────────
+    else if (/(monsters?|bestiary|creatures?)/.test(name)){
+      const rows = _5eData.filter(d => d.cat === 'monster' && matchSource(d));
+      rows.sort((a,b) => a.name.localeCompare(b.name));
+      // Monster renderer expects a second arg (localData); empty object is fine.
+      out += renderRows(rows, d => renderMonsterFull(d, {}), 3);
+    }
+
+    if (out){
+      return `<div class="adv-ref-injected"><div class="adv-ref-note">📚 The following content is sourced from the side data files (5etools convention) since the book file only stores chapter intros.</div>${out}</div>`;
+    }
+    return '';
   },
 
   // Print/export — same flow as Adventures (clone). Picker → new tab with

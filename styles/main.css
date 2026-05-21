@@ -1394,6 +1394,19 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .adv-content .adv-inset-readaloud{background:rgba(212,165,116,.06);border-color:rgba(212,165,116,.35)}
 .adv-content .adv-inset-head{font-weight:600;font-size:13px;color:var(--accent);margin-bottom:6px}
 .adv-content .adv-hr{border:0;border-top:1px solid var(--border);margin:14px 0}
+.adv-content .adv-ref-injected{margin-top:24px;border-top:1px dashed var(--border);padding-top:16px}
+.adv-content .adv-ref-note{font-size:11px;color:var(--text-dim);background:var(--panel-2);border:1px solid var(--border);padding:8px 12px;border-radius:4px;margin-bottom:18px}
+.adv-content .adv-ref-block{margin:0 0 22px}
+.adv-content .adv-ref-block.adv-ref-class{padding-top:8px;border-top:2px solid var(--accent);margin-top:30px}
+.adv-content .adv-ref-block.adv-ref-subclass{margin:8px 0 18px;padding:8px 12px;background:var(--panel-2);border-left:3px solid var(--accent);border-radius:0 4px 4px 0}
+.adv-content .adv-ref-head{color:var(--accent);margin:8px 0 6px}
+.adv-content h2.adv-ref-head{font-size:22px;border-bottom:1px solid var(--border);padding-bottom:4px}
+.adv-content h3.adv-ref-head{font-size:16px}
+.adv-content h4.adv-ref-head{font-size:14px;margin:6px 0 4px}
+.adv-content .adv-ref-subhead{color:var(--text);margin:16px 0 8px;font-size:15px;border-bottom:1px dashed var(--border);padding-bottom:3px}
+.adv-content .adv-ref-meta{font-size:11px;color:var(--text-muted);margin-bottom:6px;font-style:italic}
+.adv-content .adv-ref-body{font-size:13px;line-height:1.55}
+.adv-content .adv-ref-body .detail-statblock,.adv-content .adv-ref-body .detail-table{margin:8px 0}
 .adv-content .adv-variant{background:rgba(212,165,116,.05);border-left:3px solid var(--accent);padding:8px 14px;margin:12px 0;border-radius:0 4px 4px 0}
 .adv-content .adv-variant-head{margin:0 0 6px;color:var(--accent);font-size:13px;font-weight:600}
 .adv-content .adv-quote{border-left:3px solid var(--accent);background:rgba(212,165,116,.04);padding:8px 14px;margin:10px 0;color:var(--text-muted);font-style:italic}
