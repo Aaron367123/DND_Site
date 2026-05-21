@@ -1756,6 +1756,8 @@ registerPanel('battlemap',{
             style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <input id="mapsel-adv-filter" type="search" autocomplete="off" placeholder="Filter adventures…"
+            style="width:170px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
           <select id="mapsel-adv" disabled
             style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
             <option value="">Loading adventures…</option>
@@ -1856,6 +1858,13 @@ registerPanel('battlemap',{
       reader.onload = ev => {
         const img = new Image();
         img.onload = () => {
+          // Clear any stale stage background NOW so we don't see the old map
+          // peek through while the new natural-size calculation runs. Without
+          // this, replacing a 5etools map with an upload sometimes leaves the
+          // old background painted because CSS backgroundImage was cached on
+          // the existing stage element.
+          const oldStage = this._body?.querySelector('#map-stage');
+          if (oldStage){ oldStage.style.backgroundImage = 'none'; }
           _mapBgImage = img;
           this._bgMapNaturalW = img.naturalWidth;
           this._bgMapNaturalH = img.naturalHeight;
@@ -1867,6 +1876,10 @@ registerPanel('battlemap',{
           this._gridOffsetX = 0;
           this._gridOffsetY = 0;
           this._saveMap();
+          // Full re-render rebuilds the stage from scratch so the new image's
+          // dimensions, the grid, and the bg URL are all consistent. Then a
+          // fit-to-view call sizes it sensibly.
+          this._render();
           this._fitMapToView();
           close();
           showToast('Map loaded — this session only');
@@ -1902,10 +1915,45 @@ registerPanel('battlemap',{
         return;
       }
     }
-    // <select> options keyed by adventure id so picks are unambiguous.
-    sel.innerHTML = '<option value="">— Pick an adventure —</option>'
-      + this._adventures.map(a => `<option value="${esc(a.id)}">${esc(a.name)} (${esc(a.id)})</option>`).join('');
+    // Render the <select> options. Helper takes an optional filter substring
+    // so the side input can narrow the visible adventures without nuking the
+    // current selection (we just hide non-matches via the hidden attribute).
+    const renderAdvOptions = (filterStr) => {
+      const q = String(filterStr||'').trim().toLowerCase();
+      const visible = q
+        ? this._adventures.filter(a =>
+            (a.name||'').toLowerCase().includes(q) ||
+            (a.id||'').toLowerCase().includes(q) ||
+            (a.storyline||'').toLowerCase().includes(q))
+        : this._adventures;
+      const placeholder = q
+        ? `<option value="">— ${visible.length} match${visible.length===1?'':'es'} —</option>`
+        : '<option value="">— Pick an adventure —</option>';
+      sel.innerHTML = placeholder
+        + visible.map(a => `<option value="${esc(a.id)}">${esc(a.name)} (${esc(a.id)})</option>`).join('');
+    };
+    renderAdvOptions('');
     sel.disabled = false;
+
+    // Filter input — repaints the options list on every keystroke. If the
+    // narrowed list still contains the currently picked adventure, leave the
+    // pick alone; otherwise reset to the placeholder so the user notices.
+    const advFilter = backdrop.querySelector('#mapsel-adv-filter');
+    if (advFilter){
+      advFilter.addEventListener('input', e => {
+        const prev = sel.value;
+        renderAdvOptions(e.target.value);
+        if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+      });
+      // Enter in the filter input auto-picks the first match (if any) — quick
+      // keyboard-only flow.
+      advFilter.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        const first = Array.from(sel.options).find(o => o.value);
+        if (first){ sel.value = first.value; sel.dispatchEvent(new Event('change')); }
+      });
+    }
+
     searchInput.focus();
 
     // Resolve a select value (= adventure id) to the manifest entry.

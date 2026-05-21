@@ -344,9 +344,10 @@ function openTutorial(startIdx) {
   };
   const clearSpotlight = () => {
     if (spotlight) spotlight.style.display = 'none';
-    // Restore default centered modal position.
+    // Restore default centered modal position + restore the backdrop's dim.
     modal.classList.remove('tutorial-modal-corner');
     modal.style.left = modal.style.top = modal.style.right = modal.style.bottom = '';
+    backdrop.classList.remove('tutorial-spotlight-active');
   };
 
   const paint = () => {
@@ -367,6 +368,10 @@ function openTutorial(startIdx) {
     if (p.target){
       const el = document.querySelector(p.target);
       if (el){
+        // Some panels (e.g. dock buttons) are visible but their parent might
+        // be collapsed offscreen — `scrollIntoView` ensures the spotlight
+        // points at something the user can actually see.
+        try { el.scrollIntoView({block:'nearest', inline:'nearest'}); } catch(e){}
         const r = el.getBoundingClientRect();
         if (r.width > 0 && r.height > 0){
           const pad = 6;
@@ -377,8 +382,10 @@ function openTutorial(startIdx) {
           s.style.width  = (r.width  + pad*2) + 'px';
           s.style.height = (r.height + pad*2) + 'px';
           // Pin the modal to the corner furthest from the target so it
-          // doesn't cover the highlighted element.
+          // doesn't cover the highlighted element. Drop the backdrop dim so
+          // the spotlight's box-shadow is the only thing darkening the page.
           modal.classList.add('tutorial-modal-corner');
+          backdrop.classList.add('tutorial-spotlight-active');
           const vw = window.innerWidth, vh = window.innerHeight;
           const tx = r.left + r.width / 2, ty = r.top + r.height / 2;
           const right  = tx < vw / 2; // target on left → modal goes right

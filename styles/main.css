@@ -1727,8 +1727,12 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 }
 /* When the tutorial card pins to a corner (because a spotlight is active),
    we override the default modal-backdrop centering and shrink the
-   backdrop's own dim so the spotlight provides the only darkening. */
-.modal-backdrop:has(.tutorial-modal-corner){background:transparent}
+   backdrop's own dim so the spotlight provides the only darkening.
+   `:has()` is unreliable in some browsers (Firefox <121, older Chromium
+   embeds) so the class is also applied via JS as a belt-and-suspenders. */
+.modal-backdrop:has(.tutorial-modal-corner),
+.modal-backdrop.tutorial-spotlight-active{background:transparent;pointer-events:none}
+.modal-backdrop.tutorial-spotlight-active .tutorial-modal{pointer-events:auto}
 .tutorial-modal-corner{
   position:fixed!important;
   max-width:420px;
