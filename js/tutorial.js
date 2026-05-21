@@ -47,7 +47,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'The dock & floating windows',
     icon: '🪟',
-    target: '.dock',
+    target: '.panel-dock',
     body: `
       <p>The <strong>dock on the left</strong> opens panels. Each panel becomes a floating
       window you can:</p>
@@ -67,7 +67,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Combat Tracker ⚔',
     icon: '⚔',
-    target: '[data-panel="combat"]',
+    target: '.window[data-panel="combat"], .dock-btn[data-panel="combat"]',
+    panel: 'combat',
     body: `
       <p>Run encounters here. Add combatants by:</p>
       <ul>
@@ -85,7 +86,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Party Tracker ♥',
     icon: '♥',
-    target: '[data-panel="party"]',
+    target: '.window[data-panel="party"], .dock-btn[data-panel="party"]',
+    panel: 'party',
     body: `
       <p>Cards for your PCs. Each card shows HP/Max HP (with a bar), AC, initiative, speed,
       passive perception, and gold. Click into a card for the full sheet:</p>
@@ -107,7 +109,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Bestiary 🐲',
     icon: '🐲',
-    target: '[data-panel="bestiary"]',
+    target: '.window[data-panel="bestiary"], .dock-btn[data-panel="bestiary"]',
+    panel: 'bestiary',
     body: `
       <p>Your personal monster shelf. Use it to bookmark monsters you'll need this session
       so you don't have to search for them again.</p>
@@ -121,7 +124,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'NPC Library 👤 & Generator 🎲',
     icon: '👤',
-    target: '[data-panel="npclib"]',
+    target: '.window[data-panel="npclib"], .dock-btn[data-panel="npclib"]',
+    panel: 'npclib',
     body: `
       <p><strong>NPC Library</strong> stores recurring characters with name, role, group,
       attitude (Ally / Friendly / Neutral / Hostile / Imprisoned / Unknown), HP/AC, tags,
@@ -134,7 +138,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Loot Tracker 💰',
     icon: '💰',
-    target: '[data-panel="loot"]',
+    target: '.window[data-panel="loot"], .dock-btn[data-panel="loot"]',
+    panel: 'loot',
     body: `
       <p>Track party treasure with rich per-item state.</p>
       <ul>
@@ -157,7 +162,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Encounter Builder ⚡',
     icon: '⚡',
-    target: '[data-panel="encounter"]',
+    target: '.window[data-panel="encounter"], .dock-btn[data-panel="encounter"]',
+    panel: 'encounter',
     body: `
       <p>Plan a balanced fight before pushing it to combat. Set your party level and size,
       then add monsters with counts. The panel calculates:</p>
@@ -173,7 +179,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Session Notes 📝',
     icon: '📝',
-    target: '[data-panel="notes"]',
+    target: '.window[data-panel="notes"], .dock-btn[data-panel="notes"]',
+    panel: 'notes',
     body: `
       <p>Markdown notes with a folder tree. Click any line to edit; the toolbar provides
       bold, italic, headings, lists, quotes, and dividers. Use <kbd>Ctrl</kbd>+<kbd>B</kbd> /
@@ -186,7 +193,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Battle Map 🗺',
     icon: '🗺',
-    target: '[data-panel="battlemap"]',
+    target: '.window[data-panel="battlemap"], .dock-btn[data-panel="battlemap"]',
+    panel: 'battlemap',
     body: `
       <p>Tactical canvas with grid, tokens, fog of war, and freehand annotations.</p>
       <ul>
@@ -224,7 +232,8 @@ const TUTORIAL_PAGES = [
   {
     title: 'Soundboard 🔊',
     icon: '🔊',
-    target: '[data-panel="soundboard"]',
+    target: '.window[data-panel="soundboard"], .dock-btn[data-panel="soundboard"]',
+    panel: 'soundboard',
     body: `
       <p>Ambient sound during sessions. Two libraries:</p>
       <ul>
@@ -365,8 +374,26 @@ function openTutorial(startIdx) {
     // and that target is currently in the DOM and visible. Otherwise the
     // default centered-modal-over-darkened-backdrop layout takes over.
     clearSpotlight();
+    // If the page calls out a panel and the panel is closed, nudge it open so
+    // the spotlight has a real window to land on rather than a tiny dock pill.
+    // Skips when the user has explicitly closed it just now (no perfect signal
+    // for that — `ensurePanel` always opens, which is the intent here).
+    if (p.panel && typeof ensurePanel === 'function'){
+      try { ensurePanel(p.panel); } catch(e){}
+    }
     if (p.target){
-      const el = document.querySelector(p.target);
+      // Multi-selector targets resolve in *selector order*, not DOM order, so
+      // an open window wins over the always-present dock button.
+      const candidates = String(p.target).split(',').map(s => s.trim()).filter(Boolean);
+      let el = null;
+      for (const sel of candidates){
+        const found = document.querySelector(sel);
+        if (found){
+          const r = found.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0){ el = found; break; }
+          if (!el) el = found; // fallback if nothing visible matches later
+        }
+      }
       if (el){
         // Some panels (e.g. dock buttons) are visible but their parent might
         // be collapsed offscreen — `scrollIntoView` ensures the spotlight
