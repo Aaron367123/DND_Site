@@ -1150,6 +1150,7 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .bm-set-head{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px}
 .bm-set-section-head{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);font-weight:600;margin:10px 0 4px;text-align:center}
 .bm-set-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.bm-set-tiles.two{grid-template-columns:repeat(2,1fr)}
 .bm-set-tiles.four{grid-template-columns:repeat(4,1fr)}
 .bm-set-tile{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px 4px;cursor:pointer;color:var(--text);font-family:inherit;text-align:center;display:flex;flex-direction:column;gap:2px;align-items:center;transition:border-color .12s,background .12s}
 .bm-set-tile:hover:not(.disabled):not(:disabled){border-color:var(--accent);background:var(--panel-3)}

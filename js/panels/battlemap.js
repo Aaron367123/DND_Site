@@ -2506,13 +2506,13 @@ registerPanel('battlemap',{
       + '</div>'
 
       + '<div class="bm-set-section-head">BRUSH MODE</div>'
-      + '<div class="bm-set-tiles">'
+      + '<div class="bm-set-tiles two">'
       +   tile('fog-mode-grid', 'Grid', 'Snap to cells', this._fogBrushMode==='grid', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
       +   tile('fog-mode-free', 'Free', 'Pixel-level',   this._fogBrushMode==='free', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
       + '</div>'
 
       + '<div class="bm-set-section-head">BRUSH SHAPE</div>'
-      + '<div class="bm-set-tiles">'
+      + '<div class="bm-set-tiles two">'
       +   tile('fog-shape-square', 'Square', '', this._fogBrushShape==='square', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
       +   tile('fog-shape-circle', 'Circle', '', this._fogBrushShape==='circle', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
       + '</div>'
