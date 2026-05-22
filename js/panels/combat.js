@@ -20,16 +20,8 @@ registerPanel('combat',{
     this._body=null;
   },
 
-  // Window-actions menu — surfaces the PiP toggle in the ⋯ overflow menu.
-  // window-manager.js looks for this `menuItems` hook on each panel def.
-  menuItems(){
-    if (!('documentPictureInPicture' in window)) return [];
-    return [
-      this._pipWin
-        ? { label: '⧉ Bring back from PiP', run: () => this._closePiP() }
-        : { label: '⧉ Pop out to PiP',      run: () => this._openPiP() },
-    ];
-  },
+  // (PiP menu item is merged into the main `menuItems()` further down so the
+  // two definitions don't clobber each other.)
 
   // ─── Picture-in-Picture ───────────────────────────────────────────────────
   // Document PiP lets the combat tracker float in a small always-on-top
@@ -128,7 +120,14 @@ registerPanel('combat',{
     if (document.body.classList.contains('player-mode')) return [];
     const m = this._statsMode();
     const dot = active => active ? '●' : '○';
-    return [
+    const items = [];
+    // PiP toggle goes first so it's easy to find. Shown even when the
+    // Document PiP API isn't present — the click handler prints a clear
+    // toast in that case rather than silently hiding the feature.
+    items.push(this._pipWin
+      ? { label: '⧉ Bring back from PiP', run: () => this._closePiP() }
+      : { label: '⧉ Pop out to PiP (always-on-top)', run: () => this._openPiP() });
+    items.push(
       { label: dot(m==='show')    + ' Monster HP/AC: Show',
         run: () => this._setStatsMode('show') },
       { label: dot(m==='conceal') + ' Monster HP/AC: Conceal (Bloodied / Wounded / …)',
@@ -139,7 +138,8 @@ registerPanel('combat',{
         run: () => this._manageHealthTiers() },
       { label: '⚙ Manage quick-pick names…',
         run: () => this._manageQuickNames() },
-    ];
+    );
+    return items;
   },
 
   // Qualitative HP tier for "Conceal" mode. Tiers are user-configurable
