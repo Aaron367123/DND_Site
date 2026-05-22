@@ -1713,7 +1713,13 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .ctx-menu-item.checked{color:var(--accent)}
 
 /* ============ TUTORIAL ============ */
-.tutorial-modal{max-width:560px;width:92%;padding:0;display:flex;flex-direction:column;max-height:82vh;overflow:hidden}
+.tutorial-modal{max-width:560px;width:92%;padding:0;display:flex;flex-direction:column;max-height:82vh;overflow:hidden;position:relative;z-index:9999;background:var(--panel);box-shadow:0 18px 50px rgba(0,0,0,.75),0 0 0 1px var(--accent);transition:transform .25s ease, top .25s ease, bottom .25s ease}
+/* Docked modes — used while a spotlight is active. Card occupies one of just
+   two positions (top-center / bottom-center) to keep the tour feeling stable
+   instead of jumpy. CSS transition smooths the rare flip. */
+.tutorial-modal-docked{position:fixed!important;left:50%!important;transform:translateX(-50%);margin:0!important;max-width:560px;max-height:42vh}
+.tutorial-modal-dock-bottom{bottom:24px;top:auto!important}
+.tutorial-modal-dock-top{top:24px;bottom:auto!important}
 /* Spotlight cutout — overlays the workspace, dims everything except the
    target element with a giant box-shadow trick (huge spread + transparent
    inside = "punch a hole"). Click-through so the user can still see the

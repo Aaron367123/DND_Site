@@ -354,7 +354,7 @@ function openTutorial(startIdx) {
   const clearSpotlight = () => {
     if (spotlight) spotlight.style.display = 'none';
     // Restore default centered modal position + restore the backdrop's dim.
-    modal.classList.remove('tutorial-modal-corner');
+    modal.classList.remove('tutorial-modal-corner', 'tutorial-modal-docked', 'tutorial-modal-dock-top', 'tutorial-modal-dock-bottom');
     modal.style.left = modal.style.top = modal.style.right = modal.style.bottom = '';
     backdrop.classList.remove('tutorial-spotlight-active');
   };
@@ -374,6 +374,11 @@ function openTutorial(startIdx) {
     // and that target is currently in the DOM and visible. Otherwise the
     // default centered-modal-over-darkened-backdrop layout takes over.
     clearSpotlight();
+    // Default position for every page: docked to the bottom-center. This is
+    // the stable home — pages without a target keep it here, pages with a
+    // target on the bottom half flip it to top-center. Two positions total
+    // across the whole tour.
+    modal.classList.add('tutorial-modal-docked', 'tutorial-modal-dock-bottom');
     // If the page calls out a panel and the panel is closed, nudge it open so
     // the spotlight has a real window to land on rather than a tiny dock pill.
     // Skips when the user has explicitly closed it just now (no perfect signal
@@ -408,17 +413,21 @@ function openTutorial(startIdx) {
           s.style.top    = (r.top    - pad) + 'px';
           s.style.width  = (r.width  + pad*2) + 'px';
           s.style.height = (r.height + pad*2) + 'px';
-          // Pin the modal to the corner furthest from the target so it
-          // doesn't cover the highlighted element. Drop the backdrop dim so
-          // the spotlight's box-shadow is the only thing darkening the page.
-          modal.classList.add('tutorial-modal-corner');
+          // Drop the backdrop dim — the spotlight's box-shadow now provides
+          // the only darkening, so the workspace shows through the hole.
           backdrop.classList.add('tutorial-spotlight-active');
-          const vw = window.innerWidth, vh = window.innerHeight;
-          const tx = r.left + r.width / 2, ty = r.top + r.height / 2;
-          const right  = tx < vw / 2; // target on left → modal goes right
-          const bottom = ty < vh / 2; // target on top → modal goes bottom
-          modal.style[right ? 'right' : 'left'] = '24px';
-          modal.style[bottom ? 'bottom' : 'top'] = '24px';
+          // Predictable card position: docked-bottom by default (set above),
+          // flips to docked-top only when the spotlighted target is itself
+          // in the bottom half of the viewport (so we don't cover it). The
+          // card lives in one of just TWO places across the whole tour —
+          // easy to anticipate, not a chase. A CSS transition smooths the
+          // rare top↔bottom flip.
+          const vh = window.innerHeight;
+          const ty = r.top + r.height / 2;
+          if (ty > vh * 0.55){
+            modal.classList.remove('tutorial-modal-dock-bottom');
+            modal.classList.add('tutorial-modal-dock-top');
+          }
         }
       }
     }
