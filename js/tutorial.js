@@ -26,7 +26,7 @@ const TUTORIAL_PAGES = [
   {
     title: 'Search bar',
     icon: '🔎',
-    target: '#search-input',
+    target: '#float-search-btn, #search-input',
     body: `
       <p>Press <kbd>/</kbd> any time to focus the search bar (top-left).
       It searches the full 5etools dataset:</p>
