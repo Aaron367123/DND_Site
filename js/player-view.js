@@ -28,7 +28,8 @@ let _playerVisible = null; // populated in initPlayerView
 
 function _applySharedPanelsToPlayerView(){
   const shared = new Set(state.sharedPanels || []);
-  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const isMobile = window.matchMedia('(max-width: 768px)').matches
+    || window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
   // First time: default to first shared panel on mobile, all on desktop.
   if (_playerVisible == null){
     if (isMobile){
@@ -40,6 +41,15 @@ function _applySharedPanelsToPlayerView(){
   }
   // Remove anything from _playerVisible that's no longer shared.
   for (const id of [..._playerVisible]) if (!shared.has(id)) _playerVisible.delete(id);
+  // Mobile invariant: at most ONE panel visible at a time. Without this,
+  // a desktop visit's saved set (every shared panel) carries over into the
+  // next mobile visit and stacks 4–5 fullscreen windows on top of each
+  // other — the user's complaint. Always trim to the first kept panel
+  // when the viewport is mobile-sized.
+  if (isMobile && _playerVisible.size > 1){
+    const keep = [..._playerVisible][0];
+    _playerVisible = new Set([keep]);
+  }
 
   const desired = new Set([..._playerVisible].filter(id => shared.has(id)));
   const open = new Set(Array.from(document.querySelectorAll('.window[data-panel]'))

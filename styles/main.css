@@ -362,6 +362,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
      of a fullscreen panel. */
   body.player-mode .workspace{overflow-x:hidden;overflow-y:auto}
   body.player-mode .workspace-canvas{width:100vw}
+  /* Collapse the desktop 2-column grid (dock-w + workspace) to a single
+     column on mobile. Without this, the workspace canvas inherits a 44px
+     left margin from `grid-template-columns: var(--dock-w) 1fr` and the
+     fullscreen panel ends up offset by 44px on the x-axis. */
+  body.player-mode .app{grid-template-columns:1fr !important;grid-template-areas:"workspace" !important}
 }
 
 /* ============ MOBILE LANDSCAPE PLAYER VIEW ============ */
@@ -419,6 +424,10 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 
   /* Empty state shouldn't sit behind the right dock. */
   body.player-mode #pv-empty{padding:0;padding-right:64px}
+
+  /* Collapse desktop 2-column grid same as portrait — the side dock is
+     position:fixed so the grid doesn't need to reserve a column for it. */
+  body.player-mode .app{grid-template-columns:1fr !important;grid-template-areas:"workspace" !important}
 }
 
 /* ============ MOBILE BATTLE MAP TOUCH BEHAVIOR ============ */
