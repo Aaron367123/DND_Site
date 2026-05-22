@@ -217,8 +217,17 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 .pv-dock-btn.active{background:var(--panel-3);color:var(--accent);border-color:var(--accent)}
 /* Mobile-only one-time hint that points to the player dock. Fades in, sits
    above the dock chips, auto-dismisses after 6s or on first dock interaction. */
-#pv-dock-hint{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:rgba(212,165,116,.95);color:#1a1a1a;font-size:12px;font-weight:600;padding:8px 14px;border-radius:18px;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:9100;animation:pvHintIn .25s ease-out;pointer-events:none}
+#pv-dock-hint{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom, 0px));left:50%;transform:translateX(-50%);background:rgba(212,165,116,.95);color:#1a1a1a;font-size:12px;font-weight:600;padding:8px 14px;border-radius:18px;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:9100;animation:pvHintIn .25s ease-out;pointer-events:none;max-width:80vw;text-align:center}
 @keyframes pvHintIn { from{opacity:0;transform:translate(-50%,8px)} to{opacity:1;transform:translate(-50%,0)} }
+/* Landscape: dock is on the right, so the hint flips to point at it. */
+@media (max-height: 820px) and (orientation: landscape) and (pointer: coarse){
+  #pv-dock-hint{
+    bottom:auto;top:50%;
+    left:auto;right:calc(64px + env(safe-area-inset-right, 0px));
+    transform:translateY(-50%);
+  }
+  @keyframes pvHintIn { from{opacity:0;transform:translate(8px,-50%)} to{opacity:1;transform:translate(0,-50%)} }
+}
 /* Desktop player-view: dock is a full-height left-edge sidebar matching the
    DM, so leave it fully visible (no fade). Mobile rules below override. */
 @media (min-width: 769px){
@@ -235,10 +244,18 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 @media (max-width: 768px){
   body.player-mode .window{
     left:0 !important; top:0 !important;
-    width:100vw !important; height:calc(100vh - 64px) !important;
+    width:100vw !important;
+    /* Account for the bottom dock (64px) plus the iPhone home indicator
+       safe-area inset so panel content never sits under it. */
+    height:calc(100vh - 64px - env(safe-area-inset-bottom, 0px)) !important;
     border-radius:0;
     border-left:none;border-right:none;border-top:none;
     box-shadow:none;
+  }
+  /* Push panel body content clear of the notch on landscape iPhones. */
+  body.player-mode .window-body{
+    padding-left:env(safe-area-inset-left, 0px);
+    padding-right:env(safe-area-inset-right, 0px);
   }
   /* Hide resize handles */
   body.player-mode .rh{display:none}
@@ -249,11 +266,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   body.player-mode .pv-dock{
     flex-direction:row;
     left:0;right:0;bottom:0;top:auto;
-    height:64px;
+    height:calc(64px + env(safe-area-inset-bottom, 0px));
     width:100%;
     border-radius:0;
     border-left:none;border-right:none;border-bottom:none;
-    padding:8px;
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
     overflow-x:auto;overflow-y:hidden;
     gap:8px;
     justify-content:flex-start;
@@ -268,9 +285,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
     font-size:20px;
     flex-shrink:0;
   }
-  /* Float toolbar — compact, top-right */
+  /* Float toolbar — compact, top-right. Add safe-area offset so the toolbar
+     clears the notch on landscape iPhones and the status bar on iPad. */
   body.player-mode .float-toolbar{
-    top:6px;right:6px;
+    top:calc(6px + env(safe-area-inset-top, 0px));
+    right:calc(6px + env(safe-area-inset-right, 0px));
     padding:3px;gap:2px;
   }
   body.player-mode .float-toolbar .float-btn{
@@ -349,26 +368,33 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 /* Phones in landscape have ~360-400px of vertical space — putting the dock
    at the bottom eats too much. Pivot the dock to a vertical strip on the
    right and let the panel use the full height. Best for the battle map.
-   Keys on viewport HEIGHT + orientation (not max-width) so it fires even on
-   landscape devices wider than the 768px portrait breakpoint. */
-@media (max-height: 500px) and (orientation: landscape){
+   Keys on viewport HEIGHT + orientation so it fires on landscape phones AND
+   short-screen tablets (iPad mini landscape ≈ 768h, iPhone Pro Max landscape
+   ≈ 430h). Broadened from <=500h to <=820h to catch every typical landscape
+   phone/tablet without conflicting with the desktop float-window experience. */
+@media (max-height: 820px) and (orientation: landscape) and (pointer: coarse){
   body.player-mode .window{
     left:0 !important; top:0 !important;
-    width:calc(100vw - 56px) !important;
+    /* Reserve room for the right dock + the iPhone notch (left when in
+       landscape with home button on right; right when reversed). */
+    width:calc(100vw - 56px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) !important;
     height:100vh !important;
+    margin-left:env(safe-area-inset-left, 0px);
     border:none;border-radius:0;box-shadow:none;
   }
   body.player-mode .rh{display:none}
   body.player-mode .window-head{cursor:default;padding:6px 8px}
 
-  /* Dock pivots to a vertical strip on the right edge. */
+  /* Dock pivots to a vertical strip on the right edge, lifted clear of the
+     home indicator on landscape iPhones. */
   body.player-mode .pv-dock{
     flex-direction:column;
     top:0;right:0;bottom:0;left:auto;
-    width:56px;height:100vh;
+    width:calc(56px + env(safe-area-inset-right, 0px));
+    height:100vh;
     border-radius:0;
     border-top:none;border-right:none;border-bottom:none;
-    padding:8px 6px;
+    padding:calc(8px + env(safe-area-inset-top, 0px)) calc(6px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) 6px;
     overflow-x:hidden;overflow-y:auto;
     gap:6px;
     transition:transform .25s ease;
@@ -380,9 +406,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
     font-size:18px;
   }
 
-  /* Float toolbar — shift left of the dock so they don't overlap. */
+  /* Float toolbar — shift left of the dock so they don't overlap, and clear
+     the notch on iPhones held home-button-right. */
   body.player-mode .float-toolbar{
-    top:6px;right:64px;
+    top:calc(6px + env(safe-area-inset-top, 0px));
+    right:calc(64px + env(safe-area-inset-right, 0px));
   }
 
   /* No chrome overhead — panel fills the viewport exactly. */
@@ -397,7 +425,7 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 /* Tell the browser our scripts handle pinch + pan so it doesn't pre-empt
    them with native page-zoom on the battle map area. Only inside the
    battlemap panel — other panels keep normal scroll/zoom. */
-@media (max-width: 768px), (max-height: 500px) and (orientation: landscape){
+@media (max-width: 768px), (max-height: 820px) and (orientation: landscape) and (pointer: coarse){
   body.player-mode .window[data-panel="battlemap"] #map-scroll{
     touch-action: none;
   }

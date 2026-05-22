@@ -63,17 +63,35 @@ function _applySharedPanelsToPlayerView(){
   _renderPlayerDock();
   _writePlayerVisible(_playerVisible);
 
-  // Empty-state placeholder
+  // Empty-state placeholder. Two flavors:
+  //  • Nothing shared by DM yet — original "waiting" message.
+  //  • DM has shared but the player has closed every panel they were viewing
+  //    — point them at the pv-dock so they don't think the app is broken.
   const canvas = document.getElementById('workspace-canvas');
   if (!canvas) return;
   const empty = canvas.querySelector('#pv-empty');
-  if (!shared.size && !empty){
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const isLandscape = window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
+  if (!shared.size){
+    // DM hasn't shared anything.
+    if (!empty){
+      canvas.insertAdjacentHTML('beforeend',
+        '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#666;font-size:14px;text-align:center;pointer-events:none;padding:20px">'
+        + '<div>Waiting for the DM to share something…<br><br>'
+        + '<span style="font-size:11px">The DM clicks the 👁 in any panel\'s title bar to share.</span></div>'
+        + '</div>');
+    }
+  } else if (shared.size && desired.size === 0){
+    // DM has shared something but the player closed every panel. On mobile
+    // this happens easily — point them back at the dock.
+    if (empty) empty.remove();
+    const arrow = isLandscape ? '→' : (isMobile ? '↓' : '↑');
     canvas.insertAdjacentHTML('beforeend',
-      '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#666;font-size:14px;text-align:center;pointer-events:none">'
-      + 'Waiting for the DM to share something…<br><br>'
-      + '<span style="font-size:11px">Click the 👁 in any panel\'s title bar on the DM tab.</span>'
+      '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:14px;text-align:center;pointer-events:none;padding:20px">'
+      + '<div>No panel selected.<br><br>'
+      + '<span style="font-size:13px;color:var(--accent)">' + arrow + ' Tap an icon in the dock to view a shared panel.</span></div>'
       + '</div>');
-  } else if (shared.size && empty){
+  } else if (empty){
     empty.remove();
   }
 }
@@ -98,15 +116,18 @@ function _renderPlayerDock(){
   // First-run discoverability hint on mobile — if the DM has shared multiple
   // panels but the player can only see one at a time, surface a one-time
   // "tap a chip to switch" tip so they don't miss the other shared panels.
+  // Arrow direction is keyed to dock orientation (bottom in portrait, right
+  // in landscape) so the hint actually points at the dock.
   const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const isLandscape = window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
   const HINT_KEY = 'skt-pv-dock-hint-seen';
-  if (isMobile && shared.length > 1){
+  if ((isMobile || isLandscape) && shared.length > 1){
     let seen = false;
     try { seen = localStorage.getItem(HINT_KEY) === '1'; } catch(e){}
     if (!seen && !document.getElementById('pv-dock-hint')){
       const hint = document.createElement('div');
       hint.id = 'pv-dock-hint';
-      hint.textContent = '↓ Tap an icon below to switch panels';
+      hint.textContent = isLandscape ? '→ Tap an icon to switch panels' : '↓ Tap an icon below to switch panels';
       document.body.appendChild(hint);
       // Dismiss after 6s or on first interaction with any dock button.
       const dismiss = () => {
@@ -177,7 +198,12 @@ function _initMobileDockHideOnScroll(){
   const lastY = new WeakMap();
   let ticking = false;
   document.addEventListener('scroll', e => {
-    if (!window.matchMedia('(max-width: 768px)').matches) return;
+    // Active on both portrait mobile and short-screen landscape (where the
+    // dock pivots to a side rail). Without the landscape branch the side
+    // dock never hides, eating screen width permanently.
+    const mobile = window.matchMedia('(max-width: 768px)').matches
+      || window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
+    if (!mobile) return;
     const target = e.target;
     if (!target || target.nodeType !== 1) return;
     if (!target.classList || !target.classList.contains('window-body')) return;
