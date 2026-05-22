@@ -18,7 +18,23 @@ function init(){
   load();
   initRealtime();
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>btn.addEventListener('click',()=>togglePanel(btn.dataset.panel)));
-  const pvUrl = () => window.location.href.split('?')[0]+'?player=1';
+  // Build the player-view URL robustly. The naive `split('?')[0]+'?player=1'`
+  // approach broke whenever the page URL had a `#fragment` (notes / onboarding
+  // / scroll-into-view links sometimes add one): the result became
+  // `...html#frag?player=1`, where the browser treats `player=1` as part of
+  // the fragment instead of as a query string — `?player=1` never matched
+  // and the new window booted into DM mode instead of player mode.
+  const pvUrl = () => {
+    try {
+      const u = new URL(window.location.href);
+      u.search = '?player=1';
+      u.hash = '';
+      return u.toString();
+    } catch(e){
+      // Last-resort fallback for very old browsers without URL constructor.
+      return window.location.origin + window.location.pathname + '?player=1';
+    }
+  };
   const copyPvLink = async () => {
     const url = pvUrl();
     try {
