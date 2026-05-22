@@ -1744,9 +1744,11 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 /* Docked modes — used while a spotlight is active. Card occupies one of just
    two positions (top-center / bottom-center) to keep the tour feeling stable
    instead of jumpy. CSS transition smooths the rare flip. */
-.tutorial-modal-docked{position:fixed!important;left:50%!important;transform:translateX(-50%);margin:0!important;max-width:560px;max-height:42vh}
+.tutorial-modal-docked{position:fixed!important;left:50%!important;transform:translateX(-50%);margin:0!important;max-width:560px;max-height:calc(100vh - 80px);display:flex;flex-direction:column}
 .tutorial-modal-dock-bottom{bottom:24px;top:auto!important}
 .tutorial-modal-dock-top{top:24px;bottom:auto!important}
+/* The body should scroll inside the card so long pages don't get clipped */
+.tutorial-modal-docked .tutorial-body{flex:1;overflow-y:auto;min-height:0}
 /* Spotlight cutout — overlays the workspace, dims everything except the
    target element with a giant box-shadow trick (huge spread + transparent
    inside = "punch a hole"). Click-through so the user can still see the
@@ -1765,7 +1767,7 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
    `:has()` is unreliable in some browsers (Firefox <121, older Chromium
    embeds) so the class is also applied via JS as a belt-and-suspenders. */
 .modal-backdrop:has(.tutorial-modal-corner),
-.modal-backdrop.tutorial-spotlight-active{background:transparent;pointer-events:none}
+.modal-backdrop.tutorial-spotlight-active{background:transparent;pointer-events:none;z-index:10000}
 .modal-backdrop.tutorial-spotlight-active .tutorial-modal{pointer-events:auto}
 .tutorial-modal-corner{
   position:fixed!important;
