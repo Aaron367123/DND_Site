@@ -139,6 +139,66 @@ function initZoomPan(){
     else              zoomOut(e.clientX, e.clientY);
   }, { passive: false });
 
+  // ─── Zoom-to-selection (Ctrl+Shift+drag) ─────────────────────────────────
+  // Modifier-gated marquee that zooms the workspace to fit the dragged
+  // rectangle. Doesn't conflict with space-drag (held key, not modifier) or
+  // wheel-zoom (no drag). Esc cancels in-progress drag.
+  let marquee = null;          // {sx, sy, el, sCanvasX, sCanvasY}
+  const _marqueeStart = (e) => {
+    // Only handles plain left-click with Ctrl AND Shift.
+    if (e.button !== 0 || !e.ctrlKey || !e.shiftKey) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = ws.getBoundingClientRect();
+    // Convert client → canvas-relative pixel coords (so the rectangle stays
+    // anchored to the workspace content even if the user scrolls mid-drag).
+    const sCanvasX = (ws.scrollLeft + (e.clientX - rect.left)) / _zoom;
+    const sCanvasY = (ws.scrollTop  + (e.clientY - rect.top))  / _zoom;
+    const el = document.createElement('div');
+    el.className = 'zoom-marquee';
+    document.body.appendChild(el);
+    marquee = { sx: e.clientX, sy: e.clientY, el, sCanvasX, sCanvasY };
+    return true;
+  };
+  const _marqueeMove = (e) => {
+    if (!marquee) return;
+    const x = Math.min(marquee.sx, e.clientX);
+    const y = Math.min(marquee.sy, e.clientY);
+    const w = Math.abs(e.clientX - marquee.sx);
+    const h = Math.abs(e.clientY - marquee.sy);
+    marquee.el.style.left   = x + 'px';
+    marquee.el.style.top    = y + 'px';
+    marquee.el.style.width  = w + 'px';
+    marquee.el.style.height = h + 'px';
+  };
+  const _marqueeEnd = (e, cancel) => {
+    if (!marquee) return;
+    const m = marquee;
+    marquee = null;
+    m.el.remove();
+    if (cancel) return;
+    // Map endpoint back to canvas coords using the SAME formula as start.
+    const rect = ws.getBoundingClientRect();
+    const endCanvasX = (ws.scrollLeft + (e.clientX - rect.left)) / _zoom;
+    const endCanvasY = (ws.scrollTop  + (e.clientY - rect.top))  / _zoom;
+    const cx0 = Math.min(m.sCanvasX, endCanvasX);
+    const cy0 = Math.min(m.sCanvasY, endCanvasY);
+    const cw  = Math.abs(endCanvasX - m.sCanvasX);
+    const ch  = Math.abs(endCanvasY - m.sCanvasY);
+    // Need a minimum drag size — accidental clicks shouldn't max-zoom.
+    if (cw < 20 || ch < 20) return;
+    // Target zoom = whichever axis fits more tightly in the viewport.
+    const viewW = rect.width, viewH = rect.height;
+    const target = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(viewW / cw, viewH / ch) * 0.96));
+    _zoomSmoothNext = true;
+    setZoom(target);
+    // After zoom, scroll so the rectangle's center sits at the viewport center.
+    const targetCenterX = (cx0 + cw / 2) * target;
+    const targetCenterY = (cy0 + ch / 2) * target;
+    ws.scrollLeft = targetCenterX - viewW / 2;
+    ws.scrollTop  = targetCenterY - viewH / 2;
+  };
+
   // Pan: space-drag, middle-mouse drag, or right-click drag on empty canvas.
   // Right-click drag pans; a right-click without drag still opens the workspace
   // context menu (handled in context-menu.js). The contextmenu event is
@@ -183,6 +243,9 @@ function initZoomPan(){
     const isMiddle = e.button === 1;
     const isRight  = e.button === 2;
     const isSpaceDrag = spaceHeld && e.button === 0;
+    // Ctrl+Shift+left = marquee zoom-to-selection. Don't trigger inside a
+    // window — windows handle their own ctrl-events.
+    if (!insideWindow && _marqueeStart(e)) return;
     if (!isMiddle && !isRight && !isSpaceDrag) return;
     // Inside a window: only middle-mouse pans (left/right belong to the window).
     if (insideWindow && !isMiddle) return;
@@ -198,6 +261,7 @@ function initZoomPan(){
     ws.style.cursor = 'grabbing';
   });
   document.addEventListener('mousemove', e => {
+    if (marquee){ _marqueeMove(e); return; }
     if (!pan) return;
     const dx = e.clientX - pan.sx, dy = e.clientY - pan.sy;
     if (!pan.didDrag && Math.abs(dx)+Math.abs(dy) < 3) return; // dead-zone
@@ -205,13 +269,18 @@ function initZoomPan(){
     ws.scrollLeft = pan.sl - dx;
     ws.scrollTop  = pan.st - dy;
   });
-  document.addEventListener('mouseup', () => {
+  document.addEventListener('mouseup', (e) => {
+    if (marquee){ _marqueeEnd(e, false); return; }
     if (!pan) return;
     // If the gesture was right-click + drag, suppress the contextmenu event
     // that's about to fire so the focus menu doesn't pop up at drag-end.
     if (pan.button === 2 && pan.didDrag) suppressNextContextMenu = true;
     pan = null;
     ws.style.cursor = spaceHeld ? 'grab' : '';
+  });
+  // Esc during an in-progress marquee cancels it without zooming.
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && marquee) _marqueeEnd(e, /*cancel*/true);
   });
   // Capture-phase contextmenu so this runs before the workspace-context-menu
   // handler in context-menu.js (both attach to ws). When suppressed, we

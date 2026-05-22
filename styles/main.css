@@ -898,6 +898,33 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 @keyframes drawerGroupSlide{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
 /* Sub-section headings inside a group */
 .drawer-subhead{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);font-weight:700;margin:12px 0 6px;padding-bottom:3px;border-bottom:1px dashed var(--border)}
+.zoom-marquee{position:fixed;border:2px dashed var(--accent);background:rgba(212,165,116,.12);box-shadow:0 0 0 9999px rgba(0,0,0,.18);z-index:9000;pointer-events:none;border-radius:2px}
+/* Placeholder shown in the original combat-tracker window while PiP is active */
+.combat-pip-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:240px;color:var(--text-muted);text-align:center;padding:20px}
+/* Inside the PiP window — tighten paddings since the viewport is small */
+.combat-pip-mode .combat-controls{padding:4px 6px}
+.combat-pip-mode .combatant-list{padding:4px}
+.combat-pip-mode .combatant-card{margin-bottom:4px}
+/* Realtime conflict bar — pinned to the bottom of the workspace while one
+   or more sync keys have local↔remote divergence. Each row gets its own
+   set of three resolver buttons. Stays out of the way until needed. */
+.rt-conflict-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:760px;width:94%;background:var(--panel);border:1px solid rgba(212,90,80,.7);border-radius:8px;padding:10px 14px;box-shadow:0 12px 36px rgba(0,0,0,.55);z-index:9500;color:var(--text);font-size:12px}
+.rt-conflict-head{font-weight:600;color:#f3a0a0;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rt-conflict-hint{font-weight:400;color:var(--text-muted);font-size:11px}
+.rt-conflict-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px dashed var(--border)}
+.rt-conflict-row:first-of-type{border-top:none}
+.rt-conflict-label{flex:1;font-size:12px}
+.rt-conflict-actions{display:flex;gap:5px}
+.rt-conflict-modal .rt-conflict-diff{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;overflow:hidden}
+.rt-conflict-modal .rt-conflict-pane{display:flex;flex-direction:column;min-width:0;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;overflow:hidden}
+.rt-conflict-modal .rt-conflict-pane-head{padding:6px 10px;font-size:11px;font-weight:600;color:var(--accent);border-bottom:1px solid var(--border);background:var(--panel-3)}
+.rt-conflict-modal .rt-conflict-pane pre{flex:1;overflow:auto;margin:0;padding:8px 10px;font-size:11px;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+@media (max-width:720px){.rt-conflict-modal .rt-conflict-diff{grid-template-columns:1fr}}
+.theme-contrast-strip{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.theme-contrast-chip{font-size:10px;padding:3px 7px;border-radius:10px;border:1px solid var(--border);font-variant-numeric:tabular-nums;line-height:1.3;letter-spacing:.01em}
+.theme-contrast-chip.ok{background:rgba(60,160,80,.18);border-color:rgba(60,160,80,.55);color:#a6e3b3}
+.theme-contrast-chip.warn{background:rgba(212,165,116,.18);border-color:rgba(212,165,116,.55);color:#e8c89a}
+.theme-contrast-chip.fail{background:rgba(190,70,70,.18);border-color:rgba(190,70,70,.55);color:#f3a0a0}
 .drawer-subhead:first-child{margin-top:8px}
 /* Rows */
 .drawer-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;min-height:30px}

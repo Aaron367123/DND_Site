@@ -315,6 +315,9 @@ function initSettings(){
   document.getElementById('open-changelog-btn')?.addEventListener('click', () => {
     if (typeof window.openChangelog === 'function') window.openChangelog(false);
   });
+  document.getElementById('open-about-btn')?.addEventListener('click', () => {
+    if (typeof window.openAbout === 'function') window.openAbout();
+  });
   document.getElementById('open-demo-btn')?.addEventListener('click', () => {
     if (typeof window.runDemoScenario === 'function') window.runDemoScenario();
   });

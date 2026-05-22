@@ -14,7 +14,98 @@ registerPanel('combat',{
     this._wireBestiaryDrop();
     this._render();
   },
-  unmount(){this._body=null;},
+  unmount(){
+    // Close any open PiP window when the panel unmounts (full layout reset).
+    try { this._closePiP(/*silent*/true); } catch(e){}
+    this._body=null;
+  },
+
+  // Window-actions menu — surfaces the PiP toggle in the ⋯ overflow menu.
+  // window-manager.js looks for this `menuItems` hook on each panel def.
+  menuItems(){
+    if (!('documentPictureInPicture' in window)) return [];
+    return [
+      this._pipWin
+        ? { label: '⧉ Bring back from PiP', run: () => this._closePiP() }
+        : { label: '⧉ Pop out to PiP',      run: () => this._openPiP() },
+    ];
+  },
+
+  // ─── Picture-in-Picture ───────────────────────────────────────────────────
+  // Document PiP lets the combat tracker float in a small always-on-top
+  // window so the DM can tab to D&D Beyond / Reddit / wherever without
+  // losing initiative. Falls back to a toast when the browser doesn't
+  // support the API. While PiP is active, the main panel window shows a
+  // placeholder + "bring back" button so the panel isn't a black hole.
+  _openPiP(){
+    if (!('documentPictureInPicture' in window)){
+      if (typeof showToast === 'function') showToast('PiP not supported in this browser');
+      return;
+    }
+    if (this._pipWin) return; // already open
+    window.documentPictureInPicture.requestWindow({ width: 420, height: 560 }).then(pipWin => {
+      this._pipWin = pipWin;
+      // Mirror the app stylesheets into the PiP document so theme vars,
+      // panel layout, and combat-specific styles all carry over.
+      Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach(node => {
+        try {
+          if (node.tagName === 'LINK'){
+            const l = pipWin.document.createElement('link');
+            l.rel = 'stylesheet';
+            l.href = node.href;
+            pipWin.document.head.appendChild(l);
+          } else {
+            const s = pipWin.document.createElement('style');
+            s.textContent = node.textContent;
+            pipWin.document.head.appendChild(s);
+          }
+        } catch(e){}
+      });
+      // Carry the app's body classes so theme + player-mode styles apply.
+      try { pipWin.document.body.className = document.body.className + ' combat-pip-mode'; } catch(e){}
+      pipWin.document.body.style.cssText = 'margin:0;padding:8px;background:var(--bg);min-height:100vh;overflow:auto';
+      // Container for the combat panel inside PiP.
+      const pipBody = pipWin.document.createElement('div');
+      pipBody.id = 'panel-body-combat-pip';
+      pipBody.style.cssText = 'height:100%';
+      pipWin.document.body.appendChild(pipBody);
+      // Swap render target. Re-rendering now paints into PiP.
+      this._originalBody = this._body;
+      this._body = pipBody;
+      this._render();
+      // Placeholder in the panel window so it isn't a void.
+      if (this._originalBody){
+        this._originalBody.innerHTML = '<div class="combat-pip-placeholder">'
+          + '<div style="font-size:32px;margin-bottom:6px">⧉</div>'
+          + '<div style="margin-bottom:10px">Combat tracker is in Picture-in-Picture</div>'
+          + '<button class="btn primary" id="combat-pip-bring-back">Bring back</button>'
+          + '</div>';
+        this._originalBody.querySelector('#combat-pip-bring-back')?.addEventListener('click', () => this._closePiP());
+      }
+      // User closes the PiP window via the OS chrome — clean up.
+      pipWin.addEventListener('pagehide', () => this._closePiP(/*silent*/true));
+    }).catch(err => {
+      console.warn('PiP open failed', err);
+      if (typeof showToast === 'function') showToast('Could not open PiP window');
+    });
+  },
+  _closePiP(silent){
+    if (!this._pipWin && !this._originalBody) return;
+    // Restore the original body as the active render target.
+    if (this._originalBody){
+      this._body = this._originalBody;
+      this._originalBody = null;
+    }
+    // Close the PiP window (pagehide listener calls this again with silent
+    // — guarded by the early-out below).
+    if (this._pipWin){
+      const w = this._pipWin;
+      this._pipWin = null;
+      if (!silent){ try { w.close(); } catch(e){} }
+    }
+    // Repaint the (now active) main panel.
+    try { this._render(); } catch(e){}
+  },
 
   // Tri-state monster stats reveal: show (real numbers), conceal (qualitative
   // tier like "Bloodied"), hide ("?"). Reads old hideMonsterStats=true as 'hide'

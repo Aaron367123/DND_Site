@@ -50,6 +50,20 @@ let _pushTimer    = null;         // debounce handle for outgoing writes
 let _fbDb         = null;         // Firebase database reference
 const _dirtyKeys  = new Set();    // sync keys that have changed since last flush
 const _justWrote  = {};           // {key: value} of our most recent push, used to suppress one echo
+// True conflicts: keys where a remote value arrived while a local change was
+// still pending its first flush. {[key]: {local, remote, ts}} until the user
+// resolves via the conflict bar. No automatic merge — JSON shapes vary too
+// much. Display labels for the keys are in _CONFLICT_LABELS below.
+const _conflicts = {};
+const _CONFLICT_LABELS = {
+  'skt-workspace-v1':     'Workspace (party, combat, settings)',
+  'skt-shared-panels-v1': 'Shared panels',
+  'skt-notes-data':       'Notes',
+  'skt-bestiary-v1':      'Bestiary',
+  'skt-loot-data':        'Loot',
+  'skt-npclib-data':      'NPC Library',
+  'skt-battlemap-v1':     'Battle map',
+};
 
 // Which panels to refresh when a particular sync key changes. Avoids re-rendering
 // the whole world when a single subsystem updates.
@@ -144,6 +158,20 @@ function _applyRemoteKey(key, fbVal) {
   if (_justWrote[key] === fbVal){
     delete _justWrote[key];
     return;
+  }
+
+  // Conflict detection: if the local copy is "dirty" (queued for the next
+  // flush) AND differs from the incoming remote value, both sides have
+  // diverged. Park the conflict in `_conflicts` and let the user resolve.
+  // Without this, the apply below would silently overwrite their pending
+  // local edit.
+  if (_dirtyKeys.has(key)){
+    const localVal = localStorage.getItem(key);
+    if (localVal != null && localVal !== fbVal){
+      _conflicts[key] = { local: localVal, remote: fbVal, ts: Date.now() };
+      _renderConflictBar();
+      return; // Don't apply; user decides.
+    }
   }
 
   _remoteUpdate = true;
@@ -347,3 +375,96 @@ window.realtimeLive = {
     } catch(e){ return () => {}; }
   },
 };
+
+// ─── Conflict UI ──────────────────────────────────────────────────────────
+// Paints (or updates, or removes) a fixed-bottom bar listing every key that
+// currently has a local↔remote conflict. Each row gets three resolver
+// buttons. The bar auto-removes when _conflicts becomes empty.
+function _renderConflictBar(){
+  let bar = document.getElementById('rt-conflict-bar');
+  const entries = Object.entries(_conflicts);
+  if (entries.length === 0){ bar?.remove(); return; }
+  if (!bar){
+    bar = document.createElement('div');
+    bar.id = 'rt-conflict-bar';
+    bar.className = 'rt-conflict-bar';
+    document.body.appendChild(bar);
+  }
+  const _esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  bar.innerHTML = '<div class="rt-conflict-head">⚠ ' + entries.length + ' sync conflict' + (entries.length===1?'':'s')
+    + '<span class="rt-conflict-hint">Remote changes arrived while you were editing. Pick one per row.</span></div>'
+    + entries.map(([k]) => {
+        const label = _CONFLICT_LABELS[k] || k;
+        return '<div class="rt-conflict-row" data-rtkey="' + _esc(k) + '">'
+          + '<span class="rt-conflict-label">' + _esc(label) + '</span>'
+          + '<div class="rt-conflict-actions">'
+          + '<button class="btn small" data-rtact="compare">Compare</button>'
+          + '<button class="btn small" data-rtact="theirs">Use theirs</button>'
+          + '<button class="btn small primary" data-rtact="mine">Keep mine</button>'
+          + '</div></div>';
+      }).join('');
+  bar.querySelectorAll('[data-rtact]').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const row = btn.closest('[data-rtkey]');
+    const key = row?.dataset.rtkey;
+    if (!key || !_conflicts[key]) return;
+    const act = btn.dataset.rtact;
+    if (act === 'mine') _resolveConflict(key, 'mine');
+    else if (act === 'theirs') _resolveConflict(key, 'theirs');
+    else if (act === 'compare') _openConflictCompare(key);
+  }));
+}
+
+function _resolveConflict(key, choice){
+  const c = _conflicts[key];
+  if (!c) return;
+  delete _conflicts[key];
+  if (choice === 'mine'){
+    // Re-push local as the canonical value. _flushDirtyKeys handles the
+    // actual network write; just ensure the key is dirty.
+    _dirtyKeys.add(key);
+    clearTimeout(_pushTimer);
+    _pushTimer = setTimeout(_flushDirtyKeys, 100);
+  } else {
+    // Apply remote — runs the normal apply path, but bypass conflict
+    // detection by clearing dirty first (we're explicitly accepting remote).
+    _dirtyKeys.delete(key);
+    _applyRemoteKey(key, c.remote);
+  }
+  _renderConflictBar();
+}
+
+// Side-by-side diff modal for a single key. Pretty-prints both sides as
+// JSON so the user can eyeball what differs before picking a side.
+function _openConflictCompare(key){
+  const c = _conflicts[key]; if (!c) return;
+  const pretty = (s) => {
+    try { return JSON.stringify(JSON.parse(s), null, 2); }
+    catch(e){ return String(s); }
+  };
+  const _esc = s => String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop';
+  const label = _CONFLICT_LABELS[key] || key;
+  back.innerHTML = '<div class="modal rt-conflict-modal" role="dialog" aria-modal="true" style="width:880px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column">'
+    + '<h3 style="margin:0 0 4px">Compare conflict — ' + _esc(label) + '</h3>'
+    + '<p style="margin:0 0 10px;font-size:11px;color:var(--text-muted)">Local copy is what you just edited. Remote is what arrived from another tab / device.</p>'
+    + '<div class="rt-conflict-diff">'
+    + '<div class="rt-conflict-pane"><div class="rt-conflict-pane-head">Mine (local)</div><pre>' + _esc(pretty(c.local))   + '</pre></div>'
+    + '<div class="rt-conflict-pane"><div class="rt-conflict-pane-head">Theirs (remote)</div><pre>' + _esc(pretty(c.remote)) + '</pre></div>'
+    + '</div>'
+    + '<div class="modal-actions" style="margin-top:12px">'
+    + '<button class="btn" data-rtact="cancel">Cancel</button>'
+    + '<span style="flex:1"></span>'
+    + '<button class="btn" data-rtact="theirs">Use theirs</button>'
+    + '<button class="btn primary" data-rtact="mine">Keep mine</button>'
+    + '</div></div>';
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.addEventListener('mousedown', e => { if (e.target === back) close(); });
+  back.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  back.querySelector('[data-rtact="cancel"]').addEventListener('click', close);
+  back.querySelector('[data-rtact="mine"]').addEventListener('click', () => { _resolveConflict(key, 'mine'); close(); });
+  back.querySelector('[data-rtact="theirs"]').addEventListener('click', () => { _resolveConflict(key, 'theirs'); close(); });
+}
+

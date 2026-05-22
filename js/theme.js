@@ -231,8 +231,86 @@ function initThemeControls(){
     inp.addEventListener('input', () => {
       if (sel.value !== 'custom') return;
       persist();
+      _renderContrastChips();
     });
   });
+
+  // Build (once) the contrast-chip strip under the custom-theme row. Hidden
+  // by default; shown when the user is on the custom preset. Repaints
+  // whenever a custom color changes or the preset switches.
+  let chipStrip = document.getElementById('theme-contrast-chips');
+  if (!chipStrip){
+    chipStrip = document.createElement('div');
+    chipStrip.id = 'theme-contrast-chips';
+    chipStrip.className = 'theme-contrast-strip';
+    customRow.appendChild(chipStrip);
+  }
+  const updateChipsVisibility = () => {
+    chipStrip.style.display = sel.value === 'custom' ? '' : 'none';
+  };
+  updateChipsVisibility();
+  sel.addEventListener('change', updateChipsVisibility);
+  // Paint chips now in case the user re-opens settings while already on custom.
+  _renderContrastChips();
+}
+
+// ─── WCAG contrast helpers ─────────────────────────────────────────────────
+// Per WCAG 2.1 § 1.4.3: AA requires ≥ 4.5:1 for normal text, ≥ 3:1 for UI.
+// We surface both thresholds in the chip color (green ≥ 4.5, amber 3–4.5,
+// red < 3) so the DM gets a quick at-a-glance read on the custom palette.
+function _wcagRatio(hex1, hex2){
+  const L1 = _relLuminance(hex1);
+  const L2 = _relLuminance(hex2);
+  const hi = Math.max(L1, L2), lo = Math.min(L1, L2);
+  return (hi + 0.05) / (lo + 0.05);
+}
+function _relLuminance(hex){
+  const m = String(hex).replace('#','').match(/^([a-f\d]{6})$/i);
+  if (!m) return 0;
+  const n = parseInt(m[1], 16);
+  const ch = c => {
+    c = c / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const r = ch((n>>16) & 0xff);
+  const g = ch((n>>8)  & 0xff);
+  const b = ch( n      & 0xff);
+  return 0.2126*r + 0.7152*g + 0.0722*b;
+}
+function _renderContrastChips(){
+  const strip = document.getElementById('theme-contrast-chips');
+  if (!strip) return;
+  // Read the *resolved* CSS variables off :root — captures whatever was just
+  // applied (handles both the live color inputs and any preset switch).
+  const cs = getComputedStyle(document.documentElement);
+  const norm = v => {
+    const s = String(v||'').trim();
+    if (/^#[0-9a-f]{6}$/i.test(s)) return s;
+    // Accept rgb()/rgba() too.
+    const m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (m){
+      const hex = (n) => parseInt(n).toString(16).padStart(2,'0');
+      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+    }
+    return '#000000';
+  };
+  const text   = norm(cs.getPropertyValue('--text')   || '#e8e8e8');
+  const panel  = norm(cs.getPropertyValue('--panel'));
+  const panel2 = norm(cs.getPropertyValue('--panel-2'));
+  const accent = norm(cs.getPropertyValue('--accent'));
+  const pairs = [
+    { label: 'Text / Panel',    ratio: _wcagRatio(text,   panel),  target: 4.5 },
+    { label: 'Text / Panel-2',  ratio: _wcagRatio(text,   panel2), target: 4.5 },
+    { label: 'Accent / Panel',  ratio: _wcagRatio(accent, panel),  target: 3.0 },
+  ];
+  strip.innerHTML = pairs.map(p => {
+    const ok   = p.ratio >= 4.5;
+    const warn = p.ratio >= 3.0 && p.ratio < 4.5;
+    const cls  = ok ? 'ok' : warn ? 'warn' : 'fail';
+    const icon = ok ? '✓' : warn ? '⚠' : '✕';
+    const note = ok ? 'AA' : warn ? 'AA large only' : 'below AA';
+    return `<span class="theme-contrast-chip ${cls}" title="${esc(p.label)}: ${p.ratio.toFixed(2)}:1 — ${note}">${icon} ${esc(p.label)} ${p.ratio.toFixed(1)}:1</span>`;
+  }).join('');
 }
 
 // Lighten (+) or darken (-) a hex color by `amt` (0-100).

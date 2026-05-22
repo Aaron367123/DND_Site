@@ -385,11 +385,6 @@ registerPanel('notes', {
               <span class="tile-label">LOCAL FOLDER</span>
               ${chromiumOnly?'<span class="tile-coming">Chromium only</span>':''}
             </button>
-            <button class="notes-source-tile disabled" data-act="src-onenote" disabled title="OneNote integration coming soon">
-              <span class="tile-icon">📘</span>
-              <span class="tile-label">ONENOTE</span>
-              <span class="tile-coming">Coming soon</span>
-            </button>
           </div>
         </aside>
         <div class="notes-picker-empty">Select a note source on the left to begin.</div>
@@ -1052,10 +1047,6 @@ registerPanel('notes', {
         this._render();
       }
     });
-    b.querySelector('[data-act="src-onenote"]')?.addEventListener('click', () => {
-      showToast('OneNote integration coming soon');
-    });
-
     // Back-to-picker arrow (only present in local view)
     b.querySelector('[data-act="back-to-picker"]')?.addEventListener('click', () => {
       this._commitEditing();
