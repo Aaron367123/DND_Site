@@ -108,10 +108,13 @@ registerPanel('npcgen',{
       html+='<div style="flex:1;overflow-y:auto;padding:12px">';
 
       // Tiny lock toggle helper — sits next to any field that should be
-      // pinnable across generates. Filled icon = locked, outline = unlocked.
+      // pinnable across generates. Inline SVG keeps the glyph crisp + small;
+      // emoji 🔒/🔓 rendered chunky and inconsistent across platforms.
+      const LOCK_SVG_LOCKED   = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M5 7V5a3 3 0 1 1 6 0v2h.5a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1H5zm1 0h4V5a2 2 0 1 0-4 0v2z"/></svg>';
+      const LOCK_SVG_UNLOCKED = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.25" d="M5.5 7.5V5a2.5 2.5 0 0 1 5 0M4.5 7.5h7a.5.5 0 0 1 .5.5v5.5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5V8a.5.5 0 0 1 .5-.5z"/></svg>';
       const lock = (key) => {
         const on = !!this._locks[key];
-        return '<button class="npcgen-lock '+(on?'on':'')+'" data-lock-key="'+key+'" title="'+(on?'Locked — preserved on re-roll. Click to unlock.':'Click to lock this field')+'">'+(on?'🔒':'🔓')+'</button>';
+        return '<button class="npcgen-lock '+(on?'on':'')+'" data-lock-key="'+key+'" title="'+(on?'Locked — preserved on re-roll. Click to unlock.':'Click to lock this field')+'">'+(on?LOCK_SVG_LOCKED:LOCK_SVG_UNLOCKED)+'</button>';
       };
 
       // Name & identity (editable)
@@ -149,7 +152,8 @@ registerPanel('npcgen',{
               +(this._secretRevealed?'🙈 Hide':'👁 Reveal')
             +'</button>'
           : '';
-        const lockBtn = '<button class="npcgen-lock '+(this._locks[key]?'on':'')+'" data-lock-key="'+key+'" title="'+(this._locks[key]?'Locked — preserved on re-roll':'Lock this field')+'" style="margin-left:auto;'+(isSecret?'margin-right:6px':'')+'">'+(this._locks[key]?'🔒':'🔓')+'</button>';
+        const on = !!this._locks[key];
+        const lockBtn = '<button class="npcgen-lock '+(on?'on':'')+'" data-lock-key="'+key+'" title="'+(on?'Locked — preserved on re-roll':'Lock this field')+'" style="margin-left:auto;'+(isSecret?'margin-right:6px':'')+'">'+(on?LOCK_SVG_LOCKED:LOCK_SVG_UNLOCKED)+'</button>';
         return '<div class="npcgen-field" style="margin-bottom:8px">'
           +'<div style="display:flex;align-items:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:'+(col||'var(--text-muted)')+';margin-bottom:3px;gap:4px">'
             +'<span>'+label+'</span>'+lockBtn+reveal

@@ -301,6 +301,15 @@ const TUTORIAL_PAGES = [
 
 function openTutorial(startIdx) {
   let idx = Math.max(0, Math.min(startIdx|0, TUTORIAL_PAGES.length - 1));
+  // Track panels the tutorial itself opened so we can close them on page
+  // transitions / tour close. We don't want to leave 8 windows scattered on
+  // the workspace after the tour finishes. Panels the user had open before
+  // the tour started are recorded in `_preOpenPanels` and left alone.
+  const _autoOpened = new Set();
+  const _preOpenPanels = new Set();
+  try {
+    Object.entries(layout || {}).forEach(([id, l]) => { if (l && l.open) _preOpenPanels.add(id); });
+  } catch(e){}
 
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -379,12 +388,28 @@ function openTutorial(startIdx) {
     // target on the bottom half flip it to top-center. Two positions total
     // across the whole tour.
     modal.classList.add('tutorial-modal-docked', 'tutorial-modal-dock-bottom');
+    // Close any panels we auto-opened on prior pages — except the one this
+    // page also needs. Keeps the workspace tidy as the user navigates the
+    // tour instead of leaving a trail of 8 open windows behind.
+    if (typeof closePanel === 'function'){
+      Array.from(_autoOpened).forEach(prevId => {
+        if (prevId === p.panel) return; // still needed by this page
+        if (_preOpenPanels.has(prevId)) return; // user had it before; leave it
+        try { closePanel(prevId); } catch(e){}
+        _autoOpened.delete(prevId);
+      });
+    }
     // If the page calls out a panel and the panel is closed, nudge it open so
     // the spotlight has a real window to land on rather than a tiny dock pill.
-    // Skips when the user has explicitly closed it just now (no perfect signal
-    // for that — `ensurePanel` always opens, which is the intent here).
+    // Brought to front via focusPanel so it sits above any other open windows
+    // (the user may have left some stacked).
     if (p.panel && typeof ensurePanel === 'function'){
-      try { ensurePanel(p.panel); } catch(e){}
+      try {
+        const wasOpen = layout[p.panel] && layout[p.panel].open;
+        ensurePanel(p.panel);
+        if (!wasOpen && !_preOpenPanels.has(p.panel)) _autoOpened.add(p.panel);
+        if (typeof focusPanel === 'function') focusPanel(p.panel);
+      } catch(e){}
     }
     if (p.target){
       // Multi-selector targets resolve in *selector order*, not DOM order, so
@@ -447,6 +472,16 @@ function openTutorial(startIdx) {
       if (dontShow.checked) localStorage.setItem(TUTORIAL_KEY, '1');
       else localStorage.removeItem(TUTORIAL_KEY);
     } catch(e){}
+    // Close every panel the tutorial popped open so the workspace returns
+    // to the layout the user had when they started the tour. Anything they
+    // had open beforehand stays open.
+    if (typeof closePanel === 'function'){
+      Array.from(_autoOpened).forEach(id => {
+        if (_preOpenPanels.has(id)) return;
+        try { closePanel(id); } catch(e){}
+      });
+      _autoOpened.clear();
+    }
     backdrop.remove();
     if (spotlight) spotlight.remove();
     window.removeEventListener('resize', onResize);

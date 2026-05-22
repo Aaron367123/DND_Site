@@ -812,6 +812,11 @@ registerPanel('battlemap',{
     const oldScroll = b.querySelector('#map-scroll');
     const savedSx = oldScroll ? oldScroll.scrollLeft : 0;
     const savedSy = oldScroll ? oldScroll.scrollTop  : 0;
+    // Same trick for the settings drawer — clicking a tile (grid/fog/etc.)
+    // forces a full re-render of the panel, which otherwise yanks the
+    // drawer's scrollTop back to 0 every time. Snapshot + restore below.
+    const oldSettings = b.querySelector('.bm-settings');
+    const savedSettingsScroll = oldSettings ? oldSettings.scrollTop : 0;
     // Player-view detection — used to hide DM-only toolbar controls (fog,
     // open-player) since players receive fog state via the broadcast and
     // shouldn't be able to toggle/paint it.
@@ -980,6 +985,11 @@ registerPanel('battlemap',{
     // wheel-zoom doesn't reset to top-left when the debounced re-render fires.
     const newScroll = b.querySelector('#map-scroll');
     if (newScroll){ newScroll.scrollLeft = savedSx; newScroll.scrollTop = savedSy; }
+    // Restore the settings drawer scroll position after the rebuild so
+    // clicking tiles deep in the drawer doesn't fling the user back to the
+    // MAP section every time.
+    const newSettings = b.querySelector('.bm-settings');
+    if (newSettings && savedSettingsScroll) newSettings.scrollTop = savedSettingsScroll;
   },
 
   _setupMap(){
