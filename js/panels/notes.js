@@ -466,7 +466,7 @@ registerPanel('notes', {
         <button class="btn small" id="note-download" title="Save to desktop">💾</button>
         <button class="btn icon-btn" data-act="notes-refresh" title="Sync now (pull latest from disk)">↻</button>
         <button class="btn icon-btn" data-act="notes-settings" title="Display settings">⚙</button>
-        <button class="btn icon-btn" data-act="notes-toggle-toolbar" title="${tbHidden?'Show formatting toolbar':'Hide formatting toolbar (more room to write)'}">${tbHidden?'▾':'▴'}</button>
+        <button class="btn icon-btn ${tbHidden?'':'active'}" data-act="notes-toggle-toolbar" title="${tbHidden?'Show formatting toolbar':'Hide formatting toolbar (more room to write)'}" style="font-size:13px">${tbHidden?'▼ Tools':'▲'}</button>
       </div>
       ${tbHidden ? '' : `<div class="notes-toolbar-2">
         <button class="btn" data-nact="bold"   title="Bold (Ctrl+B)"><b>B</b></button>

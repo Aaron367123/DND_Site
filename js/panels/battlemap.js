@@ -1294,6 +1294,79 @@ registerPanel('battlemap',{
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
+
+    // Touch parity — phones/tablets don't fire mouse events on canvas, so the
+    // draw/erase tools were silently dead. Wire the same start/move/end flow
+    // off touchstart/touchmove/touchend. Single-finger only — multi-touch
+    // pinch/pan is handled at the workspace level above.
+    drawCanvas.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const rect = drawCanvas.getBoundingClientRect();
+      const x = Math.round(touch.clientX - rect.left);
+      const y = Math.round(touch.clientY - rect.top);
+
+      if (this._tool === 'erase'){
+        e.preventDefault(); e.stopPropagation();
+        let removed = this._eraseStrokeAt(x, y);
+        const onMove = ev => {
+          if (ev.touches.length !== 1) return;
+          ev.preventDefault();
+          const t2 = ev.touches[0];
+          const mx = Math.round(t2.clientX - rect.left);
+          const my = Math.round(t2.clientY - rect.top);
+          if (this._eraseStrokeAt(mx, my)) removed = true;
+        };
+        const onEnd = () => {
+          document.removeEventListener('touchmove', onMove);
+          document.removeEventListener('touchend', onEnd);
+          document.removeEventListener('touchcancel', onEnd);
+          if (removed) this._saveMap();
+        };
+        document.addEventListener('touchmove', onMove, { passive:false });
+        document.addEventListener('touchend', onEnd);
+        document.addEventListener('touchcancel', onEnd);
+        return;
+      }
+
+      if (this._tool !== 'draw') return;
+      e.preventDefault(); e.stopPropagation();
+      _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
+      this._drawings.push(_curStroke);
+      let _lastTick = 0;
+      const tickIfDue = () => {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (now - _lastTick < 100) return;
+        _lastTick = now;
+        this._broadcastStrokeTick(_curStroke);
+      };
+      this._broadcastStrokeTick(_curStroke);
+      const onMove = ev => {
+        if (!_curStroke || ev.touches.length !== 1) return;
+        ev.preventDefault();
+        const t2 = ev.touches[0];
+        const x2 = Math.round(t2.clientX - rect.left);
+        const y2 = Math.round(t2.clientY - rect.top);
+        const lp = _curStroke.p;
+        const lx = lp[lp.length-2], ly = lp[lp.length-1];
+        if (Math.abs(x2 - lx) + Math.abs(y2 - ly) < 3) return;
+        lp.push(x2, y2);
+        this._drawStrokeIncremental(drawCanvas, _curStroke);
+        tickIfDue();
+      };
+      const onEnd = () => {
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
+        _curStroke = null;
+        this._broadcastStrokeEnd();
+        this._saveMap();
+      };
+      document.addEventListener('touchmove', onMove, { passive:false });
+      document.addEventListener('touchend', onEnd);
+      document.addEventListener('touchcancel', onEnd);
+    }, { passive:false });
+
     b.querySelector('#map-bg-color')?.addEventListener('change',e=>{this._bgColor=e.target.value;this._applyBg(stage,W,H);this._saveMap();});
     // Update stage cursor when fog tool active
     if(this._fogTool || this._tool==='align') stage.style.cursor='crosshair';
