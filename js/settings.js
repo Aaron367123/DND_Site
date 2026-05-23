@@ -11,6 +11,22 @@
 function applyFontScale(scale){
   const s = Math.max(0.5, Math.min(2, scale || 1));
   document.body.style.zoom = s;
+  // CSS `zoom` visually scales the body but leaves layout dimensions alone,
+  // so `height:100vh` ends up covering only `s × 100vh` of physical screen
+  // — leaving a gap below (and to the right) of the body. Counter-scale the
+  // body's own width/height so it always fills the viewport at every zoom.
+  // Reset to '' when at 100% so the default stylesheet height (100%) takes
+  // back over cleanly.
+  if (Math.abs(s - 1) < 0.001){
+    document.body.style.width = '';
+    document.body.style.height = '';
+    document.body.style.minHeight = '';
+  } else {
+    const pct = (100 / s).toFixed(3);
+    document.body.style.width  = pct + 'vw';
+    document.body.style.height = pct + 'vh';
+    document.body.style.minHeight = pct + 'vh';
+  }
 }
 
 // Apply per-element visibility toggles by setting body classes that the CSS

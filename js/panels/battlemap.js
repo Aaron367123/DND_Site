@@ -614,7 +614,8 @@ registerPanel('battlemap',{
       const dim = tokenDim.get(t.id) || ((t.size||1) * csNat - 4) * scale;
       el.style.left = t.x + 'px';
       el.style.top  = (t.y + dim/2 + 4) + 'px';
-      el.style.fontSize = (10 * scale).toFixed(0) + 'px';
+      // Floor font-size at 11px so labels stay readable at low zoom.
+      el.style.fontSize = Math.max(11, 10 * scale).toFixed(1) + 'px';
     });
 
     // Keep the toolbar slider/% display in sync.
@@ -965,7 +966,12 @@ registerPanel('battlemap',{
       +'<label class="field-label">Color</label>'
       +'<input type="color" id="tp-color" style="width:100%;height:26px;margin-bottom:6px;cursor:pointer">'
       +'<label class="field-label">Size (cells)</label>'
-      +'<input type="number" id="tp-size" min="1" max="6" value="1" style="margin-bottom:8px;font-size:11px">'
+      +'<div style="display:flex;gap:4px;margin-bottom:8px;align-items:center">'
+        +'<button class="btn icon-btn" id="tp-size-down" title="Smaller" style="padding:1px 6px;font-size:13px">−</button>'
+        +'<input type="range" id="tp-size" min="1" max="6" step="1" value="1" style="flex:1">'
+        +'<button class="btn icon-btn" id="tp-size-up" title="Bigger" style="padding:1px 6px;font-size:13px">+</button>'
+        +'<span id="tp-size-val" style="font-size:11px;color:var(--text-muted);min-width:42px;text-align:right">1 cell</span>'
+      +'</div>'
       +'<label class="field-label">Facing</label>'
       +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
         +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:11px">↺</button>'
@@ -2658,7 +2664,12 @@ registerPanel('battlemap',{
       const nameEl = document.createElement('div');
       nameEl.className = 'map-token-name' + (t.isPC ? ' pc' : ' npc-t');
       nameEl.dataset.tid = t.id;
-      nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${(10*tokScale).toFixed(0)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600`;
+      // Floor the label font size at 11px so it stays legible when the map
+      // is zoomed out. Soft pill background gives constant contrast against
+      // light or dark map art (the previous text-shadow alone wasn't enough
+      // on busy backgrounds).
+      const nameFs = Math.max(11, 10 * tokScale);
+      nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25`;
       nameEl.textContent = displayLabel;
       stage.appendChild(nameEl);
 
@@ -2848,6 +2859,24 @@ registerPanel('battlemap',{
     b.querySelector('#tp-label').value=t.label;
     b.querySelector('#tp-color').value=t.color;
     b.querySelector('#tp-size').value=t.size||1;
+    const sizeValEl = b.querySelector('#tp-size-val');
+    const setSizeLabel = (n) => { if (sizeValEl) sizeValEl.textContent = n + (n === 1 ? ' cell' : ' cells'); };
+    setSizeLabel(t.size || 1);
+    // Buttons step the slider in either direction. Bigger-than-6 is unusual
+    // (gargantuan = 4×4 = 4 cells in 5e, but some maps use 6 for huge dragons)
+    // so we cap at 6 to avoid runaway giant tokens.
+    const stepSize = (delta) => {
+      const cur = parseInt(b.querySelector('#tp-size').value) || 1;
+      const next = Math.max(1, Math.min(6, cur + delta));
+      if (next === cur) return;
+      t.size = next;
+      b.querySelector('#tp-size').value = next;
+      setSizeLabel(next);
+      this._saveMap();
+      this._renderTokens();
+    };
+    rewire('#tp-size-down','click', () => stepSize(-1));
+    rewire('#tp-size-up',  'click', () => stepSize(+1));
     // Sync rotation controls — slider + label show the current angle, with
     // ↺ / ↻ buttons stepping by 45° for quick cardinal/diagonal directions.
     const rot0 = t.rotation || 0;
@@ -2863,7 +2892,9 @@ registerPanel('battlemap',{
     };
     rewire('#tp-label','change',e=>{t.label=e.target.value;b.querySelector('#tp-name').textContent=t.label;this._saveMap();this._renderTokens();});
     rewire('#tp-color','change',e=>{t.color=e.target.value;this._saveMap();this._renderTokens();});
-    rewire('#tp-size','change',e=>{t.size=Math.max(1,Math.min(6,parseInt(e.target.value)||1));this._saveMap();this._renderTokens();});
+    // Slider live-updates the readout on input; commits + re-renders on release.
+    rewire('#tp-size','input', e => { setSizeLabel(Math.max(1, Math.min(6, parseInt(e.target.value)||1))); });
+    rewire('#tp-size','change',e=>{t.size=Math.max(1,Math.min(6,parseInt(e.target.value)||1));setSizeLabel(t.size);this._saveMap();this._renderTokens();});
     rewire('#tp-rot','input',e=>applyRot(parseInt(e.target.value)||0));
     rewire('#tp-rot-left','click',()=>applyRot((t.rotation || 0) - 45));
     rewire('#tp-rot-right','click',()=>applyRot((t.rotation || 0) + 45));
