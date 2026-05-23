@@ -123,21 +123,34 @@ function initSettings(){
 
     // Mirror current value into both controls without re-firing each other.
     let _muting = false;
+    // Preview (drag-time) updates the number display only — applying the
+    // actual page zoom while the user is still dragging causes the slider
+    // thumb to physically move under the cursor (the whole page rescales,
+    // including the slider), making the control fight back against the
+    // drag. We commit the visual change ONLY on release.
     const setBoth = (pct, opts={}) => {
       const clampedNum = Math.max(NUM_MIN, Math.min(NUM_MAX, pct));
       _muting = true;
       fsn.value = String(clampedNum);
       fs.value  = String(Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, clampedNum)));
       _muting = false;
-      applyFontScale(clampedNum / 100);
+      if (opts.apply !== false) applyFontScale(clampedNum / 100);
       if (opts.commit){
         state.settings.fontScale = clampedNum / 100;
         save();
       }
     };
 
-    // Slider: preview on input, commit on change.
-    fs.addEventListener('input', () => { if (_muting) return; setBoth(parseInt(fs.value)); });
+    // Slider: number reads track the drag for feedback, but the actual zoom
+    // is only applied on release ('change'). No more chasing the slider as
+    // the UI rescales mid-drag.
+    fs.addEventListener('input', () => {
+      if (_muting) return;
+      const pct = Math.max(NUM_MIN, Math.min(NUM_MAX, parseInt(fs.value)));
+      _muting = true;
+      fsn.value = String(pct);
+      _muting = false;
+    });
     fs.addEventListener('change', () => { if (_muting) return; setBoth(parseInt(fs.value), {commit:true}); });
     // Number input: only apply on blur / Enter, NOT on every keystroke. If
     // we previewed on `input`, typing "1" while replacing "200" with "100"
