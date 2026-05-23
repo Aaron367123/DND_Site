@@ -244,18 +244,13 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 @media (max-width: 768px){
   body.player-mode .window{
     left:0 !important; top:0 !important;
-    /* Three-tier sizing fallback. Top wins where supported:
-         1. --pv-vw / --pv-vh — JS sets these from visualViewport.height/width
-            on every resize/rotate/scroll. Exactly what's visible, period.
-         2. dvw / dvh — browser-native dynamic viewport units (Chrome 108+,
-            Safari 15.4+, FF 101+). Honor the address-bar overlay.
-         3. vw / vh — original layout viewport. Fallback for ancient builds. */
+    /* `dvw`/`dvh` shrink to the visible area on mobile (excluding the
+       address-bar overlay). The older `vw`/`vh` fallback comes first so
+       very old browsers still get a working layout. */
     width:100vw !important;
     width:100dvw !important;
-    width:var(--pv-vw, 100dvw) !important;
     height:calc(100vh - 64px - env(safe-area-inset-bottom, 0px)) !important;
     height:calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
-    height:calc(var(--pv-vh, 100dvh) - 64px - env(safe-area-inset-bottom, 0px)) !important;
     border-radius:0;
     border-left:none;border-right:none;border-top:none;
     box-shadow:none;
@@ -368,15 +363,16 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   /* Allow vertical scroll (panel content can be tall), but lock horizontal
      pan — the canvas is 5000px wide and there's nothing useful to the side
      of a fullscreen panel. */
-  body.player-mode .workspace{overflow-x:hidden;overflow-y:auto;width:100vw;width:100dvw;height:100vh;height:100dvh}
-  body.player-mode .workspace-canvas{width:100vw;width:100dvw;min-height:100vh;min-height:100dvh}
+  body.player-mode .workspace{overflow-x:hidden;overflow-y:auto}
+  body.player-mode .workspace-canvas{width:100vw}
   /* Collapse the desktop 2-column grid (dock-w + workspace) to a single
      column on mobile. Without this, the workspace canvas inherits a 44px
      left margin from `grid-template-columns: var(--dock-w) 1fr` and the
-     fullscreen panel ends up offset by 44px on the x-axis. */
-  body.player-mode .app{grid-template-columns:1fr !important;grid-template-areas:"workspace" !important;width:100vw;width:100dvw;height:100vh;height:100dvh}
-  /* And the body itself — same trick so the page chrome doesn't bleed in. */
-  body.player-mode{width:100vw;width:100dvw;height:100vh;height:100dvh;overflow:hidden}
+     fullscreen panel ends up offset by 44px on the x-axis. The `!important`
+     overrides the grid-template-* property — we deliberately don't touch
+     width/height here, so applyFontScale()'s inline counter-scaling can
+     still kick in at non-100% font scales. */
+  body.player-mode .app{grid-template-columns:1fr !important;grid-template-areas:"workspace" !important}
 }
 
 /* ============ MOBILE LANDSCAPE PLAYER VIEW ============ */
@@ -432,7 +428,7 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   }
 
   /* No chrome overhead — panel fills the viewport exactly. */
-  body.player-mode .workspace{overflow:hidden;width:100vw;width:100dvw;height:100vh;height:100dvh}
+  body.player-mode .workspace{overflow:hidden}
   body.player-mode .workspace-canvas{width:100vw;width:100dvw;height:100vh;height:100dvh}
 
   /* Empty state shouldn't sit behind the right dock. */

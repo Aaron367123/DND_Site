@@ -723,7 +723,17 @@ registerPanel('battlemap',{
             this._previewStroke = null;
             this._drawAllStrokes();
           }
-          this._renderTokens();
+          // Only re-render tokens when the token payload ACTUALLY changed.
+          // DM fog-paint broadcasts the entire state every tick, so during a
+          // stroke `msg.tokens` is the same array hundreds of times in a row.
+          // Re-rendering each time = remove+recreate every token DOM element
+          // = browser-melting paint storm + visible flicker. A cheap JSON
+          // hash detects no-change broadcasts so we skip the work entirely.
+          const tokenHash = msg.tokens ? JSON.stringify(msg.tokens) : '';
+          if (tokenHash !== this._lastTokenHash){
+            this._lastTokenHash = tokenHash;
+            this._renderTokens();
+          }
         }
       };
     }catch(e){}
@@ -770,6 +780,33 @@ registerPanel('battlemap',{
         fogStrokes: this._fogStrokes || [],
       });
     }catch(e){}
+  },
+
+  // Throttled broadcast for high-frequency events (grid-mode fog paint).
+  // Coalesces multiple calls within ~80ms into a single broadcast so the
+  // player tab doesn't get hammered with 30+ full-state messages per second
+  // (which causes a render storm: full grid redraw + full fog redraw + full
+  // token DOM rebuild on the receiving side per message). At 80ms we still
+  // get ~12fps player-side updates — visually real-time but stable.
+  _broadcastThrottled(){
+    if (!this._bc) return;
+    const now = Date.now();
+    if (!this._lastBroadcastTs) this._lastBroadcastTs = 0;
+    const elapsed = now - this._lastBroadcastTs;
+    if (elapsed >= 80){
+      this._lastBroadcastTs = now;
+      this._broadcast();
+      return;
+    }
+    // Schedule a trailing broadcast so the LAST change in a burst always
+    // ships (without this, releasing the brush right after a 79ms-spaced
+    // change would lose that final tick on the player side).
+    if (this._broadcastTrailTimer) return;
+    this._broadcastTrailTimer = setTimeout(() => {
+      this._broadcastTrailTimer = null;
+      this._lastBroadcastTs = Date.now();
+      this._broadcast();
+    }, 80 - elapsed);
   },
 
   // Live-stroke broadcast — emits the active stroke to (a) the BroadcastChannel
@@ -1401,7 +1438,7 @@ registerPanel('battlemap',{
           }
         }
       }
-      if(changed){this._drawFog();this._broadcast();}
+      if(changed){this._drawFog();this._broadcastThrottled();}
     };
     canvas.addEventListener('mousedown',e=>{
       if (e.button !== 0) return; // middle/right click handled by pan logic below
