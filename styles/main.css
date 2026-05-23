@@ -578,7 +578,7 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
    holds the always-visible heal/damage strip. The HP/AC/Init cells still
    each take 1fr of the remaining width. */
 .card-stats.has-dmg-strip{grid-template-columns:auto 1fr 1fr 1fr}
-.card-stat{background:var(--panel-3);border-radius:4px;padding:3px 4px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.card-stat{background:var(--panel-3);border-radius:4px;padding:3px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
 .card-stat .lab{font-size:11px;color:var(--text-muted);line-height:1}
 .card-stat input{background:transparent;border:none;text-align:center;padding:0;font-size:13px;font-weight:600;color:var(--text);width:100%;-moz-appearance:textfield}
 .card-stat input:focus{outline:none;background:rgba(255,255,255,.05);border-radius:2px}
@@ -589,11 +589,11 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
    unmistakable even when you tap fast. Sized big enough to be comfortable
    tap/click targets on both desktop and touch — accepting that the card
    grows a bit vertically in exchange. */
-.hp-dmg-strip{display:flex;flex-direction:column;gap:2px;align-items:stretch;background:var(--panel-3);border-radius:4px;padding:2px}
-.hp-dmg-strip .hp-dmg-amt{width:28px;height:18px;font-size:11px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;line-height:1}
+.hp-dmg-strip{display:flex;flex-direction:column;gap:1px;align-items:stretch;padding:0}
+.hp-dmg-strip .hp-dmg-amt{width:26px;height:15px;font-size:11px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;line-height:1}
 .hp-dmg-strip .hp-dmg-amt::-webkit-outer-spin-button,
 .hp-dmg-strip .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.hp-dmg-strip .hp-dmg-btn{width:28px;height:20px;font-size:14px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.hp-dmg-strip .hp-dmg-btn{width:26px;height:17px;font-size:13px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .hp-dmg-strip .hp-dmg-btn.dmg{color:#c25450}
 .hp-dmg-strip .hp-dmg-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
 .hp-dmg-strip .hp-dmg-btn.heal{color:#6b9e6b}
