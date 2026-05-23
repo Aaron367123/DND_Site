@@ -261,6 +261,13 @@ function initPlayerView(){
   _patchClosePanelForPlayer();
   _applySharedPanelsToPlayerView();
   _initMobileDockHideOnScroll();
+  // Search is enabled in player mode too — players use it to look up
+  // monsters/spells/items they encounter. DM-only actions inside results
+  // (e.g. "+ Add to combat") still appear but no-op for players since
+  // they don't have the combat tracker open by default.
+  if (typeof initSearch === 'function'){
+    try { initSearch(); } catch(e){ console.warn('initSearch failed in player view', e); }
+  }
   _updatePlayerViewportVars();
   window.addEventListener('resize', _updatePlayerViewportVars);
   window.addEventListener('orientationchange', _updatePlayerViewportVars);

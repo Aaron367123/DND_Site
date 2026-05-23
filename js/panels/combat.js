@@ -306,23 +306,26 @@ registerPanel('combat',{
     // the field). Shown as a small "+N" pill next to the HP value when > 0.
     const partyMatch = isPC ? state.party.find(p => p.id === c.id) : null;
     const tempHp = partyMatch?.tempHp || 0;
-    // Damage/heal widget — hidden by default, revealed on card hover so
-    // resting cards stay compact. Single tight row: [−][amt][+]. Buttons
-    // are tiny and live in the HP card-stat cell without forcing a second
-    // row taller than the HP value itself.
-    const dmgWidget = (mode !== 'show')
+    // Heal/damage controls — a permanent vertical strip sitting in its own
+    // grid column to the LEFT of the HP cell. Stacks [+]/amount/[−]
+    // top-to-bottom (up = heal, down = damage). Always visible (no hover),
+    // since the old hover-popup added a 250ms delay to every HP change and
+    // didn't work at all on touch. Conditionally suppressed only when the
+    // HP itself is hidden/concealed (monsters in player view at non-show
+    // stats mode).
+    const dmgStrip = (mode !== 'show')
       ? ''
-      : `<div class="hp-dmg-widget" data-idx="${i}" title="Hover-only · type an amount, click − to damage / + to heal">
-          <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Apply as damage (drains temp HP first)">−</button>
-          <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Damage / heal amount">
-          <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Apply as healing (clamped to max HP)">+</button>
+      : `<div class="hp-dmg-strip" data-idx="${i}" title="Type an amount, click + to heal or − to damage">
+          <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
+          <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount">
+          <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage (drains temp HP first)">−</button>
         </div>`;
     const tempBadge = tempHp > 0 ? `<span class="hp-temp-badge" title="Temporary HP (absorbs damage first)">+${tempHp}</span>` : '';
     const hpField = mode === 'hide'
       ? '<span class="card-stat-hidden">?</span>'
       : mode === 'conceal'
         ? `<span class="card-stat-tier" title="Concealed health">${esc(this._hpTier(c))}</span>`
-        : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">${tempBadge}${dmgWidget}`;
+        : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">${tempBadge}`;
     const acField = mode === 'show'
       ? `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`
       : '<span class="card-stat-hidden">?</span>';
@@ -345,7 +348,8 @@ registerPanel('combat',{
               })()}
               ${active?'<span class="turn-marker">◀</span>':''}
             </div>`}
-        <div class="card-stats">
+        <div class="card-stats${dmgStrip ? ' has-dmg-strip' : ''}">
+          ${dmgStrip}
           <div class="card-stat" title="HP"><span class="lab">♥</span>${hpField}</div>
           <div class="card-stat" title="AC"><span class="lab">⛨</span>${acField}</div>
           <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>

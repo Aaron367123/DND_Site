@@ -196,9 +196,9 @@ body.hide-zoom-controls .zoom-controls{display:none}
    `hide-window-focus`), reset the focused style back to the resting border
    and shadow so the active panel doesn't visually stand out. */
 body.hide-window-focus .window.focused{border-color:var(--border);box-shadow:0 8px 24px rgba(0,0,0,.4)}
-/* Hide DM-only items in the float-toolbar; keep sync indicator + settings. */
-body.player-mode #float-search-btn,
-body.player-mode #search-wrap,
+/* Hide DM-only items in the float-toolbar; keep sync indicator, settings,
+   AND the search bar — players use search to look up monsters, spells, and
+   items they encounter during the session as a quick reference. */
 body.player-mode #player-view-btn{display:none}
 body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w) 1fr;grid-template-areas:". workspace"}
 /* Player-view floating dock — chips for the DM-shared panels */
@@ -502,7 +502,6 @@ body.player-mode #reset-layout-btn{display:none}
 /* Hide DM-only window controls (share/lock) in player mode, but keep minimize and close. */
 body.player-mode .window-actions [data-wact="share"],
 body.player-mode .window-actions [data-wact="lock"]{display:none}
-body.player-mode #search-popup{display:none !important}
 .window-body{flex:1;overflow:auto;position:relative}
 /* Resize handles — invisible hit zones around the window edges + corners */
 .rh{position:absolute;z-index:2}
@@ -575,33 +574,28 @@ body.player-mode #search-popup{display:none !important}
 .turn-marker{color:var(--accent);font-size:11px;margin-left:4px}
 
 .card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+/* When a combatant's HP is visible, an extra narrow column on the left
+   holds the always-visible heal/damage strip. The HP/AC/Init cells still
+   each take 1fr of the remaining width. */
+.card-stats.has-dmg-strip{grid-template-columns:auto 1fr 1fr 1fr}
 .card-stat{background:var(--panel-3);border-radius:4px;padding:3px 4px;display:flex;flex-direction:column;align-items:center;gap:1px}
 .card-stat .lab{font-size:11px;color:var(--text-muted);line-height:1}
 .card-stat input{background:transparent;border:none;text-align:center;padding:0;font-size:13px;font-weight:600;color:var(--text);width:100%;-moz-appearance:textfield}
 .card-stat input:focus{outline:none;background:rgba(255,255,255,.05);border-radius:2px}
 .card-stat input::-webkit-outer-spin-button,.card-stat input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-/* Damage / heal widget — hidden by default so resting cards stay clean.
-   Reveals on card hover or when the HP cell itself has focus inside.
-   Positioned absolutely so the card height doesn't change when it
-   appears — the widget floats just under the HP value without pushing
-   the AC / Init / SPD cells around. */
-.card-stat{position:relative}
-.hp-dmg-widget{display:flex;gap:2px;align-items:center;justify-content:center;position:absolute;left:-2px;right:-2px;top:100%;margin-top:1px;padding:2px 0;background:var(--panel);border:1px solid var(--border);border-radius:3px;box-shadow:0 2px 6px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .12s;z-index:5}
-.combatant-card:hover .hp-dmg-widget,
-.hp-dmg-widget:focus-within{opacity:1;pointer-events:auto}
-.hp-dmg-widget .hp-dmg-amt{width:28px;font-size:10px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;height:16px}
-.hp-dmg-widget .hp-dmg-amt::-webkit-outer-spin-button,
-.hp-dmg-widget .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.hp-dmg-widget .hp-dmg-btn{width:16px;height:16px;font-size:11px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
-.hp-dmg-widget .hp-dmg-btn.dmg{color:#c25450}
-.hp-dmg-widget .hp-dmg-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
-.hp-dmg-widget .hp-dmg-btn.heal{color:#6b9e6b}
-.hp-dmg-widget .hp-dmg-btn.heal:hover{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.6)}
-/* Touch devices have no hover — keep the widget visible at low opacity so
-   it stays accessible without making desktop cards crowded. */
-@media (hover:none){
-  .hp-dmg-widget{position:static;opacity:.85;pointer-events:auto;background:transparent;border:none;box-shadow:none;padding:1px 0;margin-top:2px}
-}
+/* Heal/damage strip — vertical tab sitting to the LEFT of the HP cell.
+   Always visible, no hover state. Top button heals, bottom button damages,
+   middle input holds the amount. Color-coded green/red so the action is
+   unmistakable even when you tap fast. */
+.hp-dmg-strip{display:flex;flex-direction:column;gap:2px;align-items:stretch;background:var(--panel-3);border-radius:4px;padding:2px}
+.hp-dmg-strip .hp-dmg-amt{width:22px;font-size:10px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:1px 0;border-radius:2px;text-align:center;-moz-appearance:textfield}
+.hp-dmg-strip .hp-dmg-amt::-webkit-outer-spin-button,
+.hp-dmg-strip .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.hp-dmg-strip .hp-dmg-btn{width:22px;height:18px;font-size:12px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.hp-dmg-strip .hp-dmg-btn.dmg{color:#c25450}
+.hp-dmg-strip .hp-dmg-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
+.hp-dmg-strip .hp-dmg-btn.heal{color:#6b9e6b}
+.hp-dmg-strip .hp-dmg-btn.heal:hover{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.6)}
 /* Temp HP badge next to current HP value. */
 .hp-temp-badge{display:inline-block;font-size:9px;font-weight:600;color:#9ad1ff;background:rgba(74,142,201,.18);border:1px solid rgba(74,142,201,.4);padding:0 4px;border-radius:6px;margin-left:2px;vertical-align:middle}
 /* Legendary action pip row, drawn under conditions/death-saves. */
