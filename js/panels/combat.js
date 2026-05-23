@@ -30,12 +30,18 @@ registerPanel('combat',{
   // support the API. While PiP is active, the main panel window shows a
   // placeholder + "bring back" button so the panel isn't a black hole.
   _openPiP(){
-    if (!('documentPictureInPicture' in window)){
-      if (typeof showToast === 'function') showToast('PiP not supported in this browser');
+    if (this._pipWin) return; // already open
+    // Some Chromium-derivatives (Opera GX, Brave with shields) hide
+    // `documentPictureInPicture` from the global even though the underlying
+    // engine supports it. Probe defensively — check the property AND that
+    // requestWindow is callable — and fall back to a regular popup if not.
+    const pip = (typeof window !== 'undefined') ? window.documentPictureInPicture : null;
+    const supportsPiP = pip && typeof pip.requestWindow === 'function';
+    if (!supportsPiP){
+      this._openPiPFallback();
       return;
     }
-    if (this._pipWin) return; // already open
-    window.documentPictureInPicture.requestWindow({ width: 420, height: 560 }).then(pipWin => {
+    pip.requestWindow({ width: 420, height: 560 }).then(pipWin => {
       this._pipWin = pipWin;
       // Mirror the app stylesheets into the PiP document so theme vars,
       // panel layout, and combat-specific styles all carry over.
@@ -77,9 +83,68 @@ registerPanel('combat',{
       // User closes the PiP window via the OS chrome — clean up.
       pipWin.addEventListener('pagehide', () => this._closePiP(/*silent*/true));
     }).catch(err => {
-      console.warn('PiP open failed', err);
-      if (typeof showToast === 'function') showToast('Could not open PiP window');
+      console.warn('PiP open failed, falling back to popup window', err);
+      this._openPiPFallback();
     });
+  },
+
+  // Fallback when `documentPictureInPicture` isn't available (Opera GX with
+  // PiP disabled, older Chromium, Firefox). Opens a plain popup window via
+  // `window.open()` — not "always-on-top" like real Document PiP, but the
+  // user CAN drag it to a second monitor or pin it via OS-level "always on
+  // top" (Windows PowerToys, macOS BetterTouchTool, etc.) so it's still
+  // useful. Same render-swap logic as the PiP path.
+  _openPiPFallback(){
+    const pop = window.open('', 'skt-combat-pip-' + Date.now(), 'width=420,height=600,resizable=yes,scrollbars=yes');
+    if (!pop){
+      if (typeof showToast === 'function') showToast('Allow popups to use the pop-out combat tracker');
+      return;
+    }
+    // Stand up a minimal HTML shell so we can append our content + styles.
+    try {
+      pop.document.open();
+      pop.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Combat Tracker</title></head><body></body></html>');
+      pop.document.close();
+    } catch(e){}
+    // Mirror app stylesheets (same as the PiP path).
+    Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach(node => {
+      try {
+        if (node.tagName === 'LINK'){
+          const l = pop.document.createElement('link');
+          l.rel = 'stylesheet';
+          // Absolute URL — relative paths won't resolve correctly in the
+          // about:blank document the popup starts on.
+          l.href = node.href;
+          pop.document.head.appendChild(l);
+        } else {
+          const s = pop.document.createElement('style');
+          s.textContent = node.textContent;
+          pop.document.head.appendChild(s);
+        }
+      } catch(e){}
+    });
+    try { pop.document.body.className = document.body.className + ' combat-pip-mode'; } catch(e){}
+    pop.document.body.style.cssText = 'margin:0;padding:8px;background:var(--bg);min-height:100vh;overflow:auto';
+    const pipBody = pop.document.createElement('div');
+    pipBody.id = 'panel-body-combat-pip';
+    pipBody.style.cssText = 'height:100%';
+    pop.document.body.appendChild(pipBody);
+    this._pipWin = pop;
+    this._originalBody = this._body;
+    this._body = pipBody;
+    this._render();
+    if (this._originalBody){
+      this._originalBody.innerHTML = '<div class="combat-pip-placeholder">'
+        + '<div style="font-size:32px;margin-bottom:6px">⧉</div>'
+        + '<div style="margin-bottom:10px">Combat tracker is in pop-out window</div>'
+        + '<button class="btn primary" id="combat-pip-bring-back">Bring back</button>'
+        + '</div>';
+      this._originalBody.querySelector('#combat-pip-bring-back')?.addEventListener('click', () => this._closePiP());
+    }
+    // Popup closed → restore. `beforeunload` covers Cmd-W / X-button.
+    pop.addEventListener('beforeunload', () => this._closePiP(/*silent*/true));
+    pop.addEventListener('pagehide', () => this._closePiP(/*silent*/true));
+    if (typeof showToast === 'function') showToast('Combat popped out — drag to a second monitor or pin it on top');
   },
   _closePiP(silent){
     if (!this._pipWin && !this._originalBody) return;

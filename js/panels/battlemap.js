@@ -1042,7 +1042,7 @@ registerPanel('battlemap',{
           this._alignFirstClick = null;
           this._removeAlignMarker();
         } else if (typeof showToast === 'function') {
-          showToast('Click two opposite corners of one cell on the printed grid.');
+          showToast('Align: click two grid intersections. Span MULTIPLE cells for accuracy.');
         }
         // Full re-render so the toolbar reveals/hides tool-specific controls
         // (e.g. the draw color/size pickers) AND the draw canvas's
@@ -1261,25 +1261,63 @@ registerPanel('battlemap',{
         if (!this._alignFirstClick){
           this._alignFirstClick = { ix, iy, cx, cy };
           this._showAlignMarker(cx, cy);
-          if (typeof showToast === 'function') showToast('Now click the opposite corner of the same cell.');
+          if (typeof showToast === 'function') showToast('Now click another intersection. Spanning multiple cells = more accurate.');
           return;
         }
         const a = this._alignFirstClick;
         const dxImg = Math.abs(ix - a.ix), dyImg = Math.abs(iy - a.iy);
-        // Average so the user can pick imperfectly opposite corners. Round
-        // to integer pixels for a clean cellSize.
-        const newCs = Math.max(8, Math.round((dxImg + dyImg) / 2));
-        const minIx = Math.min(ix, a.ix), minIy = Math.min(iy, a.iy);
-        this._cellSize = newCs;
-        this._gridOffsetX = ((minIx % newCs) + newCs) % newCs;
-        this._gridOffsetY = ((minIy % newCs) + newCs) % newCs;
-        this._alignFirstClick = null;
-        this._tool = '';
-        this._removeAlignMarker();
-        this._fitGridToBg();
-        this._saveMap();
-        this._render();
-        if (typeof showToast === 'function') showToast('Grid aligned: ' + newCs + 'px cells');
+        // Estimate how many cells the user spanned on each axis using the
+        // CURRENT cellSize as a hint. Then ask them to confirm/correct via
+        // a small prompt — this is what fixes the "drifts further out"
+        // bug: measuring N cells instead of 1 divides the alignment error
+        // by N. Decimal cellSize (no rounding) eliminates the rest.
+        const cur = this._cellSize || 50;
+        const guessNx = Math.max(1, Math.round(dxImg / cur));
+        const guessNy = Math.max(1, Math.round(dyImg / cur));
+        const askAndApply = (nx, ny) => {
+          nx = Math.max(1, Math.round(nx || 1));
+          ny = Math.max(1, Math.round(ny || 1));
+          // Cell size on each axis. They SHOULD be equal for a square grid;
+          // averaging cancels any small click error. Keep as a float — the
+          // canvas renderer accepts fractional values just fine.
+          const csX = dxImg / nx;
+          const csY = dyImg / ny;
+          const newCs = Math.max(8, (csX + csY) / 2);
+          const minIx = Math.min(ix, a.ix), minIy = Math.min(iy, a.iy);
+          this._cellSize = newCs;
+          this._gridOffsetX = ((minIx % newCs) + newCs) % newCs;
+          this._gridOffsetY = ((minIy % newCs) + newCs) % newCs;
+          this._alignFirstClick = null;
+          this._tool = '';
+          this._removeAlignMarker();
+          this._fitGridToBg();
+          this._saveMap();
+          this._render();
+          if (typeof showToast === 'function') showToast('Grid aligned: ' + newCs.toFixed(2) + 'px cells');
+        };
+        // Skip the prompt only when the user picked two corners of a
+        // single cell (the original UX). For multi-cell spans, confirm
+        // the count so we compute cellSize correctly.
+        if (guessNx <= 1 && guessNy <= 1){
+          askAndApply(1, 1);
+        } else if (typeof showModal === 'function'){
+          showModal('Align grid', [
+            { id: 'nx', label: 'Cells spanned horizontally', type: 'number', value: guessNx, min: 1, max: 200 },
+            { id: 'ny', label: 'Cells spanned vertically',   type: 'number', value: guessNy, min: 1, max: 200 },
+          ], 'Align').then(res => {
+            if (!res){
+              // User cancelled — reset transient state without applying.
+              this._alignFirstClick = null;
+              this._tool = '';
+              this._removeAlignMarker();
+              this._render();
+              return;
+            }
+            askAndApply(parseFloat(res.nx), parseFloat(res.ny));
+          });
+        } else {
+          askAndApply(guessNx, guessNy);
+        }
         return;
       }
       if(!this._tool||this._tool==='erase') return;

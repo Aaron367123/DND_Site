@@ -125,6 +125,12 @@ registerPanel('notes', {
   // Per-file content-history stacks for undo/redo. Keyed by file id.
   _undoStacks: {},
   _redoStacks: {},
+  // Toolbar collapse state. Matches the battlemap pattern — same localStorage
+  // contract, same UX (small "▾ Toolbar" chip to restore when hidden). The
+  // formatting bar eats 70px of vertical space on a phone, so being able to
+  // tuck it away while reading / writing long notes is worth more than the
+  // taps it saves on power users.
+  _toolbarHidden: (function(){ try { return localStorage.getItem('skt-notes-toolbar-hidden') === '1'; } catch(e){ return false; } })(),
 
   mount(body){
     this._body = body;
@@ -452,6 +458,7 @@ registerPanel('notes', {
   },
 
   _renderEditor(file){
+    const tbHidden = !!this._toolbarHidden;
     return `<div class="notes-editor-head">
         <input class="notes-file-title" type="text" value="${esc(file.name)}" data-act="rename-inline">
         <span class="notes-file-tag">MARKDOWN</span>
@@ -459,8 +466,9 @@ registerPanel('notes', {
         <button class="btn small" id="note-download" title="Save to desktop">💾</button>
         <button class="btn icon-btn" data-act="notes-refresh" title="Sync now (pull latest from disk)">↻</button>
         <button class="btn icon-btn" data-act="notes-settings" title="Display settings">⚙</button>
+        <button class="btn icon-btn" data-act="notes-toggle-toolbar" title="${tbHidden?'Show formatting toolbar':'Hide formatting toolbar (more room to write)'}">${tbHidden?'▾':'▴'}</button>
       </div>
-      <div class="notes-toolbar-2">
+      ${tbHidden ? '' : `<div class="notes-toolbar-2">
         <button class="btn" data-nact="bold"   title="Bold (Ctrl+B)"><b>B</b></button>
         <button class="btn" data-nact="italic" title="Italic (Ctrl+I)"><i>I</i></button>
         <button class="btn" data-nact="strike" title="Strikethrough"><span style="text-decoration:line-through">S</span></button>
@@ -481,7 +489,7 @@ registerPanel('notes', {
         <span class="notes-tb-sep"></span>
         <button class="btn" data-nact="undo" title="Undo (Ctrl+Z)">↶</button>
         <button class="btn" data-nact="redo" title="Redo (Ctrl+Shift+Z)">↷</button>
-      </div>
+      </div>`}
       <div class="notes-edit-area" id="note-edit-area">${this._renderColored(file)}</div>`;
   },
 
@@ -1072,6 +1080,15 @@ registerPanel('notes', {
     b.querySelector('[data-act="notes-settings"]')?.addEventListener('click', e => {
       e.stopPropagation();
       this._openViewSettingsPopover(e.currentTarget);
+    });
+
+    // Toolbar collapse toggle — mirrors the battlemap's ▲/▾ tools button.
+    // Persisted across sessions so a player who hates the toolbar can lose
+    // it once and have it stay gone.
+    b.querySelector('[data-act="notes-toggle-toolbar"]')?.addEventListener('click', () => {
+      this._toolbarHidden = !this._toolbarHidden;
+      try { localStorage.setItem('skt-notes-toolbar-hidden', this._toolbarHidden ? '1' : '0'); } catch(e){}
+      this._render();
     });
 
     // Download
