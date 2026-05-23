@@ -80,7 +80,8 @@ function _applySharedPanelsToPlayerView(){
   const canvas = document.getElementById('workspace-canvas');
   if (!canvas) return;
   const empty = canvas.querySelector('#pv-empty');
-  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  // `isMobile` is already declared at the top of this function (line ~31).
+  // We just need the landscape orientation check for the arrow direction.
   const isLandscape = window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
   if (!shared.size){
     // DM hasn't shared anything.
