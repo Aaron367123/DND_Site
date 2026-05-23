@@ -599,10 +599,18 @@ registerPanel('battlemap',{
       el.style.top  = t.y + 'px';
       const sz = t.size || 1;
       const dim = (sz * csNat - 4) * scale;
-      const fontSize = (sz > 1 ? 13 : Math.max(8, 11 - (this._tokenDisplayLabel(t).length > 5 ? 2 : 0))) * scale;
+      // Match the glyph vs initials font-size logic from _renderTokens so
+      // emoji icons stay big at every zoom level.
+      const iconSource = t.portrait || t.icon;
+      const isImgIcon = typeof iconSource === 'string' && (iconSource.startsWith('data:image/') || iconSource.startsWith('img/') || /^https?:\/\//.test(iconSource));
+      const isSvgIcon = typeof iconSource === 'string' && iconSource.startsWith('<svg');
+      const isGlyphIcon = !!(t.icon || t.portrait) && !isImgIcon && !isSvgIcon;
+      const fontSize = isGlyphIcon
+        ? Math.max(14, dim * 0.6)
+        : (sz > 1 ? 13 : Math.max(8, 11 - (this._tokenDisplayLabel(t).length > 5 ? 2 : 0))) * scale;
       el.style.width  = dim + 'px';
       el.style.height = dim + 'px';
-      el.style.fontSize = fontSize + 'px';
+      el.style.fontSize = fontSize.toFixed(1) + 'px';
       tokenDim.set(t.id, dim);
     });
     // Reposition the name labels (siblings of .map-token) to track their
@@ -967,10 +975,10 @@ registerPanel('battlemap',{
       +'<input type="color" id="tp-color" style="width:100%;height:26px;margin-bottom:6px;cursor:pointer">'
       +'<label class="field-label">Size (cells)</label>'
       +'<div style="display:flex;gap:4px;margin-bottom:8px;align-items:center">'
-        +'<button class="btn icon-btn" id="tp-size-down" title="Smaller" style="padding:1px 6px;font-size:13px">−</button>'
-        +'<input type="range" id="tp-size" min="1" max="6" step="1" value="1" style="flex:1">'
-        +'<button class="btn icon-btn" id="tp-size-up" title="Bigger" style="padding:1px 6px;font-size:13px">+</button>'
-        +'<span id="tp-size-val" style="font-size:11px;color:var(--text-muted);min-width:42px;text-align:right">1 cell</span>'
+        +'<button class="btn icon-btn" id="tp-size-down" title="Smaller (¼ cell)" style="padding:1px 6px;font-size:13px">−</button>'
+        +'<input type="range" id="tp-size" min="0.25" max="6" step="0.25" value="1" style="flex:1">'
+        +'<button class="btn icon-btn" id="tp-size-up" title="Bigger (¼ cell)" style="padding:1px 6px;font-size:13px">+</button>'
+        +'<span id="tp-size-val" style="font-size:11px;color:var(--text-muted);min-width:52px;text-align:right">1.00 cells</span>'
       +'</div>'
       +'<label class="field-label">Facing</label>'
       +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
@@ -2637,10 +2645,28 @@ registerPanel('battlemap',{
       const displayLabel = this._tokenDisplayLabel(t);
       el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}`;
       el.dataset.tid=t.id;
-      const fontSize=(size>1?13:Math.max(8,11-(displayLabel.length>5?2:0))) * tokScale;
-      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:hidden;box-sizing:border-box`;
+      // Two font-size regimes:
+      //  - When the token shows a single-character/emoji icon (🎵 ⚔ 🐲),
+      //    we want it to FILL the circle — scale font-size to roughly 60%
+      //    of the token's actual pixel diameter so the glyph is unmistakable
+      //    at every zoom level. The previous 11px-text-in-a-50px-circle made
+      //    emojis read as tiny specks.
+      //  - When the token has only initials text (no icon set), keep the
+      //    smaller readable size so two letters fit side-by-side.
+      const iconSource = t.portrait || t.icon;
+      const isImgIcon = typeof iconSource === 'string' && (iconSource.startsWith('data:image/') || iconSource.startsWith('img/') || /^https?:\/\//.test(iconSource));
+      const isSvgIcon = typeof iconSource === 'string' && iconSource.startsWith('<svg');
+      const isGlyphIcon = hasIcon && !isImgIcon && !isSvgIcon;
+      let fontSize;
+      if (isGlyphIcon){
+        // ~60% of dim — leaves a small ring of the token color around the glyph.
+        // Floor at 14px so the glyph stays readable when the map is zoomed far out.
+        fontSize = Math.max(14, dim * 0.6);
+      } else {
+        fontSize = (size > 1 ? 13 : Math.max(8, 11 - (displayLabel.length > 5 ? 2 : 0))) * tokScale;
+      }
+      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:hidden;box-sizing:border-box`;
       if (hasIcon){
-        const iconSource = t.portrait || t.icon;
         el.innerHTML = (typeof renderIcon === 'function')
           ? renderIcon(iconSource, displayLabel)
           : esc(displayLabel.slice(0,2));
@@ -2860,23 +2886,27 @@ registerPanel('battlemap',{
     b.querySelector('#tp-color').value=t.color;
     b.querySelector('#tp-size').value=t.size||1;
     const sizeValEl = b.querySelector('#tp-size-val');
-    const setSizeLabel = (n) => { if (sizeValEl) sizeValEl.textContent = n + (n === 1 ? ' cell' : ' cells'); };
+    // Tokens can now go sub-cell (¼ cell minimum) for familiars/imps/swarms
+    // and up to 6 cells for gargantuans. Label formats as decimal cells.
+    const fmtSize = (n) => {
+      const r = Math.round(n * 100) / 100;
+      return r.toFixed(2).replace(/\.?0+$/, '') + (Math.abs(r - 1) < .01 ? ' cell' : ' cells');
+    };
+    const setSizeLabel = (n) => { if (sizeValEl) sizeValEl.textContent = fmtSize(n); };
     setSizeLabel(t.size || 1);
-    // Buttons step the slider in either direction. Bigger-than-6 is unusual
-    // (gargantuan = 4×4 = 4 cells in 5e, but some maps use 6 for huge dragons)
-    // so we cap at 6 to avoid runaway giant tokens.
+    const clampSize = n => Math.max(0.25, Math.min(6, Math.round(n * 4) / 4));
     const stepSize = (delta) => {
-      const cur = parseInt(b.querySelector('#tp-size').value) || 1;
-      const next = Math.max(1, Math.min(6, cur + delta));
-      if (next === cur) return;
+      const cur = parseFloat(b.querySelector('#tp-size').value) || 1;
+      const next = clampSize(cur + delta);
+      if (Math.abs(next - cur) < 0.01) return;
       t.size = next;
       b.querySelector('#tp-size').value = next;
       setSizeLabel(next);
       this._saveMap();
       this._renderTokens();
     };
-    rewire('#tp-size-down','click', () => stepSize(-1));
-    rewire('#tp-size-up',  'click', () => stepSize(+1));
+    rewire('#tp-size-down','click', () => stepSize(-0.25));
+    rewire('#tp-size-up',  'click', () => stepSize(+0.25));
     // Sync rotation controls — slider + label show the current angle, with
     // ↺ / ↻ buttons stepping by 45° for quick cardinal/diagonal directions.
     const rot0 = t.rotation || 0;
@@ -2893,8 +2923,8 @@ registerPanel('battlemap',{
     rewire('#tp-label','change',e=>{t.label=e.target.value;b.querySelector('#tp-name').textContent=t.label;this._saveMap();this._renderTokens();});
     rewire('#tp-color','change',e=>{t.color=e.target.value;this._saveMap();this._renderTokens();});
     // Slider live-updates the readout on input; commits + re-renders on release.
-    rewire('#tp-size','input', e => { setSizeLabel(Math.max(1, Math.min(6, parseInt(e.target.value)||1))); });
-    rewire('#tp-size','change',e=>{t.size=Math.max(1,Math.min(6,parseInt(e.target.value)||1));setSizeLabel(t.size);this._saveMap();this._renderTokens();});
+    rewire('#tp-size','input', e => { setSizeLabel(clampSize(parseFloat(e.target.value)||1)); });
+    rewire('#tp-size','change',e=>{t.size=clampSize(parseFloat(e.target.value)||1);setSizeLabel(t.size);this._saveMap();this._renderTokens();});
     rewire('#tp-rot','input',e=>applyRot(parseInt(e.target.value)||0));
     rewire('#tp-rot-left','click',()=>applyRot((t.rotation || 0) - 45));
     rewire('#tp-rot-right','click',()=>applyRot((t.rotation || 0) + 45));

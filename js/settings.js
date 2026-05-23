@@ -13,19 +13,30 @@ function applyFontScale(scale){
   document.body.style.zoom = s;
   // CSS `zoom` visually scales the body but leaves layout dimensions alone,
   // so `height:100vh` ends up covering only `s × 100vh` of physical screen
-  // — leaving a gap below (and to the right) of the body. Counter-scale the
-  // body's own width/height so it always fills the viewport at every zoom.
-  // Reset to '' when at 100% so the default stylesheet height (100%) takes
-  // back over cleanly.
+  // — leaving a gap below (and to the right) of every element sized in
+  // viewport units. Counter-scale every viewport-sized element so they all
+  // still fill the screen at any zoom.
+  //
+  // .app uses `height:100vh` in CSS so it needs the same treatment as body;
+  // otherwise body fills the screen but `.app` (which lives inside body)
+  // still ends up shorter than the viewport and its background shows
+  // through as a dark gap.
+  const app = document.querySelector('.app');
   if (Math.abs(s - 1) < 0.001){
     document.body.style.width = '';
     document.body.style.height = '';
     document.body.style.minHeight = '';
+    if (app){ app.style.width = ''; app.style.height = ''; app.style.minHeight = ''; }
   } else {
     const pct = (100 / s).toFixed(3);
     document.body.style.width  = pct + 'vw';
     document.body.style.height = pct + 'vh';
     document.body.style.minHeight = pct + 'vh';
+    if (app){
+      app.style.width  = pct + 'vw';
+      app.style.height = pct + 'vh';
+      app.style.minHeight = pct + 'vh';
+    }
   }
 }
 
