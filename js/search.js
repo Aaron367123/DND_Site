@@ -1291,9 +1291,13 @@ function initSearch(){
   let _insideSearch = false;
   document.querySelector('.search-wrap').addEventListener('mousedown', () => { _insideSearch = true; });
   // The 🔎 toggle button on the floating toolbar opens (and focuses) the input.
+  // Note: we DON'T `e.stopPropagation()` here. If we did, the document-level
+  // mousedown handler below would never fire — meaning `_insideSearch` would
+  // stay stuck at `true` after this click, and the next click outside the
+  // search would (silently) skip the close and only reset the flag. The user
+  // would then have to click off twice to actually close the search.
   document.getElementById('float-search-btn')?.addEventListener('mousedown', e => {
     _insideSearch = true;
-    e.stopPropagation();
     const wrap = document.getElementById('search-wrap');
     if (wrap?.classList.contains('open')) closeSearch();
     else { openSearch(); setTimeout(()=>inp.focus(), 50); }
