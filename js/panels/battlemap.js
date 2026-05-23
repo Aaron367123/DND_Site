@@ -2781,6 +2781,12 @@ registerPanel('battlemap',{
             this._renderTokens();
           }
           // Left-click no longer opens the options panel — right-click does.
+          // Clear the drag flag AFTER the synthesized click event has had its
+          // turn to fire, so canvas-click bail logic still works for the
+          // immediate drag-release click. Without this defer, every future
+          // canvas click silently bails on `if (this._drag?.moved) return`
+          // — that's what broke the align tool after any token drag.
+          setTimeout(() => { this._drag = null; }, 0);
         };
 
         document.addEventListener('mousemove',onMove);
@@ -2847,6 +2853,9 @@ registerPanel('battlemap',{
           document.removeEventListener('touchmove', onMove);
           document.removeEventListener('touchend', onEnd);
           document.removeEventListener('touchcancel', onEnd);
+          // Same defer-clear as the mouse path — prevents the drag's "moved"
+          // state from poisoning the next tap on the canvas.
+          setTimeout(() => { this._drag = null; }, 0);
           if (longPressFired) return;
           if (moved){
             let nx = curPx, ny = curPy;

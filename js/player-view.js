@@ -236,6 +236,19 @@ function _initMobileDockHideOnScroll(){
   }, true);
 }
 
+// Belt-and-suspenders fullscreen sizing for the player view on mobile.
+// CSS `dvh` covers most browsers but some embedded webviews and older Opera
+// builds still measure 100vh as the layout viewport. Push the actual visible
+// height into a CSS variable that the mobile rules can consume. Updated on
+// every resize / orientationchange / visualViewport scroll (iOS).
+function _updatePlayerViewportVars(){
+  if (!document.body.classList.contains('player-mode')) return;
+  const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const w = (window.visualViewport && window.visualViewport.width)  || window.innerWidth;
+  document.documentElement.style.setProperty('--pv-vh', h + 'px');
+  document.documentElement.style.setProperty('--pv-vw', w + 'px');
+}
+
 function initPlayerView(){
   document.body.classList.add('player-mode');
   load();
@@ -248,6 +261,13 @@ function initPlayerView(){
   _patchClosePanelForPlayer();
   _applySharedPanelsToPlayerView();
   _initMobileDockHideOnScroll();
+  _updatePlayerViewportVars();
+  window.addEventListener('resize', _updatePlayerViewportVars);
+  window.addEventListener('orientationchange', _updatePlayerViewportVars);
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', _updatePlayerViewportVars);
+    window.visualViewport.addEventListener('scroll', _updatePlayerViewportVars);
+  }
   // Re-apply on viewport flip (rotate, desktop⇄mobile breakpoint cross).
   // - Entering mobile: collapse to the single currently-visible panel so the
   //   player isn't fighting tiny stacked windows.

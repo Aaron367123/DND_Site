@@ -244,10 +244,18 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 @media (max-width: 768px){
   body.player-mode .window{
     left:0 !important; top:0 !important;
+    /* Three-tier sizing fallback. Top wins where supported:
+         1. --pv-vw / --pv-vh — JS sets these from visualViewport.height/width
+            on every resize/rotate/scroll. Exactly what's visible, period.
+         2. dvw / dvh — browser-native dynamic viewport units (Chrome 108+,
+            Safari 15.4+, FF 101+). Honor the address-bar overlay.
+         3. vw / vh — original layout viewport. Fallback for ancient builds. */
     width:100vw !important;
-    /* Account for the bottom dock (64px) plus the iPhone home indicator
-       safe-area inset so panel content never sits under it. */
+    width:100dvw !important;
+    width:var(--pv-vw, 100dvw) !important;
     height:calc(100vh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+    height:calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+    height:calc(var(--pv-vh, 100dvh) - 64px - env(safe-area-inset-bottom, 0px)) !important;
     border-radius:0;
     border-left:none;border-right:none;border-top:none;
     box-shadow:none;
@@ -360,13 +368,15 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   /* Allow vertical scroll (panel content can be tall), but lock horizontal
      pan — the canvas is 5000px wide and there's nothing useful to the side
      of a fullscreen panel. */
-  body.player-mode .workspace{overflow-x:hidden;overflow-y:auto}
-  body.player-mode .workspace-canvas{width:100vw}
+  body.player-mode .workspace{overflow-x:hidden;overflow-y:auto;width:100vw;width:100dvw;height:100vh;height:100dvh}
+  body.player-mode .workspace-canvas{width:100vw;width:100dvw;min-height:100vh;min-height:100dvh}
   /* Collapse the desktop 2-column grid (dock-w + workspace) to a single
      column on mobile. Without this, the workspace canvas inherits a 44px
      left margin from `grid-template-columns: var(--dock-w) 1fr` and the
      fullscreen panel ends up offset by 44px on the x-axis. */
-  body.player-mode .app{grid-template-columns:1fr !important;grid-template-areas:"workspace" !important}
+  body.player-mode .app{grid-template-columns:1fr !important;grid-template-areas:"workspace" !important;width:100vw;width:100dvw;height:100vh;height:100dvh}
+  /* And the body itself — same trick so the page chrome doesn't bleed in. */
+  body.player-mode{width:100vw;width:100dvw;height:100vh;height:100dvh;overflow:hidden}
 }
 
 /* ============ MOBILE LANDSCAPE PLAYER VIEW ============ */
@@ -381,9 +391,12 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   body.player-mode .window{
     left:0 !important; top:0 !important;
     /* Reserve room for the right dock + the iPhone notch (left when in
-       landscape with home button on right; right when reversed). */
+       landscape with home button on right; right when reversed). Use
+       dvh/dvw so we don't overflow the browser-chrome-adjusted viewport. */
     width:calc(100vw - 56px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) !important;
+    width:calc(100dvw - 56px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) !important;
     height:100vh !important;
+    height:100dvh !important;
     margin-left:env(safe-area-inset-left, 0px);
     border:none;border-radius:0;box-shadow:none;
   }
@@ -419,8 +432,8 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   }
 
   /* No chrome overhead — panel fills the viewport exactly. */
-  body.player-mode .workspace{overflow:hidden}
-  body.player-mode .workspace-canvas{width:100vw;height:100vh}
+  body.player-mode .workspace{overflow:hidden;width:100vw;width:100dvw;height:100vh;height:100dvh}
+  body.player-mode .workspace-canvas{width:100vw;width:100dvw;height:100vh;height:100dvh}
 
   /* Empty state shouldn't sit behind the right dock. */
   body.player-mode #pv-empty{padding:0;padding-right:64px}
