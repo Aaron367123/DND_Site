@@ -1,6 +1,11 @@
 // ============================================================
-// INIT
+// INIT  —  build 20260521d
 // ============================================================
+// Bumped on every meaningful change so you can verify the new JS shipped:
+//   open DevTools console and look for "[app] build 20260521d" — if you see
+//   an older stamp, the browser is still serving cached app.js (hard-refresh
+//   with Ctrl+Shift+R, or clear site cache in browser settings).
+console.log('[app] build 20260521d loaded');
 function initPanels(){
   ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary'].forEach(id=>{
     const def=panelDefs[id];const b=document.getElementById('panel-body-'+id);
@@ -54,9 +59,23 @@ function init(){
   pvBtn?.addEventListener('click', e => {
     // Shift+click = copy link without opening a window.
     if (e.shiftKey){ copyPvLink(); return; }
-    const w = window.open(pvUrl(),'skt-player','width=1280,height=720');
-    if(!w) showToast('Allow popups to open player view');
-    else   showToast('Player view opened');
+    const url = pvUrl();
+    // Use a unique window name each click so the browser never reuses an
+    // already-open 'skt-player' tab with its (possibly stale) URL — that
+    // was causing the player view to come up looking like the DM view in
+    // Opera GX's named-target reuse. A timestamped name forces a fresh
+    // window with the correct ?player=1 URL every click.
+    const target = 'skt-player-' + Date.now();
+    const w = window.open(url, target, 'width=1280,height=720,noopener');
+    if (!w){
+      showToast('Allow popups to open player view');
+      return;
+    }
+    // Belt-and-suspenders: force-navigate the new window to the URL in case
+    // the browser preserved the parent's URL when the popup was blocked then
+    // un-blocked, or when 'noopener' lost the reference.
+    try { if (w && !w.closed && w.location && w.location.href !== url) w.location.href = url; } catch(_){}
+    showToast('Player view opened');
   });
   // Right-click = copy link only.
   pvBtn?.addEventListener('contextmenu', e => { e.preventDefault(); copyPvLink(); });
