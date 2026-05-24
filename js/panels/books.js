@@ -119,6 +119,11 @@ registerPanel('books', {
   // ── List view: grid of every adventure's cover + meta ──────────────────────
   _renderList(){
     const b = this._body; if (!b) return;
+    // Snapshot the scroll position of the book grid so a re-render (triggered
+    // by hiding/unhiding a book, typing in the search box, etc.) doesn't yank
+    // the user back to the top.
+    const prevList = b.querySelector('.adv-list');
+    const savedScrollTop = prevList ? prevList.scrollTop : 0;
     if (!this._adventures){
       b.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center">Loading books…</div>';
       return;
@@ -184,6 +189,10 @@ registerPanel('books', {
         <div class="adv-list">${cards || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>'}</div>
         ${hiddenFooter}
       </div>`;
+    // Restore the scroll position on the freshly-built list so hiding a
+    // book in the middle of the catalog doesn't fling the user to the top.
+    const newList = b.querySelector('.adv-list');
+    if (newList && savedScrollTop){ newList.scrollTop = savedScrollTop; }
     // Hide button click — also stops the card's own click (which would open
     // the book) since the × sits inside the card's bounds.
     b.querySelectorAll('[data-act="hide-book"]').forEach(btn => {
