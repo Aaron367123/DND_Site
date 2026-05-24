@@ -219,10 +219,23 @@ registerPanel('combat',{
       ? state.settings.healthTiers
       : DEFAULT_SETTINGS.healthTiers;
     const sorted = [...tiers].sort((a,b) => (b.threshold||0) - (a.threshold||0));
-    for (const t of sorted){
+    // Special-case actually-dead: hp <= 0 always gets the lowest-threshold
+    // tier (e.g. "Defeated"). Otherwise — if HP is still positive but a
+    // fractional percent — the creature must be at least the lowest
+    // NON-ZERO-threshold tier ("Near Death"). A giant at 1/138 HP is alive,
+    // not defeated, even though 1/138 = 0.72% < 1%.
+    if (c.hp <= 0) return (sorted[sorted.length-1].label || '?');
+    // Pick the highest threshold the current pct still meets, but never
+    // return the 0-threshold "defeated" tier when HP > 0.
+    const nonZero = sorted.filter(t => (t.threshold ?? 0) > 0);
+    for (const t of nonZero){
       if (pct >= (t.threshold ?? 0)) return t.label || '?';
     }
-    return sorted.length ? (sorted[sorted.length-1].label || '?') : '—';
+    // HP positive but below every non-zero threshold (e.g. 0.72% < 1%) →
+    // show the lowest non-zero tier rather than rolling over to "Defeated".
+    return nonZero.length
+      ? (nonZero[nonZero.length-1].label || '?')
+      : (sorted[sorted.length-1]?.label || '—');
   },
 
   // Render the collapsible round-log strip at the bottom of the panel.

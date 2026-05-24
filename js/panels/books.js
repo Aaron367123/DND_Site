@@ -6,6 +6,20 @@
 // and adventures use the same 5etools JSON schema. Only the fetch paths,
 // panel id, and bookmark localStorage key differ.
 
+// Eagerly publish the user's hidden-books set as a lowercase Set on `window`
+// so every panel that filters by source (shop generator, encounter builder,
+// search results, bestiary picker, etc.) can do
+//   if (window.SKT_HIDDEN_SOURCES?.has((src||'').toLowerCase())) return false;
+// without waiting for the Books panel to be mounted. The Books panel keeps
+// this in sync on every toggle via `_saveHiddenBooks()` below.
+(function _initHiddenSourcesGlobal(){
+  try {
+    const arr = JSON.parse(localStorage.getItem('skt-books-hidden-v1') || '[]');
+    const set = new Set((Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()));
+    window.SKT_HIDDEN_SOURCES = set;
+  } catch(e){ window.SKT_HIDDEN_SOURCES = new Set(); }
+})();
+
 registerPanel('books', {
   title: 'Books', icon: '📚',
   _adventures: null,        // index from books.json (sorted) — name kept for code parity with adventures.js
@@ -18,12 +32,29 @@ registerPanel('books', {
   // progress don't trample each other.
   _bookmarks: null,
 
+  // Hidden books — Set of book IDs the user has tucked away from the index.
+  // Persisted under its own localStorage key so it survives reloads. Default
+  // empty (show everything). Toggled via the × on each card; restored
+  // via the "Show N hidden" footer link.
+  _hiddenBooks: null,
+
   mount(body){
     this._body = body;
     if (!this._bookmarks){
       try { this._bookmarks = JSON.parse(localStorage.getItem('skt-book-bookmarks-v1') || '{}') || {}; }
       catch(e){ this._bookmarks = {}; }
     }
+    if (!this._hiddenBooks){
+      try {
+        const arr = JSON.parse(localStorage.getItem('skt-books-hidden-v1') || '[]');
+        this._hiddenBooks = new Set(Array.isArray(arr) ? arr : []);
+      } catch(e){ this._hiddenBooks = new Set(); }
+    }
+    // Publish a lower-cased version of the hidden-source set on `window` so
+    // every other panel (shop, bestiary, encounter, search, etc.) can do
+    // `window.SKT_HIDDEN_SOURCES?.has(source.toLowerCase())` without coupling
+    // to this panel. Kept in sync by `_saveHiddenBooks()` on every change.
+    window.SKT_HIDDEN_SOURCES = new Set([...this._hiddenBooks].map(s => String(s).toLowerCase()));
     this._render();
     this._loadIndex();
     // When the 5etools side data finishes loading, re-render the open chapter
@@ -32,6 +63,20 @@ registerPanel('books', {
       this._sideDataHook = true;
       on5eLoaded(() => { if (this._body && this._currentAdvId) this._render(); });
     }
+  },
+
+  _saveHiddenBooks(){
+    try { localStorage.setItem('skt-books-hidden-v1', JSON.stringify([...this._hiddenBooks])); } catch(e){}
+    // Rebuild the global helper cache so other panels (shop, encounter,
+    // bestiary, etc.) see the change immediately without remounting.
+    window.SKT_HIDDEN_SOURCES = new Set([...this._hiddenBooks].map(s => String(s).toLowerCase()));
+  },
+  _toggleBookHidden(id){
+    if (!this._hiddenBooks) this._hiddenBooks = new Set();
+    if (this._hiddenBooks.has(id)) this._hiddenBooks.delete(id);
+    else this._hiddenBooks.add(id);
+    this._saveHiddenBooks();
+    this._render();
   },
   unmount(){ this._body = null; },
 
@@ -98,7 +143,8 @@ registerPanel('books', {
       const resumeBadge = (bm && bm.chapterIdx > 0)
         ? `<div class="adv-card-resume" title="Last visited: chapter ${bm.chapterIdx + 1}">↪ Resume ch. ${bm.chapterIdx + 1}</div>`
         : '';
-      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px">
+      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px;position:relative">
+        <button class="adv-card-hide" data-act="hide-book" data-aid="${esc(a.id)}" title="Hide this book from the list (can be restored from the footer below)">×</button>
         <div class="adv-card-imgwrap" data-build="E" style="position:relative;width:100%;height:220px;min-height:220px;overflow:hidden;background:#444;flex:0 0 220px">
           ${cover}
           <div class="adv-card-titleover">${esc(a.name)}</div>
@@ -111,10 +157,23 @@ registerPanel('books', {
     };
     this._cardHtml = cardHtml;
     const filterQ = (this._searchQ || '').toLowerCase();
-    const visible = filterQ
+    // First narrow by search query (if any), then filter out hidden books.
+    // We track the filtered-pre-hide count and the hidden count separately
+    // so the footer can offer to restore them.
+    const searched = filterQ
       ? this._adventures.filter(a => (a.name+' '+(a.author||'')+' '+(a.group||'')+' '+(a.id||'')).toLowerCase().includes(filterQ))
       : this._adventures;
+    const showingHidden = !!this._showHiddenBooks;
+    const visible = showingHidden ? searched : searched.filter(a => !this._hiddenBooks.has(a.id));
+    const hiddenInScope = searched.filter(a => this._hiddenBooks.has(a.id)).length;
     const cards = visible.map(cardHtml).join('');
+    const hiddenFooter = hiddenInScope > 0
+      ? `<div class="adv-hidden-footer">
+          <span>${hiddenInScope} book${hiddenInScope===1?'':'s'} hidden</span>
+          <button class="btn small" id="adv-toggle-hidden">${showingHidden ? 'Hide them again' : 'Show ' + hiddenInScope + ' hidden'}</button>
+          ${this._hiddenBooks.size > 0 ? '<button class="btn small" id="adv-unhide-all">Unhide all</button>' : ''}
+        </div>`
+      : '';
 
     b.innerHTML = `
       <div class="adv-panel">
@@ -123,22 +182,42 @@ registerPanel('books', {
           <span class="adv-list-count">${visible.length} / ${this._adventures.length}</span>
         </div>
         <div class="adv-list">${cards || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>'}</div>
+        ${hiddenFooter}
       </div>`;
+    // Hide button click — also stops the card's own click (which would open
+    // the book) since the × sits inside the card's bounds.
+    b.querySelectorAll('[data-act="hide-book"]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        e.preventDefault();
+        this._toggleBookHidden(btn.dataset.aid);
+      });
+    });
+    b.querySelector('#adv-toggle-hidden')?.addEventListener('click', () => {
+      this._showHiddenBooks = !this._showHiddenBooks;
+      this._render();
+    });
+    b.querySelector('#adv-unhide-all')?.addEventListener('click', () => {
+      this._hiddenBooks.clear();
+      this._saveHiddenBooks();
+      this._render();
+    });
     const search = b.querySelector('#adv-search');
     if (search){
       search.addEventListener('input', e => {
         this._searchQ = e.target.value;
-        // Update grid only — keep input focused.
-        const list = b.querySelector('.adv-list');
-        const count = b.querySelector('.adv-list-count');
-        if (!list) return;
-        const q = (this._searchQ||'').toLowerCase();
-        const arr = q
-          ? this._adventures.filter(a => (a.name+' '+(a.storyline||'')+' '+(a.id||'')).toLowerCase().includes(q))
-          : this._adventures;
-        list.innerHTML = arr.map(cardHtml).join('') || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>';
-        if (count) count.textContent = `${arr.length} / ${this._adventures.length}`;
-        this._wireCards();
+        // Debounce + full re-render so the hidden-books filter and footer
+        // both update with the search query. Cheap because the index is small.
+        clearTimeout(this._searchTimer);
+        this._searchTimer = setTimeout(() => {
+          this._render();
+          // Restore focus + caret position so typing isn't interrupted.
+          const newSearch = this._body?.querySelector('#adv-search');
+          if (newSearch){
+            newSearch.focus();
+            try { newSearch.setSelectionRange(this._searchQ.length, this._searchQ.length); } catch(e){}
+          }
+        }, 60);
       });
     }
     this._wireCards();

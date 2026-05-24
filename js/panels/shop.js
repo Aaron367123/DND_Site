@@ -531,8 +531,13 @@ registerPanel('shop',{
     const out = [];
     const seen = new Set();
     const TYPE_LABELS = (typeof _ITEM_TYPE_LABEL !== 'undefined') ? _ITEM_TYPE_LABEL : {};
+    // Hidden-sources filter: any book the user has hidden via the Books
+    // panel's × button is excluded from the shop catalog so generated shops
+    // only contain items from sources the DM is actually using.
+    const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
+      if (hiddenSrc && hiddenSrc.has(String(d._source || '').toLowerCase())) continue;
       const r = d._raw || {};
       if (!filter(r)) continue;
       const key = (d.name + '|' + (d._source||'')).toLowerCase();

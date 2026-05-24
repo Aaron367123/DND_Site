@@ -880,6 +880,13 @@ function doSearch(){
   let pool=getSearchPool();
   const sel=state.searchState.category;
   if(sel!=='all')pool=pool.filter(r=>_catMatches(r.cat, sel));
+  // Hidden-sources filter — books the user has × off in the Books panel are
+  // excluded from search results. Keeps the result list focused on sources
+  // the DM actually uses.
+  const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
+  if (hiddenSrc && hiddenSrc.size){
+    pool = pool.filter(r => !hiddenSrc.has(String(r._source || '').toLowerCase()));
+  }
   if(q){
     // Multi-token: every whitespace-separated token must appear somewhere in
     // the normalized name or meta. So "frost gnt" still finds "Frost Giant".

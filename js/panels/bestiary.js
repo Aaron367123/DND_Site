@@ -493,8 +493,14 @@ registerPanel('bestiary', {
       showToast?.('5e data still loading — try again in a moment');
       return;
     }
-    const all = _5eData.filter(d => d.cat === 'monster')
-      .sort((a,b)=>a.name.localeCompare(b.name));
+    // Honor the user's hidden-books filter — monsters from sources they've
+    // hidden in the Books panel don't show in this picker.
+    const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
+    const all = _5eData.filter(d => {
+      if (d.cat !== 'monster') return false;
+      if (hiddenSrc && hiddenSrc.has(String(d._source || '').toLowerCase())) return false;
+      return true;
+    }).sort((a,b)=>a.name.localeCompare(b.name));
 
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
