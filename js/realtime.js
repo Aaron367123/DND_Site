@@ -39,7 +39,10 @@ const SKT_SYNC_KEYS = [
   // listener) and Dropbox already covers cross-device updates within ~8 s.
   'skt-npcs-v2',       // NPC library
   'skt-bestiary-v1',   // bestiary
-  'skt-shared-panels-v1', // which panels the DM is sharing with players
+  'skt-shared-panels-v1',  // which panels the DM is sharing with players
+  'skt-books-hidden-v1',   // hidden-books filter — propagates to every tab
+                           // so the DM's curated source list affects every
+                           // player's search / shop / encounter dropdowns too
 ];
 
 // Firebase keys cannot contain hyphens or dots — convert to underscores
@@ -195,6 +198,25 @@ function _applyRemoteKey(key, fbVal) {
         if (id && btn) btn.textContent = (state.sharedPanels||[]).includes(id) ? '👁' : '◌';
       });
     }
+    return;
+  }
+
+  // Hidden-books filter — refresh the global cache that shop / search /
+  // bestiary / encounter all read from, and re-render the Books panel if
+  // it's mounted so the user sees the new state immediately.
+  if (key === 'skt-books-hidden-v1'){
+    try {
+      const arr = JSON.parse(fbVal) || [];
+      window.SKT_HIDDEN_SOURCES = new Set((Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()));
+      const def = panelDefs && panelDefs.books;
+      if (def){
+        // Replace the panel-local copy with the synced one so toggles done
+        // in this tab don't fight the remote authority. _render() rebuilds
+        // the list with the new hidden set; the search query etc. survive.
+        def._hiddenBooks = new Set(arr);
+        if (def._body) def._render();
+      }
+    } catch(_){}
     return;
   }
 
