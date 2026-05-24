@@ -124,6 +124,57 @@ registerPanel('shop',{
       this._invLimit = all ? inv.length : Math.min(inv.length, (this._invLimit||20) + 20);
       const sd = b.querySelector('#shop-display'); if (sd){ sd.innerHTML = this._renderDisplay(); this._wireDisplay(); }
     }));
+    // Item-name click → open a modal with the full 5etools detail. Falls
+    // back to a "no description available" note for curated extras (ales,
+    // lodging, etc.) that aren't backed by 5etools data.
+    b.querySelectorAll('[data-act="show-item"]').forEach(el => el.addEventListener('click', e => {
+      e.preventDefault();
+      const i = +el.dataset.idx;
+      const inv = state.shop?.inventory; if (!inv || !inv[i]) return;
+      this._openItemDetail(inv[i]);
+    }));
+  },
+
+  // Find the matching _5eData entry by (name, source) and render its full
+  // description in a modal. Reuses renderItemFull() from search.js so the
+  // formatting matches everywhere else in the app.
+  _openItemDetail(item){
+    if (!item) return;
+    let detail = null;
+    if (typeof _5eLoaded !== 'undefined' && _5eLoaded && Array.isArray(_5eData)){
+      const wantName = (item.name || '').toLowerCase();
+      const wantSrc  = (item._source || '').toLowerCase();
+      // Try exact name+source first, fall back to name only (covers curated
+      // extras and any items whose source was lost in shop catalog building).
+      detail = _5eData.find(d => d.cat === 'item'
+        && (d.name||'').toLowerCase() === wantName
+        && (d._source||'').toLowerCase() === wantSrc)
+        || _5eData.find(d => d.cat === 'item' && (d.name||'').toLowerCase() === wantName);
+    }
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    let bodyHtml;
+    if (detail && typeof renderItemFull === 'function'){
+      bodyHtml = renderItemFull(detail);
+    } else if (detail && detail.desc){
+      bodyHtml = '<div style="white-space:pre-wrap;font-size:12px;line-height:1.55">' + esc(detail.desc) + '</div>';
+    } else {
+      bodyHtml = '<div style="color:var(--text-muted);font-size:12px;font-style:italic">No description available for this item — likely a curated shop extra (food, lodging, etc.).</div>';
+    }
+    const priceLine = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Category: ' + esc(item.category) + ' · Rarity: ' + esc(item.rarity) + ' · Price: ' + esc(this._fmtPrice(item.price)) + '</div>';
+    backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column">'
+      + '<h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px"><span style="font-size:18px">📜</span> ' + esc(item.name) + '</h3>'
+      + priceLine
+      + '<div style="flex:1;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>'
+      + '<div class="modal-actions" style="margin-top:12px">'
+      +   '<span style="flex:1"></span>'
+      +   '<button class="btn primary" id="shop-item-close">Close</button>'
+      + '</div></div>';
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#shop-item-close').addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   },
 
   // Add a purchased item to the Loot tracker. Reads-merges-writes localStorage
@@ -359,8 +410,12 @@ registerPanel('shop',{
     const remaining = inv.length - limit;
     const rowsHtml = shown.map((item, i) => {
       const out = (item.stock||0) <= 0;
+      // Make the name a clickable link if the item exists in _5eData — clicking
+      // pops open the full description. We don't bother checking up-front
+      // because the lookup is cheap; the handler shows a friendly fallback
+      // for curated extras (ales, lodging, etc.) that aren't in 5etools data.
       return `<tr class="${out?'shop-out':''}">
-        <td>${esc(item.name)}</td>
+        <td><a class="shop-item-name" href="javascript:void(0)" data-act="show-item" data-idx="${i}" title="Click to view item details">${esc(item.name)}</a></td>
         <td>${esc(item.category)}</td>
         <td><span class="rarity-badge rarity-${item.rarity.replace(/\s/,'')}">${item.rarity}</span></td>
         <td>${this._fmtPrice(item.price)}</td>

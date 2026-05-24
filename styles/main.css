@@ -881,6 +881,10 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .shop-table td{padding:7px 10px;border-bottom:1px solid var(--border)}
 .shop-table tr:last-child td{border-bottom:none}
 .shop-table tr:hover td{background:rgba(255,255,255,.02)}
+/* Clickable item name in the shop inventory — accent color + dotted underline
+   on hover so it reads as a real link without screaming for attention. */
+.shop-item-name{color:var(--text);text-decoration:none;cursor:pointer;border-bottom:1px dashed transparent;transition:color .12s,border-color .12s}
+.shop-item-name:hover{color:var(--accent);border-bottom-color:var(--accent)}
 /* Out-of-stock rows are dimmed and struck through so they read as unavailable
    without being hidden — DM still sees what was on the shelf. */
 .shop-table tr.shop-out td{opacity:.55}
