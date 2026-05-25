@@ -230,6 +230,13 @@ registerPanel('shop',{
     const sf = state.settings.shopFilters;
     const sac = state.settings.shopAssortmentCounts;
     sf.rarity = sf.rarity || {};
+    // Migrate the legacy `excludeFirearms` flag to the new tech-level radio,
+    // and fill in any new-key defaults so the UI controls all bind cleanly
+    // even on saves from before these toggles existed.
+    if (sf.excludeFirearms === true && !sf.techLevel) sf.techLevel = 'medieval';
+    ['maxPrice','hideAttunement','hideCursed','hideSentient','hideArtifacts',
+     'excludeConsumables','techLevel','maxScrollLevel','blocklist','rarityBias'
+    ].forEach(k => { if (sf[k] === undefined) sf[k] = DEFAULT_SETTINGS.shopFilters[k]; });
     sf.categories = sf.categories || {};
     const RARITIES = [
       ['Common',    'Common'],
@@ -300,6 +307,46 @@ registerPanel('shop',{
         </div>
 
         <div class="shop-filter-section">
+          <div class="shop-filter-head"><span>Restrictions</span></div>
+          <div class="shop-filter-grid">
+            ${cb('shop-hide-att',   'Hide attunement-required items', !!sf.hideAttunement)}
+            ${cb('shop-hide-curse', 'Hide cursed items',              !!sf.hideCursed)}
+            ${cb('shop-hide-sent',  'Hide sentient items',            !!sf.hideSentient)}
+            ${cb('shop-hide-art',   'Hide artifacts',                 !!sf.hideArtifacts)}
+            ${cb('shop-no-cons',    'Exclude consumables (potions, scrolls, ammo)', !!sf.excludeConsumables)}
+          </div>
+          <div class="shop-filter-slider" style="margin-top:8px">
+            <div class="shop-filter-slider-row">
+              <span>Max spell scroll level</span>
+              <span class="shop-filter-slider-val" id="shop-scroll-val">${sf.maxScrollLevel >= 10 ? 'No cap' : (sf.maxScrollLevel === 0 ? 'None' : (sf.maxScrollLevel === 1 ? 'Cantrip+1st' : sf.maxScrollLevel+(['','st','nd','rd'][sf.maxScrollLevel]||'th')))}</span>
+            </div>
+            <input type="range" id="shop-scroll" min="0" max="10" step="1" value="${sf.maxScrollLevel}">
+          </div>
+        </div>
+
+        <div class="shop-filter-section">
+          <div class="shop-filter-head"><span>Era</span></div>
+          <div class="shop-filter-radio-row">
+            ${['any','medieval','renaissance','modern'].map(t => `
+              <label class="shop-filter-radio${sf.techLevel===t?' active':''}">
+                <input type="radio" name="shop-tech" value="${t}" ${sf.techLevel===t?'checked':''}>
+                <span>${t.charAt(0).toUpperCase()+t.slice(1)}</span>
+              </label>
+            `).join('')}
+          </div>
+          <p class="shop-filter-note" style="margin-top:6px">Medieval: no firearms/lasers. Renaissance: muskets &amp; pistols return. Modern: rifles &amp; semi-autos too.</p>
+        </div>
+
+        <div class="shop-filter-section">
+          <div class="shop-filter-head"><span>Price cap</span></div>
+          <div class="shop-filter-price-row">
+            <label for="shop-maxprice" style="font-size:11px;color:var(--text-muted)">Max item price (gp)</label>
+            <input type="number" id="shop-maxprice" min="0" step="50" value="${sf.maxPrice||0}" placeholder="0 = no cap" style="width:120px">
+          </div>
+          <p class="shop-filter-note" style="margin-top:4px">Try <strong>100</strong> for a village peddler, <strong>5000</strong> for a city emporium, <strong>50000</strong> for a capital city. <strong>0</strong> = no limit.</p>
+        </div>
+
+        <div class="shop-filter-section">
           <div class="shop-filter-head">
             <span>Rarity</span>
             <span>
@@ -309,6 +356,13 @@ registerPanel('shop',{
           </div>
           <div class="shop-filter-grid">
             ${RARITIES.map(([k,l]) => cb('shop-rar-'+k, l, sf.rarity[k] !== false)).join('')}
+          </div>
+          <div class="shop-filter-slider shop-filter-bias" style="margin-top:8px">
+            <div class="shop-filter-slider-row">
+              <span>Bias <span style="color:var(--text-dim)">(common ↔ rare)</span></span>
+              <span class="shop-filter-slider-val" id="shop-bias-val">${sf.rarityBias > 0 ? '+'+sf.rarityBias : sf.rarityBias}</span>
+            </div>
+            <input type="range" id="shop-bias" min="-100" max="100" step="5" value="${sf.rarityBias||0}">
           </div>
         </div>
 
@@ -324,6 +378,12 @@ registerPanel('shop',{
             ${CATEGORIES.map(([k,l]) => cb('shop-cat-'+k, l, sf.categories[k] !== false)).join('')}
           </div>
         </div>
+
+        <details class="shop-filter-section shop-filter-blocklist">
+          <summary>Custom blocklist (advanced)</summary>
+          <p class="shop-filter-note" style="margin:6px 0 4px">One item name per line. Matched case-insensitively against the full item name.</p>
+          <textarea id="shop-blocklist" rows="6" placeholder="Sword of Sharpness&#10;Bag of Holding&#10;…">${(sf.blocklist||'').replace(/</g,'&lt;')}</textarea>
+        </details>
 
         <p class="shop-filter-note">Filters apply to <strong>every</strong> shop type — disable Magic to keep "+1 Longsword" out of the blacksmith, or uncheck Legendary to cap loot rarity.</p>
       </div>
@@ -369,6 +429,54 @@ registerPanel('shop',{
     // Magic / mundane toggles.
     backdrop.querySelector('#shop-magic').addEventListener('change', e => { sf.includeMagic   = e.target.checked; save(); });
     backdrop.querySelector('#shop-mund') .addEventListener('change', e => { sf.includeMundane = e.target.checked; save(); });
+    // Restriction checkboxes.
+    backdrop.querySelector('#shop-hide-att')  ?.addEventListener('change', e => { sf.hideAttunement     = e.target.checked; save(); });
+    backdrop.querySelector('#shop-hide-curse')?.addEventListener('change', e => { sf.hideCursed         = e.target.checked; save(); });
+    backdrop.querySelector('#shop-hide-sent') ?.addEventListener('change', e => { sf.hideSentient       = e.target.checked; save(); });
+    backdrop.querySelector('#shop-hide-art')  ?.addEventListener('change', e => { sf.hideArtifacts      = e.target.checked; save(); });
+    backdrop.querySelector('#shop-no-cons')   ?.addEventListener('change', e => { sf.excludeConsumables = e.target.checked; save(); });
+    // Era radios — set techLevel and clear the legacy excludeFirearms flag.
+    backdrop.querySelectorAll('input[name="shop-tech"]').forEach(rb => rb.addEventListener('change', e => {
+      if (!e.target.checked) return;
+      sf.techLevel = e.target.value;
+      sf.excludeFirearms = false; // legacy flag retired in favour of techLevel
+      backdrop.querySelectorAll('.shop-filter-radio').forEach(l => l.classList.toggle('active', l.querySelector('input').checked));
+      save();
+    }));
+    // Max-price input.
+    backdrop.querySelector('#shop-maxprice')?.addEventListener('change', e => {
+      sf.maxPrice = Math.max(0, parseInt(e.target.value)||0);
+      e.target.value = sf.maxPrice;
+      save();
+    });
+    // Spell-scroll cap slider.
+    const scrollEl = backdrop.querySelector('#shop-scroll');
+    const scrollValEl = backdrop.querySelector('#shop-scroll-val');
+    const scrollLabel = (v) => {
+      if (v >= 10) return 'No cap';
+      if (v === 0) return 'None';
+      if (v === 1) return 'Cantrip + 1st';
+      return v + (['','st','nd','rd'][v] || 'th');
+    };
+    if (scrollEl){
+      scrollEl.addEventListener('input',  e => { if (scrollValEl) scrollValEl.textContent = scrollLabel(parseInt(e.target.value)); });
+      scrollEl.addEventListener('change', e => { sf.maxScrollLevel = parseInt(e.target.value); save(); });
+    }
+    // Rarity-bias slider.
+    const biasEl = backdrop.querySelector('#shop-bias');
+    const biasValEl = backdrop.querySelector('#shop-bias-val');
+    if (biasEl){
+      biasEl.addEventListener('input', e => {
+        const v = parseInt(e.target.value);
+        if (biasValEl) biasValEl.textContent = v > 0 ? '+'+v : String(v);
+      });
+      biasEl.addEventListener('change', e => { sf.rarityBias = parseInt(e.target.value); save(); });
+    }
+    // Custom blocklist textarea.
+    backdrop.querySelector('#shop-blocklist')?.addEventListener('input', e => {
+      sf.blocklist = e.target.value;
+      save();
+    });
 
     // Rarity toggles.
     RARITIES.forEach(([k]) => {
@@ -571,6 +679,71 @@ registerPanel('shop',{
     return true;
   },
 
+  // Detect firearms (pistols, rifles, laser/antimatter weapons, etc.) so the
+  // "Exclude firearms" toggle in the shop settings can filter them out.
+  // Two signals:
+  //   1. `age` field — 5etools tags every classic firearm with one of
+  //      'renaissance' | 'modern' | 'futuristic'. Most reliable detector.
+  //   2. Property "AF" (ammunition-firearm) — picks up older PHB/DMG entries
+  //      whose age might be missing.
+  //   3. Name pattern — XPHB-2024 demoted muskets/pistols/revolvers to plain
+  //      martial ranged weapons (no age, no AF property). Keyword-match the
+  //      common firearm names so they still get filtered.
+  _isFirearm(r){
+    if (!r) return false;
+    const age = String(r.age || '').toLowerCase();
+    if (age === 'renaissance' || age === 'modern' || age === 'futuristic') return true;
+    const props = Array.isArray(r.property) ? r.property : [];
+    if (props.some(p => /^AF($|\|)/.test(String(p)))) return true;
+    const n = String(r.name || '').toLowerCase();
+    return /\b(pistol|revolver|musket|rifle|carbine|shotgun|firearm|laser|antimatter|machine gun|gatling|hunting rifle|automatic)\b/.test(n);
+  },
+
+  // ─── Additional content filters ────────────────────────────────────────
+  _isAttunement(r){ return !!(r && r.reqAttune); },
+  _isCursed(r){     return !!(r && r.curse); },
+  _isSentient(r){   return !!(r && r.sentient); },
+  _isArtifact(r){   return String(r && r.rarity || '').toLowerCase() === 'artifact'; },
+  _isConsumable(r){
+    const t = String(r && r.type || '').split('|')[0];
+    return t === 'P' || t === 'SC' || t === 'A';
+  },
+  // `allowed` is one of 'any' | 'medieval' | 'renaissance' | 'modern'.
+  // 5etools tags only renaissance/modern/futuristic; items without an `age`
+  // tag are treated as medieval (which is most of the catalog).
+  _techLevelAllowed(r, allowed){
+    if (!allowed || allowed === 'any') return true;
+    const order = ['medieval','renaissance','modern','futuristic'];
+    const max = order.indexOf(allowed);
+    if (max < 0) return true;
+    const age = String(r && r.age || '').toLowerCase();
+    if (!age) return true; // no age → assume medieval, always allowed
+    const i = order.indexOf(age);
+    return i >= 0 && i <= max;
+  },
+  // Test a (post-shaping) catalog row name against a spell-scroll cap. 10 = no cap.
+  _scrollLevelOK(item, maxLevel){
+    if (maxLevel == null || maxLevel >= 10) return true;
+    const m = /^Spell Scroll \((?:(\d+)(?:st|nd|rd|th)? Level|(Cantrip))\)$/i.exec(item.name || '');
+    if (!m) return true; // not a scroll
+    const lvl = m[2] ? 0 : parseInt(m[1]);
+    return lvl <= maxLevel;
+  },
+  _isBlocked(item, blocklistSet){
+    if (!blocklistSet || !blocklistSet.size) return false;
+    return blocklistSet.has(String(item.name || '').toLowerCase().trim());
+  },
+  // Rarity-bias multiplier — slider value in [-100, 100]. Negative biases
+  // toward Common/Uncommon, positive biases toward Rare/VeryRare/Legendary.
+  // Returns ~0.25–4× depending on slider extremity. 0 returns 1 for all.
+  _biasMultiplier(rarityBucket, slider){
+    if (!slider) return 1;
+    const tier = { Common: -2, Uncommon: -1, Rare: 1, VeryRare: 2, Legendary: 3 }[rarityBucket] || 0;
+    // Map slider [-100, 100] to exponent in [-1.4, 1.4] (so 2^±1.4 ≈ 0.38–2.6).
+    const s = Math.max(-100, Math.min(100, slider)) / 100;
+    return Math.pow(2, s * tier * 0.7);
+  },
+
   // For magic items without an explicit price, sample from the standard
   // 5e fan-convention rarity bands.
   _magicPriceForRarity(rarity){
@@ -599,10 +772,27 @@ registerPanel('shop',{
     // panel's × button is excluded from the shop catalog so generated shops
     // only contain items from sources the DM is actually using.
     const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
+    const sf = (state.settings && state.settings.shopFilters) || {};
+    // Exclude-firearms / new tech-level radio. The tech-level filter is the
+    // newer general control; the boolean stays around for back-compat.
+    const skipFirearms = !!sf.excludeFirearms;
+    const techLevel = sf.techLevel || 'any';
+    const maxPrice = +sf.maxPrice || 0;
+    const maxScroll = (sf.maxScrollLevel == null) ? 10 : +sf.maxScrollLevel;
+    const blocklistSet = new Set(
+      String(sf.blocklist || '').split('\n').map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
       if (hiddenSrc && hiddenSrc.has(String(d._source || '').toLowerCase())) continue;
       const r = d._raw || {};
+      if (skipFirearms && this._isFirearm(r)) continue;
+      if (!this._techLevelAllowed(r, techLevel)) continue;
+      if (sf.hideAttunement     && this._isAttunement(r)) continue;
+      if (sf.hideCursed         && this._isCursed(r))     continue;
+      if (sf.hideSentient       && this._isSentient(r))   continue;
+      if (sf.hideArtifacts      && this._isArtifact(r))   continue;
+      if (sf.excludeConsumables && this._isConsumable(r)) continue;
       if (!filter(r)) continue;
       const key = (d.name + '|' + (d._source||'')).toLowerCase();
       if (seen.has(key)) continue;
@@ -616,12 +806,17 @@ registerPanel('shop',{
       const isMagic = rawRar && rawRar !== 'none' && rawRar !== 'unknown';
       // User filters (rarity / category / magic-vs-mundane).
       if (!this._passesFilters(rarity, r.type, isMagic)) continue;
-      seen.add(key);
       const category = TYPE_LABELS[tCode] || (rarity==='Common' ? 'Item' : 'Magic');
       const basePrice = (typeof r.value_cp === 'number' && r.value_cp > 0)
         ? r.value_cp / 100
         : this._magicPriceForRarity(rarity);
-      out.push({ name: d.name, category, basePrice, rarity, _source: d._source });
+      // Post-shape filters: price cap, scroll-level cap, custom blocklist.
+      const shaped = { name: d.name, category, basePrice, rarity, _source: d._source };
+      if (maxPrice > 0 && shaped.basePrice > maxPrice) continue;
+      if (!this._scrollLevelOK(shaped, maxScroll)) continue;
+      if (this._isBlocked(shaped, blocklistSet)) continue;
+      seen.add(key);
+      out.push(shaped);
     }
     // Append curated extras for shops that need them — also subject to user
     // filters (rarity + category + magic/mundane), so disabling "Food & Drink"
@@ -645,6 +840,10 @@ registerPanel('shop',{
       if (rarity[e.rarity] === false) return;
       if (cats[extraCat] === false) return;
       if (f.includeMundane === false) return;
+      // Apply the same post-shape filters as the catalog items.
+      if (maxPrice > 0 && (e.basePrice || 0) > maxPrice) return;
+      if (this._isBlocked(e, blocklistSet)) return;
+      if (f.excludeConsumables && (catLower.includes('drink') || catLower.includes('food'))) return;
       seen.add(key);
       out.push(e);
     });
@@ -683,10 +882,14 @@ registerPanel('shop',{
     const desired = Math.max(1, parseInt(sac[assortment]) || DEFAULT_SETTINGS.shopAssortmentCounts[assortment]);
     const target = Math.max(1, Math.min(catalog.length, desired));
     const rw={Common:5,Uncommon:3,Rare:1.2,VeryRare:.4,Legendary:.15};
-    // Weighted shuffle: assign each item score = random * rarityWeight, sort
-    // descending, take top N. Rarer items rarely score high → end up rare.
+    // Rarity-bias slider (-100…+100): multiplies the per-tier weights so the
+    // user can skew the mix toward common (negative) or rare (positive) without
+    // having to toggle individual rarity checkboxes off.
+    const bias = (state.settings && state.settings.shopFilters && state.settings.shopFilters.rarityBias) || 0;
+    // Weighted shuffle: assign each item score = random * rarityWeight * bias,
+    // sort descending, take top N. Rarer items rarely score high → end up rare.
     const chosen = [...catalog]
-      .map(item => ({ item, score: Math.random() * (rw[item.rarity] || 1) }))
+      .map(item => ({ item, score: Math.random() * (rw[item.rarity] || 1) * this._biasMultiplier(item.rarity, bias) }))
       .sort((a,b) => b.score - a.score)
       .slice(0, target)
       .map(x => x.item);

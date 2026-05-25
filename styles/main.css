@@ -905,6 +905,27 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .shop-assort-grid input{font-size:13px;padding:5px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400}
 .shop-filter-chk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);cursor:pointer;padding:2px 4px;border-radius:3px;user-select:none}
 .shop-filter-chk:hover{background:var(--panel-3)}
+/* Slider row inside a shop filter section — label on the left, value
+   readout on the right, range input below. */
+.shop-filter-slider{display:flex;flex-direction:column;gap:4px}
+.shop-filter-slider-row{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;color:var(--text-muted)}
+.shop-filter-slider-val{font-size:11px;color:var(--accent);font-variant-numeric:tabular-nums;font-weight:600}
+.shop-filter-slider input[type=range]{width:100%;accent-color:var(--accent)}
+/* Bias slider — centerline marker so user can find "zero". */
+.shop-filter-bias input[type=range]{background:linear-gradient(to right,transparent calc(50% - 1px),var(--border) calc(50% - 1px),var(--border) calc(50% + 1px),transparent calc(50% + 1px));border-radius:2px}
+/* Era radios laid out as pill buttons. */
+.shop-filter-radio-row{display:flex;gap:6px;flex-wrap:wrap}
+.shop-filter-radio{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);cursor:pointer;padding:5px 10px;border:1px solid var(--border);border-radius:18px;background:var(--panel);user-select:none;transition:all .12s}
+.shop-filter-radio input{margin:0}
+.shop-filter-radio:hover{color:var(--text);border-color:var(--accent-dark)}
+.shop-filter-radio.active{background:rgba(212,165,116,.14);border-color:var(--accent);color:var(--accent)}
+/* Price-cap row — label + small number input. */
+.shop-filter-price-row{display:flex;align-items:center;gap:10px}
+.shop-filter-price-row input{font-size:12px;padding:5px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:4px;font-family:inherit}
+/* Custom-blocklist <details> — keeps the advanced area collapsed by default. */
+.shop-filter-blocklist summary{cursor:pointer;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;padding:2px 0;user-select:none}
+.shop-filter-blocklist summary:hover{color:var(--text)}
+.shop-filter-blocklist textarea{width:100%;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;resize:vertical;min-height:90px;margin-top:4px}
 .shop-filter-chk input[type="checkbox"]{margin:0;cursor:pointer;width:auto}
 .shop-filter-note{font-size:10px;color:var(--text-dim);line-height:1.45;margin:6px 0 0;padding-left:18px;position:relative}
 .shop-filter-note::before{content:'ℹ';position:absolute;left:2px;top:0;color:var(--text-muted);font-style:normal;font-size:11px;font-weight:600}
