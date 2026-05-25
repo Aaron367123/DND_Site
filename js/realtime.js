@@ -43,6 +43,9 @@ const SKT_SYNC_KEYS = [
   'skt-books-hidden-v1',   // hidden-books filter — propagates to every tab
                            // so the DM's curated source list affects every
                            // player's search / shop / encounter dropdowns too
+  'skt-adventures-hidden-v1', // same idea for hidden adventures (LMoP, SKT,
+                              // ToA, …). Adventure IDs match `_source` tags
+                              // on items / monsters from those modules.
 ];
 
 // Firebase keys cannot contain hyphens or dots — convert to underscores
@@ -66,6 +69,8 @@ const _CONFLICT_LABELS = {
   'skt-loot-data':        'Loot',
   'skt-npclib-data':      'NPC Library',
   'skt-battlemap-v1':     'Battle map',
+  'skt-books-hidden-v1':      'Hidden books',
+  'skt-adventures-hidden-v1': 'Hidden adventures',
 };
 
 // Which panels to refresh when a particular sync key changes. Avoids re-rendering
@@ -207,13 +212,23 @@ function _applyRemoteKey(key, fbVal) {
   if (key === 'skt-books-hidden-v1'){
     try {
       const arr = JSON.parse(fbVal) || [];
-      window.SKT_HIDDEN_SOURCES = new Set((Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()));
+      if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
       const def = panelDefs && panelDefs.books;
       if (def){
-        // Replace the panel-local copy with the synced one so toggles done
-        // in this tab don't fight the remote authority. _render() rebuilds
-        // the list with the new hidden set; the search query etc. survive.
         def._hiddenBooks = new Set(arr);
+        if (def._body) def._render();
+      }
+    } catch(_){}
+    return;
+  }
+  // Same handling for hidden adventures.
+  if (key === 'skt-adventures-hidden-v1'){
+    try {
+      const arr = JSON.parse(fbVal) || [];
+      if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
+      const def = panelDefs && panelDefs.adventures;
+      if (def){
+        def._hiddenAdventures = new Set(arr);
         if (def._body) def._render();
       }
     } catch(_){}

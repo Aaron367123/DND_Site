@@ -18,6 +18,11 @@ registerPanel('adventures', {
   // Lets the DM jump back to where they left off in each adventure without
   // having to remember chapter numbers. Auto-set on every chapter change.
   _bookmarks: null,
+  // Hidden adventures — same UX as the Books panel. Adventure IDs (LMoP, SKT,
+  // ToA, …) match the `_source` tag on items / monsters / etc. that 5etools
+  // tags with the originating adventure, so hiding one removes its content
+  // from search / shop / bestiary / encounter.
+  _hiddenAdventures: null,
 
   mount(body){
     this._body = body;
@@ -25,10 +30,31 @@ registerPanel('adventures', {
       try { this._bookmarks = JSON.parse(localStorage.getItem('skt-adv-bookmarks-v1') || '{}') || {}; }
       catch(e){ this._bookmarks = {}; }
     }
+    if (!this._hiddenAdventures){
+      try {
+        const arr = JSON.parse(localStorage.getItem('skt-adventures-hidden-v1') || '[]');
+        this._hiddenAdventures = new Set(Array.isArray(arr) ? arr : []);
+      } catch(e){ this._hiddenAdventures = new Set(); }
+    }
+    // Keep the merged global Set in sync in case Adventures was the first
+    // panel to mount.
+    if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
     this._render();
     this._loadIndex();
   },
   unmount(){ this._body = null; },
+
+  _saveHiddenAdventures(){
+    try { localStorage.setItem('skt-adventures-hidden-v1', JSON.stringify([...this._hiddenAdventures])); } catch(e){}
+    if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
+  },
+  _toggleAdventureHidden(id){
+    if (!this._hiddenAdventures) this._hiddenAdventures = new Set();
+    if (this._hiddenAdventures.has(id)) this._hiddenAdventures.delete(id);
+    else this._hiddenAdventures.add(id);
+    this._saveHiddenAdventures();
+    this._render();
+  },
 
   // Persist bookmark for the current adventure + chapter. Called whenever the
   // user switches chapters so "last visited" reflects what the DM actually
@@ -72,6 +98,10 @@ registerPanel('adventures', {
   // ── List view: grid of every adventure's cover + meta ──────────────────────
   _renderList(){
     const b = this._body; if (!b) return;
+    // Snapshot scroll position before rebuild so hiding/unhiding doesn't yank
+    // the user back to the top of the grid.
+    const prevList = b.querySelector('.adv-list');
+    const savedScrollTop = prevList ? prevList.scrollTop : 0;
     if (!this._adventures){
       b.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center">Loading adventures…</div>';
       return;
@@ -95,7 +125,13 @@ registerPanel('adventures', {
       const resumeBadge = (bm && bm.chapterIdx > 0)
         ? `<div class="adv-card-resume" title="Last visited: chapter ${bm.chapterIdx + 1}">↪ Resume ch. ${bm.chapterIdx + 1}</div>`
         : '';
-      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px">
+      // Hide/unhide toggle — same UX as the Books panel.
+      const isHidden = this._hiddenAdventures && this._hiddenAdventures.has(a.id);
+      const toggleBtn = isHidden
+        ? `<button class="adv-card-hide adv-card-unhide" data-act="hide-adv" data-aid="${esc(a.id)}" title="Unhide this adventure">↺</button>`
+        : `<button class="adv-card-hide" data-act="hide-adv" data-aid="${esc(a.id)}" title="Hide this adventure — also excludes its content (items, monsters, etc.) from shop/search/encounter">×</button>`;
+      return `<div class="adv-card${isHidden?' is-hidden':''}" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px;position:relative">
+        ${toggleBtn}
         <div class="adv-card-imgwrap" data-build="E" style="position:relative;width:100%;height:220px;min-height:220px;overflow:hidden;background:#444;flex:0 0 220px">
           ${cover}
           <div class="adv-card-titleover">${esc(a.name)}</div>
@@ -108,10 +144,20 @@ registerPanel('adventures', {
     };
     this._cardHtml = cardHtml;
     const filterQ = (this._searchQ || '').toLowerCase();
-    const visible = filterQ
+    const searched = filterQ
       ? this._adventures.filter(a => (a.name+' '+(a.storyline||'')+' '+(a.id||'')).toLowerCase().includes(filterQ))
       : this._adventures;
+    const showingHidden = !!this._showHiddenAdventures;
+    const visible = showingHidden ? searched : searched.filter(a => !this._hiddenAdventures.has(a.id));
+    const hiddenInScope = searched.filter(a => this._hiddenAdventures.has(a.id)).length;
     const cards = visible.map(cardHtml).join('');
+    const hiddenFooter = hiddenInScope > 0
+      ? `<div class="adv-hidden-footer">
+          <span>${hiddenInScope} adventure${hiddenInScope===1?'':'s'} hidden</span>
+          <button class="btn small" id="adv-toggle-hidden">${showingHidden ? 'Hide them again' : 'Show ' + hiddenInScope + ' hidden'}</button>
+          ${this._hiddenAdventures.size > 0 ? '<button class="btn small" id="adv-unhide-all">Unhide all</button>' : ''}
+        </div>`
+      : '';
 
     b.innerHTML = `
       <div class="adv-panel">
@@ -120,22 +166,43 @@ registerPanel('adventures', {
           <span class="adv-list-count">${visible.length} / ${this._adventures.length}</span>
         </div>
         <div class="adv-list">${cards || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>'}</div>
+        ${hiddenFooter}
       </div>`;
+    // Restore scroll position on the rebuilt list.
+    const newList = b.querySelector('.adv-list');
+    if (newList && savedScrollTop) newList.scrollTop = savedScrollTop;
+    // Wire hide / unhide + footer controls.
+    b.querySelectorAll('[data-act="hide-adv"]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        e.preventDefault();
+        this._toggleAdventureHidden(btn.dataset.aid);
+      });
+    });
+    b.querySelector('#adv-toggle-hidden')?.addEventListener('click', () => {
+      this._showHiddenAdventures = !this._showHiddenAdventures;
+      this._render();
+    });
+    b.querySelector('#adv-unhide-all')?.addEventListener('click', () => {
+      this._hiddenAdventures.clear();
+      this._saveHiddenAdventures();
+      this._render();
+    });
     const search = b.querySelector('#adv-search');
     if (search){
       search.addEventListener('input', e => {
         this._searchQ = e.target.value;
-        // Update grid only — keep input focused.
-        const list = b.querySelector('.adv-list');
-        const count = b.querySelector('.adv-list-count');
-        if (!list) return;
-        const q = (this._searchQ||'').toLowerCase();
-        const arr = q
-          ? this._adventures.filter(a => (a.name+' '+(a.storyline||'')+' '+(a.id||'')).toLowerCase().includes(q))
-          : this._adventures;
-        list.innerHTML = arr.map(cardHtml).join('') || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>';
-        if (count) count.textContent = `${arr.length} / ${this._adventures.length}`;
-        this._wireCards();
+        // Debounce + full re-render so the hidden-adventures filter and
+        // footer stay in sync with the typed query.
+        clearTimeout(this._searchTimer);
+        this._searchTimer = setTimeout(() => {
+          this._render();
+          const newSearch = this._body?.querySelector('#adv-search');
+          if (newSearch){
+            newSearch.focus();
+            try { newSearch.setSelectionRange(this._searchQ.length, this._searchQ.length); } catch(e){}
+          }
+        }, 60);
       });
     }
     this._wireCards();

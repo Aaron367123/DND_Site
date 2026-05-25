@@ -6,19 +6,31 @@
 // and adventures use the same 5etools JSON schema. Only the fetch paths,
 // panel id, and bookmark localStorage key differ.
 
-// Eagerly publish the user's hidden-books set as a lowercase Set on `window`
-// so every panel that filters by source (shop generator, encounter builder,
-// search results, bestiary picker, etc.) can do
+// Eagerly publish the user's hidden-sources set as a lowercase Set on
+// `window` so every panel that filters by source (shop generator, encounter
+// builder, search results, bestiary picker, etc.) can do
 //   if (window.SKT_HIDDEN_SOURCES?.has((src||'').toLowerCase())) return false;
-// without waiting for the Books panel to be mounted. The Books panel keeps
-// this in sync on every toggle via `_saveHiddenBooks()` below.
-(function _initHiddenSourcesGlobal(){
-  try {
-    const arr = JSON.parse(localStorage.getItem('skt-books-hidden-v1') || '[]');
-    const set = new Set((Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()));
-    window.SKT_HIDDEN_SOURCES = set;
-  } catch(e){ window.SKT_HIDDEN_SOURCES = new Set(); }
-})();
+// without waiting for the Books / Adventures panel to be mounted.
+// The set is the UNION of two storage keys:
+//   • skt-books-hidden-v1      — hidden book IDs (managed by Books panel)
+//   • skt-adventures-hidden-v1 — hidden adventure IDs (managed by Adventures
+//                                 panel)
+// Adventures contribute items, monsters, etc. to _5eData with their adventure
+// codes as `_source` (e.g. SKT, ToA, WDH), so adventures need to be filterable
+// alongside books for the source filter to be universal.
+window.SKT_HIDDEN_SOURCES_REBUILD = function(){
+  const out = new Set();
+  const add = (key) => {
+    try {
+      const arr = JSON.parse(localStorage.getItem(key) || '[]');
+      (Array.isArray(arr) ? arr : []).forEach(s => out.add(String(s).toLowerCase()));
+    } catch(e){}
+  };
+  add('skt-books-hidden-v1');
+  add('skt-adventures-hidden-v1');
+  window.SKT_HIDDEN_SOURCES = out;
+};
+window.SKT_HIDDEN_SOURCES_REBUILD();
 
 registerPanel('books', {
   title: 'Books', icon: '📚',
@@ -50,11 +62,9 @@ registerPanel('books', {
         this._hiddenBooks = new Set(Array.isArray(arr) ? arr : []);
       } catch(e){ this._hiddenBooks = new Set(); }
     }
-    // Publish a lower-cased version of the hidden-source set on `window` so
-    // every other panel (shop, bestiary, encounter, search, etc.) can do
-    // `window.SKT_HIDDEN_SOURCES?.has(source.toLowerCase())` without coupling
-    // to this panel. Kept in sync by `_saveHiddenBooks()` on every change.
-    window.SKT_HIDDEN_SOURCES = new Set([...this._hiddenBooks].map(s => String(s).toLowerCase()));
+    // Make sure the merged global is up to date — Adventures panel may have
+    // mutated its hidden list before Books was opened.
+    if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
     this._render();
     this._loadIndex();
     // When the 5etools side data finishes loading, re-render the open chapter
@@ -68,8 +78,9 @@ registerPanel('books', {
   _saveHiddenBooks(){
     try { localStorage.setItem('skt-books-hidden-v1', JSON.stringify([...this._hiddenBooks])); } catch(e){}
     // Rebuild the global helper cache so other panels (shop, encounter,
-    // bestiary, etc.) see the change immediately without remounting.
-    window.SKT_HIDDEN_SOURCES = new Set([...this._hiddenBooks].map(s => String(s).toLowerCase()));
+    // bestiary, etc.) see the change immediately without remounting. The
+    // rebuild merges hidden books + hidden adventures into one Set.
+    if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
   },
   _toggleBookHidden(id){
     if (!this._hiddenBooks) this._hiddenBooks = new Set();
