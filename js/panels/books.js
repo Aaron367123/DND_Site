@@ -148,8 +148,17 @@ registerPanel('books', {
       const resumeBadge = (bm && bm.chapterIdx > 0)
         ? `<div class="adv-card-resume" title="Last visited: chapter ${bm.chapterIdx + 1}">↪ Resume ch. ${bm.chapterIdx + 1}</div>`
         : '';
-      return `<div class="adv-card" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px;position:relative">
-        <button class="adv-card-hide" data-act="hide-book" data-aid="${esc(a.id)}" title="Hide this book from the list (can be restored from the footer below)">×</button>
+      // Toggle button morphs based on the book's current hidden state. When
+      // the book is HIDDEN (and the user is in "Show N hidden" peek mode so
+      // they can actually see it), the button shows ↺ for "restore" instead
+      // of × for "hide", with matching tooltip + accent styling. Clicking
+      // either flips the state via the same _toggleBookHidden handler.
+      const isHidden = this._hiddenBooks && this._hiddenBooks.has(a.id);
+      const toggleBtn = isHidden
+        ? `<button class="adv-card-hide adv-card-unhide" data-act="hide-book" data-aid="${esc(a.id)}" title="Unhide this book">↺</button>`
+        : `<button class="adv-card-hide" data-act="hide-book" data-aid="${esc(a.id)}" title="Hide this book from the list (can be restored from the footer below)">×</button>`;
+      return `<div class="adv-card${isHidden?' is-hidden':''}" role="button" tabindex="0" data-aid="${esc(a.id)}" title="${esc(a.name)}" data-build="E" style="display:flex;flex-direction:column;min-height:260px;position:relative">
+        ${toggleBtn}
         <div class="adv-card-imgwrap" data-build="E" style="position:relative;width:100%;height:220px;min-height:220px;overflow:hidden;background:#444;flex:0 0 220px">
           ${cover}
           <div class="adv-card-titleover">${esc(a.name)}</div>

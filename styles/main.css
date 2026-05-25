@@ -885,6 +885,10 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
    on hover so it reads as a real link without screaming for attention. */
 .shop-item-name{color:var(--text);text-decoration:none;cursor:pointer;border-bottom:1px dashed transparent;transition:color .12s,border-color .12s}
 .shop-item-name:hover{color:var(--accent);border-bottom-color:var(--accent)}
+/* Source-book pill in the item-detail modal header (which book this item
+   came from — PHB, DMG, XGE, etc.). Sits right-aligned next to the
+   category/rarity/price line. */
+.shop-item-source-tag{display:inline-block;font-size:9px;font-weight:700;color:var(--accent);background:rgba(212,165,116,.14);border:1px solid rgba(212,165,116,.5);padding:2px 7px;border-radius:10px;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
 /* Out-of-stock rows are dimmed and struck through so they read as unavailable
    without being hidden — DM still sees what was on the shelf. */
 .shop-table tr.shop-out td{opacity:.55}
@@ -1313,10 +1317,10 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .npc-badge.attitude-hostile{color:#c25450;border-color:rgba(194,84,80,.4)}
 .npc-badge.attitude-imprisoned{color:#c9a050;border-color:rgba(201,160,80,.4)}
 
-.npclib-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
-.npclib-stat{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:4px}
-.npclib-stat .lab{font-size:14px;color:var(--text-muted)}
-.npclib-stat input{width:100%;background:transparent;border:none;text-align:center;color:var(--text);font-size:22px;font-weight:600;padding:0}
+.npclib-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.npclib-stat{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 6px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.npclib-stat .lab{font-size:11px;color:var(--text-muted)}
+.npclib-stat input{width:100%;background:transparent;border:none;text-align:center;color:var(--text);font-size:16px;font-weight:600;padding:0}
 .npclib-stat input:focus{outline:none}
 
 .npclib-section-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.1em;margin:14px 0 6px;font-weight:600}
@@ -1327,12 +1331,24 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .npc-tag-chip.new-tag{background:transparent;color:var(--text-muted);border-style:dashed;cursor:pointer}
 .npc-tag-chip.new-tag:hover{border-color:var(--accent);color:var(--accent)}
 
-.npclib-desc{width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:5px;font-size:12px;line-height:1.55;min-height:50px;resize:vertical;font-family:inherit}
+.npclib-desc{width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:5px;font-size:12px;line-height:1.55;min-height:70px;max-height:60vh;resize:vertical;font-family:inherit}
 
 .npclib-notes-toolbar{display:flex;gap:2px;background:var(--panel-2);border:1px solid var(--border);border-bottom:none;border-top-left-radius:5px;border-top-right-radius:5px;padding:4px 6px;margin-top:0}
 .npclib-notes-toolbar button{background:transparent;border:none;color:var(--text-muted);padding:4px 8px;font-size:11px;cursor:pointer;border-radius:3px;font-family:inherit}
 .npclib-notes-toolbar button:hover{background:var(--panel-3);color:var(--text)}
-.npclib-notes{background:var(--panel-2);border:1px solid var(--border);border-top:none;border-bottom-left-radius:5px;border-bottom-right-radius:5px;padding:10px;min-height:80px;font-size:12px;line-height:1.55;color:var(--text);outline:none}
+/* Notes is a contenteditable div, not a textarea — CSS `resize` only works
+   if `overflow` is set to something other than `visible`. The combo below
+   gives the user the same draggable corner as a textarea, scrolls long
+   content internally, and saves/restores the size via the parent height. */
+.npclib-notes{background:var(--panel-2);border:1px solid var(--border);border-top:none;border-bottom-left-radius:5px;border-bottom-right-radius:5px;padding:10px;min-height:120px;max-height:80vh;font-size:12px;line-height:1.55;color:var(--text);outline:none;resize:vertical;overflow:auto}
+/* Secret field — DM-only, redacted until the user clicks Reveal. Resizable
+   like the description so plotty backstory can grow without pushing other
+   sections off. */
+.npclib-secret-label{display:flex;align-items:center;gap:8px}
+.npclib-secret-toggle{margin-left:auto;font-size:10px;padding:3px 8px}
+.npclib-secret{width:100%;background:var(--panel-2);border:1px solid rgba(190,70,70,.4);color:var(--text);padding:10px;border-radius:5px;font-size:12px;line-height:1.55;min-height:60px;max-height:50vh;resize:vertical;font-family:inherit;transition:filter .15s, color .15s}
+.npclib-secret.redacted{filter:blur(7px);color:rgba(255,255,255,.55);user-select:none;pointer-events:none}
+.npclib-secret:focus{outline:none;border-color:rgba(190,70,70,.7)}
 .npclib-notes:empty:before{content:attr(data-placeholder);color:var(--text-dim)}
 .npclib-notes blockquote{border-left:2px solid var(--accent-dark);margin:6px 0;padding:0 10px;color:var(--text-muted);font-style:italic}
 .npclib-notes code{background:var(--panel-3);padding:1px 4px;border-radius:3px;font-family:'Cascadia Code',Consolas,monospace;font-size:11px}
@@ -1384,6 +1400,16 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .adv-card:hover .adv-card-hide,
 .adv-card:focus-within .adv-card-hide{opacity:.85}
 .adv-card-hide:hover{opacity:1;background:rgba(190,70,70,.85)}
+/* When the user is peeking at hidden books, the toggle button morphs to a
+   ↺ restore action — always visible (since the card itself is faded) and
+   accent-colored so it reads as "click me to bring this back". */
+.adv-card-unhide{opacity:1 !important;background:rgba(212,165,116,.85);font-size:13px}
+.adv-card-unhide:hover{background:rgba(212,165,116,1)}
+/* Hidden book cards in peek mode — faded so they're visually distinct from
+   visible-by-default books but still legible enough to identify what to
+   restore. */
+.adv-card.is-hidden{opacity:.55}
+.adv-card.is-hidden:hover{opacity:.85}
 /* Footer below the book grid with the count of hidden books + restore buttons. */
 .adv-hidden-footer{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);background:var(--panel-2);color:var(--text-muted);font-size:11px}
 .adv-hidden-footer .btn{font-size:11px;padding:3px 8px}

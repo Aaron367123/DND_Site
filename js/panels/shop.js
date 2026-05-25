@@ -161,7 +161,16 @@ registerPanel('shop',{
     } else {
       bodyHtml = '<div style="color:var(--text-muted);font-size:12px;font-style:italic">No description available for this item — likely a curated shop extra (food, lodging, etc.).</div>';
     }
-    const priceLine = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Category: ' + esc(item.category) + ' · Rarity: ' + esc(item.rarity) + ' · Price: ' + esc(this._fmtPrice(item.price)) + '</div>';
+    // Source-book tag — pulled from the canonical _5eData entry when available,
+    // falling back to the shop catalog's stored _source. Renders as a small
+    // accent pill at the right of the meta line so the user can see at a
+    // glance which book the item is from (helpful when curating sources).
+    const sourceTag = (() => {
+      const src = (detail && detail._source) || item._source || '';
+      if (!src) return '';
+      return '<span class="shop-item-source-tag" title="Source book">' + esc(src) + '</span>';
+    })();
+    const priceLine = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px"><span>Category: ' + esc(item.category) + ' · Rarity: ' + esc(item.rarity) + ' · Price: ' + esc(this._fmtPrice(item.price)) + '</span><span style="flex:1"></span>' + sourceTag + '</div>';
     backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column">'
       + '<h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px"><span style="font-size:18px">📜</span> ' + esc(item.name) + '</h3>'
       + priceLine

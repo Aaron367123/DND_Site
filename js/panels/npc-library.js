@@ -42,6 +42,10 @@ function _npcGroups(npcs) {
 registerPanel('npclib', {
   title:'NPC Library', icon:'👤',
   _npcs:null, _selectedId:null, _searchQ:'', _collapsed:null,
+  // Whether the SECRET field is revealed. Defaults to hidden; user must
+  // click 👁 Reveal to see it. Reset to hidden whenever a different NPC
+  // is selected so a fresh click doesn't expose the previous reveal.
+  _secretRevealed:false,
 
   mount(body){
     this._body = body;
@@ -509,6 +513,11 @@ registerPanel('npclib', {
       </div>
       <div class="npclib-notes" contenteditable="true" data-field="notes" data-placeholder="Click here to start typing.">${n.notes||''}</div>
 
+      <div class="npclib-section-label npclib-secret-label">🔒 SECRET
+        <button class="btn small npclib-secret-toggle" data-act="toggle-secret" title="${this._secretRevealed?'Hide the secret again':'Reveal — keep your screen private!'}">${this._secretRevealed?'🙈 Hide':'👁 Reveal'}</button>
+      </div>
+      <textarea class="npclib-secret${this._secretRevealed?'':' redacted'}" data-field="secret" placeholder="DM-only — what this NPC is hiding.">${esc(n.secret||'')}</textarea>
+
       <div class="npclib-detail-actions">
         <button class="btn small primary" data-act="to-combat">+ Add to combat</button>
       </div>
@@ -683,6 +692,9 @@ registerPanel('npclib', {
         if (cb){ cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
         return;
       }
+      // New selection — re-hide the secret so it doesn't carry the previous
+      // NPC's reveal state to this one (player might be looking at the screen).
+      if (this._selectedId !== c.dataset.id) this._secretRevealed = false;
       this._selectedId = c.dataset.id;
       this._render();
     }));
@@ -765,6 +777,18 @@ registerPanel('npclib', {
       applyFormat(btn.dataset.fmt);
       n.notes = notesEl.innerHTML; this._save();
     }));
+
+    // Secret field — separate from notes so it can be hidden behind a
+    // 👁 Reveal / 🙈 Hide toggle (panel-local, not persisted between
+    // selections — defaults to hidden every time you pick a different NPC).
+    const secretEl = b.querySelector('.npclib-secret');
+    if (secretEl){
+      secretEl.addEventListener('input', () => { n.secret = secretEl.value; this._save(); });
+    }
+    b.querySelector('[data-act="toggle-secret"]')?.addEventListener('click', () => {
+      this._secretRevealed = !this._secretRevealed;
+      this._render();
+    });
 
     // Tag add / remove
     b.querySelectorAll('.tag-rm').forEach(btn => btn.addEventListener('click', e => {

@@ -37,11 +37,16 @@ function genNPC(overrides){
   const namePool=NPC_GEN_DATA.names[race]||NPC_GEN_DATA.names.default;
   const name=rnd(namePool)+(Math.random()<0.25?' '+rnd(NPC_GEN_DATA.epithets):'');
   const age=20+Math.floor(Math.random()*60);
+  // Roll quirks first so we can dedupe — picking quirk2 != quirk avoids
+  // "Hums under their breath. Hums under their breath." in the saved
+  // NPC's description.
+  const quirk = rnd(NPC_GEN_DATA.quirks);
+  let quirk2 = rnd(NPC_GEN_DATA.quirks);
+  for (let i = 0; i < 6 && quirk2 === quirk; i++) quirk2 = rnd(NPC_GEN_DATA.quirks);
   return {
     name, race, gender, role, age,
     attitude:overrides.attitude||rnd(NPC_GEN_DATA.attitudes),
-    quirk:rnd(NPC_GEN_DATA.quirks),
-    quirk2:rnd(NPC_GEN_DATA.quirks),
+    quirk, quirk2,
     motivation:rnd(NPC_GEN_DATA.motivations),
     secret:rnd(NPC_GEN_DATA.secrets),
     hp:4+Math.floor(Math.random()*12),
@@ -218,11 +223,21 @@ registerPanel('npcgen',{
       ac: g.ac || 10,
       init: 0,
       tags: [g.race, g.role, g.gender].filter(Boolean),
-      // Visible description — the player-facing flavor.
-      description: [g.gender, g.race, 'aged ' + g.age + '.', g.quirk, g.quirk2].filter(Boolean).join(' '),
-      // DM-only notes — motivation + secret stashed here so the library is the
-      // single source of truth for plotty stuff.
-      notes: 'Motivation: ' + (g.motivation||'—') + '\nSecret: ' + (g.secret||'—'),
+      // Visible description — the player-facing flavor. Dedupe quirks so an
+      // NPC whose two quirks rolled identical doesn't read "Hums under their
+      // breath Hums under their breath".
+      description: (() => {
+        const quirks = [g.quirk, g.quirk2].filter(Boolean);
+        const uniqueQuirks = [...new Set(quirks)];
+        return [g.gender, g.race, 'aged ' + g.age + '.', ...uniqueQuirks].filter(Boolean).join(' ');
+      })(),
+      // DM-only notes — motivation is fine in plain notes; the SECRET goes
+      // into its own dedicated field so the library can render it with a
+      // hide/reveal toggle (same UX as the generator). Saving a generated
+      // NPC used to dump the secret straight into the notes field where it
+      // sat in plain text — a player glancing at the screen could read it.
+      notes: 'Motivation: ' + (g.motivation||'—'),
+      secret: g.secret || '',
     });
 
     // Push one entry into the library, persisting under v2 (the library's
