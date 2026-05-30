@@ -1123,9 +1123,21 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .notes-tree-row.notes-file:hover{color:var(--text)}
 .notes-tree-row.notes-file.selected{background:var(--panel-3);color:var(--text)}
 .notes-tree-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.notes-tree-actions{display:none;gap:0;flex-shrink:0}
+.notes-tree-actions{display:none;gap:2px;flex-shrink:0}
 .notes-tree-row:hover .notes-tree-actions{display:flex}
-.notes-tree-actions .icon-btn{padding:1px 4px!important;font-size:10px!important}
+/* Tree-row action buttons (rename/delete/add) carry only .icon-btn (no .btn),
+   so the global .btn.icon-btn rule doesn't reach them. Style explicitly here
+   or browsers render a light system-button pill with invisible currentColor. */
+.notes-tree-actions .icon-btn{
+  padding:2px 4px!important;font-size:10px!important;
+  background:transparent;border:1px solid transparent;border-radius:3px;
+  color:var(--text-muted);cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  line-height:1;
+}
+.notes-tree-actions .icon-btn svg{display:block}
+.notes-tree-actions .icon-btn:hover{background:var(--panel-3);color:var(--text);border-color:var(--border)}
+.notes-tree-actions .icon-btn.danger:hover{background:rgba(194,84,80,.22);color:#c25450;border-color:rgba(194,84,80,.5)}
 
 .notes-divider{flex:0 0 5px;background:var(--border);cursor:ew-resize;transition:background .12s;position:relative}
 .notes-divider:hover,.notes-divider:active{background:var(--accent)}
