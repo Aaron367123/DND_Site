@@ -45,6 +45,32 @@ registerPanel('party',{
       + '</div>';
   },
 
+  // Status pills: concentration + exhaustion. Always rendered so the
+  // controls are always reachable; pills change appearance based on state.
+  //
+  // Concentration: stored as a string on c.concentration (spell name).
+  //   • Empty → "🌀 +" pill, click prompts for spell name.
+  //   • Set   → "🌀 Bless ×" pill, click drops concentration.
+  //
+  // Exhaustion: stored as an integer 0–6 on c.exhaustion (per 2024 rules).
+  //   • Level 0 → "+ Exh" hint button, click bumps to 1.
+  //   • Level ≥1 → "⚠ Exh: N − +" with stepper buttons.
+  _statusRow(c, i){
+    const conc = c.concentration || '';
+    const exh = +c.exhaustion || 0;
+    const concHtml = conc
+      ? `<button class="status-pill conc active" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">🌀 ${esc(conc)} <span class="status-pill-x">×</span></button>`
+      : `<button class="status-pill conc" data-act="conc-set" data-idx="${i}" title="Set what this character is concentrating on">🌀 <span class="status-pill-hint">Concentration</span></button>`;
+    const exhHtml = exh > 0
+      ? `<div class="status-pill exh active" title="Exhaustion level (1–6, 2024 rules: each level = −2 to d20 rolls and −5 ft speed; 6 = death)">
+          <span class="status-pill-label">⚠ Exh: ${exh}</span>
+          <button class="status-pill-step" data-act="exh-down" data-idx="${i}" title="Decrease">−</button>
+          <button class="status-pill-step" data-act="exh-up" data-idx="${i}" title="Increase">+</button>
+         </div>`
+      : `<button class="status-pill exh" data-act="exh-up" data-idx="${i}" title="Apply exhaustion">⚠ <span class="status-pill-hint">Exhaustion</span></button>`;
+    return `<div class="char-status-row">${concHtml}${exhHtml}</div>`;
+  },
+
   // HP bar visual: clamp 0–100% normally, but flag a "surplus" state when
   // current HP exceeds max (Aid spell, Heroes' Feast, temp HP added to total,
   // etc.) so the player sees they're over-cap. Surplus uses a cool-blue fill
@@ -93,12 +119,28 @@ registerPanel('party',{
       resHtml+='</div>';
     }
 
+    // Class/Race/Level subline. Falls back to c.sheet fields when the
+    // top-level c.cls/race/level haven't been set (PDF imports populate the
+    // sheet first; Manage Party fills the top-level fields). The line is
+    // omitted entirely when no fields are known so the card stays clean.
+    const sheet = c.sheet || {};
+    const subRace = c.race || sheet.race || '';
+    const subCls  = c.cls  || sheet.class || '';
+    const subLvl  = c.level || sheet.level;
+    const clsLvl  = [subCls, subLvl].filter(x => x != null && x !== '').join(' ');
+    const sublineParts = [subRace, clsLvl].filter(Boolean);
+    const sublineHtml = sublineParts.length
+      ? '<div class="char-subline">' + esc(sublineParts.join(' · ')) + '</div>'
+      : '';
     return '<div class="char-card" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
         +(this._pickerOpen===i?this._iconPicker(i):'')
-        +'<input class="char-name" value="'+esc(c.name)+'" data-field="name" data-idx="'+i+'" placeholder="Character name">'
+        +'<div class="char-header-text">'
+          +'<input class="char-name" value="'+esc(c.name)+'" data-field="name" data-idx="'+i+'" placeholder="Character name">'
+          +sublineHtml
+        +'</div>'
       +'</div>'
       // HP block — current / max with an optional Temp HP badge. Temp HP
       // sits visually beside the HP fields and edits inline like the others.
@@ -123,6 +165,12 @@ registerPanel('party',{
         +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
       +'</div>'
+      // Status row — concentration pill + exhaustion badge. Always rendered;
+      // the contents are minimal when neither is set (just "🌀 +" and
+      // "⚠ Exh +"). Clicking the concentration pill prompts for a spell
+      // name (or clears if already set); the exhaustion +/- buttons step
+      // 0–6 with auto-hide when zero.
+      + this._statusRow(c, i)
       // Active-conditions chip row — cross-references the matching combatant
       // by id (PCs in combat carry their condition list on state.combatants,
       // not on state.party). Hidden when no conditions are active.
@@ -284,6 +332,24 @@ registerPanel('party',{
     const pp = sh.passivePerception;
     const dexMod = (typeof ab.dex==='number') ? Math.floor((ab.dex-10)/2) : null;
     const computedPP = (typeof ab.wis==='number') ? 10+Math.floor((ab.wis-10)/2) : null;
+    // Passive Insight / Investigation — DM-side reference values that come up
+    // constantly. 10 + ability mod + (skill prof level × proficiency bonus).
+    // Skill prof level uses the same 'expert'/'proficient'/'half'/null values
+    // the Skills tab already inspects.
+    const skills = sh.skills || {};
+    const skillBonus = (lvl) => {
+      if (lvl === 'expert' && prof != null)     return prof * 2;
+      if (lvl === 'proficient' && prof != null) return prof;
+      if (lvl === 'half' && prof != null)       return Math.floor(prof / 2);
+      return 0;
+    };
+    const passiveOf = (abilKey, skillKey) => {
+      const m = (typeof ab[abilKey] === 'number') ? Math.floor((ab[abilKey]-10)/2) : null;
+      if (m == null) return null;
+      return 10 + m + skillBonus(skills[skillKey]);
+    };
+    const piVal = passiveOf('wis', 'insight');
+    const pIVal = passiveOf('int', 'investigation');
     return this._renderLastRoll(c)
       + this._abilityBlock(c)
       + '<div class="sheet-grid2">'
@@ -291,6 +357,8 @@ registerPanel('party',{
       + '<div class="sheet-col"><h5>Vitals</h5>'
       +   `<div class="sheet-stat-row"><span>Proficiency</span><span class="sheet-stat-val">${prof==null?'—':'+'+prof}</span></div>`
       +   `<div class="sheet-stat-row"><span>Passive Perception</span><span class="sheet-stat-val">${pp ?? computedPP ?? '—'}</span></div>`
+      +   `<div class="sheet-stat-row"><span>Passive Insight</span><span class="sheet-stat-val">${piVal ?? '—'}</span></div>`
+      +   `<div class="sheet-stat-row"><span>Passive Investigation</span><span class="sheet-stat-val">${pIVal ?? '—'}</span></div>`
       +   `<div class="sheet-stat-row rollable" data-act="roll-init" data-cid="${esc(c.id)}" data-mod="${c.init??0}" title="Click to roll initiative (Shift = adv · Alt = dis)" style="cursor:pointer"><span>Initiative</span><span class="sheet-stat-val">${(c.init>=0?'+':'')+(c.init??0)}</span></div>`
       +   `<div class="sheet-stat-row"><span>Speed</span><span class="sheet-stat-val">${c.spd ?? '—'}</span></div>`
       +   `<div class="sheet-stat-row"><span>AC</span><span class="sheet-stat-val">${c.ac ?? '—'}</span></div>`
@@ -1011,6 +1079,33 @@ registerPanel('party',{
       }
       else if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
       else if(act==='bardic-insp'){state.party[i]={...state.party[i],bardicInspiration:!state.party[i].bardicInspiration};save();this._render();}
+      // Concentration set/drop — set prompts for the spell name; drop clears.
+      else if(act==='conc-set'){
+        const cur = state.party[i].concentration || '';
+        showModal('Concentration spell', [
+          { id:'spell', label:'Spell name', type:'text', value:cur, placeholder:'Bless · Hex · Haste · Spiritual Weapon …' },
+        ], 'Save').then(r => {
+          if (!r) return;
+          const name = (r.spell||'').trim();
+          state.party[i] = {...state.party[i], concentration: name || null};
+          save(); this._render();
+        });
+      }
+      else if(act==='conc-drop'){
+        state.party[i] = {...state.party[i], concentration: null};
+        save(); this._render();
+      }
+      // Exhaustion stepper — clamped 0–6 per 2024 rules.
+      else if(act==='exh-up'){
+        const cur = +state.party[i].exhaustion || 0;
+        state.party[i] = {...state.party[i], exhaustion: Math.min(6, cur + 1)};
+        save(); this._render();
+      }
+      else if(act==='exh-down'){
+        const cur = +state.party[i].exhaustion || 0;
+        state.party[i] = {...state.party[i], exhaustion: Math.max(0, cur - 1)};
+        save(); this._render();
+      }
       else if(act==='add'){
         state.party.push({id:uid(),name:'New Character',cls:'fighter',icon:'⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,inspiration:false,resources:[]});
         save();this._render();

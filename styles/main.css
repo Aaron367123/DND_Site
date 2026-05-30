@@ -705,6 +705,21 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .char-card.drop-before{box-shadow:0 -2px 0 var(--accent) inset}
 .char-card.drop-after{box-shadow:0 2px 0 var(--accent) inset}
 .char-header{display:flex;align-items:center;gap:6px}
+.char-header-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+/* Race · Class Level subline under the name. */
+.char-subline{font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:.02em;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+/* Status row — concentration pill + exhaustion badge stack horizontally
+   under HP/stats. Wraps to a second line on narrow cards. */
+.char-status-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.status-pill{display:inline-flex;align-items:center;gap:4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);font-size:10px;padding:3px 8px;border-radius:12px;cursor:pointer;font-family:inherit;line-height:1.2;transition:all .12s;user-select:none}
+.status-pill:hover{color:var(--text);border-color:var(--accent-dark)}
+.status-pill .status-pill-hint{color:var(--text-dim);font-weight:500}
+.status-pill .status-pill-x{margin-left:2px;opacity:.6}
+.status-pill.conc.active{background:rgba(155,80,170,.18);border-color:rgba(155,80,170,.55);color:#d4a8e0;font-weight:600}
+.status-pill.conc.active:hover{background:rgba(155,80,170,.28)}
+.status-pill.exh.active{background:rgba(190,70,70,.18);border-color:rgba(190,70,70,.55);color:#f3a0a0;font-weight:600;padding:2px 4px 2px 8px;gap:6px}
+.status-pill.exh.active .status-pill-step{background:rgba(190,70,70,.3);border:none;color:#fff;width:18px;height:18px;border-radius:50%;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:background .12s}
+.status-pill.exh.active .status-pill-step:hover{background:rgba(190,70,70,.5)}
 .char-icon-btn{font-size:20px;background:var(--panel-3);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;position:relative}
 .char-icon-btn:hover{background:#404040;border-color:var(--accent-dark)}
 .char-name{background:transparent;border:none;padding:0;font-weight:600;font-size:13px;color:var(--text);flex:1;min-width:0;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
