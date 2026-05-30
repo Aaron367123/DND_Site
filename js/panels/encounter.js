@@ -56,12 +56,11 @@ registerPanel('encounter',{
   _searchPool(q){
     if (typeof _5eLoaded !== 'undefined' && _5eLoaded && Array.isArray(_5eData)) {
       const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-      // Honor the Books panel's hidden-sources list so encounters drawn from
-      // disabled books don't appear in the dropdown.
-      const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
+      // Honor the user's hidden-sources filter when the encounter scope is
+      // on (toggleable per consumer in the Books panel).
       return _5eData
         .filter(d => d.cat==='monster')
-        .filter(d => !hiddenSrc || !hiddenSrc.has(String(d._source || '').toLowerCase()))
+        .filter(d => !(typeof window.SKT_IS_SOURCE_HIDDEN === 'function' && window.SKT_IS_SOURCE_HIDDEN('encounter', d._source)))
         .filter(d => tokens.every(t => (d.name+' '+(d.meta||'')).toLowerCase().includes(t)))
         .slice(0, 30)
         .map(d => ({ name:d.name, cr:d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d._raw?.dexterity||10, _img:d._img, _source:d._source }));

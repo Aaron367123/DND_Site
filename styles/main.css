@@ -1452,6 +1452,16 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .adv-card.is-hidden:hover{opacity:.85}
 /* Footer below the book grid with the count of hidden books + restore buttons. */
 .adv-hidden-footer{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);background:var(--panel-2);color:var(--text-muted);font-size:11px}
+/* Per-consumer scope toggle row — appears under the search input when at
+   least one book/adventure is hidden. Each chip flips one entry of
+   state.settings.hiddenSourceScope so the user can decide which panels
+   actually filter on the hidden list. */
+.adv-scope-row{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);background:var(--panel-2);font-size:11px;flex-wrap:wrap}
+.adv-scope-label{color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-right:2px}
+.adv-scope-chip{font-size:10px;padding:3px 9px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text-dim);font-family:inherit;cursor:pointer;transition:all .12s;font-weight:500}
+.adv-scope-chip:hover{color:var(--text);border-color:var(--accent-dark)}
+.adv-scope-chip.on{background:rgba(212,165,116,.16);border-color:rgba(212,165,116,.55);color:var(--accent);font-weight:600}
+.adv-scope-chip.on:hover{background:rgba(212,165,116,.28)}
 .adv-hidden-footer .btn{font-size:11px;padding:3px 8px}
 .adv-card:hover{border-color:var(--accent);transform:translateY(-2px)}
 .adv-card-imgwrap{position:relative;width:100%;height:220px;flex:0 0 auto;background:var(--panel-3);overflow:hidden}

@@ -158,6 +158,24 @@ registerPanel('adventures', {
           ${this._hiddenAdventures.size > 0 ? '<button class="btn small" id="adv-unhide-all">Unhide all</button>' : ''}
         </div>`
       : '';
+    // Filter-scope row mirrored from the Books panel — same global state, so
+    // toggling here propagates to every consumer immediately.
+    const anyHidden = this._hiddenAdventures.size > 0 || (typeof window.SKT_HIDDEN_SOURCES === 'object' && window.SKT_HIDDEN_SOURCES.size > 0);
+    const scope = (typeof state !== 'undefined' && state.settings && state.settings.hiddenSourceScope) || {};
+    const scopeChip = (key, label, title) => {
+      const on = scope[key] !== false;
+      return `<button class="adv-scope-chip${on?' on':''}" data-act="toggle-scope" data-scope="${esc(key)}" title="${esc(title)}">${esc(label)}</button>`;
+    };
+    const scopeRow = anyHidden
+      ? `<div class="adv-scope-row" title="Pick which panels honor the hidden-books/adventures filter">
+          <span class="adv-scope-label">Filter applies to:</span>
+          ${scopeChip('shop',      'Shop',      'Shop generator')}
+          ${scopeChip('search',    'Search',    'Top-bar / global search panel')}
+          ${scopeChip('bestiary',  'Bestiary',  'Bestiary panel\'s Add-Monster picker')}
+          ${scopeChip('encounter', 'Encounter', 'Encounter builder dropdown')}
+          ${scopeChip('loot',      'Loot',      'Loot tracker item search')}
+        </div>`
+      : '';
 
     b.innerHTML = `
       <div class="adv-panel">
@@ -165,6 +183,7 @@ registerPanel('adventures', {
           <input type="search" id="adv-search" placeholder="🔎 Filter adventures…" value="${esc(this._searchQ||'')}" autocomplete="off">
           <span class="adv-list-count">${visible.length} / ${this._adventures.length}</span>
         </div>
+        ${scopeRow}
         <div class="adv-list">${cards || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>'}</div>
         ${hiddenFooter}
       </div>`;
@@ -188,6 +207,18 @@ registerPanel('adventures', {
       this._saveHiddenAdventures();
       this._render();
     });
+    // Per-consumer scope chip clicks — flip the corresponding flag in
+    // state.settings.hiddenSourceScope. Shared with the Books panel.
+    b.querySelectorAll('[data-act="toggle-scope"]').forEach(btn => btn.addEventListener('click', () => {
+      const k = btn.dataset.scope;
+      if (!state.settings.hiddenSourceScope){
+        state.settings.hiddenSourceScope = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.hiddenSourceScope));
+      }
+      const cur = state.settings.hiddenSourceScope[k] !== false;
+      state.settings.hiddenSourceScope[k] = !cur;
+      save();
+      this._render();
+    }));
     const search = b.querySelector('#adv-search');
     if (search){
       search.addEventListener('input', e => {

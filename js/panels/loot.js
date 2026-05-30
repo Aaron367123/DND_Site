@@ -52,24 +52,50 @@ registerPanel('loot',{
   // ── 5e item search ───────────────────────────────────────────────────────────
   _searchItems(q){
     if (!q || typeof _5eLoaded === 'undefined' || !_5eLoaded || !Array.isArray(_5eData)) return [];
-    const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const qLow = q.toLowerCase().trim();
+    const tokens = qLow.split(/\s+/).filter(Boolean);
     const matches = (name, meta) =>
       tokens.every(t => (name+' '+(meta||'')).toLowerCase().includes(t));
-    const out = [];
+    // Honor the per-consumer hidden-source filter (toggleable in Books panel).
+    const isHidden = (src) => typeof window.SKT_IS_SOURCE_HIDDEN === 'function'
+      ? window.SKT_IS_SOURCE_HIDDEN('loot', src)
+      : false;
+    // Collect all matches first (no early break — there are only ~2,500
+    // items, easy to iterate fully). Then rank so prefix matches and
+    // shorter names come first: typing "shield" puts the plain Shield base
+    // item at the top, not 31 magic shields ahead of it.
+    const all = [];
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
-      if (matches(d.name, d.meta)) out.push({name:d.name, meta:d.meta, _source:d._source, value:d._raw?.value || '', rarity:d._raw?.rarity || null, weight: d._raw?.weight ?? null});
+      if (isHidden(d._source)) continue;
+      if (matches(d.name, d.meta)) all.push({name:d.name, meta:d.meta, _source:d._source, value:d._raw?.value || '', rarity:d._raw?.rarity || null, weight: d._raw?.weight ?? null});
       // Items with bonus variants (+1, +2, +3) — include each variant as its
       // own selectable row so the user can drop "+2 Longsword" directly
       // into loot without having to retype the prefix.
       if (d._variants){
         for (const v of d._variants){
-          if (matches(v.name, v.meta)) out.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:v._raw?.value || '', rarity:v._raw?.rarity || d._raw?.rarity || null, weight: v._raw?.weight ?? d._raw?.weight ?? null});
+          if (isHidden(v._source || d._source)) continue;
+          if (matches(v.name, v.meta)) all.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:v._raw?.value || '', rarity:v._raw?.rarity || d._raw?.rarity || null, weight: v._raw?.weight ?? d._raw?.weight ?? null});
         }
       }
-      if (out.length >= 20) break;
     }
-    return out.slice(0, 20);
+    // Score each match. Lower score = ranks higher.
+    //   • Exact (case-insensitive) name match → 0
+    //   • Name starts with the full query → 1
+    //   • Otherwise → 2 + name length / 200 (shorter beats longer)
+    // Tie-break alphabetically.
+    const score = (it) => {
+      const n = (it.name || '').toLowerCase();
+      if (n === qLow) return 0;
+      if (n.startsWith(qLow)) return 1;
+      return 2 + (n.length / 200);
+    };
+    all.sort((a,b) => {
+      const sa = score(a), sb = score(b);
+      if (sa !== sb) return sa - sb;
+      return a.name.localeCompare(b.name);
+    });
+    return all.slice(0, 20);
   },
 
   _renderSearchDropdown(){

@@ -880,12 +880,11 @@ function doSearch(){
   let pool=getSearchPool();
   const sel=state.searchState.category;
   if(sel!=='all')pool=pool.filter(r=>_catMatches(r.cat, sel));
-  // Hidden-sources filter — books the user has × off in the Books panel are
-  // excluded from search results. Keeps the result list focused on sources
-  // the DM actually uses.
-  const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
-  if (hiddenSrc && hiddenSrc.size){
-    pool = pool.filter(r => !hiddenSrc.has(String(r._source || '').toLowerCase()));
+  // Hidden-sources filter — books/adventures the user has × off are excluded
+  // when the Search consumer scope is enabled (defaults on; the user can
+  // turn it off in the Books panel's "Filter applies to" toggle row).
+  if (typeof window.SKT_IS_SOURCE_HIDDEN === 'function'){
+    pool = pool.filter(r => !window.SKT_IS_SOURCE_HIDDEN('search', r._source));
   }
   if(q){
     // Multi-token: every whitespace-separated token must appear somewhere in

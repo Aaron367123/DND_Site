@@ -493,12 +493,11 @@ registerPanel('bestiary', {
       showToast?.('5e data still loading — try again in a moment');
       return;
     }
-    // Honor the user's hidden-books filter — monsters from sources they've
-    // hidden in the Books panel don't show in this picker.
-    const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
+    // Honor the user's hidden-books filter — monsters from hidden sources
+    // are excluded when the bestiary scope is on (toggleable per consumer).
     const all = _5eData.filter(d => {
       if (d.cat !== 'monster') return false;
-      if (hiddenSrc && hiddenSrc.has(String(d._source || '').toLowerCase())) return false;
+      if (typeof window.SKT_IS_SOURCE_HIDDEN === 'function' && window.SKT_IS_SOURCE_HIDDEN('bestiary', d._source)) return false;
       return true;
     }).sort((a,b)=>a.name.localeCompare(b.name));
 

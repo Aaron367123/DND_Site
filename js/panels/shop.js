@@ -791,7 +791,12 @@ registerPanel('shop',{
     // Hidden-sources filter: any book the user has hidden via the Books
     // panel's × button is excluded from the shop catalog so generated shops
     // only contain items from sources the DM is actually using.
-    const hiddenSrc = window.SKT_HIDDEN_SOURCES || null;
+    // Per-consumer scope test — honors `state.settings.hiddenSourceScope.shop`
+    // so the user can have books/adventures hidden EVERYWHERE except here
+    // (or vice versa).
+    const isHidden = (src) => window.SKT_IS_SOURCE_HIDDEN
+      ? window.SKT_IS_SOURCE_HIDDEN('shop', src)
+      : !!(window.SKT_HIDDEN_SOURCES && window.SKT_HIDDEN_SOURCES.has(String(src||'').toLowerCase()));
     const sf = (state.settings && state.settings.shopFilters) || {};
     // Exclude-firearms / new tech-level radio. The tech-level filter is the
     // newer general control; the boolean stays around for back-compat.
@@ -804,7 +809,7 @@ registerPanel('shop',{
     );
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
-      if (hiddenSrc && hiddenSrc.has(String(d._source || '').toLowerCase())) continue;
+      if (isHidden(d._source)) continue;
       const r = d._raw || {};
       if (skipFirearms && this._isFirearm(r)) continue;
       if (!this._techLevelAllowed(r, techLevel)) continue;
