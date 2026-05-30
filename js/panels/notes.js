@@ -438,9 +438,9 @@ registerPanel('notes', {
             <span class="caret">${expanded?'▾':'▸'}</span>
             <span class="notes-tree-name">${esc(it.name)}</span>
             <span class="notes-tree-actions">
-              <button class="icon-btn" data-act="add-file-in" data-id="${it.id}" title="New file in folder">＋</button>
-              <button class="icon-btn" data-act="rename" data-id="${it.id}" title="Rename">✎</button>
-              <button class="icon-btn danger" data-act="delete" data-id="${it.id}" title="Delete">×</button>
+              <button class="icon-btn" data-act="add-file-in" data-id="${it.id}" title="New file in folder"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg></button>
+              <button class="icon-btn" data-act="rename" data-id="${it.id}" title="Rename"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/><line x1="10" y1="4" x2="12" y2="6"/></svg></button>
+              <button class="icon-btn danger" data-act="delete" data-id="${it.id}" title="Delete"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h10M6 5V3.5h4V5M5 5l.6 8.2c0 .5.4.8.9.8h3c.5 0 .9-.3.9-.8L11 5"/></svg></button>
             </span>
           </div>
           ${expanded ? this._renderTree(tree, it.id, depth+1) : ''}`;
@@ -449,8 +449,8 @@ registerPanel('notes', {
         return `<div class="notes-tree-row notes-file${sel}" data-id="${it.id}" data-act="select-file" draggable="true" style="padding-left:${8+depth*14+12}px">
           <span class="notes-tree-name">${esc(it.name)}.md</span>
           <span class="notes-tree-actions">
-            <button class="icon-btn" data-act="rename" data-id="${it.id}" title="Rename">✎</button>
-            <button class="icon-btn danger" data-act="delete" data-id="${it.id}" title="Delete">×</button>
+            <button class="icon-btn" data-act="rename" data-id="${it.id}" title="Rename"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/><line x1="10" y1="4" x2="12" y2="6"/></svg></button>
+            <button class="icon-btn danger" data-act="delete" data-id="${it.id}" title="Delete"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h10M6 5V3.5h4V5M5 5l.6 8.2c0 .5.4.8.9.8h3c.5 0 .9-.3.9-.8L11 5"/></svg></button>
           </span>
         </div>`;
       }
@@ -478,14 +478,14 @@ registerPanel('notes', {
         <button class="btn" data-nact="h2" title="Heading 2">H2</button>
         <button class="btn" data-nact="h3" title="Heading 3">H3</button>
         <span class="notes-tb-sep"></span>
-        <button class="btn" data-nact="bullet" title="Bullet list">≡</button>
+        <button class="btn" data-nact="bullet" title="Bullet list"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="3" cy="4" r="1" fill="currentColor"/><circle cx="3" cy="8" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/><line x1="6" y1="4" x2="14" y2="4"/><line x1="6" y1="8" x2="14" y2="8"/><line x1="6" y1="12" x2="14" y2="12"/></svg></button>
         <button class="btn" data-nact="numlist" title="Numbered list">1.</button>
         <button class="btn" data-nact="indent" title="Indent list item">→</button>
         <span class="notes-tb-sep"></span>
-        <button class="btn" data-nact="quote"     title="Blockquote">&ldquo;</button>
+        <button class="btn" data-nact="quote"     title="Blockquote"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3 4h4v4H5c0 1.5 1 2.5 2 2.5V12c-2.5 0-4-1.7-4-4V4zm6 0h4v4h-2c0 1.5 1 2.5 2 2.5V12c-2.5 0-4-1.7-4-4V4z"/></svg></button>
         <button class="btn" data-nact="codeblock" title="Code block">{ }</button>
         <button class="btn" data-nact="hr"        title="Horizontal rule">—</button>
-        <button class="btn" data-nact="table"     title="Insert table">▦</button>
+        <button class="btn" data-nact="table"     title="Insert table"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="10" rx="1"/><line x1="2" y1="7" x2="14" y2="7"/><line x1="2" y1="10" x2="14" y2="10"/><line x1="6" y1="3" x2="6" y2="13"/><line x1="10" y1="3" x2="10" y2="13"/></svg></button>
         <span class="notes-tb-sep"></span>
         <button class="btn" data-nact="undo" title="Undo (Ctrl+Z)">↶</button>
         <button class="btn" data-nact="redo" title="Redo (Ctrl+Shift+Z)">↷</button>
