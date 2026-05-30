@@ -566,18 +566,25 @@ registerPanel('shop',{
   _shopFilters: {
     'Blacksmith/Armory': r => {
       const t = (r.type||'').split('|')[0];
-      return ['HA','MA','LA','S','M'].includes(t) && (r.rarity==='none' || !r.rarity || r.rarity==='unknown');
+      // Armor (HA/MA/LA/S), melee weapons (M), and mundane ammunition (A:
+      // arrows/bolts/bullets — smithed metal parts). Mundane only — magic
+      // pieces flow through Magic Shop.
+      return ['HA','MA','LA','S','M','A'].includes(t)
+        && (r.rarity==='none' || !r.rarity || r.rarity==='unknown');
     },
     'General Store': r => {
       const t = (r.type||'').split('|')[0];
-      return ['G','AT','T','GS','TAH','TG','INS','OTH'].includes(t)
+      // Added SCF (spellcasting foci — orbs/crystals/druidic foci, 77 items)
+      // and TB (trinkets) so general stores actually feel general.
+      return ['G','AT','T','GS','TAH','TG','INS','OTH','SCF','TB'].includes(t)
         && (r.rarity==='none' || !r.rarity || r.rarity==='unknown');
     },
     'Alchemist': r => {
       const t = (r.type||'').split('|')[0];
-      if (t === 'P') return true;
+      if (t === 'P') return true;           // potions
+      if (t === 'EXP') return true;         // bombs, alchemist's fire, acid flasks
       const n = (r.name||'').toLowerCase();
-      return /^(acid|antitoxin|alchemist's fire|holy water|oil)\b/.test(n);
+      return /^(acid|antitoxin|alchemist's fire|holy water|oil|basic poison|perfume|incense|soap|tindertwig|smokestick|smokepowder)\b/.test(n);
     },
     'Magic Shop': r => {
       const rar = (r.rarity||'').toLowerCase();
@@ -590,18 +597,27 @@ registerPanel('shop',{
     'Jeweler': r => {
       const t = (r.type||'').split('|')[0];
       const rar = (r.rarity||'').toLowerCase();
-      if (t === '$') return true;
+      // 5etools treasure type codes are `$A` (art objects), `$G` (gems),
+      // `$C` (coinage), `$?` (uncategorized) — NOT plain `$`. The old check
+      // `t === '$'` matched zero items, so every gem (Diamond, Ruby, etc.)
+      // was excluded from the Jeweler. Match the whole `$*` family instead.
+      if (t.startsWith('$')) return true;
       if (t === 'RG' && (rar==='none' || rar==='common' || rar==='uncommon' || rar==='rare')) return true;
       return /^(gemstone|silver ring|gold ring|pearl)\b/i.test(r.name||'');
     },
     'Bookshop': r => {
       const t = (r.type||'').split('|')[0];
-      return t === 'SC';
+      if (t === 'SC') return true;          // spell scrolls
+      // Magic books/tomes/manuals/codices/folios/libram — typed OTH but
+      // clearly belong on a bookshop's shelf.
+      return /^(book|tome|manual|codex|folio|libram|grimoire) of\b/i.test(r.name||'');
     },
     'Fletcher': r => {
       const t = (r.type||'').split('|')[0];
       const rar = (r.rarity||'').toLowerCase();
-      return (t === 'R' || t === 'A') && (rar==='none' || !rar || rar==='unknown');
+      // R (ranged weapons), A (mundane ammo), AF (firearm ammo — gated by
+      // techLevel filter elsewhere if the campaign forbids guns).
+      return (t === 'R' || t === 'A' || t === 'AF') && (rar==='none' || !rar || rar==='unknown');
     },
   },
 
@@ -649,6 +665,10 @@ registerPanel('shop',{
   // checkboxes in the settings popover. Anything unmatched falls into 'other'.
   _typeToCategory(typeCode){
     const t = (typeCode || '').split('|')[0];
+    // 5etools treasure codes are `$A` (art) / `$G` (gem) / `$C` (coinage)
+    // / `$?` (uncategorized). Plain `$` never appears. Bucket the entire
+    // family into the existing 'treasure' category.
+    if (t && t.charAt(0) === '$') return 'treasure';
     const map = {
       M:'weapons', R:'weapons',
       A:'ammo', AF:'ammo',
@@ -659,7 +679,6 @@ registerPanel('shop',{
       RG:'rings',
       SC:'scrolls',
       SCF:'foci',
-      $:'treasure',
       FD:'foodDrink',
     };
     return map[t] || 'other';
