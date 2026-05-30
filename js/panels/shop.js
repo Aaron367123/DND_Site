@@ -709,17 +709,36 @@ registerPanel('shop',{
     return t === 'P' || t === 'SC' || t === 'A';
   },
   // `allowed` is one of 'any' | 'medieval' | 'renaissance' | 'modern'.
-  // 5etools tags only renaissance/modern/futuristic; items without an `age`
-  // tag are treated as medieval (which is most of the catalog).
+  // 5etools tags renaissance/modern/futuristic via the `age` field BUT the
+  // XPHB-2024 reprints of muskets/pistols/rifles dropped that tag entirely.
+  // So we can't just trust `age === undefined → medieval`; we have to also
+  // run firearm detection by name + property and assign a synthetic tier
+  // when age is missing.
   _techLevelAllowed(r, allowed){
     if (!allowed || allowed === 'any') return true;
     const order = ['medieval','renaissance','modern','futuristic'];
     const max = order.indexOf(allowed);
     if (max < 0) return true;
     const age = String(r && r.age || '').toLowerCase();
-    if (!age) return true; // no age → assume medieval, always allowed
-    const i = order.indexOf(age);
-    return i >= 0 && i <= max;
+    if (age){
+      const i = order.indexOf(age);
+      return i >= 0 && i <= max;
+    }
+    // No age tag. If the item is detectably a firearm (name pattern, AF
+    // property), infer its tier from the name so XPHB muskets/pistols still
+    // get blocked at medieval and modern rifles still get blocked at
+    // renaissance, etc. Non-firearms with no age → medieval (the default,
+    // always allowed for any tech-level setting).
+    if (this._isFirearm(r)){
+      const n = String(r.name || '').toLowerCase();
+      // Futuristic: energy weapons.
+      if (/(laser|antimatter|plasma|disintegrat|phaser|blaster)/.test(n))   return max >= 3;
+      // Modern: rifles, automatics, shotguns, machine guns.
+      if (/(automatic|rifle|machine gun|gatling|shotgun|carbine|hunting rifle|semi)/.test(n)) return max >= 2;
+      // Renaissance: musket, pistol, revolver (powder firearms).
+      return max >= 1;
+    }
+    return true;
   },
   // Test a (post-shaping) catalog row name against a spell-scroll cap. 10 = no cap.
   _scrollLevelOK(item, maxLevel){
