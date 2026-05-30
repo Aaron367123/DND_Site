@@ -308,17 +308,18 @@ registerPanel('shop',{
 
         <div class="shop-filter-section">
           <div class="shop-filter-head"><span>Restrictions</span></div>
-          <div class="shop-filter-grid">
-            ${cb('shop-hide-att',   'Hide attunement-required items', !!sf.hideAttunement)}
-            ${cb('shop-hide-curse', 'Hide cursed items',              !!sf.hideCursed)}
-            ${cb('shop-hide-sent',  'Hide sentient items',            !!sf.hideSentient)}
-            ${cb('shop-hide-art',   'Hide artifacts',                 !!sf.hideArtifacts)}
-            ${cb('shop-no-cons',    'Exclude consumables (potions, scrolls, ammo)', !!sf.excludeConsumables)}
+          <div class="shop-filter-grid shop-filter-grid-1col">
+            ${cb('shop-hide-att',   'Hide attunement-required items',   !!sf.hideAttunement)}
+            ${cb('shop-hide-curse', 'Hide cursed items',                !!sf.hideCursed)}
+            ${cb('shop-hide-sent',  'Hide sentient items',              !!sf.hideSentient)}
+            ${cb('shop-hide-art',   'Hide artifacts',                   !!sf.hideArtifacts)}
+            ${cb('shop-no-cons',    'Exclude consumables',              !!sf.excludeConsumables)}
           </div>
-          <div class="shop-filter-slider" style="margin-top:8px">
+          <p class="shop-filter-note" style="margin:4px 0 8px;font-size:10px">Consumables = potions, scrolls, ammunition.</p>
+          <div class="shop-filter-slider">
             <div class="shop-filter-slider-row">
               <span>Max spell scroll level</span>
-              <span class="shop-filter-slider-val" id="shop-scroll-val">${sf.maxScrollLevel >= 10 ? 'No cap' : (sf.maxScrollLevel === 0 ? 'None' : (sf.maxScrollLevel === 1 ? 'Cantrip+1st' : sf.maxScrollLevel+(['','st','nd','rd'][sf.maxScrollLevel]||'th')))}</span>
+              <span class="shop-filter-slider-val" id="shop-scroll-val">${sf.maxScrollLevel >= 10 ? 'No cap' : (sf.maxScrollLevel === 0 ? 'None' : (sf.maxScrollLevel === 1 ? 'Cantrip + 1st' : sf.maxScrollLevel+(['','st','nd','rd'][sf.maxScrollLevel]||'th')))}</span>
             </div>
             <input type="range" id="shop-scroll" min="0" max="10" step="1" value="${sf.maxScrollLevel}">
           </div>

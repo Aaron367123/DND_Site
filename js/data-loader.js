@@ -553,6 +553,15 @@ function _convertItem(d) {
     page: d.page,
     rarity,
     requires_attunement: attune,
+    // Pass-through the original `reqAttune` value too so consumers can do
+    // truthy/falsy checks without needing to know about the converter's
+    // rename. Same for the other shop-filter signals (`curse`, `sentient`,
+    // `age`) which the converter previously dropped — the shop generator's
+    // detection helpers rely on these fields being present on `_raw`.
+    reqAttune: d.reqAttune || null,
+    curse:     d.curse     || null,
+    sentient:  d.sentient  || null,
+    age:       d.age       || null,
     value: valueStr,
     value_cp: valueCp,
     weight: d.weight != null ? d.weight : null,
