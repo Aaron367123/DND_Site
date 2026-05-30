@@ -905,7 +905,17 @@ registerPanel('shop',{
     // counts are Sparse:8, Standard:18, Abundant:32. Cap at catalog size.
     const sac = (state.settings && state.settings.shopAssortmentCounts) || DEFAULT_SETTINGS.shopAssortmentCounts;
     const desired = Math.max(1, parseInt(sac[assortment]) || DEFAULT_SETTINGS.shopAssortmentCounts[assortment]);
-    const target = Math.max(1, Math.min(catalog.length, desired));
+    let target = Math.max(1, Math.min(catalog.length, desired));
+    // Variety guard — when the requested assortment would take essentially
+    // every item in the catalog (e.g. Tavern only has ~13 food/drink items
+    // but Standard wants 18), the weighted-shuffle has nothing to leave out
+    // and the same inventory comes back every Generate. Drop a random
+    // 15-30% so each re-roll sees a different ~70-85% slice.
+    // Only kicks in when target consumes ≥90% of the catalog.
+    if (catalog.length >= 4 && target >= catalog.length * 0.9){
+      const dropFrac = 0.15 + Math.random() * 0.15;
+      target = Math.max(2, Math.floor(catalog.length * (1 - dropFrac)));
+    }
     const rw={Common:5,Uncommon:3,Rare:1.2,VeryRare:.4,Legendary:.15};
     // Rarity-bias slider (-100…+100): multiplies the per-tier weights so the
     // user can skew the mix toward common (negative) or rare (positive) without
