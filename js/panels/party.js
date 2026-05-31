@@ -8,7 +8,7 @@ registerPanel('party',{
   _pickerOpen:null, // idx of card with open icon picker
   // UI-only state (not synced) keyed by character id.
   _expanded:{},
-  _activeTab:{}, // 'stats' | 'skills' | 'spells' | 'inventory' | 'bio'
+  _activeTab:{}, // 'stats' | 'skills' | 'spells'
   mount(body){this._body=body;this._render();},
   unmount(){this._body=null;},
   // Items added to the window's ⋯ menu. Evaluated each time the menu opens
@@ -167,7 +167,9 @@ registerPanel('party',{
     // + a "Downed" badge so the DM glancing across a 5-card party can spot
     // who's in death-save territory without reading numbers.
     const downed = (c.hp != null) && c.hp <= 0;
-    return '<div class="char-card'+(isActiveTurn?' active-turn':'')+(inCombat?' in-combat':'')+(downed?' downed':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
+    const raging = !!c.rage;
+    const wildshaped = !!(c.wildshape && c.wildshape.name);
+    return '<div class="char-card'+(isActiveTurn?' active-turn':'')+(inCombat?' in-combat':'')+(downed?' downed':'')+(raging?' raging':'')+(wildshaped?' wildshaped':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
@@ -206,16 +208,25 @@ registerPanel('party',{
           +'<input class="party-hp-amt" type="number" value="'+(this._lastDmgAmount||5)+'" min="0" max="999" data-idx="'+i+'" title="Heal / damage amount">'
           +'<button class="party-hp-btn heal" data-act="hp-heal" data-idx="'+i+'" title="Heal (clamped to max)">+</button>'
           +(()=>{
+            // Dropdown panel shows the FULL type name; collapsed chip shows
+            // the 2-letter abbreviation. The visible chip text is an overlay
+            // <span> sitting on top of a transparent-text <select>.
             const dmgTypes = [
-              ['', '—'],
-              ['acid','ac'],['bludgeoning','bl'],['cold','co'],['fire','fi'],
-              ['force','fo'],['lightning','li'],['necrotic','ne'],['piercing','pi'],
-              ['poison','po'],['psychic','ps'],['radiant','ra'],['slashing','sl'],['thunder','th'],
+              ['', '— untyped', '—'],
+              ['acid','acid','ac'],['bludgeoning','bludgeoning','bl'],['cold','cold','co'],
+              ['fire','fire','fi'],['force','force','fo'],['lightning','lightning','li'],
+              ['necrotic','necrotic','ne'],['piercing','piercing','pi'],['poison','poison','po'],
+              ['psychic','psychic','ps'],['radiant','radiant','ra'],['slashing','slashing','sl'],
+              ['thunder','thunder','th'],
             ];
             const lastType = this._lastDmgType || '';
-            return '<select class="party-hp-type" data-idx="'+i+'" title="Damage type — applies this PC\'s resist/vuln/immune (set them in the Stats tab; current: '+(lastType||'untyped')+')">'
-              + dmgTypes.map(([val,abbr])=>'<option value="'+val+'"'+(val===lastType?' selected':'')+' title="'+(val||'untyped')+'">'+abbr+'</option>').join('')
-              + '</select>';
+            const lastAbbr = (dmgTypes.find(t => t[0] === lastType) || dmgTypes[0])[2];
+            return '<span class="party-hp-type-wrap" title="Damage type — applies this PC\'s resist/vuln/immune (set them in the Stats tab; current: '+(lastType||'untyped')+')">'
+              + '<span class="party-hp-type-label">'+lastAbbr+'</span>'
+              + '<select class="party-hp-type" data-idx="'+i+'">'
+              + dmgTypes.map(([val,full])=>'<option value="'+val+'"'+(val===lastType?' selected':'')+'>'+full+'</option>').join('')
+              + '</select>'
+              + '</span>';
           })()
         +'</div>'
         +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+(downed?' downed':'')+'">'
@@ -248,6 +259,14 @@ registerPanel('party',{
         +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
       +'</div>'
+      // Active-form row — class-aware buttons for rage (barbarian) and wild
+      // shape (druid). Renders nothing for other classes. When active, the
+      // toggle becomes a pill with quick-reference rules and a ✕ to drop.
+      + this._formsRow(c, i)
+      // Wild Shape beast stats overlay — sits between the forms row and the
+      // stats row. Shows beast HP / AC / speed / attacks. Damage from the
+      // heal/damage strip routes to beast HP first while this is rendered.
+      + this._wildshapeOverlay(c, i)
       // Concentration / Exhaustion / Conditions removed from the party card
       // to keep it focused on HP / stats / resources / inspiration. Those
       // statuses still exist and still work — they're managed from the
@@ -282,7 +301,7 @@ registerPanel('party',{
   },
 
   // ------------------------------------------------------------------
-  // Character sheet (Phase 2): tabbed view of skills / spells / inventory / bio
+  // Character sheet (Phase 2): tabbed view of stats / skills / spells
   // ------------------------------------------------------------------
   _sheetSection(c, i){
     const has = !!c.sheet;
@@ -293,52 +312,160 @@ registerPanel('party',{
   },
 
   _sheetBody(c, i){
-    const tabs = ['stats','skills','spells','inventory'];
-    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', inventory:'Inventory'};
+    const tabs = ['stats','skills','spells','features'];
+    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', features:'Features'};
     let active = this._activeTab[c.id] || 'stats';
     if (!tabs.includes(active)) active = 'stats';
     const tabBar = tabs.map(t =>
       `<button class="sheet-tab ${t===active?'active':''}" data-act="sheet-tab" data-idx="${i}" data-tab="${t}">${labels[t]}</button>`
     ).join('');
     let body = '';
-    if (active === 'stats')          body = this._tabStats(c);
-    else if (active === 'skills')    body = this._tabSkills(c);
-    else if (active === 'spells')    body = this._tabSpells(c);
-    else if (active === 'inventory') body = this._tabInventory(c, i);
+    if (active === 'stats')        body = this._tabStats(c);
+    else if (active === 'skills')  body = this._tabSkills(c);
+    else if (active === 'spells')  body = this._tabSpells(c);
+    else if (active === 'features')body = this._tabFeatures(c);
     return `<div class="sheet-body">
       <div class="sheet-tabs">${tabBar}</div>
       <div class="sheet-content">${body}</div>
     </div>`;
   },
 
-  // Inventory tab. Items live on c.sheet.inventory as [{name, qty, notes}].
-  // Manually managed — the PDF importer doesn't parse 5e sheet inventory
-  // reliably, so the DM (or player) populates this themselves. Add row
-  // appends to the list; clicking the × removes; qty input edits in place.
-  _tabInventory(c, ci){
-    const inv = (c.sheet && Array.isArray(c.sheet.inventory)) ? c.sheet.inventory : [];
-    const rows = inv.map((it, ii) => {
-      const qty = (it.qty == null) ? 1 : it.qty;
-      return `<tr class="inv-row" data-ii="${ii}">
-        <td><input class="inv-name" type="text" value="${esc(it.name||'')}" data-act="inv-edit" data-ci="${ci}" data-ii="${ii}" data-key="name" placeholder="Item name"></td>
-        <td><input class="inv-qty" type="number" value="${qty}" min="0" max="999" data-act="inv-edit" data-ci="${ci}" data-ii="${ii}" data-key="qty"></td>
-        <td><input class="inv-notes" type="text" value="${esc(it.notes||'')}" data-act="inv-edit" data-ci="${ci}" data-ii="${ii}" data-key="notes" placeholder="Notes (weight, attunement, …)"></td>
-        <td><button class="btn icon-btn danger" data-act="inv-remove" data-ci="${ci}" data-ii="${ii}" title="Remove">×</button></td>
-      </tr>`;
-    }).join('');
-    const empty = !inv.length
-      ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:14px 8px;font-size:11px">No inventory yet. Click <strong>+ Add item</strong> below.</td></tr>`
-      : '';
-    return `<div class="sheet-block">
-      <h5>Inventory <span class="sheet-prof-count">${inv.length}</span></h5>
-      <table class="sheet-table inv-table">
-        <thead><tr><th>Item</th><th>Qty</th><th>Notes</th><th></th></tr></thead>
-        <tbody>${rows}${empty}</tbody>
-      </table>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <button class="btn small" data-act="inv-add" data-ci="${ci}" title="Add an empty row">+ Add item</button>
-      </div>
-    </div>`;
+  // Features tab — pulls from the loaded 5etools dataset and renders the
+  // character's race, class, and subclass features filtered by their level.
+  // Falls back to a helpful empty state if c.cls/c.race/c.subclass don't
+  // match any loaded entry. Each section is collapsible so a level-15
+  // character with 20+ features doesn't dump the whole list at once.
+  _tabFeatures(c){
+    if (typeof _5eData === 'undefined' || !_5eLoaded){
+      return '<div class="sheet-empty">5e data still loading — open this tab again in a moment.</div>';
+    }
+    const pcLevel = parseInt(c.level || (c.sheet && c.sheet.level) || 0) || 0;
+    const clsName = String(c.cls || (c.sheet && c.sheet.class) || '').trim().toLowerCase();
+    const subName = String(c.subclass || '').trim().toLowerCase();
+    const raceName= String(c.race || '').trim().toLowerCase();
+
+    // Find the matching loaded entries. Classes/subclasses share cat:'class'
+    // but disambiguate via _raw — classes have `classFeatures`, subclasses
+    // have `subclassFeatures`. We pick the first source-PHB match when
+    // multiple exist; the entry's _resolvedFeatures has already been built
+    // by data-loader.js.
+    const classEntry = clsName
+      ? _5eData.find(d => d.cat==='class' && d._raw?.classFeatures && d.name.toLowerCase() === clsName)
+      : null;
+    const subEntry = (subName && clsName)
+      ? _5eData.find(d => d.cat==='class' && d._raw?.subclassFeatures
+          && d.name.toLowerCase() === subName
+          && String(d._raw.className||'').toLowerCase() === clsName)
+      : null;
+    const raceEntry = raceName
+      ? _5eData.find(d => d.cat==='race' && d.name.toLowerCase() === raceName)
+      : null;
+
+    const flatten = entries => {
+      if (!Array.isArray(entries)) return '';
+      // Mirror Bestiary detail rendering: recursive walk over entries,
+      // bolding named sub-entries and dropping the rest as paragraphs.
+      const walk = arr => arr.map(e => {
+        if (typeof e === 'string') return '<p>' + this._renderEntryText(e) + '</p>';
+        if (e && typeof e === 'object'){
+          if (e.type === 'list' && Array.isArray(e.items)){
+            return '<ul class="feat-list">' + e.items.map(it =>
+              '<li>' + (typeof it === 'string' ? this._renderEntryText(it)
+                : (it.entries ? walk(it.entries) : '')) + '</li>'
+            ).join('') + '</ul>';
+          }
+          if (e.name && e.entries){
+            return '<div class="feat-sub"><strong>' + esc(e.name) + '.</strong> ' + walk(e.entries) + '</div>';
+          }
+          if (e.entries) return walk(e.entries);
+        }
+        return '';
+      }).join('');
+      return walk(entries);
+    };
+
+    const renderFeatureList = (features, ribbon) => {
+      if (!features || !features.length) return '';
+      const filtered = features.filter(f => (f.level || 0) <= pcLevel);
+      if (!filtered.length) return `<div class="sheet-empty">No ${ribbon} features at level ${pcLevel||'?'} yet.</div>`;
+      return filtered.map(f =>
+        `<details class="feat-block">
+          <summary><span class="feat-lvl">L${f.level||'?'}</span> ${esc(f.name)}</summary>
+          <div class="feat-body">${flatten(f.entries)}</div>
+        </details>`
+      ).join('');
+    };
+
+    const renderRaceFeatures = (raceObj) => {
+      const raw = raceObj && raceObj._raw;
+      if (!raw) return '';
+      // Race entries can be flat strings + named sub-blocks. We treat each
+      // named sub-block as its own collapsible row. Anonymous strings get
+      // their own "overview" row at the top.
+      const entries = Array.isArray(raw.entries) ? raw.entries : [];
+      const named = entries.filter(e => e && typeof e === 'object' && e.name && e.entries);
+      const plain = entries.filter(e => !(e && typeof e === 'object' && e.name));
+      const out = [];
+      if (plain.length){
+        out.push(`<details class="feat-block" open>
+          <summary><span class="feat-lvl race">RACE</span> Overview</summary>
+          <div class="feat-body">${flatten(plain)}</div>
+        </details>`);
+      }
+      named.forEach(e => {
+        out.push(`<details class="feat-block">
+          <summary><span class="feat-lvl race">RACE</span> ${esc(e.name)}</summary>
+          <div class="feat-body">${flatten(e.entries)}</div>
+        </details>`);
+      });
+      return out.join('');
+    };
+
+    const sections = [];
+    if (raceEntry){
+      sections.push(`<div class="sheet-block feat-section">
+        <h5>🌿 Race: ${esc(raceEntry.name)}${raceEntry._source?` <span class="detail-source-badge">${esc(_formatSource(raceEntry._source))}</span>`:''}</h5>
+        ${renderRaceFeatures(raceEntry)}
+      </div>`);
+    } else if (raceName){
+      sections.push(`<div class="sheet-block feat-section"><h5>🌿 Race</h5><div class="sheet-empty">No 5etools entry matched "${esc(c.race)}". Check spelling (case-insensitive match on name).</div></div>`);
+    }
+    if (classEntry){
+      sections.push(`<div class="sheet-block feat-section">
+        <h5>⚔ Class: ${esc(classEntry.name)} <span class="feat-lvl-pill">level ${pcLevel||'?'}</span></h5>
+        ${renderFeatureList(classEntry._raw?._resolvedFeatures, 'class')}
+      </div>`);
+    } else if (clsName){
+      sections.push(`<div class="sheet-block feat-section"><h5>⚔ Class</h5><div class="sheet-empty">No 5etools class matched "${esc(c.cls)}". Try "Fighter", "Wizard", etc.</div></div>`);
+    }
+    if (subEntry){
+      sections.push(`<div class="sheet-block feat-section">
+        <h5>✦ Subclass: ${esc(subEntry.name)}</h5>
+        ${renderFeatureList(subEntry._raw?._resolvedFeatures, 'subclass')}
+      </div>`);
+    } else if (subName){
+      sections.push(`<div class="sheet-block feat-section"><h5>✦ Subclass</h5><div class="sheet-empty">No 5etools subclass matched "${esc(c.subclass)}" for ${esc(c.cls||'class')}.</div></div>`);
+    }
+
+    if (!sections.length){
+      return `<div class="sheet-empty">
+        Set <strong>Race</strong>, <strong>Class</strong>, and <strong>Subclass</strong> on this character (use 📋 Manage Party → ✏ Edit details) to see their features here.
+      </div>`;
+    }
+    return sections.join('');
+  },
+
+  // Light-weight 5etools entry-string renderer: strips {@tag …} markup down
+  // to readable plain text. The full search/popout renderer already handles
+  // these at depth — we don't need links here, just clean prose.
+  _renderEntryText(s){
+    return esc(String(s||'')
+      .replace(/\{@(?:dice|damage|hit|d20|chance|recharge|scaledice|scaledamage|h)\s+([^|}]+)(?:\|[^}]*)?\}/gi, '$1')
+      .replace(/\{@(?:item|spell|condition|skill|action|sense|ability|race|class|feat|creature|filter|table|book|adventure|background|disease|status|object|vehicle|reward|hazard|deity|deck|card|optfeature|psionic|trap|cult|boon|language|legroup|variantrule|classFeature|subclassFeature|itemMastery|itemProperty)\s+([^|}]+)(?:\|[^}]*)?\}/gi, '$1')
+      .replace(/\{@(?:bold|b)\s+([^}]+)\}/gi, '$1')
+      .replace(/\{@(?:italic|i)\s+([^}]+)\}/gi, '$1')
+      .replace(/\{@note\s+([^}]+)\}/gi, '$1')
+      .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1'));
   },
 
   // Resistances / Immunities / Vulnerabilities editor. Three rows of chips,
@@ -446,6 +573,113 @@ registerPanel('party',{
     }
     save(); this._render();
     panelDefs.combat?._render?.();
+  },
+
+  // Forms row — toggleable class state for Barbarians (rage) and Druids
+  // (wild shape). Renders the right control set based on the character's
+  // class string. Empty for other classes so the row adds no chrome unless
+  // there's something to show.
+  _formsRow(c, i){
+    const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
+    const isBarb  = /\bbarbarian\b/.test(cls);
+    const isDruid = /\bdruid\b/.test(cls);
+    if (!isBarb && !isDruid) return '';
+    const raging = !!c.rage;
+    const wildshape = c.wildshape || null;
+    const parts = [];
+    if (isBarb){
+      // Rage damage bonus by level (5e RAW: +2 to lv8, +3 to lv15, +4 at 16+).
+      const lvl = parseInt(c.level || c.sheet?.level || 1, 10) || 1;
+      const rageDmg = lvl >= 16 ? '+4' : lvl >= 9 ? '+3' : '+2';
+      if (raging){
+        parts.push(`<button class="form-pill rage-on" data-act="rage-off" data-idx="${i}" title="Rage active — Advantage on STR checks/saves · ${rageDmg} damage on melee STR attacks · Resistance to bludgeoning, piercing, slashing · Can't cast or concentrate · Lasts 1 min (10 rounds). Click to end rage.">💢 RAGING <span class="form-pill-x">×</span></button>`);
+      } else {
+        parts.push(`<button class="form-pill rage-off" data-act="rage-on" data-idx="${i}" title="Enter rage — Advantage on STR · ${rageDmg} melee damage · Resist B/P/S · Lasts 1 minute">💢 Rage</button>`);
+      }
+    }
+    if (isDruid){
+      if (wildshape){
+        parts.push(`<button class="form-pill ws-on" data-act="ws-end" data-idx="${i}" title="Wild Shape active as ${esc(wildshape.name)} — Druid stats hidden, beast HP routes damage first. Click to revert.">🐺 ${esc(wildshape.name)} <span class="form-pill-x">×</span></button>`);
+        parts.push(`<button class="form-pill ws-edit" data-act="ws-edit" data-idx="${i}" title="Edit the beast's HP, AC, speed, attacks">✎</button>`);
+      } else {
+        parts.push(`<button class="form-pill ws-off" data-act="ws-start" data-idx="${i}" title="Transform into a beast — opens an editor for the beast's HP, AC, speed, and attacks">🐺 Wild Shape</button>`);
+      }
+    }
+    return `<div class="char-forms-row">${parts.join('')}</div>`;
+  },
+
+  // Wild Shape stats overlay — visible only when c.wildshape is set. Shows
+  // the beast's HP bar + AC + Speed + attacks. The card's editable druid
+  // HP/AC stay rendered above (in the normal HP block & stats row); damage
+  // from the heal/damage strip routes through _applyHpDelta which checks
+  // c.wildshape and decrements beast HP first.
+  _wildshapeOverlay(c, i){
+    const ws = c.wildshape;
+    if (!ws || !ws.name) return '';
+    const max = ws.hpMax || ws.hp || 1;
+    const pct = Math.max(0, Math.min(100, Math.round((ws.hp / max) * 100)));
+    const color = pct > 50 ? '#6b9e6b' : pct > 25 ? '#c9a050' : '#c25450';
+    const attacks = (ws.attacks || '').trim();
+    return `<div class="char-wildshape">
+      <div class="ws-head">
+        <span class="ws-icon">🐺</span>
+        <span class="ws-name">${esc(ws.name)}</span>
+        <span class="ws-stats">
+          <span title="Beast HP — damage from the strip drains here first">♥ ${ws.hp}/${ws.hpMax||ws.hp}</span>
+          ${ws.ac!=null ? `<span title="Beast AC">⛨ ${ws.ac}</span>` : ''}
+          ${ws.speed ? `<span title="Beast speed">⇒ ${esc(ws.speed)}</span>` : ''}
+        </span>
+      </div>
+      <div class="ws-bar"><div class="ws-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      ${attacks ? `<div class="ws-attacks" title="Attacks / abilities of this beast form">${esc(attacks)}</div>` : ''}
+      ${ws.notes ? `<div class="ws-notes">${esc(ws.notes)}</div>` : ''}
+    </div>`;
+  },
+
+  // Open a small modal for the beast's stats. On save, mark wildshape active
+  // and re-render. On cancel, no change. The druid's existing concentration
+  // is dropped per 5e RAW when transformation starts (handled here on save).
+  _editWildShape(i){
+    const c = state.party[i]; if (!c) return;
+    const cur = c.wildshape || {};
+    showModal('🐺 Wild Shape — ' + c.name, [
+      {id:'name',   label:'Beast name',                  type:'text',   value:cur.name||'',   placeholder:'Brown Bear, Giant Spider, Wolf …'},
+      {id:'hp',     label:'Beast HP (current)',          type:'number', value:cur.hp==null?34:cur.hp, min:0},
+      {id:'hpMax',  label:'Beast HP (max)',              type:'number', value:cur.hpMax==null?34:cur.hpMax, min:1},
+      {id:'ac',     label:'Beast AC',                    type:'number', value:cur.ac==null?11:cur.ac, min:0},
+      {id:'speed',  label:'Beast speed',                 type:'text',   value:cur.speed||'',  placeholder:'40 ft · climb 30 ft · swim 30 ft'},
+      {id:'attacks',label:'Attacks (free text)',         type:'text',   value:cur.attacks||'',placeholder:'Bite +5 (1d8+3 piercing); Claws +5 (2d6+3 slashing)'},
+      {id:'notes',  label:'Notes',                       type:'text',   value:cur.notes||'',  placeholder:'Keen Smell, Charge…'},
+    ], cur.name?'Update':'Transform').then(r => {
+      if (!r || !String(r.name||'').trim()) return;
+      // Save the beast snapshot. Druid's own HP/AC stay unchanged.
+      const ws = {
+        name:    String(r.name).trim(),
+        hp:      Math.max(0, parseInt(r.hp)    || 0),
+        hpMax:   Math.max(1, parseInt(r.hpMax) || 1),
+        ac:                  parseInt(r.ac)    || 0,
+        speed:   String(r.speed||'').trim(),
+        attacks: String(r.attacks||'').trim(),
+        notes:   String(r.notes||'').trim(),
+      };
+      ws.hp = Math.min(ws.hp, ws.hpMax);
+      const wasFresh = !c.wildshape;
+      state.party[i] = {...c, wildshape: ws};
+      // Druids drop concentration when they wildshape (5e RAW).
+      if (wasFresh && state.party[i].concentration){
+        state.party[i].concentration = null;
+      }
+      save(); this._render();
+    });
+  },
+
+  // Drop wild shape — revert to druid form. Carry any HP overflow if the
+  // beast was at 0 (rare on a manual ✕ click but handled cleanly).
+  _endWildShape(i){
+    const c = state.party[i]; if (!c || !c.wildshape) return;
+    state.party[i] = {...c, wildshape: null};
+    save(); this._render();
+    showToast(c.name + ' reverts to their normal form');
   },
 
   // Bardic Inspiration die-size ladder (5e RAW): d6 at lv1, d8 at lv5, d10
@@ -579,24 +813,54 @@ registerPanel('party',{
     if (delta < 0){
       let remaining = -delta; // positive amount of damage
       let typeSuffix = '';
-      // Resist/immune/vulnerable math — only fires when a type is supplied.
+      // Resist/immune/vulnerable math — fires whenever a type is supplied.
+      // Rage extends this with bludgeoning/piercing/slashing resist while
+      // c.rage is true (5e barbarian RAW). The math walks immune → resist
+      // → vuln in priority order; rage just adds to the resist set.
       if (dmgType){
         const t = String(dmgType).toLowerCase();
         const has = (arr) => Array.isArray(arr) && arr.some(x => String(x).toLowerCase() === t);
+        const ragingBPS = c.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
         if (has(c.immunities)){
           remaining = 0;
           typeSuffix = ' (' + dmgType + ' — immune)';
-        } else if (has(c.resistances)){
+        } else if (has(c.resistances) || ragingBPS){
           remaining = Math.floor(remaining / 2);
-          typeSuffix = ' (' + dmgType + ' — resisted, ½)';
+          typeSuffix = ' (' + dmgType + (ragingBPS ? ' — rage resist, ½' : ' — resisted, ½') + ')';
         } else if (has(c.vulnerabilities)){
           remaining = remaining * 2;
           typeSuffix = ' (' + dmgType + ' — vulnerable, ×2)';
         } else {
           typeSuffix = ' (' + dmgType + ')';
         }
+      } else if (c.rage){
+        // Untyped damage in rage gets no resist (we'd need the type to know
+        // if it's B/P/S). Show a small reminder in the toast though.
+        typeSuffix = ' (untyped — rage applies only to B/P/S)';
       }
-      // Temp HP absorbs first, then real HP.
+      // Wild Shape: damage hits the BEAST pool first. Once beast HP ≤ 0,
+      // overflow drops the form and carries to druid HP (5e RAW).
+      if (c.wildshape && c.wildshape.name){
+        const wsHp = c.wildshape.hp || 0;
+        if (wsHp > 0){
+          const beastTook = Math.min(wsHp, remaining);
+          c.wildshape.hp = wsHp - beastTook;
+          remaining -= beastTook;
+          if (typeof showToast === 'function'){
+            showToast(c.name + '\'s ' + c.wildshape.name + ' took ' + beastTook + ' damage' + typeSuffix);
+          }
+          // Beast knocked out → revert and let overflow continue to druid.
+          if (c.wildshape.hp <= 0){
+            const beastName = c.wildshape.name;
+            c.wildshape = null;
+            if (typeof showToast === 'function'){
+              showToast(beastName + ' form drops — ' + c.name + ' reverts');
+            }
+          }
+        }
+      }
+      // Temp HP absorbs next (druid side, after beast pool is exhausted or
+      // when no wildshape is active).
       const temp = c.tempHp || 0;
       if (temp > 0 && remaining > 0){
         const drain = Math.min(temp, remaining);
@@ -621,8 +885,27 @@ registerPanel('party',{
         showToast(c.name + ' took ' + taken + ' damage' + typeSuffix);
       }
     } else if (delta > 0){
-      const cap = c.hpMax || c.hp || 0;
-      c.hp = Math.min(cap, (c.hp || 0) + delta);
+      // Healing routes to the beast pool first while wildshape is active —
+      // that's the body actually taking the spell. Druid HP is unchanged
+      // unless overflow remains (rare; clamped to beast hpMax).
+      if (c.wildshape && c.wildshape.name){
+        const beastCap = c.wildshape.hpMax || c.wildshape.hp || 0;
+        const before = c.wildshape.hp || 0;
+        c.wildshape.hp = Math.min(beastCap, before + delta);
+        const beastHealed = c.wildshape.hp - before;
+        const overflow = delta - beastHealed;
+        if (overflow > 0){
+          // Spillover heals the druid too (matches "regaining hit points"
+          // affecting both pools in the spirit of the rule). Clamp to druid
+          // hpMax. Most tables won't see this trigger because beast HP
+          // refills to cap fast.
+          const cap = c.hpMax || c.hp || 0;
+          c.hp = Math.min(cap, (c.hp || 0) + overflow);
+        }
+      } else {
+        const cap = c.hpMax || c.hp || 0;
+        c.hp = Math.min(cap, (c.hp || 0) + delta);
+      }
     }
     save();
     syncPartyToCombat(i);
@@ -671,6 +954,10 @@ registerPanel('party',{
       c.exhaustion = Math.max(0, (+c.exhaustion || 0) - 1);
       // Concentration: dropped.
       c.concentration = null;
+      // Rage / Wild Shape: both end at any rest (rage lasts 1 minute;
+      // wildshape ends at the druid's choice or when its hours expire).
+      c.rage = false;
+      c.wildshape = null;
       // Mirror to combat tracker.
       syncPartyToCombat(i);
     });
@@ -1365,9 +1652,10 @@ registerPanel('party',{
         <div class="mp-edit-body">
           <div class="mp-edit-section">
             <div class="mp-edit-grid">
-              <label>Class<input class="mp-input" data-k="cls" value="${esc(c.cls||'')}"></label>
+              <label>Class<input class="mp-input" data-k="cls" value="${esc(c.cls||'')}" placeholder="Fighter, Wizard, …"></label>
+              <label>Subclass<input class="mp-input" data-k="subclass" value="${esc(c.subclass||'')}" placeholder="Battle Master, Evocation, …"></label>
               <label>Level<input class="mp-input" type="number" data-k="level" value="${c.level==null?'':c.level}"></label>
-              <label>Race<input class="mp-input" data-k="race" value="${esc(c.race||'')}"></label>
+              <label>Race<input class="mp-input" data-k="race" value="${esc(c.race||'')}" placeholder="Human, High Elf, …"></label>
               <label>Background<input class="mp-input" data-k="background" value="${esc(c.background||'')}"></label>
             </div>
           </div>
@@ -1578,29 +1866,23 @@ registerPanel('party',{
       });
     });
 
-    // Damage-type select — same suppress + persist-last-choice dance.
+    // Damage-type select — same suppress + persist-last-choice dance, plus
+    // updating the overlay abbreviation label. Map kept here so both render
+    // path and change path agree on the 2-letter codes.
+    const ABBR = {'':'—','acid':'ac','bludgeoning':'bl','cold':'co','fire':'fi','force':'fo','lightning':'li','necrotic':'ne','piercing':'pi','poison':'po','psychic':'ps','radiant':'ra','slashing':'sl','thunder':'th'};
     b.querySelectorAll('.party-hp-type').forEach(sel => {
       sel.addEventListener('click', e => e.stopPropagation());
       sel.addEventListener('mousedown', e => e.stopPropagation());
-      sel.addEventListener('change', () => { this._lastDmgType = sel.value; });
-    });
-
-    // Inventory row inputs (name/qty/notes) — write back to
-    // c.sheet.inventory[ii][key] on change. Click + mousedown stoppropagation
-    // so the card drag doesn't fire when grabbing a field.
-    b.querySelectorAll('[data-act="inv-edit"]').forEach(inp => {
-      inp.addEventListener('click', e => e.stopPropagation());
-      inp.addEventListener('mousedown', e => e.stopPropagation());
-      inp.addEventListener('change', e => {
-        e.stopPropagation();
-        const ci = +inp.dataset.ci, ii = +inp.dataset.ii, key = inp.dataset.key;
-        const c = state.party[ci]; if (!c?.sheet?.inventory?.[ii]) return;
-        let v = inp.value;
-        if (key === 'qty') v = Math.max(0, parseInt(v) || 0);
-        c.sheet.inventory[ii] = {...c.sheet.inventory[ii], [key]: v};
-        save();
+      sel.addEventListener('change', () => {
+        this._lastDmgType = sel.value;
+        const lbl = sel.parentElement?.querySelector('.party-hp-type-label');
+        if (lbl) lbl.textContent = ABBR[sel.value] || '—';
+        const wrap = sel.parentElement;
+        if (wrap) wrap.title = 'Damage type — applies this PC\'s resist/vuln/immune (set them in the Stats tab; current: ' + (sel.value || 'untyped') + ')';
       });
     });
+
+    // (Inventory tab removed — no inv-edit wiring needed.)
 
     // Actions
     b.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',e=>{
@@ -1732,6 +2014,22 @@ registerPanel('party',{
       }
       // (long-rest / short-rest live in the window-options menu now, not a
       // top-of-panel toolbar; their handlers are reachable via menuItems().)
+      // Rage toggle — flips c.rage. Damage handler honors the B/P/S resist
+      // on damage with one of those types when c.rage is true. No data
+      // mutation beyond the flag — players & DMs still narrate the rest.
+      else if(act==='rage-on'){
+        state.party[i] = {...state.party[i], rage: true};
+        save(); this._render();
+        showToast(state.party[i].name + ' enters a rage');
+      }
+      else if(act==='rage-off'){
+        state.party[i] = {...state.party[i], rage: false};
+        save(); this._render();
+        showToast(state.party[i].name + '\'s rage ends');
+      }
+      else if(act==='ws-start') this._editWildShape(i);
+      else if(act==='ws-edit')  this._editWildShape(i);
+      else if(act==='ws-end')   this._endWildShape(i);
       // (expand-all / collapse-all removed; per-card toggle on each sheet
       // remains the only path to open/close a sheet.)
       // Resist/Immune/Vuln editor — toggle visible state per-PC; cycle a type
@@ -1818,24 +2116,7 @@ registerPanel('party',{
         }));
         showContextMenu(rect.left, rect.bottom + 4, items);
       }
-      // Inventory CRUD on c.sheet.inventory. Reads stay safe with optional
-      // chains; writes ensure sheet/inventory exist before pushing.
-      else if(act==='inv-add'){
-        const ci = +el.dataset.ci;
-        const c = state.party[ci]; if (!c) return;
-        if (!c.sheet) c.sheet = {};
-        if (!Array.isArray(c.sheet.inventory)) c.sheet.inventory = [];
-        c.sheet.inventory.push({name:'', qty:1, notes:''});
-        save(); this._render();
-      }
-      else if(act==='inv-remove'){
-        const ci = +el.dataset.ci, ii = +el.dataset.ii;
-        const c = state.party[ci]; if (!c?.sheet?.inventory) return;
-        c.sheet.inventory.splice(ii, 1);
-        save(); this._render();
-      }
-      // inv-edit fires from change handler on the row inputs (see input-wire
-      // section below) — not from this click loop.
+      // (Inventory tab removed.)
       else if(act==='hd-rest'){
         const idx = +el.dataset.idx;
         const c = state.party[idx]; if (!c || !c.hitDice) return;

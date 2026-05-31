@@ -408,18 +408,24 @@ registerPanel('combat',{
     // HP itself is hidden/concealed (monsters in player view at non-show
     // stats mode).
     // Damage-type select. State-cached in this._lastDmgType so it persists
-    // across re-renders. Empty = untyped (no resist/vuln/immune math). The
-    // option text shows the 2-letter abbreviation so the select stays the
-    // same width as the strip buttons; the FULL type name lives in the
-    // tooltip + the option's `title`. Picking still passes the full type
-    // string to _applyHpDelta.
+    // across re-renders. Empty = untyped (no resist/vuln/immune math).
+    //
+    // We want the OPEN dropdown panel to show full type names ("fire",
+    // "bludgeoning") but the COLLAPSED chip to show the 2-letter abbreviation
+    // so it fits the strip. Native <select> always shows the selected
+    // option's text — to break that, the select is rendered with its text
+    // visually hidden and an overlay span shows the abbreviation. The
+    // overlay updates from JS on `change`.
     const dmgTypes = [
-      ['', '—'],
-      ['acid','ac'],['bludgeoning','bl'],['cold','co'],['fire','fi'],
-      ['force','fo'],['lightning','li'],['necrotic','ne'],['piercing','pi'],
-      ['poison','po'],['psychic','ps'],['radiant','ra'],['slashing','sl'],['thunder','th'],
+      ['', '— untyped', '—'],
+      ['acid','acid','ac'],['bludgeoning','bludgeoning','bl'],['cold','cold','co'],
+      ['fire','fire','fi'],['force','force','fo'],['lightning','lightning','li'],
+      ['necrotic','necrotic','ne'],['piercing','piercing','pi'],['poison','poison','po'],
+      ['psychic','psychic','ps'],['radiant','radiant','ra'],['slashing','slashing','sl'],
+      ['thunder','thunder','th'],
     ];
     const lastType = this._lastDmgType || '';
+    const lastAbbr = (dmgTypes.find(t => t[0] === lastType) || dmgTypes[0])[2];
     // Heal/damage strip is now a HORIZONTAL row that sits between the stats
     // grid and the HP bar (rendered separately below — see `dmgStripRow`).
     // We keep `dmgStrip` empty here so the stats grid stays a clean 3-column
@@ -431,9 +437,12 @@ registerPanel('combat',{
           <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
           <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount">
           <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
-          <select class="hp-dmg-type" data-idx="${i}" title="Damage type — applies monster resist/vuln/immune (current: ${lastType||'untyped'})">
-            ${dmgTypes.map(([val,abbr]) => `<option value="${val}" ${val===lastType?'selected':''} title="${val||'untyped'}">${abbr}</option>`).join('')}
-          </select>
+          <span class="hp-dmg-type-wrap" title="Damage type — applies monster resist/vuln/immune (current: ${lastType||'untyped'})">
+            <span class="hp-dmg-type-label">${lastAbbr}</span>
+            <select class="hp-dmg-type" data-idx="${i}">
+              ${dmgTypes.map(([val,full]) => `<option value="${val}" ${val===lastType?'selected':''}>${full}</option>`).join('')}
+            </select>
+          </span>
         </div>`;
     const tempBadge = tempHp > 0 ? `<span class="hp-temp-badge" title="Temporary HP (absorbs damage first)">+${tempHp}</span>` : '';
     const hpField = mode === 'hide'
@@ -687,11 +696,22 @@ registerPanel('combat',{
       });
     });
 
-    // Damage-type select — same suppress + persistence dance.
+    // Damage-type select — same suppress + persistence dance, plus updating
+    // the overlay label to the 2-letter abbreviation on change. The map
+    // lives here so the render path and wire path agree on abbreviations.
+    const ABBR = {'':'—','acid':'ac','bludgeoning':'bl','cold':'co','fire':'fi','force':'fo','lightning':'li','necrotic':'ne','piercing':'pi','poison':'po','psychic':'ps','radiant':'ra','slashing':'sl','thunder':'th'};
     b.querySelectorAll('.hp-dmg-type').forEach(sel => {
       sel.addEventListener('click', e => e.stopPropagation());
       sel.addEventListener('mousedown', e => e.stopPropagation());
-      sel.addEventListener('change', () => { this._lastDmgType = sel.value; });
+      sel.addEventListener('change', () => {
+        this._lastDmgType = sel.value;
+        const lbl = sel.parentElement?.querySelector('.hp-dmg-type-label');
+        if (lbl) lbl.textContent = ABBR[sel.value] || '—';
+        // Also refresh the wrap's tooltip so hover reads correctly without
+        // a full re-render.
+        const wrap = sel.parentElement;
+        if (wrap) wrap.title = 'Damage type — applies monster resist/vuln/immune (current: ' + (sel.value || 'untyped') + ')';
+      });
     });
 
     // Monster name input: Ctrl+click opens stat block. Plain click still

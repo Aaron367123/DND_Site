@@ -822,18 +822,131 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .party-hp-btn.heal{color:#6b9e6b}
 .party-hp-btn.heal:hover{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.6)}
 
-/* Damage-type select in the party heal/damage bar. Pinned to far right of
-   the grid; option text is 2-letter abbreviation, tooltip has full name. */
-.party-hp-dmg .party-hp-type{
-  width:100%;height:20px;font-size:10px;
-  background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);
-  border-radius:3px;cursor:pointer;
-  -moz-appearance:none;-webkit-appearance:none;appearance:none;
-  padding:0;text-align:center;line-height:1;
-  text-transform:uppercase;letter-spacing:.04em
+/* Party damage-type — same overlay technique as combat tracker. Wrapper
+   carries the visible chip styling; inner <select> is transparent. */
+.party-hp-type-wrap{
+  position:relative;display:inline-block;
+  width:100%;height:20px;
+  background:var(--panel-3);border:1px solid var(--border);border-radius:3px;
+  overflow:hidden;cursor:pointer;
+  transition:border-color .12s
 }
-.party-hp-dmg .party-hp-type:hover{border-color:var(--accent);color:var(--text)}
-.party-hp-dmg .party-hp-type:not([value=""]):valid{color:var(--accent)}
+.party-hp-type-wrap:hover{border-color:var(--accent)}
+.party-hp-type-wrap .party-hp-type-label{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.04em;
+  pointer-events:none;line-height:1
+}
+.party-hp-type-wrap:hover .party-hp-type-label{color:var(--text)}
+.party-hp-type-wrap .party-hp-type{
+  position:absolute;inset:0;width:100%;height:100%;
+  background:transparent;border:none;color:transparent;
+  font-size:10px;cursor:pointer;
+  -moz-appearance:none;-webkit-appearance:none;appearance:none;
+  padding:0;text-align:center;line-height:1;text-shadow:0 0 0 transparent
+}
+.party-hp-type-wrap .party-hp-type option{
+  color:var(--text);background:var(--panel-2);font-size:11px;text-transform:none;letter-spacing:0
+}
+.party-hp-type-wrap:has(select.party-hp-type option:checked:not([value=""])) .party-hp-type-label{color:var(--accent)}
+
+/* Class-form row — Rage / Wild Shape toggles. Only renders for the right
+   class; pill goes accent when the form is active. */
+.char-forms-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.form-pill{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:3px 8px;border-radius:10px;font-size:10px;font-weight:600;
+  border:1px solid var(--border);background:var(--panel-3);color:var(--text-muted);
+  cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s,color .12s;
+  user-select:none;line-height:1;letter-spacing:.02em
+}
+.form-pill:hover{border-color:var(--accent);color:var(--text)}
+.form-pill .form-pill-x{font-size:11px;font-weight:700;opacity:.65;margin-left:1px}
+.form-pill.rage-off{}
+.form-pill.rage-on{
+  background:rgba(194,84,80,.25);border-color:rgba(194,84,80,.6);color:#e8b3b0
+}
+.form-pill.rage-on:hover{background:rgba(194,84,80,.38)}
+.form-pill.ws-off{}
+.form-pill.ws-on{
+  background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b
+}
+.form-pill.ws-on:hover{background:rgba(107,158,107,.34)}
+.form-pill.ws-edit{padding:3px 6px;font-size:11px}
+
+/* Card-wide raging tint — subtle red border + sheen so the table sees the
+   barb is up. Stays out of the way of the active-turn glow. */
+.char-card.raging{
+  border-color:rgba(194,84,80,.45);
+  background:linear-gradient(180deg,rgba(194,84,80,.06) 0%,var(--panel-2) 60%)
+}
+.char-card.raging .char-name{color:#e8b3b0}
+.char-card.wildshaped{
+  border-color:rgba(107,158,107,.45);
+  background:linear-gradient(180deg,rgba(107,158,107,.06) 0%,var(--panel-2) 60%)
+}
+
+/* Wild Shape stats overlay — beast info between forms row and stats row. */
+.char-wildshape{
+  background:rgba(107,158,107,.08);
+  border:1px dashed rgba(107,158,107,.45);
+  border-radius:4px;padding:5px 7px;font-size:11px;color:var(--text)
+}
+.ws-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ws-icon{font-size:14px}
+.ws-name{font-weight:600;color:#9bc99b}
+.ws-stats{display:flex;gap:8px;margin-left:auto;font-size:10px;color:var(--text-muted)}
+.ws-bar{height:4px;background:rgba(0,0,0,.4);border-radius:2px;overflow:hidden;margin:4px 0 2px}
+.ws-bar-fill{height:100%;transition:width .25s ease,background .25s ease}
+.ws-attacks,.ws-notes{font-size:10px;color:var(--text-muted);margin-top:3px;line-height:1.35}
+.ws-attacks{font-style:italic}
+
+/* Features tab — Race / Class / Subclass feature lists, each entry a
+   <details> block so a high-level character's wall of features stays
+   collapsed by default. The feat-lvl pill bookmarks the gained level. */
+.sheet-block.feat-section{padding:0 0 6px 0}
+.sheet-block.feat-section > h5{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.sheet-block.feat-section .detail-source-badge{font-size:9px}
+.feat-lvl-pill{
+  font-size:9px;font-weight:600;color:var(--text-muted);
+  background:var(--panel-3);border:1px solid var(--border);
+  padding:1px 6px;border-radius:8px;letter-spacing:.04em;text-transform:uppercase
+}
+.feat-block{
+  background:var(--panel-3);border:1px solid var(--border);border-radius:4px;
+  margin-bottom:3px;overflow:hidden
+}
+.feat-block summary{
+  cursor:pointer;padding:5px 8px;font-size:11px;font-weight:500;color:var(--text);
+  display:flex;align-items:center;gap:6px;
+  list-style:none;user-select:none;
+  transition:background .12s
+}
+.feat-block summary::-webkit-details-marker{display:none}
+.feat-block summary::before{
+  content:'▸';font-size:9px;color:var(--text-muted);
+  transition:transform .12s;display:inline-block
+}
+.feat-block[open] summary::before{transform:rotate(90deg)}
+.feat-block summary:hover{background:rgba(212,165,116,.08)}
+.feat-block .feat-lvl{
+  font-size:8px;font-weight:700;letter-spacing:.06em;
+  background:var(--panel-2);color:var(--text-muted);
+  padding:1px 5px;border-radius:6px;min-width:24px;text-align:center
+}
+.feat-block .feat-lvl.race{background:rgba(140,108,209,.22);color:#b6a3e8}
+.feat-block .feat-body{
+  padding:6px 10px 8px 10px;border-top:1px dashed var(--border);
+  font-size:11px;line-height:1.5;color:var(--text-muted)
+}
+.feat-block .feat-body p{margin:0 0 6px 0}
+.feat-block .feat-body p:last-child{margin-bottom:0}
+.feat-block .feat-body strong{color:var(--text);font-weight:600}
+.feat-block .feat-body .feat-sub{margin-bottom:6px}
+.feat-block .feat-body .feat-list{margin:2px 0 6px 14px;padding:0}
+.feat-block .feat-body .feat-list li{margin-bottom:3px}
 
 /* Resistance editor — chip grid inside the Stats tab. Each chip cycles
    through 4 states; the dash/RES/IMM/VUL label color-codes the state. */
@@ -895,25 +1008,6 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
   background:transparent;border:1px dashed var(--border);color:var(--text-muted);opacity:.65
 }
 .char-conditions .cond-chip.add:hover{opacity:1;border-color:var(--accent);color:var(--text);background:rgba(212,165,116,.10)}
-
-/* Inventory tab — table layout. Inputs are borderless until focused so the
-   table reads cleanly. Qty column is narrow, notes column flexes wide. */
-.sheet-table.inv-table{table-layout:fixed;width:100%}
-.sheet-table.inv-table th:nth-child(1){width:38%}
-.sheet-table.inv-table th:nth-child(2){width:50px}
-.sheet-table.inv-table th:nth-child(3){}
-.sheet-table.inv-table th:nth-child(4){width:24px}
-.sheet-table.inv-table td{padding:2px}
-.sheet-table.inv-table input{
-  width:100%;background:transparent;border:1px solid transparent;color:var(--text);
-  padding:3px 6px;font-size:11px;border-radius:3px;font-family:inherit
-}
-.sheet-table.inv-table input:hover{border-color:var(--border)}
-.sheet-table.inv-table input:focus{outline:none;border-color:var(--accent);background:var(--panel-3)}
-.sheet-table.inv-table input.inv-qty{text-align:center;-moz-appearance:textfield}
-.sheet-table.inv-table input.inv-qty::-webkit-outer-spin-button,
-.sheet-table.inv-table input.inv-qty::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.sheet-table.inv-table .btn.icon-btn{padding:1px 6px;font-size:11px}
 
 /* Damage chip inside the roll-strip — shows d20+mod AND damage on one line. */
 .roll-strip .roll-dmg{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 7px;background:rgba(194,84,80,.18);border:1px solid rgba(194,84,80,.5);border-radius:10px;font-size:11px;color:#e8b3b0}
@@ -1255,20 +1349,43 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .combat-status-row .buff-pill:not(.empty){background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b}
 .combat-status-row .buff-pill:not(.empty):hover{background:rgba(107,158,107,.34)}
 
-/* ─── Damage-type select in the hp-dmg bar (combat & legacy strip) ───── */
-/* Options carry the 2-letter abbreviation (fi, co, bl…); tooltip carries
-   the full type name; the full string is what gets passed to _applyHpDelta. */
-.hp-dmg-bar .hp-dmg-type{
-  width:100%;height:18px;font-size:10px;
-  background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);
-  border-radius:3px;cursor:pointer;
-  -moz-appearance:none;-webkit-appearance:none;appearance:none;
-  padding:0;text-align:center;line-height:1;
-  text-transform:uppercase;letter-spacing:.04em
+/* ─── Damage-type "fake chip" overlay select ─────────────────────────────
+   Native <select> always shows the selected option's text. To get
+   "full name in dropdown, abbreviation when closed", we hide the select's
+   text (color:transparent) and overlay an absolutely-positioned span that
+   shows the abbreviation. The select still receives clicks/focus so the
+   dropdown opens normally; options inside the panel render fully visible
+   because option text uses the system color, not the parent. */
+.hp-dmg-type-wrap{
+  position:relative;display:inline-block;
+  width:100%;height:18px;
+  background:var(--panel-3);border:1px solid var(--border);border-radius:3px;
+  overflow:hidden;cursor:pointer;
+  transition:border-color .12s
 }
-.hp-dmg-bar .hp-dmg-type:hover{border-color:var(--accent);color:var(--text)}
-.hp-dmg-bar .hp-dmg-type:not([value=""]):valid{color:var(--accent)}
-/* Same chip in the legacy column strip used by group rows. */
+.hp-dmg-type-wrap:hover{border-color:var(--accent)}
+.hp-dmg-type-wrap .hp-dmg-type-label{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.04em;
+  pointer-events:none;line-height:1
+}
+.hp-dmg-type-wrap:hover .hp-dmg-type-label{color:var(--text)}
+.hp-dmg-type-wrap .hp-dmg-type{
+  position:absolute;inset:0;width:100%;height:100%;
+  background:transparent;border:none;color:transparent;
+  font-size:10px;cursor:pointer;
+  -moz-appearance:none;-webkit-appearance:none;appearance:none;
+  padding:0;text-align:center;line-height:1;text-shadow:0 0 0 transparent
+}
+.hp-dmg-type-wrap .hp-dmg-type option{
+  color:var(--text);background:var(--panel-2);font-size:11px;text-transform:none;letter-spacing:0
+}
+/* Accent tint on the abbreviation when a non-empty type is selected. */
+.hp-dmg-type-wrap:has(select.hp-dmg-type option:checked:not([value=""])) .hp-dmg-type-label{color:var(--accent)}
+
+/* Same overlay in the legacy column strip used by group rows. */
 .hp-dmg-strip .hp-dmg-type{
   width:24px;height:15px;font-size:9px;
   background:var(--panel-2);border:1px solid var(--border);color:var(--text-muted);
