@@ -507,7 +507,10 @@ registerPanel('combat',{
       chips.push(`<span class="status-pill rage-pill" title="Raging — Advantage on STR checks/saves · Resistance to bludgeoning/piercing/slashing · Can't cast or concentrate · Toggle in the Party tracker">💢 RAGING</span>`);
     }
     if (wildshape){
-      chips.push(`<span class="status-pill wildshape-pill" title="Wild Shape as ${esc(wildshape.name)} — damage routes to the beast HP pool (${wildshape.hp}/${wildshape.hpMax||wildshape.hp}). Toggle in the Party tracker.">🐺 ${esc(wildshape.name)}</span>`);
+      // Beast HP visible on the chip itself so the DM doesn't have to hover
+      // to see how close the form is to dropping. Format: "🐺 Bear 22/34".
+      const wsHpMax = wildshape.hpMax || wildshape.hp || 1;
+      chips.push(`<span class="status-pill wildshape-pill" title="Wild Shape as ${esc(wildshape.name)} — damage routes to the beast HP pool. When the beast hits 0 HP the form auto-drops. Toggle in the Party tracker.">🐺 ${esc(wildshape.name)} <strong>${wildshape.hp}/${wsHpMax}</strong></span>`);
     }
     if (conc){
       chips.push(`<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">🌀 ${esc(conc)} ×</span>`);

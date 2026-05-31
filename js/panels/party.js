@@ -179,10 +179,10 @@ registerPanel('party',{
     const sublineHtml = sublineParts.length
       ? '<div class="char-subline">' + esc(sublineParts.join(' · ')) + '</div>'
       : '';
-    // Active-turn highlight: mirror the combat tracker's accent glow when
-    // this PC is the current initiative slot. Lets the DM (or player on the
-    // player view) see whose turn it is without switching panels.
-    const isActiveTurn = c.id && state.activeCombatantId === c.id;
+    // Active-turn highlight intentionally NOT applied to the party card —
+    // the combat tracker is the canonical "whose turn is it" surface. The
+    // party panel stays calm so a DM glancing at it during downtime doesn't
+    // see flashing borders or a swelling avatar.
     // Already-in-combat check: drives the header button's affordance —
     // "+ ⚔" to add, or "in combat" pill to remove from combat with one click.
     const inCombat = !!(state.combatants && state.combatants.find(co => co.id === c.id));
@@ -193,7 +193,7 @@ registerPanel('party',{
     const raging = !!c.rage;
     const wildshaped = !!(c.wildshape && c.wildshape.name);
     const classColor = this._classColor(c);
-    return '<div class="char-card'+(isActiveTurn?' active-turn':'')+(inCombat?' in-combat':'')+(downed?' downed':'')+(raging?' raging':'')+(wildshaped?' wildshaped':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat" style="--class-color:'+classColor+'">'
+    return '<div class="char-card'+(inCombat?' in-combat':'')+(downed?' downed':'')+(raging?' raging':'')+(wildshaped?' wildshaped':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat" style="--class-color:'+classColor+'">'
       // Class-color accent stripe — purely decorative, set via CSS using the
       // --class-color custom property on the card root.
       +'<div class="char-class-stripe"></div>'
@@ -227,7 +227,12 @@ registerPanel('party',{
       // BIG HP block — large numeral, thick bar, color-coded by tier. The
       // current/max/temp inputs live UNDER the numeral as small fields so
       // the eye lands on the big number first. Heal/damage strip is below.
-      +'<div class="char-hp-block">'
+      // When the PC is wildshaped, this is labeled as the DRUID's true HP
+      // (the beast HP shows in the wildshape overlay below). Damage from
+      // the strip routes to the beast pool first; the druid HP only takes
+      // damage after the beast form drops.
+      +'<div class="char-hp-block'+(wildshaped?' has-wildshape':'')+'">'
+        +(wildshaped?'<div class="char-hp-druid-label" title="Your druid form\'s true HP — damage from the strip drains the beast pool first (see wild shape overlay below). When the beast hits 0 HP the form auto-drops and overflow damage continues here.">DRUID HP</div>':'')
         +'<div class="char-hp-big">'
           +'<div class="char-hp-big-num" style="color:'+hpColor+'" title="Click to edit current HP">'
             +'<input class="char-hp-current" type="number" value="'+c.hp+'" data-field="hp" data-idx="'+i+'" title="Current HP">'
@@ -416,10 +421,25 @@ registerPanel('party',{
     const classEntry = clsName
       ? _5eData.find(d => d.cat==='class' && d._raw?.classFeatures && d.name.toLowerCase() === clsName)
       : null;
-    const subEntry = (subName && clsName)
-      ? _5eData.find(d => d.cat==='class' && d._raw?.subclassFeatures
-          && d.name.toLowerCase() === subName
-          && String(d._raw.className||'').toLowerCase() === clsName)
+    // Subclass entries in _5eData carry a displayName like "Battle Master
+    // (Fighter)" (so the global search can disambiguate same-named subclasses
+    // across classes). For the lookup we want the BARE subclass name — that
+    // lives on _raw.name (and _raw.shortName for the short form). We also
+    // accept partial matches both directions ("Battle Master" matches
+    // "Battlemaster" and vice-versa, after stripping non-alphanumerics) so
+    // the DM doesn't have to type the canonical 5etools spelling.
+    const normalize = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const subNameN = normalize(subName);
+    const subEntry = (subNameN && clsName)
+      ? _5eData.find(d => {
+          if (d.cat !== 'class' || !d._raw?.subclassFeatures) return false;
+          if (String(d._raw.className||'').toLowerCase() !== clsName) return false;
+          const candidates = [d._raw.name, d._raw.shortName, d.name.replace(/\s*\([^)]+\)\s*$/, '')];
+          return candidates.some(n => {
+            const nN = normalize(n);
+            return nN === subNameN || nN.includes(subNameN) || subNameN.includes(nN);
+          });
+        })
       : null;
     const raceEntry = raceName
       ? _5eData.find(d => d.cat==='race' && d.name.toLowerCase() === raceName)
@@ -427,22 +447,69 @@ registerPanel('party',{
 
     const flatten = entries => {
       if (!Array.isArray(entries)) return '';
-      // Mirror Bestiary detail rendering: recursive walk over entries,
-      // bolding named sub-entries and dropping the rest as paragraphs.
+      // Walk 5etools entry array. Handles every common type used in class +
+      // subclass features so the rendered text matches what you'd see in
+      // the official rulebook (not a stripped-down placeholder).
       const walk = arr => arr.map(e => {
+        if (e == null) return '';
         if (typeof e === 'string') return '<p>' + this._renderEntryText(e) + '</p>';
-        if (e && typeof e === 'object'){
-          if (e.type === 'list' && Array.isArray(e.items)){
-            return '<ul class="feat-list">' + e.items.map(it =>
-              '<li>' + (typeof it === 'string' ? this._renderEntryText(it)
-                : (it.entries ? walk(it.entries) : '')) + '</li>'
-            ).join('') + '</ul>';
-          }
-          if (e.name && e.entries){
-            return '<div class="feat-sub"><strong>' + esc(e.name) + '.</strong> ' + walk(e.entries) + '</div>';
-          }
-          if (e.entries) return walk(e.entries);
+        if (typeof e !== 'object') return '';
+        // Bullet list
+        if (e.type === 'list' && Array.isArray(e.items)){
+          return '<ul class="feat-list">' + e.items.map(it =>
+            '<li>' + (typeof it === 'string' ? this._renderEntryText(it)
+              : (it && it.entries ? walk(it.entries)
+                : it && it.name ? '<strong>'+esc(it.name)+'.</strong> '+(it.entries?walk(it.entries):'')
+                : '')) + '</li>'
+          ).join('') + '</ul>';
         }
+        // Table (Combat Superiority die size, Sneak Attack dice, etc.)
+        if (e.type === 'table' && Array.isArray(e.rows)){
+          const head = Array.isArray(e.colLabels)
+            ? '<thead><tr>'+e.colLabels.map(l => '<th>'+this._renderEntryText(l)+'</th>').join('')+'</tr></thead>'
+            : '';
+          const body = '<tbody>'+e.rows.map(r => {
+            const cells = Array.isArray(r) ? r : (r.row || []);
+            return '<tr>'+cells.map(cell => {
+              if (typeof cell === 'string') return '<td>'+this._renderEntryText(cell)+'</td>';
+              if (cell && typeof cell === 'object'){
+                if (cell.type === 'cell' && cell.entry) return '<td>'+walk([cell.entry])+'</td>';
+                if (cell.entries) return '<td>'+walk(cell.entries)+'</td>';
+                if (cell.roll != null) return '<td>'+esc(String(cell.roll.exact ?? (cell.roll.min+'-'+cell.roll.max)))+'</td>';
+              }
+              return '<td></td>';
+            }).join('')+'</tr>';
+          }).join('')+'</tbody>';
+          return '<table class="feat-table">'+(e.caption?'<caption>'+esc(e.caption)+'</caption>':'')+head+body+'</table>';
+        }
+        // Inset / quote — render as block quote
+        if (e.type === 'inset' || e.type === 'insetReadaloud' || e.type === 'quote'){
+          const body = e.entries ? walk(e.entries) : '';
+          const head = e.name ? '<strong>'+esc(e.name)+'.</strong> ' : '';
+          return '<blockquote class="feat-quote">'+head+body+'</blockquote>';
+        }
+        // Spell DC / spell attack auto-text
+        if (e.type === 'abilityDc'){
+          return '<p><strong>'+esc(e.name||'Spell save DC')+' = 8 + your proficiency bonus + your '+esc(((e.attributes||[]).join('/'))||'spellcasting')+' modifier</strong></p>';
+        }
+        if (e.type === 'abilityAttackMod'){
+          return '<p><strong>'+esc(e.name||'Spell attack bonus')+' = your proficiency bonus + your '+esc(((e.attributes||[]).join('/'))||'spellcasting')+' modifier</strong></p>';
+        }
+        if (e.type === 'abilityGeneric'){
+          return e.text ? '<p>'+this._renderEntryText(e.text)+'</p>' : '';
+        }
+        // "Options" lists (multiple sub-features the player chooses from —
+        // Maneuvers, Eldritch Invocations, Metamagic, etc.) render each as
+        // its own named sub-block.
+        if (e.type === 'options' && Array.isArray(e.entries)){
+          return '<div class="feat-options">'+walk(e.entries)+'</div>';
+        }
+        // Named feature block — by far the most common: `{name, entries, …}`.
+        if (e.name && Array.isArray(e.entries)){
+          return '<div class="feat-sub"><strong>'+esc(e.name)+'.</strong> '+walk(e.entries)+'</div>';
+        }
+        // Anonymous nested entries.
+        if (Array.isArray(e.entries)) return walk(e.entries);
         return '';
       }).join('');
       return walk(entries);

@@ -1173,6 +1173,33 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .feat-block .feat-body .feat-sub{margin-bottom:6px}
 .feat-block .feat-body .feat-list{margin:2px 0 6px 14px;padding:0}
 .feat-block .feat-body .feat-list li{margin-bottom:3px}
+/* Tables inside features (Combat Superiority die size, Sneak Attack dice,
+   etc.) — render compact but readable, with subtle row separators. */
+.feat-block .feat-body .feat-table{
+  width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:10px;
+  background:var(--panel-2);border:1px solid var(--border);border-radius:3px
+}
+.feat-block .feat-body .feat-table caption{
+  font-size:10px;font-weight:600;text-align:left;padding:3px 6px;color:var(--text-muted);
+  caption-side:top
+}
+.feat-block .feat-body .feat-table th{
+  text-align:left;padding:3px 6px;font-size:9px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--text-muted);
+  border-bottom:1px solid var(--border);background:rgba(0,0,0,.15)
+}
+.feat-block .feat-body .feat-table td{
+  padding:3px 6px;border-bottom:1px dashed rgba(255,255,255,.05);color:var(--text)
+}
+.feat-block .feat-body .feat-table tr:last-child td{border-bottom:none}
+/* Insets / quotes — light bg + accent left border */
+.feat-block .feat-body .feat-quote{
+  margin:4px 0;padding:4px 8px;
+  background:rgba(212,165,116,.08);border-left:2px solid var(--accent);
+  color:var(--text-muted);font-style:italic;border-radius:0 3px 3px 0
+}
+.feat-block .feat-body .feat-quote strong{font-style:normal;color:var(--text)}
+.feat-block .feat-body .feat-options{margin:4px 0}
 
 /* Resistance editor — chip grid inside the Stats tab. Each chip cycles
    through 4 states; the dash/RES/IMM/VUL label color-codes the state. */
@@ -1281,6 +1308,15 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
    it earns the most vertical space on the card. Adds padding + a tiny gap
    between the big numeral and the bar below. */
 .char-hp-block{background:var(--panel-3);border-radius:6px;padding:8px 10px 9px}
+/* When wildshape is active, this block holds the DRUID's true HP. A tiny
+   uppercase label sits above the numeral so the DM can see at a glance
+   which pool they're looking at. The wildshape overlay below shows beast
+   HP (with its own bar) and is what damage actually hits first. */
+.char-hp-block.has-wildshape{border:1px solid rgba(107,158,107,.3)}
+.char-hp-druid-label{
+  font-size:9px;font-weight:700;letter-spacing:.1em;color:#9bc99b;
+  text-align:center;margin-bottom:2px;text-transform:uppercase;line-height:1
+}
 
 /* BIG HP block — large numeral dominates. Current / max as one big number,
    temp HP as a small "Temp" field on the side. The HP bar (thicker now)
