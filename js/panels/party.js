@@ -515,9 +515,21 @@ registerPanel('party',{
       return walk(entries);
     };
 
-    const renderFeatureList = (features, ribbon) => {
+    // Names that are pure "choose a subclass" placeholders — the entry text
+    // just says "pick a Roguish Archetype" without describing any features.
+    // We hide these in the CLASS section because the actual subclass
+    // features render in their own section below. Covers 2014 names (per
+    // class) AND the 2024 generic "<Class> Subclass" pattern.
+    const SUBCLASS_PLACEHOLDER = /^(roguish archetype|martial archetype(?: feature)?|arcane tradition|divine domain|druid circle|sorcerous origin|otherworldly patron|sacred oath|ranger (?:archetype|conclave)|monastic tradition|bard college|primal path|artificer specialist|\w+ subclass|subclass feature)$/i;
+    const renderFeatureList = (features, ribbon, opts) => {
       if (!features || !features.length) return '';
-      const filtered = features.filter(f => (f.level || 0) <= pcLevel);
+      let filtered = features.filter(f => (f.level || 0) <= pcLevel);
+      // For the class list, drop subclass-marker placeholders since their
+      // text is "choose a subclass" — useless once the subclass section
+      // renders the actual features below. Keep them everywhere else.
+      if (opts && opts.dropSubclassMarkers){
+        filtered = filtered.filter(f => !SUBCLASS_PLACEHOLDER.test(String(f.name||'').trim()));
+      }
       if (!filtered.length) return `<div class="sheet-empty">No ${ribbon} features at level ${pcLevel||'?'} yet.</div>`;
       return filtered.map(f =>
         `<details class="feat-block">
@@ -564,7 +576,8 @@ registerPanel('party',{
     if (classEntry){
       sections.push(`<div class="sheet-block feat-section">
         <h5>⚔ Class: ${esc(classEntry.name)} <span class="feat-lvl-pill">level ${pcLevel||'?'}</span></h5>
-        ${renderFeatureList(classEntry._raw?._resolvedFeatures, 'class')}
+        ${renderFeatureList(classEntry._raw?._resolvedFeatures, 'class', {dropSubclassMarkers:true})}
+        ${!subEntry && pcLevel >= 3 ? '<div class="sheet-empty" style="text-align:left;padding:6px 8px">✦ <strong>Subclass features</strong> — set <em>Subclass</em> in Manage Party → ✏ Edit details to see the chosen archetype\'s features.</div>' : ''}
       </div>`);
     } else if (clsName){
       sections.push(`<div class="sheet-block feat-section"><h5>⚔ Class</h5><div class="sheet-empty">No 5etools class matched "${esc(c.cls)}". Try "Fighter", "Wizard", etc.</div></div>`);
