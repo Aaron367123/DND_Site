@@ -1105,10 +1105,13 @@ registerPanel('combat',{
     const cur = c.isPC
       ? (state.party.find(p => p.id === c.id)?.concentration || '')
       : (c.concentration || '');
-    const next = window.prompt(`Concentration spell for ${c.name}:\n(empty cancels)`, cur);
-    if (next == null) return;
-    const trimmed = String(next).trim();
-    this._setConcentration(i, trimmed || null);
+    showModal('🌀 Concentration spell — ' + c.name, [
+      {id:'spell', label:'Spell name (leave blank to clear)', type:'text', value: cur, placeholder:'Bless, Hold Person, Hex…'},
+    ], cur ? 'Update' : 'Concentrate').then(r => {
+      if (!r) return; // cancel
+      const trimmed = String(r.spell || '').trim();
+      this._setConcentration(i, trimmed || null);
+    });
   },
   _setConcentration(i, spellName){
     const c = state.combatants[i]; if (!c) return;
