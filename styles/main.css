@@ -523,8 +523,13 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 /* COMBAT */
 /* COMBAT — card-based tracker. Cards are manually reorderable; bestiary
    monsters can be dropped on the panel to add them. */
-.combat-controls{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:center}
-.combat-controls .round-display{font-size:10px;color:var(--text-muted);padding:0 8px;text-transform:uppercase;letter-spacing:.5px}
+/* Toolbar wraps when the window narrows so buttons never get clipped off
+   the right edge. The flex:1 spacer is removed in wrap mode by collapsing
+   it to a 0-height break. Round counter stays on the first row alongside
+   the buttons. */
+.combat-controls{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap}
+.combat-controls .round-display{font-size:10px;color:var(--text-muted);padding:0 6px;text-transform:uppercase;letter-spacing:.5px;margin-left:auto}
+.combat-controls .btn.icon-btn{padding:3px 7px;font-size:13px}
 .combat-section-label{padding:6px 10px 4px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border)}
 .combatant-list{padding:8px;display:flex;flex-direction:column;gap:8px}
 /* Floats over the panel — position:absolute so showing/hiding it doesn't
@@ -534,7 +539,7 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .window-body.drop-active{background:rgba(212,165,116,.04);outline:2px dashed var(--accent);outline-offset:-4px}
 .window-body.drop-active .combat-droptip{display:block}
 
-.combatant-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;display:grid;grid-template-columns:14px 42px 1fr auto;gap:7px;align-items:center;position:relative;transition:border-color .12s,box-shadow .15s}
+.combatant-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:5px 7px;display:grid;grid-template-columns:12px 36px 1fr auto;gap:6px;align-items:center;position:relative;transition:border-color .12s,box-shadow .15s}
 /* Active turn — stronger visual: accent border, soft glow, gradient sheen
    that draws the eye at a glance. The pulse keeps it noticeable during
    long combat scenes without being distracting. */
@@ -553,10 +558,10 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .combatant-card.party-row{opacity:.85;grid-template-columns:48px 1fr auto}
 .combatant-card.party-row.in-combat{opacity:1;border-color:rgba(212,165,116,.3)}
 
-.card-avatar{width:42px;height:42px;border-radius:50%;background:var(--panel-3);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;flex-shrink:0}
+.card-avatar{width:36px;height:36px;border-radius:50%;background:var(--panel-3);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;flex-shrink:0}
 .card-avatar.pc{background:linear-gradient(135deg,#4a3d2a,#6b5439)}
 .card-avatar.npc{background:linear-gradient(135deg,#3d2a2a,#6b3939)}
-.card-avatar svg{width:26px;height:26px}
+.card-avatar svg{width:22px;height:22px}
 .card-avatar:hover::after{content:'📷';position:absolute;inset:0;font-size:14px;background:rgba(0,0,0,.65);color:#fff;display:flex;align-items:center;justify-content:center;border-radius:50%}
 .icon-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .char-icon-btn .icon-img{width:34px;height:34px}
@@ -564,7 +569,7 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .icon-upload-btn:hover{background:var(--panel-2)!important;border-color:var(--accent)!important}
 
 .card-body{min-width:0;display:flex;flex-direction:column;gap:4px}
-.card-name{font-size:12px;font-weight:600;color:var(--text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+.card-name{font-size:12px;font-weight:600;color:var(--text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;margin-bottom:1px}
 .card-name-row{display:flex;align-items:center;gap:4px;justify-content:center}
 .card-name-input{flex:1;min-width:0;background:transparent;border:1px solid transparent;color:var(--text);font-size:13px;font-weight:600;padding:2px 4px;border-radius:3px;text-align:center}
 .card-name-input:hover{border-color:var(--border);background:var(--panel-3)}
@@ -580,14 +585,16 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .in-combat-pill{font-size:9px;color:var(--accent);font-weight:500;letter-spacing:.05em;margin-left:4px}
 .turn-marker{color:var(--accent);font-size:11px;margin-left:4px}
 
-.card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:3px}
+.card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:2px}
 /* When a combatant's HP is visible, an extra narrow column on the left
    holds the always-visible heal/damage strip. The HP/AC/Init cells still
    each take 1fr of the remaining width. */
 .card-stats.has-dmg-strip{grid-template-columns:auto 1fr 1fr 1fr}
-.card-stat{background:var(--panel-3);border-radius:4px;padding:2px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0}
-.card-stat .lab{font-size:10px;color:var(--text-muted);line-height:1}
-.card-stat input{background:transparent;border:none;text-align:center;padding:0;font-size:12px;font-weight:600;color:var(--text);width:100%;-moz-appearance:textfield;line-height:1.1}
+/* Stat cells lay icon ←→ value HORIZONTALLY now — cuts vertical height
+   from ~38px to ~22px, the biggest single source of card "fatness". */
+.card-stat{background:var(--panel-3);border-radius:4px;padding:2px 4px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;min-height:0}
+.card-stat .lab{font-size:11px;color:var(--text-muted);line-height:1;flex-shrink:0}
+.card-stat input{background:transparent;border:none;text-align:center;padding:0;font-size:12px;font-weight:600;color:var(--text);width:100%;min-width:0;-moz-appearance:textfield;line-height:1}
 .card-stat input:focus{outline:none;background:rgba(255,255,255,.05);border-radius:2px}
 .card-stat input::-webkit-outer-spin-button,.card-stat input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 /* Heal/damage strip — vertical tab sitting to the LEFT of the HP cell.
@@ -706,11 +713,138 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .mp-res-row{display:flex;align-items:center;gap:6px}
 .mp-res-row .mp-input{font-size:12px;padding:5px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:4px}
 /* PARTY CARD v2 */
-.char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:7px;cursor:grab}
+.char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:7px;cursor:grab;transition:border-color .15s,box-shadow .15s}
 .char-card:active{cursor:grabbing}
 .char-card.dragging{opacity:.4}
 .char-card.drop-before{box-shadow:0 -2px 0 var(--accent) inset}
 .char-card.drop-after{box-shadow:0 2px 0 var(--accent) inset}
+/* Active-turn highlight — pulses the accent glow when this PC is currently
+   up in initiative (state.activeCombatantId). Matches the combat tracker so
+   the cue is consistent across panels. */
+.char-card.active-turn{
+  border-color:var(--accent);
+  background:linear-gradient(180deg,rgba(212,165,116,.10) 0%,var(--panel-2) 60%);
+  box-shadow:0 0 0 1px var(--accent),0 0 14px rgba(212,165,116,.35);
+  animation:party-active-pulse 2.4s ease-in-out infinite
+}
+@keyframes party-active-pulse{
+  0%,100%{box-shadow:0 0 0 1px var(--accent),0 0 10px rgba(212,165,116,.25)}
+  50%   {box-shadow:0 0 0 1px var(--accent),0 0 18px rgba(212,165,116,.55)}
+}
+
+/* Downed visual — fired when a PC's HP hits 0. The card desaturates a bit
+   so it visually retreats from healthy cards in a 4-up grid, gets a red
+   border tint, and the HP bar pulses red so a quick glance picks it out. */
+.char-card.downed{
+  border-color:rgba(194,84,80,.55);
+  background:linear-gradient(180deg,rgba(194,84,80,.10) 0%,var(--panel-2) 70%);
+  filter:saturate(.7)
+}
+.char-card.downed .char-name{color:#e8b3b0}
+.hp-bar-wrap.downed .hp-bar-fill{
+  background:#c25450 !important;
+  animation:party-downed-pulse 1.6s ease-in-out infinite
+}
+@keyframes party-downed-pulse{
+  0%,100%{opacity:.55}
+  50%   {opacity:.95}
+}
+.char-downed-badge{
+  margin-top:4px;font-size:10px;font-weight:600;color:#e8b3b0;letter-spacing:.04em;
+  text-align:center;padding:2px 6px;background:rgba(194,84,80,.15);
+  border:1px dashed rgba(194,84,80,.5);border-radius:3px;line-height:1.3
+}
+
+/* "Active turn" + "Downed" overlap is possible (PC is up but dying). The
+   downed border wins because dying is more urgent than turn order. */
+.char-card.active-turn.downed{border-color:rgba(194,84,80,.8);box-shadow:0 0 0 1px rgba(194,84,80,.7),0 0 14px rgba(194,84,80,.45);animation:party-downed-pulse 1.6s ease-in-out infinite}
+
+/* Top toolbar — long/short rest buttons above the party grid. */
+.party-toolbar{display:flex;gap:6px;padding:8px 10px 0;align-items:center;flex-wrap:wrap}
+.party-toolbar .btn.small{font-size:11px;padding:4px 10px}
+
+/* Heal/damage strip on the party card. Compact vertical column to the right
+   of the HP / Max / Temp inputs. Mirrors the combat tracker's strip. */
+.party-hp-dmg{display:flex;flex-direction:column;gap:1px;align-items:stretch;margin-left:auto}
+.party-hp-dmg .party-hp-amt{
+  width:26px;height:13px;font-size:10px;font-weight:600;
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text);
+  padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;line-height:1
+}
+.party-hp-dmg .party-hp-amt::-webkit-outer-spin-button,
+.party-hp-dmg .party-hp-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.party-hp-btn{
+  width:26px;height:15px;font-size:12px;line-height:1;padding:0;
+  border:1px solid var(--border);background:var(--panel-3);color:var(--text);
+  border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center
+}
+.party-hp-btn.dmg{color:#c25450}
+.party-hp-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
+.party-hp-btn.heal{color:#6b9e6b}
+.party-hp-btn.heal:hover{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.6)}
+
+/* Slot pips are now interactive — restore cursor + a hover state so the
+   affordance is obvious. The available/spent colors stay as defined. */
+.slot-pip{cursor:pointer;transition:transform .12s,box-shadow .12s}
+.slot-pip:hover{transform:scale(1.18);box-shadow:0 0 0 1px var(--accent)}
+
+/* Attack table row click target — subtle highlight on hover for rollable
+   rows; non-rollable rows render identically (no extra chrome). */
+.sheet-table tr.attack-row.rollable:hover{background:rgba(212,165,116,.10)}
+.sheet-table tr.attack-row.rollable td:first-child::before{content:'🎲 ';opacity:.55;font-size:10px}
+
+/* One-click "Add to combat" button in the party-card header. Sits to the
+   right of the name/subline column. Affordance flips: "+ ⚔" when not in
+   combat → "⚔ In" once added (accent-tinted, click again to remove). */
+.char-combat-btn{
+  flex-shrink:0;font-size:10px;font-weight:600;padding:3px 7px;border-radius:10px;
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+  display:inline-flex;align-items:center;gap:2px;line-height:1;letter-spacing:.02em;
+  font-family:inherit
+}
+.char-combat-btn:hover{background:rgba(212,165,116,.18);border-color:var(--accent);color:var(--text)}
+.char-combat-btn.in-combat{background:rgba(212,165,116,.22);border-color:var(--accent);color:var(--accent)}
+.char-combat-btn.in-combat:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.55);color:#e8b3b0}
+
+/* Conditions row chips — clickable for remove (× hint on hover), plus an
+   "+ Cond" pill at the end that opens the picker. Existing chip styling
+   stays for the colored chips themselves; this just adds the × cue. */
+.char-conditions .cond-chip{cursor:pointer;transition:background .12s,border-color .12s;display:inline-flex;align-items:center;gap:3px}
+.char-conditions .cond-chip:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.5)}
+.char-conditions .cond-chip-x{font-weight:700;opacity:.6;font-size:10px}
+.char-conditions .cond-chip:hover .cond-chip-x{opacity:1}
+.char-conditions .cond-chip.add{
+  background:transparent;border:1px dashed var(--border);color:var(--text-muted);opacity:.65
+}
+.char-conditions .cond-chip.add:hover{opacity:1;border-color:var(--accent);color:var(--text);background:rgba(212,165,116,.10)}
+
+/* Inventory tab — table layout. Inputs are borderless until focused so the
+   table reads cleanly. Qty column is narrow, notes column flexes wide. */
+.sheet-table.inv-table{table-layout:fixed;width:100%}
+.sheet-table.inv-table th:nth-child(1){width:38%}
+.sheet-table.inv-table th:nth-child(2){width:50px}
+.sheet-table.inv-table th:nth-child(3){}
+.sheet-table.inv-table th:nth-child(4){width:24px}
+.sheet-table.inv-table td{padding:2px}
+.sheet-table.inv-table input{
+  width:100%;background:transparent;border:1px solid transparent;color:var(--text);
+  padding:3px 6px;font-size:11px;border-radius:3px;font-family:inherit
+}
+.sheet-table.inv-table input:hover{border-color:var(--border)}
+.sheet-table.inv-table input:focus{outline:none;border-color:var(--accent);background:var(--panel-3)}
+.sheet-table.inv-table input.inv-qty{text-align:center;-moz-appearance:textfield}
+.sheet-table.inv-table input.inv-qty::-webkit-outer-spin-button,
+.sheet-table.inv-table input.inv-qty::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sheet-table.inv-table .btn.icon-btn{padding:1px 6px;font-size:11px}
+
+/* Damage chip inside the roll-strip — shows d20+mod AND damage on one line. */
+.roll-strip .roll-dmg{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 7px;background:rgba(194,84,80,.18);border:1px solid rgba(194,84,80,.5);border-radius:10px;font-size:11px;color:#e8b3b0}
+.roll-strip .roll-dmg.crit{background:rgba(194,84,80,.32);font-weight:700}
+.roll-strip .roll-dmg-icon{font-size:10px;opacity:.85}
+.roll-strip .roll-dmg-total{font-weight:700}
+.roll-strip .roll-dmg-type{font-size:9px;color:var(--text-muted);text-transform:lowercase}
 .char-header{display:flex;align-items:center;gap:6px}
 .char-header-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
 /* Race · Class Level subline under the name. */
@@ -1006,7 +1140,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 /* ─── Card HP bar (full-width thin gradient under the stats row) ────────── */
 .card-hp-bar{
   --hp-pct:100%; --hp-color:#6b9e6b;
-  position:relative;height:3px;margin-top:3px;border-radius:2px;
+  position:relative;height:3px;margin-top:2px;border-radius:2px;
   background:rgba(0,0,0,.35);overflow:hidden
 }
 .card-hp-bar-fill{
@@ -1017,12 +1151,12 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 
 /* ─── Status pill row (concentration / reaction / buffs under the stats) ── */
 .combat-status-row{
-  display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;
+  display:flex;flex-wrap:wrap;gap:2px;margin-top:2px;
   font-size:9px;line-height:1
 }
 .combat-status-row .status-pill{
   display:inline-flex;align-items:center;gap:2px;
-  padding:1px 5px;border-radius:7px;
+  padding:1px 4px;border-radius:6px;
   border:1px solid var(--border);background:var(--panel-3);
   color:var(--text-muted);cursor:pointer;
   transition:background .12s,color .12s,border-color .12s;

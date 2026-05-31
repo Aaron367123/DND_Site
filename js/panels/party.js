@@ -26,23 +26,55 @@ registerPanel('party',{
 
   _render(){
     const b=this._body;if(!b)return;
-    b.innerHTML='<div class="party-grid">'+state.party.map((c,i)=>this._card(c,i)).join('')+'</div>';
+    const hasParty = state.party.length > 0;
+    // Top toolbar — quick party-wide actions. Rest buttons only render when
+    // there's actually a party (otherwise they're nonsense). Kept short so
+    // the panel still feels card-first, not toolbar-first.
+    // Expand/Collapse-all is meaningful only when at least one card has a
+    // sheet attached — but we keep the buttons rendered regardless for
+    // muscle memory; if no sheet, the click is a no-op.
+    const anyExpanded = state.party.some(c => this._expanded[c.id]);
+    const toolbar = hasParty
+      ? `<div class="party-toolbar">
+          <button class="btn small" data-act="long-rest" title="Long rest: HP to max, all spell slots restored, half hit dice back, exhaustion −1, concentration dropped">🛌 Long rest</button>
+          <button class="btn small" data-act="short-rest" title="Short rest: spend hit dice to heal (you'll be prompted per PC)">💤 Short rest</button>
+          <span style="flex:1"></span>
+          <button class="btn small" data-act="${anyExpanded?'collapse-all':'expand-all'}" title="${anyExpanded?'Collapse every open character sheet':'Open every character sheet at once'}">${anyExpanded?'▲ Collapse all':'▼ Expand all'}</button>
+        </div>`
+      : '';
+    b.innerHTML = toolbar + '<div class="party-grid">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
     this._wire();
   },
 
   // Pull active conditions from the matching combat slot. PCs that aren't in
   // combat won't have a combatant entry — return empty in that case. Returns
   // empty string if there's nothing to show so it adds zero visual weight.
+  // Active-conditions row. Conditions live on the combat slot when the PC
+  // is in combat, OR on c.conditions as a fallback when they aren't (so the
+  // DM can mark "frightened" during an RP scene without forcing them into
+  // initiative). Both sets get unioned for display.
+  //
+  // Chips are clickable (remove that condition) and the "+ Cond" pill at
+  // the end opens the picker — same condition list the combat tracker uses.
   _conditionsRow(c){
     if (!c || !c.id) return '';
+    const i = state.party.findIndex(p => p.id === c.id);
     const co = (typeof state !== 'undefined' && state.combatants)
       ? state.combatants.find(x => x.id === c.id)
       : null;
-    const conds = co?.conditions || [];
-    if (!conds.length) return '';
-    return '<div class="char-conditions" title="Active conditions (set in Combat Tracker)">'
-      + conds.map(name => `<span class="cond-chip">${esc(name)}</span>`).join('')
-      + '</div>';
+    // Union of combat-slot conditions + party-side conditions. dedupe.
+    const seen = new Set();
+    const conds = [];
+    (co?.conditions || []).forEach(n => { if (!seen.has(n)){ seen.add(n); conds.push(n); }});
+    (c.conditions || []).forEach(n => { if (!seen.has(n)){ seen.add(n); conds.push(n); }});
+    // Even with no active conditions we still show the "+ Cond" picker pill
+    // so adding a condition is one click. Empty pill is dashed/muted so it
+    // doesn't compete visually.
+    const chips = conds.map(name =>
+      `<span class="cond-chip" data-act="cond-remove" data-idx="${i}" data-cond="${esc(name)}" title="Remove ${esc(name)}">${esc(name)} <span class="cond-chip-x">×</span></span>`
+    ).join('');
+    const addPill = `<span class="cond-chip add" data-act="cond-add" data-idx="${i}" title="Add a condition (frightened, poisoned, prone, …)">+ Cond</span>`;
+    return `<div class="char-conditions" title="Active conditions — click a chip to remove, + to add">${chips}${addPill}</div>`;
   },
 
   // Status pills: concentration + exhaustion. Always rendered so the
@@ -132,7 +164,18 @@ registerPanel('party',{
     const sublineHtml = sublineParts.length
       ? '<div class="char-subline">' + esc(sublineParts.join(' · ')) + '</div>'
       : '';
-    return '<div class="char-card" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
+    // Active-turn highlight: mirror the combat tracker's accent glow when
+    // this PC is the current initiative slot. Lets the DM (or player on the
+    // player view) see whose turn it is without switching panels.
+    const isActiveTurn = c.id && state.activeCombatantId === c.id;
+    // Already-in-combat check: drives the header button's affordance —
+    // "+ ⚔" to add, or "in combat" pill to remove from combat with one click.
+    const inCombat = !!(state.combatants && state.combatants.find(co => co.id === c.id));
+    // Downed visual — PC at ≤0 HP gets a desaturated card + pulsing red bar
+    // + a "Downed" badge so the DM glancing across a 5-card party can spot
+    // who's in death-save territory without reading numbers.
+    const downed = (c.hp != null) && c.hp <= 0;
+    return '<div class="char-card'+(isActiveTurn?' active-turn':'')+(inCombat?' in-combat':'')+(downed?' downed':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
@@ -141,27 +184,59 @@ registerPanel('party',{
           +'<input class="char-name" value="'+esc(c.name)+'" data-field="name" data-idx="'+i+'" placeholder="Character name">'
           +sublineHtml
         +'</div>'
+        // One-click toggle to add/remove this PC from the combat tracker —
+        // drag-drop still works, this is the discoverable affordance for new
+        // DMs (and saves a panel-switch when the combat tracker isn't open).
+        +'<button class="char-combat-btn'+(inCombat?' in-combat':'')+'" data-act="toggle-combat" data-idx="'+i+'" title="'+(inCombat?'Remove from combat':'Add to combat')+'">'
+          +(inCombat?'⚔ In':'+ ⚔')
+        +'</button>'
       +'</div>'
       // HP block — current / max with an optional Temp HP badge. Temp HP
       // sits visually beside the HP fields and edits inline like the others.
       // The HP bar gains a small overlay segment when temp > 0 so the
       // surplus is visible at a glance, even if c.hp itself isn't full.
+      // The heal/damage strip on the right mirrors the combat tracker — same
+      // shape, same handlers (party uses _applyHpDelta), so DMs don't context-
+      // switch to combat just to apply a potion outside of initiative.
       +'<div class="char-hp-block">'
         +'<div class="char-hp-row">'
           +'<input class="char-hp-current" type="number" value="'+c.hp+'" data-field="hp" data-idx="'+i+'" title="Current HP">'
           +'<span class="char-hp-sep">/</span>'
           +'<input class="char-hp-max" type="number" value="'+c.hpMax+'" data-field="hpMax" data-idx="'+i+'" title="Max HP">'
           +'<input class="char-hp-temp" type="number" value="'+(c.tempHp||0)+'" data-field="tempHp" data-idx="'+i+'" title="Temporary HP (absorbs damage first)" min="0">'
-          +'<span style="font-size:10px;color:var(--text-dim);margin-left:auto">HP</span>'
+          +'<div class="party-hp-dmg" data-idx="'+i+'" title="Type amount, click + to heal or − to damage (drains temp HP first)">'
+            +'<button class="party-hp-btn heal" data-act="hp-heal" data-idx="'+i+'" title="Heal (clamped to max)">+</button>'
+            +'<input class="party-hp-amt" type="number" value="'+(this._lastDmgAmount||5)+'" min="0" max="999" data-idx="'+i+'" title="Heal / damage amount">'
+            +'<button class="party-hp-btn dmg" data-act="hp-damage" data-idx="'+i+'" title="Damage (drains temp HP first)">−</button>'
+          +'</div>'
         +'</div>'
-        +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+'">'
+        +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+(downed?' downed':'')+'">'
           +'<div class="hp-bar-fill" style="width:'+hpPct+'%;background:'+hpColor+'"></div>'
           +(c.tempHp>0 ? '<div class="hp-bar-temp" title="Temp HP: '+c.tempHp+'"></div>' : '')
         +'</div>'
+        // Downed banner — shows below the HP bar when at ≤0 HP. Death saves
+        // themselves live on the combat slot (combat.js initializes deathSaves
+        // on the matching combatant when HP crosses 0 in combat) — we just
+        // surface the badge here so the party panel makes the state visible.
+        + (downed
+          ? '<div class="char-downed-badge" title="At 0 HP — see combat tracker for death saves">💀 Downed' + (
+              (()=>{
+                const co = state.combatants.find(x => x.id === c.id);
+                if (co && co.deathSaves){
+                  const ds = co.deathSaves;
+                  return ' · ' + (ds.success||0) + '/3 saves · ' + (ds.fail||0) + '/3 fails';
+                }
+                return '';
+              })()
+            ) + '</div>'
+          : '')
       +'</div>'
-      // Stats: AC, Init, Spd, PP
+      // Stats: AC, Init, Spd. The AC input has a computed-breakdown tooltip
+      // ("10 + 2 DEX + 5 gear = 17") so the DM can see at a glance whether
+      // a number looks right. Manual c.acSources entries override the
+      // inferred breakdown for DMs who track gear explicitly.
       +'<div class="char-stats-row">'
-        +'<div class="char-stat"><div class="l">⛨ AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'"></div>'
+        +'<div class="char-stat"><div class="l">⛨ AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'" title="'+esc(this._acBreakdown(c))+'"></div>'
         +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
       +'</div>'
@@ -179,15 +254,24 @@ registerPanel('party',{
       +this._hitDiceRow(c,i)
       // Resources
       +resHtml
-      // Inspiration row: Heroic (the original generic toggle) + Bardic
-      +'<div class="inspiration-pair">'
-        +'<div class="inspiration-row '+(c.inspiration?'has-inspiration':'')+'" data-act="insp" data-idx="'+i+'" title="Heroic Inspiration · right-click for award reasons">'
-          +'<div class="inspiration-toggle"></div><span>Heroic</span>'
-        +'</div>'
-        +'<div class="inspiration-row '+(c.bardicInspiration?'has-inspiration bardic':'')+'" data-act="bardic-insp" data-idx="'+i+'" title="Bardic Inspiration">'
-          +'<div class="inspiration-toggle"></div><span>Bardic</span>'
-        +'</div>'
-      +'</div>'
+      // Inspiration row: Heroic (the original generic toggle) + Bardic.
+      // Bardic shows the appropriate die-size from class+level when this
+      // character is actually a bard (d6 lv1→d8 lv5→d10 lv10→d12 lv15).
+      + (()=>{
+          const bd = this._bardicDie(c);
+          const bardicLabel = bd ? `Bardic ${bd}` : 'Bardic';
+          const bardicTitle = bd
+            ? `Bardic Inspiration die (auto from level ${subLvl||'?'}): roll a ${bd} for the buff`
+            : 'Bardic Inspiration';
+          return '<div class="inspiration-pair">'
+            +'<div class="inspiration-row '+(c.inspiration?'has-inspiration':'')+'" data-act="insp" data-idx="'+i+'" title="Heroic Inspiration · right-click for award reasons">'
+              +'<div class="inspiration-toggle"></div><span>Heroic</span>'
+            +'</div>'
+            +'<div class="inspiration-row '+(c.bardicInspiration?'has-inspiration bardic':'')+'" data-act="bardic-insp" data-idx="'+i+'" title="'+esc(bardicTitle)+'">'
+              +'<div class="inspiration-toggle"></div><span>'+esc(bardicLabel)+'</span>'
+            +'</div>'
+          +'</div>';
+        })()
       // Full character sheet — collapsed by default; expand to see tabs.
       + this._sheetSection(c, i)
     +'</div>';
@@ -205,21 +289,132 @@ registerPanel('party',{
   },
 
   _sheetBody(c, i){
-    const tabs = ['stats','skills','spells'];
-    const labels = {stats:'Stats', skills:'Skills', spells:'Spells'};
+    const tabs = ['stats','skills','spells','inventory'];
+    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', inventory:'Inventory'};
     let active = this._activeTab[c.id] || 'stats';
     if (!tabs.includes(active)) active = 'stats';
     const tabBar = tabs.map(t =>
       `<button class="sheet-tab ${t===active?'active':''}" data-act="sheet-tab" data-idx="${i}" data-tab="${t}">${labels[t]}</button>`
     ).join('');
     let body = '';
-    if (active === 'stats')      body = this._tabStats(c);
-    else if (active === 'skills')body = this._tabSkills(c);
-    else if (active === 'spells')body = this._tabSpells(c);
+    if (active === 'stats')          body = this._tabStats(c);
+    else if (active === 'skills')    body = this._tabSkills(c);
+    else if (active === 'spells')    body = this._tabSpells(c);
+    else if (active === 'inventory') body = this._tabInventory(c, i);
     return `<div class="sheet-body">
       <div class="sheet-tabs">${tabBar}</div>
       <div class="sheet-content">${body}</div>
     </div>`;
+  },
+
+  // Inventory tab. Items live on c.sheet.inventory as [{name, qty, notes}].
+  // Manually managed — the PDF importer doesn't parse 5e sheet inventory
+  // reliably, so the DM (or player) populates this themselves. Add row
+  // appends to the list; clicking the × removes; qty input edits in place.
+  _tabInventory(c, ci){
+    const inv = (c.sheet && Array.isArray(c.sheet.inventory)) ? c.sheet.inventory : [];
+    const rows = inv.map((it, ii) => {
+      const qty = (it.qty == null) ? 1 : it.qty;
+      return `<tr class="inv-row" data-ii="${ii}">
+        <td><input class="inv-name" type="text" value="${esc(it.name||'')}" data-act="inv-edit" data-ci="${ci}" data-ii="${ii}" data-key="name" placeholder="Item name"></td>
+        <td><input class="inv-qty" type="number" value="${qty}" min="0" max="999" data-act="inv-edit" data-ci="${ci}" data-ii="${ii}" data-key="qty"></td>
+        <td><input class="inv-notes" type="text" value="${esc(it.notes||'')}" data-act="inv-edit" data-ci="${ci}" data-ii="${ii}" data-key="notes" placeholder="Notes (weight, attunement, …)"></td>
+        <td><button class="btn icon-btn danger" data-act="inv-remove" data-ci="${ci}" data-ii="${ii}" title="Remove">×</button></td>
+      </tr>`;
+    }).join('');
+    const empty = !inv.length
+      ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:14px 8px;font-size:11px">No inventory yet. Click <strong>+ Add item</strong> below.</td></tr>`
+      : '';
+    return `<div class="sheet-block">
+      <h5>Inventory <span class="sheet-prof-count">${inv.length}</span></h5>
+      <table class="sheet-table inv-table">
+        <thead><tr><th>Item</th><th>Qty</th><th>Notes</th><th></th></tr></thead>
+        <tbody>${rows}${empty}</tbody>
+      </table>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn small" data-act="inv-add" data-ci="${ci}" title="Add an empty row">+ Add item</button>
+      </div>
+    </div>`;
+  },
+
+  // AC breakdown tooltip — best-effort decomposition of c.ac into base 10 +
+  // Dex modifier (capped by armor type when we know it) + residual gear.
+  // If the DM has populated c.acSources as [{label, value}], we honor that
+  // explicitly and show their labelled breakdown instead of inferring.
+  // Returns a human-readable string for the input's `title` attribute.
+  _acBreakdown(c){
+    const ac = c.ac;
+    if (ac == null || ac === '') return 'No AC set';
+    // Explicit DM-authored breakdown wins.
+    if (Array.isArray(c.acSources) && c.acSources.length){
+      const sum = c.acSources.reduce((s, x) => s + (parseInt(x.value)||0), 0);
+      const parts = c.acSources.map(x => {
+        const v = parseInt(x.value)||0;
+        return (v >= 0 ? '+' : '') + v + ' ' + (x.label || '');
+      });
+      const mismatch = sum !== ac ? ` (Σ=${sum}, stored ${ac})` : '';
+      return 'AC ' + ac + ': ' + parts.join(', ') + mismatch;
+    }
+    // Inferred breakdown from Dex.
+    const ab = c.abilities || {};
+    const dexMod = (typeof ab.dex === 'number') ? Math.floor((ab.dex - 10) / 2) : null;
+    if (dexMod == null) return 'AC ' + ac + ' (import a PDF for Dex-based breakdown)';
+    const residual = ac - 10 - dexMod;
+    // Sign formatting helper. residual can be negative for low-AC PCs (rare).
+    const sign = n => (n >= 0 ? '+' : '−') + Math.abs(n);
+    let label;
+    if (residual === 0)      label = 'Unarmored';
+    else if (residual <= 1)  label = 'Mage Armor / Padded';
+    else if (residual <= 2)  label = 'Leather + Shield / Studded';
+    else if (residual <= 3)  label = 'Studded + Shield / Hide';
+    else if (residual <= 4)  label = 'Chain Shirt + Shield / Scale Mail';
+    else if (residual <= 5)  label = 'Half Plate + Shield / Chain Mail';
+    else if (residual <= 7)  label = 'Plate + Shield / heavy gear';
+    else                     label = 'Magical gear';
+    return 'AC ' + ac + ': 10 base ' + sign(dexMod) + ' DEX ' + sign(residual) + ' gear (≈ ' + label + ')';
+  },
+
+  // Add or remove a condition. Writes to whichever store currently holds it
+  // (combat slot if the PC is in combat, else c.conditions on the party
+  // member). Adding always writes to the combat slot when one exists so the
+  // combat tracker chip stays canonical; otherwise it stores on the party
+  // member and gets carried over the next time they join combat.
+  _toggleCondition(i, name){
+    const c = state.party[i]; if (!c) return;
+    const co = state.combatants.find(x => x.id === c.id);
+    // De-duplicated "currently has it" check across both stores.
+    const partyHas = Array.isArray(c.conditions) && c.conditions.includes(name);
+    const combatHas = co && Array.isArray(co.conditions) && co.conditions.includes(name);
+    if (partyHas || combatHas){
+      // Remove from both — keeps the two stores from drifting.
+      if (partyHas) c.conditions = c.conditions.filter(x => x !== name);
+      if (combatHas) co.conditions = co.conditions.filter(x => x !== name);
+    } else {
+      if (co){
+        co.conditions = [...(co.conditions || []), name];
+      } else {
+        c.conditions = [...(c.conditions || []), name];
+      }
+    }
+    save(); this._render();
+    panelDefs.combat?._render?.();
+  },
+
+  // Bardic Inspiration die-size ladder (5e RAW): d6 at lv1, d8 at lv5, d10
+  // at lv10, d12 at lv15. Returns the die string when this character is a
+  // bard (multiclass detection is "class string contains 'bard'") or null
+  // when the auto-display doesn't apply. The DM can still toggle Bardic
+  // Inspiration regardless; the die-size label is just a reminder.
+  _bardicDie(c){
+    const sheet = c.sheet || {};
+    const cls = (c.cls || sheet.class || '').toLowerCase();
+    if (!/\bbard\b/.test(cls)) return null;
+    const lvl = parseInt(c.level || sheet.level || 0, 10);
+    if (!lvl) return null;
+    if (lvl >= 15) return 'd12';
+    if (lvl >= 10) return 'd10';
+    if (lvl >= 5)  return 'd8';
+    return 'd6';
   },
 
   // Roll a d20 with an integer modifier. opts.mode: 'normal'|'adv'|'dis'.
@@ -257,6 +452,184 @@ registerPanel('party',{
     };
   },
 
+  // Roll an attack: d20 + bonus to-hit, then roll damage dice. Returns the
+  // same shape as _rollD20() with an extra `damage` block when dmgExpr was
+  // provided. Crits double the dice (not modifiers), per 5e RAW.
+  _rollAttack(c, name, atkBonus, dmgExpr, mode){
+    const toHit = this._rollD20(atkBonus, {
+      mode,
+      label: c.name + ' · ' + name + ' attack',
+    });
+    if (dmgExpr){
+      const dmg = this._rollDamageExpr(dmgExpr, toHit.crit);
+      toHit.damage = dmg;
+      toHit.attack = true;
+    }
+    return toHit;
+  },
+
+  // Tiny dice-expression evaluator. Accepts things like:
+  //   "2d6+3", "1d8 +5", "1d10+3 piercing", "2d6+1d4+3 fire", "1d8"
+  // Returns { total, breakdown, type } where breakdown is the human-readable
+  // string with individual rolls. On crit, each NdN term doubles (the rule is
+  // "double the dice", so 2d6+3 becomes 4d6+3, not 2d6+3 doubled). Unparsed
+  // input degrades gracefully — returns the raw string in breakdown.
+  _rollDamageExpr(expr, crit){
+    const raw = String(expr || '').trim();
+    if (!raw) return null;
+    // Split off the trailing "type" word(s) so "2d6+3 slashing" pulls out
+    // "slashing" cleanly. Everything not part of the math goes to type.
+    const typeMatch = raw.match(/\b(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder|healing)\b/i);
+    const dmgType = typeMatch ? typeMatch[1].toLowerCase() : '';
+    const expression = raw.replace(/\b(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder|healing)\b/ig, '').trim();
+    // Tokenize: NdN, signed integers, plus/minus separators. Anything weird
+    // → fall through to "couldn't parse" branch.
+    const terms = [];
+    const re = /([+-]?\s*\d+d\d+|[+-]?\s*\d+)/g;
+    let m;
+    while ((m = re.exec(expression)) !== null){
+      terms.push(m[0].replace(/\s+/g, ''));
+    }
+    if (!terms.length) return { total: 0, breakdown: raw, type: dmgType };
+    let total = 0;
+    const parts = [];
+    for (const t of terms){
+      const sign = t.startsWith('-') ? -1 : 1;
+      const body = t.replace(/^[+-]/, '');
+      const dm = body.match(/^(\d+)d(\d+)$/);
+      if (dm){
+        let n = parseInt(dm[1], 10);
+        const sides = parseInt(dm[2], 10);
+        if (crit) n *= 2;             // crit doubles the dice
+        const rolls = [];
+        for (let i = 0; i < n; i++){
+          rolls.push(1 + Math.floor(Math.random() * sides));
+        }
+        const sub = rolls.reduce((a,b)=>a+b, 0) * sign;
+        total += sub;
+        parts.push((sign < 0 ? '−' : '') + n + 'd' + sides + ' [' + rolls.join(',') + ']');
+      } else {
+        const k = parseInt(body, 10) * sign;
+        if (Number.isFinite(k)){
+          total += k;
+          parts.push((k >= 0 ? '+' : '−') + Math.abs(k));
+        }
+      }
+    }
+    return { total, breakdown: parts.join(' '), type: dmgType, crit: !!crit };
+  },
+
+  // Apply +/- HP to party member `i`, draining tempHp first on damage. Mirrors
+  // to combat tracker via syncPartyToCombat so an in-combat PC stays in sync.
+  // Heal is clamped to hpMax; damage can dip below 0 (death-save territory).
+  _applyHpDelta(i, delta){
+    const c = state.party[i]; if (!c) return;
+    if (delta < 0){
+      let remaining = -delta; // positive amount of damage
+      const temp = c.tempHp || 0;
+      if (temp > 0){
+        const drain = Math.min(temp, remaining);
+        c.tempHp = temp - drain;
+        remaining -= drain;
+      }
+      if (remaining > 0){
+        c.hp = (c.hp || 0) - remaining;
+      }
+    } else if (delta > 0){
+      const cap = c.hpMax || c.hp || 0;
+      c.hp = Math.min(cap, (c.hp || 0) + delta);
+    }
+    save();
+    syncPartyToCombat(i);
+    this._render();
+    // Combat panel might be showing this PC's card — keep its HP value in
+    // sync without forcing the DM to click into it.
+    panelDefs.combat?._render?.();
+  },
+
+  // Long rest applied to the whole party. 5e RAW:
+  //   • HP back to max
+  //   • All spell slots restored
+  //   • Hit dice restored by half (rounded up, min 1)
+  //   • Exhaustion -1 (2024 rules: same)
+  //   • Concentration dropped
+  //   • Death saves cleared (PCs that survived stabilize)
+  // Players that survived the day get a clean slate; downed PCs come back at
+  // 1 HP (5e rule: a stabilized creature wakes with 1 HP after a long rest).
+  _longRestAll(){
+    if (!state.party.length){ showToast('No party to rest'); return; }
+    if (typeof showConfirm !== 'function'){
+      this._applyLongRest();
+      return;
+    }
+    showConfirm('Long rest the whole party? HP to max, all spell slots restored, hit dice ½ back, exhaustion −1, concentration dropped.',
+      {title:'Long rest', confirmLabel:'Rest', danger:false}).then(ok => {
+        if (ok) this._applyLongRest();
+      });
+  },
+  _applyLongRest(){
+    state.party.forEach((c, i) => {
+      // HP: stabilize downed PCs at 1, else full heal.
+      c.hp = (c.hp <= 0) ? 1 : (c.hpMax || c.hp);
+      c.tempHp = 0;
+      // Hit dice: half back, rounded up, min 1.
+      if (c.hitDice && c.hitDice.max){
+        const back = Math.max(1, Math.ceil(c.hitDice.max / 2));
+        c.hitDice.current = Math.min(c.hitDice.max, (c.hitDice.current || 0) + back);
+      }
+      // Spell slots: clear all expended counters.
+      const slots = c.sheet?.spellSlots;
+      if (slots){
+        Object.keys(slots).forEach(k => { slots[k] = {...slots[k], expended: 0}; });
+      }
+      // Exhaustion: -1 (clamped at 0).
+      c.exhaustion = Math.max(0, (+c.exhaustion || 0) - 1);
+      // Concentration: dropped.
+      c.concentration = null;
+      // Mirror to combat tracker.
+      syncPartyToCombat(i);
+    });
+    save();
+    this._render();
+    panelDefs.combat?._render?.();
+    showToast('🛌 Long rest — party fully recovered');
+  },
+
+  // Short rest applied to the whole party. 5e RAW: PCs spend hit dice to
+  // heal. We don't auto-spend (varies wildly by player choice); instead we
+  // restore Warlock-style "short rest" pact slots and recharge things like
+  // Action Surge / Second Wind. For now, the simplest useful behavior:
+  //   • Clear concentration (a 1-hour break drops it)
+  //   • Restore any resources flagged with name containing "short rest"
+  // Hit dice spending stays per-PC via the existing per-die-pip click.
+  _shortRestAll(){
+    if (!state.party.length){ showToast('No party to rest'); return; }
+    if (typeof showConfirm !== 'function'){
+      this._applyShortRest();
+      return;
+    }
+    showConfirm('Short rest the whole party? Concentration drops; resources whose name contains "short rest" refresh. Players can spend hit dice per-PC after.',
+      {title:'Short rest', confirmLabel:'Rest', danger:false}).then(ok => {
+        if (ok) this._applyShortRest();
+      });
+  },
+  _applyShortRest(){
+    state.party.forEach((c, i) => {
+      c.concentration = null;
+      if (Array.isArray(c.resources)){
+        c.resources = c.resources.map(r => {
+          if (/short\s*rest/i.test(r.name || '')) return {...r, current: r.max || r.current};
+          return r;
+        });
+      }
+      syncPartyToCombat(i);
+    });
+    save();
+    this._render();
+    panelDefs.combat?._render?.();
+    showToast('💤 Short rest — concentration dropped, short-rest resources refreshed');
+  },
+
   // Render the "Last roll" strip shown above the ability block. Returns ''
   // when this character hasn't rolled anything this session. The strip is
   // ephemeral (held on the panel, not persisted) so opening the sheet on
@@ -274,12 +647,22 @@ registerPanel('party',{
     const status = r.crit ? '<span class="roll-status crit">CRIT 20!</span>'
                   : r.fumble ? '<span class="roll-status fumble">Nat 1</span>'
                   : '';
+    // Attack rolls carry an attached damage block. Show it inline so the
+    // player sees the to-hit AND the damage on one row. Damage is also bold-
+    // styled when the hit critted (already doubled at roll time).
+    const dmgBlock = r.damage
+      ? `<span class="roll-dmg ${r.crit?'crit':''}" title="${esc(r.damage.breakdown)}">
+          <span class="roll-dmg-icon">⚔</span>
+          <span class="roll-dmg-total">${r.damage.total}</span>${r.damage.type?`<span class="roll-dmg-type">${esc(r.damage.type)}</span>`:''}
+         </span>`
+      : '';
     return `<div class="roll-strip ${r.crit?'crit':''}${r.fumble?' fumble':''}">
       <span class="roll-label">${esc(r.label || 'Roll')}</span>
       ${modeChip}
       <span class="roll-dice">${dice}</span>
       <span class="roll-eq">${modText}</span>
       <span class="roll-total">${r.total}</span>
+      ${dmgBlock}
       ${status}
       <span class="roll-hint" title="Shift-click any ability or save for advantage · Alt-click for disadvantage">?</span>
     </div>`;
@@ -365,7 +748,7 @@ registerPanel('party',{
       + '</div>'
       + '</div>'
       + (sh.languages ? this._renderLanguages(sh.languages) : '')
-      + (sh.attacks?.length ? this._renderAttacks(sh.attacks) : '');
+      + (sh.attacks?.length ? this._renderAttacks(sh.attacks, c) : '');
   },
 
   // Split a free-text "languages & proficiencies" blob into categorized chip
@@ -422,15 +805,35 @@ registerPanel('party',{
     return `<div class="sheet-block"><h5>Languages &amp; Proficiencies</h5>${html}</div>`;
   },
 
-  _renderAttacks(attacks){
-    const rows = attacks.map(a =>
-      `<tr><td>${esc(a.name)}</td><td>${esc(a.atkBonus||'—')}</td><td>${esc(a.damage||'—')}</td></tr>`
-    ).join('');
+  _renderAttacks(attacks, c){
+    // Rows are clickable when atkBonus parses to a number — clicking rolls
+    // d20+bonus (with Shift/Alt = adv/dis), then evaluates the damage dice
+    // expression. Crits double dice (not modifiers), nat-1 still shows the
+    // result but as a miss. Falls back to display-only for ambiguous fields.
+    const rows = attacks.map(a => {
+      const atkNum = this._parseAtkBonus(a.atkBonus);
+      const clickable = (atkNum != null && c && c.id);
+      const cls = clickable ? 'attack-row rollable' : 'attack-row';
+      const extra = clickable
+        ? ` data-act="roll-attack" data-cid="${esc(c.id)}" data-atk="${atkNum}" data-dmg="${esc(a.damage||'')}" data-atk-name="${esc(a.name)}" style="cursor:pointer" title="Click to roll attack (Shift = adv · Alt = dis)"`
+        : '';
+      return `<tr class="${cls}"${extra}><td>${esc(a.name)}</td><td>${esc(a.atkBonus||'—')}</td><td>${esc(a.damage||'—')}</td></tr>`;
+    }).join('');
     return `<div class="sheet-block"><h5>Attacks</h5>
       <table class="sheet-table">
         <thead><tr><th>Name</th><th>Atk</th><th>Damage</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
+  },
+
+  // Extract a signed integer from atkBonus strings like "+7", "+11/+6/+1"
+  // (Extra Attack), "5". Returns null when nothing numeric is found. For
+  // multi-attack chains we just use the first bonus — rolling the others is
+  // a separate click.
+  _parseAtkBonus(s){
+    if (s == null) return null;
+    const m = String(s).match(/[+-]?\d+/);
+    return m ? parseInt(m[0], 10) : null;
   },
 
   _tabSkills(c){
@@ -511,12 +914,21 @@ registerPanel('party',{
     const lvls = Object.keys(slots).map(n=>parseInt(n)).sort((a,b)=>a-b);
     let slotsHtml = '';
     if (lvls.length){
+      // Slot pips are clickable: click the leftmost available pip to mark a
+      // slot expended; click any spent pip to refund. Click handler is keyed
+      // off (level, pip-index) so the rendered order is the source of truth.
+      // Need PC index for the handler — find via state.party (id-based, so
+      // reordering can't desync the wire).
+      const pcIdx = state.party.findIndex(p => p.id === c.id);
       slotsHtml = '<div class="sheet-block"><h5>Spell Slots</h5><div class="sheet-slots">'
         + lvls.map(l=>{
             const s = slots[l];
             const total = s.total||0, expended = s.expended||0;
             let pips = '';
-            for (let n=1; n<=total; n++) pips += `<span class="slot-pip ${n<=total-expended?'available':'spent'}"></span>`;
+            for (let n=1; n<=total; n++){
+              const filled = n <= (total - expended);
+              pips += `<span class="slot-pip ${filled?'available':'spent'}" data-act="slot-pip" data-idx="${pcIdx}" data-lvl="${l}" data-n="${n}" title="${filled?'Spend a level ' + l + ' slot':'Refund a level ' + l + ' slot'}"></span>`;
+            }
             return `<div class="sheet-slot-row"><span class="slot-lvl">L${l}</span>${pips}<span class="slot-count">${total-expended}/${total}</span></div>`;
           }).join('')
         + '</div></div>';
@@ -977,7 +1389,7 @@ registerPanel('party',{
     // drag when grabbing inputs/buttons so text selection still works.
     b.querySelectorAll('.char-card').forEach(card=>{
       card.addEventListener('dragstart', e=>{
-        if (e.target.closest('input,select,textarea,button,.icon-picker,.pip')){ e.preventDefault(); return; }
+        if (e.target.closest('input,select,textarea,button,.icon-picker,.pip,.party-hp-dmg,.slot-pip')){ e.preventDefault(); return; }
         e.dataTransfer.effectAllowed = 'copy';
         e.dataTransfer.setData('application/x-skt-party-pi', card.dataset.cidx);
         card.classList.add('dragging');
@@ -1069,6 +1481,34 @@ registerPanel('party',{
       inp.addEventListener('click',e=>e.stopPropagation());
     });
 
+    // Heal/damage amount input — suppress drag/card-click and persist the
+    // typed value across renders so the DM doesn't have to re-type.
+    b.querySelectorAll('.party-hp-amt').forEach(inp => {
+      inp.addEventListener('click', e => e.stopPropagation());
+      inp.addEventListener('mousedown', e => e.stopPropagation());
+      inp.addEventListener('change', () => {
+        const v = parseInt(inp.value) || 0;
+        if (v > 0) this._lastDmgAmount = v;
+      });
+    });
+
+    // Inventory row inputs (name/qty/notes) — write back to
+    // c.sheet.inventory[ii][key] on change. Click + mousedown stoppropagation
+    // so the card drag doesn't fire when grabbing a field.
+    b.querySelectorAll('[data-act="inv-edit"]').forEach(inp => {
+      inp.addEventListener('click', e => e.stopPropagation());
+      inp.addEventListener('mousedown', e => e.stopPropagation());
+      inp.addEventListener('change', e => {
+        e.stopPropagation();
+        const ci = +inp.dataset.ci, ii = +inp.dataset.ii, key = inp.dataset.key;
+        const c = state.party[ci]; if (!c?.sheet?.inventory?.[ii]) return;
+        let v = inp.value;
+        if (key === 'qty') v = Math.max(0, parseInt(v) || 0);
+        c.sheet.inventory[ii] = {...c.sheet.inventory[ii], [key]: v};
+        save();
+      });
+    });
+
     // Actions
     b.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',e=>{
       e.stopPropagation();
@@ -1151,6 +1591,144 @@ registerPanel('party',{
         if (n > c.hitDice.current) return; // empty pip — ignore
         this._spendHitDie(idx);
       }
+      // Heal/damage strip — same shape as the combat tracker's. Reads the
+      // amount from this card's own input, drains tempHp first, and mirrors
+      // the change into any active combat slot via _applyHpDelta.
+      else if(act==='hp-heal' || act==='hp-damage'){
+        const card = el.closest('.char-card');
+        const amtInp = card?.querySelector('.party-hp-amt');
+        const amt = Math.max(0, parseInt(amtInp?.value) || 0);
+        if (!amt) return;
+        this._lastDmgAmount = amt;
+        this._applyHpDelta(i, act === 'hp-damage' ? -amt : +amt);
+      }
+      // Spell-slot pip — toggle expended state on sheet.spellSlots[lvl]. Click
+      // an available pip to spend, click a spent pip to refund.
+      else if(act==='slot-pip'){
+        const lvl = parseInt(el.dataset.lvl);
+        const n   = parseInt(el.dataset.n);     // 1-based pip index
+        const c = state.party[i]; if (!c || !c.sheet?.spellSlots?.[lvl]) return;
+        const slot = c.sheet.spellSlots[lvl];
+        const total = slot.total || 0;
+        const available = total - (slot.expended || 0);
+        // Pip N=1 is leftmost (available pips drawn first, then spent). To
+        // map pip-index back to action: if N <= available → spend (expended++);
+        // else → refund (expended--).
+        let exp = slot.expended || 0;
+        if (n <= available)  exp = Math.min(total, exp + 1);
+        else                 exp = Math.max(0, exp - 1);
+        const newSlots = {...c.sheet.spellSlots, [lvl]: {...slot, expended: exp}};
+        state.party[i] = {...c, sheet: {...c.sheet, spellSlots: newSlots}};
+        save(); this._render();
+      }
+      // Attack row click — d20 + atk bonus, then roll damage dice. Shift =
+      // advantage, Alt = disadvantage. Crits double damage dice (not modifiers).
+      else if(act==='roll-attack'){
+        const cid = el.dataset.cid;
+        const c = state.party.find(p => p.id === cid);
+        if (!c) return;
+        const atkBonus = parseInt(el.dataset.atk) || 0;
+        const dmgExpr = el.dataset.dmg || '';
+        const name = el.dataset.atkName || 'Attack';
+        const mode = e.shiftKey ? 'adv' : e.altKey ? 'dis' : 'normal';
+        const result = this._rollAttack(c, name, atkBonus, dmgExpr, mode);
+        this._setLastRoll(c, result);
+      }
+      else if(act==='long-rest')  this._longRestAll();
+      else if(act==='short-rest') this._shortRestAll();
+      // Expand-all: set _expanded[c.id] true for every PC. Collapse-all:
+      // clear the map. Single _render redraws every card with the new state.
+      else if(act==='expand-all'){
+        state.party.forEach(c => { this._expanded[c.id] = true; });
+        this._render();
+      }
+      else if(act==='collapse-all'){
+        this._expanded = {};
+        this._render();
+      }
+      // One-click add-or-remove this PC from combat. Calls into combat.js
+      // for the add path so name-numbering, init-mod, portrait, etc. all use
+      // the same code as drag-drop. Remove uses splice + _render.
+      else if(act==='toggle-combat'){
+        const c = state.party[i]; if (!c) return;
+        const cIdx = state.combatants.findIndex(co => co.id === c.id);
+        if (cIdx >= 0){
+          state.combatants.splice(cIdx, 1);
+          // If we removed the active turn, advance to the next combatant or
+          // clear if list is empty. Combat panel re-renders cleanly either way.
+          if (state.activeCombatantId === c.id){
+            state.activeCombatantId = state.combatants[0]?.id || null;
+          }
+          save(); this._render(); panelDefs.combat?._render?.();
+          showToast(c.name + ' removed from combat');
+        } else {
+          // Reuse combat.js's _addPartyToCombat so init-mod / portrait / etc.
+          // get computed the same way as a drag-drop. Falls back to a minimal
+          // push when the combat panel isn't loaded.
+          if (panelDefs.combat && typeof panelDefs.combat._addPartyToCombat === 'function'){
+            panelDefs.combat._addPartyToCombat(i);
+          } else {
+            const dexMod = (c.abilities && typeof c.abilities.dex==='number') ? Math.floor((c.abilities.dex-10)/2) : 0;
+            state.combatants.push({id:c.id, name:c.name, isPC:true, cls:c.cls||'fighter', hp:c.hp, hpMax:c.hpMax, ac:c.ac, initBonus: c.init || dexMod, initiative: c.init || 0, conditions:[]});
+            if (!state.combatRound) state.combatRound = 1;
+            save();
+          }
+          this._render();
+          showToast(c.name + ' added to combat');
+        }
+      }
+      // Condition chip × removes from BOTH combat slot and party-side list
+      // (a chip can come from either). Belt and suspenders.
+      else if(act==='cond-remove'){
+        const cond = el.dataset.cond;
+        const c = state.party[i]; if (!c) return;
+        if (Array.isArray(c.conditions)){
+          c.conditions = c.conditions.filter(x => x !== cond);
+        }
+        const co = state.combatants.find(x => x.id === c.id);
+        if (co && Array.isArray(co.conditions)){
+          co.conditions = co.conditions.filter(x => x !== cond);
+        }
+        save(); this._render(); panelDefs.combat?._render?.();
+      }
+      // "+ Cond" pill — open the same condition list the combat tracker uses.
+      // SEARCH_DATA is the data-loader's flat catalog with cat:'condition'.
+      else if(act==='cond-add'){
+        const c = state.party[i]; if (!c) return;
+        const conds = (typeof SEARCH_DATA !== 'undefined')
+          ? SEARCH_DATA.filter(d => d.cat === 'condition')
+          : [];
+        if (!conds.length){ showToast('Condition list not loaded yet'); return; }
+        const rect = el.getBoundingClientRect();
+        // Show as a context menu — checked entries are already on the PC so
+        // clicking unchecks them, otherwise it adds.
+        const co = state.combatants.find(x => x.id === c.id);
+        const have = new Set([...(c.conditions||[]), ...(co?.conditions||[])]);
+        const items = conds.map(d => ({
+          label: d.name,
+          checked: have.has(d.name),
+          onClick: () => this._toggleCondition(i, d.name),
+        }));
+        showContextMenu(rect.left, rect.bottom + 4, items);
+      }
+      // Inventory CRUD on c.sheet.inventory. Reads stay safe with optional
+      // chains; writes ensure sheet/inventory exist before pushing.
+      else if(act==='inv-add'){
+        const ci = +el.dataset.ci;
+        const c = state.party[ci]; if (!c) return;
+        if (!c.sheet) c.sheet = {};
+        if (!Array.isArray(c.sheet.inventory)) c.sheet.inventory = [];
+        c.sheet.inventory.push({name:'', qty:1, notes:''});
+        save(); this._render();
+      }
+      else if(act==='inv-remove'){
+        const ci = +el.dataset.ci, ii = +el.dataset.ii;
+        const c = state.party[ci]; if (!c?.sheet?.inventory) return;
+        c.sheet.inventory.splice(ii, 1);
+        save(); this._render();
+      }
+      // inv-edit fires from change handler on the row inputs (see input-wire
+      // section below) — not from this click loop.
       else if(act==='hd-rest'){
         const idx = +el.dataset.idx;
         const c = state.party[idx]; if (!c || !c.hitDice) return;
