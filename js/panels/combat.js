@@ -204,6 +204,18 @@ registerPanel('combat',{
       { label: '⚙ Manage quick-pick names…',
         run: () => this._manageQuickNames() },
     );
+    // HP bar visibility toggle — default ON. Stored on settings so it
+    // persists across reloads and syncs across tabs via the existing
+    // workspace-key path. Pure visual toggle — HP numerals always render.
+    const hpBarOn = (state.settings && state.settings.combatHpBar !== false);
+    items.push({
+      label: (hpBarOn ? '☑' : '☐') + ' Show HP bars',
+      run: () => {
+        if (!state.settings) state.settings = {};
+        state.settings.combatHpBar = !hpBarOn;
+        save(); this._render();
+      }
+    });
     return items;
   },
 
@@ -296,7 +308,7 @@ registerPanel('combat',{
       })()}
 
       ${inCombat
-        ? `<div class="combatant-list${compact?' compact':''}${grouped?' grouped':''}" id="combat-list">`+this._renderCombatants()+'</div>'
+        ? `<div class="combatant-list${compact?' compact':''}${grouped?' grouped':''}${(state.settings&&state.settings.combatHpBar===false)?' no-hp-bar':''}" id="combat-list">`+this._renderCombatants()+'</div>'
         : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}
 
       ${inCombat ? this._renderLog() : ''}

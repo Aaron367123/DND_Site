@@ -1669,6 +1669,11 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
   background:rgba(0,0,0,.4);overflow:hidden;
   transition:box-shadow .25s
 }
+/* Toggle: hide HP bars (main card + grouped rows) when the user turns
+   them off via the window-options menu. HP numerals always stay visible
+   — this is purely a "give me back that vertical space" lever. */
+.combatant-list.no-hp-bar .card-hp-bar{display:none}
+.combatant-list.no-hp-bar .group-row-bar{display:none}
 .card-hp-bar-fill{
   position:absolute;left:0;top:0;bottom:0;width:var(--hp-pct);
   background:linear-gradient(90deg,var(--hp-color) 0%,var(--hp-color) 100%);
