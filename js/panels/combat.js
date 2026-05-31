@@ -370,6 +370,23 @@ registerPanel('combat',{
     </div>`;
   },
 
+  // Class-color helper — mirrors the party tracker's palette. Reads c.cls
+  // from the matching party member so monsters fall through to the default
+  // accent (no class stripe).
+  _pcClassColor(p){
+    const COLORS = {
+      barbarian:'#c25450', bard:'#c08fde', cleric:'#e8c75f', druid:'#6b9e6b',
+      fighter:'#a0a0a8', monk:'#c9a050', paladin:'#d4d4dc', ranger:'#6b8f6b',
+      rogue:'#6a6a72', sorcerer:'#e892a0', warlock:'#8a4fa0', wizard:'#5e8fc8',
+      artificer:'#c47a52', blood_hunter:'#7c1f1f',
+    };
+    const cls = String(p.cls || p.sheet?.class || '').toLowerCase();
+    for (const k of Object.keys(COLORS)){
+      if (cls.includes(k.replace('_',' '))) return COLORS[k];
+    }
+    return '';
+  },
+
   // HP bar math — returns 0-100 percent of current/max.
   _hpPct(c){
     const max = c.hpMax || c.hp || 1;
@@ -504,7 +521,13 @@ registerPanel('combat',{
     // clicking pops the stat block. PCs already get a quick-ref popout on
     // click elsewhere — keep their existing path.
     const nameClickable = !isPC && c.baseName;
-    return `<div class="combatant-card ${active?'active':''} ${dead?'dead':''} ${isPC?'pc':'npc'}" data-idx="${i}" draggable="true">
+    // Class-color accent stripe for PCs — pulled from the party tracker's
+    // class palette so the two panels read as one design language. Monsters
+    // get a neutral accent (no class) so the two are also visually distinct.
+    const classColor = isPC && partyMatch ? this._pcClassColor(partyMatch) : '';
+    const cardStyle = classColor ? ` style="--class-color:${classColor}"` : '';
+    return `<div class="combatant-card ${active?'active':''} ${dead?'dead':''} ${isPC?'pc':'npc'}" data-idx="${i}" draggable="true"${cardStyle}>
+      ${isPC?'<div class="card-class-stripe"></div>':''}
       <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
       <div class="card-avatar ${isPC?'pc':'npc'}" data-act="upload-portrait" data-idx="${i}" title="Click to upload portrait">${renderIcon(portrait, c.name)}</div>
       <div class="card-body">

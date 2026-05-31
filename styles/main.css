@@ -539,7 +539,13 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .window-body.drop-active{background:rgba(212,165,116,.04);outline:2px dashed var(--accent);outline-offset:-4px}
 .window-body.drop-active .combat-droptip{display:block}
 
-.combatant-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:5px 7px;display:grid;grid-template-columns:12px 36px 1fr auto;gap:6px;align-items:center;position:relative;transition:border-color .12s,box-shadow .15s}
+.combatant-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 8px 6px 11px;display:grid;grid-template-columns:12px 36px 1fr auto;gap:6px;align-items:center;position:relative;transition:border-color .12s,box-shadow .15s;--class-color:var(--accent)}
+/* Class-color accent stripe — PC cards only. Matches the party tracker's
+   left-edge stripe so the two panels share design language. */
+.combatant-card .card-class-stripe{
+  position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;
+  background:var(--class-color);opacity:.85;pointer-events:none
+}
 /* Active turn — stronger visual: accent border, soft glow, gradient sheen
    that draws the eye at a glance. The pulse keeps it noticeable during
    long combat scenes without being distracting. */
@@ -558,7 +564,21 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .combatant-card.party-row{opacity:.85;grid-template-columns:48px 1fr auto}
 .combatant-card.party-row.in-combat{opacity:1;border-color:rgba(212,165,116,.3)}
 
-.card-avatar{width:36px;height:36px;border-radius:50%;background:var(--panel-3);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;flex-shrink:0}
+.card-avatar{
+  width:36px;height:36px;border-radius:50%;background:var(--panel-3);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;
+  position:relative;flex-shrink:0;border:1px solid var(--border);
+  transition:width .35s ease,height .35s ease,border-color .25s,box-shadow .35s
+}
+/* Active-turn avatar grow — mirrors the party tracker's behavior. Larger
+   avatar + class-colored ring (var --class-color is set inline for PCs;
+   monsters fall back to accent). */
+.combatant-card.active .card-avatar{
+  width:46px;height:46px;
+  border-color:var(--class-color, var(--accent));
+  box-shadow:0 0 0 1px var(--class-color, var(--accent)),0 0 12px rgba(212,165,116,.4)
+}
+.combatant-card.active .card-avatar svg{width:28px;height:28px}
 .card-avatar.pc{background:linear-gradient(135deg,#4a3d2a,#6b5439)}
 .card-avatar.npc{background:linear-gradient(135deg,#3d2a2a,#6b3939)}
 .card-avatar svg{width:22px;height:22px}
@@ -569,9 +589,11 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .icon-upload-btn:hover{background:var(--panel-2)!important;border-color:var(--accent)!important}
 
 .card-body{min-width:0;display:flex;flex-direction:column;gap:4px}
-.card-name{font-size:12px;font-weight:600;color:var(--text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;margin-bottom:1px}
-.card-name-row{display:flex;align-items:center;gap:4px;justify-content:center}
-.card-name-input{flex:1;min-width:0;background:transparent;border:1px solid transparent;color:var(--text);font-size:13px;font-weight:600;padding:2px 4px;border-radius:3px;text-align:center}
+.card-name{font-size:13px;font-weight:600;color:var(--text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;margin-bottom:2px;letter-spacing:.01em}
+.card-name-row{display:flex;align-items:center;gap:4px;justify-content:center;margin-bottom:2px}
+.card-name-input{flex:1;min-width:0;background:transparent;border:1px solid transparent;color:var(--text);font-size:13px;font-weight:600;padding:2px 4px;border-radius:3px;text-align:center;transition:background .12s,border-color .12s;font-family:inherit}
+.card-name-input:hover{background:rgba(255,255,255,.04)}
+.card-name-input:focus{outline:none;background:var(--panel-2);border-color:var(--accent)}
 .card-name-input:hover{border-color:var(--border);background:var(--panel-3)}
 .card-name-input:focus{outline:none;border-color:var(--accent);background:var(--panel-3)}
 /* Compact inline quick-pick — overrides the global select styling
@@ -586,13 +608,24 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .turn-marker{color:var(--accent);font-size:11px;margin-left:4px}
 
 .card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:2px}
-/* Stat cells lay icon ←→ value HORIZONTALLY now — cuts vertical height
-   from ~38px to ~22px, the biggest single source of card "fatness". */
-.card-stat{background:var(--panel-3);border-radius:4px;padding:2px 4px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;min-height:0}
+/* Stat cells — icon ← → value horizontally. HP cell gets a bigger numeral
+   tinted by the HP tier (driven by the existing _hpColor inline style).
+   Transparent input chrome by default; focus reveals the accent border. */
+.card-stat{background:transparent;border-radius:4px;padding:3px 4px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;min-height:0;transition:background .12s}
+.card-stat:hover{background:var(--panel-3)}
 .card-stat .lab{font-size:11px;color:var(--text-muted);line-height:1;flex-shrink:0}
-.card-stat input{background:transparent;border:none;text-align:center;padding:0;font-size:12px;font-weight:600;color:var(--text);width:100%;min-width:0;-moz-appearance:textfield;line-height:1}
-.card-stat input:focus{outline:none;background:rgba(255,255,255,.05);border-radius:2px}
+.card-stat input{
+  background:transparent;border:1px solid transparent;text-align:center;padding:0;
+  font-size:13px;font-weight:700;color:var(--text);width:100%;min-width:0;
+  -moz-appearance:textfield;line-height:1;font-family:inherit;
+  transition:background .12s,border-color .12s;cursor:text;border-radius:3px
+}
+.card-stat input:hover{background:rgba(255,255,255,.04)}
+.card-stat input:focus{outline:none;background:var(--panel-2);border-color:var(--accent)}
 .card-stat input::-webkit-outer-spin-button,.card-stat input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+/* HP cell gets a bolder treatment — the most important number on the card. */
+.card-stat[title="HP"] input{font-size:15px;font-weight:800}
+.card-stat[title="HP"] .lab{font-size:13px;color:#c25450}
 /* Heal/damage strip — vertical tab sitting to the LEFT of the HP cell.
    Always visible, no hover state. Top button heals, bottom button damages,
    middle input holds the amount. Color-coded green/red so the action is
@@ -610,11 +643,12 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
    the rest of the row. */
 .hp-dmg-bar{
   display:grid;grid-template-columns:1fr 36px 1fr 26px;gap:3px;
-  margin-top:3px;
+  margin-top:5px;
+  padding-top:5px;border-top:1px dashed rgba(255,255,255,.06);
   align-items:stretch
 }
 .hp-dmg-bar .hp-dmg-amt{
-  height:18px;font-size:11px;font-weight:600;
+  height:20px;font-size:11px;font-weight:600;
   background:var(--panel-3);border:1px solid var(--border);color:var(--text);
   padding:0 2px;border-radius:3px;text-align:center;-moz-appearance:textfield;line-height:1;
   min-width:0
@@ -622,7 +656,7 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .hp-dmg-bar .hp-dmg-amt::-webkit-outer-spin-button,
 .hp-dmg-bar .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .hp-dmg-bar .hp-dmg-btn{
-  height:18px;font-size:14px;line-height:1;padding:0;
+  height:20px;font-size:14px;line-height:1;padding:0;
   border:1px solid var(--border);background:var(--panel-3);color:var(--text);
   border-radius:3px;cursor:pointer;font-family:inherit;font-weight:700;
   display:flex;align-items:center;justify-content:center;
@@ -704,10 +738,17 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .pc-quickref-empty{font-size:10px;color:var(--text-muted);font-style:italic;margin-top:6px}
 
 /* PARTY */
-/* The min track size is driven by --party-card-w (set on the panel body
-   when the user drags any card's resize grip). Default 210 px when no
-   user preference is saved. */
-.party-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--party-card-w,210px),1fr));gap:10px;padding:10px}
+/* Cards use a FIXED width driven by --party-card-w (set on the panel body
+   when the user drags any card's resize grip). auto-fill packs as many
+   columns as fit; cards never stretch beyond the chosen width so dragging
+   the grip produces a smooth, continuous resize instead of snap-jumps
+   between column-count breakpoints. */
+.party-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, var(--party-card-w, 210px));
+  justify-content:start;
+  gap:10px;padding:10px
+}
 
 /* Resize grip on every card — visible-ish triangle in the bottom-right
    corner. Dragging it grows/shrinks the minimum width for the whole grid.
@@ -1607,11 +1648,13 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .combat-pip-mode .combatant-list{padding:4px}
 .combat-pip-mode .combatant-card{margin-bottom:4px}
 
-/* ─── Card HP bar (full-width thin gradient under the stats row) ────────── */
+/* ─── Card HP bar — full width, thicker, color-tier'd. Matches the party
+   tracker's HP bar so the two panels read consistently. ────────────────── */
 .card-hp-bar{
   --hp-pct:100%; --hp-color:#6b9e6b;
-  position:relative;height:3px;margin-top:2px;border-radius:2px;
-  background:rgba(0,0,0,.35);overflow:hidden
+  position:relative;height:6px;margin-top:4px;border-radius:3px;
+  background:rgba(0,0,0,.4);overflow:hidden;
+  transition:box-shadow .25s
 }
 .card-hp-bar-fill{
   position:absolute;left:0;top:0;bottom:0;width:var(--hp-pct);
@@ -1621,12 +1664,18 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 
 /* ─── Status pill row (concentration / reaction / buffs under the stats) ── */
 .combat-status-row{
-  display:flex;flex-wrap:wrap;gap:2px;margin-top:2px;
-  font-size:9px;line-height:1
+  display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;
+  padding-top:4px;border-top:1px dashed rgba(255,255,255,.06);
+  font-size:10px;line-height:1
 }
+/* Conditions / legendary / death-save rows all sit below status; share the
+   same dashed-divider language so the card has clear functional zones. */
+.combatant-card .conditions{margin-top:4px;padding-top:4px;border-top:1px dashed rgba(255,255,255,.06)}
+.combatant-card .legendary-row{margin-top:4px;padding-top:4px;border-top:1px dashed rgba(255,255,255,.06)}
+.combatant-card .death-saves{margin-top:4px;padding-top:4px;border-top:1px dashed rgba(255,255,255,.06)}
 .combat-status-row .status-pill{
-  display:inline-flex;align-items:center;gap:2px;
-  padding:1px 4px;border-radius:6px;
+  display:inline-flex;align-items:center;gap:3px;
+  padding:2px 7px;border-radius:8px;
   border:1px solid var(--border);background:var(--panel-3);
   color:var(--text-muted);cursor:pointer;
   transition:background .12s,color .12s,border-color .12s;
@@ -1667,7 +1716,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
    because option text uses the system color, not the parent. */
 .hp-dmg-type-wrap{
   position:relative;display:inline-block;
-  width:100%;height:18px;
+  width:100%;height:20px;
   background:var(--panel-3);border:1px solid var(--border);border-radius:3px;
   overflow:hidden;cursor:pointer;
   transition:border-color .12s

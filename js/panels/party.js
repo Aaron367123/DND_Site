@@ -50,7 +50,10 @@ registerPanel('party',{
     // user can't shrink cards to nothing or stretch them off-screen.
     const w = state.settings?.partyCardWidth;
     if (typeof w === 'number' && w > 0){
-      b.style.setProperty('--party-card-w', Math.max(160, Math.min(520, w)) + 'px');
+      // Wide clamp range — narrow enough for a "phone book" look, wide
+      // enough to fill a single column on a big monitor. Drag updates this
+      // live via the grip handler below.
+      b.style.setProperty('--party-card-w', Math.max(140, Math.min(640, w)) + 'px');
     } else {
       b.style.removeProperty('--party-card-w');
     }
@@ -2151,9 +2154,10 @@ registerPanel('party',{
         const startX = e.clientX;
         const startW = card.getBoundingClientRect().width;
         const onMove = (mv) => {
-          // Width grows when dragged right (positive dx). Clamp so cards
-          // can never become unreadable or off-canvas wide.
-          const next = Math.max(160, Math.min(520, Math.round(startW + (mv.clientX - startX))));
+          // Width grows when dragged right (positive dx). Clamp matches the
+          // render-time clamp so saved + live values agree. Wider range
+          // (140-640 px) so "any size" actually feels like any size.
+          const next = Math.max(140, Math.min(640, Math.round(startW + (mv.clientX - startX))));
           b.style.setProperty('--party-card-w', next + 'px');
           this._pendingCardWidth = next;
         };
