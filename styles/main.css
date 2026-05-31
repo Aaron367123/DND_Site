@@ -900,8 +900,25 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .ws-stats{display:flex;gap:8px;margin-left:auto;font-size:10px;color:var(--text-muted)}
 .ws-bar{height:4px;background:rgba(0,0,0,.4);border-radius:2px;overflow:hidden;margin:4px 0 2px}
 .ws-bar-fill{height:100%;transition:width .25s ease,background .25s ease}
-.ws-attacks,.ws-notes{font-size:10px;color:var(--text-muted);margin-top:3px;line-height:1.35}
-.ws-attacks{font-style:italic}
+.ws-cr{font-size:9px;font-weight:600;letter-spacing:.04em;color:var(--text-muted);background:var(--panel-3);padding:1px 5px;border-radius:6px;margin-left:4px}
+.ws-abilities,.ws-senses,.ws-mods{font-size:10px;color:var(--text-muted);margin-top:3px;line-height:1.35}
+.ws-mods{font-style:italic}
+.ws-section{margin-top:4px}
+.ws-section summary{
+  cursor:pointer;font-size:10px;font-weight:600;color:var(--text);
+  list-style:none;padding:2px 0;letter-spacing:.04em;text-transform:uppercase;
+  user-select:none
+}
+.ws-section summary::-webkit-details-marker{display:none}
+.ws-section summary::before{content:'▸';font-size:9px;color:var(--text-muted);margin-right:4px;display:inline-block;transition:transform .12s}
+.ws-section[open] summary::before{transform:rotate(90deg)}
+.ws-block{
+  white-space:pre-wrap;font-family:inherit;font-size:10px;color:var(--text-muted);
+  background:rgba(0,0,0,.18);padding:4px 7px;border-radius:3px;margin:2px 0 0 0;
+  line-height:1.4
+}
+/* Picker badges */
+.ws-cr-warn{color:#c9a050;font-size:11px;margin-left:4px;cursor:help}
 
 /* Features tab — Race / Class / Subclass feature lists, each entry a
    <details> block so a high-level character's wall of features stays
@@ -1346,6 +1363,15 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .combat-status-row .react-pip{background:var(--panel-3);color:var(--text-muted)}
 .combat-status-row .react-pip:hover{color:var(--text);border-color:var(--accent)}
 .combat-status-row .react-pip.spent{opacity:.45;text-decoration:line-through}
+/* PC-only state mirrors from the party tracker (toggle from there). */
+.combat-status-row .rage-pill{
+  background:rgba(194,84,80,.28);border-color:rgba(194,84,80,.6);color:#e8b3b0;
+  cursor:help;letter-spacing:.04em;font-weight:600
+}
+.combat-status-row .wildshape-pill{
+  background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b;
+  cursor:help
+}
 .combat-status-row .buff-pill:not(.empty){background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b}
 .combat-status-row .buff-pill:not(.empty):hover{background:rgba(107,158,107,.34)}
 

@@ -469,7 +469,19 @@ registerPanel('combat',{
     // For PCs, concentration comes from the party slot (single source of
     // truth); for monsters, it lives on the combatant itself.
     const conc = isPC ? (partyMatch?.concentration || '') : (c.concentration || '');
+    // Rage / Wild Shape — PC-only, mirrored from the party slot. Chips are
+    // visual mirrors; toggling them still happens in the party tracker
+    // (single source of truth for these states). Damage routing for both
+    // states is implemented further down in _applyHpDelta.
+    const ragingPc = !!(isPC && partyMatch?.rage);
+    const wildshape = isPC && partyMatch?.wildshape && partyMatch.wildshape.name ? partyMatch.wildshape : null;
     const chips = [];
+    if (ragingPc){
+      chips.push(`<span class="status-pill rage-pill" title="Raging — Advantage on STR checks/saves · Resistance to bludgeoning/piercing/slashing · Can't cast or concentrate · Toggle in the Party tracker">💢 RAGING</span>`);
+    }
+    if (wildshape){
+      chips.push(`<span class="status-pill wildshape-pill" title="Wild Shape as ${esc(wildshape.name)} — damage routes to the beast HP pool (${wildshape.hp}/${wildshape.hpMax||wildshape.hp}). Toggle in the Party tracker.">🐺 ${esc(wildshape.name)}</span>`);
+    }
     if (conc){
       chips.push(`<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">🌀 ${esc(conc)} ×</span>`);
     }
@@ -1239,39 +1251,80 @@ registerPanel('combat',{
     let logParts = [];
     let typeSuffix = '';
     if (delta < 0){
-      // Apply 5e resist / vulnerable / immune from the monster's stat block.
-      // Only the typed-damage path uses these; untyped damage skips the math.
-      // Resist/vuln/immune are looked up on c._raw or the parent _5eData entry.
+      // Apply 5e resist / vulnerable / immune. For PCs, we union the party
+      // slot's resist/immune/vuln (DM-authored) PLUS the beast's lists when
+      // wildshape is active PLUS rage's B/P/S resist for raging barbarians.
+      // For monsters, we use the 5etools _raw block as before.
+      const partyIdx = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
+      const partySlot = partyIdx >= 0 ? state.party[partyIdx] : null;
+      const ws = (partySlot && partySlot.wildshape && partySlot.wildshape.name) ? partySlot.wildshape : null;
       if (dmgType){
-        const raw = c._raw || (c.baseName && typeof _5eData !== 'undefined' && _5eLoaded
-          ? (_5eData.find(d => d.cat==='monster' && d.name.toLowerCase() === c.baseName.toLowerCase())?._raw)
-          : null);
-        const has = (arr, t) => Array.isArray(arr) && arr.some(x => {
-          const s = (typeof x === 'string' ? x : (x?.resist || x?.immune || x?.vulnerable || '')) + '';
+        const t = dmgType.toLowerCase();
+        const has = (arr) => Array.isArray(arr) && arr.some(x => {
+          const s = (typeof x === 'string' ? x : (x?.resist || x?.immune || x?.vulnerable || x?.name || '')) + '';
           return s.toLowerCase().includes(t);
         });
-        const t = dmgType.toLowerCase();
-        if (raw){
-          if (has(raw.immune, t)){
+        const ragingBPS = partySlot?.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
+        if (c.isPC){
+          if (has(partySlot?.immunities) || has(ws?.immunities)){
             remaining = 0;
-            typeSuffix = ` (${dmgType} — immune)`;
-          } else if (has(raw.resist, t)){
-            remaining = Math.ceil(remaining / 2); // remaining negative → smaller magnitude
-            typeSuffix = ` (${dmgType} — resisted, ½)`;
-          } else if (has(raw.vulnerable, t)){
+            typeSuffix = ` (${dmgType} — immune${ws ? ' [beast]' : ''})`;
+          } else if (has(partySlot?.resistances) || has(ws?.resistances) || ragingBPS){
+            remaining = Math.ceil(remaining / 2);
+            typeSuffix = ` (${dmgType} — ${ragingBPS ? 'rage resist' : has(ws?.resistances) ? 'beast resist' : 'resisted'}, ½)`;
+          } else if (has(partySlot?.vulnerabilities) || has(ws?.vulnerabilities)){
             remaining = remaining * 2;
-            typeSuffix = ` (${dmgType} — vulnerable, ×2)`;
+            typeSuffix = ` (${dmgType} — vulnerable, ×2${has(ws?.vulnerabilities) ? ' [beast]' : ''})`;
           } else {
             typeSuffix = ` (${dmgType})`;
           }
         } else {
-          typeSuffix = ` (${dmgType})`;
+          // Monster path — preserve the original 5etools _raw lookup.
+          const raw = c._raw || (c.baseName && typeof _5eData !== 'undefined' && _5eLoaded
+            ? (_5eData.find(d => d.cat==='monster' && d.name.toLowerCase() === c.baseName.toLowerCase())?._raw)
+            : null);
+          if (raw){
+            if (has(raw.immune)){
+              remaining = 0;
+              typeSuffix = ` (${dmgType} — immune)`;
+            } else if (has(raw.resist)){
+              remaining = Math.ceil(remaining / 2);
+              typeSuffix = ` (${dmgType} — resisted, ½)`;
+            } else if (has(raw.vulnerable)){
+              remaining = remaining * 2;
+              typeSuffix = ` (${dmgType} — vulnerable, ×2)`;
+            } else {
+              typeSuffix = ` (${dmgType})`;
+            }
+          } else {
+            typeSuffix = ` (${dmgType})`;
+          }
+        }
+      } else if (partySlot?.rage){
+        // Untyped damage in rage — the resist only applies to B/P/S, so we
+        // can't know without a type. Leave a hint in the log.
+        typeSuffix = ' (untyped — rage applies only to B/P/S)';
+      }
+      // Wild Shape: damage hits the BEAST pool first. Once beast HP ≤ 0,
+      // form drops and overflow continues to druid HP / temp / death-save
+      // territory. Mirrors party.js _applyHpDelta beast routing.
+      if (c.isPC && ws && remaining < 0){
+        const wsHp = ws.hp || 0;
+        if (wsHp > 0){
+          const beastTook = Math.min(wsHp, -remaining);
+          ws.hp = wsHp - beastTook;
+          remaining += beastTook; // remaining is negative → becomes less negative
+          logParts.push(beastTook + ' ' + ws.name);
+          if (ws.hp <= 0){
+            const beastName = ws.name;
+            partySlot.wildshape = null;
+            logParts.push('form drops');
+            if (typeof showToast === 'function') showToast(beastName + ' form drops — ' + c.name + ' reverts');
+          }
         }
       }
-      // Damage path — temp HP first (PC only)
+      // Damage path — temp HP next (PC only, after beast pool).
       if (c.isPC && remaining < 0){
-        const partyIdx = state.party.findIndex(p => p.id === c.id);
-        const partySlot = partyIdx >= 0 ? state.party[partyIdx] : null;
         if (partySlot && (partySlot.tempHp || 0) > 0){
           const drain = Math.min(partySlot.tempHp, -remaining);
           partySlot.tempHp -= drain;
@@ -1301,13 +1354,31 @@ registerPanel('combat',{
         showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
       }
     } else if (delta > 0){
+      // Healing routes to the beast pool first if the PC is wildshaped —
+      // matches the party tracker's heal routing. Overflow above beast cap
+      // spills onto the druid.
+      let remainingHeal = delta;
+      let logHealParts = [];
+      if (c.isPC){
+        const partyIdx = state.party.findIndex(p => p.id === c.id);
+        const partySlot = partyIdx >= 0 ? state.party[partyIdx] : null;
+        const ws = (partySlot && partySlot.wildshape && partySlot.wildshape.name) ? partySlot.wildshape : null;
+        if (ws){
+          const beastCap = ws.hpMax || ws.hp || 0;
+          const beastBefore = ws.hp || 0;
+          ws.hp = Math.min(beastCap, beastBefore + remainingHeal);
+          const beastHealed = ws.hp - beastBefore;
+          remainingHeal -= beastHealed;
+          if (beastHealed > 0) logHealParts.push(beastHealed + ' ' + ws.name);
+        }
+      }
       const before = c.hp || 0;
       const cap = c.hpMax || c.hp || 0;
-      c.hp = Math.min(cap, before + delta);
+      c.hp = Math.min(cap, before + remainingHeal);
       const actual = c.hp - before;
-      // PC healed above 0 — clear death-save tracker.
+      if (actual > 0) logHealParts.push(actual + ' HP');
       if (c.isPC && c.hp > 0 && c.deathSaves){ delete c.deathSaves; }
-      this._log(c.name + ' healed ' + actual + ' HP');
+      this._log(c.name + ' healed ' + (logHealParts.join(' + ') || '0') + ' HP');
     }
     save();
     // Mirror HP changes to the party tracker for PCs (party.js does the

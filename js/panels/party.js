@@ -619,58 +619,175 @@ registerPanel('party',{
     const max = ws.hpMax || ws.hp || 1;
     const pct = Math.max(0, Math.min(100, Math.round((ws.hp / max) * 100)));
     const color = pct > 50 ? '#6b9e6b' : pct > 25 ? '#c9a050' : '#c25450';
-    const attacks = (ws.attacks || '').trim();
+    const mod = v => v == null ? '' : ' (' + (((v-10)>>1) >= 0 ? '+' : '') + ((v-10)>>1) + ')';
+    const ab = [
+      ws.str!=null?`STR ${ws.str}${mod(ws.str)}`:'',
+      ws.dex!=null?`DEX ${ws.dex}${mod(ws.dex)}`:'',
+      ws.con!=null?`CON ${ws.con}${mod(ws.con)}`:'',
+    ].filter(Boolean).join(' · ');
+    const dmgMods = [];
+    if (ws.immunities?.length)      dmgMods.push(`IMM: ${ws.immunities.join(', ')}`);
+    if (ws.resistances?.length)     dmgMods.push(`RES: ${ws.resistances.join(', ')}`);
+    if (ws.vulnerabilities?.length) dmgMods.push(`VUL: ${ws.vulnerabilities.join(', ')}`);
     return `<div class="char-wildshape">
       <div class="ws-head">
         <span class="ws-icon">🐺</span>
-        <span class="ws-name">${esc(ws.name)}</span>
+        <span class="ws-name">${esc(ws.name)}${ws.cr!=null?` <span class="ws-cr">CR ${esc(String(ws.cr))}</span>`:''}</span>
         <span class="ws-stats">
           <span title="Beast HP — damage from the strip drains here first">♥ ${ws.hp}/${ws.hpMax||ws.hp}</span>
-          ${ws.ac!=null ? `<span title="Beast AC">⛨ ${ws.ac}</span>` : ''}
+          ${ws.ac!=null ? `<span title="Beast AC${ws.acDesc?' — '+esc(ws.acDesc):''}">⛨ ${ws.ac}</span>` : ''}
           ${ws.speed ? `<span title="Beast speed">⇒ ${esc(ws.speed)}</span>` : ''}
         </span>
       </div>
       <div class="ws-bar"><div class="ws-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-      ${attacks ? `<div class="ws-attacks" title="Attacks / abilities of this beast form">${esc(attacks)}</div>` : ''}
-      ${ws.notes ? `<div class="ws-notes">${esc(ws.notes)}</div>` : ''}
+      ${ab ? `<div class="ws-abilities">${esc(ab)}</div>` : ''}
+      ${ws.senses ? `<div class="ws-senses">${esc(ws.senses)}</div>` : ''}
+      ${dmgMods.length ? `<div class="ws-mods">${esc(dmgMods.join(' · '))}</div>` : ''}
+      ${ws.traits ? `<details class="ws-section"><summary>Traits</summary><pre class="ws-block">${esc(ws.traits)}</pre></details>` : ''}
+      ${ws.attacks ? `<details class="ws-section" open><summary>Actions</summary><pre class="ws-block">${esc(ws.attacks)}</pre></details>` : ''}
     </div>`;
   },
 
-  // Open a small modal for the beast's stats. On save, mark wildshape active
-  // and re-render. On cancel, no change. The druid's existing concentration
-  // is dropped per 5e RAW when transformation starts (handled here on save).
+  // Wild-Shape beast picker. Pulls beasts from the loaded 5etools dataset
+  // and hydrates the wildshape snapshot from the chosen beast's stat block.
+  //
+  // Druid level gates the eligible CR (5e RAW): lv1 → CR 1/4 (no climb/swim
+  // restrictions removed at lv4), lv4 → CR 1/2, lv8 → CR 1. We show every
+  // beast regardless and add a chip badge for "above your CR" — Circle of
+  // the Moon and homebrew vary, so the DM gets the final call.
   _editWildShape(i){
     const c = state.party[i]; if (!c) return;
+    if (typeof _5eData === 'undefined' || !_5eLoaded){
+      showToast('5e bestiary still loading — try again in a moment');
+      return;
+    }
+    // Beasts only. Filter on the parsed creature type — _raw.type can be
+    // a string or {type, tags}; the stored type field in the catalog is the
+    // human-readable type that data-loader.js builds. We match case-insensitively.
+    const all = _5eData
+      .filter(d => d.cat === 'monster' && /beast/i.test(d._raw?.type || ''))
+      .sort((a,b) => {
+        // Sort by CR first, then name. Low-CR beasts (the ones druids
+        // actually shape into) bubble to the top.
+        const ca = parseFloat(a._raw?.challenge_rating?.cr ?? a._raw?.cr ?? 999);
+        const cb = parseFloat(b._raw?.challenge_rating?.cr ?? b._raw?.cr ?? 999);
+        if (ca !== cb) return ca - cb;
+        return a.name.localeCompare(b.name);
+      });
+    if (!all.length){ showToast('No beasts in the loaded data'); return; }
+
+    const druidLvl = parseInt(c.level || c.sheet?.level || 1, 10) || 1;
+    // CR cap by druid level (vanilla 5e — Circle of the Moon doubles this).
+    const crCap = druidLvl >= 8 ? 1
+                : druidLvl >= 4 ? 0.5
+                : 0.25;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const renderList = (q) => {
+      const qn = (q || '').toLowerCase().trim();
+      const list = backdrop.querySelector('#ws-pick-list');
+      const pool = qn
+        ? all.filter(d => d.name.toLowerCase().includes(qn))
+        : all;
+      list.innerHTML = pool.slice(0, 240).map(d => {
+        const raw = d._raw || {};
+        const cr = raw.challenge_rating?.cr ?? raw.cr;
+        const crStr = (cr == null || cr === '') ? '?' : (typeof cr === 'object' ? (cr.cr || '?') : String(cr));
+        const overCap = typeof cr === 'number' || /^[\d./]+$/.test(crStr)
+          ? (parseFloat(crStr.replace(/^1\/(\d+)$/, (_,n)=>(1/parseInt(n)).toString())) > crCap)
+          : false;
+        const hp = raw.hit_points || raw.hp || '?';
+        const ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || raw.ac || '?';
+        return `<div class="bestiary-pick-row" data-slug="${esc(d._slug)}">
+          <div class="bestiary-pick-left">
+            <span class="bestiary-pick-name">${esc(d.name)}</span>
+            ${overCap?'<span class="ws-cr-warn" title="Above your druid-level CR cap (vanilla 5e) — Circle of the Moon may override">⚠</span>':''}
+          </div>
+          <span class="bestiary-pick-meta">CR ${esc(crStr)} · HP ${esc(String(hp))} · AC ${esc(String(ac))}</span>
+        </div>`;
+      }).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No beasts match.</div>';
+    };
     const cur = c.wildshape || {};
-    showModal('🐺 Wild Shape — ' + c.name, [
-      {id:'name',   label:'Beast name',                  type:'text',   value:cur.name||'',   placeholder:'Brown Bear, Giant Spider, Wolf …'},
-      {id:'hp',     label:'Beast HP (current)',          type:'number', value:cur.hp==null?34:cur.hp, min:0},
-      {id:'hpMax',  label:'Beast HP (max)',              type:'number', value:cur.hpMax==null?34:cur.hpMax, min:1},
-      {id:'ac',     label:'Beast AC',                    type:'number', value:cur.ac==null?11:cur.ac, min:0},
-      {id:'speed',  label:'Beast speed',                 type:'text',   value:cur.speed||'',  placeholder:'40 ft · climb 30 ft · swim 30 ft'},
-      {id:'attacks',label:'Attacks (free text)',         type:'text',   value:cur.attacks||'',placeholder:'Bite +5 (1d8+3 piercing); Claws +5 (2d6+3 slashing)'},
-      {id:'notes',  label:'Notes',                       type:'text',   value:cur.notes||'',  placeholder:'Keen Smell, Charge…'},
-    ], cur.name?'Update':'Transform').then(r => {
-      if (!r || !String(r.name||'').trim()) return;
-      // Save the beast snapshot. Druid's own HP/AC stay unchanged.
-      const ws = {
-        name:    String(r.name).trim(),
-        hp:      Math.max(0, parseInt(r.hp)    || 0),
-        hpMax:   Math.max(1, parseInt(r.hpMax) || 1),
-        ac:                  parseInt(r.ac)    || 0,
-        speed:   String(r.speed||'').trim(),
-        attacks: String(r.attacks||'').trim(),
-        notes:   String(r.notes||'').trim(),
-      };
-      ws.hp = Math.min(ws.hp, ws.hpMax);
-      const wasFresh = !c.wildshape;
-      state.party[i] = {...c, wildshape: ws};
-      // Druids drop concentration when they wildshape (5e RAW).
-      if (wasFresh && state.party[i].concentration){
-        state.party[i].concentration = null;
-      }
-      save(); this._render();
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:540px;max-width:92vw">
+      <h3>🐺 Wild Shape — ${esc(c.name)}</h3>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--text-muted)">Druid lv ${druidLvl} · CR cap ≤ ${crCap}</span>
+        <span style="flex:1"></span>
+        ${cur.name ? `<button class="btn small" id="ws-revert" title="Drop the current form">↩ Revert (${esc(cur.name)})</button>` : ''}
+      </div>
+      <input type="search" id="ws-pick-search" placeholder="🔎 Search beasts (Wolf, Bear, Cat, …)" autocomplete="off"
+        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
+      <div id="ws-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
+      <div class="modal-actions"><button class="btn" id="ws-pick-close">Close</button></div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    renderList('');
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#ws-pick-search').addEventListener('input', e => renderList(e.target.value));
+    backdrop.querySelector('#ws-pick-close').addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    backdrop.querySelector('#ws-revert')?.addEventListener('click', () => {
+      close();
+      this._endWildShape(i);
     });
+    backdrop.querySelector('#ws-pick-list').addEventListener('click', e => {
+      const row = e.target.closest('.bestiary-pick-row'); if (!row) return;
+      const d = all.find(x => x._slug === row.dataset.slug); if (!d) return;
+      this._applyWildShape(i, d);
+      close();
+    });
+    setTimeout(() => backdrop.querySelector('#ws-pick-search').focus(), 30);
+  },
+
+  // Snapshot a 5etools beast entry into c.wildshape. Pulls HP / AC / speed /
+  // actions / traits / saves / damage modifiers verbatim from the parsed
+  // _raw block. Druid concentration drops on initial transform (5e RAW).
+  _applyWildShape(i, beast){
+    const c = state.party[i]; if (!c || !beast) return;
+    const raw = beast._raw || {};
+    const ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || 10;
+    const acDesc = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.desc : '') || '';
+    const hp = parseInt(raw.hit_points || raw.hp || 1) || 1;
+    const speed = typeof raw.speed === 'string' ? raw.speed : (raw.speed?.walk ? `${raw.speed.walk} ft` : '—');
+    // Format actions as multi-line "Name: description". Cap each desc at a
+    // sensible length so the overlay doesn't grow unbounded.
+    const fmtAction = a => {
+      const desc = String(a.desc || '').replace(/\s+/g, ' ').trim();
+      return a.name + (desc ? ': ' + (desc.length > 220 ? desc.slice(0, 217) + '…' : desc) : '');
+    };
+    const actions = (raw.actions || []).map(fmtAction).join('\n');
+    const traits  = (raw.special_abilities || []).map(fmtAction).join('\n');
+    // Stash damage-modifier arrays so the wildshape damage handler can
+    // honor them (e.g. a Brown Bear has no resistances, but an Earth
+    // Elemental shape from Circle of Spores etc. would).
+    const ws = {
+      name: beast.name,
+      slug: beast._slug,
+      source: beast._source,
+      hp, hpMax: hp,
+      ac, acDesc,
+      speed,
+      // Ability scores carry over so the DM can see them on the overlay.
+      str: raw.strength, dex: raw.dexterity, con: raw.constitution,
+      int: raw.intelligence, wis: raw.wisdom, cha: raw.charisma,
+      senses: raw.senses || '',
+      attacks: actions,
+      traits,
+      resistances:    (raw.damage_resistances    || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
+      immunities:     (raw.damage_immunities     || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
+      vulnerabilities:(raw.damage_vulnerabilities|| []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
+      cr: raw.challenge_rating?.cr ?? raw.cr ?? null,
+    };
+    const wasFresh = !c.wildshape;
+    state.party[i] = {...c, wildshape: ws};
+    // Druids drop concentration when they wildshape (5e RAW).
+    if (wasFresh && state.party[i].concentration){
+      state.party[i].concentration = null;
+    }
+    save(); this._render();
+    showToast(c.name + ' transforms into ' + ws.name);
   },
 
   // Drop wild shape — revert to druid form. Carry any HP overflow if the
@@ -815,21 +932,23 @@ registerPanel('party',{
       let typeSuffix = '';
       // Resist/immune/vulnerable math — fires whenever a type is supplied.
       // Rage extends this with bludgeoning/piercing/slashing resist while
-      // c.rage is true (5e barbarian RAW). The math walks immune → resist
-      // → vuln in priority order; rage just adds to the resist set.
+      // c.rage is true (5e barbarian RAW). When wildshape is active the
+      // beast's own resist/immune/vuln lists ALSO apply (the beast is the
+      // body taking the hit). Order of priority is immune → resist → vuln.
       if (dmgType){
         const t = String(dmgType).toLowerCase();
         const has = (arr) => Array.isArray(arr) && arr.some(x => String(x).toLowerCase() === t);
+        const ws = c.wildshape;
         const ragingBPS = c.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
-        if (has(c.immunities)){
+        if (has(c.immunities) || has(ws?.immunities)){
           remaining = 0;
-          typeSuffix = ' (' + dmgType + ' — immune)';
-        } else if (has(c.resistances) || ragingBPS){
+          typeSuffix = ' (' + dmgType + ' — immune' + (ws ? ' [beast]' : '') + ')';
+        } else if (has(c.resistances) || has(ws?.resistances) || ragingBPS){
           remaining = Math.floor(remaining / 2);
-          typeSuffix = ' (' + dmgType + (ragingBPS ? ' — rage resist, ½' : ' — resisted, ½') + ')';
-        } else if (has(c.vulnerabilities)){
+          typeSuffix = ' (' + dmgType + (ragingBPS ? ' — rage resist, ½' : has(ws?.resistances) ? ' — beast resist, ½' : ' — resisted, ½') + ')';
+        } else if (has(c.vulnerabilities) || has(ws?.vulnerabilities)){
           remaining = remaining * 2;
-          typeSuffix = ' (' + dmgType + ' — vulnerable, ×2)';
+          typeSuffix = ' (' + dmgType + ' — vulnerable, ×2' + (has(ws?.vulnerabilities) ? ' [beast]' : '') + ')';
         } else {
           typeSuffix = ' (' + dmgType + ')';
         }
