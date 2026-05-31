@@ -278,8 +278,6 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="next" title="Advance turn">▶</button>
         <button class="btn icon-btn" data-act="add" title="Add custom combatant">+</button>
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
-        ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for NPCs (PCs keep their entered value if non-zero)">🎲</button>':''}
-        ${inCombat?'<button class="btn icon-btn" data-act="sort-init" title="Sort by initiative (Dex modifier breaks ties)">⇅</button>':''}
         <button class="btn icon-btn ${compact?'active':''}" data-act="toggle-compact" title="${compact?'Show full cards':'Compact card mode'}">${compact?'▤':'▦'}</button>
         <button class="btn icon-btn ${grouped?'active':''}" data-act="toggle-group" title="${grouped?'Show every monster individually':'Group identical monsters into one card'}">${grouped?'▣':'⊞'}</button>
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
@@ -554,8 +552,6 @@ registerPanel('combat',{
       const act=el.dataset.act;
       if(act==='next')                this._nextTurn();
       else if(act==='prev')           this._prevTurn();
-      else if(act==='roll-init')      this._rollInitiative();
-      else if(act==='sort-init')      this._sortByInitiative();
       else if(act==='toggle-compact'){ state.settings.combatCompact = !state.settings.combatCompact; save(); this._render(); }
       else if(act==='toggle-group')  { state.settings.combatGroupSimilar = !state.settings.combatGroupSimilar; save(); this._render(); }
       else if(act==='toggle-reaction'){
