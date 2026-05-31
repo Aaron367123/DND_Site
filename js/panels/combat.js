@@ -1377,10 +1377,10 @@ registerPanel('combat',{
       this._log(c.name + ' healed ' + (logHealParts.join(' + ') || '0') + ' HP');
     }
     save();
-    // Mirror HP changes to the party tracker for PCs (party.js does the
-    // reverse via syncPartyToCombat).
+    // Mirror HP changes to the party tracker for PCs. syncCombatToParty()
+    // itself triggers panelDefs.party._render() — don't re-render party
+    // afterwards (was a double-render that lagged every HP click).
     if (c.isPC && typeof syncCombatToParty === 'function') syncCombatToParty(c.id);
-    if (c.isPC) panelDefs.party?._render?.();
     this._render();
   },
 

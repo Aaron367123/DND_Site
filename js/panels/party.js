@@ -1027,11 +1027,11 @@ registerPanel('party',{
       }
     }
     save();
+    // Mirror to the matching combat slot. syncPartyToCombat() itself calls
+    // panelDefs.combat._render() so we don't need to re-render combat
+    // separately — that was the double-render that made HP ticks feel laggy.
     syncPartyToCombat(i);
     this._render();
-    // Combat panel might be showing this PC's card — keep its HP value in
-    // sync without forcing the DM to click into it.
-    panelDefs.combat?._render?.();
   },
 
   // Long rest applied to the whole party. 5e RAW:
@@ -1054,6 +1054,18 @@ registerPanel('party',{
         if (ok) this._applyLongRest();
       });
   },
+  // Cheap inline mirror — same field copy as syncPartyToCombat() does, but
+  // WITHOUT triggering a panel re-render. Use this inside batched paths
+  // (long rest, short rest) so we re-render combat ONCE at the end instead
+  // of N times in the loop.
+  _mirrorPartyToCombatSilent(partyIdx){
+    const p = state.party[partyIdx]; if (!p) return;
+    const ci = state.combatants.findIndex(c => c.id === p.id);
+    if (ci >= 0){
+      state.combatants[ci] = {...state.combatants[ci], hp:p.hp, hpMax:p.hpMax, ac:p.ac};
+    }
+  },
+
   _applyLongRest(){
     state.party.forEach((c, i) => {
       // HP: stabilize downed PCs at 1, else full heal.
@@ -1077,8 +1089,8 @@ registerPanel('party',{
       // wildshape ends at the druid's choice or when its hours expire).
       c.rage = false;
       c.wildshape = null;
-      // Mirror to combat tracker.
-      syncPartyToCombat(i);
+      // Silent mirror — one combat render at the bottom, not N.
+      this._mirrorPartyToCombatSilent(i);
     });
     save();
     this._render();
@@ -1113,7 +1125,7 @@ registerPanel('party',{
           return r;
         });
       }
-      syncPartyToCombat(i);
+      this._mirrorPartyToCombatSilent(i);
     });
     save();
     this._render();
