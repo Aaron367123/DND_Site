@@ -334,8 +334,26 @@
 
       // Pass 2: ensure Dropbox files exist locally + download fresh content
       // when their rev has changed. Collect work to download in parallel.
+      // First — if a file is in our pendingDeletes set (a previous delete
+      // failed), re-attempt the delete instead of re-creating it locally.
+      // This is the self-heal path for "file keeps reappearing after I
+      // deleted it" — the user shouldn't have to manually delete twice.
+      const pending = _state.pendingDeletes || {};
       const filesToFetch = [];
       for (const f of files) {
+        if (pending[f.path_lower]){
+          // Retry the delete in the background. If it succeeds the next
+          // fullSync won't see the file. Capped at 5 attempts.
+          const attempts = (pending[f.path_lower].attempts || 0);
+          if (attempts < 5){
+            deletePath(f.path_display).catch(()=>{});
+            continue; // skip creating a local entry for it
+          } else {
+            // Give up — surface and let the user clear it via Dropbox UI.
+            console.warn('[dropboxSync] gave up on pending delete after 5 attempts:', f.path_display);
+            delete pending[f.path_lower];
+          }
+        }
         const rel = f.path_display.slice((np || '').length).replace(/^\//, '');
         const parts = rel.split('/');
         const parentParts = parts.slice(0, -1);
@@ -450,6 +468,13 @@
       } else if (tag === 'file' && /\.md$/i.test(entry.name)) {
         const prevRev = _state.fileRevs[entry.path_lower];
         if (prevRev === entry.rev) continue; // already current
+        // Pending-delete guard: a previous delete request failed and the
+        // file still sits on Dropbox. Re-attempt the delete instead of
+        // re-creating it locally so the user's intent (a delete) wins.
+        if (_state.pendingDeletes && _state.pendingDeletes[entry.path_lower]){
+          deletePath(entry.path_display).catch(()=>{});
+          continue;
+        }
         let item = _findItemByPath(entry.path_display, data.items);
         if (!item) {
           // New file from outside — create item under its folder chain.
@@ -516,12 +541,32 @@
     try {
       await _api('/files/delete_v2', { path });
       delete _state.fileRevs[path.toLowerCase()];
+      // Remember the deletion so a poll that races in BEFORE this delete
+      // reaches the cursor stream doesn't resurrect the file. Cleared on
+      // confirmed delete event, or on a successful re-delete.
+      delete (_state.pendingDeletes || {})[path.toLowerCase()];
       _saveState();
+      console.log('[dropboxSync] deleted', path);
     } catch (e) {
+      const msg = String(e.message);
       // path/not_found means the file was already gone — silent success.
-      if (!String(e.message).includes('not_found')) {
-        console.error('[dropboxSync] delete failed', path, e.message);
+      if (msg.includes('not_found')) {
+        delete _state.fileRevs[path.toLowerCase()];
+        _saveState();
+        return;
       }
+      console.error('[dropboxSync] delete failed', path, msg);
+      if (typeof showToast === 'function'){
+        showToast('Dropbox delete failed for ' + path + ' — check console. Will retry.');
+      }
+      // Track for retry — next poll re-attempts. Without this, the file
+      // stays on Dropbox and reappears locally on the next fullSync().
+      if (!_state.pendingDeletes) _state.pendingDeletes = {};
+      _state.pendingDeletes[path.toLowerCase()] = { path, ts: Date.now(), attempts: ((_state.pendingDeletes[path.toLowerCase()]||{}).attempts || 0) + 1 };
+      _saveState();
+      // Don't re-throw — callers are fire-and-forget. The retry stash +
+      // toast already surface the failure, and a thrown rejection here
+      // just spams the console with "Uncaught (in promise)".
     }
   }
   async function movePath(fromPath, toPath) {
