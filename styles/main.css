@@ -586,10 +586,6 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .turn-marker{color:var(--accent);font-size:11px;margin-left:4px}
 
 .card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:2px}
-/* When a combatant's HP is visible, an extra narrow column on the left
-   holds the always-visible heal/damage strip. The HP/AC/Init cells still
-   each take 1fr of the remaining width. */
-.card-stats.has-dmg-strip{grid-template-columns:auto 1fr 1fr 1fr}
 /* Stat cells lay icon ←→ value HORIZONTALLY now — cuts vertical height
    from ~38px to ~22px, the biggest single source of card "fatness". */
 .card-stat{background:var(--panel-3);border-radius:4px;padding:2px 4px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;min-height:0}
@@ -603,11 +599,47 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
    unmistakable even when you tap fast. Sized big enough to be comfortable
    tap/click targets on both desktop and touch — accepting that the card
    grows a bit vertically in exchange. */
-.hp-dmg-strip{display:flex;flex-direction:column;gap:1px;align-items:stretch;padding:0}
-.hp-dmg-strip .hp-dmg-amt{width:24px;height:13px;font-size:10px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;line-height:1}
+/* Heal/damage bar — horizontal row spanning the card body width, sitting
+   between the stats grid and the HP bar. The `−` button is on the LEFT
+   because damage is the more frequent action; the amount input is centered
+   so it reads naturally; `+` heals on the right; the type select pins
+   to the far right.
+
+   Layout: [−────────] [ 5 ] [+] [fi]
+   The two value/type controls auto-size; the buttons stretch to fill
+   the rest of the row. */
+.hp-dmg-bar{
+  display:grid;grid-template-columns:1fr 36px 1fr 26px;gap:3px;
+  margin-top:3px;
+  align-items:stretch
+}
+.hp-dmg-bar .hp-dmg-amt{
+  height:18px;font-size:11px;font-weight:600;
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text);
+  padding:0 2px;border-radius:3px;text-align:center;-moz-appearance:textfield;line-height:1;
+  min-width:0
+}
+.hp-dmg-bar .hp-dmg-amt::-webkit-outer-spin-button,
+.hp-dmg-bar .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.hp-dmg-bar .hp-dmg-btn{
+  height:18px;font-size:14px;line-height:1;padding:0;
+  border:1px solid var(--border);background:var(--panel-3);color:var(--text);
+  border-radius:3px;cursor:pointer;font-family:inherit;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s,border-color .12s,color .12s
+}
+.hp-dmg-bar .hp-dmg-btn.dmg{color:#c25450}
+.hp-dmg-bar .hp-dmg-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
+.hp-dmg-bar .hp-dmg-btn.heal{color:#6b9e6b}
+.hp-dmg-bar .hp-dmg-btn.heal:hover{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.6)}
+
+/* Backward-compat stub: group-row still uses old class names .hp-dmg-strip
+   for its inline mini-controls. Keep those rules minimal. */
+.hp-dmg-strip{display:flex;flex-direction:row;gap:2px;align-items:center}
+.hp-dmg-strip .hp-dmg-amt{width:24px;height:15px;font-size:10px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;line-height:1}
 .hp-dmg-strip .hp-dmg-amt::-webkit-outer-spin-button,
 .hp-dmg-strip .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.hp-dmg-strip .hp-dmg-btn{width:24px;height:15px;font-size:12px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.hp-dmg-strip .hp-dmg-btn{width:22px;height:15px;font-size:12px;line-height:1;padding:0;border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .hp-dmg-strip .hp-dmg-btn.dmg{color:#c25450}
 .hp-dmg-strip .hp-dmg-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
 .hp-dmg-strip .hp-dmg-btn.heal{color:#6b9e6b}
@@ -763,26 +795,70 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .party-toolbar{display:flex;gap:6px;padding:8px 10px 0;align-items:center;flex-wrap:wrap}
 .party-toolbar .btn.small{font-size:11px;padding:4px 10px}
 
-/* Heal/damage strip on the party card. Compact vertical column to the right
-   of the HP / Max / Temp inputs. Mirrors the combat tracker's strip. */
-.party-hp-dmg{display:flex;flex-direction:column;gap:1px;align-items:stretch;margin-left:auto}
+/* Heal/damage bar on the party card — horizontal row below the HP fields.
+   Matches the combat tracker's new layout: [−────] [amt] [+] [type]. */
+.party-hp-dmg{
+  display:grid;grid-template-columns:1fr 40px 1fr 30px;gap:4px;
+  margin-top:4px;
+  align-items:stretch
+}
 .party-hp-dmg .party-hp-amt{
-  width:26px;height:13px;font-size:10px;font-weight:600;
+  height:20px;font-size:11px;font-weight:600;
   background:var(--panel-3);border:1px solid var(--border);color:var(--text);
-  padding:0;border-radius:2px;text-align:center;-moz-appearance:textfield;line-height:1
+  padding:0 2px;border-radius:3px;text-align:center;-moz-appearance:textfield;line-height:1;
+  min-width:0
 }
 .party-hp-dmg .party-hp-amt::-webkit-outer-spin-button,
 .party-hp-dmg .party-hp-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .party-hp-btn{
-  width:26px;height:15px;font-size:12px;line-height:1;padding:0;
+  height:20px;font-size:14px;line-height:1;padding:0;
   border:1px solid var(--border);background:var(--panel-3);color:var(--text);
-  border-radius:2px;cursor:pointer;font-family:inherit;font-weight:700;
-  display:inline-flex;align-items:center;justify-content:center
+  border-radius:3px;cursor:pointer;font-family:inherit;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s,border-color .12s,color .12s
 }
 .party-hp-btn.dmg{color:#c25450}
 .party-hp-btn.dmg:hover{background:rgba(194,84,80,.22);border-color:rgba(194,84,80,.6)}
 .party-hp-btn.heal{color:#6b9e6b}
 .party-hp-btn.heal:hover{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.6)}
+
+/* Damage-type select in the party heal/damage bar. Pinned to far right of
+   the grid; option text is 2-letter abbreviation, tooltip has full name. */
+.party-hp-dmg .party-hp-type{
+  width:100%;height:20px;font-size:10px;
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);
+  border-radius:3px;cursor:pointer;
+  -moz-appearance:none;-webkit-appearance:none;appearance:none;
+  padding:0;text-align:center;line-height:1;
+  text-transform:uppercase;letter-spacing:.04em
+}
+.party-hp-dmg .party-hp-type:hover{border-color:var(--accent);color:var(--text)}
+.party-hp-dmg .party-hp-type:not([value=""]):valid{color:var(--accent)}
+
+/* Resistance editor — chip grid inside the Stats tab. Each chip cycles
+   through 4 states; the dash/RES/IMM/VUL label color-codes the state. */
+.sheet-block .resist-legend{font-size:9px;color:var(--text-dim);font-weight:400;margin-left:6px;text-transform:none;letter-spacing:0}
+.resist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:3px;margin-top:4px}
+.resist-chip{
+  display:flex;align-items:center;justify-content:space-between;gap:4px;
+  padding:3px 7px;border-radius:4px;
+  background:var(--panel-3);border:1px solid var(--border);
+  color:var(--text-muted);font-size:10px;cursor:pointer;font-family:inherit;
+  transition:background .12s,border-color .12s,color .12s
+}
+.resist-chip:hover{border-color:var(--accent)}
+.resist-chip-name{text-transform:capitalize;font-weight:500}
+.resist-chip-state{font-size:8px;font-weight:700;letter-spacing:.08em;opacity:.6}
+.resist-chip.none{}
+.resist-chip.res{background:rgba(107,158,107,.18);border-color:rgba(107,158,107,.45);color:#9bc99b}
+.resist-chip.res .resist-chip-state{opacity:1;color:#7fb87f}
+.resist-chip.imm{background:rgba(140,108,209,.20);border-color:rgba(140,108,209,.55);color:#b6a3e8}
+.resist-chip.imm .resist-chip-state{opacity:1;color:#a48ee0}
+.resist-chip.vul{background:rgba(194,84,80,.20);border-color:rgba(194,84,80,.5);color:#e8b3b0}
+.resist-chip.vul .resist-chip-state{opacity:1;color:#d68a87}
+.sheet-resist-collapsed{padding:0;background:transparent;border:none}
+.sheet-resist-collapsed .btn.small{font-size:10px;opacity:.7}
+.sheet-resist-collapsed .btn.small:hover{opacity:1}
 
 /* Slot pips are now interactive — restore cursor + a hover state so the
    affordance is obvious. The available/spent colors stay as defined. */
@@ -1164,6 +1240,13 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 }
 .combat-status-row .status-pill.empty{opacity:.55;border-style:dashed}
 .combat-status-row .status-pill.empty:hover{opacity:1}
+/* Trailing "+" pill — opens the status menu. Very compact (1ch wide) so a
+   card with zero active statuses adds only ~14 px of vertical space. */
+.combat-status-row .status-pill.status-add{
+  padding:1px 5px;font-size:11px;font-weight:700;line-height:1;
+  background:transparent;border:1px dashed var(--border);opacity:.55
+}
+.combat-status-row .status-pill.status-add:hover{opacity:1;border-style:solid;border-color:var(--accent);color:var(--accent)}
 .combat-status-row .conc-pill:not(.empty){background:rgba(140,108,209,.22);border-color:rgba(140,108,209,.55);color:#b6a3e8}
 .combat-status-row .conc-pill:not(.empty):hover{background:rgba(140,108,209,.34)}
 .combat-status-row .react-pip{background:var(--panel-3);color:var(--text-muted)}
@@ -1172,15 +1255,30 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .combat-status-row .buff-pill:not(.empty){background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b}
 .combat-status-row .buff-pill:not(.empty):hover{background:rgba(107,158,107,.34)}
 
-/* ─── Damage-type select in the hp-dmg strip ────────────────────────────── */
+/* ─── Damage-type select in the hp-dmg bar (combat & legacy strip) ───── */
+/* Options carry the 2-letter abbreviation (fi, co, bl…); tooltip carries
+   the full type name; the full string is what gets passed to _applyHpDelta. */
+.hp-dmg-bar .hp-dmg-type{
+  width:100%;height:18px;font-size:10px;
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);
+  border-radius:3px;cursor:pointer;
+  -moz-appearance:none;-webkit-appearance:none;appearance:none;
+  padding:0;text-align:center;line-height:1;
+  text-transform:uppercase;letter-spacing:.04em
+}
+.hp-dmg-bar .hp-dmg-type:hover{border-color:var(--accent);color:var(--text)}
+.hp-dmg-bar .hp-dmg-type:not([value=""]):valid{color:var(--accent)}
+/* Same chip in the legacy column strip used by group rows. */
 .hp-dmg-strip .hp-dmg-type{
-  width:26px;height:15px;font-size:9px;
-  background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+  width:24px;height:15px;font-size:9px;
+  background:var(--panel-2);border:1px solid var(--border);color:var(--text-muted);
   border-radius:2px;cursor:pointer;
   -moz-appearance:none;-webkit-appearance:none;appearance:none;
-  padding:0 1px;text-align:center
+  padding:0;text-align:center;line-height:1;
+  text-transform:uppercase;letter-spacing:.04em
 }
-.hp-dmg-strip .hp-dmg-type:hover{border-color:var(--accent)}
+.hp-dmg-strip .hp-dmg-type:hover{border-color:var(--accent);color:var(--text)}
+.hp-dmg-strip .hp-dmg-type:not([value=""]):valid{color:var(--accent)}
 
 /* ─── Compact mode — slim padding, hide portrait/log to fit more cards ──── */
 .combatant-list.compact .combatant-card{padding:5px;gap:5px;grid-template-columns:14px 1fr auto}

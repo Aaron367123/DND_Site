@@ -20,29 +20,21 @@ registerPanel('party',{
     ];
     if (state.party.length){
       items.push({ label:'📊 Party Skills', run: () => this._openPartySkills() });
+      // Rest actions live in the window menu now (instead of a top-of-panel
+      // toolbar) so the panel itself stays card-focused. Long rest is a
+      // destructive-ish action (overwrites HP / slots / hit dice / etc.) so
+      // it gets a confirm; short rest is a softer touch.
+      items.push({ label:'🛌 Long rest (party)',  run: () => this._longRestAll() });
+      items.push({ label:'💤 Short rest (party)', run: () => this._shortRestAll() });
     }
     return items;
   },
 
   _render(){
     const b=this._body;if(!b)return;
-    const hasParty = state.party.length > 0;
-    // Top toolbar — quick party-wide actions. Rest buttons only render when
-    // there's actually a party (otherwise they're nonsense). Kept short so
-    // the panel still feels card-first, not toolbar-first.
-    // Expand/Collapse-all is meaningful only when at least one card has a
-    // sheet attached — but we keep the buttons rendered regardless for
-    // muscle memory; if no sheet, the click is a no-op.
-    const anyExpanded = state.party.some(c => this._expanded[c.id]);
-    const toolbar = hasParty
-      ? `<div class="party-toolbar">
-          <button class="btn small" data-act="long-rest" title="Long rest: HP to max, all spell slots restored, half hit dice back, exhaustion −1, concentration dropped">🛌 Long rest</button>
-          <button class="btn small" data-act="short-rest" title="Short rest: spend hit dice to heal (you'll be prompted per PC)">💤 Short rest</button>
-          <span style="flex:1"></span>
-          <button class="btn small" data-act="${anyExpanded?'collapse-all':'expand-all'}" title="${anyExpanded?'Collapse every open character sheet':'Open every character sheet at once'}">${anyExpanded?'▲ Collapse all':'▼ Expand all'}</button>
-        </div>`
-      : '';
-    b.innerHTML = toolbar + '<div class="party-grid">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
+    // Long rest / Short rest moved into the window-options menu (menuItems)
+    // so the panel is card-only — no top toolbar competing with the grid.
+    b.innerHTML = '<div class="party-grid">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
     this._wire();
   },
 
@@ -204,11 +196,27 @@ registerPanel('party',{
           +'<span class="char-hp-sep">/</span>'
           +'<input class="char-hp-max" type="number" value="'+c.hpMax+'" data-field="hpMax" data-idx="'+i+'" title="Max HP">'
           +'<input class="char-hp-temp" type="number" value="'+(c.tempHp||0)+'" data-field="tempHp" data-idx="'+i+'" title="Temporary HP (absorbs damage first)" min="0">'
-          +'<div class="party-hp-dmg" data-idx="'+i+'" title="Type amount, click + to heal or − to damage (drains temp HP first)">'
-            +'<button class="party-hp-btn heal" data-act="hp-heal" data-idx="'+i+'" title="Heal (clamped to max)">+</button>'
-            +'<input class="party-hp-amt" type="number" value="'+(this._lastDmgAmount||5)+'" min="0" max="999" data-idx="'+i+'" title="Heal / damage amount">'
-            +'<button class="party-hp-btn dmg" data-act="hp-damage" data-idx="'+i+'" title="Damage (drains temp HP first)">−</button>'
-          +'</div>'
+          +'<span style="font-size:10px;color:var(--text-dim);margin-left:auto">HP</span>'
+        +'</div>'
+        // Horizontal heal/damage row sits beside/below the HP fields, full
+        // width of the card. Bigger tap targets, clearer grouping, and no
+        // more 4-tall column that fights with the HP/max/temp inputs above.
+        +'<div class="party-hp-dmg" data-idx="'+i+'" title="Type amount, click − to damage (drains temp HP first, applies resist/vuln/immune) or + to heal">'
+          +'<button class="party-hp-btn dmg" data-act="hp-damage" data-idx="'+i+'" title="Damage">−</button>'
+          +'<input class="party-hp-amt" type="number" value="'+(this._lastDmgAmount||5)+'" min="0" max="999" data-idx="'+i+'" title="Heal / damage amount">'
+          +'<button class="party-hp-btn heal" data-act="hp-heal" data-idx="'+i+'" title="Heal (clamped to max)">+</button>'
+          +(()=>{
+            const dmgTypes = [
+              ['', '—'],
+              ['acid','ac'],['bludgeoning','bl'],['cold','co'],['fire','fi'],
+              ['force','fo'],['lightning','li'],['necrotic','ne'],['piercing','pi'],
+              ['poison','po'],['psychic','ps'],['radiant','ra'],['slashing','sl'],['thunder','th'],
+            ];
+            const lastType = this._lastDmgType || '';
+            return '<select class="party-hp-type" data-idx="'+i+'" title="Damage type — applies this PC\'s resist/vuln/immune (set them in the Stats tab; current: '+(lastType||'untyped')+')">'
+              + dmgTypes.map(([val,abbr])=>'<option value="'+val+'"'+(val===lastType?' selected':'')+' title="'+(val||'untyped')+'">'+abbr+'</option>').join('')
+              + '</select>';
+          })()
         +'</div>'
         +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+(downed?' downed':'')+'">'
           +'<div class="hp-bar-fill" style="width:'+hpPct+'%;background:'+hpColor+'"></div>'
@@ -240,16 +248,12 @@ registerPanel('party',{
         +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
       +'</div>'
-      // Status row — concentration pill + exhaustion badge. Always rendered;
-      // the contents are minimal when neither is set (just "🌀 +" and
-      // "⚠ Exh +"). Clicking the concentration pill prompts for a spell
-      // name (or clears if already set); the exhaustion +/- buttons step
-      // 0–6 with auto-hide when zero.
-      + this._statusRow(c, i)
-      // Active-conditions chip row — cross-references the matching combatant
-      // by id (PCs in combat carry their condition list on state.combatants,
-      // not on state.party). Hidden when no conditions are active.
-      + this._conditionsRow(c)
+      // Concentration / Exhaustion / Conditions removed from the party card
+      // to keep it focused on HP / stats / resources / inspiration. Those
+      // statuses still exist and still work — they're managed from the
+      // combat tracker's per-card status menu (the "+" pill on each combat
+      // card opens Set Conc / Mark Reaction / Add Buff). Concentration data
+      // still lives on c.concentration and damage triggers the save toast.
       // Hit dice — only shown when the character has hitDice info from PDF import.
       +this._hitDiceRow(c,i)
       // Resources
@@ -334,6 +338,50 @@ registerPanel('party',{
       <div style="display:flex;gap:6px;margin-top:6px">
         <button class="btn small" data-act="inv-add" data-ci="${ci}" title="Add an empty row">+ Add item</button>
       </div>
+    </div>`;
+  },
+
+  // Resistances / Immunities / Vulnerabilities editor. Three rows of chips,
+  // each chip is a damage type, click to cycle through the four states:
+  // (none) → resist → immune → vulnerable → (none). Honored by _applyHpDelta
+  // when the DM picks a damage type on the heal/damage strip.
+  // Stored on c.resistances / c.immunities / c.vulnerabilities as lowercase
+  // type strings. Backward-compat: if a PDF later imports these, the lists
+  // get unioned (combat tracker style).
+  _renderResistances(c){
+    const TYPES = ['acid','bludgeoning','cold','fire','force','lightning','necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
+    const i = state.party.findIndex(p => p.id === c.id);
+    const res = new Set((c.resistances    || []).map(x => String(x).toLowerCase()));
+    const imm = new Set((c.immunities     || []).map(x => String(x).toLowerCase()));
+    const vul = new Set((c.vulnerabilities|| []).map(x => String(x).toLowerCase()));
+    // Only render the block if the PC has at least one entry OR the user
+    // explicitly toggled it open (cheap: a transient `this._resistancesOpen`
+    // map). New PCs see a small "+ Resist/Vuln/Immune" pill that opens it.
+    if (!this._resistancesOpen) this._resistancesOpen = {};
+    const isOpen = this._resistancesOpen[c.id] === true;
+    const hasAny = res.size || imm.size || vul.size;
+    if (!hasAny && !isOpen){
+      return `<div class="sheet-block sheet-resist-collapsed">
+        <button class="btn small" data-act="resist-toggle" data-cid="${esc(c.id)}" title="Edit this character's damage resistances, immunities, and vulnerabilities">+ Resist / Immune / Vuln</button>
+      </div>`;
+    }
+    const chip = (t) => {
+      let state, label, cls;
+      if (imm.has(t))      { state='immune';     label='IMM'; cls='imm'; }
+      else if (res.has(t)) { state='resist';     label='RES'; cls='res'; }
+      else if (vul.has(t)) { state='vulnerable'; label='VUL'; cls='vul'; }
+      else                 { state='none';       label='—';   cls='none'; }
+      const next = state==='none' ? 'resist' : state==='resist' ? 'immune' : state==='immune' ? 'vulnerable' : 'none';
+      return `<button class="resist-chip ${cls}" data-act="resist-cycle" data-idx="${i}" data-type="${t}" data-next="${next}" title="${t}: ${state} — click to set ${next}">
+        <span class="resist-chip-name">${t}</span>
+        <span class="resist-chip-state">${label}</span>
+      </button>`;
+    };
+    return `<div class="sheet-block">
+      <h5>Damage Resistances <span class="resist-legend">click to cycle: — → RES → IMM → VUL</span>
+        <button class="btn icon-btn" data-act="resist-toggle" data-cid="${esc(c.id)}" title="Hide editor" style="margin-left:auto;padding:1px 6px;font-size:11px">×</button>
+      </h5>
+      <div class="resist-grid">${TYPES.map(chip).join('')}</div>
     </div>`;
   },
 
@@ -519,21 +567,58 @@ registerPanel('party',{
     return { total, breakdown: parts.join(' '), type: dmgType, crit: !!crit };
   },
 
-  // Apply +/- HP to party member `i`, draining tempHp first on damage. Mirrors
-  // to combat tracker via syncPartyToCombat so an in-combat PC stays in sync.
-  // Heal is clamped to hpMax; damage can dip below 0 (death-save territory).
-  _applyHpDelta(i, delta){
+  // Apply +/- HP to party member `i`, draining tempHp first on damage. When
+  // dmgType is supplied AND the PC has matching entries in c.immunities /
+  // c.resistances / c.vulnerabilities (DM-managed arrays of lowercase type
+  // strings), the damage is nulled / halved / doubled before any temp-HP
+  // math. Mirrors to combat tracker via syncPartyToCombat so an in-combat PC
+  // stays in sync. Heal is clamped to hpMax; damage can dip below 0
+  // (death-save territory). Triggers a concentration-save toast on damage.
+  _applyHpDelta(i, delta, dmgType){
     const c = state.party[i]; if (!c) return;
     if (delta < 0){
       let remaining = -delta; // positive amount of damage
+      let typeSuffix = '';
+      // Resist/immune/vulnerable math — only fires when a type is supplied.
+      if (dmgType){
+        const t = String(dmgType).toLowerCase();
+        const has = (arr) => Array.isArray(arr) && arr.some(x => String(x).toLowerCase() === t);
+        if (has(c.immunities)){
+          remaining = 0;
+          typeSuffix = ' (' + dmgType + ' — immune)';
+        } else if (has(c.resistances)){
+          remaining = Math.floor(remaining / 2);
+          typeSuffix = ' (' + dmgType + ' — resisted, ½)';
+        } else if (has(c.vulnerabilities)){
+          remaining = remaining * 2;
+          typeSuffix = ' (' + dmgType + ' — vulnerable, ×2)';
+        } else {
+          typeSuffix = ' (' + dmgType + ')';
+        }
+      }
+      // Temp HP absorbs first, then real HP.
       const temp = c.tempHp || 0;
-      if (temp > 0){
+      if (temp > 0 && remaining > 0){
         const drain = Math.min(temp, remaining);
         c.tempHp = temp - drain;
         remaining -= drain;
       }
-      if (remaining > 0){
-        c.hp = (c.hp || 0) - remaining;
+      const taken = Math.max(0, remaining);
+      if (taken > 0){
+        c.hp = (c.hp || 0) - taken;
+      }
+      // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
+      if (c.concentration && taken > 0){
+        const dc = Math.max(10, Math.floor(taken / 2));
+        if (typeof showToast === 'function'){
+          showToast('🌀 ' + c.name + ': DC ' + dc + ' CON save to maintain ' + c.concentration);
+        }
+      }
+      // Damage-type readout in a small toast so the DM sees the resist/etc.
+      // applied. Untyped damage stays silent (no extra toast — the HP bar
+      // is the feedback).
+      if (dmgType && typeof showToast === 'function'){
+        showToast(c.name + ' took ' + taken + ' damage' + typeSuffix);
       }
     } else if (delta > 0){
       const cap = c.hpMax || c.hp || 0;
@@ -735,6 +820,7 @@ registerPanel('party',{
     const pIVal = passiveOf('int', 'investigation');
     return this._renderLastRoll(c)
       + this._abilityBlock(c)
+      + this._renderResistances(c)
       + '<div class="sheet-grid2">'
       + '<div class="sheet-col"><h5>Saving Throws</h5>'+saveRows+'</div>'
       + '<div class="sheet-col"><h5>Vitals</h5>'
@@ -1389,7 +1475,7 @@ registerPanel('party',{
     // drag when grabbing inputs/buttons so text selection still works.
     b.querySelectorAll('.char-card').forEach(card=>{
       card.addEventListener('dragstart', e=>{
-        if (e.target.closest('input,select,textarea,button,.icon-picker,.pip,.party-hp-dmg,.slot-pip')){ e.preventDefault(); return; }
+        if (e.target.closest('input,select,textarea,button,.icon-picker,.pip,.party-hp-dmg,.slot-pip,.party-hp-type')){ e.preventDefault(); return; }
         e.dataTransfer.effectAllowed = 'copy';
         e.dataTransfer.setData('application/x-skt-party-pi', card.dataset.cidx);
         card.classList.add('dragging');
@@ -1490,6 +1576,13 @@ registerPanel('party',{
         const v = parseInt(inp.value) || 0;
         if (v > 0) this._lastDmgAmount = v;
       });
+    });
+
+    // Damage-type select — same suppress + persist-last-choice dance.
+    b.querySelectorAll('.party-hp-type').forEach(sel => {
+      sel.addEventListener('click', e => e.stopPropagation());
+      sel.addEventListener('mousedown', e => e.stopPropagation());
+      sel.addEventListener('change', () => { this._lastDmgType = sel.value; });
     });
 
     // Inventory row inputs (name/qty/notes) — write back to
@@ -1597,10 +1690,13 @@ registerPanel('party',{
       else if(act==='hp-heal' || act==='hp-damage'){
         const card = el.closest('.char-card');
         const amtInp = card?.querySelector('.party-hp-amt');
+        const typeSel = card?.querySelector('.party-hp-type');
         const amt = Math.max(0, parseInt(amtInp?.value) || 0);
         if (!amt) return;
         this._lastDmgAmount = amt;
-        this._applyHpDelta(i, act === 'hp-damage' ? -amt : +amt);
+        const type = typeSel ? typeSel.value : '';
+        if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
+        else                     this._applyHpDelta(i, +amt);
       }
       // Spell-slot pip — toggle expended state on sheet.spellSlots[lvl]. Click
       // an available pip to spend, click a spent pip to refund.
@@ -1634,17 +1730,28 @@ registerPanel('party',{
         const result = this._rollAttack(c, name, atkBonus, dmgExpr, mode);
         this._setLastRoll(c, result);
       }
-      else if(act==='long-rest')  this._longRestAll();
-      else if(act==='short-rest') this._shortRestAll();
-      // Expand-all: set _expanded[c.id] true for every PC. Collapse-all:
-      // clear the map. Single _render redraws every card with the new state.
-      else if(act==='expand-all'){
-        state.party.forEach(c => { this._expanded[c.id] = true; });
+      // (long-rest / short-rest live in the window-options menu now, not a
+      // top-of-panel toolbar; their handlers are reachable via menuItems().)
+      // (expand-all / collapse-all removed; per-card toggle on each sheet
+      // remains the only path to open/close a sheet.)
+      // Resist/Immune/Vuln editor — toggle visible state per-PC; cycle a type
+      // through the four states (none → resist → immune → vulnerable → none).
+      else if(act==='resist-toggle'){
+        const cid = el.dataset.cid;
+        if (!this._resistancesOpen) this._resistancesOpen = {};
+        this._resistancesOpen[cid] = !this._resistancesOpen[cid];
         this._render();
       }
-      else if(act==='collapse-all'){
-        this._expanded = {};
-        this._render();
+      else if(act==='resist-cycle'){
+        const idx = +el.dataset.idx, type = el.dataset.type, next = el.dataset.next;
+        const c = state.party[idx]; if (!c) return;
+        const drop = (key) => { c[key] = (c[key]||[]).filter(t => String(t).toLowerCase() !== type); };
+        drop('resistances'); drop('immunities'); drop('vulnerabilities');
+        const map = { resist:'resistances', immune:'immunities', vulnerable:'vulnerabilities' };
+        if (map[next]){
+          c[map[next]] = [...(c[map[next]]||[]), type];
+        }
+        save(); this._render();
       }
       // One-click add-or-remove this PC from combat. Calls into combat.js
       // for the add path so name-numbering, init-mod, portrait, etc. all use

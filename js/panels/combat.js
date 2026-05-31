@@ -408,17 +408,31 @@ registerPanel('combat',{
     // HP itself is hidden/concealed (monsters in player view at non-show
     // stats mode).
     // Damage-type select. State-cached in this._lastDmgType so it persists
-    // across re-renders. Empty = untyped (no resist/vuln/immune math).
-    const dmgTypes = ['','acid','bludgeoning','cold','fire','force','lightning','necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
+    // across re-renders. Empty = untyped (no resist/vuln/immune math). The
+    // option text shows the 2-letter abbreviation so the select stays the
+    // same width as the strip buttons; the FULL type name lives in the
+    // tooltip + the option's `title`. Picking still passes the full type
+    // string to _applyHpDelta.
+    const dmgTypes = [
+      ['', '—'],
+      ['acid','ac'],['bludgeoning','bl'],['cold','co'],['fire','fi'],
+      ['force','fo'],['lightning','li'],['necrotic','ne'],['piercing','pi'],
+      ['poison','po'],['psychic','ps'],['radiant','ra'],['slashing','sl'],['thunder','th'],
+    ];
     const lastType = this._lastDmgType || '';
-    const dmgStrip = (mode !== 'show')
+    // Heal/damage strip is now a HORIZONTAL row that sits between the stats
+    // grid and the HP bar (rendered separately below — see `dmgStripRow`).
+    // We keep `dmgStrip` empty here so the stats grid stays a clean 3-column
+    // ♥ ⛨ ⚡ layout at its natural height.
+    const dmgStrip = '';
+    const dmgStripRow = (mode !== 'show')
       ? ''
-      : `<div class="hp-dmg-strip" data-idx="${i}" title="Type an amount, click + to heal or − to damage">
-          <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
+      : `<div class="hp-dmg-bar" data-idx="${i}" title="Type amount, click − to damage (drains temp HP first, applies resist/vuln/immune) or + to heal">
+          <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
           <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount">
-          <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage (drains temp HP first; applies resist/vuln/immune by damage type)">−</button>
-          <select class="hp-dmg-type" data-idx="${i}" title="Damage type — applies monster resist/vuln/immune">
-            ${dmgTypes.map(t => `<option value="${t}" ${t===lastType?'selected':''}>${t || '— type'}</option>`).join('')}
+          <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
+          <select class="hp-dmg-type" data-idx="${i}" title="Damage type — applies monster resist/vuln/immune (current: ${lastType||'untyped'})">
+            ${dmgTypes.map(([val,abbr]) => `<option value="${val}" ${val===lastType?'selected':''} title="${val||'untyped'}">${abbr}</option>`).join('')}
           </select>
         </div>`;
     const tempBadge = tempHp > 0 ? `<span class="hp-temp-badge" title="Temporary HP (absorbs damage first)">+${tempHp}</span>` : '';
@@ -439,24 +453,32 @@ registerPanel('combat',{
       ? ''
       : `<div class="card-hp-bar" style="--hp-pct:${hpPct}%;--hp-color:${hpColor}" title="${c.hp}/${c.hpMax||c.hp} HP"><span class="card-hp-bar-fill"></span></div>`;
 
-    // Status row — concentration pill + reaction pip + AC/HP buff chips.
+    // Status row — only renders chips for items that ARE active. A single
+    // "+ ⋯" trailing button opens the status menu (set concentration / mark
+    // reaction / add buff). When nothing's active and the row is collapsed
+    // to just the "+", the whole row uses ~14 px instead of the old ~22 px.
     // For PCs, concentration comes from the party slot (single source of
     // truth); for monsters, it lives on the combatant itself.
     const conc = isPC ? (partyMatch?.concentration || '') : (c.concentration || '');
-    const concPill = conc
-      ? `<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating — click to drop">🌀 ${esc(conc)} ×</span>`
-      : `<span class="status-pill conc-pill empty" data-act="set-conc" data-idx="${i}" title="Set concentration spell">🌀 Conc</span>`;
-    const reactPip = `<span class="status-pill react-pip ${c.reactionUsed?'spent':''}" data-act="toggle-reaction" data-idx="${i}" title="Reaction ${c.reactionUsed?'spent — click to refund':'available — click to mark used'}">↩ Reaction</span>`;
+    const chips = [];
+    if (conc){
+      chips.push(`<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">🌀 ${esc(conc)} ×</span>`);
+    }
+    if (c.reactionUsed){
+      chips.push(`<span class="status-pill react-pip spent" data-act="toggle-reaction" data-idx="${i}" title="Reaction spent this round — click to refund">↩ React</span>`);
+    }
     const buffs = Array.isArray(c.buffs) ? c.buffs : [];
-    const buffChips = buffs.map((bf, bi) => {
-      const acStr = bf.ac ? ` ${bf.ac>0?'+':''}${bf.ac} AC` : '';
-      const hpStr = bf.hp ? ` ${bf.hp>0?'+':''}${bf.hp} HP` : '';
-      const dur   = (bf.rounds!=null && bf.rounds>=0) ? ` · ${bf.rounds}r` : '';
-      return `<span class="status-pill buff-pill" data-act="rm-buff" data-idx="${i}" data-bi="${bi}" title="${esc(bf.label||'Buff')}${esc(acStr)}${esc(hpStr)}${esc(dur)} — click to remove">✦ ${esc(bf.label||'buff')}${acStr}${hpStr}${dur} ×</span>`;
-    }).join('');
-    const addBuffPill = `<span class="status-pill buff-pill empty" data-act="add-buff" data-idx="${i}" title="Add a temporary AC/HP buff (e.g. Shield +5 AC for 1 round)">+ Buff</span>`;
+    buffs.forEach((bf, bi) => {
+      const acStr = bf.ac ? ` ${bf.ac>0?'+':''}${bf.ac}AC` : '';
+      const hpStr = bf.hp ? ` ${bf.hp>0?'+':''}${bf.hp}HP` : '';
+      const dur   = (bf.rounds!=null && bf.rounds>=0) ? ` ${bf.rounds}r` : '';
+      chips.push(`<span class="status-pill buff-pill" data-act="rm-buff" data-idx="${i}" data-bi="${bi}" title="${esc(bf.label||'Buff')}${esc(acStr)}${esc(hpStr)}${esc(dur)} — click to remove">✦ ${esc(bf.label||'buff')}${acStr}${hpStr}${dur} ×</span>`);
+    });
+    // Trailing add button — opens a small inline menu for the three actions.
+    // The menu is built lazily via showContextMenu so we don't render it now.
+    const addPill = `<span class="status-pill status-add" data-act="status-menu" data-idx="${i}" title="Add concentration / mark reaction / add buff">+</span>`;
     const statusRow = (mode === 'show')
-      ? `<div class="combat-status-row">${concPill}${reactPip}${buffChips}${addBuffPill}</div>`
+      ? `<div class="combat-status-row">${chips.join('')}${addPill}</div>`
       : '';
 
     // Name rendered as a span with data-act="open-bestiary" for monsters so
@@ -483,12 +505,12 @@ registerPanel('combat',{
               ${nameClickable?`<button class="btn icon-btn" data-act="open-bestiary" data-idx="${i}" title="Open ${esc(c.baseName)} stat block in bestiary popout">📖</button>`:''}
               ${active?'<span class="turn-marker">◀</span>':''}
             </div>`}
-        <div class="card-stats${dmgStrip ? ' has-dmg-strip' : ''}">
-          ${dmgStrip}
+        <div class="card-stats">
           <div class="card-stat" title="HP"><span class="lab">♥</span>${hpField}</div>
           <div class="card-stat" title="AC"><span class="lab">⛨</span>${acField}</div>
           <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
         </div>
+        ${dmgStripRow}
         ${hpBar}
         ${statusRow}
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
@@ -520,6 +542,25 @@ registerPanel('combat',{
         const c = state.combatants[i]; if (!c) return;
         state.combatants[i] = {...c, reactionUsed: !c.reactionUsed};
         save(); this._render();
+      }
+      else if(act==='status-menu'){
+        // Open a tiny context menu for the three add-status actions. The
+        // anchor is the "+" pill itself; we position the menu just below it.
+        const idx = parseInt(el.dataset.idx);
+        const c = state.combatants[idx]; if (!c) return;
+        const rect = el.getBoundingClientRect();
+        const items = [];
+        // Show "mark reaction" only when reaction is currently available
+        // (when it's spent, the spent chip itself toggles to refund).
+        if (!c.reactionUsed){
+          items.push({ label: '↩ Mark reaction used', onClick: () => {
+            state.combatants[idx] = {...c, reactionUsed: true};
+            save(); this._render();
+          }});
+        }
+        items.push({ label: '🌀 Set concentration…', onClick: () => this._promptConcentration(idx) });
+        items.push({ label: '✦ Add buff…',           onClick: () => this._promptAddBuff(idx) });
+        showContextMenu(rect.left, rect.bottom + 4, items);
       }
       else if(act==='set-conc')      this._promptConcentration(parseInt(el.dataset.idx));
       else if(act==='clear-conc'){
