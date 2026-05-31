@@ -704,7 +704,23 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .pc-quickref-empty{font-size:10px;color:var(--text-muted);font-style:italic;margin-top:6px}
 
 /* PARTY */
-.party-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;padding:10px}
+/* The min track size is driven by --party-card-w (set on the panel body
+   when the user drags any card's resize grip). Default 210 px when no
+   user preference is saved. */
+.party-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--party-card-w,210px),1fr));gap:10px;padding:10px}
+
+/* Resize grip on every card — visible-ish triangle in the bottom-right
+   corner. Dragging it grows/shrinks the minimum width for the whole grid.
+   Hidden in compact mode (rows are 1fr there). */
+.char-resize-grip{
+  position:absolute;right:0;bottom:0;width:14px;height:14px;
+  cursor:ew-resize;opacity:.35;
+  background:linear-gradient(135deg,transparent 50%,var(--text-muted) 50%,var(--text-muted) 60%,transparent 60%,transparent 70%,var(--text-muted) 70%,var(--text-muted) 80%,transparent 80%);
+  border-bottom-right-radius:5px;
+  transition:opacity .12s
+}
+.char-resize-grip:hover{opacity:.8}
+.party-grid.compact .char-resize-grip{display:none}
 
 /* Search row pinned above the grid. Tiny chip-count on the right shows
    "filtered/total" so the DM knows how many cards are currently hidden. */

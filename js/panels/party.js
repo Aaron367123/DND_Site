@@ -43,29 +43,18 @@ registerPanel('party',{
 
   _render(){
     const b=this._body;if(!b)return;
-    const hasParty = state.party.length > 0;
     const compact = !!(state.settings && state.settings.partyCompact);
-    // Search filter — transient (this._search), not persisted. Filters by
-    // name (case-insensitive substring). When set, non-matching cards drop
-    // out of the grid entirely.
-    const q = String(this._search || '').toLowerCase().trim();
-    const filtered = q
-      ? state.party.map((c,i)=>({c,i})).filter(({c}) => (c.name||'').toLowerCase().includes(q))
-      : state.party.map((c,i)=>({c,i}));
-    const searchBar = hasParty
-      ? `<div class="party-search-row">
-          <input type="search" class="party-search" placeholder="🔎 Filter by name…" value="${esc(this._search||'')}" autocomplete="off">
-          ${this._search ? '<button class="party-search-clear" data-act="party-search-clear" title="Clear filter">×</button>' : ''}
-          <span style="flex:1"></span>
-          <span class="party-search-count">${filtered.length}/${state.party.length}</span>
-        </div>`
-      : '';
     const gridCls = 'party-grid' + (compact ? ' compact' : '');
-    const cards = filtered.map(({c,i}) => this._card(c, i)).join('');
-    const emptyHit = (q && filtered.length === 0)
-      ? '<div class="party-search-empty">No characters match "<strong>'+esc(this._search)+'</strong>"</div>'
-      : '';
-    b.innerHTML = searchBar + '<div class="'+gridCls+'">' + cards + '</div>' + emptyHit;
+    // Apply the persisted card-width custom property on the panel body
+    // so the grid's minmax() picks it up. Clamped to a sane range so the
+    // user can't shrink cards to nothing or stretch them off-screen.
+    const w = state.settings?.partyCardWidth;
+    if (typeof w === 'number' && w > 0){
+      b.style.setProperty('--party-card-w', Math.max(160, Math.min(520, w)) + 'px');
+    } else {
+      b.style.removeProperty('--party-card-w');
+    }
+    b.innerHTML = '<div class="'+gridCls+'">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
     this._wire();
   },
 
@@ -205,6 +194,10 @@ registerPanel('party',{
       // Class-color accent stripe — purely decorative, set via CSS using the
       // --class-color custom property on the card root.
       +'<div class="char-class-stripe"></div>'
+      // Resize grip — drag horizontally to change the minimum card width
+      // for the WHOLE grid (party-wide setting, persisted). Hidden in
+      // compact mode (where cards are already full-row).
+      +'<div class="char-resize-grip" data-act="resize-start" title="Drag to resize all character cards"></div>'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
@@ -219,12 +212,11 @@ registerPanel('party',{
         +'<button class="char-combat-btn'+(inCombat?' in-combat':'')+'" data-act="toggle-combat" data-idx="'+i+'" title="'+(inCombat?'Remove from combat':'Add to combat')+'">'
           +(inCombat?'⚔ In':'+ ⚔')
         +'</button>'
-        // Quick-roll + actions menu — placed in the header so the HP strip
-        // stays its compact 4-column layout. Roll pops a d20 menu (init/saves/
-        // skills/death save). ⋯ opens the consolidated actions menu (combat
-        // toggle, rage/wild shape, hit die, inspiration, edit, remove).
-        +'<button class="char-action-btn roll" data-act="quick-roll" data-idx="'+i+'" title="Roll d20 — initiative, save, skill, or death save">🎲</button>'
-        +'<button class="char-action-btn menu" data-act="actions-menu" data-idx="'+i+'" title="More actions — combat toggle, hit die, inspiration, edit, remove">⋯</button>'
+        // ⋯ actions menu — consolidated menu of less-frequent actions
+        // (combat toggle, rage/wild shape, hit die, inspiration, edit,
+        // remove). Roll d20 also reachable in the actions menu now that
+        // the dedicated 🎲 button has been removed.
+        +'<button class="char-action-btn menu" data-act="actions-menu" data-idx="'+i+'" title="More actions — roll, combat toggle, hit die, inspiration, edit, remove">⋯</button>'
       +'</div>'
       // Status badges — concentration, rage, wildshape, inspiration. Only
       // renders for ACTIVE states. Empty row collapses to nothing.
@@ -332,14 +324,18 @@ registerPanel('party',{
           // Only render the "give inspiration" affordance row when neither
           // flavor is active (otherwise the badges above already cover it).
           if (c.inspiration && c.bardicInspiration) return '';
+          // Bardic Inspiration is grantable to ANY character (bards can give
+          // it out, so any party member can be the recipient). The bardic
+          // die-size auto-label still only renders when the recipient is a
+          // bard (since the die-size formula keys off bard level), but a
+          // non-bard recipient just sees "🎵 Bardic" without the die suffix.
           const bd = this._bardicDie(c);
-          const isBard = /\bbard\b/i.test(String(c.cls || c.sheet?.class || ''));
           const parts = [];
           if (!c.inspiration){
             parts.push(`<button class="insp-give-btn" data-act="insp" data-idx="${i}" title="Grant Heroic Inspiration · right-click for award reasons">✨ Grant</button>`);
           }
-          if (!c.bardicInspiration && isBard){
-            parts.push(`<button class="insp-give-btn bardic" data-act="bardic-insp" data-idx="${i}" title="Grant Bardic Inspiration${bd?' ('+bd+')':''}">🎵 Bardic${bd?' '+bd:''}</button>`);
+          if (!c.bardicInspiration){
+            parts.push(`<button class="insp-give-btn bardic" data-act="bardic-insp" data-idx="${i}" title="Grant Bardic Inspiration${bd?' ('+bd+')':' (set by the bard granting it)'}">🎵 Bardic${bd?' '+bd:''}</button>`);
           }
           return parts.length ? `<div class="insp-give-row">${parts.join('')}</div>` : '';
         })()
@@ -2046,7 +2042,7 @@ registerPanel('party',{
     // drag when grabbing inputs/buttons so text selection still works.
     b.querySelectorAll('.char-card').forEach(card=>{
       card.addEventListener('dragstart', e=>{
-        if (e.target.closest('input,select,textarea,button,.icon-picker,.pip,.party-hp-dmg,.slot-pip,.party-hp-type')){ e.preventDefault(); return; }
+        if (e.target.closest('input,select,textarea,button,.icon-picker,.pip,.party-hp-dmg,.slot-pip,.party-hp-type,.char-resize-grip')){ e.preventDefault(); return; }
         e.dataTransfer.effectAllowed = 'copy';
         e.dataTransfer.setData('application/x-skt-party-pi', card.dataset.cidx);
         card.classList.add('dragging');
@@ -2142,32 +2138,43 @@ registerPanel('party',{
       inp.addEventListener('click',e=>e.stopPropagation());
     });
 
-    // Party search — filters cards by name (case-insensitive). Live as you
-    // type; we keep focus + caret position by avoiding the full re-render's
-    // input replacement (the search box is the FIRST input in the panel, so
-    // we re-focus + restore selection after rendering).
-    const searchEl = b.querySelector('.party-search');
-    if (searchEl){
-      searchEl.addEventListener('input', e => {
-        const v = e.target.value;
-        const sel = e.target.selectionStart;
-        this._search = v;
-        this._render();
-        // Restore focus + caret since _render rebuilt the DOM.
-        const newEl = this._body?.querySelector('.party-search');
-        if (newEl){
-          newEl.focus();
-          try { newEl.setSelectionRange(sel, sel); } catch(_){}
-        }
+    // Resize grips on each card — dragging any grip changes the minimum
+    // card width for the WHOLE grid (so all cards stay the same size). The
+    // setting persists in state.settings.partyCardWidth and syncs across
+    // tabs via the normal save() path.
+    b.querySelectorAll('.char-resize-grip').forEach(grip => {
+      grip.addEventListener('mousedown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const card = grip.closest('.char-card');
+        if (!card) return;
+        const startX = e.clientX;
+        const startW = card.getBoundingClientRect().width;
+        const onMove = (mv) => {
+          // Width grows when dragged right (positive dx). Clamp so cards
+          // can never become unreadable or off-canvas wide.
+          const next = Math.max(160, Math.min(520, Math.round(startW + (mv.clientX - startX))));
+          b.style.setProperty('--party-card-w', next + 'px');
+          this._pendingCardWidth = next;
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          if (this._pendingCardWidth != null){
+            if (!state.settings) state.settings = {};
+            state.settings.partyCardWidth = this._pendingCardWidth;
+            this._pendingCardWidth = null;
+            save();
+          }
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
       });
-      // Esc clears.
-      searchEl.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && this._search){
-          this._search = '';
-          this._render();
-        }
-      });
-    }
+      // Also suppress click + dragstart so the card itself doesn't try to
+      // drag-to-combat when the grip is grabbed.
+      grip.addEventListener('click', e => e.stopPropagation());
+      grip.addEventListener('dragstart', e => { e.preventDefault(); e.stopPropagation(); });
+    });
 
     // Heal/damage amount input — suppress drag/card-click and persist the
     // typed value across renders so the DM doesn't have to re-type.
@@ -2321,6 +2328,53 @@ registerPanel('party',{
         const isBarb  = /\bbarbarian\b/.test(cls);
         const isDruid = /\bdruid\b/.test(cls);
         const isBard  = /\bbard\b/.test(cls);
+        // Quick d20 roll — pops a sub-menu of initiative/saves/skill/death save.
+        // Wire the same handler the old 🎲 button used; just open it from
+        // the actions menu now.
+        items.push({
+          label: '🎲 Roll d20…',
+          onClick: () => {
+            // Re-find the menu button position to anchor the roll submenu.
+            const card = this._body?.querySelector(`[data-cidx="${i}"]`);
+            const anchor = card?.querySelector('.char-action-btn.menu');
+            const rect = anchor ? anchor.getBoundingClientRect() : { left: 200, bottom: 200 };
+            const rollItems = [];
+            rollItems.push({ label:'⚡ Initiative', onClick: () => {
+              const r = this._rollD20(c.init || 0, { mode:'normal', label: c.name + ' · Initiative' });
+              this._setLastRoll(c, r);
+              if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
+            }});
+            const ab = c.abilities || {};
+            const sh = c.sheet || {};
+            const saveDefs = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
+            const saves = sh.saves || {};
+            const anySave = saveDefs.some(([k]) => saves[k] != null || typeof ab[k] === 'number');
+            if (anySave){
+              rollItems.push({ label: '─────', disabled: true });
+              saveDefs.forEach(([k, lbl]) => {
+                let v = saves[k];
+                if (v == null && typeof ab[k] === 'number') v = Math.floor((ab[k]-10)/2);
+                if (v == null) return;
+                rollItems.push({ label: `${lbl} save (${v>=0?'+':''}${v})`, onClick: () => {
+                  const r = this._rollD20(v, { mode:'normal', label: c.name + ' · ' + lbl + ' Save' });
+                  this._setLastRoll(c, r);
+                  if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
+                }});
+              });
+            }
+            if ((c.hp || 0) <= 0){
+              rollItems.push({ label: '─────', disabled: true });
+              rollItems.push({ label:'💀 Death save', onClick: () => {
+                const r = this._rollD20(0, { mode:'normal', label: c.name + ' · Death Save' });
+                this._setLastRoll(c, r);
+              }});
+            }
+            rollItems.push({ label: '─────', disabled: true });
+            rollItems.push({ label:'(Hold Shift = adv · Alt = dis when clicking sheet skills)', disabled:true });
+            showContextMenu(rect.left, rect.bottom + 4, rollItems);
+          }
+        });
+        items.push({ label: '─────', disabled: true });
         // Combat toggle
         const inCombatNow = !!(state.combatants && state.combatants.find(co => co.id === c.id));
         items.push({
@@ -2376,15 +2430,16 @@ registerPanel('party',{
             save(); this._render();
           }
         });
-        if (isBard){
-          items.push({
-            label: c.bardicInspiration ? '🎵 Spend Bardic Inspiration' : '🎵 Grant Bardic Inspiration',
-            onClick: () => {
-              state.party[i] = {...c, bardicInspiration: !c.bardicInspiration};
-              save(); this._render();
-            }
-          });
-        }
+        // Bardic Inspiration is grantable to anyone — any character can be
+        // the recipient of a bard's buff. (The auto-die label still respects
+        // bard-only level math; non-bards just get the label without a die.)
+        items.push({
+          label: c.bardicInspiration ? '🎵 Spend Bardic Inspiration' : '🎵 Grant Bardic Inspiration',
+          onClick: () => {
+            state.party[i] = {...c, bardicInspiration: !c.bardicInspiration};
+            save(); this._render();
+          }
+        });
         items.push({ label: '─────', disabled: true });
         items.push({ label:'✎ Edit details…',  onClick: () => this._openCharDetailsEditor(i) });
         items.push({ label:'📋 Manage Party…', onClick: () => this._openManageParty() });
@@ -2395,11 +2450,6 @@ registerPanel('party',{
           });
         }});
         showContextMenu(rect.left, rect.bottom + 4, items);
-      }
-      // Party search clear (× button) — empties the filter.
-      else if(act==='party-search-clear'){
-        this._search = '';
-        this._render();
       }
       // Roll history disclosure — flips _historyOpen[cid].
       else if(act==='roll-history-toggle'){
