@@ -619,12 +619,32 @@ registerPanel('party',{
     const max = ws.hpMax || ws.hp || 1;
     const pct = Math.max(0, Math.min(100, Math.round((ws.hp / max) * 100)));
     const color = pct > 50 ? '#6b9e6b' : pct > 25 ? '#c9a050' : '#c25450';
+    // Hydrate display-only fields from _5eData on demand. The snapshot only
+    // stores name/slug/hp/ac/resist/etc. — keeps every save() tiny. If the
+    // dataset isn't loaded yet (rare; race on a fresh refresh), we render
+    // just the HP/AC/damage-mods which the snapshot does carry.
+    const beastEntry = (typeof _5eData !== 'undefined' && _5eLoaded && ws.slug)
+      ? _5eData.find(d => d.cat === 'monster' && d._slug === ws.slug)
+      : null;
+    const raw = beastEntry?._raw || null;
     const mod = v => v == null ? '' : ' (' + (((v-10)>>1) >= 0 ? '+' : '') + ((v-10)>>1) + ')';
-    const ab = [
-      ws.str!=null?`STR ${ws.str}${mod(ws.str)}`:'',
-      ws.dex!=null?`DEX ${ws.dex}${mod(ws.dex)}`:'',
-      ws.con!=null?`CON ${ws.con}${mod(ws.con)}`:'',
-    ].filter(Boolean).join(' · ');
+    const ab = raw
+      ? [
+          raw.strength!=null    ? `STR ${raw.strength}${mod(raw.strength)}`         : '',
+          raw.dexterity!=null   ? `DEX ${raw.dexterity}${mod(raw.dexterity)}`       : '',
+          raw.constitution!=null? `CON ${raw.constitution}${mod(raw.constitution)}` : '',
+        ].filter(Boolean).join(' · ')
+      : '';
+    const speed = raw
+      ? (typeof raw.speed === 'string' ? raw.speed : (raw.speed?.walk ? `${raw.speed.walk} ft` : ''))
+      : '';
+    const senses = raw?.senses || '';
+    const fmtAction = a => {
+      const desc = String(a.desc || '').replace(/\s+/g, ' ').trim();
+      return a.name + (desc ? ': ' + (desc.length > 220 ? desc.slice(0, 217) + '…' : desc) : '');
+    };
+    const actions = raw ? (raw.actions || []).map(fmtAction).join('\n') : '';
+    const traits  = raw ? (raw.special_abilities || []).map(fmtAction).join('\n') : '';
     const dmgMods = [];
     if (ws.immunities?.length)      dmgMods.push(`IMM: ${ws.immunities.join(', ')}`);
     if (ws.resistances?.length)     dmgMods.push(`RES: ${ws.resistances.join(', ')}`);
@@ -635,16 +655,16 @@ registerPanel('party',{
         <span class="ws-name">${esc(ws.name)}${ws.cr!=null?` <span class="ws-cr">CR ${esc(String(ws.cr))}</span>`:''}</span>
         <span class="ws-stats">
           <span title="Beast HP — damage from the strip drains here first">♥ ${ws.hp}/${ws.hpMax||ws.hp}</span>
-          ${ws.ac!=null ? `<span title="Beast AC${ws.acDesc?' — '+esc(ws.acDesc):''}">⛨ ${ws.ac}</span>` : ''}
-          ${ws.speed ? `<span title="Beast speed">⇒ ${esc(ws.speed)}</span>` : ''}
+          ${ws.ac!=null ? `<span title="Beast AC">⛨ ${ws.ac}</span>` : ''}
+          ${speed ? `<span title="Beast speed">⇒ ${esc(speed)}</span>` : ''}
         </span>
       </div>
       <div class="ws-bar"><div class="ws-bar-fill" style="width:${pct}%;background:${color}"></div></div>
       ${ab ? `<div class="ws-abilities">${esc(ab)}</div>` : ''}
-      ${ws.senses ? `<div class="ws-senses">${esc(ws.senses)}</div>` : ''}
+      ${senses ? `<div class="ws-senses">${esc(senses)}</div>` : ''}
       ${dmgMods.length ? `<div class="ws-mods">${esc(dmgMods.join(' · '))}</div>` : ''}
-      ${ws.traits ? `<details class="ws-section"><summary>Traits</summary><pre class="ws-block">${esc(ws.traits)}</pre></details>` : ''}
-      ${ws.attacks ? `<details class="ws-section" open><summary>Actions</summary><pre class="ws-block">${esc(ws.attacks)}</pre></details>` : ''}
+      ${traits ? `<details class="ws-section"><summary>Traits</summary><pre class="ws-block">${esc(traits)}</pre></details>` : ''}
+      ${actions ? `<details class="ws-section" open><summary>Actions</summary><pre class="ws-block">${esc(actions)}</pre></details>` : ''}
     </div>`;
   },
 
@@ -748,33 +768,18 @@ registerPanel('party',{
     const c = state.party[i]; if (!c || !beast) return;
     const raw = beast._raw || {};
     const ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || 10;
-    const acDesc = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.desc : '') || '';
     const hp = parseInt(raw.hit_points || raw.hp || 1) || 1;
-    const speed = typeof raw.speed === 'string' ? raw.speed : (raw.speed?.walk ? `${raw.speed.walk} ft` : '—');
-    // Format actions as multi-line "Name: description". Cap each desc at a
-    // sensible length so the overlay doesn't grow unbounded.
-    const fmtAction = a => {
-      const desc = String(a.desc || '').replace(/\s+/g, ' ').trim();
-      return a.name + (desc ? ': ' + (desc.length > 220 ? desc.slice(0, 217) + '…' : desc) : '');
-    };
-    const actions = (raw.actions || []).map(fmtAction).join('\n');
-    const traits  = (raw.special_abilities || []).map(fmtAction).join('\n');
-    // Stash damage-modifier arrays so the wildshape damage handler can
-    // honor them (e.g. a Brown Bear has no resistances, but an Earth
-    // Elemental shape from Circle of Spores etc. would).
+    // Tiny snapshot — only the fields the damage handler needs at click
+    // time. Display data (actions, traits, ability scores, senses, AC desc,
+    // speed) is fetched fresh from _5eData at render time using the slug.
+    // Keeps every `save()` (and Firebase push) under a few hundred bytes
+    // even when the form is a complex beast.
     const ws = {
       name: beast.name,
       slug: beast._slug,
       source: beast._source,
       hp, hpMax: hp,
-      ac, acDesc,
-      speed,
-      // Ability scores carry over so the DM can see them on the overlay.
-      str: raw.strength, dex: raw.dexterity, con: raw.constitution,
-      int: raw.intelligence, wis: raw.wisdom, cha: raw.charisma,
-      senses: raw.senses || '',
-      attacks: actions,
-      traits,
+      ac,
       resistances:    (raw.damage_resistances    || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
       immunities:     (raw.damage_immunities     || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
       vulnerabilities:(raw.damage_vulnerabilities|| []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
@@ -786,7 +791,12 @@ registerPanel('party',{
     if (wasFresh && state.party[i].concentration){
       state.party[i].concentration = null;
     }
-    save(); this._render();
+    save();
+    this._render();
+    // Combat tracker mirrors rage/wildshape chips from partyMatch — nudge it
+    // to re-render now so the chip appears instantly instead of waiting for
+    // the next unrelated render. Same for _endWildShape and rage toggles.
+    panelDefs.combat?._render?.();
     showToast(c.name + ' transforms into ' + ws.name);
   },
 
@@ -795,7 +805,9 @@ registerPanel('party',{
   _endWildShape(i){
     const c = state.party[i]; if (!c || !c.wildshape) return;
     state.party[i] = {...c, wildshape: null};
-    save(); this._render();
+    save();
+    this._render();
+    panelDefs.combat?._render?.();
     showToast(c.name + ' reverts to their normal form');
   },
 
@@ -2151,11 +2163,13 @@ registerPanel('party',{
       else if(act==='rage-on'){
         state.party[i] = {...state.party[i], rage: true};
         save(); this._render();
+        panelDefs.combat?._render?.();
         showToast(state.party[i].name + ' enters a rage');
       }
       else if(act==='rage-off'){
         state.party[i] = {...state.party[i], rage: false};
         save(); this._render();
+        panelDefs.combat?._render?.();
         showToast(state.party[i].name + '\'s rage ends');
       }
       else if(act==='ws-start') this._editWildShape(i);
