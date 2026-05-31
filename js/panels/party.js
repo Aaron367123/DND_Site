@@ -769,7 +769,24 @@ registerPanel('party',{
     const speed = raw
       ? (typeof raw.speed === 'string' ? raw.speed : (raw.speed?.walk ? `${raw.speed.walk} ft` : ''))
       : '';
-    const senses = raw?.senses || '';
+    // raw.senses is an OBJECT like {darkvision:'60 ft.', passive_perception:13}
+    // — flatten it to a readable string. Falls back to a plain string when
+    // data shape varies. Passive perception goes last as "PP 13".
+    const senses = (() => {
+      const s = raw?.senses;
+      if (!s) return '';
+      if (typeof s === 'string') return s;
+      if (typeof s !== 'object') return String(s);
+      const parts = [];
+      Object.entries(s).forEach(([k, v]) => {
+        if (k === 'passive_perception' || k === 'passive') return; // last
+        const label = k.replace(/_/g,' ');
+        parts.push(label + (v ? ' ' + v : ''));
+      });
+      const pp = s.passive_perception ?? s.passive;
+      if (pp != null) parts.push('passive Perception ' + pp);
+      return parts.join(', ');
+    })();
     const fmtAction = a => {
       const desc = String(a.desc || '').replace(/\s+/g, ' ').trim();
       return a.name + (desc ? ': ' + (desc.length > 220 ? desc.slice(0, 217) + '…' : desc) : '');
