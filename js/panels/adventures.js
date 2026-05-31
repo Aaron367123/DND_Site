@@ -174,6 +174,7 @@ registerPanel('adventures', {
           ${scopeChip('bestiary',  'Bestiary',  'Bestiary panel\'s Add-Monster picker')}
           ${scopeChip('encounter', 'Encounter', 'Encounter builder dropdown')}
           ${scopeChip('loot',      'Loot',      'Loot tracker item search')}
+          ${scopeChip('wildshape', 'Wild Shape','Druid Wild Shape beast picker')}
         </div>`
       : '';
 

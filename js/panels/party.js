@@ -815,8 +815,13 @@ registerPanel('party',{
     // Beasts only. Filter on the parsed creature type — _raw.type can be
     // a string or {type, tags}; the stored type field in the catalog is the
     // human-readable type that data-loader.js builds. We match case-insensitively.
+    // Also honor the global hidden-books/adventures filter via the
+    // 'wildshape' consumer key (toggle in Books / Adventures panels).
+    const isHidden = (src) => (typeof window.SKT_IS_SOURCE_HIDDEN === 'function')
+      && window.SKT_IS_SOURCE_HIDDEN('wildshape', src);
     const all = _5eData
       .filter(d => d.cat === 'monster' && /beast/i.test(d._raw?.type || ''))
+      .filter(d => !isHidden(d._source))
       .sort((a,b) => {
         // Sort by CR first, then name. Low-CR beasts (the ones druids
         // actually shape into) bubble to the top.
@@ -848,8 +853,17 @@ registerPanel('party',{
     const renderList = (q) => {
       const qn = (q || '').toLowerCase().trim();
       const list = backdrop.querySelector('#ws-pick-list');
+      // Search matches name OR source (code AND friendly name) so the DM
+      // can filter by book — type "MM", "Monster Manual", "Volo", etc.
       const pool = qn
-        ? all.filter(d => d.name.toLowerCase().includes(qn))
+        ? all.filter(d => {
+            if (d.name.toLowerCase().includes(qn)) return true;
+            const src = (d._source || '').toLowerCase();
+            if (src.includes(qn)) return true;
+            const srcLabel = (typeof _formatSource === 'function' ? _formatSource(d._source||'') : '').toLowerCase();
+            if (srcLabel.includes(qn)) return true;
+            return false;
+          })
         : all;
       list.innerHTML = pool.slice(0, 240).map(d => {
         const raw = d._raw || {};
@@ -863,9 +877,16 @@ registerPanel('party',{
         const overCap = Number.isFinite(crNum) && crNum > crCap;
         const hp = raw.hit_points || raw.hp || '?';
         const ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || raw.ac || '?';
+        // Source badge — uses _formatSource so book codes like "MM" / "XMM"
+        // / "VGM" render as their friendly names. Falls back to the raw
+        // code when the formatter doesn't know it.
+        const src = d._source || '';
+        const srcLabel = (src && typeof _formatSource === 'function')
+          ? _formatSource(src) : src;
         return `<div class="bestiary-pick-row" data-slug="${esc(d._slug)}">
           <div class="bestiary-pick-left">
             <span class="bestiary-pick-name">${esc(d.name)}</span>
+            ${src ? `<span class="detail-source-badge" title="From ${esc(srcLabel)}">${esc(srcLabel)}</span>` : ''}
             ${overCap?'<span class="ws-cr-warn" title="Above your druid-level CR cap (vanilla 5e) — Circle of the Moon may override">⚠</span>':''}
           </div>
           <span class="bestiary-pick-meta">CR ${esc(crStr)} · HP ${esc(String(hp))} · AC ${esc(String(ac))}</span>
@@ -880,7 +901,7 @@ registerPanel('party',{
         <span style="flex:1"></span>
         ${cur.name ? `<button class="btn small" id="ws-revert" title="Drop the current form">↩ Revert (${esc(cur.name)})</button>` : ''}
       </div>
-      <input type="search" id="ws-pick-search" placeholder="🔎 Search beasts (Wolf, Bear, Cat, …)" autocomplete="off"
+      <input type="search" id="ws-pick-search" placeholder="🔎 Search beasts by name or source (Wolf · Volo · MM …)" autocomplete="off"
         style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
       <div id="ws-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
       <div class="modal-actions"><button class="btn" id="ws-pick-close">Close</button></div>
