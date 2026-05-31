@@ -689,8 +689,18 @@ registerPanel('party',{
       .sort((a,b) => {
         // Sort by CR first, then name. Low-CR beasts (the ones druids
         // actually shape into) bubble to the top.
-        const ca = parseFloat(a._raw?.challenge_rating?.cr ?? a._raw?.cr ?? 999);
-        const cb = parseFloat(b._raw?.challenge_rating?.cr ?? b._raw?.cr ?? 999);
+        // _raw.challenge_rating is a STRING built by _parseCR (e.g. "1/4",
+        // "1", "5", "None"). parseFloat("1/4") = 1, parseFloat("None") = NaN
+        // — handle fractions and unknowns explicitly so the sort is right.
+        const toN = s => {
+          const v = String(s ?? '').trim();
+          if (!v || v === 'None' || v === '—') return 999;
+          if (v.includes('/')){ const [p,q] = v.split('/').map(parseFloat); return q ? p/q : 999; }
+          const n = parseFloat(v);
+          return Number.isFinite(n) ? n : 999;
+        };
+        const ca = toN(a._raw?.challenge_rating);
+        const cb = toN(b._raw?.challenge_rating);
         if (ca !== cb) return ca - cb;
         return a.name.localeCompare(b.name);
       });
@@ -712,11 +722,14 @@ registerPanel('party',{
         : all;
       list.innerHTML = pool.slice(0, 240).map(d => {
         const raw = d._raw || {};
-        const cr = raw.challenge_rating?.cr ?? raw.cr;
-        const crStr = (cr == null || cr === '') ? '?' : (typeof cr === 'object' ? (cr.cr || '?') : String(cr));
-        const overCap = typeof cr === 'number' || /^[\d./]+$/.test(crStr)
-          ? (parseFloat(crStr.replace(/^1\/(\d+)$/, (_,n)=>(1/parseInt(n)).toString())) > crCap)
-          : false;
+        // raw.challenge_rating is a string from _parseCR ("1/4", "1", "None")
+        const crStr = String(raw.challenge_rating ?? '').trim() || '?';
+        const crNum = /^\d+(\.\d+)?$/.test(crStr)
+          ? parseFloat(crStr)
+          : /^1\/(\d+)$/.test(crStr)
+            ? 1 / parseInt(crStr.split('/')[1])
+            : NaN;
+        const overCap = Number.isFinite(crNum) && crNum > crCap;
         const hp = raw.hit_points || raw.hp || '?';
         const ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || raw.ac || '?';
         return `<div class="bestiary-pick-row" data-slug="${esc(d._slug)}">
@@ -783,7 +796,7 @@ registerPanel('party',{
       resistances:    (raw.damage_resistances    || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
       immunities:     (raw.damage_immunities     || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
       vulnerabilities:(raw.damage_vulnerabilities|| []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
-      cr: raw.challenge_rating?.cr ?? raw.cr ?? null,
+      cr: raw.challenge_rating ?? null,
     };
     const wasFresh = !c.wildshape;
     state.party[i] = {...c, wildshape: ws};
