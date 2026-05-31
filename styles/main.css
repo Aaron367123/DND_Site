@@ -534,8 +534,15 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .window-body.drop-active{background:rgba(212,165,116,.04);outline:2px dashed var(--accent);outline-offset:-4px}
 .window-body.drop-active .combat-droptip{display:block}
 
-.combatant-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:8px;display:grid;grid-template-columns:14px 48px 1fr auto;gap:8px;align-items:center;position:relative;transition:border-color .12s}
-.combatant-card.active{border-color:var(--accent);background:rgba(212,165,116,.08)}
+.combatant-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:8px;display:grid;grid-template-columns:14px 48px 1fr auto;gap:8px;align-items:center;position:relative;transition:border-color .12s,box-shadow .15s}
+/* Active turn — stronger visual: accent border, soft glow, gradient sheen
+   that draws the eye at a glance. The pulse keeps it noticeable during
+   long combat scenes without being distracting. */
+.combatant-card.active{border-color:var(--accent);background:rgba(212,165,116,.10);box-shadow:0 0 0 1px var(--accent),0 0 14px rgba(212,165,116,.35);animation:combat-active-pulse 2.4s ease-in-out infinite}
+@keyframes combat-active-pulse{
+  0%,100%{box-shadow:0 0 0 1px var(--accent),0 0 10px rgba(212,165,116,.25)}
+  50%   {box-shadow:0 0 0 1px var(--accent),0 0 18px rgba(212,165,116,.55)}
+}
 .combatant-card.dead{opacity:.45}
 .combatant-card.dragging{opacity:.4}
 .combatant-card.drop-before{box-shadow:0 -2px 0 var(--accent) inset}
@@ -995,6 +1002,110 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .combat-pip-mode .combat-controls{padding:4px 6px}
 .combat-pip-mode .combatant-list{padding:4px}
 .combat-pip-mode .combatant-card{margin-bottom:4px}
+
+/* ─── Card HP bar (full-width thin gradient under the stats row) ────────── */
+.card-hp-bar{
+  --hp-pct:100%; --hp-color:#6b9e6b;
+  position:relative;height:5px;margin-top:5px;border-radius:3px;
+  background:rgba(0,0,0,.35);overflow:hidden
+}
+.card-hp-bar-fill{
+  position:absolute;left:0;top:0;bottom:0;width:var(--hp-pct);
+  background:linear-gradient(90deg,var(--hp-color) 0%,var(--hp-color) 100%);
+  transition:width .25s ease, background .25s ease
+}
+
+/* ─── Status pill row (concentration / reaction / buffs under the stats) ── */
+.combat-status-row{
+  display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;
+  font-size:10px;line-height:1
+}
+.combat-status-row .status-pill{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:2px 6px;border-radius:9px;
+  border:1px solid var(--border);background:var(--panel-3);
+  color:var(--text-muted);cursor:pointer;
+  transition:background .12s,color .12s,border-color .12s;
+  user-select:none;white-space:nowrap
+}
+.combat-status-row .status-pill.empty{opacity:.55;border-style:dashed}
+.combat-status-row .status-pill.empty:hover{opacity:1}
+.combat-status-row .conc-pill:not(.empty){background:rgba(140,108,209,.22);border-color:rgba(140,108,209,.55);color:#b6a3e8}
+.combat-status-row .conc-pill:not(.empty):hover{background:rgba(140,108,209,.34)}
+.combat-status-row .react-pip{background:var(--panel-3);color:var(--text-muted)}
+.combat-status-row .react-pip:hover{color:var(--text);border-color:var(--accent)}
+.combat-status-row .react-pip.spent{opacity:.45;text-decoration:line-through}
+.combat-status-row .buff-pill:not(.empty){background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b}
+.combat-status-row .buff-pill:not(.empty):hover{background:rgba(107,158,107,.34)}
+
+/* ─── Damage-type select in the hp-dmg strip ────────────────────────────── */
+.hp-dmg-strip .hp-dmg-type{
+  width:26px;height:15px;font-size:9px;
+  background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+  border-radius:2px;cursor:pointer;
+  -moz-appearance:none;-webkit-appearance:none;appearance:none;
+  padding:0 1px;text-align:center
+}
+.hp-dmg-strip .hp-dmg-type:hover{border-color:var(--accent)}
+
+/* ─── Compact mode — slim padding, hide portrait/log to fit more cards ──── */
+.combatant-list.compact .combatant-card{padding:5px;gap:5px;grid-template-columns:14px 1fr auto}
+.combatant-list.compact .card-avatar{display:none}
+.combatant-list.compact .card-hp-bar{height:3px;margin-top:3px}
+.combatant-list.compact .combat-status-row{display:none}
+.combatant-list.compact .conditions{margin-top:3px}
+.combatant-list.compact .card-stats{gap:2px}
+.combatant-list.compact .card-stat{padding:1px 3px}
+.combatant-list.compact .card-stat input{font-size:11px}
+.combatant-list.compact .card-stat .lab{font-size:9px}
+.combatant-list.compact .hp-dmg-strip .hp-dmg-amt{height:12px;font-size:9px}
+.combatant-list.compact .hp-dmg-strip .hp-dmg-btn{height:13px;font-size:11px}
+.combatant-list.compact .hp-dmg-strip .hp-dmg-type{display:none}
+
+/* ─── Group card (collapsed identical monsters) ──────────────────────────── */
+.combatant-card.group{align-items:flex-start}
+.combatant-card.group .group-rows{
+  display:flex;flex-direction:column;gap:3px;margin-top:5px
+}
+.combatant-card.group .group-row{
+  display:grid;grid-template-columns:1fr 90px auto auto auto auto;
+  align-items:center;gap:4px;
+  padding:3px 5px;background:var(--panel-3);border-radius:3px;
+  font-size:11px
+}
+.combatant-card.group .group-row.active{border-left:2px solid var(--accent);padding-left:3px}
+.combatant-card.group .group-row.dead{opacity:.45}
+.combatant-card.group .group-row-name{
+  cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.combatant-card.group .group-row-name:hover{color:var(--accent);text-decoration:underline}
+.combatant-card.group .group-row-bar{
+  position:relative;height:14px;border-radius:2px;
+  background:rgba(0,0,0,.4);overflow:hidden;--hp-pct:100%;--hp-color:#6b9e6b
+}
+.combatant-card.group .group-row-bar-fill{
+  position:absolute;left:0;top:0;bottom:0;width:var(--hp-pct);
+  background:var(--hp-color);transition:width .25s ease, background .25s ease
+}
+.combatant-card.group .group-row-bar-text{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;color:var(--text);
+  text-shadow:0 1px 2px rgba(0,0,0,.85)
+}
+.combatant-card.group .group-row .hp-dmg-btn{width:20px;height:16px;font-size:11px}
+.combatant-card.group .group-row .hp-dmg-amt{width:24px;height:16px;font-size:10px;text-align:center;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:2px;-moz-appearance:textfield}
+.combatant-card.group .group-row .hp-dmg-amt::-webkit-outer-spin-button,
+.combatant-card.group .group-row .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.combatant-card.group .group-row .icon-btn.danger{background:transparent;border:1px solid transparent;color:var(--text-muted);padding:0 3px;border-radius:2px;cursor:pointer;font-size:12px;line-height:1}
+.combatant-card.group .group-row .icon-btn.danger:hover{color:#c25450;border-color:rgba(194,84,80,.5)}
+.combatant-card.group .group-init{font-size:10px;color:var(--text-muted);margin-top:5px}
+
+/* ─── Toolbar toggle buttons "active" indicator ─────────────────────────── */
+.combat-controls .btn.icon-btn.active{background:rgba(212,165,116,.22);border-color:var(--accent);color:var(--accent)}
+
+/* ─── Name input "clickable" hint (Ctrl-click to open stat block) ────────── */
+input.card-name-input.clickable{cursor:text}
+input.card-name-input.clickable:hover{background:rgba(212,165,116,.08)}
 /* Realtime conflict bar — pinned to the bottom of the workspace while one
    or more sync keys have local↔remote divergence. Each row gets its own
    set of three resolver buttons. Stays out of the way until needed. */

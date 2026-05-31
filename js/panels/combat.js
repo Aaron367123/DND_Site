@@ -270,11 +270,18 @@ registerPanel('combat',{
   _render(){
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
+    const compact = !!(state.settings && state.settings.combatCompact);
+    const grouped = !!(state.settings && state.settings.combatGroupSimilar);
     b.innerHTML=`
       <div class="combat-controls">
+        ${inCombat?'<button class="btn icon-btn" data-act="prev" title="Step back one turn (undo turn advance)">◀</button>':''}
         <button class="btn icon-btn" data-act="next" title="Advance turn">▶</button>
         <button class="btn icon-btn" data-act="add" title="Add custom combatant">+</button>
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
+        ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for NPCs (PCs keep their entered value if non-zero)">🎲</button>':''}
+        ${inCombat?'<button class="btn icon-btn" data-act="sort-init" title="Sort by initiative (Dex modifier breaks ties)">⇅</button>':''}
+        <button class="btn icon-btn ${compact?'active':''}" data-act="toggle-compact" title="${compact?'Show full cards':'Compact card mode'}">${compact?'▤':'▦'}</button>
+        <button class="btn icon-btn ${grouped?'active':''}" data-act="toggle-group" title="${grouped?'Show every monster individually':'Group identical monsters into one card'}">${grouped?'▣':'⊞'}</button>
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
         ${inCombat?'<button class="btn icon-btn danger" data-act="end" title="End combat (clears all combatants)">⏹ End</button>':''}
@@ -291,7 +298,7 @@ registerPanel('combat',{
       })()}
 
       ${inCombat
-        ? '<div class="combatant-list" id="combat-list">'+this._renderCombatants()+'</div>'
+        ? `<div class="combatant-list${compact?' compact':''}${grouped?' grouped':''}" id="combat-list">`+this._renderCombatants()+'</div>'
         : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}
 
       ${inCombat ? this._renderLog() : ''}
@@ -301,7 +308,81 @@ registerPanel('combat',{
   },
 
   _renderCombatants(){
-    return state.combatants.map((c,i)=>this._renderCard(c,i,false)).join('');
+    const grouped = !!(state.settings && state.settings.combatGroupSimilar);
+    if (!grouped) return state.combatants.map((c,i)=>this._renderCard(c,i,false)).join('');
+    // Group adjacent same-baseName monsters into one card with N HP rows.
+    // PCs and ungrouped monsters render normally. Groups respect the
+    // existing combatant order — we don't reshuffle, just collapse runs.
+    const out = [];
+    const used = new Set();
+    state.combatants.forEach((c, i) => {
+      if (used.has(i)) return;
+      if (c.isPC || !c.baseName){ out.push(this._renderCard(c, i, false)); used.add(i); return; }
+      // Find every same-baseName monster across the list (not just adjacent
+      // — DM may have reordered). Active turn highlights the right row.
+      const members = [];
+      state.combatants.forEach((c2, j) => {
+        if (!c2.isPC && c2.baseName === c.baseName) { members.push({c:c2, i:j}); used.add(j); }
+      });
+      if (members.length === 1) out.push(this._renderCard(c, i, false));
+      else out.push(this._renderGroupCard(c.baseName, members));
+    });
+    return out.join('');
+  },
+
+  // Group-card render: one header (avatar/name/init), then N stacked rows,
+  // each row = one combatant with its own HP bar + heal/damage strip.
+  // The card itself has no `draggable` — group reorder is out of scope; the
+  // user can disable grouping to drag.
+  _renderGroupCard(baseName, members){
+    const anyActive = members.some(m => m.c.id === state.activeCombatantId);
+    const allDead = members.every(m => (m.c.hp||0) <= 0);
+    const first = members[0].c;
+    const portrait = first.portrait || CLASS_ICONS[first.cls] || CLASS_ICONS.enemy;
+    const init = first.initiative || 0;
+    return `<div class="combatant-card group ${anyActive?'active':''} ${allDead?'dead':''} npc" data-group="${esc(baseName)}">
+      <div class="drag-handle" style="visibility:hidden">⋮⋮</div>
+      <div class="card-avatar npc">${renderIcon(portrait, baseName)}</div>
+      <div class="card-body">
+        <div class="card-name">${esc(baseName)} <span style="color:var(--text-muted);font-weight:400">×${members.length}</span></div>
+        <div class="group-rows">
+          ${members.map(m => this._renderGroupRow(m.c, m.i)).join('')}
+        </div>
+        <div class="group-init">⚡ Init ${init}</div>
+      </div>
+      <div class="card-actions"></div>
+    </div>`;
+  },
+
+  _renderGroupRow(c, i){
+    const active = c.id === state.activeCombatantId;
+    const dead = (c.hp||0) <= 0;
+    const hpPct = this._hpPct(c);
+    const hpColor = this._hpColor(hpPct);
+    return `<div class="group-row ${active?'active':''} ${dead?'dead':''}" data-idx="${i}">
+      <span class="group-row-name" data-act="open-bestiary" data-idx="${i}" title="Open stat block">${esc(c.name)}</span>
+      <div class="group-row-bar" style="--hp-pct:${hpPct}%;--hp-color:${hpColor}">
+        <span class="group-row-bar-fill"></span>
+        <span class="group-row-bar-text">${c.hp}/${c.hpMax||c.hp}</span>
+      </div>
+      <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal">+</button>
+      <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Amount">
+      <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
+      <button class="icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>
+    </div>`;
+  },
+
+  // HP bar math — returns 0-100 percent of current/max.
+  _hpPct(c){
+    const max = c.hpMax || c.hp || 1;
+    return Math.max(0, Math.min(100, Math.round((c.hp / max) * 100)));
+  },
+  // HP-bar color ramp: green (75+) → yellow (35-75) → red (under 35).
+  _hpColor(pct){
+    if (pct <= 0) return '#5a3a3a';
+    if (pct < 35) return '#c25450';
+    if (pct < 75) return '#d4a574';
+    return '#6b9e6b';
   },
 
   _renderCard(c, i, isParty){
@@ -326,12 +407,19 @@ registerPanel('combat',{
     // didn't work at all on touch. Conditionally suppressed only when the
     // HP itself is hidden/concealed (monsters in player view at non-show
     // stats mode).
+    // Damage-type select. State-cached in this._lastDmgType so it persists
+    // across re-renders. Empty = untyped (no resist/vuln/immune math).
+    const dmgTypes = ['','acid','bludgeoning','cold','fire','force','lightning','necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
+    const lastType = this._lastDmgType || '';
     const dmgStrip = (mode !== 'show')
       ? ''
       : `<div class="hp-dmg-strip" data-idx="${i}" title="Type an amount, click + to heal or − to damage">
           <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
           <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount">
-          <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage (drains temp HP first)">−</button>
+          <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage (drains temp HP first; applies resist/vuln/immune by damage type)">−</button>
+          <select class="hp-dmg-type" data-idx="${i}" title="Damage type — applies monster resist/vuln/immune">
+            ${dmgTypes.map(t => `<option value="${t}" ${t===lastType?'selected':''}>${t || '— type'}</option>`).join('')}
+          </select>
         </div>`;
     const tempBadge = tempHp > 0 ? `<span class="hp-temp-badge" title="Temporary HP (absorbs damage first)">+${tempHp}</span>` : '';
     const hpField = mode === 'hide'
@@ -342,6 +430,39 @@ registerPanel('combat',{
     const acField = mode === 'show'
       ? `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`
       : '<span class="card-stat-hidden">?</span>';
+
+    // HP bar — thin gradient fill across the card. Hidden in player-view
+    // hide/conceal modes to avoid leaking remaining HP visually.
+    const hpPct = this._hpPct(c);
+    const hpColor = this._hpColor(hpPct);
+    const hpBar = (mode !== 'show')
+      ? ''
+      : `<div class="card-hp-bar" style="--hp-pct:${hpPct}%;--hp-color:${hpColor}" title="${c.hp}/${c.hpMax||c.hp} HP"><span class="card-hp-bar-fill"></span></div>`;
+
+    // Status row — concentration pill + reaction pip + AC/HP buff chips.
+    // For PCs, concentration comes from the party slot (single source of
+    // truth); for monsters, it lives on the combatant itself.
+    const conc = isPC ? (partyMatch?.concentration || '') : (c.concentration || '');
+    const concPill = conc
+      ? `<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating — click to drop">🌀 ${esc(conc)} ×</span>`
+      : `<span class="status-pill conc-pill empty" data-act="set-conc" data-idx="${i}" title="Set concentration spell">🌀 Conc</span>`;
+    const reactPip = `<span class="status-pill react-pip ${c.reactionUsed?'spent':''}" data-act="toggle-reaction" data-idx="${i}" title="Reaction ${c.reactionUsed?'spent — click to refund':'available — click to mark used'}">↩ Reaction</span>`;
+    const buffs = Array.isArray(c.buffs) ? c.buffs : [];
+    const buffChips = buffs.map((bf, bi) => {
+      const acStr = bf.ac ? ` ${bf.ac>0?'+':''}${bf.ac} AC` : '';
+      const hpStr = bf.hp ? ` ${bf.hp>0?'+':''}${bf.hp} HP` : '';
+      const dur   = (bf.rounds!=null && bf.rounds>=0) ? ` · ${bf.rounds}r` : '';
+      return `<span class="status-pill buff-pill" data-act="rm-buff" data-idx="${i}" data-bi="${bi}" title="${esc(bf.label||'Buff')}${esc(acStr)}${esc(hpStr)}${esc(dur)} — click to remove">✦ ${esc(bf.label||'buff')}${acStr}${hpStr}${dur} ×</span>`;
+    }).join('');
+    const addBuffPill = `<span class="status-pill buff-pill empty" data-act="add-buff" data-idx="${i}" title="Add a temporary AC/HP buff (e.g. Shield +5 AC for 1 round)">+ Buff</span>`;
+    const statusRow = (mode === 'show')
+      ? `<div class="combat-status-row">${concPill}${reactPip}${buffChips}${addBuffPill}</div>`
+      : '';
+
+    // Name rendered as a span with data-act="open-bestiary" for monsters so
+    // clicking pops the stat block. PCs already get a quick-ref popout on
+    // click elsewhere — keep their existing path.
+    const nameClickable = !isPC && c.baseName;
     return `<div class="combatant-card ${active?'active':''} ${dead?'dead':''} ${isPC?'pc':'npc'}" data-idx="${i}" draggable="true">
       <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
       <div class="card-avatar ${isPC?'pc':'npc'}" data-act="upload-portrait" data-idx="${i}" title="Click to upload portrait">${renderIcon(portrait, c.name)}</div>
@@ -349,7 +470,7 @@ registerPanel('combat',{
         ${isPC
           ? `<div class="card-name">${esc(c.name)}${active?' <span class="turn-marker">◀</span>':''}</div>`
           : `<div class="card-name-row">
-              <input class="card-name-input" type="text" value="${esc(c.name)}" data-ci="${i}" data-cf="name" title="Edit name">
+              <input class="card-name-input ${nameClickable?'clickable':''}" type="text" value="${esc(c.name)}" data-ci="${i}" data-cf="name" ${nameClickable?'data-bestiary-link="1"':''} title="${nameClickable?'Edit name (Ctrl+click to open stat block)':'Edit name'}">
               ${(()=>{
                 const opts = (state.settings && state.settings.combatNameOptions) || ['spear','hands','rock','small'];
                 return `<select class="card-name-quick" data-ci="${i}" title="Quick-pick name">
@@ -359,6 +480,7 @@ registerPanel('combat',{
                   <option value="__manage__">⚙ Manage…</option>
                 </select>`;
               })()}
+              ${nameClickable?`<button class="btn icon-btn" data-act="open-bestiary" data-idx="${i}" title="Open ${esc(c.baseName)} stat block in bestiary popout">📖</button>`:''}
               ${active?'<span class="turn-marker">◀</span>':''}
             </div>`}
         <div class="card-stats${dmgStrip ? ' has-dmg-strip' : ''}">
@@ -367,6 +489,8 @@ registerPanel('combat',{
           <div class="card-stat" title="AC"><span class="lab">⛨</span>${acField}</div>
           <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
         </div>
+        ${hpBar}
+        ${statusRow}
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
         ${(!isPC && (c.legendaryMax || c.legendaryMax === 0)) ? this._renderLegendary(i, c) : ''}
         ${(isPC && (c.hp||0) <= 0) ? this._renderDeathSaves(i, c) : ''}
@@ -386,6 +510,40 @@ registerPanel('combat',{
       e.stopPropagation();
       const act=el.dataset.act;
       if(act==='next')                this._nextTurn();
+      else if(act==='prev')           this._prevTurn();
+      else if(act==='roll-init')      this._rollInitiative();
+      else if(act==='sort-init')      this._sortByInitiative();
+      else if(act==='toggle-compact'){ state.settings.combatCompact = !state.settings.combatCompact; save(); this._render(); }
+      else if(act==='toggle-group')  { state.settings.combatGroupSimilar = !state.settings.combatGroupSimilar; save(); this._render(); }
+      else if(act==='toggle-reaction'){
+        const i = parseInt(el.dataset.idx);
+        const c = state.combatants[i]; if (!c) return;
+        state.combatants[i] = {...c, reactionUsed: !c.reactionUsed};
+        save(); this._render();
+      }
+      else if(act==='set-conc')      this._promptConcentration(parseInt(el.dataset.idx));
+      else if(act==='clear-conc'){
+        const i = parseInt(el.dataset.idx);
+        this._setConcentration(i, null);
+      }
+      else if(act==='add-buff')      this._promptAddBuff(parseInt(el.dataset.idx));
+      else if(act==='rm-buff'){
+        const i  = parseInt(el.dataset.idx);
+        const bi = parseInt(el.dataset.bi);
+        const c = state.combatants[i]; if (!c || !Array.isArray(c.buffs)) return;
+        const bf = c.buffs[bi]; if (!bf) return;
+        // Reverse the AC/HP delta when removing — symmetrical to _promptAddBuff.
+        const next = c.buffs.slice(); next.splice(bi, 1);
+        const patch = {buffs: next};
+        if (bf.ac){ patch.ac = (c.ac || 0) - bf.ac; }
+        if (bf.hp){
+          patch.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
+          patch.hp    = Math.min(patch.hpMax, (c.hp || 0) - bf.hp);
+        }
+        state.combatants[i] = {...c, ...patch};
+        save(); this._render();
+      }
+      else if(act==='open-bestiary') this._openBestiaryDetail(parseInt(el.dataset.idx));
       else if(act==='end'){
         const proceed = ok => {
           if (!ok) return;
@@ -445,12 +603,18 @@ registerPanel('combat',{
       }
       else if(act==='hp-damage' || act==='hp-heal'){
         const i = parseInt(el.dataset.idx);
+        // Read the amount from THIS row's input. Group rows have their own
+        // amt input; single-card rows put it inside .hp-dmg-strip. We scope
+        // via the same data-idx attribute on the input.
         const card = el.closest('.combatant-card');
-        const amtInp = card?.querySelector('.hp-dmg-amt');
+        const amtInp = card?.querySelector(`.hp-dmg-amt[data-idx="${i}"]`) || card?.querySelector('.hp-dmg-amt');
+        const typeSel = card?.querySelector('.hp-dmg-type');
         const amt = Math.max(0, parseInt(amtInp?.value) || 0);
         if (!amt) return;
         this._lastDmgAmount = amt;
-        this._applyHpDelta(i, act === 'hp-damage' ? -amt : +amt);
+        const type = typeSel ? typeSel.value : '';
+        if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
+        else                     this._applyHpDelta(i, +amt);
       }
       else if(act==='death-save'){
         const i = parseInt(el.dataset.idx);
@@ -479,6 +643,27 @@ registerPanel('combat',{
       inp.addEventListener('change', () => {
         const v = parseInt(inp.value) || 0;
         if (v > 0) this._lastDmgAmount = v;
+      });
+    });
+
+    // Damage-type select — same suppress + persistence dance.
+    b.querySelectorAll('.hp-dmg-type').forEach(sel => {
+      sel.addEventListener('click', e => e.stopPropagation());
+      sel.addEventListener('mousedown', e => e.stopPropagation());
+      sel.addEventListener('change', () => { this._lastDmgType = sel.value; });
+    });
+
+    // Monster name input: Ctrl+click opens stat block. Plain click still
+    // lets the user type/edit. We listen on mousedown so we can catch the
+    // modifier before the input focuses.
+    b.querySelectorAll('input.card-name-input[data-bestiary-link="1"]').forEach(inp => {
+      inp.addEventListener('mousedown', e => {
+        if (e.ctrlKey || e.metaKey){
+          e.preventDefault();
+          const card = inp.closest('.combatant-card');
+          const i = parseInt(card?.dataset.idx);
+          if (!isNaN(i)) this._openBestiaryDetail(i);
+        }
       });
     });
 
@@ -795,12 +980,180 @@ registerPanel('combat',{
     state.activeCombatantId=id;state.combatRound=round;
     if (newRound){
       this._log('— Round ' + round + ' —');
-      // Refresh legendary action pools at the start of every round (5e rule).
+      // Refresh legendary actions + reaction availability at the start of
+      // every round (5e rule: both refresh on a creature's own turn, but the
+      // common simplification is "everyone resets on round tick" — close
+      // enough for the table, and saves per-combatant accounting).
       state.combatants.forEach(c => {
         if (c.legendaryMax){ c.legendaryUsed = 0; }
+        if (c.reactionUsed){ c.reactionUsed = false; }
+      });
+      // Tick down buff durations. A buff at rounds==0 expires after this
+      // round's start — drop it. Negative/undefined durations are permanent
+      // (until manually removed) and don't tick.
+      state.combatants.forEach(c => {
+        if (!Array.isArray(c.buffs) || !c.buffs.length) return;
+        const next = [];
+        for (const bf of c.buffs){
+          if (bf.rounds == null || bf.rounds < 0) { next.push(bf); continue; }
+          // rounds is "ticks remaining". rounds<=1 → expires at THIS round
+          // tick. rounds>1 → decrement and keep.
+          if (bf.rounds <= 1){
+            this._log(`${c.name} — buff "${bf.label||'buff'}" expired`);
+            // Reverse the AC/HP delta on expiry so the chip removal mirrors
+            // a manual ×-click. HP delta backs out of both current and max.
+            if (bf.ac){ c.ac = (c.ac || 0) - bf.ac; }
+            if (bf.hp){
+              c.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
+              c.hp    = Math.min(c.hpMax, (c.hp || 0) - bf.hp);
+            }
+            continue;
+          }
+          next.push({...bf, rounds: bf.rounds - 1});
+        }
+        c.buffs = next;
       });
     }
     save();this._render();
+  },
+
+  // Step back one turn. Mirror of _nextTurn but in reverse. Crossing into
+  // the previous round decrements the counter; doesn't undo buff/reaction/
+  // legendary side-effects (those are state mutations, not the timeline).
+  _prevTurn(){
+    if (!state.combatants.length){ showToast('No combatants yet'); return; }
+    let id = state.activeCombatantId;
+    let round = state.combatRound || 1;
+    if (!id){
+      // No active turn — set to last combatant.
+      state.activeCombatantId = state.combatants[state.combatants.length-1].id;
+    } else {
+      let pi = state.combatants.findIndex(c => c.id === id) - 1;
+      if (pi < 0){
+        if (round <= 1){ showToast('Already at start of round 1'); return; }
+        pi = state.combatants.length - 1;
+        round -= 1;
+        showToast(`Back to round ${round}`);
+      }
+      state.activeCombatantId = state.combatants[pi].id;
+      state.combatRound = round;
+    }
+    save(); this._render();
+  },
+
+  // Roll 1d20 + initBonus for every NPC. Skips PCs entirely (their initiative
+  // comes from the player's own roll at the table) and skips NPCs whose
+  // initBonus is missing (caller should fix the data first). Toasts a summary.
+  _rollInitiative(){
+    if (!state.combatants.length){ showToast('No combatants yet'); return; }
+    let rolled = 0;
+    state.combatants.forEach((c, i) => {
+      if (c.isPC) return;
+      const bonus = c.initBonus || 0;
+      const d20 = 1 + Math.floor(Math.random() * 20);
+      state.combatants[i] = {...c, initiative: d20 + bonus};
+      rolled++;
+    });
+    if (!rolled){ showToast('No NPCs to roll for'); return; }
+    save(); this._render();
+    showToast(`Rolled initiative for ${rolled} NPC${rolled===1?'':'s'}`);
+  },
+
+  // Sort combatants by initiative DESC, with Dex modifier as tiebreaker
+  // (5e PHB ch.9: "If a tie occurs, the DM decides... or roll a d20").
+  // We use Dex mod because it's the canonical tiebreaker most tables use.
+  // Active combatant ID is preserved so the turn marker survives the sort.
+  _sortByInitiative(){
+    if (!state.combatants.length){ showToast('No combatants yet'); return; }
+    const dexMod = c => {
+      if (c.isPC){
+        const p = state.party.find(pp => pp.id === c.id);
+        const ab = p && p.abilities;
+        return (ab && typeof ab.dex === 'number') ? Math.floor((ab.dex - 10) / 2) : 0;
+      }
+      // For monsters, initBonus IS the Dex mod (set in addMonster), so reuse.
+      return c.initBonus || 0;
+    };
+    state.combatants.sort((a, b) => {
+      const di = (b.initiative || 0) - (a.initiative || 0);
+      if (di !== 0) return di;
+      return dexMod(b) - dexMod(a);
+    });
+    save(); this._render();
+    showToast('Sorted by initiative (Dex breaks ties)');
+  },
+
+  // Open the bestiary detail popout for a monster combatant. Looks up the
+  // 5etools entry by slug — falls back to a toast if data isn't loaded.
+  _openBestiaryDetail(i){
+    const c = state.combatants[i];
+    if (!c || c.isPC){ return; }
+    if (typeof _5eData === 'undefined' || !_5eLoaded){
+      showToast('5e data still loading — try again in a moment');
+      return;
+    }
+    const base = (c.baseName || c.name || '').toLowerCase();
+    const entry = _5eData.find(d => d.cat === 'monster' && d.name.toLowerCase() === base);
+    if (!entry){ showToast('Stat block not found for ' + (c.baseName||c.name)); return; }
+    if (typeof popOutDetail === 'function') popOutDetail(entry);
+  },
+
+  // Concentration prompt — set or change the concentration spell. For PCs
+  // this writes through to the party slot so both panels stay in sync.
+  _promptConcentration(i){
+    const c = state.combatants[i]; if (!c) return;
+    const cur = c.isPC
+      ? (state.party.find(p => p.id === c.id)?.concentration || '')
+      : (c.concentration || '');
+    const next = window.prompt(`Concentration spell for ${c.name}:\n(empty cancels)`, cur);
+    if (next == null) return;
+    const trimmed = String(next).trim();
+    this._setConcentration(i, trimmed || null);
+  },
+  _setConcentration(i, spellName){
+    const c = state.combatants[i]; if (!c) return;
+    if (c.isPC){
+      const pi = state.party.findIndex(p => p.id === c.id);
+      if (pi >= 0) state.party[pi] = {...state.party[pi], concentration: spellName || null};
+    } else {
+      state.combatants[i] = {...c, concentration: spellName || null};
+    }
+    save(); this._render();
+    // Party panel mirrors concentration; nudge it to re-render so the chip
+    // updates immediately on its side.
+    if (c.isPC) panelDefs.party?._render?.();
+  },
+
+  // Buff prompt — collects label / AC delta / HP delta / duration.
+  // Stored on combatant as {label, ac, hp, rounds}. Duration in rounds:
+  // 0 = expires at start of next round; -1 (or undefined) = permanent.
+  _promptAddBuff(i){
+    const c = state.combatants[i]; if (!c) return;
+    showModal('Add buff to ' + c.name, [
+      {id:'label',  label:'Name (e.g. Shield, Bless, Mage Armor)', type:'text',   value:''},
+      {id:'ac',     label:'AC bonus (blank for none)',             type:'number', value:''},
+      {id:'hp',     label:'HP bonus (blank for none)',             type:'number', value:''},
+      {id:'rounds', label:'Duration in rounds (blank = permanent)', type:'number', value:''},
+    ], 'Add buff').then(r => {
+      if (!r || !String(r.label||'').trim()) return;
+      const next = Array.isArray(c.buffs) ? c.buffs.slice() : [];
+      const ac = r.ac === '' || r.ac == null ? 0 : (parseInt(r.ac) || 0);
+      const hp = r.hp === '' || r.hp == null ? 0 : (parseInt(r.hp) || 0);
+      const rounds = (r.rounds === '' || r.rounds == null) ? null : Math.max(0, parseInt(r.rounds) || 0);
+      next.push({label: String(r.label).trim(), ac, hp, rounds});
+      // Apply the AC/HP delta immediately so the visible stats reflect the
+      // buff. We DON'T track an "original AC" anywhere — the DM uses the
+      // buff chip's remove (×) to subtract it back manually OR re-edits AC.
+      // This matches how Bless/Shield work at the table (DM updates AC
+      // mentally; the chip is a reminder).
+      if (ac) state.combatants[i] = {...c, ac: (c.ac || 0) + ac, buffs: next};
+      else    state.combatants[i] = {...c, buffs: next};
+      if (hp){
+        state.combatants[i].hpMax = (state.combatants[i].hpMax || c.hp || 0) + hp;
+        state.combatants[i].hp    = (state.combatants[i].hp    || 0)        + hp;
+      }
+      save(); this._render();
+    });
   },
 
   // Append an entry to the shared combat log. Capped at 200 entries so the
@@ -816,13 +1169,43 @@ registerPanel('combat',{
   // temporary HP first (mirrored from the Party tracker) before chipping
   // into real HP. Positive delta = heal, clamped to hpMax. Mirrors to party
   // afterward so HP bars stay in sync.
-  _applyHpDelta(i, delta){
+  _applyHpDelta(i, delta, dmgType){
     const c = state.combatants[i]; if (!c) return;
     let remaining = delta;
     let logParts = [];
+    let typeSuffix = '';
     if (delta < 0){
+      // Apply 5e resist / vulnerable / immune from the monster's stat block.
+      // Only the typed-damage path uses these; untyped damage skips the math.
+      // Resist/vuln/immune are looked up on c._raw or the parent _5eData entry.
+      if (dmgType){
+        const raw = c._raw || (c.baseName && typeof _5eData !== 'undefined' && _5eLoaded
+          ? (_5eData.find(d => d.cat==='monster' && d.name.toLowerCase() === c.baseName.toLowerCase())?._raw)
+          : null);
+        const has = (arr, t) => Array.isArray(arr) && arr.some(x => {
+          const s = (typeof x === 'string' ? x : (x?.resist || x?.immune || x?.vulnerable || '')) + '';
+          return s.toLowerCase().includes(t);
+        });
+        const t = dmgType.toLowerCase();
+        if (raw){
+          if (has(raw.immune, t)){
+            remaining = 0;
+            typeSuffix = ` (${dmgType} — immune)`;
+          } else if (has(raw.resist, t)){
+            remaining = Math.ceil(remaining / 2); // remaining negative → smaller magnitude
+            typeSuffix = ` (${dmgType} — resisted, ½)`;
+          } else if (has(raw.vulnerable, t)){
+            remaining = remaining * 2;
+            typeSuffix = ` (${dmgType} — vulnerable, ×2)`;
+          } else {
+            typeSuffix = ` (${dmgType})`;
+          }
+        } else {
+          typeSuffix = ` (${dmgType})`;
+        }
+      }
       // Damage path — temp HP first (PC only)
-      if (c.isPC){
+      if (c.isPC && remaining < 0){
         const partyIdx = state.party.findIndex(p => p.id === c.id);
         const partySlot = partyIdx >= 0 ? state.party[partyIdx] : null;
         if (partySlot && (partySlot.tempHp || 0) > 0){
@@ -832,16 +1215,27 @@ registerPanel('combat',{
           if (drain) logParts.push(drain + ' temp');
         }
       }
+      const damageDealt = remaining < 0 ? -remaining : 0;
       if (remaining < 0){
-        const taken = -remaining;
-        c.hp = (c.hp || 0) - taken;
-        logParts.push(taken + ' HP');
+        c.hp = (c.hp || 0) - damageDealt;
+        logParts.push(damageDealt + ' HP');
         // PC dropped to 0 — initialize death saves if not already there.
         if (c.isPC && c.hp <= 0 && !c.deathSaves){
           c.deathSaves = {success:0, fail:0};
         }
       }
-      this._log(c.name + ' took ' + logParts.join(' + ') + ' damage');
+      if (!logParts.length) logParts.push('0');
+      this._log(c.name + ' took ' + logParts.join(' + ') + ' damage' + typeSuffix);
+      // Concentration save prompt — 5e rule: when a concentrating creature
+      // takes damage, they roll a Con save vs DC max(10, half the damage).
+      // We just toast the reminder; rolling itself stays at the table.
+      const conc = c.isPC
+        ? (state.party.find(p => p.id === c.id)?.concentration || '')
+        : (c.concentration || '');
+      if (conc && damageDealt > 0){
+        const dc = Math.max(10, Math.floor(damageDealt / 2));
+        showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
+      }
     } else if (delta > 0){
       const before = c.hp || 0;
       const cap = c.hpMax || c.hp || 0;
