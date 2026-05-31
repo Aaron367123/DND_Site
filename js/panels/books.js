@@ -18,12 +18,19 @@
 // Adventures contribute items, monsters, etc. to _5eData with their adventure
 // codes as `_source` (e.g. SKT, ToA, WDH), so adventures need to be filterable
 // alongside books for the source filter to be universal.
+// Normalize a source/id string so book ids ("PS-K", "GoS") match the
+// corresponding monster source codes ("PSK", "GOS") that lack the dash /
+// case match. Used on BOTH sides of every comparison so the set lookups
+// work regardless of which form the stored key took.
+window.SKT_NORMALIZE_SOURCE = function(s){
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]/g, '');
+};
 window.SKT_HIDDEN_SOURCES_REBUILD = function(){
   const out = new Set();
   const add = (key) => {
     try {
       const arr = JSON.parse(localStorage.getItem(key) || '[]');
-      (Array.isArray(arr) ? arr : []).forEach(s => out.add(String(s).toLowerCase()));
+      (Array.isArray(arr) ? arr : []).forEach(s => out.add(window.SKT_NORMALIZE_SOURCE(s)));
     } catch(e){}
   };
   add('skt-books-hidden-v1');
@@ -48,7 +55,13 @@ window.SKT_IS_SOURCE_HIDDEN = function(consumer, source){
   const enabled = scope[consumer] !== false;
   if (!enabled) return false;
   const hidden = window.SKT_HIDDEN_SOURCES;
-  return !!(hidden && hidden.has(String(source).toLowerCase()));
+  // Normalize the source the same way SKT_HIDDEN_SOURCES_REBUILD normalizes
+  // hidden ids — strip non-alphanumerics + lowercase. Otherwise book ids
+  // like "PS-K" never match monster sources like "PSK".
+  const norm = (typeof window.SKT_NORMALIZE_SOURCE === 'function')
+    ? window.SKT_NORMALIZE_SOURCE(source)
+    : String(source).toLowerCase();
+  return !!(hidden && hidden.has(norm));
 };
 
 registerPanel('books', {
