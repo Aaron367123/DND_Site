@@ -705,6 +705,102 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 
 /* PARTY */
 .party-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;padding:10px}
+
+/* Search row pinned above the grid. Tiny chip-count on the right shows
+   "filtered/total" so the DM knows how many cards are currently hidden. */
+.party-search-row{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 10px 0;
+  position:sticky;top:0;z-index:5;
+  background:linear-gradient(180deg,var(--panel) 0%,var(--panel) 70%,transparent 100%)
+}
+.party-search{
+  flex:1;min-width:0;
+  background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+  padding:5px 9px;border-radius:6px;font-size:11px;font-family:inherit;line-height:1
+}
+.party-search:focus{outline:none;border-color:var(--accent);background:var(--panel-3)}
+.party-search-clear{
+  background:transparent;border:none;color:var(--text-muted);font-size:14px;
+  cursor:pointer;padding:0 4px;line-height:1
+}
+.party-search-clear:hover{color:var(--text)}
+.party-search-count{font-size:10px;color:var(--text-muted);letter-spacing:.04em}
+.party-search-empty{
+  text-align:center;padding:24px 14px;font-size:11px;color:var(--text-muted)
+}
+
+/* ═══ Compact party-glance mode ═══
+   Single-row layout per character: avatar | name+subline | HP bar+numerals |
+   AC+Init | status badges | quick heal/damage. Hides the sheet tab strip,
+   forms row, wildshape overlay, hit dice, resources, inspiration-give row
+   so each card is one tight horizontal row (~44 px). Toggle via the window
+   menu. State persists across reloads.
+
+   Every section that doesn't belong in compact mode is hidden via
+   `display:none` so the card structure stays valid (events still wire). */
+.party-grid.compact{grid-template-columns:1fr;gap:4px}
+.party-grid.compact .char-card{
+  flex-direction:row;align-items:center;
+  padding:5px 8px 5px 11px;gap:8px;
+  cursor:pointer
+}
+.party-grid.compact .char-class-stripe{top:4px;bottom:4px}
+.party-grid.compact .char-header{flex:0 0 auto;gap:6px}
+.party-grid.compact .char-icon-btn{width:28px;height:28px}
+.party-grid.compact .char-icon-btn svg{width:18px;height:18px}
+.party-grid.compact .char-header-text{min-width:120px;max-width:200px}
+.party-grid.compact .char-name{font-size:13px;font-weight:600;line-height:1.1}
+.party-grid.compact .char-subline{font-size:9px;line-height:1.1}
+.party-grid.compact .char-combat-btn{font-size:9px;padding:2px 5px}
+
+/* The HP block flattens into a horizontal row instead of a block: numerals
+   then a thin bar that flexes to fill, then temp HP as a small chip. */
+.party-grid.compact .char-hp-block{
+  flex:1;display:flex;align-items:center;gap:8px;background:transparent;padding:0
+}
+.party-grid.compact .char-hp-big{flex:1;display:flex;align-items:center;gap:6px}
+.party-grid.compact .char-hp-big-num{flex:0 0 auto}
+.party-grid.compact .char-hp-big-num .char-hp-current{font-size:18px;width:38px}
+.party-grid.compact .char-hp-big-num .char-hp-max{font-size:11px;width:30px}
+.party-grid.compact .char-hp-big-sep{font-size:13px}
+.party-grid.compact .hp-bar-wrap{flex:1;height:6px;margin-top:0}
+.party-grid.compact .char-hp-side{flex:0 0 auto}
+.party-grid.compact .char-hp-temp-row span{display:none}
+.party-grid.compact .char-hp-temp{width:32px;font-size:10px;padding:1px 3px}
+.party-grid.compact .party-hp-dmg{
+  flex:0 0 auto;margin-top:0;
+  grid-template-columns:24px 32px 24px 26px;gap:2px
+}
+.party-grid.compact .party-hp-btn{height:18px;font-size:12px}
+.party-grid.compact .party-hp-amt{height:18px;font-size:10px}
+.party-grid.compact .party-hp-type-wrap{height:18px}
+.party-grid.compact .char-downed-badge{display:none}
+
+/* Stats row collapses to inline AC / Init / Spd separated by dividers. */
+.party-grid.compact .char-stats-row{
+  flex:0 0 auto;display:flex;gap:0;background:transparent
+}
+.party-grid.compact .char-stat{
+  flex-direction:row;gap:3px;background:transparent;padding:0 6px;
+  border-right:1px solid var(--border)
+}
+.party-grid.compact .char-stat:last-child{border-right:none}
+.party-grid.compact .char-stat .l{font-size:9px}
+.party-grid.compact .char-stat input{font-size:11px;width:auto;min-width:24px}
+
+/* Status badges keep their look but inline to the right of stats. */
+.party-grid.compact .char-status-badges{flex:0 0 auto;margin:0}
+.party-grid.compact .char-status-badges .status-badge{font-size:9px;padding:1px 6px}
+
+/* Hide everything else in compact mode — heavy details belong to full view. */
+.party-grid.compact .char-forms-row,
+.party-grid.compact .char-wildshape,
+.party-grid.compact .hd-row,
+.party-grid.compact .resource-section,
+.party-grid.compact .insp-give-row,
+.party-grid.compact .sheet-tab-strip,
+.party-grid.compact .sheet-content-open{display:none}
 .party-settings{padding:0 10px 10px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .party-settings-body{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;width:100%;box-sizing:border-box}
 /* MANAGE PARTY modal */
@@ -745,7 +841,32 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .mp-res-row{display:flex;align-items:center;gap:6px}
 .mp-res-row .mp-input{font-size:12px;padding:5px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:4px}
 /* PARTY CARD v2 */
-.char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:7px;cursor:grab;transition:border-color .15s,box-shadow .15s}
+.char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px 10px 10px 13px;display:flex;flex-direction:column;gap:6px;cursor:grab;transition:border-color .15s,box-shadow .15s;position:relative;--class-color:var(--accent)}
+
+/* Subtle dashed dividers between functional zones — applied as a top
+   border on the section that begins each zone (so the divider doesn't
+   show when its target section is absent). Logical groups are:
+     header  →  status badges  →  vitals (HP+stats)  →  transforms
+     →  resources/hit-dice  →  sheet tabs.
+   Dashed lines are unobtrusive; they organize without shouting. */
+.char-card > .char-status-badges{padding-top:5px;border-top:1px dashed rgba(255,255,255,.06)}
+.char-card > .char-hp-block      {padding-top:6px}
+.char-card > .char-stats-row    {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
+.char-card > .char-forms-row    {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
+.char-card > .char-wildshape    {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
+.char-card > .hd-row            {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
+.char-card > .resource-section  {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
+.char-card > .insp-give-row     {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
+.char-card > .sheet-tab-strip   {margin-top:4px}
+/* Compact mode keeps the row dividers off — they only make sense in the
+   stacked-vertical full card layout. */
+.party-grid.compact .char-card > *{border-top:none !important;padding-top:0 !important}
+/* Class-color accent stripe down the left edge of every card. The CSS
+   var is set inline on the card root via _classColor(c). Width: 3 px. */
+.char-class-stripe{
+  position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;
+  background:var(--class-color);opacity:.85;pointer-events:none
+}
 .char-card:active{cursor:grabbing}
 .char-card.dragging{opacity:.4}
 .char-card.drop-before{box-shadow:0 -2px 0 var(--accent) inset}
@@ -802,6 +923,24 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
   margin-top:4px;
   align-items:stretch
 }
+/* CONSISTENT BUTTON LANGUAGE inside the card:
+     • PILL (rounded, text+border) → state toggles: combat in/out, rage,
+       wild shape, inspiration. Indicates "this is on/off".
+     • ICON SQUARE (small square, border, no fill) → one-shot actions:
+       roll, menu, edit, settings. Doesn't carry state.
+     • TEXT-ONLY (no border) → low-emphasis nav / secondary actions.
+
+   Header actions 🎲 and ⋯ are ICON SQUARES (actions, not state). */
+.char-header .char-action-btn{
+  flex-shrink:0;width:24px;height:24px;
+  font-size:13px;line-height:1;padding:0;border-radius:5px;
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text-muted);
+  cursor:pointer;font-family:inherit;
+  transition:background .12s,border-color .12s,color .12s;
+  display:inline-flex;align-items:center;justify-content:center
+}
+.char-header .char-action-btn:hover{background:rgba(212,165,116,.12);border-color:var(--accent);color:var(--text)}
+.char-header .char-action-btn.menu{font-size:14px;font-weight:900;letter-spacing:-1px}
 .party-hp-dmg .party-hp-amt{
   height:20px;font-size:11px;font-weight:600;
   background:var(--panel-3);border:1px solid var(--border);color:var(--text);
@@ -1048,26 +1187,74 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .status-pill.exh.active{background:rgba(190,70,70,.18);border-color:rgba(190,70,70,.55);color:#f3a0a0;font-weight:600;padding:2px 4px 2px 8px;gap:6px}
 .status-pill.exh.active .status-pill-step{background:rgba(190,70,70,.3);border:none;color:#fff;width:18px;height:18px;border-radius:50%;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:background .12s}
 .status-pill.exh.active .status-pill-step:hover{background:rgba(190,70,70,.5)}
-.char-icon-btn{font-size:20px;background:var(--panel-3);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;position:relative}
+.char-icon-btn{
+  font-size:20px;background:var(--panel-3);border:1px solid var(--border);
+  border-radius:50%;width:36px;height:36px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  transition:background .15s,width .35s ease,height .35s ease,border-color .25s,box-shadow .35s;
+  position:relative
+}
 .char-icon-btn:hover{background:#404040;border-color:var(--accent-dark)}
+/* Active turn: avatar grows by ~33% with a soft accent ring to draw the
+   eye. Pure CSS — runs whenever .active-turn is on the card root, which is
+   set in render based on state.activeCombatantId. */
+.char-card.active-turn .char-icon-btn{
+  width:48px;height:48px;font-size:26px;
+  border-color:var(--class-color, var(--accent));
+  box-shadow:0 0 0 1px var(--class-color, var(--accent)),0 0 14px rgba(212,165,116,.4)
+}
+.char-card.active-turn .char-icon-btn svg{width:30px;height:30px}
 .char-name{background:transparent;border:none;padding:0;font-weight:600;font-size:13px;color:var(--text);flex:1;min-width:0;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
 .char-name:focus{background:var(--panel-3);border-radius:3px;padding:2px 4px;outline:none;border:none;text-overflow:clip;overflow:auto}
 /* HP display */
-.char-hp-block{background:var(--panel-3);border-radius:5px;padding:6px 8px}
-.char-hp-row{display:flex;align-items:baseline;gap:3px;margin-bottom:4px}
-.char-hp-current{font-size:22px;font-weight:700;color:var(--text);background:transparent;border:none;padding:0;width:44px;text-align:center;line-height:1}
-.char-hp-current:focus{background:rgba(255,255,255,.05);border-radius:3px;outline:none}
-.char-hp-sep{font-size:14px;color:var(--text-dim);flex-shrink:0}
-.char-hp-max{font-size:13px;color:var(--text-muted);background:transparent;border:none;padding:0;width:36px}
-.char-hp-max:focus{background:rgba(255,255,255,.05);border-radius:3px;outline:none}
-/* Temporary HP inline input — small chip-style with the value left-aligned and
-   a "+" pseudo-element so it reads as a bonus. Hidden visually when 0. */
-.char-hp-temp{font-size:11px;font-weight:600;color:#9ad1ff;background:rgba(74,142,201,.12);border:1px solid rgba(74,142,201,.35);border-radius:8px;padding:1px 6px;width:42px;text-align:center;margin-left:6px}
-.char-hp-temp[value="0"]{opacity:.25}
-.char-hp-temp:focus{outline:none;border-color:rgba(74,142,201,.8);background:rgba(74,142,201,.18);opacity:1}
-.hp-bar-wrap{width:100%;height:5px;background:rgba(0,0,0,.3);border-radius:3px;overflow:hidden;transition:box-shadow .3s;position:relative}
+/* HP block gets more breathing room — it's the most important stat, so
+   it earns the most vertical space on the card. Adds padding + a tiny gap
+   between the big numeral and the bar below. */
+.char-hp-block{background:var(--panel-3);border-radius:6px;padding:8px 10px 9px}
+
+/* BIG HP block — large numeral dominates. Current / max as one big number,
+   temp HP as a small "Temp" field on the side. The HP bar (thicker now)
+   sits below this header. Color of the big number is set inline from the
+   tier helper so green/amber/red lands without an extra wrap div. */
+.char-hp-big{display:flex;align-items:center;gap:10px}
+.char-hp-big-num{
+  display:flex;align-items:baseline;flex:1;justify-content:center;
+  font-weight:800;line-height:1;letter-spacing:-.02em
+}
+.char-hp-big-num .char-hp-current{
+  font-size:28px;font-weight:800;color:inherit;
+  background:transparent;border:1px solid transparent;padding:0 2px;width:56px;text-align:right;line-height:1;
+  font-family:inherit;font-feature-settings:"tnum" 1;
+  transition:background .12s,border-color .12s;cursor:text;border-radius:3px
+}
+.char-hp-big-num .char-hp-current:hover{background:rgba(255,255,255,.04)}
+.char-hp-big-num .char-hp-current:focus{background:var(--panel-2);border-color:var(--accent);outline:none}
+.char-hp-big-sep{font-size:18px;color:var(--text-dim);margin:0 4px;opacity:.6}
+.char-hp-big-num .char-hp-max{
+  font-size:15px;color:var(--text-muted);
+  background:transparent;border:1px solid transparent;padding:0 2px;width:40px;text-align:left;line-height:1;font-weight:600;
+  transition:background .12s,border-color .12s;cursor:text;border-radius:3px
+}
+.char-hp-big-num .char-hp-max:hover{background:rgba(255,255,255,.04)}
+.char-hp-big-num .char-hp-max:focus{background:var(--panel-2);border-color:var(--accent);outline:none}
+
+/* Side temp-HP chip — small, compact, only visually loud when temp > 0. */
+.char-hp-side{display:flex;flex-direction:column;gap:2px;align-items:flex-end}
+.char-hp-temp-row{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;cursor:text}
+.char-hp-temp-row span{line-height:1}
+.char-hp-temp{
+  font-size:12px;font-weight:600;color:#9ad1ff;
+  background:rgba(74,142,201,.12);border:1px solid rgba(74,142,201,.35);border-radius:8px;
+  padding:1px 6px;width:42px;text-align:center;line-height:1
+}
+.char-hp-temp[value="0"]{opacity:.35;color:var(--text-dim);background:transparent;border-color:var(--border)}
+.char-hp-temp:focus{outline:none;border-color:rgba(74,142,201,.8);background:rgba(74,142,201,.18);opacity:1;color:#9ad1ff}
+
+/* Thicker HP bar — 8 px (was 5 px). Same color/fill/temp logic, just more
+   visually prominent so it carries weight equal to the numeral above. */
+.hp-bar-wrap{width:100%;height:8px;background:rgba(0,0,0,.4);border-radius:4px;overflow:hidden;transition:box-shadow .3s;position:relative;margin-top:8px}
 .hp-bar-temp{position:absolute;top:0;right:0;height:100%;width:25%;background:rgba(74,142,201,.6);border-left:1px solid rgba(255,255,255,.3)}
-.hp-bar-fill{height:100%;border-radius:3px;transition:width .3s,background .3s}
+.hp-bar-fill{height:100%;border-radius:4px;transition:width .3s,background .3s}
 /* Surplus: HP exceeds max (Aid, Heroes' Feast, temp-as-overflow). The bar
    is full and tinted blue; a soft glow signals "over-cap" at a glance. */
 .hp-bar-wrap.hp-surplus{box-shadow:0 0 6px rgba(74,142,201,.7),inset 0 0 0 1px rgba(74,142,201,.5)}
@@ -1086,15 +1273,68 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .hd-row .hd-count{font-size:10px;color:var(--text-dim);min-width:32px;text-align:right}
 .hd-row .btn{font-size:10px;padding:2px 6px}
 
-/* ===== Character sheet (Phase 2: expandable tabbed view) ===== */
+/* ===== Status badges in the card header ===== */
+/* Row of active-state pills (concentration, rage, wild shape, inspiration).
+   Empty row collapses to nothing — only the active states render. Each pill
+   is clickable to manage that state. */
+.char-status-badges{display:flex;flex-wrap:wrap;gap:4px;margin:-2px 0 2px}
+.char-status-badges .status-badge{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;
+  border:1px solid var(--border);background:var(--panel-3);color:var(--text-muted);
+  cursor:pointer;font-family:inherit;line-height:1.1;letter-spacing:.02em;
+  transition:background .12s,border-color .12s,color .12s;user-select:none
+}
+.char-status-badges .status-badge:hover{border-color:var(--accent);color:var(--text)}
+.char-status-badges .status-badge.conc{background:rgba(140,108,209,.20);border-color:rgba(140,108,209,.5);color:#b6a3e8}
+.char-status-badges .status-badge.rage{background:rgba(194,84,80,.25);border-color:rgba(194,84,80,.6);color:#e8b3b0;font-weight:700;letter-spacing:.05em}
+.char-status-badges .status-badge.wildshape{background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b}
+.char-status-badges .status-badge.insp{background:rgba(232,199,95,.22);border-color:rgba(232,199,95,.55);color:#e8c75f}
+.char-status-badges .status-badge.bardic{background:rgba(192,143,222,.22);border-color:rgba(192,143,222,.55);color:#c08fde}
+
+/* "Grant inspiration" affordance row — only renders when the character
+   doesn't already have inspiration active. Tiny outlined buttons. */
+.insp-give-row{display:flex;gap:4px;margin-top:2px}
+.insp-give-btn{
+  flex:1;padding:3px 7px;font-size:10px;
+  background:transparent;border:1px dashed var(--border);color:var(--text-muted);
+  border-radius:10px;cursor:pointer;font-family:inherit;font-weight:500;
+  transition:background .12s,border-color .12s,color .12s;letter-spacing:.02em
+}
+.insp-give-btn:hover{background:rgba(232,199,95,.10);border-color:rgba(232,199,95,.55);color:#e8c75f}
+.insp-give-btn.bardic:hover{background:rgba(192,143,222,.10);border-color:rgba(192,143,222,.55);color:#c08fde}
+
+/* ===== Character sheet — always-visible tab strip ===== */
+.sheet-tab-strip{
+  display:flex;margin-top:4px;
+  border:1px solid var(--border);border-radius:5px;background:var(--panel-3);overflow:hidden
+}
+.sheet-tab-strip .sheet-tab{
+  flex:1;padding:5px 4px;background:transparent;border:none;border-right:1px solid var(--border);
+  color:var(--text-muted);font-size:10px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;
+  font-weight:600;transition:background .12s,color .12s;font-family:inherit
+}
+.sheet-tab-strip .sheet-tab:last-child{border-right:none}
+.sheet-tab-strip .sheet-tab:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.sheet-tab-strip .sheet-tab.active{background:var(--panel-2);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.sheet-content-open{
+  margin-top:-1px;
+  padding:8px 10px;font-size:11px;color:var(--text);
+  max-height:380px;overflow-y:auto;
+  background:var(--panel-2);border:1px solid var(--border);border-top:none;
+  border-radius:0 0 5px 5px
+}
+.sheet-content-open .sheet-empty{padding:14px;text-align:center;color:var(--text-muted);font-size:11px;font-style:italic}
+
+/* Back-compat for any old call site still rendering .sheet-toggle / .sheet-tabs */
 .sheet-toggle{display:block;width:100%;margin-top:6px;padding:4px 6px;background:var(--panel-3);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);font-size:10px;cursor:pointer;text-align:center;transition:background .12s}
 .sheet-toggle:hover{background:var(--panel-2);color:var(--text)}
 .sheet-body{margin-top:6px;border:1px solid var(--border);border-radius:4px;background:var(--panel-2);overflow:hidden}
 .sheet-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel-3)}
-.sheet-tab{flex:1;padding:6px 4px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--text-muted);font-size:10px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;font-weight:600;transition:background .12s,color .12s}
-.sheet-tab:last-child{border-right:none}
-.sheet-tab:hover{background:rgba(255,255,255,.04);color:var(--text)}
-.sheet-tab.active{background:var(--panel-2);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.sheet-tabs .sheet-tab{flex:1;padding:6px 4px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--text-muted);font-size:10px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;font-weight:600;transition:background .12s,color .12s}
+.sheet-tabs .sheet-tab:last-child{border-right:none}
+.sheet-tabs .sheet-tab:hover{background:rgba(255,255,255,.04);color:var(--text)}
+.sheet-tabs .sheet-tab.active{background:var(--panel-2);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
 .sheet-content{padding:8px 10px;font-size:11px;color:var(--text);max-height:380px;overflow-y:auto}
 .sheet-empty{padding:14px;text-align:center;color:var(--text-muted);font-size:11px;font-style:italic}
 .sheet-block{margin-top:10px}
@@ -1115,7 +1355,21 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .sheet-stat-row.rollable:hover{background:rgba(212,165,116,.1);border-radius:3px}
 .sheet-stat-row.rollable:hover .sheet-stat-val{color:var(--accent)}
 /* Last-roll strip — pinned above the ability block on Stats / Skills tabs. */
-.roll-strip{display:flex;align-items:center;gap:6px;background:var(--panel-3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;margin-bottom:8px;font-size:11px;transition:border-color .2s,background .2s;animation:rollPulse .5s ease-out}
+.roll-strip{display:flex;align-items:center;gap:6px;background:var(--panel-3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;margin-bottom:4px;font-size:11px;transition:border-color .2s,background .2s;animation:rollPulse .5s ease-out}
+.roll-strip.history{
+  /* Historic rolls in the disclosure list — same shape but dimmer so the
+     current roll stays visually dominant. No pulse animation. */
+  opacity:.7;animation:none;font-size:10px;padding:3px 7px
+}
+.roll-strip.history .roll-total{font-size:11px}
+.roll-history-wrap{margin-bottom:8px}
+.roll-history-toggle{
+  display:block;margin:0 auto;font-size:9px;
+  background:transparent;border:none;color:var(--text-muted);cursor:pointer;
+  padding:2px 8px;letter-spacing:.04em;font-family:inherit
+}
+.roll-history-toggle:hover{color:var(--text)}
+.roll-history-list{display:flex;flex-direction:column;gap:2px;margin-top:2px}
 .roll-strip.crit{border-color:#6b9e6b;background:rgba(107,158,107,.15)}
 .roll-strip.fumble{border-color:#c25450;background:rgba(194,84,80,.15)}
 @keyframes rollPulse { 0%{transform:scale(.96);box-shadow:0 0 0 0 var(--accent)} 60%{box-shadow:0 0 0 6px rgba(212,165,116,0)} 100%{transform:scale(1);box-shadow:0 0 0 0 rgba(0,0,0,0)} }
@@ -1177,10 +1431,23 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .prof-group-label{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;margin-bottom:3px}
 .prof-chips{display:flex;flex-wrap:wrap;gap:4px}
 .prof-chip{background:var(--panel-3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:10px;color:var(--text);white-space:nowrap}
-.char-stat{background:var(--panel-3);border-radius:4px;padding:3px 4px;text-align:center}
+/* Click-to-edit stat cells. By default the input reads like plain text;
+   hovering it shows a subtle backdrop (so users know it's editable), and
+   focus reveals the full input chrome. Avoids the "every field looks like
+   a form" feeling without losing edit-in-place ergonomics. */
+.char-stat{
+  background:transparent;border-radius:4px;padding:3px 4px;text-align:center;
+  transition:background .12s
+}
+.char-stat:hover{background:var(--panel-3)}
 .char-stat .l{font-size:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
-.char-stat input{background:transparent;border:none;text-align:center;padding:0;font-weight:600;font-size:12px;width:100%;color:var(--text)}
-.char-stat input:focus{outline:none;background:rgba(255,255,255,.05);border-radius:2px}
+.char-stat input{
+  background:transparent;border:1px solid transparent;text-align:center;padding:0;
+  font-weight:600;font-size:12px;width:100%;color:var(--text);font-family:inherit;
+  transition:background .12s,border-color .12s
+}
+.char-stat input:hover{cursor:text}
+.char-stat input:focus{outline:none;background:var(--panel-2);border-color:var(--accent);border-radius:3px}
 /* Resources */
 .resource-section{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--border);padding-top:6px}
 .resource-section-head{display:flex;align-items:center;justify-content:space-between;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:2px}

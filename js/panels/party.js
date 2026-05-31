@@ -26,15 +26,46 @@ registerPanel('party',{
       // it gets a confirm; short rest is a softer touch.
       items.push({ label:'🛌 Long rest (party)',  run: () => this._longRestAll() });
       items.push({ label:'💤 Short rest (party)', run: () => this._shortRestAll() });
+      // Compact "party glance" mode — one-row-per-character layout. Stored
+      // as a setting so it persists across reloads & syncs.
+      const compact = !!(state.settings && state.settings.partyCompact);
+      items.push({
+        label: (compact?'☑':'☐') + ' Compact party glance',
+        run: () => {
+          if (!state.settings) state.settings = {};
+          state.settings.partyCompact = !state.settings.partyCompact;
+          save(); this._render();
+        }
+      });
     }
     return items;
   },
 
   _render(){
     const b=this._body;if(!b)return;
-    // Long rest / Short rest moved into the window-options menu (menuItems)
-    // so the panel is card-only — no top toolbar competing with the grid.
-    b.innerHTML = '<div class="party-grid">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
+    const hasParty = state.party.length > 0;
+    const compact = !!(state.settings && state.settings.partyCompact);
+    // Search filter — transient (this._search), not persisted. Filters by
+    // name (case-insensitive substring). When set, non-matching cards drop
+    // out of the grid entirely.
+    const q = String(this._search || '').toLowerCase().trim();
+    const filtered = q
+      ? state.party.map((c,i)=>({c,i})).filter(({c}) => (c.name||'').toLowerCase().includes(q))
+      : state.party.map((c,i)=>({c,i}));
+    const searchBar = hasParty
+      ? `<div class="party-search-row">
+          <input type="search" class="party-search" placeholder="🔎 Filter by name…" value="${esc(this._search||'')}" autocomplete="off">
+          ${this._search ? '<button class="party-search-clear" data-act="party-search-clear" title="Clear filter">×</button>' : ''}
+          <span style="flex:1"></span>
+          <span class="party-search-count">${filtered.length}/${state.party.length}</span>
+        </div>`
+      : '';
+    const gridCls = 'party-grid' + (compact ? ' compact' : '');
+    const cards = filtered.map(({c,i}) => this._card(c, i)).join('');
+    const emptyHit = (q && filtered.length === 0)
+      ? '<div class="party-search-empty">No characters match "<strong>'+esc(this._search)+'</strong>"</div>'
+      : '';
+    b.innerHTML = searchBar + '<div class="'+gridCls+'">' + cards + '</div>' + emptyHit;
     this._wire();
   },
 
@@ -169,7 +200,11 @@ registerPanel('party',{
     const downed = (c.hp != null) && c.hp <= 0;
     const raging = !!c.rage;
     const wildshaped = !!(c.wildshape && c.wildshape.name);
-    return '<div class="char-card'+(isActiveTurn?' active-turn':'')+(inCombat?' in-combat':'')+(downed?' downed':'')+(raging?' raging':'')+(wildshaped?' wildshaped':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat">'
+    const classColor = this._classColor(c);
+    return '<div class="char-card'+(isActiveTurn?' active-turn':'')+(inCombat?' in-combat':'')+(downed?' downed':'')+(raging?' raging':'')+(wildshaped?' wildshaped':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat" style="--class-color:'+classColor+'">'
+      // Class-color accent stripe — purely decorative, set via CSS using the
+      // --class-color custom property on the card root.
+      +'<div class="char-class-stripe"></div>'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
@@ -184,21 +219,32 @@ registerPanel('party',{
         +'<button class="char-combat-btn'+(inCombat?' in-combat':'')+'" data-act="toggle-combat" data-idx="'+i+'" title="'+(inCombat?'Remove from combat':'Add to combat')+'">'
           +(inCombat?'⚔ In':'+ ⚔')
         +'</button>'
+        // Quick-roll + actions menu — placed in the header so the HP strip
+        // stays its compact 4-column layout. Roll pops a d20 menu (init/saves/
+        // skills/death save). ⋯ opens the consolidated actions menu (combat
+        // toggle, rage/wild shape, hit die, inspiration, edit, remove).
+        +'<button class="char-action-btn roll" data-act="quick-roll" data-idx="'+i+'" title="Roll d20 — initiative, save, skill, or death save">🎲</button>'
+        +'<button class="char-action-btn menu" data-act="actions-menu" data-idx="'+i+'" title="More actions — combat toggle, hit die, inspiration, edit, remove">⋯</button>'
       +'</div>'
-      // HP block — current / max with an optional Temp HP badge. Temp HP
-      // sits visually beside the HP fields and edits inline like the others.
-      // The HP bar gains a small overlay segment when temp > 0 so the
-      // surplus is visible at a glance, even if c.hp itself isn't full.
-      // The heal/damage strip on the right mirrors the combat tracker — same
-      // shape, same handlers (party uses _applyHpDelta), so DMs don't context-
-      // switch to combat just to apply a potion outside of initiative.
+      // Status badges — concentration, rage, wildshape, inspiration. Only
+      // renders for ACTIVE states. Empty row collapses to nothing.
+      + this._statusBadges(c, i)
+      // BIG HP block — large numeral, thick bar, color-coded by tier. The
+      // current/max/temp inputs live UNDER the numeral as small fields so
+      // the eye lands on the big number first. Heal/damage strip is below.
       +'<div class="char-hp-block">'
-        +'<div class="char-hp-row">'
-          +'<input class="char-hp-current" type="number" value="'+c.hp+'" data-field="hp" data-idx="'+i+'" title="Current HP">'
-          +'<span class="char-hp-sep">/</span>'
-          +'<input class="char-hp-max" type="number" value="'+c.hpMax+'" data-field="hpMax" data-idx="'+i+'" title="Max HP">'
-          +'<input class="char-hp-temp" type="number" value="'+(c.tempHp||0)+'" data-field="tempHp" data-idx="'+i+'" title="Temporary HP (absorbs damage first)" min="0">'
-          +'<span style="font-size:10px;color:var(--text-dim);margin-left:auto">HP</span>'
+        +'<div class="char-hp-big">'
+          +'<div class="char-hp-big-num" style="color:'+hpColor+'" title="Click to edit current HP">'
+            +'<input class="char-hp-current" type="number" value="'+c.hp+'" data-field="hp" data-idx="'+i+'" title="Current HP">'
+            +'<span class="char-hp-big-sep">/</span>'
+            +'<input class="char-hp-max" type="number" value="'+c.hpMax+'" data-field="hpMax" data-idx="'+i+'" title="Max HP">'
+          +'</div>'
+          +'<div class="char-hp-side">'
+            +'<label class="char-hp-temp-row" title="Temporary HP (absorbs damage first)">'
+              +'<span>Temp</span>'
+              +'<input class="char-hp-temp" type="number" value="'+(c.tempHp||0)+'" data-field="tempHp" data-idx="'+i+'" min="0">'
+            +'</label>'
+          +'</div>'
         +'</div>'
         // Horizontal heal/damage row sits beside/below the HP fields, full
         // width of the card. Bigger tap targets, clearer grouping, and no
@@ -277,38 +323,57 @@ registerPanel('party',{
       +this._hitDiceRow(c,i)
       // Resources
       +resHtml
-      // Inspiration row: Heroic (the original generic toggle) + Bardic.
-      // Bardic shows the appropriate die-size from class+level when this
-      // character is actually a bard (d6 lv1→d8 lv5→d10 lv10→d12 lv15).
+      // Inspiration moved into the status badges row above. To AWARD/grant
+      // inspiration (when none is active), use the inspiration buttons in
+      // the tab content below — or right-click anywhere on the badge area.
+      // For PCs without active inspiration, a small "+ Insp / + Bardic"
+      // row sits at the bottom of the card body.
       + (()=>{
+          // Only render the "give inspiration" affordance row when neither
+          // flavor is active (otherwise the badges above already cover it).
+          if (c.inspiration && c.bardicInspiration) return '';
           const bd = this._bardicDie(c);
-          const bardicLabel = bd ? `Bardic ${bd}` : 'Bardic';
-          const bardicTitle = bd
-            ? `Bardic Inspiration die (auto from level ${subLvl||'?'}): roll a ${bd} for the buff`
-            : 'Bardic Inspiration';
-          return '<div class="inspiration-pair">'
-            +'<div class="inspiration-row '+(c.inspiration?'has-inspiration':'')+'" data-act="insp" data-idx="'+i+'" title="Heroic Inspiration · right-click for award reasons">'
-              +'<div class="inspiration-toggle"></div><span>Heroic</span>'
-            +'</div>'
-            +'<div class="inspiration-row '+(c.bardicInspiration?'has-inspiration bardic':'')+'" data-act="bardic-insp" data-idx="'+i+'" title="'+esc(bardicTitle)+'">'
-              +'<div class="inspiration-toggle"></div><span>'+esc(bardicLabel)+'</span>'
-            +'</div>'
-          +'</div>';
+          const isBard = /\bbard\b/i.test(String(c.cls || c.sheet?.class || ''));
+          const parts = [];
+          if (!c.inspiration){
+            parts.push(`<button class="insp-give-btn" data-act="insp" data-idx="${i}" title="Grant Heroic Inspiration · right-click for award reasons">✨ Grant</button>`);
+          }
+          if (!c.bardicInspiration && isBard){
+            parts.push(`<button class="insp-give-btn bardic" data-act="bardic-insp" data-idx="${i}" title="Grant Bardic Inspiration${bd?' ('+bd+')':''}">🎵 Bardic${bd?' '+bd:''}</button>`);
+          }
+          return parts.length ? `<div class="insp-give-row">${parts.join('')}</div>` : '';
         })()
-      // Full character sheet — collapsed by default; expand to see tabs.
-      + this._sheetSection(c, i)
+      // Tab strip — always visible. Click a tab to show its content;
+      // click the SAME tab to collapse. Replaces the old ▼/▲ accordion.
+      + this._sheetTabStrip(c, i)
     +'</div>';
   },
 
   // ------------------------------------------------------------------
-  // Character sheet (Phase 2): tabbed view of stats / skills / spells
+  // Character sheet — Stats / Skills / Spells / Features tabs.
+  // Tab strip is ALWAYS visible at the bottom of the card. Clicking a tab:
+  //   • If no tab is currently open → opens it.
+  //   • If clicking the OPEN tab → collapses (no content shown).
+  //   • If clicking a DIFFERENT tab → switches the content panel.
+  // _expanded[c.id] tracks open/closed; _activeTab[c.id] tracks which tab.
   // ------------------------------------------------------------------
-  _sheetSection(c, i){
-    const has = !!c.sheet;
+  _sheetTabStrip(c, i){
+    const tabs = ['stats','skills','spells','features'];
+    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', features:'Features'};
     const expanded = !!this._expanded[c.id];
-    const toggleLabel = expanded ? '▲ Hide character sheet' : (has ? '▼ Show character sheet' : '▼ Show character sheet (no PDF imported)');
-    return '<button class="sheet-toggle" data-act="toggle-sheet" data-idx="'+i+'">'+toggleLabel+'</button>'
-      + (expanded ? this._sheetBody(c, i) : '');
+    const active = expanded ? (this._activeTab[c.id] || 'stats') : null;
+    const tabBar = tabs.map(t =>
+      `<button class="sheet-tab ${t===active?'active':''}" data-act="sheet-tab-toggle" data-idx="${i}" data-tab="${t}" title="${labels[t]}${t===active?' — click again to collapse':''}">${labels[t]}</button>`
+    ).join('');
+    let body = '';
+    if (expanded){
+      if (active === 'stats')        body = this._tabStats(c);
+      else if (active === 'skills')  body = this._tabSkills(c);
+      else if (active === 'spells')  body = this._tabSpells(c);
+      else if (active === 'features')body = this._tabFeatures(c);
+    }
+    return `<div class="sheet-tab-strip">${tabBar}</div>`
+      + (expanded ? `<div class="sheet-content sheet-content-open">${body}</div>` : '');
   },
 
   _sheetBody(c, i){
@@ -824,6 +889,50 @@ registerPanel('party',{
     showToast(c.name + ' reverts to their normal form');
   },
 
+  // Class → accent color. Drives the left-edge stripe on each party card so
+  // a glance across the panel identifies the party comp by color. Lowercase
+  // match on the c.cls string (multiclass "Fighter/Wizard" uses the first
+  // class). Default falls back to the workspace accent color.
+  _classColor(c){
+    const COLORS = {
+      barbarian:'#c25450', bard:'#c08fde', cleric:'#e8c75f', druid:'#6b9e6b',
+      fighter:'#a0a0a8', monk:'#c9a050', paladin:'#d4d4dc', ranger:'#6b8f6b',
+      rogue:'#6a6a72', sorcerer:'#e892a0', warlock:'#8a4fa0', wizard:'#5e8fc8',
+      artificer:'#c47a52', blood_hunter:'#7c1f1f',
+    };
+    const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
+    for (const k of Object.keys(COLORS)){
+      if (cls.includes(k.replace('_',' '))) return COLORS[k];
+    }
+    return 'var(--accent)';
+  },
+
+  // Header status badges. Renders only ACTIVE states (concentration spell,
+  // rage, wild shape, heroic/bardic inspiration). Empty → returns ''. Each
+  // badge is clickable to manage that state. Lives right under the name so
+  // the eye catches it before falling to HP.
+  _statusBadges(c, i){
+    const badges = [];
+    if (c.concentration){
+      badges.push(`<span class="status-badge conc" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(c.concentration)} — click to drop">🌀 ${esc(c.concentration)}</span>`);
+    }
+    if (c.rage){
+      badges.push(`<span class="status-badge rage" data-act="rage-off" data-idx="${i}" title="Raging — adv on STR · resist B/P/S · click to end">💢 RAGE</span>`);
+    }
+    if (c.wildshape && c.wildshape.name){
+      badges.push(`<span class="status-badge wildshape" data-act="ws-end" data-idx="${i}" title="Wild Shape as ${esc(c.wildshape.name)} — click to revert">🐺 ${esc(c.wildshape.name)}</span>`);
+    }
+    if (c.inspiration){
+      badges.push(`<span class="status-badge insp" data-act="insp" data-idx="${i}" title="Heroic Inspiration — click to spend">✨ Inspiration</span>`);
+    }
+    if (c.bardicInspiration){
+      const bd = this._bardicDie(c);
+      badges.push(`<span class="status-badge bardic" data-act="bardic-insp" data-idx="${i}" title="Bardic Inspiration${bd?' '+bd:''} — click to spend">🎵 Bardic${bd?' '+bd:''}</span>`);
+    }
+    if (!badges.length) return '';
+    return `<div class="char-status-badges">${badges.join('')}</div>`;
+  },
+
   // Bardic Inspiration die-size ladder (5e RAW): d6 at lv1, d8 at lv5, d10
   // at lv10, d12 at lv15. Returns the die string when this character is a
   // bard (multiclass detection is "class string contains 'bard'") or null
@@ -1158,48 +1267,66 @@ registerPanel('party',{
     showToast('💤 Short rest — concentration dropped, short-rest resources refreshed');
   },
 
-  // Render the "Last roll" strip shown above the ability block. Returns ''
-  // when this character hasn't rolled anything this session. The strip is
-  // ephemeral (held on the panel, not persisted) so opening the sheet on
-  // a fresh page load starts clean.
+  // Render the "Last roll" strip + optional history (last 4 prior rolls).
+  // Storage: this._rollHistory[c.id] is an array of up to 5 results with
+  // index 0 = most recent. Older rolls reveal via a small ▼ disclosure
+  // anchored on the strip. Returns '' if the character hasn't rolled yet.
   _renderLastRoll(c){
-    const r = this._lastRoll && this._lastRoll[c.id];
-    if (!r) return '';
-    const modText = (r.mod >= 0 ? '+' : '') + r.mod;
-    const modeChip = r.mode === 'adv' ? '<span class="roll-chip adv">ADV</span>'
-                    : r.mode === 'dis' ? '<span class="roll-chip dis">DIS</span>'
+    const list = (this._rollHistory && this._rollHistory[c.id]) || [];
+    if (!list.length) return '';
+    const showHistory = !!(this._historyOpen && this._historyOpen[c.id]);
+    const renderOne = (r, isCurrent) => {
+      const modText = (r.mod >= 0 ? '+' : '') + r.mod;
+      const modeChip = r.mode === 'adv' ? '<span class="roll-chip adv">ADV</span>'
+                      : r.mode === 'dis' ? '<span class="roll-chip dis">DIS</span>'
+                      : '';
+      const dice = r.rolls.map((x, di) =>
+        `<span class="roll-die${di === r.kept ? ' kept' : ' dropped'}${x === 20 ? ' crit' : x === 1 ? ' fumble' : ''}">${x}</span>`
+      ).join('');
+      const status = r.crit ? '<span class="roll-status crit">CRIT 20!</span>'
+                    : r.fumble ? '<span class="roll-status fumble">Nat 1</span>'
                     : '';
-    const dice = r.rolls.map((x, i) =>
-      `<span class="roll-die${i === r.kept ? ' kept' : ' dropped'}${x === 20 ? ' crit' : x === 1 ? ' fumble' : ''}">${x}</span>`
-    ).join('');
-    const status = r.crit ? '<span class="roll-status crit">CRIT 20!</span>'
-                  : r.fumble ? '<span class="roll-status fumble">Nat 1</span>'
-                  : '';
-    // Attack rolls carry an attached damage block. Show it inline so the
-    // player sees the to-hit AND the damage on one row. Damage is also bold-
-    // styled when the hit critted (already doubled at roll time).
-    const dmgBlock = r.damage
-      ? `<span class="roll-dmg ${r.crit?'crit':''}" title="${esc(r.damage.breakdown)}">
-          <span class="roll-dmg-icon">⚔</span>
-          <span class="roll-dmg-total">${r.damage.total}</span>${r.damage.type?`<span class="roll-dmg-type">${esc(r.damage.type)}</span>`:''}
-         </span>`
+      const dmgBlock = r.damage
+        ? `<span class="roll-dmg ${r.crit?'crit':''}" title="${esc(r.damage.breakdown)}">
+            <span class="roll-dmg-icon">⚔</span>
+            <span class="roll-dmg-total">${r.damage.total}</span>${r.damage.type?`<span class="roll-dmg-type">${esc(r.damage.type)}</span>`:''}
+           </span>`
+        : '';
+      return `<div class="roll-strip ${isCurrent?'current':'history'} ${r.crit?'crit':''}${r.fumble?' fumble':''}">
+        <span class="roll-label">${esc(r.label || 'Roll')}</span>
+        ${modeChip}
+        <span class="roll-dice">${dice}</span>
+        <span class="roll-eq">${modText}</span>
+        <span class="roll-total">${r.total}</span>
+        ${dmgBlock}
+        ${status}
+      </div>`;
+    };
+    const cur = list[0];
+    const prior = list.slice(1);
+    const toggleBtn = prior.length
+      ? `<button class="roll-history-toggle" data-act="roll-history-toggle" data-cid="${esc(c.id)}" title="${showHistory?'Hide':'Show'} the last ${prior.length} roll${prior.length===1?'':'s'}">${showHistory?'▲':'▼'} ${prior.length} prior</button>`
       : '';
-    return `<div class="roll-strip ${r.crit?'crit':''}${r.fumble?' fumble':''}">
-      <span class="roll-label">${esc(r.label || 'Roll')}</span>
-      ${modeChip}
-      <span class="roll-dice">${dice}</span>
-      <span class="roll-eq">${modText}</span>
-      <span class="roll-total">${r.total}</span>
-      ${dmgBlock}
-      ${status}
-      <span class="roll-hint" title="Shift-click any ability or save for advantage · Alt-click for disadvantage">?</span>
+    let priorHtml = '';
+    if (showHistory && prior.length){
+      priorHtml = '<div class="roll-history-list">' + prior.map(r => renderOne(r, false)).join('') + '</div>';
+    }
+    return `<div class="roll-history-wrap">
+      ${renderOne(cur, true)}
+      ${toggleBtn}
+      ${priorHtml}
     </div>`;
   },
 
-  // Persist the result of a roll on the panel and re-render the active
-  // character's sheet so the strip updates. The map is keyed by character
-  // id so each PC keeps their own most-recent roll.
+  // Persist a roll result + keep up to 5 most-recent per character. New
+  // entries push to the front (index 0); older drop off the tail.
   _setLastRoll(c, result){
+    if (!this._rollHistory) this._rollHistory = {};
+    const list = this._rollHistory[c.id] || [];
+    list.unshift(result);
+    if (list.length > 5) list.length = 5;
+    this._rollHistory[c.id] = list;
+    // Back-compat: keep _lastRoll[c.id] pointing at the most recent.
     if (!this._lastRoll) this._lastRoll = {};
     this._lastRoll[c.id] = result;
     this._render();
@@ -1995,7 +2122,9 @@ registerPanel('party',{
         // a later save anywhere could push the old combatants back out.
         if(['hp','hpMax','ac'].includes(f))syncPartyToCombat(i);
         save();
-        // Re-render just this card's HP bar without full re-render
+        // Re-render just this card's HP bar + big numeral color without
+        // doing a full re-render. The numeral color is bound inline via
+        // _hpBarStyle.color so it has to be updated here too.
         if(f==='hp'||f==='hpMax'||f==='tempHp'){
           const card=b.querySelector('[data-cidx="'+i+'"]');
           if(card){
@@ -2003,13 +2132,42 @@ registerPanel('party',{
             const hp=this._hpBarStyle(p);
             const wrap=card.querySelector('.hp-bar-wrap');
             const bar=card.querySelector('.hp-bar-fill');
+            const big=card.querySelector('.char-hp-big-num');
             if(wrap) wrap.classList.toggle('hp-surplus', hp.surplus);
             if(bar){bar.style.width=hp.pct+'%';bar.style.background=hp.color;}
+            if(big){big.style.color=hp.color;}
           }
         }
       });
       inp.addEventListener('click',e=>e.stopPropagation());
     });
+
+    // Party search — filters cards by name (case-insensitive). Live as you
+    // type; we keep focus + caret position by avoiding the full re-render's
+    // input replacement (the search box is the FIRST input in the panel, so
+    // we re-focus + restore selection after rendering).
+    const searchEl = b.querySelector('.party-search');
+    if (searchEl){
+      searchEl.addEventListener('input', e => {
+        const v = e.target.value;
+        const sel = e.target.selectionStart;
+        this._search = v;
+        this._render();
+        // Restore focus + caret since _render rebuilt the DOM.
+        const newEl = this._body?.querySelector('.party-search');
+        if (newEl){
+          newEl.focus();
+          try { newEl.setSelectionRange(sel, sel); } catch(_){}
+        }
+      });
+      // Esc clears.
+      searchEl.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && this._search){
+          this._search = '';
+          this._render();
+        }
+      });
+    }
 
     // Heal/damage amount input — suppress drag/card-click and persist the
     // typed value across renders so the DM doesn't have to re-type.
@@ -2090,6 +2248,167 @@ registerPanel('party',{
       else if(act==='spell-open'){
         this._openSpellDetail(el.dataset.spell);
       }
+      // Unified tab toggle replaces the old toggle-sheet/sheet-tab pair.
+      //   • clicking the currently-active tab collapses the content panel
+      //   • clicking a different tab (or any tab when collapsed) opens that tab
+      else if(act==='sheet-tab-toggle'){
+        const c = state.party[i]; if (!c) return;
+        const newTab = el.dataset.tab;
+        const wasOpen = !!this._expanded[c.id];
+        const oldTab = this._activeTab[c.id];
+        if (wasOpen && oldTab === newTab){
+          this._expanded[c.id] = false;
+        } else {
+          this._expanded[c.id] = true;
+          this._activeTab[c.id] = newTab;
+        }
+        this._render();
+      }
+      // Quick-roll popover — d20 with optional adv/dis. Lets the DM roll
+      // initiative / a save / a skill / a death save without expanding the
+      // sheet. Anchored under the 🎲 button. Shift = adv, Alt = dis when
+      // selecting from the menu.
+      else if(act==='quick-roll'){
+        const c = state.party[i]; if (!c) return;
+        const rect = el.getBoundingClientRect();
+        const mode = e.shiftKey ? 'adv' : e.altKey ? 'dis' : 'normal';
+        const items = [];
+        // Initiative — always available.
+        items.push({ label:'⚡ Initiative', onClick: () => {
+          const r = this._rollD20(c.init || 0, { mode, label: c.name + ' · Initiative' });
+          this._setLastRoll(c, r);
+          if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
+        }});
+        const ab = c.abilities || {};
+        const sh = c.sheet || {};
+        // Saving throws — uses sheet.saves[k] if available, falls back to ability mod.
+        const saveDefs = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
+        const saves = sh.saves || {};
+        const anySave = saveDefs.some(([k]) => saves[k] != null || typeof ab[k] === 'number');
+        if (anySave){
+          items.push({ label: '─────', disabled: true });
+          saveDefs.forEach(([k, lbl]) => {
+            let v = saves[k];
+            if (v == null && typeof ab[k] === 'number') v = Math.floor((ab[k]-10)/2);
+            if (v == null) return;
+            items.push({ label: `${lbl} save (${v>=0?'+':''}${v})`, onClick: () => {
+              const r = this._rollD20(v, { mode, label: c.name + ' · ' + lbl + ' Save' });
+              this._setLastRoll(c, r);
+              if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
+            }});
+          });
+        }
+        // Death save when downed.
+        if ((c.hp || 0) <= 0){
+          items.push({ label: '─────', disabled: true });
+          items.push({ label:'💀 Death save', onClick: () => {
+            const r = this._rollD20(0, { mode, label: c.name + ' · Death Save' });
+            this._setLastRoll(c, r);
+          }});
+        }
+        items.push({ label: '─────', disabled: true });
+        items.push({ label:'(Shift = advantage · Alt = disadvantage)', disabled:true });
+        showContextMenu(rect.left, rect.bottom + 4, items);
+      }
+      // ⋯ actions menu — rare or "drill-down" actions consolidated in one
+      // place so the always-visible card stays clean. Class-conditional
+      // entries (rage, wild shape) only appear when applicable.
+      else if(act==='actions-menu'){
+        const c = state.party[i]; if (!c) return;
+        const rect = el.getBoundingClientRect();
+        const items = [];
+        const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
+        const isBarb  = /\bbarbarian\b/.test(cls);
+        const isDruid = /\bdruid\b/.test(cls);
+        const isBard  = /\bbard\b/.test(cls);
+        // Combat toggle
+        const inCombatNow = !!(state.combatants && state.combatants.find(co => co.id === c.id));
+        items.push({
+          label: inCombatNow ? '⚔ Remove from combat' : '⚔ Add to combat',
+          onClick: () => {
+            const wireEl = this._body?.querySelector(`[data-cidx="${i}"] .char-combat-btn`)
+                       || { dataset:{ idx: String(i) }, closest:()=>null };
+            // Simplest: just call the toggle-combat handler inline.
+            const cIdx = state.combatants.findIndex(co => co.id === c.id);
+            if (cIdx >= 0){
+              state.combatants.splice(cIdx, 1);
+              if (state.activeCombatantId === c.id){
+                state.activeCombatantId = state.combatants[0]?.id || null;
+              }
+              save(); this._render(); panelDefs.combat?._render?.();
+            } else if (panelDefs.combat?._addPartyToCombat){
+              panelDefs.combat._addPartyToCombat(i);
+              this._render();
+            }
+          }
+        });
+        // Rage (barb)
+        if (isBarb){
+          items.push({
+            label: c.rage ? '💢 End rage' : '💢 Enter rage',
+            onClick: () => {
+              state.party[i] = {...c, rage: !c.rage};
+              save(); this._render(); panelDefs.combat?._render?.();
+            }
+          });
+        }
+        // Wild Shape (druid)
+        if (isDruid){
+          items.push({
+            label: c.wildshape ? '🐺 Revert wild shape' : '🐺 Wild shape…',
+            onClick: () => c.wildshape ? this._endWildShape(i) : this._editWildShape(i),
+          });
+        }
+        // Hit die spend
+        if (c.hitDice && c.hitDice.max){
+          items.push({
+            label: `🎲 Spend a hit die (${c.hitDice.current||0}/${c.hitDice.max})`,
+            disabled: (c.hitDice.current||0) === 0,
+            onClick: () => this._spendHitDie(i),
+          });
+        }
+        items.push({ label: '─────', disabled: true });
+        // Inspiration grants
+        items.push({
+          label: c.inspiration ? '✨ Spend Heroic Inspiration' : '✨ Grant Heroic Inspiration',
+          onClick: () => {
+            state.party[i] = {...c, inspiration: !c.inspiration};
+            save(); this._render();
+          }
+        });
+        if (isBard){
+          items.push({
+            label: c.bardicInspiration ? '🎵 Spend Bardic Inspiration' : '🎵 Grant Bardic Inspiration',
+            onClick: () => {
+              state.party[i] = {...c, bardicInspiration: !c.bardicInspiration};
+              save(); this._render();
+            }
+          });
+        }
+        items.push({ label: '─────', disabled: true });
+        items.push({ label:'✎ Edit details…',  onClick: () => this._openCharDetailsEditor(i) });
+        items.push({ label:'📋 Manage Party…', onClick: () => this._openManageParty() });
+        items.push({ label:'🗑 Remove from party', onClick: () => {
+          showModal('Remove '+c.name+'?',[],'Remove').then(r=>{
+            if(r===null)return;
+            state.party.splice(i,1); save(); this._render();
+          });
+        }});
+        showContextMenu(rect.left, rect.bottom + 4, items);
+      }
+      // Party search clear (× button) — empties the filter.
+      else if(act==='party-search-clear'){
+        this._search = '';
+        this._render();
+      }
+      // Roll history disclosure — flips _historyOpen[cid].
+      else if(act==='roll-history-toggle'){
+        const cid = el.dataset.cid;
+        if (!this._historyOpen) this._historyOpen = {};
+        this._historyOpen[cid] = !this._historyOpen[cid];
+        this._render();
+      }
+      // Back-compat handlers (in case some path still emits the old names).
       else if(act==='toggle-sheet'){
         const c = state.party[i]; if (!c) return;
         this._expanded[c.id] = !this._expanded[c.id];
