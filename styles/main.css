@@ -360,6 +360,19 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
      hit targets don't collide. */
   body.player-mode .window-body .char-card{padding:10px;gap:7px}
   body.player-mode .window-body .resource-row{padding:4px 0}
+
+  /* Party grid on mobile player view — the desktop grid uses a FIXED card
+     width via --party-card-w, which on a 360-400px phone leaves the card
+     stranded at 210px with empty space to its right. Override to a single
+     column that fills the viewport so cards are touch-friendly without
+     pinch-zoom. Also kill the resize grip (no use on touch). */
+  body.player-mode .window-body .party-grid{
+    grid-template-columns:1fr !important;
+    gap:8px;padding:8px
+  }
+  body.player-mode .window-body .char-resize-grip{display:none}
+  /* Compact mode override — keep single-column behavior here too. */
+  body.player-mode .window-body .party-grid.compact{grid-template-columns:1fr !important}
   /* Allow vertical scroll (panel content can be tall), but lock horizontal
      pan — the canvas is 5000px wide and there's nothing useful to the side
      of a fullscreen panel. */
