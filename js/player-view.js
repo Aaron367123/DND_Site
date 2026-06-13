@@ -28,7 +28,7 @@ let _playerVisible = null; // populated in initPlayerView
 
 function _applySharedPanelsToPlayerView(){
   const shared = new Set(state.sharedPanels || []);
-  const isMobile = window.matchMedia('(max-width: 768px)').matches
+  const isMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches
     || window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
   // First time: default to first shared panel on mobile, all on desktop.
   if (_playerVisible == null){
@@ -129,7 +129,7 @@ function _renderPlayerDock(){
   // "tap a chip to switch" tip so they don't miss the other shared panels.
   // Arrow direction is keyed to dock orientation (bottom in portrait, right
   // in landscape) so the hint actually points at the dock.
-  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const isMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
   const isLandscape = window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
   const HINT_KEY = 'skt-pv-dock-hint-seen';
   if ((isMobile || isLandscape) && shared.length > 1){
@@ -152,7 +152,7 @@ function _renderPlayerDock(){
   dock.querySelectorAll('[data-pv-toggle]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.pvToggle;
-      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      const isMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
       if (isMobile){
         // Tab-bar behavior: tapping a chip shows ONLY that panel; tapping the
         // active chip again hides it (back to empty state).
@@ -212,7 +212,7 @@ function _initMobileDockHideOnScroll(){
     // Active on both portrait mobile and short-screen landscape (where the
     // dock pivots to a side rail). Without the landscape branch the side
     // dock never hides, eating screen width permanently.
-    const mobile = window.matchMedia('(max-width: 768px)').matches
+    const mobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches
       || window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
     if (!mobile) return;
     const target = e.target;
@@ -281,9 +281,9 @@ function initPlayerView(){
   // - Leaving mobile: restore every shared panel so the desktop user gets the
   //   full view they had before. Previously this was a one-way ratchet —
   //   rotating an iPad back to landscape left the player stuck on one panel.
-  let _wasMobile = window.matchMedia('(max-width: 768px)').matches;
+  let _wasMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
   window.addEventListener('resize', () => {
-    const nowMobile = window.matchMedia('(max-width: 768px)').matches;
+    const nowMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
     if (nowMobile && !_wasMobile && _playerVisible && _playerVisible.size > 1){
       const first = [..._playerVisible][0];
       _playerVisible = new Set([first]);

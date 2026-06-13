@@ -240,8 +240,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
 /* Mobile players see one fullscreen panel at a time, with the pv-dock
    pinned to the bottom as a horizontally-scrolling tab bar. Resize and
    drag are disabled — windows always occupy the available area minus
-   the dock and toolbar. */
-@media (max-width: 768px){
+   the dock and toolbar.
+   Gated on `pointer: coarse` so this only triggers on actual touch devices
+   (phones/tablets) — a narrow DESKTOP window keeps the multi-window player
+   layout instead of collapsing to the mobile single-panel view. */
+@media (max-width: 768px) and (pointer: coarse){
   body.player-mode .window{
     left:0 !important; top:0 !important;
     /* `dvw`/`dvh` shrink to the visible area on mobile (excluding the
