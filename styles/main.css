@@ -1710,7 +1710,11 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
    them off via the window-options menu. HP numerals always stay visible
    — this is purely a "give me back that vertical space" lever. */
 .combatant-list.no-hp-bar .card-hp-bar{display:none}
-.combatant-list.no-hp-bar .group-row-bar{display:none}
+/* HP bars off: in a normal card the editable HP number stays, but a group
+   row's only HP readout is this bar — so keep the NUMBER, just drop the
+   colored bar/fill (otherwise grouped monsters show no HP at all). */
+.combatant-list.no-hp-bar .group-row-bar{background:none}
+.combatant-list.no-hp-bar .group-row-bar-fill{display:none}
 .card-hp-bar-fill{
   position:absolute;left:0;top:0;bottom:0;width:var(--hp-pct);
   background:linear-gradient(90deg,var(--hp-color) 0%,var(--hp-color) 100%);
