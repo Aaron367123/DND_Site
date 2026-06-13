@@ -135,6 +135,37 @@ registerPanel('notes', {
   mount(body){
     this._body = body;
     if (!this._data) this._data = _notesHydrate();
+    // Attach the divider's document-level mousemove/mouseup ONCE per mount.
+    // (Previously these were re-attached inside _wireDivider() — which runs
+    // from _wire() on every _render() — so each sync-pull poll added a new
+    // closure-retaining listener, leaking the panel and slowing every
+    // document click. Now there's exactly one pair, gated on
+    // this._dividerDrag which the divider's mousedown sets up.)
+    if (!this._onDividerMove){
+      this._onDividerMove = (e) => {
+        const drag = this._dividerDrag; if (!drag) return;
+        const b = this._body; if (!b) return;
+        const tree = b.querySelector('.notes-tree');
+        const root = b.querySelector('.notes-shell');
+        if (!tree || !root) return;
+        const z = (typeof getZoom === 'function') ? getZoom() : 1;
+        const rootW = root.getBoundingClientRect().width / z;
+        const min = 160, max = Math.max(min + 100, rootW - 320);
+        let w = drag.ow + (e.clientX - drag.sx) / z;
+        w = Math.max(min, Math.min(max, w));
+        tree.style.flex = `0 0 ${w}px`;
+        tree.style.width = w + 'px';
+        try { localStorage.setItem('skt-notes-treew', String(w)); } catch(err){}
+      };
+      this._onDividerUp = () => {
+        if (this._dividerDrag){
+          this._dividerDrag = null;
+          document.body.style.cursor = '';
+        }
+      };
+      document.addEventListener('mousemove', this._onDividerMove);
+      document.addEventListener('mouseup', this._onDividerUp);
+    }
     // Source preference order on mount:
     //  1. Dropbox if a token is configured (the "always logged in" shared
     //     account) — auto-skips the picker entirely. notesSync is NOT
@@ -187,6 +218,14 @@ registerPanel('notes', {
     if (window.notesSync)   { window.notesSync.stopPolling();   window.notesSync._onPullCallback   = null; }
     if (window.dropboxSync) { window.dropboxSync.stopPolling(); window.dropboxSync._onPullCallback = null; }
     if (this._paneObserver){ this._paneObserver.disconnect(); this._paneObserver = null; }
+    // Detach the document-level divider listeners attached in mount().
+    // Without this, repeated mount/unmount cycles (e.g., reset-layout) would
+    // each leave a dangling listener pair.
+    if (this._onDividerMove) document.removeEventListener('mousemove', this._onDividerMove);
+    if (this._onDividerUp)   document.removeEventListener('mouseup',   this._onDividerUp);
+    this._onDividerMove = null;
+    this._onDividerUp = null;
+    this._dividerDrag = null;
     this._body = null;
   },
 
@@ -947,6 +986,20 @@ registerPanel('notes', {
         const dropInto = row.classList.contains('drop-into');
         const dropBefore = row.classList.contains('drop-before');
         row.classList.remove('drop-before','drop-after','drop-into');
+
+        // Capture the OLD Dropbox path BEFORE mutating `from.parent`. Once
+        // the parent changes, _buildPath would walk the new tree and give
+        // the new path — leaving the file stranded on Dropbox at its old
+        // location, and the next poll would silently restore the move.
+        // Folder moves are handled by Dropbox's move_v2 server-side with
+        // all descendants, so we only need the top-level item's path.
+        const isDropbox = this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured();
+        const oldParent = from.parent;
+        let oldPath = null;
+        if (isDropbox && window.dropboxSync.buildPath){
+          oldPath = window.dropboxSync.buildPath(from, this._data.items, from.type === 'folder' ? '' : '.md');
+        }
+
         if (dropInto && to.type === 'folder'){
           // Move into folder. Place at the end of that folder's children.
           from.parent = to.id;
@@ -960,6 +1013,28 @@ registerPanel('notes', {
         }
         this._save();
         this._render();
+
+        // Sync the move to the remote. Two cases:
+        //   • Parent CHANGED → path changed on Dropbox/disk; we need to
+        //     move the file (Dropbox) or re-push and orphan the old (vault).
+        //   • Parent DIDN'T change (pure within-folder reorder) → path is
+        //     identical; no remote action needed. Tree position is a
+        //     client-only concern that Dropbox doesn't care about.
+        const parentChanged = (from.parent || null) !== (oldParent || null);
+        if (!parentChanged) return;
+        if (isDropbox && oldPath){
+          const newPath = window.dropboxSync.buildPath(from, this._data.items, from.type === 'folder' ? '' : '.md');
+          if (newPath && newPath !== oldPath){
+            window.dropboxSync.movePath(oldPath, newPath);
+          }
+        } else {
+          // Local vault path — notesSync has no move primitive, so
+          // _syncAfter() re-pushes every file at its new path. This leaves
+          // the old file orphaned at the old path on disk (separate audit
+          // item); the user's INTENT (the move) at least lands correctly
+          // at the new location.
+          this._syncAfter();
+        }
       });
     });
 
@@ -1263,30 +1338,18 @@ registerPanel('notes', {
   },
 
   _wireDivider(){
+    // Only the divider's mousedown is per-render (the element is rebuilt
+    // every _render). Document-level mousemove/mouseup live on the panel
+    // instance — attached once in mount(), removed in unmount(). The drag
+    // state lives on this._dividerDrag so the document handlers can read it.
     const b = this._body;
     const divider = b.querySelector('#notes-divider');
     const tree = b.querySelector('.notes-tree');
     if (!divider || !tree) return;
-    let drag = null;
     divider.addEventListener('mousedown', e => {
       e.preventDefault(); e.stopPropagation();
-      drag = { sx: e.clientX, ow: tree.getBoundingClientRect().width };
+      this._dividerDrag = { sx: e.clientX, ow: tree.getBoundingClientRect().width };
       document.body.style.cursor = 'ew-resize';
-    });
-    document.addEventListener('mousemove', e => {
-      if (!drag) return;
-      const z = (typeof getZoom==='function') ? getZoom() : 1;
-      const root = b.querySelector('.notes-shell');
-      const rootW = root.getBoundingClientRect().width / z;
-      const min = 160, max = Math.max(min + 100, rootW - 320);
-      let w = drag.ow + (e.clientX - drag.sx) / z;
-      w = Math.max(min, Math.min(max, w));
-      tree.style.flex = `0 0 ${w}px`;
-      tree.style.width = w + 'px';
-      try { localStorage.setItem('skt-notes-treew', String(w)); } catch(e){}
-    });
-    document.addEventListener('mouseup', () => {
-      if (drag) { drag = null; document.body.style.cursor = ''; }
     });
     // Restore persisted width
     try {

@@ -886,6 +886,14 @@ registerPanel('combat',{
     const list = b.querySelector('#combat-list');
     if (!list) return;
     list.querySelectorAll('.combatant-card').forEach(card=>{
+      // Skip group containers — they have no data-idx (the per-row
+      // .group-row children own their own indices, but those aren't
+      // .combatant-card and therefore aren't selected here). Without this
+      // guard, the drop handler runs parseInt(undefined) → NaN, then
+      // state.combatants.splice(NaN, …) coerces to splice(0, …) and
+      // silently scrambles initiative whenever grouping is on. Group
+      // cards aren't draggable anyway; ignoring them entirely is correct.
+      if (!card.dataset.idx) return;
       card.addEventListener('dragstart', e=>{
         // Suppress drag if user grabbed an input/select (they need text drag)
         if (e.target.closest('input,select,textarea,button')) { e.preventDefault(); return; }
@@ -913,6 +921,13 @@ registerPanel('combat',{
         const r = card.getBoundingClientRect();
         const before = e.clientY < r.top + r.height/2;
         let to = parseInt(card.dataset.idx);
+        // Defensive: if either index didn't parse (group card sneaks in,
+        // unexpected DOM, etc.) bail rather than splicing(NaN) which would
+        // coerce to splice(0, …) and silently scramble combat order.
+        if (Number.isNaN(from) || Number.isNaN(to)){
+          card.classList.remove('drop-before','drop-after');
+          return;
+        }
         if (!before) to += 1;
         // Adjust because removing from earlier index shifts indices down
         if (from < to) to -= 1;

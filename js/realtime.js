@@ -55,7 +55,15 @@ let _remoteUpdate = false;        // true while applying remote changes → prev
 let _pushTimer    = null;         // debounce handle for outgoing writes
 let _fbDb         = null;         // Firebase database reference
 const _dirtyKeys  = new Set();    // sync keys that have changed since last flush
-const _justWrote  = {};           // {key: value} of our most recent push, used to suppress one echo
+// Echo-suppression registry. Each value is a {pushed: Map<value, count>}
+// — a multiset of values we've pushed since the last echo for them came
+// back. Tracking only the LATEST push (the old single-string design) loses
+// the suppression key whenever a second flush overwrites it before the
+// first echo arrives, leading to silent data loss (the older echo gets
+// applied and clobbers the newer local value). The multiset matches each
+// inbound echo to whichever value it carries, regardless of how many
+// flushes have piled up in flight.
+const _justWrote  = {};
 // True conflicts: keys where a remote value arrived while a local change was
 // still pending its first flush. {[key]: {local, remote, ts}} until the user
 // resolves via the conflict bar. No automatic merge — JSON shapes vary too
@@ -123,7 +131,17 @@ function _flushDirtyKeys() {
     // that comes back to us. (Don't use a `localStorage===fbVal` check for
     // this — same-browser tabs share localStorage, which would falsely
     // suppress legitimate cross-tab updates.)
-    _justWrote[k] = val;
+    //
+    // Multiset: increment a counter per (key, value) pair. When the echo
+    // for that exact value lands, we decrement; only when the counter hits
+    // zero do we delete the entry. Two rapid flushes for the same key with
+    // DIFFERENT values both get tracked; each echo matches the one it
+    // carries. (The old single-string design overwrote the entry on the
+    // second flush, causing the first echo to slip through and clobber
+    // the second flush's value — silent data loss.)
+    const norm = val != null ? val : '__null__';
+    if (!_justWrote[k]) _justWrote[k] = new Map();
+    _justWrote[k].set(norm, (_justWrote[k].get(norm) || 0) + 1);
     _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).then(() => {
       // Success — clear retry counter so a future failure starts fresh.
       delete _retryCounts[k];
@@ -158,14 +176,25 @@ function _applyRemoteKey(key, fbVal) {
     try { fbVal = JSON.stringify(fbVal); }
     catch(e){ return; }
   }
-  // Echo suppression: if this matches the value we most recently pushed,
+  // Echo suppression: if this echo matches a value we recently pushed,
   // drop exactly that one fire. Anything else (cross-tab write, edit from
   // a different client, manual Firebase Console edit) always processes —
   // we can't rely on "localStorage === fbVal" because same-browser tabs
   // share localStorage and that would suppress legitimate updates.
-  if (_justWrote[key] === fbVal){
-    delete _justWrote[key];
-    return;
+  //
+  // Multiset lookup: decrement the counter for this exact value; if zero,
+  // remove the entry. Anything still left after this represents in-flight
+  // echoes for OTHER values we've also pushed since.
+  const pending = _justWrote[key];
+  if (pending){
+    const norm = fbVal != null ? fbVal : '__null__';
+    const count = pending.get(norm) || 0;
+    if (count > 0){
+      if (count === 1) pending.delete(norm);
+      else             pending.set(norm, count - 1);
+      if (pending.size === 0) delete _justWrote[key];
+      return;
+    }
   }
 
   // Conflict detection: if the local copy is "dirty" (queued for the next

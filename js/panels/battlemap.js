@@ -533,6 +533,29 @@ registerPanel('battlemap',{
     this._broadcast();
   },
 
+  // Reset the scene cleanly when swapping in a NEW map. Three things have
+  // to happen, in this order:
+  //   1. Bake any in-flight token rescale into canonical pixels by calling
+  //      _scaleTokensTo(1) BEFORE clobbering _lastTokenScale. Otherwise
+  //      tokens stay at the previous map's scaled coords and appear at
+  //      ~40% of their intended positions on the new map.
+  //   2. Clear _drawings — they were drawn in the OLD map's coordinate
+  //      space (and on top of an image that no longer exists). Keeping
+  //      them paints onto whatever pixels happen to land at those coords
+  //      in the new image; almost never useful.
+  //   3. Clear _fog — fog cells are keyed by "row,col" strings. A new map
+  //      has different _cols/_rows (set by _fitGridToBg after this returns),
+  //      so old fog cells either disappear silently (outside new bounds)
+  //      or paint onto unrelated cells. Cleaner to start fresh.
+  // Called by every map-swap path (upload, map-card click, starred-strip
+  // map-card click) so the bug doesn't reappear when a fourth call site
+  // is added later.
+  _resetMapScene(){
+    this._scaleTokensTo(1);
+    this._drawings = [];
+    this._fog = null;
+  },
+
   _scaleTokensTo(newScale){
     const old = this._lastTokenScale != null ? this._lastTokenScale : (this._bgMapScale || 1);
     if (!newScale || !old || newScale === old) { this._lastTokenScale = newScale || old; return; }
@@ -1471,6 +1494,13 @@ registerPanel('battlemap',{
     const fogPaint=(e)=>{
       if(!this._fogTool||this._fog===null)return;
       const r=canvas.getBoundingClientRect();
+      // Recompute `cs` per event. The outer closure captured `cs` once at
+      // _setupMap time (line ~1075). Wheel/pinch zoom calls
+      // _applyZoomTransform — it resizes the canvas but doesn't re-run
+      // _setupMap, so the captured cs would still match the pre-zoom cell
+      // size and every `(e.clientX-r.left)/cs` division would land on the
+      // wrong cell (and the brush would cover a wrong-sized area).
+      const cs = this._csScreen();
       const radius=this._fogRadius||1;
       const mode  = this._fogPaintMode  || 'reveal';
       const shape = this._fogBrushShape || 'square';
@@ -2043,6 +2073,9 @@ registerPanel('battlemap',{
           // Uploaded images aren't 5etools paths — clear any prior path so
           // _saveMap() doesn't try to reload a stale one on next mount.
           this._bgMapPath = null;
+          // Bake token rescale + clear stale drawings/fog BEFORE clobbering
+          // scale fields. See _resetMapScene comment for the full rationale.
+          this._resetMapScene();
           this._bgMapScale = 1;
           this._lastTokenScale = 1;
           this._gridOffsetX = 0;
@@ -2212,6 +2245,9 @@ registerPanel('battlemap',{
           if (e.target.closest('.mapsel-star')) return;
           const path = card.dataset.path;
           this._bgMapPath = path;
+          // Bake token rescale + clear stale drawings/fog BEFORE clobbering
+          // scale fields. See _resetMapScene comment for the full rationale.
+          this._resetMapScene();
           this._bgMapScale = 1;
           this._lastTokenScale = 1;
           // Different maps have different printed grids — reset any previous
@@ -2274,6 +2310,9 @@ registerPanel('battlemap',{
           if (e.target.closest('.mapsel-star')) return;
           const path = card.dataset.path;
           this._bgMapPath = path;
+          // Bake token rescale + clear stale drawings/fog BEFORE clobbering
+          // scale fields. See _resetMapScene comment for the full rationale.
+          this._resetMapScene();
           this._bgMapScale = 1;
           this._lastTokenScale = 1;
           this._gridOffsetX = 0;
@@ -2884,7 +2923,11 @@ registerPanel('battlemap',{
               ny = Math.round(ny/cs - size/2) * cs + size*cs/2;
             }
             const stageW = this._cols * cs, stageH = this._rows * cs;
-            const half = (size*cs/2) * (this._bgMapScale || 1);
+            // `cs` (from _csScreen) already incorporates _bgMapScale, so the
+            // half-extent is just size*cs/2. Multiplying by _bgMapScale again
+            // double-scaled the clamp — at 2x zoom, tokens released near the
+            // right/bottom edge jumped inward by an extra full natural-cell.
+            const half = size * cs / 2;
             t.x = Math.max(half, Math.min(stageW - half, nx));
             t.y = Math.max(half, Math.min(stageH - half, ny));
             this._saveMap();
@@ -2974,7 +3017,9 @@ registerPanel('battlemap',{
               ny = Math.round(ny/cs - size/2) * cs + size*cs/2;
             }
             const stageW = this._cols * cs, stageH = this._rows * cs;
-            const half = (size*cs/2) * (this._bgMapScale || 1);
+            // Same double-scale fix as the mouse handler above. `cs` already
+            // includes _bgMapScale via _csScreen() — don't apply it twice.
+            const half = size * cs / 2;
             t.x = Math.max(half, Math.min(stageW - half, nx));
             t.y = Math.max(half, Math.min(stageH - half, ny));
             this._saveMap();
