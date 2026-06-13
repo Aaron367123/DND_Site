@@ -1858,6 +1858,9 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
   font-size:10px;font-weight:600;color:var(--text);
   text-shadow:0 1px 2px rgba(0,0,0,.85)
 }
+/* Concealed/hidden HP in player view — plain tier text, not a (depleted-looking) bar */
+.combatant-card.group .group-row-bar.group-row-tier{background:none}
+.combatant-card.group .group-row-tier .group-row-bar-text{color:var(--text-muted);position:static}
 /* Group-row heal/damage buttons — buttons inside `.group-row` have only
    class `.hp-dmg-btn` (no wrapping `.hp-dmg-bar` or `.hp-dmg-strip`), so
    they don't pick up either of those rule sets. Style them explicitly here

@@ -369,16 +369,30 @@ registerPanel('combat',{
     const dead = (c.hp||0) <= 0;
     const hpPct = this._hpPct(c);
     const hpColor = this._hpColor(hpPct);
-    return `<div class="group-row ${active?'active':''} ${dead?'dead':''}" data-idx="${i}">
-      <span class="group-row-name" data-act="open-bestiary" data-idx="${i}" title="Open stat block">${esc(c.name)}</span>
-      <div class="group-row-bar" style="--hp-pct:${hpPct}%;--hp-color:${hpColor}">
-        <span class="group-row-bar-fill"></span>
-        <span class="group-row-bar-text">${c.hp}/${c.hpMax||c.hp}</span>
-      </div>
-      <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal">+</button>
+    // Grouped entries are always monsters (PCs never group). In player view
+    // they must respect the monster-stats mode just like single cards do —
+    // otherwise exact HP (e.g. "9/9") leaks even when single monsters show a
+    // concealed "Healthy" tier or a hidden "?".
+    const isPlayerView = document.body.classList.contains('player-mode');
+    const mode = isPlayerView ? this._statsMode() : 'show';
+    const hpReadout = mode === 'show'
+      ? `<div class="group-row-bar" style="--hp-pct:${hpPct}%;--hp-color:${hpColor}">
+          <span class="group-row-bar-fill"></span>
+          <span class="group-row-bar-text">${c.hp}/${c.hpMax||c.hp}</span>
+        </div>`
+      : `<div class="group-row-bar group-row-tier"><span class="group-row-bar-text">${mode === 'conceal' ? esc(this._hpTier(c)) : '?'}</span></div>`;
+    // Heal/damage + remove controls are DM-only — never expose them (or the
+    // stat-block link) to players.
+    const controls = isPlayerView ? '' :
+      `<button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal">+</button>
       <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Amount">
       <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
-      <button class="icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>
+      <button class="icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>`;
+    const nameAttrs = isPlayerView ? '' : ` data-act="open-bestiary" data-idx="${i}" title="Open stat block"`;
+    return `<div class="group-row ${active?'active':''} ${dead?'dead':''}" data-idx="${i}">
+      <span class="group-row-name"${nameAttrs}>${esc(c.name)}</span>
+      ${hpReadout}
+      ${controls}
     </div>`;
   },
 
