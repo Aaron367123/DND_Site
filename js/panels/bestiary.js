@@ -483,8 +483,10 @@ registerPanel('bestiary', {
         (m.cr != null && String(m.cr) !== String(raw.challenge_rating ?? ''));
       if (edited){
         const clone = { ...entry, _raw: { ...raw } };
-        if (m.hp != null && +m.hp) clone._raw.hit_points = +m.hp;
-        if (m.ac != null && +m.ac){
+        // Use !isNaN, not a truthy check — an edited HP/AC of 0 is valid and
+        // must still override (the old `&& +m.ac` skipped 0).
+        if (m.hp != null && !isNaN(+m.hp)) clone._raw.hit_points = +m.hp;
+        if (m.ac != null && !isNaN(+m.ac)){
           const ac0 = (raw.armor_class && raw.armor_class[0]) ? { ...raw.armor_class[0] } : {};
           ac0.value = +m.ac;
           clone._raw.armor_class = [ac0, ...((raw.armor_class || []).slice(1))];

@@ -1526,8 +1526,15 @@ registerPanel('battlemap',{
       }
       // Grid mode — snap to cells. Optional circle shape skips corner cells
       // outside (radius - 0.5)² distance from the brush center.
-      const gx=Math.floor((e.clientX-r.left)/cs);
-      const gy=Math.floor((e.clientY-r.top)/cs);
+      // Honor the Align-tool grid offset so revealed cells land on the DRAWN
+      // grid squares, not the raw 0,0 origin. _drawGrid offsets its lines the
+      // same way and _drawFog mirrors this when rendering — without it, an
+      // aligned grid (non-zero offset) reveals shifted off the squares.
+      const _fpScale = _mapBgImage ? (this._bgMapScale || 1) : 1;
+      const offX = (((this._gridOffsetX || 0) * _fpScale) % cs + cs) % cs;
+      const offY = (((this._gridOffsetY || 0) * _fpScale) % cs + cs) % cs;
+      const gx=Math.floor((e.clientX-r.left-offX)/cs);
+      const gy=Math.floor((e.clientY-r.top-offY)/cs);
       const r2 = (radius - 0.5) * (radius - 0.5);
       let changed=false;
       for(let dx=-radius+1;dx<radius;dx++){
@@ -2677,9 +2684,14 @@ registerPanel('battlemap',{
     // Cut out revealed cells fully
     ctx.globalCompositeOperation='destination-out';
     ctx.fillStyle='rgba(0,0,0,1)';
+    // Offset cells to match the drawn grid (Align-tool offset) — same formula
+    // as _drawGrid + fogPaint, so painted cells render on the squares.
+    const _fScale = _mapBgImage ? (this._bgMapScale || 1) : 1;
+    const _offX = (((this._gridOffsetX || 0) * _fScale) % cs + cs) % cs;
+    const _offY = (((this._gridOffsetY || 0) * _fScale) % cs + cs) % cs;
     this._fog.forEach(key=>{
       const [gx,gy]=key.split(',').map(Number);
-      ctx.fillRect(gx*cs,gy*cs,cs,cs);
+      ctx.fillRect(_offX + gx*cs, _offY + gy*cs, cs, cs);
     });
     // Free-mode strokes — two passes: reveals (destination-out, punches more
     // holes) then hides (source-over, repaints fog over previously revealed

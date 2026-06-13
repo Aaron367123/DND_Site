@@ -386,7 +386,16 @@ function showModal(title, fields, confirmLabel) {
       fields.forEach(function(f) {
         var el = backdrop.querySelector('#mf-' + f.id);
         if(!el) return;
-        result[f.id] = (f.type === 'number') ? (parseInt(el.value) || f.value || 0) : el.value.trim();
+        if (f.type === 'number') {
+          // Parse, but keep a genuine 0 — `parseInt(v) || f.value` dropped any
+          // "0" the user typed (0 is falsy) and silently restored the original
+          // value, so e.g. setting an AC/HP/count to 0 was impossible. Only
+          // fall back to the default when the field is blank / non-numeric.
+          var n = parseInt(el.value, 10);
+          result[f.id] = isNaN(n) ? (f.value != null ? f.value : 0) : n;
+        } else {
+          result[f.id] = el.value.trim();
+        }
       });
       close(result);
     });
