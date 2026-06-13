@@ -39,10 +39,32 @@ registerPanel('adventures', {
     // Keep the merged global Set in sync in case Adventures was the first
     // panel to mount.
     if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
+    // Cross-tab sync (mirrors the Books panel). Hidden-adventures + bookmarks
+    // are browser-local, so a second tab never saw the change without a slow
+    // Firebase round-trip. The native `storage` event fires in other tabs the
+    // instant these keys change; re-read + re-render off it.
+    if (!this._onStorage){
+      this._onStorage = (e) => {
+        if (!this._body || !e) return;
+        if (e.key === 'skt-adventures-hidden-v1'){
+          try { const arr = JSON.parse(e.newValue || '[]'); this._hiddenAdventures = new Set(Array.isArray(arr) ? arr : []); }
+          catch(_){ this._hiddenAdventures = new Set(); }
+          if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
+          this._render();
+        } else if (e.key === 'skt-adv-bookmarks-v1'){
+          try { this._bookmarks = JSON.parse(e.newValue || '{}') || {}; } catch(_){ this._bookmarks = {}; }
+          if (!this._currentAdvId) this._render();
+        }
+      };
+      window.addEventListener('storage', this._onStorage);
+    }
     this._render();
     this._loadIndex();
   },
-  unmount(){ this._body = null; },
+  unmount(){
+    if (this._onStorage){ window.removeEventListener('storage', this._onStorage); this._onStorage = null; }
+    this._body = null;
+  },
 
   _saveHiddenAdventures(){
     try { localStorage.setItem('skt-adventures-hidden-v1', JSON.stringify([...this._hiddenAdventures])); } catch(e){}
@@ -284,7 +306,12 @@ registerPanel('adventures', {
     }
 
     const chapters = (file && file.data) || [];
-    if (this._currentChapterIdx >= chapters.length) this._currentChapterIdx = 0;
+    if (this._currentChapterIdx >= chapters.length){
+      // Stale bookmark past the end — clamp AND persist so the next open
+      // doesn't restore the same out-of-range index and re-clamp.
+      this._currentChapterIdx = 0;
+      this._bumpBookmark();
+    }
     const ch = chapters[this._currentChapterIdx];
 
     const tocHtml = chapters.map((c, i) => `
@@ -632,7 +659,7 @@ registerPanel('adventures', {
           return `<li>${this._renderNode(it)}</li>`;
         }).join('');
         const tag = node.style && node.style.includes('list-decimal') ? 'ol' : 'ul';
-        return `<${tag} class="adv-list">${items}</${tag}>`;
+        return `<${tag} class="adv-content-list">${items}</${tag}>`;
       }
       case 'table':
       case 'tableGroup': {

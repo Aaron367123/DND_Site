@@ -140,7 +140,8 @@
     }
     return res;
   }
-  async function _api(endpoint, body) {
+  async function _api(endpoint, body, _attempt) {
+    _attempt = _attempt || 0;
     if (!isConfigured()) throw new Error('Dropbox not configured');
     await _ensureAccessToken();
     const res = await _retryOn401(() => fetch(API + endpoint, {
@@ -158,9 +159,19 @@
       throw new Error('Dropbox 401');
     }
     if (res.status === 429) {
-      const retry = parseInt(res.headers.get('Retry-After')) || 5;
+      // Cap the retries. A sustained rate-limit would otherwise recurse
+      // _api → wait → _api → … forever, never surfacing the failure to the
+      // caller and pinning a background loop on the 429 wall.
+      if (_attempt >= 4) {
+        _connectError = 'Dropbox rate-limited';
+        _emit();
+        if (typeof showToast === 'function') showToast('Dropbox is rate-limiting — sync paused, will retry later');
+        throw new Error('Dropbox 429: retry cap reached after ' + _attempt + ' attempts');
+      }
+      // Honor Retry-After when present; otherwise exponential backoff capped at 60s.
+      const retry = parseInt(res.headers.get('Retry-After')) || Math.min(60, 5 * Math.pow(2, _attempt));
       await new Promise(r => setTimeout(r, retry * 1000));
-      return _api(endpoint, body);
+      return _api(endpoint, body, _attempt + 1);
     }
     if (!res.ok) {
       const text = await res.text();
@@ -521,8 +532,10 @@
   // ─── Push (single file upload, debounced) ─────────────────────────────────
   function pushFile(file, items) {
     if (!isConfigured() || !file) return;
-    if (_pushTimers.has(file.id)) clearTimeout(_pushTimers.get(file.id));
-    const t = setTimeout(async () => {
+    if (_pushTimers.has(file.id)) clearTimeout(_pushTimers.get(file.id).timer);
+    // Named closure (not a bare setTimeout) so flushPending() can fire it
+    // immediately on page hide / panel unmount.
+    const run = async () => {
       _pushTimers.delete(file.id);
       try {
         const path = _buildPath(file, items, '.md');
@@ -531,8 +544,17 @@
         _state.lastSync = Date.now();
         _saveState();
       } catch(e) { /* swallow — next sync tick will retry indirectly */ }
-    }, PUSH_DEBOUNCE_MS);
-    _pushTimers.set(file.id, t);
+    };
+    _pushTimers.set(file.id, { timer: setTimeout(run, PUSH_DEBOUNCE_MS), run });
+  }
+
+  // Fire every queued debounced upload NOW (tab hide / unmount) so a write
+  // isn't lost if the page closes inside the 800 ms debounce window.
+  function flushPending() {
+    if (!_pushTimers.size) return;
+    const runs = [];
+    _pushTimers.forEach(v => { clearTimeout(v.timer); runs.push(v.run); });
+    runs.forEach(run => { try { run(); } catch(e){} });
   }
 
   // ─── Delete / move (propagate panel mutations to Dropbox) ─────────────────
@@ -583,6 +605,17 @@
       } else if (res && res.metadata && res.metadata.rev){
         _state.fileRevs[newKey] = res.metadata.rev;
       }
+      // Folder move: move_v2 relocated every descendant server-side in one
+      // call, but their cached revs were still filed under the OLD folder path.
+      // Re-key each `oldKey/…` rev to `newKey/…` so a later sync looks up the
+      // right path and reuses the rev instead of re-uploading or conflicting.
+      const oldPrefix = oldKey + '/';
+      Object.keys(_state.fileRevs).forEach(k => {
+        if (k.startsWith(oldPrefix)){
+          _state.fileRevs[newKey + '/' + k.slice(oldPrefix.length)] = _state.fileRevs[k];
+          delete _state.fileRevs[k];
+        }
+      });
       _saveState();
     } catch (e) {
       console.error('[dropboxSync] move failed', fromPath, '→', toPath, e.message);
@@ -592,7 +625,7 @@
   // ─── Expose ───────────────────────────────────────────────────────────────
   window.dropboxSync = {
     init, isConfigured, isConnected, isSupported, getStatus, onStatus,
-    fullSync, pushFile, deletePath, movePath, startPolling, stopPolling,
+    fullSync, pushFile, flushPending, deletePath, movePath, startPolling, stopPolling,
     // buildPath is useful for callers that need to compute a Dropbox path
     // from an item + items[] (e.g. notes panel capturing path before
     // deletion). Exposes the same private helper used internally.

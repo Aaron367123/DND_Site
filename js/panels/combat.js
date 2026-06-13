@@ -572,7 +572,9 @@ registerPanel('combat',{
         ${statusRow}
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
         ${(!isPC && (c.legendaryMax || c.legendaryMax === 0)) ? this._renderLegendary(i, c) : ''}
-        ${(isPC && (c.hp||0) <= 0) ? this._renderDeathSaves(i, c) : ''}
+        ${(isPC && (c.hp||0) <= 0 && !c.dead && !c.stable) ? this._renderDeathSaves(i, c) : ''}
+        ${(isPC && c.dead)   ? '<div class="death-saves dead-banner" title="The PC is dead. Heal them above 0 HP (revivify, etc.) to bring them back.">💀 Dead</div>' : ''}
+        ${(isPC && c.stable && (c.hp||0) <= 0) ? '<div class="death-saves stable-banner" title="Stable at 0 HP — no more death saves unless they take damage (which will start fresh saves with one failure, per RAW).">⚕ Stable</div>' : ''}
       </div>
       <div class="card-actions">
         ${isPlayerView ? '' : `<button class="btn icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>`}
@@ -704,11 +706,17 @@ registerPanel('combat',{
         // via the same data-idx attribute on the input.
         const card = el.closest('.combatant-card');
         const amtInp = card?.querySelector(`.hp-dmg-amt[data-idx="${i}"]`) || card?.querySelector('.hp-dmg-amt');
+        // Damage type: prefer the local card's type select. Group rows
+        // don't render a select at all (no room), so fall back to
+        // this._lastDmgType — the same panel-scoped value that keeps
+        // single-card selects in sync across renders. Without this fallback
+        // group rows always passed type='' and silently bypassed every
+        // monster's resist/immune/vulnerable.
         const typeSel = card?.querySelector('.hp-dmg-type');
         const amt = Math.max(0, parseInt(amtInp?.value) || 0);
         if (!amt) return;
         this._lastDmgAmount = amt;
-        const type = typeSel ? typeSel.value : '';
+        const type = typeSel ? typeSel.value : (this._lastDmgType || '');
         if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
         else                     this._applyHpDelta(i, +amt);
       }
@@ -717,14 +725,29 @@ registerPanel('combat',{
         const kind = el.dataset.kind; // 'success' | 'fail'
         const n = parseInt(el.dataset.n);
         const c = state.combatants[i]; if (!c) return;
+        // Dead PCs can't roll. Without this guard, clicking the 3rd-fail
+        // pip on a dead PC un-fills it (the toggle below would read
+        // ds[kind]=3 >= n=3 → true → set to 2), effectively un-killing them.
+        if (c.dead) return;
         const ds = {...(c.deathSaves || {success:0, fail:0})};
         // Click N: if already at >=N, set to N-1 (un-click); else set to N.
         ds[kind] = (ds[kind] >= n) ? (n-1) : n;
         state.combatants[i] = {...c, deathSaves: ds};
         if (ds.success >= 3){
-          state.combatants[i].deathSaves = {success:0, fail:0};
+          // Stabilize: HP stays at 0 (RAW), but no more death saves until
+          // the PC takes new damage. Set c.stable so _applyHpDelta knows
+          // not to re-initialize {success:0, fail:0} on the next damage
+          // — instead it should flip stable→false AND record one failure
+          // (or two, on crit). Clear the deathSaves struct so the pip row
+          // doesn't render anymore.
+          state.combatants[i] = {...state.combatants[i], deathSaves: null, stable: true};
           showToast(c.name + ' stabilized');
         } else if (ds.fail >= 3){
+          // Dead: lock the state so re-clicking the 3rd pip can't undo it,
+          // and so future damage doesn't re-initialize saves. The death
+          // pip row stops rendering; the card stays in its dead visual
+          // (.dead class is added because c.hp is still ≤ 0).
+          state.combatants[i] = {...state.combatants[i], deathSaves: null, dead: true};
           showToast(c.name + ' has died');
         }
         save(); this._render();
@@ -797,9 +820,15 @@ registerPanel('combat',{
           if (String(val) !== e.target.value) e.target.value = val;
         }
         state.combatants[i]={...state.combatants[i],[f]:val};
-        // PC came back above 0 HP — clear death-save tracker.
-        if (f === 'hp' && state.combatants[i].isPC && val > 0 && state.combatants[i].deathSaves){
-          state.combatants[i] = {...state.combatants[i], deathSaves: undefined};
+        // PC came back above 0 HP — wipe ALL downed-related state: death
+        // saves, stable flag, dead flag. (Direct edit is rarer than the
+        // strip, but a DM raising an HP value is an explicit revive.)
+        if (f === 'hp' && state.combatants[i].isPC && val > 0){
+          const next = {...state.combatants[i]};
+          if (next.deathSaves) next.deathSaves = undefined;
+          if (next.stable)     next.stable = undefined;
+          if (next.dead)       next.dead = undefined;
+          state.combatants[i] = next;
         }
         // Mirror to the party slot BEFORE saving so localStorage (and the
         // resulting Firebase push) captures both halves in one consistent
@@ -1354,6 +1383,13 @@ registerPanel('combat',{
         // can't know without a type. Leave a hint in the log.
         typeSuffix = ' (untyped — rage applies only to B/P/S)';
       }
+      // Snapshot the damage that the CREATURE "took" per 5e RAW — after
+      // resist/immune/vuln math but BEFORE pool absorption. Concentration
+      // saves trigger on "taking damage", and that includes damage soaked
+      // by temp HP or wild-shape beast HP. Using `damageDealt` (post-
+      // absorption) silently swallowed every check when the beast or temp
+      // HP ate all of it.
+      const damageForConc = remaining < 0 ? -remaining : 0;
       // Wild Shape: damage hits the BEAST pool first. Once beast HP ≤ 0,
       // form drops and overflow continues to druid HP / temp / death-save
       // territory. Mirrors party.js _applyHpDelta beast routing.
@@ -1385,9 +1421,22 @@ registerPanel('combat',{
       if (remaining < 0){
         c.hp = (c.hp || 0) - damageDealt;
         logParts.push(damageDealt + ' HP');
-        // PC dropped to 0 — initialize death saves if not already there.
-        if (c.isPC && c.hp <= 0 && !c.deathSaves){
-          c.deathSaves = {success:0, fail:0};
+        // PC dropped to 0 (or took damage while already at 0):
+        //   • Already dead → stays dead, no death-save state changes.
+        //   • Stable but downed → un-stabilize and start fresh death saves
+        //     with one failure (RAW: damage to a stable creature counts
+        //     as a failed death save; crit = two failures, but we don't
+        //     track crits here).
+        //   • Already downed with active deathSaves → leave them alone
+        //     (the user is mid-roll, clicking pips manually).
+        //   • Otherwise → initialize fresh {success:0, fail:0}.
+        if (c.isPC && c.hp <= 0 && !c.dead){
+          if (c.stable){
+            c.stable = false;
+            c.deathSaves = {success:0, fail:1};
+          } else if (!c.deathSaves){
+            c.deathSaves = {success:0, fail:0};
+          }
         }
       }
       if (!logParts.length) logParts.push('0');
@@ -1398,8 +1447,11 @@ registerPanel('combat',{
       const conc = c.isPC
         ? (state.party.find(p => p.id === c.id)?.concentration || '')
         : (c.concentration || '');
-      if (conc && damageDealt > 0){
-        const dc = Math.max(10, Math.floor(damageDealt / 2));
+      // Use damageForConc (after resist/vuln math, before absorption) so
+      // the check fires even when the beast pool / temp HP ate everything.
+      // damageDealt is post-absorption and would show 0 in that case.
+      if (conc && damageForConc > 0){
+        const dc = Math.max(10, Math.floor(damageForConc / 2));
         showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
       }
     } else if (delta > 0){
@@ -1426,7 +1478,14 @@ registerPanel('combat',{
       c.hp = Math.min(cap, before + remainingHeal);
       const actual = c.hp - before;
       if (actual > 0) logHealParts.push(actual + ' HP');
-      if (c.isPC && c.hp > 0 && c.deathSaves){ delete c.deathSaves; }
+      // Any heal above 0 wipes downed-related state — death saves, stable
+      // flag, dead flag. Even dead PCs come back if revivified, so we
+      // honor the heal rather than silently swallowing it.
+      if (c.isPC && c.hp > 0){
+        if (c.deathSaves) delete c.deathSaves;
+        if (c.stable)     delete c.stable;
+        if (c.dead)       delete c.dead;
+      }
       this._log(c.name + ' healed ' + (logHealParts.join(' + ') || '0') + ' HP');
     }
     save();

@@ -623,7 +623,11 @@ registerPanel('loot',{
     nameInp.addEventListener('input', e => {
       this._searchQ = e.target.value;
       this._searchOpen = true;
-      this._renderSearchDropdown();
+      // Debounce the dropdown render — _searchItems scans the full _5eData
+      // catalog (thousands of entries), so doing it on every keystroke janks
+      // fast typing. Fire ~120ms after the user pauses.
+      clearTimeout(this._searchDebounce);
+      this._searchDebounce = setTimeout(() => this._renderSearchDropdown(), 120);
     });
     nameInp.addEventListener('focus', () => {
       this._searchOpen = true;
@@ -632,6 +636,10 @@ registerPanel('loot',{
     nameInp.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        // Flush any pending debounced render so the dropdown reflects what was
+        // just typed before we read the first result.
+        clearTimeout(this._searchDebounce);
+        this._renderSearchDropdown();
         // If dropdown has results, pick the first; otherwise add as manual.
         const first = b.querySelector('#loot-search-results.open .loot-search-result');
         if (first) first.click();

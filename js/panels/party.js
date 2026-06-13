@@ -9,8 +9,40 @@ registerPanel('party',{
   // UI-only state (not synced) keyed by character id.
   _expanded:{},
   _activeTab:{}, // 'stats' | 'skills' | 'spells'
-  mount(body){this._body=body;this._render();},
-  unmount(){this._body=null;},
+  // Last heal/damage amount + type, PER character id. Panel-scoping these (one
+  // value for the whole panel) bled the type between PCs — set "fire" on one
+  // card and every other card's quick-damage defaulted to fire, silently
+  // applying the wrong resist/vuln math. Keyed by id, each card remembers its
+  // own. (Combat keeps its panel-scoped versions on purpose — group rows
+  // inherit the type there.)
+  _lastDmgType:{},
+  _lastDmgAmount:{},
+  mount(body){
+    this._body=body;
+    // Body-level click listener for the "click outside to close the icon
+    // picker" affordance. Attached ONCE per mount instead of inside _wire()
+    // — _wire runs on every _render(), so attaching there leaked a new
+    // listener per interaction (eventually thousands per session, each
+    // running the picker-close check on every click). The handler closes
+    // over `this`, not the picker state, so it reads the current value.
+    if (!this._bodyClickHandler){
+      this._bodyClickHandler = () => {
+        if (this._pickerOpen !== null){
+          this._pickerOpen = null;
+          this._render();
+        }
+      };
+      body.addEventListener('click', this._bodyClickHandler);
+    }
+    this._render();
+  },
+  unmount(){
+    if (this._body && this._bodyClickHandler){
+      this._body.removeEventListener('click', this._bodyClickHandler);
+    }
+    this._bodyClickHandler = null;
+    this._body = null;
+  },
   // Items added to the window's ⋯ menu. Evaluated each time the menu opens
   // so labels/visibility can react to current party state.
   menuItems(){
@@ -41,8 +73,24 @@ registerPanel('party',{
     return items;
   },
 
+  // Drop transient per-character UI state for PCs no longer in the party.
+  // These maps are keyed by character id and were never cleaned on removal,
+  // so a long session (or repeated add/remove) leaked entries — and a recycled
+  // id could inherit a stale tab / roll history / damage type. Runs on every
+  // render so it catches removals from any path (actions menu, Manage Party,
+  // remote sync deletion).
+  _pruneTransientState(){
+    const live = new Set(state.party.map(p => p.id));
+    ['_rollHistory','_activeTab','_expanded','_lastRoll','_historyOpen','_resistancesOpen','_lastDmgType','_lastDmgAmount'].forEach(name => {
+      const m = this[name];
+      if (!m || typeof m !== 'object') return;
+      for (const id in m){ if (!live.has(id)) delete m[id]; }
+    });
+  },
+
   _render(){
     const b=this._body;if(!b)return;
+    this._pruneTransientState();
     const compact = !!(state.settings && state.settings.partyCompact);
     const gridCls = 'party-grid' + (compact ? ' compact' : '');
     // Apply the persisted card-width custom property on the panel body
@@ -59,63 +107,6 @@ registerPanel('party',{
     }
     b.innerHTML = '<div class="'+gridCls+'">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
     this._wire();
-  },
-
-  // Pull active conditions from the matching combat slot. PCs that aren't in
-  // combat won't have a combatant entry — return empty in that case. Returns
-  // empty string if there's nothing to show so it adds zero visual weight.
-  // Active-conditions row. Conditions live on the combat slot when the PC
-  // is in combat, OR on c.conditions as a fallback when they aren't (so the
-  // DM can mark "frightened" during an RP scene without forcing them into
-  // initiative). Both sets get unioned for display.
-  //
-  // Chips are clickable (remove that condition) and the "+ Cond" pill at
-  // the end opens the picker — same condition list the combat tracker uses.
-  _conditionsRow(c){
-    if (!c || !c.id) return '';
-    const i = state.party.findIndex(p => p.id === c.id);
-    const co = (typeof state !== 'undefined' && state.combatants)
-      ? state.combatants.find(x => x.id === c.id)
-      : null;
-    // Union of combat-slot conditions + party-side conditions. dedupe.
-    const seen = new Set();
-    const conds = [];
-    (co?.conditions || []).forEach(n => { if (!seen.has(n)){ seen.add(n); conds.push(n); }});
-    (c.conditions || []).forEach(n => { if (!seen.has(n)){ seen.add(n); conds.push(n); }});
-    // Even with no active conditions we still show the "+ Cond" picker pill
-    // so adding a condition is one click. Empty pill is dashed/muted so it
-    // doesn't compete visually.
-    const chips = conds.map(name =>
-      `<span class="cond-chip" data-act="cond-remove" data-idx="${i}" data-cond="${esc(name)}" title="Remove ${esc(name)}">${esc(name)} <span class="cond-chip-x">×</span></span>`
-    ).join('');
-    const addPill = `<span class="cond-chip add" data-act="cond-add" data-idx="${i}" title="Add a condition (frightened, poisoned, prone, …)">+ Cond</span>`;
-    return `<div class="char-conditions" title="Active conditions — click a chip to remove, + to add">${chips}${addPill}</div>`;
-  },
-
-  // Status pills: concentration + exhaustion. Always rendered so the
-  // controls are always reachable; pills change appearance based on state.
-  //
-  // Concentration: stored as a string on c.concentration (spell name).
-  //   • Empty → "🌀 +" pill, click prompts for spell name.
-  //   • Set   → "🌀 Bless ×" pill, click drops concentration.
-  //
-  // Exhaustion: stored as an integer 0–6 on c.exhaustion (per 2024 rules).
-  //   • Level 0 → "+ Exh" hint button, click bumps to 1.
-  //   • Level ≥1 → "⚠ Exh: N − +" with stepper buttons.
-  _statusRow(c, i){
-    const conc = c.concentration || '';
-    const exh = +c.exhaustion || 0;
-    const concHtml = conc
-      ? `<button class="status-pill conc active" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">🌀 ${esc(conc)} <span class="status-pill-x">×</span></button>`
-      : `<button class="status-pill conc" data-act="conc-set" data-idx="${i}" title="Set what this character is concentrating on">🌀 <span class="status-pill-hint">Concentration</span></button>`;
-    const exhHtml = exh > 0
-      ? `<div class="status-pill exh active" title="Exhaustion level (1–6, 2024 rules: each level = −2 to d20 rolls and −5 ft speed; 6 = death)">
-          <span class="status-pill-label">⚠ Exh: ${exh}</span>
-          <button class="status-pill-step" data-act="exh-down" data-idx="${i}" title="Decrease">−</button>
-          <button class="status-pill-step" data-act="exh-up" data-idx="${i}" title="Increase">+</button>
-         </div>`
-      : `<button class="status-pill exh" data-act="exh-up" data-idx="${i}" title="Apply exhaustion">⚠ <span class="status-pill-hint">Exhaustion</span></button>`;
-    return `<div class="char-status-row">${concHtml}${exhHtml}</div>`;
   },
 
   // HP bar visual: clamp 0–100% normally, but flag a "surplus" state when
@@ -200,7 +191,7 @@ registerPanel('party',{
       // Resize grip — drag horizontally to change the minimum card width
       // for the WHOLE grid (party-wide setting, persisted). Hidden in
       // compact mode (where cards are already full-row).
-      +'<div class="char-resize-grip" data-act="resize-start" title="Drag to resize all character cards"></div>'
+      +'<div class="char-resize-grip" title="Drag to resize all character cards"></div>'
       // Header: icon + name + remove
       +'<div class="char-header" style="position:relative">'
         +'<button class="char-icon-btn" data-act="icon-btn" data-idx="'+i+'" title="Change icon">'+renderIcon(icon, c.name)+'</button>'
@@ -251,7 +242,7 @@ registerPanel('party',{
         // more 4-tall column that fights with the HP/max/temp inputs above.
         +'<div class="party-hp-dmg" data-idx="'+i+'" title="Type amount, click − to damage (drains temp HP first, applies resist/vuln/immune) or + to heal">'
           +'<button class="party-hp-btn dmg" data-act="hp-damage" data-idx="'+i+'" title="Damage">−</button>'
-          +'<input class="party-hp-amt" type="number" value="'+(this._lastDmgAmount||5)+'" min="0" max="999" data-idx="'+i+'" title="Heal / damage amount">'
+          +'<input class="party-hp-amt" type="number" value="'+(this._lastDmgAmount[c.id]||5)+'" min="0" max="999" data-idx="'+i+'" title="Heal / damage amount">'
           +'<button class="party-hp-btn heal" data-act="hp-heal" data-idx="'+i+'" title="Heal (clamped to max)">+</button>'
           +(()=>{
             // Dropdown panel shows the FULL type name; collapsed chip shows
@@ -265,7 +256,7 @@ registerPanel('party',{
               ['psychic','psychic','ps'],['radiant','radiant','ra'],['slashing','slashing','sl'],
               ['thunder','thunder','th'],
             ];
-            const lastType = this._lastDmgType || '';
+            const lastType = this._lastDmgType[c.id] || '';
             const lastAbbr = (dmgTypes.find(t => t[0] === lastType) || dmgTypes[0])[2];
             return '<span class="party-hp-type-wrap" title="Damage type — applies this PC\'s resist/vuln/immune (set them in the Stats tab; current: '+(lastType||'untyped')+')">'
               + '<span class="party-hp-type-label">'+lastAbbr+'</span>'
@@ -378,25 +369,6 @@ registerPanel('party',{
     }
     return `<div class="sheet-tab-strip">${tabBar}</div>`
       + (expanded ? `<div class="sheet-content sheet-content-open">${body}</div>` : '');
-  },
-
-  _sheetBody(c, i){
-    const tabs = ['stats','skills','spells','features'];
-    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', features:'Features'};
-    let active = this._activeTab[c.id] || 'stats';
-    if (!tabs.includes(active)) active = 'stats';
-    const tabBar = tabs.map(t =>
-      `<button class="sheet-tab ${t===active?'active':''}" data-act="sheet-tab" data-idx="${i}" data-tab="${t}">${labels[t]}</button>`
-    ).join('');
-    let body = '';
-    if (active === 'stats')        body = this._tabStats(c);
-    else if (active === 'skills')  body = this._tabSkills(c);
-    else if (active === 'spells')  body = this._tabSpells(c);
-    else if (active === 'features')body = this._tabFeatures(c);
-    return `<div class="sheet-body">
-      <div class="sheet-tabs">${tabBar}</div>
-      <div class="sheet-content">${body}</div>
-    </div>`;
   },
 
   // Features tab — pulls from the loaded 5etools dataset and renders the
@@ -1311,7 +1283,16 @@ registerPanel('party',{
   // of N times in the loop.
   _mirrorPartyToCombatSilent(partyIdx){
     const p = state.party[partyIdx]; if (!p) return;
-    const ci = state.combatants.findIndex(c => c.id === p.id);
+    // Use the canonical name-fallback lookup so combatants that were added
+    // via the manual "Add Combatant" dialog (different id, same character
+    // name) also get mirrored during long/short rest. The strict
+    // `c.id === p.id` test missed these — syncPartyToCombat() in
+    // window-manager.js falls back to a normalized-name match for exactly
+    // this reason, and the silent mirror needs the same fallback to avoid
+    // skipping HP/AC restore on rest.
+    const ci = (typeof _findCombatantForPartyMember === 'function')
+      ? _findCombatantForPartyMember(p)
+      : state.combatants.findIndex(c => c.id === p.id);
     if (ci >= 0){
       state.combatants[ci] = {...state.combatants[ci], hp:p.hp, hpMax:p.hpMax, ac:p.ac};
     }
@@ -2223,6 +2204,14 @@ registerPanel('party',{
       });
     });
     // Inputs
+    // Keep the .char-hp-temp[value="0"] dim selector honest while the user
+    // types. That selector matches the value ATTRIBUTE (the rendered default),
+    // not the live IDL value — so without this, editing a 0 to a real number
+    // (or vice versa) wouldn't update the dim state until a full re-render.
+    // Mirror each keystroke onto the attribute so the rule re-evaluates live.
+    b.querySelectorAll('.char-hp-temp').forEach(inp=>{
+      inp.addEventListener('input',()=>inp.setAttribute('value', inp.value));
+    });
     b.querySelectorAll('input[data-field]').forEach(inp=>{
       inp.addEventListener('change',e=>{
         const i=+e.target.dataset.idx, f=e.target.dataset.field;
@@ -2237,23 +2226,34 @@ registerPanel('party',{
         // resulting Firebase push) captures both halves in one write. If the
         // sync happened after save(), the persisted value would be stale and
         // a later save anywhere could push the old combatants back out.
-        if(['hp','hpMax','ac'].includes(f))syncPartyToCombat(i);
+        if(['hp','hpMax','ac','name'].includes(f))syncPartyToCombat(i);
         save();
-        // Re-render just this card's HP bar + big numeral color without
-        // doing a full re-render. The numeral color is bound inline via
-        // _hpBarStyle.color so it has to be updated here too.
+        // HP / hpMax / tempHp partial update. When the card's VISUAL STATE
+        // changes (alive↔downed, tempHp 0↔>0), the surgical bar/numeral
+        // recolor isn't enough — we also need to toggle the .downed class
+        // on the card, add/remove the downed banner, and add/remove the
+        // .hp-bar-temp marker. Those are markup-structure changes, so we
+        // fall back to a full _render(). Within-range edits (HP stays >0,
+        // tempHp stays 0 or stays >0) keep the fast inline update.
         if(f==='hp'||f==='hpMax'||f==='tempHp'){
+          const p=state.party[i];
           const card=b.querySelector('[data-cidx="'+i+'"]');
-          if(card){
-            const p=state.party[i];
-            const hp=this._hpBarStyle(p);
-            const wrap=card.querySelector('.hp-bar-wrap');
-            const bar=card.querySelector('.hp-bar-fill');
-            const big=card.querySelector('.char-hp-big-num');
-            if(wrap) wrap.classList.toggle('hp-surplus', hp.surplus);
-            if(bar){bar.style.width=hp.pct+'%';bar.style.background=hp.color;}
-            if(big){big.style.color=hp.color;}
+          if(!card){ return; }
+          const wasDowned = card.classList.contains('downed');
+          const isDowned  = (p.hp != null) && p.hp <= 0;
+          const hadTemp   = !!card.querySelector('.hp-bar-temp');
+          const hasTemp   = (p.tempHp||0) > 0;
+          if (wasDowned !== isDowned || hadTemp !== hasTemp){
+            this._render();
+            return;
           }
+          const hp=this._hpBarStyle(p);
+          const wrap=card.querySelector('.hp-bar-wrap');
+          const bar=card.querySelector('.hp-bar-fill');
+          const big=card.querySelector('.char-hp-big-num');
+          if(wrap) wrap.classList.toggle('hp-surplus', hp.surplus);
+          if(bar){bar.style.width=hp.pct+'%';bar.style.background=hp.color;}
+          if(big){big.style.color=hp.color;}
         }
       });
       inp.addEventListener('click',e=>e.stopPropagation());
@@ -2305,7 +2305,8 @@ registerPanel('party',{
       inp.addEventListener('mousedown', e => e.stopPropagation());
       inp.addEventListener('change', () => {
         const v = parseInt(inp.value) || 0;
-        if (v > 0) this._lastDmgAmount = v;
+        const cid = state.party[+inp.dataset.idx]?.id;
+        if (v > 0 && cid) this._lastDmgAmount[cid] = v;
       });
     });
 
@@ -2317,7 +2318,8 @@ registerPanel('party',{
       sel.addEventListener('click', e => e.stopPropagation());
       sel.addEventListener('mousedown', e => e.stopPropagation());
       sel.addEventListener('change', () => {
-        this._lastDmgType = sel.value;
+        const cid = state.party[+sel.dataset.idx]?.id;
+        if (cid) this._lastDmgType[cid] = sel.value;
         const lbl = sel.parentElement?.querySelector('.party-hp-type-label');
         if (lbl) lbl.textContent = ABBR[sel.value] || '—';
         const wrap = sel.parentElement;
@@ -2331,11 +2333,7 @@ registerPanel('party',{
     b.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',e=>{
       e.stopPropagation();
       const act=el.dataset.act, i=+el.dataset.idx;
-      if(act==='remove'){
-        showModal('Remove '+state.party[i].name+'?',[],'Remove')
-          .then(r=>{if(r===null)return;state.party.splice(i,1);save();this._render();});
-      }
-      else if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
+      if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
       else if(act==='bardic-insp'){state.party[i]={...state.party[i],bardicInspiration:!state.party[i].bardicInspiration};save();this._render();}
       // Concentration set/drop — set prompts for the spell name; drop clears.
       else if(act==='conc-set'){
@@ -2364,16 +2362,6 @@ registerPanel('party',{
         state.party[i] = {...state.party[i], exhaustion: Math.max(0, cur - 1)};
         save(); this._render();
       }
-      else if(act==='add'){
-        state.party.push({id:uid(),name:'New Character',cls:'fighter',icon:'⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,inspiration:false,resources:[]});
-        save();this._render();
-      }
-      else if(act==='import-pdf'){
-        this._importPdf();
-      }
-      else if(act==='party-skills'){
-        this._openPartySkills();
-      }
       else if(act==='spell-open'){
         this._openSpellDetail(el.dataset.spell);
       }
@@ -2393,81 +2381,47 @@ registerPanel('party',{
         }
         this._render();
       }
-      // Quick-roll popover — d20 with optional adv/dis. Lets the DM roll
-      // initiative / a save / a skill / a death save without expanding the
-      // sheet. Anchored under the 🎲 button. Shift = adv, Alt = dis when
-      // selecting from the menu.
-      else if(act==='quick-roll'){
-        const c = state.party[i]; if (!c) return;
-        const rect = el.getBoundingClientRect();
-        const mode = e.shiftKey ? 'adv' : e.altKey ? 'dis' : 'normal';
-        const items = [];
-        // Initiative — always available.
-        items.push({ label:'⚡ Initiative', onClick: () => {
-          const r = this._rollD20(c.init || 0, { mode, label: c.name + ' · Initiative' });
-          this._setLastRoll(c, r);
-          if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
-        }});
-        const ab = c.abilities || {};
-        const sh = c.sheet || {};
-        // Saving throws — uses sheet.saves[k] if available, falls back to ability mod.
-        const saveDefs = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
-        const saves = sh.saves || {};
-        const anySave = saveDefs.some(([k]) => saves[k] != null || typeof ab[k] === 'number');
-        if (anySave){
-          items.push({ label: '─────', disabled: true });
-          saveDefs.forEach(([k, lbl]) => {
-            let v = saves[k];
-            if (v == null && typeof ab[k] === 'number') v = Math.floor((ab[k]-10)/2);
-            if (v == null) return;
-            items.push({ label: `${lbl} save (${v>=0?'+':''}${v})`, onClick: () => {
-              const r = this._rollD20(v, { mode, label: c.name + ' · ' + lbl + ' Save' });
-              this._setLastRoll(c, r);
-              if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
-            }});
-          });
-        }
-        // Death save when downed.
-        if ((c.hp || 0) <= 0){
-          items.push({ label: '─────', disabled: true });
-          items.push({ label:'💀 Death save', onClick: () => {
-            const r = this._rollD20(0, { mode, label: c.name + ' · Death Save' });
-            this._setLastRoll(c, r);
-          }});
-        }
-        items.push({ label: '─────', disabled: true });
-        items.push({ label:'(Shift = advantage · Alt = disadvantage)', disabled:true });
-        showContextMenu(rect.left, rect.bottom + 4, items);
-      }
       // ⋯ actions menu — rare or "drill-down" actions consolidated in one
       // place so the always-visible card stays clean. Class-conditional
       // entries (rage, wild shape) only appear when applicable.
+      //
+      // All handlers re-resolve the party slot by ID inside their onClick
+      // (via the resolve() helper). The menu survives _render(), so if a
+      // remote peer or local drag-reorder shuffles state.party between
+      // open + click, the captured index `i` would point at the wrong PC
+      // (or none). Looking up by id at click time keeps the menu correct.
       else if(act==='actions-menu'){
         const c = state.party[i]; if (!c) return;
+        const cid = c.id;
+        // Re-resolve the party slot at click time. Returns { idx, c } or
+        // null if the PC has been removed since the menu opened.
+        const resolve = () => {
+          const idx = state.party.findIndex(p => p.id === cid);
+          return idx < 0 ? null : { idx, c: state.party[idx] };
+        };
         const rect = el.getBoundingClientRect();
         const items = [];
         const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
         const isBarb  = /\bbarbarian\b/.test(cls);
         const isDruid = /\bdruid\b/.test(cls);
-        const isBard  = /\bbard\b/.test(cls);
         // Quick d20 roll — pops a sub-menu of initiative/saves/skill/death save.
-        // Wire the same handler the old 🎲 button used; just open it from
-        // the actions menu now.
         items.push({
           label: '🎲 Roll d20…',
           onClick: () => {
+            const r0 = resolve(); if (!r0) return;
+            const liveC = r0.c;
             // Re-find the menu button position to anchor the roll submenu.
-            const card = this._body?.querySelector(`[data-cidx="${i}"]`);
+            const card = this._body?.querySelector(`[data-cidx="${r0.idx}"]`);
             const anchor = card?.querySelector('.char-action-btn.menu');
             const rect = anchor ? anchor.getBoundingClientRect() : { left: 200, bottom: 200 };
             const rollItems = [];
             rollItems.push({ label:'⚡ Initiative', onClick: () => {
-              const r = this._rollD20(c.init || 0, { mode:'normal', label: c.name + ' · Initiative' });
-              this._setLastRoll(c, r);
-              if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
+              const r = this._rollD20(liveC.init || 0, { mode:'normal', label: liveC.name + ' · Initiative' });
+              this._setLastRoll(liveC, r);
+              if (!this._expanded[cid]) { this._expanded[cid] = true; this._activeTab[cid] = 'stats'; this._render(); }
             }});
-            const ab = c.abilities || {};
-            const sh = c.sheet || {};
+            const ab = liveC.abilities || {};
+            const sh = liveC.sheet || {};
             const saveDefs = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
             const saves = sh.saves || {};
             const anySave = saveDefs.some(([k]) => saves[k] != null || typeof ab[k] === 'number');
@@ -2478,17 +2432,17 @@ registerPanel('party',{
                 if (v == null && typeof ab[k] === 'number') v = Math.floor((ab[k]-10)/2);
                 if (v == null) return;
                 rollItems.push({ label: `${lbl} save (${v>=0?'+':''}${v})`, onClick: () => {
-                  const r = this._rollD20(v, { mode:'normal', label: c.name + ' · ' + lbl + ' Save' });
-                  this._setLastRoll(c, r);
-                  if (!this._expanded[c.id]) { this._expanded[c.id] = true; this._activeTab[c.id] = 'stats'; this._render(); }
+                  const r = this._rollD20(v, { mode:'normal', label: liveC.name + ' · ' + lbl + ' Save' });
+                  this._setLastRoll(liveC, r);
+                  if (!this._expanded[cid]) { this._expanded[cid] = true; this._activeTab[cid] = 'stats'; this._render(); }
                 }});
               });
             }
-            if ((c.hp || 0) <= 0){
+            if ((liveC.hp || 0) <= 0){
               rollItems.push({ label: '─────', disabled: true });
               rollItems.push({ label:'💀 Death save', onClick: () => {
-                const r = this._rollD20(0, { mode:'normal', label: c.name + ' · Death Save' });
-                this._setLastRoll(c, r);
+                const r = this._rollD20(0, { mode:'normal', label: liveC.name + ' · Death Save' });
+                this._setLastRoll(liveC, r);
               }});
             }
             rollItems.push({ label: '─────', disabled: true });
@@ -2498,22 +2452,20 @@ registerPanel('party',{
         });
         items.push({ label: '─────', disabled: true });
         // Combat toggle
-        const inCombatNow = !!(state.combatants && state.combatants.find(co => co.id === c.id));
+        const inCombatNow = !!(state.combatants && state.combatants.find(co => co.id === cid));
         items.push({
           label: inCombatNow ? '⚔ Remove from combat' : '⚔ Add to combat',
           onClick: () => {
-            const wireEl = this._body?.querySelector(`[data-cidx="${i}"] .char-combat-btn`)
-                       || { dataset:{ idx: String(i) }, closest:()=>null };
-            // Simplest: just call the toggle-combat handler inline.
-            const cIdx = state.combatants.findIndex(co => co.id === c.id);
+            const r = resolve(); if (!r) return;
+            const cIdx = state.combatants.findIndex(co => co.id === cid);
             if (cIdx >= 0){
               state.combatants.splice(cIdx, 1);
-              if (state.activeCombatantId === c.id){
+              if (state.activeCombatantId === cid){
                 state.activeCombatantId = state.combatants[0]?.id || null;
               }
               save(); this._render(); panelDefs.combat?._render?.();
             } else if (panelDefs.combat?._addPartyToCombat){
-              panelDefs.combat._addPartyToCombat(i);
+              panelDefs.combat._addPartyToCombat(r.idx);
               this._render();
             }
           }
@@ -2523,7 +2475,8 @@ registerPanel('party',{
           items.push({
             label: c.rage ? '💢 End rage' : '💢 Enter rage',
             onClick: () => {
-              state.party[i] = {...c, rage: !c.rage};
+              const r = resolve(); if (!r) return;
+              state.party[r.idx] = {...r.c, rage: !r.c.rage};
               save(); this._render(); panelDefs.combat?._render?.();
             }
           });
@@ -2532,7 +2485,10 @@ registerPanel('party',{
         if (isDruid){
           items.push({
             label: c.wildshape ? '🐺 Revert wild shape' : '🐺 Wild shape…',
-            onClick: () => c.wildshape ? this._endWildShape(i) : this._editWildShape(i),
+            onClick: () => {
+              const r = resolve(); if (!r) return;
+              r.c.wildshape ? this._endWildShape(r.idx) : this._editWildShape(r.idx);
+            },
           });
         }
         // Hit die spend
@@ -2540,7 +2496,10 @@ registerPanel('party',{
           items.push({
             label: `🎲 Spend a hit die (${c.hitDice.current||0}/${c.hitDice.max})`,
             disabled: (c.hitDice.current||0) === 0,
-            onClick: () => this._spendHitDie(i),
+            onClick: () => {
+              const r = resolve(); if (!r) return;
+              this._spendHitDie(r.idx);
+            },
           });
         }
         items.push({ label: '─────', disabled: true });
@@ -2548,27 +2507,37 @@ registerPanel('party',{
         items.push({
           label: c.inspiration ? '✨ Spend Heroic Inspiration' : '✨ Grant Heroic Inspiration',
           onClick: () => {
-            state.party[i] = {...c, inspiration: !c.inspiration};
+            const r = resolve(); if (!r) return;
+            state.party[r.idx] = {...r.c, inspiration: !r.c.inspiration};
             save(); this._render();
           }
         });
         // Bardic Inspiration is grantable to anyone — any character can be
-        // the recipient of a bard's buff. (The auto-die label still respects
-        // bard-only level math; non-bards just get the label without a die.)
+        // the recipient of a bard's buff.
         items.push({
           label: c.bardicInspiration ? '🎵 Spend Bardic Inspiration' : '🎵 Grant Bardic Inspiration',
           onClick: () => {
-            state.party[i] = {...c, bardicInspiration: !c.bardicInspiration};
+            const r = resolve(); if (!r) return;
+            state.party[r.idx] = {...r.c, bardicInspiration: !r.c.bardicInspiration};
             save(); this._render();
           }
         });
         items.push({ label: '─────', disabled: true });
-        items.push({ label:'✎ Edit details…',  onClick: () => this._openCharDetailsEditor(i) });
+        items.push({ label:'✎ Edit details…',  onClick: () => {
+          const r = resolve(); if (!r) return;
+          this._openCharDetailsEditor(r.idx);
+        }});
         items.push({ label:'📋 Manage Party…', onClick: () => this._openManageParty() });
         items.push({ label:'🗑 Remove from party', onClick: () => {
-          showModal('Remove '+c.name+'?',[],'Remove').then(r=>{
-            if(r===null)return;
-            state.party.splice(i,1); save(); this._render();
+          const r0 = resolve(); if (!r0) return;
+          const liveC = r0.c;
+          showModal('Remove '+liveC.name+'?',[],'Remove').then(ans => {
+            if(ans === null) return;
+            // Re-resolve AGAIN inside the modal callback — the modal is
+            // async and the array may have shifted between menu open and
+            // confirm click.
+            const r2 = resolve(); if (!r2) return;
+            state.party.splice(r2.idx, 1); save(); this._render();
           });
         }});
         showContextMenu(rect.left, rect.bottom + 4, items);
@@ -2578,17 +2547,6 @@ registerPanel('party',{
         const cid = el.dataset.cid;
         if (!this._historyOpen) this._historyOpen = {};
         this._historyOpen[cid] = !this._historyOpen[cid];
-        this._render();
-      }
-      // Back-compat handlers (in case some path still emits the old names).
-      else if(act==='toggle-sheet'){
-        const c = state.party[i]; if (!c) return;
-        this._expanded[c.id] = !this._expanded[c.id];
-        this._render();
-      }
-      else if(act==='sheet-tab'){
-        const c = state.party[i]; if (!c) return;
-        this._activeTab[c.id] = el.dataset.tab;
         this._render();
       }
       else if(act==='roll-check' || act==='roll-save' || act==='roll-init' || act==='roll-skill'){
@@ -2622,7 +2580,8 @@ registerPanel('party',{
         const typeSel = card?.querySelector('.party-hp-type');
         const amt = Math.max(0, parseInt(amtInp?.value) || 0);
         if (!amt) return;
-        this._lastDmgAmount = amt;
+        const cid = state.party[i]?.id;
+        if (cid) this._lastDmgAmount[cid] = amt;
         const type = typeSel ? typeSel.value : '';
         if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
         else                     this._applyHpDelta(i, +amt);
@@ -2821,29 +2780,11 @@ registerPanel('party',{
         state.party[i]={...state.party[i],resources:res};
         save();this._render();
       }
-      else if(act==='del-res'){
-        const res=state.party[i].resources.filter((_,ri)=>ri!==+el.dataset.ri);
-        state.party[i]={...state.party[i],resources:res};save();this._render();
-      }
-      else if(act==='add-res'){
-        showModal('Add Resource',[
-          {id:'name',label:'Name',type:'text',value:'',placeholder:'Spell Slots L1, Rage, Focus Points...'},
-          {id:'max', label:'Max uses',type:'number',value:4,min:1,max:99},
-          {id:'type',label:'Type',type:'select',value:'pool',options:[
-            {value:'pool',  label:'Pool (multiple uses, click pips to spend)'},
-            {value:'toggle',label:'Toggle (single on/off)'},
-          ]},
-        ],'Add').then(r=>{
-          if(!r||!r.name)return;
-          const res=[...(state.party[i].resources||[])];
-          res.push({name:r.name,type:r.type==='toggle'?'toggle':'pool',current:parseInt(r.max)||1,max:parseInt(r.max)||1});
-          state.party[i]={...state.party[i],resources:res};save();this._render();
-        });
-      }
     }));
 
-    // Close icon picker when clicking outside
-    b.addEventListener('click',()=>{if(this._pickerOpen!==null){this._pickerOpen=null;this._render();}});
+    // Close-icon-picker-on-outside-click listener is attached ONCE in
+    // mount() (see this._bodyClickHandler). Re-attaching here per _render
+    // leaked one listener per interaction.
   },
 
   // ── Spell quick-view ────────────────────────────────────────────────────

@@ -338,7 +338,10 @@ function syncPartyToCombat(partyIdx){
   const p=state.party[partyIdx];
   const ci=_findCombatantForPartyMember(p);
   if(ci>=0){
-    state.combatants[ci]={...state.combatants[ci],hp:p.hp,hpMax:p.hpMax,ac:p.ac};
+    // Mirror name too, not just stats — otherwise a party rename leaves the
+    // combat card showing the old name (and, when matching falls back to
+    // name, the two slowly drift apart).
+    state.combatants[ci]={...state.combatants[ci],hp:p.hp,hpMax:p.hpMax,ac:p.ac,name:p.name};
     panelDefs.combat?._render?.();
   }
 }

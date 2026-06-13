@@ -19,7 +19,13 @@ const DEFAULT_NPCS_V2 = [
 ];
 
 function _npcInitials(name) {
-  return (name||'?').split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
+  // First alphanumeric char of each of the first two words. Skipping leading
+  // punctuation keeps initials letter-only — which, besides looking better,
+  // makes them safe to drop into the avatar's inline onerror="...'X'..."
+  // handler (an apostrophe initial like O'Brien → "'" would break that string).
+  return (name||'?').split(/\s+/).slice(0,2)
+    .map(w => (w.match(/[\p{L}\p{N}]/u) || [''])[0])
+    .join('').toUpperCase().slice(0,2) || '?';
 }
 
 function _npcGroups(npcs) {
@@ -382,6 +388,13 @@ registerPanel('npclib', {
       try { const v = parseFloat(localStorage.getItem('skt-npclib-leftw')); if (!isNaN(v)) this._leftWidth = v; } catch(e){}
     }
     const leftStyle = this._leftWidth != null ? `style="width:${this._leftWidth}px;flex:0 0 ${this._leftWidth}px"` : '';
+    // Capture any user-drag-resized desc/secret textarea heights BEFORE we blow
+    // away the DOM. Keyed to the NPC currently in the DOM (_lastRenderedId), so
+    // switching NPCs doesn't carry one NPC's height onto another's fields.
+    {
+      const da0 = b.querySelector('.npclib-desc'), sa0 = b.querySelector('.npclib-secret');
+      if (da0 || sa0) this._fieldH = { id: this._lastRenderedId, desc: da0 && da0.style.height, secret: sa0 && sa0.style.height };
+    }
     b.innerHTML = `<div class="npclib-root">
       <div class="npclib-left" ${leftStyle}>
         <div class="npclib-toolbar">
@@ -401,6 +414,13 @@ registerPanel('npclib', {
     </div>`;
     this._wire();
     this._wireDivider();
+    // Restore the resized heights only if the SAME NPC is still showing.
+    if (this._fieldH && this._fieldH.id === this._selectedId){
+      const da = b.querySelector('.npclib-desc'), sa = b.querySelector('.npclib-secret');
+      if (da && this._fieldH.desc)   da.style.height = this._fieldH.desc;
+      if (sa && this._fieldH.secret) sa.style.height = this._fieldH.secret;
+    }
+    this._lastRenderedId = this._selectedId;
   },
 
   // Drag the column divider. Width is stored in pixels and persisted to
@@ -847,6 +867,10 @@ registerPanel('npclib', {
         if (!r) return;
         this._npcs = this._npcs.filter(x => x.id !== n.id);
         this._selectedId = this._npcs[0]?.id || null;
+        // Auto-selecting the next NPC must NOT inherit the deleted one's reveal
+        // state — re-hide so the new NPC's secret stays redacted until the DM
+        // explicitly clicks Reveal (a player could be looking at the screen).
+        this._secretRevealed = false;
         this._save(); this._render();
       });
     });

@@ -322,6 +322,13 @@ function _applyMod(target, prop, mod) {
   }
 }
 
+// Fast deep clone. structuredClone is markedly quicker than a JSON round-trip
+// for the large monster objects _resolveCopy churns through on cold load, and
+// for this pure-JSON data the two are semantically equivalent. Falls back to
+// the JSON path on the rare engine that lacks structuredClone.
+const _deepClone = (typeof structuredClone === 'function')
+  ? structuredClone
+  : (x => JSON.parse(JSON.stringify(x)));
 function _resolveCopy(monster, byKey, depth) {
   if (!monster || !monster._copy) return monster;
   if (depth > 5) return monster; // guard against pathological cycles
@@ -335,12 +342,12 @@ function _resolveCopy(monster, byKey, depth) {
   // Resolve the source first if it itself uses _copy (chained inheritance)
   const baseSrc = src._copy ? _resolveCopy(src, byKey, (depth || 0) + 1) : src;
   // Start from a deep clone of the inheriting entity (its values win)
-  const cpy = JSON.parse(JSON.stringify(monster));
+  const cpy = _deepClone(monster);
   // Pull in any field from the base that the copy doesn't define (or explicitly nulls out)
   Object.keys(baseSrc).forEach(k => {
     if (k === '_copy' || k === '_mod') return;
     if (cpy[k] === null) { delete cpy[k]; return; }
-    if (cpy[k] === undefined) cpy[k] = JSON.parse(JSON.stringify(baseSrc[k]));
+    if (cpy[k] === undefined) cpy[k] = _deepClone(baseSrc[k]);
   });
   // Apply any mods declared on the _copy spec
   if (ref._mod) {
@@ -446,7 +453,19 @@ function _convertSpell(d) {
     concentration: d.duration?.[0]?.concentration||false,
     ritual:       d.meta?.ritual||false,
     desc:         [_parseEntries(d.entries)].filter(Boolean),
-    higher_level: d.entriesHigherLevel?.length ? [_parseEntries(d.entriesHigherLevel[0]?.entries||d.entriesHigherLevel)] : [],
+    // Preserve EVERY higher-level block, not just [0]. A handful of spells
+    // carry multiple (e.g. a "Cantrip Upgrade" block plus an upcast block);
+    // the old [0]-only slice silently dropped the rest. Each block becomes one
+    // string (renderer joins with blank lines). A non-generic block name is
+    // prefixed so multi-block spells read correctly.
+    higher_level: (Array.isArray(d.entriesHigherLevel) && d.entriesHigherLevel.length)
+      ? d.entriesHigherLevel.map(b => {
+          const body = _parseEntries((b && Array.isArray(b.entries)) ? b.entries : [b]);
+          if (!body) return '';
+          const nm = (b && typeof b.name === 'string') ? b.name.trim() : '';
+          return (nm && !/^at higher levels$/i.test(nm)) ? `${nm}. ${body}` : body;
+        }).filter(Boolean)
+      : [],
     classes:      _parseClasses(d.classes),
   };
 }
@@ -472,9 +491,15 @@ function _convertCondition(d) {
 // the entries — otherwise the user sees the literal "{#itemEntry ...}" text
 // in the rendered description.
 let _ITEM_ENTRY_BY_KEY = {};
+let _ITEM_ENTRY_BY_NAME = {}; // name-only fallback (first template wins)
 function _findItemEntry(name, source){
-  const key = ((name||'') + '|' + (source||'')).toLowerCase();
-  return _ITEM_ENTRY_BY_KEY[key] || null;
+  const n = (name||'').toLowerCase();
+  const key = n + '|' + (source||'').toLowerCase();
+  // Exact name|source first. If the reference omits the source — or names a
+  // source that differs from where the template actually lives — fall back to
+  // a name-only match so the {#itemEntry …} ref still resolves instead of
+  // leaking the literal token into the rendered description.
+  return _ITEM_ENTRY_BY_KEY[key] || _ITEM_ENTRY_BY_NAME[n] || null;
 }
 function _substituteItemPlaceholders(node, item){
   if (typeof node === 'string'){
@@ -621,7 +646,9 @@ function _isLegacyEntry(r) {
 // True if this entry IS the newer reprint of something older.
 function _isReprintEntry(r) {
   if (!r) return false;
-  const key = (r.name + '|' + (r._source || '')).toLowerCase();
+  // Trim both halves — the reprint-target keys are built from trimmed name +
+  // source, so an entry with stray whitespace would silently miss otherwise.
+  const key = ((r.name || '').trim() + '|' + (r._source || '').trim()).toLowerCase();
   return _5eReprintTo.has(key);
 }
 
@@ -806,6 +833,22 @@ async function load5eData() {
   }
   function expandMagicVariants(baseItems, variants){
     const out = [];
+    // Pre-bucket base items by their `type` code (the dominant discriminator in
+    // variant `requires`). The old code scanned ALL base items for EVERY
+    // variant (variants × baseItems ≈ 100k predicate calls per cold load).
+    // Since every base item has exactly one type, a variant whose requires all
+    // specify a type only needs the union of those type-buckets — and that
+    // union still contains every item that could match (an item matching a
+    // req's type IS in that type's bucket; an item of another type fails that
+    // req's type check anyway). So the result set is identical, just reached
+    // without the full sweep.
+    const byType = new Map();
+    baseItems.forEach(b => {
+      const tc = String(b.type || '').split('|')[0];
+      let arr = byType.get(tc);
+      if (!arr){ arr = []; byType.set(tc, arr); }
+      arr.push(b);
+    });
     (variants || []).forEach(v => {
       const reqs = Array.isArray(v.requires) ? v.requires : [];
       if (!reqs.length || !v.inherits) return;
@@ -823,7 +866,22 @@ async function load5eData() {
         }
         return false;
       });
-      baseItems.forEach(b => {
+      // Narrow to candidate base items via the type buckets. If ANY req omits
+      // `type`, it could match any item → fall back to the full list.
+      let candidates;
+      const typeCodes = new Set();
+      let needsAll = false;
+      for (const r of reqs){
+        if (r.type == null){ needsAll = true; break; }
+        typeCodes.add(String(r.type).split('|')[0]);
+      }
+      if (needsAll){
+        candidates = baseItems;
+      } else {
+        candidates = [];
+        typeCodes.forEach(tc => { const arr = byType.get(tc); if (arr) candidates = candidates.concat(arr); });
+      }
+      candidates.forEach(b => {
         if (isExcluded(b)) return;
         if (reqs.some(r => _variantMatchesBase(r, b))){
           out.push(_applyVariant(b, v));
@@ -1051,10 +1109,18 @@ async function load5eData() {
     // Subclass fluff lives in the same file under "subclassFluff".
     (json.subclassFluff || []).forEach(f => {
       if (!f || !f.name) return;
-      const display = f.name + (f.className ? ` (${f.className})` : '');
-      const k = (display + '|' + (f.source||'')).toLowerCase();
       const desc = _parseEntries(f.entries || []);
-      if (desc) classBucket[k] = { desc, img: null };
+      if (!desc) return;
+      const val = { desc, img: null };
+      // _applyFluff looks up subclasses via addRef → _applyFluff('class',
+      // d.name, d.source) where d.name is the BARE subclass name ("Alchemist"),
+      // NOT the "Alchemist (Artificer)" display string. Keying only by the
+      // display name (the old bug) meant the lookup never hit and every
+      // subclass card fell through to raw feature text. Key by the bare
+      // name|source so the lookup matches; also store the display-name variant
+      // for any consumer that keys by the disambiguated name.
+      classBucket[(f.name + '|' + (f.source||'')).toLowerCase()] = val;
+      if (f.className) classBucket[(f.name + ` (${f.className})` + '|' + (f.source||'')).toLowerCase()] = val;
     });
   });
 
@@ -1098,9 +1164,12 @@ async function load5eData() {
   // that reference one via {#itemEntry …} can have it resolved during
   // _convertItem. Must run before the items.json + baseitem passes.
   _ITEM_ENTRY_BY_KEY = {};
+  _ITEM_ENTRY_BY_NAME = {};
   ((baseItemFile?.itemEntry) || []).forEach(t => {
     if (!t || !t.name) return;
     _ITEM_ENTRY_BY_KEY[(t.name + '|' + (t.source||'')).toLowerCase()] = t;
+    const nk = t.name.toLowerCase();
+    if (!_ITEM_ENTRY_BY_NAME[nk]) _ITEM_ENTRY_BY_NAME[nk] = t; // first wins
   });
 
   if (itemFile) (itemFile.item||[]).forEach(d => addItem(d));

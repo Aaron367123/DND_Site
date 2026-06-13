@@ -224,14 +224,10 @@ function _applyRemoteKey(key, fbVal) {
     try { state.sharedPanels = JSON.parse(fbVal) || []; } catch(_){ state.sharedPanels = []; }
     if (typeof _applySharedPanelsToPlayerView === 'function' && document.body.classList.contains('player-mode')){
       _applySharedPanelsToPlayerView();
-    } else {
-      // DM tab — refresh share-button icon on each open window.
-      document.querySelectorAll('.window').forEach(el => {
-        const id = el.dataset.panel;
-        const btn = el.querySelector('[data-wact="share"]');
-        if (id && btn) btn.textContent = (state.sharedPanels||[]).includes(id) ? '👁' : '◌';
-      });
     }
+    // DM tab: nothing to refresh here. Share state moved into the window ⋯
+    // menu, which reads state.sharedPanels live each time it opens — the old
+    // code probed for a [data-wact="share"] head button that no longer exists.
     return;
   }
 

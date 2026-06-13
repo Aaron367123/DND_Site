@@ -97,6 +97,26 @@ registerPanel('books', {
     // Make sure the merged global is up to date — Adventures panel may have
     // mutated its hidden list before Books was opened.
     if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
+    // Cross-tab sync. Hidden-books and bookmarks are browser-local
+    // (skt-books-hidden-v1 / skt-book-bookmarks-v1) and hidden-books only
+    // round-trips through Firebase slowly — so a second tab in the SAME browser
+    // never saw the change. The native `storage` event fires in other tabs the
+    // instant these keys change; re-read + re-render off it. Attached once.
+    if (!this._onStorage){
+      this._onStorage = (e) => {
+        if (!this._body || !e) return;
+        if (e.key === 'skt-books-hidden-v1'){
+          try { const arr = JSON.parse(e.newValue || '[]'); this._hiddenBooks = new Set(Array.isArray(arr) ? arr : []); }
+          catch(_){ this._hiddenBooks = new Set(); }
+          if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
+          this._render();
+        } else if (e.key === 'skt-book-bookmarks-v1'){
+          try { this._bookmarks = JSON.parse(e.newValue || '{}') || {}; } catch(_){ this._bookmarks = {}; }
+          if (!this._currentAdvId) this._render(); // list view shows resume badges
+        }
+      };
+      window.addEventListener('storage', this._onStorage);
+    }
     this._render();
     this._loadIndex();
     // When the 5etools side data finishes loading, re-render the open chapter
@@ -121,7 +141,10 @@ registerPanel('books', {
     this._saveHiddenBooks();
     this._render();
   },
-  unmount(){ this._body = null; },
+  unmount(){
+    if (this._onStorage){ window.removeEventListener('storage', this._onStorage); this._onStorage = null; }
+    this._body = null;
+  },
 
   _bumpBookmark(){
     if (!this._currentAdvId) return;
@@ -144,12 +167,16 @@ registerPanel('books', {
     if (this._advCache[key]) return this._advCache[key];
     try {
       const res = await fetch('data/book/book-' + key + '.json');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const j = await res.json();
       this._advCache[key] = j;
       return j;
     } catch(_){
-      this._advCache[key] = { data: [] };
-      return this._advCache[key];
+      // Do NOT cache the failure. A transient network error (or a fetch that
+      // raced page load) would otherwise pin this adventure to "empty" for the
+      // rest of the session. Return a throwaway empty shape and leave the cache
+      // slot open so the next open retries the fetch.
+      return { data: [] };
     }
   },
 
@@ -259,7 +286,7 @@ registerPanel('books', {
           <span class="adv-list-count">${visible.length} / ${this._adventures.length}</span>
         </div>
         ${scopeRow}
-        <div class="adv-list">${cards || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No adventures match.</div>'}</div>
+        <div class="adv-list">${cards || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No books match.</div>'}</div>
         ${hiddenFooter}
       </div>`;
     // Restore the scroll position on the freshly-built list so hiding a
@@ -362,7 +389,13 @@ registerPanel('books', {
     }
 
     const chapters = (file && file.data) || [];
-    if (this._currentChapterIdx >= chapters.length) this._currentChapterIdx = 0;
+    if (this._currentChapterIdx >= chapters.length){
+      // Stale bookmark pointing past the end (chapter count shrank, or a bad
+      // saved value) — clamp AND persist, so the next open doesn't restore the
+      // same out-of-range index and clamp all over again.
+      this._currentChapterIdx = 0;
+      this._bumpBookmark();
+    }
     const ch = chapters[this._currentChapterIdx];
 
     const tocHtml = chapters.map((c, i) => `
@@ -715,7 +748,7 @@ registerPanel('books', {
           return `<li>${this._renderNode(it)}</li>`;
         }).join('');
         const tag = node.style && node.style.includes('list-decimal') ? 'ol' : 'ul';
-        return `<${tag} class="adv-list">${items}</${tag}>`;
+        return `<${tag} class="adv-content-list">${items}</${tag}>`;
       }
       case 'table':
       case 'tableGroup': {

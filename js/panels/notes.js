@@ -68,11 +68,24 @@ function _notesHydrate(){
 function _notesUpdateLineAuthors(oldContent, oldAuthors, newContent, myId){
   const oldLines=(oldContent||'').split('\n');
   const newLines=(newContent||'').split('\n');
-  const priorByText=new Map();
-  oldLines.forEach((line,i)=>{ if(!priorByText.has(line)) priorByText.set(line, oldAuthors && oldAuthors[i]); });
+  oldAuthors = oldAuthors || [];
+  // Build, per distinct line TEXT, an ordered QUEUE of the authors that owned
+  // each occurrence. Consuming from the queue (rather than always reading the
+  // single first match) preserves per-occurrence authorship for duplicate
+  // lines — blank lines in particular are everywhere, and the old first-match
+  // map collapsed all of them onto the first blank line's author.
+  const queues=new Map();
+  oldLines.forEach((line,i)=>{
+    let q=queues.get(line); if(!q){ q=[]; queues.set(line,q); }
+    q.push(oldAuthors[i]);
+  });
   return newLines.map(line => {
-    const prior = priorByText.get(line);
-    return prior!=null ? prior : myId;
+    const q=queues.get(line);
+    if (q && q.length){
+      const prior=q.shift();
+      return prior!=null ? prior : myId;
+    }
+    return myId; // genuinely new (or surplus duplicate) line → current author
   });
 }
 
@@ -135,6 +148,20 @@ registerPanel('notes', {
   mount(body){
     this._body = body;
     if (!this._data) this._data = _notesHydrate();
+    // Commit + flush on tab hide/close so an edit typed in the last 800 ms
+    // isn't lost when the page goes away (unmount() won't fire on tab close).
+    // visibilitychange→hidden is the reliable signal (fires before pagehide on
+    // mobile + desktop); pagehide is the belt-and-suspenders for hard closes.
+    if (!this._onPageHide){
+      this._onPageHide = () => {
+        this._commitEditing();
+        if (window.notesSync   && window.notesSync.flushPending)   window.notesSync.flushPending();
+        if (window.dropboxSync && window.dropboxSync.flushPending) window.dropboxSync.flushPending();
+      };
+      this._onVisChange = () => { if (document.visibilityState === 'hidden') this._onPageHide(); };
+      window.addEventListener('pagehide', this._onPageHide);
+      document.addEventListener('visibilitychange', this._onVisChange);
+    }
     // Attach the divider's document-level mousemove/mouseup ONCE per mount.
     // (Previously these were re-attached inside _wireDivider() — which runs
     // from _wire() on every _render() — so each sync-pull poll added a new
@@ -189,7 +216,7 @@ registerPanel('notes', {
     const ds = window.dropboxSync; if (!ds) return;
     ds.init(() => this._editing);
     ds.onStatus(() => { if (this._body) this._renderVaultPill(); });
-    ds._onPullCallback = () => { if (!this._editing && this._body) this._render(); };
+    ds._onPullCallback = () => { if (!this._editing && this._body) this._renderKeepScroll(); };
     ds.startPolling(() => this._data);
     // Bring the vault tree into the in-memory model on first connect.
     ds.fullSync(this._data, { force: true }).catch(() => {});
@@ -202,7 +229,7 @@ registerPanel('notes', {
     this._localSyncWired = true;
     ns.init(() => this._editing);
     ns.onStatus(() => { if (this._body) this._renderVaultPill(); });
-    ns._onPullCallback = () => { if (!this._editing && this._body) this._render(); };
+    ns._onPullCallback = () => { if (!this._editing && this._body) this._renderKeepScroll(); };
     // Conflict subscription — when notes-sync detects a two-sided change,
     // surface a banner so the user can review and choose a winner.
     if (typeof ns.onConflict === 'function'){
@@ -215,6 +242,15 @@ registerPanel('notes', {
   },
   unmount(){
     this._commitEditing();
+    // Flush any debounced push before tearing down so a just-typed edit isn't
+    // stranded in the 800 ms window when the panel closes.
+    if (window.notesSync   && window.notesSync.flushPending)   window.notesSync.flushPending();
+    if (window.dropboxSync && window.dropboxSync.flushPending) window.dropboxSync.flushPending();
+    if (this._onPageHide){
+      window.removeEventListener('pagehide', this._onPageHide);
+      document.removeEventListener('visibilitychange', this._onVisChange);
+      this._onPageHide = null; this._onVisChange = null;
+    }
     if (window.notesSync)   { window.notesSync.stopPolling();   window.notesSync._onPullCallback   = null; }
     if (window.dropboxSync) { window.dropboxSync.stopPolling(); window.dropboxSync._onPullCallback = null; }
     if (this._paneObserver){ this._paneObserver.disconnect(); this._paneObserver = null; }
@@ -313,6 +349,17 @@ registerPanel('notes', {
       return a.name.localeCompare(b.name);
     }));
     return byParent;
+  },
+
+  // Re-render while keeping the click-to-edit preview's scroll position.
+  // Used by the sync-pull callbacks: a remote change (or another tab's edit)
+  // shouldn't yank the DM back to the top of a long note they're reading.
+  _renderKeepScroll(){
+    const area = this._body && this._body.querySelector('.notes-edit-area');
+    const st = area ? area.scrollTop : 0;
+    this._render();
+    const area2 = this._body && this._body.querySelector('.notes-edit-area');
+    if (area2) area2.scrollTop = st;
   },
 
   _render(){
@@ -658,6 +705,16 @@ registerPanel('notes', {
       delBtn?.addEventListener('click', () => {
         if (!this._data.authors) return;
         delete this._data.authors[id];
+        // Scrub orphan references. Any line still attributed to the removed
+        // author would look up a now-missing legend entry and render as a
+        // colorless "ghost" author. Null those entries so the lines fall back
+        // to the unattributed style instead of dangling on a dead id.
+        (this._data.items || []).forEach(it => {
+          if (!Array.isArray(it.lineAuthors)) return;
+          for (let i = 0; i < it.lineAuthors.length; i++){
+            if (it.lineAuthors[i] === id) it.lineAuthors[i] = null;
+          }
+        });
         this._save();
         // Re-render the popover content so the row disappears immediately.
         const list = pop.querySelector('.nvs-authors-list');
@@ -665,18 +722,15 @@ registerPanel('notes', {
         if (this._body && !this._editing) this._refreshPreview();
       });
     });
-    const close = () => pop.remove();
+    // close() also tears down the document outside-click listener. The old
+    // code only removed it on the outside-click path, so closing via Close/Done
+    // left a dangling capture-phase listener bound until the next stray click.
+    const onOutside = (e) => { if (!pop.contains(e.target) && e.target !== anchor) close(); };
+    const close = () => { pop.remove(); document.removeEventListener('mousedown', onOutside, true); };
     pop.querySelector('#nvs-close').addEventListener('click', close);
     pop.querySelector('#nvs-done').addEventListener('click', close);
     // Close when clicking outside.
-    setTimeout(() => {
-      document.addEventListener('mousedown', function outside(e){
-        if (!pop.contains(e.target) && e.target !== anchor){
-          close();
-          document.removeEventListener('mousedown', outside, true);
-        }
-      }, true);
-    }, 0);
+    setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
   },
 
   _renderColored(file){
@@ -803,14 +857,22 @@ registerPanel('notes', {
       const me = _getMe();
       file.lineAuthors = _notesUpdateLineAuthors(oldContent, file.lineAuthors, newContent, me.id);
       file.content = newContent;
-      // Push to the active adapter (debounced inside each sync module).
-      if (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured()) {
-        window.dropboxSync.pushFile(file, this._data.items);
-      } else if (window.notesSync && window.notesSync.isConnected()) {
-        window.notesSync.pushFile(file, this._data.items);
-      }
+      this._pushActive(file);
     }
     this._save();
+  },
+
+  // Push a file to whichever sync adapter is active (debounced inside each
+  // module). Centralized so every content mutation — commit, AND undo/redo
+  // while not in edit mode — propagates to Dropbox / the vault, not just
+  // localStorage.
+  _pushActive(file){
+    if (!file) return;
+    if (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured()) {
+      window.dropboxSync.pushFile(file, this._data.items);
+    } else if (window.notesSync && window.notesSync.isConnected()) {
+      window.notesSync.pushFile(file, this._data.items);
+    }
   },
 
   _insert(ta, act){
@@ -876,7 +938,7 @@ registerPanel('notes', {
     const prev = stack.pop();
     (this._redoStacks[id] = this._redoStacks[id] || []).push(cur);
     if (ta){ ta.value = prev; ta.focus(); }
-    else { file.content = prev; this._save(); this._render(); }
+    else { file.content = prev; this._save(); this._pushActive(file); this._render(); }
   },
   _redo(){
     const file = this._selected(); if (!file) return;
@@ -888,7 +950,7 @@ registerPanel('notes', {
     const next = stack.pop();
     (this._undoStacks[id] = this._undoStacks[id] || []).push(cur);
     if (ta){ ta.value = next; ta.focus(); }
-    else { file.content = next; this._save(); this._render(); }
+    else { file.content = next; this._save(); this._pushActive(file); this._render(); }
   },
 
   _wire(){
@@ -1234,6 +1296,20 @@ registerPanel('notes', {
           await window.notesSync.fullSync(this._data, { force: true });
           this._render();
         }
+      };
+      return;
+    }
+    if (s.needsPermission) {
+      // Handle restored from IndexedDB but the readwrite grant lapsed on
+      // reload. Don't pretend we're synced — make the user re-grant. The click
+      // is a user gesture, so requestAccess() can actually open the dialog.
+      pill.className = 'notes-vault-pill needs-permission';
+      pill.textContent = '🔓 Grant vault access';
+      pill.title = 'Folder permission lapsed after reload — click to re-grant access to ' + (s.vaultName || 'your vault');
+      pill.onclick = async () => {
+        const ok = await window.notesSync.requestAccess();
+        if (ok) await window.notesSync.fullSync(this._data, { force: true });
+        this._render();
       };
       return;
     }

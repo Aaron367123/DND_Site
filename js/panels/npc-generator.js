@@ -41,8 +41,11 @@ function genNPC(overrides){
   // "Hums under their breath. Hums under their breath." in the saved
   // NPC's description.
   const quirk = rnd(NPC_GEN_DATA.quirks);
-  let quirk2 = rnd(NPC_GEN_DATA.quirks);
-  for (let i = 0; i < 6 && quirk2 === quirk; i++) quirk2 = rnd(NPC_GEN_DATA.quirks);
+  // Pick the second quirk from the remaining pool so it's GUARANTEED distinct —
+  // the old bounded retry loop could, with vanishing-but-nonzero odds, still
+  // land on the same quirk twice.
+  const _otherQuirks = NPC_GEN_DATA.quirks.filter(q => q !== quirk);
+  const quirk2 = _otherQuirks.length ? rnd(_otherQuirks) : quirk;
   return {
     name, race, gender, role, age,
     attitude:overrides.attitude||rnd(NPC_GEN_DATA.attitudes),
@@ -236,7 +239,9 @@ registerPanel('npcgen',{
       // hide/reveal toggle (same UX as the generator). Saving a generated
       // NPC used to dump the secret straight into the notes field where it
       // sat in plain text — a player glancing at the screen could read it.
-      notes: 'Motivation: ' + (g.motivation||'—'),
+      // HTML-escaped: the library renders n.notes as innerHTML (rich-text
+      // field), so a raw '<' or '&' in the motivation would corrupt it.
+      notes: 'Motivation: ' + esc(g.motivation||'—'),
       secret: g.secret || '',
     });
 
@@ -249,8 +254,15 @@ registerPanel('npcgen',{
       if (lib){
         if (!Array.isArray(lib._npcs)) lib._npcs = [];
         lib._npcs.unshift(entry);
-        try { localStorage.setItem('skt-npcs-v2', JSON.stringify(lib._npcs)); } catch(e){}
         lib._selectedId = entry.id;
+        // Re-hide the secret: the generated NPC carries one, and the library's
+        // reveal flag is panel-global — leaving it true would expose the new
+        // entry's secret on render without an explicit Reveal click.
+        lib._secretRevealed = false;
+        // Use the panel's own _save() rather than poking localStorage directly,
+        // so any future persistence logic in _save() isn't bypassed.
+        if (typeof lib._save === 'function') lib._save();
+        else { try { localStorage.setItem('skt-npcs-v2', JSON.stringify(lib._npcs)); } catch(e){} }
         if (lib._body && typeof lib._render === 'function') lib._render();
       } else {
         // Library panel not mounted — write directly to localStorage so it

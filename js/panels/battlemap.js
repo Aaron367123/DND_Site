@@ -1422,8 +1422,11 @@ registerPanel('battlemap',{
         const guessNx = Math.max(1, Math.round(dxImg / cur));
         const guessNy = Math.max(1, Math.round(dyImg / cur));
         const askAndApply = (nx, ny) => {
-          nx = Math.max(1, Math.round(nx || 1));
-          ny = Math.max(1, Math.round(ny || 1));
+          // Don't round — the renderer takes a fractional cellSize, so honor a
+          // fractional span (e.g. the user measured 2.5 cells). Rounding here
+          // threw away the precision the multi-cell measurement was meant to buy.
+          nx = Math.max(0.1, parseFloat(nx) || 1);
+          ny = Math.max(0.1, parseFloat(ny) || 1);
           // Cell size on each axis. They SHOULD be equal for a square grid;
           // averaging cancels any small click error. Keep as a float — the
           // canvas renderer accepts fractional values just fine.
@@ -1586,6 +1589,34 @@ registerPanel('battlemap',{
         }
       }
     });
+
+    // Touch fog painting — mirror the mouse handlers so mobile/tablet DMs can
+    // reveal/hide fog with a finger. fogPaint() reads clientX/clientY, which a
+    // Touch object carries too, so we forward e.touches[0] straight through.
+    // Single-finger only: 2-finger gestures fall through (pinch-zoom is gated
+    // off while a fog tool is active, but we leave the door open for it).
+    canvas.addEventListener('touchstart',e=>{
+      if(!this._fogTool||this._tool==='add-pc'||this._tool==='add-npc')return;
+      if(e.touches.length!==1)return;
+      e.stopPropagation();e.preventDefault();
+      this._isPainting=true;
+      fogPaint(e.touches[0]);
+    },{ passive:false });
+    canvas.addEventListener('touchmove',e=>{
+      if(!this._isPainting||!this._fogTool)return;
+      if(e.touches.length!==1)return;
+      e.preventDefault();
+      fogPaint(e.touches[0]);
+    },{ passive:false });
+    const endFogTouch=()=>{
+      if(this._isPainting){
+        this._isPainting=false;
+        this._saveMap();
+        if(this._fogStrokeDirty){this._fogStrokeDirty=false;this._broadcast();}
+      }
+    };
+    canvas.addEventListener('touchend',endFogTouch);
+    canvas.addEventListener('touchcancel',endFogTouch);
 
     // Click empty stage = deselect
     stage.addEventListener('click',e=>{
@@ -2761,7 +2792,11 @@ registerPanel('battlemap',{
     // size (tokens are stored in stage-pixel coords). Visual diameter still
     // uses the natural cellSize × scale via tokScale below.
     const cs=this._csScreen();
-    stage.querySelectorAll('.map-token, .map-token-name').forEach(el=>el.remove());
+    // Sweep ALL token layers including the rotated facing-arrow overlays.
+    // Facing divs (.map-token-facing) are appended per rotated token below;
+    // if they aren't cleared here they accumulate every _renderTokens() call
+    // (fog paint, drag, zoom all re-render) and pile up as z-fighting clones.
+    stage.querySelectorAll('.map-token, .map-token-name, .map-token-facing').forEach(el=>el.remove());
 
     const tokScale = this._bgMapScale || 1;
     const csNat = this._cellSize;

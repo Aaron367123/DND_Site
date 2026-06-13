@@ -166,17 +166,23 @@ function _runCrop(img, outSize, shape, title, resolve) {
     setZoom(s + (e.deltaY < 0 ? 0.1 : -0.1), e.clientX, e.clientY);
   }, { passive: false });
 
+  function escHandler(e) {
+    if (e.key === 'Escape') { cleanup(); resolve(null); }
+  }
   function cleanup() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    // Always release the document keydown listener here — the old code only
+    // removed it on the Escape path, so closing via Save/Cancel/backdrop left
+    // a dangling handler (one leaked per crop, each pinning the overlay
+    // closure in memory).
+    document.removeEventListener('keydown', escHandler);
     overlay.remove();
   }
 
   overlay.querySelector('[data-act="cancel"]').addEventListener('click', () => { cleanup(); resolve(null); });
   overlay.addEventListener('click', e => { if (e.target === overlay) { cleanup(); resolve(null); } });
-  document.addEventListener('keydown', function escHandler(e) {
-    if (e.key === 'Escape') { document.removeEventListener('keydown', escHandler); cleanup(); resolve(null); }
-  });
+  document.addEventListener('keydown', escHandler);
 
   overlay.querySelector('[data-act="save"]').addEventListener('click', () => {
     // The viewport shows the rectangle of the displayed image around its center,

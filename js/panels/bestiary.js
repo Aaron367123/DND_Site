@@ -329,10 +329,13 @@ registerPanel('bestiary', {
       </div>
     </div>`;
     document.body.appendChild(backdrop);
-    const close = () => backdrop.remove();
+    // Escape on document, not the backdrop: a plain <div> isn't focusable so
+    // the old backdrop keydown never fired. close() removes it to avoid a leak.
+    const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
     backdrop.querySelector('#best-template-close').addEventListener('click', close);
     backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
-    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    document.addEventListener('keydown', onKey);
 
     const customInp = backdrop.querySelector('#best-template-custom');
     const countEl   = backdrop.querySelector('#best-template-count');
@@ -452,7 +455,7 @@ registerPanel('bestiary', {
     ], 'Save').then(r => {
       if (!r) return;
       if (r.hp !== '' && r.hp != null) m.hp = parseInt(r.hp) || m.hp;
-      if (r.ac !== '' && r.ac != null) m.ac = parseInt(r.ac) || m.ac;
+      if (r.ac !== '' && r.ac != null){ const acv = parseInt(r.ac); if (!isNaN(acv)) m.ac = acv; } // allow AC 0 (|| dropped it)
       if (r.cr !== '' && r.cr != null) m.cr = String(r.cr).trim() || m.cr;
       this._save(); this._render();
       if (typeof showToast === 'function') showToast('Updated ' + m.name);
@@ -468,7 +471,29 @@ registerPanel('bestiary', {
     if (entry && typeof popOutDetail === 'function'){
       // Reuse the search popout — same header, image layout, source badge,
       // and "+ Add to combat" button users get from the search dropdown.
-      popOutDetail(entry);
+      // If the DM edited the snapshot (e.g. an elite Goblin with +HP), the
+      // popout must reflect those numbers — not the canonical stat block. The
+      // renderer reads HP/AC/CR from `_raw.hit_points`, `_raw.armor_class[0]
+      // .value`, and `_raw.challenge_rating`, so we clone the entry and overlay
+      // the edits. Clone (never mutate) so the shared _5eData entry stays clean.
+      const raw = entry._raw || {};
+      const edited =
+        (m.hp != null && +m.hp !== raw.hit_points) ||
+        (m.ac != null && +m.ac !== (raw.armor_class && raw.armor_class[0] && raw.armor_class[0].value)) ||
+        (m.cr != null && String(m.cr) !== String(raw.challenge_rating ?? ''));
+      if (edited){
+        const clone = { ...entry, _raw: { ...raw } };
+        if (m.hp != null && +m.hp) clone._raw.hit_points = +m.hp;
+        if (m.ac != null && +m.ac){
+          const ac0 = (raw.armor_class && raw.armor_class[0]) ? { ...raw.armor_class[0] } : {};
+          ac0.value = +m.ac;
+          clone._raw.armor_class = [ac0, ...((raw.armor_class || []).slice(1))];
+        }
+        if (m.cr != null && String(m.cr).trim()) clone._raw.challenge_rating = String(m.cr).trim();
+        popOutDetail(clone);
+      } else {
+        popOutDetail(entry);
+      }
       return;
     }
     // Fallback before 5e data is loaded — show the saved snapshot.

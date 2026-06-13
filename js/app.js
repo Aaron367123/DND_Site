@@ -1,13 +1,13 @@
 // ============================================================
-// INIT  —  build 20260521d
+// INIT  —  build 20260524e
 // ============================================================
 // Bumped on every meaningful change so you can verify the new JS shipped:
-//   open DevTools console and look for "[app] build 20260521d" — if you see
+//   open DevTools console and look for "[app] build 20260524e" — if you see
 //   an older stamp, the browser is still serving cached app.js (hard-refresh
 //   with Ctrl+Shift+R, or clear site cache in browser settings).
-console.log('[app] build 20260521d loaded');
+console.log('[app] build 20260524e loaded');
 function initPanels(){
-  ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary'].forEach(id=>{
+  ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary','adventures','books'].forEach(id=>{
     const def=panelDefs[id];const b=document.getElementById('panel-body-'+id);
     if(b&&def)def.mount(b);
   });
@@ -84,7 +84,7 @@ function init(){
     showConfirm('Reset window layout to defaults?', {title:'Reset layout', confirmLabel:'Reset'}).then(ok=>{
       if(!ok) return;
       layout=JSON.parse(JSON.stringify(DEFAULT_LAYOUT));saveLayout();
-      ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary'].forEach(id=>{
+      ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary','adventures','books'].forEach(id=>{
         const el=document.querySelector('.window[data-panel="'+id+'"]');
         if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
       });

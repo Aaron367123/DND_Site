@@ -69,6 +69,8 @@
   let _conflictListeners = new Set();
   let _busy = false;           // syncing right now
   let _editingProvider = null; // function returning whether the user is mid-edit
+  let _needsPermission = false;// handle restored but its readwrite grant lapsed
+                               // (File System Access permissions reset on reload)
 
   // Outstanding conflicts the user needs to resolve. Kept in-memory only —
   // a fresh page-load forces a re-sync that re-detects them, so we don't
@@ -186,9 +188,32 @@
   async function _ensurePermission() {
     if (!_vaultHandle) return false;
     const opts = { mode: 'readwrite' };
-    if ((await _vaultHandle.queryPermission(opts)) === 'granted') return true;
-    if ((await _vaultHandle.requestPermission(opts)) === 'granted') return true;
+    if ((await _vaultHandle.queryPermission(opts)) === 'granted') {
+      if (_needsPermission) { _needsPermission = false; _emit(); }
+      return true;
+    }
+    // requestPermission() only opens a dialog inside a user gesture. Called
+    // from the poll timer there's no gesture, so it resolves 'prompt' without
+    // prompting — and may throw in some engines. Either way, surface the lapse
+    // so the pill can offer a manual "grant access" click (which IS a gesture).
+    let granted = false;
+    try { granted = (await _vaultHandle.requestPermission(opts)) === 'granted'; } catch(e) { granted = false; }
+    if (granted) {
+      if (_needsPermission) { _needsPermission = false; _emit(); }
+      return true;
+    }
+    if (!_needsPermission) { _needsPermission = true; _emit(); }
     return false;
+  }
+
+  // Re-request the readwrite grant. MUST be called from a user gesture (the
+  // vault pill's click handler) so the browser actually shows the permission
+  // dialog. Clears the needsPermission flag on success.
+  async function requestAccess() {
+    if (!_vaultHandle) return false;
+    const ok = await _ensurePermission();
+    _emit();
+    return ok;
   }
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -198,7 +223,19 @@
     if (!isSupported()) return;
     try {
       const handle = await _idbGet(HANDLE_ID);
-      if (handle) _vaultHandle = handle;
+      if (handle) {
+        _vaultHandle = handle;
+        // File System Access permission grants do NOT survive a page reload —
+        // the handle persists in IndexedDB but its readwrite permission resets
+        // to 'prompt'. Re-requesting needs a user gesture, so we can't do it
+        // here on load. Detect the lapsed grant up front and flag it; without
+        // this the pill claims "connected" while every poll-driven sync silently
+        // no-ops (requestPermission outside a gesture never shows a dialog).
+        try {
+          const perm = await _vaultHandle.queryPermission({ mode: 'readwrite' });
+          _needsPermission = (perm !== 'granted');
+        } catch(e) { _needsPermission = true; }
+      }
     } catch(e){}
     _emit();
   }
@@ -216,7 +253,7 @@
       vaultName: _state.vaultName || (_vaultHandle && _vaultHandle.name) || null,
       lastSync:  _state.lastSync,
       busy:      _busy,
-      needsPermission: false,
+      needsPermission: _needsPermission,
     };
   }
   function onStatus(fn) { _statusListeners.add(fn); return () => _statusListeners.delete(fn); }
@@ -399,8 +436,10 @@
   function pushFile(item, allItems) {
     if (!_vaultHandle || item.type !== 'file') return;
     const id = item.id;
-    if (_pushTimers.has(id)) clearTimeout(_pushTimers.get(id));
-    _pushTimers.set(id, setTimeout(async () => {
+    if (_pushTimers.has(id)) clearTimeout(_pushTimers.get(id).timer);
+    // Keep the work as a named closure (not just a bare setTimeout) so
+    // flushPending() can fire it immediately when the page is hiding.
+    const run = async () => {
       _pushTimers.delete(id);
       if (!(await _ensurePermission())) return;
       try {
@@ -419,7 +458,20 @@
       } catch (e) {
         console.error('[notes-sync] pushFile failed', e);
       }
-    }, PUSH_DEBOUNCE_MS));
+    };
+    _pushTimers.set(id, { timer: setTimeout(run, PUSH_DEBOUNCE_MS), run });
+  }
+
+  // Fire every queued debounced push NOW instead of waiting out the 800 ms
+  // window. Called on tab hide / panel unmount so a write isn't silently lost
+  // when the page closes inside the debounce window (localStorage already has
+  // it, but the on-disk vault copy would otherwise lag a tick behind).
+  function flushPending() {
+    if (!_pushTimers.size) return;
+    // Snapshot the runs first — each run() deletes its own _pushTimers entry.
+    const runs = [];
+    _pushTimers.forEach(v => { clearTimeout(v.timer); runs.push(v.run); });
+    runs.forEach(run => { try { run(); } catch(e){} });
   }
 
   // Periodic poll loop. Started via startPolling(getDataFn).
@@ -485,8 +537,8 @@
 
   // Expose
   window.notesSync = {
-    init, isSupported, isConnected, getStatus, onStatus,
-    connect, disconnect, fullSync, pushFile,
+    init, isSupported, isConnected, getStatus, onStatus, requestAccess,
+    connect, disconnect, fullSync, pushFile, flushPending,
     startPolling, stopPolling,
     onConflict, getConflicts, resolveConflict,
     _onPullCallback: null,         // notes panel sets this to re-render after disk → app

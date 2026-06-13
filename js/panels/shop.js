@@ -18,7 +18,14 @@ registerPanel('shop',{
     // before the load completes.
     if (typeof load5eData === 'function') load5eData();
   },
-  unmount(){this._body=null;},
+  unmount(){
+    // Modal backdrops are appended to document.body, so they outlive the panel
+    // window. If the user closes the shop while its item-detail or settings
+    // modal is open, that backdrop would otherwise be orphaned over the
+    // workspace forever. Sweep any shop-owned backdrops here.
+    document.querySelectorAll('.modal-backdrop[data-shop-modal]').forEach(el => el.remove());
+    this._body=null;
+  },
   _saveShops(){ try { localStorage.setItem('skt-shops-v1', JSON.stringify({saved:this._saved})); } catch(e){} },
   _render(){
     const b=this._body;if(!b)return;
@@ -152,7 +159,7 @@ registerPanel('shop',{
         || _5eData.find(d => d.cat === 'item' && (d.name||'').toLowerCase() === wantName);
     }
     const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
+    backdrop.className = 'modal-backdrop'; backdrop.dataset.shopModal = '1';
     let bodyHtml;
     if (detail && typeof renderItemFull === 'function'){
       bodyHtml = renderItemFull(detail);
@@ -180,10 +187,14 @@ registerPanel('shop',{
       +   '<button class="btn primary" id="shop-item-close">Close</button>'
       + '</div></div>';
     document.body.appendChild(backdrop);
-    const close = () => backdrop.remove();
+    // Escape must be bound on document, not the backdrop: a plain <div> isn't
+    // focusable, so it never receives keydown and the old backdrop listener
+    // never fired. close() removes the document listener so it can't leak.
+    const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
     backdrop.querySelector('#shop-item-close').addEventListener('click', close);
     backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
-    backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    document.addEventListener('keydown', onKey);
   },
 
   // Add a purchased item to the Loot tracker. Reads-merges-writes localStorage
@@ -215,7 +226,7 @@ registerPanel('shop',{
   // shop generator, so we surface them here on a dedicated button instead.
   _openSettings(){
     const backdrop=document.createElement('div');
-    backdrop.className='modal-backdrop';
+    backdrop.className='modal-backdrop'; backdrop.dataset.shopModal='1';
     const cur = state.settings.currencySymbol || 'gp';
     const jit = state.settings.priceJitter ?? 20;
     const rnd = state.settings.rounding ?? 'none';
@@ -887,7 +898,10 @@ registerPanel('shop',{
       // Apply the same post-shape filters as the catalog items.
       if (maxPrice > 0 && (e.basePrice || 0) > maxPrice) return;
       if (this._isBlocked(e, blocklistSet)) return;
-      if (f.excludeConsumables && (catLower.includes('drink') || catLower.includes('food'))) return;
+      // Match the main catalog's "consumable" definition (P/SC/A + food/drink).
+      // Curated extras carry a free-text `category`, so detect by substring:
+      // potions, scrolls, ammunition and food/drink all count.
+      if (f.excludeConsumables && /drink|food|potion|consumable|scroll|ammo/.test(catLower)) return;
       seen.add(key);
       out.push(e);
     });
