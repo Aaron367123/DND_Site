@@ -529,9 +529,8 @@ registerPanel('combat',{
     if (conc){
       chips.push(`<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">🌀 ${esc(conc)} ×</span>`);
     }
-    if (c.reactionUsed){
-      chips.push(`<span class="status-pill react-pip spent" data-act="toggle-reaction" data-idx="${i}" title="Reaction spent this round — click to refund">↩ React</span>`);
-    }
+    // Reaction is no longer a conditional chip — it's an always-visible toggle
+    // in the controls cluster below, so the DM can scan who still has one.
     const buffs = Array.isArray(c.buffs) ? c.buffs : [];
     buffs.forEach((bf, bi) => {
       const acStr = bf.ac ? ` ${bf.ac>0?'+':''}${bf.ac}AC` : '';
@@ -539,11 +538,17 @@ registerPanel('combat',{
       const dur   = (bf.rounds!=null && bf.rounds>=0) ? ` ${bf.rounds}r` : '';
       chips.push(`<span class="status-pill buff-pill" data-act="rm-buff" data-idx="${i}" data-bi="${bi}" title="${esc(bf.label||'Buff')}${esc(acStr)}${esc(hpStr)}${esc(dur)} — click to remove">✦ ${esc(bf.label||'buff')}${acStr}${hpStr}${dur} ×</span>`);
     });
-    // Trailing add button — opens a small inline menu for the three actions.
-    // The menu is built lazily via showContextMenu so we don't render it now.
-    const addPill = `<span class="status-pill status-add" data-act="status-menu" data-idx="${i}" title="Add concentration / mark reaction / add buff">+</span>`;
+    // Three always-visible direct controls — no intermediate menu. Reaction is
+    // a one-click toggle; concentration + buff jump straight to their prompt /
+    // modal. Active states still surface as the pills on the left (× to clear);
+    // these are just the fast entry points (mirrors the handlers at toggle-
+    // reaction / set-conc / add-buff).
+    const ctrls =
+        `<button class="status-ctrl react-toggle${c.reactionUsed?' spent':''}" data-act="toggle-reaction" data-idx="${i}" aria-pressed="${c.reactionUsed?'true':'false'}" title="${c.reactionUsed?'Reaction used this round — click to refund':'Reaction available — click to mark used'}">↩</button>`
+      + `<button class="status-ctrl conc-ctrl${conc?' on':''}" data-act="set-conc" data-idx="${i}" title="${conc?('Concentrating on '+esc(conc)+' — click to change'):'Set concentration spell'}">🌀</button>`
+      + `<button class="status-ctrl buff-ctrl" data-act="add-buff" data-idx="${i}" title="Add a buff (AC / HP / duration)">✦</button>`;
     const statusRow = (mode === 'show')
-      ? `<div class="combat-status-row">${chips.join('')}${addPill}</div>`
+      ? `<div class="combat-status-row">${chips.join('')}<span class="status-ctrls">${ctrls}</span></div>`
       : '';
 
     // Name rendered as a span with data-act="open-bestiary" for monsters so
@@ -613,25 +618,6 @@ registerPanel('combat',{
         const c = state.combatants[i]; if (!c) return;
         state.combatants[i] = {...c, reactionUsed: !c.reactionUsed};
         save(); this._render();
-      }
-      else if(act==='status-menu'){
-        // Open a tiny context menu for the three add-status actions. The
-        // anchor is the "+" pill itself; we position the menu just below it.
-        const idx = parseInt(el.dataset.idx);
-        const c = state.combatants[idx]; if (!c) return;
-        const rect = el.getBoundingClientRect();
-        const items = [];
-        // Show "mark reaction" only when reaction is currently available
-        // (when it's spent, the spent chip itself toggles to refund).
-        if (!c.reactionUsed){
-          items.push({ label: '↩ Mark reaction used', onClick: () => {
-            state.combatants[idx] = {...c, reactionUsed: true};
-            save(); this._render();
-          }});
-        }
-        items.push({ label: '🌀 Set concentration…', onClick: () => this._promptConcentration(idx) });
-        items.push({ label: '✦ Add buff…',           onClick: () => this._promptAddBuff(idx) });
-        showContextMenu(rect.left, rect.bottom + 4, items);
       }
       else if(act==='set-conc')      this._promptConcentration(parseInt(el.dataset.idx));
       else if(act==='clear-conc'){

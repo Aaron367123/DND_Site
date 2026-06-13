@@ -1742,18 +1742,25 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 }
 .combat-status-row .status-pill.empty{opacity:.55;border-style:dashed}
 .combat-status-row .status-pill.empty:hover{opacity:1}
-/* Trailing "+" pill — opens the status menu. Very compact (1ch wide) so a
-   card with zero active statuses adds only ~14 px of vertical space. */
-.combat-status-row .status-pill.status-add{
-  padding:1px 5px;font-size:11px;font-weight:700;line-height:1;
-  background:transparent;border:1px dashed var(--border);opacity:.55
-}
-.combat-status-row .status-pill.status-add:hover{opacity:1;border-style:solid;border-color:var(--accent);color:var(--accent)}
 .combat-status-row .conc-pill:not(.empty){background:rgba(140,108,209,.22);border-color:rgba(140,108,209,.55);color:#b6a3e8}
 .combat-status-row .conc-pill:not(.empty):hover{background:rgba(140,108,209,.34)}
-.combat-status-row .react-pip{background:var(--panel-3);color:var(--text-muted)}
-.combat-status-row .react-pip:hover{color:var(--text);border-color:var(--accent)}
-.combat-status-row .react-pip.spent{opacity:.45;text-decoration:line-through}
+/* Always-visible action controls: reaction toggle / set concentration / add
+   buff. Small icon buttons pushed to the right of any active pills — each goes
+   straight to its action (no intermediate menu). */
+.combat-status-row .status-ctrls{display:inline-flex;gap:3px;margin-left:auto;align-items:center;flex-shrink:0}
+.combat-status-row .status-ctrl{
+  width:22px;height:18px;padding:0;border-radius:6px;
+  border:1px solid var(--border);background:transparent;color:var(--text-dim);
+  font-family:inherit;font-size:11px;line-height:1;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s,border-color .12s
+}
+.combat-status-row .status-ctrl:hover{color:var(--text);border-color:var(--accent);background:var(--panel-3)}
+/* Reaction: dim outline = available, filled accent = used this round. */
+.combat-status-row .react-toggle.spent{background:rgba(212,165,116,.22);border-color:rgba(212,165,116,.6);color:var(--accent)}
+.combat-status-row .react-toggle.spent:hover{background:rgba(212,165,116,.34)}
+/* Concentration control lights up purple while concentrating. */
+.combat-status-row .conc-ctrl.on{background:rgba(140,108,209,.22);border-color:rgba(140,108,209,.55);color:#b6a3e8}
 /* PC-only state mirrors from the party tracker (toggle from there). */
 .combat-status-row .rage-pill{
   background:rgba(194,84,80,.28);border-color:rgba(194,84,80,.6);color:#e8b3b0;
