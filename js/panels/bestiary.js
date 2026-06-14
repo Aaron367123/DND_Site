@@ -228,9 +228,35 @@ registerPanel('bestiary', {
       card.addEventListener('dragstart', e=>{
         e.dataTransfer.effectAllowed = 'copyMove';
         e.dataTransfer.setData('application/x-skt-bestiary-mid', card.dataset.mid);
+        this._dragMid = card.dataset.mid;
         card.classList.add('dragging');
       });
-      card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+      card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); this._dragMid = null; });
+      // Card-to-card reorder (like the combat tracker). Dropping a monster onto
+      // another card inserts it before/after that card — by horizontal midpoint
+      // since the cards lay out in a grid — and adopts the target's folder so a
+      // cross-folder drag relocates + positions in one move. stopPropagation so
+      // the enclosing folder's move-to-folder drop doesn't also fire.
+      card.addEventListener('dragover', e=>{
+        if (!e.dataTransfer.types.includes('application/x-skt-bestiary-mid')) return;
+        if (this._dragMid && this._dragMid === card.dataset.mid) return; // over self
+        e.preventDefault(); e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        const r = card.getBoundingClientRect();
+        const before = e.clientX < r.left + r.width/2;
+        card.classList.toggle('drop-before', before);
+        card.classList.toggle('drop-after', !before);
+      });
+      card.addEventListener('dragleave', ()=>card.classList.remove('drop-before','drop-after'));
+      card.addEventListener('drop', e=>{
+        const mid = e.dataTransfer.getData('application/x-skt-bestiary-mid');
+        card.classList.remove('drop-before','drop-after');
+        if (!mid || mid === card.dataset.mid) return;
+        e.preventDefault(); e.stopPropagation();
+        const r = card.getBoundingClientRect();
+        const before = e.clientX < r.left + r.width/2;
+        this._reorderMonster(mid, card.dataset.mid, before);
+      });
     });
 
     // Folder drop target — drag a monster card onto a folder to move it there.
@@ -441,6 +467,24 @@ registerPanel('bestiary', {
       this._save(); this._render();
     }});
     showContextMenu(x, y, items);
+  },
+
+  // Reorder by drag — move `fromMid` to sit before/after `toMid` in the flat
+  // _data.monsters array (which drives display order within a folder), adopting
+  // the target's folder so a cross-folder drag relocates + positions at once.
+  _reorderMonster(fromMid, toMid, before){
+    const monsters = this._data.monsters;
+    const fromIdx = monsters.findIndex(m => m.id === fromMid);
+    const toMon   = monsters.find(m => m.id === toMid);
+    if (fromIdx < 0 || !toMon || fromMid === toMid) return;
+    const moved = monsters.splice(fromIdx, 1)[0];
+    moved.folderId = toMon.folderId;                 // adopt target's folder (no-op if same)
+    let insertIdx = monsters.findIndex(m => m.id === toMid);
+    if (insertIdx < 0) insertIdx = monsters.length;  // safety (shouldn't happen)
+    if (!before) insertIdx += 1;
+    monsters.splice(insertIdx, 0, moved);
+    this._save();
+    this._render();
   },
 
   // Edit the per-card HP/AC/CR snapshot without dropping and re-adding the
