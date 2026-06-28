@@ -4,6 +4,10 @@
 // XP thresholds by character level [easy, medium, hard, deadly]
 const XP_THRESH=[[25,50,75,100],[200,450,600,800],[400,700,1100,1600],[500,900,1400,2100],[700,1100,1800,2700],[1000,1400,2300,3400],[1300,1700,2900,4300],[1400,2100,3900,5900],[1600,2400,4700,7200],[2000,2800,5700,8800],[2200,3200,6400,9600],[2500,3600,7300,10900],[2800,4000,8200,12300],[3200,4400,9100,13700],[3500,4800,10000,15000],[3800,5200,10900,15000],[4000,5600,11800,15000],[4300,6000,12700,15000],[4700,6400,13600,15000],[5000,6800,14400,15000]];
 const CR_XP={'0':10,'1/8':25,'1/4':50,'1/2':100,'1':200,'2':450,'3':700,'4':1100,'5':1800,'6':2300,'7':2900,'8':3900,'9':5000,'10':5900,'11':7200,'12':8400,'13':10000,'14':11500,'15':13000,'16':15000,'17':18000,'18':20000,'19':22000,'20':25000,'21':33000,'22':41000,'23':50000,'24':62000};
+// 2024 DMG XP budget PER CHARACTER by level (1–20): [Low, Moderate, High].
+// The 2024 system drops the encounter multiplier entirely — you just spend the
+// summed budget on monsters (raw XP), which reads far closer to actual play.
+const XP_BUDGET_2024=[[50,75,100],[100,150,200],[150,225,400],[250,375,500],[500,750,1100],[600,1000,1400],[750,1300,1700],[1000,1700,2100],[1300,2000,2600],[1600,2300,3100],[1900,2900,4100],[2200,3700,4700],[2600,4200,5400],[2900,4900,6200],[3300,5400,7800],[3800,6100,9800],[4500,7200,11700],[5000,8700,14200],[5500,10700,17200],[6400,13200,22000]];
 // Sample monster list for encounter search
 const MONSTER_LIST=[
   {name:'Goblin',cr:'1/4',hp:7,ac:15},{name:'Orc',cr:'1/2',hp:15,ac:13},{name:'Hobgoblin',cr:'1/2',hp:11,ac:18},
@@ -20,12 +24,13 @@ const MONSTER_LIST=[
 registerPanel('encounter',{
   title:'Encounter Builder',icon:'⚡',
   _monsters:[],_partyLevel:6,_partySize:5,_searchQ:'',_searchOpen:false,
+  _system:'2024', // encounter-building system: '2024' (budget, no multiplier) or '2014'
   // Library of saved encounters — each is {id, name, monsters, ts}. Lets
   // the DM stage two or three fights for a session and switch between them.
   _saved:[],
   mount(body){
     this._body=body;
-    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];}}catch(e){}
+    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;}}catch(e){}
     this._partySize=state.party.length||this._partySize;
     this._render();
   },
@@ -33,7 +38,23 @@ registerPanel('encounter',{
     if (this._encDocDown){ document.removeEventListener('mousedown', this._encDocDown); this._encDocDown = null; }
     this._body=null;
   },
-  _save(){try{localStorage.setItem('skt-enc-v1',JSON.stringify({monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved}));}catch(e){}},
+  _save(){try{localStorage.setItem('skt-enc-v1',JSON.stringify({monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system}));}catch(e){}},
+  _systemMode(){ return this._system==='2014' ? '2014' : '2024'; },
+  // 2024 party XP budget for the current level + size (per-char × size).
+  _budget2024(){
+    const lvl=Math.min(Math.max(this._partyLevel,1),20)-1;
+    const b=XP_BUDGET_2024[lvl]||XP_BUDGET_2024[0];
+    return {low:b[0]*this._partySize, moderate:b[1]*this._partySize, high:b[2]*this._partySize};
+  },
+  // 2024 difficulty from RAW monster XP (no multiplier) vs the party budget.
+  _difficulty2024(rawXP){
+    if(!rawXP) return {label:'—',cls:'easy'};
+    const bg=this._budget2024();
+    if(rawXP<=bg.low)      return {label:'Low',cls:'easy'};
+    if(rawXP<=bg.moderate) return {label:'Moderate',cls:'medium'};
+    if(rawXP<=bg.high)     return {label:'High',cls:'hard'};
+    return {label:'Deadly',cls:'deadly'};
+  },
   _calcXP(){
     const total=this._monsters.reduce((sum,m)=>{const xp=CR_XP[m.cr]||0;return sum+(xp*(m.count||1));},0);
     const count=this._monsters.reduce((s,m)=>s+(m.count||1),0);
@@ -94,7 +115,9 @@ registerPanel('encounter',{
 
   _render(){
     const b=this._body;if(!b)return;
-    const xp=this._calcXP();const diff=this._difficulty(xp.adjusted);
+    const xp=this._calcXP();
+    const system=this._systemMode();
+    const diff=system==='2024' ? this._difficulty2024(xp.raw) : this._difficulty(xp.adjusted);
     b.innerHTML=`<div class="enc-panel">
       <div class="enc-left">
         <div class="enc-section">
@@ -129,24 +152,19 @@ registerPanel('encounter',{
       </div>
       <div class="enc-right">
         <div class="enc-stats">
-          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:0 0 10px">XP Budget</h3>
-          <div class="enc-stat-grid">
-            <div class="enc-stat-box"><div class="l">Raw XP</div><div class="v">${xp.raw.toLocaleString()}</div></div>
-            <div class="enc-stat-box"><div class="l">Adjusted XP (×${xp.mult})</div><div class="v">${xp.adjusted.toLocaleString()}</div></div>
-            <div class="enc-stat-box"><div class="l">Difficulty</div><div class="v ${diff.cls}">${diff.label}</div></div>
-            <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px">
+            <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:0">XP Budget</h3>
+            <div class="enc-system-toggle" title="Encounter-building system. 2024 drops the count multiplier and reads closer to real play.">
+              <button class="enc-sys-btn ${system==='2024'?'active':''}" data-eact="sys" data-sys="2024" title="2024 DMG — XP budget, no multiplier">2024</button>
+              <button class="enc-sys-btn ${system==='2014'?'active':''}" data-eact="sys" data-sys="2014" title="2014 DMG — adjusted XP with count multiplier">2014</button>
+            </div>
           </div>
-          ${this._renderDifficultyGauge(xp.adjusted)}
-          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">Thresholds (full party)</h3>
-          ${(()=>{const l=Math.min(Math.max(this._partyLevel,1),20)-1;const t=XP_THRESH[l]||XP_THRESH[0];return`<div class="enc-stat-grid">${['Easy','Medium','Hard','Deadly'].map((lab,i)=>`<div class="enc-stat-box"><div class="l">${lab}</div><div class="v" style="font-size:12px">${(t[i]*this._partySize).toLocaleString()} XP</div></div>`).join('')}</div>`;})()}
+          ${this._renderEncStats(system, xp, diff)}
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Scale to:</label>
             <select id="enc-scale-target" style="font-size:11px;padding:3px 6px;flex:0 0 auto;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
               <option value="">—</option>
-              <option value="Easy">Easy</option>
-              <option value="Medium">Medium</option>
-              <option value="Hard">Hard</option>
-              <option value="Deadly">Deadly</option>
+              ${(system==='2024'?['Moderate','High','Deadly']:['Easy','Medium','Hard','Deadly']).map(o=>`<option value="${o}">${o}</option>`).join('')}
             </select>
             <span style="font-size:10px;color:var(--text-dim)">multiplies counts</span>
           </div>
@@ -250,7 +268,7 @@ registerPanel('encounter',{
       if (!target || !this._monsters.length){ e.target.value=''; return; }
       const factor = this._findScaleFactor(target);
       if (factor === null){
-        showToast('Already past Deadly — clear or reduce monsters first');
+        showToast('Already past the top tier — clear or reduce monsters first');
         e.target.value=''; return;
       }
       if (factor === 1){
@@ -261,6 +279,11 @@ registerPanel('encounter',{
       this._save(); this._render();
       showToast('Scaled counts ×' + factor.toFixed(2) + ' → ' + target);
     });
+    // 2014 ⇄ 2024 system toggle.
+    b.querySelectorAll('[data-eact="sys"]').forEach(btn=>btn.addEventListener('click',()=>{
+      this._system = btn.dataset.sys==='2014' ? '2014' : '2024';
+      this._save(); this._render();
+    }));
     b.querySelector('#enc-clear').addEventListener('click',()=>{
       showConfirm('Clear all monsters from this encounter?', {title:'Clear encounter', confirmLabel:'Clear', danger:true}).then(ok=>{
         if(!ok) return;
@@ -311,6 +334,58 @@ registerPanel('encounter',{
         });
     }));
   },
+  // Stats block — switches between the 2024 budget read and the 2014 adjusted
+  // read. 2024: total (raw) XP vs party Low/Moderate/High budget, no multiplier.
+  // 2014: raw + adjusted (×multiplier) XP vs Easy/Medium/Hard/Deadly thresholds.
+  _renderEncStats(system, xp, diff){
+    if (system === '2024'){
+      const bg = this._budget2024();
+      return `<div class="enc-stat-grid">
+            <div class="enc-stat-box"><div class="l">Total XP</div><div class="v">${xp.raw.toLocaleString()}</div></div>
+            <div class="enc-stat-box"><div class="l">Difficulty</div><div class="v ${diff.cls}">${diff.label}</div></div>
+            <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
+          </div>
+          ${this._renderGauge2024(xp.raw)}
+          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">XP budget (full party)</h3>
+          <div class="enc-stat-grid">
+            <div class="enc-stat-box"><div class="l">Low</div><div class="v" style="font-size:12px">${bg.low.toLocaleString()} XP</div></div>
+            <div class="enc-stat-box"><div class="l">Moderate</div><div class="v" style="font-size:12px">${bg.moderate.toLocaleString()} XP</div></div>
+            <div class="enc-stat-box"><div class="l">High</div><div class="v" style="font-size:12px">${bg.high.toLocaleString()} XP</div></div>
+          </div>`;
+    }
+    const l = Math.min(Math.max(this._partyLevel,1),20)-1;
+    const t = XP_THRESH[l] || XP_THRESH[0];
+    return `<div class="enc-stat-grid">
+            <div class="enc-stat-box"><div class="l">Raw XP</div><div class="v">${xp.raw.toLocaleString()}</div></div>
+            <div class="enc-stat-box"><div class="l">Adjusted XP (×${xp.mult})</div><div class="v">${xp.adjusted.toLocaleString()}</div></div>
+            <div class="enc-stat-box"><div class="l">Difficulty</div><div class="v ${diff.cls}">${diff.label}</div></div>
+            <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
+          </div>
+          ${this._renderDifficultyGauge(xp.adjusted)}
+          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">Thresholds (full party)</h3>
+          <div class="enc-stat-grid">${['Easy','Medium','Hard','Deadly'].map((lab,i)=>`<div class="enc-stat-box"><div class="l">${lab}</div><div class="v" style="font-size:12px">${(t[i]*this._partySize).toLocaleString()} XP</div></div>`).join('')}</div>`;
+  },
+
+  // 2024 gauge — Low / Moderate / High zones at the party budget, marker at the
+  // total (raw) monster XP. Reuses the gauge zone classes (green→red).
+  _renderGauge2024(rawXP){
+    const bg = this._budget2024();
+    const t = [bg.low, bg.moderate, bg.high];
+    const maxX = Math.max(rawXP, t[2]) * 1.15 || 100;
+    const pct = (v) => Math.max(0, Math.min(100, (v / maxX) * 100));
+    const markerPct = pct(rawXP);
+    return '<div class="enc-gauge">'
+      + '<div class="enc-gauge-bar">'
+      + '<div class="enc-gauge-zone easy"   style="left:0%;width:'+pct(t[0])+'%" title="Low · 0–'+t[0].toLocaleString()+' XP"></div>'
+      + '<div class="enc-gauge-zone medium" style="left:'+pct(t[0])+'%;width:'+(pct(t[1])-pct(t[0]))+'%" title="Moderate · '+t[0].toLocaleString()+'–'+t[1].toLocaleString()+' XP"></div>'
+      + '<div class="enc-gauge-zone hard"   style="left:'+pct(t[1])+'%;width:'+(pct(t[2])-pct(t[1]))+'%" title="High · '+t[1].toLocaleString()+'–'+t[2].toLocaleString()+' XP"></div>'
+      + '<div class="enc-gauge-zone deadly" style="left:'+pct(t[2])+'%;width:'+(100-pct(t[2]))+'%" title="Beyond High · '+t[2].toLocaleString()+'+ XP"></div>'
+      + '<div class="enc-gauge-marker" style="left:'+markerPct+'%" title="Total: '+rawXP.toLocaleString()+' XP"></div>'
+      + '</div>'
+      + '<div class="enc-gauge-axis"><span>Low</span><span>Mod</span><span>High</span><span>+</span></div>'
+      + '</div>';
+  },
+
   // Difficulty gauge — horizontal bar split into Easy / Medium / Hard / Deadly
   // zones at the party's thresholds, with a marker showing where the current
   // adjusted XP sits. Gives an at-a-glance read of "how close to the next tier
@@ -342,22 +417,28 @@ registerPanel('encounter',{
   // happens with a totally empty monster list).
   _findScaleFactor(target){
     if (!this._monsters.length) return null;
-    const level = Math.min(Math.max(this._partyLevel,1),20)-1;
-    const t = (XP_THRESH[level]||XP_THRESH[0]).map(x => x * this._partySize);
-    const targetMin = { Easy:t[0], Medium:t[1], Hard:t[2], Deadly:t[3] }[target];
+    let targetMin, xpAt;
+    if (this._systemMode() === '2024'){
+      // 2024: target is the LOWER bound of the named band — Moderate starts just
+      // past the Low budget, High past Moderate, Deadly past High. No multiplier.
+      const bg = this._budget2024();
+      targetMin = { Moderate:bg.low, High:bg.moderate, Deadly:bg.high }[target];
+      xpAt = (f) => this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*Math.max(1,Math.round((m.count||1)*f)),0);
+    } else {
+      const level = Math.min(Math.max(this._partyLevel,1),20)-1;
+      const t = (XP_THRESH[level]||XP_THRESH[0]).map(x => x * this._partySize);
+      targetMin = { Easy:t[0], Medium:t[1], Hard:t[2], Deadly:t[3] }[target];
+      // Adjusted XP grows non-linearly with count (the multiplier table jumps).
+      xpAt = (f) => {
+        const count = this._monsters.reduce((n,m)=>n+Math.max(1,Math.round((m.count||1)*f)),0);
+        const xp    = this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*Math.max(1,Math.round((m.count||1)*f)),0);
+        const mults = [1,1.5,2,2,2,3,3,3,4,4,4,4,5];
+        return xp * (mults[Math.min(count,12)] || 5);
+      };
+    }
     if (targetMin == null) return null;
-    // Adjusted XP grows non-linearly with count (the multiplier table jumps).
-    // Brute-force search over factors 0.25–10 picks the cheapest that clears
-    // the threshold; if scaling DOWN gets us there, we still return 1 because
-    // the user explicitly asked to "scale to fit" not "reduce."
-    const baseCount = this._monsters.reduce((n,m)=>n+(m.count||1),0);
-    const baseXP    = this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*(m.count||1),0);
-    const xpAt = (f) => {
-      const count = this._monsters.reduce((n,m)=>n+Math.max(1,Math.round((m.count||1)*f)),0);
-      const xp    = this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*Math.max(1,Math.round((m.count||1)*f)),0);
-      const mults = [1,1.5,2,2,2,3,3,3,4,4,4,4,5];
-      return xp * (mults[Math.min(count,12)] || 5);
-    };
+    // Brute-force the cheapest factor (0.25 steps) that clears the target. If
+    // we're already at/above it, return 1 — "scale to fit" never reduces.
     if (xpAt(1) >= targetMin) return 1;
     for (let f = 1.25; f <= 10; f += 0.25){
       if (xpAt(f) >= targetMin) return f;

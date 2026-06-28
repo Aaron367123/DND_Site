@@ -2676,6 +2676,12 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .enc-add-input{display:flex;gap:4px;padding:8px}
 .enc-add-input input{font-size:11px}
 .enc-stats{padding:10px}
+/* 2014 ⇄ 2024 system toggle — small segmented control in the stats header. */
+.enc-system-toggle{display:inline-flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;flex-shrink:0}
+.enc-sys-btn{font-family:inherit;font-size:10px;font-weight:600;letter-spacing:.02em;padding:3px 8px;background:transparent;border:none;color:var(--text-muted);cursor:pointer;transition:background .12s,color .12s}
+.enc-sys-btn+.enc-sys-btn{border-left:1px solid var(--border)}
+.enc-sys-btn:hover{color:var(--text)}
+.enc-sys-btn.active{background:var(--accent);color:#1a1a1a}
 .enc-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
 .enc-stat-box{background:var(--panel-2);padding:6px 8px;border-radius:4px}
 .enc-stat-box .l{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
