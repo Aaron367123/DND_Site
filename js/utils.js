@@ -22,8 +22,16 @@ function sanitizeHtml(html) {
       var a = el.attributes[i];
       var n = a.name.toLowerCase();
       if (n.indexOf('on') === 0) { el.removeAttribute(a.name); continue; }
-      if ((n === 'href' || n === 'src' || n === 'xlink:href' || n === 'formaction')
-          && /^\s*(javascript|data|vbscript):/i.test(a.value)) el.removeAttribute(a.name);
+      // Navigational attributes: no script-ish or data: URLs at all.
+      if ((n === 'href' || n === 'formaction')
+          && /^\s*(javascript|data|vbscript):/i.test(a.value)) { el.removeAttribute(a.name); continue; }
+      // Embed attributes: data:image/* is legitimate (pasted screenshots /
+      // portraits live as base64 <img> in contenteditable) — allow it, block
+      // every other data: flavor plus script URLs.
+      if (n === 'src' || n === 'xlink:href'){
+        if (/^\s*(javascript|vbscript):/i.test(a.value)) { el.removeAttribute(a.name); continue; }
+        if (/^\s*data:/i.test(a.value) && !/^\s*data:image\//i.test(a.value)) el.removeAttribute(a.name);
+      }
     }
   }
   return tpl.innerHTML;

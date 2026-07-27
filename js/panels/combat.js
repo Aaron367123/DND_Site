@@ -21,8 +21,13 @@ registerPanel('combat',{
   // here replaces re-attaching dozens of per-card listeners on every render.
   _wireDelegated(){
     const b = this._body;
-    if (!b || this._delegatedBody === b) return;
-    this._delegatedBody = b;
+    if (!b) return;
+    // WeakSet, not a single last-body field: PiP/pop-out swaps _body to a
+    // node in ANOTHER document and back again — each body must be wired
+    // exactly once, and re-wiring the restored original must be a no-op.
+    this._delegatedBodies = this._delegatedBodies || new WeakSet();
+    if (this._delegatedBodies.has(b)) return;
+    this._delegatedBodies.add(b);
     b.addEventListener('click', e => {
       // Clicks on form fields never dispatch actions — same net effect as the
       // old per-input stopPropagation.
@@ -175,9 +180,13 @@ registerPanel('combat',{
       pipBody.id = 'panel-body-combat-pip';
       pipBody.style.cssText = 'height:100%';
       pipWin.document.body.appendChild(pipBody);
-      // Swap render target. Re-rendering now paints into PiP.
+      // Swap render target. Re-rendering now paints into PiP. The delegated
+      // click/change/mousedown listeners live on the OLD body in the main
+      // document — events in the PiP document never reach them, so wire the
+      // new body too or every control in the popout is dead.
       this._originalBody = this._body;
       this._body = pipBody;
+      this._wireDelegated();
       this._render();
       // Placeholder in the panel window so it isn't a void.
       if (this._originalBody){
@@ -240,6 +249,7 @@ registerPanel('combat',{
     this._pipWin = pop;
     this._originalBody = this._body;
     this._body = pipBody;
+    this._wireDelegated(); // popup document — same reasoning as the PiP path
     this._render();
     if (this._originalBody){
       this._originalBody.innerHTML = '<div class="combat-pip-placeholder">'
@@ -744,13 +754,29 @@ registerPanel('combat',{
         const bf = c.buffs[bi]; if (!bf) return;
         // Reverse the AC/HP delta when removing — symmetrical to _promptAddBuff.
         const next = c.buffs.slice(); next.splice(bi, 1);
-        const patch = {buffs: next};
-        if (bf.ac){ patch.ac = (c.ac || 0) - bf.ac; }
-        if (bf.hp){
-          patch.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
-          patch.hp    = Math.min(patch.hpMax, (c.hp || 0) - bf.hp);
+        const pi = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
+        if (pi >= 0){
+          // PC: reverse the delta on the party slot (the stat owner) and let
+          // the mirror propagate — see _promptAddBuff for the rationale.
+          const p = state.party[pi];
+          const newMax = Math.max(1, (p.hpMax || 0) - (bf.hp || 0));
+          state.party[pi] = {...p,
+            ac: (p.ac || 0) - (bf.ac || 0),
+            hpMax: newMax,
+            hp: Math.min(newMax, (p.hp || 0) - (bf.hp || 0)),
+          };
+          state.combatants[i] = {...c, buffs: next};
+          syncPartyToCombat(pi);
+          panelDefs.party?._render?.();
+        } else {
+          const patch = {buffs: next};
+          if (bf.ac){ patch.ac = (c.ac || 0) - bf.ac; }
+          if (bf.hp){
+            patch.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
+            patch.hp    = Math.min(patch.hpMax, (c.hp || 0) - bf.hp);
+          }
+          state.combatants[i] = {...c, ...patch};
         }
-        state.combatants[i] = {...c, ...patch};
         save(); this._render();
       }
       else if(act==='open-bestiary') this._openBestiaryDetail(parseInt(el.dataset.idx));
@@ -875,8 +901,13 @@ registerPanel('combat',{
     // Right-click (or long-press on mobile): conditions menu / PC quick-ref
     b.querySelectorAll('.combatant-card').forEach(card=>{
       const openMenu = (x, y) => {
-        const i=+card.dataset.idx;
-        const c=state.combatants[i]; if(!c) return;
+        const i0=+card.dataset.idx;
+        const c=state.combatants[i0]; if(!c) return;
+        // Menu clicks land LATER — a remote reorder/removal while the menu
+        // is open would make a captured index hit the wrong combatant (same
+        // fix the party actions-menu already got). Resolve by id per click.
+        const cid = c.id;
+        const resolve = () => state.combatants.findIndex(x => x.id === cid);
         const have=new Set(c.conditions||[]);
         const items = [];
         // Monsters get a "Legendary actions" sub-section at the top: enable
@@ -884,7 +915,8 @@ registerPanel('combat',{
         if (!c.isPC){
           if (c.legendaryMax == null){
             items.push({ label:'➕ Enable legendary actions (3/turn)', onClick:()=>{
-              state.combatants[i] = {...c, legendaryMax:3, legendaryUsed:0};
+              const i = resolve(); if (i < 0) return;
+              state.combatants[i] = {...state.combatants[i], legendaryMax:3, legendaryUsed:0};
               save(); this._render();
             }});
           } else {
@@ -894,13 +926,16 @@ registerPanel('combat',{
                 label: '   ' + n + ' / turn',
                 checked: c.legendaryMax === n,
                 onClick: () => {
-                  state.combatants[i] = {...c, legendaryMax:n, legendaryUsed:Math.min(c.legendaryUsed||0, n)};
+                  const i = resolve(); if (i < 0) return;
+                  const cur = state.combatants[i];
+                  state.combatants[i] = {...cur, legendaryMax:n, legendaryUsed:Math.min(cur.legendaryUsed||0, n)};
                   save(); this._render();
                 }
               });
             }
             items.push({ label:'✕ Disable legendary tracker', onClick:()=>{
-              state.combatants[i] = {...c};
+              const i = resolve(); if (i < 0) return;
+              state.combatants[i] = {...state.combatants[i]};
               delete state.combatants[i].legendaryMax;
               delete state.combatants[i].legendaryUsed;
               save(); this._render();
@@ -910,7 +945,10 @@ registerPanel('combat',{
         }
         SEARCH_DATA
           .filter(d=>d.cat==='condition')
-          .forEach(d => items.push({label:d.name, checked:have.has(d.name), onClick:()=>this._toggleCondAtIdx(i,d.name)}));
+          .forEach(d => items.push({label:d.name, checked:have.has(d.name), onClick:()=>{
+            const i = resolve(); if (i < 0) return;
+            this._toggleCondAtIdx(i, d.name);
+          }}));
         showContextMenu(x, y, items);
       };
       card.addEventListener('contextmenu',e=>{
@@ -1277,6 +1315,8 @@ registerPanel('combat',{
   // this writes through to the party slot so both panels stay in sync.
   _promptConcentration(i){
     const c = state.combatants[i]; if (!c) return;
+    // Re-resolve by id when the modal closes — see _promptAddBuff.
+    const cid = c.id;
     const cur = c.isPC
       ? (state.party.find(p => p.id === c.id)?.concentration || '')
       : (c.concentration || '');
@@ -1284,8 +1324,10 @@ registerPanel('combat',{
       {id:'spell', label:'Spell name (leave blank to clear)', type:'text', value: cur, placeholder:'Bless, Hold Person, Hex…'},
     ], cur ? 'Update' : 'Concentrate').then(r => {
       if (!r) return; // cancel
+      const idx = state.combatants.findIndex(x => x.id === cid);
+      if (idx < 0) return;
       const trimmed = String(r.spell || '').trim();
-      this._setConcentration(i, trimmed || null);
+      this._setConcentration(idx, trimmed || null);
     });
   },
   _setConcentration(i, spellName){
@@ -1306,14 +1348,21 @@ registerPanel('combat',{
   // Stored on combatant as {label, ac, hp, rounds}. Duration in rounds:
   // 0 = expires at start of next round; -1 (or undefined) = permanent.
   _promptAddBuff(i){
-    const c = state.combatants[i]; if (!c) return;
-    showModal('Add buff to ' + c.name, [
+    const c0 = state.combatants[i]; if (!c0) return;
+    // Resolve by id when the modal closes — the list can be reordered,
+    // sorted, or edited remotely while the dialog sits open, so a captured
+    // index could point at a different combatant by then.
+    const cid = c0.id;
+    showModal('Add buff to ' + c0.name, [
       {id:'label',  label:'Name (e.g. Shield, Bless, Mage Armor)', type:'text',   value:''},
       {id:'ac',     label:'AC bonus (blank for none)',             type:'number', value:''},
       {id:'hp',     label:'HP bonus (blank for none)',             type:'number', value:''},
       {id:'rounds', label:'Duration in rounds (blank = permanent)', type:'number', value:''},
     ], 'Add buff').then(r => {
       if (!r || !String(r.label||'').trim()) return;
+      const idx = state.combatants.findIndex(x => x.id === cid);
+      if (idx < 0) return; // combatant removed while the modal was open
+      const c = state.combatants[idx];
       const next = Array.isArray(c.buffs) ? c.buffs.slice() : [];
       const ac = r.ac === '' || r.ac == null ? 0 : (parseInt(r.ac) || 0);
       const hp = r.hp === '' || r.hp == null ? 0 : (parseInt(r.hp) || 0);
@@ -1322,13 +1371,25 @@ registerPanel('combat',{
       // Apply the AC/HP delta immediately so the visible stats reflect the
       // buff. We DON'T track an "original AC" anywhere — the DM uses the
       // buff chip's remove (×) to subtract it back manually OR re-edits AC.
-      // This matches how Bless/Shield work at the table (DM updates AC
-      // mentally; the chip is a reminder).
-      if (ac) state.combatants[i] = {...c, ac: (c.ac || 0) + ac, buffs: next};
-      else    state.combatants[i] = {...c, buffs: next};
-      if (hp){
-        state.combatants[i].hpMax = (state.combatants[i].hpMax || c.hp || 0) + hp;
-        state.combatants[i].hp    = (state.combatants[i].hp    || 0)        + hp;
+      const pi = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
+      if (pi >= 0){
+        // PC stats are OWNED by the party slot — syncPartyToCombat overwrites
+        // the combatant's hp/hpMax/ac on every party-side edit, which
+        // silently reverted buffs applied only to the combatant. Apply the
+        // delta to the party slot and let the mirror carry it back here.
+        const p = state.party[pi];
+        const newMax = Math.max(1, (p.hpMax || 0) + hp);
+        state.party[pi] = {...p, ac: (p.ac || 0) + ac, hpMax: newMax, hp: (p.hp || 0) + hp};
+        state.combatants[idx] = {...c, buffs: next};
+        syncPartyToCombat(pi);
+        panelDefs.party?._render?.();
+      } else {
+        if (ac) state.combatants[idx] = {...c, ac: (c.ac || 0) + ac, buffs: next};
+        else    state.combatants[idx] = {...c, buffs: next};
+        if (hp){
+          state.combatants[idx].hpMax = (state.combatants[idx].hpMax || c.hp || 0) + hp;
+          state.combatants[idx].hp    = (state.combatants[idx].hp    || 0)        + hp;
+        }
       }
       save(); this._render();
     });

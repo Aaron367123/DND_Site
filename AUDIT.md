@@ -311,4 +311,42 @@ User report: "I delete a note, it doesn't reflect on a different device, and the
 
 ---
 
+## Bug hunt round 3 (2026-07-26) — post-refactor sweep
+
+Three parallel reviewers over commit ee83c059 (the delegation/zoom/sync refactor), the never-audited files, and the big panels. Every finding below was hand-verified against the code; agent claims that didn't survive verification were dropped.
+
+### Fixed immediately (regressions from this session's changes)
+
+- [x] ~~**PiP / pop-out combat tracker was completely dead**~~ — `js/panels/combat.js` *(fixed + verified: delegated handler fires in a swapped body, exactly once in each)*
+  - The delegation refactor attached click/change/mousedown to the panel body once at mount. `_openPiP`/`_openPiPFallback` swap `_body` to a node in a DIFFERENT document — whose events never reach the old body's listeners. Every button/field in the popout did nothing.
+  - **Fix:** `_wireDelegated()` now runs after each body swap; the wired-bodies guard is a WeakSet so re-wiring the restored original is a no-op (no double-dispatch).
+
+- [x] ~~**sanitizeHtml stripped `data:image/` — pasted images in NPC notes broke, then were destroyed on next edit**~~ — `js/utils.js` *(fixed + verified)*
+  - The blanket `data:` block on `src` removed the base64 payload of pasted screenshots/portraits; the notes input handler then re-saved the src-less HTML, permanently losing the image.
+  - **Fix:** `src`/`xlink:href` now allow `data:image/*` (still block `javascript:`/`vbscript:` and every other `data:` flavor); `href`/`formaction` keep the full block.
+
+- [x] ~~**Cache-bust versions never bumped — deployed browsers keep running OLD code after every change**~~ — `skt-workspace.html` *(fixed)*
+  - Scripts load as `js/…?v=20260525c`; none of this session's 11 changed files had their `?v=` bumped, so any browser with the old cached URL (i.e. every returning device on the deployed site) would keep executing pre-fix code indefinitely. All changed assets bumped to `v=20260726a`. **Process note: bump `?v=` on every changed JS/CSS file when committing.**
+
+### Open findings — verified real, not yet fixed
+
+- [x] ~~**Map rotation ≠ 0 breaks all battlemap pointer input**~~ *(fixed: `_stagePoint`/`_stageDelta` helpers un-rotate every screen→stage conversion — draw, erase, fog, click/align, hover, token drags, and party-token drops; verified in preview at 90° rotation: fog painted the exact aimed cell)* — `js/panels/battlemap.js`
+  - `#map-stage` rotates via CSS transform, but every screen→canvas conversion assumes an unrotated stage. At 90°/270° axes swap; at 180° both flip. Token drags move perpendicular, fog paints wrong cells, Align computes garbage. Fix: un-rotate pointer coords about the stage center, or lock rotation-dependent tools while rotated.
+
+- [x] ~~**PC AC/HP buffs are clobbered by the party↔combat mirror**~~ *(fixed: PC buff add/remove now applies the delta to the party slot — the stat owner — and lets syncPartyToCombat mirror it back; verified: +2 AC buff survives a forced re-mirror and removal restores the original values exactly)* — `js/panels/combat.js` (`_promptAddBuff`) vs `js/window-manager.js:344`
+  - The ✦ buff writes AC/HP only to the combatant; any party-side edit re-mirrors un-buffed `hp/hpMax/ac` over it. The buff chip stays; removing it then SUBTRACTS the delta again, leaving the PC below their true max. Fix: route PC buffs through the party slot, or re-apply active buffs after each mirror, or hide AC/HP buffs on PC cards.
+
+- [x] ~~**Combat right-click menu + conc/buff prompts capture stale indices**~~ *(fixed: context-menu items, `_promptAddBuff`, and `_promptConcentration` capture the combatant id and re-resolve the index at click/confirm time, mirroring the party actions-menu fix)* — `js/panels/combat.js` (`openMenu`, `_promptConcentration`, `_promptAddBuff`)
+  - Index + combatant snapshot captured at open; a remote reorder/removal while the menu/modal is open makes the click hit whatever now sits at that index. Same pattern already fixed for the party actions menu — mirror that fix (capture `c.id`, re-resolve at click time).
+
+- [x] ~~**Remote battlemap update mid-drag discards the local token move**~~ *(fixed: `_reloadPanel('battlemap')` skips while `def._drag` is active — the drag-end `_saveMap()` makes this device canonical under last-write-wins anyway; logic fix, not practical to race-test locally)* — `js/realtime.js` (`_reloadPanel('battlemap')`)
+  - Now that the map is last-write-wins, a peer's write during a local drag re-renders the stage and replaces `_tokens`; drag-end then writes to an orphaned object and saves the un-moved array — token snaps back. Fix: while `def._drag` is active, defer the reload (apply on drag-end).
+
+- [x] ~~**`state.settings` shallow-copies `DEFAULT_SETTINGS` — nested defaults get corrupted; Reset to Defaults can't restore them**~~ — `js/state.js:14`, `js/settings.js:368` *(fixed: deep clone at both init and Reset-to-Defaults, same as `DEFAULT_PARTY`; verified `state.settings.shopFilters !== DEFAULT_SETTINGS.shopFilters`)*
+
+- [x] ~~**Adventures panel caches a failed fetch as permanently empty**~~ *(fixed: `res.ok` check + failures return without caching, mirroring the books fix; verified a failed load leaves the cache slot empty for retry)* — `js/panels/adventures.js:100`
+  - No `res.ok` check + the catch writes `{data:[]}` into `_advCache`, so one transient 404/hiccup pins "No chapters in this file" until a full page reload. The books panel got this exact fix (AUDIT line ~123); adventures was missed. Fix: mirror the books pattern (throw on !ok, return without caching).
+
+---
+
 *Generated by codebase audit workflow. Findings have already been adversarially verified — false positives were stripped before this list was written. When fixing an item, mark its checkbox and (optionally) annotate with the date and commit hash so future audits can skip it.*
