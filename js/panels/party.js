@@ -26,7 +26,21 @@ registerPanel('party',{
     // running the picker-close check on every click). The handler closes
     // over `this`, not the picker state, so it reads the current value.
     if (!this._bodyClickHandler){
-      this._bodyClickHandler = () => {
+      this._bodyClickHandler = (e) => {
+        // [data-act] dispatch is delegated here too — the body element
+        // survives _render() (innerHTML only swaps its children), so one
+        // listener replaces re-attaching every card's action buttons on
+        // every render. Actions swallow the click (same net effect as the
+        // old per-element stopPropagation), so an action click never falls
+        // through to the picker-close branch below.
+        const actEl = e.target.closest('[data-act]');
+        if (actEl && this._body && this._body.contains(actEl)){
+          this._onAction(actEl, e);
+          return;
+        }
+        // Form fields kept their clicks to themselves before (per-element
+        // stopPropagation) — preserve that: never treat them as "outside".
+        if (e.target.matches('input,select,textarea')) return;
         if (this._pickerOpen !== null){
           this._pickerOpen = null;
           this._render();
@@ -2329,9 +2343,13 @@ registerPanel('party',{
 
     // (Inventory tab removed — no inv-edit wiring needed.)
 
-    // Actions
-    b.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',e=>{
-      e.stopPropagation();
+    // [data-act] clicks are dispatched by the delegated body listener
+    // attached in mount() — see _onAction below.
+  },
+
+  // Single dispatch for every [data-act] click inside the panel body.
+  // `el` is the closest [data-act] element to the click target.
+  _onAction(el, e){
       const act=el.dataset.act, i=+el.dataset.idx;
       if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
       else if(act==='bardic-insp'){state.party[i]={...state.party[i],bardicInspiration:!state.party[i].bardicInspiration};save();this._render();}
@@ -2780,11 +2798,6 @@ registerPanel('party',{
         state.party[i]={...state.party[i],resources:res};
         save();this._render();
       }
-    }));
-
-    // Close-icon-picker-on-outside-click listener is attached ONCE in
-    // mount() (see this._bodyClickHandler). Re-attaching here per _render
-    // leaked one listener per interaction.
   },
 
   // ── Spell quick-view ────────────────────────────────────────────────────

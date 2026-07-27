@@ -1892,7 +1892,15 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:11px;color:var(-
 .combatant-card.group .group-row .hp-dmg-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .combatant-card.group .group-row .icon-btn.danger{background:transparent;border:1px solid transparent;color:var(--text-muted);padding:0 3px;border-radius:2px;cursor:pointer;font-size:12px;line-height:1}
 .combatant-card.group .group-row .icon-btn.danger:hover{color:#c25450;border-color:rgba(194,84,80,.5)}
-.combatant-card.group .group-init{font-size:10px;color:var(--text-muted);margin-top:5px}
+.combatant-card.group .group-init{font-size:10px;color:var(--text-muted);margin-top:5px;display:flex;align-items:center;gap:4px}
+.combatant-card.group .group-init-input{
+  background:transparent;border:1px solid var(--border);text-align:center;padding:1px 2px;
+  font-size:12px;font-weight:700;color:var(--text);width:38px;min-width:0;
+  -moz-appearance:textfield;line-height:1;font-family:inherit;border-radius:3px;cursor:text;
+  transition:background .12s,border-color .12s
+}
+.combatant-card.group .group-init-input:hover{background:rgba(255,255,255,.04)}
+.combatant-card.group .group-init-input:focus{outline:none;background:var(--panel-2);border-color:var(--accent)}
 
 /* ─── Toolbar toggle buttons "active" indicator ─────────────────────────── */
 .combat-controls .btn.icon-btn.active{background:rgba(212,165,116,.22);border-color:var(--accent);color:var(--accent)}

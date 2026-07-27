@@ -444,13 +444,15 @@
       if (!(await _ensurePermission())) return;
       try {
         const path = _itemPath(item, allItems);
-        // If the path changed (rename / move), delete the old one
+        // Write the new path FIRST, then delete the old one on rename/move.
+        // Delete-before-write meant a failed write (permission revoked, disk
+        // full) left no copy on disk at all — the old file was already gone.
         const oldMeta = _state.fileMeta[id];
+        const mtime = await _writeFile(path, item.content || '');
         if (oldMeta && oldMeta.path && oldMeta.path !== path) {
-          await _deleteFile(oldMeta.path);
+          try { await _deleteFile(oldMeta.path); } catch (e) { /* stale copy is recoverable; the new path is canonical */ }
           delete _state.pathToId[oldMeta.path];
         }
-        const mtime = await _writeFile(path, item.content || '');
         _state.fileMeta[id] = { mtime, hash: _hash(item.content || ''), path };
         _state.pathToId[path] = id;
         _state.lastSync = Date.now();

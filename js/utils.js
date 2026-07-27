@@ -4,6 +4,31 @@
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function uid(){return Math.random().toString(36).slice(2,9)}
 
+// Sanitize rich-text HTML before it goes into innerHTML. For fields that
+// legitimately store markup (contenteditable notes) but whose content arrives
+// through shared sync (Dropbox/Firebase) — so another connected browser could
+// have written anything into it. Strips script/style/embed-type elements,
+// on* event-handler attributes, and javascript: URLs; keeps formatting tags.
+function sanitizeHtml(html) {
+  if (!html) return '';
+  var tpl = document.createElement('template');
+  tpl.innerHTML = String(html);
+  var bad = tpl.content.querySelectorAll('script,style,iframe,object,embed,link,meta,base,form');
+  bad.forEach(function(el){ el.remove(); });
+  var walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_ELEMENT);
+  var el;
+  while ((el = walker.nextNode())) {
+    for (var i = el.attributes.length - 1; i >= 0; i--) {
+      var a = el.attributes[i];
+      var n = a.name.toLowerCase();
+      if (n.indexOf('on') === 0) { el.removeAttribute(a.name); continue; }
+      if ((n === 'href' || n === 'src' || n === 'xlink:href' || n === 'formaction')
+          && /^\s*(javascript|data|vbscript):/i.test(a.value)) el.removeAttribute(a.name);
+    }
+  }
+  return tpl.innerHTML;
+}
+
 // Local-only per-browser identity used by the Notes panel for per-line author
 // coloring. Stored under skt-me-v1, intentionally NOT in SKT_SYNC_KEYS — same
 // pattern as skt-layout-v1 (each browser stays its own user).
@@ -378,7 +403,16 @@ function showModal(title, fields, confirmLabel) {
     document.body.appendChild(backdrop);
     setTimeout(function(){ var inp = backdrop.querySelector('input,select'); if(inp) inp.focus(); }, 30);
 
-    var close = function(result) { backdrop.remove(); resolve(result); };
+    // Keys on document, not the backdrop: the backdrop div isn't focusable,
+    // so its keydown only fired while focus happened to sit inside the modal
+    // (e.g. after the auto-focus). Document-level always works; close()
+    // removes it so stacked/repeated modals don't accumulate handlers.
+    var onKey = function(e) {
+      if(e.key === 'Enter')  { e.preventDefault(); backdrop.querySelector('#modal-confirm').click(); }
+      if(e.key === 'Escape') { close(null); }
+    };
+    var close = function(result) { document.removeEventListener('keydown', onKey); backdrop.remove(); resolve(result); };
+    document.addEventListener('keydown', onKey);
 
     backdrop.querySelector('#modal-cancel').addEventListener('click', function(){ close(null); });
     backdrop.querySelector('#modal-confirm').addEventListener('click', function() {
@@ -398,10 +432,6 @@ function showModal(title, fields, confirmLabel) {
         }
       });
       close(result);
-    });
-    backdrop.addEventListener('keydown', function(e) {
-      if(e.key === 'Enter')  { e.preventDefault(); backdrop.querySelector('#modal-confirm').click(); }
-      if(e.key === 'Escape') { close(null); }
     });
     backdrop.addEventListener('mousedown', function(e) { if(e.target === backdrop) close(null); });
   });
@@ -431,13 +461,15 @@ function showConfirm(message, opts){
     document.body.appendChild(backdrop);
     var ok = backdrop.querySelector('#conf-ok');
     setTimeout(function(){ if(ok) ok.focus(); }, 30);
-    var close = function(result){ backdrop.remove(); resolve(result); };
-    backdrop.querySelector('#conf-cancel').addEventListener('click', function(){ close(false); });
-    ok.addEventListener('click', function(){ close(true); });
-    backdrop.addEventListener('keydown', function(e){
+    // Document-level keys for the same reason as showModal above.
+    var onKey = function(e){
       if (e.key === 'Enter')  { e.preventDefault(); close(true); }
       if (e.key === 'Escape') { close(false); }
-    });
+    };
+    var close = function(result){ document.removeEventListener('keydown', onKey); backdrop.remove(); resolve(result); };
+    document.addEventListener('keydown', onKey);
+    backdrop.querySelector('#conf-cancel').addEventListener('click', function(){ close(false); });
+    ok.addEventListener('click', function(){ close(true); });
     backdrop.addEventListener('mousedown', function(e){ if (e.target === backdrop) close(false); });
   });
 }

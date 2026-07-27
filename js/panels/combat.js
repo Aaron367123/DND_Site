@@ -11,8 +11,116 @@ registerPanel('combat',{
   title:'Combat Tracker',icon:'⚔',
   mount(body){
     this._body=body;
+    this._wireDelegated();
     this._wireBestiaryDrop();
     this._render();
+  },
+
+  // Delegated handlers attached ONCE per mount — the body element survives
+  // _render() (only its children are swapped by innerHTML), so routing events
+  // here replaces re-attaching dozens of per-card listeners on every render.
+  _wireDelegated(){
+    const b = this._body;
+    if (!b || this._delegatedBody === b) return;
+    this._delegatedBody = b;
+    b.addEventListener('click', e => {
+      // Clicks on form fields never dispatch actions — same net effect as the
+      // old per-input stopPropagation.
+      if (e.target.matches('input,select,textarea')) return;
+      const el = e.target.closest('[data-act]');
+      if (el) this._onAction(el, e);
+    });
+    b.addEventListener('change', e => this._onFieldChange(e));
+    // Ctrl/Cmd+click on a monster name input opens its stat block. Mousedown
+    // (not click) so the preventDefault lands before the input takes focus.
+    b.addEventListener('mousedown', e => {
+      const inp = e.target.closest('input.card-name-input[data-bestiary-link="1"]');
+      if (inp && (e.ctrlKey || e.metaKey)){
+        e.preventDefault();
+        const card = inp.closest('.combatant-card');
+        const i = parseInt(card?.dataset.idx);
+        if (!isNaN(i)) this._openBestiaryDetail(i);
+      }
+    });
+  },
+
+  _onFieldChange(e){
+    const t = e.target;
+    if (t.matches('.hp-dmg-amt')){
+      // Persist the typed value so the next render starts from it.
+      const v = parseInt(t.value) || 0;
+      if (v > 0) this._lastDmgAmount = v;
+      return;
+    }
+    if (t.matches('.hp-dmg-type')){
+      const ABBR = {'':'—','acid':'ac','bludgeoning':'bl','cold':'co','fire':'fi','force':'fo','lightning':'li','necrotic':'ne','piercing':'pi','poison':'po','psychic':'ps','radiant':'ra','slashing':'sl','thunder':'th'};
+      this._lastDmgType = t.value;
+      const lbl = t.parentElement?.querySelector('.hp-dmg-type-label');
+      if (lbl) lbl.textContent = ABBR[t.value] || '—';
+      const wrap = t.parentElement;
+      if (wrap) wrap.title = 'Damage type — applies monster resist/vuln/immune (current: ' + (t.value || 'untyped') + ')';
+      return;
+    }
+    if (t.matches('input[data-cf]')){
+      // Combatant fields (hp, ac, initiative, name) — clamped to sane ranges
+      // to prevent fat-finger inputs and 9-digit overflow values sticking.
+      const CLAMP = {
+        hp:         {min:-9999, max: 99999},  // negative HP allowed: downed PCs can dip below 0 from massive hits
+        hpMax:      {min:    1, max: 99999},
+        ac:         {min:    0, max:    99},
+        initiative: {min:  -99, max:    99},
+        initBonus:  {min:  -20, max:    20},
+      };
+      const i=+t.dataset.ci, f=t.dataset.cf;
+      const isText = f === 'name';
+      let val = isText ? String(t.value).trim() : (parseInt(t.value)||0);
+      if (!isText && CLAMP[f]){
+        const {min, max} = CLAMP[f];
+        if (val < min) val = min;
+        if (val > max) val = max;
+        // Reflect the clamp in the field so the user sees what was actually saved.
+        if (String(val) !== t.value) t.value = val;
+      }
+      state.combatants[i]={...state.combatants[i],[f]:val};
+      // PC came back above 0 HP — wipe ALL downed-related state: death
+      // saves, stable flag, dead flag. (Direct edit is rarer than the
+      // strip, but a DM raising an HP value is an explicit revive.)
+      if (f === 'hp' && state.combatants[i].isPC && val > 0){
+        const next = {...state.combatants[i]};
+        if (next.deathSaves) next.deathSaves = undefined;
+        if (next.stable)     next.stable = undefined;
+        if (next.dead)       next.dead = undefined;
+        state.combatants[i] = next;
+      }
+      // Mirror to the party slot BEFORE saving so localStorage (and the
+      // resulting Firebase push) captures both halves in one consistent
+      // write — see the matching comment in party.js.
+      if((f==='hp'||f==='ac')&&state.combatants[i]?.isPC) syncCombatToParty(state.combatants[i].id);
+      save();
+      this._render();
+      return;
+    }
+    if (t.matches('.group-init-input')){
+      // Group init — grouped monsters act on one count, so the group card
+      // exposes a single editable value that stamps every member.
+      const base = t.dataset.group;
+      let v = parseInt(t.value) || 0;
+      if (v < -99) v = -99;
+      if (v > 99) v = 99;
+      state.combatants.forEach((c, i) => {
+        if (!c.isPC && c.baseName === base) state.combatants[i] = {...c, initiative: v};
+      });
+      save(); this._render();
+      return;
+    }
+    if (t.matches('select.card-name-quick')){
+      const v = t.value;
+      if (!v) return;
+      if (v === '__manage__'){ t.value=''; this._manageQuickNames(); return; }
+      const i = +t.dataset.ci;
+      state.combatants[i] = {...state.combatants[i], name: v};
+      save(); this._render();
+    }
   },
   unmount(){
     // Close any open PiP window when the panel unmounts (full layout reset).
@@ -292,6 +400,8 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
         <button class="btn icon-btn ${compact?'active':''}" data-act="toggle-compact" title="${compact?'Show full cards':'Compact card mode'}">${compact?'▤':'▦'}</button>
         <button class="btn icon-btn ${grouped?'active':''}" data-act="toggle-group" title="${grouped?'Show every monster individually':'Group identical monsters into one card'}">${grouped?'▣':'⊞'}</button>
+        ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for every NPC (d20 + their bonus; PCs keep their own rolls)">🎲</button>':''}
+        ${inCombat?'<button class="btn icon-btn" data-act="sort-init" title="Sort by initiative — highest first, Dex breaks ties">⇅</button>':''}
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
         ${inCombat?'<button class="btn icon-btn danger" data-act="end" title="End combat (clears all combatants)">⏹ End</button>':''}
@@ -358,7 +468,9 @@ registerPanel('combat',{
         <div class="group-rows">
           ${members.map(m => this._renderGroupRow(m.c, m.i)).join('')}
         </div>
-        <div class="group-init">⚡ Init ${init}</div>
+        <div class="group-init" title="Initiative — grouped monsters act together; editing sets every member">⚡ Init
+          <input type="number" class="group-init-input" data-group="${esc(baseName)}" value="${init}">
+        </div>
       </div>
       <div class="card-actions"></div>
     </div>`;
@@ -602,17 +714,17 @@ registerPanel('combat',{
     </div>`;
   },
 
-  _wire(){
-    const b=this._body;if(!b)return;
-
-    // Toolbar + per-card actions
-    b.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',e=>{
-      e.stopPropagation();
+  // Single dispatch for every [data-act] click, routed from the delegated
+  // body listener in _wireDelegated(). `el` is the closest [data-act] element
+  // to the click target, so nested action buttons resolve innermost-first.
+  _onAction(el, e){
       const act=el.dataset.act;
       if(act==='next')                this._nextTurn();
       else if(act==='prev')           this._prevTurn();
       else if(act==='toggle-compact'){ state.settings.combatCompact = !state.settings.combatCompact; save(); this._render(); }
       else if(act==='toggle-group')  { state.settings.combatGroupSimilar = !state.settings.combatGroupSimilar; save(); this._render(); }
+      else if(act==='roll-init')      this._rollInitiative();
+      else if(act==='sort-init')      this._sortByInitiative();
       else if(act==='toggle-reaction'){
         const i = parseInt(el.dataset.idx);
         const c = state.combatants[i]; if (!c) return;
@@ -752,109 +864,13 @@ registerPanel('combat',{
         }
         save(); this._render();
       }
-    }));
+  },
 
-    // Damage/heal amount inputs shouldn't trigger card click or drag.
-    b.querySelectorAll('.hp-dmg-amt').forEach(inp => {
-      inp.addEventListener('click', e => e.stopPropagation());
-      inp.addEventListener('mousedown', e => e.stopPropagation());
-      // Persist the typed value so the next render starts from it.
-      inp.addEventListener('change', () => {
-        const v = parseInt(inp.value) || 0;
-        if (v > 0) this._lastDmgAmount = v;
-      });
-    });
+  _wire(){
+    const b=this._body;if(!b)return;
 
-    // Damage-type select — same suppress + persistence dance, plus updating
-    // the overlay label to the 2-letter abbreviation on change. The map
-    // lives here so the render path and wire path agree on abbreviations.
-    const ABBR = {'':'—','acid':'ac','bludgeoning':'bl','cold':'co','fire':'fi','force':'fo','lightning':'li','necrotic':'ne','piercing':'pi','poison':'po','psychic':'ps','radiant':'ra','slashing':'sl','thunder':'th'};
-    b.querySelectorAll('.hp-dmg-type').forEach(sel => {
-      sel.addEventListener('click', e => e.stopPropagation());
-      sel.addEventListener('mousedown', e => e.stopPropagation());
-      sel.addEventListener('change', () => {
-        this._lastDmgType = sel.value;
-        const lbl = sel.parentElement?.querySelector('.hp-dmg-type-label');
-        if (lbl) lbl.textContent = ABBR[sel.value] || '—';
-        // Also refresh the wrap's tooltip so hover reads correctly without
-        // a full re-render.
-        const wrap = sel.parentElement;
-        if (wrap) wrap.title = 'Damage type — applies monster resist/vuln/immune (current: ' + (sel.value || 'untyped') + ')';
-      });
-    });
-
-    // Monster name input: Ctrl+click opens stat block. Plain click still
-    // lets the user type/edit. We listen on mousedown so we can catch the
-    // modifier before the input focuses.
-    b.querySelectorAll('input.card-name-input[data-bestiary-link="1"]').forEach(inp => {
-      inp.addEventListener('mousedown', e => {
-        if (e.ctrlKey || e.metaKey){
-          e.preventDefault();
-          const card = inp.closest('.combatant-card');
-          const i = parseInt(card?.dataset.idx);
-          if (!isNaN(i)) this._openBestiaryDetail(i);
-        }
-      });
-    });
-
-    // Combatant inputs (hp, ac, initiative, name) — no auto-sort
-    // Numeric fields are clamped to sane ranges to prevent fat-finger inputs
-    // (e.g. typing -9999 into HP) and 9-digit overflow values from sticking.
-    const CLAMP = {
-      hp:         {min:-9999, max: 99999},  // negative HP allowed: downed PCs can dip below 0 from massive hits
-      hpMax:      {min:    1, max: 99999},
-      ac:         {min:    0, max:    99},
-      initiative: {min:  -99, max:    99},
-      initBonus:  {min:  -20, max:    20},
-    };
-    b.querySelectorAll('input[data-cf]').forEach(inp=>{
-      inp.addEventListener('change',e=>{
-        const i=+e.target.dataset.ci, f=e.target.dataset.cf;
-        const isText = f === 'name';
-        let val = isText ? String(e.target.value).trim() : (parseInt(e.target.value)||0);
-        if (!isText && CLAMP[f]){
-          const {min, max} = CLAMP[f];
-          if (val < min) val = min;
-          if (val > max) val = max;
-          // Reflect the clamp in the field so the user sees what was actually saved.
-          if (String(val) !== e.target.value) e.target.value = val;
-        }
-        state.combatants[i]={...state.combatants[i],[f]:val};
-        // PC came back above 0 HP — wipe ALL downed-related state: death
-        // saves, stable flag, dead flag. (Direct edit is rarer than the
-        // strip, but a DM raising an HP value is an explicit revive.)
-        if (f === 'hp' && state.combatants[i].isPC && val > 0){
-          const next = {...state.combatants[i]};
-          if (next.deathSaves) next.deathSaves = undefined;
-          if (next.stable)     next.stable = undefined;
-          if (next.dead)       next.dead = undefined;
-          state.combatants[i] = next;
-        }
-        // Mirror to the party slot BEFORE saving so localStorage (and the
-        // resulting Firebase push) captures both halves in one consistent
-        // write — see the matching comment in party.js.
-        if((f==='hp'||f==='ac')&&state.combatants[i]?.isPC) syncCombatToParty(state.combatants[i].id);
-        save();
-        this._render();
-      });
-      inp.addEventListener('click',e=>e.stopPropagation());
-      inp.addEventListener('mousedown',e=>e.stopPropagation()); // don't start card drag from input
-    });
-
-    // Quick-pick name dropdown
-    b.querySelectorAll('select.card-name-quick').forEach(sel=>{
-      sel.addEventListener('change',e=>{
-        e.stopPropagation();
-        const v = e.target.value;
-        if (!v) return;
-        if (v === '__manage__'){ e.target.value=''; this._manageQuickNames(); return; }
-        const i = +e.target.dataset.ci;
-        state.combatants[i] = {...state.combatants[i], name: v};
-        save(); this._render();
-      });
-      sel.addEventListener('click',e=>e.stopPropagation());
-      sel.addEventListener('mousedown',e=>e.stopPropagation());
-    });
+    // Combatant field edits, damage inputs, and quick-pick dropdowns are
+    // handled by the delegated change listener from _wireDelegated().
 
     // Right-click (or long-press on mobile): conditions menu / PC quick-ref
     b.querySelectorAll('.combatant-card').forEach(card=>{
@@ -1074,11 +1090,19 @@ registerPanel('combat',{
       </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No matches</div>';
     };
     renderList('');
-    const close = ()=>backdrop.remove();
-    backdrop.querySelector('#cmb-pick-search').addEventListener('input', e=>renderList(e.target.value));
+    // Escape on document, not the backdrop — a plain div isn't focusable, so
+    // backdrop keydown only fired while focus sat inside the modal. close()
+    // removes the handler so repeated opens don't stack listeners.
+    const onKey = e=>{ if (e.key==='Escape') close(); };
+    const close = ()=>{ document.removeEventListener('keydown', onKey); backdrop.remove(); };
+    document.addEventListener('keydown', onKey);
+    let searchTimer = null;
+    backdrop.querySelector('#cmb-pick-search').addEventListener('input', e=>{
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(()=>renderList(e.target.value), 150);
+    });
     backdrop.querySelector('#cmb-pick-close').addEventListener('click', close);
     backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
-    backdrop.addEventListener('keydown', e=>{ if (e.key==='Escape') close(); });
     list.addEventListener('click', e=>{
       const row = e.target.closest('.bestiary-pick-row'); if (!row) return;
       const d = all.find(x=>x._slug===row.dataset.slug); if (!d) return;

@@ -69,7 +69,10 @@ registerPanel('bestiary', {
   },
   unmount(){ this._body = null; },
 
-  _save(){ try { localStorage.setItem(BESTIARY_STORAGE_KEY, JSON.stringify(this._data)); } catch(e){} },
+  _save(){
+    try { localStorage.setItem(BESTIARY_STORAGE_KEY, JSON.stringify(this._data)); }
+    catch(e){ showToast?.('Couldn’t save bestiary — browser storage is full'); }
+  },
 
   _render(){
     const b = this._body; if (!b) return;
@@ -607,11 +610,18 @@ registerPanel('bestiary', {
     };
     renderList('');
 
-    const close = ()=>backdrop.remove();
-    backdrop.querySelector('#best-pick-search').addEventListener('input', e=>renderList(e.target.value));
+    // Escape on document, not the backdrop — same reasoning as the template
+    // modal above (a plain div isn't focusable). close() removes the handler.
+    const onKey = e => { if (e.key==='Escape') close(); };
+    const close = ()=>{ document.removeEventListener('keydown', onKey); backdrop.remove(); };
+    document.addEventListener('keydown', onKey);
+    let searchTimer = null;
+    backdrop.querySelector('#best-pick-search').addEventListener('input', e=>{
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(()=>renderList(e.target.value), 150);
+    });
     backdrop.querySelector('#best-pick-close').addEventListener('click', close);
     backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
-    backdrop.addEventListener('keydown', e=>{ if (e.key==='Escape') close(); });
     list.addEventListener('click', e=>{
       const row = e.target.closest('.bestiary-pick-row'); if (!row) return;
       const slug = row.dataset.slug;

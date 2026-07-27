@@ -232,4 +232,83 @@ Found while play-testing the site against the static preview server.
 
 ---
 
+## Second-pass review (2026-07-02)
+
+Fresh multi-agent review after the original 70 were closed. Agent findings were adversarially spot-checked before fixing — several claims did NOT survive verification (showModal listeners don't leak: they're element-scoped and die with `backdrop.remove()`; NPC bulk delete DOES confirm first) and were discarded. Everything below was verified in code and, where observable, in the live preview.
+
+- [x] ~~**Rename/move deleted the vault file before writing the new one — data loss if the write fails**~~ — `js/notes-sync.js:449` *(fixed)*
+  - `pushFile` did `_deleteFile(oldPath)` then `_writeFile(newPath)`. A failed write (permission revoked, disk full) left no copy on disk at all.
+  - **Fix applied:** write-new-first, delete-old only after success; a failed delete of the stale copy is tolerated (recoverable — the new path is canonical).
+
+- [x] ~~**Battlemap leaked one `document` mouseup listener per render**~~ — `js/panels/battlemap.js` (`_setupMap`) *(fixed)*
+  - Anonymous handler attached in `_setupMap()` (runs on every `_render()`), never removed. **Fix:** stored on `this._docMouseUp`, swapped on re-render, removed in `unmount()`.
+
+- [x] ~~**Escape didn't close the bestiary/combat monster pickers or utils modals reliably**~~ — `js/panels/bestiary.js`, `js/panels/combat.js`, `js/utils.js` *(fixed + verified in preview)*
+  - Keydown was attached to the non-focusable backdrop div (the exact bug already fixed in bestiary's template modal). **Fix:** document-level keydown, removed in `close()`, applied to all four modals (`showModal`, `showConfirm`, both pickers).
+
+- [x] ~~**XSS via NPC notes — raw HTML from shared sync rendered into innerHTML**~~ — `js/panels/npc-library.js:534` *(fixed)*
+  - `${n.notes||''}` unescaped while the `secret` field beside it used `esc()`. Notes sync through the shared Dropbox account + Firebase, so any player could inject HTML that executes on the DM's screen. Notes is legit rich text, so it can't just be escaped.
+  - **Fix applied:** new `sanitizeHtml()` in utils.js (template-parse, strip script/style/iframe/etc., `on*` attributes, `javascript:`/`data:` URLs) applied at render. Verified: `<script>`, `onerror`, and `javascript:` payloads stripped; formatting tags kept.
+
+- [x] ~~**Sync failures were silent (quota, upload, realtime give-up)**~~ — `js/dropbox-sync.js`, `js/realtime.js`, `js/panels/bestiary.js` *(fixed)*
+  - `localStorage.setItem` quota failures in both fullSync/poll paths, upload failures in `pushFile` (whose "next tick retries indirectly" comment was wrong — nothing retried once the rev was recorded), realtime giving up after 4 retries with only `console.error`, and bestiary `_save()` with a bare `catch{}` — all now surface a toast. Dropbox toasts throttle to once/min per kind (`_warnSync`) so the poll loop can't spam.
+
+- [x] ~~**Combat + party re-attached every card's listeners on every render**~~ — `js/panels/combat.js`, `js/panels/party.js` *(refactored + verified in preview)*
+  - The `[data-act]` dispatch, damage inputs, combatant field edits, and quick-pick dropdowns are now delegated: one click/change/mousedown listener attached ONCE in `mount()` on the panel body (which survives `_render()` — innerHTML only swaps children). Party's dispatch is merged with the icon-picker outside-click closer so action clicks still never close a just-opened picker (matches the old stopPropagation semantics). Verified: sheet tabs, next/prev turn, icon picker open/outside-close, damage strip all behave identically.
+
+- [x] ~~**Battlemap settings tiles forced a full stage re-render**~~ — `js/panels/battlemap.js` (`_wireSettingsSidebar`) *(fixed + verified: `#map-stage` node survives toggles)*
+  - Fog reveal/hide swap, brush mode/shape, grid square/hex/none, cell highlight, and token visibility now update surgically: sidebar re-renders in place (`_refreshSettings()`), grid changes redraw only the canvas (same lightweight path the remote-update handler already used), token visibility toggles classes on `#map-stage`. `_saveMap()` still broadcasts, so players stay in sync. Turning the fog TOOL on still full-renders (top toolbar changes).
+
+- [x] ~~**Monster/encounter search rebuilt a 200-row list per keystroke**~~ — `js/panels/combat.js`, `js/panels/bestiary.js`, `js/panels/encounter.js` *(fixed: 150ms debounce, verified in preview)*
+
+- [x] ~~**`_renderTokens` appended 3 nodes per token individually**~~ — `js/panels/battlemap.js` *(fixed: all nodes batched through one DocumentFragment append)*
+
+- [x] ~~**Realtime retry backoff had no jitter; give-up was silent**~~ — `js/realtime.js` *(fixed: +0–300ms random jitter so multi-tab sessions don't retry in lockstep; toast on final give-up)*
+
+**Noted, intentionally not changed:** the Dropbox refresh token in `js/dropbox-config.js` is committed by documented design (shared single account, app-folder scope, no per-user login). Residual risk: anyone with repo access can wipe the campaign folder — the revoke link in that file's comments is the kill switch. Worth confirming Firebase RTDB rules are scoped equally tightly.
+
+---
+
+## Mobile sync + eraser fixes (2026-07-26)
+
+User report: "battle grid isn't syncing at times, on mobile the map doesn't update at all, eraser doesn't work." Three root causes found and fixed:
+
+- [x] ~~**Draw / erase / fog / align / hover ignored the workspace zoom**~~ — `js/panels/battlemap.js` *(fixed + verified at 50% zoom)*
+  - Every screen→canvas conversion (`clientX - rect.left`) skipped dividing by `getZoom()` — only the token drag did it right. At any workspace zoom ≠ 1 (i.e. nearly always on mobile) the eraser hit-tested the wrong spot, strokes drew offset, and fog painted the wrong cells.
+  - **Fix applied:** zoom division added to draw + erase (mouse and touch), fogPaint, canvas click (align/token placement), hover-cell tracking, and the wheel-zoom cursor anchor. Verified in preview at zoom 0.5: stroke recorded at target coords exactly, eraser removed it, fog revealed exactly the aimed cell.
+
+- [x] ~~**Cross-device apply path dropped half the map fields**~~ — `js/realtime.js` (`_reloadPanel`) *(fixed + verified)*
+  - BroadcastChannel only reaches same-browser tabs; a phone gets updates solely through Firebase → `_reloadPanel('battlemap')`, which never applied `gridType`, `fogStrokes`, `gridOffsetX/Y`, `bgMapScale`, or `mapRotation`. Grid-type changes and free-fog paint simply never arrived on other devices; scale changes left tokens misplaced.
+  - **Fix applied:** all shared fields now applied (with `_lastTokenScale` kept in lockstep). The same missing fields were also added to the BroadcastChannel payload + handler (scale/rotation changes trigger a full render there; offsets ride the lightweight repaint).
+
+- [x] ~~**Conflict parking silently froze battlemap updates**~~ — `js/realtime.js` (`_applyRemoteKey`) *(fixed + verified)*
+  - The map is written on every token drag / fog stroke by both sides, so the 300 ms dirty window collided constantly; a parked conflict then blocked ALL further battlemap updates on that device until the conflict bar was resolved — easy to miss on mobile, reads as "map stopped updating."
+  - **Fix applied:** `skt-battlemap-v1` is exempt from conflict parking (last-write-wins). Losing one in-flight stroke to a rare race beats a frozen map; the local push still queued re-asserts this device's state moments later. Other keys (notes, party, …) keep full conflict handling.
+
+---
+
+## Notes delete-resurrection fixes (2026-07-26)
+
+User report: "I delete a note, it doesn't reflect on a different device, and the deleted file shows up again." Two root causes in `js/dropbox-sync.js`, both fixed and verified end-to-end against the live Dropbox with a throwaway test file:
+
+- [x] ~~**fullSync re-uploaded remotely-deleted files — the resurrection bug**~~ *(fixed + verified)*
+  - fullSync's pass 3 treated every file that exists locally but not in the Dropbox listing as "created locally, push it up." But "deleted remotely while this device wasn't watching" looks identical. Since fullSync runs on EVERY notes-panel mount, any device that was closed (or asleep — phones) when the delete happened would re-upload its stale copy on next open, and every other device then pulled the "deleted" file back. Guaranteed resurrection unless all devices were actively polling at delete time.
+  - **Fix applied:** `_state.fileRevs` doubles as a tombstone — if this device has a rev recorded for the file's path, it synced that exact path FROM Dropbox before, so its absence from the listing means a remote delete → remove the local copy instead of re-uploading. Files with no recorded rev are genuinely local-only and still push up. Stale rev entries are pruned after reconciliation (pendingDeletes kept). Also handles remote renames correctly (old path removed, new path created by pass 2).
+  - **Verified:** uploaded `zz-sync-selftest.md`, deleted it remotely, restored the stale-device state (local item + rev tombstone), reloaded → mount-time fullSync removed the local copy, did NOT re-upload, tombstone consumed, real notes untouched.
+
+- [x] ~~**Cursor expiry silently stopped sync until remount**~~ *(fixed)*
+  - When the incremental poll's cursor expired, `_pollOnce` set `cursor = null` with a comment saying "recover with a full sync next tick" — but the next tick just early-returned on `!cursor`, forever. The device silently stopped receiving ALL notes changes (including deletes) until the notes panel was remounted, which is what set up the stale state the resurrection bug then fed on.
+  - **Fix applied:** a poll tick with no cursor now runs `fullSync()` to reconcile and re-establish the cursor (respects the mid-edit guard and fullSync's busy re-entrancy check).
+
+---
+
+## Grid opacity / line width now sync to the player view (2026-07-26)
+
+- [x] ~~**Grid opacity (and the new line width) never reached the player view**~~ — `js/panels/battlemap.js`, `js/realtime.js` *(fixed + verified live in a real ?player=1 tab)*
+  - `gridOpacity` was designed as "per-user" — excluded from both the BroadcastChannel payload (same-browser player tabs) and the Firebase `_reloadPanel` apply (cross-device). But the player view has no settings UI, so "per-user" in practice meant "the DM's grid tuning silently never applies to what players see."
+  - **Fix applied:** `gridOpacity` + `gridWidth` are now shared map state — added to the broadcast payload, the BC receive handler, and the cross-device `_reloadPanel` apply. Verified end-to-end: DM tab set 85%/2px → player tab applied both and repainted within 800 ms; restore to 60%/1px tracked back the same way.
+  - *Also confirmed while investigating:* stroke coordinates DO rescale with map zoom (`_scaleTokensTo` handles `_drawings`), so the desktop "eraser doesn't work" reports trace to the workspace-zoom coordinate bug fixed above — desktop browsers hit it too whenever the workspace zoom control isn't at exactly 100%.
+
+---
+
 *Generated by codebase audit workflow. Findings have already been adversarially verified — false positives were stripped before this list was written. When fixing an item, mark its checkbox and (optionally) annotate with the date and commit hash so future audits can skip it.*

@@ -153,13 +153,16 @@ function _flushDirtyKeys() {
       _retryCounts[k] = n;
       if (n <= _MAX_RETRIES){
         _dirtyKeys.add(k);
-        // Exponential-ish backoff: 300ms × 2^(n-1) capped at 5s.
-        const delay = Math.min(5000, 300 * Math.pow(2, n - 1));
+        // Exponential-ish backoff: 300ms × 2^(n-1) capped at 5s, plus up to
+        // 300ms of random jitter so multiple tabs hitting the same outage
+        // don't all retry in lockstep and re-trigger it together.
+        const delay = Math.min(5000, 300 * Math.pow(2, n - 1)) + Math.random() * 300;
         setTimeout(_flushDirtyKeys, delay);
-        console.warn('[realtime] Push failed for ' + k + ' (retry ' + n + '/' + _MAX_RETRIES + ' in ' + delay + 'ms)', err);
+        console.warn('[realtime] Push failed for ' + k + ' (retry ' + n + '/' + _MAX_RETRIES + ' in ' + Math.round(delay) + 'ms)', err);
       } else {
         console.error('[realtime] Push gave up for ' + k + ' after ' + _MAX_RETRIES + ' retries', err);
         delete _retryCounts[k];
+        if (typeof showToast === 'function') showToast('Live sync failed — your last change may not have reached other players');
       }
     });
   });
@@ -202,7 +205,15 @@ function _applyRemoteKey(key, fbVal) {
   // diverged. Park the conflict in `_conflicts` and let the user resolve.
   // Without this, the apply below would silently overwrite their pending
   // local edit.
-  if (_dirtyKeys.has(key)){
+  //
+  // EXCEPTION — battle map is last-write-wins. Both sides write it on every
+  // token drag / fog stroke, so the 300ms dirty window is hit constantly
+  // during play; parking a conflict then silently FREEZES all map updates on
+  // this device until the bar is resolved (easy to miss, especially on
+  // mobile — "the map stopped updating"). Losing one in-flight stroke to a
+  // race is far cheaper than a frozen map, and the local push that's still
+  // queued re-asserts this device's latest state moments later anyway.
+  if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1'){
     const localVal = localStorage.getItem(key);
     if (localVal != null && localVal !== fbVal){
       _conflicts[key] = { local: localVal, remote: fbVal, ts: Date.now() };
@@ -273,16 +284,30 @@ function _reloadPanel(id) {
   if (id === 'battlemap') {
     // Update internal data directly so the BroadcastChannel doesn't fire
     // a duplicate event into the player view.
+    //
+    // This is the ONLY live-update path a cross-device client (phone/tablet
+    // on another machine) has — BroadcastChannel is same-browser only. It
+    // must therefore apply every shared map field. It used to skip gridType,
+    // fogStrokes, the align offsets, scale, and rotation, which is why grid
+    // changes and free-fog paint never showed up on other devices.
     try {
       const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
       def._tokens     = d.tokens   || [];
       def._fog        = d.fog      ? new Set(d.fog) : null;
-      def._drawings   = Array.isArray(d.drawings) ? d.drawings : [];
+      def._drawings   = Array.isArray(d.drawings)   ? d.drawings   : [];
+      def._fogStrokes = Array.isArray(d.fogStrokes) ? d.fogStrokes : [];
       def._bgColor    = d.bgColor  || def._bgColor;
       def._cellSize   = d.cellSize || def._cellSize;
       def._cols       = d.cols     || def._cols;
       def._rows       = d.rows     || def._rows;
-      def._showGrid   = d.showGrid !== false;
+      def._gridType   = d.gridType || (d.showGrid !== false ? 'square' : 'none');
+      def._showGrid   = def._gridType !== 'none';
+      if (d.gridOffsetX != null) def._gridOffsetX = d.gridOffsetX;
+      if (d.gridOffsetY != null) def._gridOffsetY = d.gridOffsetY;
+      if (d.bgMapScale  != null) { def._bgMapScale = d.bgMapScale; def._lastTokenScale = d.bgMapScale; }
+      if (d.mapRotation != null) def._mapRotation = d.mapRotation;
+      if (d.gridOpacity != null) def._gridOpacity = d.gridOpacity;
+      if (d.gridWidth   != null) def._gridWidth   = d.gridWidth;
       def._bgMapPath  = d.bgMapPath || null;
       def._render();
       if (def._bgMapPath) def._loadBgFromPath?.(def._bgMapPath);

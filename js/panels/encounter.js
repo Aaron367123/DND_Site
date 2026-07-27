@@ -202,7 +202,10 @@ registerPanel('encounter',{
     searchInp.addEventListener('input',e=>{
       this._searchQ=e.target.value;
       this._searchOpen=true;
-      this._renderSearchDropdown();
+      // Debounced — the dropdown filters the full monster list, so rebuilding
+      // it on every keystroke makes fast typing feel laggy.
+      clearTimeout(this._searchTimer);
+      this._searchTimer=setTimeout(()=>this._renderSearchDropdown(), 150);
     });
     searchInp.addEventListener('focus',()=>{
       this._searchOpen=true;

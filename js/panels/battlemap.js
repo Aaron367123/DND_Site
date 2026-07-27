@@ -49,6 +49,7 @@ registerPanel('battlemap',{
   _mapRotation:0,                // 0 / 90 / 180 / 270
   _fogHardness:50,               // 0–100 → blur on fog canvas
   _gridOpacity:60,               // 0–100 → grid line alpha
+  _gridWidth:1,                  // 1–4 px grid line thickness (shared — syncs to player view)
   _tokensVisible:true, _namesVisible:true, _pcsVisible:true, _npcsVisible:true,
   _fogPaintMode:'reveal',        // 'reveal' | 'hide' — replaces the boolean _fogTool
   _fogBrushMode:'grid',          // 'grid' (snap to cells) | 'free' (pixel-level)
@@ -145,6 +146,7 @@ registerPanel('battlemap',{
         this._mapRotation   = d.mapRotation   || 0;
         this._fogHardness   = (d.fogHardness   != null) ? d.fogHardness   : 50;
         this._gridOpacity   = (d.gridOpacity   != null) ? d.gridOpacity   : 60;
+        this._gridWidth     = (d.gridWidth     != null) ? d.gridWidth     : 1;
         this._tokensVisible = d.tokensVisible !== false;
         this._namesVisible  = d.namesVisible  !== false;
         this._pcsVisible    = d.pcsVisible    !== false;
@@ -212,6 +214,7 @@ registerPanel('battlemap',{
   },
   unmount(){
     if (this._resizeObserver){ this._resizeObserver.disconnect(); this._resizeObserver = null; }
+    if (this._docMouseUp){ document.removeEventListener('mouseup', this._docMouseUp); this._docMouseUp = null; }
     this._saveMap();
     this._stopBroadcast();
     this._body = null;
@@ -220,7 +223,7 @@ registerPanel('battlemap',{
   _saveMap(){
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){}
     this._broadcast();
   },
@@ -480,6 +483,7 @@ registerPanel('battlemap',{
       fogBrushShape:this._fogBrushShape || 'square',
       fogHardness:  this._fogHardness,
       gridOpacity:  this._gridOpacity,
+      gridWidth:    this._gridWidth,
       drawings:     JSON.parse(JSON.stringify(this._drawings || [])),
       // Flag uploaded-image state — restore-time we can warn the user that
       // the background needs re-uploading. The path field stays null.
@@ -514,6 +518,7 @@ registerPanel('battlemap',{
     this._fogBrushShape= snap.fogBrushShape || 'square';
     if (snap.fogHardness != null) this._fogHardness = snap.fogHardness;
     if (snap.gridOpacity != null) this._gridOpacity = snap.gridOpacity;
+    if (snap.gridWidth   != null) this._gridWidth   = snap.gridWidth;
     this._drawings     = Array.isArray(snap.drawings) ? JSON.parse(JSON.stringify(snap.drawings)) : [];
     this._lastTokenScale = this._bgMapScale;
     // Bg image: either reload via 5etools path, or drop any stale in-memory
@@ -719,6 +724,16 @@ registerPanel('battlemap',{
         if (Array.isArray(msg.drawings))   this._drawings   = msg.drawings;
         if (Array.isArray(msg.fogStrokes)) this._fogStrokes = msg.fogStrokes;
         if (msg.bgMapPath !== undefined) this._bgMapPath = msg.bgMapPath;
+        // Align offsets repaint fine on the lightweight path; scale and
+        // rotation resize/transform the stage, so they need a full render.
+        const scaleChanged = msg.bgMapScale  != null && msg.bgMapScale !== (this._bgMapScale || 1);
+        const rotChanged   = msg.mapRotation != null && (msg.mapRotation || 0) !== (this._mapRotation || 0);
+        if (msg.gridOffsetX != null) this._gridOffsetX = msg.gridOffsetX;
+        if (msg.gridOffsetY != null) this._gridOffsetY = msg.gridOffsetY;
+        if (msg.bgMapScale  != null){ this._bgMapScale = msg.bgMapScale; this._lastTokenScale = msg.bgMapScale; }
+        if (msg.mapRotation != null) this._mapRotation = msg.mapRotation;
+        if (msg.gridOpacity != null) this._gridOpacity = msg.gridOpacity;
+        if (msg.gridWidth   != null) this._gridWidth   = msg.gridWidth;
 
         // Map path changed → reload the bg image, then full re-render so the
         // canvas is sized to the new map.
@@ -731,6 +746,10 @@ registerPanel('battlemap',{
         if (!msg.bgMapPath && prevPath){
           _mapBgImage = null;
           if (this._render) this._render();
+          return;
+        }
+        if ((scaleChanged || rotChanged) && this._body){
+          this._render();
           return;
         }
         // Lightweight repaint — fog + drawings + tokens only. No flicker.
@@ -794,6 +813,14 @@ registerPanel('battlemap',{
         cols:this._cols, rows:this._rows,
         bgColor:this._bgColor, fog:fogArr,
         gridType: this._gridType || 'square',
+        gridOffsetX: this._gridOffsetX || 0,
+        gridOffsetY: this._gridOffsetY || 0,
+        bgMapScale: this._bgMapScale || 1,
+        mapRotation: this._mapRotation || 0,
+        // Grid look is shared state — the DM dials in opacity/width and the
+        // player view renders the same grid.
+        gridOpacity: this._gridOpacity != null ? this._gridOpacity : 60,
+        gridWidth: this._gridWidth || 1,
         bgImageData: _mapBgImage?'present':null,
         bgMapPath: this._bgMapPath,
         // Pencil annotations — players see strokes as the DM commits them
@@ -1255,8 +1282,13 @@ registerPanel('battlemap',{
     drawCanvas.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
       const rect = drawCanvas.getBoundingClientRect();
-      const x = Math.round(e.clientX - rect.left);
-      const y = Math.round(e.clientY - rect.top);
+      // Screen → canvas pixels: the workspace zoom is a CSS scale() above
+      // this canvas, so screen offsets are canvas-pixels × zoom. Without the
+      // division, draw strokes land offset and the eraser hit-tests the
+      // wrong spot whenever zoom != 1 (i.e. nearly always on mobile).
+      const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+      const x = Math.round((e.clientX - rect.left) / z);
+      const y = Math.round((e.clientY - rect.top) / z);
 
       if (this._tool === 'erase'){
         e.preventDefault(); e.stopPropagation();
@@ -1265,8 +1297,8 @@ registerPanel('battlemap',{
         let removed = this._eraseStrokeAt(x, y);
         // Drag-to-erase: keep removing strokes the cursor passes over.
         const onMove = ev => {
-          const mx = Math.round(ev.clientX - rect.left);
-          const my = Math.round(ev.clientY - rect.top);
+          const mx = Math.round((ev.clientX - rect.left) / z);
+          const my = Math.round((ev.clientY - rect.top) / z);
           if (this._eraseStrokeAt(mx, my)) removed = true;
         };
         const onUp = () => {
@@ -1296,8 +1328,8 @@ registerPanel('battlemap',{
       this._broadcastStrokeTick(_curStroke);
       const onMove = ev => {
         if (!_curStroke) return;
-        const x2 = Math.round(ev.clientX - rect.left);
-        const y2 = Math.round(ev.clientY - rect.top);
+        const x2 = Math.round((ev.clientX - rect.left) / z);
+        const y2 = Math.round((ev.clientY - rect.top) / z);
         const lp = _curStroke.p;
         const lx = lp[lp.length-2], ly = lp[lp.length-1];
         if (Math.abs(x2 - lx) + Math.abs(y2 - ly) < 3) return; // sample-down
@@ -1326,8 +1358,10 @@ registerPanel('battlemap',{
       if (e.touches.length !== 1) return;
       const touch = e.touches[0];
       const rect = drawCanvas.getBoundingClientRect();
-      const x = Math.round(touch.clientX - rect.left);
-      const y = Math.round(touch.clientY - rect.top);
+      // Same screen → canvas zoom correction as the mouse path above.
+      const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+      const x = Math.round((touch.clientX - rect.left) / z);
+      const y = Math.round((touch.clientY - rect.top) / z);
 
       if (this._tool === 'erase'){
         e.preventDefault(); e.stopPropagation();
@@ -1336,8 +1370,8 @@ registerPanel('battlemap',{
           if (ev.touches.length !== 1) return;
           ev.preventDefault();
           const t2 = ev.touches[0];
-          const mx = Math.round(t2.clientX - rect.left);
-          const my = Math.round(t2.clientY - rect.top);
+          const mx = Math.round((t2.clientX - rect.left) / z);
+          const my = Math.round((t2.clientY - rect.top) / z);
           if (this._eraseStrokeAt(mx, my)) removed = true;
         };
         const onEnd = () => {
@@ -1368,8 +1402,8 @@ registerPanel('battlemap',{
         if (!_curStroke || ev.touches.length !== 1) return;
         ev.preventDefault();
         const t2 = ev.touches[0];
-        const x2 = Math.round(t2.clientX - rect.left);
-        const y2 = Math.round(t2.clientY - rect.top);
+        const x2 = Math.round((t2.clientX - rect.left) / z);
+        const y2 = Math.round((t2.clientY - rect.top) / z);
         const lp = _curStroke.p;
         const lx = lp[lp.length-2], ly = lp[lp.length-1];
         if (Math.abs(x2 - lx) + Math.abs(y2 - ly) < 3) return;
@@ -1399,7 +1433,9 @@ registerPanel('battlemap',{
     canvas.addEventListener('click',e=>{
       if(this._drag?.moved) return;
       const r=canvas.getBoundingClientRect();
-      let cx=e.clientX-r.left, cy=e.clientY-r.top;
+      // Screen → canvas zoom correction (see draw/erase handlers).
+      const _cz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+      let cx=(e.clientX-r.left)/_cz, cy=(e.clientY-r.top)/_cz;
       // Two-click grid alignment mode — click two opposite corners of one
       // cell on the printed map grid; we infer cell size + offset from that.
       if (this._tool === 'align' && _mapBgImage){
@@ -1497,6 +1533,13 @@ registerPanel('battlemap',{
     const fogPaint=(e)=>{
       if(!this._fogTool||this._fog===null)return;
       const r=canvas.getBoundingClientRect();
+      // Workspace zoom is a CSS scale() on the whole canvas area, so screen
+      // offsets are stage-pixels × zoom. Divide them back down (same
+      // correction the token drag applies) — without it, fog painting lands
+      // on the wrong cells whenever zoom != 1 (i.e. nearly always on mobile).
+      const _z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+      const ex = (e.clientX - r.left) / _z;
+      const ey = (e.clientY - r.top)  / _z;
       // Recompute `cs` per event. The outer closure captured `cs` once at
       // _setupMap time (line ~1075). Wheel/pinch zoom calls
       // _applyZoomTransform — it resizes the canvas but doesn't re-run
@@ -1511,8 +1554,8 @@ registerPanel('battlemap',{
       // survives zoom. The fog canvas redraw paints these on top of the
       // cell-based reveal pass.
       if ((this._fogBrushMode || 'grid') === 'free'){
-        const xc = (e.clientX - r.left) / cs;
-        const yc = (e.clientY - r.top)  / cs;
+        const xc = ex / cs;
+        const yc = ey / cs;
         // Free brush radius (in cells): matches grid coverage roughly —
         // radius=1 → 0.5 cell radius (1-cell diameter), radius=5 → 4.5 cell radius.
         const rCells = Math.max(0.25, radius - 0.5);
@@ -1533,8 +1576,8 @@ registerPanel('battlemap',{
       const _fpScale = _mapBgImage ? (this._bgMapScale || 1) : 1;
       const offX = (((this._gridOffsetX || 0) * _fpScale) % cs + cs) % cs;
       const offY = (((this._gridOffsetY || 0) * _fpScale) % cs + cs) % cs;
-      const gx=Math.floor((e.clientX-r.left-offX)/cs);
-      const gy=Math.floor((e.clientY-r.top-offY)/cs);
+      const gx=Math.floor((ex-offX)/cs);
+      const gy=Math.floor((ey-offY)/cs);
       const r2 = (radius - 0.5) * (radius - 0.5);
       let changed=false;
       for(let dx=-radius+1;dx<radius;dx++){
@@ -1566,7 +1609,8 @@ registerPanel('battlemap',{
       // under the cursor actually changes, then repaints the grid canvas.
       if (this._cellHighlight){
         const rr = canvas.getBoundingClientRect();
-        const cell = this._cellAtPx(e.clientX - rr.left, e.clientY - rr.top);
+        const _hz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+        const cell = this._cellAtPx((e.clientX - rr.left) / _hz, (e.clientY - rr.top) / _hz);
         const prev = this._hoverCell;
         const same = prev && cell && (
           (cell.col!=null && prev.col===cell.col && prev.row===cell.row) ||
@@ -1584,7 +1628,11 @@ registerPanel('battlemap',{
         this._drawGrid(canvas, this._csScreen());
       }
     });
-    document.addEventListener('mouseup',()=>{
+    // One document-level mouseup total — _setupMap() runs on every _render(),
+    // so an anonymous listener here accumulated one copy per render and was
+    // never removed on unmount. Swap the old one out before re-adding.
+    if (this._docMouseUp) document.removeEventListener('mouseup', this._docMouseUp);
+    this._docMouseUp = ()=>{
       if(this._isPainting){
         this._isPainting=false;
         this._saveMap();
@@ -1595,7 +1643,8 @@ registerPanel('battlemap',{
           this._broadcast();
         }
       }
-    });
+    };
+    document.addEventListener('mouseup', this._docMouseUp);
 
     // Touch fog painting — mirror the mouse handlers so mobile/tablet DMs can
     // reveal/hide fog with a finger. fogPaint() reads clientX/clientY, which a
@@ -1647,7 +1696,11 @@ registerPanel('battlemap',{
       if (newScale === oldScale) return;
 
       const rect = scrollEl.getBoundingClientRect();
-      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+      // scrollLeft/scrollTop are in the scroll element's own (unscaled)
+      // space while clientX is screen space — divide by the workspace zoom
+      // so the cursor-anchor math mixes like units.
+      const _wz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+      const cx = (e.clientX - rect.left)/_wz, cy = (e.clientY - rect.top)/_wz;
       // Image-space point under cursor before zoom
       const imgX = (scrollEl.scrollLeft + cx) / oldScale;
       const imgY = (scrollEl.scrollTop  + cy) / oldScale;
@@ -1873,6 +1926,19 @@ registerPanel('battlemap',{
     this._wireSettingsSidebar();
   },
 
+  // Surgical sidebar update for settings-only changes (paint mode, brush
+  // shape, grid style, token visibility). A full _render() here rebuilt the
+  // whole stage — toolbar, canvas handlers, tokens — for a change that only
+  // re-tints a few tiles. _saveMap() (called by every handler) still
+  // broadcasts, so players stay in sync either way.
+  _refreshSettings(){
+    const b = this._body; if (!b) return;
+    const aside = b.querySelector('.bm-settings');
+    if (!aside){ this._render(); return; }
+    aside.outerHTML = this._renderSettingsSidebar();
+    this._wireSettingsSidebar();
+  },
+
   _wireSettingsSidebar(){
     const b = this._body; if (!b) return;
     // Tile buttons
@@ -1892,8 +1958,17 @@ registerPanel('battlemap',{
         this._mapRotation = ((this._mapRotation || 0) + 90) % 360;
         this._saveMap(); this._render(); return;
       }
-      if (k === 'fog-reveal'){ this._fogPaintMode = 'reveal'; this._fogTool = true; this._saveMap(); this._render(); return; }
-      if (k === 'fog-hide'){   this._fogPaintMode = 'hide';   this._fogTool = true; this._saveMap(); this._render(); return; }
+      if (k === 'fog-reveal' || k === 'fog-hide'){
+        this._fogPaintMode = k === 'fog-hide' ? 'hide' : 'reveal';
+        const wasOn = this._fogTool;
+        this._fogTool = true;
+        this._saveMap();
+        // Turning the fog tool ON changes the top toolbar (paint button state,
+        // brush slider) → full render. A reveal↔hide swap while already
+        // painting only re-tints sidebar tiles.
+        if (wasOn) this._refreshSettings(); else this._render();
+        return;
+      }
       if (k === 'fog-clear'){
         // Reveal everything (clear fog)
         const all=new Set();
@@ -1904,22 +1979,55 @@ registerPanel('battlemap',{
       if (k === 'fog-fill'){
         this._fog = new Set(); this._fogStrokes=[]; this._saveMap(); this._drawFog(); this._broadcast(); return;
       }
-      if (k === 'grid-square'){ this._gridType = 'square'; this._showGrid = true;  this._saveMap(); this._render(); return; }
-      if (k === 'grid-hex'){    this._gridType = 'hex';    this._showGrid = true;  this._saveMap(); this._render(); return; }
-      if (k === 'grid-none'){   this._gridType = 'none';   this._showGrid = false; this._saveMap(); this._render(); return; }
-      if (k === 'grid-cell'){   this._cellHighlight = !this._cellHighlight; if (!this._cellHighlight) this._hoverCell = null; this._saveMap(); this._render(); return; }
+      if (k === 'grid-square' || k === 'grid-hex' || k === 'grid-none'){
+        this._gridType = k.slice(5); this._showGrid = this._gridType !== 'none';
+        this._saveMap();
+        // Same lightweight repaint the remote-update path uses — the grid
+        // canvas redraws in place; nothing else on the stage changes.
+        const c = b.querySelector('#map-canvas');
+        if (c) this._drawGrid(c, this._csScreen());
+        this._refreshSettings();
+        return;
+      }
+      if (k === 'grid-cell'){
+        this._cellHighlight = !this._cellHighlight;
+        if (!this._cellHighlight) this._hoverCell = null;
+        this._saveMap();
+        const c = b.querySelector('#map-canvas');
+        if (c) this._drawGrid(c, this._csScreen());
+        this._refreshSettings();
+        return;
+      }
       if (k === 'fog-mode-grid' || k === 'fog-mode-free'){
         this._fogBrushMode = k === 'fog-mode-free' ? 'free' : 'grid';
-        this._saveMap(); this._render(); return;
+        this._saveMap(); this._refreshSettings(); return;
       }
       if (k === 'fog-shape-square' || k === 'fog-shape-circle'){
         this._fogBrushShape = k === 'fog-shape-circle' ? 'circle' : 'square';
-        this._saveMap(); this._render(); return;
+        this._saveMap(); this._refreshSettings(); return;
       }
-      if (k === 'tok-all'){   this._tokensVisible = !this._tokensVisible; this._saveMap(); this._render(); return; }
-      if (k === 'tok-names'){ this._namesVisible  = !this._namesVisible;  this._saveMap(); this._render(); return; }
-      if (k === 'tok-pcs'){   this._pcsVisible    = !this._pcsVisible;    this._saveMap(); this._render(); return; }
-      if (k === 'tok-npcs'){  this._npcsVisible   = !this._npcsVisible;   this._saveMap(); this._render(); return; }
+      // Token visibility is pure CSS classes on the stage — toggle in place.
+      if (k === 'tok-all' || k === 'tok-names' || k === 'tok-pcs' || k === 'tok-npcs'){
+        if (k === 'tok-all')   this._tokensVisible = !this._tokensVisible;
+        if (k === 'tok-names') this._namesVisible  = !this._namesVisible;
+        if (k === 'tok-pcs')   this._pcsVisible    = !this._pcsVisible;
+        if (k === 'tok-npcs')  this._npcsVisible   = !this._npcsVisible;
+        this._saveMap();
+        const stage = b.querySelector('#map-stage');
+        if (stage){
+          stage.classList.toggle('hide-tokens', !this._tokensVisible);
+          stage.classList.toggle('hide-names',  !this._namesVisible);
+          stage.classList.toggle('hide-pcs',    !this._pcsVisible);
+          stage.classList.toggle('hide-npcs',   !this._npcsVisible);
+        }
+        const scroll = b.querySelector('#map-scroll');
+        if (scroll){
+          if (this._tokensVisible) scroll.style.removeProperty('--bm-hide-tokens');
+          else scroll.style.setProperty('--bm-hide-tokens', '1');
+        }
+        this._refreshSettings();
+        return;
+      }
       if (k === 'load-init'){ this._syncParty(); return; }
     }));
     // Sliders
@@ -1967,6 +2075,17 @@ registerPanel('battlemap',{
         if (grid) this._drawGrid(grid, this._csScreen());
       });
       opEl.addEventListener('change', () => this._saveMap());
+    }
+    const gwEl = b.querySelector('#bm-set-gridwidth');
+    if (gwEl){
+      gwEl.addEventListener('input', e => {
+        this._gridWidth = Math.max(1, Math.min(4, parseInt(e.target.value) || 1));
+        const out = b.querySelector('#bm-set-gridwidth-val');
+        if (out) out.textContent = this._gridWidth + 'px';
+        const grid = b.querySelector('#map-canvas');
+        if (grid) this._drawGrid(grid, this._csScreen());
+      });
+      gwEl.addEventListener('change', () => this._saveMap());
     }
   },
 
@@ -2500,11 +2619,19 @@ registerPanel('battlemap',{
       return;
     }
 
-    // Per-user grid opacity (0–100 from the sidebar). Scales the base alpha.
+    // Grid opacity (0–100 from the sidebar; shared — the DM's setting syncs
+    // to the player view via broadcast/Firebase). Below 60% (the default)
+    // this scales the adaptive base alpha exactly as it always did; above 60%
+    // it ramps from that point up to FULLY opaque at 100%. The old mapping
+    // capped at the base alpha (0.25–0.4) even with the slider maxed, so the
+    // grid could never be made properly bold on busy map art.
     const op = (this._gridOpacity != null ? this._gridOpacity : 60) / 100;
+    const alphaFor = base => op <= 0.6
+      ? base * op
+      : base * 0.6 + (1 - base * 0.6) * ((op - 0.6) / 0.4);
 
     // Determine if background is light or dark for adaptive grid color
-    let gridColor='rgba(255,255,255,'+(0.18*op).toFixed(3)+')';
+    let gridColor='rgba(255,255,255,'+alphaFor(0.18).toFixed(3)+')';
     if(_mapBgImage){
       // Sample corners of the image to estimate brightness
       const off=document.createElement('canvas');off.width=4;off.height=4;
@@ -2513,7 +2640,7 @@ registerPanel('battlemap',{
         const d=octx.getImageData(0,0,4,4).data;
         let lum=0;for(let i=0;i<d.length;i+=4)lum+=(d[i]*299+d[i+1]*587+d[i+2]*114)/1000;
         lum/=16;
-        gridColor=lum>128?'rgba(0,0,0,'+(0.35*op).toFixed(3)+')':'rgba(255,255,255,'+(0.25*op).toFixed(3)+')';
+        gridColor=lum>128?'rgba(0,0,0,'+alphaFor(0.35).toFixed(3)+')':'rgba(255,255,255,'+alphaFor(0.25).toFixed(3)+')';
       }catch(e){}
     } else {
       // Parse bgColor hex to check brightness
@@ -2521,12 +2648,12 @@ registerPanel('battlemap',{
       if(hex.length===6){
         const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),bv=parseInt(hex.slice(4,6),16);
         const lum=(r*299+g*587+bv*114)/1000;
-        gridColor=lum>128?'rgba(0,0,0,'+(0.4*op).toFixed(3)+')':'rgba(255,255,255,'+(0.18*op).toFixed(3)+')';
+        gridColor=lum>128?'rgba(0,0,0,'+alphaFor(0.4).toFixed(3)+')':'rgba(255,255,255,'+alphaFor(0.18).toFixed(3)+')';
       }
     }
 
     ctx.strokeStyle=gridColor;
-    ctx.lineWidth=1;
+    ctx.lineWidth=Math.max(1, Math.min(4, this._gridWidth || 1));
     // Offsets are stored in image-pixel space; convert to on-screen pixels.
     const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
     const offX = (((this._gridOffsetX || 0) * scale) % cs + cs) % cs;
@@ -2784,6 +2911,7 @@ registerPanel('battlemap',{
       + '</div>'
       + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)
       + slider('opacity',  'Opacity',   this._gridOpacity, '%', 0, 100)
+      + slider('gridwidth','Line Width', this._gridWidth || 1, 'px', 1, 4)
 
       + '<div class="bm-set-section-head">TOKENS</div>'
       + '<div class="bm-set-tiles four">'
@@ -2817,6 +2945,9 @@ registerPanel('battlemap',{
     // from the token's pixel center.
     const isPlayer = document.body.classList.contains('player-mode');
     const fogSet = this._fog;
+    // Batch all token/name/facing nodes into one fragment so the browser does
+    // a single layout pass instead of one per appendChild (3 nodes × N tokens).
+    const frag = document.createDocumentFragment();
     this._tokens.forEach(t=>{
       const size=t.size||1;
       // Tokens store pixel coordinates (center). Default to middle of stage
@@ -2879,7 +3010,7 @@ registerPanel('battlemap',{
         facing.className = 'map-token-facing' + (t.isPC ? ' pc' : ' npc-t');
         facing.dataset.tid = t.id;
         facing.style.cssText = `left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;position:absolute;transform:translate(-50%,-50%) rotate(${t.rotation}deg);pointer-events:none;z-index:2`;
-        stage.appendChild(facing);
+        frag.appendChild(facing);
       }
       // Name label rendered as a sibling so it sits BELOW the token circle
       // (the circle has overflow:hidden which would clip an inner label).
@@ -2893,7 +3024,7 @@ registerPanel('battlemap',{
       const nameFs = Math.max(11, 10 * tokScale);
       nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25`;
       nameEl.textContent = displayLabel;
-      stage.appendChild(nameEl);
+      frag.appendChild(nameEl);
 
       // Right-click on a token opens the options panel (drag/select are left-click only).
       el.addEventListener('contextmenu', e => {
@@ -3078,8 +3209,9 @@ registerPanel('battlemap',{
         document.addEventListener('touchcancel', onEnd);
       }, { passive: false });
 
-      stage.appendChild(el);
+      frag.appendChild(el);
     });
+    stage.appendChild(frag);
   },
 
   _showPanel(t){

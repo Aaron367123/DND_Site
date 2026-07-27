@@ -531,7 +531,7 @@ registerPanel('npclib', {
         <button data-fmt="code" title="Inline code">&lt;/&gt;</button>
         <button data-fmt="insertUnorderedList" title="Bullet list">• List</button>
       </div>
-      <div class="npclib-notes" contenteditable="true" data-field="notes" data-placeholder="Click here to start typing.">${n.notes||''}</div>
+      <div class="npclib-notes" contenteditable="true" data-field="notes" data-placeholder="Click here to start typing.">${sanitizeHtml(n.notes||'')}</div>
 
       <div class="npclib-section-label npclib-secret-label">🔒 SECRET
         <button class="btn small npclib-secret-toggle" data-act="toggle-secret" title="${this._secretRevealed?'Hide the secret again':'Reveal — keep your screen private!'}">${this._secretRevealed?'🙈 Hide':'👁 Reveal'}</button>

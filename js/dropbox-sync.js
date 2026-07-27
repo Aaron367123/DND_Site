@@ -49,6 +49,17 @@
   }
   function _emit() { _statusListeners.forEach(fn => { try { fn(getStatus()); } catch(e){} }); }
 
+  // Toast a sync problem at most once a minute per kind — the poll loop runs
+  // every few seconds, so an unthrottled toast would spam a persistent failure.
+  const _lastWarnAt = {};
+  function _warnSync(kind, msg) {
+    const now = Date.now();
+    if (_lastWarnAt[kind] && now - _lastWarnAt[kind] < 60000) return;
+    _lastWarnAt[kind] = now;
+    console.warn('[dropbox-sync] ' + msg);
+    if (typeof showToast === 'function') showToast(msg);
+  }
+
   function _appKey() {
     return (window.DROPBOX_CONFIG && window.DROPBOX_CONFIG.appKey) || '';
   }
@@ -410,14 +421,43 @@
       }
       await Promise.all(Array.from({length: Math.min(CONCURRENCY, filesToFetch.length)}, worker));
 
-      // Pass 3: push local-only files up to Dropbox. These are files that
-      // exist locally but don't appear in the Dropbox listing — typically
-      // created in this app session before Dropbox was reachable. Folders
-      // get created implicitly when their files upload.
+      // Pass 3: reconcile files that exist locally but not in the Dropbox
+      // listing. Two very different causes look identical here:
+      //   a) genuinely new — created on this device before Dropbox was
+      //      reachable → push it up.
+      //   b) deleted remotely — another device deleted it while this one
+      //      wasn't polling (phone asleep, app closed, cursor expired).
+      // Blindly pushing (the old behavior) RESURRECTED remotely-deleted
+      // files: this device re-uploaded its stale copy on the next mount and
+      // every other device then pulled it back. Disambiguate with
+      // _state.fileRevs — if this device has a rev recorded for the file's
+      // path, it synced that exact path from Dropbox before, so its absence
+      // from the listing means it was deleted remotely → delete locally.
+      const listedPaths = new Set(files.map(f => f.path_lower));
       const localOnlyFiles = items.filter(it => it.type === 'file' && !seenLocalIds.has(it.id));
+      const removedRemotely = new Set();
       for (const f of localOnlyFiles) {
+        const p = _buildPath(f, items, '.md').toLowerCase();
+        if ((_state.fileRevs || {})[p] && !listedPaths.has(p)){
+          removedRemotely.add(f.id);
+          delete fileRevs[p];
+          continue;
+        }
         pushFile(f, items); // debounced individually; fires within 800 ms
       }
+      if (removedRemotely.size){
+        // Splice in place — `items` aliases data.items and is read below.
+        for (let i = items.length - 1; i >= 0; i--){
+          if (removedRemotely.has(items[i].id)) items.splice(i, 1);
+        }
+        console.log('[dropboxSync] removed ' + removedRemotely.size + ' file(s) deleted remotely');
+      }
+      // Prune stale rev entries (renamed/deleted paths already reconciled
+      // above) so tombstones don't accumulate forever. Keep pendingDeletes —
+      // those are still being retried.
+      Object.keys(fileRevs).forEach(p => {
+        if (!listedPaths.has(p) && !pending[p]) delete fileRevs[p];
+      });
 
       // Ensure selectedId still points at a real file.
       if (!data.selectedId || !items.find(i => i.id === data.selectedId)){
@@ -428,7 +468,8 @@
       _state.lastSync = Date.now();
       _saveState();
       // Persist the merged model to local storage too.
-      try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); } catch(e){}
+      try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); }
+      catch(e){ _warnSync('quota', 'Couldn’t save synced notes locally — browser storage is full'); }
     } finally {
       _busy = false; _emit();
     }
@@ -436,9 +477,18 @@
 
   // ─── Incremental poll ─────────────────────────────────────────────────────
   async function _pollOnce(getData) {
-    if (!isConfigured() || !_state.cursor) return;
+    if (!isConfigured()) return;
     if (_editingProvider && _editingProvider()) return; // skip — user mid-edit
     const data = getData(); if (!data || !Array.isArray(data.items)) return;
+    if (!_state.cursor){
+      // No cursor — either first run or the previous poll invalidated it
+      // (expired cursor). The old code returned here forever, so a device
+      // whose cursor expired silently STOPPED syncing until the notes panel
+      // was remounted. Recover by running a full sync, which re-establishes
+      // the cursor for subsequent incremental polls.
+      await fullSync(data);
+      return;
+    }
     let resp;
     try {
       resp = await _api('/files/list_folder/continue', { cursor: _state.cursor });
@@ -513,7 +563,8 @@
     _state.lastSync = Date.now();
     _saveState();
     if (changed) {
-      try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); } catch(e){}
+      try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); }
+      catch(e){ _warnSync('quota', 'Couldn’t save synced notes locally — browser storage is full'); }
       if (typeof window.dropboxSync._onPullCallback === 'function') {
         try { window.dropboxSync._onPullCallback(); } catch(e){}
       }
@@ -543,7 +594,11 @@
         if (res && res.rev) _state.fileRevs[(res.path_lower || path.toLowerCase())] = res.rev;
         _state.lastSync = Date.now();
         _saveState();
-      } catch(e) { /* swallow — next sync tick will retry indirectly */ }
+      } catch(e) {
+        // Don't swallow silently: if the rev is already recorded, no later
+        // tick re-attempts this write — the user needs to know it didn't land.
+        _warnSync('upload', 'Dropbox upload failed — "' + (file.name || 'note') + '" isn’t synced yet');
+      }
     };
     _pushTimers.set(file.id, { timer: setTimeout(run, PUSH_DEBOUNCE_MS), run });
   }
