@@ -102,12 +102,17 @@ registerPanel('adventures', {
     if (this._advCache[key]) return this._advCache[key];
     try {
       const res = await fetch('data/adventure/adventure-' + key + '.json');
+      // A 404/500 body is HTML — res.json() would throw anyway, but check
+      // explicitly so a served-but-failed response never counts as content.
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const j = await res.json();
       this._advCache[key] = j;
       return j;
     } catch(_){
-      this._advCache[key] = { data: [] };
-      return this._advCache[key];
+      // Do NOT cache the failure — a transient network hiccup used to pin
+      // "No chapters in this file" for the whole session (the books panel
+      // got this same fix earlier; this path was missed).
+      return { data: [] };
     }
   },
 

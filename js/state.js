@@ -11,7 +11,11 @@ const state={
   combatRound:0,
   activeCombatantId:null,
   shop:null,
-  settings:{...DEFAULT_SETTINGS},
+  // Deep clone (like DEFAULT_PARTY above) — a shallow spread shared the
+  // nested objects (shopFilters, uiHide, healthTiers, …) with the constant,
+  // so editing e.g. a shop filter corrupted the defaults themselves and
+  // "Reset to Defaults" couldn't restore them.
+  settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
   searchState:{category:'all',query:'',focused:-1,detail:null},
   // Panel ids the DM has opted to share with the player view. Synced through
   // Firebase as its own key so toggling share doesn't push the whole workspace.

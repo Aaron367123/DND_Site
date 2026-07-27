@@ -365,7 +365,7 @@ function initSettings(){
   document.getElementById('reset-data-btn').addEventListener('click',()=>{
     showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{
       if(r===null)return;
-      state.party=JSON.parse(JSON.stringify(DEFAULT_PARTY));state.combatants=[];state.combatRound=0;state.activeCombatantId=null;state.shop=null;state.settings={...DEFAULT_SETTINGS};
+      state.party=JSON.parse(JSON.stringify(DEFAULT_PARTY));state.combatants=[];state.combatRound=0;state.activeCombatantId=null;state.shop=null;state.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
       save();applyFontScale(state.settings.fontScale??1);applyUiHide(state.settings.uiHide||{});initPanels();showToast('Reset to defaults');
     });
   });

@@ -282,6 +282,12 @@ function _reloadPanel(id) {
   if (!def || !def._body) return;
 
   if (id === 'battlemap') {
+    // A token drag is in flight — replacing _tokens and re-rendering now
+    // would destroy the dragged element and orphan the drag's object, so
+    // the move would be silently discarded on mouseup. Skip this update;
+    // the map is last-write-wins, and the drag-end _saveMap() makes this
+    // device's state canonical moments later anyway.
+    if (def._drag) return;
     // Update internal data directly so the BroadcastChannel doesn't fire
     // a duplicate event into the player view.
     //

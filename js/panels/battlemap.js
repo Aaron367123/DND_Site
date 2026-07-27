@@ -273,6 +273,34 @@ registerPanel('battlemap',{
     return this._cellSize * (_mapBgImage ? (this._bgMapScale || 1) : 1);
   },
 
+  // Screen → stage-pixel conversion that accounts for BOTH the workspace CSS
+  // scale() and the stage's rotate() transform. getBoundingClientRect() on a
+  // rotated element returns the axis-aligned bounding box, so plain
+  // `clientX - rect.left` math swaps/flips axes at 90/180/270° — tokens
+  // dragged right moved down, fog painted perpendicular cells, Align broke.
+  // The bbox CENTER is rotation-invariant (transform-origin is 50% 50%), so
+  // we measure from it, un-rotate, then shift back to top-left origin using
+  // the element's UNROTATED size (canvas.width/height = stage pixels).
+  _stagePoint(clientX, clientY, el){
+    const rect = el.getBoundingClientRect();
+    const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+    const cx = (clientX - (rect.left + rect.width  / 2)) / z;
+    const cy = (clientY - (rect.top  + rect.height / 2)) / z;
+    const d = this._stageDelta(cx, cy);
+    const W = el.width  || el.offsetWidth  || 0;
+    const H = el.height || el.offsetHeight || 0;
+    return { x: d.x + W / 2, y: d.y + H / 2 };
+  },
+  // Rotate a screen-space delta into stage space (inverse of _mapRotation).
+  // Used for both point conversion above and drag deltas.
+  _stageDelta(dx, dy){
+    const rot = (((this._mapRotation || 0) % 360) + 360) % 360;
+    if (rot === 90)  return { x: dy,  y: -dx };
+    if (rot === 180) return { x: -dx, y: -dy };
+    if (rot === 270) return { x: -dy, y: dx  };
+    return { x: dx, y: dy };
+  },
+
   _drawAllStrokes(){
     const b = this._body; if (!b) return;
     const canvas = b.querySelector('#draw-canvas'); if (!canvas) return;
@@ -1281,14 +1309,12 @@ registerPanel('battlemap',{
     let _curStroke = null;
     drawCanvas.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
-      const rect = drawCanvas.getBoundingClientRect();
-      // Screen → canvas pixels: the workspace zoom is a CSS scale() above
-      // this canvas, so screen offsets are canvas-pixels × zoom. Without the
-      // division, draw strokes land offset and the eraser hit-tests the
-      // wrong spot whenever zoom != 1 (i.e. nearly always on mobile).
-      const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
-      const x = Math.round((e.clientX - rect.left) / z);
-      const y = Math.round((e.clientY - rect.top) / z);
+      // _stagePoint handles the workspace zoom (CSS scale) AND the stage
+      // rotation — plain rect math misplaced draw/erase whenever zoom != 1
+      // or the map was rotated.
+      const p0 = this._stagePoint(e.clientX, e.clientY, drawCanvas);
+      const x = Math.round(p0.x);
+      const y = Math.round(p0.y);
 
       if (this._tool === 'erase'){
         e.preventDefault(); e.stopPropagation();
@@ -1297,9 +1323,8 @@ registerPanel('battlemap',{
         let removed = this._eraseStrokeAt(x, y);
         // Drag-to-erase: keep removing strokes the cursor passes over.
         const onMove = ev => {
-          const mx = Math.round((ev.clientX - rect.left) / z);
-          const my = Math.round((ev.clientY - rect.top) / z);
-          if (this._eraseStrokeAt(mx, my)) removed = true;
+          const mp = this._stagePoint(ev.clientX, ev.clientY, drawCanvas);
+          if (this._eraseStrokeAt(Math.round(mp.x), Math.round(mp.y))) removed = true;
         };
         const onUp = () => {
           document.removeEventListener('mousemove', onMove);
@@ -1328,8 +1353,9 @@ registerPanel('battlemap',{
       this._broadcastStrokeTick(_curStroke);
       const onMove = ev => {
         if (!_curStroke) return;
-        const x2 = Math.round((ev.clientX - rect.left) / z);
-        const y2 = Math.round((ev.clientY - rect.top) / z);
+        const mp = this._stagePoint(ev.clientX, ev.clientY, drawCanvas);
+        const x2 = Math.round(mp.x);
+        const y2 = Math.round(mp.y);
         const lp = _curStroke.p;
         const lx = lp[lp.length-2], ly = lp[lp.length-1];
         if (Math.abs(x2 - lx) + Math.abs(y2 - ly) < 3) return; // sample-down
@@ -1357,11 +1383,10 @@ registerPanel('battlemap',{
     drawCanvas.addEventListener('touchstart', e => {
       if (e.touches.length !== 1) return;
       const touch = e.touches[0];
-      const rect = drawCanvas.getBoundingClientRect();
-      // Same screen → canvas zoom correction as the mouse path above.
-      const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
-      const x = Math.round((touch.clientX - rect.left) / z);
-      const y = Math.round((touch.clientY - rect.top) / z);
+      // Same zoom+rotation-aware conversion as the mouse path above.
+      const p0 = this._stagePoint(touch.clientX, touch.clientY, drawCanvas);
+      const x = Math.round(p0.x);
+      const y = Math.round(p0.y);
 
       if (this._tool === 'erase'){
         e.preventDefault(); e.stopPropagation();
@@ -1370,9 +1395,8 @@ registerPanel('battlemap',{
           if (ev.touches.length !== 1) return;
           ev.preventDefault();
           const t2 = ev.touches[0];
-          const mx = Math.round((t2.clientX - rect.left) / z);
-          const my = Math.round((t2.clientY - rect.top) / z);
-          if (this._eraseStrokeAt(mx, my)) removed = true;
+          const mp = this._stagePoint(t2.clientX, t2.clientY, drawCanvas);
+          if (this._eraseStrokeAt(Math.round(mp.x), Math.round(mp.y))) removed = true;
         };
         const onEnd = () => {
           document.removeEventListener('touchmove', onMove);
@@ -1402,8 +1426,9 @@ registerPanel('battlemap',{
         if (!_curStroke || ev.touches.length !== 1) return;
         ev.preventDefault();
         const t2 = ev.touches[0];
-        const x2 = Math.round((t2.clientX - rect.left) / z);
-        const y2 = Math.round((t2.clientY - rect.top) / z);
+        const mp = this._stagePoint(t2.clientX, t2.clientY, drawCanvas);
+        const x2 = Math.round(mp.x);
+        const y2 = Math.round(mp.y);
         const lp = _curStroke.p;
         const lx = lp[lp.length-2], ly = lp[lp.length-1];
         if (Math.abs(x2 - lx) + Math.abs(y2 - ly) < 3) return;
@@ -1432,10 +1457,9 @@ registerPanel('battlemap',{
     // Canvas click = place token when in add-pc/add-npc mode
     canvas.addEventListener('click',e=>{
       if(this._drag?.moved) return;
-      const r=canvas.getBoundingClientRect();
-      // Screen → canvas zoom correction (see draw/erase handlers).
-      const _cz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
-      let cx=(e.clientX-r.left)/_cz, cy=(e.clientY-r.top)/_cz;
+      // Zoom + rotation-aware conversion (see _stagePoint).
+      const _cp = this._stagePoint(e.clientX, e.clientY, canvas);
+      let cx=_cp.x, cy=_cp.y;
       // Two-click grid alignment mode — click two opposite corners of one
       // cell on the printed map grid; we infer cell size + offset from that.
       if (this._tool === 'align' && _mapBgImage){
@@ -1532,14 +1556,11 @@ registerPanel('battlemap',{
     // (re-fogs cells the player had seen).
     const fogPaint=(e)=>{
       if(!this._fogTool||this._fog===null)return;
-      const r=canvas.getBoundingClientRect();
-      // Workspace zoom is a CSS scale() on the whole canvas area, so screen
-      // offsets are stage-pixels × zoom. Divide them back down (same
-      // correction the token drag applies) — without it, fog painting lands
-      // on the wrong cells whenever zoom != 1 (i.e. nearly always on mobile).
-      const _z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
-      const ex = (e.clientX - r.left) / _z;
-      const ey = (e.clientY - r.top)  / _z;
+      // Zoom + rotation-aware conversion (see _stagePoint) — plain rect math
+      // painted the wrong cells whenever zoom != 1 or the map was rotated.
+      const _sp = this._stagePoint(e.clientX, e.clientY, canvas);
+      const ex = _sp.x;
+      const ey = _sp.y;
       // Recompute `cs` per event. The outer closure captured `cs` once at
       // _setupMap time (line ~1075). Wheel/pinch zoom calls
       // _applyZoomTransform — it resizes the canvas but doesn't re-run
@@ -1608,9 +1629,8 @@ registerPanel('battlemap',{
       // Cell-highlight hover tracking. Cheap: only updates when the cell
       // under the cursor actually changes, then repaints the grid canvas.
       if (this._cellHighlight){
-        const rr = canvas.getBoundingClientRect();
-        const _hz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
-        const cell = this._cellAtPx((e.clientX - rr.left) / _hz, (e.clientY - rr.top) / _hz);
+        const _hp = this._stagePoint(e.clientX, e.clientY, canvas);
+        const cell = this._cellAtPx(_hp.x, _hp.y);
         const prev = this._hoverCell;
         const same = prev && cell && (
           (cell.col!=null && prev.col===cell.col && prev.row===cell.row) ||
@@ -1858,14 +1878,14 @@ registerPanel('battlemap',{
       scrollEl.classList.remove('map-drop-active');
       if (!hasTokenDrop(e)) return;
       e.preventDefault(); e.stopPropagation();
-      // Compute drop position in stage coordinates.
+      // Compute drop position in stage coordinates (zoom + rotation aware).
       const stageEl = b.querySelector('#map-stage');
-      const sr = stageEl.getBoundingClientRect();
       // On-screen cell size — scales with zoom so snap and bounds match the
       // visible grid.
       const cs2 = this._csScreen();
-      let x = e.clientX - sr.left;
-      let y = e.clientY - sr.top;
+      const _dp = this._stagePoint(e.clientX, e.clientY, stageEl);
+      let x = _dp.x;
+      let y = _dp.y;
       const wantSnap = e.shiftKey ? !this._snapToGrid : this._snapToGrid;
       if (wantSnap){
         x = Math.floor(x/cs2)*cs2 + cs2/2;
@@ -3077,10 +3097,11 @@ registerPanel('battlemap',{
           // Token positions are stored in stage-pixel coords, but the cursor
           // delta comes back in screen pixels. The workspace-canvas has a
           // CSS transform: scale(zoom), so one stage pixel == `zoom` screen
-          // pixels. Divide the delta by zoom to keep the token under the
-          // cursor at any zoom level.
+          // pixels. Divide the delta by zoom, then un-rotate it into stage
+          // space (_stageDelta) so drags track the cursor on rotated maps.
           const z = (typeof getZoom === 'function') ? getZoom() : 1;
-          const dx=(ev.clientX-startX)/z, dy=(ev.clientY-startY)/z;
+          const _sd = this._stageDelta((ev.clientX-startX)/z, (ev.clientY-startY)/z);
+          const dx=_sd.x, dy=_sd.y;
           if(!moved&&Math.abs(dx)<4&&Math.abs(dy)<4) return;
           moved=true;this._drag.moved=true;
           el.style.cursor='grabbing';
@@ -3166,9 +3187,10 @@ registerPanel('battlemap',{
         const onMove = ev => {
           if (ev.touches.length !== 1) return;
           const tt = ev.touches[0];
-          // Same zoom-correction as the mouse drag handler above.
+          // Same zoom + rotation correction as the mouse drag handler above.
           const z = (typeof getZoom === 'function') ? getZoom() : 1;
-          const dx = (tt.clientX-startX)/z, dy = (tt.clientY-startY)/z;
+          const _sd = this._stageDelta((tt.clientX-startX)/z, (tt.clientY-startY)/z);
+          const dx = _sd.x, dy = _sd.y;
           if (!moved && Math.abs(dx)<6 && Math.abs(dy)<6) return;
           moved = true; this._drag.moved = true;
           clearTimeout(longPressTimer);
