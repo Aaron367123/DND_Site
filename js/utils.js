@@ -132,7 +132,7 @@ function renderIcon(icon, alt) {
   const s = String(icon);
   if (s.startsWith('data:image/') || s.startsWith('img/') || /^https?:\/\//.test(s)) {
     // assetUrl passes data:/http(s) through untouched and re-bases img/ paths.
-    return `<img class="icon-img" src="${esc(assetUrl(s))}" alt="${esc(alt||'')}" onerror="this.style.display='none'">`;
+    return `<img class="icon-img" crossorigin="anonymous" src="${esc(assetUrl(s))}" alt="${esc(alt||'')}" onerror="this.style.display='none'">`;
   }
   if (s.startsWith('<svg')) return s;          // already an SVG (CLASS_ICONS)
   return esc(s);                                // emoji / character

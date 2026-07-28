@@ -623,16 +623,23 @@ function initRealtime() {
   // until the Anonymous provider is enabled in the console. Do NOT flip the
   // rules until every device runs this code and the provider is on.
   if (firebase.auth){
-    firebase.auth().signInAnonymously()
-      .then(cred => {
-        console.info('[SKT] signed in anonymously (uid ' + (cred && cred.user ? cred.user.uid : '?') + ')');
-        _startRealtime();
-      })
-      .catch(err => {
-        console.warn('[SKT] anonymous sign-in failed (' + (err && err.code) + ') — running unauthenticated. '
-          + 'Enable Authentication → Sign-in method → Anonymous in the Firebase console to complete the lockdown.');
-        _startRealtime();
-      });
+    // Start listeners from onAuthStateChanged, NOT from the signInAnonymously
+    // promise. Resolving that promise only means `currentUser` is populated —
+    // the Realtime Database's websocket may not have been handed the token
+    // yet. Listeners attached in that window are rejected with
+    // permission_denied, and Firebase NEVER retries a revoked listener, so
+    // sync stays dead for the whole page life. onAuthStateChanged fires after
+    // the token has propagated. (_startRealtime is idempotent.)
+    firebase.auth().onAuthStateChanged(user => {
+      if (!user) return;
+      console.info('[SKT] signed in anonymously (uid ' + user.uid + ')');
+      _startRealtime();
+    });
+    firebase.auth().signInAnonymously().catch(err => {
+      console.warn('[SKT] anonymous sign-in failed (' + (err && err.code) + ') — running unauthenticated. '
+        + 'Enable Authentication → Sign-in method → Anonymous in the Firebase console to complete the lockdown.');
+      _startRealtime();   // unauthenticated fallback, for pre-lockdown setups
+    });
   } else {
     console.warn('[SKT] firebase-auth SDK not loaded — running unauthenticated.');
     _startRealtime();
@@ -651,8 +658,44 @@ function _startRealtime() {
   // during play, when most edits touch a single key (HP, token positions, etc).
   SKT_SYNC_KEYS.forEach(k => {
     if (_ENTITY_KEYS[k]) return; // handled by the subtree listeners below
-    const path = 'skt/' + _toFbKey(k);
-    _fbDb.ref(path).on('value', snap => {
+    _attachKeyListener(k);
+  });
+
+  // Entity-key subtree listeners.
+  Object.keys(_ENTITY_KEYS).forEach(k => _attachEntityListener(k));
+
+  _startRealtimeExtras();
+}
+
+// A permission_denied here is FATAL to that listener — Firebase revokes it and
+// never retries, so the subsystem silently stops syncing for the rest of the
+// page's life. That's exactly what happens if a listener is attached in the
+// window between "signed in" and "the database connection has the token", so
+// re-attach a couple of times before giving up.
+const _listenRetries = {};
+function _onListenError(label, path, err, reattach){
+  const code = (err && err.code) || '';
+  console.error('[SKT] Firebase read error for ' + label + ':', err);
+  if (code === 'permission_denied' || code === 'PERMISSION_DENIED'){
+    const n = (_listenRetries[label] || 0) + 1;
+    _listenRetries[label] = n;
+    if (n <= 3){
+      const delay = 800 * n;
+      console.warn('[SKT] re-attaching listener for ' + label + ' in ' + delay + 'ms (attempt ' + n + '/3)');
+      setTimeout(() => { try { reattach(); } catch(e){} }, delay);
+      return;
+    }
+    console.error('[SKT] giving up on ' + label + '. If the database rules require auth, '
+      + 'make sure Authentication → Sign-in method → Anonymous is ENABLED in the Firebase console.');
+    if (typeof showToast === 'function') showToast('Sync permission denied — check Firebase auth settings');
+  }
+  _setSyncStatus('offline');
+}
+
+function _attachKeyListener(k){
+  const path = 'skt/' + _toFbKey(k);
+  _fbDb.ref(path).off();   // drop any revoked listener before re-adding
+  _fbDb.ref(path).on('value', snap => {
       if (!snap.exists()){
         // No remote value yet for this key — seed it from local if we have one.
         const local = localStorage.getItem(k);
@@ -664,17 +707,15 @@ function _startRealtime() {
         return;
       }
       _applyRemoteKey(k, snap.val());
-    }, err => {
-      console.error('[SKT] Firebase read error for ' + k + ':', err);
-      _setSyncStatus('offline');
-    });
-  });
+    }, err => _onListenError(k, path, err, () => _attachKeyListener(k)));
+}
 
-  // Entity-key subtree listeners. The realtime protocol only sends changed
-  // children over the wire for a subtree value listener, so receive traffic
-  // is already incremental — we just reassemble locally.
-  Object.keys(_ENTITY_KEYS).forEach(k => {
+// Entity-key subtree listener. The realtime protocol only sends changed
+// children over the wire for a subtree value listener, so receive traffic
+// is already incremental — we just reassemble locally.
+function _attachEntityListener(k){
     const spec = _ENTITY_KEYS[k];
+    _fbDb.ref(spec.base).off();   // drop any revoked listener before re-adding
     _fbDb.ref(spec.base).on('value', snap => {
       if (snap.exists()){ _applyEntitySnapshot(k, snap.val()); return; }
       // v2 subtree absent — first client on the new layout. Seed from local
@@ -700,12 +741,11 @@ function _startRealtime() {
         _pushTimer = setTimeout(_flushDirtyKeys, 100);
         console.log('[SKT] migrated ' + k + ' from legacy whole-key node into v2 subtree');
       }).catch(()=>{});
-    }, err => {
-      console.error('[SKT] Firebase read error for ' + spec.base + ':', err);
-      _setSyncStatus('offline');
-    });
-  });
+    }, err => _onListenError(spec.base, spec.base, err, () => _attachEntityListener(k)));
+}
 
+// Everything that only needs to happen once per page, after listeners exist.
+function _startRealtimeExtras() {
   // Track connection state for the status indicator. Firebase queues writes
   // automatically while offline and flushes them on reconnect — no manual
   // re-push needed here.

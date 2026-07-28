@@ -262,6 +262,13 @@ registerPanel('battlemap',{
       }
     };
     img.onerror = () => { showToast('Could not load map image'); };
+    // MUST be set before .src, and MUST stay set while images are served
+    // cross-origin. _drawGrid samples this image with getImageData() to pick
+    // a grid colour that contrasts with the map; a cross-origin image loaded
+    // without CORS taints the canvas, that read throws, and the adaptive
+    // contrast silently falls back to the default for every map. It's also
+    // what makes the response non-opaque so the service worker can cache it.
+    img.crossOrigin = 'anonymous';
     img.src = assetUrl(path);
   },
 
@@ -443,7 +450,7 @@ registerPanel('battlemap',{
       const fullSrc  = assetUrl(m.path);
       return `<div class="mapsel-card starred" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
         <button class="mapsel-star on" data-mapsel-star="${esc(m.path)}" title="Unstar">★</button>
-        <img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.opacity=.3;}">
+        <img crossorigin="anonymous" src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.opacity=.3;}">
         <div class="mapsel-title">${esc(m.title)}</div>
         ${m.advName ? `<div class="mapsel-sub">${esc(m.advName)}</div>` : ''}
         <span class="mapsel-badge ${esc(m.type || 'map')}">${m.type==='mapPlayer'?'Player':'DM'}</span>
@@ -2431,7 +2438,7 @@ registerPanel('battlemap',{
         const isStarred = starred.has(m.path);
         return `<div class="mapsel-card${isStarred?' starred':''}" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
           <button class="mapsel-star ${isStarred?'on':''}" data-mapsel-star="${esc(m.path)}" title="${isStarred?'Unstar':'Star (quick-access)'}">${isStarred?'★':'☆'}</button>
-          <img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.opacity=.3;}">
+          <img crossorigin="anonymous" src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.opacity=.3;}">
           <div class="mapsel-title">${esc(m.title)}</div>
           ${subtitle}
           <span class="mapsel-badge ${esc(m.type)}">${m.type==='mapPlayer'?'Player':'DM'}</span>

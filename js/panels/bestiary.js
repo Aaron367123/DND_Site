@@ -133,7 +133,7 @@ registerPanel('bestiary', {
     const tokenSrc = m.img ? assetUrl(m.img.replace(/^bestiary\//, 'bestiary/tokens/')) : null;
     const fullSrc  = m.img ? assetUrl(m.img) : null;
     const img = m.img
-      ? `<img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.parentNode.textContent='${esc(_bestInitials(m.name))}';}">`
+      ? `<img crossorigin="anonymous" src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.parentNode.textContent='${esc(_bestInitials(m.name))}';}">`
       : esc(_bestInitials(m.name));
     return `<div class="bestiary-card" data-mid="${esc(m.id)}" draggable="true" title="Click for stat block · Drag to combat tracker">
       <button class="bestiary-card-x" data-rmid="${esc(m.id)}" title="Remove from bestiary">×</button>

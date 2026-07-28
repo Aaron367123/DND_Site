@@ -144,7 +144,7 @@ registerPanel('adventures', {
       const meta = [lvl, a.storyline, a.published].filter(Boolean).join(' · ');
       const coverPath = a.cover && a.cover.path ? assetUrl(a.cover.path) : '';
       const cover = coverPath
-        ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖',style:'cssText:width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px'}))">`
+        ? `<img class="adv-card-img" crossorigin="anonymous" src="${esc(coverPath)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📖',style:'cssText:width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px'}))">`
         : `<div class="adv-card-nopic" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px">📖</div>`;
       // Resume badge — shown only when the user has a bookmark and the
       // bookmarked chapter isn't 0 (chapter 0 = "haven't really started").
@@ -705,7 +705,7 @@ registerPanel('adventures', {
         if (!path) return '';
         const cap = node.title || node.caption || '';
         const credit = node.credit ? `<span class="adv-img-credit">${this._inline(node.credit)}</span>` : '';
-        return `<figure class="adv-figure"><img src="${esc(path)}" alt="${esc(cap)}" loading="lazy" onerror="this.style.display='none'">${(cap||credit)?`<figcaption>${cap?this._inline(cap):''}${credit}</figcaption>`:''}</figure>`;
+        return `<figure class="adv-figure"><img crossorigin="anonymous" src="${esc(path)}" alt="${esc(cap)}" loading="lazy" onerror="this.style.display='none'">${(cap||credit)?`<figcaption>${cap?this._inline(cap):''}${credit}</figcaption>`:''}</figure>`;
       }
       case 'gallery': {
         return `<div class="adv-gallery">${(node.images||[]).map(im => this._renderNode(im)).join('')}</div>`;

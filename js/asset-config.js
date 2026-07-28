@@ -24,5 +24,10 @@
 // worker's IMG_ORIGINS allow-list in sw.js — otherwise images bypass the
 // offline cache. Both are documented at those call sites.
 window.ASSET_CONFIG = {
-  imgBase: '',
+  // Cloudflare R2 bucket `dnd-img` (15,980 objects: 14,278 images + 1,702
+  // thumbnails, content-verified against the local tree).
+  // If this ever changes, update IMG_ORIGINS in sw.js to match or images
+  // silently stop being cached offline.
+  // Set to '' to fall back to local img/ files (offline dev, or to revert).
+  imgBase: 'https://pub-4b8864700c38402395c9f9951ed106ce.r2.dev',
 };

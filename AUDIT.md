@@ -462,7 +462,18 @@ Decisions: keep every image (host on Cloudflare R2, don't prune), rewrite histor
 - [x] **Service worker prepared** — cross-origin allow-list (`IMG_ORIGINS`, currently empty so behavior is unchanged) added *above* the same-origin guard rather than weakening it, so Firebase/gstatic still fall straight through. Thumbnails get their own `skt-thumb-v1` bucket (cap 1500) so browsing can't evict full-size maps from `skt-img-v1`; both added to `KEEP` and the cleanup regex.
 - [x] **`.gitignore`** for `/img/` and `/thumbs/`. Correctly does **not** untrack the existing images — they must keep serving from Pages until the CDN is live.
 
-### Remaining — needs a Cloudflare account (can't be done from here)
+### LIVE as of 2026-07-28 — images now served from Cloudflare R2
+
+Bucket `dnd-img`, public base `https://pub-4b8864700c38402395c9f9951ed106ce.r2.dev`.
+
+- **Upload verified by content, not just size:** 15,980 objects (14,278 images + 1,702 thumbnails), 3.768 GiB. `rclone check --one-way` → **0 differences, 14,278 matching files**. Single-part uploads (`--s3-chunk-size=32M` exceeds the 16.5 MB largest file) keep every ETag a true MD5, so that check is a real hash comparison.
+- **CORS + `crossorigin="anonymous"`** on all 11 generated `<img>` sites and on `img.crossOrigin` before `.src` in `_loadBgFromPath`.
+- **Verified live in the browser:** 23 requests from the CDN, **0 still hitting local `img/`**; percent-encoded names (`Hill%20Giant.webp`) resolve; Firebase still "Live" (same-origin guard intact); map loads at 3000×1905 and **`getImageData` succeeds — canvas NOT tainted**, so adaptive grid contrast still works (sampled luminance 184); **19 CDN images cached in `skt-img-v1`**, which is only possible with non-opaque responses and therefore proves CORS end to end.
+- `tools/verify-cdn.sh` passes 6/6 (public access, content-type, cache headers, CORS, thumbnails, awkward filenames).
+
+**Still fully reversible:** the images remain in the repo. Setting `imgBase: ''` in `js/asset-config.js` restores local serving.
+
+### Remaining — the history purge (irreversible; soak first)
 
 1. **R2, not Pages**: Pages caps a project at 20,000 files; 14,278 images + thumbnails leaves no headroom. R2 has no file limit, 10 GB free (need ~3.9 GB), zero egress.
 2. Upload with `rclone copy ./img r2:<bucket>` — bucket root mirrors the *contents* of `img/`; thumbnails to `thumbs/`. Set `Cache-Control: public, max-age=31536000, immutable`.

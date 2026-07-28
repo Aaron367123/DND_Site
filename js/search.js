@@ -661,7 +661,7 @@ function renderAdventureFull(d) {
     ? `${r.level.start}${r.level.end!=null?'–'+r.level.end:''}`
     : '';
   const cover = r.cover && r.cover.path
-    ? `<img class="detail-img" src="${esc(assetUrl(r.cover.path))}" onerror="this.style.display='none'" alt="${esc(d.name)} cover">`
+    ? `<img class="detail-img" crossorigin="anonymous" src="${esc(assetUrl(r.cover.path))}" onerror="this.style.display='none'" alt="${esc(d.name)} cover">`
     : '';
   const stat = (label, val) => val
     ? `<div class="stat-block"><div class="lab">${label}</div><div class="val">${esc(String(val))}</div></div>`
@@ -1150,11 +1150,11 @@ function _detailImgTag(d) {
     // if no token exists for this monster, then hide if neither loads.
     const token = assetUrl(d._img.replace(/^img\//,'').replace(/^bestiary\//, 'bestiary/tokens/'));
     const full  = assetUrl(d._img);
-    return `<img class="detail-img" src="${esc(token)}" data-fb="${esc(full)}" alt="${esc(d.name)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
+    return `<img class="detail-img" crossorigin="anonymous" src="${esc(token)}" data-fb="${esc(full)}" alt="${esc(d.name)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
   }
   // Non-monster `_img` already carries the img/ prefix (see data-loader);
   // assetUrl normalizes either form.
-  return `<img class="detail-img" src="${esc(assetUrl(d._img))}" onerror="this.style.display='none'" alt="${esc(d.name)}">`;
+  return `<img class="detail-img" crossorigin="anonymous" src="${esc(assetUrl(d._img))}" onerror="this.style.display='none'" alt="${esc(d.name)}">`;
 }
 
 // Builds just the inner stat-block / description HTML for any search entry.
