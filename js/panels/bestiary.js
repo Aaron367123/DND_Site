@@ -130,8 +130,8 @@ registerPanel('bestiary', {
 
   _renderCard(m){
     // Prefer the small token image; fall back to full art, then to initials.
-    const tokenSrc = m.img ? 'img/' + m.img.replace(/^bestiary\//, 'bestiary/tokens/') : null;
-    const fullSrc  = m.img ? 'img/' + m.img : null;
+    const tokenSrc = m.img ? assetUrl(m.img.replace(/^bestiary\//, 'bestiary/tokens/')) : null;
+    const fullSrc  = m.img ? assetUrl(m.img) : null;
     const img = m.img
       ? `<img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.parentNode.textContent='${esc(_bestInitials(m.name))}';}">`
       : esc(_bestInitials(m.name));

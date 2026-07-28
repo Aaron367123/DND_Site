@@ -1920,6 +1920,9 @@ registerPanel('combat',{
       // img/bestiary/tokens/<source>/<name>.webp.
       const raw = m._img.startsWith('img/') ? m._img.slice(4) : m._img;
       const token = raw.replace(/^bestiary\//, 'bestiary/tokens/');
+      // Stays a RELATIVE 'img/…' value on purpose — it's stored on the
+      // combatant and synced. renderIcon() runs it through assetUrl() when
+      // drawing, so it resolves to the CDN without persisting a host.
       portrait = 'img/' + token;
     }
     // Auto-detect legendary actions from the 5etools entry. 5etools data

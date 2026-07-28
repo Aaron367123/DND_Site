@@ -28,28 +28,29 @@
  */
 'use strict';
 
-const BUILD = '546c04f284';
+const BUILD = '89031ebd7c';
 const PRECACHE = [
   './',
   'skt-workspace.html',
   'styles/main.css?v=737cbe7d18',
   'js/data.js?v=4271d26464',
   'js/theme.js?v=533ffb6fb1',
-  'js/utils.js?v=1afcb8d7ff',
+  'js/asset-config.js?v=9eb31d5a7a',
+  'js/utils.js?v=2bdd42b963',
   'js/state.js?v=f59175b98e',
   'js/window-manager.js?v=e88d7a8da0',
-  'js/panels/combat.js?v=77e9effef0',
+  'js/panels/combat.js?v=f3902be915',
   'js/panels/party.js?v=4e582f8172',
   'js/panels/shop.js?v=9834741b8b',
   'js/notes-sync.js?v=8b74d04e3a',
   'js/dropbox-config.js?v=ccf8533d50',
   'js/dropbox-sync.js?v=90ddfd734c',
   'js/panels/notes.js?v=801ba3a8b8',
-  'js/panels/battlemap.js?v=73645a81aa',
+  'js/panels/battlemap.js?v=b47c6e220c',
   'js/panels/npc-library.js?v=892b488fee',
-  'js/panels/bestiary.js?v=8f31463083',
-  'js/panels/adventures.js?v=d562953f3b',
-  'js/panels/books.js?v=7a58b1a258',
+  'js/panels/bestiary.js?v=7f049344ec',
+  'js/panels/adventures.js?v=8fe07cc6ac',
+  'js/panels/books.js?v=078a2b00dd',
   'js/panels/npc-generator.js?v=2be67577d7',
   'js/panels/loot.js?v=d486c19305',
   'js/panels/encounter.js?v=5351dd6bc0',
@@ -57,7 +58,7 @@ const PRECACHE = [
   'js/panels/weather.js?v=d7dd02abd8',
   'js/panels/timetracker.js?v=38051fc485',
   'js/data-loader.js?v=24ad236e15',
-  'js/search.js?v=682b910e5d',
+  'js/search.js?v=8892f6ea7e',
   'js/settings.js?v=a6c9492896',
   'js/context-menu.js?v=92f9a49378',
   'js/zoom-pan.js?v=0e8544341a',
@@ -73,8 +74,18 @@ const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build
 const DATA_CACHE  = 'skt-data-v1';          // survives builds; self-refreshing
 const IMG_CACHE   = 'skt-img-v1';           // survives builds; capped
 const IMG_MAX_ENTRIES = 120;
+// Separate bucket for browse thumbnails — small (~27 KB) and numerous, so
+// they get a far higher cap and can't evict full-size maps.
+const THUMB_CACHE = 'skt-thumb-v1';
+const THUMB_MAX_ENTRIES = 1500;
 
-const KEEP = [SHELL_CACHE, DATA_CACHE, IMG_CACHE];
+// Cross-origin hosts allowed to be intercepted for image caching. Keep this
+// in sync with ASSET_CONFIG.imgBase in js/asset-config.js — if they disagree,
+// images silently stop being cached offline (no error, just misses).
+// Origin only: 'https://pub-xxxx.r2.dev', no path, no trailing slash.
+const IMG_ORIGINS = [];
+
+const KEEP = [SHELL_CACHE, DATA_CACHE, IMG_CACHE, THUMB_CACHE];
 
 // ─── Install: precache the shell ─────────────────────────────────────────────
 self.addEventListener('install', event => {
@@ -101,7 +112,7 @@ self.addEventListener('activate', event => {
     await Promise.all(names.map(n => {
       if (KEEP.includes(n)) return null;
       // Only touch our own buckets — never delete another app's cache.
-      if (!/^skt-(shell|data|img)-/.test(n)) return null;
+      if (!/^skt-(shell|data|img|thumb)-/.test(n)) return null;
       return caches.delete(n);
     }));
     await self.clients.claim();
@@ -166,13 +177,32 @@ async function networkFirst(request, cacheName){
 self.addEventListener('fetch', event => {
   const req = event.request;
 
-  // GUARD — everything below this line is same-origin GET only.
+  // GUARD — same-origin GET only, with ONE narrow exception below.
   // Firebase (realtime sync, auth) and gstatic are cross-origin and must
   // always go straight to the network; intercepting them would break sync.
   if (req.method !== 'GET') return;
   let url;
   try { url = new URL(req.url); } catch (e) { return; }
-  if (url.origin !== self.location.origin) return;
+
+  if (url.origin !== self.location.origin) {
+    // The image CDN is the only cross-origin host we ever touch. This is
+    // strictly narrower than "block everything cross-origin" — it matches one
+    // exact origin string — so Firebase/gstatic still fall straight through.
+    // Empty until the images actually move (see js/asset-config.js); while
+    // empty this branch can never match and behavior is unchanged.
+    //
+    // IMPORTANT: the bucket must send CORS headers and the <img> tags must
+    // carry crossorigin="anonymous". Without that, responses come back
+    // `opaque` — cacheFirst's `res.ok` check is always false so nothing is
+    // ever cached, and force-caching them instead would charge ~7 MB of
+    // padding PER ENTRY against origin quota, risking eviction of the app
+    // shell itself. CORS is the fix; do not relax the res.ok check.
+    if (IMG_ORIGINS.length && IMG_ORIGINS.indexOf(url.origin) !== -1) {
+      event.respondWith(cacheFirst(req, IMG_CACHE));
+      event.waitUntil(trimCache(IMG_CACHE, IMG_MAX_ENTRIES));
+    }
+    return;
+  }
 
   // Navigations: always try the network so the freshest HTML (and therefore
   // the freshest asset hashes) wins whenever we're online.
@@ -184,6 +214,16 @@ self.addEventListener('fetch', event => {
   const p = url.pathname;
   if (/\/data\/.+\.json$/i.test(p)){
     event.respondWith(staleWhileRevalidate(event, req, DATA_CACHE));
+    return;
+  }
+  // Thumbnails get their OWN bucket with a much higher cap. They're ~27 KB
+  // each (vs ~500 KB for a full map), so a single map-picker scroll would
+  // otherwise evict every cached full-size map from IMG_CACHE. They must also
+  // not fall through to the .webp rule below, which would put them in the
+  // shell bucket and wipe them on every build.
+  if (/\/thumbs\//i.test(p)){
+    event.respondWith(cacheFirst(req, THUMB_CACHE));
+    event.waitUntil(trimCache(THUMB_CACHE, THUMB_MAX_ENTRIES));
     return;
   }
   if (/\/img\//i.test(p)){

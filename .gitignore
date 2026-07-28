@@ -1,0 +1,13 @@
+# Art pack — NOT tracked. ~3.8 GB / 14k files of 5etools art made .git 5.6 GB
+# and pushed the site past GitHub Pages' 1 GB limit, so the images are served
+# from object storage instead (see js/asset-config.js and SETUP.md).
+# The local copy stays on disk as the master source for uploads + thumbnails.
+/img/
+
+# Generated browse-sized thumbnails (tools/make-thumbs.py). Derived from
+# /img/, uploaded alongside it — no reason to version them.
+/thumbs/
+
+# Local scratch
+*.log
+upload.log

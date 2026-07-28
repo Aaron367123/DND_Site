@@ -23,6 +23,32 @@ node tools/stamp-build.js --check  # exit 1 if stamping is needed (CI gate)
 
 If node is missing on a machine, the hook warns and lets the commit through rather than blocking you. `git commit --no-verify` bypasses it for one commit.
 
+## Where images come from
+
+Image URLs are built by `assetUrl()` / `assetThumbUrl()` in `js/utils.js`, and the base is set in **`js/asset-config.js`**:
+
+- `imgBase: ''` → local files (`img/…`). This is the current setting; everything works exactly as before.
+- `imgBase: 'https://…'` → object storage. The **bucket root must mirror the contents of `img/`** (it contains `adventure/`, `bestiary/`, … directly), with thumbnails under a `thumbs/` prefix.
+
+Switching hosts is a one-line change. Nothing else hardcodes an image path — and image paths saved in your campaign data stay *relative*, so they never bake in a hostname and keep working across devices and hosts.
+
+**If you set a cross-origin base, two things are mandatory or images break in subtle ways:**
+1. **CORS on the bucket** (allow `GET` from the site origin). Without it the battle map's adaptive grid-contrast silently stops working (the canvas gets tainted) and the service worker can't cache images at all.
+2. **Add the origin to `IMG_ORIGINS` in `sw.js`** — otherwise images bypass the offline cache entirely.
+
+### Thumbnails
+
+`tools/make-thumbs.py` (needs `pip install Pillow`) generates 400 px browse thumbnails into `thumbs/`, mirroring the `img/` tree. It scopes itself to exactly the images the grid UIs show — anything tagged `imageType: map`/`mapPlayer` in the adventure/book data, plus covers — by applying the same filter the map picker uses.
+
+```bash
+python tools/make-thumbs.py            # generate (skips up-to-date)
+python tools/make-thumbs.py --dry-run  # report scope only
+```
+
+Current output: 1,702 thumbnails, 46 MB — versus 1,884 MB for the same images at full size. A map-picker card is ~28 KB instead of ~2.5 MB. Missing thumbnails are harmless: every consumer falls back to the full-size image.
+
+`img/` and `thumbs/` are both gitignored.
+
 ## Offline support
 
 `sw.js` is a service worker that precaches the app shell, so the workspace **boots and runs with no network** — your campaign comes from localStorage and the 5e index from IndexedDB. Firebase reconnects on its own when you're back online.

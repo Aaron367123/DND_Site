@@ -72,6 +72,56 @@ function _getMe() {
   try { localStorage.setItem('skt-me-v1', JSON.stringify(fresh)); } catch(e) {}
   return fresh;
 }
+// ─── Image asset URLs ────────────────────────────────────────────────────────
+// Single place that turns a 5etools-relative image path into a loadable URL.
+// Every image in the app goes through here so the art can be served from
+// local files or from object storage by flipping ASSET_CONFIG.imgBase — see
+// js/asset-config.js.
+//
+// Input tolerance matters, because callers disagree about the prefix:
+//   • data-loader stores monster art PREFIX-LESS ('bestiary/MM/Goblin.webp')
+//     but non-monster art WITH the prefix ('img/covers/LMoP.webp') — both
+//     end up in the same `_img` field.
+//   • Persisted state (_bgMapPath, starred maps in skt-battlemap-v1, synced
+//     to Firebase) stores prefix-less paths and must keep working untouched.
+// So: accept either form, normalize, and never rewrite what gets SAVED.
+function assetUrl(path) {
+  if (!path) return '';
+  const s = String(path);
+  // Already a complete URL or inline payload — hand back unchanged.
+  if (/^(data:|blob:|https?:\/\/|\/\/)/i.test(s) || s.startsWith('<svg')) return s;
+  const rel  = s.replace(/^\/+/, '').replace(/^img\//i, '');
+  const base = (window.ASSET_CONFIG && window.ASSET_CONFIG.imgBase) || '';
+  return (base ? base.replace(/\/+$/, '') + '/' : 'img/') + _encPath(rel);
+}
+
+// Percent-encode each path SEGMENT (never the slashes). 5,870 of the art
+// filenames contain spaces, 256 parentheses and 106 apostrophes. Browsers
+// silently encode those for RELATIVE urls, which is why the local build works
+// without this — but a hand-built ABSOLUTE cdn url must encode them itself or
+// thousands of images 404 with no obvious pattern. The tree contains no
+// #/?/%/&/+ or non-ASCII characters, so this is a lossless round trip.
+function _encPath(rel) {
+  return String(rel).split('/').map(seg => {
+    // Don't double-encode a segment that already looks encoded.
+    try { if (decodeURIComponent(seg) !== seg) return seg; } catch(e){}
+    return encodeURIComponent(seg);
+  }).join('/');
+}
+
+// Small pre-generated preview of the same image (see tools/make-thumbs.py).
+// Used by grid/browse UIs so picking a map doesn't decode a 16 MB poster.
+// Callers should keep an onerror fallback to assetUrl() — thumbnails are
+// generated for a subset of images, and a missing one must degrade, not break.
+function assetThumbUrl(path) {
+  if (!path) return '';
+  const s = String(path);
+  if (/^(data:|blob:|https?:\/\/|\/\/)/i.test(s) || s.startsWith('<svg')) return s;
+  const rel  = s.replace(/^\/+/, '').replace(/^img\//i, '');
+  const base = (window.ASSET_CONFIG && window.ASSET_CONFIG.imgBase) || '';
+  return (base ? base.replace(/\/+$/, '') + '/' : '') + 'thumbs/' + _encPath(rel);
+}
+
 // Render an "icon" value (used by party / combatant portraits). Accepts:
 //   - data:image/...      → <img>
 //   - paths starting with img/ or http(s)/ → <img>
@@ -81,7 +131,8 @@ function renderIcon(icon, alt) {
   if (!icon) return '⚔';
   const s = String(icon);
   if (s.startsWith('data:image/') || s.startsWith('img/') || /^https?:\/\//.test(s)) {
-    return `<img class="icon-img" src="${esc(s)}" alt="${esc(alt||'')}" onerror="this.style.display='none'">`;
+    // assetUrl passes data:/http(s) through untouched and re-bases img/ paths.
+    return `<img class="icon-img" src="${esc(assetUrl(s))}" alt="${esc(alt||'')}" onerror="this.style.display='none'">`;
   }
   if (s.startsWith('<svg')) return s;          // already an SVG (CLASS_ICONS)
   return esc(s);                                // emoji / character

@@ -262,7 +262,7 @@ registerPanel('battlemap',{
       }
     };
     img.onerror = () => { showToast('Could not load map image'); };
-    img.src = 'img/' + path;
+    img.src = assetUrl(path);
   },
 
   // Grow/shrink _cols and _rows so the grid covers the map at its current
@@ -438,10 +438,12 @@ registerPanel('battlemap',{
     }
     const cards = [...set].map(path => {
       const m = meta.get(path) || { path, title: path.split('/').pop().replace(/\.[^.]+$/, ''), type:'map' };
-      const tokenSrc = 'img/' + m.path;
+      // Thumbnail with full-map fallback — same reasoning as the main grid.
+      const tokenSrc = assetThumbUrl(m.path);
+      const fullSrc  = assetUrl(m.path);
       return `<div class="mapsel-card starred" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
         <button class="mapsel-star on" data-mapsel-star="${esc(m.path)}" title="Unstar">★</button>
-        <img src="${esc(tokenSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
+        <img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.opacity=.3;}">
         <div class="mapsel-title">${esc(m.title)}</div>
         ${m.advName ? `<div class="mapsel-sub">${esc(m.advName)}</div>` : ''}
         <span class="mapsel-badge ${esc(m.type || 'map')}">${m.type==='mapPlayer'?'Player':'DM'}</span>
@@ -1936,6 +1938,10 @@ registerPanel('battlemap',{
         // versions under bestiary/tokens/<source>/ — we mirror the path
         // mapping the Bestiary panel itself uses. Falls back to the existing
         // portrait field, then to the class-icon glyph.
+        // NOTE: deliberately NOT assetUrl() — this value is STORED on the
+        // token and synced to Firebase. Persisting an absolute CDN URL would
+        // bake the current host into saved state (and break if it changes).
+        // renderIcon() re-bases it through assetUrl() at render time.
         const tokenImg = m.img ? 'img/' + m.img.replace(/^bestiary\//, 'bestiary/tokens/') : null;
         const portrait = m.portrait || tokenImg || null;
         this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false, icon:npcIcon, portrait});
@@ -2415,12 +2421,17 @@ registerPanel('battlemap',{
       }
       const starred = this._starredMaps || new Set();
       grid.innerHTML = cards.map(m=>{
-        const tokenSrc = 'img/'+m.path;
+        // Browse-sized thumbnail (tools/make-thumbs.py), falling back to the
+        // full map if one wasn't generated. Cards render at ~180px; the full
+        // maps average 498 KB and peak at 15.7 MB, so a 200-result search
+        // used to pull ~100 MB just to draw the grid.
+        const tokenSrc = assetThumbUrl(m.path);
+        const fullSrc  = assetUrl(m.path);
         const subtitle = opts.showAdv && m.advName ? `<div class="mapsel-sub">${esc(m.advName)}</div>` : '';
         const isStarred = starred.has(m.path);
         return `<div class="mapsel-card${isStarred?' starred':''}" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
           <button class="mapsel-star ${isStarred?'on':''}" data-mapsel-star="${esc(m.path)}" title="${isStarred?'Unstar':'Star (quick-access)'}">${isStarred?'★':'☆'}</button>
-          <img src="${esc(tokenSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
+          <img src="${esc(tokenSrc)}" data-fb="${esc(fullSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.opacity=.3;}">
           <div class="mapsel-title">${esc(m.title)}</div>
           ${subtitle}
           <span class="mapsel-badge ${esc(m.type)}">${m.type==='mapPlayer'?'Player':'DM'}</span>
@@ -2619,7 +2630,7 @@ registerPanel('battlemap',{
       const scale = this._bgMapScale || 1;
       const dispW = (this._bgMapNaturalW || _mapBgImage.naturalWidth) * scale;
       const dispH = (this._bgMapNaturalH || _mapBgImage.naturalHeight) * scale;
-      const url = this._bgMapPath ? `img/${this._bgMapPath}` : _mapBgImage.src;
+      const url = this._bgMapPath ? assetUrl(this._bgMapPath) : _mapBgImage.src;
       stage.style.backgroundImage = `url("${url}")`;
       stage.style.backgroundSize = `${dispW}px ${dispH}px`;
       stage.style.backgroundRepeat = 'no-repeat';

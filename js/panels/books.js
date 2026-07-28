@@ -211,7 +211,7 @@ registerPanel('books', {
       // since the JSON ships it lowercase.
       const group = a.group ? a.group.charAt(0).toUpperCase() + a.group.slice(1) : '';
       const meta = [group, a.author, a.published].filter(Boolean).join(' · ');
-      const coverPath = a.cover && a.cover.path ? 'img/' + a.cover.path : '';
+      const coverPath = a.cover && a.cover.path ? assetUrl(a.cover.path) : '';
       const cover = coverPath
         ? `<img class="adv-card-img" src="${esc(coverPath)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'adv-card-nopic',textContent:'📚',style:'cssText:width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px'}))">`
         : `<div class="adv-card-nopic" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px">📚</div>`;
@@ -788,7 +788,7 @@ registerPanel('books', {
         return `<blockquote class="adv-quote">${renderChildren(node.entries)}${by}</blockquote>`;
       }
       case 'image': {
-        const path = node.href && node.href.path ? 'img/'+node.href.path : '';
+        const path = node.href && node.href.path ? assetUrl(node.href.path) : '';
         if (!path) return '';
         const cap = node.title || node.caption || '';
         const credit = node.credit ? `<span class="adv-img-credit">${this._inline(node.credit)}</span>` : '';
