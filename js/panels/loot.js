@@ -68,7 +68,9 @@ registerPanel('loot',{
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
       if (isHidden(d._source)) continue;
-      if (matches(d.name, d.meta)) all.push({name:d.name, meta:d.meta, _source:d._source, value:d._raw?.value || '', rarity:d._raw?.rarity || null, weight: d._raw?.weight ?? null});
+      // Facets hoisted onto the row by the data loader — avoids walking into
+      // _raw for every one of the ~5,800 item rows on each search pass.
+      if (matches(d.name, d.meta)) all.push({name:d.name, meta:d.meta, _source:d._source, value:d._value || '', rarity:d._rarity || null, weight: d._weight ?? null});
       // Items with bonus variants (+1, +2, +3) — include each variant as its
       // own selectable row so the user can drop "+2 Longsword" directly
       // into loot without having to retype the prefix.

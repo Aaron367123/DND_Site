@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# Auto-stamp cache-busting hashes whenever a commit touches JS or CSS.
+#
+# WHY: every JS/CSS URL in skt-workspace.html carries a content hash, and sw.js
+# holds a matching build id + precache list. If those aren't regenerated after
+# an edit, browsers keep serving the OLD file and the change silently doesn't
+# take effect. Relying on a human to remember is exactly how that bug happened.
+#
+# Installed to .git/hooks/pre-commit by tools/hooks/install.sh.
+# .git/hooks is not version-controlled, so re-run the installer after a fresh
+# clone (or on a second machine).
+#
+# Bypass for one commit if you ever need to:  git commit --no-verify
+
+# Only act when the staged changes actually include JS or CSS.
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -qE '^(js/.*\.js|styles/.*\.css)$'; then
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: node not found — SKIPPING cache-bust stamp." >&2
+  echo "            Run 'node tools/stamp-build.js' before deploying, or the" >&2
+  echo "            change won't reach browsers that cached the old build." >&2
+  exit 0
+fi
+
+# Warn (don't block) if the generated files already had unstaged edits — the
+# git add below would sweep those into this commit alongside the stamp.
+for f in skt-workspace.html sw.js; do
+  if ! git diff --quiet -- "$f" 2>/dev/null; then
+    echo "pre-commit: note — $f had unstaged changes; they're included in this commit." >&2
+  fi
+done
+
+node tools/stamp-build.js || {
+  echo "pre-commit: stamping FAILED — commit aborted." >&2
+  exit 1
+}
+
+# The stamper rewrites these two; stage them so the commit is self-consistent.
+git add skt-workspace.html sw.js
+echo "pre-commit: cache-bust hashes stamped and staged."
+exit 0

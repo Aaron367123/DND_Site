@@ -535,6 +535,36 @@ registerPanel('combat',{
     return '';
   },
 
+  // Surgical HP repaint for ONE combatant card — the counterpart to
+  // party._patchHp(). Returns true if handled, false to fall back to
+  // _render(). Structural changes (death saves appearing, dead/stable
+  // banners, alive↔downed styling, grouped cards) need the full path.
+  _patchHp(i){
+    const b = this._body; if (!b) return true;          // panel closed
+    const c = state.combatants[i]; if (!c) return false;
+    if (state.settings && state.settings.combatGroupSimilar) return false; // grouped rows differ
+    const card = b.querySelector('.combatant-card[data-idx="'+i+'"]');
+    if (!card) return false;
+    const wasDead = card.classList.contains('dead');
+    const isDead  = (c.hp||0) <= 0;
+    if (wasDead !== isDead) return false;               // toggles death-save UI / .dead styling
+    if (isDead) return false;                           // death-save pips are structural
+    const pct = this._hpPct(c);
+    const col = this._hpColor(pct);
+    const bar = card.querySelector('.card-hp-bar');
+    if (bar){
+      bar.style.setProperty('--hp-pct', pct + '%');
+      bar.style.setProperty('--hp-color', col);
+      bar.title = c.hp + '/' + (c.hpMax || c.hp) + ' HP';
+    }
+    const act = document.activeElement;
+    const hpInp = card.querySelector('input[data-cf="hp"][data-ci="'+i+'"]');
+    if (hpInp && hpInp !== act && String(c.hp) !== hpInp.value) hpInp.value = c.hp;
+    const acInp = card.querySelector('input[data-cf="ac"][data-ci="'+i+'"]');
+    if (acInp && acInp !== act && String(c.ac) !== acInp.value) acInp.value = c.ac;
+    return true;
+  },
+
   // HP bar math — returns 0-100 percent of current/max.
   _hpPct(c){
     const max = c.hpMax || c.hp || 1;
@@ -1442,23 +1472,38 @@ registerPanel('combat',{
             typeSuffix = ` (${dmgType})`;
           }
         } else {
-          // Monster path — preserve the original 5etools _raw lookup.
-          const raw = c._raw || (c.baseName && typeof _5eData !== 'undefined' && _5eLoaded
-            ? (_5eData.find(d => d.cat==='monster' && d.name.toLowerCase() === c.baseName.toLowerCase())?._raw)
-            : null);
-          if (raw){
-            if (has(raw.immune)){
-              remaining = 0;
-              typeSuffix = ` (${dmgType} — immune)`;
-            } else if (has(raw.resist)){
-              remaining = Math.ceil(remaining / 2);
-              typeSuffix = ` (${dmgType} — resisted, ½)`;
-            } else if (has(raw.vulnerable)){
-              remaining = remaining * 2;
-              typeSuffix = ` (${dmgType} — vulnerable, ×2)`;
-            } else {
-              typeSuffix = ` (${dmgType})`;
-            }
+          // Monster path. BUG FIX (2026-07-28): this used to read
+          // raw.immune / raw.resist / raw.vulnerable off `_raw`, but `_raw`
+          // is the CONVERTED monster object, whose fields are named
+          // damage_immunities / damage_resistances / damage_vulnerabilities.
+          // Those reads were always undefined, so monster resistance,
+          // immunity and vulnerability NEVER applied — every monster took
+          // full damage from everything. The loader now hoists the arrays
+          // onto the row as _immune/_resist/_vulnerable, which also removes
+          // the synchronous `_raw` dependency from this hot path.
+          let src = c;   // combatants carry their own facets once added below
+          if (c._immune === undefined && c._resist === undefined && c._vulnerable === undefined
+              && typeof _5eData !== 'undefined' && _5eLoaded){
+            // Combatants added before facets existed (or renamed by the DM)
+            // fall back to an index lookup. Try the raw name first, then with
+            // any trailing group number stripped — duplicates are named
+            // "Ogre 1" / "Ogre 2", which would otherwise never match "Ogre".
+            const cand = String(c.baseName || c.name || '').toLowerCase().trim();
+            const stripped = cand.replace(/\s+\d+$/, '');
+            const idx = _5eData.find(d => d.cat==='monster'
+              && (d._n === cand || d.name.toLowerCase() === cand
+                  || (stripped && d.name.toLowerCase() === stripped)));
+            if (idx) src = idx;
+          }
+          if (has(src._immune)){
+            remaining = 0;
+            typeSuffix = ` (${dmgType} — immune)`;
+          } else if (has(src._resist)){
+            remaining = Math.ceil(remaining / 2);
+            typeSuffix = ` (${dmgType} — resisted, ½)`;
+          } else if (has(src._vulnerable)){
+            remaining = remaining * 2;
+            typeSuffix = ` (${dmgType} — vulnerable, ×2)`;
           } else {
             typeSuffix = ` (${dmgType})`;
           }
@@ -1575,10 +1620,13 @@ registerPanel('combat',{
     }
     save();
     // Mirror HP changes to the party tracker for PCs. syncCombatToParty()
-    // itself triggers panelDefs.party._render() — don't re-render party
-    // afterwards (was a double-render that lagged every HP click).
+    // repaints the party card itself (surgically when it can) — don't
+    // re-render party afterwards.
     if (c.isPC && typeof syncCombatToParty === 'function') syncCombatToParty(c.id);
-    this._render();
+    // Surgical repaint of just this card when nothing structural changed.
+    // A full _render() here re-serialized every combatant on every hit.
+    const ci = state.combatants.indexOf(c);
+    if (ci < 0 || !this._patchHp(ci)) this._render();
   },
 
   _removeCond(i,cond){
@@ -1895,6 +1943,12 @@ registerPanel('combat',{
       initiative: initMod, // pre-fill with dex modifier; user can bump it before/during combat
       conditions: [],
       portrait,
+      // Damage resistance/immunity/vulnerability, copied from the index row so
+      // _applyHpDelta doesn't have to scan _5eData on every hit (and still
+      // works if the dataset isn't loaded in a later session).
+      ...(m._immune     ? {_immune:     m._immune}     : {}),
+      ...(m._resist     ? {_resist:     m._resist}     : {}),
+      ...(m._vulnerable ? {_vulnerable: m._vulnerable} : {}),
       ...legendaryFields,
     });
     if (!state.combatRound) state.combatRound = 1;

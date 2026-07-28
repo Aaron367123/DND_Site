@@ -362,6 +362,14 @@ function initSettings(){
     if (typeof window.runDemoScenario === 'function') window.runDemoScenario();
   });
 
+  // Rebuild the cached 5e index — escape hatch for a stale cache (e.g. data/
+  // files changed without bumping DATA_STAMP in data-loader.js).
+  document.getElementById('rebuild-index-btn')?.addEventListener('click', () => {
+    if (typeof window.SKT_REBUILD_INDEX !== 'function'){ showToast('Index cache unavailable'); return; }
+    showToast('Rebuilding data index — reloading…');
+    window.SKT_REBUILD_INDEX();
+  });
+
   document.getElementById('reset-data-btn').addEventListener('click',()=>{
     showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{
       if(r===null)return;

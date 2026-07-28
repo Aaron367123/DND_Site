@@ -98,6 +98,83 @@ function init(){
   initWorkspaceContextMenu();
   initZoomPan();
   if (typeof initOnboarding === 'function') initOnboarding();
+  initServiceWorker();
+}
+
+// ─── Service worker ──────────────────────────────────────────────────────────
+// Gives the app offline support (it's a table-side tool — basement wifi is a
+// real failure mode) and lets hashed assets be cached hard while the HTML
+// stays network-first, so a new build can never be masked by a stale cache.
+//
+// The update flow is deliberately NOT automatic: a new worker installs and
+// then WAITS, and we surface a prompt instead of swapping code underneath a
+// live session. That prompt doubles as the fix for version skew — a device
+// running old code writes old-shaped sync data, and until now nothing told
+// anyone they were behind.
+function initServiceWorker(){
+  if (!('serviceWorker' in navigator)) return;
+  // file:// has no SW support and the preview/dev flow doesn't need it.
+  if (location.protocol === 'file:') return;
+
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // Watch one worker to completion. The controller check distinguishes
+    // "update to an existing install" from "very first install" — only the
+    // former deserves a reload prompt.
+    const track = sw => {
+      if (!sw) return;
+      sw.addEventListener('statechange', () => {
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) promptUpdate(reg);
+      });
+    };
+    // Detecting "an update is ready" is racy: by the time register() resolves
+    // the new worker may not have been fetched yet, may be mid-install, or may
+    // already be waiting — and 'updatefound' can fire before we can attach a
+    // listener. Rather than rely on catching one specific moment, watch every
+    // entry point AND re-check a few times over the first few seconds. The
+    // prompt is idempotent (see promptUpdate), so overlapping paths are safe.
+    let prompted = false;
+    const checkWaiting = () => {
+      if (prompted) return;
+      if (reg.waiting && navigator.serviceWorker.controller){ prompted = true; promptUpdate(reg); }
+    };
+    checkWaiting();                                                   // already waiting
+    track(reg.installing);                                            // install in flight
+    reg.addEventListener('updatefound', () => track(reg.installing)); // install starts later
+    [1000, 3000, 8000].forEach(ms => setTimeout(checkWaiting, ms));   // backstop
+
+    // Long sessions: re-check for a new build when the tab regains focus, so
+    // a device left open overnight doesn't keep running (and syncing with)
+    // stale code.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(()=>{});
+    });
+  }).catch(err => console.warn('[SKT] service worker registration failed:', err));
+
+  // The new worker took over → reload once so the page runs the new code.
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
+}
+
+let _updatePrompted = false;
+function promptUpdate(reg){
+  if (_updatePrompted) return;   // several detection paths can reach here
+  _updatePrompted = true;
+  console.info('[SKT] a new build is available — prompting to reload.');
+  if (typeof showToast !== 'function'){ console.info('[SKT] update available — reload to apply.'); return; }
+  showToast('A new version is available.', {
+    action: {
+      label: 'Reload',
+      run: () => {
+        // Tell the waiting worker to take over; controllerchange reloads us.
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        else location.reload();
+      },
+    },
+  });
 }
 
 init();

@@ -649,6 +649,12 @@ function renderConditionFull(d) {
 // Adventure detail: cover image (if installed), level range, storyline, published
 // date, author, and a chapter-name list. Chapters are themselves searchable as
 // their own entries so users can pull up the full text.
+// UNREACHABLE as of 2026-07-28: the data loader no longer creates `adventure`
+// or `chapter` rows (it used to fetch ~45 MB of adventure files to build rows
+// that getSearchPool() then discarded unconditionally — see the note in
+// data-loader.js). Adventures are browsed via the Adventures/Books panels,
+// which fetch their own content. Kept only so that re-enabling adventure
+// indexing doesn't require rewriting this renderer.
 function renderAdventureFull(d) {
   const r = d._raw || {};
   const lvl = r.level && r.level.start
@@ -815,17 +821,68 @@ function searchForSpell(slug) {
   if (match) { state.searchState.detail = match; renderSearchResults(); }
 }
 
-function getSearchPool(){
-  const party = state.party.map(p=>({cat:'party',name:p.name,meta:(p.notes||'').split('\n')[0]||'Party member',partyData:p}));
+// Memoized search pool. Rebuilding this array meant walking all ~16k rows with
+// 1-2 .filter() passes and a fresh spread — and it was called up to 4× per
+// keystroke (doSearch, renderSearchTabs, and twice more inside the fuzzy
+// branch). Now it's built once and reused until something it depends on
+// actually changes.
+//
+// The signature deliberately covers ONLY the fields the pool derives from.
+// Party rows hold `partyData: p` (a live object reference), so HP ticks and
+// other stat edits stay visible without invalidating the cache — only a
+// rename / add / remove / notes-first-line change rebuilds it.
+let _poolCache = null;   // {sig, arr, visible, visibleVer, byCat}
+let _lastResults = [];   // last list produced by renderSearchResults, reused by keydown nav
+
+function _poolSig(){
+  const party = state.party.map(p => p.id + ':' + p.name + ':' + ((p.notes||'').split('\n')[0]||'')).join('|');
+  return (_5eLoaded ? 'L' : 'S')
+    + '|' + (state.settings?.reprintPolicy || 'all')
+    + '|' + party;
+}
+
+function _buildPool(){
+  const party = state.party.map(p=>{
+    const row = {cat:'party',name:p.name,meta:(p.notes||'').split('\n')[0]||'Party member',partyData:p};
+    // Party rows are built here rather than by the data loader, so they need
+    // their normalized search fields computed too (≤10 rows — trivial).
+    row._n = _normSearch(row.name);
+    row._h = row._n + ' ' + _normSearch(row.meta || '');
+    return row;
+  });
   // Use 5etools data once loaded, otherwise fall back to built-in SEARCH_DATA
   let base = _5eLoaded ? _5eData : SEARCH_DATA;
   const policy = state.settings?.reprintPolicy || 'all';
   if (policy === 'hide-legacy')   base = base.filter(r => !_isLegacyEntry(r));
   else if (policy === 'hide-reprints') base = base.filter(r => !_isReprintEntry(r));
   // Adventures + their chapters are no longer in search — they have their
-  // own dedicated panel (Adventures 📖) with a chapter-tree browser.
+  // own dedicated panel (Adventures 📖) with a chapter-tree browser. (The
+  // data loader no longer produces those rows at all; this filter remains as
+  // a cheap guard for the static SEARCH_DATA fallback.)
   base = base.filter(r => r.cat !== 'adventure' && r.cat !== 'chapter');
   return [...party, ...base];
+}
+
+function getSearchPool(){
+  const sig = _poolSig();
+  if (_poolCache && _poolCache.sig === sig) return _poolCache.arr;
+  _poolCache = { sig, arr: _buildPool(), visible: null, visibleVer: -1, byCat: null };
+  return _poolCache.arr;
+}
+
+// Pool with the hidden-sources filter applied. Kept SEPARATE from the base
+// pool on purpose: renderSearchTabs() counts against the unfiltered pool while
+// doSearch() returns filtered results, so tab counts can exceed the result
+// count when sources are hidden. That asymmetry predates this change — it is
+// preserved here rather than silently "fixed" during a performance pass.
+function _getVisiblePool(){
+  const arr = getSearchPool();
+  if (typeof window.SKT_IS_SOURCE_HIDDEN !== 'function') return arr;
+  const ver = window.SKT_SOURCE_FILTER_VERSION || 0;
+  if (_poolCache.visible && _poolCache.visibleVer === ver) return _poolCache.visible;
+  _poolCache.visible = arr.filter(r => !window.SKT_IS_SOURCE_HIDDEN('search', r._source));
+  _poolCache.visibleVer = ver;
+  return _poolCache.visible;
 }
 
 // Tab category can be 'all', a single cat string, or a comma-joined list
@@ -877,34 +934,28 @@ function _editDistance(a, b){
 function doSearch(){
   const qRaw=(state.searchState.query||'').trim().toLowerCase();
   const q=_normSearch(qRaw);
-  let pool=getSearchPool();
-  const sel=state.searchState.category;
-  if(sel!=='all')pool=pool.filter(r=>_catMatches(r.cat, sel));
   // Hidden-sources filter — books/adventures the user has × off are excluded
   // when the Search consumer scope is enabled (defaults on; the user can
   // turn it off in the Books panel's "Filter applies to" toggle row).
-  if (typeof window.SKT_IS_SOURCE_HIDDEN === 'function'){
-    pool = pool.filter(r => !window.SKT_IS_SOURCE_HIDDEN('search', r._source));
-  }
+  // Both this and the base pool are memoized; see _getVisiblePool().
+  let pool=_getVisiblePool();
+  const sel=state.searchState.category;
+  if(sel!=='all')pool=pool.filter(r=>_catMatches(r.cat, sel));
   if(q){
     // Multi-token: every whitespace-separated token must appear somewhere in
     // the normalized name or meta. So "frost gnt" still finds "Frost Giant".
+    // `_h` is the precomputed haystack (name + meta + item variant names)
+    // built once by the data loader — no per-row regex work here.
     const tokens = q.split(' ').filter(Boolean);
+    const nTok = tokens.length;
     pool = pool.filter(r => {
-      let hay = _normSearch(r.name) + ' ' + _normSearch(r.meta||'');
-      // Items group their +1/+2/+3 enchantments under the base entry as
-      // _variants. Include those variant names in the searchable haystack so
-      // "+1 longsword" still finds the Longsword row (the user can then tab
-      // to the +1 view inside the detail).
-      if (r._variants && r._variants.length){
-        hay += ' ' + r._variants.map(v => _normSearch(v.name||'')).join(' ');
-      }
-      return tokens.every(t => hay.includes(t));
+      const hay = r._h || (r._n = _normSearch(r.name), r._h = r._n + ' ' + _normSearch(r.meta||''));
+      for (let i = 0; i < nTok; i++) if (hay.indexOf(tokens[i]) === -1) return false;
+      return true;
     });
     pool.sort((a,b) => {
-      const an = _normSearch(a.name), bn = _normSearch(b.name);
-      const aStarts = an.startsWith(q) ? 0 : 1;
-      const bStarts = bn.startsWith(q) ? 0 : 1;
+      const aStarts = (a._n || '').startsWith(q) ? 0 : 1;
+      const bStarts = (b._n || '').startsWith(q) ? 0 : 1;
       return aStarts - bStarts || a.name.localeCompare(b.name);
     });
     // Fuzzy fallback — only kicks in for single-token queries of 3+ chars
@@ -915,14 +966,18 @@ function doSearch(){
     if (tokens.length === 1 && q.length >= 3 && pool.length < 5){
       const maxDist = q.length <= 3 ? 1 : 2;
       const seen = new Set(pool.map(r => r.name + '|' + (r._source||'')));
+      // NOTE: intentionally the BASE pool (not _getVisiblePool) — fuzzy
+      // fallback has always searched without the hidden-sources filter.
+      // Preserved as-is; changing it is a behavior decision, not a perf one.
+      const basePool = getSearchPool();
       const fullPool = (sel === 'all')
-        ? getSearchPool()
-        : getSearchPool().filter(r => _catMatches(r.cat, sel));
+        ? basePool
+        : basePool.filter(r => _catMatches(r.cat, sel));
       const candidates = [];
       for (const r of fullPool){
         const key = r.name + '|' + (r._source||'');
         if (seen.has(key)) continue;
-        const name = _normSearch(r.name);
+        const name = r._n || _normSearch(r.name);
         if (!name) continue;
         // Cheap early-out on overall length difference.
         if (Math.abs(name.length - q.length) > maxDist + 4) continue;
@@ -959,10 +1014,25 @@ function renderSearchTabs(){
     'cult,boon':'Cults & Boons',object:'Objects','trap,hazard':'Traps & Hazards'};
   const sel=state.searchState.category;
   let activeIsSecondary=false;
+  // Count every category in ONE pass and memoize onto the pool cache. This
+  // used to run pool.filter() once per tab — 21 tabs × 16k rows ≈ 340k
+  // iterations plus 21 throwaway arrays on every single render.
+  if (_poolCache && !_poolCache.byCat){
+    const c = Object.create(null);
+    for (let i = 0; i < pool.length; i++){ const k = pool[i].cat; c[k] = (c[k]||0) + 1; }
+    _poolCache.byCat = c;
+  }
+  const byCat = (_poolCache && _poolCache.byCat) || Object.create(null);
+  // Tab labels can be comma-joined multi-category (e.g. 'trap,hazard').
+  const countFor = cat => cat === 'all'
+    ? pool.length
+    : (cat.indexOf(',') >= 0
+        ? cat.split(',').reduce((a,k) => a + (byCat[k]||0), 0)
+        : (byCat[cat]||0));
   document.querySelectorAll('#search-tabs .search-tab').forEach(tab=>{
     if(tab.classList.contains('more-toggle'))return; // handled separately below
     const cat=tab.dataset.cats||tab.dataset.cat;
-    const count=cat==='all'?pool.length:pool.filter(r=>_catMatches(r.cat, cat)).length;
+    const count=countFor(cat);
     tab.innerHTML=`${labels[cat]||cat} <span class="count">${count}</span>`;
     const isActive=sel===cat;
     tab.classList.toggle('active',isActive);
@@ -1011,6 +1081,7 @@ function renderSearchResults(){
   const container=document.getElementById('search-results');
   if(state.searchState.detail){renderSearchDetail();return;}
   const results=doSearch();
+  _lastResults = results;   // reused by the keydown nav handler — see below
   const q=(state.searchState.query||'').trim();
 
   if(!results.length && !q){
@@ -1277,10 +1348,27 @@ function initSearch(){
     if (_searchInputTimer) clearTimeout(_searchInputTimer);
     _searchInputTimer = setTimeout(() => { _searchInputTimer = null; renderSearchResults(); }, 80);
   });
+  // Nav keys only. This used to run a full doSearch() on EVERY keydown —
+  // including plain characters — which completely defeated the 80ms input
+  // debounce above and made each keystroke cost two full scans of the pool.
+  // Navigation reuses the result list from the last render instead.
+  const _NAV_KEYS = new Set(['Escape','ArrowDown','ArrowUp','Enter']);
   inp.addEventListener('keydown',e=>{
-    const list=doSearch();
-    if(e.key==='Escape'){if(state.searchState.detail){state.searchState.detail=null;renderSearchResults();}else{inp.blur();closeSearch();}}
-    else if(e.key==='ArrowDown'){e.preventDefault();state.searchState.focused=Math.min(state.searchState.focused+1,list.length-1);renderSearchResults();document.querySelector('.search-result.focused')?.scrollIntoView({block:'nearest'});}
+    if(!_NAV_KEYS.has(e.key)) return;   // typing: let the debounced input handler do the work
+    if(e.key==='Escape'){
+      if(state.searchState.detail){state.searchState.detail=null;renderSearchResults();}
+      else{inp.blur();closeSearch();}
+      return;
+    }
+    // Flush a pending debounce first — otherwise Enter/Arrow pressed within
+    // 80ms of the last character would act on the PREVIOUS query's results.
+    if(_searchInputTimer){
+      clearTimeout(_searchInputTimer); _searchInputTimer = null;
+      renderSearchResults();
+    }
+    const list=_lastResults;
+    if(!list.length) return;
+    if(e.key==='ArrowDown'){e.preventDefault();state.searchState.focused=Math.min(state.searchState.focused+1,list.length-1);renderSearchResults();document.querySelector('.search-result.focused')?.scrollIntoView({block:'nearest'});}
     else if(e.key==='ArrowUp'){e.preventDefault();state.searchState.focused=Math.max(state.searchState.focused-1,0);renderSearchResults();document.querySelector('.search-result.focused')?.scrollIntoView({block:'nearest'});}
     else if(e.key==='Enter'){const r=state.searchState.focused>=0?list[state.searchState.focused]:list[0];if(r){state.searchState.detail=r;_searchSaveRecent(state.searchState.query);renderSearchResults();}}
   });

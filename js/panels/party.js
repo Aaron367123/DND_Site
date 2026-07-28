@@ -1264,11 +1264,13 @@ registerPanel('party',{
       }
     }
     save();
-    // Mirror to the matching combat slot. syncPartyToCombat() itself calls
-    // panelDefs.combat._render() so we don't need to re-render combat
-    // separately — that was the double-render that made HP ticks feel laggy.
+    // Mirror to the matching combat slot. syncPartyToCombat() repaints the
+    // combat card itself (surgically where possible), so don't re-render
+    // combat separately — that was the double-render that made HP ticks lag.
     syncPartyToCombat(i);
-    this._render();
+    // Surgical repaint of just this card when nothing structural changed;
+    // a full party _render() re-serializes every character sheet.
+    if (!this._patchHp(i)) this._render();
   },
 
   // Long rest applied to the whole party. 5e RAW:
@@ -2152,6 +2154,43 @@ registerPanel('party',{
     </div>`;
   },
 
+  // Surgical HP repaint for ONE character card. Returns true if it fully
+  // handled the update, false when the caller must fall back to _render().
+  //
+  // A full party _render() re-serializes every character sheet (~230 lines of
+  // template per member) — far too expensive for an HP tick, especially since
+  // the party↔combat mirror means one click used to rebuild BOTH panels.
+  // Structural transitions (alive↔downed, tempHp 0↔>0) change the card's
+  // markup, not just its numbers, so those still need the full path.
+  _patchHp(i){
+    const b = this._body; if (!b) return true;   // panel closed → nothing to paint
+    const p = state.party[i]; if (!p) return false;
+    const card = b.querySelector('[data-cidx="'+i+'"]');
+    if (!card) return false;
+    const wasDowned = card.classList.contains('downed');
+    const isDowned  = (p.hp != null) && p.hp <= 0;
+    const hadTemp   = !!card.querySelector('.hp-bar-temp');
+    const hasTemp   = (p.tempHp||0) > 0;
+    if (wasDowned !== isDowned || hadTemp !== hasTemp) return false;
+    const hp = this._hpBarStyle(p);
+    const wrap = card.querySelector('.hp-bar-wrap');
+    const bar  = card.querySelector('.hp-bar-fill');
+    const big  = card.querySelector('.char-hp-big-num');
+    if (wrap) wrap.classList.toggle('hp-surplus', hp.surplus);
+    if (bar){ bar.style.width = hp.pct+'%'; bar.style.background = hp.color; }
+    if (big){ big.style.color = hp.color; }
+    // Keep the numeric fields in step — the change may have originated in the
+    // combat panel, so this card's inputs still show the pre-mirror values.
+    // Skip whichever field is focused so we never fight the user's cursor.
+    const act = document.activeElement;
+    ['hp','hpMax','tempHp'].forEach(f => {
+      const inp = card.querySelector('input[data-field="'+f+'"][data-idx="'+i+'"]');
+      if (inp && inp !== act && String(p[f] ?? '') !== inp.value) inp.value = p[f] ?? '';
+    });
+    if (big && big.textContent !== String(p.hp)) big.textContent = p.hp;
+    return true;
+  },
+
   _wire(){
     const b=this._body;if(!b)return;
     // Drag a party card → drop on Combat Tracker to add to combat. Suppress
@@ -2250,24 +2289,7 @@ registerPanel('party',{
         // fall back to a full _render(). Within-range edits (HP stays >0,
         // tempHp stays 0 or stays >0) keep the fast inline update.
         if(f==='hp'||f==='hpMax'||f==='tempHp'){
-          const p=state.party[i];
-          const card=b.querySelector('[data-cidx="'+i+'"]');
-          if(!card){ return; }
-          const wasDowned = card.classList.contains('downed');
-          const isDowned  = (p.hp != null) && p.hp <= 0;
-          const hadTemp   = !!card.querySelector('.hp-bar-temp');
-          const hasTemp   = (p.tempHp||0) > 0;
-          if (wasDowned !== isDowned || hadTemp !== hasTemp){
-            this._render();
-            return;
-          }
-          const hp=this._hpBarStyle(p);
-          const wrap=card.querySelector('.hp-bar-wrap');
-          const bar=card.querySelector('.hp-bar-fill');
-          const big=card.querySelector('.char-hp-big-num');
-          if(wrap) wrap.classList.toggle('hp-surplus', hp.surplus);
-          if(bar){bar.style.width=hp.pct+'%';bar.style.background=hp.color;}
-          if(big){big.style.color=hp.color;}
+          if (!this._patchHp(i)) this._render();
         }
       });
       inp.addEventListener('click',e=>e.stopPropagation());

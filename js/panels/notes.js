@@ -272,7 +272,8 @@ registerPanel('notes', {
     const me = _getMe();
     if (!this._data.authors) this._data.authors = {};
     this._data.authors[me.id] = {name:me.name, color:me.color};
-    try { localStorage.setItem('skt-notes-v2', JSON.stringify(this._data)); } catch(e){}
+    try { localStorage.setItem('skt-notes-v2', JSON.stringify(this._data)); }
+    catch(e){ if (typeof warnStorageFailure === 'function') warnStorageFailure('session notes', e); }
   },
 
   _touchSelf(){

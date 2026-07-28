@@ -36,6 +36,9 @@ window.SKT_HIDDEN_SOURCES_REBUILD = function(){
   add('skt-books-hidden-v1');
   add('skt-adventures-hidden-v1');
   window.SKT_HIDDEN_SOURCES = out;
+  // Version counter so search.js can memoize its filtered pool and know when
+  // to invalidate — bumped here so every caller of REBUILD is covered.
+  window.SKT_SOURCE_FILTER_VERSION = (window.SKT_SOURCE_FILTER_VERSION || 0) + 1;
 };
 window.SKT_HIDDEN_SOURCES_REBUILD();
 

@@ -396,4 +396,54 @@ The last step of the sync plan. Every client now signs into Firebase anonymously
 
 ---
 
+## Performance overhaul (2026-07-28)
+
+Profiled with three parallel reviewers plus a Node reproduction of the data loader. Measured before → after, all verified in the browser.
+
+| Metric | Before | After |
+|---|---|---|
+| Files fetched per load | 369 | **0** (warm cache) / 211 (cold) |
+| Bytes fetched + parsed | 74 MB | **0** (warm) / 24 MB (cold) |
+| Index build time | ~3,000 ms | 1,171 ms cold · **228 ms warm** |
+| Index size in memory | ~80 MB | **30 MB** |
+| doSearch() | 15.1 ms | **1.69 ms** |
+| renderSearchTabs() | 16.5 ms | **0.18 ms** |
+| doSearch calls per 6 chars typed | 6+ | **1** |
+| Full panel rebuilds per HP click | 2 | **0** |
+| Canvas redraws per 50 mousemoves | 50 | **1** |
+
+- [x] **Adventures no longer indexed** — 98 files / 45 MB were fetched and parsed on every load to build 833 rows that `getSearchPool()` discarded unconditionally and no panel ever read (Adventures/Books fetch their own content). Removed from `data-loader.js`; row count 17,079 → 16,246 with per-category counts otherwise unchanged.
+- [x] **`defer` on all 34 scripts** — 1.29 MB of JS no longer blocks first paint (no inline scripts, so execution order is preserved).
+- [x] **IndexedDB index cache** (`skt-5edata`) keyed by `DATA_STAMP#INDEX_SCHEMA`. Warm loads hydrate in one read: **0 data fetches**. Write is deferred to idle and `meta` is written last, so a half-written cache is never a hit; cache reads race a 3 s timeout so a hung/blocked IDB can never be worse than today. Verified: stale stamp → clean rebuild; Settings → **"Rebuild data index"** is the manual escape hatch.
+  - **Bump `DATA_STAMP` in `js/data-loader.js` whenever anything under `data/` changes** — same discipline as the `?v=` query strings.
+- [x] **Search index** — `_n`/`_h` normalized fields precomputed at build (was ~68k regex executions per keystroke); pool memoized on a signature that deliberately ignores live party stat edits; tab counts in one pass instead of 21 filters; `keydown` no longer runs a full search on every character (it bypassed the 80 ms debounce entirely) and flushes a pending debounce before Enter/Arrow so they never act on a stale list.
+- [x] **Monster resist/immune/vulnerable FIXED** — `combat.js` read `raw.immune`/`resist`/`vulnerable`, but `_raw` is the *converted* object whose fields are `damage_*`. Those reads were always `undefined`, so **monsters have always taken full damage from everything**. Facets are now hoisted onto index rows (`_immune`/`_resist`/`_vulnerable`, plus `_cr`/`_type`/item+class facets) and copied onto combatants when added; numbered duplicates ("Ogre 2") resolve via name-stripping. Verified: Skeleton takes 4 bludgeoning → 8, 10 poison → 0, 3 fire → 3. **Encounters will hit harder than the party is used to.**
+- [x] **Surgical HP updates** — a single HP click used to rebuild BOTH the party and combat panels (re-serializing every character sheet). `_patchHp(i)` on each panel patches just that card and the mirror routes through it; structural transitions (downed/dead/temp-HP/grouped) still fall back to a full render.
+- [x] **rAF-batched canvas** — fog paint and cell-hover fired a synchronous full redraw per mousemove; now coalesced to one per frame, and the fog canvas only reallocates its backing store when dimensions actually change. Pending frames are cancelled on unmount.
+- [x] **Quota failures surfaced** — `warnStorageFailure()` (throttled 1/min per subsystem) on party/combat, notes, and battle map saves. These were bare `catch{}`, so a full quota silently discarded writes while the session looked healthy.
+
+**Deliberately NOT done, with reasons:**
+- *Portraits → IndexedDB blobs:* would make character icons **device-local**, breaking the cross-device sync players rely on. The base64 icons are 96px/~5–11 KB each — not the real quota risk. Notes with pasted images are; those are now covered by the quota toast.
+- *Map picker thumbnails:* the picker renders full-resolution art (largest are 16 MB, ~280 MB decoded). Real fix needs generated thumbnails, i.e. a build step, which is out of scope for this no-build project. Added `decoding="async"` so decodes don't block the main thread. **Still the largest open memory item.**
+- *`width` → `transform` CSS transitions:* animate briefly on HP change rather than continuously; converting means touching every bar-write site for negligible gain.
+- *Stripping `_raw` from cached rows* (would take 30 MB → ~7 MB): needs migrating shop.js's filter helpers off many raw fields. Deferred as high-risk/low-reward versus keeping `_raw` cached.
+- *`notesSync.stopPolling()` on unmount* and *`SEARCH_DATA` removal:* both were reviewer claims that **did not survive verification** — the stop call already exists, and `SEARCH_DATA` is the only source for the condition context menus.
+
+---
+
+## Service worker + automated cache-busting (2026-07-28)
+
+- [x] **`tools/stamp-build.js`** — hashes every JS/CSS file and writes the hash into its `?v=` in the HTML, then stamps `sw.js` with a build id + precache list. Replaces manual `?v=` date bumps, which failed silently (it happened during this session's work: a fix didn't take because the browser served a cached `utils.js`). `--check` mode exits 1 when stamping is needed, for a pre-commit/CI gate. Verified idempotent, and correctly detects an edited file.
+- [x] **`sw.js`** — offline support + correct caching. HTML network-first (fresh asset hashes always win online), hashed JS/CSS cache-first (safe: changed file = changed URL), `data/*.json` stale-while-revalidate, `img/` cache-on-use capped at 120 entries, **cross-origin never intercepted** so Firebase sync is untouched. Versioned shell bucket, all other `skt-*` buckets purged on activate.
+- [x] **Removed the `no-cache, no-store, must-revalidate` meta tags** — they forced a full re-download of 1.3 MB of JS on every load as a stale-code defence. That job now belongs to content hashes + network-first HTML, without the bandwidth cost.
+- [x] **Update prompt** — a new build installs and *waits*; the page shows "A new version is available — Reload" instead of swapping code under a live session. Doubles as the **version-skew warning** that repeated deploy hazards in this file called for. Also re-checks for updates on tab focus.
+
+**Verified in the browser:** with the dev server fully stopped, a reload booted the complete app — shell rendered, real campaign loaded (party + 7 combatants), all 16,246 index rows hydrated — and search, panel opening, and damage application all worked offline. Firebase stayed "Live" throughout, confirming cross-origin passthrough. A simulated deploy produced the toast; clicking Reload activated the new worker, reloaded into the new build, and collapsed three stale shell buckets to one.
+
+**Gotcha found and fixed during verification:** update detection is genuinely racy — `updatefound` can fire before `register()` resolves, so a single listener misses it. The registration now watches all three entry points (already-waiting, install-in-flight, install-starts-later) plus timed backstops, with an idempotency guard so overlapping paths can't double-prompt.
+
+**Deploy note:** run `node tools/stamp-build.js` before committing. The first deploy after this change is the last one that needs everyone to hard-reload manually; from then on the update prompt handles it.
+
+---
+
 *Generated by codebase audit workflow. Findings have already been adversarially verified — false positives were stripped before this list was written. When fixing an item, mark its checkbox and (optionally) annotate with the date and commit hash so future audits can skip it.*

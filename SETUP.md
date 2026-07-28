@@ -1,5 +1,38 @@
 # SKT Campaign Workspace — Setup Guide
 
+## Cache-busting is automatic (nothing to remember)
+
+A git pre-commit hook runs `tools/stamp-build.js` for you whenever a commit touches JS or CSS. It hashes every JS/CSS file, writes that hash into its `?v=` in `skt-workspace.html`, stamps `sw.js` with a matching build id + precache list, and stages those two files with your commit. Commits that don't touch JS/CSS are left alone.
+
+**This replaces hand-bumping `?v=` dates** — forgetting that was silent, and meant browsers kept running old code while you wondered why a fix "didn't work."
+
+**After a fresh clone, or on a second machine, install the hook once:**
+
+```bash
+sh tools/hooks/install.sh
+```
+
+(`.git/hooks` isn't version-controlled, so the hook lives in `tools/hooks/` and is copied into place by that script.)
+
+You never need to run the stamper by hand, but these still work if you want them:
+
+```bash
+node tools/stamp-build.js          # stamp now
+node tools/stamp-build.js --check  # exit 1 if stamping is needed (CI gate)
+```
+
+If node is missing on a machine, the hook warns and lets the commit through rather than blocking you. `git commit --no-verify` bypasses it for one commit.
+
+## Offline support
+
+`sw.js` is a service worker that precaches the app shell, so the workspace **boots and runs with no network** — your campaign comes from localStorage and the 5e index from IndexedDB. Firebase reconnects on its own when you're back online.
+
+When you deploy a new build, open tabs show a **"A new version is available — Reload"** toast rather than swapping code mid-session. That prompt is also the fix for version skew: a device running old code writes old-shaped sync data, and nothing used to tell anyone they were behind.
+
+Caching rules, if you need to reason about them: HTML is network-first (so fresh asset hashes always win when online), hashed JS/CSS are cache-first (safe — a changed file is a different URL), `data/*.json` is stale-while-revalidate (edits self-heal on the next load), `img/` is cached on use and capped at 120 entries, and **anything cross-origin — Firebase, gstatic — is never intercepted**.
+
+To wipe caches during development: DevTools → Application → Service Workers → Unregister, or tick "Update on reload".
+
 ## Locking Down the Database (auth + rules) — RECOMMENDED
 
 Out of the box the database runs in "test mode": anyone who finds the URL can read or wipe the whole campaign. The app now signs every client in anonymously, which lets you lock the database to app users only. Two console steps, ~2 minutes:

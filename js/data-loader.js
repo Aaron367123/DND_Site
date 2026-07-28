@@ -657,10 +657,144 @@ function on5eLoaded(cb) {
   else _5eCallbacks.push(cb);
 }
 
+// Normalizer for the precomputed search fields (_n/_h). Must stay byte-for-byte
+// identical to _normSearch() in search.js — the query is normalized there and
+// compared against fields built here.
+function _normSearchIdx(s) {
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
+
+// ─── Index cache (IndexedDB) ────────────────────────────────────────────────
+// Building the index means fetching ~211 files (~24 MB) and parsing them on
+// the main thread — multiple seconds, repeated on EVERY page load. The result
+// is deterministic for a given data/ tree, so it's cached here and rehydrated
+// in one read on subsequent loads.
+//
+// Bump DATA_STAMP whenever anything under data/ changes (same discipline as
+// the ?v= query strings in skt-workspace.html). INDEX_SCHEMA is separate
+// because it invalidates for a different reason: the row shape / facet set
+// changing. Either one differing from the stored value forces a rebuild.
+// Escape hatch for a forgotten bump: Settings → "Rebuild data index".
+const DATA_STAMP   = '20260728a';
+const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
+const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
+const _IDB_NAME    = 'skt-5edata';
+const _IDB_STORE   = 'index';
+
+function _idbOpen(){
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = indexedDB.open(_IDB_NAME, 1); }
+    catch(e){ reject(e); return; }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(_IDB_STORE)) db.createObjectStore(_IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+    req.onblocked = () => reject(new Error('idb blocked'));
+  });
+}
+function _idbGet(db, key){
+  return new Promise((resolve, reject) => {
+    const r = db.transaction(_IDB_STORE, 'readonly').objectStore(_IDB_STORE).get(key);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror   = () => reject(r.error);
+  });
+}
+// Never let a hung IndexedDB (blocked upgrade, locked-down profile, private
+// window) make startup WORSE than it is today — race every cache read and
+// fall through to the normal build if it doesn't answer promptly.
+function _withTimeout(p, ms){
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('idb timeout')), ms))]);
+}
+
+async function _cacheHydrate(){
+  const db = await _idbOpen();
+  try {
+    const meta = await _idbGet(db, 'meta');
+    if (!meta || meta.key !== CACHE_KEY) return null;          // stale or absent
+    const rows = await _idbGet(db, 'rows');
+    if (!Array.isArray(rows) || !rows.length) return null;     // treat empty as a miss
+    const reprintTo = await _idbGet(db, 'reprintTo');
+    return { rows, reprintTo: Array.isArray(reprintTo) ? reprintTo : [] };
+  } finally { try { db.close(); } catch(e){} }
+}
+
+// Persist AFTER the app is interactive — callbacks have already fired by the
+// time this runs, so the write never delays first paint. `meta` is written
+// LAST so a half-written cache is never mistaken for a complete one.
+function _schedulePersist(rows, reprintTo){
+  const run = async () => {
+    try {
+      const db = await _idbOpen();
+      try {
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(_IDB_STORE, 'readwrite');
+          const os = tx.objectStore(_IDB_STORE);
+          os.put(rows, 'rows');
+          os.put(reprintTo, 'reprintTo');
+          os.put({ key: CACHE_KEY, builtAt: Date.now(), rowCount: rows.length }, 'meta');
+          tx.oncomplete = resolve;
+          tx.onerror    = () => reject(tx.error);
+          tx.onabort    = () => reject(tx.error || new Error('idb abort'));
+        });
+        console.info('[SKT] index cached (' + rows.length + ' rows · stamp ' + CACHE_KEY + ')');
+      } finally { try { db.close(); } catch(e){} }
+    } catch(e){
+      // Quota exceeded / IDB unavailable — app runs uncached, exactly as before.
+      console.warn('[SKT] index cache write skipped:', e && e.message || e);
+    }
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(() => run(), { timeout: 5000 });
+  else setTimeout(run, 0);
+}
+
+// Delete the cache and reload — wired to the Settings "Rebuild data index"
+// button as the escape hatch when DATA_STAMP wasn't bumped after a data edit.
+window.SKT_REBUILD_INDEX = async function(){
+  try {
+    const db = await _idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_IDB_STORE, 'readwrite');
+      tx.objectStore(_IDB_STORE).clear();
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch(e){ console.warn('[SKT] index cache clear failed', e); }
+  location.reload();
+};
+
+function _finishLoad(rows, reprintToArr, via, t0){
+  _5eData      = rows;
+  _5eReprintTo = new Set(reprintToArr || []);
+  _5eLoaded    = true;
+  _5eLoading   = false;
+  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  console.info(`[SKT] index ready (${via}) ${rows.length} rows · stamp ${CACHE_KEY} · ${Math.round(t1 - t0)}ms`);
+  _5eCallbacks.forEach(cb => cb(_5eData));
+  _5eCallbacks = [];
+}
+
 // ─── Main loader ────────────────────────────────────────────────────────────────
 async function load5eData() {
   if (_5eLoading || _5eLoaded) return;
   _5eLoading = true;
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  try {
+    const hit = await _withTimeout(_cacheHydrate(), 3000);
+    if (hit){ _finishLoad(hit.rows, hit.reprintTo, 'cache', t0); return; }
+  } catch(e){
+    console.warn('[SKT] index cache read failed; rebuilding from files —', e && e.message || e);
+  }
+  _5eLoading = false;   // handed off to the builder
+  return _buildIndexFromFiles();
+}
+
+async function _buildIndexFromFiles() {
+  if (_5eLoading || _5eLoaded) return;
+  _5eLoading = true;
+  const _t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
   const seen = new Set(); // deduplicate by name+cat
   const results = [];
@@ -943,14 +1077,14 @@ async function load5eData() {
   };
 
   // Step 1: fetch index files to discover all available source files dynamically.
-  // adventures.json is the master list of published adventures; we use the `id`
-  // of each entry to construct the per-adventure content file path.
-  const [bestiaryIdx, spellIdx, classIdx, bestiaryFluffIdx, advIndex] = await Promise.all([
+  // NOTE: adventures are deliberately NOT indexed here — see the comment at the
+  // former adventure block below. The Adventures/Books panels fetch their own
+  // content on demand.
+  const [bestiaryIdx, spellIdx, classIdx, bestiaryFluffIdx] = await Promise.all([
     fetchFile('data/bestiary/index.json'),
     fetchFile('data/spells/index.json'),
     fetchFile('data/class/index.json'),
     fetchFile('data/bestiary/fluff-index.json'),
-    fetchFile('data/adventures.json'),
   ]);
 
   const _skipKeys = new Set(['fluff-index.json', 'index.json', 'sources.json', 'foundry.json']);
@@ -973,12 +1107,6 @@ async function load5eData() {
   const bestiaryFluffFiles = bestiaryFluffIdx
     ? Object.values(bestiaryFluffIdx).map(f => `data/bestiary/${f}`)
     : [];
-  // Each published adventure has its full chapter content in a separate file
-  // named adventure-{id-lowercase}.json under data/adventure/.
-  const adventureFiles = advIndex && Array.isArray(advIndex.adventure)
-    ? advIndex.adventure.map(a => 'data/adventure/adventure-' + (a.id||'').toLowerCase() + '.json')
-    : [];
-
   // Long tail of single-file reference categories
   const _refSpecs = [
     {path:'data/backgrounds.json',         arr:'background',   cat:'background'},
@@ -1031,7 +1159,7 @@ async function load5eData() {
   const _fluffUniquePaths = [...new Set(_FLUFF_SPECS.map(s => s.path))];
 
   // Step 2: fetch all data files in parallel
-  const [bestiaries, spellbooks, classBooks, classFluffBooks, conditionFiles, itemFile, baseItemFile, magicVariantFile, featFile, refFiles, bestiaryFluffs, adventureBooks, fluffFiles] = await Promise.all([
+  const [bestiaries, spellbooks, classBooks, classFluffBooks, conditionFiles, itemFile, baseItemFile, magicVariantFile, featFile, refFiles, bestiaryFluffs, fluffFiles] = await Promise.all([
     Promise.all(bestiaryFiles.map(fetchFile)),
     Promise.all(spellFiles.map(fetchFile)),
     Promise.all(classFiles.map(fetchFile)),
@@ -1043,7 +1171,6 @@ async function load5eData() {
     fetchFile('data/feats.json'),
     Promise.all(_refUniquePaths.map(fetchFile)),
     Promise.all(bestiaryFluffFiles.map(fetchFile)),
-    Promise.all(adventureFiles.map(fetchFile)),
     Promise.all(_fluffUniquePaths.map(fetchFile)),
   ]);
   const _refByPath = {};
@@ -1386,41 +1513,78 @@ async function load5eData() {
     });
   });
 
-  // Adventures: master metadata entries + their top-level chapters as separate
-  // searchable entries. Sub-sections within chapters are intentionally not
-  // indexed — that would add tens of thousands of entries.
-  if (advIndex && Array.isArray(advIndex.adventure)) {
-    advIndex.adventure.forEach((adv, i) => {
-      if (!adv || !adv.name) return;
-      const file = adventureBooks[i];
-      const chapters = file && Array.isArray(file.data)
-        ? file.data.filter(ch => ch && ch.name).map(ch => ch.name)
-        : [];
-      const lvl = adv.level && adv.level.start
-        ? `L${adv.level.start}${adv.level.end!=null?'–'+adv.level.end:''}`
-        : '';
-      const meta = ['Adventure', lvl, adv.storyline, adv.published].filter(Boolean).join(' · ');
+  // ── Adventures are deliberately NOT indexed ──────────────────────────────
+  // This used to fetch all ~98 per-adventure files (≈45 MB) and flatten their
+  // top-level chapters into ~833 search rows. That work was pure waste:
+  //   • search.js drops every `adventure`/`chapter` row unconditionally (it
+  //     filters them out right after building the pool — adventures have their
+  //     own dedicated panel with a chapter tree);
+  //   • adventures.js and books.js never read this index — each fetches the
+  //     single adventure file it needs on demand and caches it itself.
+  // So 45 MB was downloaded, parsed, and pinned in memory on EVERY page load
+  // to build rows nothing ever read. Removing it takes the startup load from
+  // ~369 files / 74 MB down to ~288 files / 30 MB.
+  // If adventure chapters should become searchable again, index only
+  // {name, _advId, _chIdx} (~0.1 MB) and deep-link into the Adventures panel —
+  // do not re-attach the full chapter trees.
 
-      const advKey = 'adventure:' + adv.name.toLowerCase() + '|' + (adv.source||'').toLowerCase();
-      if (!seen.has(advKey)) {
-        seen.add(advKey);
-        results.push({
-          cat:'adventure', name:adv.name, _slug:_toIndex(adv.name), _fromLocal:true,
-          meta, _source:adv.source,
-          desc:'',
-          _raw:{...adv, _chapters:chapters},
-        });
-      }
+  // Precompute normalized search fields ONCE, here at build time, instead of
+  // re-deriving them for all 16k rows on every keystroke:
+  //   _n = normalized name       (prefix match + sort key)
+  //   _h = normalized haystack   (name + meta + item variant names)
+  // doSearch() used to call _normSearch() on r.name AND r.meta per row per
+  // query — two regex replaces × 16k rows × (2 doSearch calls/keystroke) —
+  // and normalized names again inside the sort comparator. These fields also
+  // ride along into the IndexedDB cache, so the cost is paid once per build.
+  // The same pass also HOISTS FACETS off `_raw` onto the row. Bulk consumers
+  // (shop filters over all 5,792 items, party beast lists, encounter CR math,
+  // loot rolls) reach into `_raw` today, which forces the entire parsed source
+  // graph to stay resident. Reading a handful of scalars from the row instead
+  // lets `_raw` be dropped from the cached index and fetched lazily per entry.
+  // Costs ~0.3 MB on a 7 MB index.
+  for (let i = 0; i < results.length; i++){
+    const r = results[i];
+    r._n = _normSearchIdx(r.name);
+    let h = r._n + ' ' + _normSearchIdx(r.meta || '');
+    if (r._variants && r._variants.length){
+      for (let j = 0; j < r._variants.length; j++) h += ' ' + _normSearchIdx(r._variants[j].name || '');
+    }
+    r._h = h;
 
-      // Top-level chapter entries (Chapter 1: …, Appendix A: …, etc.)
-      if (file && Array.isArray(file.data)) {
-        file.data.forEach(ch => {
-          if (!ch || !ch.name) return;
-          const display = `${ch.name} (${adv.id||adv.source||''})`;
-          addRef('chapter', ch, `Chapter · ${adv.name}`, {displayName:display, dedupeKey:display});
-        });
+    const raw = r._raw;
+    if (!raw) continue;
+    // Stable identity for the lazy `_raw` store (unique by construction — the
+    // `seen` set rejected collisions when these rows were built).
+    r._key = r.cat + ':' + String(r.name).toLowerCase() + '|' + String(r._source||'').toLowerCase();
+    if (Array.isArray(raw.reprintedAs)) r._reprint = true;
+
+    if (r.cat === 'monster'){
+      r._cr   = raw.challenge_rating;
+      r._type = raw.type;
+      // Damage resistance/immunity/vulnerability. NOTE the field names: `_raw`
+      // is the CONVERTED monster (see addMonster), so the arrays live under
+      // damage_* — combat.js used to read raw.immune/resist/vulnerable, which
+      // never existed on this object, so monster resistances never applied.
+      if (raw.damage_immunities     && raw.damage_immunities.length)     r._immune     = raw.damage_immunities;
+      if (raw.damage_resistances    && raw.damage_resistances.length)    r._resist     = raw.damage_resistances;
+      if (raw.damage_vulnerabilities&& raw.damage_vulnerabilities.length)r._vulnerable = raw.damage_vulnerabilities;
+    } else if (r.cat === 'item'){
+      r._type     = raw.type;
+      r._rarity   = raw.rarity;
+      r._value    = raw.value;
+      r._weight   = raw.weight;
+      if (raw.reqAttune != null) r._reqAttune = raw.reqAttune;
+      if (raw.curse)     r._curse    = true;
+      if (raw.sentient)  r._sentient = true;
+      if (raw.age)       r._age      = raw.age;
+      if (raw.property)  r._property = raw.property;
+    } else if (r.cat === 'class'){
+      if (raw.className) r._className = raw.className;
+      if (raw.shortName) r._shortName = raw.shortName;
+      if (raw.classFeatures || raw.subclassFeatures){
+        r._isSubclass = !!raw.subclassFeatures && !raw.classFeatures;
       }
-    });
+    }
   }
 
   // Build the reprint-target index: for each entry that has a reprintedAs list,
@@ -1440,10 +1604,8 @@ async function load5eData() {
     });
   });
 
-  _5eData    = results;
-  _5eLoaded  = true;
-  _5eLoading = false;
-  console.info(`[SKT] Loaded ${results.length} entries from local 5etools data.`);
-  _5eCallbacks.forEach(cb => cb(_5eData));
-  _5eCallbacks = [];
+  const _reprintArr = Array.from(_5eReprintTo);
+  _finishLoad(results, _reprintArr, 'build', _t0);
+  // Cache for next time — deferred to idle so it never delays first paint.
+  _schedulePersist(results, _reprintArr);
 }

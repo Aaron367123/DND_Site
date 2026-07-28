@@ -4,6 +4,26 @@
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function uid(){return Math.random().toString(36).slice(2,9)}
 
+// Report a localStorage write failure ONCE per minute per subsystem.
+// Nearly every setItem in this app sits inside a bare try/catch, so a full
+// quota (easy to hit — notes with pasted images, portraits, big fog maps)
+// silently discarded the write and the user kept playing, believing their
+// campaign was saved. Throttled because these fire from save loops.
+var _sktStoreWarnAt = {};
+function warnStorageFailure(what, err){
+  var isQuota = err && (err.name === 'QuotaExceededError'
+    || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22);
+  console.warn('[SKT] localStorage write failed for ' + what + ':', err);
+  var now = Date.now();
+  if (_sktStoreWarnAt[what] && now - _sktStoreWarnAt[what] < 60000) return;
+  _sktStoreWarnAt[what] = now;
+  if (typeof showToast === 'function'){
+    showToast(isQuota
+      ? 'Browser storage is full — "' + what + '" did NOT save. Free space (clear old notes/images) to avoid losing work.'
+      : 'Couldn’t save "' + what + '" locally — changes may be lost on reload.');
+  }
+}
+
 // Sanitize rich-text HTML before it goes into innerHTML. For fields that
 // legitimately store markup (contenteditable notes) but whose content arrives
 // through shared sync (Dropbox/Firebase) — so another connected browser could

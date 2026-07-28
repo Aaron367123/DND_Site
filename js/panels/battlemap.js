@@ -215,6 +215,12 @@ registerPanel('battlemap',{
   unmount(){
     if (this._resizeObserver){ this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._docMouseUp){ document.removeEventListener('mouseup', this._docMouseUp); this._docMouseUp = null; }
+    // Drop any queued repaint — its callback would run against a torn-down body.
+    if (this._rafPending){
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this._rafPending);
+      else clearTimeout(this._rafPending);
+      this._rafPending = null; this._dirty = {};
+    }
     this._saveMap();
     this._stopBroadcast();
     this._body = null;
@@ -224,7 +230,12 @@ registerPanel('battlemap',{
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
       localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
-    }catch(e){}
+    }catch(e){
+      // Fog sets and freehand strokes grow without bound on large maps — this
+      // is a realistic place to hit the quota, and silently dropping the write
+      // meant losing everything revealed this session.
+      if (typeof warnStorageFailure === 'function') warnStorageFailure('battle map', e);
+    }
     this._broadcast();
   },
 
@@ -430,7 +441,7 @@ registerPanel('battlemap',{
       const tokenSrc = 'img/' + m.path;
       return `<div class="mapsel-card starred" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
         <button class="mapsel-star on" data-mapsel-star="${esc(m.path)}" title="Unstar">★</button>
-        <img src="${esc(tokenSrc)}" loading="lazy" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
+        <img src="${esc(tokenSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
         <div class="mapsel-title">${esc(m.title)}</div>
         ${m.advName ? `<div class="mapsel-sub">${esc(m.advName)}</div>` : ''}
         <span class="mapsel-badge ${esc(m.type || 'map')}">${m.type==='mapPlayer'?'Player':'DM'}</span>
@@ -1581,10 +1592,10 @@ registerPanel('battlemap',{
         // radius=1 → 0.5 cell radius (1-cell diameter), radius=5 → 4.5 cell radius.
         const rCells = Math.max(0.25, radius - 0.5);
         this._fogStrokes.push({xc, yc, r:rCells, op:mode, shape});
-        // Repaint locally every move so the DM gets immediate feedback.
-        // Defer the broadcast until mouseup (handled below) to avoid
-        // hammering BroadcastChannel/Firebase at 60fps with full payloads.
-        this._drawFog();
+        // Repaint locally every move so the DM gets immediate feedback —
+        // batched to one redraw per frame. Defer the broadcast until mouseup
+        // (handled below) to avoid hammering BroadcastChannel/Firebase.
+        this._invalidate({fog:true});
         this._fogStrokeDirty = true;
         return;
       }
@@ -1615,7 +1626,7 @@ registerPanel('battlemap',{
           }
         }
       }
-      if(changed){this._drawFog();this._broadcastThrottled();}
+      if(changed){this._invalidate({fog:true});this._broadcastThrottled();}
     };
     canvas.addEventListener('mousedown',e=>{
       if (e.button !== 0) return; // middle/right click handled by pan logic below
@@ -1638,14 +1649,14 @@ registerPanel('battlemap',{
         );
         if (!same){
           this._hoverCell = cell;
-          this._drawGrid(canvas, this._csScreen());
+          this._invalidate({grid:true});
         }
       }
     });
     canvas.addEventListener('mouseleave',()=>{
       if (this._cellHighlight && this._hoverCell){
         this._hoverCell = null;
-        this._drawGrid(canvas, this._csScreen());
+        this._invalidate({grid:true});
       }
     });
     // One document-level mouseup total — _setupMap() runs on every _render(),
@@ -2409,7 +2420,7 @@ registerPanel('battlemap',{
         const isStarred = starred.has(m.path);
         return `<div class="mapsel-card${isStarred?' starred':''}" data-path="${esc(m.path)}" title="${esc(m.title)}${m.advName?' — '+esc(m.advName):''}">
           <button class="mapsel-star ${isStarred?'on':''}" data-mapsel-star="${esc(m.path)}" title="${isStarred?'Unstar':'Star (quick-access)'}">${isStarred?'★':'☆'}</button>
-          <img src="${esc(tokenSrc)}" loading="lazy" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
+          <img src="${esc(tokenSrc)}" loading="lazy" decoding="async" alt="${esc(m.title)}" onerror="this.style.opacity=.3">
           <div class="mapsel-title">${esc(m.title)}</div>
           ${subtitle}
           <span class="mapsel-badge ${esc(m.type)}">${m.type==='mapPlayer'?'Player':'DM'}</span>
@@ -2804,6 +2815,35 @@ registerPanel('battlemap',{
     return {col, row};
   },
 
+  // Coalesce canvas repaints into one per animation frame. Fog painting and
+  // cell-hover both fire on mousemove (up to ~120/s on a high-rate mouse) and
+  // each used to trigger a synchronous full redraw — clearing and refilling
+  // the whole stage, then re-walking every revealed cell and every stroke.
+  // Batching means at most one redraw per displayed frame, which is all the
+  // screen can show anyway. Network broadcast is throttled separately
+  // (_broadcastThrottled, ~80ms) — this is purely about paint cost.
+  _invalidate(what){
+    this._dirty = Object.assign(this._dirty || {}, what || {});
+    if (this._rafPending) return;
+    const run = () => {
+      this._rafPending = null;
+      const d = this._dirty || {}; this._dirty = {};
+      if (!this._body) return;
+      if (d.grid){
+        const c = this._body.querySelector('#map-canvas');
+        // _drawGrid finishes by calling _drawFog itself, so a pending fog
+        // repaint is already covered by this path.
+        if (c){ this._drawGrid(c, this._csScreen()); d.fog = false; }
+      }
+      if (d.fog)     this._drawFog();
+      if (d.strokes) this._drawAllStrokes();
+      if (d.tokens)  this._renderTokens();
+    };
+    this._rafPending = (typeof requestAnimationFrame === 'function')
+      ? requestAnimationFrame(run)
+      : setTimeout(run, 16);
+  },
+
   _drawFog(){
     const b=this._body;if(!b)return;
     // Use a dedicated fog canvas layered above the grid canvas
@@ -2818,7 +2858,11 @@ registerPanel('battlemap',{
       fogCanvas.style.cssText='position:absolute;top:0;left:0;z-index:10;pointer-events:none';
       stage.appendChild(fogCanvas);
     }
-    fogCanvas.width=W;fogCanvas.height=H;
+    // Only resize when the dimensions actually changed — assigning width or
+    // height reallocates the backing store even when the value is identical,
+    // and this runs on every fog-paint mousemove.
+    if (fogCanvas.width !== W)  fogCanvas.width  = W;
+    if (fogCanvas.height !== H) fogCanvas.height = H;
     const ctx=fogCanvas.getContext('2d');
     ctx.clearRect(0,0,W,H);
     if(this._fog===null)return; // fog disabled

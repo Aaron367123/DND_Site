@@ -42,7 +42,11 @@ function save(){
     localStorage.setItem(COMBAT_KEY,JSON.stringify({combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId}));
     localStorage.setItem(SHOP_KEY,JSON.stringify(state.shop));
     localStorage.setItem(SETTINGS_KEY,JSON.stringify(state.settings));
-  }catch(e){}
+  }catch(e){
+    // Don't swallow: a full quota here means party/combat changes are being
+    // silently discarded while the session looks fine.
+    if (typeof warnStorageFailure === 'function') warnStorageFailure('party & combat', e);
+  }
 }
 
 // Re-read ONE domain from localStorage into `state`. Used at boot (via

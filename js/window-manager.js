@@ -341,8 +341,14 @@ function syncPartyToCombat(partyIdx){
     // Mirror name too, not just stats — otherwise a party rename leaves the
     // combat card showing the old name (and, when matching falls back to
     // name, the two slowly drift apart).
-    state.combatants[ci]={...state.combatants[ci],hp:p.hp,hpMax:p.hpMax,ac:p.ac,name:p.name};
-    panelDefs.combat?._render?.();
+    const prev = state.combatants[ci];
+    const nameChanged = prev.name !== p.name;
+    state.combatants[ci]={...prev,hp:p.hp,hpMax:p.hpMax,ac:p.ac,name:p.name};
+    // Try a surgical repaint first. A full combat _render() re-serializes
+    // every combatant card, and this fires on every HP tick — one click used
+    // to rebuild BOTH panels end to end. A rename still needs the full path
+    // (the name lives in an input rendered per card).
+    if (nameChanged || !panelDefs.combat?._patchHp?.(ci)) panelDefs.combat?._render?.();
   }
 }
 
@@ -353,7 +359,8 @@ function syncCombatToParty(combatantId){
   const pi=_findPartyMemberForCombatant(c);
   if(pi>=0){
     state.party[pi]={...state.party[pi],hp:c.hp,hpMax:c.hpMax,ac:c.ac};
-    panelDefs.party?._render?.();
+    // Surgical first — see the matching comment in syncPartyToCombat.
+    if (!panelDefs.party?._patchHp?.(pi)) panelDefs.party?._render?.();
   }
 }
 
