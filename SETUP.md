@@ -23,6 +23,110 @@ node tools/stamp-build.js --check  # exit 1 if stamping is needed (CI gate)
 
 If node is missing on a machine, the hook warns and lets the commit through rather than blocking you. `git commit --no-verify` bypasses it for one commit.
 
+## One-time: hosting the art on Cloudflare R2
+
+Walkthrough for moving `img/` (3.8 GB, 14,278 files) off the repo. Cloudflare's dashboard wording shifts occasionally — the labels below were current as of mid-2026; if something is renamed, the structure still holds.
+
+### 1. Account and bucket
+
+1. Sign up at **dash.cloudflare.com** (free).
+2. Left sidebar → **R2**.
+3. **Heads-up:** enabling R2 asks for a **payment method even on the free tier**. Free allowance is 10 GB storage and 1M writes/month; this project uses ~3.9 GB and ~24k writes once, so it should stay free — but the card is required to turn the product on.
+4. **Create bucket** → name `dnd-img` → Location **Automatic** → Create.
+5. Copy your **Account ID** (shown on the R2 overview page). You need it for the upload endpoint.
+
+### 2. Public access
+
+Bucket → **Settings** → **Public access**. Two choices:
+
+- **Custom domain** (recommended): *Connect Domain*, e.g. `img.yourdomain.com`. Requires a domain with DNS on Cloudflare (~$10/yr at Cloudflare Registrar). Gets you real CDN caching, so repeat views cost nothing.
+- **r2.dev subdomain** (free, no domain): *Allow Access* → gives `https://pub-<hash>.r2.dev`. Fine to start with, but it's rate-limited and Cloudflare explicitly doesn't support it for production.
+
+Either way, **save the resulting base URL** — that's what goes into `js/asset-config.js`.
+
+### 3. CORS — required, not optional
+
+Bucket → **Settings** → **CORS policy** → Add. Paste:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://aaron367123.github.io",
+      "http://localhost:8765"
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Without this: the battle map's adaptive grid-contrast silently dies (tainted canvas via `getImageData`), NPC PNG export throws, and the service worker can't cache images at all (responses come back `opaque`, so `res.ok` is false and nothing is stored).
+
+### 4. API token for uploading
+
+R2 → **Manage R2 API Tokens** → **Create API token**.
+
+- Permission: **Object Read & Write**
+- Scope it to the `dnd-img` bucket
+- Create, then **copy the Access Key ID and Secret Access Key immediately** — the secret is shown exactly once.
+
+Store them in a password manager. They are write credentials for the bucket.
+
+### 5. Install and configure rclone
+
+```bash
+winget install Rclone.Rclone
+```
+
+Then create the remote. Run `rclone config file` to find the config path, and add this block (fill in your own values — never commit this file):
+
+```ini
+[dnd]
+type = s3
+provider = Cloudflare
+access_key_id = YOUR_ACCESS_KEY_ID
+secret_access_key = YOUR_SECRET_ACCESS_KEY
+endpoint = https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+acl = private
+```
+
+(`rclone config` has an interactive wizard if you prefer: *New remote* → `s3` → `Cloudflare R2`.)
+
+### 6. Upload
+
+The bucket root mirrors the **contents** of `img/` — so it holds `adventure/`, `bestiary/`, `covers/`… directly, not an `img/` folder.
+
+```bash
+rclone copy ./img dnd:dnd-img --transfers=32 --checkers=64 --s3-chunk-size=32M --s3-no-check-bucket --header-upload "Cache-Control: public, max-age=31536000, immutable" --progress --log-file=upload.log
+```
+
+Then the thumbnails:
+
+```bash
+rclone copy ./thumbs dnd:dnd-img/thumbs --transfers=32 --checkers=64 --s3-no-check-bucket --header-upload "Cache-Control: public, max-age=31536000, immutable" --progress --log-file=upload-thumbs.log
+```
+
+Resumable — if it dies, rerun the same command and it skips what's already there. Budget 20–60 minutes for 3.8 GB depending on your upload speed. `--s3-chunk-size=32M` is above the largest file (16.5 MB), so nothing goes multipart and every ETag stays a real MD5 — which makes the next step a true content check.
+
+### 7. Verify before changing any code
+
+```bash
+rclone check ./img dnd:dnd-img --one-way
+rclone size dnd:dnd-img
+```
+
+Expect 0 differences and 14,278 + 1,702 objects. Then spot-check a filename with a space (5,870 of them have one):
+
+```bash
+curl -I "https://YOUR-BASE-URL/bestiary/tokens/MM/Hill%20Giant.webp"
+```
+
+Expect `200`, `content-type: image/webp`, and the long `cache-control`. Add `-H "Origin: https://aaron367123.github.io"` and confirm an `access-control-allow-origin` header comes back — that's the CORS check.
+
+Once all that passes, hand the base URL over and the code flip is a two-line change (`imgBase` in `js/asset-config.js`, `IMG_ORIGINS` in `sw.js`).
+
 ## Where images come from
 
 Image URLs are built by `assetUrl()` / `assetThumbUrl()` in `js/utils.js`, and the base is set in **`js/asset-config.js`**:
