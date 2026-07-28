@@ -1,5 +1,16 @@
 # SKT Campaign Workspace — Setup Guide
 
+## Locking Down the Database (auth + rules) — RECOMMENDED
+
+Out of the box the database runs in "test mode": anyone who finds the URL can read or wipe the whole campaign. The app now signs every client in anonymously, which lets you lock the database to app users only. Two console steps, ~2 minutes:
+
+1. **Enable anonymous sign-in:** Firebase console → **Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save.**
+2. **Apply the rules:** Firebase console → **Build → Realtime Database → Rules** tab → replace the contents with the contents of [`firebase-rules.json`](firebase-rules.json) from this repo → **Publish.**
+
+Order matters: deploy the current site code first and have every device reload it (so all clients are signing in), THEN publish the rules. A device still running old code when the rules land will show "Offline" until it reloads. To verify it worked: the app's console logs `[SKT] signed in anonymously (uid …)` and the Live pill stays green, while opening the database URL raw in a browser gets permission-denied.
+
+---
+
 ## Sharing with Friends (Real-Time Sync)
 
 To let friends access the app and sync changes in real time, you need to:

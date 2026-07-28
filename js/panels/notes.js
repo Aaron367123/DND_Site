@@ -211,15 +211,18 @@ registerPanel('notes', {
     this._render();
   },
 
-  // Wire the Dropbox adapter — mirrors the notesSync init dance.
+  // Wire the Dropbox adapter — BACKUP MIRROR ONLY (sync redesign step 3).
+  // Notes now sync device-to-device through Firebase like everything else
+  // (per-note entity nodes — fast, no polling, no delete-resurrection class
+  // of bugs). Dropbox keeps receiving write-through pushes on every edit /
+  // rename / delete so the .md mirror stays fresh, but it is no longer a
+  // sync SOURCE: no polling, no mount-time fullSync merging Dropbox back
+  // into the app. A manual "Pull from Dropbox backup" stays available in
+  // the vault menu for disaster recovery.
   _initDropbox(){
     const ds = window.dropboxSync; if (!ds) return;
     ds.init(() => this._editing);
     ds.onStatus(() => { if (this._body) this._renderVaultPill(); });
-    ds._onPullCallback = () => { if (!this._editing && this._body) this._renderKeepScroll(); };
-    ds.startPolling(() => this._data);
-    // Bring the vault tree into the in-memory model on first connect.
-    ds.fullSync(this._data, { force: true }).catch(() => {});
   },
 
   // Wire the local-folder adapter. Idempotent — only attaches once.
@@ -1199,8 +1202,11 @@ registerPanel('notes', {
       this._render();
     });
 
-    // Manual sync (the ↻ button next to the gear). Pulls from the active
-    // adapter — Dropbox or local vault.
+    // Manual sync (the ↻ button next to the gear). For the local vault this
+    // is a normal pull. For Dropbox — now a backup mirror, not a live sync
+    // source — this is the DELIBERATE disaster-recovery path: fullSync
+    // merges the backup in and re-pushes local-only files. Day-to-day
+    // cross-device sync happens via Firebase and never touches this.
     b.querySelector('[data-act="notes-refresh"]')?.addEventListener('click', async () => {
       const adapter = (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured())
         ? window.dropboxSync

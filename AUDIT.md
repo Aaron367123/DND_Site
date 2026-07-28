@@ -349,4 +349,51 @@ Three parallel reviewers over commit ee83c059 (the delegation/zoom/sync refactor
 
 ---
 
+## Sync redesign — step 1: split the workspace blob (2026-07-26)
+
+First step of the sync architecture cleanup (see plan: one transport, small documents, field-level writes). `skt-workspace-v1` (party + combat + shop + settings in ONE 21.5KB blob, fully re-shipped on every HP tick, blob-level conflicts) is split into `skt-party-v1` / `skt-combat-v1` / `skt-shop-v1` / `skt-settings-v1`.
+
+- `save()` still serializes everything, but the sync layer's setItem patch now skips byte-identical writes — so only the domain(s) that actually changed mark dirty and push. Verified: a monster HP tick pushes ONLY the 1.1KB combat key; a settings toggle pushes only settings; a PC HP edit pushes party + combat (the mirror pair), nothing else.
+- Migration is two-sided: `load()` splits a LOCAL legacy blob (kept read-only as a rollback snapshot), and realtime init pulls the Firebase legacy node once for fresh-profile clients — without that, a new device would boot showing defaults and its first edit could seed defaults over the campaign (caught during verification, before any damage).
+- Conflicts are now per-domain: two DMs editing combat and settings in the same window can no longer collide at all.
+- **Deploy note:** old-code clients still read/write the legacy node until they reload with new code — ship this with the version bumps (`state.js`/`realtime.js` → `20260726c`) and have everyone reload before the next session. Remaining steps of the plan: field-level `update()` for combat/map (step 2), notes onto Firebase + Dropbox as export-only (step 3), auth + rules (step 4).
+
+---
+
+## Sync redesign — step 2: entity-level sync for combat + battlemap (2026-07-26)
+
+Combat and the battlemap now sync as per-entity Firebase nodes (`skt/combat_v2/items/{id}`, `skt/battlemap_v2/tokens/{id}`, plus `meta`/`fog`/`fogStrokes`/`drawings`) instead of whole-key strings. Panels are untouched — localStorage keeps the assembled JSON; `explode()`/`assemble()` in `realtime.js` translate at the transport boundary. Push side diffs against the last known server state and multi-path-`update()`s only changed nodes; receive side does an entity-level three-way merge (pending local entity edits are kept, server wins elsewhere).
+
+**Verified live:** a damage tick writes exactly ONE 154-byte node (21.5KB in the blob era → 1.1KB after step 1 → 154B now); a pending local edit to combatant A survives a simultaneous remote edit to combatant B and both apply — the exact race that used to clobber one side. Migration seeds v2 from local, falling back to the step-1 whole-key node; `_refreshAll` covers entity keys.
+
+**Safety property gained:** deletions only ship for nodes present in the client's last-seen server state, so a fresh/empty client can no longer mass-delete entities it never knew about.
+
+**⚠ Incident during verification:** that exact failure mode — under the OLD whole-key transport — had already clobbered the map's tokens server-side (a fresh preview profile's auto-fit save pushed a token-less map). Recovery staged: both server map nodes were deleted so the next real device to load (old or new code) re-seeds the full map, tokens included, from its localStorage. If the map ever comes up empty anyway, re-drag the party tokens from the map's party bar — positions were the only unrecoverable part.
+
+Remaining roadmap: ~~notes onto Firebase with Dropbox as export-only (step 3)~~ *(done — see below)*, auth + security rules (step 4).
+
+---
+
+## Sync redesign — step 3: notes onto Firebase, Dropbox demoted to backup (2026-07-26)
+
+Notes now sync device-to-device through the same per-entity Firebase layer as combat/battlemap (`skt/notes_v3/items/{id}` + `meta{order, authors}`), replacing the 8-second Dropbox polling loop as the live transport. `selectedId` stays per-device (each client keeps its own selection through remote updates). A `holdOff` hook (generalized from the battlemap drag guard) skips remote applies while the user is mid-edit so the editor never re-renders under the cursor.
+
+**Dropbox's new role — write-through backup, not a sync source:** every edit/rename/delete still pushes to Dropbox so the .md mirror stays fresh, but nothing ever pulls from it automatically (no polling, no mount-time fullSync — the whole delete-resurrection class of bugs is out of the live path). The notes ↻ button remains as the deliberate disaster-recovery pull (fullSync with the tombstone fix).
+
+**Verified live:** seeded `notes_v3` (12 items) via the manual backup pull; a single note edit pushed only that note's node (~335 bytes incl. meta); a simulated remote edit was skipped while `_editing` (cache untouched, so nothing was lost), applied cleanly after editing ended, and the local selection survived. Empty clients seed nothing (safety property holds). Zero console errors.
+
+**Deploy note:** an old-code device edits notes → Dropbox only; new-code devices won't see those edits until a manual ↻. Ship with the version bumps (`realtime.js`/`notes.js` → `20260726e`) and have everyone reload together.
+
+---
+
+## Sync redesign — step 4: anonymous auth + database rules (2026-07-26)
+
+The last step of the sync plan. Every client now signs into Firebase anonymously before starting sync (`firebase-auth-compat` added to the page; `initRealtime` split into auth → `_startRealtime`). Sign-in failure is non-fatal — clients fall back to unauthenticated sync so nothing breaks before the console-side setup is done. Verified live: SDK loads, sign-in attempts, fails with `auth/configuration-not-found` (Anonymous provider not yet enabled in the project), falls back gracefully, and sync runs exactly as before ("Live", full campaign loaded, zero errors).
+
+**[`firebase-rules.json`](../firebase-rules.json)** (repo root) contains the lockdown rules: root denied; `skt/*` read/write requires `auth != null`; per-node `.validate` caps for the v2 subtrees (combat items 100KB, notes items 500KB, fog 500KB, etc., unknown children rejected); legacy whole-string keys capped at 2MB; the live-stroke channel requires the `{stroke, ts}` shape.
+
+**⚠ TWO MANUAL CONSOLE STEPS remain (documented at the top of SETUP.md):** (1) enable Authentication → Anonymous, (2) paste `firebase-rules.json` into Realtime Database → Rules and Publish. **Order matters:** deploy the site + everyone reloads FIRST, then publish the rules — old-code clients can't authenticate and go "Offline" the moment the rules land. Until the rules are published, the database remains in test mode (anyone with the URL can write), same as it's been all along.
+
+---
+
 *Generated by codebase audit workflow. Findings have already been adversarially verified — false positives were stripped before this list was written. When fixing an item, mark its checkbox and (optionally) annotate with the date and commit hash so future audits can skip it.*

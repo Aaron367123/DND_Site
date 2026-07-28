@@ -276,6 +276,7 @@
 <!-- Firebase (required for real-time sync; safe to remove if not using) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <!-- 1. Data (no deps) -->
 <script src="js/data.js?v=20260524f"></script>
 <!-- 1b. Theme (no deps; applies CSS vars before any panels render) -->
@@ -283,7 +284,7 @@
 <!-- 2. Pure utilities (no deps) -->
 <script src="js/utils.js?v=20260726b"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
-<script src="js/state.js?v=20260726b"></script>
+<script src="js/state.js?v=20260726c"></script>
 <!-- 4. Window manager (depends on state) -->
 <script src="js/window-manager.js?v=20260524f"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
@@ -293,7 +294,7 @@
 <script src="js/notes-sync.js?v=20260726a"></script>
 <script src="js/dropbox-config.js?v=20260510b"></script>
 <script src="js/dropbox-sync.js?v=20260726a"></script>
-<script src="js/panels/notes.js?v=20260525a"></script>
+<script src="js/panels/notes.js?v=20260726e"></script>
 <script src="js/panels/battlemap.js?v=20260726b"></script>
 <script src="js/panels/npc-library.js?v=20260726a"></script>
 <script src="js/panels/bestiary.js?v=20260726a"></script>
@@ -313,7 +314,7 @@
 <script src="js/zoom-pan.js?v=20260521c"></script>
 <script src="js/pdf-import.js?v=20260524e"></script>
 <script src="js/player-view.js?v=20260525e"></script>
-<script src="js/realtime.js?v=20260726b"></script>
+<script src="js/realtime.js?v=20260726f"></script>
 <script src="js/tutorial.js?v=20260521c"></script>
 <script src="js/onboarding.js?v=20260521c"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->

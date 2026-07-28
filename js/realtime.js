@@ -29,14 +29,21 @@ const firebaseConfig = {
 // localStorage keys to sync across all connected clients.
 // skt-layout-v1 is intentionally excluded — each user manages their own panel positions.
 const SKT_SYNC_KEYS = [
-  'skt-workspace-v1',  // party, combat tracker, shop, settings
+  // The old combined 'skt-workspace-v1' blob is split into per-domain keys:
+  // an HP tick now ships ~1KB of combat state instead of the whole
+  // workspace, and edits in different domains can never conflict.
+  'skt-party-v1',      // party tracker characters
+  'skt-combat-v1',     // combat tracker (combatants, round, active turn)
+  'skt-shop-v1',       // shop inventory
+  'skt-settings-v1',   // shared campaign settings
   'skt-battlemap-v1',  // battle map tokens & fog
   'skt-enc-v1',        // encounter builder
   'skt-loot-v1',       // loot tracker
-  // 'skt-notes-v2'  — session notes ride on Dropbox (or local-folder vault
-  // sync) instead of Firebase. Notes payloads can be the biggest single key
-  // in the workspace (200 KB+ for a chatty campaign × every commit × every
-  // listener) and Dropbox already covers cross-device updates within ~8 s.
+  'skt-notes-v2',      // session notes — per-note entity nodes (see below).
+  // Notes were originally excluded ("payloads can be 200KB+ per push") and
+  // rode on Dropbox polling instead. The entity layer removes that concern:
+  // only the note being edited pushes, so Firebase now carries notes too and
+  // Dropbox is demoted to a write-through backup (no polling, no pull).
   'skt-npcs-v2',       // NPC library
   'skt-bestiary-v1',   // bestiary
   'skt-shared-panels-v1',  // which panels the DM is sharing with players
@@ -70,7 +77,10 @@ const _justWrote  = {};
 // much. Display labels for the keys are in _CONFLICT_LABELS below.
 const _conflicts = {};
 const _CONFLICT_LABELS = {
-  'skt-workspace-v1':     'Workspace (party, combat, settings)',
+  'skt-party-v1':         'Party tracker',
+  'skt-combat-v1':        'Combat tracker',
+  'skt-shop-v1':          'Shop',
+  'skt-settings-v1':      'Settings',
   'skt-shared-panels-v1': 'Shared panels',
   'skt-notes-data':       'Notes',
   'skt-bestiary-v1':      'Bestiary',
@@ -84,7 +94,12 @@ const _CONFLICT_LABELS = {
 // Which panels to refresh when a particular sync key changes. Avoids re-rendering
 // the whole world when a single subsystem updates.
 const _PANELS_FOR_KEY = {
-  'skt-workspace-v1': ['combat', 'party', 'shop'],     // panels that read from `state`
+  // party and combat cross-refresh: combat cards mirror PC hp/ac, and party
+  // cards show the "in combat" badge.
+  'skt-party-v1':    ['party', 'combat'],
+  'skt-combat-v1':   ['combat', 'party'],
+  'skt-shop-v1':     ['shop'],
+  'skt-settings-v1': ['combat', 'party', 'shop'],      // display modes, hp bars, filters
   'skt-battlemap-v1': ['battlemap'],
   'skt-enc-v1':       ['encounter'],
   'skt-loot-v1':      ['loot'],
@@ -95,12 +110,225 @@ const _PANELS_FOR_KEY = {
   // in _applyRemoteKey so the player view can mount/unmount whole panels.
 };
 
+// ─── Entity-level sync (sync redesign, step 2) ───────────────────────────────
+// Combat and the battlemap sync as SMALL PER-ENTITY Firebase nodes under a
+// v2 subtree instead of one whole-key string:
+//
+//   skt/combat_v2/meta            {round, activeId, order:[ids]}
+//   skt/combat_v2/items/{id}      one combatant each
+//   skt/battlemap_v2/meta         grid/scale/rotation/… scalars
+//   skt/battlemap_v2/tokens/{id}  one token each
+//   skt/battlemap_v2/fog|fogStrokes|drawings
+//
+// Locally NOTHING changes — panels still read/write the same localStorage
+// keys; explode() splits the stored JSON into nodes on push and assemble()
+// rebuilds it on receive. What it buys:
+//   • an HP tick ships ~200 bytes (that combatant) instead of the whole key;
+//   • edits to DIFFERENT combatants/tokens from two devices MERGE at the
+//     entity level instead of last-write-wins clobbering the loser;
+//   • same-entity races stay LWW — acceptable for this app, and no worse
+//     than before.
+const _ENTITY_KEYS = {
+  'skt-combat-v1': {
+    base: 'skt/combat_v2',
+    legacyNode: 'skt/skt_combat_v1',   // step-1 whole-key node, migration fallback
+    explode(s){
+      const d = JSON.parse(s) || {};
+      const list = Array.isArray(d.combatants) ? d.combatants : [];
+      const nodes = { meta: JSON.stringify({
+        combatRound: d.combatRound || 0,
+        activeCombatantId: d.activeCombatantId ?? null,
+        order: list.map(c => _fbSafeId(c.id)),
+      }) };
+      list.forEach(c => { nodes['items/' + _fbSafeId(c.id)] = JSON.stringify(c); });
+      return nodes;
+    },
+    assemble(nodes){
+      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){}
+      const items = {};
+      Object.keys(nodes).forEach(n => {
+        if (!n.startsWith('items/')) return;
+        try { const c = JSON.parse(nodes[n]); if (c && c.id != null) items[_fbSafeId(c.id)] = c; } catch(e){}
+      });
+      const combatants = [], used = new Set();
+      (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
+        if (items[id]){ combatants.push(items[id]); used.add(id); }
+      });
+      Object.keys(items).forEach(id => { if (!used.has(id)) combatants.push(items[id]); });
+      return JSON.stringify({ combatants, combatRound: meta.combatRound || 0, activeCombatantId: meta.activeCombatantId ?? null });
+    },
+    postApply(){ loadDomain('combat'); ['combat','party'].forEach(_reloadPanel); },
+  },
+  'skt-battlemap-v1': {
+    base: 'skt/battlemap_v2',
+    legacyNode: 'skt/skt_battlemap_v1',
+    explode(s){
+      const d = JSON.parse(s) || {};
+      const nodes = {};
+      (Array.isArray(d.tokens) ? d.tokens : []).forEach(t => {
+        nodes['tokens/' + _fbSafeId(t.id)] = JSON.stringify(t);
+      });
+      nodes.fog        = JSON.stringify(d.fog ?? null);
+      nodes.fogStrokes = JSON.stringify(d.fogStrokes || []);
+      nodes.drawings   = JSON.stringify(d.drawings || []);
+      const meta = {...d};
+      delete meta.tokens; delete meta.fog; delete meta.fogStrokes; delete meta.drawings;
+      nodes.meta = JSON.stringify(meta);
+      return nodes;
+    },
+    assemble(nodes){
+      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){}
+      const tokens = [];
+      Object.keys(nodes).forEach(n => {
+        if (!n.startsWith('tokens/')) return;
+        try { const t = JSON.parse(nodes[n]); if (t) tokens.push(t); } catch(e){}
+      });
+      const parse = (n, fb) => { try { return nodes[n] != null ? JSON.parse(nodes[n]) : fb; } catch(e){ return fb; } };
+      return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: parse('drawings', []) });
+    },
+    postApply(){ _reloadPanel('battlemap'); },
+    // Don't stomp an in-flight token drag — the drag-end save re-pushes
+    // local state (LWW) and reconciles.
+    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.battlemap; return !!(d && d._drag); },
+  },
+  'skt-notes-v2': {
+    base: 'skt/notes_v3',
+    legacyNode: null,  // notes never had a whole-key Firebase node
+    explode(s){
+      const d = JSON.parse(s) || {};
+      const items = Array.isArray(d.items) ? d.items : [];
+      const nodes = { meta: JSON.stringify({
+        order: items.map(i => _fbSafeId(i.id)),
+        authors: d.authors || {},
+      }) };
+      items.forEach(it => { nodes['items/' + _fbSafeId(it.id)] = JSON.stringify(it); });
+      return nodes;
+    },
+    assemble(nodes){
+      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){}
+      const map = {};
+      Object.keys(nodes).forEach(n => {
+        if (!n.startsWith('items/')) return;
+        try { const it = JSON.parse(nodes[n]); if (it && it.id != null) map[_fbSafeId(it.id)] = it; } catch(e){}
+      });
+      const items = [], used = new Set();
+      (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
+        if (map[id]){ items.push(map[id]); used.add(id); }
+      });
+      Object.keys(map).forEach(id => { if (!used.has(id)) items.push(map[id]); });
+      // selectedId is per-device UI state — keep whatever THIS device had,
+      // falling back to the first file if the selection was deleted remotely.
+      let selectedId = null;
+      try { selectedId = (JSON.parse(localStorage.getItem('skt-notes-v2') || '{}')).selectedId ?? null; } catch(e){}
+      if (selectedId && !items.find(i => i.id === selectedId)) selectedId = null;
+      if (!selectedId) selectedId = (items.find(i => i.type === 'file') || {}).id || null;
+      return JSON.stringify({ items, selectedId, authors: meta.authors || {} });
+    },
+    postApply(){ _reloadPanel('notes'); },
+    // Never re-render under the user's cursor mid-edit; the next event or
+    // the focus-refresh reconciles once they're done typing.
+    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.notes; return !!(d && d._editing); },
+  },
+};
+function _fbSafeId(id){ return String(id).replace(/[.#$\/\[\]]/g, '_'); }
+// Last known SERVER state per entity key: {nodeName: jsonString}. Flush
+// diffs against it (only changed nodes go out); receive compares against it
+// (identical snapshot = our own echo / no-op → skip).
+const _entityCache = {};
+function _flattenEntitySnap(val){
+  const out = {};
+  if (!val || typeof val !== 'object') return out;
+  Object.keys(val).forEach(k1 => {
+    const v = val[k1];
+    if (v && typeof v === 'object'){
+      Object.keys(v).forEach(k2 => { out[k1 + '/' + k2] = typeof v[k2] === 'string' ? v[k2] : JSON.stringify(v[k2]); });
+    } else {
+      out[k1] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+  });
+  return out;
+}
+
+function _flushEntityKey(k){
+  if (!_fbDb) return;
+  const spec = _ENTITY_KEYS[k];
+  const local = localStorage.getItem(k);
+  if (local == null) return;
+  let nodes;
+  try { nodes = spec.explode(local); } catch(e){ return; }
+  const prev = _entityCache[k] || {};
+  const updates = {};
+  Object.keys(nodes).forEach(n => { if (prev[n] !== nodes[n]) updates[spec.base + '/' + n] = nodes[n]; });
+  Object.keys(prev).forEach(n => { if (!(n in nodes)) updates[spec.base + '/' + n] = null; });
+  if (!Object.keys(updates).length) return;
+  // Optimistic cache update — the echo snapshot must match the cache so it
+  // gets recognized and skipped. Rolled back on failure so a retry re-diffs.
+  _entityCache[k] = nodes;
+  _fbDb.ref().update(updates).then(() => {
+    delete _retryCounts[k];
+  }).catch(err => {
+    _entityCache[k] = prev;
+    const n = (_retryCounts[k] || 0) + 1;
+    _retryCounts[k] = n;
+    if (n <= _MAX_RETRIES){
+      _dirtyKeys.add(k);
+      const delay = Math.min(5000, 300 * Math.pow(2, n - 1)) + Math.random() * 300;
+      setTimeout(_flushDirtyKeys, delay);
+      console.warn('[realtime] Entity push failed for ' + k + ' (retry ' + n + '/' + _MAX_RETRIES + ')', err);
+    } else {
+      console.error('[realtime] Entity push gave up for ' + k, err);
+      delete _retryCounts[k];
+      if (typeof showToast === 'function') showToast('Live sync failed — your last change may not have reached other players');
+    }
+  });
+}
+
+function _applyEntitySnapshot(k, snapVal){
+  const spec = _ENTITY_KEYS[k];
+  const serverNodes = _flattenEntitySnap(snapVal);
+  const prevCache = _entityCache[k] || {};
+  const sNames = Object.keys(serverNodes);
+  if (sNames.length === Object.keys(prevCache).length && sNames.every(n => serverNodes[n] === prevCache[n])){
+    return; // echo of our own push, or no-op
+  }
+  // Per-key hold-off: skip applying while the user is mid-interaction
+  // (battlemap token drag, notes editing) — the next event or the focus
+  // refresh reconciles once they're done.
+  if (spec.holdOff && spec.holdOff()) return;
+  // Entity-level merge: keep OUR locally-pending entity changes (dirty key,
+  // not yet flushed), take the server's version of everything else. This is
+  // the step-2 payoff — a peer's goblin damage and our token move both land.
+  let merged = {...serverNodes};
+  if (_dirtyKeys.has(k)){
+    try {
+      const localNodes = spec.explode(localStorage.getItem(k) || 'null');
+      new Set([...Object.keys(localNodes), ...Object.keys(prevCache)]).forEach(n => {
+        if (localNodes[n] !== prevCache[n]){
+          if (localNodes[n] === undefined) delete merged[n];
+          else merged[n] = localNodes[n];
+        }
+      });
+    } catch(e){}
+  }
+  _entityCache[k] = serverNodes;
+  let assembled;
+  try { assembled = spec.assemble(merged); } catch(e){ return; }
+  if (assembled === localStorage.getItem(k)) return; // nothing visible changed
+  _remoteUpdate = true;
+  try { localStorage.setItem(k, assembled); } finally { _remoteUpdate = false; }
+  spec.postApply();
+}
+
 // ─── Intercept localStorage writes ────────────────────────────────────────────
 // Any panel that calls localStorage.setItem('skt-*', ...) marks that key dirty
 // and schedules a debounced push of only the dirty keys.
 function _patchLocalStorage() {
   const _orig = Storage.prototype.setItem;
   Storage.prototype.setItem = function(key, value) {
+    // No-op writes (byte-identical value) neither store nor mark dirty.
+    // save() serializes all four state domains on every call — this check
+    // is what makes only the domain(s) that actually CHANGED sync out.
+    if (SKT_SYNC_KEYS.includes(key) && this.getItem(key) === String(value)) return;
     _orig.call(this, key, value);
     if (!_remoteUpdate && SKT_SYNC_KEYS.includes(key) && _fbDb) {
       _dirtyKeys.add(key);
@@ -126,6 +354,9 @@ function _flushDirtyKeys() {
   const keys = Array.from(_dirtyKeys);
   _dirtyKeys.clear();
   keys.forEach(k => {
+    // Entity keys diff per-node and multi-path update() instead of pushing
+    // the whole string.
+    if (_ENTITY_KEYS[k]){ _flushEntityKey(k); return; }
     const val = localStorage.getItem(k);
     // Remember exactly what we pushed so the listener can drop the one echo
     // that comes back to us. (Don't use a `localStorage===fbVal` check for
@@ -226,8 +457,11 @@ function _applyRemoteKey(key, fbVal) {
   localStorage.setItem(key, fbVal);
   _remoteUpdate = false;
 
-  // skt-workspace-v1 backs the global `state` object — re-read it.
-  if (key === 'skt-workspace-v1') load();
+  // The split state keys back the global `state` object — re-read just the
+  // domain that changed (a party update no longer re-parses combat/shop/
+  // settings, and vice versa).
+  const _STATE_DOMAINS = {'skt-party-v1':'party','skt-combat-v1':'combat','skt-shop-v1':'shop','skt-settings-v1':'settings'};
+  if (_STATE_DOMAINS[key]) loadDomain(_STATE_DOMAINS[key]);
 
   // Shared-panels list is its own little world — apply it to the player tab
   // by mounting/unmounting panels, and refresh the DM tab's share toggles.
@@ -381,12 +615,42 @@ function initRealtime() {
     return;
   }
 
+  // Anonymous auth (sync redesign step 4). Once the database rules require
+  // `auth != null` (see firebase-rules.json), only clients that sign in here
+  // can read or write — someone who merely scraped the public config out of
+  // this file gets permission-denied. Sign-in failure is NON-fatal: we fall
+  // through and run unauthenticated so existing deployments keep working
+  // until the Anonymous provider is enabled in the console. Do NOT flip the
+  // rules until every device runs this code and the provider is on.
+  if (firebase.auth){
+    firebase.auth().signInAnonymously()
+      .then(cred => {
+        console.info('[SKT] signed in anonymously (uid ' + (cred && cred.user ? cred.user.uid : '?') + ')');
+        _startRealtime();
+      })
+      .catch(err => {
+        console.warn('[SKT] anonymous sign-in failed (' + (err && err.code) + ') — running unauthenticated. '
+          + 'Enable Authentication → Sign-in method → Anonymous in the Firebase console to complete the lockdown.');
+        _startRealtime();
+      });
+  } else {
+    console.warn('[SKT] firebase-auth SDK not loaded — running unauthenticated.');
+    _startRealtime();
+  }
+}
+
+let _realtimeStarted = false;
+function _startRealtime() {
+  if (_realtimeStarted) return; // auth callback + fallback can both land here
+  _realtimeStarted = true;
+
   _patchLocalStorage();
 
   // One listener per sync key. A change to one subsystem only re-downloads
   // that subsystem's blob — not the entire dataset. Massive bandwidth win
   // during play, when most edits touch a single key (HP, token positions, etc).
   SKT_SYNC_KEYS.forEach(k => {
+    if (_ENTITY_KEYS[k]) return; // handled by the subtree listeners below
     const path = 'skt/' + _toFbKey(k);
     _fbDb.ref(path).on('value', snap => {
       if (!snap.exists()){
@@ -406,6 +670,42 @@ function initRealtime() {
     });
   });
 
+  // Entity-key subtree listeners. The realtime protocol only sends changed
+  // children over the wire for a subtree value listener, so receive traffic
+  // is already incremental — we just reassemble locally.
+  Object.keys(_ENTITY_KEYS).forEach(k => {
+    const spec = _ENTITY_KEYS[k];
+    _fbDb.ref(spec.base).on('value', snap => {
+      if (snap.exists()){ _applyEntitySnapshot(k, snap.val()); return; }
+      // v2 subtree absent — first client on the new layout. Seed from local
+      // if we have data; otherwise fall back to the old whole-key node
+      // (written by pre-step-2 clients) and re-push it in v2 form.
+      const local = localStorage.getItem(k);
+      if (local != null){
+        _dirtyKeys.add(k);
+        clearTimeout(_pushTimer);
+        _pushTimer = setTimeout(_flushDirtyKeys, 100);
+        return;
+      }
+      if (!spec.legacyNode) return; // no pre-v2 node ever existed for this key
+      _fbDb.ref(spec.legacyNode).once('value').then(ls => {
+        if (!ls.exists()) return;
+        let v = ls.val();
+        if (typeof v !== 'string'){ try { v = JSON.stringify(v); } catch(e){ return; } }
+        _remoteUpdate = true;
+        try { localStorage.setItem(k, v); } finally { _remoteUpdate = false; }
+        spec.postApply();
+        _dirtyKeys.add(k);
+        clearTimeout(_pushTimer);
+        _pushTimer = setTimeout(_flushDirtyKeys, 100);
+        console.log('[SKT] migrated ' + k + ' from legacy whole-key node into v2 subtree');
+      }).catch(()=>{});
+    }, err => {
+      console.error('[SKT] Firebase read error for ' + spec.base + ':', err);
+      _setSyncStatus('offline');
+    });
+  });
+
   // Track connection state for the status indicator. Firebase queues writes
   // automatically while offline and flushes them on reconnect — no manual
   // re-push needed here.
@@ -420,6 +720,12 @@ function initRealtime() {
   const _refreshAll = () => {
     if (!_fbDb) return;
     SKT_SYNC_KEYS.forEach(k => {
+      if (_ENTITY_KEYS[k]){
+        _fbDb.ref(_ENTITY_KEYS[k].base).once('value').then(snap => {
+          if (snap.exists()) _applyEntitySnapshot(k, snap.val());
+        }).catch(()=>{});
+        return;
+      }
       _fbDb.ref('skt/' + _toFbKey(k)).once('value').then(snap => {
         if (snap.exists()) _applyRemoteKey(k, snap.val());
       }).catch(()=>{});
@@ -429,6 +735,28 @@ function initRealtime() {
     if (document.visibilityState === 'visible') _refreshAll();
   });
   window.addEventListener('focus', _refreshAll);
+
+  // Legacy-blob migration, Firebase side. load() migrates a LOCAL
+  // 'skt-workspace-v1' blob into the split keys, but a client with a fresh
+  // profile (new device, cleared storage) has no local blob — and if no
+  // device has migrated yet, Firebase only has the legacy node, which new
+  // code no longer listens to. Without this, such a client boots showing
+  // DEFAULTS and its first edit would seed default data over the campaign.
+  // Pull the legacy node once, stage it locally, and let load() do the
+  // same split-and-seed it does for a local blob.
+  _fbDb.ref('skt/' + _toFbKey('skt-workspace-v1')).once('value').then(snap => {
+    if (!snap.exists()) return;
+    const SPLIT = ['skt-party-v1','skt-combat-v1','skt-shop-v1','skt-settings-v1'];
+    if (SPLIT.some(k => localStorage.getItem(k) != null)) return; // already migrated (locally or via a peer)
+    let val = snap.val();
+    if (typeof val !== 'string'){ try { val = JSON.stringify(val); } catch(e){ return; } }
+    try {
+      localStorage.setItem('skt-workspace-v1', val); // not a sync key anymore — no push
+      load();                                        // splits + seeds the new keys
+      ['party','combat','shop'].forEach(_reloadPanel);
+      console.log('[SKT] migrated legacy workspace blob from Firebase into split keys');
+    } catch(e){ console.warn('[SKT] legacy blob migration failed', e); }
+  }).catch(()=>{});
 }
 
 // ─── Live ephemeral channels ─────────────────────────────────────────────────

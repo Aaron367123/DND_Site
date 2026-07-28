@@ -1,0 +1,42 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "skt": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+
+      "combat_v2": {
+        "meta":  { ".validate": "newData.isString() && newData.val().length < 20000" },
+        "items": { "$id": { ".validate": "newData.isString() && newData.val().length < 100000" } },
+        "$other": { ".validate": false }
+      },
+
+      "battlemap_v2": {
+        "meta":       { ".validate": "newData.isString() && newData.val().length < 50000" },
+        "fog":        { ".validate": "newData.isString() && newData.val().length < 500000" },
+        "fogStrokes": { ".validate": "newData.isString() && newData.val().length < 500000" },
+        "drawings":   { ".validate": "newData.isString() && newData.val().length < 1000000" },
+        "tokens":     { "$id": { ".validate": "newData.isString() && newData.val().length < 200000" } },
+        "$other": { ".validate": false }
+      },
+
+      "notes_v3": {
+        "meta":  { ".validate": "newData.isString() && newData.val().length < 50000" },
+        "items": { "$id": { ".validate": "newData.isString() && newData.val().length < 500000" } },
+        "$other": { ".validate": false }
+      },
+
+      "$wholeKey": {
+        ".validate": "newData.isString() && newData.val().length < 2000000"
+      }
+    },
+
+    "skt_battlemap_live_v1": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".validate": "newData.hasChildren(['stroke', 'ts']) || newData.val() == null"
+    }
+  }
+}

@@ -1,7 +1,15 @@
 // ============================================================
 // STATE & PERSISTENCE
 // ============================================================
-const SAVE_KEY='skt-workspace-v1';
+// Legacy combined blob (party+combat+shop+settings in ONE key). Read once
+// for migration, never written again — syncing it as a unit meant any HP
+// tick shipped the whole workspace and any two same-window edits anywhere
+// in it counted as a "conflict". Split keys shrink both problems.
+const LEGACY_SAVE_KEY='skt-workspace-v1';
+const PARTY_KEY='skt-party-v1';
+const COMBAT_KEY='skt-combat-v1';
+const SHOP_KEY='skt-shop-v1';
+const SETTINGS_KEY='skt-settings-v1';
 const LAYOUT_KEY='skt-layout-v1';
 const SHARED_PANELS_KEY='skt-shared-panels-v1';
 
@@ -24,12 +32,59 @@ const state={
 
 let layout=JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
 
-function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({party:state.party,combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId,shop:state.shop,settings:state.settings}))}catch(e){}}
+// save() serializes all four domains — callers don't declare what changed,
+// and the writes are cheap. The realtime layer skips setItem calls whose
+// value is byte-identical to what's stored, so only the domain(s) that
+// actually changed get marked dirty and pushed to Firebase.
+function save(){
+  try{
+    localStorage.setItem(PARTY_KEY,JSON.stringify(state.party));
+    localStorage.setItem(COMBAT_KEY,JSON.stringify({combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId}));
+    localStorage.setItem(SHOP_KEY,JSON.stringify(state.shop));
+    localStorage.setItem(SETTINGS_KEY,JSON.stringify(state.settings));
+  }catch(e){}
+}
+
+// Re-read ONE domain from localStorage into `state`. Used at boot (via
+// load) and by realtime.js when that domain's key arrives from Firebase —
+// a party update no longer re-parses combat/shop/settings.
+function loadDomain(domain){
+  try{
+    if(domain==='party'){
+      const r=localStorage.getItem(PARTY_KEY);
+      if(r){const a=JSON.parse(r);if(Array.isArray(a))state.party=a;}
+    }else if(domain==='combat'){
+      const r=localStorage.getItem(COMBAT_KEY);
+      if(r){const d=JSON.parse(r);if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;}
+    }else if(domain==='shop'){
+      const r=localStorage.getItem(SHOP_KEY);
+      if(r)state.shop=JSON.parse(r);
+    }else if(domain==='settings'){
+      const r=localStorage.getItem(SETTINGS_KEY);
+      if(r){const s=JSON.parse(r);if(s&&typeof s==='object')state.settings={...state.settings,...s};}
+    }
+  }catch(e){}
+}
 function saveLayout(){try{localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout))}catch(e){}}
 function load(){
   try{
-    const raw=localStorage.getItem(SAVE_KEY);
-    if(raw){const d=JSON.parse(raw);if(Array.isArray(d.party))state.party=d.party;if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;state.shop=d.shop??null;if(d.settings)state.settings={...state.settings,...d.settings};}
+    const hasSplit=[PARTY_KEY,COMBAT_KEY,SHOP_KEY,SETTINGS_KEY].some(k=>localStorage.getItem(k)!=null);
+    const legacy=localStorage.getItem(LEGACY_SAVE_KEY);
+    if(!hasSplit&&legacy){
+      // One-time migration: split the combined blob into per-domain keys.
+      // The legacy key is left in place (read-only) as a rollback snapshot;
+      // it's no longer written or synced.
+      const d=JSON.parse(legacy);
+      if(Array.isArray(d.party))state.party=d.party;
+      if(Array.isArray(d.combatants))state.combatants=d.combatants;
+      if(typeof d.combatRound==='number')state.combatRound=d.combatRound;
+      state.activeCombatantId=d.activeCombatantId??null;
+      state.shop=d.shop??null;
+      if(d.settings)state.settings={...state.settings,...d.settings};
+      save(); // seed the split keys (and, via the sync layer, Firebase)
+    }else{
+      loadDomain('party');loadDomain('combat');loadDomain('shop');loadDomain('settings');
+    }
     const lr=localStorage.getItem(LAYOUT_KEY);
     if(lr)layout={...layout,...JSON.parse(lr)};
     const sr=localStorage.getItem(SHARED_PANELS_KEY);
