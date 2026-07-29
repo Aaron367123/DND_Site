@@ -217,9 +217,14 @@ registerPanel('battlemap',{
     // device was closed while the DM swapped maps. Otherwise a phone reopens
     // showing a corner of a map it has never fitted.
     this._pendingRefit = !_vs || _vs.p !== (this._bgMapPath || '');
+    // Undo baseline = the state as loaded. Set before the first _saveMap so
+    // the first edit of a session has something to return to.
+    this._undoStack.length = 0; this._redoStack.length = 0;
+    this._lastCommitted = this._undoSnapshot();
     this._render();
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath, this._pendingRefit);
     this._startBroadcast();
+    this._startUndoKeys();
     // Watch the panel body for size changes (window resize). When the map is
     // currently in "fit" mode, re-fit on resize so it always fills the new
     // viewport. Doesn't interfere with manual wheel/slider zoom — _isFitted
@@ -246,10 +251,17 @@ registerPanel('battlemap',{
     }
     this._saveMap();
     this._stopBroadcast();
+    this._stopUndoKeys();
     this._body = null;
   },
 
   _saveMap(){
+    // Undo is captured HERE rather than at each mutation site. There are 20+
+    // places that change tokens/fog/drawings, every one of them ends in
+    // _saveMap(), and hooking them individually would guarantee a missed one.
+    // Snapshotting on commit also gets the granularity right for free: a fog
+    // drag, a token drag and a pencil stroke each save once, at the end.
+    this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
       localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
@@ -260,6 +272,123 @@ registerPanel('battlemap',{
       if (typeof warnStorageFailure === 'function') warnStorageFailure('battle map', e);
     }
     this._broadcast();
+  },
+
+  // ─── Undo / redo ───────────────────────────────────────────────────────────
+  // Snapshot-based, not command-based: the undoable state is small (~20 KB
+  // serialized) and inverse-operations for fog brushes and multi-cell drags
+  // would be far more code and far easier to get subtly wrong.
+  //
+  // Deliberately covers CONTENT only — tokens, fog, fog strokes, drawings.
+  // Grid size, alignment, rotation, zoom and the map image are excluded: Ctrl+Z
+  // silently swapping the map back would be a worse surprise than not undoing.
+  _undoStack: [],
+  _redoStack: [],
+  _lastCommitted: null,   // state as of the last save = the next undo target
+  _undoRestoring: false,
+  _UNDO_MAX: 30,
+
+  _undoSnapshot(){
+    return JSON.stringify({
+      tokens: this._tokens || [],
+      fog: this._fog ? Array.from(this._fog) : null,
+      fogStrokes: this._fogStrokes || [],
+      drawings: this._drawings || [],
+    });
+  },
+
+  // Called at the top of _saveMap. Pushes the PREVIOUS committed state, so the
+  // stack holds states to return to rather than states just created.
+  _captureUndo(){
+    const cur = this._undoSnapshot();
+    if (this._undoRestoring){ this._lastCommitted = cur; return; }
+    if (this._lastCommitted != null && this._lastCommitted !== cur){
+      this._undoStack.push(this._lastCommitted);
+      if (this._undoStack.length > this._UNDO_MAX) this._undoStack.shift();
+      this._redoStack.length = 0;   // a new action invalidates the redo branch
+      this._updateUndoButtons();
+    }
+    this._lastCommitted = cur;
+  },
+
+  _applyUndoSnapshot(s){
+    let d; try { d = JSON.parse(s); } catch(e){ return false; }
+    this._tokens     = d.tokens || [];
+    this._fog        = d.fog ? new Set(d.fog) : null;
+    this._fogStrokes = d.fogStrokes || [];
+    this._drawings   = d.drawings || [];
+    this._selected   = null;   // the selected token may no longer exist
+    return true;
+  },
+
+  _undoRedo(back){
+    const from = back ? this._undoStack : this._redoStack;
+    const to   = back ? this._redoStack : this._undoStack;
+    if (!from.length){
+      if (typeof showToast === 'function') showToast(back ? 'Nothing to undo' : 'Nothing to redo');
+      return;
+    }
+    const cur = this._undoSnapshot();
+    const target = from.pop();
+    to.push(cur);
+    if (to.length > this._UNDO_MAX) to.shift();
+    // _undoRestoring keeps _captureUndo from treating this restore as a fresh
+    // action — otherwise undo would push its own result and you could never
+    // get further back than one step.
+    this._undoRestoring = true;
+    try {
+      if (!this._applyUndoSnapshot(target)) return;
+      this._saveMap();          // propagate: an undo should reach other devices
+    } finally { this._undoRestoring = false; }
+    this._closePanel?.();
+    // Force the token pass: _repaintLayers skips it when the hash matches, and
+    // a restore must always redraw regardless of what the last hash was.
+    this._lastTokenHash = null;
+    this._repaintLayers({ drawings: true, tokens: this._tokens });
+    this._updateUndoButtons();
+  },
+  _undo(){ this._undoRedo(true); },
+  _redo(){ this._undoRedo(false); },
+
+  // A remote change means the stack now describes a history that no longer
+  // matches shared state — undoing across it would silently revert someone
+  // else's work. Drop it and re-baseline instead.
+  _resetUndoBaseline(){
+    this._undoStack.length = 0;
+    this._redoStack.length = 0;
+    this._lastCommitted = this._undoSnapshot();
+    this._updateUndoButtons();
+  },
+
+  _updateUndoButtons(){
+    const b = this._body; if (!b) return;
+    const u = b.querySelector('[data-mact="undo"]'), r = b.querySelector('[data-mact="redo"]');
+    if (u){ u.disabled = !this._undoStack.length; u.style.opacity = this._undoStack.length ? '' : '.4'; }
+    if (r){ r.disabled = !this._redoStack.length; r.style.opacity = this._redoStack.length ? '' : '.4'; }
+  },
+
+  // Ctrl+Z / Ctrl+Shift+Z, scoped to the battle map window. Two guards matter:
+  // the notes editor owns Ctrl+Z while you're typing in it, and several panels
+  // have text inputs — so bail on any editable target, and require this
+  // window to be the focused one (window-manager sets .focused on mousedown).
+  _startUndoKeys(){
+    this._stopUndoKeys();
+    this._undoKeyHandler = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || (e.key !== 'z' && e.key !== 'Z')) return;
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return;
+      const win = this._body && this._body.closest('.window');
+      if (!win || !win.classList.contains('focused')) return;
+      e.preventDefault();
+      if (e.shiftKey) this._redo(); else this._undo();
+    };
+    document.addEventListener('keydown', this._undoKeyHandler);
+  },
+  _stopUndoKeys(){
+    if (this._undoKeyHandler){
+      document.removeEventListener('keydown', this._undoKeyHandler);
+      this._undoKeyHandler = null;
+    }
   },
 
   // Load an image at img/{path} into _mapBgImage and refresh the canvas.
@@ -923,7 +1052,17 @@ registerPanel('battlemap',{
   // fog reveal. Callers must still fall back to _render() when the map's
   // GEOMETRY changes (cols/rows/cellSize/scale/rotation), since that resizes
   // the stage and the canvases.
+  // Remote wrapper: a change arriving from another device invalidates the
+  // undo history (see _resetUndoBaseline) before the same painting runs.
+  // Undo/redo call _repaintLayers directly — going through here would make
+  // undo erase its own stack, which is exactly the bug this split fixes.
   _repaintRemote(opts){
+    if (!this._body) return;
+    this._resetUndoBaseline();
+    this._repaintLayers(opts);
+  },
+
+  _repaintLayers(opts){
     const b = this._body; if (!b) return;
     opts = opts || {};
     // Redraw the grid canvas so gridType changes (square/hex/none) reflect
@@ -1130,6 +1269,10 @@ registerPanel('battlemap',{
       +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
       +'<div style="flex:1"></div>'
+      // Undo/redo sit next to the destructive buttons on purpose — that's
+      // where you look after a misclick.
+      +'<button class="btn icon-btn" data-mact="undo" style="flex-shrink:0;padding:2px 6px" title="Undo (Ctrl+Z)">↶</button>'
+      +'<button class="btn icon-btn" data-mact="redo" style="flex-shrink:0;padding:2px 6px" title="Redo (Ctrl+Shift+Z)">↷</button>'
       +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">🗑 Drawings</button>'
       +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
     +'</div>';
@@ -1180,6 +1323,10 @@ registerPanel('battlemap',{
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide entire map (fog everything)">🚫</button>':'')
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal entire map">👁</button>':'')
       +'<div style="flex:1"></div>'
+      // Undo/redo for fog, drawings and tokens. Fog is the one that matters:
+      // a stray reveal shows the party a room you hadn't got to yet.
+      +'<button class="btn icon-btn" data-mact="undo" style="flex-shrink:0" title="Undo (Ctrl+Z)">↶</button>'
+      +'<button class="btn icon-btn" data-mact="redo" style="flex-shrink:0" title="Redo (Ctrl+Shift+Z)">↷</button>'
       +'<button class="btn icon-btn '+(this._settingsOpen?'active':'')+'" data-mact="toggle-settings" style="flex-shrink:0" title="Map settings">⚙</button>'
     +'</div>';
 
@@ -1310,6 +1457,9 @@ registerPanel('battlemap',{
     // 0×0 the browser clamps the restored scroll to 0 and the view jumps to
     // the top-left corner on every re-render.
     this._applyViewScale(null);
+    // _render() rebuilds the toolbar, so the buttons come back enabled —
+    // re-sync them to the actual stack depth.
+    this._updateUndoButtons();
 
     // Default tool is now empty string — tokens are always draggable
     // Tool only controls what happens on canvas click (place PC/NPC or erase)
@@ -1381,6 +1531,8 @@ registerPanel('battlemap',{
           this._render();
         });
       }
+      else if(act==='undo'){this._undo();}
+      else if(act==='redo'){this._redo();}
       else if(act==='fit-map'){this._fitMapToView();}
       else if(act==='fog-toggle'){
         this._fog=this._fog!==null?null:new Set();

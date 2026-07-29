@@ -589,6 +589,20 @@ The asymmetry: the same-browser BroadcastChannel handler had always used a cheap
 
 **Verified end-to-end against live Firebase**, using two tabs as two independent sync clients: a display-only change (`gridOpacity` 80→55) applied on the receiver with **1 repaint and 0 full renders**; a geometry change (`mapRotation` 0→90) correctly fell back to **1 full render** with `rotate(90deg)` landing on the stage. Both test values restored afterwards; 0 console errors.
 
+### Follow-up: undo/redo for the battle map (2026-07-29)
+
+**The gap:** zero matches for "undo" anywhere in `battlemap.js`. An accidental fog reveal, a stray pencil stroke, a misclicked "Clear drawings" — none of it was recoverable, mid-session, in front of players. Fog is the one that stings: revealing a room early can't be taken back.
+
+- [x] **Snapshot-based, captured in `_saveMap()`.** There are 20+ sites that mutate tokens/fog/drawings and every one ends in `_saveMap()` — hooking them individually would have guaranteed a missed one. Committing on save also gets the granularity right for free: a fog drag, a token drag and a pencil stroke each save once, at the end, so each is one undo step.
+- [x] **Content only** — tokens, fog, fog strokes, drawings. Grid size, alignment, rotation, zoom and the map image are deliberately excluded: Ctrl+Z silently swapping the map back would be a worse surprise than not undoing.
+- [x] **30-deep, with no-op dedupe.** A save that doesn't change content pushes nothing.
+- [x] **A remote change clears the history and re-baselines** — undoing across another device's edit would silently revert their work.
+- [x] **Ctrl+Z / Ctrl+Shift+Z**, scoped by two guards: bail on any editable target (the notes editor owns Ctrl+Z while you type in it) and require the map window to carry window-manager's `.focused` class. Plus `↶`/`↷` toolbar buttons in both the DM and player toolbars, disabled when their stack is empty.
+
+**Bug found and fixed during verification:** `_undoRedo` called `_repaintRemote()`, which clears the undo stacks — so undo worked exactly once and then erased its own history. Split into `_repaintLayers()` (pure painting, used by undo) and `_repaintRemote()` (re-baselines, then paints). Caught by the test asserting three successive undos, not by reading the code.
+
+**Verified in-browser (24 assertions):** three distinct edits → depth 3, each undo peeling back exactly one layer and leaving the others intact; full drain to empty and full redo back up; a new action clearing the redo branch; the 30-entry cap holding across 45 edits; persisted state matching memory. Keyboard: fires when the map window is focused, ignored in `<input>`/`<textarea>` (notes keeps Ctrl+Z), ignored when another window is focused, Shift redoes. Remote: a simulated remote update cleared both stacks and the next undo correctly returned to the *remote* state rather than jumping behind it. 0 console errors; all test tokens/fog/drawings cleared from the live campaign afterwards.
+
 **Deferred:** canvas layers (grid/fog/pencil) are bitmaps and blur above 100% zoom. Fixing it means raising the backing store (`canvas.width = W*k`, `ctx.setTransform(k,0,0,k,0,0)`) with a pixel budget — it changes *how* coordinates rasterise, never *what* they are, so it's contained and safe to do separately.
 
 ---

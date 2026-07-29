@@ -596,6 +596,10 @@ function _reloadPanel(id) {
       } else if (_struct() !== _structBefore || (!def._bgMapPath && _prevPath)){
         // Stage geometry moved (grid resize, Align offset, rotation, world
         // scale) or the map was cleared — the canvases have to be rebuilt.
+        // _repaintRemote isn't involved on this branch, so re-baseline undo
+        // here too: the stack would otherwise describe a history that no
+        // longer matches shared state.
+        def._resetUndoBaseline?.();
         def._render();
       } else {
         // The common case by far: a token moved or fog changed. Repaint the
