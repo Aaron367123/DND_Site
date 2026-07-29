@@ -845,10 +845,23 @@ function _startRealtimeExtras() {
   // DEFAULTS and its first edit would seed default data over the campaign.
   // Pull the legacy node once, stage it locally, and let load() do the
   // same split-and-seed it does for a local blob.
+  //
+  // The "already migrated?" test is LOCAL, so it runs BEFORE the network read
+  // rather than after it. It used to sit inside the .then(), which meant every
+  // client downloaded the ~24 KB legacy blob on every single load and then
+  // threw it away — about a third of this app's total Firebase download, for
+  // a migration that finished long ago.
+  //
+  // It is still re-tested after the read, and that is not redundant: on a
+  // genuinely fresh profile the key listeners may deliver real data while this
+  // request is in flight, and if they do, their (newer) data must win over the
+  // legacy blob.
+  const SPLIT = ['skt-party-v1','skt-combat-v1','skt-shop-v1','skt-settings-v1'];
+  const _migrated = () => SPLIT.some(k => localStorage.getItem(k) != null);
+  if (_migrated()) return;   // nothing to do — and nothing to download
   _fbDb.ref('skt/' + _toFbKey('skt-workspace-v1')).once('value').then(snap => {
     if (!snap.exists()) return;
-    const SPLIT = ['skt-party-v1','skt-combat-v1','skt-shop-v1','skt-settings-v1'];
-    if (SPLIT.some(k => localStorage.getItem(k) != null)) return; // already migrated (locally or via a peer)
+    if (_migrated()) return; // a listener beat us to it while in flight
     let val = snap.val();
     if (typeof val !== 'string'){ try { val = JSON.stringify(val); } catch(e){ return; } }
     try {
