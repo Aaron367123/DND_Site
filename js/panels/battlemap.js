@@ -4,6 +4,38 @@
 // Image stored in memory only — never localStorage (avoids freeze/quota)
 let _mapBgImage = null; // holds the Image object
 
+// Cached average luminance of the map art, used to pick a grid colour that
+// contrasts with it. Computing it means resampling the whole image (3000x1905
+// on the current map) down to 4x4 and reading it back — measured at 0.887ms,
+// a third of _drawGrid's total cost, and _drawGrid runs on every render, every
+// remote update and every fog repaint. The value only depends on the image.
+//
+// Keyed on the Image OBJECT, not the path: every load path assigns a brand new
+// Image, so a different map is automatically a cache miss and there is no
+// invalidation to forget. `lum: null` means "couldn't sample" (tainted canvas)
+// and is cached too, so a failure doesn't retry the expensive resample forever.
+let _bgLumCache = { img: null, lum: null };
+function _bgLuminance(){
+  if (!_mapBgImage) return null;
+  if (_bgLumCache.img === _mapBgImage) return _bgLumCache.lum;
+  let lum = null;
+  try {
+    const off = document.createElement('canvas'); off.width = 4; off.height = 4;
+    const octx = off.getContext('2d');
+    octx.drawImage(_mapBgImage, 0, 0, 4, 4);
+    const d = octx.getImageData(0, 0, 4, 4).data;
+    let t = 0;
+    for (let i = 0; i < d.length; i += 4) t += (d[i]*299 + d[i+1]*587 + d[i+2]*114) / 1000;
+    lum = t / 16;
+  } catch(e){
+    // Cross-origin image without CORS taints the canvas and getImageData
+    // throws. Cache the failure so we stop paying for the resample.
+    lum = null;
+  }
+  _bgLumCache = { img: _mapBgImage, lum };
+  return lum;
+}
+
 registerPanel('battlemap',{
   title:'Battle Map',icon:'🗺',
 
@@ -2960,15 +2992,13 @@ registerPanel('battlemap',{
     // Determine if background is light or dark for adaptive grid color
     let gridColor='rgba(255,255,255,'+alphaFor(0.18).toFixed(3)+')';
     if(_mapBgImage){
-      // Sample corners of the image to estimate brightness
-      const off=document.createElement('canvas');off.width=4;off.height=4;
-      const octx=off.getContext('2d');octx.drawImage(_mapBgImage,0,0,4,4);
-      try{
-        const d=octx.getImageData(0,0,4,4).data;
-        let lum=0;for(let i=0;i<d.length;i+=4)lum+=(d[i]*299+d[i+1]*587+d[i+2]*114)/1000;
-        lum/=16;
+      // Average brightness of the map art, cached per Image — see
+      // _bgLuminance(). null means the sample wasn't available (tainted
+      // canvas), in which case we keep the default light grid.
+      const lum = _bgLuminance();
+      if (lum != null){
         gridColor=lum>128?'rgba(0,0,0,'+alphaFor(0.35).toFixed(3)+')':'rgba(255,255,255,'+alphaFor(0.25).toFixed(3)+')';
-      }catch(e){}
+      }
     } else {
       // Parse bgColor hex to check brightness
       const hex=this._bgColor.replace('#','');

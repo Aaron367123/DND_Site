@@ -603,6 +603,17 @@ The asymmetry: the same-browser BroadcastChannel handler had always used a cheap
 
 **Verified in-browser (24 assertions):** three distinct edits → depth 3, each undo peeling back exactly one layer and leaving the others intact; full drain to empty and full redo back up; a new action clearing the redo branch; the 30-entry cap holding across 45 edits; persisted state matching memory. Keyboard: fires when the map window is focused, ignored in `<input>`/`<textarea>` (notes keeps Ctrl+Z), ignored when another window is focused, Shift redoes. Remote: a simulated remote update cleared both stacks and the next undo correctly returned to the *remote* state rather than jumping behind it. 0 console errors; all test tokens/fog/drawings cleared from the live campaign afterwards.
 
+### Follow-up: cache the grid luminance probe (2026-07-29)
+
+`_drawGrid` picks a grid colour that contrasts with the map art by resampling the **entire image** (3000×1905 on the current map) down to 4×4 and reading it back with `getImageData`. It did that on every call — and `_drawGrid` runs on every render, every remote update, and every fog repaint — even though the value depends only on the image.
+
+- [x] Cached in `_bgLuminance()`, **keyed on the Image object rather than the path**. Every load path assigns a brand-new `Image`, so a different map is automatically a cache miss and there is no invalidation to forget.
+- [x] A failed sample (tainted canvas) is cached too, so a CORS failure doesn't retry the expensive resample forever.
+
+**Measured under the same synthetic load as the original profile:** `_drawGrid` **2.70 ms → 0.98 ms**, `_setupMap` **2.58 ms → 1.30 ms**, `_repaintLayers` (the remote-update path) **2.42 ms → 1.06 ms**. Grid output is pixel-identical, verified by hashing the canvas before and after; reloading the map produces a fresh `Image`, correctly misses the cache, recomputes, and yields the identical grid.
+
+**Not a regression, checked:** `_render` appeared to slow down between runs, but repeated timings bounce 24.8 → 7.6 → 12.4 → 5.6 ms with DOM node count flat at 1441 across 20 renders — high variance in a non-compositing preview pane, no listener or node accumulation.
+
 **Deferred:** canvas layers (grid/fog/pencil) are bitmaps and blur above 100% zoom. Fixing it means raising the backing store (`canvas.width = W*k`, `ctx.setTransform(k,0,0,k,0,0)`) with a pixel budget — it changes *how* coordinates rasterise, never *what* they are, so it's contained and safe to do separately.
 
 ---
