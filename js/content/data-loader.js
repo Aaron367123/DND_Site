@@ -678,7 +678,8 @@ function _normSearchIdx(s) {
 // from the stored value forces a rebuild.
 // Escape hatch for a forgotten bump: Settings → "Rebuild data index".
 // 20260729a — _copy resolution added for races/backgrounds/decks/items.
-const DATA_STAMP   = '20260729a';
+// 20260729b — lair actions / regional effects + spell class lists joined in.
+const DATA_STAMP   = '20260729b';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
 const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';
@@ -810,6 +811,18 @@ async function _buildIndexFromFiles() {
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertMonster(d);
+    // Lair actions / regional effects are stored once per legendary GROUP
+    // (171 groups shared by 220 monsters) rather than on each creature, so
+    // they have to be joined on here or they never reach the stat block.
+    if (d.legendaryGroup && d.legendaryGroup.name){
+      const g = _legendaryGroupByKey[((d.legendaryGroup.name||'') + '|' + (d.legendaryGroup.source||'')).toLowerCase()];
+      if (g){
+        if (Array.isArray(g.lairActions) && g.lairActions.length)
+          r.lair_actions = [{name:'', desc:_parseEntries(g.lairActions)}];
+        if (Array.isArray(g.regionalEffects) && g.regionalEffects.length)
+          r.regional_effects = [{name:'', desc:_parseEntries(g.regionalEffects)}];
+      }
+    }
     const imgKey = ((d.name||'') + '|' + (d.source||'')).toLowerCase();
     results.push({
       cat:'monster', name:d.name, _slug:r.index, _fromLocal:true,
@@ -829,6 +842,13 @@ async function _buildIndexFromFiles() {
     if (seen.has(key)) return;
     seen.add(key);
     const r = _convertSpell(d);
+    // _convertSpell reads d.classes, which modern 5etools data no longer
+    // carries — the class list moved to data/spells/sources.json. Fill it in
+    // only when the spell didn't bring its own, so older data still wins.
+    if (!r.classes || !r.classes.length){
+      const fromSrc = _spellClassesByKey[((d.name||'') + '|' + (d.source||'')).toLowerCase()];
+      if (fromSrc) r.classes = fromSrc;
+    }
     const lvl = r.level===0?'Cantrip':'Level '+r.level;
     results.push({
       cat:'spell', name:d.name, _slug:r.index, _fromLocal:true,
@@ -1162,7 +1182,7 @@ async function _buildIndexFromFiles() {
   const _fluffUniquePaths = [...new Set(_FLUFF_SPECS.map(s => s.path))];
 
   // Step 2: fetch all data files in parallel
-  const [bestiaries, spellbooks, classBooks, classFluffBooks, conditionFiles, itemFile, baseItemFile, magicVariantFile, featFile, refFiles, bestiaryFluffs, fluffFiles] = await Promise.all([
+  const [bestiaries, spellbooks, classBooks, classFluffBooks, conditionFiles, itemFile, baseItemFile, magicVariantFile, featFile, refFiles, bestiaryFluffs, fluffFiles, legendaryGroupFile, spellSourceFile] = await Promise.all([
     Promise.all(bestiaryFiles.map(fetchFile)),
     Promise.all(spellFiles.map(fetchFile)),
     Promise.all(classFiles.map(fetchFile)),
@@ -1175,9 +1195,44 @@ async function _buildIndexFromFiles() {
     Promise.all(_refUniquePaths.map(fetchFile)),
     Promise.all(bestiaryFluffFiles.map(fetchFile)),
     Promise.all(_fluffUniquePaths.map(fetchFile)),
+    // Lair actions and regional effects live in their own file, referenced by
+    // 220 monsters via legendaryGroup. Without it every dragon, lich, hag and
+    // beholder renders with no lair actions at all.
+    fetchFile('data/bestiary/legendarygroups.json'),
+    // Which classes can cast a spell. Modern 5etools moved this OUT of the
+    // spell entries into a per-source lookup, which is why _convertSpell's
+    // `classes` field has been coming back empty and the renderer's "Classes:"
+    // row never appeared.
+    fetchFile('data/spells/sources.json'),
   ]);
   const _refByPath = {};
   _refUniquePaths.forEach((p, i) => { _refByPath[p] = refFiles[i]; });
+
+  // name|source → {lairActions, regionalEffects}. A monster points at one via
+  // its `legendaryGroup: {name, source}` field.
+  const _legendaryGroupByKey = {};
+  ((legendaryGroupFile && legendaryGroupFile.legendaryGroup) || []).forEach(g => {
+    if (!g || !g.name) return;
+    _legendaryGroupByKey[((g.name||'') + '|' + (g.source||'')).toLowerCase()] = g;
+  });
+
+  // spellName|spellSource → [{name}] of casting classes. sources.json is keyed
+  // by the SPELL's source, then by spell name; each value carries a `class`
+  // array of {name, source}. Deduped by class name — the same class appears
+  // once per rules revision (PHB and XPHB), which would otherwise read
+  // "Wizard, Wizard".
+  const _spellClassesByKey = {};
+  if (spellSourceFile){
+    Object.keys(spellSourceFile).forEach(srcCode => {
+      const bySpell = spellSourceFile[srcCode] || {};
+      Object.keys(bySpell).forEach(spellName => {
+        const list = bySpell[spellName] && bySpell[spellName].class;
+        if (!Array.isArray(list) || !list.length) return;
+        const names = [...new Set(list.map(c => c && c.name).filter(Boolean))];
+        if (names.length) _spellClassesByKey[(spellName + '|' + srcCode).toLowerCase()] = names.map(n => ({name:n}));
+      });
+    });
+  }
   const _fluffByPath = {};
   _fluffUniquePaths.forEach((p, i) => { _fluffByPath[p] = fluffFiles[i]; });
 

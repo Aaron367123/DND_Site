@@ -72,6 +72,10 @@ function renderMonsterFull(d, localData) {
   if(r.reactions?.length)html+=actions('Reactions',r.reactions);
   if(r.legendary_actions?.length)html+=actions('Legendary Actions',r.legendary_actions);
   if(r.mythic_actions?.length)html+=actions('Mythic Actions',r.mythic_actions);
+  // Joined on from data/bestiary/legendarygroups.json — see addMonster. These
+  // sit last because that's where they appear in a printed stat block.
+  if(r.lair_actions?.length)html+=actions('Lair Actions',r.lair_actions);
+  if(r.regional_effects?.length)html+=actions('Regional Effects',r.regional_effects);
   return html;
 }
 
