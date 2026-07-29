@@ -89,3 +89,29 @@ for d, s in by_dir.most_common(15):
 sys.stdout.write('\nlargest unreachable files:\n')
 for p in sorted(dead, key=os.path.getsize, reverse=True)[:15]:
     sys.stdout.write('   %-52s %7.0f KB\n' % (p, os.path.getsize(p) / 1024.0))
+
+# --content : summarise what each unreachable file actually holds, so the
+# question "is it dead?" can be answered as "could this be USED?" rather than
+# only "is it referenced?". Two of the files this tool first reported as dead
+# (legendarygroups.json, spells/sources.json) turned out to be content the app
+# should have been showing all along.
+if '--content' in sys.argv:
+    sys.stdout.write('\n=== what each unreachable file contains ===\n')
+    for p in sorted(dead, key=os.path.getsize, reverse=True):
+        kb = os.path.getsize(p) / 1024.0
+        desc = ''
+        if p.endswith('.json'):
+            try:
+                j = json.load(io.open(p, encoding='utf-8'))
+                if isinstance(j, dict):
+                    parts = []
+                    for k, v in list(j.items())[:4]:
+                        parts.append('%s[%d]' % (k, len(v)) if isinstance(v, (list, dict)) else str(k))
+                    desc = ', '.join(parts)
+                elif isinstance(j, list):
+                    desc = 'array[%d]' % len(j)
+            except Exception as e:
+                desc = 'unparseable: %s' % e
+        else:
+            desc = '(not json)'
+        sys.stdout.write('  %-46s %7.0f KB  %s\n' % (p, kb, desc[:80]))
