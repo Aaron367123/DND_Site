@@ -84,9 +84,21 @@ registerPanel('battlemap',{
   // Runtime-only hover cell tracker (not persisted). For square grids this is
   // {col,row}; for hex grids it's {q,r} axial coords.
   _hoverCell: null,
-  // Map image scale (1 = natural pixel size). Persisted; the toolbar slider
-  // adjusts it. Aspect ratio is always preserved.
+  // WORLD scale. 1 = natural pixel size. Synced — and, crucially, it defines
+  // the units that token x/y and drawing points are stored in (see
+  // _scaleTokensTo). It is therefore FROZEN during normal use: only a map
+  // swap or a saved-map restore may change it. Zooming does NOT touch it;
+  // that's _viewScale below.
   _bgMapScale: 1,
+  // VIEW scale — this device's own zoom, layered on top of _bgMapScale as a
+  // CSS transform. Per-device and per-window-role, never synced, never
+  // written by _saveMap. A phone can sit at 3x while a desktop sits at 0.5x
+  // and their token coordinates still agree, because neither one rewrote
+  // them. Effective on-screen scale = _bgMapScale * _viewScale.
+  _viewScale: 1,
+  // True until this device has fitted the CURRENT map. Set in mount() when
+  // the stored view state is for a different map than the one now loaded.
+  _pendingRefit: false,
   // Whether token drops snap to the cellSize grid. Default off — free movement
   // works better with maps that have their own printed grids. Persisted.
   _snapToGrid: false,
@@ -194,8 +206,19 @@ registerPanel('battlemap',{
       const arr = raw ? JSON.parse(raw) : [];
       this._starredMaps = new Set(Array.isArray(arr) ? arr : []);
     } catch(e){ this._starredMaps = new Set(); }
+    // Restore THIS window's zoom. Read here rather than in the panel object
+    // literal (the _toolbarHidden idiom) because body.player-mode is added by
+    // initPlayerView() long after this file parses — reading at parse time
+    // would always pick the DM key, so a player window would inherit the DM's
+    // zoom on every load.
+    const _vs = this._loadViewState();
+    this._viewScale = (_vs && _vs.v > 0) ? _vs.v : 1;
+    // Re-fit if the stored zoom was chosen for a different map — e.g. this
+    // device was closed while the DM swapped maps. Otherwise a phone reopens
+    // showing a corner of a map it has never fitted.
+    this._pendingRefit = !_vs || _vs.p !== (this._bgMapPath || '');
     this._render();
-    if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath);
+    if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath, this._pendingRefit);
     this._startBroadcast();
     // Watch the panel body for size changes (window resize). When the map is
     // currently in "fit" mode, re-fit on resize so it always fills the new
@@ -285,8 +308,66 @@ registerPanel('battlemap',{
     this._rows = Math.max(6, Math.ceil(this._bgMapNaturalH / cs));
   },
 
-  // On-screen pixel size of one grid cell at the current zoom level. When no
-  // map is loaded, scale is 1.0 (grid is drawn at the natural cellSize).
+  // ─── Per-device view zoom ──────────────────────────────────────────────────
+  // Which localStorage key this window's zoom lives under. A DM workspace and
+  // a ?player=1 window in the SAME browser share localStorage, so one key
+  // would mean zooming your working view also moves the TV. Scope by role.
+  // NOTE: must be called at runtime, not from the panel object literal —
+  // body.player-mode is added by initPlayerView() long after this file parses.
+  _viewKey(){
+    return document.body.classList.contains('player-mode')
+      ? 'skt-bm-view-player-v1' : 'skt-bm-view-v1';
+  },
+  // Stored as {p, v}: the map path the zoom was chosen for, and the zoom.
+  // Keeping the path is what makes "re-fit when the map changes" work across
+  // devices with no extra sync channel — each device notices the path it
+  // saved against no longer matches and re-fits to its own screen.
+  _loadViewState(){
+    try {
+      const raw = localStorage.getItem(this._viewKey());
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      return (d && typeof d === 'object') ? d : null;
+    } catch(e){ return null; }
+  },
+  _saveViewState(){
+    // Silent on failure — this is a display preference. A quota error here
+    // must never interrupt play with a toast.
+    try {
+      localStorage.setItem(this._viewKey(), JSON.stringify({
+        p: this._bgMapPath || '', v: this._viewScale || 1,
+      }));
+    } catch(e){}
+  },
+  // Total screen pixels per stage pixel: the workspace's CSS scale() times
+  // this device's map zoom. Every screen→stage conversion divides by this.
+  _screenScale(){
+    const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+    return z * (this._viewScale || 1);
+  },
+  // Max EFFECTIVE zoom. Touch devices get more headroom because the whole
+  // point of this feature is a phone being able to read a token label on a
+  // map that a desktop is happy viewing whole.
+  _maxEff(){
+    try {
+      if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return 6;
+    } catch(e){}
+    return 3;
+  },
+  // Clamp a candidate _viewScale so the EFFECTIVE scale stays in range.
+  // Clamping the view scale directly would give different limits depending on
+  // what the frozen world scale happens to be for this map.
+  _clampView(v){
+    const bg = this._bgMapScale || 1;
+    const lo = 0.1 / bg, hi = this._maxEff() / bg;
+    return Math.max(lo, Math.min(hi, v || 1));
+  },
+
+  // On-screen pixel size of one grid cell — in STAGE pixels, i.e. before this
+  // device's _viewScale is applied by the CSS transform. Deliberately unchanged
+  // by the per-device zoom work: everything that reads it (grid drawing, fog,
+  // cell hit-testing, the Align tool) operates in stage space, which is the
+  // space stored coordinates live in.
   _csScreen(){
     return this._cellSize * (_mapBgImage ? (this._bgMapScale || 1) : 1);
   },
@@ -299,9 +380,14 @@ registerPanel('battlemap',{
   // The bbox CENTER is rotation-invariant (transform-origin is 50% 50%), so
   // we measure from it, un-rotate, then shift back to top-left origin using
   // the element's UNROTATED size (canvas.width/height = stage pixels).
+  // The per-device _viewScale is a uniform scale() on an ancestor, so it
+  // changes exactly one thing here: the screen-px-per-stage-px factor. It
+  // cannot affect the `+ W/2` shift, because el.width (canvas backing store)
+  // and el.offsetWidth (layout size) are both UNTRANSFORMED. That is why this
+  // single divisor is the whole coordinate change — see _screenScale().
   _stagePoint(clientX, clientY, el){
     const rect = el.getBoundingClientRect();
-    const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+    const z = this._screenScale();
     const cx = (clientX - (rect.left + rect.width  / 2)) / z;
     const cy = (clientY - (rect.top  + rect.height / 2)) / z;
     const d = this._stageDelta(cx, cy);
@@ -574,7 +660,10 @@ registerPanel('battlemap',{
     // when an upload state is restored without its image.
     if (this._bgMapPath){
       _mapBgImage = null;
-      this._loadBgFromPath(this._bgMapPath);
+      // autoFit: a restored snapshot carries its own world scale and its own
+      // image, so this device should fit it fresh rather than keep a zoom
+      // chosen for whatever was on screen before.
+      this._loadBgFromPath(this._bgMapPath, /*autoFit=*/true);
     } else {
       _mapBgImage = null;
       this._render();
@@ -634,81 +723,84 @@ registerPanel('battlemap',{
     this._lastTokenScale = newScale;
   },
 
-  // Resize the stage + every canvas in place and redraw the grid/strokes/fog/
-  // tokens at the given scale. Used by the wheel/pinch zoom paths so a live
-  // zoom is glitch-free without forcing an innerHTML rebuild.
-  // Caller is responsible for already having set this._bgMapScale and run
-  // _scaleTokensTo so token coords are at the new scale.
-  _applyZoomTransform(scale){
+  // Apply this device's view zoom. Purely a display operation: it sets one
+  // CSS transform and the layout size that drives the scrollbars. It NEVER
+  // touches token coordinates, drawing points, or any synced state — which is
+  // the whole reason zoom can safely differ per device.
+  //
+  // Replaces the old _applyZoomTransform, which resized every canvas and
+  // rebaked token coords because zoom used to BE the world scale.
+  _applyViewScale(v){
+    if (v != null) this._viewScale = this._clampView(v);
     const b = this._body; if (!b) return;
-    const stage  = b.querySelector('#map-stage'); if (!stage) return;
-    const grid   = b.querySelector('#map-canvas');
-    const drawC  = b.querySelector('#draw-canvas');
-    const csNow  = this._csScreen();
-    const W      = this._cols * csNow;
-    const H      = this._rows * csNow;
+    const stage = b.querySelector('#map-stage'); if (!stage) return;
+    const sizer = b.querySelector('#map-sizer');
+    const zoomEl = b.querySelector('#map-zoom');
+    const vs  = this._viewScale || 1;
+    const cs  = this._csScreen();
+    const W   = this._cols * cs, H = this._rows * cs;
 
-    stage.style.width  = W + 'px';
-    stage.style.height = H + 'px';
-    this._applyBg(stage, W, H);
-
-    if (grid){
-      grid.width = W; grid.height = H;
-      this._drawGrid(grid, csNow);
+    if (zoomEl){
+      zoomEl.style.transformOrigin = '0 0';
+      zoomEl.style.transform = 'scale(' + vs + ')';
+      zoomEl.style.width  = W + 'px';
+      zoomEl.style.height = H + 'px';
     }
-    if (drawC){
-      drawC.width = W; drawC.height = H;
-      this._drawAllStrokes();
+    // The sizer carries the SCALED size so #map-scroll can scroll the whole
+    // zoomed map. A transform alone leaves layout size unchanged, so without
+    // this you'd zoom in and be unable to reach the rest of the map.
+    if (sizer){
+      sizer.style.width  = (W * vs) + 'px';
+      sizer.style.height = (H * vs) + 'px';
     }
-    if (this._fog !== null) this._drawFog();
+    // Consumed by CSS for anything that must stay a fixed SCREEN size despite
+    // the transform (mobile token tap targets — see styles/main.css).
+    stage.style.setProperty('--bm-vs', String(vs));
+    this._counterScaleLabels(vs);
 
-    // Token DOM positions/sizes — tokens use stage-pixel coords (already
-    // scaled in _scaleTokensTo) and visual diameter = natural cellSize × scale.
-    const csNat = this._cellSize;
-    // Track each token's current diameter so we can place its name label
-    // below it (labels are siblings of .map-token, not children).
-    const tokenDim = new Map();
+    const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = vs;
+    const pct = b.querySelector('#map-bg-scale-pct');
+    // Show the EFFECTIVE zoom — what the user actually perceives — not the
+    // bare view multiplier, which is meaningless without the world scale.
+    if (pct) pct.textContent = Math.round(vs * (this._bgMapScale || 1) * 100) + '%';
+  },
+
+  // Font sizes with a minimum are minimums in SCREEN pixels by intent, but the
+  // CSS transform silently reinterprets them as stage pixels. Divide the floor
+  // by the view scale so "at least 11px" keeps meaning 11px on the display.
+  _counterScaleLabels(vs){
+    const b = this._body; if (!b) return;
+    const csNat = this._cellSize, bg = this._bgMapScale || 1;
+    b.querySelectorAll('.map-token-name').forEach(el => {
+      el.style.fontSize = Math.max(11 / vs, 10 * bg).toFixed(1) + 'px';
+    });
     b.querySelectorAll('.map-token').forEach(el => {
-      const t = this._tokens.find(x => x.id === el.dataset.tid);
-      if (!t || t.x == null) return;
-      el.style.left = t.x + 'px';
-      el.style.top  = t.y + 'px';
-      const sz = t.size || 1;
-      const dim = (sz * csNat - 4) * scale;
-      // Match the glyph vs initials font-size logic from _renderTokens so
-      // emoji icons stay big at every zoom level.
+      const t = this._tokens.find(x => x.id === el.dataset.tid); if (!t) return;
       const iconSource = t.portrait || t.icon;
       const isImgIcon = typeof iconSource === 'string' && (iconSource.startsWith('data:image/') || iconSource.startsWith('img/') || /^https?:\/\//.test(iconSource));
       const isSvgIcon = typeof iconSource === 'string' && iconSource.startsWith('<svg');
-      const isGlyphIcon = !!(t.icon || t.portrait) && !isImgIcon && !isSvgIcon;
-      const fontSize = isGlyphIcon
-        ? Math.max(14, dim * 0.6)
-        : (sz > 1 ? 13 : Math.max(8, 11 - (this._tokenDisplayLabel(t).length > 5 ? 2 : 0))) * scale;
-      el.style.width  = dim + 'px';
-      el.style.height = dim + 'px';
-      el.style.fontSize = fontSize.toFixed(1) + 'px';
-      tokenDim.set(t.id, dim);
+      if (!(!!(t.icon || t.portrait) && !isImgIcon && !isSvgIcon)) return;   // glyph icons only
+      const dim = ((t.size || 1) * csNat - 4) * bg;
+      el.style.fontSize = Math.max(14 / vs, dim * 0.6).toFixed(1) + 'px';
     });
-    // Reposition the name labels (siblings of .map-token) to track their
-    // tokens through the zoom. Without this they stick at their pre-zoom
-    // y-coordinate and drift away from the circle.
-    b.querySelectorAll('.map-token-name').forEach(el => {
-      const t = this._tokens.find(x => x.id === el.dataset.tid);
-      if (!t || t.x == null) return;
-      const dim = tokenDim.get(t.id) || ((t.size||1) * csNat - 4) * scale;
-      el.style.left = t.x + 'px';
-      el.style.top  = (t.y + dim/2 + 4) + 'px';
-      // Floor font-size at 11px so labels stay readable at low zoom.
-      el.style.fontSize = Math.max(11, 10 * scale).toFixed(1) + 'px';
-    });
-
-    // Keep the toolbar slider/% display in sync.
-    const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = scale;
-    const pct    = b.querySelector('#map-bg-scale-pct'); if (pct) pct.textContent = Math.round(scale*100)+'%';
   },
 
-  // Fit-to-view: pick the largest scale that makes the map fully fit inside
-  // the current panel viewport, then refit grid + render.
+  // A device still running the OLD code writes _bgMapScale when it zooms, and
+  // pushes it together with the tokens it rescaled — so the payload is
+  // internally consistent and accepting it can't corrupt anything. But the
+  // effective scale here would visibly lurch. Absorb the world-scale change
+  // into this device's view scale so the on-screen size is unchanged.
+  // Also covers a saved-map restore that lands on the same map path.
+  _absorbWorldScaleChange(oldBg, newBg){
+    if (!oldBg || !newBg || oldBg === newBg) return;
+    const eff = (this._viewScale || 1) * oldBg;   // on-screen size to preserve
+    this._viewScale = this._clampView(eff / newBg);
+  },
+
+  // Fit-to-view — now a per-device operation. Computes the effective on-screen
+  // scale that fits this viewport, then divides out the frozen world scale to
+  // get THIS device's view multiplier. Writes nothing synced: fitting on a
+  // phone must not move anyone else's view.
   _fitMapToView(){
     if (!_mapBgImage || !this._bgMapNaturalW) return;
     const scrollEl = this._body?.querySelector('#map-scroll');
@@ -716,16 +808,21 @@ registerPanel('battlemap',{
     const vw = scrollEl.clientWidth - 4;   // small margin so edges aren't flush
     const vh = scrollEl.clientHeight - 4;
     if (vw <= 0 || vh <= 0) return;
-    const sx = vw / this._bgMapNaturalW;
-    const sy = vh / this._bgMapNaturalH;
-    this._bgMapScale = Math.max(0.05, Math.min(3, Math.min(sx, sy)));
-    this._scaleTokensTo(this._bgMapScale);
+    // Fit the GRID extent, not the raw image. _cols/_rows round UP to whole
+    // cells, so the stage is up to a cell wider/taller than the art — and the
+    // stage is what gets laid out. Fitting the image instead (what this used
+    // to do) left the last row overflowing, which raised a scrollbar, which
+    // shrank clientHeight, which meant "Fit" reliably failed to fit.
+    const gw = this._cols * this._cellSize, gh = this._rows * this._cellSize;
+    if (!gw || !gh) return;
+    // Displayed size is grid × bgMapScale × viewScale (_applyBg/_setupMap
+    // apply the first, the CSS transform the second), so viewScale = eff / bg.
+    const eff = Math.max(0.1, Math.min(this._maxEff(), Math.min(vw / gw, vh / gh)));
     this._fitGridToBg();
     this._isFitted = true; // panel resize will re-fit until the user manually zooms
-    this._saveMap();
-    // Glitch-free fit: in-place size every layer instead of an innerHTML
-    // rebuild that would briefly flash the empty stage.
-    this._applyZoomTransform(this._bgMapScale);
+    this._pendingRefit = false;
+    this._applyViewScale(eff / (this._bgMapScale || 1));
+    this._saveViewState();
   },
 
   // BroadcastChannel — lets a player view tab receive live updates from the
@@ -778,7 +875,13 @@ registerPanel('battlemap',{
         const rotChanged   = msg.mapRotation != null && (msg.mapRotation || 0) !== (this._mapRotation || 0);
         if (msg.gridOffsetX != null) this._gridOffsetX = msg.gridOffsetX;
         if (msg.gridOffsetY != null) this._gridOffsetY = msg.gridOffsetY;
-        if (msg.bgMapScale  != null){ this._bgMapScale = msg.bgMapScale; this._lastTokenScale = msg.bgMapScale; }
+        if (msg.bgMapScale  != null){
+          // Same map, different world scale (an old-code tab zooming, or a
+          // saved-map restore). Keep this window's on-screen size steady
+          // instead of lurching; a genuine map change re-fits below anyway.
+          if (msg.bgMapPath === prevPath) this._absorbWorldScaleChange(this._bgMapScale || 1, msg.bgMapScale);
+          this._bgMapScale = msg.bgMapScale; this._lastTokenScale = msg.bgMapScale;
+        }
         if (msg.mapRotation != null) this._mapRotation = msg.mapRotation;
         if (msg.gridOpacity != null) this._gridOpacity = msg.gridOpacity;
         if (msg.gridWidth   != null) this._gridWidth   = msg.gridWidth;
@@ -786,7 +889,9 @@ registerPanel('battlemap',{
         // Map path changed → reload the bg image, then full re-render so the
         // canvas is sized to the new map.
         if (msg.bgMapPath && msg.bgMapPath !== prevPath){
-          if (this._loadBgFromPath) this._loadBgFromPath(this._bgMapPath);
+          // autoFit: a different map means this window re-fits to its OWN
+          // viewport, independently of whatever the sender is looking at.
+          if (this._loadBgFromPath) this._loadBgFromPath(this._bgMapPath, /*autoFit=*/true);
           return; // _loadBgFromPath triggers _render() on image load
         }
         // Map was cleared on the DM side → drop the cached image and re-render
@@ -1078,6 +1183,16 @@ registerPanel('battlemap',{
     html+='<div class="bm-main" style="flex:1;display:flex;min-height:0;overflow:hidden;position:relative">'
       +'<div id="map-scroll" style="flex:1;overflow:auto;background:#111;position:relative;'
         + (this._tokensVisible?'':'--bm-hide-tokens:1;')+'">'
+      // Two wrappers, deliberately. #map-sizer carries the SCALED layout size
+      // so #map-scroll gets correct scrollbars (a CSS transform doesn't affect
+      // layout, so without this you could zoom in but not scroll to the rest
+      // of the map). #map-zoom carries the scale at origin 0 0. They stay
+      // separate from #map-stage because that element already owns rotate()
+      // at origin 50% 50% — compositing the two on one element would need a
+      // hand-written translate sandwich recomputed on every resize, and every
+      // existing querySelector('#map-stage') would still have to keep working.
+      +'<div id="map-sizer" style="position:relative">'
+      +'<div id="map-zoom" style="position:absolute;top:0;left:0;transform-origin:0 0">'
       +'<div id="map-stage" class="'
         + (this._tokensVisible?'':'hide-tokens ')
         + (this._namesVisible?'':'hide-names ')
@@ -1087,8 +1202,10 @@ registerPanel('battlemap',{
         + (this._mapRotation ? `;transform-origin:50% 50%;transform:rotate(${this._mapRotation}deg)` : '')
         + '">'
         +'<canvas id="map-canvas" style="display:block;position:relative;z-index:1"></canvas>'
-      +'</div>'
-      +'</div>'
+      +'</div>'   // #map-stage
+      +'</div>'   // #map-zoom
+      +'</div>'   // #map-sizer
+      +'</div>'   // #map-scroll
       + (this._settingsOpen ? this._renderSettingsSidebar() : '')
     +'</div>';
 
@@ -1173,6 +1290,11 @@ registerPanel('battlemap',{
     drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase') ? 'auto' : 'none';
     this._drawAllStrokes();
     this._renderTokens();
+    // Size the zoom wrappers to match the stage we just built. Must happen
+    // BEFORE _render() restores scrollLeft/scrollTop — if the sizer is still
+    // 0×0 the browser clamps the restored scroll to 0 and the view jumps to
+    // the top-left corner on every re-render.
+    this._applyViewScale(null);
 
     // Default tool is now empty string — tokens are always draggable
     // Tool only controls what happens on canvas click (place PC/NPC or erase)
@@ -1306,18 +1428,15 @@ registerPanel('battlemap',{
     // Both run the same comprehensive in-place update — no innerHTML thrash,
     // so the slider drag stays smooth and there's no settle-flicker.
     b.querySelector('#map-bg-scale')?.addEventListener('input',e=>{
-      const newScale = parseFloat(e.target.value);
       this._isFitted = false;
-      this._scaleTokensTo(newScale);
-      this._bgMapScale = newScale;
-      this._applyZoomTransform(newScale);
-      const pct = b.querySelector('#map-bg-scale-pct');
-      if (pct) pct.textContent = Math.round(newScale*100)+'%';
+      // Drives _viewScale only. No _scaleTokensTo, no _bgMapScale write —
+      // dragging this slider must not move anybody else's tokens.
+      this._applyViewScale(parseFloat(e.target.value));
     });
     b.querySelector('#map-bg-scale')?.addEventListener('change',()=>{
-      // Persist on release. _applyZoomTransform during the drag already kept
-      // every visual layer in sync.
-      this._saveMap();
+      // Persist to the per-device key on release, NOT _saveMap(). Zoom is no
+      // longer campaign state.
+      this._saveViewState();
     });
     b.querySelector('#fog-radius')?.addEventListener('input',e=>{this._fogRadius=parseInt(e.target.value)||1;});
     b.querySelector('#draw-color')?.addEventListener('input',e=>{this._drawColor=e.target.value;});
@@ -1581,12 +1700,11 @@ registerPanel('battlemap',{
       const _sp = this._stagePoint(e.clientX, e.clientY, canvas);
       const ex = _sp.x;
       const ey = _sp.y;
-      // Recompute `cs` per event. The outer closure captured `cs` once at
-      // _setupMap time (line ~1075). Wheel/pinch zoom calls
-      // _applyZoomTransform — it resizes the canvas but doesn't re-run
-      // _setupMap, so the captured cs would still match the pre-zoom cell
-      // size and every `(e.clientX-r.left)/cs` division would land on the
-      // wrong cell (and the brush would cover a wrong-sized area).
+      // Recompute `cs` per event rather than trusting the closure's copy,
+      // captured once at _setupMap time. A map swap or an Align adjustment
+      // changes _cellSize/_bgMapScale without re-running _setupMap, and a
+      // stale cs makes every `(e.clientX-r.left)/cs` division land on the
+      // wrong cell (and the brush cover a wrong-sized area).
       const cs = this._csScreen();
       const radius=this._fogRadius||1;
       const mode  = this._fogPaintMode  || 'reveal';
@@ -1730,40 +1848,35 @@ registerPanel('battlemap',{
       if (e.ctrlKey) return; // hand off to workspace zoom
       if (!_mapBgImage) return; // nothing to zoom without a map
       e.preventDefault();
-      const oldScale = this._bgMapScale || 1;
+      const oldScale = this._viewScale || 1;
       const factor = e.deltaY < 0 ? 1.1 : (1/1.1);
-      const newScale = Math.max(0.1, Math.min(3, oldScale * factor));
+      const newScale = this._clampView(oldScale * factor);
       if (newScale === oldScale) return;
 
       const rect = scrollEl.getBoundingClientRect();
-      // scrollLeft/scrollTop are in the scroll element's own (unscaled)
-      // space while clientX is screen space — divide by the workspace zoom
-      // so the cursor-anchor math mixes like units.
+      // scrollLeft/scrollTop are in #map-sizer units — stage px × viewScale —
+      // while clientX is screen space. Divide by the WORKSPACE zoom only:
+      // #map-scroll sits inside the workspace transform but outside the map
+      // one, so _viewScale must not appear here. It is already carried by
+      // oldScale/newScale below, which is what makes the anchor math work.
       const _wz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
       const cx = (e.clientX - rect.left)/_wz, cy = (e.clientY - rect.top)/_wz;
-      // Image-space point under cursor before zoom
+      // Stage-space point under the cursor before the zoom.
       const imgX = (scrollEl.scrollLeft + cx) / oldScale;
       const imgY = (scrollEl.scrollTop  + cy) / oldScale;
 
-      this._bgMapScale = newScale;
       this._isFitted = false; // manual zoom — panel resize should not re-fit
-      // Update token positions in lockstep so they stay anchored to the map
-      // during the wheel spin.
-      this._scaleTokensTo(newScale);
-
-      // Comprehensive in-place update: resize stage + every canvas + redraw
-      // the grid, strokes, fog, tokens. No innerHTML thrash, so the zoom is
-      // fluid and there's no settle-flicker when the wheel timer fires.
-      this._applyZoomTransform(newScale);
+      // Display-only. No _scaleTokensTo: token coordinates are in stage space
+      // and stage space does not move when this device zooms.
+      this._applyViewScale(newScale);
       scrollEl.scrollLeft = imgX * newScale - cx;
       scrollEl.scrollTop  = imgY * newScale - cy;
-      const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = newScale;
-      const pct    = b.querySelector('#map-bg-scale-pct'); if (pct) pct.textContent = Math.round(newScale*100)+'%';
 
-      // Just persist the new state on settle — no full _render needed since
-      // every visual layer was already updated above.
+      // Persist to the per-device key on settle. Note what is NOT here any
+      // more: _saveMap(), which used to ship the whole battlemap blob
+      // (tokens + fog + strokes + drawings) to Firebase on every wheel spin.
       clearTimeout(_wheelTimer);
-      _wheelTimer = setTimeout(() => { this._saveMap(); }, 180);
+      _wheelTimer = setTimeout(() => { this._saveViewState(); }, 180);
     }, { passive:false });
 
     // Pan: middle-click drag, right-click drag, or left-click drag on empty
@@ -1836,11 +1949,11 @@ registerPanel('battlemap',{
         _touchPan = null; // pinch supersedes pan
         _touchPinch = {
           startDist: touchDistance(e.touches[0], e.touches[1]),
-          startScale: this._bgMapScale || 1,
+          startScale: this._viewScale || 1,
           anchorX: mid.x, anchorY: mid.y,
-          // Image-space point under the pinch center, captured at the start
-          imgX: (scrollEl.scrollLeft + mid.x) / (this._bgMapScale || 1),
-          imgY: (scrollEl.scrollTop  + mid.y) / (this._bgMapScale || 1),
+          // Stage-space point under the pinch center, captured at the start.
+          imgX: (scrollEl.scrollLeft + mid.x) / (this._viewScale || 1),
+          imgY: (scrollEl.scrollTop  + mid.y) / (this._viewScale || 1),
         };
         this._isFitted = false;
       }
@@ -1850,12 +1963,11 @@ registerPanel('battlemap',{
         e.preventDefault();
         const dist = touchDistance(e.touches[0], e.touches[1]);
         const ratio = dist / _touchPinch.startDist;
-        const newScale = Math.max(0.1, Math.min(3, _touchPinch.startScale * ratio));
         if (!_mapBgImage) return;
-        this._bgMapScale = newScale;
-        this._scaleTokensTo(newScale);
-        // Same in-place comprehensive update as the wheel path.
-        this._applyZoomTransform(newScale);
+        const newScale = this._clampView(_touchPinch.startScale * ratio);
+        // Display-only, exactly like the wheel path — a player pinching their
+        // phone must not rescale the DM's tokens.
+        this._applyViewScale(newScale);
         scrollEl.scrollLeft = _touchPinch.imgX * newScale - _touchPinch.anchorX;
         scrollEl.scrollTop  = _touchPinch.imgY * newScale - _touchPinch.anchorY;
       } else if (_touchPan && e.touches.length === 1){
@@ -1871,9 +1983,8 @@ registerPanel('battlemap',{
     }, { passive: false });
     const endTouch = () => {
       if (_touchPinch){
-        // Persist the new scale. No full _render — _applyZoomTransform during
-        // the pinch already updated every visual layer.
-        this._saveMap();
+        // Per-device key, not _saveMap(). Nothing synced changed.
+        this._saveViewState();
       }
       _touchPan = null;
       _touchPinch = null;
@@ -3069,8 +3180,12 @@ registerPanel('battlemap',{
       let fontSize;
       if (isGlyphIcon){
         // ~60% of dim — leaves a small ring of the token color around the glyph.
-        // Floor at 14px so the glyph stays readable when the map is zoomed far out.
-        fontSize = Math.max(14, dim * 0.6);
+        // Floor at 14px so the glyph stays readable when the map is zoomed far
+        // out. The floor is in SCREEN px by intent, but everything here is in
+        // stage px and the view transform scales it, so divide the floor by
+        // _viewScale to keep its real-world meaning. (_counterScaleLabels
+        // reapplies the same expression when only the zoom changes.)
+        fontSize = Math.max(14 / (this._viewScale || 1), dim * 0.6);
       } else {
         fontSize = (size > 1 ? 13 : Math.max(8, 11 - (displayLabel.length > 5 ? 2 : 0))) * tokScale;
       }
@@ -3103,7 +3218,9 @@ registerPanel('battlemap',{
       // is zoomed out. Soft pill background gives constant contrast against
       // light or dark map art (the previous text-shadow alone wasn't enough
       // on busy backgrounds).
-      const nameFs = Math.max(11, 10 * tokScale);
+      // Floor divided by _viewScale for the same reason as the glyph floor
+      // above — it must stay 11 SCREEN px, not 11 stage px.
+      const nameFs = Math.max(11 / (this._viewScale || 1), 10 * tokScale);
       nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25`;
       nameEl.textContent = displayLabel;
       frag.appendChild(nameEl);
@@ -3148,20 +3265,20 @@ registerPanel('battlemap',{
         const startX=e.clientX, startY=e.clientY;
         let curPx=t.x, curPy=t.y;
         let moved=false;
-        // Drag anchor lives on this._drag (not in the closure) so
-        // _scaleTokensTo() can rescale it when the user zooms mid-drag.
-        // A pure-closure copy would go stale: t.x/t.y get multiplied by the
-        // new zoom ratio while the closure's startPx/startPy don't,
-        // teleporting the token on the next mousemove.
+        // Drag anchor lives on this._drag (not in the closure) so a remote
+        // world-scale change can rescale it in lockstep with t.x/t.y. A
+        // pure-closure copy would go stale and teleport the token on the next
+        // mousemove. (Local zoom no longer rescales anything — see
+        // _applyViewScale — but a saved-map restore mid-drag still can.)
         this._drag = { moved:false, startPx:t.x, startPy:t.y };
 
         const onMove=ev=>{
           // Token positions are stored in stage-pixel coords, but the cursor
-          // delta comes back in screen pixels. The workspace-canvas has a
-          // CSS transform: scale(zoom), so one stage pixel == `zoom` screen
-          // pixels. Divide the delta by zoom, then un-rotate it into stage
-          // space (_stageDelta) so drags track the cursor on rotated maps.
-          const z = (typeof getZoom === 'function') ? getZoom() : 1;
+          // delta comes back in screen pixels. TWO CSS scales sit in between:
+          // the workspace canvas and this device's map zoom. _screenScale()
+          // is their product. Divide the delta by it, then un-rotate into
+          // stage space (_stageDelta) so drags track the cursor on rotated maps.
+          const z = this._screenScale();
           const _sd = this._stageDelta((ev.clientX-startX)/z, (ev.clientY-startY)/z);
           const dx=_sd.x, dy=_sd.y;
           if(!moved&&Math.abs(dx)<4&&Math.abs(dy)<4) return;
@@ -3250,7 +3367,9 @@ registerPanel('battlemap',{
           if (ev.touches.length !== 1) return;
           const tt = ev.touches[0];
           // Same zoom + rotation correction as the mouse drag handler above.
-          const z = (typeof getZoom === 'function') ? getZoom() : 1;
+          // This is the touch path — the one the per-device zoom feature
+          // exists for, so getting _screenScale() here is not optional.
+          const z = this._screenScale();
           const _sd = this._stageDelta((tt.clientX-startX)/z, (tt.clientY-startY)/z);
           const dx = _sd.x, dy = _sd.y;
           if (!moved && Math.abs(dx)<6 && Math.abs(dy)<6) return;

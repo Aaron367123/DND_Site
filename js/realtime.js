@@ -563,13 +563,26 @@ function _reloadPanel(id) {
       def._showGrid   = def._gridType !== 'none';
       if (d.gridOffsetX != null) def._gridOffsetX = d.gridOffsetX;
       if (d.gridOffsetY != null) def._gridOffsetY = d.gridOffsetY;
-      if (d.bgMapScale  != null) { def._bgMapScale = d.bgMapScale; def._lastTokenScale = d.bgMapScale; }
+      const _prevPath = def._bgMapPath || null;
+      const _nextPath = d.bgMapPath || null;
+      if (d.bgMapScale  != null) {
+        // Zoom is per-device now, so bgMapScale only moves for a real reason:
+        // a map swap, a saved-map restore, or a device still on old code that
+        // zoomed. In the last two cases absorb the change into this device's
+        // view scale so its on-screen size doesn't lurch. A map swap re-fits
+        // below regardless, so skip it there.
+        if (_nextPath === _prevPath) def._absorbWorldScaleChange?.(def._bgMapScale || 1, d.bgMapScale);
+        def._bgMapScale = d.bgMapScale; def._lastTokenScale = d.bgMapScale;
+      }
       if (d.mapRotation != null) def._mapRotation = d.mapRotation;
       if (d.gridOpacity != null) def._gridOpacity = d.gridOpacity;
       if (d.gridWidth   != null) def._gridWidth   = d.gridWidth;
-      def._bgMapPath  = d.bgMapPath || null;
+      def._bgMapPath  = _nextPath;
       def._render();
-      if (def._bgMapPath) def._loadBgFromPath?.(def._bgMapPath);
+      // Only re-fit when the map actually changed. This also stops a redundant
+      // image reload on every unrelated update (a fog tick used to reload the
+      // background), which the old unconditional call did on each sync.
+      if (def._bgMapPath) def._loadBgFromPath?.(def._bgMapPath, _nextPath !== _prevPath);
     } catch(e) {}
     return;
   }

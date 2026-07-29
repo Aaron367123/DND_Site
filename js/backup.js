@@ -54,6 +54,12 @@ const EXCLUDE = new Set([
   'skt-notes-v2-corrupt-backup',
   // Transient UI noise.
   'skt-search-recent-v1',
+  // Per-device battle-map zoom, one key per window role. A zoom fitted to a
+  // 27" monitor restored onto a phone is exactly the "wrong, not merely
+  // redundant" case above — and per-device zoom exists precisely so screens
+  // of different sizes stop inheriting each other's view.
+  'skt-bm-view-v1',
+  'skt-bm-view-player-v1',
 ]);
 
 // Friendly names for the restore preview. Anything unlisted still gets

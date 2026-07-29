@@ -459,10 +459,14 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
     touch-action: none;
   }
   /* Token tap targets — keep token visual size scaled with the map but ensure
-     the hit area is at least 32px even at very low zoom. */
+     the hit area is at least 32px even at very low zoom.
+     Divided by --bm-vs (this device's map zoom, set on #map-stage by
+     _applyViewScale) because the map now sits inside a CSS scale(): without
+     it, 32px would silently become 32 STAGE px and a zoomed-out phone would
+     get tap targets far under the 32px minimum this rule exists to guarantee. */
   body.player-mode .window[data-panel="battlemap"] .map-token{
-    min-width: 32px;
-    min-height: 32px;
+    min-width: calc(32px / var(--bm-vs, 1));
+    min-height: calc(32px / var(--bm-vs, 1));
   }
 }
 
