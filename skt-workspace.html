@@ -324,8 +324,11 @@
 <script defer src="js/panels/battlemap.js?v=77deba5e98"></script>
 <script defer src="js/panels/npc-library.js?v=fb75c638ec"></script>
 <script defer src="js/panels/bestiary.js?v=82bf3c5db4"></script>
-<script defer src="js/panels/adventures.js?v=2292f2612f"></script>
-<script defer src="js/panels/books.js?v=f9bf470615"></script>
+<!-- Behaviour shared by the Adventures and Books panels. Must load BEFORE
+     both, since each calls applyContentPanelShared() at the end of its file. -->
+<script defer src="js/panels/content-panel.js?v=4d5ee5f31a"></script>
+<script defer src="js/panels/adventures.js?v=66fdb095a9"></script>
+<script defer src="js/panels/books.js?v=75cd5addb6"></script>
 <script defer src="js/panels/npc-generator.js?v=8d9da454f7"></script>
 <script defer src="js/panels/loot.js?v=824fbb5705"></script>
 <script defer src="js/panels/encounter.js?v=76d4f06a4b"></script>
