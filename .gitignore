@@ -14,3 +14,9 @@ upload.log
 
 # scratch output from data-audit scripts
 *.tmp
+
+# Vendored 5etools v2.28.0 reference copy — 1,572 files the app never loads.
+# Kept beside the repo (../DND_Site-reference/) so project-wide greps and
+# editor file-search stop drowning in it. Nothing in js/, styles/, tools/,
+# skt-workspace.html, sw.js or manifest.json references it.
+/5etools-v2.28.0/
