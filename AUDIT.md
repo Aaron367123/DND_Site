@@ -473,7 +473,25 @@ Bucket `dnd-img`, public base `https://pub-4b8864700c38402395c9f9951ed106ce.r2.d
 
 **Still fully reversible:** the images remain in the repo. Setting `imgBase: ''` in `js/asset-config.js` restores local serving.
 
+### `r2.dev` load-tested — the rate-limit worry was unfounded (2026-07-28)
+
+Cloudflare designates the free `pub-*.r2.dev` URL as non-production and rate-limited, which was the stated reason to consider a custom domain before purging. Measured instead of assumed: **481 requests / 115 MB in 34 s at 40 concurrent** — 5–10× a real session, and harsher per-IP than five players browsing.
+
+- **481/481 HTTP 200. Zero 429s, zero throttling.** (The one 404 in an earlier run was `adventure/SKT/thumbnail`, a *directory* the test script picked up — not a missing object.)
+- Latency p50 **317 ms**, p95 **1.1 s**.
+- **No edge caching**: repeat requests to the same object stay at p50 ~170–210 ms with no `Age` or `cf-cache-status` header, despite `Cache-Control: immutable, max-age=31536000`. Every request reaches the R2 origin.
+
+So a custom domain would buy edge caching, not rate-limit relief — and the service worker already caches images per-device, so the gain is first-view-only. **Decision: no custom domain; proceed r2.dev → soak → purge.** Residual risk is policy, not capacity: Cloudflare could tighten `r2.dev` at any time precisely because it's non-production.
+
 ### Remaining — the history purge (irreversible; soak first)
+
+**Tooling is built and tested: `tools/purge-img-history.sh`.** Rewrites in a fresh clone and stops — it never pushes, and never touches the working repo, which stays a complete fallback. Gates on: clean tree, on `main`, in sync with `origin/main` (unpushed work would be discarded by the force-push), `img/` still tracked, `.gitignore` covers `img/`, `imgBase` non-empty, and **8 CDN probes sampled across the tree all returning 200**. Backs up to a tag + bundle, then proves the bundle by *actually cloning from it* and comparing HEAD, commit count and file count — `git bundle verify` alone only checks prerequisites, not that the result is usable.
+
+Predicts the post-purge commit count up front (**14 image-only commits will vanish, 236 of 250 remain**) and asserts it afterwards, so a surprise is a failure rather than a shrug.
+
+Verified end-to-end on a throwaway repo built to mirror the real conditions — force-added images past `.gitignore`, real CDN paths, a bare upstream: **.git 12M → 102K**, `img/` gone from index and all history, predicted commit count exact, key source files intact, original repo and upstream both provably untouched.
+
+**Soak checklist before running it:** one real session with players connected · every device loaded the new build · Settings → Data → Diagnostics shows no `Failed to load img` entries (the error handler records resource failures, so this is now measurable rather than a vibe) · a fresh incognito window renders images, since the service worker will otherwise mask a broken deploy with cached copies.
 
 1. **R2, not Pages**: Pages caps a project at 20,000 files; 14,278 images + thumbnails leaves no headroom. R2 has no file limit, 10 GB free (need ~3.9 GB), zero egress.
 2. Upload with `rclone copy ./img r2:<bucket>` — bucket root mirrors the *contents* of `img/`; thumbnails to `thumbs/`. Set `Cache-Control: public, max-age=31536000, immutable`.
