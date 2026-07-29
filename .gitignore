@@ -11,3 +11,6 @@
 # Local scratch
 *.log
 upload.log
+
+# scratch output from data-audit scripts
+*.tmp
