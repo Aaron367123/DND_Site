@@ -1,8 +1,10 @@
 {
+  "id": "skt-workspace",
   "name": "SKT Campaign Workspace",
   "short_name": "SKT DnD",
   "description": "D&D 5e campaign management tool for Storm King's Thunder",
-  "start_url": "./skt-workspace.html?player=1",
+  "scope": "./",
+  "start_url": "./skt-workspace.html",
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#1a1a1a",
@@ -11,7 +13,22 @@
     {
       "src": "icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Player view",
+      "short_name": "Player",
+      "description": "Read-only view of whatever the DM is currently sharing",
+      "url": "./skt-workspace.html?player=1"
     }
   ]
 }

@@ -1,0 +1,28 @@
+<!-- Maskable variant of icon.svg, for Android adaptive icons.
+     Two differences from the base icon, both required by the maskable spec:
+       1. Full-bleed background, no rounded corners. The platform applies its
+          own mask (circle, squircle, rounded square, teardrop — it varies by
+          launcher), so any transparency near the edge shows as a notch.
+       2. Artwork scaled to 85% about the centre. Maskable icons guarantee
+          only the central 80% circle is visible; the unscaled art reaches a
+          radius of ~201 of the 204.8 available, which is inside the safe
+          zone but with no practical margin. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#1a1a1a"/>
+  <g transform="translate(256 256) scale(0.85) translate(-256 -256)">
+    <!-- Shield -->
+    <path d="M256 96 L368 144 L368 288 Q368 368 256 416 Q144 368 144 288 L144 144 Z"
+          fill="#2a2a3a" stroke="#8b6914" stroke-width="8"/>
+    <!-- Sword (vertical, centered) -->
+    <rect x="248" y="130" width="16" height="200" rx="3" fill="#c8a84b"/>
+    <!-- Crossguard -->
+    <rect x="216" y="222" width="80" height="14" rx="4" fill="#c8a84b"/>
+    <!-- Pommel -->
+    <ellipse cx="256" cy="338" rx="14" ry="10" fill="#c8a84b"/>
+    <!-- Blade tip -->
+    <polygon points="248,130 264,130 256,100" fill="#c8a84b"/>
+    <!-- Shield border highlight -->
+    <path d="M256 112 L356 156 L356 288 Q356 358 256 400"
+          fill="none" stroke="#c8a84b" stroke-width="3" opacity="0.4"/>
+  </g>
+</svg>
