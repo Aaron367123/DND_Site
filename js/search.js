@@ -1145,10 +1145,10 @@ function _detailImgTag(d) {
   if (!d._img) return '';
   if (d.cat === 'monster'){
     // Prefer the token image (head-shot, cropped) over the full creature art.
-    // 5etools stores tokens at img/bestiary/tokens/<source>/<name>.webp — same
-    // path as the fluff art with "tokens/" inserted. Fall back to the full art
-    // if no token exists for this monster, then hide if neither loads.
-    const token = assetUrl(d._img.replace(/^img\//,'').replace(/^bestiary\//, 'bestiary/tokens/'));
+    // bestiaryPortraitPath picks whichever actually exists (see utils.js —
+    // 10% of monsters have no token crop). Keep the onerror chain anyway for
+    // art the index doesn't know about, then hide if neither loads.
+    const token = assetUrl(bestiaryPortraitPath(d._img));
     const full  = assetUrl(d._img);
     return `<img class="detail-img" crossorigin="anonymous" src="${esc(token)}" data-fb="${esc(full)}" alt="${esc(d.name)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
   }

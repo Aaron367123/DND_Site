@@ -1942,14 +1942,14 @@ registerPanel('battlemap',{
         // so monsters get the same visual treatment as PCs (round portrait
         // inside the token ring) instead of a generic class-icon emoji.
         // 5etools ships images under bestiary/<source>/ with token-cropped
-        // versions under bestiary/tokens/<source>/ — we mirror the path
-        // mapping the Bestiary panel itself uses. Falls back to the existing
-        // portrait field, then to the class-icon glyph.
+        // versions under bestiary/tokens/<source>/ — bestiaryPortraitPath
+        // picks whichever exists (10% have no crop). Falls back to the
+        // existing portrait field, then to the class-icon glyph.
         // NOTE: deliberately NOT assetUrl() — this value is STORED on the
         // token and synced to Firebase. Persisting an absolute CDN URL would
         // bake the current host into saved state (and break if it changes).
         // renderIcon() re-bases it through assetUrl() at render time.
-        const tokenImg = m.img ? 'img/' + m.img.replace(/^bestiary\//, 'bestiary/tokens/') : null;
+        const tokenImg = m.img ? 'img/' + bestiaryPortraitPath(m.img) : null;
         const portrait = m.portrait || tokenImg || null;
         this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false, icon:npcIcon, portrait});
         this._renderTokens(); this._saveMap();

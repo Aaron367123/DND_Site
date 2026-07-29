@@ -1918,12 +1918,12 @@ registerPanel('combat',{
       // Prefer the head-shot token over the full creature art for the small
       // round portrait. Tokens live alongside the fluff at
       // img/bestiary/tokens/<source>/<name>.webp.
-      const raw = m._img.startsWith('img/') ? m._img.slice(4) : m._img;
-      const token = raw.replace(/^bestiary\//, 'bestiary/tokens/');
-      // Stays a RELATIVE 'img/…' value on purpose — it's stored on the
+      // bestiaryPortraitPath falls back to the full art for the ~10% of
+      // monsters that have no token crop, so we never persist a path that
+      // 404s. Stays a RELATIVE 'img/…' value on purpose — it's stored on the
       // combatant and synced. renderIcon() runs it through assetUrl() when
       // drawing, so it resolves to the CDN without persisting a host.
-      portrait = 'img/' + token;
+      portrait = 'img/' + bestiaryPortraitPath(m._img);
     }
     // Auto-detect legendary actions from the 5etools entry. 5etools data
     // exposes them at m._raw.legendary_actions (array). Default count is 3

@@ -122,6 +122,33 @@ function assetThumbUrl(path) {
   return (base ? base.replace(/\/+$/, '') + '/' : '') + 'thumbs/' + _encPath(rel);
 }
 
+// ─── Bestiary portraits: token crop vs full art ──────────────────────────────
+// 5etools ships a cropped head-shot for most monsters at
+// bestiary/tokens/<SRC>/<name>.webp, alongside the full art at
+// bestiary/<SRC>/<name>.webp. The token path is DERIVED, not declared — and
+// for 327 art paths (10% of the set) no token was ever produced, so deriving
+// it blind means a guaranteed 404 before the fallback kicks in.
+//
+// The bestiary data's own `hasToken` flag can't be used to tell them apart:
+// it is true on all 4,454 monster entries, including every one that has no
+// token file. tools/make-token-index.js precomputes the real exceptions into
+// js/token-index.js instead.
+//
+// Accepts either form — a full-art path OR an already-tokenized path from
+// saved state — and returns the prefix-less path that actually exists. Safe
+// if token-index.js hasn't loaded: it degrades to the old derive-and-fallback
+// behavior rather than throwing.
+function bestiaryPortraitPath(p) {
+  if (!p) return p;
+  const rel = String(p).replace(/^\/+/, '').replace(/^img\//i, '');
+  const m = /^bestiary\/(?:tokens\/)?(.+)$/.exec(rel);
+  if (!m) return p;                       // not bestiary art — hand back as-is
+  const key = m[1];                       // "<SOURCE>/<file>"
+  const misses = window.TOKEN_MISSES;
+  const cropped = !(misses && misses.has(key));
+  return 'bestiary/' + (cropped ? 'tokens/' : '') + key;
+}
+
 // Render an "icon" value (used by party / combatant portraits). Accepts:
 //   - data:image/...      → <img>
 //   - paths starting with img/ or http(s)/ → <img>
@@ -131,14 +158,17 @@ function renderIcon(icon, alt) {
   if (!icon) return '⚔';
   const s = String(icon);
   if (s.startsWith('data:image/') || s.startsWith('img/') || /^https?:\/\//.test(s)) {
+    // Repair the path on the way out. combat.js and battlemap.js PERSIST the
+    // portrait on the combatant/token and sync it, so state saved before the
+    // token index existed still holds 'bestiary/tokens/…' paths that 404.
+    // Rewriting here fixes those renders without migrating stored data.
     // assetUrl passes data:/http(s) through untouched and re-bases img/ paths.
-    const src = assetUrl(s);
-    // 408 of the 2,959 bestiary images ship with no matching token crop
-    // (XMM group entries, JttRC, DSotDQ… — 14% of the set). Callers that
-    // PERSIST a portrait — combat.js and battlemap.js store 'img/bestiary/
-    // tokens/…' on the combatant/token and sync it — can't carry a fallback
-    // chain in a saved string, so retry the un-cropped art here before
-    // giving up. Without this those monsters render an empty portrait ring.
+    const src = assetUrl(bestiaryPortraitPath(s));
+    // Belt and braces: the index only covers paths it was generated from, so
+    // art added later — or an absolute URL saved by an older build, which
+    // bestiaryPortraitPath deliberately leaves alone — can still miss. Retry
+    // the un-cropped art once before giving up, or the portrait ring renders
+    // empty.
     const fb = src.indexOf('/bestiary/tokens/') !== -1
       ? src.replace('/bestiary/tokens/', '/bestiary/') : '';
     const onerr = fb

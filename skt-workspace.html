@@ -287,23 +287,26 @@
 <script defer src="js/theme.js?v=533ffb6fb1"></script>
 <!-- 1c. Asset config (where images are served from; read by utils' assetUrl) -->
 <script defer src="js/asset-config.js?v=9b018a4988"></script>
+<!-- 1d. Which bestiary art lacks a token crop (generated; read by utils'
+     bestiaryPortraitPath). Must load before anything renders a portrait. -->
+<script defer src="js/token-index.js?v=e043a461be"></script>
 <!-- 2. Pure utilities (no deps) -->
-<script defer src="js/utils.js?v=138abe1791"></script>
+<script defer src="js/utils.js?v=a14beac802"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/state.js?v=f59175b98e"></script>
 <!-- 4. Window manager (depends on state) -->
 <script defer src="js/window-manager.js?v=e88d7a8da0"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=f3902be915"></script>
+<script defer src="js/panels/combat.js?v=1f8612d914"></script>
 <script defer src="js/panels/party.js?v=4e582f8172"></script>
 <script defer src="js/panels/shop.js?v=9834741b8b"></script>
 <script defer src="js/notes-sync.js?v=8b74d04e3a"></script>
 <script defer src="js/dropbox-config.js?v=ccf8533d50"></script>
 <script defer src="js/dropbox-sync.js?v=90ddfd734c"></script>
 <script defer src="js/panels/notes.js?v=801ba3a8b8"></script>
-<script defer src="js/panels/battlemap.js?v=aedac4bc76"></script>
+<script defer src="js/panels/battlemap.js?v=5c03192876"></script>
 <script defer src="js/panels/npc-library.js?v=892b488fee"></script>
-<script defer src="js/panels/bestiary.js?v=e8bd93a088"></script>
+<script defer src="js/panels/bestiary.js?v=82bf3c5db4"></script>
 <script defer src="js/panels/adventures.js?v=2292f2612f"></script>
 <script defer src="js/panels/books.js?v=f9bf470615"></script>
 <script defer src="js/panels/npc-generator.js?v=2be67577d7"></script>
@@ -314,7 +317,7 @@
 <script defer src="js/panels/timetracker.js?v=38051fc485"></script>
 <!-- 6. Features (depend on state + utils + panels) -->
 <script defer src="js/data-loader.js?v=24ad236e15"></script>
-<script defer src="js/search.js?v=638a297cac"></script>
+<script defer src="js/search.js?v=a9753b332c"></script>
 <script defer src="js/settings.js?v=a6c9492896"></script>
 <script defer src="js/context-menu.js?v=92f9a49378"></script>
 <script defer src="js/zoom-pan.js?v=0e8544341a"></script>

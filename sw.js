@@ -28,26 +28,27 @@
  */
 'use strict';
 
-const BUILD = '35cad015c5';
+const BUILD = '065b525ddd';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=737cbe7d18',
   'js/data.js?v=4271d26464',
   'js/theme.js?v=533ffb6fb1',
   'js/asset-config.js?v=9b018a4988',
-  'js/utils.js?v=138abe1791',
+  'js/token-index.js?v=e043a461be',
+  'js/utils.js?v=a14beac802',
   'js/state.js?v=f59175b98e',
   'js/window-manager.js?v=e88d7a8da0',
-  'js/panels/combat.js?v=f3902be915',
+  'js/panels/combat.js?v=1f8612d914',
   'js/panels/party.js?v=4e582f8172',
   'js/panels/shop.js?v=9834741b8b',
   'js/notes-sync.js?v=8b74d04e3a',
   'js/dropbox-config.js?v=ccf8533d50',
   'js/dropbox-sync.js?v=90ddfd734c',
   'js/panels/notes.js?v=801ba3a8b8',
-  'js/panels/battlemap.js?v=aedac4bc76',
+  'js/panels/battlemap.js?v=5c03192876',
   'js/panels/npc-library.js?v=892b488fee',
-  'js/panels/bestiary.js?v=e8bd93a088',
+  'js/panels/bestiary.js?v=82bf3c5db4',
   'js/panels/adventures.js?v=2292f2612f',
   'js/panels/books.js?v=f9bf470615',
   'js/panels/npc-generator.js?v=2be67577d7',
@@ -57,7 +58,7 @@ const PRECACHE = [
   'js/panels/weather.js?v=d7dd02abd8',
   'js/panels/timetracker.js?v=38051fc485',
   'js/data-loader.js?v=24ad236e15',
-  'js/search.js?v=638a297cac',
+  'js/search.js?v=a9753b332c',
   'js/settings.js?v=a6c9492896',
   'js/context-menu.js?v=92f9a49378',
   'js/zoom-pan.js?v=0e8544341a',
