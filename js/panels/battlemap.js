@@ -284,6 +284,8 @@ registerPanel('battlemap',{
     this._saveMap();
     this._stopBroadcast();
     this._stopUndoKeys();
+    // Would otherwise fire against a torn-down body.
+    clearTimeout(this._requalityTimer); this._requalityTimer = null;
     this._body = null;
   },
 
@@ -552,8 +554,14 @@ registerPanel('battlemap',{
     const cx = (clientX - (rect.left + rect.width  / 2)) / z;
     const cy = (clientY - (rect.top  + rect.height / 2)) / z;
     const d = this._stageDelta(cx, cy);
-    const W = el.width  || el.offsetWidth  || 0;
-    const H = el.height || el.offsetHeight || 0;
+    // Stage dimensions come from STATE, never from the element. This used to
+    // read el.width, which for a canvas is the BACKING STORE — fine while that
+    // equalled the stage size, wrong the moment _sizeLayer started allocating
+    // it at k× for high-zoom sharpness. Every element passed here (the grid
+    // canvas, the draw canvas, the stage div) is exactly cols×cs by rows×cs,
+    // so computing it is both exact and immune to how the layer is rasterised.
+    const cs = this._csScreen();
+    const W = this._cols * cs, H = this._rows * cs;
     return { x: d.x + W / 2, y: d.y + H / 2 };
   },
   // Rotate a screen-space delta into stage space (inverse of _mapRotation).
@@ -566,11 +574,87 @@ registerPanel('battlemap',{
     return { x: dx, y: dy };
   },
 
+  // ─── Canvas backing-store resolution ───────────────────────────────────────
+  // The three map layers (grid, drawings, fog) are bitmaps sized in STAGE
+  // pixels, and the per-device zoom is a CSS transform — so zooming past 100%
+  // magnifies those bitmaps and the grid goes soft. Fix: allocate the backing
+  // store at k× the stage size and scale the drawing context by k, so the
+  // layers rasterise at display resolution. Coordinates are untouched; only
+  // the resolution they're rasterised at changes.
+  //
+  // k is CAPPED, and the cap is the whole reason this is safe. Uncapped, a
+  // 1617×1036 stage at 3× zoom on a 2× phone asks for k=6 — 60 MP per canvas,
+  // ~240 MB each, ~720 MB across three. Browsers either refuse the allocation
+  // or the tab dies. The budget below keeps the worst case at ~32 MB a layer.
+  _CANVAS_MAX_PIXELS: 8e6,   // per layer (~32 MB at 4 bytes/px)
+  _CANVAS_MAX_SIDE: 16384,   // hard browser limit on either dimension
+  _appliedK: 1,
+
+  _canvasK(W, H){
+    if (!(W > 0 && H > 0)) return 1;
+    const dpr = window.devicePixelRatio || 1;
+    // Never go BELOW 1: at k<1 we'd be allocating less than the stage size and
+    // making the zoomed-out case worse than it is today. Only ever add detail.
+    const want = Math.max(1, (this._viewScale || 1) * dpr);
+    return Math.max(1, Math.min(
+      want,
+      this._CANVAS_MAX_SIDE / Math.max(W, H),
+      Math.sqrt(this._CANVAS_MAX_PIXELS / (W * H))
+    ));
+  },
+
+  // Size one layer and hand back a context already scaled by k, so every
+  // existing draw call keeps working in stage coordinates unchanged.
+  // `force` re-sizes even when dimensions match — needed after a k change,
+  // since the backing store must be reallocated to change resolution.
+  _sizeLayer(canvas, W, H, force){
+    const k = this._canvasK(W, H);
+    const bw = Math.round(W * k), bh = Math.round(H * k);
+    if (force || canvas.width !== bw || canvas.height !== bh){
+      // Assigning width/height reallocates AND resets all context state,
+      // including the transform — so it has to be re-applied below.
+      canvas.width = bw; canvas.height = bh;
+    }
+    // CSS size stays in stage px; the extra backing pixels are what buy the
+    // sharpness. Without this the canvas would render k× too large.
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    return ctx;
+  },
+
+  // Re-rasterise every layer at the current zoom. Debounced by its callers:
+  // reallocating three backing stores on each wheel tick would be far worse
+  // than the moment of softness while the zoom settles.
+  _requalityCanvases(){
+    const b = this._body; if (!b) return;
+    const k = this._canvasK(this._cols * this._csScreen(), this._rows * this._csScreen());
+    if (Math.abs(k - this._appliedK) < 0.05) return;   // not worth a realloc
+    this._appliedK = k;
+    const canvas = b.querySelector('#map-canvas');
+    if (canvas) this._drawGrid(canvas, this._csScreen());
+    const drawC = b.querySelector('#draw-canvas');
+    if (drawC){
+      this._sizeLayer(drawC, this._cols * this._csScreen(), this._rows * this._csScreen(), true);
+      this._drawAllStrokes();
+    }
+    if (this._fog !== null) this._drawFog(true);
+  },
+  _scheduleRequality(){
+    clearTimeout(this._requalityTimer);
+    this._requalityTimer = setTimeout(() => this._requalityCanvases(), 180);
+  },
+
   _drawAllStrokes(){
     const b = this._body; if (!b) return;
     const canvas = b.querySelector('#draw-canvas'); if (!canvas) return;
+    // Context keeps the k-scale transform _sizeLayer left on it, so clearing
+    // must use STAGE dimensions — canvas.width is k× larger and would be
+    // scaled by k again, clearing k² the area.
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const cs = this._csScreen();
+    ctx.clearRect(0, 0, this._cols * cs, this._rows * cs);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const scale = this._bgMapScale || 1;
     (this._drawings||[]).forEach(s => {
@@ -918,6 +1002,12 @@ registerPanel('battlemap',{
     // the transform (mobile token tap targets — see styles/main.css).
     stage.style.setProperty('--bm-vs', String(vs));
     this._counterScaleLabels(vs);
+
+    // Re-rasterise the canvas layers at the new zoom, once the zoom settles.
+    // Deliberately debounced rather than immediate: reallocating three backing
+    // stores per wheel tick would stutter far worse than the brief softness
+    // while zooming.
+    this._scheduleRequality();
 
     const slider = b.querySelector('#map-bg-scale'); if (slider) slider.value = vs;
     const pct = b.querySelector('#map-bg-scale-pct');
@@ -1461,7 +1551,6 @@ registerPanel('battlemap',{
     const cs=this._csScreen();
     const W=this._cols*cs, H=this._rows*cs;
 
-    canvas.width=W; canvas.height=H;
     stage.style.width=W+'px'; stage.style.height=H+'px';
 
     this._applyBg(stage,W,H);
@@ -1478,7 +1567,9 @@ registerPanel('battlemap',{
       drawCanvas.style.cssText = 'position:absolute;top:0;left:0;z-index:1';
       stage.appendChild(drawCanvas);
     }
-    drawCanvas.width = W; drawCanvas.height = H;
+    // Backing store sized by _sizeLayer (k× for sharpness); _drawAllStrokes
+    // below inherits the scaled context it leaves on the canvas.
+    this._sizeLayer(drawCanvas, W, H);
     // Draw canvas needs to receive clicks for the pencil AND for the eraser
     // (to remove strokes). Other tools/no-tool let clicks pass through.
     drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase') ? 'auto' : 'none';
@@ -2962,10 +3053,11 @@ registerPanel('battlemap',{
   },
 
   _drawGrid(canvas,cs){
-    const ctx=canvas.getContext('2d');
     const W=this._cols*cs, H=this._rows*cs;
-    // Make sure canvas is sized correctly (fixes black area when resizing)
-    canvas.width=W; canvas.height=H;
+    // Sizes the backing store (at k× for sharpness — see _sizeLayer) and
+    // returns a context pre-scaled by k, so everything below stays in stage
+    // coordinates exactly as it was.
+    const ctx=this._sizeLayer(canvas,W,H);
     ctx.clearRect(0,0,W,H);
 
     const gt = this._gridType || (this._showGrid ? 'square' : 'none');
@@ -3170,7 +3262,7 @@ registerPanel('battlemap',{
       : setTimeout(run, 16);
   },
 
-  _drawFog(){
+  _drawFog(forceResize){
     const b=this._body;if(!b)return;
     // Use a dedicated fog canvas layered above the grid canvas
     const stage=b.querySelector('#map-stage');if(!stage)return;
@@ -3184,12 +3276,11 @@ registerPanel('battlemap',{
       fogCanvas.style.cssText='position:absolute;top:0;left:0;z-index:10;pointer-events:none';
       stage.appendChild(fogCanvas);
     }
-    // Only resize when the dimensions actually changed — assigning width or
-    // height reallocates the backing store even when the value is identical,
-    // and this runs on every fog-paint mousemove.
-    if (fogCanvas.width !== W)  fogCanvas.width  = W;
-    if (fogCanvas.height !== H) fogCanvas.height = H;
-    const ctx=fogCanvas.getContext('2d');
+    // _sizeLayer only reallocates when the backing dimensions actually change,
+    // which matters because this runs on every fog-paint mousemove — assigning
+    // width/height reallocates even when the value is identical. `forceResize`
+    // is passed only by the requality pass, where k itself changed.
+    const ctx=this._sizeLayer(fogCanvas,W,H,forceResize);
     ctx.clearRect(0,0,W,H);
     if(this._fog===null)return; // fog disabled
     // DM view: translucent so the DM can still see the map through the fog.

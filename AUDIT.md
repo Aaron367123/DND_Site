@@ -614,7 +614,17 @@ The asymmetry: the same-browser BroadcastChannel handler had always used a cheap
 
 **Not a regression, checked:** `_render` appeared to slow down between runs, but repeated timings bounce 24.8 → 7.6 → 12.4 → 5.6 ms with DOM node count flat at 1441 across 20 renders — high variance in a non-compositing preview pane, no listener or node accumulation.
 
-**Deferred:** canvas layers (grid/fog/pencil) are bitmaps and blur above 100% zoom. Fixing it means raising the backing store (`canvas.width = W*k`, `ctx.setTransform(k,0,0,k,0,0)`) with a pixel budget — it changes *how* coordinates rasterise, never *what* they are, so it's contained and safe to do separately.
+### Follow-up: canvas crispness at high zoom — done (2026-07-29)
+
+The three map layers (grid, drawings, fog) are bitmaps sized in stage pixels, and the per-device zoom is a CSS transform — so past 100% the browser magnified those bitmaps and the grid went soft. `_sizeLayer()` now allocates the backing store at k× the stage size and hands back a context pre-scaled by k, so the layers rasterise at display resolution while every existing draw call keeps working in stage coordinates unchanged.
+
+- [x] **k is capped, and the cap is the point.** Uncapped, a 1617×1036 stage at 2.8× on a 2× phone asks for k=6 — ~240 MB per canvas, ~720 MB across three; browsers refuse the allocation or the tab dies. Budget: 8 MP per layer (~32 MB), plus the 16384px hard side limit. Measured worst case **92 MB across all three layers**, with k landing at 2.18 instead of 2.8. On a very large map (6000×4000 stage) the budget correctly refuses to add any resolution at all — k=1.
+- [x] **k never drops below 1**, so the zoomed-out case can never get worse than it is today; resolution is only ever added.
+- [x] **Debounced (180 ms).** `_applyViewScale` schedules the re-rasterise rather than doing it inline — reallocating three backing stores per wheel tick would stutter far worse than the moment of softness while zooming. Verified: no reallocation during the zoom itself, k upgrades after settle.
+
+**Real bug this surfaced:** `_stagePoint` derived the element centre from `el.width` — which for a canvas is the **backing store**, equal to the stage size only by coincidence. The moment `_sizeLayer` started allocating at k×, every click, drag, fog paint and Align measurement was off by that factor at high zoom. Now computed from state (`_cols × _csScreen()`), which is exact and immune to how a layer is rasterised. Caught by the coordinate round-trip failing at k=2.18 while passing at k=1.
+
+**Verified in-browser:** coordinate error is now **identical (0.0053px, from the fractional stage width) at k=1 and k=2.18**, via the grid canvas, the draw canvas and the stage div, including at 90° rotation and workspace zoom 1.25 — i.e. k provably does not affect coordinates. Grid lines land at the same stage positions at both k (max drift 0.70px, and the higher k resolves one extra edge line). A stroke drawn at stage y=300 rasterises at y=300 at both k, thicker in device pixels at high k. Fog coverage identical (alpha 140 both). Undo/redo unaffected. 0 console errors; campaign state left clean.
 
 ---
 
