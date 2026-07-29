@@ -551,6 +551,12 @@ function _reloadPanel(id) {
     // changes and free-fog paint never showed up on other devices.
     try {
       const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+      // Everything that changes the STAGE's geometry. If none of it moved,
+      // this update can be painted with _repaintRemote() instead of a full
+      // _render(). Captured before the fields are overwritten below.
+      const _struct = () => [def._cols, def._rows, def._cellSize, def._gridType,
+        def._bgMapScale, def._mapRotation, def._gridOffsetX, def._gridOffsetY].join('|');
+      const _structBefore = _struct();
       def._tokens     = d.tokens   || [];
       def._fog        = d.fog      ? new Set(d.fog) : null;
       def._drawings   = Array.isArray(d.drawings)   ? d.drawings   : [];
@@ -578,11 +584,30 @@ function _reloadPanel(id) {
       if (d.gridOpacity != null) def._gridOpacity = d.gridOpacity;
       if (d.gridWidth   != null) def._gridWidth   = d.gridWidth;
       def._bgMapPath  = _nextPath;
-      def._render();
-      // Only re-fit when the map actually changed. This also stops a redundant
-      // image reload on every unrelated update (a fog tick used to reload the
-      // background), which the old unconditional call did on each sync.
-      if (def._bgMapPath) def._loadBgFromPath?.(def._bgMapPath, _nextPath !== _prevPath);
+
+      // Three tiers, most expensive first. Only the last one is common.
+      if (def._bgMapPath && (_nextPath !== _prevPath || !def._bgMapNaturalW)){
+        // A genuinely different map (or the image isn't loaded on this device
+        // yet). Reload it; _loadBgFromPath renders on load. autoFit only when
+        // the map actually changed, so each device re-fits to its own screen.
+        // Previously this ran on EVERY update — a fog tick re-created the
+        // Image and forced a second full render on top of the one above.
+        def._loadBgFromPath?.(def._bgMapPath, _nextPath !== _prevPath);
+      } else if (_struct() !== _structBefore || (!def._bgMapPath && _prevPath)){
+        // Stage geometry moved (grid resize, Align offset, rotation, world
+        // scale) or the map was cleared — the canvases have to be rebuilt.
+        def._render();
+      } else {
+        // The common case by far: a token moved or fog changed. Repaint the
+        // canvas layers only. Same path the same-browser BroadcastChannel
+        // handler has always used; cross-device clients were paying a full
+        // innerHTML rebuild for it.
+        if (typeof def._repaintRemote === 'function'){
+          def._repaintRemote({ drawings: true, tokens: def._tokens });
+        } else {
+          def._render();
+        }
+      }
     } catch(e) {}
     return;
   }

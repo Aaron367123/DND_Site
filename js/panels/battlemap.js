@@ -906,32 +906,47 @@ registerPanel('battlemap',{
           return;
         }
         // Lightweight repaint — fog + drawings + tokens only. No flicker.
-        if (this._body){
-          // Redraw grid canvas so gridType changes (square/hex/none) reflect
-          // on the player side without waiting for a full re-render.
-          const _gridC = this._body.querySelector('#map-canvas');
-          if (_gridC) this._drawGrid(_gridC, this._csScreen());
-          this._drawFog();
-          if (Array.isArray(msg.drawings)){
-            // Stroke now committed → drop the live preview (whichever client's
-            // tick last painted it) and redraw from canonical state.
-            this._previewStroke = null;
-            this._drawAllStrokes();
-          }
-          // Only re-render tokens when the token payload ACTUALLY changed.
-          // DM fog-paint broadcasts the entire state every tick, so during a
-          // stroke `msg.tokens` is the same array hundreds of times in a row.
-          // Re-rendering each time = remove+recreate every token DOM element
-          // = browser-melting paint storm + visible flicker. A cheap JSON
-          // hash detects no-change broadcasts so we skip the work entirely.
-          const tokenHash = msg.tokens ? JSON.stringify(msg.tokens) : '';
-          if (tokenHash !== this._lastTokenHash){
-            this._lastTokenHash = tokenHash;
-            this._renderTokens();
-          }
-        }
+        this._repaintRemote({ drawings: Array.isArray(msg.drawings), tokens: msg.tokens });
       };
     }catch(e){}
+  },
+
+  // Repaint the canvas layers for an incoming REMOTE update, without the
+  // innerHTML teardown a full _render() does.
+  //
+  // Shared by both live paths on purpose. The same-browser BroadcastChannel
+  // handler has always used this cheap path; the cross-device Firebase apply
+  // in realtime.js used to call _render() for the identical events — a full
+  // rebuild of the toolbar, sidebar, stage and every token node, measured at
+  // ~10ms here and several times that on a phone. Players on their own
+  // devices were paying 10x what a player in a second tab paid, for the same
+  // fog reveal. Callers must still fall back to _render() when the map's
+  // GEOMETRY changes (cols/rows/cellSize/scale/rotation), since that resizes
+  // the stage and the canvases.
+  _repaintRemote(opts){
+    const b = this._body; if (!b) return;
+    opts = opts || {};
+    // Redraw the grid canvas so gridType changes (square/hex/none) reflect
+    // without waiting for a full re-render.
+    const gridC = b.querySelector('#map-canvas');
+    if (gridC) this._drawGrid(gridC, this._csScreen());
+    this._drawFog();
+    if (opts.drawings){
+      // Stroke now committed → drop the live preview (whichever client's tick
+      // last painted it) and redraw from canonical state.
+      this._previewStroke = null;
+      this._drawAllStrokes();
+    }
+    // Only re-render tokens when the token payload ACTUALLY changed. DM
+    // fog-paint broadcasts the entire state every tick, so during a stroke
+    // the token array is identical hundreds of times in a row. Re-rendering
+    // each time = remove+recreate every token DOM element = paint storm and
+    // visible flicker. A cheap JSON hash skips the work entirely.
+    const tokenHash = opts.tokens ? JSON.stringify(opts.tokens) : '';
+    if (tokenHash !== this._lastTokenHash){
+      this._lastTokenHash = tokenHash;
+      this._renderTokens();
+    }
   },
   _stopBroadcast(){
     try { this._bc?.close(); } catch(e){}

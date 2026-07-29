@@ -575,6 +575,20 @@ Verified end-to-end on a throwaway repo built to mirror the real conditions — 
 
 **Verified in-browser (20 assertions).** Coordinate correctness was proved by round-tripping through the browser's own layout engine — place a marker at a known stage point, read where it actually lands, feed that back through `_stagePoint` — rather than by performing drags, so the test wrote nothing: **0.000px error across viewScale {0.4, 1, 2.5} × rotation {0, 90} × workspace zoom {1, 1.25}**. Token and drawing coordinates **byte-identical across four zoom changes**. **Zero writes to `skt-battlemap-v1`** during 25 wheel events plus slider and Fit (previously every wheel tick shipped the whole blob to Firebase). Two windows held independent zoom and each restored its own on reload; a stale stored map path correctly triggered a re-fit. 0 console errors throughout.
 
+### Follow-up: remote updates no longer force a full rebuild (2026-07-29)
+
+Profiled the panel under a synthetic session load (20 tokens, ~500 fog cells, 25 strokes). Local hot paths were already fine — fog painting is rAF-batched via `_invalidate({fog:true})`, token drags use `_renderTokens()` (0.50 ms), `_drawFog()` is 0.19 ms. **The outlier was `_render()` at ~10–12 ms**, and the cross-device sync path called it unconditionally.
+
+The asymmetry: the same-browser BroadcastChannel handler had always used a cheap repaint, while `realtime.js` — *the only live path a player on their own phone or laptop has* — did a full innerHTML teardown for the identical event. Every token move and fog reveal rebuilt the toolbar, sidebar, stage and every token node.
+
+- [x] Extracted that repaint into **`_repaintRemote()`**, now shared by both live paths instead of existing only inside the BroadcastChannel closure.
+- [x] `realtime.js` picks one of three tiers: map path changed (or image not yet loaded) → reload + re-fit; **stage geometry** changed (`cols`/`rows`/`cellSize`/`gridType`/`bgMapScale`/`mapRotation`/grid offsets, compared via a signature captured before the fields are overwritten) → full `_render()`; otherwise → `_repaintRemote()`. Anything that resizes the stage still takes the old path, so the fast path can only ever be taken when it's safe.
+- [x] Also stopped `_loadBgFromPath` running on **every** update — a fog tick used to re-create the `Image` and force a *second* full render on top of the first.
+
+**Measured: 11.94 ms → 2.42 ms (4.9× faster)**, and 1.52 ms when the token payload is unchanged (the common case during a fog stroke, where the hash check skips token DOM work entirely).
+
+**Verified end-to-end against live Firebase**, using two tabs as two independent sync clients: a display-only change (`gridOpacity` 80→55) applied on the receiver with **1 repaint and 0 full renders**; a geometry change (`mapRotation` 0→90) correctly fell back to **1 full render** with `rotate(90deg)` landing on the stage. Both test values restored afterwards; 0 console errors.
+
 **Deferred:** canvas layers (grid/fog/pencil) are bitmaps and blur above 100% zoom. Fixing it means raising the backing store (`canvas.width = W*k`, `ctx.setTransform(k,0,0,k,0,0)`) with a pixel budget — it changes *how* coordinates rasterise, never *what* they are, so it's contained and safe to do separately.
 
 ---

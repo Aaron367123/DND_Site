@@ -28,7 +28,7 @@
  */
 'use strict';
 
-const BUILD = 'a4afd5e05f';
+const BUILD = 'f821a53a72';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=35667c8e20',
@@ -47,7 +47,7 @@ const PRECACHE = [
   'js/dropbox-config.js?v=ccf8533d50',
   'js/dropbox-sync.js?v=90ddfd734c',
   'js/panels/notes.js?v=801ba3a8b8',
-  'js/panels/battlemap.js?v=2a3d5b265c',
+  'js/panels/battlemap.js?v=6fd58f8fee',
   'js/panels/npc-library.js?v=892b488fee',
   'js/panels/bestiary.js?v=82bf3c5db4',
   'js/panels/adventures.js?v=2292f2612f',
@@ -66,7 +66,7 @@ const PRECACHE = [
   'js/zoom-pan.js?v=0e8544341a',
   'js/pdf-import.js?v=0ae3653bd8',
   'js/player-view.js?v=a806602667',
-  'js/realtime.js?v=73025fa73d',
+  'js/realtime.js?v=51920061d2',
   'js/tutorial.js?v=0f28ad967f',
   'js/onboarding.js?v=7e4c89c909',
   'js/app.js?v=9045fd4214',
