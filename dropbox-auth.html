@@ -63,7 +63,7 @@
   <p class="blurb">
     One-time setup. Dropbox no longer issues long-lived access tokens via the Generate button, so the
     notes app uses the refresh-token flow instead. This page runs that flow in your browser once and gives
-    you the refresh token to paste into <code>js/dropbox-config.js</code>.
+    you the refresh token to paste into <code>js/sync/dropbox-config.js</code>.
   </p>
 
   <div id="phase-start">
@@ -90,8 +90,8 @@
   </div>
 
   <div id="phase-done" class="hidden">
-    <div class="step">Step 3 — Copy these into <code>js/dropbox-config.js</code></div>
-    <p class="hint ok">✓ Success. Paste the snippet below into <code>js/dropbox-config.js</code>, replacing the entire <code>window.DROPBOX_CONFIG = {...}</code> block. Commit and push.</p>
+    <div class="step">Step 3 — Copy these into <code>js/sync/dropbox-config.js</code></div>
+    <p class="hint ok">✓ Success. Paste the snippet below into <code>js/sync/dropbox-config.js</code>, replacing the entire <code>window.DROPBOX_CONFIG = {...}</code> block. Commit and push.</p>
     <div class="out" id="config-snippet"></div>
     <div class="copy-row">
       <button class="copy-btn" id="copy-snippet">Copy snippet</button>

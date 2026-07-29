@@ -471,7 +471,7 @@ registerPanel('notes', {
         <aside class="notes-picker-side">
           <div class="notes-picker-head">SELECT NOTE SOURCE</div>
           <div class="notes-picker-tiles">
-            <button class="notes-source-tile${dropboxConfigured?'':' disabled'}" data-act="src-dropbox"${dropboxConfigured?'':' disabled title="Dropbox not configured — paste a token in js/dropbox-config.js"'}>
+            <button class="notes-source-tile${dropboxConfigured?'':' disabled'}" data-act="src-dropbox"${dropboxConfigured?'':' disabled title="Dropbox not configured — paste a token in js/sync/dropbox-config.js"'}>
               <span class="tile-icon">📦</span>
               <span class="tile-label">DROPBOX</span>
               ${dropboxConfigured?'':'<span class="tile-coming">Not configured</span>'}
@@ -1172,7 +1172,7 @@ registerPanel('notes', {
     // Source-picker tiles (only present when _view === 'picker')
     b.querySelector('[data-act="src-dropbox"]')?.addEventListener('click', () => {
       if (!window.dropboxSync || !window.dropboxSync.isConfigured()){
-        showToast('Dropbox not configured — paste a token in js/dropbox-config.js');
+        showToast('Dropbox not configured — paste a token in js/sync/dropbox-config.js');
         return;
       }
       this._initDropbox();
@@ -1258,7 +1258,7 @@ registerPanel('notes', {
       if (!s.configured){
         pill.className = 'notes-vault-pill unsupported';
         pill.textContent = '⚠ No token';
-        pill.title = 'Set accessToken in js/dropbox-config.js';
+        pill.title = 'Set accessToken in js/sync/dropbox-config.js';
         pill.onclick = null;
         return;
       }

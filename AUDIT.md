@@ -29,7 +29,7 @@ Real bugs or data-loss risks. Tackle these first.
   - Sync pulls fire every 8 s → unbounded listener growth; panel becomes uncollectable.
   - **Fix:** Store bound handlers on `this._dividerHandlers`; remove before re-adding. Or attach once in `mount()` gated on `this._dragState`.
 
-- [x] **Firebase echo suppression breaks under rapid edits** — `js/realtime.js:126`
+- [x] **Firebase echo suppression breaks under rapid edits** — `js/sync/realtime.js:126`
   - `_justWrote[k]` is overwritten on each flush. Two close-spaced writes for the same key → echo for the older value no longer matches and gets applied. Silently clobbers user input.
   - **Fix:** Track a Set/queue of pushed values per key, or include a per-write nonce and suppress by nonce.
 
@@ -75,24 +75,24 @@ Clear correctness / perf issues that haven't bitten yet.
   - **Fix applied:** Added `touchstart`/`touchmove`/`touchend`/`touchcancel` on the canvas mirroring the mouse handlers — `fogPaint()` reads `clientX/clientY`, so `e.touches[0]` forwards straight through. Single-finger only (2-finger gestures fall through), `{passive:false}` + `preventDefault` to suppress scroll, and a shared `endFogTouch` that flushes the deferred free-stroke broadcast just like the mouseup path.
 
 ### Sync
-- [x] ~~**Dropbox 429 retry recurses without retry cap**~~ — `js/dropbox-sync.js:160` *(fixed)*
+- [x] ~~**Dropbox 429 retry recurses without retry cap**~~ — `js/sync/dropbox-sync.js:160` *(fixed)*
   - The 429 branch waited `Retry-After` then unconditionally `return _api(endpoint, body)` — a sustained rate-limit recursed forever, never surfacing the failure and pinning a background loop on the 429 wall.
   - **Fix applied:** Threaded an internal `_attempt` counter through `_api`. After 4 retries it sets `_connectError`, toasts "Dropbox is rate-limiting — sync paused", and throws. Backoff now honors `Retry-After` or falls back to exponential (`5·2^n`) capped at 60s.
-- [x] ~~**File System Access permission silently expires after reload — UI shows "connected" but vault never syncs**~~ — `js/notes-sync.js:199` *(fixed)*
+- [x] ~~**File System Access permission silently expires after reload — UI shows "connected" but vault never syncs**~~ — `js/sync/notes-sync.js:199` *(fixed)*
   - `init()` restored the handle from IndexedDB so `isConnected()` returned true and the pill showed 📂 connected, but FSA grants reset to `'prompt'` on reload. Every poll-driven `fullSync` called `_ensurePermission()` → `requestPermission()` with no user gesture, which never opens a dialog, so the vault silently never synced.
   - **Fix applied:** Added a `_needsPermission` flag — `init()` now `queryPermission()`s the restored handle and flags a lapsed grant; `getStatus()` surfaces it; `_ensurePermission()` updates+emits it on every transition. New public `requestAccess()` re-requests inside a user gesture. `notes.js` renders a pulsing amber "🔓 Grant vault access" pill that calls `requestAccess()` then `fullSync` on click.
 
 ### Data loader
-- [x] ~~**Subclass fluff lookup keyed by display name never matches — all subclass cards fall through to mechanical text**~~ — `js/data-loader.js:1052` *(fixed)*
+- [x] ~~**Subclass fluff lookup keyed by display name never matches — all subclass cards fall through to mechanical text**~~ — `js/content/data-loader.js:1052` *(fixed)*
   - The bucket was keyed `"alchemist (artificer)|tce"` (display name), but `addRef` → `_applyFluff('class', d.name, d.source)` looks up the BARE `"alchemist|tce"`. Confirmed against real data: both `subclass.name` and `subclassFluff.name` are the bare `"Alchemist"`. The key mismatch meant fluff never applied and every subclass fell back to concatenated feature text.
   - **Fix applied:** Key the subclass-fluff bucket by bare `name|source` (matching `_applyFluff`), and additionally store the `"Name (ClassName)|source"` display variant for any consumer keying by the disambiguated name.
-- [x] ~~**`_convertSpell` drops all but the first `entriesHigherLevel` block**~~ — `js/data-loader.js:449` *(fixed)*
+- [x] ~~**`_convertSpell` drops all but the first `entriesHigherLevel` block**~~ — `js/content/data-loader.js:449` *(fixed)*
   - `[_parseEntries(d.entriesHigherLevel[0]?.entries||…)]` only ever kept block [0]. Spells with multiple higher-level blocks (e.g. a "Cantrip Upgrade" block + an upcast block) silently lost the rest.
   - **Fix applied:** Map every block to its own parsed string (renderer joins with blank lines), prefixing a non-generic block name when present so multi-block spells read correctly.
-- [x] ~~**`_findItemEntry` no source-omitted fallback — literal `{#itemEntry …}` leaks into descriptions**~~ — `js/data-loader.js:475` *(fixed)*
+- [x] ~~**`_findItemEntry` no source-omitted fallback — literal `{#itemEntry …}` leaks into descriptions**~~ — `js/content/data-loader.js:475` *(fixed)*
   - Lookup was exact `name|source` only; a ref that omitted the source (or named a source differing from where the template lives) missed and the literal `{#itemEntry …}` token rendered in the description.
   - **Fix applied:** Added a parallel `_ITEM_ENTRY_BY_NAME` index (first template wins) populated alongside `_ITEM_ENTRY_BY_KEY`; `_findItemEntry` now falls back to the name-only match when the exact key misses.
-- [x] ~~**`expandMagicVariants` is O(variants × baseItems), ~100k calls per cold load**~~ — `js/data-loader.js:807` *(fixed)*
+- [x] ~~**`expandMagicVariants` is O(variants × baseItems), ~100k calls per cold load**~~ — `js/content/data-loader.js:807` *(fixed)*
   - Scanned all base items for every variant's `requires.some(...)` predicate.
   - **Fix applied:** Pre-bucket base items by `type` code; each variant only scans the union of its requires' type-buckets (full-list fallback when a req omits `type`). **Empirically verified equivalent** — a replay over real `magicvariants.json` × `items-base.json` produced identical match sets for all 187 named variants / 5,450 pairs, 0 mismatches.
 
@@ -138,7 +138,7 @@ Clear correctness / perf issues that haven't bitten yet.
 - [x] ~~**Stale/missing cache busters** on `utils.js` / `state.js` / `soundboard.js` / `weather.js` / `timetracker.js` / `pdf-import.js` (+ every panel edited this batch)~~ — `skt-workspace.html` *(fixed)*
   - These had no `?v=` at all, so prior edits never shipped to returning browsers.
   - **Fix applied:** Added `?v=20260524e` to the unbustered files and bumped every file edited this batch (`app.js`, `encounter.js`, `bestiary.js`, `shop.js`, `books.js`, `adventures.js`, `npc-library.js`, `npc-generator.js`, `utils.js`, `state.js`, `main.css→y`). app.js build stamp bumped to match.
-- [x] ~~**Document-level Escape keydown leaks per crop modal**~~ — `js/utils.js:177` *(fixed)*
+- [x] ~~**Document-level Escape keydown leaks per crop modal**~~ — `js/core/utils.js:177` *(fixed)*
   - The keydown listener was only removed on the Escape path; closing via Save/Cancel/backdrop left a dangling handler (one leaked per crop).
   - **Fix applied:** Moved `removeEventListener('keydown', escHandler)` into `cleanup()` (now a hoisted fn) so it's released on every close path.
 - [x] ~~**Toast `z-index:200` sits below `modal-backdrop:500` — validation toasts hidden behind modals**~~ — `styles/main.css:2872` *(fixed)*
@@ -168,9 +168,9 @@ Polish, dead code, schema drift.
 - [x] ~~**`.char-hp-temp[value='0']` dim-state won't re-apply after edit (attribute vs IDL value)**~~ *(fixed)* — the rule matches the value *attribute*, not the live IDL value. Added an `input` listener that mirrors keystrokes onto the attribute so the dim re-evaluates live; kept the CSS rule (it now works reliably).
 
 ### State / settings drift
-- [x] ~~**Runtime-only settings keys not in `DEFAULT_SETTINGS`**~~ — `js/data.js:51` *(fixed)*
+- [x] ~~**Runtime-only settings keys not in `DEFAULT_SETTINGS`**~~ — `js/core/data.js:51` *(fixed)*
   - Found all 7 missing: `partyCompact`, `partyCardWidth`, `lootEncumbrance`, `monsterStatsMode`, `combatHpBar`, `combatCompact`, `combatGroupSimilar`. Added each with the default that matches its current undefined-fallback so behavior is unchanged (`combatHpBar:true` since it's read as `!== false`; `monsterStatsMode:'show'`; `partyCardWidth:null`; the rest `false`). Now they reset on "reset to defaults" and round-trip through export/import.
-- [x] ~~**`syncPartyToCombat` only mirrors `hp/hpMax/ac` — name renames go stale on combat card**~~ — `js/window-manager.js:336` *(fixed)*
+- [x] ~~**`syncPartyToCombat` only mirrors `hp/hpMax/ac` — name renames go stale on combat card**~~ — `js/core/window-manager.js:336` *(fixed)*
   - Added `name:p.name` to the mirror and extended the party change-handler trigger to fire on `name` edits too. Id-matched PCs (the normal case) now propagate renames to their combat slot; documented that the rare name-only-match case can't (matching key is the name itself).
 - [x] ~~**Transient per-character maps never pruned on removal**~~ — `js/panels/party.js` *(fixed)*
   - Added `_pruneTransientState()` (drops entries whose id isn't in `state.party`) and call it at the top of `_render()`, so `_rollHistory`/`_activeTab`/`_expanded`/`_lastRoll`/`_historyOpen`/`_resistancesOpen` (+ the new per-char damage maps) are cleaned no matter how a PC is removed (actions menu, Manage Party, remote-sync deletion). Also prevents a recycled id from inheriting stale state.
@@ -196,10 +196,10 @@ Polish, dead code, schema drift.
 - [x] ~~**Resizable textareas lose drag-resized height on every full `_render`**~~ — `js/panels/npc-library.js` *(fixed)* — `_render` captures the desc/secret heights (keyed to the NPC in the DOM via `_lastRenderedId`) and restores them after rebuild, only when the same NPC is still selected.
 - [x] ~~**Generator notes write plain text but library treats `n.notes` as HTML**~~ — `js/panels/npc-generator.js` *(fixed)* — motivation is now `esc()`-escaped so it's valid HTML for the rich-text notes field.
 - [x] ~~**Settings popover outside-click listener stays bound after Close/Done**~~ — `js/panels/notes.js` *(fixed)* — `close()` now removes the capture-phase document listener on every close path.
-- [x] ~~**Folder rename on Dropbox leaves descendant file revs keyed under old path**~~ — `js/dropbox-sync.js` *(fixed)* — `movePath` now re-keys every `oldPath/…` descendant rev to `newPath/…` after the server-side move.
-- [x] ~~**`_resolveCopy` deep-clones every monster via `JSON.parse(JSON.stringify)`**~~ — `js/data-loader.js` *(fixed)* — added a `_deepClone` helper using `structuredClone` (markedly faster for these large objects; semantically equivalent for pure-JSON data) with a JSON fallback.
-- [x] ~~**`_isReprintEntry` key not trimmed while reprint targets are**~~ — `js/data-loader.js` *(fixed)* — both name and source are now trimmed before the lookup, matching how the target keys are built.
-- [x] ~~**Dead share-button DOM lookup in `realtime.js` shared-panels handler**~~ — `js/realtime.js` *(fixed)* — removed the dead `[data-wact="share"]` loop; share state now lives in the window ⋯ menu which reads it live.
+- [x] ~~**Folder rename on Dropbox leaves descendant file revs keyed under old path**~~ — `js/sync/dropbox-sync.js` *(fixed)* — `movePath` now re-keys every `oldPath/…` descendant rev to `newPath/…` after the server-side move.
+- [x] ~~**`_resolveCopy` deep-clones every monster via `JSON.parse(JSON.stringify)`**~~ — `js/content/data-loader.js` *(fixed)* — added a `_deepClone` helper using `structuredClone` (markedly faster for these large objects; semantically equivalent for pure-JSON data) with a JSON fallback.
+- [x] ~~**`_isReprintEntry` key not trimmed while reprint targets are**~~ — `js/content/data-loader.js` *(fixed)* — both name and source are now trimmed before the lookup, matching how the target keys are built.
+- [x] ~~**Dead share-button DOM lookup in `realtime.js` shared-panels handler**~~ — `js/sync/realtime.js` *(fixed)* — removed the dead `[data-wact="share"]` loop; share state now lives in the window ⋯ menu which reads it live.
 - [x] ~~**`.party-grid.compact .char-card > *` uses `!important` to nuke 8 sibling rules — fragile**~~ — `styles/main.css` *(fixed + browser-verified)*
   - The `!important` was unnecessary: the compact selector is `(0,3,0)` and every divider rule it fights is `.char-card > .child` `(0,2,0)`, so it already wins on specificity. Removed both `!important` flags. **Verified live** via a local static server + computed-style probe: in compact mode the children read `border-top:none/0px; padding-top:0px`; in normal mode the `1px dashed` dividers + padding remain — identical to before, just won by specificity. Added a comment steering future divider rules to a `:not(.compact)` qualifier instead of reaching for `!important`.
 - [x] ~~**Card-avatar/char-icon-btn animate width+height (layout-driving transition)**~~ — `styles/main.css` *(fixed)* — dropped `width`/`height` from both `transition` lists (active-turn size now snaps; only border-color/box-shadow animate, which are compositor-friendly). The transform-based smooth-grow alternative was left out to avoid changing whether neighbors get pushed.
@@ -236,21 +236,21 @@ Found while play-testing the site against the static preview server.
 
 Fresh multi-agent review after the original 70 were closed. Agent findings were adversarially spot-checked before fixing — several claims did NOT survive verification (showModal listeners don't leak: they're element-scoped and die with `backdrop.remove()`; NPC bulk delete DOES confirm first) and were discarded. Everything below was verified in code and, where observable, in the live preview.
 
-- [x] ~~**Rename/move deleted the vault file before writing the new one — data loss if the write fails**~~ — `js/notes-sync.js:449` *(fixed)*
+- [x] ~~**Rename/move deleted the vault file before writing the new one — data loss if the write fails**~~ — `js/sync/notes-sync.js:449` *(fixed)*
   - `pushFile` did `_deleteFile(oldPath)` then `_writeFile(newPath)`. A failed write (permission revoked, disk full) left no copy on disk at all.
   - **Fix applied:** write-new-first, delete-old only after success; a failed delete of the stale copy is tolerated (recoverable — the new path is canonical).
 
 - [x] ~~**Battlemap leaked one `document` mouseup listener per render**~~ — `js/panels/battlemap.js` (`_setupMap`) *(fixed)*
   - Anonymous handler attached in `_setupMap()` (runs on every `_render()`), never removed. **Fix:** stored on `this._docMouseUp`, swapped on re-render, removed in `unmount()`.
 
-- [x] ~~**Escape didn't close the bestiary/combat monster pickers or utils modals reliably**~~ — `js/panels/bestiary.js`, `js/panels/combat.js`, `js/utils.js` *(fixed + verified in preview)*
+- [x] ~~**Escape didn't close the bestiary/combat monster pickers or utils modals reliably**~~ — `js/panels/bestiary.js`, `js/panels/combat.js`, `js/core/utils.js` *(fixed + verified in preview)*
   - Keydown was attached to the non-focusable backdrop div (the exact bug already fixed in bestiary's template modal). **Fix:** document-level keydown, removed in `close()`, applied to all four modals (`showModal`, `showConfirm`, both pickers).
 
 - [x] ~~**XSS via NPC notes — raw HTML from shared sync rendered into innerHTML**~~ — `js/panels/npc-library.js:534` *(fixed)*
   - `${n.notes||''}` unescaped while the `secret` field beside it used `esc()`. Notes sync through the shared Dropbox account + Firebase, so any player could inject HTML that executes on the DM's screen. Notes is legit rich text, so it can't just be escaped.
   - **Fix applied:** new `sanitizeHtml()` in utils.js (template-parse, strip script/style/iframe/etc., `on*` attributes, `javascript:`/`data:` URLs) applied at render. Verified: `<script>`, `onerror`, and `javascript:` payloads stripped; formatting tags kept.
 
-- [x] ~~**Sync failures were silent (quota, upload, realtime give-up)**~~ — `js/dropbox-sync.js`, `js/realtime.js`, `js/panels/bestiary.js` *(fixed)*
+- [x] ~~**Sync failures were silent (quota, upload, realtime give-up)**~~ — `js/sync/dropbox-sync.js`, `js/sync/realtime.js`, `js/panels/bestiary.js` *(fixed)*
   - `localStorage.setItem` quota failures in both fullSync/poll paths, upload failures in `pushFile` (whose "next tick retries indirectly" comment was wrong — nothing retried once the rev was recorded), realtime giving up after 4 retries with only `console.error`, and bestiary `_save()` with a bare `catch{}` — all now surface a toast. Dropbox toasts throttle to once/min per kind (`_warnSync`) so the poll loop can't spam.
 
 - [x] ~~**Combat + party re-attached every card's listeners on every render**~~ — `js/panels/combat.js`, `js/panels/party.js` *(refactored + verified in preview)*
@@ -263,9 +263,9 @@ Fresh multi-agent review after the original 70 were closed. Agent findings were 
 
 - [x] ~~**`_renderTokens` appended 3 nodes per token individually**~~ — `js/panels/battlemap.js` *(fixed: all nodes batched through one DocumentFragment append)*
 
-- [x] ~~**Realtime retry backoff had no jitter; give-up was silent**~~ — `js/realtime.js` *(fixed: +0–300ms random jitter so multi-tab sessions don't retry in lockstep; toast on final give-up)*
+- [x] ~~**Realtime retry backoff had no jitter; give-up was silent**~~ — `js/sync/realtime.js` *(fixed: +0–300ms random jitter so multi-tab sessions don't retry in lockstep; toast on final give-up)*
 
-**Noted, intentionally not changed:** the Dropbox refresh token in `js/dropbox-config.js` is committed by documented design (shared single account, app-folder scope, no per-user login). Residual risk: anyone with repo access can wipe the campaign folder — the revoke link in that file's comments is the kill switch. Worth confirming Firebase RTDB rules are scoped equally tightly.
+**Noted, intentionally not changed:** the Dropbox refresh token in `js/sync/dropbox-config.js` is committed by documented design (shared single account, app-folder scope, no per-user login). Residual risk: anyone with repo access can wipe the campaign folder — the revoke link in that file's comments is the kill switch. Worth confirming Firebase RTDB rules are scoped equally tightly.
 
 ---
 
@@ -277,11 +277,11 @@ User report: "battle grid isn't syncing at times, on mobile the map doesn't upda
   - Every screen→canvas conversion (`clientX - rect.left`) skipped dividing by `getZoom()` — only the token drag did it right. At any workspace zoom ≠ 1 (i.e. nearly always on mobile) the eraser hit-tested the wrong spot, strokes drew offset, and fog painted the wrong cells.
   - **Fix applied:** zoom division added to draw + erase (mouse and touch), fogPaint, canvas click (align/token placement), hover-cell tracking, and the wheel-zoom cursor anchor. Verified in preview at zoom 0.5: stroke recorded at target coords exactly, eraser removed it, fog revealed exactly the aimed cell.
 
-- [x] ~~**Cross-device apply path dropped half the map fields**~~ — `js/realtime.js` (`_reloadPanel`) *(fixed + verified)*
+- [x] ~~**Cross-device apply path dropped half the map fields**~~ — `js/sync/realtime.js` (`_reloadPanel`) *(fixed + verified)*
   - BroadcastChannel only reaches same-browser tabs; a phone gets updates solely through Firebase → `_reloadPanel('battlemap')`, which never applied `gridType`, `fogStrokes`, `gridOffsetX/Y`, `bgMapScale`, or `mapRotation`. Grid-type changes and free-fog paint simply never arrived on other devices; scale changes left tokens misplaced.
   - **Fix applied:** all shared fields now applied (with `_lastTokenScale` kept in lockstep). The same missing fields were also added to the BroadcastChannel payload + handler (scale/rotation changes trigger a full render there; offsets ride the lightweight repaint).
 
-- [x] ~~**Conflict parking silently froze battlemap updates**~~ — `js/realtime.js` (`_applyRemoteKey`) *(fixed + verified)*
+- [x] ~~**Conflict parking silently froze battlemap updates**~~ — `js/sync/realtime.js` (`_applyRemoteKey`) *(fixed + verified)*
   - The map is written on every token drag / fog stroke by both sides, so the 300 ms dirty window collided constantly; a parked conflict then blocked ALL further battlemap updates on that device until the conflict bar was resolved — easy to miss on mobile, reads as "map stopped updating."
   - **Fix applied:** `skt-battlemap-v1` is exempt from conflict parking (last-write-wins). Losing one in-flight stroke to a rare race beats a frozen map; the local push still queued re-asserts this device's state moments later. Other keys (notes, party, …) keep full conflict handling.
 
@@ -289,7 +289,7 @@ User report: "battle grid isn't syncing at times, on mobile the map doesn't upda
 
 ## Notes delete-resurrection fixes (2026-07-26)
 
-User report: "I delete a note, it doesn't reflect on a different device, and the deleted file shows up again." Two root causes in `js/dropbox-sync.js`, both fixed and verified end-to-end against the live Dropbox with a throwaway test file:
+User report: "I delete a note, it doesn't reflect on a different device, and the deleted file shows up again." Two root causes in `js/sync/dropbox-sync.js`, both fixed and verified end-to-end against the live Dropbox with a throwaway test file:
 
 - [x] ~~**fullSync re-uploaded remotely-deleted files — the resurrection bug**~~ *(fixed + verified)*
   - fullSync's pass 3 treated every file that exists locally but not in the Dropbox listing as "created locally, push it up." But "deleted remotely while this device wasn't watching" looks identical. Since fullSync runs on EVERY notes-panel mount, any device that was closed (or asleep — phones) when the delete happened would re-upload its stale copy on next open, and every other device then pulled the "deleted" file back. Guaranteed resurrection unless all devices were actively polling at delete time.
@@ -304,7 +304,7 @@ User report: "I delete a note, it doesn't reflect on a different device, and the
 
 ## Grid opacity / line width now sync to the player view (2026-07-26)
 
-- [x] ~~**Grid opacity (and the new line width) never reached the player view**~~ — `js/panels/battlemap.js`, `js/realtime.js` *(fixed + verified live in a real ?player=1 tab)*
+- [x] ~~**Grid opacity (and the new line width) never reached the player view**~~ — `js/panels/battlemap.js`, `js/sync/realtime.js` *(fixed + verified live in a real ?player=1 tab)*
   - `gridOpacity` was designed as "per-user" — excluded from both the BroadcastChannel payload (same-browser player tabs) and the Firebase `_reloadPanel` apply (cross-device). But the player view has no settings UI, so "per-user" in practice meant "the DM's grid tuning silently never applies to what players see."
   - **Fix applied:** `gridOpacity` + `gridWidth` are now shared map state — added to the broadcast payload, the BC receive handler, and the cross-device `_reloadPanel` apply. Verified end-to-end: DM tab set 85%/2px → player tab applied both and repainted within 800 ms; restore to 60%/1px tracked back the same way.
   - *Also confirmed while investigating:* stroke coordinates DO rescale with map zoom (`_scaleTokensTo` handles `_drawings`), so the desktop "eraser doesn't work" reports trace to the workspace-zoom coordinate bug fixed above — desktop browsers hit it too whenever the workspace zoom control isn't at exactly 100%.
@@ -321,7 +321,7 @@ Three parallel reviewers over commit ee83c059 (the delegation/zoom/sync refactor
   - The delegation refactor attached click/change/mousedown to the panel body once at mount. `_openPiP`/`_openPiPFallback` swap `_body` to a node in a DIFFERENT document — whose events never reach the old body's listeners. Every button/field in the popout did nothing.
   - **Fix:** `_wireDelegated()` now runs after each body swap; the wired-bodies guard is a WeakSet so re-wiring the restored original is a no-op (no double-dispatch).
 
-- [x] ~~**sanitizeHtml stripped `data:image/` — pasted images in NPC notes broke, then were destroyed on next edit**~~ — `js/utils.js` *(fixed + verified)*
+- [x] ~~**sanitizeHtml stripped `data:image/` — pasted images in NPC notes broke, then were destroyed on next edit**~~ — `js/core/utils.js` *(fixed + verified)*
   - The blanket `data:` block on `src` removed the base64 payload of pasted screenshots/portraits; the notes input handler then re-saved the src-less HTML, permanently losing the image.
   - **Fix:** `src`/`xlink:href` now allow `data:image/*` (still block `javascript:`/`vbscript:` and every other `data:` flavor); `href`/`formaction` keep the full block.
 
@@ -333,16 +333,16 @@ Three parallel reviewers over commit ee83c059 (the delegation/zoom/sync refactor
 - [x] ~~**Map rotation ≠ 0 breaks all battlemap pointer input**~~ *(fixed: `_stagePoint`/`_stageDelta` helpers un-rotate every screen→stage conversion — draw, erase, fog, click/align, hover, token drags, and party-token drops; verified in preview at 90° rotation: fog painted the exact aimed cell)* — `js/panels/battlemap.js`
   - `#map-stage` rotates via CSS transform, but every screen→canvas conversion assumes an unrotated stage. At 90°/270° axes swap; at 180° both flip. Token drags move perpendicular, fog paints wrong cells, Align computes garbage. Fix: un-rotate pointer coords about the stage center, or lock rotation-dependent tools while rotated.
 
-- [x] ~~**PC AC/HP buffs are clobbered by the party↔combat mirror**~~ *(fixed: PC buff add/remove now applies the delta to the party slot — the stat owner — and lets syncPartyToCombat mirror it back; verified: +2 AC buff survives a forced re-mirror and removal restores the original values exactly)* — `js/panels/combat.js` (`_promptAddBuff`) vs `js/window-manager.js:344`
+- [x] ~~**PC AC/HP buffs are clobbered by the party↔combat mirror**~~ *(fixed: PC buff add/remove now applies the delta to the party slot — the stat owner — and lets syncPartyToCombat mirror it back; verified: +2 AC buff survives a forced re-mirror and removal restores the original values exactly)* — `js/panels/combat.js` (`_promptAddBuff`) vs `js/core/window-manager.js:344`
   - The ✦ buff writes AC/HP only to the combatant; any party-side edit re-mirrors un-buffed `hp/hpMax/ac` over it. The buff chip stays; removing it then SUBTRACTS the delta again, leaving the PC below their true max. Fix: route PC buffs through the party slot, or re-apply active buffs after each mirror, or hide AC/HP buffs on PC cards.
 
 - [x] ~~**Combat right-click menu + conc/buff prompts capture stale indices**~~ *(fixed: context-menu items, `_promptAddBuff`, and `_promptConcentration` capture the combatant id and re-resolve the index at click/confirm time, mirroring the party actions-menu fix)* — `js/panels/combat.js` (`openMenu`, `_promptConcentration`, `_promptAddBuff`)
   - Index + combatant snapshot captured at open; a remote reorder/removal while the menu/modal is open makes the click hit whatever now sits at that index. Same pattern already fixed for the party actions menu — mirror that fix (capture `c.id`, re-resolve at click time).
 
-- [x] ~~**Remote battlemap update mid-drag discards the local token move**~~ *(fixed: `_reloadPanel('battlemap')` skips while `def._drag` is active — the drag-end `_saveMap()` makes this device canonical under last-write-wins anyway; logic fix, not practical to race-test locally)* — `js/realtime.js` (`_reloadPanel('battlemap')`)
+- [x] ~~**Remote battlemap update mid-drag discards the local token move**~~ *(fixed: `_reloadPanel('battlemap')` skips while `def._drag` is active — the drag-end `_saveMap()` makes this device canonical under last-write-wins anyway; logic fix, not practical to race-test locally)* — `js/sync/realtime.js` (`_reloadPanel('battlemap')`)
   - Now that the map is last-write-wins, a peer's write during a local drag re-renders the stage and replaces `_tokens`; drag-end then writes to an orphaned object and saves the un-moved array — token snaps back. Fix: while `def._drag` is active, defer the reload (apply on drag-end).
 
-- [x] ~~**`state.settings` shallow-copies `DEFAULT_SETTINGS` — nested defaults get corrupted; Reset to Defaults can't restore them**~~ — `js/state.js:14`, `js/settings.js:368` *(fixed: deep clone at both init and Reset-to-Defaults, same as `DEFAULT_PARTY`; verified `state.settings.shopFilters !== DEFAULT_SETTINGS.shopFilters`)*
+- [x] ~~**`state.settings` shallow-copies `DEFAULT_SETTINGS` — nested defaults get corrupted; Reset to Defaults can't restore them**~~ — `js/core/state.js:14`, `js/ui/settings.js:368` *(fixed: deep clone at both init and Reset-to-Defaults, same as `DEFAULT_PARTY`; verified `state.settings.shopFilters !== DEFAULT_SETTINGS.shopFilters`)*
 
 - [x] ~~**Adventures panel caches a failed fetch as permanently empty**~~ *(fixed: `res.ok` check + failures return without caching, mirroring the books fix; verified a failed load leaves the cache slot empty for retry)* — `js/panels/adventures.js:100`
   - No `res.ok` check + the catch writes `{data:[]}` into `_advCache`, so one transient 404/hiccup pins "No chapters in this file" until a full page reload. The books panel got this exact fix (AUDIT line ~123); adventures was missed. Fix: mirror the books pattern (throw on !ok, return without caching).
@@ -415,7 +415,7 @@ Profiled with three parallel reviewers plus a Node reproduction of the data load
 - [x] **Adventures no longer indexed** — 98 files / 45 MB were fetched and parsed on every load to build 833 rows that `getSearchPool()` discarded unconditionally and no panel ever read (Adventures/Books fetch their own content). Removed from `data-loader.js`; row count 17,079 → 16,246 with per-category counts otherwise unchanged.
 - [x] **`defer` on all 34 scripts** — 1.29 MB of JS no longer blocks first paint (no inline scripts, so execution order is preserved).
 - [x] **IndexedDB index cache** (`skt-5edata`) keyed by `DATA_STAMP#INDEX_SCHEMA`. Warm loads hydrate in one read: **0 data fetches**. Write is deferred to idle and `meta` is written last, so a half-written cache is never a hit; cache reads race a 3 s timeout so a hung/blocked IDB can never be worse than today. Verified: stale stamp → clean rebuild; Settings → **"Rebuild data index"** is the manual escape hatch.
-  - **Bump `DATA_STAMP` in `js/data-loader.js` whenever anything under `data/` changes** — same discipline as the `?v=` query strings.
+  - **Bump `DATA_STAMP` in `js/content/data-loader.js` whenever anything under `data/` changes** — same discipline as the `?v=` query strings.
 - [x] **Search index** — `_n`/`_h` normalized fields precomputed at build (was ~68k regex executions per keystroke); pool memoized on a signature that deliberately ignores live party stat edits; tab counts in one pass instead of 21 filters; `keydown` no longer runs a full search on every character (it bypassed the 80 ms debounce entirely) and flushes a pending debounce before Enter/Arrow so they never act on a stale list.
 - [x] **Monster resist/immune/vulnerable FIXED** — `combat.js` read `raw.immune`/`resist`/`vulnerable`, but `_raw` is the *converted* object whose fields are `damage_*`. Those reads were always `undefined`, so **monsters have always taken full damage from everything**. Facets are now hoisted onto index rows (`_immune`/`_resist`/`_vulnerable`, plus `_cr`/`_type`/item+class facets) and copied onto combatants when added; numbered duplicates ("Ogre 2") resolve via name-stripping. Verified: Skeleton takes 4 bludgeoning → 8, 10 poison → 0, 3 fire → 3. **Encounters will hit harder than the party is used to.**
 - [x] **Surgical HP updates** — a single HP click used to rebuild BOTH the party and combat panels (re-serializing every character sheet). `_patchHp(i)` on each panel patches just that card and the mirror routes through it; structural transitions (downed/dead/temp-HP/grouped) still fall back to a full render.
@@ -454,7 +454,7 @@ Decisions: keep every image (host on Cloudflare R2, don't prune), rewrite histor
 
 ### Done and verified
 
-- [x] **`assetUrl()` / `assetThumbUrl()` in `js/utils.js` + `js/asset-config.js`** — all 13 render-time `'img/' + path` sites now route through one helper; `imgBase: ''` reproduces today's URLs exactly. Verified as a **provable no-op**: 22 image requests, 0 failures, map background + picker cards + bestiary tokens + covers all render.
+- [x] **`assetUrl()` / `assetThumbUrl()` in `js/core/utils.js` + `js/core/asset-config.js`** — all 13 render-time `'img/' + path` sites now route through one helper; `imgBase: ''` reproduces today's URLs exactly. Verified as a **provable no-op**: 22 image requests, 0 failures, map background + picker cards + bestiary tokens + covers all render.
   - Absorbs the long-standing `_img` inconsistency (monsters prefix-less at `data-loader.js:1271`, everything else prefixed at `:1212/:1232`) by stripping any leading `img/`.
   - **Four sites deliberately still build relative `'img/…'` strings** (`battlemap.js:1943`, `combat.js:1926`, `data-loader.js:1212/1232`) because those values are **stored and synced to Firebase** — persisting an absolute CDN URL would bake in a hostname. `renderIcon()` re-bases them at render time. Commented in place so nobody "fixes" them.
 - [x] **Percent-encoding** — 5,870 filenames contain spaces (256 parens, 106 apostrophes). Browsers auto-encode *relative* URLs, so this was invisible locally, but hand-built absolute CDN URLs would have 404'd on all of them. `_encPath()` encodes per segment, idempotently. Verified `bestiary/tokens/MM/Hill Giant.webp` → 200 `image/webp`.
@@ -471,7 +471,7 @@ Bucket `dnd-img`, public base `https://pub-4b8864700c38402395c9f9951ed106ce.r2.d
 - **Verified live in the browser:** 23 requests from the CDN, **0 still hitting local `img/`**; percent-encoded names (`Hill%20Giant.webp`) resolve; Firebase still "Live" (same-origin guard intact); map loads at 3000×1905 and **`getImageData` succeeds — canvas NOT tainted**, so adaptive grid contrast still works (sampled luminance 184); **19 CDN images cached in `skt-img-v1`**, which is only possible with non-opaque responses and therefore proves CORS end to end.
 - `tools/verify-cdn.sh` passes 6/6 (public access, content-type, cache headers, CORS, thumbnails, awkward filenames).
 
-**Still fully reversible:** the images remain in the repo. Setting `imgBase: ''` in `js/asset-config.js` restores local serving.
+**Still fully reversible:** the images remain in the repo. Setting `imgBase: ''` in `js/core/asset-config.js` restores local serving.
 
 ### `r2.dev` load-tested — the rate-limit worry was unfounded (2026-07-28)
 
@@ -497,7 +497,7 @@ Verified end-to-end on a throwaway repo built to mirror the real conditions — 
 2. Upload with `rclone copy ./img r2:<bucket>` — bucket root mirrors the *contents* of `img/`; thumbnails to `thumbs/`. Set `Cache-Control: public, max-age=31536000, immutable`.
 3. **CORS is mandatory, not optional.** `battlemap.js` reads pixels off the map background (`getImageData`) for adaptive grid contrast, and `npc-library.js` uses `toBlob` — a cross-origin image taints the canvas and silently kills the first and throws in the second. CORS also keeps SW responses non-opaque; opaque entries are never cached by `cacheFirst` (`res.ok` is false) and force-caching them costs ~7 MB padding each.
 4. Also add `crossorigin="anonymous"` to generated `<img>` tags and `img.crossOrigin` before `.src`, or requests stay `no-cors` and come back opaque even with CORS headers present.
-5. Then set `imgBase` in `js/asset-config.js` **and** `IMG_ORIGINS` in `sw.js` (they must match), soak for a few days with the repo copy as a live fallback, and only then purge history.
+5. Then set `imgBase` in `js/core/asset-config.js` **and** `IMG_ORIGINS` in `sw.js` (they must match), soak for a few days with the repo copy as a live fallback, and only then purge history.
 6. **Purge is last and irreversible.** Tag `pre-cdn-purge` and push it first; take a mirror clone + bundle and verify both; `pip install git-filter-repo`; rewrite in a *fresh* clone; force-push. **Never `git reset --hard` the old clone afterwards — against an img-less tree that deletes all 14,278 files from disk.** Verify in a fresh incognito profile: the SW will happily keep serving cached images and make a broken deploy look fine locally.
 
 ---
@@ -508,7 +508,7 @@ Verified end-to-end on a throwaway repo built to mirror the real conditions — 
 
 ### Done and verified
 
-- [x] **`js/backup.js`** — `snapshot()` captures every `skt-*` key minus a documented denylist (`skt-me-v1` is the important one: it's per-browser author identity, and restoring it onto a second device makes two people the same notes author). Values are stored as **raw strings, never re-parsed** — a `JSON.parse`/`stringify` round trip reorders keys and drops `undefined`, so the restore wouldn't be byte-identical to the backup.
+- [x] **`js/features/backup.js`** — `snapshot()` captures every `skt-*` key minus a documented denylist (`skt-me-v1` is the important one: it's per-browser author identity, and restoring it onto a second device makes two people the same notes author). Values are stored as **raw strings, never re-parsed** — a `JSON.parse`/`stringify` round trip reorders keys and drops `undefined`, so the restore wouldn't be byte-identical to the backup.
 - [x] **Restore is destructive on purpose, and says so.** Keys absent from the file are cleared, otherwise a restore *merges* and an NPC deleted before the backup was taken comes back to life. The confirm dialog lists exactly which local data will be cleared, and warns that a restore overwrites the shared campaign for everyone connected.
 - [x] **The clobber trap — the reason this needed care.** Writing keys locally and reloading does **not** work: on the next load the sync listeners attach, read the server's still-pre-restore copy, and apply it over everything. The restore vanishes with no error anywhere. `_flushDirtyKeys`/`_flushEntityKey` now return their promises and `window.realtimeFlushAndWait()` resolves `published` / `partial` / `offline` / `timeout`; the UI only reloads on `published`, and on anything else keeps the restored state on screen and tells the user to sync first.
 - [x] **Entity keys ignored a clear** — `_flushEntityKey` returned early when the local value was gone, leaving every exploded child node on the server so the next load pulled the deleted data straight back. Now removes the base node. (Affects `skt-combat-v1`, `skt-battlemap-v1`, `skt-notes-v2`.)
@@ -528,12 +528,12 @@ Verified end-to-end on a throwaway repo built to mirror the real conditions — 
 
 ### Done and verified
 
-- [x] **`js/errors.js`, loaded first.** Defer scripts execute in order, so installing ahead of everything else means the handlers exist while the rest of the app is still parsing — a syntax error anywhere below gets logged instead of lost.
+- [x] **`js/core/errors.js`, loaded first.** Defer scripts execute in order, so installing ahead of everything else means the handlers exist while the rest of the app is still parsing — a syntax error anywhere below gets logged instead of lost.
 - [x] **Toast only for the genuinely exceptional** — uncaught exceptions and unhandled rejections. `console.error`/`console.warn` are recorded but never toasted: Firebase logs to console on ordinary network blips, and a toast per blip is worse than silence.
 - [x] **Resource errors are not app errors.** An `<img>` 404 fires the same `error` event with the element as target; `renderIcon`'s token fallback deliberately relies on one. Filtered on `ErrorEvent`, so image failures are logged quietly and never surface as "something went wrong".
 - [x] **Throttled and collapsed.** One toast per 30 s with an overflow count, so a render loop throwing every frame can't paper the screen over (verified: 25 errors → ≤1 toast). Consecutive identical entries collapse to a single row with a counter rather than evicting real history from the 120-entry ring.
 - [x] **Passive console capture** puts the 47 existing `console.warn`/`error` sites in the log without editing any of them.
-- [x] **Known cost, mitigated:** wrapping `console` moves DevTools' clickable source link to `errors.js`. Unavoidable while wrapping, so the wrapper resolves the true call site from the stack and stores it on the entry — the diagnostics view keeps attribution the console loses (verified: `@ /js/utils.js:388:52`, cache-bust hash stripped).
+- [x] **Known cost, mitigated:** wrapping `console` moves DevTools' clickable source link to `errors.js`. Unavoidable while wrapping, so the wrapper resolves the true call site from the stack and stores it on the entry — the diagnostics view keeps attribution the console loses (verified: `@ /js/core/utils.js:388:52`, cache-bust hash stripped).
 - [x] **Diagnostics viewer** built from raw DOM, depending on nothing but `document` — it has to work when the app is broken. Copy-all falls back to `execCommand` when `navigator.clipboard` is unavailable, which is exactly the plain-http LAN case where you're most likely debugging. Reachable from Settings → Data → Diagnostics, with a count badge that turns the button red.
 - [x] **Log survives a reload** (sessionStorage, 64 KB cap, oldest-first drop) — the error often *causes* the reload.
 
@@ -642,7 +642,7 @@ Added this session and costing **nothing** on Firebase: backups and rolling snap
 
 ### Fixed: legacy blob downloaded on every load
 
-`js/realtime.js` pulled the ~24 KB `skt_workspace_v1` legacy node on **every page load**, then checked whether the migration was needed — roughly a third of the app's total Firebase download, for a migration that completed long ago. The test is purely local, so it now runs *before* the network read.
+`js/sync/realtime.js` pulled the ~24 KB `skt_workspace_v1` legacy node on **every page load**, then checked whether the migration was needed — roughly a third of the app's total Firebase download, for a migration that completed long ago. The test is purely local, so it now runs *before* the network read.
 
 The post-read re-check is kept, and it isn't redundant: on a genuinely fresh profile the key listeners may deliver real data while the request is in flight, and their newer data must win over the legacy blob. Verified `load()` only *reads* the split keys on a fresh profile, so the guard is meaningful rather than always-true.
 

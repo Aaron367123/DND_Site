@@ -125,7 +125,7 @@ function _getMe() {
 // Single place that turns a 5etools-relative image path into a loadable URL.
 // Every image in the app goes through here so the art can be served from
 // local files or from object storage by flipping ASSET_CONFIG.imgBase — see
-// js/asset-config.js.
+// js/core/asset-config.js.
 //
 // Input tolerance matters, because callers disagree about the prefix:
 //   • data-loader stores monster art PREFIX-LESS ('bestiary/MM/Goblin.webp')
@@ -181,7 +181,7 @@ function assetThumbUrl(path) {
 // The bestiary data's own `hasToken` flag can't be used to tell them apart:
 // it is true on all 4,454 monster entries, including every one that has no
 // token file. tools/make-token-index.js precomputes the real exceptions into
-// js/token-index.js instead.
+// js/generated/token-index.js instead.
 //
 // Accepts either form — a full-art path OR an already-tokenized path from
 // saved state — and returns the prefix-less path that actually exists. Safe

@@ -74,4 +74,4 @@ if [ "$fail" -gt 0 ]; then
   echo "  403          -> public access not enabled"
   exit 1
 fi
-echo "All good — safe to set imgBase in js/asset-config.js and IMG_ORIGINS in sw.js."
+echo "All good — safe to set imgBase in js/core/asset-config.js and IMG_ORIGINS in sw.js."

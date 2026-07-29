@@ -22,7 +22,7 @@ Bestiary tokens are skipped: ~150 KB average is already thumbnail-sized.
 OUTPUT
 ------
 Mirrors the source tree under a top-level `thumbs/` prefix, matching
-assetThumbUrl() in js/utils.js:
+assetThumbUrl() in js/core/utils.js:
     img/adventure/SKT/foo.webp  ->  thumbs/adventure/SKT/foo.webp
 `thumbs/` is gitignored and uploaded next to the originals; a missing
 thumbnail is harmless because callers fall back to the full-size URL.

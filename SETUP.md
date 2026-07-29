@@ -42,7 +42,7 @@ Bucket → **Settings** → **Public access**. Two choices:
 - **Custom domain** (recommended): *Connect Domain*, e.g. `img.yourdomain.com`. Requires a domain with DNS on Cloudflare (~$10/yr at Cloudflare Registrar). Gets you real CDN caching, so repeat views cost nothing.
 - **r2.dev subdomain** (free, no domain): *Allow Access* → gives `https://pub-<hash>.r2.dev`. Fine to start with, but it's rate-limited and Cloudflare explicitly doesn't support it for production.
 
-Either way, **save the resulting base URL** — that's what goes into `js/asset-config.js`.
+Either way, **save the resulting base URL** — that's what goes into `js/core/asset-config.js`.
 
 ### 3. CORS — required, not optional
 
@@ -125,11 +125,11 @@ curl -I "https://YOUR-BASE-URL/bestiary/tokens/MM/Hill%20Giant.webp"
 
 Expect `200`, `content-type: image/webp`, and the long `cache-control`. Add `-H "Origin: https://aaron367123.github.io"` and confirm an `access-control-allow-origin` header comes back — that's the CORS check.
 
-Once all that passes, hand the base URL over and the code flip is a two-line change (`imgBase` in `js/asset-config.js`, `IMG_ORIGINS` in `sw.js`).
+Once all that passes, hand the base URL over and the code flip is a two-line change (`imgBase` in `js/core/asset-config.js`, `IMG_ORIGINS` in `sw.js`).
 
 ## Where images come from
 
-Image URLs are built by `assetUrl()` / `assetThumbUrl()` in `js/utils.js`, and the base is set in **`js/asset-config.js`**:
+Image URLs are built by `assetUrl()` / `assetThumbUrl()` in `js/core/utils.js`, and the base is set in **`js/core/asset-config.js`**:
 
 - `imgBase: ''` → local files (`img/…`). This is the current setting; everything works exactly as before.
 - `imgBase: 'https://…'` → object storage. The **bucket root must mirror the contents of `img/`** (it contains `adventure/`, `bestiary/`, … directly), with thumbnails under a `thumbs/` prefix.
@@ -204,7 +204,7 @@ To let friends access the app and sync changes in real time, you need to:
      };
      ```
 
-5. Open `js/realtime.js` and replace the 7 `'REPLACE_ME'` values with the values from your config
+5. Open `js/sync/realtime.js` and replace the 7 `'REPLACE_ME'` values with the values from your config
 
 ---
 

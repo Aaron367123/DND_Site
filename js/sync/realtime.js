@@ -655,7 +655,7 @@ function initRealtime() {
   // Skip if config hasn't been filled in yet
   if (firebaseConfig.apiKey === 'REPLACE_ME') {
     _setSyncStatus('offline');
-    console.info('[SKT] Firebase not configured — running in local-only mode.\nSee js/realtime.js for setup instructions.');
+    console.info('[SKT] Firebase not configured — running in local-only mode.\nSee js/sync/realtime.js for setup instructions.');
     return;
   }
 

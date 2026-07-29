@@ -293,34 +293,34 @@
 <!-- 0. Error capture. FIRST on purpose: defer scripts run in order, so
      installing here means the handlers exist while everything below is still
      parsing, and a syntax error in any of it gets logged instead of lost. -->
-<script defer src="js/errors.js?v=568f89ffd1"></script>
+<script defer src="js/core/errors.js?v=568f89ffd1"></script>
 <!-- Firebase (required for real-time sync; safe to remove if not using) -->
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <!-- 1. Data (no deps) -->
-<script defer src="js/data.js?v=4271d26464"></script>
+<script defer src="js/core/data.js?v=4271d26464"></script>
 <!-- 1b. Theme (no deps; applies CSS vars before any panels render) -->
-<script defer src="js/theme.js?v=533ffb6fb1"></script>
+<script defer src="js/core/theme.js?v=533ffb6fb1"></script>
 <!-- 1c. Asset config (where images are served from; read by utils' assetUrl) -->
-<script defer src="js/asset-config.js?v=9b018a4988"></script>
+<script defer src="js/core/asset-config.js?v=9b018a4988"></script>
 <!-- 1d. Which bestiary art lacks a token crop (generated; read by utils'
      bestiaryPortraitPath). Must load before anything renders a portrait. -->
-<script defer src="js/token-index.js?v=e043a461be"></script>
+<script defer src="js/generated/token-index.js?v=e043a461be"></script>
 <!-- 2. Pure utilities (no deps) -->
-<script defer src="js/utils.js?v=86f2ee3cd1"></script>
+<script defer src="js/core/utils.js?v=3ede2d8e37"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
-<script defer src="js/state.js?v=f59175b98e"></script>
+<script defer src="js/core/state.js?v=f59175b98e"></script>
 <!-- 4. Window manager (depends on state) -->
-<script defer src="js/window-manager.js?v=e88d7a8da0"></script>
+<script defer src="js/core/window-manager.js?v=e88d7a8da0"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
 <script defer src="js/panels/combat.js?v=1f8612d914"></script>
 <script defer src="js/panels/party.js?v=4e582f8172"></script>
 <script defer src="js/panels/shop.js?v=39acf9d21b"></script>
-<script defer src="js/notes-sync.js?v=8b74d04e3a"></script>
-<script defer src="js/dropbox-config.js?v=ccf8533d50"></script>
-<script defer src="js/dropbox-sync.js?v=90ddfd734c"></script>
-<script defer src="js/panels/notes.js?v=801ba3a8b8"></script>
+<script defer src="js/sync/notes-sync.js?v=8b74d04e3a"></script>
+<script defer src="js/sync/dropbox-config.js?v=ccf8533d50"></script>
+<script defer src="js/sync/dropbox-sync.js?v=3a838e0274"></script>
+<script defer src="js/panels/notes.js?v=4baaf07127"></script>
 <script defer src="js/panels/battlemap.js?v=77deba5e98"></script>
 <script defer src="js/panels/npc-library.js?v=fb75c638ec"></script>
 <script defer src="js/panels/bestiary.js?v=82bf3c5db4"></script>
@@ -336,18 +336,18 @@
 <script defer src="js/panels/weather.js?v=b318dd7112"></script>
 <script defer src="js/panels/timetracker.js?v=3906d0ae60"></script>
 <!-- 6. Features (depend on state + utils + panels) -->
-<script defer src="js/data-loader.js?v=94f3b18848"></script>
-<script defer src="js/search.js?v=a9753b332c"></script>
+<script defer src="js/content/data-loader.js?v=94f3b18848"></script>
+<script defer src="js/content/search.js?v=a9753b332c"></script>
 <!-- Whole-state snapshot/restore. Before settings.js, which wires its UI. -->
-<script defer src="js/backup.js?v=aa3d74defd"></script>
-<script defer src="js/settings.js?v=3a35b590f9"></script>
-<script defer src="js/context-menu.js?v=92f9a49378"></script>
-<script defer src="js/zoom-pan.js?v=0e8544341a"></script>
-<script defer src="js/pdf-import.js?v=0ae3653bd8"></script>
-<script defer src="js/player-view.js?v=a806602667"></script>
-<script defer src="js/realtime.js?v=71bfc366db"></script>
-<script defer src="js/tutorial.js?v=0f28ad967f"></script>
-<script defer src="js/onboarding.js?v=7e4c89c909"></script>
+<script defer src="js/features/backup.js?v=aa3d74defd"></script>
+<script defer src="js/ui/settings.js?v=19cb2d3859"></script>
+<script defer src="js/ui/context-menu.js?v=92f9a49378"></script>
+<script defer src="js/ui/zoom-pan.js?v=0e8544341a"></script>
+<script defer src="js/features/pdf-import.js?v=0ae3653bd8"></script>
+<script defer src="js/ui/player-view.js?v=a806602667"></script>
+<script defer src="js/sync/realtime.js?v=8797366433"></script>
+<script defer src="js/ui/tutorial.js?v=0f28ad967f"></script>
+<script defer src="js/ui/onboarding.js?v=7e4c89c909"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->
 <script defer src="js/app.js?v=9045fd4214"></script>
 </body>

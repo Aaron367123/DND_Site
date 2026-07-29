@@ -87,8 +87,8 @@ grep -qE '^/?img/?$' .gitignore 2>/dev/null \
 ok ".gitignore covers img/"
 
 # The whole point of the purge is that the CDN is already carrying the load.
-BASE="$(grep -oE "imgBase: *'[^']*'" js/asset-config.js | sed "s/.*'\(.*\)'/\1/")"
-[ -n "$BASE" ] || die "js/asset-config.js has an empty imgBase — the site is still serving images from this repo. Purging now breaks every image."
+BASE="$(grep -oE "imgBase: *'[^']*'" js/core/asset-config.js | sed "s/.*'\(.*\)'/\1/")"
+[ -n "$BASE" ] || die "js/core/asset-config.js has an empty imgBase — the site is still serving images from this repo. Purging now breaks every image."
 ok "imgBase set: $BASE"
 
 # Sample across the tree rather than probing one arbitrary file. Every one
@@ -212,7 +212,7 @@ else
 fi
 
 # Code must survive intact.
-for f in skt-workspace.html js/app.js js/backup.js js/errors.js sw.js; do
+for f in skt-workspace.html js/app.js js/features/backup.js js/core/errors.js sw.js; do
   [ -f "$f" ] || die "$f missing from the rewrite"
 done
 ok "key source files intact"

@@ -28,25 +28,25 @@
  */
 'use strict';
 
-const BUILD = '598a934ac2';
+const BUILD = '402a0042ec';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=35667c8e20',
-  'js/errors.js?v=568f89ffd1',
-  'js/data.js?v=4271d26464',
-  'js/theme.js?v=533ffb6fb1',
-  'js/asset-config.js?v=9b018a4988',
-  'js/token-index.js?v=e043a461be',
-  'js/utils.js?v=86f2ee3cd1',
-  'js/state.js?v=f59175b98e',
-  'js/window-manager.js?v=e88d7a8da0',
+  'js/core/errors.js?v=568f89ffd1',
+  'js/core/data.js?v=4271d26464',
+  'js/core/theme.js?v=533ffb6fb1',
+  'js/core/asset-config.js?v=9b018a4988',
+  'js/generated/token-index.js?v=e043a461be',
+  'js/core/utils.js?v=3ede2d8e37',
+  'js/core/state.js?v=f59175b98e',
+  'js/core/window-manager.js?v=e88d7a8da0',
   'js/panels/combat.js?v=1f8612d914',
   'js/panels/party.js?v=4e582f8172',
   'js/panels/shop.js?v=39acf9d21b',
-  'js/notes-sync.js?v=8b74d04e3a',
-  'js/dropbox-config.js?v=ccf8533d50',
-  'js/dropbox-sync.js?v=90ddfd734c',
-  'js/panels/notes.js?v=801ba3a8b8',
+  'js/sync/notes-sync.js?v=8b74d04e3a',
+  'js/sync/dropbox-config.js?v=ccf8533d50',
+  'js/sync/dropbox-sync.js?v=3a838e0274',
+  'js/panels/notes.js?v=4baaf07127',
   'js/panels/battlemap.js?v=77deba5e98',
   'js/panels/npc-library.js?v=fb75c638ec',
   'js/panels/bestiary.js?v=82bf3c5db4',
@@ -59,17 +59,17 @@ const PRECACHE = [
   'js/panels/soundboard.js?v=611bf224d4',
   'js/panels/weather.js?v=b318dd7112',
   'js/panels/timetracker.js?v=3906d0ae60',
-  'js/data-loader.js?v=94f3b18848',
-  'js/search.js?v=a9753b332c',
-  'js/backup.js?v=aa3d74defd',
-  'js/settings.js?v=3a35b590f9',
-  'js/context-menu.js?v=92f9a49378',
-  'js/zoom-pan.js?v=0e8544341a',
-  'js/pdf-import.js?v=0ae3653bd8',
-  'js/player-view.js?v=a806602667',
-  'js/realtime.js?v=71bfc366db',
-  'js/tutorial.js?v=0f28ad967f',
-  'js/onboarding.js?v=7e4c89c909',
+  'js/content/data-loader.js?v=94f3b18848',
+  'js/content/search.js?v=a9753b332c',
+  'js/features/backup.js?v=aa3d74defd',
+  'js/ui/settings.js?v=19cb2d3859',
+  'js/ui/context-menu.js?v=92f9a49378',
+  'js/ui/zoom-pan.js?v=0e8544341a',
+  'js/features/pdf-import.js?v=0ae3653bd8',
+  'js/ui/player-view.js?v=a806602667',
+  'js/sync/realtime.js?v=8797366433',
+  'js/ui/tutorial.js?v=0f28ad967f',
+  'js/ui/onboarding.js?v=7e4c89c909',
   'js/app.js?v=9045fd4214',
 ];
 
@@ -83,7 +83,7 @@ const THUMB_CACHE = 'skt-thumb-v1';
 const THUMB_MAX_ENTRIES = 1500;
 
 // Cross-origin hosts allowed to be intercepted for image caching. Keep this
-// in sync with ASSET_CONFIG.imgBase in js/asset-config.js — if they disagree,
+// in sync with ASSET_CONFIG.imgBase in js/core/asset-config.js — if they disagree,
 // images silently stop being cached offline (no error, just misses).
 // Origin only: 'https://pub-xxxx.r2.dev', no path, no trailing slash.
 const IMG_ORIGINS = ['https://pub-4b8864700c38402395c9f9951ed106ce.r2.dev'];
@@ -191,7 +191,7 @@ self.addEventListener('fetch', event => {
     // The image CDN is the only cross-origin host we ever touch. This is
     // strictly narrower than "block everything cross-origin" — it matches one
     // exact origin string — so Firebase/gstatic still fall straight through.
-    // Empty until the images actually move (see js/asset-config.js); while
+    // Empty until the images actually move (see js/core/asset-config.js); while
     // empty this branch can never match and behavior is unchanged.
     //
     // IMPORTANT: the bucket must send CORS headers and the <img> tags must

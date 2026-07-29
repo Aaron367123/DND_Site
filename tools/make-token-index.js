@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Generate js/token-index.js — the list of bestiary art that has NO
+ * Generate js/generated/token-index.js — the list of bestiary art that has NO
  * token-cropped counterpart.
  *
  * WHY THIS EXISTS
@@ -32,14 +32,14 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const DATA = path.join(ROOT, 'data', 'bestiary');
 const TOKENS = path.join(ROOT, 'img', 'bestiary', 'tokens');
-const OUT = path.join(ROOT, 'js', 'token-index.js');
+const OUT = path.join(ROOT, 'js', 'generated', 'token-index.js');
 
 function readJson(f) {
   try { return JSON.parse(fs.readFileSync(f, 'utf8')); }
   catch (e) { console.warn('[tokens] unreadable', path.basename(f), e.message); return null; }
 }
 
-// Mirror the app's own selection rule (js/data-loader.js): the portrait is the
+// Mirror the app's own selection rule (js/content/data-loader.js): the portrait is the
 // first image that isn't a battle map.
 function firstArt(entry) {
   const imgs = (entry && entry.images) || [];
@@ -101,7 +101,7 @@ function main() {
     return;
   }
   fs.writeFileSync(OUT, body);
-  console.log('[tokens] ' + list.length + ' misses of ' + checked + ' art paths · wrote js/token-index.js');
+  console.log('[tokens] ' + list.length + ' misses of ' + checked + ' art paths · wrote js/generated/token-index.js');
   console.log('[tokens] remember to re-run tools/stamp-build.js');
 }
 

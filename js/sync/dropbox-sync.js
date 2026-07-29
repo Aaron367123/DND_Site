@@ -5,7 +5,7 @@
 // Notes panel can call either adapter with the same method names.
 //
 // Auth model: one long-lived access token pasted into
-// js/dropbox-config.js. There is no per-user OAuth — every browser
+// js/sync/dropbox-config.js. There is no per-user OAuth — every browser
 // that loads the page is "logged in" as the shared account.
 //
 // Sync model: same as notes-sync.js — last-write-wins, 8 s poll for

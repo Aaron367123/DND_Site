@@ -261,7 +261,7 @@ function initSettings(){
     });
   }
 
-  // Export / import now go through js/backup.js, which snapshots EVERY
+  // Export / import now go through js/features/backup.js, which snapshots EVERY
   // skt-* key. The old inline version wrote six fields and quietly omitted
   // notes, the battle map, the bestiary, NPCs, loot and the rest.
   document.getElementById('export-btn').addEventListener('click',()=>{
