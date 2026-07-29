@@ -249,23 +249,37 @@ function _flattenEntitySnap(val){
   return out;
 }
 
+// Returns a promise resolving true once the push lands, false if it didn't
+// (or if there was nothing to do). Callers that just want fire-and-forget
+// can ignore it; the backup restore awaits it, because it must not reload
+// the page until the server actually holds the restored data.
 function _flushEntityKey(k){
-  if (!_fbDb) return;
+  if (!_fbDb) return Promise.resolve(false);
   const spec = _ENTITY_KEYS[k];
   const local = localStorage.getItem(k);
-  if (local == null) return;
+  // Key deliberately emptied or removed (backup restore clearing state the
+  // file doesn't contain). Returning early here would leave every exploded
+  // node sitting on the server, and the next load would pull the deleted
+  // data straight back. Drop the whole subtree instead.
+  if (local == null || local === ''){
+    _entityCache[k] = {};
+    return _fbDb.ref(spec.base).remove()
+      .then(() => { delete _retryCounts[k]; return true; })
+      .catch(err => { console.warn('[realtime] Entity clear failed for ' + k, err); return false; });
+  }
   let nodes;
-  try { nodes = spec.explode(local); } catch(e){ return; }
+  try { nodes = spec.explode(local); } catch(e){ return Promise.resolve(false); }
   const prev = _entityCache[k] || {};
   const updates = {};
   Object.keys(nodes).forEach(n => { if (prev[n] !== nodes[n]) updates[spec.base + '/' + n] = nodes[n]; });
   Object.keys(prev).forEach(n => { if (!(n in nodes)) updates[spec.base + '/' + n] = null; });
-  if (!Object.keys(updates).length) return;
+  if (!Object.keys(updates).length) return Promise.resolve(true);
   // Optimistic cache update — the echo snapshot must match the cache so it
   // gets recognized and skipped. Rolled back on failure so a retry re-diffs.
   _entityCache[k] = nodes;
-  _fbDb.ref().update(updates).then(() => {
+  return _fbDb.ref().update(updates).then(() => {
     delete _retryCounts[k];
+    return true;
   }).catch(err => {
     _entityCache[k] = prev;
     const n = (_retryCounts[k] || 0) + 1;
@@ -280,6 +294,7 @@ function _flushEntityKey(k){
       delete _retryCounts[k];
       if (typeof showToast === 'function') showToast('Live sync failed — your last change may not have reached other players');
     }
+    return false;
   });
 }
 
@@ -349,14 +364,16 @@ function _patchLocalStorage() {
 // the key sits dirty again and the next user write re-enqueues it.
 const _retryCounts = {};
 const _MAX_RETRIES = 4;
+// Returns a promise resolving to an array of per-key booleans (true = the
+// value reached the server). Fire-and-forget callers ignore it.
 function _flushDirtyKeys() {
-  if (!_fbDb || _dirtyKeys.size === 0) return;
+  if (!_fbDb || _dirtyKeys.size === 0) return Promise.resolve([]);
   const keys = Array.from(_dirtyKeys);
   _dirtyKeys.clear();
-  keys.forEach(k => {
+  return Promise.all(keys.map(k => {
     // Entity keys diff per-node and multi-path update() instead of pushing
     // the whole string.
-    if (_ENTITY_KEYS[k]){ _flushEntityKey(k); return; }
+    if (_ENTITY_KEYS[k]) return _flushEntityKey(k);
     const val = localStorage.getItem(k);
     // Remember exactly what we pushed so the listener can drop the one echo
     // that comes back to us. (Don't use a `localStorage===fbVal` check for
@@ -373,9 +390,10 @@ function _flushDirtyKeys() {
     const norm = val != null ? val : '__null__';
     if (!_justWrote[k]) _justWrote[k] = new Map();
     _justWrote[k].set(norm, (_justWrote[k].get(norm) || 0) + 1);
-    _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).then(() => {
+    return _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).then(() => {
       // Success — clear retry counter so a future failure starts fresh.
       delete _retryCounts[k];
+      return true;
     }).catch((err) => {
       // Failure — re-mark the key dirty + bump retry counter so the next
       // debounce tick (300ms) tries again. After _MAX_RETRIES attempts give
@@ -395,8 +413,9 @@ function _flushDirtyKeys() {
         delete _retryCounts[k];
         if (typeof showToast === 'function') showToast('Live sync failed — your last change may not have reached other players');
       }
+      return false;
     });
-  });
+  }));
 }
 
 // ─── Apply one incoming remote key ────────────────────────────────────────────
@@ -814,6 +833,34 @@ window.realtimeFlush = function(){
   if (!_fbDb) return false;
   try { _flushDirtyKeys(); } catch(e){ return false; }
   return true;
+};
+
+// Flush now and RESOLVE ONLY ONCE THE SERVER HAS IT. Used by the backup
+// restore, which must not reload the page until the restored data is on the
+// server — otherwise the listeners come up on the next load, read the old
+// pre-restore state, and apply it over everything, wiping the restore with
+// no error shown anywhere.
+//
+// Resolves: 'published' (everything landed) · 'partial' (some key failed and
+// is queued for retry) · 'offline' (no Firebase configured) · 'timeout'
+// (still in flight after timeoutMs — the caller should warn rather than
+// assume either outcome).
+window.realtimeFlushAndWait = function(timeoutMs){
+  if (!_fbDb) return Promise.resolve('offline');
+  // The setItem hook debounces by 300ms; jump the queue so we're waiting on
+  // the real write rather than on the timer.
+  clearTimeout(_pushTimer);
+  let settled = false;
+  const flushed = Promise.resolve()
+    .then(() => _flushDirtyKeys())
+    .then(results => {
+      settled = true;
+      return (results || []).every(Boolean) ? 'published' : 'partial';
+    })
+    .catch(() => { settled = true; return 'partial'; });
+  const timer = new Promise(res => setTimeout(() => res(settled ? null : 'timeout'),
+                                              timeoutMs || 8000));
+  return Promise.race([flushed, timer]).then(r => r || flushed);
 };
 
 window.realtimeLive = {

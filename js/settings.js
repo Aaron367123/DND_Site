@@ -261,59 +261,154 @@ function initSettings(){
     });
   }
 
+  // Export / import now go through js/backup.js, which snapshots EVERY
+  // skt-* key. The old inline version wrote six fields and quietly omitted
+  // notes, the battle map, the bestiary, NPCs, loot and the rest.
   document.getElementById('export-btn').addEventListener('click',()=>{
-    const blob=new Blob([JSON.stringify({party:state.party,combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId,shop:state.shop,settings:state.settings},null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob),a=Object.assign(document.createElement('a'),{href:url,download:`skt-${new Date().toISOString().slice(0,10)}.json`});
-    a.click();URL.revokeObjectURL(url);showToast('Exported');
+    try {
+      const bytes = sktBackup.download();
+      showToast('Exported · ' + sktBackup.formatBytes(bytes));
+    } catch(err){
+      console.error('[backup] export failed', err);
+      showToast('Export failed — ' + (err.message || err));
+    }
   });
   document.getElementById('import-btn').addEventListener('click',()=>document.getElementById('import-file').click());
   document.getElementById('import-file').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;
     const reader = new FileReader();
     reader.onload = ev => {
-      let d;
-      try { d = JSON.parse(ev.target.result); }
-      catch(err){ alert('Invalid JSON: ' + err.message); return; }
-      // Build a human-readable preview of what's about to replace local
-      // state. Lets the user back out before clobbering an active campaign.
-      const partyN  = Array.isArray(d.party)      ? d.party.length      : null;
-      const combN   = Array.isArray(d.combatants) ? d.combatants.length : null;
-      const round   = typeof d.combatRound === 'number' ? d.combatRound : null;
-      const hasShop = !!d.shop;
-      const hasSet  = !!d.settings;
-      const lines = [];
-      if (partyN != null) lines.push('• Party (' + partyN + ' member' + (partyN===1?'':'s') + ')');
-      if (combN  != null) lines.push('• Combat (' + combN + ' combatant' + (combN===1?'':'s') + (round?', round '+round:'') + ')');
-      if (hasShop)        lines.push('• Active shop · ' + esc(d.shop.type || 'shop'));
-      if (hasSet)         lines.push('• Settings (font scale, theme, etc.)');
-      if (!lines.length)  lines.push('• Nothing recognisable — file may be from a different tool');
-      const summary = lines.join('\n');
-      const proceed = (ok) => {
-        if (!ok) { e.target.value = ''; return; }
-        try {
-          if (Array.isArray(d.party))      state.party      = d.party;
-          if (Array.isArray(d.combatants)) state.combatants = d.combatants;
-          if (typeof d.combatRound === 'number') state.combatRound = d.combatRound;
-          state.activeCombatantId = d.activeCombatantId ?? null;
-          state.shop = d.shop ?? null;
-          if (d.settings) state.settings = { ...state.settings, ...d.settings };
-          save();
-          applyFontScale(state.settings.fontScale ?? 1);
-          applyUiHide(state.settings.uiHide || {});
-          initPanels();
-          showToast('Imported');
-        } catch(err){ alert('Import failed: ' + err.message); }
+      let parsed;
+      try { parsed = sktBackup.parse(ev.target.result); }
+      catch(err){ showToast('Import failed — ' + err.message); e.target.value = ''; return; }
+      const info = sktBackup.describe(parsed);
+
+      // Spell out the two things that actually surprise people: a restore
+      // REMOVES local data the file doesn't contain, and it publishes to
+      // every other connected device rather than staying on this one.
+      let msg = 'Replace everything in this browser with:\n\n' + info.lines.join('\n');
+      if (info.created) msg += '\n\nBacked up ' + new Date(info.created).toLocaleString();
+      if (info.legacy){
+        msg += '\n\n⚠ Old-format file — it only contains party, combat, shop and'
+             + ' settings. Notes, maps, bestiary and NPCs were not in this backup.';
+      }
+      if (info.localOnly.length){
+        msg += '\n\n⚠ Not in this file, so it will be CLEARED:\n• ' + info.localOnly.join('\n• ');
+      }
+      msg += '\n\nThis also overwrites the shared campaign for everyone connected.';
+
+      const proceed = async (ok) => {
         e.target.value = '';
+        if (!ok) return;
+        try {
+          const res = await sktBackup.restore(parsed);
+          if (res.sync === 'timeout' || res.sync === 'partial'){
+            // Don't reload — the listeners would read the server's older
+            // copy and undo the restore. Let the user retry from a stable
+            // state instead of silently losing it.
+            showToast('Restored locally, but the sync push did not confirm. Use “Sync now” before reloading.');
+            return;
+          }
+          showToast('Restored ' + res.restored + ' item' + (res.restored===1?'':'s') + ' — reloading…');
+          // Full reload rather than initPanels(): every panel re-reads its
+          // own key on boot, which is far more reliable than trying to
+          // re-init 16 panels in place after replacing all of storage.
+          setTimeout(() => location.reload(), 600);
+        } catch(err){
+          console.error('[backup] restore failed', err);
+          showToast('Restore failed — ' + (err.message || err));
+        }
       };
       if (typeof showConfirm === 'function'){
-        showConfirm('Replace local data with:\n\n' + summary + '\n\nThis overwrites anything currently in this browser.',
-          {title:'Import backup', confirmLabel:'Replace', danger:true}).then(proceed);
+        showConfirm(msg, {title:'Restore backup', confirmLabel:'Replace everything', danger:true}).then(proceed);
       } else {
-        proceed(window.confirm('Replace local data with:\n\n' + summary + '\n\nThis overwrites anything currently in this browser.'));
+        proceed(window.confirm(msg));
       }
     };
     reader.readAsText(f);
   });
+
+  // ─── Automatic snapshots ───────────────────────────────────────────────────
+  // Rolling local copies, so recovery doesn't depend on having remembered to
+  // click Export. Rendered on every drawer open (cheap — the list query
+  // strips the payloads).
+  const renderSnapshots = async () => {
+    const el = document.getElementById('snapshot-list');
+    if (!el || !window.sktBackup) return;
+    let rows;
+    try { rows = await sktBackup.autosave.list(); }
+    catch(err){ el.innerHTML = '<p class="drawer-note">Snapshots unavailable — ' + esc(String(err.message||err)) + '</p>'; return; }
+    if (!rows.length){
+      el.innerHTML = '<p class="drawer-note">No snapshots yet — the first is taken a minute after load, then every '
+        + Math.round(sktBackup.autosave.INTERVAL_MS/60000) + ' minutes.</p>';
+      return;
+    }
+    el.innerHTML = rows.map(r => {
+      const when = new Date(r.created);
+      const tag = r.reason === 'before-restore' ? ' <span class="snap-tag">pre-restore</span>' : '';
+      return '<div class="snap-row" data-snap="' + r.id + '">'
+        + '<span class="snap-when">' + esc(when.toLocaleString()) + tag + '</span>'
+        + '<span class="snap-size">' + esc(sktBackup.formatBytes(r.size||0)) + '</span>'
+        + '<button class="btn small" data-snapact="download" data-snap="' + r.id + '">Download</button>'
+        + '<button class="btn small danger" data-snapact="restore" data-snap="' + r.id + '">Restore</button>'
+        + '</div>';
+    }).join('');
+  };
+
+  const snapList = document.getElementById('snapshot-list');
+  if (snapList){
+    snapList.addEventListener('click', async ev => {
+      const btn = ev.target.closest('[data-snapact]'); if (!btn) return;
+      const id = Number(btn.dataset.snap);
+      const rec = await sktBackup.autosave.get(id);
+      if (!rec){ showToast('Snapshot not found'); return; }
+      if (btn.dataset.snapact === 'download'){
+        sktBackup.download(rec.snap);
+        showToast('Downloaded');
+        return;
+      }
+      const parsed = { keys: rec.snap.keys, created: rec.created, version: rec.snap.version, legacy:false };
+      const info = sktBackup.describe(parsed);
+      let msg = 'Roll back to the snapshot from ' + new Date(rec.created).toLocaleString() + '?\n\n'
+              + info.lines.join('\n');
+      if (info.localOnly.length) msg += '\n\n⚠ Will be CLEARED:\n• ' + info.localOnly.join('\n• ');
+      msg += '\n\nThis also overwrites the shared campaign for everyone connected.\n'
+           + 'Your current state is saved as a new snapshot first.';
+      const ok = typeof showConfirm === 'function'
+        ? await showConfirm(msg, {title:'Restore snapshot', confirmLabel:'Roll back', danger:true})
+        : window.confirm(msg);
+      if (!ok) return;
+      try {
+        const res = await sktBackup.restore(parsed);
+        if (res.sync === 'timeout' || res.sync === 'partial'){
+          showToast('Restored locally, but the sync push did not confirm. Use “Sync now” before reloading.');
+          return;
+        }
+        showToast('Rolled back — reloading…');
+        setTimeout(() => location.reload(), 600);
+      } catch(err){
+        console.error('[backup] snapshot restore failed', err);
+        showToast('Restore failed — ' + (err.message || err));
+      }
+    });
+  }
+
+  const snapNowBtn = document.getElementById('snapshot-now-btn');
+  if (snapNowBtn){
+    snapNowBtn.addEventListener('click', async () => {
+      snapNowBtn.disabled = true;
+      try {
+        // 'manual' is exempt from the rolling prune, same as 'before-restore'.
+        const rec = await sktBackup.autosave.write('manual');
+        showToast(rec ? 'Snapshot saved · ' + sktBackup.formatBytes(rec.size) : 'No changes since the last snapshot');
+        await renderSnapshots();
+      } catch(err){
+        showToast('Snapshot failed — ' + (err.message || err));
+      }
+      snapNowBtn.disabled = false;
+    });
+  }
+  window._sktRenderSnapshots = renderSnapshots;
 
   // Storage usage indicator — sums byte length of every localStorage key the
   // app owns (skt-* prefix) so the user can spot when they're approaching the
@@ -338,11 +433,13 @@ function initSettings(){
       </div>`;
   };
   updateStorageUsage();
+  renderSnapshots();
   // Also refresh when the drawer opens — easy hook is the visibility class
   // toggling on the drawer container. (Reuses the `drawer` already declared
   // at the top of initSettings.)
   if (drawer){
-    new MutationObserver(updateStorageUsage).observe(drawer, { attributes:true, attributeFilter:['class','style'] });
+    new MutationObserver(() => { updateStorageUsage(); renderSnapshots(); })
+      .observe(drawer, { attributes:true, attributeFilter:['class','style'] });
   }
   // Help & about: open the shortcut overlay from settings (parity with `?`
   // key), and let the user re-trigger the tutorial from here too.

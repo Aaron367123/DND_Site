@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
-<link rel="stylesheet" href="styles/main.css?v=737cbe7d18">
+<link rel="stylesheet" href="styles/main.css?v=3888233ed1">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -251,7 +251,14 @@
         <button class="btn small" id="import-btn">📥 Import JSON</button>
       </div>
       <input type="file" id="import-file" accept=".json" style="display:none">
-      <p class="drawer-note">Your data auto-saves to this browser. Use Export/Import to back up or move to another device.</p>
+      <p class="drawer-note">Exports everything: party, combat, notes, maps, bestiary, NPCs, loot, encounters, bookmarks and settings. Soundboard <em>audio</em> is not included (it lives outside this file) — re-add those from disk after a restore.</p>
+
+      <h4 class="drawer-subhead">Automatic snapshots</h4>
+      <div class="drawer-data-row">
+        <button class="btn small" id="snapshot-now-btn" title="Take a snapshot right now, before doing something risky">📸 Snapshot now</button>
+      </div>
+      <div id="snapshot-list" class="snap-list"></div>
+      <p class="drawer-note">Kept in this browser only. Download the ones you care about — clearing site data deletes them.</p>
 
       <h4 class="drawer-subhead">Storage</h4>
       <div id="storage-usage" class="drawer-note" style="margin:4px 0 12px"></div>
@@ -318,15 +325,17 @@
 <!-- 6. Features (depend on state + utils + panels) -->
 <script defer src="js/data-loader.js?v=24ad236e15"></script>
 <script defer src="js/search.js?v=a9753b332c"></script>
-<script defer src="js/settings.js?v=a6c9492896"></script>
+<!-- Whole-state snapshot/restore. Before settings.js, which wires its UI. -->
+<script defer src="js/backup.js?v=c27194d035"></script>
+<script defer src="js/settings.js?v=ae54b2dd09"></script>
 <script defer src="js/context-menu.js?v=92f9a49378"></script>
 <script defer src="js/zoom-pan.js?v=0e8544341a"></script>
 <script defer src="js/pdf-import.js?v=0ae3653bd8"></script>
 <script defer src="js/player-view.js?v=a806602667"></script>
-<script defer src="js/realtime.js?v=1296cecaf4"></script>
+<script defer src="js/realtime.js?v=ad40160093"></script>
 <script defer src="js/tutorial.js?v=0f28ad967f"></script>
 <script defer src="js/onboarding.js?v=7e4c89c909"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->
-<script defer src="js/app.js?v=05d965a6b5"></script>
+<script defer src="js/app.js?v=9045fd4214"></script>
 </body>
 </html>

@@ -99,6 +99,12 @@ function init(){
   initZoomPan();
   if (typeof initOnboarding === 'function') initOnboarding();
   initServiceWorker();
+  // Rolling local snapshots. Starts its own timer; the first fires a minute
+  // in, so it never competes with boot. Player view doesn't need it — it
+  // holds no authoritative state of its own.
+  if (window.sktBackup && !document.body.classList.contains('player-mode')){
+    try { sktBackup.autosave.start(); } catch(e){ console.warn('[backup] autosave unavailable', e); }
+  }
 }
 
 // ─── Service worker ──────────────────────────────────────────────────────────

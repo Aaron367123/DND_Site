@@ -1972,6 +1972,14 @@ input.card-name-input.clickable:hover{background:rgba(212,165,116,.08)}
 /* Data section: side-by-side equal-width buttons */
 .drawer-data-row{display:flex;gap:6px;margin-bottom:0}
 .drawer-data-row .btn{flex:1}
+/* Automatic snapshot list. Capped height with its own scroll so a full ring
+   of 20 entries can't push the danger zone off the bottom of the drawer. */
+.snap-list{margin:8px 0 4px;max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.snap-row{display:flex;align-items:center;gap:6px;padding:5px 7px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;font-size:11px}
+.snap-when{flex:1;min-width:0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.snap-size{color:var(--text-muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+.snap-row .btn{flex:0 0 auto;padding:2px 7px;font-size:10px}
+.snap-tag{color:var(--accent);font-size:10px;margin-left:4px}
 /* Danger zone callout */
 .danger-callout{background:rgba(194,84,80,.08);border:1px solid rgba(194,84,80,.4);border-radius:5px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .danger-callout-text{margin:0;font-size:11px;color:var(--text-muted);line-height:1.5}
