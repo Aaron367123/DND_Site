@@ -132,7 +132,19 @@ function renderIcon(icon, alt) {
   const s = String(icon);
   if (s.startsWith('data:image/') || s.startsWith('img/') || /^https?:\/\//.test(s)) {
     // assetUrl passes data:/http(s) through untouched and re-bases img/ paths.
-    return `<img class="icon-img" crossorigin="anonymous" src="${esc(assetUrl(s))}" alt="${esc(alt||'')}" onerror="this.style.display='none'">`;
+    const src = assetUrl(s);
+    // 408 of the 2,959 bestiary images ship with no matching token crop
+    // (XMM group entries, JttRC, DSotDQ… — 14% of the set). Callers that
+    // PERSIST a portrait — combat.js and battlemap.js store 'img/bestiary/
+    // tokens/…' on the combatant/token and sync it — can't carry a fallback
+    // chain in a saved string, so retry the un-cropped art here before
+    // giving up. Without this those monsters render an empty portrait ring.
+    const fb = src.indexOf('/bestiary/tokens/') !== -1
+      ? src.replace('/bestiary/tokens/', '/bestiary/') : '';
+    const onerr = fb
+      ? "if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}"
+      : "this.style.display='none'";
+    return `<img class="icon-img" crossorigin="anonymous" src="${esc(src)}"${fb ? ` data-fb="${esc(fb)}"` : ''} alt="${esc(alt||'')}" onerror="${onerr}">`;
   }
   if (s.startsWith('<svg')) return s;          // already an SVG (CLASS_ICONS)
   return esc(s);                                // emoji / character

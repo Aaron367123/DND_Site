@@ -69,7 +69,13 @@ function main(){
 
   // The HTML itself is precached too. It is fetched network-first at runtime,
   // so the copy in the bucket is purely the offline fallback.
-  const precache = ['./', 'skt-workspace.html'].concat(assets.map(a => a.url));
+  //
+  // Deliberately NOT './' — there is no index.html at the repo root, so the
+  // directory URL 404s and cache.add() rejects on every single install
+  // ("precache skipped ./ TypeError: Request failed"). The offline navigation
+  // fallback doesn't need it: networkFirst() falls back to skt-workspace.html
+  // by name. If an index.html is ever added, put it back here.
+  const precache = ['skt-workspace.html'].concat(assets.map(a => a.url));
 
   let sw = fs.readFileSync(SW, 'utf8');
   const swBefore = sw;
