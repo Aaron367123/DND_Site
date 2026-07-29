@@ -93,7 +93,43 @@ registerPanel('npclib', {
   },
   unmount(){ this._body = null; },
 
-  _save(){ try { localStorage.setItem('skt-npcs-v2', JSON.stringify(this._npcs)); } catch(e){} },
+  _save(){ saveJson('skt-npcs-v2', this._npcs, 'NPC library'); },
+
+  // Longest edge for an image stored inside an NPC note. ~1000px keeps a
+  // pasted screenshot readable while landing around 100–200 KB of base64
+  // instead of multiple megabytes.
+  _NOTE_IMG_MAX_SIDE: 1000,
+  // Anything whose data: URI is longer than this gets re-encoded on paste.
+  _NOTE_IMG_MAX_CHARS: 300000,   // ~300 KB of base64
+
+  // Re-encode oversized inline images in a notes field. Used after a rich-text
+  // paste, which can carry data: URIs the image-file branch never sees.
+  // Async and best-effort: an image that won't decode is left alone rather
+  // than destroyed.
+  _shrinkNoteImages(notesEl, n){
+    if (!notesEl) return;
+    const big = Array.prototype.filter.call(
+      notesEl.querySelectorAll('img'),
+      im => (im.getAttribute('src') || '').startsWith('data:image/')
+            && im.getAttribute('src').length > this._NOTE_IMG_MAX_CHARS);
+    if (!big.length) return;
+    let done = 0;
+    big.forEach(im => {
+      fetch(im.getAttribute('src'))
+        .then(r => r.blob())
+        .then(blob => imageToBoundedDataUrl(blob, this._NOTE_IMG_MAX_SIDE, 0.8))
+        .then(url => { im.setAttribute('src', url); im.style.maxWidth = '100%'; })
+        .catch(err => console.warn('[npclib] could not shrink pasted image', err))
+        .then(() => {
+          if (++done !== big.length) return;
+          n.notes = notesEl.innerHTML;
+          this._save();
+          if (typeof showToast === 'function'){
+            showToast('Resized ' + big.length + ' pasted image' + (big.length===1?'':'s') + ' to keep storage in check');
+          }
+        });
+    });
+  },
 
   _selected(){ return this._npcs.find(n => n.id === this._selectedId); },
 
@@ -782,6 +818,32 @@ registerPanel('npclib', {
     };
     const notesEl = b.querySelector('.npclib-notes');
     if (notesEl) {
+      // Pasting a screenshot in here used to store the raw clipboard image as
+      // base64 — a 4K PNG is ~8 MB against a ~5 MB localStorage quota, AND
+      // this key syncs, so it also went to Firebase. Bound it on the way in.
+      notesEl.addEventListener('paste', e => {
+        const items = (e.clipboardData && e.clipboardData.items) || [];
+        const imgItem = Array.prototype.find.call(items,
+          it => it.kind === 'file' && /^image\//.test(it.type || ''));
+        if (imgItem){
+          e.preventDefault();
+          const file = imgItem.getAsFile();
+          if (!file) return;
+          imageToBoundedDataUrl(file, this._NOTE_IMG_MAX_SIDE, 0.8).then(url => {
+            document.execCommand('insertHTML', false,
+              '<img src="' + url + '" style="max-width:100%">');
+            n.notes = notesEl.innerHTML; this._save();
+          }).catch(err => {
+            console.warn('[npclib] image paste failed', err);
+            if (typeof showToast === 'function') showToast('Could not paste that image');
+          });
+          return;
+        }
+        // Rich-text paste (e.g. copied from a web page) can smuggle in
+        // oversized data: URIs too. Let the default paste happen, then shrink
+        // anything over budget before it can be saved at full size.
+        setTimeout(() => this._shrinkNoteImages(notesEl, n), 0);
+      });
       notesEl.addEventListener('input', () => { n.notes = notesEl.innerHTML; this._save(); });
       notesEl.addEventListener('keydown', e => {
         if ((e.ctrlKey||e.metaKey) && (e.key==='b'||e.key==='i')) {

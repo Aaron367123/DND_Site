@@ -24,6 +24,55 @@ function warnStorageFailure(what, err){
   }
 }
 
+// Persist a value, and SAY SO when it fails. The bare
+// `try { localStorage.setItem(...) } catch(e){}` idiom this replaces appeared
+// at 64 of the app's 68 write sites: when the browser's ~5 MB quota is
+// reached the write silently evaporates and the user finds out next session,
+// when their work isn't there. Returns true on success so callers can react.
+function saveJson(key, value, label){
+  try {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    return true;
+  } catch(e){
+    warnStorageFailure(label || key, e);
+    return false;
+  }
+}
+
+// Downsize an image blob to fit inside maxSide, preserving aspect ratio, and
+// return a data URL. Unlike fileToIconDataUrl this does NOT crop to a square —
+// it's for images pasted into notes, where the whole picture matters.
+//
+// Exists because a pasted screenshot is otherwise stored verbatim: a 4K PNG
+// becomes ~8 MB of base64 in localStorage (quota is ~5 MB) AND is pushed to
+// Firebase, since the NPC library is a sync key. One paste could take out both.
+function imageToBoundedDataUrl(blob, maxSide, quality){
+  maxSide = maxSide || 1000;
+  quality = quality == null ? 0.8 : quality;
+  return new Promise((resolve, reject) => {
+    if (!blob || !blob.type || !/^image\//.test(blob.type)) return reject(new Error('Not an image'));
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Image decode failed'));
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        // JPEG rather than PNG: a photo or screenshot as PNG stays enormous,
+        // and these are illustrations in a notes field, not archival masters.
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 // Sanitize rich-text HTML before it goes into innerHTML. For fields that
 // legitimately store markup (contenteditable notes) but whose content arrives
 // through shared sync (Dropbox/Firebase) — so another connected browser could

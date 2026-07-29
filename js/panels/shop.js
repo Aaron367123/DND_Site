@@ -26,7 +26,7 @@ registerPanel('shop',{
     document.querySelectorAll('.modal-backdrop[data-shop-modal]').forEach(el => el.remove());
     this._body=null;
   },
-  _saveShops(){ try { localStorage.setItem('skt-shops-v1', JSON.stringify({saved:this._saved})); } catch(e){} },
+  _saveShops(){ saveJson('skt-shops-v1', {saved:this._saved}, 'saved shops'); },
   _render(){
     const b=this._body;if(!b)return;
     const types=Object.keys(ITEM_CATALOG);
@@ -212,7 +212,7 @@ registerPanel('shop',{
         value: this._fmtPrice(item.price),
         assignedTo: null,
       });
-      localStorage.setItem('skt-loot-v1', JSON.stringify(cur));
+      saveJson('skt-loot-v1', cur, 'loot');
       // If the panel is mounted, refresh it directly from the stored value.
       if (panelDefs.loot && panelDefs.loot._loot){
         panelDefs.loot._loot = cur;

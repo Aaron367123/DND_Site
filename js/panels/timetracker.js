@@ -115,7 +115,7 @@ registerPanel('time', {
   },
   unmount(){ this._body = null; },
 
-  _save(){ try{ localStorage.setItem('skt-time-v1', JSON.stringify(this._data)); }catch(e){} },
+  _save(){ saveJson('skt-time-v1', this._data, 'time tracker'); },
 
   _advance(deltaHours){
     this._data = _timeAdvance(this._data, deltaHours);

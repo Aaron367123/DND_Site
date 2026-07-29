@@ -262,7 +262,7 @@ registerPanel('npcgen',{
         // Use the panel's own _save() rather than poking localStorage directly,
         // so any future persistence logic in _save() isn't bypassed.
         if (typeof lib._save === 'function') lib._save();
-        else { try { localStorage.setItem('skt-npcs-v2', JSON.stringify(lib._npcs)); } catch(e){} }
+        else { saveJson('skt-npcs-v2', lib._npcs, 'NPC library'); }
         if (lib._body && typeof lib._render === 'function') lib._render();
       } else {
         // Library panel not mounted — write directly to localStorage so it
@@ -271,7 +271,7 @@ registerPanel('npcgen',{
         try { cur = JSON.parse(localStorage.getItem('skt-npcs-v2') || '[]'); } catch(e){ cur = []; }
         if (!Array.isArray(cur)) cur = [];
         cur.unshift(entry);
-        try { localStorage.setItem('skt-npcs-v2', JSON.stringify(cur)); } catch(e){}
+        saveJson('skt-npcs-v2', cur, 'NPC library');
       }
       return entry;
     };

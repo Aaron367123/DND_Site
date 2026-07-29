@@ -38,7 +38,7 @@ registerPanel('encounter',{
     if (this._encDocDown){ document.removeEventListener('mousedown', this._encDocDown); this._encDocDown = null; }
     this._body=null;
   },
-  _save(){try{localStorage.setItem('skt-enc-v1',JSON.stringify({monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system}));}catch(e){}},
+  _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system}, 'encounters');},
   _systemMode(){ return this._system==='2014' ? '2014' : '2024'; },
   // 2024 party XP budget for the current level + size (per-char × size).
   _budget2024(){

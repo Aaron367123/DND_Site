@@ -25,7 +25,7 @@ registerPanel('loot',{
     if (typeof load5eData === 'function') load5eData();
   },
   unmount(){this._body=null;},
-  _save(){try{localStorage.setItem('skt-loot-v1',JSON.stringify(this._loot));}catch(e){}},
+  _save(){saveJson('skt-loot-v1', this._loot, 'loot');},
 
   // Resolve an `assignedTo` id to a display name. Works for both party-member
   // ids and custom tab-group ids; returns null for unassigned / orphaned.

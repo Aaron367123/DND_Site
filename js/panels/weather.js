@@ -152,7 +152,7 @@ registerPanel('weather', {
   },
   unmount(){ this._body = null; },
 
-  _save(){ try{ localStorage.setItem('skt-weather-v2', JSON.stringify(this._data)); }catch(e){} },
+  _save(){ saveJson('skt-weather-v2', this._data, 'weather'); },
 
   // Push a copy of the current weather (minus its own history) into the
   // history array, then trim to cap. Records the in-game date at the time

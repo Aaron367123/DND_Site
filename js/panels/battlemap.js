@@ -741,9 +741,7 @@ registerPanel('battlemap',{
   },
 
   _saveStarredMaps(){
-    try {
-      localStorage.setItem('skt-battlemap-starred-v1', JSON.stringify([...(this._starredMaps || [])]));
-    } catch(e){}
+    saveJson('skt-battlemap-starred-v1', [...(this._starredMaps || [])], 'starred maps');
   },
 
   // Toggle the starred state of a 5etools map path. Returns the new state
@@ -832,8 +830,7 @@ registerPanel('battlemap',{
   // the active-map save — quota errors are swallowed (rare for this list
   // since each entry is small, just metadata + token/fog state).
   _saveSavedMaps(){
-    try { localStorage.setItem('skt-battlemap-saved-v1', JSON.stringify({saved:this._savedMaps})); }
-    catch(e){}
+    saveJson('skt-battlemap-saved-v1', {saved:this._savedMaps}, 'saved maps');
   },
 
   // Snapshot the full per-map state into a plain JSON object suitable for

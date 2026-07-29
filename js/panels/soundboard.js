@@ -29,7 +29,7 @@ const _sb = {
 };
 
 function _sbSaveAmbient(){
-  try { localStorage.setItem('skt-sb-ambient-v1', JSON.stringify([..._sb.ambient])); } catch(e){}
+  saveJson('skt-sb-ambient-v1', [..._sb.ambient], 'soundboard ambience');
 }
 function _sbLoadAmbient(){
   try {
@@ -38,7 +38,7 @@ function _sbLoadAmbient(){
   } catch(e){ _sb.ambient = new Set(); }
 }
 function _sbSaveScenes(){
-  try { localStorage.setItem('skt-sb-scenes-v1', JSON.stringify(_sb.scenes)); } catch(e){}
+  saveJson('skt-sb-scenes-v1', _sb.scenes, 'soundboard scenes');
 }
 function _sbLoadScenes(){
   try {
