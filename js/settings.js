@@ -432,13 +432,27 @@ function initSettings(){
         <div style="width:${pct}%;height:100%;background:${pct>80?'var(--danger)':'var(--accent)'};transition:width .2s"></div>
       </div>`;
   };
+  // Diagnostics. The count is the point — it's the passive signal that
+  // something went wrong while you weren't looking at the console.
+  const updateErrCount = () => {
+    const el = document.getElementById('errlog-count');
+    if (!el || !window.sktErrors) return;
+    const n = sktErrors.count();
+    el.textContent = n ? ('Error log (' + n + ')') : 'Error log';
+    el.parentElement?.classList.toggle('danger', n > 0);
+  };
+  document.getElementById('open-errlog-btn')?.addEventListener('click', () => {
+    if (window.sktErrors) sktErrors.show();
+  });
+
   updateStorageUsage();
+  updateErrCount();
   renderSnapshots();
   // Also refresh when the drawer opens — easy hook is the visibility class
   // toggling on the drawer container. (Reuses the `drawer` already declared
   // at the top of initSettings.)
   if (drawer){
-    new MutationObserver(() => { updateStorageUsage(); renderSnapshots(); })
+    new MutationObserver(() => { updateStorageUsage(); updateErrCount(); renderSnapshots(); })
       .observe(drawer, { attributes:true, attributeFilter:['class','style'] });
   }
   // Help & about: open the shortcut overlay from settings (parity with `?`

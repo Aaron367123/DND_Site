@@ -2801,6 +2801,19 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .modal-field label{display:block;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .modal-field input{font-size:13px;padding:8px 10px}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end}
+/* Diagnostics viewer (js/errors.js). Wider than a normal modal because the
+   payload is stack traces, and it has to stay usable when the app is broken —
+   so it leans on nothing but these rules. */
+.errlog-modal{max-width:760px;display:flex;flex-direction:column;max-height:80vh}
+.errlog-modal .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.errlog-modal .modal-head h3{margin:0;font-size:15px}
+.errlog-body{flex:1;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:6px}
+.errlog-row{border:1px solid var(--border);border-left-width:3px;border-radius:4px;padding:6px 9px;background:var(--panel-2)}
+.errlog-row.errlog-error,.errlog-row.errlog-rejection{border-left-color:var(--danger,#c25450)}
+.errlog-row.errlog-report{border-left-color:var(--accent)}
+.errlog-head{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+.errlog-msg{font-size:12px;color:var(--text);margin-top:3px;word-break:break-word}
+.errlog-detail{font-size:10px;color:var(--text-muted);margin:5px 0 0;white-space:pre-wrap;word-break:break-word;max-height:130px;overflow:auto;background:var(--panel-3);padding:5px 7px;border-radius:3px}
 .modal-actions .btn{padding:7px 20px;font-size:13px}
 
 /* CONTEXT MENU */
