@@ -670,12 +670,15 @@ function _normSearchIdx(s) {
 // is deterministic for a given data/ tree, so it's cached here and rehydrated
 // in one read on subsequent loads.
 //
-// Bump DATA_STAMP whenever anything under data/ changes (same discipline as
-// the ?v= query strings in skt-workspace.html). INDEX_SCHEMA is separate
-// because it invalidates for a different reason: the row shape / facet set
-// changing. Either one differing from the stored value forces a rebuild.
+// Bump DATA_STAMP whenever anything under data/ changes — OR whenever the
+// converter's output changes for the same input, since the cached index is
+// converter output, not raw data. (Same discipline as the ?v= query strings in
+// skt-workspace.html.) INDEX_SCHEMA is separate because it invalidates for a
+// different reason: the row shape / facet set changing. Either one differing
+// from the stored value forces a rebuild.
 // Escape hatch for a forgotten bump: Settings → "Rebuild data index".
-const DATA_STAMP   = '20260728a';
+// 20260729a — _copy resolution added for races/backgrounds/decks/items.
+const DATA_STAMP   = '20260729a';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
 const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';
@@ -1299,7 +1302,18 @@ async function _buildIndexFromFiles() {
     if (!_ITEM_ENTRY_BY_NAME[nk]) _ITEM_ENTRY_BY_NAME[nk] = t; // first wins
   });
 
-  if (itemFile) (itemFile.item||[]).forEach(d => addItem(d));
+  // Items inherit via _copy too — 41 of them define no entries of their own,
+  // which is why a handful rendered with a price and nothing else. Index the
+  // raw list first (items + base items, since a copy can point at either),
+  // then resolve on the way in.
+  const _itemRawByKey = {};
+  [ ...((itemFile && itemFile.item) || []), ...((baseItemFile && baseItemFile.baseitem) || []) ]
+    .forEach(d => {
+      if (!d || !d.name) return;
+      const k = ((d.name||'') + '|' + (d.source||'')).toLowerCase();
+      if (!_itemRawByKey[k]) _itemRawByKey[k] = d;
+    });
+  if (itemFile) (itemFile.item||[]).forEach(d => addItem(d && d._copy ? _resolveCopy(d, _itemRawByKey, 0) : d));
   // Base items: mundane gear / weapons / armor / tools.
   const baseItems = (baseItemFile?.baseitem) || [];
 
@@ -1454,11 +1468,34 @@ async function _buildIndexFromFiles() {
     });
   });
 
-  // Long-tail reference categories
+  // Long-tail reference categories.
+  //
+  // Index every raw entry by name|source FIRST, so entries that inherit via
+  // {_copy:{name,source}} can resolve against their base. 45 entries here
+  // (16 races, 1 subrace, 26 backgrounds, 2 decks) carry _copy and define no
+  // entries of their own — without this they render with their stat line and
+  // NO descriptive text at all, and several (Hobgoblin, Orc, Amonkhet) come
+  // out completely blank. Same treatment the fluff loader above already gets.
+  //
+  // Keyed per CATEGORY, not per file, because a copy may point at a base in a
+  // different array of the same file (races.json holds race + subrace).
+  const _refRawByCatKey = {};
+  _refSpecs.forEach(spec => {
+    const json = _refByPath[spec.path];
+    if (!json) return;
+    const bucket = _refRawByCatKey[spec.cat] = _refRawByCatKey[spec.cat] || {};
+    (json[spec.arr]||[]).forEach(d => {
+      if (!d || !d.name) return;
+      const k = ((d.name||'') + '|' + (d.source||'')).toLowerCase();
+      if (!bucket[k]) bucket[k] = d;
+    });
+  });
+
   _refSpecs.forEach(spec => {
     const json = _refByPath[spec.path];
     if (!json) return;
     (json[spec.arr]||[]).forEach(d => {
+      if (d && d._copy) d = _resolveCopy(d, _refRawByCatKey[spec.cat] || {}, 0);
       let meta = '', display, dedupe;
       switch (spec.cat) {
         case 'background': meta = 'Background'; break;
