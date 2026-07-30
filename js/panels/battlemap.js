@@ -3099,7 +3099,35 @@ registerPanel('battlemap',{
     }
 
     ctx.strokeStyle=gridColor;
-    ctx.lineWidth=Math.max(1, Math.min(4, this._gridWidth || 1));
+
+    // Pixel snapping has to happen in BACKING-STORE space, not stage space.
+    //
+    // _sizeLayer leaves a setTransform(k,0,0,k,0,0) on the context, so a stage
+    // coordinate is multiplied by k before it rasterises. The old
+    // `Math.round(x) + .5` snapped in stage space, which only lands on a
+    // device half-pixel when k is exactly 1. At k = viewScale x dpr — routinely
+    // fractional (1.25 on Windows display scaling, 2.75 zoomed in) — it broke
+    // two ways at once:
+    //   • consecutive lines landed on DIFFERENT subpixel offsets (.625, .125,
+    //     .625, .875 …) so some drew crisp and others smeared over two pixels,
+    //     which is the shimmer you see while zooming;
+    //   • rounding to whole STAGE pixels quantised a fractional cell size
+    //     (77 x 0.44 = 33.88) into gaps of 34,34,34,34,33 — an error the CSS
+    //     scale then magnified to 2.75 device px at k=2.75, i.e. one line
+    //     visibly out of place.
+    //
+    // Snapping in device space fixes both: every line lands on the backing
+    // pixel grid at any k, and the residual spacing error is bounded at ONE
+    // device pixel, which is the floor for a non-integer cell size.
+    const k = this._canvasK(W, H);
+    // Pick a whole number of backing pixels for the stroke, then express it
+    // back in stage units so it survives the k transform exactly. The
+    // half-pixel offset applies only to odd widths — an even-width stroke
+    // straddles an integer boundary cleanly.
+    const wDev = Math.max(1, Math.round(Math.max(1, Math.min(4, this._gridWidth || 1)) * k));
+    const half = (wDev % 2) ? 0.5 : 0;
+    const snap = v => (Math.round(v * k - half) + half) / k;
+    ctx.lineWidth = wDev / k;
     // Offsets are stored in image-pixel space; convert to on-screen pixels.
     const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
     const offX = (((this._gridOffsetX || 0) * scale) % cs + cs) % cs;
@@ -3109,10 +3137,12 @@ registerPanel('battlemap',{
       this._drawHexGrid(ctx, cs, W, H, offX, offY);
     } else {
       for (let x = offX; x <= W + .01; x += cs){
-        ctx.beginPath(); ctx.moveTo(Math.round(x)+.5, 0); ctx.lineTo(Math.round(x)+.5, H); ctx.stroke();
+        const sx = snap(x);
+        ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
       }
       for (let y = offY; y <= H + .01; y += cs){
-        ctx.beginPath(); ctx.moveTo(0, Math.round(y)+.5); ctx.lineTo(W, Math.round(y)+.5); ctx.stroke();
+        const sy = snap(y);
+        ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
       }
     }
 
