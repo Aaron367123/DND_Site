@@ -1153,6 +1153,18 @@ registerPanel('battlemap',{
         // sample. For typical paint events we just need the fog canvas and
         // the token positions repainted in place.
         const prevPath = this._bgMapPath;
+        // Snapshot of everything that determines the STAGE's pixel size, taken
+        // before the incoming fields overwrite it. _repaintRemote's contract
+        // is that callers fall back to _render() when geometry moves, because
+        // only _setupMap resizes the stage and re-tiles the background. The
+        // Firebase apply in realtime.js has always compared this; this handler
+        // only checked scale and rotation, so a cell-size change from the DM
+        // left a same-browser player tab on the OLD stage size with the grid
+        // and background out of step. Measured: cellSize 80 -> 110 left the
+        // stage at 800x1040 when it should have been 880x1100.
+        const _struct = () => [this._cols, this._rows, this._cellSize, this._gridType,
+          this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY].join('|');
+        const _structBefore = _struct();
         if (msg.tokens)   this._tokens   = msg.tokens;
         if (msg.cellSize) this._cellSize = msg.cellSize;
         if (msg.cols)     this._cols     = msg.cols;
@@ -1195,7 +1207,10 @@ registerPanel('battlemap',{
           if (this._render) this._render();
           return;
         }
-        if ((scaleChanged || rotChanged) && this._body){
+        // scaleChanged/rotChanged are kept as explicit flags because they're
+        // computed against the message rather than the applied state; the
+        // struct comparison catches cols/rows/cellSize/gridType/offsets.
+        if ((scaleChanged || rotChanged || _struct() !== _structBefore) && this._body){
           this._render();
           return;
         }

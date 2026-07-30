@@ -834,6 +834,63 @@ checklist. Everything below was verified in the browser.
     path to B and run the OLD sequence (`_fitGridToBg` + `_fitMapToView`) —
     stage still shows A. Add `_applyBg` + `_render` — stage shows B.
 
+## Audit: what the old `_applyZoomTransform` used to do (2026-07-29)
+
+Two defects had already traced back to repaints that used to ride inside
+`_applyZoomTransform` before the per-device zoom work replaced it with
+`_applyViewScale`. That's a pattern, not a coincidence, so this is a
+line-by-line audit of the old function's responsibilities against what covers
+them now. It found a third.
+
+The old function did eight things. Coverage today:
+
+| # | Old responsibility | Covered by | Verdict |
+|---|---|---|---|
+| 1 | `stage.style.width/height` | `_setupMap` ONLY (via `_render`) | callers must render on geometry change — see below |
+| 2 | `_applyBg(stage, W, H)` | `_setupMap`, and now `_loadBgFromPath` | **was broken**, fixed |
+| 3 | grid canvas resize + `_drawGrid` | `_scheduleRequality` (synchronous) | **was broken**, fixed |
+| 4 | draw canvas resize + `_drawAllStrokes` | `_scheduleRequality` (debounced) | ok |
+| 5 | `_drawFog` | `_scheduleRequality` (debounced) | ok |
+| 6 | token position / size / font | automatic under the CSS transform; glyph font floor in `_counterScaleLabels` | ok |
+| 7 | token name label position / font floor | `_counterScaleLabels` | ok |
+| 8 | slider value + % readout | `_applyViewScale` (now shows *effective* %) | ok |
+
+Rows 1 and 2 are the dangerous ones: exactly one place in the file sets the
+stage's pixel size and re-tiles the background, so **every path that changes
+`_cols` / `_rows` / `_cellSize` must reach `_render()`**. Auditing all seven
+writers of those fields:
+
+- `mount()` load — followed by `_render()` — ok
+- `_fitGridToBg` via `_loadBgFromPath` — fixed earlier this session
+- `_restoreMapSnapshot` — routes through `_loadBgFromPath` or `_render()` — ok
+  (it was also broken before the `_loadBgFromPath` fix, and that fix repaired it)
+- three grid-size inputs (`:1741`, `:1969`, `:2551`) — all `_saveMap(); _render()` — ok
+- Firebase apply in `realtime.js` — compares a `_struct()` of all eight
+  geometry fields and renders on any change — ok
+- **BroadcastChannel receive — checked only scale and rotation** — BROKEN
+
+- [x] ~~**Grid-size changes didn't resize the stage in a same-browser player tab**~~ — `js/panels/battlemap.js` *(found by this audit; fixed + measured)*
+  - `_repaintRemote`'s own comment states the contract: *"Callers must still
+    fall back to `_render()` when the map's GEOMETRY changes
+    (cols/rows/cellSize/scale/rotation)."* The Firebase path honoured it; the
+    BroadcastChannel handler checked scale and rotation only, so a cell-size
+    change from the DM fell through to the lightweight repaint.
+  - **Measured:** cellSize 80 → 110 left a same-browser player tab's stage at
+    800×1040 when it should have been 880×1100 — grid and background out of
+    step with the new cell grid. A cross-device player was unaffected, which
+    is what made it easy to miss.
+  - **Fix applied:** the handler now captures the same eight-field `_struct()`
+    before applying the message and renders when it moves. Verified the
+    cell-size case takes the full-render branch and lands on the correct stage
+    size, **and** that a fog-only message still takes the cheap path — the
+    point of `_repaintRemote` is that fog ticks don't cost a full rebuild.
+
+**Net: the zoom rewrite left three defects, all now closed.** Two were
+repaints that silently stopped happening; the third was a geometry check that
+existed on one live-update path and not the other. Worth remembering that the
+DM's own window and the two remote paths are three separate code paths for the
+same event, and a change to one is not a change to the others.
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:
