@@ -588,15 +588,37 @@ registerPanel('battlemap',{
   // or the tab dies. The budget below keeps the worst case at ~32 MB a layer.
   _CANVAS_MAX_PIXELS: 8e6,   // per layer (~32 MB at 4 bytes/px)
   _CANVAS_MAX_SIDE: 16384,   // hard browser limit on either dimension
+  // Floor on the backing-store scale. Zoomed right out the canvas only needs
+  // as many pixels as it occupies on screen; this just stops a pathological
+  // zoom from allocating a buffer so small that the settle-time redraw has
+  // nothing useful to show.
+  _CANVAS_MIN_K: 0.2,
   _appliedK: 1,
 
+  // Backing-store scale. The goal is ONE backing pixel per device pixel:
+  // the canvas is CSS-sized in stage px and an ancestor applies
+  // scale(viewScale), so the on-screen size is stage x viewScale x dpr.
+  //
+  // This used to clamp at >= 1 — "only ever add detail" — on the assumption
+  // that extra resolution can't hurt. For thin line art it hurts a lot. At
+  // 40% zoom the grid was drawn 3003px wide and downscaled by the browser to
+  // ~1200, and resampling a 1px line by 0.4 spreads it across pixel
+  // boundaries by an amount that differs per line. Measured over one row at
+  // 40%: peak ink ranged from 14 to 230 out of 255, widths split evenly
+  // between 1px and 2px, and one line of 39 disappeared altogether. Which
+  // lines were faint changed as the zoom changed — the "haywire" grid.
+  // Rendering at display resolution instead: 39/39 lines, every one exactly
+  // 1px at full 255.
+  //
+  // Safe for every layer because all three are re-rasterised from state, not
+  // resampled from a bitmap — the grid from _cols/_rows, pencil strokes from
+  // their stored point arrays, fog from its cell grid. Dropping resolution
+  // loses nothing recoverable; _requalityCanvases redraws on the way back up.
   _canvasK(W, H){
     if (!(W > 0 && H > 0)) return 1;
     const dpr = window.devicePixelRatio || 1;
-    // Never go BELOW 1: at k<1 we'd be allocating less than the stage size and
-    // making the zoomed-out case worse than it is today. Only ever add detail.
-    const want = Math.max(1, (this._viewScale || 1) * dpr);
-    return Math.max(1, Math.min(
+    const want = (this._viewScale || 1) * dpr;
+    return Math.max(this._CANVAS_MIN_K, Math.min(
       want,
       this._CANVAS_MAX_SIDE / Math.max(W, H),
       Math.sqrt(this._CANVAS_MAX_PIXELS / (W * H))
@@ -630,7 +652,10 @@ registerPanel('battlemap',{
   _requalityCanvases(){
     const b = this._body; if (!b) return;
     const k = this._canvasK(this._cols * this._csScreen(), this._rows * this._csScreen());
-    if (Math.abs(k - this._appliedK) < 0.05) return;   // not worth a realloc
+    // Ratio, not absolute difference. k now ranges roughly 0.2–3, and a fixed
+    // 0.05 gap means "20% of the resolution" down at 0.2 but under 2% up at 3
+    // — so the low end would sit at a stale resolution indefinitely.
+    if (Math.abs(k - this._appliedK) / Math.max(k, this._appliedK) < 0.05) return;
     this._appliedK = k;
     const canvas = b.querySelector('#map-canvas');
     if (canvas) this._drawGrid(canvas, this._csScreen());
@@ -642,6 +667,15 @@ registerPanel('battlemap',{
     if (this._fog !== null) this._drawFog(true);
   },
   _scheduleRequality(){
+    // The grid is redrawn IMMEDIATELY, not on the debounce. Now that k tracks
+    // the zoom downwards as well as up, waiting would leave a canvas rendered
+    // for the old scale stretched over the new one — and the grid is the one
+    // layer where that reads as an obvious defect rather than mild softness.
+    // It costs ~1 ms (measured) because it is only strokes, so there is no
+    // reason to make it wait behind the two expensive layers.
+    const b = this._body;
+    const gridC = b && b.querySelector('#map-canvas');
+    if (gridC) this._drawGrid(gridC, this._csScreen());
     clearTimeout(this._requalityTimer);
     this._requalityTimer = setTimeout(() => this._requalityCanvases(), 180);
   },

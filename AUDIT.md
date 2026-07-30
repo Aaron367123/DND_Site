@@ -776,6 +776,37 @@ checklist. Everything below was verified in the browser.
     - cache-first: **0 files** — confirmed the load really did rebuild
       (`index ready (build) 16246 rows`), so the zero isn't trivial
 
+- [x] ~~**Grid lines uneven / one missing when zoomed OUT**~~ — `js/panels/battlemap.js` *(fixed + measured; follow-up to the snapping fix)*
+  - The device-space snapping fix was real but addressed the wrong half of
+    the problem. `_canvasK` clamped at `>= 1` ("only ever add detail"), so at
+    40% zoom the grid was rasterised 3003px wide and the BROWSER downscaled it
+    to ~1200. Resampling a 1px line by 0.4 lands it differently on every line.
+  - **Measured over one row at 40%, simulating the compositor's downscale:**
+    38 lines instead of 39 (one gone entirely), peak ink 14–230 out of 255,
+    widths split evenly 1px/2px. Which lines were faint changed with the zoom.
+  - **Fix applied:** `_canvasK` now tracks `viewScale x dpr` DOWN as well as
+    up (floor `_CANVAS_MIN_K` 0.2) so the backing store matches the on-screen
+    size — one backing pixel per device pixel, no resampling. Safe for all
+    three layers because each is re-rasterised from state (grid from
+    cols/rows, strokes from stored points, fog from its cell grid), never
+    resampled from a bitmap. `_requalityCanvases` switched to a RATIO
+    threshold — a fixed 0.05 was 20% of the resolution at k=0.2 but under 2%
+    at k=3, so the low end would have stayed stale. `_scheduleRequality` now
+    redraws the grid synchronously (~1 ms, strokes only) instead of behind the
+    180 ms debounce, since a grid rendered for the old scale is an obvious
+    defect where soft fog is not.
+  - **After, measured through the same simulated downscale:** 25/40/60/100%
+    all render every line at exactly 1px and full 255.
+  - **Still imperfect zoomed IN:** `_CANVAS_MAX_PIXELS` (8 MP) caps k at 1.176
+    on a 3003x1925 stage, so at 150%/275% the backing store is upscaled and
+    peaks range 168–252 / 207–255. Raising the budget is not free — k=2.75
+    would need ~175 MB per layer, ~525 MB across three, on a platform where
+    the touch zoom cap is 6x. The real fix is rendering only the visible
+    viewport at full resolution; deferred as a separate change.
+  - Coordinates verified unaffected: `_stagePoint` output is identical at
+    k=0.4, 1 and 1.176, and it derives stage size from `_cols`/`_csScreen()`
+    plus the CSS `rect`, never from `canvas.width`.
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:
