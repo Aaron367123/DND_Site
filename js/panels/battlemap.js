@@ -716,13 +716,19 @@ registerPanel('battlemap',{
   // ~96% of those pixels were never visible. Sizing the layer to the viewport
   // instead lets k reach the full viewScale x dpr and stay well inside budget.
   //
+  // Rotation is handled by mapping the viewport's four corners into stage
+  // space and taking their bounding box. #map-stage rotates about its own
+  // centre, so a corner at (zx, zy) in the un-scaled #map-zoom space becomes
+  // _stageDelta(zx - W/2, zy - H/2) + (W/2, H/2) — the same conversion
+  // _stagePoint uses, reused rather than re-derived. For the rotations this
+  // panel supports (0/90/180/270, all _stageDelta implements) the rotated
+  // viewport is still axis-aligned in stage space, so the bounding box is
+  // exact rather than conservative.
+  //
   // Returns null (⇒ keep the old full-stage behaviour) when:
-  //   • the stage is rotated — the visible region becomes an inverse-rotated
-  //     box and the extra math is not worth it for a rare setting;
   //   • the scroll container isn't measurable yet;
   //   • the whole stage already fits, where the two are equivalent anyway.
   _visibleStageRect(){
-    if (this._mapRotation) return null;
     const b = this._body; if (!b) return null;
     const scroll = b.querySelector('#map-scroll'); if (!scroll) return null;
     const vs = this._viewScale || 1;
@@ -731,6 +737,25 @@ registerPanel('battlemap',{
     if (!(W > 0 && H > 0)) return null;
     const vw = scroll.clientWidth, vh = scroll.clientHeight;
     if (!(vw > 0 && vh > 0)) return null;
+
+    if (this._mapRotation){
+      // Viewport box in un-scaled #map-zoom coordinates.
+      const zx0 = scroll.scrollLeft / vs,       zy0 = scroll.scrollTop / vs;
+      const zx1 = (scroll.scrollLeft + vw) / vs, zy1 = (scroll.scrollTop + vh) / vs;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const [zx, zy] of [[zx0,zy0],[zx1,zy0],[zx0,zy1],[zx1,zy1]]){
+        const d = this._stageDelta(zx - W / 2, zy - H / 2);
+        const px = d.x + W / 2, py = d.y + H / 2;
+        if (px < minX) minX = px; if (px > maxX) maxX = px;
+        if (py < minY) minY = py; if (py > maxY) maxY = py;
+      }
+      const padR = Math.max(cs, 64 / vs);
+      let rx = Math.max(0, minX - padR), ry = Math.max(0, minY - padR);
+      let rw = Math.min(W, maxX + padR) - rx, rh = Math.min(H, maxY + padR) - ry;
+      if (!(rw > 0 && rh > 0)) return null;
+      if (rx <= 0 && ry <= 0 && rw >= W && rh >= H) return null;   // covers it all
+      return { x: rx, y: ry, w: rw, h: rh };
+    }
     // scrollLeft/clientWidth are in SIZER units, which are stage x viewScale
     // (#map-scroll sits outside the map's transform). Divide to get stage px.
     const w = vw / vs, h = vh / vs;

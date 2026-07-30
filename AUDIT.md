@@ -956,6 +956,49 @@ anything that re-renders replaces that node, so it was reading a detached
 canvas. Same root cause as the two earlier false alarms this session. **When
 testing this panel, re-query every DOM node after any await.**
 
+- [x] ~~**Rotated maps were excluded from viewport sizing**~~ — `js/panels/battlemap.js` *(fixed + measured)*
+  - `_visibleStageRect` bailed out on any rotation, so a rotated map kept the
+    full-stage layers and stayed soft at high zoom.
+  - **Fix applied:** the viewport's four corners are mapped into stage space
+    and their bounding box taken. `#map-stage` rotates about its own centre, so
+    a corner at `(zx, zy)` in un-scaled `#map-zoom` space becomes
+    `_stageDelta(zx - W/2, zy - H/2) + (W/2, H/2)` — the same conversion
+    `_stagePoint` uses, reused rather than re-derived, because a second copy of
+    the rotation maths is exactly what goes quietly wrong. For the rotations
+    this panel supports (0/90/180/270, all `_stageDelta` implements) the
+    rotated viewport is still axis-aligned in stage space, so the box is exact.
+  - **Measured at 250% zoom, scrolled, all four rotations:** strokes land in
+    the right place (residual is the 6px round line cap, not drift), and the
+    invariant *"whatever is at the centre of the viewport is inside the rect we
+    chose to rasterise"* holds at every rotation x scroll position tested —
+    zero violations.
+
+### Found while doing that, NOT fixed — rotated maps overflow their scroll area
+
+Pre-existing and independent of the viewport work, but worth writing down
+because it is more user-visible than the sharpness it was found chasing.
+
+`_applyViewScale` sizes `#map-sizer` to `W x H x viewScale` — the UNROTATED
+stage dimensions. At 90/270 the rotated stage's visual box is `H x W`, so the
+two disagree. Measured on a 3040x1920 map at 90 degrees:
+
+| | |
+|---|---|
+| sizer box | 3040 x 1920 |
+| rotated stage box | 1920 x 3040 |
+| overflow top / bottom | **560px each** |
+| overflow left / right | -560px each (scrolls through empty space) |
+
+So roughly a third of a 90-degree-rotated map cannot be scrolled to, and
+horizontally you scroll through 560px of nothing at each end. This is why the
+visible rect collapses to a sliver at maximum scroll on a rotated map — the
+rect is correct; the place it is pointing at genuinely is mostly off-map.
+
+The fix is to size the sizer to the rotated extent and translate the stage so
+the rotated content starts at the origin, which also shifts the coordinate
+frame `_visibleStageRect` reads. That is a separate change and deserves its own
+pass rather than being bolted onto this one.
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:
