@@ -1317,8 +1317,36 @@ registerPanel('battlemap',{
         });
       }
       this._bc.onmessage = ev => {
-        if (!isPlayer) return; // DM tab only sends; ignore its own echoes
         const msg = ev.data; if (!msg) return;
+        if (!isPlayer){
+          // The DM tab used to drop EVERY inbound message, on the stated
+          // grounds that it was ignoring its own echoes. It has none to
+          // ignore: BroadcastChannel never delivers a message back to the
+          // context that posted it. What the guard actually blocked was other
+          // tabs — so a player drawing in a second tab of the same browser
+          // never reached the DM window, and only turned up later via the
+          // Firebase round trip, or not at all when offline.
+          //
+          // Accept pencil annotations from a player, and NOTHING else. A
+          // player's payload carries the whole map state, and applying all of
+          // it would let a stale player tab push its tokens or fog back over
+          // the DM's. Drawing (and erasing) is the only shared state a player
+          // can actually change — everything else in their toolbar is
+          // per-device — so that is the whole of what we take.
+          //
+          // Last-write-wins, as everywhere else on this map: if the DM adds a
+          // stroke in the same instant, whichever array lands second is the
+          // one kept.
+          if (msg.role !== 'player') return;
+          if (!Array.isArray(msg.drawings)) return;
+          this._drawings = msg.drawings;
+          this._previewStroke = null;
+          this._drawAllStrokes();
+          // Persist so it reaches Firebase and every other device — without
+          // this the DM would see the stroke but never pass it on.
+          this._saveMap();
+          return;
+        }
         // Live-drawing messages — applied to a transient preview that doesn't
         // touch _drawings. Once the DM finishes the stroke, a full state push
         // arrives (with the stroke now in _drawings) and the preview is
@@ -1492,6 +1520,10 @@ registerPanel('battlemap',{
         drawings: this._drawings || [],
         // Free-mode fog strokes (pixel-level, cell-fraction coords).
         fogStrokes: this._fogStrokes || [],
+        // Who sent this. The DM tab needs it to tell a PLAYER tab's message
+        // apart from another DM window's, because it accepts different things
+        // from each (see the handler in _startBroadcast).
+        role: document.body.classList.contains('player-mode') ? 'player' : 'dm',
       });
     }catch(e){}
   },

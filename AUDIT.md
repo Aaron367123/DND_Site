@@ -999,6 +999,37 @@ the rotated content starts at the origin, which also shifts the coordinate
 frame `_visibleStageRect` reads. That is a separate change and deserves its own
 pass rather than being bolted onto this one.
 
+- [x] ~~**A player drawing in a same-browser tab never reached the DM window**~~ — `js/panels/battlemap.js` *(fixed + measured with two live tabs)*
+  - User report: "a player is also drawing." The BroadcastChannel handler
+    opened with `if (!isPlayer) return; // DM tab only sends; ignore its own
+    echoes`. That reason is **wrong** — BroadcastChannel never delivers a
+    message back to the context that posted it, so the DM tab has no echoes to
+    ignore. What the guard actually dropped was every OTHER tab's message,
+    including a player's.
+  - Measured before the fix: the player's stroke reached shared localStorage
+    (1 drawing) while the DM tab's in-memory `_drawings` stayed at **0**.
+    Cross-device players were fine, since Firebase carries `drawings` both
+    ways — so this only bit a player sharing the DM's browser, and offline it
+    never arrived at all.
+  - **Fix applied:** the broadcast payload carries a `role`, and the DM tab
+    accepts pencil annotations from a `player` message — **and nothing else**.
+    A player's payload contains the whole map state, so applying all of it
+    would let a stale player tab push its tokens or fog back over the DM's.
+    Drawing and erasing are the only shared state a player can change;
+    everything else in their toolbar is per-device. The DM then `_saveMap()`s
+    so the stroke reaches Firebase and every other device.
+  - **Verified with two real tabs**, player at 220% zoom and DM at 100%:
+    the stroke arrives, coordinates identical (`240,320,560,320`), renders in
+    the right place on the DM canvas. Coordinates match because strokes are
+    stored in stage pixels and per-device `_viewScale` deliberately never
+    touches them.
+  - **Isolation verified from the adversarial side:** a player broadcasting a
+    divergent full state — a ghost token, `gridType: 'hex'`, a fog cell — had
+    only its stroke accepted; `ghostTokenLeaked: false`, DM grid still square.
+  - Same-entity races stay last-write-wins, as everywhere else on this map: if
+    the DM adds a stroke in the same instant, whichever array lands second is
+    the one kept.
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:
