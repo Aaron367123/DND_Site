@@ -891,6 +891,43 @@ existed on one live-update path and not the other. Worth remembering that the
 DM's own window and the two remote paths are three separate code paths for the
 same event, and a change to one is not a change to the others.
 
+- [x] ~~**Zoomed-in canvas layers were soft — the pixel budget was spent off-screen**~~ — `js/panels/battlemap.js` *(fixed + measured)*
+  - `_CANVAS_MAX_PIXELS` (8 MP) is a per-layer budget, and a layer covering
+    the whole map spent it on area nobody was looking at. On a 3040x1920 stage
+    (5.8 MP) that capped `k` at 1.18, so zooming to 275% just upscaled a 1.18x
+    bitmap — grid, pencil strokes and fog all soft. At that zoom the viewport
+    shows ~623x385 stage px, about 4% of the map: ~96% of those pixels were
+    never visible.
+  - **Fix applied:** `_sizeLayer` now sizes each layer to `_visibleStageRect()`
+    — the on-screen part of the stage — and positions it there, with the
+    offset folded into the context transform as
+    `setTransform(k,0,0,k,-ox*k,-oy*k)`. That last part is what makes this
+    cheap: **every existing draw call is unchanged**. Callers still work in
+    stage coordinates and still clear with `(0,0,stageW,stageH)`; anything
+    outside the covered rect falls off the canvas and is clipped. An
+    rAF-throttled `scroll` listener repaints as the viewport moves.
+  - Falls back to the old full-stage behaviour when the stage is rotated (the
+    visible region becomes an inverse-rotated box and it isn't worth the math
+    for a rare setting), when the scroll container isn't measurable, or when
+    the whole stage already fits — where the two are equivalent anyway.
+  - **Measured on the 3040x1920 map:** `k` 1.18 → **2.75** at 275% zoom, and
+    effective resolution is **exactly 1.00** backing pixel per device pixel at
+    0.4 / 1 / 1.5 / 2.75. Backing store *fell* from 32 MB to 6.9 MB. Grid line
+    positions verified against prediction while scrolled: worst centre error
+    0.55 stage px, which is the deliberate half-pixel snapping, not drift.
+  - **Prerequisite, committed separately:** `_stagePoint` used to take the
+    coordinate frame from whatever element the caller passed, and nine of ten
+    callers pass a CANVAS. That is only correct while every canvas is exactly
+    the stage's box — precisely the invariant this change breaks. It now
+    resolves `#map-stage` itself.
+  - **Smoke test caught two of its own flaws here**, both of which looked like
+    product bugs: it downscaled by the STAGE size (stretching a viewport-sized
+    canvas across the whole map), and it sampled a single mid-height row that
+    can land exactly on a horizontal grid line, inking the row end to end and
+    reading as one enormous "line". Fixed to scale by what the canvas actually
+    covers and to sample five rows, keeping the busiest. Red-green re-verified
+    against the reintroduced bug afterwards.
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:

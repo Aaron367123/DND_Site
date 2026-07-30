@@ -286,6 +286,13 @@ registerPanel('battlemap',{
     this._stopUndoKeys();
     // Would otherwise fire against a torn-down body.
     clearTimeout(this._requalityTimer); this._requalityTimer = null;
+    if (this._scrollRaf){
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this._scrollRaf);
+      this._scrollRaf = null;
+    }
+    // The scroll listener is on #map-scroll, which dies with the body, but
+    // drop the reference so a later mount rebinds cleanly.
+    this._onScrollBound = null;
     this._body = null;
   },
 
@@ -646,13 +653,61 @@ registerPanel('battlemap',{
     ));
   },
 
+  // The part of the stage currently on screen, in STAGE coordinates, or null
+  // when the whole stage should be rasterised instead.
+  //
+  // Why this exists: the pixel budget is per layer, and a layer covering the
+  // whole map burns it on area nobody is looking at. A 3003x1925 stage is
+  // 5.8 MP, so the 8 MP budget caps k at 1.18 — meaning zooming to 275% just
+  // upscales a 1.18x bitmap and the grid, strokes and fog all go soft. At that
+  // zoom the viewport shows roughly 440x290 stage px, about 4% of the map, so
+  // ~96% of those pixels were never visible. Sizing the layer to the viewport
+  // instead lets k reach the full viewScale x dpr and stay well inside budget.
+  //
+  // Returns null (⇒ keep the old full-stage behaviour) when:
+  //   • the stage is rotated — the visible region becomes an inverse-rotated
+  //     box and the extra math is not worth it for a rare setting;
+  //   • the scroll container isn't measurable yet;
+  //   • the whole stage already fits, where the two are equivalent anyway.
+  _visibleStageRect(){
+    if (this._mapRotation) return null;
+    const b = this._body; if (!b) return null;
+    const scroll = b.querySelector('#map-scroll'); if (!scroll) return null;
+    const vs = this._viewScale || 1;
+    const cs = this._csScreen();
+    const W = this._cols * cs, H = this._rows * cs;
+    if (!(W > 0 && H > 0)) return null;
+    const vw = scroll.clientWidth, vh = scroll.clientHeight;
+    if (!(vw > 0 && vh > 0)) return null;
+    // scrollLeft/clientWidth are in SIZER units, which are stage x viewScale
+    // (#map-scroll sits outside the map's transform). Divide to get stage px.
+    const w = vw / vs, h = vh / vs;
+    if (w >= W && h >= H) return null;          // whole stage visible
+    // A margin either side so a small scroll doesn't expose unpainted canvas
+    // before the scroll handler catches up.
+    const pad = Math.max(cs, 64 / vs);
+    let x = scroll.scrollLeft / vs - pad;
+    let y = scroll.scrollTop  / vs - pad;
+    let rw = w + pad * 2, rh = h + pad * 2;
+    x = Math.max(0, Math.min(x, Math.max(0, W - rw)));
+    y = Math.max(0, Math.min(y, Math.max(0, H - rh)));
+    rw = Math.min(rw, W - x);
+    rh = Math.min(rh, H - y);
+    return { x, y, w: rw, h: rh };
+  },
+
   // Size one layer and hand back a context already scaled by k, so every
   // existing draw call keeps working in stage coordinates unchanged.
   // `force` re-sizes even when dimensions match — needed after a k change,
   // since the backing store must be reallocated to change resolution.
   _sizeLayer(canvas, W, H, force){
-    const k = this._canvasK(W, H);
-    const bw = Math.round(W * k), bh = Math.round(H * k);
+    // Cover only what's on screen when that's a win (see _visibleStageRect),
+    // otherwise the whole stage exactly as before.
+    const vis = this._visibleStageRect();
+    const cw = vis ? vis.w : W, ch = vis ? vis.h : H;
+    const ox = vis ? vis.x : 0,  oy = vis ? vis.y : 0;
+    const k = this._canvasK(cw, ch);
+    const bw = Math.max(1, Math.round(cw * k)), bh = Math.max(1, Math.round(ch * k));
     if (force || canvas.width !== bw || canvas.height !== bh){
       // Assigning width/height reallocates AND resets all context state,
       // including the transform — so it has to be re-applied below.
@@ -660,11 +715,39 @@ registerPanel('battlemap',{
     }
     // CSS size stays in stage px; the extra backing pixels are what buy the
     // sharpness. Without this the canvas would render k× too large.
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    canvas.style.left = ox + 'px';
+    canvas.style.top  = oy + 'px';
     const ctx = canvas.getContext('2d');
-    ctx.setTransform(k, 0, 0, k, 0, 0);
+    // The translate is what keeps EVERY existing draw call correct without
+    // touching it: callers still work in stage coordinates and still clear
+    // with (0, 0, stageW, stageH); anything outside the covered rect simply
+    // falls off the canvas and is clipped, which is exactly what we want.
+    ctx.setTransform(k, 0, 0, k, -ox * k, -oy * k);
     return ctx;
+  },
+
+  // Repaint the layers when the viewport moves over the map. Only meaningful
+  // while the layers are viewport-sized; a full-stage layer already covers
+  // wherever the user scrolled to. rAF-throttled — scroll fires far faster
+  // than there is any point redrawing.
+  _onMapScroll(){
+    if (this._scrollRaf) return;
+    this._scrollRaf = requestAnimationFrame(() => {
+      this._scrollRaf = null;
+      if (!this._body || !this._visibleStageRect()) return;
+      const cs = this._csScreen();
+      const W = this._cols * cs, H = this._rows * cs;
+      const gridC = this._body.querySelector('#map-canvas');
+      if (gridC) this._drawGrid(gridC, cs);          // sizes itself
+      // _drawAllStrokes reuses whatever transform was last left on the draw
+      // canvas, so it has to be re-sized/re-positioned first — unlike the grid
+      // and fog paths, which call _sizeLayer themselves.
+      const drawC = this._body.querySelector('#draw-canvas');
+      if (drawC){ this._sizeLayer(drawC, W, H); this._drawAllStrokes(); }
+      if (this._fog !== null) this._drawFog();       // sizes itself
+    });
   },
 
   // Re-rasterise every layer at the current zoom. Debounced by its callers:
@@ -1552,7 +1635,7 @@ registerPanel('battlemap',{
         + '" style="position:relative;display:inline-block'
         + (this._mapRotation ? `;transform-origin:50% 50%;transform:rotate(${this._mapRotation}deg)` : '')
         + '">'
-        +'<canvas id="map-canvas" style="display:block;position:relative;z-index:1"></canvas>'
+        +'<canvas id="map-canvas" style="display:block;position:absolute;left:0;top:0;z-index:1"></canvas>'
       +'</div>'   // #map-stage
       +'</div>'   // #map-zoom
       +'</div>'   // #map-sizer
@@ -1647,6 +1730,16 @@ registerPanel('battlemap',{
     // 0×0 the browser clamps the restored scroll to 0 and the view jumps to
     // the top-left corner on every re-render.
     this._applyViewScale(null);
+    // Viewport-sized layers have to repaint as the viewport moves. Bound once
+    // and swapped on re-render, mirroring the _docMouseUp pattern — _setupMap
+    // runs on every _render(), so an anonymous handler here would leak one
+    // listener per render (the bug npc-library had).
+    const scrollHost = b.querySelector('#map-scroll');
+    if (scrollHost){
+      if (this._onScrollBound) scrollHost.removeEventListener('scroll', this._onScrollBound);
+      this._onScrollBound = () => this._onMapScroll();
+      scrollHost.addEventListener('scroll', this._onScrollBound, { passive: true });
+    }
     // _render() rebuilds the toolbar, so the buttons come back enabled —
     // re-sync them to the actual stack depth.
     this._updateUndoButtons();

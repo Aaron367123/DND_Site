@@ -321,31 +321,45 @@
           d._drawGrid(c, d._csScreen());
 
           const cs = d._csScreen();
-          const stageW = d._cols * cs, stageH = d._rows * cs;
           const dpr = W.devicePixelRatio || 1;
+          // Scale by what the canvas ACTUALLY covers, which since layers became
+          // viewport-sized is usually less than the whole stage. Reading the
+          // stage size here instead stretches a viewport-sized canvas across
+          // the full map and manufactures failures.
+          const coveredW = parseFloat(c.style.width)  || (d._cols * cs);
+          const coveredH = parseFloat(c.style.height) || (d._rows * cs);
           const shown = W.document.createElement('canvas');
-          shown.width  = Math.max(1, Math.round(stageW * vs * dpr));
-          shown.height = Math.max(1, Math.round(stageH * vs * dpr));
+          shown.width  = Math.max(1, Math.round(coveredW * vs * dpr));
+          shown.height = Math.max(1, Math.round(coveredH * vs * dpr));
           const sx = shown.getContext('2d');
           sx.imageSmoothingEnabled = true;
           sx.imageSmoothingQuality = 'high';
           sx.drawImage(c, 0, 0, shown.width, shown.height);
 
-          const row = sx.getImageData(0, Math.floor(shown.height / 2), shown.width, 1).data;
-          const runs = [];
-          let i = 0;
-          while (i < shown.width) {
-            if (row[i * 4 + 3] > 8) {
-              let j = i, peak = 0;
-              while (j < shown.width && row[j * 4 + 3] > 8) { peak = Math.max(peak, row[j * 4 + 3]); j++; }
-              runs.push({ w: j - i, peak }); i = j;
-            } else i++;
+          // Sample several rows and keep the busiest. A single mid-height row
+          // can land exactly ON a horizontal grid line, which inks the entire
+          // row and reads as one enormous "line" — that false failure is why
+          // this samples more than once.
+          let runs = [];
+          for (const frac of [0.5, 0.37, 0.61, 0.23, 0.78]) {
+            const y = Math.min(shown.height - 1, Math.max(0, Math.floor(shown.height * frac)));
+            const row = sx.getImageData(0, y, shown.width, 1).data;
+            const found = [];
+            let i = 0;
+            while (i < shown.width) {
+              if (row[i * 4 + 3] > 8) {
+                let j = i, peak = 0;
+                while (j < shown.width && row[j * 4 + 3] > 8) { peak = Math.max(peak, row[j * 4 + 3]); j++; }
+                found.push({ w: j - i, peak }); i = j;
+              } else i++;
+            }
+            if (found.length > runs.length) runs = found;
           }
+          // Expected vertical lines within the covered rect, not the whole map.
+          const expected = Math.floor(coveredW / cs);
           const widths = new Set(runs.map(r => r.w));
           const faint = runs.filter(r => r.peak < 250).length;
-          // Every vertical line must survive the downscale. Allow the last one
-          // to fall outside the sampled row's right edge by rounding.
-          if (runs.length < d._cols - 1) bad.push(`vs ${vs}: only ${runs.length} of ~${d._cols} lines survived`);
+          if (runs.length < expected - 1) bad.push(`vs ${vs}: only ${runs.length} of ~${expected} lines survived`);
           if (widths.size > 1) bad.push(`vs ${vs}: mixed widths ${[...widths].join('/')}`);
           if (faint > 0) bad.push(`vs ${vs}: ${faint}/${runs.length} lines below full ink`);
         }
