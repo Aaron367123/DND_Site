@@ -561,7 +561,16 @@ registerPanel('battlemap',{
   // and el.offsetWidth (layout size) are both UNTRANSFORMED. That is why this
   // single divisor is the whole coordinate change — see _screenScale().
   _stagePoint(clientX, clientY, el){
-    const rect = el.getBoundingClientRect();
+    // Always measure from #map-stage, whatever the caller passed. Nine of the
+    // ten call sites hand in a CANVAS, which works only while every canvas is
+    // exactly the stage's box — an invariant nothing enforces and which any
+    // change to how layers are sized would silently break, taking draw, erase,
+    // fog paint, token placement, Align and hover with it in one go. The
+    // stage is the coordinate system these points are expressed in, so resolve
+    // it here rather than trusting the argument. `el` remains the fallback for
+    // a caller with no mounted body.
+    const stage = (this._body && this._body.querySelector('#map-stage')) || el;
+    const rect = stage.getBoundingClientRect();
     const z = this._screenScale();
     const cx = (clientX - (rect.left + rect.width  / 2)) / z;
     const cy = (clientY - (rect.top  + rect.height / 2)) / z;
