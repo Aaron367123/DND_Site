@@ -89,9 +89,48 @@ registerPanel('npclib', {
     let cleaned = false;
     this._npcs.forEach(n => { if (n.images){ delete n.images; cleaned = true; } });
     if (cleaned) this._save();
+    // Divider drag listeners live on `document` and are attached ONCE here,
+    // not inside _wireDivider() — that runs from _render(), so every re-render
+    // (which a sync pull can trigger repeatedly) used to add another
+    // closure-retaining pair that was never removed. Same bug, same fix as
+    // notes._wireDivider. Handlers are built once and reused so the
+    // add/remove pair below always references the same function.
+    if (!this._onDividerMove){
+      this._onDividerMove = (e) => {
+        const drag = this._dividerDrag; if (!drag) return;
+        const b = this._body; if (!b) return;
+        const left = b.querySelector('.npclib-left');
+        const root = b.querySelector('.npclib-root');
+        if (!left || !root) return;
+        const z = (typeof getZoom==='function') ? getZoom() : 1;
+        const rootW = root.getBoundingClientRect().width / z;
+        const min = 200, max = Math.max(min + 100, rootW - 280);
+        let w = drag.ow + (e.clientX - drag.sx) / z;
+        w = Math.max(min, Math.min(max, w));
+        left.style.flex = `0 0 ${w}px`;
+        left.style.width = w + 'px';
+        this._leftWidth = w;
+      };
+      this._onDividerUp = () => {
+        if (!this._dividerDrag) return;
+        this._dividerDrag = null;
+        document.body.style.cursor = '';
+        try { localStorage.setItem('skt-npclib-leftw', String(this._leftWidth)); } catch(e){}
+      };
+    }
+    document.addEventListener('mousemove', this._onDividerMove);
+    document.addEventListener('mouseup', this._onDividerUp);
     this._render();
   },
-  unmount(){ this._body = null; },
+  unmount(){
+    // Symmetric with mount(). Re-adding the same function reference on a
+    // later mount is a no-op if it's somehow still attached, so this stays
+    // correct across any mount/unmount ordering.
+    document.removeEventListener('mousemove', this._onDividerMove);
+    document.removeEventListener('mouseup', this._onDividerUp);
+    this._dividerDrag = null;
+    this._body = null;
+  },
 
   _save(){ saveJson('skt-npcs-v2', this._npcs, 'NPC library'); },
 
@@ -467,28 +506,14 @@ registerPanel('npclib', {
     const left    = b.querySelector('.npclib-left');
     const root    = b.querySelector('.npclib-root');
     if (!divider || !left || !root) return;
-    let drag = null;
+    // Only the divider's OWN mousedown is wired here. It's element-scoped, so
+    // it dies with the DOM node on the next _render() — no leak. The
+    // document-level mousemove/mouseup pair lives in mount()/unmount();
+    // drag state is shared through this._dividerDrag.
     divider.addEventListener('mousedown', e => {
       e.preventDefault(); e.stopPropagation();
-      drag = { sx: e.clientX, ow: left.getBoundingClientRect().width };
+      this._dividerDrag = { sx: e.clientX, ow: left.getBoundingClientRect().width };
       document.body.style.cursor = 'ew-resize';
-    });
-    document.addEventListener('mousemove', e => {
-      if (!drag) return;
-      const z = (typeof getZoom==='function') ? getZoom() : 1;
-      const rootW = root.getBoundingClientRect().width / z;
-      const min = 200, max = Math.max(min + 100, rootW - 280);
-      let w = drag.ow + (e.clientX - drag.sx) / z;
-      w = Math.max(min, Math.min(max, w));
-      left.style.flex = `0 0 ${w}px`;
-      left.style.width = w + 'px';
-      this._leftWidth = w;
-    });
-    document.addEventListener('mouseup', () => {
-      if (!drag) return;
-      drag = null;
-      document.body.style.cursor = '';
-      try { localStorage.setItem('skt-npclib-leftw', String(this._leftWidth)); } catch(e){}
     });
   },
 

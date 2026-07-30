@@ -947,7 +947,15 @@ function doSearch(){
   if(sel!=='all')pool=pool.filter(r=>_catMatches(r.cat, sel));
   if(q){
     // Multi-token: every whitespace-separated token must appear somewhere in
-    // the normalized name or meta. So "frost gnt" still finds "Frost Giant".
+    // the normalized name or meta, in any order. So "giant frost" and
+    // "frost gia" both find "Frost Giant".
+    //
+    // Tokens match as SUBSTRINGS, not subsequences — "frost gnt" finds
+    // nothing. (An earlier version of this comment claimed otherwise; the
+    // code never did it.) Substring matching is the deliberate choice:
+    // subsequence matching would make "gnt" also hit "aGeNT", "arGeNTum",
+    // "puNGeNT"… and drown the short queries people actually type.
+    //
     // `_h` is the precomputed haystack (name + meta + item variant names)
     // built once by the data loader — no per-row regex work here.
     const tokens = q.split(' ').filter(Boolean);
