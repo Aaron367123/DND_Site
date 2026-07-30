@@ -1,0 +1,552 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SKT — smoke test</title>
+<!--
+  Smoke test for the campaign workspace.
+
+  WHY THIS EXISTS
+  ---------------
+  Every check in here was written by hand at least once while chasing a real
+  bug. Re-typing them into a console each time is slow and, more importantly,
+  error-prone: three hand-written probes during one debugging session each
+  reported a defect that did not exist (a DOM reference captured before
+  _render() replaced it; a rotation set on the panel object but never applied
+  to the DOM; a call to a method name that does not exist). Every one of those
+  looked exactly like a product bug. Checked-in tests fail the same way twice,
+  which makes a wrong test findable instead of convincing.
+
+  HOW IT WORKS
+  ------------
+  It loads the REAL workspace in a same-origin iframe rather than rebuilding a
+  DOM skeleton here. The panels need #workspace, #workspace-canvas and friends
+  at script-load time, so a hand-made skeleton would drift out of step with the
+  app and start producing fake failures. Testing the actual page cannot drift.
+
+  SAFETY
+  ------
+  The iframe is loaded with ?nosync=1, so it never opens a Firebase connection
+  and Dropbox reports itself unconfigured. localStorage IS shared with the real
+  app on this origin, so every key a test can touch is snapshotted up front and
+  restored in a finally — including when a test throws.
+
+  Open smoke.html directly. No build step, no dependencies.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#12151a; color:#dfe4ea;
+         font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:16px 20px; border-bottom:1px solid #263040; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:.01em; }
+  #summary { font-variant-numeric:tabular-nums; }
+  .pill { padding:2px 10px; border-radius:999px; font-weight:650; font-size:12px; }
+  .pill.pass { background:#12331f; color:#7ee2a8; }
+  .pill.fail { background:#3a1620; color:#ff9aa8; }
+  .pill.run  { background:#243044; color:#9fc0ea; }
+  button { background:#1d2531; color:#dfe4ea; border:1px solid #33405a; border-radius:6px;
+           padding:6px 14px; font:inherit; cursor:pointer; }
+  button:hover { background:#26303f; }
+  button:disabled { opacity:.5; cursor:default; }
+  main { padding:8px 20px 40px; }
+  table { border-collapse:collapse; width:100%; max-width:1100px; }
+  th,td { text-align:left; padding:7px 10px; border-bottom:1px solid #1e2530; vertical-align:top; }
+  th { color:#8b98ab; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  td.st { width:64px; font-weight:700; }
+  td.ms { width:80px; text-align:right; color:#8b98ab; font-variant-numeric:tabular-nums; }
+  tr.pass td.st { color:#7ee2a8; }
+  tr.fail td.st { color:#ff9aa8; }
+  tr.skip td.st { color:#c8a45c; }
+  .detail { color:#9aa7b8; font-size:12.5px; white-space:pre-wrap; margin-top:3px; }
+  tr.fail .detail { color:#ffc2cc; }
+  iframe { position:fixed; left:-10000px; top:0; width:1200px; height:820px; border:0; }
+  .note { color:#8b98ab; font-size:12.5px; max-width:1100px; margin:14px 0 0; }
+</style>
+
+<header>
+  <h1>SKT workspace — smoke test</h1>
+  <span id="summary" class="pill run">not started</span>
+  <button id="run">Run</button>
+  <span class="note" style="margin:0">Loads the real app with <code>?nosync=1</code>. Never contacts Firebase or Dropbox.</span>
+</header>
+<main>
+  <table>
+    <thead><tr><th class="st">·</th><th>Check</th><th class="ms">ms</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="note" id="footnote"></p>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const rowsEl = document.getElementById('rows');
+  const sumEl  = document.getElementById('summary');
+  const runBtn = document.getElementById('run');
+  const footEl = document.getElementById('footnote');
+
+  const TESTS = [];
+  const test = (name, fn) => TESTS.push({ name, fn });
+
+  // Assertions throw; the runner catches and records the message.
+  function ok(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
+  function eq(actual, expected, msg) {
+    if (actual !== expected) throw new Error((msg ? msg + ': ' : '') + `expected ${expected}, got ${actual}`);
+  }
+
+  // ── iframe plumbing ────────────────────────────────────────────────────────
+  // Top-level `const`/`let` in a classic script live in the global LEXICAL
+  // environment, not on `window` — so W._5eData is undefined even though the
+  // variable exists. eval() runs in that scope and can see them. (Learned the
+  // hard way: reading window._5eData reports 0 rows on a fully loaded app.)
+  let W = null;
+  const ev = expr => W.eval(expr);
+
+  function bootIframe() {
+    return new Promise((resolve, reject) => {
+      const old = document.querySelector('iframe');
+      if (old) old.remove();
+      const f = document.createElement('iframe');
+      // Cache-bust so a stale service-worker HTML copy can't be tested by mistake.
+      f.src = 'skt-workspace.html?nosync=1&smoke=' + Date.now();
+      f.addEventListener('load', () => {
+        W = f.contentWindow;
+        const t0 = Date.now();
+        (function waitReady() {
+          let ready = false;
+          try { ready = !!ev('typeof _5eLoaded !== "undefined" && _5eLoaded'); } catch (e) { /* still parsing */ }
+          if (ready) return resolve();
+          if (Date.now() - t0 > 90000) return reject(new Error('index never became ready (90s)'));
+          setTimeout(waitReady, 250);
+        })();
+      });
+      f.addEventListener('error', () => reject(new Error('iframe failed to load')));
+      document.body.appendChild(f);
+    });
+  }
+
+  // Keys any test may write. Snapshotted before the run, restored in a finally.
+  const VOLATILE_KEYS = ['skt-battlemap-v1', 'skt-bm-view-v1', 'skt-bm-view-player-v1'];
+  let snapshot = null;
+  function takeSnapshot() {
+    snapshot = {};
+    for (const k of VOLATILE_KEYS) snapshot[k] = W.localStorage.getItem(k);
+  }
+  function restoreSnapshot() {
+    if (!snapshot) return;
+    for (const k of VOLATILE_KEYS) {
+      const v = snapshot[k];
+      if (v == null) W.localStorage.removeItem(k); else W.localStorage.setItem(k, v);
+    }
+  }
+
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  // Mount a panel into a throwaway container in the IFRAME's document (panels
+  // query within it and need its stylesheet), hand it to fn, always unmount.
+  async function withPanel(id, fn) {
+    const doc = W.document;
+    const host = doc.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:1000px;height:700px;opacity:0.01;z-index:-1;pointer-events:none';
+    doc.body.appendChild(host);
+    const def = ev('panelDefs')[id];
+    def.mount(host);
+    try { return await fn(def, host, doc); }
+    finally { try { def.unmount && def.unmount(); } catch (e) {} host.remove(); }
+  }
+
+  // ── the checks ─────────────────────────────────────────────────────────────
+
+  test('sync is disabled (no Firebase, no Dropbox)', async () => {
+    const res = ev('performance.getEntriesByType("resource").map(r => r.name)');
+    const live = res.filter(n => /firebaseio|googleapis|firebaseapp|dropboxapi/.test(n));
+    ok(live.length === 0, 'contacted a sync host: ' + live.slice(0, 3).join(', '));
+    const disabled = ev('typeof _syncDisabled === "function" && _syncDisabled()');
+    ok(disabled === true, '_syncDisabled() should be true under ?nosync=1');
+  });
+
+  test('content index built', async () => {
+    const n = ev('_5eData.length');
+    ok(n > 10000, `only ${n} rows indexed`);
+    return `${n} rows`;
+  });
+
+  test('every entry renders (no errors, no empty cards)', async () => {
+    // The bug this caught: entries whose only content lived on a parent record
+    // rendered a completely blank card. `desc` emptiness is NOT the signal —
+    // monsters/items/feats render from _raw stat-blocks and legitimately have
+    // no desc. Measure the rendered text.
+    const r = ev(`(() => {
+      const div = document.createElement('div');
+      let errs = 0; const empty = [];
+      for (const row of _5eData) {
+        let h; try { h = buildDetailBody(row); } catch (e) { errs++; continue; }
+        div.innerHTML = h || '';
+        const t = (div.textContent || '').replace(/\\s+/g, ' ').trim();
+        // item/language are genuinely terse in the source data (an abacus is
+        // cost + weight and nothing else) — not a defect.
+        if (t.length < 25 && row.cat !== 'item' && row.cat !== 'language') empty.push(row.cat + ': ' + row.name);
+      }
+      return { errs, empty, total: _5eData.length };
+    })()`);
+    eq(r.errs, 0, 'render exceptions');
+    ok(r.empty.length === 0, 'blank cards: ' + r.empty.slice(0, 5).join(' | '));
+    return `${r.total} entries, 0 errors, 0 blank`;
+  });
+
+  test('all panels mount and unmount cleanly (3 cycles)', async () => {
+    const r = ev(`(() => {
+      const names = Object.keys(panelDefs).filter(k => typeof panelDefs[k].mount === 'function');
+      const host = document.createElement('div');
+      host.style.cssText = 'position:fixed;left:-99999px;width:1000px;height:700px';
+      document.body.appendChild(host);
+      const bad = [];
+      for (let i = 0; i < 3; i++) for (const n of names) {
+        const b = document.createElement('div');
+        b.style.cssText = 'width:1000px;height:700px';
+        host.appendChild(b);
+        try { panelDefs[n].mount(b); } catch (e) { bad.push(n + ' mount: ' + e.message); }
+        try { panelDefs[n].unmount && panelDefs[n].unmount(); } catch (e) { bad.push(n + ' unmount: ' + e.message); }
+        b.remove();
+      }
+      host.remove();
+      return { panels: names.length, bad };
+    })()`);
+    ok(r.bad.length === 0, r.bad.slice(0, 4).join(' | '));
+    return `${r.panels} panels x 3 cycles`;
+  });
+
+  test('no document listener leaks across mount/unmount', async () => {
+    // npc-library used to attach an anonymous mousemove+mouseup pair to
+    // `document` from _wireDivider, which runs on every _render().
+    const r = ev(`(() => {
+      const oa = document.addEventListener.bind(document);
+      const orm = document.removeEventListener.bind(document);
+      const a = {}, rm = {};
+      document.addEventListener = (t, f, o) => { a[t] = (a[t]||0)+1; return oa(t, f, o); };
+      document.removeEventListener = (t, f, o) => { rm[t] = (rm[t]||0)+1; return orm(t, f, o); };
+      const names = Object.keys(panelDefs).filter(k => typeof panelDefs[k].mount === 'function');
+      const host = document.createElement('div');
+      host.style.cssText = 'position:fixed;left:-99999px;width:1000px;height:700px';
+      document.body.appendChild(host);
+      const CYCLES = 4;
+      for (let i = 0; i < CYCLES; i++) for (const n of names) {
+        const b = document.createElement('div');
+        b.style.cssText = 'width:1000px;height:700px';
+        host.appendChild(b);
+        try { panelDefs[n].mount(b); } catch (e) {}
+        try { panelDefs[n].unmount && panelDefs[n].unmount(); } catch (e) {}
+        b.remove();
+      }
+      host.remove();
+      document.addEventListener = oa; document.removeEventListener = orm;
+      const leaked = {};
+      new Set([...Object.keys(a), ...Object.keys(rm)]).forEach(t => {
+        const d = (a[t]||0) - (rm[t]||0);
+        if (d > 0) leaked[t] = d;      // negative just means pre-existing handlers were released
+      });
+      return { leaked, cycles: CYCLES };
+    })()`);
+    const names = Object.keys(r.leaked);
+    ok(names.length === 0, 'leaked per 4 cycles: ' + JSON.stringify(r.leaked));
+    return `4 cycles, 0 leaked`;
+  });
+
+  test('battlemap pointer coords survive zoom x rotation', async () => {
+    // Place a token at a known cell, render it, read where it ACTUALLY landed,
+    // and convert that back. Rotation only reaches the DOM through _render(),
+    // so each case must re-render — setting _mapRotation alone tests nothing.
+    return withPanel('battlemap', async (d, host) => {
+      const savedTokens = JSON.parse(JSON.stringify(d._tokens || []));
+      const savedVS = d._viewScale, savedRot = d._mapRotation;
+      const fails = [];
+      let cases = 0;
+      try {
+        for (const rot of [0, 90, 180, 270]) {
+          for (const vs of [0.3, 1, 2.5]) {
+            d._mapRotation = rot;
+            d._viewScale = vs;
+            d._render();
+            d._applyViewScale(vs);
+            await wait(90);
+            const cs = d._csScreen();
+            const sx = 5.5 * cs, sy = 3.5 * cs;
+            d._tokens = [{ id: '__smoke', name: 'T', x: sx, y: sy, size: 1 }];
+            d._renderTokens();
+            await wait(40);
+            // Re-query every time — _render() replaces these nodes.
+            const el = host.querySelector('.map-token[data-tid="__smoke"]');
+            const stage = host.querySelector('#map-stage');
+            if (!el || !stage) { fails.push(`rot ${rot} vs ${vs}: token not rendered`); continue; }
+            const applied = /rotate\(([-\d.]+)deg\)/.exec(stage.style.transform || '');
+            const domRot = applied ? +applied[1] : 0;
+            if (domRot !== rot) { fails.push(`rot ${rot}: DOM shows ${domRot} — test setup wrong, not a product bug`); continue; }
+            const r = el.getBoundingClientRect();
+            const back = d._stagePoint(r.left + r.width / 2, r.top + r.height / 2, stage);
+            const hit = [Math.floor(back.x / cs), Math.floor(back.y / cs)];
+            cases++;
+            if (hit[0] !== 5 || hit[1] !== 3) {
+              fails.push(`rot ${rot} vs ${vs}: hit [${hit}] drift [${(back.x - sx).toFixed(1)},${(back.y - sy).toFixed(1)}]`);
+            }
+          }
+        }
+      } finally {
+        d._tokens = savedTokens; d._viewScale = savedVS; d._mapRotation = savedRot;
+        try { d._render(); } catch (e) {}
+      }
+      ok(fails.length === 0, fails.slice(0, 4).join(' | '));
+      return `${cases} cases, exact`;
+    });
+  });
+
+  test('grid lines uniform at every zoom (as composited)', async () => {
+    // The defect: _canvasK clamped the backing store at >= 1x, so at 40% zoom
+    // the grid was rasterised 3003px wide and the BROWSER downscaled it to
+    // ~1200. Resampling a 1px line by 0.4 lands it differently on every line —
+    // measured 14-230 alpha, mixed 1px/2px widths, and one line of 39 gone.
+    //
+    // CRITICAL: measure the COMPOSITED result, not the backing store. An
+    // earlier version of this test read the canvas directly, where lines are
+    // perfectly uniform at k=1 because the damage happens during compositing —
+    // it passed happily against a deliberately reintroduced bug. The canvas is
+    // CSS-sized in stage px and an ancestor scales it by viewScale, so the
+    // on-screen size is W * viewScale * dpr; reproduce that with drawImage.
+    return withPanel('battlemap', async (d, host) => {
+      const savedVS = d._viewScale, savedOp = d._gridOpacity;
+      const bad = [];
+      try {
+        d._gridOpacity = 100;
+        for (const vs of [0.25, 0.4, 0.6, 1]) {
+          d._viewScale = vs;
+          const c = host.querySelector('#map-canvas');
+          d._drawGrid(c, d._csScreen());
+
+          const cs = d._csScreen();
+          const stageW = d._cols * cs, stageH = d._rows * cs;
+          const dpr = W.devicePixelRatio || 1;
+          const shown = W.document.createElement('canvas');
+          shown.width  = Math.max(1, Math.round(stageW * vs * dpr));
+          shown.height = Math.max(1, Math.round(stageH * vs * dpr));
+          const sx = shown.getContext('2d');
+          sx.imageSmoothingEnabled = true;
+          sx.imageSmoothingQuality = 'high';
+          sx.drawImage(c, 0, 0, shown.width, shown.height);
+
+          const row = sx.getImageData(0, Math.floor(shown.height / 2), shown.width, 1).data;
+          const runs = [];
+          let i = 0;
+          while (i < shown.width) {
+            if (row[i * 4 + 3] > 8) {
+              let j = i, peak = 0;
+              while (j < shown.width && row[j * 4 + 3] > 8) { peak = Math.max(peak, row[j * 4 + 3]); j++; }
+              runs.push({ w: j - i, peak }); i = j;
+            } else i++;
+          }
+          const widths = new Set(runs.map(r => r.w));
+          const faint = runs.filter(r => r.peak < 250).length;
+          // Every vertical line must survive the downscale. Allow the last one
+          // to fall outside the sampled row's right edge by rounding.
+          if (runs.length < d._cols - 1) bad.push(`vs ${vs}: only ${runs.length} of ~${d._cols} lines survived`);
+          if (widths.size > 1) bad.push(`vs ${vs}: mixed widths ${[...widths].join('/')}`);
+          if (faint > 0) bad.push(`vs ${vs}: ${faint}/${runs.length} lines below full ink`);
+        }
+      } finally {
+        d._viewScale = savedVS; d._gridOpacity = savedOp;
+        try { d._drawGrid(host.querySelector('#map-canvas'), d._csScreen()); } catch (e) {}
+      }
+      ok(bad.length === 0, bad.join(' | '));
+      return '4 zoom levels, uniform after compositing';
+    });
+  });
+
+  test('choosing a map repaints the DM view', async () => {
+    // Regression guard: the autoFit branch of _loadBgFromPath stopped calling
+    // _applyBg/_render, so the grid re-fitted to the new map while the OLD
+    // art stayed on the stage until the window was closed and reopened.
+    return withPanel('battlemap', async (d, host) => {
+      const A = 'adventure/SKT/027-skt03-thenorth.webp';
+      const B = 'adventure/SKT/008-skt01-03.webp';
+      const bgName = () => {
+        const s = host.querySelector('#map-stage');
+        const m = /([^/"')]+\.(?:webp|png|jpg))/i.exec(s ? W.getComputedStyle(s).backgroundImage : '');
+        return m ? m[1] : 'none';
+      };
+      const loadable = p => new Promise(r => {
+        const i = new W.Image(); i.crossOrigin = 'anonymous';
+        i.onload = () => r(true); i.onerror = () => r(false);
+        i.src = ev('assetUrl')(p);
+      });
+      if (!(await loadable(A)) || !(await loadable(B))) return { skip: 'probe map images unreachable (offline or moved)' };
+
+      const swap = async p => {
+        d._bgMapPath = p; d._resetMapScene();
+        d._bgMapScale = 1; d._lastTokenScale = 1;
+        d._gridOffsetX = 0; d._gridOffsetY = 0;
+        d._loadBgFromPath(p, true);
+        await wait(900);
+      };
+      await swap(A);
+      eq(bgName(), A.split('/').pop(), 'seed map did not paint');
+      await swap(B);
+      eq(bgName(), B.split('/').pop(), 'stage kept the previous map');
+      const cs = d._csScreen();
+      const stage = host.querySelector('#map-stage');
+      eq(stage.style.width, (d._cols * cs) + 'px', 'stage width out of step with grid');
+      eq(stage.style.height, (d._rows * cs) + 'px', 'stage height out of step with grid');
+      return 'repainted, stage tracks grid';
+    });
+  });
+
+  test('geometry change forces a full render, fog does not', async () => {
+    // _repaintRemote's contract: callers fall back to _render() when geometry
+    // moves, because only _setupMap resizes the stage and re-tiles the
+    // background. The BroadcastChannel path used to check scale/rotation only,
+    // so a cell-size change left a same-browser player tab on a stale stage.
+    return withPanel('battlemap', async (d, host) => {
+      const struct = () => [d._cols, d._rows, d._cellSize, d._gridType,
+        d._bgMapScale, d._mapRotation, d._gridOffsetX, d._gridOffsetY].join('|');
+      const before = struct();
+      const savedCs = d._cellSize, savedCols = d._cols, savedRows = d._rows;
+      try {
+        d._cellSize = savedCs + 30;
+        d._cols = Math.max(8, Math.ceil((d._bgMapNaturalW || 3000) / d._cellSize));
+        d._rows = Math.max(6, Math.ceil((d._bgMapNaturalH || 1905) / d._cellSize));
+        ok(struct() !== before, 'struct did not change — test setup wrong');
+        d._render();
+        await wait(120);
+        const cs = d._csScreen();
+        const stage = host.querySelector('#map-stage');   // re-query after render
+        eq(stage.style.width, (d._cols * cs) + 'px', 'stage not resized');
+        eq(stage.style.height, (d._rows * cs) + 'px', 'stage not resized');
+        // A fog-only update must still take the cheap path — that is the whole
+        // point of _repaintRemote, and turning it into a full render would undo
+        // a deliberate performance fix.
+        const s2 = struct();
+        d._repaintRemote({ drawings: true, tokens: d._tokens });
+        eq(struct(), s2, 'repaint mutated geometry');
+      } finally {
+        d._cellSize = savedCs; d._cols = savedCols; d._rows = savedRows;
+        try { d._render(); } catch (e) {}
+      }
+      return 'renders on geometry, cheap on fog';
+    });
+  });
+
+  test('undo and redo restore state', async () => {
+    return withPanel('battlemap', async (d) => {
+      const savedTokens = JSON.parse(JSON.stringify(d._tokens || []));
+      try {
+        const cs = d._csScreen();
+        // _captureUndo fires inside _saveMap — that is the real flow.
+        d._tokens = [{ id: '__s1', name: 'A', x: cs, y: cs, size: 1 }];
+        d._saveMap();
+        const n0 = d._tokens.length;
+        d._tokens.push({ id: '__s2', name: 'B', x: 2 * cs, y: cs, size: 1 });
+        d._saveMap();
+        const n1 = d._tokens.length;
+        d._undoRedo(true);  await wait(120);
+        eq(d._tokens.length, n0, 'undo did not restore');
+        d._undoRedo(false); await wait(120);
+        eq(d._tokens.length, n1, 'redo did not restore');
+      } finally {
+        d._tokens = savedTokens;
+      }
+      return 'undo + redo exact';
+    });
+  });
+
+  test('service worker serves data cache-first', async () => {
+    // stale-while-revalidate fires fetch() even on a cache hit, which had every
+    // page load re-downloading ~30 MB of 5etools data to replace it with
+    // identical bytes.
+    const src = await (await fetch('sw.js?smoke=' + Date.now())).text();
+    ok(/respondWith\(cacheFirst\(req,\s*DATA_CACHE\)\)/.test(src), 'data route is not cache-first');
+    ok(!/staleWhileRevalidate/.test(src), 'staleWhileRevalidate still present');
+    ok(/const DATA_CACHE\s*=\s*'skt-data-'\s*\+\s*DATA_STAMP/.test(src), 'data bucket not keyed to DATA_STAMP');
+    return 'cache-first, bucket keyed to DATA_STAMP';
+  });
+
+  test('no errors logged during the run', async () => {
+    const msgs = ev('sktErrors.list().map(e => e.msg)');
+    ok(msgs.length === 0, msgs.slice(0, 4).join(' | '));
+    return 'diagnostics clean';
+  });
+
+  // ── runner ─────────────────────────────────────────────────────────────────
+  async function run() {
+    runBtn.disabled = true;
+    rowsEl.innerHTML = '';
+    footEl.textContent = '';
+    sumEl.className = 'pill run';
+    sumEl.textContent = 'booting app…';
+
+    let pass = 0, fail = 0, skip = 0;
+    const t0 = performance.now();
+    try {
+      await bootIframe();
+      takeSnapshot();
+      try { ev('sktErrors.clear()'); } catch (e) {}
+
+      for (const t of TESTS) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td class="st">…</td><td></td><td class="ms"></td>';
+        row.children[1].textContent = t.name;
+        rowsEl.appendChild(row);
+        const s = performance.now();
+        try {
+          const detail = await t.fn();
+          const ms = Math.round(performance.now() - s);
+          if (detail && detail.skip) {
+            skip++; row.className = 'skip';
+            row.children[0].textContent = 'SKIP';
+            row.children[1].innerHTML = '';
+            row.children[1].append(t.name);
+            const d = document.createElement('div'); d.className = 'detail'; d.textContent = detail.skip;
+            row.children[1].appendChild(d);
+          } else {
+            pass++; row.className = 'pass';
+            row.children[0].textContent = 'PASS';
+            if (typeof detail === 'string' && detail) {
+              const d = document.createElement('div'); d.className = 'detail'; d.textContent = detail;
+              row.children[1].appendChild(d);
+            }
+          }
+          row.children[2].textContent = ms;
+        } catch (e) {
+          fail++; row.className = 'fail';
+          row.children[0].textContent = 'FAIL';
+          const d = document.createElement('div'); d.className = 'detail';
+          d.textContent = (e && e.message) || String(e);
+          row.children[1].appendChild(d);
+          row.children[2].textContent = Math.round(performance.now() - s);
+        }
+        sumEl.textContent = `${pass} passed · ${fail} failed`;
+      }
+    } catch (e) {
+      fail++;
+      const row = document.createElement('tr');
+      row.className = 'fail';
+      row.innerHTML = '<td class="st">FAIL</td><td></td><td class="ms"></td>';
+      row.children[1].textContent = 'harness';
+      const d = document.createElement('div'); d.className = 'detail';
+      d.textContent = (e && e.message) || String(e);
+      row.children[1].appendChild(d);
+      rowsEl.appendChild(row);
+    } finally {
+      // Runs even if a test threw mid-mutation.
+      try { restoreSnapshot(); } catch (e) {}
+      runBtn.disabled = false;
+    }
+
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    sumEl.className = 'pill ' + (fail ? 'fail' : 'pass');
+    sumEl.textContent = fail ? `${fail} FAILED · ${pass} passed` : `${pass} passed`;
+    footEl.textContent = `${secs}s. localStorage keys touched by the run were restored. `
+      + `A failure here is not automatically a product bug — check the test's own setup first; `
+      + `wrong tests are a recurring source of false alarms in this codebase.`
+      + (skip ? ` ${skip} skipped.` : '');
+  }
+
+  runBtn.addEventListener('click', run);
+  run();
+})();
+</script>
