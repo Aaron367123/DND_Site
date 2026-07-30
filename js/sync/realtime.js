@@ -55,6 +55,18 @@ const SKT_SYNC_KEYS = [
                               // on items / monsters from those modules.
 ];
 
+// Record a handled-but-unexpected failure into the diagnostics log
+// (Settings → Diagnostics) without changing behaviour: no toast, no rethrow.
+//
+// The sync layer used to swallow these into bare `catch(e){}`. That's the
+// right *behaviour* — one corrupt node must not abort a whole assemble — but
+// it left no trace, so "a combatant vanished" or "sync just stopped" was
+// unfalsifiable after the fact. Self-contained and null-guarded so a missing
+// errors.js can never turn a swallowed error into a thrown one.
+function _diag(what, e) {
+  try { if (window.sktErrors) sktErrors.report('realtime:' + what, e); } catch(_){}
+}
+
 // Firebase keys cannot contain hyphens or dots — convert to underscores
 function _toFbKey(lsKey) { return lsKey.replace(/[-\.]/g, '_'); }
 
@@ -144,11 +156,11 @@ const _ENTITY_KEYS = {
       return nodes;
     },
     assemble(nodes){
-      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){}
+      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){ _diag('combat meta', e); }
       const items = {};
       Object.keys(nodes).forEach(n => {
         if (!n.startsWith('items/')) return;
-        try { const c = JSON.parse(nodes[n]); if (c && c.id != null) items[_fbSafeId(c.id)] = c; } catch(e){}
+        try { const c = JSON.parse(nodes[n]); if (c && c.id != null) items[_fbSafeId(c.id)] = c; } catch(e){ _diag('combat node ' + n, e); }
       });
       const combatants = [], used = new Set();
       (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
@@ -177,11 +189,11 @@ const _ENTITY_KEYS = {
       return nodes;
     },
     assemble(nodes){
-      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){}
+      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){ _diag('battlemap meta', e); }
       const tokens = [];
       Object.keys(nodes).forEach(n => {
         if (!n.startsWith('tokens/')) return;
-        try { const t = JSON.parse(nodes[n]); if (t) tokens.push(t); } catch(e){}
+        try { const t = JSON.parse(nodes[n]); if (t) tokens.push(t); } catch(e){ _diag('battlemap node ' + n, e); }
       });
       const parse = (n, fb) => { try { return nodes[n] != null ? JSON.parse(nodes[n]) : fb; } catch(e){ return fb; } };
       return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: parse('drawings', []) });
@@ -205,11 +217,11 @@ const _ENTITY_KEYS = {
       return nodes;
     },
     assemble(nodes){
-      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){}
+      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){ _diag('notes meta', e); }
       const map = {};
       Object.keys(nodes).forEach(n => {
         if (!n.startsWith('items/')) return;
-        try { const it = JSON.parse(nodes[n]); if (it && it.id != null) map[_fbSafeId(it.id)] = it; } catch(e){}
+        try { const it = JSON.parse(nodes[n]); if (it && it.id != null) map[_fbSafeId(it.id)] = it; } catch(e){ _diag('notes node ' + n, e); }
       });
       const items = [], used = new Set();
       (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
@@ -219,7 +231,7 @@ const _ENTITY_KEYS = {
       // selectedId is per-device UI state — keep whatever THIS device had,
       // falling back to the first file if the selection was deleted remotely.
       let selectedId = null;
-      try { selectedId = (JSON.parse(localStorage.getItem('skt-notes-v2') || '{}')).selectedId ?? null; } catch(e){}
+      try { selectedId = (JSON.parse(localStorage.getItem('skt-notes-v2') || '{}')).selectedId ?? null; } catch(e){ _diag('notes selectedId', e); }
       if (selectedId && !items.find(i => i.id === selectedId)) selectedId = null;
       if (!selectedId) selectedId = (items.find(i => i.type === 'file') || {}).id || null;
       return JSON.stringify({ items, selectedId, authors: meta.authors || {} });
@@ -323,11 +335,13 @@ function _applyEntitySnapshot(k, snapVal){
           else merged[n] = localNodes[n];
         }
       });
-    } catch(e){}
+    } catch(e){ _diag('entity merge ' + k, e); }
   }
   _entityCache[k] = serverNodes;
   let assembled;
-  try { assembled = spec.assemble(merged); } catch(e){ return; }
+  // A throw here silently discards the ENTIRE remote update for this key —
+  // the most consequential swallow in the file, and previously invisible.
+  try { assembled = spec.assemble(merged); } catch(e){ _diag('assemble ' + k, e); return; }
   if (assembled === localStorage.getItem(k)) return; // nothing visible changed
   _remoteUpdate = true;
   try { localStorage.setItem(k, assembled); } finally { _remoteUpdate = false; }
@@ -507,7 +521,7 @@ function _applyRemoteKey(key, fbVal) {
         def._hiddenBooks = new Set(arr);
         if (def._body) def._render();
       }
-    } catch(_){}
+    } catch(e){ _diag('apply hidden books', e); }
     return;
   }
   // Same handling for hidden adventures.
@@ -520,7 +534,7 @@ function _applyRemoteKey(key, fbVal) {
         def._hiddenAdventures = new Set(arr);
         if (def._body) def._render();
       }
-    } catch(_){}
+    } catch(e){ _diag('apply hidden adventures', e); }
     return;
   }
 
@@ -612,7 +626,7 @@ function _reloadPanel(id) {
           def._render();
         }
       }
-    } catch(e) {}
+    } catch(e) { _diag('apply battlemap', e); }
     return;
   }
 
@@ -773,7 +787,7 @@ function _onListenError(label, path, err, reattach){
     if (n <= 3){
       const delay = 800 * n;
       console.warn('[SKT] re-attaching listener for ' + label + ' in ' + delay + 'ms (attempt ' + n + '/3)');
-      setTimeout(() => { try { reattach(); } catch(e){} }, delay);
+      setTimeout(() => { try { reattach(); } catch(e){ _diag('reattach ' + label, e); } }, delay);
       return;
     }
     console.error('[SKT] giving up on ' + label + '. If the database rules require auth, '

@@ -38,14 +38,23 @@
   let _accessTokenExpiry = 0;
   let _refreshPromise = null; // dedupe concurrent refreshes
 
+  // Record a handled failure into the diagnostics log (Settings ->
+  // Diagnostics) without changing behaviour. Null-guarded so a missing
+  // errors.js can never turn a swallowed error into a thrown one.
+  function _diag(what, e){
+    try { if (window.sktErrors) sktErrors.report('dropbox:' + what, e); } catch(_){}
+  }
+
   function _loadState() {
     try {
       const raw = localStorage.getItem(STATE_KEY);
       if (raw) _state = Object.assign(_state, JSON.parse(raw));
-    } catch(e){}
+    } catch(e){ _diag('loadState', e); }
   }
   function _saveState() {
-    try { localStorage.setItem(STATE_KEY, JSON.stringify(_state)); } catch(e){}
+    // Losing _state drops fileRevs, which doubles as the delete tombstone —
+    // the exact state whose absence caused the note-resurrection bug.
+    try { localStorage.setItem(STATE_KEY, JSON.stringify(_state)); } catch(e){ _diag('saveState', e); }
   }
   function _emit() { _statusListeners.forEach(fn => { try { fn(getStatus()); } catch(e){} }); }
 
@@ -560,7 +569,7 @@
         try {
           const text = await _download(entry.path_lower);
           if (text != null) item.content = text;
-        } catch(e) {}
+        } catch(e) { _diag('download ' + entry.path_lower, e); }
         _state.fileRevs[entry.path_lower] = entry.rev;
         changed = true;
       }
@@ -572,7 +581,7 @@
       try { localStorage.setItem('skt-notes-v2', JSON.stringify(data)); }
       catch(e){ _warnSync('quota', 'Couldn’t save synced notes locally — browser storage is full'); }
       if (typeof window.dropboxSync._onPullCallback === 'function') {
-        try { window.dropboxSync._onPullCallback(); } catch(e){}
+        try { window.dropboxSync._onPullCallback(); } catch(e){ _diag('onPull callback', e); }
       }
     }
   }
@@ -615,7 +624,9 @@
     if (!_pushTimers.size) return;
     const runs = [];
     _pushTimers.forEach(v => { clearTimeout(v.timer); runs.push(v.run); });
-    runs.forEach(run => { try { run(); } catch(e){} });
+    // Tab-close / unmount flush — a throw here silently drops the pending
+    // upload, so the note never reaches Dropbox.
+    runs.forEach(run => { try { run(); } catch(e){ _diag('flushPending', e); } });
   }
 
   // ─── Delete / move (propagate panel mutations to Dropbox) ─────────────────

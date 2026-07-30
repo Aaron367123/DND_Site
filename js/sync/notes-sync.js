@@ -79,14 +79,23 @@
   let _conflicts = [];
   function _emitConflicts(){ _conflictListeners.forEach(cb => { try { cb([..._conflicts]); } catch(e){} }); }
 
+  // Record a handled failure into the diagnostics log (Settings ->
+  // Diagnostics) without changing behaviour. Null-guarded so a missing
+  // errors.js can never turn a swallowed error into a thrown one.
+  function _diag(what, e){
+    try { if (window.sktErrors) sktErrors.report('vault:' + what, e); } catch(_){}
+  }
+
   function _loadState() {
     try {
       const raw = localStorage.getItem(SYNC_KEY);
       if (raw) _state = Object.assign(_state, JSON.parse(raw));
-    } catch(e){}
+    } catch(e){ _diag('loadState', e); }
   }
   function _saveState() {
-    try { localStorage.setItem(SYNC_KEY, JSON.stringify(_state)); } catch(e){}
+    // Quota failure here loses the path->id map and the rev tombstones that
+    // stop deleted notes resurrecting — worth a diagnostics entry.
+    try { localStorage.setItem(SYNC_KEY, JSON.stringify(_state)); } catch(e){ _diag('saveState', e); }
   }
   function _emit() { _statusListeners.forEach(fn => { try { fn(getStatus()); } catch(e){} }); }
 
@@ -124,7 +133,7 @@
           cur = items.find(x => x.id === cur.parent);
         }
         map[it.id] = _itemPath(it, items);
-      } catch(e){}
+      } catch(e){ _diag('path map ' + (it && it.id), e); }
     });
     return map;
   }
@@ -473,7 +482,9 @@
     // Snapshot the runs first — each run() deletes its own _pushTimers entry.
     const runs = [];
     _pushTimers.forEach(v => { clearTimeout(v.timer); runs.push(v.run); });
-    runs.forEach(run => { try { run(); } catch(e){} });
+    // This is the tab-close / unmount flush. A throw here means the pending
+    // note write is dropped and the edit only ever existed in localStorage.
+    runs.forEach(run => { try { run(); } catch(e){ _diag('flushPending', e); } });
   }
 
   // Periodic poll loop. Started via startPolling(getDataFn).
