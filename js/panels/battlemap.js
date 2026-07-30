@@ -653,6 +653,58 @@ registerPanel('battlemap',{
     ));
   },
 
+  // Centre of what this device is currently LOOKING AT, in stage coordinates.
+  //
+  // Deliberately routed through _stagePoint rather than doing the arithmetic
+  // here: that one function already accounts for the workspace zoom, the
+  // per-device view scale and the stage's rotation, and it is the conversion
+  // every pointer interaction uses. Reimplementing it would mean a second
+  // copy of the rotation maths to keep in step — and the rotated cases are
+  // exactly the ones that get silently wrong.
+  //
+  // Returns null when there's nothing sensible to measure.
+  _viewCenterStage(){
+    const b = this._body; if (!b) return null;
+    const scroll = b.querySelector('#map-scroll'); if (!scroll) return null;
+    const stage  = b.querySelector('#map-stage');  if (!stage)  return null;
+    const r = scroll.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+    const p = this._stagePoint(r.left + r.width / 2, r.top + r.height / 2, stage);
+    if (!p || !isFinite(p.x) || !isFinite(p.y)) return null;
+    return p;
+  },
+
+  // Pick a free cell centre at or near a stage point, spiralling outward so
+  // adding the whole party doesn't stack everyone on one square. Clamped to
+  // the map, so a view centre that sits off the edge still lands on it.
+  _freeCellNear(px, py){
+    const cs = this._csScreen();
+    const maxCol = Math.max(0, this._cols - 1), maxRow = Math.max(0, this._rows - 1);
+    const clampC = c => Math.max(0, Math.min(maxCol, c));
+    const clampR = r => Math.max(0, Math.min(maxRow, r));
+    const col0 = clampC(Math.floor(px / cs)), row0 = clampR(Math.floor(py / cs));
+    const taken = (c, r) => {
+      const x = (c + 0.5) * cs, y = (r + 0.5) * cs;
+      return this._tokens.some(t => t.x != null &&
+        Math.abs(t.x - x) < cs / 2 && Math.abs(t.y - y) < cs / 2);
+    };
+    if (!taken(col0, row0)) return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
+    // Rings outward from the centre cell. Bounded by the map, so this always
+    // terminates; if every cell is occupied we fall back to the centre.
+    const maxRing = Math.max(this._cols, this._rows);
+    for (let ring = 1; ring <= maxRing; ring++){
+      for (let dc = -ring; dc <= ring; dc++){
+        for (let dr = -ring; dr <= ring; dr++){
+          if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;   // ring edge only
+          const c = col0 + dc, r = row0 + dr;
+          if (c < 0 || r < 0 || c > maxCol || r > maxRow) continue;
+          if (!taken(c, r)) return { x: (c + 0.5) * cs, y: (r + 0.5) * cs };
+        }
+      }
+    }
+    return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
+  },
+
   // The part of the stage currently on screen, in STAGE coordinates, or null
   // when the whole stage should be rasterised instead.
   //
@@ -1507,7 +1559,7 @@ registerPanel('battlemap',{
       if(onMap)return '';
       // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.
       const iconHtml = renderIcon(p.icon||'⚔', p.name);
-      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at top-left, or drag onto the map for precise placement" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;cursor:grab">'
+      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at the centre of your current view, or drag onto the map for precise placement" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;cursor:grab">'
         +'<span class="map-party-icon">'+iconHtml+'</span>'
         +'<span>'+esc(p.name)+'</span>'
       +'</button>';
@@ -1840,13 +1892,22 @@ registerPanel('battlemap',{
         const pi=+btn.dataset.pi;
         const p=state.party[pi];
         if(!p)return;
-        // Place at first empty slot in the top row, in stage-pixel coords.
-        // Use on-screen cellSize so placement scales with the current zoom.
+        // Drop the token where the DM is LOOKING, not at the top-left corner
+        // and not at the middle of the whole map. Zoomed into one room, the
+        // token should land in that room — otherwise every add means hunting
+        // for the token and dragging it back across the map.
+        //
+        // _viewCenterStage handles the workspace zoom, the per-device view
+        // scale and rotation because it goes through _stagePoint. Falling back
+        // to the middle of the map keeps this sane if the view can't be
+        // measured (panel not laid out yet).
         const cs2=this._csScreen();
-        const usedCols=new Set(this._tokens.filter(t=>t.y!=null && t.y<cs2).map(t=>Math.round(t.x/cs2 - 0.5)));
-        let col=0; while(usedCols.has(col))col++;
-        const newX=(col + 0.5)*cs2, newY=cs2/2;
-        this._tokens.push({id:uid(),label:p.name,x:newX,y:newY,isPC:true,color:'#696969',size:1,dead:false,icon:p.icon||'⚔',portrait:p.portrait||null});
+        const centre = this._viewCenterStage()
+          || { x: this._cols*cs2/2, y: this._rows*cs2/2 };
+        // Spiral out from there so adding the whole party doesn't pile every
+        // member onto one square.
+        const spot = this._freeCellNear(centre.x, centre.y);
+        this._tokens.push({id:uid(),label:p.name,x:spot.x,y:spot.y,isPC:true,color:'#696969',size:1,dead:false,icon:p.icon||'⚔',portrait:p.portrait||null});
         this._renderTokens();this._saveMap();
         this._render(); // refresh party quick-add row
       }
