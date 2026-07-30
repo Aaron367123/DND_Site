@@ -75,6 +75,12 @@
 
   // ─── Public state helpers ─────────────────────────────────────────────────
   function isConfigured() {
+    // `?nosync=1` (see realtime.js) must cut EVERY remote write, not just
+    // Firebase — otherwise a local test session still pushes notes to the
+    // shared Dropbox folder. Reporting "not configured" is the right lever:
+    // every _api() call already checks it, and the UI renders a plain
+    // not-connected pill rather than a broken/error state.
+    if (typeof _syncDisabled === 'function' && _syncDisabled()) return false;
     const k = _appKey();
     const r = _refreshToken();
     return !!k && !!r &&

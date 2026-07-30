@@ -679,7 +679,7 @@ function _normSearchIdx(s) {
 // Escape hatch for a forgotten bump: Settings → "Rebuild data index".
 // 20260729a — _copy resolution added for races/backgrounds/decks/items.
 // 20260729b — lair actions / regional effects + spell class lists joined in.
-const DATA_STAMP   = '20260729b';
+const DATA_STAMP   = '20260729d';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
 const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';
@@ -1560,6 +1560,32 @@ async function _buildIndexFromFiles() {
             display = d.name + (parent?` (${parent})`:'');
             dedupe  = display;
             meta = 'Subrace · ' + parent;
+            // A few subraces are defined purely as "same as the parent race"
+            // — no entries, no ability/size/speed, and no fluff file either
+            // (MTF's Asmodeus tiefling is the only one left in the current
+            // data). Those rendered a completely empty card. Fall back to the
+            // parent's raw entry so the card shows the parent's traits; the
+            // meta line above already says which race it belongs to.
+            //
+            // Deliberately narrow: this only fires when the subrace supplies
+            // NOTHING renderable, so the other 97 subraces — which override
+            // or extend the parent — are untouched and can't double up on
+            // inherited text.
+            const _own = d.entries || d.ability || d.size || d.speed ||
+                         d.languageProficiencies || d.traitTags;
+            // `d.name` guard is load-bearing: races.json has 5 UNNAMED
+            // subraces (the base variants of Dragonborn / Half-Elf / Half-Orc
+            // / Human / Tiefling). addRef drops them on `!d.name`, which is
+            // correct — they're markers for "the parent race itself", not
+            // separate entries. Without this check the merge below would hand
+            // them the parent's name and resurrect all 5 as phantom rows.
+            if (!_own && parent && d.name) {
+              const pk = (parent + '|' + (d.raceSource || d.source || '')).toLowerCase();
+              const pRaw = (_refRawByCatKey['race'] || {})[pk];
+              // Merge parent under the subrace so the subrace's own identity
+              // (name/source/page) always wins over the inherited body.
+              if (pRaw) d = Object.assign({}, pRaw, d);
+            }
           } else {
             const sz = (Array.isArray(d.size)?d.size[0]:d.size) || '';
             const sizeName = _SIZE[sz] || sz || '';

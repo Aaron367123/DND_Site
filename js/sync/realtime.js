@@ -651,7 +651,37 @@ function _setSyncStatus(state) {
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
+
+// Local-only escape hatch: `?nosync=1` runs the whole app against localStorage
+// and never opens a Firebase connection. It sticks for the tab via
+// sessionStorage so in-app navigation (player view, pop-outs) can't silently
+// reconnect after the param falls off the URL.
+//
+// This exists because there was previously NO way to open the app without
+// joining the live campaign — and a throwaway browser profile doing exactly
+// that once pushed an empty battlemap over the real one. Any local
+// development, screenshot, or debugging session should use this.
+// `?nosync=0` clears the flag again.
+function _syncDisabled() {
+  try {
+    const q = new URLSearchParams(location.search).get('nosync');
+    if (q === '0' || q === 'false') { sessionStorage.removeItem('skt-nosync'); return false; }
+    if (q != null && q !== '') sessionStorage.setItem('skt-nosync', '1');
+    return sessionStorage.getItem('skt-nosync') === '1';
+  } catch(e) {
+    // sessionStorage can throw in hardened/private modes — fall back to the
+    // URL alone rather than failing open into a live connection.
+    return /[?&]nosync=(?!0|false)/.test(location.search);
+  }
+}
+
 function initRealtime() {
+  if (_syncDisabled()) {
+    _setSyncStatus('offline');
+    console.info('[SKT] nosync — local-only mode, Firebase never contacted. Reload with ?nosync=0 to rejoin the campaign.');
+    return;
+  }
+
   // Skip if config hasn't been filled in yet
   if (firebaseConfig.apiKey === 'REPLACE_ME') {
     _setSyncStatus('offline');
