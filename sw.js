@@ -1,7 +1,8 @@
 /*
  * SKT Campaign Workspace — service worker.
  *
- * Generated fields (BUILD, PRECACHE) are stamped by tools/stamp-build.js.
+ * Generated fields (BUILD, PRECACHE, DATA_STAMP) are stamped by
+ * tools/stamp-build.js.
  * DO NOT hand-edit them; run `node tools/stamp-build.js` instead.
  *
  * CACHING STRATEGY, and why each choice
@@ -15,10 +16,15 @@
  * js/ + styles/       → cache-first.
  *     Safe precisely because the URLs are content-hashed — a changed file is
  *     a different URL, so "cache forever" can never serve stale code.
- * data/*.json         → stale-while-revalidate.
- *     ~24 MB of 5etools data that changes rarely. Serve instantly from cache,
- *     refresh in the background, so an edited data file self-heals on the
- *     next load without any manual version bump.
+ * data/*.json         → cache-first, bucket keyed to DATA_STAMP.
+ *     ~30 MB of 5etools data that only changes when the dump is refreshed.
+ *     This was stale-while-revalidate, which sounds right but fires fetch()
+ *     even on a cache hit — so every page load re-downloaded all 289 files,
+ *     29.9 MB, per device, forever, to replace them with identical bytes.
+ *     Freshness instead comes from the bucket name: bump DATA_STAMP in
+ *     js/content/data-loader.js when the data changes and every client
+ *     re-fetches once. That stamp already gates the in-app index cache, so
+ *     there is exactly one thing to bump.
  * img/                → cache-on-use, hard-capped.
  *     3.7 GB on disk — precaching is impossible. Cache what's actually used
  *     and trim oldest-first so a session browsing maps can't fill the quota.
@@ -74,7 +80,15 @@ const PRECACHE = [
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build
-const DATA_CACHE  = 'skt-data-v1';          // survives builds; self-refreshing
+// Versioned by DATA_STAMP (stamped in from js/content/data-loader.js by
+// tools/stamp-build.js — do not edit by hand). The 5etools dump is immutable
+// between refreshes, so the bucket only needs to change when the data does.
+// Bumping DATA_STAMP already invalidates the in-app index cache; now it
+// invalidates the HTTP cache too, from the same single source of truth.
+// The activate handler deletes any skt-data-* bucket that isn't this one, so
+// the changeover is automatic.
+const DATA_STAMP  = '20260729d';
+const DATA_CACHE  = 'skt-data-' + DATA_STAMP;
 const IMG_CACHE   = 'skt-img-v1';           // survives builds; capped
 const IMG_MAX_ENTRIES = 120;
 // Separate bucket for browse thumbnails — small (~27 KB) and numerous, so
@@ -145,24 +159,6 @@ async function cacheFirst(request, cacheName){
   return res;
 }
 
-// `event` is threaded in so the background refresh can be registered with
-// event.waitUntil() — without it the browser is free to kill the worker as
-// soon as respondWith settles, silently cancelling the revalidation.
-async function staleWhileRevalidate(event, request, cacheName){
-  const cache = await caches.open(cacheName);
-  const hit = await cache.match(request);
-  const network = fetch(request).then(res => {
-    if (res && res.ok) return cache.put(request, res.clone()).then(() => res);
-    return res;
-  }).catch(() => null);
-  // Serve the cached copy immediately when we have one; the refresh continues
-  // in the background and lands for the next load.
-  if (hit){ event.waitUntil(network); return hit; }
-  const res = await network;
-  if (res) return res;
-  throw new Error('offline and uncached: ' + request.url);
-}
-
 async function networkFirst(request, cacheName){
   const cache = await caches.open(cacheName);
   try {
@@ -215,8 +211,19 @@ self.addEventListener('fetch', event => {
   }
 
   const p = url.pathname;
+  // Cache-first, NOT stale-while-revalidate.
+  //
+  // SWR fires fetch() unconditionally — including on a cache hit — so every
+  // single page load quietly re-downloaded the whole 5etools dump in the
+  // background: 289 files, 29.9 MB, per device, per load, forever. Measured
+  // against the live site. It bought nothing, because the payload is
+  // byte-identical until the dump is refreshed, and it competed for bandwidth
+  // with the index build (5.2 s cold on a real connection).
+  //
+  // Freshness now comes from DATA_CACHE being keyed to DATA_STAMP: change the
+  // data, bump the stamp, every client fetches once and then stops.
   if (/\/data\/.+\.json$/i.test(p)){
-    event.respondWith(staleWhileRevalidate(event, req, DATA_CACHE));
+    event.respondWith(cacheFirst(req, DATA_CACHE));
     return;
   }
   // Thumbnails get their OWN bucket with a much higher cap. They're ~27 KB

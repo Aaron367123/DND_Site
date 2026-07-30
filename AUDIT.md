@@ -751,6 +751,31 @@ checklist. Everything below was verified in the browser.
     Comment corrected, with the reason substring is the deliberate choice
     (subsequence would make "gnt" hit "aGeNT", "puNGeNT", …).
 
+- [x] ~~**Every page load silently re-downloaded the whole 5etools dump**~~ — `sw.js`, `tools/stamp-build.js` *(fixed + A/B measured)*
+  - `data/*.json` used stale-while-revalidate. SWR fires `fetch()`
+    unconditionally — including on a cache hit — so any load that rebuilt the
+    search index with a warm SW cache re-fetched all 289 files (29.9 MB) to
+    replace them with byte-identical content. Pure waste: the dump is
+    immutable between refreshes.
+  - **Careful with the evidence here.** DevTools shows a SW-intercepted
+    request as TWO entries (page→SW, SW→network), so "items.json appears
+    twice" does NOT by itself prove double bandwidth — that read was wrong at
+    first. The dev server's request log is the authoritative source, because
+    SW cache hits never reach it.
+  - **Fix applied:** cache-first, with `DATA_CACHE` keyed to `DATA_STAMP`
+    instead of a hand-written `v1`. `tools/stamp-build.js` now reads
+    `DATA_STAMP` out of `js/content/data-loader.js` and stamps it into
+    `sw.js`, so the stamp that already gates the in-app index cache gates the
+    HTTP cache too — one thing to bump, and a missing constant is a hard
+    error rather than a silent stale pin. The activate handler already
+    deletes non-current `skt-data-*` buckets, so the changeover is automatic.
+    Dead `staleWhileRevalidate` helper removed.
+  - **A/B, identical scenario (index cache wiped -> forced rebuild, data cache
+    warm), counted from the server log:**
+    - stale-while-revalidate: all 289 files re-fetched
+    - cache-first: **0 files** — confirmed the load really did rebuild
+      (`index ready (build) 16246 rows`), so the zero isn't trivial
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:

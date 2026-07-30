@@ -30,6 +30,7 @@ const crypto = require('crypto');
 const ROOT = path.resolve(__dirname, '..');
 const HTML = path.join(ROOT, 'skt-workspace.html');
 const SW   = path.join(ROOT, 'sw.js');
+const LOADER = path.join(ROOT, 'js', 'content', 'data-loader.js');
 const CHECK_ONLY = process.argv.includes('--check');
 
 const hash = buf => crypto.createHash('sha1').update(buf).digest('hex').slice(0, 10);
@@ -77,9 +78,24 @@ function main(){
   // by name. If an index.html is ever added, put it back here.
   const precache = ['skt-workspace.html'].concat(assets.map(a => a.url));
 
+  // The service worker's data bucket is keyed to DATA_STAMP so it invalidates
+  // exactly when the 5etools dump changes — mirroring it here keeps
+  // data-loader.js the single place anyone has to edit. Missing/renamed
+  // constant is a hard error: silently leaving a stale stamp in sw.js would
+  // pin every client to old data with no visible symptom.
+  const loaderSrc = fs.readFileSync(LOADER, 'utf8');
+  const stampMatch = /const DATA_STAMP\s*=\s*'([^']*)';/.exec(loaderSrc);
+  if (!stampMatch){
+    console.error('[stamp] could not find DATA_STAMP in js/content/data-loader.js');
+    process.exitCode = 1;
+    return;
+  }
+  const DATA_STAMP = stampMatch[1];
+
   let sw = fs.readFileSync(SW, 'utf8');
   const swBefore = sw;
   sw = sw.replace(/const BUILD\s*=\s*'[^']*';/, "const BUILD = '" + BUILD + "';");
+  sw = sw.replace(/const DATA_STAMP\s*=\s*'[^']*';/, "const DATA_STAMP  = '" + DATA_STAMP + "';");
   sw = sw.replace(
     /const PRECACHE\s*=\s*\[[\s\S]*?\];/,
     'const PRECACHE = [\n' + precache.map(u => "  '" + u + "',").join('\n') + '\n];'
