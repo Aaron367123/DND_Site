@@ -789,16 +789,12 @@ registerPanel('battlemap',{
     this._scrollRaf = requestAnimationFrame(() => {
       this._scrollRaf = null;
       if (!this._body || !this._visibleStageRect()) return;
-      const cs = this._csScreen();
-      const W = this._cols * cs, H = this._rows * cs;
+      // All three layers size and position themselves, so moving the viewport
+      // just means asking each to repaint.
       const gridC = this._body.querySelector('#map-canvas');
-      if (gridC) this._drawGrid(gridC, cs);          // sizes itself
-      // _drawAllStrokes reuses whatever transform was last left on the draw
-      // canvas, so it has to be re-sized/re-positioned first — unlike the grid
-      // and fog paths, which call _sizeLayer themselves.
-      const drawC = this._body.querySelector('#draw-canvas');
-      if (drawC){ this._sizeLayer(drawC, W, H); this._drawAllStrokes(); }
-      if (this._fog !== null) this._drawFog();       // sizes itself
+      if (gridC) this._drawGrid(gridC, this._csScreen());
+      this._drawAllStrokes();
+      if (this._fog !== null) this._drawFog();
     });
   },
 
@@ -839,11 +835,23 @@ registerPanel('battlemap',{
   _drawAllStrokes(){
     const b = this._body; if (!b) return;
     const canvas = b.querySelector('#draw-canvas'); if (!canvas) return;
-    // Context keeps the k-scale transform _sizeLayer left on it, so clearing
-    // must use STAGE dimensions — canvas.width is k× larger and would be
-    // scaled by k again, clearing k² the area.
-    const ctx = canvas.getContext('2d');
     const cs = this._csScreen();
+    // Size the layer HERE rather than trusting whatever transform was left on
+    // it, matching _drawGrid and _drawFog which have always been
+    // self-sufficient. This used to read the context directly, which was safe
+    // only while the canvas always covered the whole stage — a stale transform
+    // was still the right transform. Now that layers track the viewport, a
+    // redraw after the view moved would paint every stroke at the previous
+    // scroll offset. Four callers (the eraser, the remote-update repaint, the
+    // live-stroke preview and the rAF flush) reach here without sizing first,
+    // so the guarantee belongs in one place, not at each of them.
+    //
+    // Cheap to call repeatedly: _sizeLayer only reallocates when the backing
+    // dimensions actually change, which is the same reason _drawFog can do it
+    // on every fog-paint mousemove.
+    const ctx = this._sizeLayer(canvas, this._cols * cs, this._rows * cs);
+    // Clearing uses STAGE dimensions — canvas.width is k× larger and would be
+    // scaled by k again, clearing k² the area.
     ctx.clearRect(0, 0, this._cols * cs, this._rows * cs);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const scale = this._bgMapScale || 1;

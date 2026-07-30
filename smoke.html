@@ -372,6 +372,65 @@
     });
   });
 
+  test('strokes redraw at the right place after scrolling', async () => {
+    // Layers are sized to the viewport, so a redraw that doesn't re-size the
+    // canvas paints at the PREVIOUS scroll offset. Four callers reach
+    // _drawAllStrokes without sizing (eraser, remote repaint, live preview,
+    // rAF flush), which is why it sizes itself — this guards that.
+    return withPanel('battlemap', async (d, host) => {
+      const savedDrawings = JSON.parse(JSON.stringify(d._drawings || []));
+      const savedVS = d._viewScale;
+      try {
+        const scroll = host.querySelector('#map-scroll');
+        if (!scroll) return { skip: 'no scroll container' };
+        d._viewScale = 2.5; d._applyViewScale(2.5);
+        // Scroll as far as this map allows, then let the browser clamp —
+        // hard-coded offsets don't survive an arbitrary map size.
+        scroll.scrollLeft = 1e6; scroll.scrollTop = 1e6;
+        // Long enough to clear the 180ms requality debounce that
+        // _applyViewScale schedules. Measuring inside that window catches the
+        // layers mid-reallocation and reports an empty canvas — a race in the
+        // test, not a defect.
+        await wait(320);
+        const vis = d._visibleStageRect();
+        if (!vis) return { skip: 'whole stage visible at this size — nothing to offset' };
+        // Place the stroke through the middle of what is CURRENTLY visible, so
+        // the check works whatever map happens to be loaded. Fixed cell
+        // coordinates put it off-canvas on a small map and it renders nothing.
+        const SY = vis.y + vis.h / 2;
+        const X0 = vis.x + vis.w * 0.25, X1 = vis.x + vis.w * 0.75;
+        d._drawings = [{ p: [X0, SY, X1, SY], c: '#ff0000', s: 6 }];
+        d._drawAllStrokes();            // the un-sized path
+        await wait(40);
+        // Re-query: anything that re-rendered in the meantime replaced this
+        // node, and reading a detached canvas reports an empty one.
+        const c = host.querySelector('#draw-canvas');
+        if (!c) return { skip: 'draw canvas not present' };
+        const k = d._canvasK(vis.w, vis.h);
+        const ctx = c.getContext('2d');
+        let foundY = -1, best = 0;
+        for (let y = 0; y < c.height; y++) {
+          const row = ctx.getImageData(0, y, c.width, 1).data;
+          let n = 0;
+          for (let x = 0; x < c.width; x++) if (row[x * 4 + 3] > 8) n++;
+          if (n > best) { best = n; foundY = y; }
+        }
+        ok(best > 0, 'stroke did not render at all');
+        const wantY = (SY - vis.y) * k;
+        // Tolerance is half the stroke width: 6 stage px at k, round-capped,
+        // so the "busiest row" can sit anywhere inside the painted band.
+        const tol = Math.max(4, (6 * k) / 2 + 2);
+        ok(Math.abs(foundY - wantY) <= tol,
+          `stroke painted at y=${foundY}, expected ~${Math.round(wantY)} (tolerance ${Math.round(tol)}) — stale scroll offset`);
+        return `offset correct at 250% scrolled (±${Math.round(tol)}px)`;
+      } finally {
+        d._drawings = savedDrawings;
+        d._viewScale = savedVS;
+        try { d._applyViewScale(savedVS); d._drawAllStrokes(); } catch (e) {}
+      }
+    });
+  });
+
   test('choosing a map repaints the DM view', async () => {
     // Regression guard: the autoFit branch of _loadBgFromPath stopped calling
     // _applyBg/_render, so the grid re-fitted to the new map while the OLD

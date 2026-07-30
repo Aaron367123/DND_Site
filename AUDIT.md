@@ -928,6 +928,34 @@ same event, and a change to one is not a change to the others.
     covers and to sample five rows, keeping the busiest. Red-green re-verified
     against the reintroduced bug afterwards.
 
+- [x] ~~**Strokes redrawn after a scroll painted at the previous offset**~~ — `js/panels/battlemap.js` *(regression from the viewport-sizing change, caught by auditing it; fixed + red-green verified)*
+  - `_drawAllStrokes` took its context with `canvas.getContext('2d')` and
+    relied on whatever transform `_sizeLayer` had last left there. That was
+    safe while layers always covered the whole stage — a stale transform was
+    still the correct transform. Once layers track the viewport it is not:
+    four callers reach `_drawAllStrokes` without sizing first (the eraser at
+    `:908`, the remote repaint at `:1401`, the live-stroke preview at `:1522`,
+    the rAF flush at `:3508`), so any redraw after the view moved painted
+    every stroke at the old scroll offset.
+  - **Fix applied:** `_drawAllStrokes` now sizes its own layer, matching
+    `_drawGrid` and `_drawFog` which have always been self-sufficient. The
+    guarantee belongs in one place rather than at four call sites where the
+    fifth will be missed. Cheap — `_sizeLayer` only reallocates when the
+    backing dimensions actually change, the same reason `_drawFog` can call it
+    on every fog-paint mousemove.
+  - **Verified:** a stroke at a known stage position, drawn through the
+    un-sized path while scrolled to the far corner at 250%, lands within the
+    expected band (residual offset is the 6px round line cap at k=2.5, not
+    drift). New smoke check `strokes redraw at the right place after
+    scrolling`, red-green verified against the reintroduced bug.
+
+**The stale-node trap bit a third time.** Writing that smoke check, the first
+two versions failed with "stroke did not render at all" and both looked like
+product bugs. Cause: the test captured `#draw-canvas` before a wait, and
+anything that re-renders replaces that node, so it was reading a detached
+canvas. Same root cause as the two earlier false alarms this session. **When
+testing this panel, re-query every DOM node after any await.**
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:
