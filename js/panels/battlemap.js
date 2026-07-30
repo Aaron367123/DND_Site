@@ -434,18 +434,30 @@ registerPanel('battlemap',{
       _mapBgImage = img;
       this._bgMapNaturalW = img.naturalWidth;
       this._bgMapNaturalH = img.naturalHeight;
-      if (autoFit){
-        this._fitMapToView();
-      } else {
-        this._fitGridToBg();
-        const b = this._body;
-        const stage = b && b.querySelector('#map-stage');
-        if (stage){
-          const cs = this._csScreen();
-          this._applyBg(stage, this._cols*cs, this._rows*cs);
-        }
-        this._render();
+      // Pick the cell count / view scale for the new art…
+      if (autoFit) this._fitMapToView();   // also runs _fitGridToBg internally
+      else         this._fitGridToBg();
+      // …then paint it. BOTH branches must do this.
+      //
+      // The autoFit branch used to skip it and lean on _fitMapToView, which
+      // was fine while that ended in _applyZoomTransform — the old zoom
+      // resized the stage in pixels, so it called _applyBg on the way past.
+      // Per-device zoom replaced it with _applyViewScale, which only sets a
+      // CSS transform and therefore has no reason to touch the background.
+      // The repaint went with it, so choosing a map re-fitted the grid to the
+      // new image's dimensions while leaving the PREVIOUS map's art on the
+      // stage — an oversized grid hanging off the old picture, until the
+      // window was closed and reopened (mount() re-renders from scratch).
+      //
+      // Only the DM's own window showed it: every other view receives the
+      // change over BroadcastChannel or Firebase and re-renders on that path.
+      const b = this._body;
+      const stage = b && b.querySelector('#map-stage');
+      if (stage){
+        const cs = this._csScreen();
+        this._applyBg(stage, this._cols*cs, this._rows*cs);
       }
+      this._render();
     };
     img.onerror = () => { showToast('Could not load map image'); };
     // MUST be set before .src, and MUST stay set while images are served

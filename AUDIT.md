@@ -807,6 +807,33 @@ checklist. Everything below was verified in the browser.
     k=0.4, 1 and 1.176, and it derives stage size from `_cols`/`_csScreen()`
     plus the CSS `rect`, never from `canvas.width`.
 
+- [x] ~~**Choosing a map didn't repaint the DM's own view**~~ — `js/panels/battlemap.js` *(regression from the per-device zoom work; fixed + counterfactual measured)*
+  - User report: "I tried loading a new map in the DM view and only the map in
+    the player view changed, and I need to close the Battle Map window then
+    open it again."
+  - `_loadBgFromPath`'s `autoFit` branch called only `_fitMapToView()`, leaving
+    the `_applyBg()` + `_render()` to the non-autoFit branch. That was fine
+    while `_fitMapToView` ended in `_applyZoomTransform`, which resized the
+    stage in pixels and called `_applyBg` on the way past. Per-device zoom
+    replaced it with `_applyViewScale`, which only sets a CSS transform and so
+    has no reason to touch the background — and the repaint went with it.
+  - Result: picking a map re-fitted the grid to the NEW image's dimensions
+    while leaving the PREVIOUS map's art on the stage (the oversized grid
+    hanging off the old picture), until the window was closed and reopened —
+    `mount()` renders from scratch. Only the DM's own window was affected;
+    every other view gets the change over BroadcastChannel or Firebase and
+    re-renders on that path, which is why the player view looked correct and
+    the DM's didn't.
+  - **Fix applied:** both branches of `_loadBgFromPath` now `_applyBg()` +
+    `_render()`. Deliberately fixed there and not in `_fitMapToView`, which is
+    also called by the Fit button and the ResizeObserver — the art hasn't
+    changed on those paths and a full render would be waste. Verified the Fit
+    path still does not rebuild the stage node, and that `_viewScale` survives
+    the added `_render()` (`_setupMap` re-applies it).
+  - **Counterfactual, same panel, same session:** start on map A, switch the
+    path to B and run the OLD sequence (`_fitGridToBg` + `_fitMapToView`) —
+    stage still shows A. Add `_applyBg` + `_render` — stage shows B.
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:
