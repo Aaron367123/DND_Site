@@ -164,11 +164,29 @@ function _fromFields(f){
 
   const name = get('CharacterName', 'Character Name');
   const classLevel = get('ClassLevel', 'CLASS & LEVEL', 'Class & Level', 'Class and Level');
-  let cls = null, level = null;
+  let cls = null, level = null, classLevels = null;
   if (classLevel){
-    const m = String(classLevel).match(/^([A-Za-z ]+?)\s+(\d{1,2})/);
-    if (m){ cls = m[1].trim(); level = parseInt(m[2]); }
-    else { cls = String(classLevel).trim(); }
+    // Multiclass sheets write "Wizard 5 / Fighter 3". The old pattern was
+    // anchored at the start and stopped after the first pair, so a level-8
+    // character imported as a level-5 wizard with 5 hit dice and the fighter
+    // half thrown away. Collect every class/level pair instead.
+    const parts = String(classLevel).match(/[A-Za-z][A-Za-z ]*?\s+\d{1,2}\b/g) || [];
+    const split = parts.map(p => {
+      const m = p.match(/^([A-Za-z][A-Za-z ]*?)\s+(\d{1,2})$/);
+      return { cls: m[1].trim(), level: parseInt(m[2]) };
+    });
+    if (split.length){
+      // `cls` stays a BARE class name. The party panel matches it against the
+      // 5etools dataset with `d.name.toLowerCase() === clsName`, so storing
+      // the joined "Wizard 5 / Fighter 3" here would silently drop the whole
+      // class- and subclass-features tab. The split rides along on the sheet
+      // instead, which is what keeps feature gating honest (see _tabFeatures).
+      cls = split.reduce((a, b) => (b.level > a.level ? b : a)).cls;
+      level = split.reduce((s, p) => s + p.level, 0);
+      if (split.length > 1) classLevels = split;
+    } else {
+      cls = String(classLevel).trim();
+    }
   }
   const race       = get('Race');
   const background = get('Background');
@@ -193,6 +211,13 @@ function _fromFields(f){
   // Hit dice — D&D Beyond uses "HDTotal" or "Hit Dice" for current pool,
   // and the die size is determined by class. Fall back to deriving from
   // class + level if the field isn't directly present.
+  //
+  // Multiclass note: the pool size is now the full character level, which is
+  // right, but the die type is the primary class's. A Wizard 5 / Fighter 3
+  // really has 5d6 + 3d10 and the model holds a single die, so it imports as
+  // 8d6 — understated, and better than the 5d6 it used to get. Do NOT alias
+  // this template's "Total" field ("5d6 + 3d10") in here: _deriveHitDice reads
+  // it as the *current* pool, so it would report 5 of 8 dice remaining.
   const hdTotalRaw = get('HDTotal', 'HD Total', 'Hit Dice', 'HitDice');
   const hd = _deriveHitDice(cls, level, hdTotalRaw);
 
@@ -368,7 +393,7 @@ function _fromFields(f){
   console.log('[PDF Import] spell-related fields ('+spellLikeKeys.length+'), extracted spells ('+spellsUniq.length+'), slots:', spellSlots);
 
   const sheet = {
-    skills, saves, profBonus, passivePerception,
+    skills, saves, profBonus, passivePerception, classLevels,
     languages, attacks, spellSlots,
     spellSaveDc: _spellSaveDc, spellAtkBonus: _spellAtkBonus,
     spells: spellsUniq, bio,

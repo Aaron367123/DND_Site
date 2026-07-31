@@ -1146,3 +1146,49 @@ assertion ran before the callback did. Testing `_applyShortRest` directly shows
 the warlock restoring to 0 expended and a wizard with identical slots correctly
 keeping them spent. Same class of mistake as the stale-DOM-node reads: assert
 after the async boundary, not across it.
+
+### Three more sheets: Wizard 8, Wizard 5 / Fighter 3, Ranger 9
+
+**The ordinary slot table was never broken.** A wizard's sections read
+`"4 Slots OOOO"` — the format the original regex was written for. Wizard 8
+imports 4/3/3/2, exactly the RAW table, so the earlier warlock failure really
+was specific to the pact wording and the fix didn't need to go further.
+
+**Multiclass imported at the wrong level.** `"Wizard 5 / Fighter 3"` was matched
+by a start-anchored pattern that stopped after the first pair, so a level-8
+character became a level-5 wizard with 5 hit dice and no fighter half at all.
+Now every class/level pair is collected: the character level is their sum, the
+highest becomes the primary class, and the split is kept on
+`sheet.classLevels`. Verified against `"Fighter 1/Rogue 2/Wizard 3"` (no spaces
+around the slash) and `"Wizard 5 (Evocation) / Fighter 3"` too.
+
+`cls` deliberately stays a **bare class name**. `_tabFeatures` matches it with
+`d.name.toLowerCase() === clsName`, so storing the joined string would have
+silently emptied the class *and* subclass features tabs — the kind of quiet
+downgrade that only shows up when someone opens the tab weeks later.
+
+That created a second-order problem worth naming: with the level correctly
+raised to 8, gating class features by character level would have handed the
+wizard three levels of features she doesn't have. `_tabFeatures` now gates on
+the character's levels *in that class* when `sheet.classLevels` is present, and
+falls through to the total otherwise. Confirmed in the DOM: the multiclass
+renders a "level 5" pill and no 6th–8th-level content, while a pure Wizard 8
+still renders "level 8" and does. Race features are untouched — they never read
+that variable.
+
+**Ranger 9 imports only 1st-level slots, and that is correct.** RAW it should be
+4/3/2, but the sheet only prints spell sections the character actually has
+spells in, and this one has only 1st-level spells. Nothing to import.
+Multi-speed strings (`"40 ft. (Walking), 40 ft. (Climbing), …"`) resolve to 40.
+
+**Still unverified: expended slots.** All five sheets have every slot unspent
+(`OOOO`), so the expended-pip detection — `[●Xx✓✔■▲]` — has never once matched
+real input. It is equally consistent with "this template uses a glyph we don't
+list" and "this template never encodes expenditure at all", and the two can't
+be told apart without a sheet exported mid-adventuring-day. Defaulting to 0
+expended is the safe reading either way.
+
+Also confirmed: `CharacterName` reading `Zoey\(Rogue\` was purely the scratch
+Python extractor's regex stopping at PDF-escaped parens. With the unescape
+fixed it reads `Zoey(Rogue)`, which is what the app got via pdf.js all along.
+Good reminder to distrust the measuring instrument before the thing measured.

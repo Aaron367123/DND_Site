@@ -394,8 +394,18 @@ registerPanel('party',{
     if (typeof _5eData === 'undefined' || !_5eLoaded){
       return '<div class="sheet-empty">5e data still loading — open this tab again in a moment.</div>';
     }
-    const pcLevel = parseInt(c.level || (c.sheet && c.sheet.level) || 0) || 0;
+    const totalLevel = parseInt(c.level || (c.sheet && c.sheet.level) || 0) || 0;
     const clsName = String(c.cls || (c.sheet && c.sheet.class) || '').trim().toLowerCase();
+    // Class features are gated by levels in THAT class, not the character
+    // level. A Wizard 5 / Fighter 3 is level 8 but has only a 5th-level
+    // wizard's features; using the total would invent three she doesn't have.
+    // `sheet.classLevels` is only set by a multiclass PDF import, so a
+    // single-class character falls straight through to the total.
+    const splitLevels = (c.sheet && c.sheet.classLevels) || null;
+    const inClass = Array.isArray(splitLevels)
+      ? splitLevels.find(p => String(p.cls||'').trim().toLowerCase() === clsName)
+      : null;
+    const pcLevel = inClass ? inClass.level : totalLevel;
     const subName = String(c.subclass || '').trim().toLowerCase();
     const raceName= String(c.race || '').trim().toLowerCase();
 
