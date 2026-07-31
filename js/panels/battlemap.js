@@ -3616,6 +3616,35 @@ registerPanel('battlemap',{
       : setTimeout(run, 16);
   },
 
+  // Is this stage point under fog right now? Mirrors exactly how _drawFog
+  // composites: everything starts fogged, cells in _fog are revealed, then
+  // free-brush strokes apply in the order they were painted, last one wins.
+  //
+  // _renderTokens used to answer this itself with `_fog.has(floor(x/cs))`,
+  // which was wrong twice over. It ignored _fogStrokes, so a DM using the free
+  // brush revealed the room to the players but every monster standing in it
+  // stayed invisible — and, in the other direction, a free-brush HIDE over a
+  // cell-revealed square left the token showing. It also dropped the Align
+  // offset that fogPaint applies when building the cell key, so on any map
+  // whose grid has been aligned the lookup was a cell off.
+  _isFogged(px, py){
+    if (!this._fog) return false;               // fog disabled entirely
+    const cs = this._csScreen();
+    const sc = _mapBgImage ? (this._bgMapScale || 1) : 1;
+    const offX = (((this._gridOffsetX || 0) * sc) % cs + cs) % cs;
+    const offY = (((this._gridOffsetY || 0) * sc) % cs + cs) % cs;
+    const gx = Math.floor((px - offX) / cs), gy = Math.floor((py - offY) / cs);
+    let fogged = !this._fog.has(gx + ',' + gy);
+    for (const s of (this._fogStrokes || [])){
+      const x = s.xc * cs, y = s.yc * cs, r = s.r * cs;
+      const inside = s.shape === 'circle'
+        ? ((px - x) * (px - x) + (py - y) * (py - y)) <= r * r
+        : (Math.abs(px - x) <= r && Math.abs(py - y) <= r);
+      if (inside) fogged = (s.op === 'hide');
+    }
+    return fogged;
+  },
+
   _drawFog(forceResize){
     const b=this._body;if(!b)return;
     // Use a dedicated fog canvas layered above the grid canvas
@@ -3825,7 +3854,6 @@ registerPanel('battlemap',{
     // sees everything regardless. Fog set is keyed by "gx,gy" — derive cell
     // from the token's pixel center.
     const isPlayer = document.body.classList.contains('player-mode');
-    const fogSet = this._fog;
     // Batch all token/name/facing nodes into one fragment so the browser does
     // a single layout pass instead of one per appendChild (3 nodes × N tokens).
     const frag = document.createDocumentFragment();
@@ -3835,11 +3863,10 @@ registerPanel('battlemap',{
       // for any token that's somehow missing them (shouldn't happen post-migration).
       if (t.x == null) t.x = cs * size / 2;
       if (t.y == null) t.y = cs * size / 2;
-      if (isPlayer && fogSet && !t.isPC){
-        const gx = Math.floor(t.x / cs);
-        const gy = Math.floor(t.y / cs);
-        if (!fogSet.has(gx+','+gy)) return; // cell still fogged → hide from player
-      }
+      // Still fogged where this token stands → hide it from players. See
+      // _isFogged: it accounts for free-brush strokes and the Align offset,
+      // which the inline cell lookup here did not.
+      if (isPlayer && !t.isPC && this._isFogged(t.x, t.y)) return;
       const px=t.x;
       const py=t.y;
       // Visual diameter scales with the bg image so tokens stay proportional
@@ -4183,12 +4210,19 @@ registerPanel('battlemap',{
     // newly placed tokens land at the visible grid spacing.
     const cs=this._csScreen();
     const source=state.combatants.filter(c=>c.isPC).length?state.combatants.filter(c=>c.isPC):state.party;
-    source.forEach((c,i)=>{
+    // Place where the DM is LOOKING and spiral out, exactly like the
+    // one-at-a-time "add party member" button. That button was fixed to stop
+    // dropping tokens in the top-left corner; this bulk path kept the old
+    // top-row layout, so syncing the whole party still dumped everyone in the
+    // corner of the map and left the DM dragging them back one by one.
+    const centre = this._viewCenterStage()
+      || { x: this._cols*cs/2, y: this._rows*cs/2 };
+    source.forEach((c)=>{
       const name=c.name||c.label;
       if(!this._tokens.find(t=>t.label===name&&t.isPC)){
-        // Lay them out on a virtual top-row grid using cellSize as spacing.
-        const col = i % this._cols, row = Math.floor(i / this._cols);
-        const x = (col + 0.5) * cs, y = (row + 0.5) * cs;
+        // _freeCellNear reads this._tokens, and we push as we go, so each
+        // member takes the next free ring rather than stacking on the first.
+        const {x, y} = this._freeCellNear(centre.x, centre.y);
         // Pull the icon from the matching party member so tokens carry the
         // same glyph the user picked in the Party Tracker.
         const partyMatch = state.party.find(p => p.name === name);

@@ -1606,3 +1606,51 @@ Also verified while in here: `_drawFog` passes the full stage size to
 `_sizeLayer`, which clips to `_visibleStageRect` internally — so fog already
 inherits the viewport-sizing work from earlier this session and does not
 allocate a full-map backing store at high zoom.
+
+### Tokens
+
+**Syncing the party still dumped everyone in the top-left corner.** Earlier this
+session the one-at-a-time "add party member" button was changed to drop tokens
+where the DM is looking, spiralling out via `_viewCenterStage` + `_freeCellNear`,
+because placing them at the corner meant hunting each one down and dragging it
+back. `_syncParty` — the "↺ Sync tokens from Combat tracker" / load-initiative
+path, which is how you place the *whole party at once* — was not changed, and
+kept laying them along a virtual top row. So the fix covered the path that
+places one token and missed the path that places five.
+
+That is the fourth time this session a fix landed on one call site while a
+sibling kept the old behavior (duplicate numbering → `addMonster`; slug lookup →
+three more sites; and now my own token-placement fix). The pattern is always the
+same: the symptom is found in one function, fixed there, and never grepped for.
+
+`_syncParty` now uses the same centre-and-spiral placement. Verified with the
+view centre stubbed to a known point: all five land within two cells of it, none
+on the same square, none near the corner; a member added later goes to the
+*current* view centre rather than the old one; and with the view unmeasurable it
+falls back to the middle of the map.
+
+**Players couldn't see monsters standing on free-brush-revealed ground.** The
+renderer decided token visibility with its own inline lookup,
+`_fog.has(floor(x/cs) + ',' + floor(y/cs))`, which was wrong in two ways:
+
+- It ignored `_fogStrokes` entirely. A DM who reveals a room with the *free*
+  brush — a supported, first-class mode — showed the players the room and
+  nothing standing in it. In the other direction a free-brush HIDE over a
+  cell-revealed square left the token on screen, which leaks rather than hides.
+- It dropped the Align-tool grid offset that `fogPaint` applies when building
+  the same key, so on any map whose grid has been aligned the lookup was a cell
+  off.
+
+Both now go through `_isFogged(px, py)`, which mirrors `_drawFog`'s composition
+exactly: start fogged, cells in `_fog` reveal, then strokes apply in painted
+order with the last one covering the point winning. 13 assertions on the
+predicate (fog disabled, cells, free reveal, free hide over a cell, both
+chronological orders, circle radius, aligned-grid offset both sides) plus 6 on
+the renderer in a real player-mode DOM (DM sees all; players see only the PC
+when fogged; free-brush reveal exposes the orc; cell reveal exposes the troll; a
+later hide re-conceals; fog off shows everything).
+
+Noted, not changed: a token's `dead` flag is seeded from combatant HP when the
+token is created and thereafter only toggled by hand in the token panel, so it
+drifts once someone drops in combat. Auto-syncing it is a behavior change rather
+than a fix, and the DM has an explicit toggle.
