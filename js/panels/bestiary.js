@@ -511,10 +511,10 @@ registerPanel('bestiary', {
 
   _openStatBlock(mid){
     const m = this._data.monsters.find(x=>x.id===mid); if (!m) return;
-    let entry = null;
-    if (typeof _5eData !== 'undefined' && _5eLoaded){
-      entry = _5eData.find(d => d.cat==='monster' && d._slug === m.slug);
-    }
+    // Slug + source: slugs collide across books, so opening the stat block for
+    // a saved SKT tressym could show the BGDIA one. See sktFindMonster.
+    const entry = (typeof _5eData !== 'undefined' && _5eLoaded)
+      ? sktFindMonster(m.slug, m.source) : null;
     if (entry && typeof popOutDetail === 'function'){
       // Reuse the search popout — same header, image layout, source badge,
       // and "+ Add to combat" button users get from the search dropdown.
@@ -589,24 +589,37 @@ registerPanel('bestiary', {
         </select>
       </div>` : ''}
       <div id="best-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
+      <div id="best-pick-count" style="font-size:11px;color:var(--text-muted);padding:6px 2px 0"></div>
       <div class="modal-actions"><button class="btn" id="best-pick-close">Close</button></div>
     </div>`;
     document.body.appendChild(backdrop);
 
     const list = backdrop.querySelector('#best-pick-list');
+    const countEl = backdrop.querySelector('#best-pick-count');
     const folderSel = backdrop.querySelector('#best-pick-folder');
+    // Index into the pool that rendered the row, and state the cut-off. This
+    // modal was a copy of the combat picker and carried both of its bugs:
+    // looking rows up by slug reached the wrong source for the 273 colliding
+    // pairs, and the 200-row cap (200 of 4454 unfiltered) was silent, so a
+    // monster past the end looked like one the dataset didn't have.
+    const LIMIT = 200;
+    let pool = [];
     const renderList = (q)=>{
       const qn = (q||'').toLowerCase().trim();
-      const pool = qn
-        ? all.filter(d => d.name.toLowerCase().includes(qn) || (d.meta||'').toLowerCase().includes(qn) || (d._source||'').toLowerCase().includes(qn) || (_formatSource(d._source)||'').toLowerCase().includes(qn)).slice(0,200)
-        : all.slice(0,200);
-      list.innerHTML = pool.map(d => `<div class="bestiary-pick-row" data-slug="${esc(d._slug)}">
+      const matches = qn
+        ? all.filter(d => d.name.toLowerCase().includes(qn) || (d.meta||'').toLowerCase().includes(qn) || (d._source||'').toLowerCase().includes(qn) || (_formatSource(d._source)||'').toLowerCase().includes(qn))
+        : all;
+      pool = matches.slice(0, LIMIT);
+      list.innerHTML = pool.map((d, k) => `<div class="bestiary-pick-row" data-i="${k}">
         <div class="bestiary-pick-left">
           <span class="bestiary-pick-name">${esc(d.name)}</span>
           ${d._source ? `<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>` : ''}
         </div>
         <span class="bestiary-pick-meta">${esc(d.meta||'')}</span>
       </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No matches</div>';
+      if (countEl) countEl.textContent = matches.length > LIMIT
+        ? `Showing first ${LIMIT} of ${matches.length} matches — keep typing to narrow it down`
+        : `${matches.length} match${matches.length === 1 ? '' : 'es'}`;
     };
     renderList('');
 
@@ -624,8 +637,7 @@ registerPanel('bestiary', {
     backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
     list.addEventListener('click', e=>{
       const row = e.target.closest('.bestiary-pick-row'); if (!row) return;
-      const slug = row.dataset.slug;
-      const d = all.find(x=>x._slug===slug); if (!d) return;
+      const d = pool[parseInt(row.dataset.i)]; if (!d) return;
       const folderId = folderSel ? (folderSel.value || null) : null;
       this._data.monsters.push({
         id: uid(),

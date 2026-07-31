@@ -1093,7 +1093,11 @@ registerPanel('combat',{
       b.classList.add('drop-active');
     });
     b.addEventListener('dragleave', e=>{
-      if (e.target === b) b.classList.remove('drop-active');
+      // relatedTarget is what the pointer moved ONTO. Checking `e.target === b`
+      // instead meant leaving the panel from over a card — which is most of
+      // its area — fired dragleave on the card, failed the test, and left the
+      // drop highlight stuck on until the next dragover or drop.
+      if (!b.contains(e.relatedTarget)) b.classList.remove('drop-active');
     });
     b.addEventListener('drop', e=>{
       b.classList.remove('drop-active');
@@ -1104,15 +1108,18 @@ registerPanel('combat',{
         const bData = panelDefs.bestiary?._data;
         const m = bData?.monsters.find(x=>x.id===mid);
         if (!m){ showToast('Monster not found'); return; }
-        let entry = null;
-        if (typeof _5eData !== 'undefined' && _5eLoaded){
-          entry = _5eData.find(d => d.cat==='monster' && d._slug === m.slug);
-        }
+        // Match the source too. The bestiary saves one on every monster, and
+        // without it a slug-only lookup drops a different book's stat block
+        // into combat for any of the 273 colliding pairs — see sktFindMonster.
+        const entry = (_5eLoaded ? sktFindMonster(m.slug, m.source) : null);
         if (entry) this.addMonster(entry);
         else       this.addMonster({name:m.name, hp:m.hp||10, ac:m.ac||10, dex:10, _img:m.img||null});
       } else if (pi !== ''){
         e.preventDefault();
-        this._addPartyToCombat(parseInt(pi));
+        const idx = parseInt(pi);
+        // A malformed payload used to reach _addPartyToCombat as NaN, where
+        // state.party[NaN] is undefined and the very next line reads p.id.
+        if (Number.isInteger(idx) && state.party[idx]) this._addPartyToCombat(idx);
       }
     });
   },

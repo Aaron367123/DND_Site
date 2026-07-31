@@ -898,3 +898,27 @@ function createFloatingWindow(opts) {
 
   return { el: el, body: body, close: close };
 }
+
+// Resolve a monster row out of the 5etools index by slug.
+//
+// Slugs are NOT unique. 685 of the 4454 monster rows share one with another
+// source, and 273 of those pairs have genuinely different stat blocks — Space
+// Hamster is BAM 10 HP/15 AC and WDMM 1 HP/10 AC; tressym appears in both
+// BGDIA and SKT. A bare `find` by slug returns whichever book happens to sort
+// first, so half of every colliding pair was unreachable.
+//
+// Callers that stored a source alongside the slug (the bestiary saves one on
+// every monster) get an exact match. `source` is optional so older saved rows,
+// which predate that field, still resolve to something sensible instead of
+// nothing.
+function sktFindMonster(slug, source){
+  if (typeof _5eData === 'undefined' || !Array.isArray(_5eData) || !slug) return null;
+  const s = String(slug);
+  let first = null;
+  for (const d of _5eData){
+    if (d.cat !== 'monster' || d._slug !== s) continue;
+    if (source && d._source === source) return d;
+    if (!first) first = d;
+  }
+  return first;
+}

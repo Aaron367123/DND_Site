@@ -1470,3 +1470,47 @@ Worth noting as a process point: the duplicate-numbering bug was fixed one
 commit earlier and I did not check whether the same logic existed elsewhere. It
 did, in the path a DM uses far more often. Grep for the pattern, not just the
 symptom.
+
+### Bestiary drag-and-drop — and the same slug bug in two more places
+
+Following the drop path found the picker collision again, twice. The bestiary
+saves a `source` on every monster it stores, so both of these had the
+information needed to disambiguate and neither used it:
+
+- `combat._wireBestiaryDrop` resolved the dragged monster with
+  `_5eData.find(d => d._slug === m.slug)`. Dragging a saved **WDMM** Space
+  Hamster (1 HP/10 AC) into combat added **BAM**'s (10 HP/15 AC).
+- `bestiary._openStatBlock` did the same, so opening a saved SKT tressym's stat
+  block could show the BGDIA one.
+- `bestiary._openMonsterPicker` is a copy of the combat picker and carried
+  *both* of its bugs — slug lookup and the silent 200-row cap.
+
+All slug lookups now go through `sktFindMonster(slug, source)` in
+`js/core/utils.js`, which prefers an exact source match and falls back to the
+slug alone so saved rows predating the `source` field still resolve. The two
+pickers index into the pool that rendered the row.
+
+Verified end to end by dispatching real drop events: a saved WDMM hamster
+arrives as 1/10 and a saved BAM one as 10/15; the bestiary picker's second row
+saves `source: WDMM, 1hp/10ac`; and `sktFindMonster` returns the right entry for
+each source, falls back rather than returning null for an unknown source, and
+returns null for an unknown or empty slug.
+
+Two smaller things in the drop handler itself:
+
+- **The drop highlight could stick on.** `dragleave` only cleared it when
+  `e.target === b`, but leaving the panel from over a card — most of its area —
+  fires `dragleave` on the card. Now tests `!b.contains(e.relatedTarget)`,
+  which is what "actually left" means.
+- **A malformed party payload crashed.** `parseInt('garbage')` reached
+  `_addPartyToCombat` as NaN, where `state.party[NaN]` is undefined and the next
+  line reads `p.id`. Guarded; verified the drop is now a silent no-op.
+
+**Not fixed, noted:** `_wireBestiaryDrop` is only called from `mount()`, so the
+popped-out tracker is not a drop target. Adding the call is a one-liner, but
+cross-window HTML5 drag with custom MIME types can't be exercised here, and I
+would rather not ship behavior I can't verify.
+
+This is the third distinct copy of the "look it up by slug" mistake and the
+second copy of the 200-row cap. The pattern, not the symptom — as noted one
+section above, and evidently worth repeating.
