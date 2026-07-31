@@ -922,3 +922,182 @@ function sktFindMonster(slug, source){
   }
   return first;
 }
+
+// ─── Monster attack parsing ─────────────────────────────────────────────────
+// 5etools monster actions are free text, not structured damage. Everything the
+// DM needs is in there — to-hit, average, dice, damage type — it just has to be
+// read out of an English sentence. This turns one action into:
+//
+//   { name, toHit, save:{dc,ability,half}|null, parts:[{avg,dice,type}], alt:[…], altLabel }
+//
+// `parts` are ADDITIVE (a red dragon's bite is piercing *plus* fire, and the two
+// must be applied separately or a fire-resistant target halves the wrong half).
+// `alt` is an ALTERNATIVE — versatile weapons read "5 (1d8+1) slashing damage,
+// or 6 (1d10+1) slashing damage if used with two hands", and taking both would
+// double the hit. That exact mistake was made once already in the PDF importer.
+//
+// Returns [] for anything with no damage in it (Multiattack, Frightful
+// Presence, and so on) so callers can just concat.
+
+const SKT_DMG_TYPE_RE = /acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder/;
+
+// "19 (2d10 + 8) piercing damage" → {avg:19, dice:'2d10+8', type:'piercing'}
+//
+// Assembled from regex-literal .source rather than a quoted string: in a string
+// every backslash has to be doubled, and a single missed pair turns \d into a
+// literal "d" that still compiles and silently matches nothing.
+//
+// Built fresh per call, not hoisted — a shared /g/ regex carries lastIndex
+// between calls, so one parse would resume midway through the next.
+function _sktDamageRe(){
+  return new RegExp(
+    /(\d+)\s*\(([^)]*?)\)\s*/.source + '(' + SKT_DMG_TYPE_RE.source + ')' + /\s+damage/.source,
+    'gi');
+}
+
+function _sktDamageClauses(segment){
+  const out = [];
+  const re = _sktDamageRe();
+  let m;
+  while ((m = re.exec(segment))){
+    out.push({
+      avg: parseInt(m[1]),
+      dice: String(m[2]).replace(/\s+/g, ''),   // "2d10 + 8" → "2d10+8"
+      type: m[3].toLowerCase(),
+      at: m.index,
+    });
+  }
+  return out;
+}
+
+// Cut a description down to just the clause that carries the damage. Riders
+// live in later sentences — the Fire Elemental's touch sets the target alight
+// for "5 (1d10) fire damage" a sentence later, and a global scan would add that
+// to the hit. Stop at the first sentence break.
+function _sktDamageSegment(text, fromIdx){
+  const rest = text.slice(fromIdx);
+  const stop = rest.search(/\.\s|\.$/);
+  return stop === -1 ? rest : rest.slice(0, stop);
+}
+
+// Walk sentences forward from `fromIdx` and return the first one that actually
+// carries damage. Save wording varies far more than attack wording — the
+// damage may sit in the same sentence ("saving throw, taking 63 (18d6) fire
+// damage") or the next one ("saving throw. On a failed save, it takes 22
+// (4d10) psychic damage") — and requiring one phrasing missed 678 actions.
+// Bounded to a few sentences so a long paragraph can't donate unrelated
+// damage numbers to an attack.
+function _sktFirstDamageSentence(text, fromIdx){
+  const rest = text.slice(fromIdx);
+  const sentences = rest.split(/(?<=\.)\s+/);
+  for (let i = 0; i < Math.min(sentences.length, 3); i++){
+    if (_sktDamageClauses(sentences[i]).length) return sentences[i];
+  }
+  return '';
+}
+
+function sktParseMonsterAttack(action){
+  const name = String((action && action.name) || '').replace(/\s*\{@recharge[^}]*\}/gi, '').trim();
+  const desc = String((action && action.desc) || '');
+  if (!desc) return null;
+
+  // Save-based, in either of the two house styles the dataset mixes:
+  //   2014 — "…must make a DC 21 Dexterity saving throw, taking 63 (18d6)
+  //          fire damage on a failed save, or half as much on a success."
+  //   2024 — "dex DC 11, each creature in a 5-foot Emanation.  7 (2d6) Fire
+  //          damage.  Half damage." (abbreviated ability, no "saving throw")
+  // Anchoring on the save and then taking the first sentence that carries
+  // damage covers both; requiring the literal word "taking" covered neither
+  // reliably and missed 880 actions between them.
+  const ABIL = {str:'Strength', dex:'Dexterity', con:'Constitution',
+                int:'Intelligence', wis:'Wisdom', cha:'Charisma'};
+  let saveDc = null, saveAbility = null, saveAt = -1;
+  const save2014 = desc.match(/DC\s*(\d+)\s+(\w+)\s+saving throw/i);
+  const save2024 = desc.match(/(?:^|[\s(])(str|dex|con|int|wis|cha)\s+DC\s*(\d+)/i);
+  if (save2014){
+    saveDc = parseInt(save2014[1]); saveAbility = save2014[2]; saveAt = save2014.index;
+  } else if (save2024){
+    saveDc = parseInt(save2024[2]);
+    saveAbility = ABIL[save2024[1].toLowerCase()] || save2024[1];
+    saveAt = save2024.index;
+  }
+  if (saveDc != null){
+    const seg = _sktFirstDamageSentence(desc, saveAt);
+    const parts = _sktDamageClauses(seg);
+    if (parts.length){
+      return {
+        name, toHit: null,
+        save: { dc: saveDc, ability: saveAbility,
+                half: /half as much|half damage/i.test(desc) },
+        parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
+        alt: null, altLabel: '',
+      };
+    }
+  }
+
+  // Attack: "…: +14 to hit, … Hit: 19 (2d10 + 8) piercing damage plus 7 (2d6)
+  // fire damage."
+  const hitIdx = desc.search(/\bHit:/i);
+  if (hitIdx === -1) return null;
+  const seg = _sktDamageSegment(desc, hitIdx);
+  const clauses = _sktDamageClauses(seg);
+  if (!clauses.length) return null;
+
+  // Split additive from alternative by the connector in front of each clause.
+  // Anything introduced by "or" is a different way to make the SAME attack.
+  const parts = [], alt = [];
+  let altLabel = '';
+  clauses.forEach((c, i) => {
+    if (i === 0){ parts.push(c); return; }
+    const between = seg.slice(clauses[i-1].at, c.at);
+    if (/\bor\b/i.test(between)){
+      alt.push(c);
+      const tail = seg.slice(c.at).match(/damage\s+(if [^,.]*)/i);
+      if (tail && !altLabel) altLabel = tail[1].trim();
+    } else {
+      parts.push(c);   // "plus", "and"
+    }
+  });
+
+  // "+14 to hit" (2014) or "Melee Attack Roll: +7," (2024).
+  const toHitM = desc.match(/([+-]\s*\d+)\s+to hit/i)
+              || desc.match(/Attack Roll:\s*([+-]\s*\d+)/i);
+  return {
+    name,
+    toHit: toHitM ? toHitM[1].replace(/\s+/g, '') : null,
+    save: null,
+    parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
+    alt: alt.length ? alt.map(p => ({avg:p.avg, dice:p.dice, type:p.type})) : null,
+    altLabel: altLabel || (alt.length ? 'alternate' : ''),
+  };
+}
+
+// Every damaging action on a monster, across the action groups worth having in
+// a fight. Legendary actions are included because they are exactly the thing a
+// DM is juggling when a stat block gets busy.
+function sktParseMonsterAttacks(raw){
+  if (!raw) return [];
+  const groups = [
+    ['actions',           ''],
+    ['bonus_actions',     'bonus'],
+    ['legendary_actions', 'legendary'],
+    ['reactions',         'reaction'],
+  ];
+  const out = [];
+  groups.forEach(([key, tag]) => {
+    (raw[key] || []).forEach(a => {
+      const parsed = sktParseMonsterAttack(a);
+      if (parsed){ parsed.group = tag; out.push(parsed); }
+    });
+  });
+  return out;
+}
+
+// Monsters whose stat block says their strikes count as magical — "Its weapon
+// attacks are magical". Matters because a target resistant to nonmagical
+// bludgeoning/piercing/slashing should NOT halve these, and sktResistApplies
+// already knows how to honour that once it's told.
+function sktMonsterAttacksAreMagical(raw){
+  const blocks = [].concat(raw && raw.special_abilities || [], raw && raw.actions || []);
+  return blocks.some(b => /attacks?\s+(?:are|count as)\s+magical/i.test(String(b && b.desc || '')));
+}

@@ -1453,10 +1453,28 @@ registerPanel('combat',{
       showToast('5e data still loading — try again in a moment');
       return;
     }
-    const base = (c.baseName || c.name || '').toLowerCase();
-    const entry = _5eData.find(d => d.cat === 'monster' && d.name.toLowerCase() === base);
+    const entry = this.statBlockFor(c);
     if (!entry){ showToast('Stat block not found for ' + (c.baseName||c.name)); return; }
     if (typeof popOutDetail === 'function') popOutDetail(entry);
+  },
+
+  // The 5etools row a combatant came from. Prefers the slug+source recorded at
+  // add time — a bare name match picks whichever book sorts first, which for
+  // the 273 same-slug-different-stats pairs is a coin flip. Falls back to the
+  // name (with any "Ogre 2" group suffix stripped) for combatants added before
+  // the slug was stored, and for hand-typed ones.
+  statBlockFor(c){
+    if (!c || c.isPC) return null;
+    if (typeof _5eData === 'undefined' || !_5eLoaded) return null;
+    if (c._slug && typeof sktFindMonster === 'function'){
+      const hit = sktFindMonster(c._slug, c._source);
+      if (hit) return hit;
+    }
+    const cand = String(c.baseName || c.name || '').toLowerCase().trim();
+    const stripped = cand.replace(/\s+\d+$/, '');
+    return _5eData.find(d => d.cat === 'monster'
+      && (d._n === cand || d.name.toLowerCase() === cand
+          || (stripped && d.name.toLowerCase() === stripped))) || null;
   },
 
   // Concentration prompt — set or change the concentration spell. For PCs
@@ -1637,14 +1655,9 @@ registerPanel('combat',{
           if (c._immune === undefined && c._resist === undefined && c._vulnerable === undefined
               && typeof _5eData !== 'undefined' && _5eLoaded){
             // Combatants added before facets existed (or renamed by the DM)
-            // fall back to an index lookup. Try the raw name first, then with
-            // any trailing group number stripped — duplicates are named
-            // "Ogre 1" / "Ogre 2", which would otherwise never match "Ogre".
-            const cand = String(c.baseName || c.name || '').toLowerCase().trim();
-            const stripped = cand.replace(/\s+\d+$/, '');
-            const idx = _5eData.find(d => d.cat==='monster'
-              && (d._n === cand || d.name.toLowerCase() === cand
-                  || (stripped && d.name.toLowerCase() === stripped)));
+            // fall back to an index lookup — slug+source when it was recorded,
+            // otherwise the name with any "Ogre 2" group suffix stripped.
+            const idx = this.statBlockFor(c);
             if (idx) src = idx;
           }
           if (has(src._immune)){
@@ -2181,6 +2194,13 @@ registerPanel('combat',{
       initiative: initMod, // pre-fill with dex modifier; user can bump it before/during combat
       conditions: [],
       portrait,
+      // Remember exactly WHICH stat block this came from. Everything that
+      // needs to look the monster up again — resistances, the stat-block
+      // popout, the attack runner — otherwise has to guess from the name,
+      // and 685 monster slugs are shared across sources with 273 of those
+      // pairs having different numbers (see sktFindMonster).
+      _slug: m._slug || null,
+      _source: m._source || null,
       // Damage resistance/immunity/vulnerability, copied from the index row so
       // _applyHpDelta doesn't have to scan _5eData on every hit (and still
       // works if the dataset isn't loaded in a later session).

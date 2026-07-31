@@ -1898,3 +1898,65 @@ on the exposed surface matching the vault's.
 the fixture note removed, the fake rev/hash entries deleted, and the cursor
 nulled so the next real sync does a full list rather than trusting a cursor a
 stub minted.
+
+## Attack Runner (new panel, 2026-07-31)
+
+Collapses the per-attack ritual — read the stat block, work out the type, click
+the damage-type chip, type a number, find the card, click minus — down to two
+clicks: **Avg** or **🎲 Roll** on the attack, then the target. The damage type
+comes from the stat block, so resistances and immunities resolve without anyone
+selecting anything. That last part is also where the old flow quietly went
+wrong: the type chip keeps whatever it was set to last, so a DM in a hurry
+applies fire damage as slashing and never sees it.
+
+**Multi-type attacks apply as separate typed hits.** An Adult Red Dragon's bite
+is 2d10+8 piercing *plus* 2d6 fire, and a fire-resistant target must halve only
+the fire. Measured against a 19+7 bite: plain PC takes 26, fire-resistant takes
+**22** (19 + 3), piercing-resistant takes **16** (9 + 7), fire-immune takes
+**19**. Collapsing it into one number would be wrong in a way nobody notices.
+
+Save-based attacks get **Failed** / **Saved ½** buttons. The halving happens
+before resistance and rounds down at each step, per RAW: a 63-damage breath is
+63 failed, 31 saved, and 15 saved-and-fire-resistant.
+
+### The parser is the load-bearing part
+
+5etools monster actions are English prose, not structured damage. Everything
+needed is in there; it has to be read out of a sentence. Grammars handled:
+
+- 2014 attacks — `+14 to hit … Hit: 19 (2d10 + 8) piercing damage plus 7 (2d6) fire damage`
+- 2024 attacks — `Melee Attack Roll: +7, … Hit: …`
+- 2014 saves — `DC 21 Dexterity saving throw, taking 63 (18d6) fire damage … half as much`
+- 2024 saves — `dex DC 11, … 7 (2d6) Fire damage.  Half damage.`
+- versatile — `, or 6 (1d10+1) slashing damage if used with two hands` is an
+  **alternative**, offered separately, not added. The PDF importer made exactly
+  this mistake once already.
+- riders — the Fire Elemental sets its target alight for `5 (1d10) fire damage`
+  a sentence after the hit; a global scan would bill that as part of the strike.
+
+Coverage: **7871 of 8122** damage-bearing actions parse (97%). The first pass
+scored 7065 — the shortfall was two grammars I had written off after checking
+only monster-level coverage instead of action-level, which made a 13% gap look
+like 4%. The remaining 251 are genuinely ambiguous prose (grapple-then-ongoing
+damage, damage dealt to a *ship*, "takes the bite's damage") and are left
+unparsed on purpose: inventing attacks that don't exist is worse than omitting
+ones that do.
+
+Two supporting changes: `addMonster` now records `_slug`/`_source` on the
+combatant, and `combat.statBlockFor()` resolves by slug+source before falling
+back to the name — otherwise the panel would re-introduce the same-name
+ambiguity fixed earlier. `_openBestiaryDetail` and `_applyHpDelta`'s facet
+fallback share it.
+
+Also: monsters whose block says their strikes are magical are detected and set
+the attack property accordingly, so a target resistant to *nonmagical* damage
+correctly does not halve them. Verified both directions through the UI — a
+Couatl's magical bite ignores "piercing from nonmagical attacks" and lands 8
+while a Werewolf's ordinary bite against the same target is halved to 3.
+
+Verification: 11 parser assertions, 13 on damage application, 14 through the
+rendered DOM (real clicks on Avg/Roll/target/cancel/collapse, dock button opens
+the panel). Two test expectations were wrong rather than the code — a Werewolf
+biting a Werewolf deals 0 because both are immune to nonmagical piercing, which
+is right; and I reused a DOM node captured before a re-render, for the fourth
+time this session.
