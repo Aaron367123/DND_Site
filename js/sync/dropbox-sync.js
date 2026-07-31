@@ -24,8 +24,31 @@
   let _state = {
     cursor: null,       // for list_folder/continue incremental polling
     fileRevs: {},       // path_lower → Dropbox rev string
+    // path_lower → hash of the content as of the last time this device and
+    // Dropbox agreed on that file. Without it a poll cannot tell "the remote
+    // moved on" from "we both moved on", which is the difference between a
+    // safe update and destroying somebody's writing. Mirrors the
+    // fileMeta.hash the vault adapter has always kept.
+    fileHashes: {},
     lastSync: 0,
   };
+  // Two-sided changes waiting on the user. In-memory only, same as the vault
+  // adapter — a conflict that survives a reload would be stale.
+  let _conflicts = [];
+  let _conflictListeners = new Set();
+  function _emitConflicts(){
+    _conflictListeners.forEach(cb => { try { cb([..._conflicts]); } catch(e){} });
+  }
+  // FNV-1a, byte-for-byte the same function the vault adapter uses, so the
+  // two agree about what "unchanged" means.
+  function _hash(s){
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++){
+      h ^= s.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h.toString(16);
+  }
   let _pushTimers = new Map();
   let _pollTimer = null;
   let _statusListeners = new Set();
@@ -416,7 +439,14 @@
         }
         const prevRev = _state.fileRevs && _state.fileRevs[f.path_lower];
         if (prevRev !== f.rev) {
-          filesToFetch.push({ item: existing, path: f.path_lower, rev: f.rev });
+          // The remote moved. Whether it is safe to take it depends on
+          // whether WE moved too since the last agreement — compare the local
+          // content against the hash recorded when this device and Dropbox
+          // last matched. No recorded hash means we've never agreed on this
+          // path, so there is nothing local to protect.
+          const baseHash = _state.fileHashes && _state.fileHashes[f.path_lower];
+          const localChanged = baseHash != null && _hash(existing.content || '') !== baseHash;
+          filesToFetch.push({ item: existing, path: f.path_lower, rev: f.rev, localChanged });
         } else {
           fileRevs[f.path_lower] = f.rev;
         }
@@ -426,15 +456,42 @@
       async function worker() {
         while (cursor2 < filesToFetch.length) {
           const idx = cursor2++;
-          const { item, path, rev } = filesToFetch[idx];
+          const { item, path, rev, localChanged } = filesToFetch[idx];
           try {
             const text = await _download(path);
-            if (text != null) item.content = text;
+            if (text == null) continue;
+            // Both sides edited since they last agreed → do NOT pick a winner.
+            // This used to assign item.content unconditionally, so a remote
+            // edit silently destroyed local writing that hadn't been pushed
+            // yet (the push is debounced 800 ms, and a failed upload leaves it
+            // unsent indefinitely). The vault adapter has always queued this
+            // case for the user; Dropbox just overwrote.
+            if (localChanged && _hash(text) !== _hash(item.content || '')){
+              if (!_conflicts.some(c => c.itemId === item.id)){
+                _conflicts.push({
+                  itemId: item.id,
+                  path,
+                  name: item.name || path.split('/').pop().replace(/\.md$/, ''),
+                  appContent: item.content || '',
+                  diskContent: text,
+                  diskMtime: 0,
+                  ts: Date.now(),
+                });
+                console.warn('[dropboxSync] conflict queued for', path);
+              }
+              // Leave both the content and the recorded rev/hash alone so the
+              // next poll re-detects it until the user decides.
+              continue;
+            }
+            item.content = text;
             fileRevs[path] = rev;
+            _state.fileHashes[path] = _hash(text);
           } catch(e) { /* leave existing content on failure */ }
         }
       }
       await Promise.all(Array.from({length: Math.min(CONCURRENCY, filesToFetch.length)}, worker));
+      // One emit for the whole batch rather than per worker.
+      if (_conflicts.length) _emitConflicts();
 
       // Pass 3: reconcile files that exist locally but not in the Dropbox
       // listing. Two very different causes look identical here:
@@ -471,7 +528,7 @@
       // above) so tombstones don't accumulate forever. Keep pendingDeletes —
       // those are still being retried.
       Object.keys(fileRevs).forEach(p => {
-        if (!listedPaths.has(p) && !pending[p]) delete fileRevs[p];
+        if (!listedPaths.has(p) && !pending[p]){ delete fileRevs[p]; delete _state.fileHashes[p]; }
       });
 
       // Ensure selectedId still points at a real file.
@@ -568,7 +625,33 @@
         }
         try {
           const text = await _download(entry.path_lower);
-          if (text != null) item.content = text;
+          if (text != null) {
+            // Same two-sided-change guard as the full sync. This is the path
+            // that runs on every poll tick, so it is the one that actually
+            // ate local edits in practice.
+            const baseHash = _state.fileHashes && _state.fileHashes[entry.path_lower];
+            const localChanged = baseHash != null && _hash(item.content || '') !== baseHash;
+            if (localChanged && _hash(text) !== _hash(item.content || '')){
+              if (!_conflicts.some(c => c.itemId === item.id)){
+                _conflicts.push({
+                  itemId: item.id,
+                  path: entry.path_lower,
+                  name: item.name || entry.name.replace(/\.md$/i, ''),
+                  appContent: item.content || '',
+                  diskContent: text,
+                  diskMtime: 0,
+                  ts: Date.now(),
+                });
+                console.warn('[dropboxSync] conflict queued for', entry.path_lower);
+                _emitConflicts();
+              }
+              // Leave content, rev and hash untouched so the next tick
+              // re-detects this until the user picks a side.
+              continue;
+            }
+            item.content = text;
+            _state.fileHashes[entry.path_lower] = _hash(text);
+          }
         } catch(e) { _diag('download ' + entry.path_lower, e); }
         _state.fileRevs[entry.path_lower] = entry.rev;
         changed = true;
@@ -605,8 +688,17 @@
       _pushTimers.delete(file.id);
       try {
         const path = _buildPath(file, items, '.md');
-        const res = await _upload(path, file.content || '');
-        if (res && res.rev) _state.fileRevs[(res.path_lower || path.toLowerCase())] = res.rev;
+        const body = file.content || '';
+        const res = await _upload(path, body);
+        if (res && res.rev){
+          const key = res.path_lower || path.toLowerCase();
+          _state.fileRevs[key] = res.rev;
+          // A successful upload is the other moment the two sides agree, so
+          // it's the other place the baseline hash has to be recorded — miss
+          // it and the next poll reads every pushed edit as a local change
+          // and reports a conflict against our own write.
+          _state.fileHashes[key] = _hash(body);
+        }
         _state.lastSync = Date.now();
         _saveState();
       } catch(e) {
@@ -677,6 +769,14 @@
       } else if (res && res.metadata && res.metadata.rev){
         _state.fileRevs[newKey] = res.metadata.rev;
       }
+      // The baseline hash is keyed by path too, so it has to follow the move.
+      // Left behind, the new path would have a rev but no hash — which reads
+      // as "never agreed" and quietly disables conflict detection for that
+      // file until the next upload re-establishes it.
+      if (_state.fileHashes[oldKey] != null){
+        _state.fileHashes[newKey] = _state.fileHashes[oldKey];
+        delete _state.fileHashes[oldKey];
+      }
       // Folder move: move_v2 relocated every descendant server-side in one
       // call, but their cached revs were still filed under the OLD folder path.
       // Re-key each `oldKey/…` rev to `newKey/…` so a later sync looks up the
@@ -688,16 +788,66 @@
           delete _state.fileRevs[k];
         }
       });
+      Object.keys(_state.fileHashes).forEach(k => {
+        if (k.startsWith(oldPrefix)){
+          _state.fileHashes[newKey + '/' + k.slice(oldPrefix.length)] = _state.fileHashes[k];
+          delete _state.fileHashes[k];
+        }
+      });
       _saveState();
     } catch (e) {
       console.error('[dropboxSync] move failed', fromPath, '→', toPath, e.message);
     }
   }
 
+  // ─── Conflicts ────────────────────────────────────────────────────────────
+  // Same three functions, same shapes and same 'app' | 'disk' | 'manual'
+  // vocabulary as the vault adapter, so the notes panel's existing resolver
+  // works against either without knowing which one it is talking to.
+  function onConflict(cb){
+    _conflictListeners.add(cb);
+    try { cb([..._conflicts]); } catch(e){}
+    return () => _conflictListeners.delete(cb);
+  }
+  function getConflicts(){ return [..._conflicts]; }
+  async function resolveConflict(itemId, choice, opts){
+    const c = _conflicts.find(x => x.itemId === itemId);
+    if (!c) return false;
+    const data = opts && opts.data;
+    const item = data && data.items && data.items.find(i => i.id === itemId);
+    let finalContent;
+    if (choice === 'app')         finalContent = c.appContent;
+    else if (choice === 'manual') finalContent = (opts && typeof opts.manualContent === 'string') ? opts.manualContent : c.appContent;
+    else                          finalContent = c.diskContent;
+    if (item){
+      item.content = finalContent;
+      if (choice === 'disk') item.lineAuthors = [];
+    }
+    // Write the decision back so both sides agree again, and record the
+    // baseline hash from the SAME string we uploaded — otherwise the very
+    // next poll re-raises the conflict we just resolved.
+    try {
+      const res = await _upload(c.path, finalContent);
+      const key = (res && res.path_lower) || c.path.toLowerCase();
+      if (res && res.rev) _state.fileRevs[key] = res.rev;
+      _state.fileHashes[key] = _hash(finalContent);
+      _state.lastSync = Date.now();
+      _saveState();
+    } catch(e){
+      _diag('resolveConflict upload', e);
+      _warnSync('upload', 'Couldn’t write the resolved note to Dropbox — it stays unsynced for now');
+    }
+    _conflicts = _conflicts.filter(x => x.itemId !== itemId);
+    _emitConflicts();
+    _emit();
+    return true;
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   window.dropboxSync = {
     init, isConfigured, isConnected, isSupported, getStatus, onStatus,
     fullSync, pushFile, flushPending, deletePath, movePath, startPolling, stopPolling,
+    onConflict, getConflicts, resolveConflict,
     // buildPath is useful for callers that need to compute a Dropbox path
     // from an item + items[] (e.g. notes panel capturing path before
     // deletion). Exposes the same private helper used internally.

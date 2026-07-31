@@ -1832,3 +1832,69 @@ there is nothing inside. Files are unchanged.
 terminating on a cycle while still correctly identifying real
 descendants/non-descendants/self, normal nesting still bucketing normally
 (not flattened by the new guard), and all three delete-prompt wordings.
+
+### Dropbox sync had no conflict detection at all
+
+The vault adapter (`notes-sync.js`) reconciles properly: it keeps a
+last-known-good hash per file and compares three signals — disk changed, app
+changed, disk newer — so a two-sided edit is queued for the user instead of one
+side being picked silently. `dropbox-sync.js` had none of that. It uploaded
+with `mode: 'overwrite'` and, on the download side, did this:
+
+```js
+const text = await _download(path);
+if (text != null) item.content = text;
+```
+
+Unconditional. If the remote rev had moved, the local copy was replaced —
+whether or not this device had edits of its own that hadn't been pushed yet.
+That window is not small: the push is debounced 800 ms, and a *failed* upload
+leaves the edit unsent indefinitely (the code warns, but never retries). Both
+download paths had it, including the incremental cursor poll, which is the one
+that runs every tick and so is the one that actually ate work.
+
+Dropbox now keeps `_state.fileHashes` — the content hash as of the last time
+this device and Dropbox agreed — written at both moments they agree: after a
+successful upload and after a successful download. On a rev change it compares
+the local content against that baseline:
+
+| baseline vs local | remote vs local | outcome |
+|---|---|---|
+| unchanged | differs | take remote |
+| changed | same text | take remote (both made the same edit) |
+| changed | differs | **conflict — neither side written** |
+| no baseline recorded | — | take remote (nothing local to protect) |
+
+The conflict is queued in the same shape the vault uses and the adapter exposes
+`onConflict` / `getConflicts` / `resolveConflict` with identical signatures and
+the same `'app' | 'disk' | 'manual'` vocabulary. The resolver UI in the notes
+panel was already adapter-agnostic in everything but its wiring — it subscribed
+only to `notesSync` and called `notesSync.resolveConflict` directly, so a
+Dropbox conflict had nowhere to appear and no way to be resolved. It now
+subscribes to Dropbox too and routes resolution through `_activeSync()`.
+
+Three details that would each have re-broken it:
+
+- `resolveConflict` records the baseline hash from the *same string* it
+  uploads. Skip that and the next poll re-raises the conflict just resolved.
+- `pushFile` records the hash on upload. Skip that and every pushed edit reads
+  as a local change on the next poll — a conflict against our own write.
+- `movePath` re-keys hashes alongside revs, including the `oldPrefix/…` sweep
+  for folder moves. Left behind, the new path has a rev but no hash, which
+  reads as "never agreed" and silently disables detection for that file.
+
+Verified against the real code path with `window.fetch` fully stubbed — no
+request could reach Dropbox, and the endpoints hit are listed in the test output
+as proof (`/oauth2/token`, `/2/files/list_folder`, `/2/files/download`,
+`/2/files/upload`). 12 assertions across a four-round sequence: first pull
+establishes the baseline; a remote-only change applies cleanly; a two-sided
+change leaves the local edit intact and queues a conflict carrying both
+versions; resolving to the app version writes it back and clears the queue; and
+a following poll does not re-raise it. Plus 6 on the decision table itself and 6
+on the exposed surface matching the vault's.
+
+**Note:** that test wrote a fixture note and a fake path/cursor into the live
+`skt-notes-v2` and `skt-dropbox-sync-v1` keys. Both were cleaned afterwards —
+the fixture note removed, the fake rev/hash entries deleted, and the cursor
+nulled so the next real sync does a full list rather than trusting a cursor a
+stub minted.

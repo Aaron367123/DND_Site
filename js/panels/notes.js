@@ -220,8 +220,29 @@ registerPanel('notes', {
   // the vault menu for disaster recovery.
   _initDropbox(){
     const ds = window.dropboxSync; if (!ds) return;
+    if (this._dropboxWired) return;
+    this._dropboxWired = true;
     ds.init(() => this._editing);
     ds.onStatus(() => { if (this._body) this._renderVaultPill(); });
+    // Dropbox can raise the same two-sided-change conflicts the vault does,
+    // and the resolver banner is adapter-agnostic — it only ever needed
+    // subscribing to. Without this the Dropbox adapter would detect a
+    // conflict and have nowhere to show it.
+    if (typeof ds.onConflict === 'function'){
+      ds.onConflict(list => {
+        this._pendingConflicts = list || [];
+        if (this._body) this._render();
+      });
+    }
+  },
+
+  // Whichever sync adapter is driving the current view. The conflict resolver
+  // talks to this rather than hard-coding notesSync, which used to mean a
+  // Dropbox conflict could never be resolved from the UI.
+  _activeSync(){
+    if (this._view === 'dropbox' && window.dropboxSync && window.dropboxSync.isConfigured()) return window.dropboxSync;
+    if (window.notesSync && window.notesSync.isConnected && window.notesSync.isConnected()) return window.notesSync;
+    return null;
   },
 
   // Wire the local-folder adapter. Idempotent — only attaches once.
@@ -1399,8 +1420,9 @@ registerPanel('notes', {
         const v = backdrop.querySelector('#notes-conflict-manual').value;
         opts.manualContent = v;
       }
-      if (window.notesSync && typeof window.notesSync.resolveConflict === 'function'){
-        await window.notesSync.resolveConflict(c.itemId, choice, opts);
+      const adapter = this._activeSync();
+      if (adapter && typeof adapter.resolveConflict === 'function'){
+        await adapter.resolveConflict(c.itemId, choice, opts);
       }
       this._save();
       this._render();
