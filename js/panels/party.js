@@ -2637,10 +2637,10 @@ registerPanel('party',{
             const r = resolve(); if (!r) return;
             const cIdx = state.combatants.findIndex(co => co.id === cid);
             if (cIdx >= 0){
-              state.combatants.splice(cIdx, 1);
-              if (state.activeCombatantId === cid){
-                state.activeCombatantId = state.combatants[0]?.id || null;
-              }
+              // Combat owns the turn order — see combat.js _removeCombatantAt.
+              // Splicing here and resetting the active id to combatants[0]
+              // rewound the initiative order to the top mid-round.
+              panelDefs.combat._removeCombatantAt(cIdx);
               save(); this._render(); panelDefs.combat?._render?.();
             } else if (panelDefs.combat?._addPartyToCombat){
               panelDefs.combat._addPartyToCombat(r.idx);
@@ -2844,12 +2844,10 @@ registerPanel('party',{
         const c = state.party[i]; if (!c) return;
         const cIdx = state.combatants.findIndex(co => co.id === c.id);
         if (cIdx >= 0){
-          state.combatants.splice(cIdx, 1);
-          // If we removed the active turn, advance to the next combatant or
-          // clear if list is empty. Combat panel re-renders cleanly either way.
-          if (state.activeCombatantId === c.id){
-            state.activeCombatantId = state.combatants[0]?.id || null;
-          }
+          // The comment here used to promise it advanced to the next
+          // combatant; the code jumped to combatants[0]. Combat owns this —
+          // see combat.js _removeCombatantAt.
+          panelDefs.combat._removeCombatantAt(cIdx);
           save(); this._render(); panelDefs.combat?._render?.();
           showToast(c.name + ' removed from combat');
         } else {

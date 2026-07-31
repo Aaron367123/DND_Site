@@ -1192,3 +1192,63 @@ Also confirmed: `CharacterName` reading `Zoey\(Rogue\` was purely the scratch
 Python extractor's regex stopping at PDF-escaped parens. With the unescape
 fixed it reads `Zoey(Rogue)`, which is what the app got via pdf.js all along.
 Good reminder to distrust the measuring instrument before the thing measured.
+
+## Combat Tracker (2026-07-31)
+
+### Removing the active combatant corrupted the initiative order
+
+Killing a creature on its own turn and clicking ✕ — routine — left
+`state.activeCombatantId` pointing at something that no longer existed. Four
+removal paths, three different behaviors: `combat._remove` and
+`combat._removeFromCombatById` spliced and left the id dangling, while
+`party.js` had two copies that reset it to `combatants[0]`. One of those carried
+the comment "advance to the next combatant" above code that jumped to index 0.
+
+The dangling id was the damaging case, because of an accident in `_nextTurn`:
+
+```js
+let ni = state.combatants.findIndex(c => c.id === id) + 1;   // -1 + 1 === 0
+```
+
+A missing id produced index 0 — indistinguishable from a legitimate wrap except
+that the round never incremented. Measured on a four-creature order with Borg
+active:
+
+| | before | correct |
+|---|---|---|
+| remove active Borg | no turn marker at all | Cleo |
+| then Next | **Aria** — Cleo and Dax lose their turns | Dax |
+| remove the last creature in the order, then Next | Aria, **round stays 3** | Aria, round 4 |
+| condition hotkey with a dangling id | silently returns false | applies |
+
+The round counter stalling is the worst of these: it is silent, and it
+compounds every time the last creature in the order dies, so durations and
+"rounds elapsed" drift further from the truth the longer the fight runs.
+
+All four paths now funnel through `combat._removeCombatantAt(i)`. When the
+removed creature was active its turn is over, so the turn passes to whoever now
+occupies its slot; falling off the end means the round ended with it and ticks
+the round properly. Removing a non-active creature leaves the turn untouched,
+and emptying the list nulls the id.
+
+Two things fell out of doing it properly:
+
+- The round-boundary side effects (legendary/reaction refresh, buff duration
+  ticks) lived inline in `_nextTurn`, so the remove-the-last-creature path would
+  have skipped them all. Extracted to `_startRound(n)` and shared.
+- `_prevTurn` had the mirror-image bug: `findIndex(...) - 1` on a missing id
+  gives -2, which fell into the wrap branch and walked the round counter
+  *backwards*. It now treats "not found" explicitly, like `_nextTurn` does.
+
+### Buff expiry could leave a creature at negative HP
+
+`_startRound`'s expiry path backed a `+hp` buff out of both current and max with
+`Math.min(hpMax, hp - bf.hp)` and no lower bound. A creature at 5 of 20 HP when
+a +10 Aid-style buff expired landed at **-5**, which renders as a live creature
+with a nonsense bar rather than one that has dropped. Clamped at 0.
+
+Verified with ten assertions covering mid-order removal, last-in-order removal
+(round ticks), non-active removal (turn unmoved), removing the only combatant,
+`_prevTurn` with a dangling id, an ordinary wrap still ticking exactly once, and
+the buff clamp — plus real DOM clicks on the panel's ✕ and the party panel's
+"remove from combat", since both had their own copy of the logic.

@@ -1137,7 +1137,7 @@ registerPanel('combat',{
 
   _removeFromCombatById(id){
     const i=state.combatants.findIndex(c=>c.id===id);
-    if(i>=0){state.combatants.splice(i,1);save();this._render();}
+    if(i>=0){this._removeCombatantAt(i);save();this._render();}
   },
 
   _addPrompt(){
@@ -1208,7 +1208,7 @@ registerPanel('combat',{
     setTimeout(()=>backdrop.querySelector('#cmb-pick-search').focus(), 30);
   },
 
-  _remove(i){state.combatants.splice(i,1);save();this._render();},
+  _remove(i){this._removeCombatantAt(i);save();this._render();},
 
   // Duplicate a monster card. Re-uses the same baseName logic addMonster
   // uses so a second Goblin becomes "Goblin 2" (and the original gets
@@ -1238,54 +1238,102 @@ registerPanel('combat',{
     save(); this._render();
   },
 
+  // Everything that happens when the initiative order wraps. Split out of
+  // _nextTurn because removing the last combatant in the order also ends the
+  // round, and that path used to skip all of it.
+  _startRound(round){
+    state.combatRound = round;
+    showToast(`Round ${round}`);
+    this._log('— Round ' + round + ' —');
+    // Refresh legendary actions + reaction availability at the start of
+    // every round (5e rule: both refresh on a creature's own turn, but the
+    // common simplification is "everyone resets on round tick" — close
+    // enough for the table, and saves per-combatant accounting).
+    state.combatants.forEach(c => {
+      if (c.legendaryMax){ c.legendaryUsed = 0; }
+      if (c.reactionUsed){ c.reactionUsed = false; }
+    });
+    // Tick down buff durations. A buff at rounds==0 expires after this
+    // round's start — drop it. Negative/undefined durations are permanent
+    // (until manually removed) and don't tick.
+    state.combatants.forEach(c => {
+      if (!Array.isArray(c.buffs) || !c.buffs.length) return;
+      const next = [];
+      for (const bf of c.buffs){
+        if (bf.rounds == null || bf.rounds < 0) { next.push(bf); continue; }
+        // rounds is "ticks remaining". rounds<=1 → expires at THIS round
+        // tick. rounds>1 → decrement and keep.
+        if (bf.rounds <= 1){
+          this._log(`${c.name} — buff "${bf.label||'buff'}" expired`);
+          // Reverse the AC/HP delta on expiry so the chip removal mirrors
+          // a manual ×-click. HP delta backs out of both current and max.
+          if (bf.ac){ c.ac = (c.ac || 0) - bf.ac; }
+          if (bf.hp){
+            c.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
+            // Clamp at 0. A creature that was already hurt when a +HP buff
+            // expired went NEGATIVE here, which reads as a live creature with
+            // a nonsense bar rather than one that has dropped.
+            c.hp    = Math.max(0, Math.min(c.hpMax, (c.hp || 0) - bf.hp));
+          }
+          continue;
+        }
+        next.push({...bf, rounds: bf.rounds - 1});
+      }
+      c.buffs = next;
+    });
+  },
+
   _nextTurn(){
     if(!state.combatants.length){ showToast('No combatants yet'); return; }
-    let id=state.activeCombatantId,round=state.combatRound;
-    let newRound = false;
-    if(!id){id=state.combatants[0].id;round=Math.max(1,round);}
-    else{
-      let ni=state.combatants.findIndex(c=>c.id===id)+1;
-      if(ni>=state.combatants.length){ni=0;round++;newRound=true;showToast(`Round ${round}`);}
-      id=state.combatants[ni].id;
-    }
-    state.activeCombatantId=id;state.combatRound=round;
-    if (newRound){
-      this._log('— Round ' + round + ' —');
-      // Refresh legendary actions + reaction availability at the start of
-      // every round (5e rule: both refresh on a creature's own turn, but the
-      // common simplification is "everyone resets on round tick" — close
-      // enough for the table, and saves per-combatant accounting).
-      state.combatants.forEach(c => {
-        if (c.legendaryMax){ c.legendaryUsed = 0; }
-        if (c.reactionUsed){ c.reactionUsed = false; }
-      });
-      // Tick down buff durations. A buff at rounds==0 expires after this
-      // round's start — drop it. Negative/undefined durations are permanent
-      // (until manually removed) and don't tick.
-      state.combatants.forEach(c => {
-        if (!Array.isArray(c.buffs) || !c.buffs.length) return;
-        const next = [];
-        for (const bf of c.buffs){
-          if (bf.rounds == null || bf.rounds < 0) { next.push(bf); continue; }
-          // rounds is "ticks remaining". rounds<=1 → expires at THIS round
-          // tick. rounds>1 → decrement and keep.
-          if (bf.rounds <= 1){
-            this._log(`${c.name} — buff "${bf.label||'buff'}" expired`);
-            // Reverse the AC/HP delta on expiry so the chip removal mirrors
-            // a manual ×-click. HP delta backs out of both current and max.
-            if (bf.ac){ c.ac = (c.ac || 0) - bf.ac; }
-            if (bf.hp){
-              c.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
-              c.hp    = Math.min(c.hpMax, (c.hp || 0) - bf.hp);
-            }
-            continue;
-          }
-          next.push({...bf, rounds: bf.rounds - 1});
-        }
-        c.buffs = next;
-      });
+    const id = state.activeCombatantId;
+    const cur = id ? state.combatants.findIndex(c => c.id === id) : -1;
+    if (cur < 0){
+      // Either combat hasn't started, or the active combatant is no longer in
+      // the list (a sync or a restore can drop it). Start at the top and leave
+      // the round alone. This used to be reached by accident — findIndex
+      // returned -1, +1 made it 0 — which is how removing the active creature
+      // silently rewound the whole order to the first combatant.
+      state.activeCombatantId = state.combatants[0].id;
+      state.combatRound = Math.max(1, state.combatRound || 0);
+    } else {
+      let ni = cur + 1;
+      if (ni >= state.combatants.length){
+        ni = 0;
+        this._startRound((state.combatRound || 1) + 1);
+      }
+      state.activeCombatantId = state.combatants[ni].id;
     }
     save();this._render();
+  },
+
+  // Remove a combatant without corrupting the turn order. Every removal path
+  // funnels through here — the panel's ✕, the group card, and the party
+  // panel's two "remove from combat" entry points. They previously did three
+  // different things: two left `activeCombatantId` pointing at a creature that
+  // no longer existed, and two reset it to combatants[0], which rewinds the
+  // order to the top mid-round.
+  //
+  // When the removed creature was the active one its turn is over, so the turn
+  // passes to whoever now occupies its slot. Falling off the end of the list
+  // means the round ended with it, so the round has to tick — otherwise the
+  // counter stalls forever if the last creature in the order keeps dying.
+  _removeCombatantAt(i){
+    const c = state.combatants[i];
+    if (!c) return;
+    const wasActive = state.activeCombatantId === c.id;
+    state.combatants.splice(i, 1);
+    if (!wasActive) return;
+    if (!state.combatants.length){
+      state.activeCombatantId = null;
+      return;
+    }
+    let ni = i;
+    if (ni >= state.combatants.length){
+      ni = 0;
+      this._startRound((state.combatRound || 1) + 1);
+    }
+    state.activeCombatantId = state.combatants[ni].id;
+    this._log(`${c.name} removed — turn passes to ${state.combatants[ni].name}`);
   },
 
   // Step back one turn. Mirror of _nextTurn but in reverse. Crossing into
@@ -1293,13 +1341,17 @@ registerPanel('combat',{
   // legendary side-effects (those are state mutations, not the timeline).
   _prevTurn(){
     if (!state.combatants.length){ showToast('No combatants yet'); return; }
-    let id = state.activeCombatantId;
+    const id = state.activeCombatantId;
     let round = state.combatRound || 1;
-    if (!id){
-      // No active turn — set to last combatant.
+    const cur = id ? state.combatants.findIndex(c => c.id === id) : -1;
+    if (cur < 0){
+      // No active turn, or the active combatant is gone — go to the last one
+      // and leave the round alone. Reaching this through findIndex returning
+      // -1 used to fall into the wrap branch below and walk the round counter
+      // backwards for no reason.
       state.activeCombatantId = state.combatants[state.combatants.length-1].id;
     } else {
-      let pi = state.combatants.findIndex(c => c.id === id) - 1;
+      let pi = cur - 1;
       if (pi < 0){
         if (round <= 1){ showToast('Already at start of round 1'); return; }
         pi = state.combatants.length - 1;
