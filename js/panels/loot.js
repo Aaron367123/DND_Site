@@ -51,16 +51,70 @@ registerPanel('loot',{
     return this._lootTablesPromise;
   },
 
-  // "5d6", "6d6*100", "2d6*10", "1d6" — the only shapes these tables use.
+  // "5d6", "6d6*100", "2d6*10", "1d4-1" — every shape these tables actually
+  // use. The trailing +/- matters: the 2024 CR 0-4 hoard is "1d4-1" magic
+  // items, so without it that band would always hand out at least one.
   // A bare number is allowed so a fixed quantity can't blow up the roll.
   _rollDice(expr){
     if (typeof expr === 'number') return expr;
-    const m = /^\s*(\d+)\s*d\s*(\d+)\s*(?:\*\s*(\d+))?\s*$/i.exec(String(expr||''));
+    const m = /^\s*(\d+)\s*d\s*(\d+)\s*(?:\*\s*(\d+))?\s*(?:([+-])\s*(\d+))?\s*$/i.exec(String(expr||''));
     if (!m) { const n = parseInt(expr, 10); return isNaN(n) ? 0 : n; }
     const count = +m[1], sides = +m[2], mult = m[3] ? +m[3] : 1;
     let total = 0;
     for (let i = 0; i < count; i++) total += 1 + Math.floor(Math.random() * sides);
-    return total * mult;
+    total *= mult;
+    if (m[4]) total += (m[4] === '-' ? -1 : 1) * (+m[5]);
+    return Math.max(0, total);
+  },
+
+  // Resolve a magic-item table row to a name.
+  //
+  // 8% of the 2014 rows (29 of 364) and 14% of the 2024 rows carry no literal
+  // `item` — they carry a `choose`, and the first version of this roller
+  // silently dropped every one of them, so roughly one magic item roll in
+  // twelve produced nothing at all. Four shapes exist:
+  //
+  //   fromItems    an explicit list        → pick one, exact
+  //   fromMatching {rarity}                → any magic item of that rarity;
+  //                                          resolved against the loaded 5e
+  //                                          index, which is what the 2024
+  //                                          byLevel tables are built on
+  //   fromGroup    a named family          → e.g. "Potion of Resistance", where
+  //   fromGeneric  a variant pattern         the DM picks the damage type
+  //
+  // The last two are deliberately NOT auto-resolved: expanding them properly
+  // needs the variant machinery in the data loader, and naming the family with
+  // "(choose)" tells the DM exactly what to decide. Silently inventing one
+  // member of the family would be worse than asking.
+  _resolveMagicRow(row){
+    if (!row) return null;
+    const ch = row.choose;
+    if (ch && Array.isArray(ch.fromItems) && ch.fromItems.length){
+      return ch.fromItems[Math.floor(Math.random() * ch.fromItems.length)];
+    }
+    if (ch && ch.fromMatching && ch.fromMatching.rarity){
+      const want = String(ch.fromMatching.rarity).toLowerCase();
+      // Honour the hidden-sources filter, the same way the item search in this
+      // panel does. The DM curates which books are in play; a roller that
+      // quietly hands out an item from a book they switched off is worse than
+      // a smaller pool.
+      const isHidden = (typeof window.SKT_IS_SOURCE_HIDDEN === 'function')
+        ? window.SKT_IS_SOURCE_HIDDEN : () => false;
+      const pool = (typeof _5eData !== 'undefined' && Array.isArray(_5eData))
+        ? _5eData.filter(d => d.cat === 'item'
+            && String(d._rarity || '').toLowerCase() === want
+            && !isHidden(d._source))
+        : [];
+      if (pool.length) return pool[Math.floor(Math.random() * pool.length)].name;
+      return 'Random ' + want + ' magic item';       // index not loaded, or all hidden
+    }
+    if (ch && Array.isArray(ch.fromGroup) && ch.fromGroup.length){
+      return ch.fromGroup[Math.floor(Math.random() * ch.fromGroup.length)] + ' (choose)';
+    }
+    if (ch && Array.isArray(ch.fromGeneric) && ch.fromGeneric.length){
+      return ch.fromGeneric[Math.floor(Math.random() * ch.fromGeneric.length)] + ' (choose)';
+    }
+    return row.item || null;
   },
 
   // d100 against a [{min,max,...}] table. Returns the matching row.
@@ -72,9 +126,9 @@ registerPanel('loot',{
   // gems/artObjects are listed twice — once from the DMG and once from the
   // 2024 revision — so `type` alone is ambiguous. Prefer the DMG list, which
   // is what the hoard tables' page references point at.
-  _lootListByType(arr, type){
+  _lootListByType(arr, type, edition){
     const hits = (arr || []).filter(x => String(x.type) === String(type));
-    return hits.find(x => x.source === 'DMG') || hits[0] || null;
+    return hits.find(x => x.source === (edition || 'DMG')) || hits[0] || null;
   },
 
   _clean(s){
@@ -89,9 +143,29 @@ registerPanel('loot',{
     return (typeof _stripTags === 'function' ? _stripTags(str) : str).trim();
   },
 
+  // Which rulebook the tables come from. 'DMG' is the 2014 Dungeon Master's
+  // Guide, 'XDMG' the 2024 revision — loot.json ships both, and they are
+  // genuinely different designs rather than a re-tune:
+  //
+  //             2014 (DMG)                     2024 (XDMG)
+  //   coins     4 lines, cp/sp/gp/pp           one gp line
+  //   contents  29-row d100: gems, art,        one row: 1d3-ish magic items
+  //             and magic tables A-I           drawn by character level
+  //   gems/art  yes                            not in the hoard table
+  //
+  // 2024 is not the more restrained of the two — its CR 5-10 hoard averages
+  // 4,400 gp against 2014's 3,857.
+  _lootEdition(){
+    try { return localStorage.getItem('skt-loot-edition') === 'XDMG' ? 'XDMG' : 'DMG'; }
+    catch(e){ return 'DMG'; }
+  },
+  _setLootEdition(ed){
+    try { localStorage.setItem('skt-loot-edition', ed === 'XDMG' ? 'XDMG' : 'DMG'); } catch(e){}
+  },
+
   // Roll one treasure result. Returns {coins:{cp,sp,...}, items:[{name,qty,value}]}
   // without touching panel state — the caller decides whether to keep it.
-  _rollTreasure(kind, crBand){
+  _rollTreasure(kind, crBand, edition){
     const T = this._lootTables; if (!T) return null;
     const coins = {};
     const bucket = new Map();   // name → {name, qty, value}
@@ -105,22 +179,15 @@ registerPanel('loot',{
       Object.keys(obj || {}).forEach(c => { coins[c] = (coins[c] || 0) + this._rollDice(obj[c]); });
     };
 
-    // Pin the edition. loot.json carries BOTH the 2014 tables (source 'DMG')
-    // and the 2024 revision ('XDMG'), and they use identical band names, so a
-    // plain find-by-CR picks whichever the file happens to list first. That
-    // worked only because DMG currently occupies indices 0–3; a regenerated
-    // dump with the order flipped would silently switch editions and nothing
-    // on screen would look wrong.
-    //
-    // 2014 is the deliberate choice: its hoards carry gems, art objects and
-    // the A–I magic item tables, which is what the rest of this roller
-    // implements. The 2024 hoard is a different shape — one row, pure gp, and
-    // 1d3 magic items drawn by character level — and would need its own
-    // handling for the `randomByLevel` type before it could be offered.
-    const EDITION = 'DMG';
+    // Pin the edition explicitly. Both editions use identical band names
+    // ("Challenge 5-10"), so a plain find-by-CR returns whichever the file
+    // happens to list first — which gave 2014 only because DMG currently
+    // occupies indices 0-3. A regenerated dump with the order flipped would
+    // have switched editions silently, with nothing on screen looking wrong.
+    const EDITION = edition === 'XDMG' ? 'XDMG' : 'DMG';
     const set = (kind === 'hoard' ? T.hoard : T.individual) || [];
     const band = set.find(x => x.source === EDITION && x.crMin === crBand.min)
-              || set.find(x => x.crMin === crBand.min)   // dump without the 2014 tables
+              || set.find(x => x.crMin === crBand.min)   // dump missing that edition
               || set[0];
     if (!band) return null;
 
@@ -129,7 +196,7 @@ registerPanel('loot',{
       const row = this._rollOnTable(band.table);
       if (row){
         if (row.gems){
-          const list = this._lootListByType(T.gems, row.gems.type);
+          const list = this._lootListByType(T.gems, row.gems.type, EDITION);
           const n = this._rollDice(row.gems.amount);
           for (let i = 0; i < n; i++){
             const pick = list && list.table[Math.floor(Math.random() * list.table.length)];
@@ -137,7 +204,7 @@ registerPanel('loot',{
           }
         }
         if (row.artObjects){
-          const list = this._lootListByType(T.artObjects, row.artObjects.type);
+          const list = this._lootListByType(T.artObjects, row.artObjects.type, EDITION);
           const n = this._rollDice(row.artObjects.amount);
           for (let i = 0; i < n; i++){
             const pick = list && list.table[Math.floor(Math.random() * list.table.length)];
@@ -145,17 +212,27 @@ registerPanel('loot',{
           }
         }
         (row.magicItems || []).forEach(mi => {
-          const tbl = (T.magicItems || []).find(x => String(x.type) === String(mi.type));
+          // 2024 says "randomByLevel", meaning the byLevel table for the
+          // party's tier. The CR band and the level band line up closely
+          // enough that reusing it beats asking for a second number.
+          const type = String(mi.type) === 'randomByLevel'
+            ? 'byLevel.' + ({0:'1-4', 5:'5-10', 11:'11-16', 17:'17-20'}[crBand.min] || '1-4')
+            : String(mi.type);
+          const tbl = (T.magicItems || []).find(x => String(x.type) === type);
           const n = this._rollDice(mi.amount);
           for (let i = 0; i < n; i++){
-            const hit = tbl && this._rollOnTable(tbl.table);
-            if (hit && hit.item) addItem(hit.item, '');
+            const name = this._resolveMagicRow(tbl && this._rollOnTable(tbl.table));
+            if (name) addItem(name, '');
           }
         });
       }
     } else {
+      // Individual: 2014 puts the coins on the rolled row; 2024 has a single
+      // row and no band-level coins. Both are covered by rolling and reading
+      // the row, with the band-level coins added when a table defines them.
+      addCoins(band.coins);
       const row = this._rollOnTable(band.table);
-      if (row) addCoins(row.coins);              // individual treasure is coins only
+      if (row) addCoins(row.coins);
     }
     return { coins, items: [...bucket.values()] };
   },
@@ -186,10 +263,16 @@ registerPanel('loot',{
                    {value:'individual', label:'Individual (coins only)'}] },
         { id:'band', label:'Challenge rating', type:'select', value:'0',
           options: BANDS.map(x => ({ value:String(x.min), label:x.label })) },
+        // Remembers the last choice — a table runs one edition, so asking
+        // afresh every roll would be noise.
+        { id:'edition', label:'Rules', type:'select', value:this._lootEdition(),
+          options:[{value:'DMG',  label:"2014 DMG — gems, art, tables A–I"},
+                   {value:'XDMG', label:'2024 DMG — gold + magic items by level'}] },
       ], 'Roll').then(r => {
         if (!r) return;
+        this._setLootEdition(r.edition);
         const band = BANDS.find(x => String(x.min) === String(r.band)) || BANDS[0];
-        const res = this._rollTreasure(r.kind, band);
+        const res = this._rollTreasure(r.kind, band, r.edition);
         if (!res) { if (typeof showToast === 'function') showToast('No table for that combination'); return; }
         // Show the result BEFORE committing — a roll you can't preview is a
         // roll you end up undoing by hand.
