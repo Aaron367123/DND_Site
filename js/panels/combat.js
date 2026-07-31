@@ -706,7 +706,8 @@ registerPanel('combat',{
     const wildshape = isPC && partyMatch?.wildshape && partyMatch.wildshape.name ? partyMatch.wildshape : null;
     const chips = [];
     if (ragingPc){
-      chips.push(`<span class="status-pill rage-pill" title="Raging — Advantage on STR checks/saves · Resistance to bludgeoning/piercing/slashing · Can't cast or concentrate · Toggle in the Party tracker">💢 RAGING</span>`);
+      const rLeft = partyMatch && partyMatch.rageRounds;
+      chips.push(`<span class="status-pill rage-pill" title="Raging — Advantage on STR checks/saves · Resistance to bludgeoning/piercing/slashing · Can't cast or concentrate${rLeft ? ' · ' + rLeft + ' round' + (rLeft===1?'':'s') + ' left' : ''} · Toggle in the Party tracker">💢 RAGING${rLeft ? ' <span class="rage-rounds">'+rLeft+'</span>' : ''}</span>`);
     }
     if (wildshape){
       // Beast HP visible on the chip itself so the DM doesn't have to hover
@@ -1297,7 +1298,33 @@ registerPanel('combat',{
     // Tick down buff durations. A buff at rounds==0 expires after this
     // round's start — drop it. Negative/undefined durations are permanent
     // (until manually removed) and don't tick.
-    let partyTouched = false;
+    // Rage runs on the same clock as buffs: 1 minute, so 10 rounds. Ticked
+    // here rather than in the party panel because rounds only exist in combat
+    // — outside it a rage has no clock and stays up until it's ended by hand,
+    // by a rest, or by dropping to 0.
+    //
+    // Only PCs who are actually in this fight tick. A barbarian raging in the
+    // party tracker but not added to the tracker isn't in the initiative
+    // order, and counting down their rage from rounds they aren't taking part
+    // in would be wrong.
+    let ragePartyTouched = false;
+    state.combatants.forEach(cb => {
+      if (!cb.isPC) return;
+      const pi = state.party.findIndex(p => p.id === cb.id);
+      const p = pi >= 0 ? state.party[pi] : null;
+      if (!p || !p.rage || p.rageRounds == null) return;
+      const left = p.rageRounds - 1;
+      if (left <= 0){
+        p.rage = false; p.rageRounds = null;
+        this._log(`${p.name} — the rage ends (1 minute)`);
+        showToast(`💢 ${p.name}'s rage ends`);
+      } else {
+        p.rageRounds = left;
+      }
+      ragePartyTouched = true;
+    });
+
+    let partyTouched = ragePartyTouched;
     state.combatants.forEach((c, ci) => {
       if (!Array.isArray(c.buffs) || !c.buffs.length) return;
       const next = [], expired = [];
@@ -1794,20 +1821,27 @@ registerPanel('combat',{
         this._log(`${c.name} dropped to 0 HP — ${conc} ends`);
         showToast(`🌀 ${conc} ends — ${c.name} is down`);
       }
-      // Rage ends on falling unconscious too, for the same reason and with the
-      // same consequence if missed: the B/P/S resistance would go on halving
-      // hits against a downed barbarian.
-      if (partySlot && partySlot.rage && (c.hp || 0) <= 0){
-        partySlot.rage = false;
-        concDropped = true;   // the rage chip is structural — force a repaint
-        this._log(`${c.name} falls — the rage ends`);
-      }
       // Use damageForConc (after resist/vuln math, before absorption) so
       // the check fires even when the beast pool / temp HP ate everything.
       // damageDealt is post-absorption and would show 0 in that case.
       else if (conc && damageForConc > 0){
         const dc = Math.max(10, Math.floor(damageForConc / 2));
         showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
+      }
+      // Rage ends on falling unconscious too, for the same reason and with the
+      // same consequence if missed: the B/P/S resistance would go on halving
+      // hits against a downed barbarian.
+      //
+      // Kept AFTER the if/else above, not between them. Slotting it in the
+      // middle silently re-bound that `else if` to this condition instead of
+      // to the concentration one — the two happened to agree because both test
+      // `hp <= 0`, which is exactly the kind of accident that stops being true
+      // the next time either is edited.
+      if (partySlot && partySlot.rage && (c.hp || 0) <= 0){
+        partySlot.rage = false;
+        partySlot.rageRounds = null;
+        concDropped = true;   // the rage chip is structural — force a repaint
+        this._log(`${c.name} falls — the rage ends`);
       }
     } else if (delta > 0){
       // Healing routes to the beast pool first if the PC is wildshaped —

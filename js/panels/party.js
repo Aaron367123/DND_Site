@@ -726,9 +726,16 @@ registerPanel('party',{
   // spell RAW says has already ended. Note this is the OPPOSITE of wild shape,
   // where Sage Advice says concentration survives; the two look similar and
   // are not (see the wild-shape note in AUDIT).
+  // Rage lasts 1 minute = 10 rounds. The clock only advances while combat is
+  // running, because that is the only place rounds exist — out of combat the
+  // rage simply stays up until it's ended by hand, by a rest, or by dropping.
+  // See combat._startRound, which ticks it alongside buff durations.
+  RAGE_ROUNDS: 10,
+
   _setRage(i, on){
     const c = state.party[i]; if (!c) return;
     const next = {...c, rage: !!on};
+    next.rageRounds = on ? this.RAGE_ROUNDS : null;
     let dropped = null;
     if (on && c.concentration){ dropped = c.concentration; next.concentration = null; }
     state.party[i] = next;
@@ -757,7 +764,11 @@ registerPanel('party',{
       const lvl = parseInt(c.level || c.sheet?.level || 1, 10) || 1;
       const rageDmg = lvl >= 16 ? '+4' : lvl >= 9 ? '+3' : '+2';
       if (raging){
-        parts.push(`<button class="form-pill rage-on" data-act="rage-off" data-idx="${i}" title="Rage active — Advantage on STR checks/saves · ${rageDmg} damage on melee STR attacks · Resistance to bludgeoning, piercing, slashing · Can't cast or concentrate · Lasts 1 min (10 rounds). Click to end rage.">💢 RAGING <span class="form-pill-x">×</span></button>`);
+        // Rounds left, when a fight is running to count them. Absent out of
+        // combat, where there is no round clock to count against.
+        const left = c.rageRounds;
+        const leftTxt = left != null ? ` <span class="rage-rounds">${left}</span>` : '';
+        parts.push(`<button class="form-pill rage-on" data-act="rage-off" data-idx="${i}" title="Rage active — Advantage on STR checks/saves · ${rageDmg} damage on melee STR attacks · Resistance to bludgeoning, piercing, slashing · Can't cast or concentrate${left != null ? ' · ' + left + ' round' + (left===1?'':'s') + ' left' : ' · Lasts 1 min (10 rounds)'}. Click to end rage.">💢 RAGING${leftTxt} <span class="form-pill-x">×</span></button>`);
       } else {
         parts.push(`<button class="form-pill rage-off" data-act="rage-on" data-idx="${i}" title="Enter rage — Advantage on STR · ${rageDmg} melee damage · Resist B/P/S · Lasts 1 minute">💢 Rage</button>`);
       }
@@ -1080,7 +1091,7 @@ registerPanel('party',{
       badges.push(`<span class="status-badge conc" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(c.concentration)} — click to drop">🌀 ${esc(c.concentration)}</span>`);
     }
     if (c.rage){
-      badges.push(`<span class="status-badge rage" data-act="rage-off" data-idx="${i}" title="Raging — adv on STR · resist B/P/S · click to end">💢 RAGE</span>`);
+      badges.push(`<span class="status-badge rage" data-act="rage-off" data-idx="${i}" title="Raging — adv on STR · resist B/P/S${c.rageRounds != null ? ' · ' + c.rageRounds + ' round' + (c.rageRounds===1?'':'s') + ' left' : ''} · click to end">💢 RAGE${c.rageRounds != null ? ' ' + c.rageRounds : ''}</span>`);
     }
     if (c.wildshape && c.wildshape.name){
       badges.push(`<span class="status-badge wildshape" data-act="ws-end" data-idx="${i}" title="Wild Shape as ${esc(c.wildshape.name)} — click to revert">🐺 ${esc(c.wildshape.name)}</span>`);
@@ -1322,7 +1333,7 @@ registerPanel('party',{
       // resistance kept halving hits on a downed barbarian — the one time a
       // creature is least able to shrug anything off.
       if (c.rage && (c.hp || 0) <= 0){
-        c.rage = false;
+        c.rage = false; c.rageRounds = null;
         if (typeof showToast === 'function') showToast(c.name + ' falls — the rage ends');
       }
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
@@ -1460,7 +1471,7 @@ registerPanel('party',{
       c.concentration = null;
       // Rage / Wild Shape: both end at any rest (rage lasts 1 minute;
       // wildshape ends at the druid's choice or when its hours expire).
-      c.rage = false;
+      c.rage = false; c.rageRounds = null;
       c.wildshape = null;
       // Silent mirror — one combat render at the bottom, not N.
       this._mirrorPartyToCombatSilent(i);
@@ -1496,7 +1507,7 @@ registerPanel('party',{
       // A rage lasts 1 minute; an hour's rest is well past that. Only the LONG
       // rest cleared it — and the long rest's own comment claims "rage and
       // wild shape end at any rest", which was true of one of the two rests.
-      c.rage = false;
+      c.rage = false; c.rageRounds = null;
       if (c.wildshape) c.wildshape = null;
       if (Array.isArray(c.resources)){
         c.resources = c.resources.map(r => {

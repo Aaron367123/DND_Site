@@ -2055,3 +2055,43 @@ tagged as such. Two conditional-damage cases came out better than expected:
 **Harshnag's Gurt's Greataxe** offers "39 (5d12+7) if the target is human" as a
 separate button rather than adding it to the base 26, and **Zephyros's Staff of
 the Magi** does the same for two-handed.
+
+### Rage duration tracking
+
+Rage now runs a 10-round clock (1 minute), ticked in `combat._startRound` —
+the same round-boundary hook that ages buff durations, so the two can't drift.
+Rounds remaining show on the party pill, the party status badge and the combat
+status chip, and the rage ends itself with a log line and a toast.
+
+Two deliberate limits:
+
+- **The clock only advances while combat is running**, because rounds only
+  exist there. Out of combat a rage stays up until it is ended by hand, by a
+  rest, or by dropping to 0 — which is honest about what the tracker knows.
+- **Only PCs actually in the initiative order tick.** A barbarian raging in the
+  party tracker but never added to the fight isn't taking those rounds, and
+  counting them down would be wrong.
+
+RAW's other early-end condition — rage ends if you haven't attacked a hostile
+creature or taken damage since your last turn — is deliberately not automated.
+The tracker can't know whether an attack was made, and guessing would end rages
+that shouldn't end.
+
+`rageRounds` is cleared everywhere `rage` is: manual toggle, falling to 0 HP
+(both damage paths), short rest and long rest.
+
+**A mistake I made and caught here, worth recording.** Adding the rage check
+between an existing `if` and its `else if` silently re-bound that `else` to the
+new condition. Nothing broke, because both conditions happened to test
+`hp <= 0` — which is precisely the sort of accident that stops holding the next
+time either branch is edited. The rage block now sits after the complete
+if/else pair, with a comment saying why it can't move.
+
+23 assertions: countdown 10→0, ending exactly on the tenth round, further
+rounds harmless, manual end, falling (rage *and* clock), both rests, a PC
+outside the fight not ticking, the concentration prompt still pairing with the
+right branch in both directions, and the counter rendering and disappearing in
+both panels.
+
+Massive damage auto-marking a PC dead is confirmed as intended behaviour and
+re-asserted here rather than changed.
