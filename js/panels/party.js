@@ -2288,7 +2288,12 @@ registerPanel('party',{
       const inp = card.querySelector('input[data-field="'+f+'"][data-idx="'+i+'"]');
       if (inp && inp !== act && String(p[f] ?? '') !== inp.value) inp.value = p[f] ?? '';
     });
-    if (big && big.textContent !== String(p.hp)) big.textContent = p.hp;
+    // NOTE: do not write textContent on `big`. It is a CONTAINER holding the
+    // current-HP input, a "/" separator and the max-HP input — setting text on
+    // it replaced all three with a bare number, so a single damage click wiped
+    // the editable HP fields off the card until the next full _render().
+    // Left over from when that element really did hold plain text. The loop
+    // above already puts the new value in the input, which is the whole job.
     return true;
   },
 
