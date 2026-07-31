@@ -1448,6 +1448,7 @@ registerPanel('party',{
       });
   },
   _applyShortRest(){
+    let pactRestored = 0;
     state.party.forEach((c, i) => {
       c.concentration = null;
       if (Array.isArray(c.resources)){
@@ -1456,12 +1457,33 @@ registerPanel('party',{
           return r;
         });
       }
+      // Warlock Pact Magic is the one kind of spell slot that comes back on a
+      // SHORT rest, and nothing restored it — a warlock had to refund every
+      // pip by hand after each fight, or quietly play down a slot.
+      //
+      // Restricted to a PURE warlock on purpose. There is no marker in the
+      // sheet distinguishing a pact slot from an ordinary one, so on a
+      // "Warlock/Sorcerer" the same map holds both and refilling all of them
+      // would hand back the sorcerer's slots too. A multiclass warlock still
+      // refunds pips by hand, which is what happens today.
+      const cls = String(c.cls || '').trim().toLowerCase();
+      if (cls === 'warlock' && c.sheet && c.sheet.spellSlots){
+        const slots = {};
+        let changed = false;
+        Object.keys(c.sheet.spellSlots).forEach(k => {
+          const s = c.sheet.spellSlots[k];
+          if ((s.expended || 0) > 0) changed = true;
+          slots[k] = {...s, expended: 0};
+        });
+        if (changed){ c.sheet = {...c.sheet, spellSlots: slots}; pactRestored++; }
+      }
       this._mirrorPartyToCombatSilent(i);
     });
     save();
     this._render();
     panelDefs.combat?._render?.();
-    showToast('💤 Short rest — concentration dropped, short-rest resources refreshed');
+    showToast('💤 Short rest — concentration dropped, short-rest resources refreshed'
+      + (pactRestored ? ' · Pact Magic slots restored' : ''));
   },
 
   // Render the "Last roll" strip + optional history (last 4 prior rolls).
