@@ -1999,3 +1999,59 @@ Deliberately **not** added, as they change behaviour rather than fix it:
 duration tracking (rage is 10 rounds and nothing counts them) and a per-long-rest
 rage-use counter. The generic `resources` list already lets a DM track "Rages"
 by hand, and auto-creating one would collide with anybody who has.
+
+### Attack Runner — SKT campaign coverage
+
+Checked against the creatures the adventure actually uses rather than a
+guess: every `{@creature …}` reference in `data/adventure/adventure-skt.json`
+— **261 distinct creatures**, 2056 mentions.
+
+| | |
+|---|---|
+| fully parsed | **247** |
+| partially parsed | 4 |
+| no damaging actions | 10 |
+| stat block not found | **0** |
+
+That is **483 runnable attacks**, 74 save-based and 38 multi-type. Every
+creature the campaign names resolves to a stat block.
+
+The 10 with nothing to run are Sheep, Pig, Tressym, Bat, Cat, Octopus, Sprite,
+Rat and a Stone Giant Statue — correctly empty.
+
+All 4 partials are single actions that are deliberately not parsed, and every
+other attack on those creatures works:
+
+- **Slarkrethel · Fling** and **Kraken · Fling** — "3 (1d6) bludgeoning damage
+  for every 10 feet it was thrown". Distance-dependent; a fixed number would be
+  wrong.
+- **Remorhaz · Swallow** — "takes the bite's damage" (no dice of its own) plus
+  6d6 acid per turn while swallowed. Ongoing, not a hit.
+- **Rug of Smothering · Smother** — the hit inflicts a grapple; the 2d6+3 is
+  per-turn afterwards.
+
+The sweep found two genuine parser gaps, both since fixed:
+
+- **"a DC 16 Strength or Dexterity saving throw (target's choice)"** — the
+  Bulette's Deadly Leap. The ability was followed by another ability rather than
+  by "saving throw", so the whole action failed to parse.
+- **Area damage with no save and no attack roll** — Maegera the Dawn Titan's
+  Smoke Cloud, "Each creature in the area takes 11 (2d10) fire damage". Anchored
+  on that trigger phrase specifically, not on "any damage in the text", because
+  the looser rule would scoop up per-turn ongoing damage (the Rug's) and bill it
+  as a hit. Verified all four exclusions above still hold afterwards.
+- And **"takes only half the damage"** wasn't recognised as a half-on-save
+  phrasing, so the Bulette lost its Saved ½ button. 923 of 1451 save actions now
+  offer it, and none carries the flag without the word "half" in its text.
+
+Whole-bestiary coverage moved 7871 → 7884 of 8122 with no false positives.
+
+Spot-checked the campaign's signature enemies against the Monster Manual — the
+six giant types, Iymrith, Klauth, Harshnag, King Hekaton, Duke Zalto, Zephyros,
+Sansuri, Storvald, Chief Guh, Yakfolk Warrior. All correct, including the
+multi-type dragon bites (Iymrith 2d10+9 piercing + 2d10 lightning), the
+save-based Lightning Strike and Thunderous Stomp, and legendary Wing Attacks
+tagged as such. Two conditional-damage cases came out better than expected:
+**Harshnag's Gurt's Greataxe** offers "39 (5d12+7) if the target is human" as a
+separate button rather than adding it to the base 26, and **Zephyros's Staff of
+the Magi** does the same for two-handed.

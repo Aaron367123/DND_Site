@@ -1012,7 +1012,11 @@ function sktParseMonsterAttack(action){
   const ABIL = {str:'Strength', dex:'Dexterity', con:'Constitution',
                 int:'Intelligence', wis:'Wisdom', cha:'Charisma'};
   let saveDc = null, saveAbility = null, saveAt = -1;
-  const save2014 = desc.match(/DC\s*(\d+)\s+(\w+)\s+saving throw/i);
+  // "…or Dexterity" covers "a DC 16 Strength or Dexterity saving throw
+  // (target's choice)" — the Bulette's Deadly Leap, which failed to parse at
+  // all because the ability was followed by another ability instead of by
+  // "saving throw".
+  const save2014 = desc.match(/DC\s*(\d+)\s+(\w+)(?:\s+or\s+\w+)?\s+saving throw/i);
   const save2024 = desc.match(/(?:^|[\s(])(str|dex|con|int|wis|cha)\s+DC\s*(\d+)/i);
   if (save2014){
     saveDc = parseInt(save2014[1]); saveAbility = save2014[2]; saveAt = save2014.index;
@@ -1028,7 +1032,31 @@ function sktParseMonsterAttack(action){
       return {
         name, toHit: null,
         save: { dc: saveDc, ability: saveAbility,
-                half: /half as much|half damage/i.test(desc) },
+                // "half as much damage" (2014), "Half damage." (2024), and
+        // "takes only half the damage" (the Bulette, among others). Missing a
+        // phrasing here silently drops the Saved ½ button, so the DM applies
+        // the full amount to a creature that made its save.
+        half: /half as much|half damage|half the damage/i.test(desc) },
+        parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
+        alt: null, altLabel: '',
+      };
+    }
+  }
+
+  // Area damage with no save and no attack roll — "Maegera exhales a
+  // billowing cloud… Each creature in the area takes 11 (2d10) fire damage."
+  // Nothing to anchor on, so this needs a trigger phrase rather than "any
+  // damage in the text": that looser rule would also scoop up per-turn
+  // ongoing damage (a Rug of Smothering's "at the start of each of the
+  // target's turns, the target takes 10 (2d6+3)") and bill it as a hit.
+  // Requiring "each creature in/within … takes" separates the two — the
+  // ongoing cases say "the target takes" or "it takes".
+  const areaM = desc.match(/each creature (?:in|within)[^.]{0,80}?\btakes\b/i);
+  if (areaM){
+    const parts = _sktDamageClauses(_sktDamageSegment(desc, areaM.index));
+    if (parts.length){
+      return {
+        name, toHit: null, save: null,
         parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
         alt: null, altLabel: '',
       };
