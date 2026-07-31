@@ -1111,8 +1111,18 @@ registerPanel('party',{
   // "double the dice", so 2d6+3 becomes 4d6+3, not 2d6+3 doubled). Unparsed
   // input degrades gracefully — returns the raw string in breakdown.
   _rollDamageExpr(expr, crit){
-    const raw = String(expr || '').trim();
+    let raw = String(expr || '').trim();
     if (!raw) return null;
+    // Versatile weapons are written "1d8/1d10" on a character sheet, meaning
+    // one-handed OR two-handed — not both. The tokenizer treated the slash as
+    // noise and rolled every die it found, so a longsword swung for 1d8+1d10
+    // and quietly hit about 60% too hard. Keep the first alternative, which is
+    // the one-handed value and the conventional default.
+    //
+    // Collapse only the DICE PAIR, not the whole string: splitting on the
+    // slash threw away anything after it, so "1d8/1d10 +3" lost its +3 and
+    // rolled a bare d8.
+    raw = raw.replace(/(\d+d\d+)\s*\/\s*\d+d\d+/g, '$1').trim();
     // Split off the trailing "type" word(s) so "2d6+3 slashing" pulls out
     // "slashing" cleanly. Everything not part of the math goes to type.
     const typeMatch = raw.match(/\b(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder|healing)\b/i);
@@ -1643,8 +1653,15 @@ registerPanel('party',{
   // a separate click.
   _parseAtkBonus(s){
     if (s == null) return null;
-    const m = String(s).match(/[+-]?\d+/);
-    return m ? parseInt(m[0], 10) : null;
+    const str = String(s);
+    // Prefer an explicitly SIGNED number — that's what a to-hit bonus looks
+    // like. Taking the first number of any kind read "1d8 Longsword +5" as a
+    // bonus of 1, because the 1 in "1d8" came first. Unsigned is still
+    // accepted as a fallback so a bare "7" keeps working.
+    const signed = str.match(/[+-]\s*\d+/);
+    if (signed) return parseInt(signed[0].replace(/\s+/g, ''), 10);
+    const any = str.match(/\d+/);
+    return any ? parseInt(any[0], 10) : null;
   },
 
   _tabSkills(c){
