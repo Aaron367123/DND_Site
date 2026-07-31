@@ -2945,23 +2945,46 @@ registerPanel('battlemap',{
         if (!r) return;
         const name = (r.name || '').trim();
         if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
-        // Replace any existing entry with the same case-insensitive name so
-        // re-saving overwrites instead of cluttering the list.
         const lc = name.toLowerCase();
-        this._savedMaps = this._savedMaps.filter(s => (s.name||'').toLowerCase() !== lc);
-        this._savedMaps.unshift({
-          id: 'map_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
-          name,
-          ts: Date.now(),
-          snapshot: this._snapshotMap(),
-        });
-        // Cap library so quota doesn't creep over time. Saved-map snapshots
-        // can be 20-50 KB each with lots of tokens/fog; 40 caps the list at
-        // about 1-2 MB worst case.
-        if (this._savedMaps.length > 40) this._savedMaps.length = 40;
-        this._saveSavedMaps();
-        close();
-        if (typeof showToast === 'function') showToast('Saved "' + name + '"');
+        const clash = this._savedMaps.find(s => (s.name||'').toLowerCase() === lc);
+        const commit = () => {
+          // Replace any existing entry with the same case-insensitive name so
+          // re-saving overwrites instead of cluttering the list.
+          this._savedMaps = this._savedMaps.filter(s => (s.name||'').toLowerCase() !== lc);
+          this._savedMaps.unshift({
+            id: 'map_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
+            name,
+            ts: Date.now(),
+            snapshot: this._snapshotMap(),
+          });
+          // Cap library so quota doesn't creep over time. Saved-map snapshots
+          // can be 20-50 KB each with lots of tokens/fog; 40 caps the list at
+          // about 1-2 MB worst case. Say WHICH ones went: new entries unshift
+          // to the front, so this drops the oldest saves, and doing it in
+          // silence meant a full library quietly ate them.
+          let dropped = [];
+          if (this._savedMaps.length > 40){
+            dropped = this._savedMaps.slice(40).map(s => s.name || 'untitled');
+            this._savedMaps.length = 40;
+          }
+          this._saveSavedMaps();
+          close();
+          if (typeof showToast === 'function'){
+            showToast('Saved "' + name + '"'
+              + (dropped.length ? ` · library full, dropped oldest: ${dropped.join(', ')}` : ''));
+          }
+        };
+        // Overwriting is as destructive as deleting, and the delete button
+        // asks first — this didn't, so re-saving under a suggested name (which
+        // is derived from the map file, and so collides by default on the same
+        // map) silently replaced the earlier save with no way back.
+        if (clash && typeof showConfirm === 'function'){
+          showConfirm('A saved map named "' + clash.name + '" already exists. Overwrite it?',
+            {title:'Overwrite saved map', confirmLabel:'Overwrite', danger:true})
+            .then(ok => { if (ok) commit(); });
+        } else {
+          commit();
+        }
       });
     });
 

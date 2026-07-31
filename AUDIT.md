@@ -1654,3 +1654,41 @@ Noted, not changed: a token's `dead` flag is seeded from combatant HP when the
 token is created and thereafter only toggled by hand in the token panel, so it
 drifts once someone drops in combat. Auto-syncing it is a behavior change rather
 than a fix, and the DM has an explicit toggle.
+
+### Saved / starred maps
+
+Mostly a negative result, which is worth recording as clearly as a bug.
+`_snapshotMap` ↔ `_restoreMapSnapshot` round-trips **cleanly**: 18 assertions
+over every field the snapshot claims to carry — path, world scale, rotation,
+Align offsets, cell size, cols/rows, bg colour, grid type, cell highlight, snap,
+all three fog modes, hardness/opacity/width, tokens (including size and facing),
+fog cells, fog strokes and drawings — plus two that confirm the snapshot is a
+deep copy rather than an alias, and one that `fog: null` (disabled) survives as
+disabled instead of collapsing to an empty set. Starred maps also behave: Set
+semantics, correct persistence, no duplicates, corrupt JSON caught by mount's
+guard, and an empty section rendering nothing.
+
+Two real problems, both in the save path, both about destroying data quietly.
+
+**Re-saving under an existing name overwrote it silently.** The name field is
+pre-filled from the map's own filename, so saving the same map twice collides
+*by default* — that is the normal case, not an edge case. The delete button asks
+before destroying a saved map; overwrite, which destroys one just as completely
+and with no undo, did not. It now confirms, naming the entry it would replace.
+
+**The 40-entry cap dropped the oldest saves in silence.** New entries `unshift`
+to the front and the list is then truncated, so a full library quietly eats the
+oldest map every time you save. The toast now names what went:
+`Saved "Number Fortyone" · library full, dropped oldest: Old 39`.
+
+14 assertions on the save path: first save, collision prompting, declining
+leaving the original untouched, accepting replacing in place without adding a
+row, a fresh name never prompting, and the cap keeping the newest, dropping the
+oldest, and reporting it.
+
+Noted, not changed: loading a saved map replaces the current scene with no
+confirmation, and since the undo history is now correctly cleared on a scene
+change (see the undo section above), that is irreversible. Loading from a picker
+conventionally replaces, and prompting every time would be tiresome — but it is
+the one remaining unguarded way to lose unsaved tokens and fog, so it is the
+user's call whether it should ask when the current scene has content.
