@@ -1093,3 +1093,56 @@ Recording these so the next pass doesn't re-investigate them:
   silently truncates — use the dev server's request log for anything
   authoritative.
 
+
+## PDF importer, validated against two real sheets (2026-07-31)
+
+Two actual character sheets (a level-6 rogue and a level-6 warlock, a custom
+874-field template, not the WotC form) were run through `_fromFields`. Most of
+the importer held up unchanged: class/level, abilities, AC, speed, all 18
+skills, all 6 saves, prof bonus, HP, attacks and 17 spells all came out right.
+Three things did not.
+
+**Warlocks imported with zero spell slots.** The indexed-template slot walker
+matched `/(\d+)\s*Slot/i` against each `spellSlotHeader<N>`. A warlock's section
+never contains the word "Slots" — the real field reads `"2 Pact OO"` — so the
+match failed and every warlock silently got `spellSlots: {}`. The level lookup
+was fine (`spellHeader3` = `"=== 3rd LEVEL ==="`); only the count regex was
+wrong. Now also accepts the pact form, giving `{3: {total: 2, expended: 0}}`,
+and the Pact Magic short-rest restore added earlier works on the result.
+
+**`Defenses` was parsed by nobody.** The warlock's sheet says
+`"Resistances - Radiant, Necrotic"`, and the party card has had
+`c.resistances`/`immunities`/`vulnerabilities` all along — the import just never
+filled them, so the tool applied full damage from two types the character
+resists. `_parseDefenses` now locates resist/immune/vulnerable headings by index
+and assigns each run of text between them, defaulting to resistances for text
+before any heading. Only the 13 canonical damage types are accepted, so prose
+("from nonmagical attacks", "advantage on saves vs. charm") contributes nothing
+rather than guessing. On merge the lists are **unioned** with whatever the DM set
+by hand, and are only written when the parse found something — a PDF with no
+defenses line can't clear chips someone toggled on.
+
+**`Passive1` added as a passive-Perception alias.** This template numbers its
+passives rather than naming them. On both sheets `Passive1/2/3` are exactly
+`10 +` Perception/Insight/Investigation, so it agrees with the value the party
+panel already derives; the alias only matters for sheets whose skill rows are
+blank.
+
+Two candidates deliberately **not** taken:
+
+- `Total` = `"6d8"` as a hit-dice alias. `_deriveHitDice` uses the raw string
+  only for the *current* pool, never the die size, so on these sheets it
+  produces exactly what class+level derivation already produces — no gain. And
+  "Total" is generic enough to collide with a currency or weight total on some
+  other template, where a small value would wrongly show spent hit dice.
+- `CharacterName` reading `Zoey\(Rogue\`. That is an artifact of the throwaway
+  Python extractor used to dump the fields (its regex stops at the first `)`,
+  including PDF-escaped ones), not of the app — pdf.js unescapes properly.
+  Fixing the app here would have corrupted correct input.
+
+Method note, again: the first short-rest check appeared to show pact slots *not*
+restoring. `_shortRestAll` routes through an async `showConfirm`, and the
+assertion ran before the callback did. Testing `_applyShortRest` directly shows
+the warlock restoring to 0 expended and a wizard with identical slots correctly
+keeping them spent. Same class of mistake as the stale-DOM-node reads: assert
+after the async boundary, not across it.

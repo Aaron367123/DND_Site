@@ -3199,6 +3199,14 @@ registerPanel('party',{
       // Confirmed by applying such an import over a populated character.
       if (data.hitDice) data2.hitDice = data.hitDice;
       if (data.sheet)   data2.sheet   = data.sheet;
+      // Damage defenses parsed out of the sheet's "Defenses" line. Unioned with
+      // whatever the DM already set by hand rather than replacing it, and only
+      // written when the parse actually found types — otherwise a PDF with no
+      // defenses line would silently clear chips someone had toggled on.
+      ['resistances','immunities','vulnerabilities'].forEach(k => {
+        if (!Array.isArray(data[k]) || !data[k].length) return;
+        data2[k] = [...new Set([...(prior[k] || []), ...data[k]])];
+      });
       if (slot === 'new'){
         state.party.push({
           id: uid(),

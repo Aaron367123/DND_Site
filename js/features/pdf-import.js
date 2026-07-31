@@ -239,7 +239,11 @@ function _fromFields(f){
   });
 
   const profBonus = num('ProfBonus', 'Proficiency Bonus', 'ProficiencyBonus');
-  const passivePerception = num('Passive', 'PassiveWisdom', 'Passive Wisdom (Perception)', 'PassivePerception');
+  // "Passive1" is this template's passive Perception (Passive2 = Insight,
+  // Passive3 = Investigation). Confirmed on two real sheets: both equal
+  // 10 + the matching skill bonus exactly, so it agrees with the value the
+  // party panel derives — it just also covers sheets whose skill rows are blank.
+  const passivePerception = num('Passive', 'PassiveWisdom', 'Passive Wisdom (Perception)', 'PassivePerception', 'Passive1');
 
   // Free-text panels.
   const sStr = (...aliases) => String(get(...aliases) || '').trim();
@@ -335,7 +339,10 @@ function _fromFields(f){
       if (/cantrip/i.test(s.header)) return;
       if (!s.raw) return;
       // Pull total slots from leading number, expended from filled circles.
-      const m = s.raw.match(/(\d+)\s*Slot/i);
+      // Warlocks don't say "Slots" at all — a level-6 warlock's section 3 reads
+      // "2 Pact OO". Without the pact alternative the match failed and every
+      // warlock imported with zero spell slots (verified against a real sheet).
+      const m = s.raw.match(/(\d+)\s*(?:pact\s*)?slots?\b/i) || s.raw.match(/^\s*(\d+)\s*pact\b/i);
       if (!m) return;
       const total = parseInt(m[1]);
       // Determine level from header text: "=== 1st LEVEL ===" → 1, "2nd" → 2, etc.
@@ -367,6 +374,9 @@ function _fromFields(f){
     spells: spellsUniq, bio,
   };
 
+  const def = _parseDefenses(get('Defenses', 'Defences', 'Resistances',
+                                 'DamageResistances', 'Damage Resistances'));
+
   return {
     name: String(name||''),
     cls, level,
@@ -376,9 +386,55 @@ function _fromFields(f){
     hp, hpMax, ac, init, speed,
     abilities,
     hitDice: hd,
+    resistances: def.resistances,
+    immunities: def.immunities,
+    vulnerabilities: def.vulnerabilities,
     sheet,
     _rawFields: f,
   };
+}
+
+const _PDF_DMG_TYPES = ['acid','bludgeoning','cold','fire','force','lightning','necrotic',
+                        'piercing','poison','psychic','radiant','slashing','thunder'];
+
+// Parse a free-text defenses line into the three lists the party card already
+// understands (c.resistances / c.immunities / c.vulnerabilities, lowercase
+// damage types — see party.js `_renderResistances`). Real sheets write things
+// like "Resistances - Radiant, Necrotic", and may combine buckets in one field:
+// "Resistances - Fire; Immunity - Poison".
+//
+// Headings are located by index and each run of text between them is assigned
+// to the bucket its heading opened; text before any heading falls into
+// resistances, which is what an unlabelled "Resistances" field means.
+// Anything that isn't one of the 13 damage types is ignored, so prose such as
+// "from nonmagical attacks" contributes nothing rather than guessing.
+function _parseDefenses(raw){
+  const out = { resistances: [], immunities: [], vulnerabilities: [] };
+  const s = String(raw || '').toLowerCase();
+  if (!s.trim()) return out;
+
+  const heads = [];
+  const re = /(resist\w*|immun\w*|vulner\w*)/g;
+  let m;
+  while ((m = re.exec(s))) {
+    heads.push({
+      at: m.index,
+      end: re.lastIndex,
+      key: m[1][0] === 'r' ? 'resistances' : m[1][0] === 'i' ? 'immunities' : 'vulnerabilities',
+    });
+  }
+
+  const add = (key, from, to) => {
+    const seg = s.slice(from, to);
+    _PDF_DMG_TYPES.forEach(t => {
+      if (seg.includes(t) && !out[key].includes(t)) out[key].push(t);
+    });
+  };
+
+  if (!heads.length) { add('resistances', 0, s.length); return out; }
+  if (heads[0].at > 0) add('resistances', 0, heads[0].at);
+  heads.forEach((h, i) => add(h.key, h.end, i + 1 < heads.length ? heads[i + 1].at : s.length));
+  return out;
 }
 
 // 5e hit-die size by class (default d8 for unknowns/multiclass).
