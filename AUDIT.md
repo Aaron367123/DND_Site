@@ -1960,3 +1960,42 @@ the panel). Two test expectations were wrong rather than the code — a Werewolf
 biting a Werewolf deals 0 because both are immune to nonmagical piercing, which
 is right; and I reused a DOM node captured before a re-render, for the fourth
 time this session.
+
+### Rage
+
+Reviewed after the fact — rage had been read from (combat's damage handler
+honours its B/P/S resistance) but never reviewed on the party side. The
+resistance itself is correct. Three things around it were not, and all three
+were promised by text already on screen.
+
+**A short rest didn't end it.** Rage lasts one minute; a short rest is an hour.
+Only `_applyLongRest` cleared it, and the long rest's own comment says "Rage /
+Wild Shape: both end at any rest" — true of one of the two rests. Wild shape had
+the same gap and is fixed alongside.
+
+**Entering a rage didn't drop concentration.** PHB is explicit — "you can't cast
+spells or concentrate on them while raging" — and the rage pill's tooltip has
+always said so. It never happened, so a raging barbarian kept a lit 🌀 chip and
+the tracker went on prompting concentration saves for a spell that RAW had
+already ended. Note this is the *opposite* of wild shape, where Sage Advice says
+concentration survives; the two read alike and behave differently, which is
+presumably how one got the other's treatment. Ending a rage correctly leaves
+concentration alone — only entering one breaks it.
+
+**Rage didn't end on falling unconscious.** The consequence is worse than a
+stale chip: the B/P/S resistance kept halving hits on a downed barbarian, at the
+one moment a creature is least able to shrug anything off. Fixed in both damage
+paths — the party tracker's and the combat tracker's — since either can drop a
+PC to 0.
+
+There were also two independent rage toggles, the pill and the context-menu
+item, which had already drifted. Both now go through `_setRage`.
+
+13 assertions: both rests, concentration dropped on entering and preserved on
+ending, 0 HP through each damage path, the resistance halving correctly while up
+and not after going down, and a non-barbarian unaffected.
+
+Deliberately **not** added, as they change behaviour rather than fix it:
+duration tracking (rage is 10 rounds and nothing counts them) and a per-long-rest
+rage-use counter. The generic `resources` list already lets a DM track "Rages"
+by hand, and auto-creating one would collide with anybody who has.

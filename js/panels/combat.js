@@ -1794,6 +1794,14 @@ registerPanel('combat',{
         this._log(`${c.name} dropped to 0 HP — ${conc} ends`);
         showToast(`🌀 ${conc} ends — ${c.name} is down`);
       }
+      // Rage ends on falling unconscious too, for the same reason and with the
+      // same consequence if missed: the B/P/S resistance would go on halving
+      // hits against a downed barbarian.
+      if (partySlot && partySlot.rage && (c.hp || 0) <= 0){
+        partySlot.rage = false;
+        concDropped = true;   // the rage chip is structural — force a repaint
+        this._log(`${c.name} falls — the rage ends`);
+      }
       // Use damageForConc (after resist/vuln math, before absorption) so
       // the check fires even when the beast pool / temp HP ate everything.
       // damageDealt is post-absorption and would show 0 in that case.

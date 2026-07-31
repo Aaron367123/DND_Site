@@ -715,6 +715,31 @@ registerPanel('party',{
     panelDefs.combat?._render?.();
   },
 
+  // Single place rage is turned on or off. There were two — the pill and the
+  // context-menu item — and they had already drifted apart in what they did
+  // besides flipping the flag.
+  //
+  // Entering a rage ends concentration. PHB: "you can't cast spells or
+  // concentrate on them while raging", and the rage pill's own tooltip has
+  // always said so — it just never happened, so a raging barbarian kept a lit
+  // 🌀 chip and the tracker went on prompting for concentration saves on a
+  // spell RAW says has already ended. Note this is the OPPOSITE of wild shape,
+  // where Sage Advice says concentration survives; the two look similar and
+  // are not (see the wild-shape note in AUDIT).
+  _setRage(i, on){
+    const c = state.party[i]; if (!c) return;
+    const next = {...c, rage: !!on};
+    let dropped = null;
+    if (on && c.concentration){ dropped = c.concentration; next.concentration = null; }
+    state.party[i] = next;
+    save(); this._render();
+    panelDefs.combat?._render?.();
+    if (typeof showToast === 'function'){
+      showToast(on ? (c.name + ' enters a rage' + (dropped ? ' — ' + dropped + ' ends' : ''))
+                   : (c.name + '’s rage ends'));
+    }
+  },
+
   // Forms row — toggleable class state for Barbarians (rage) and Druids
   // (wild shape). Renders the right control set based on the character's
   // class string. Empty for other classes so the row adds no chrome unless
@@ -1293,6 +1318,13 @@ registerPanel('party',{
         // down, when RAW says they wake at 5.
         c.hp = Math.max(0, (c.hp || 0) - taken);
       }
+      // Rage ends when you fall unconscious (PHB). Left set, the B/P/S
+      // resistance kept halving hits on a downed barbarian — the one time a
+      // creature is least able to shrug anything off.
+      if (c.rage && (c.hp || 0) <= 0){
+        c.rage = false;
+        if (typeof showToast === 'function') showToast(c.name + ' falls — the rage ends');
+      }
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
       if (c.concentration && damageForConc > 0){
         const dc = Math.max(10, Math.floor(damageForConc / 2));
@@ -1461,6 +1493,11 @@ registerPanel('party',{
     let pactRestored = 0;
     state.party.forEach((c, i) => {
       c.concentration = null;
+      // A rage lasts 1 minute; an hour's rest is well past that. Only the LONG
+      // rest cleared it — and the long rest's own comment claims "rage and
+      // wild shape end at any rest", which was true of one of the two rests.
+      c.rage = false;
+      if (c.wildshape) c.wildshape = null;
       if (Array.isArray(c.resources)){
         c.resources = c.resources.map(r => {
           if (/short\s*rest/i.test(r.name || '')) return {...r, current: r.max || r.current};
@@ -2654,8 +2691,7 @@ registerPanel('party',{
             label: c.rage ? '💢 End rage' : '💢 Enter rage',
             onClick: () => {
               const r = resolve(); if (!r) return;
-              state.party[r.idx] = {...r.c, rage: !r.c.rage};
-              save(); this._render(); panelDefs.combat?._render?.();
+              this._setRage(r.idx, !r.c.rage);
             }
           });
         }
@@ -2801,18 +2837,8 @@ registerPanel('party',{
       // Rage toggle — flips c.rage. Damage handler honors the B/P/S resist
       // on damage with one of those types when c.rage is true. No data
       // mutation beyond the flag — players & DMs still narrate the rest.
-      else if(act==='rage-on'){
-        state.party[i] = {...state.party[i], rage: true};
-        save(); this._render();
-        panelDefs.combat?._render?.();
-        showToast(state.party[i].name + ' enters a rage');
-      }
-      else if(act==='rage-off'){
-        state.party[i] = {...state.party[i], rage: false};
-        save(); this._render();
-        panelDefs.combat?._render?.();
-        showToast(state.party[i].name + '\'s rage ends');
-      }
+      else if(act==='rage-on')  this._setRage(i, true);
+      else if(act==='rage-off') this._setRage(i, false);
       else if(act==='ws-start') this._editWildShape(i);
       else if(act==='ws-edit')  this._editWildShape(i);
       else if(act==='ws-end')   this._endWildShape(i);
