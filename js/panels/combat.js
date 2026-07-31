@@ -70,7 +70,12 @@ registerPanel('combat',{
       // Combatant fields (hp, ac, initiative, name) — clamped to sane ranges
       // to prevent fat-finger inputs and 9-digit overflow values sticking.
       const CLAMP = {
-        hp:         {min:-9999, max: 99999},  // negative HP allowed: downed PCs can dip below 0 from massive hits
+        // HP floors at 0. This used to allow -9999, justified in a comment as
+        // "downed PCs can dip below 0 from massive hits" — the behavior the
+        // damage path no longer produces, because a negative pool silently
+        // swallows healing (see AUDIT). Hand-typing one was the last way back
+        // into that state: -10 stuck, and an 8-point heal left the PC at -2.
+        hp:         {min:    0, max: 99999},
         hpMax:      {min:    1, max: 99999},
         ac:         {min:    0, max:    99},
         initiative: {min:  -99, max:    99},
@@ -1216,18 +1221,26 @@ registerPanel('combat',{
   _duplicate(i){
     const c = state.combatants[i]; if (!c || c.isPC) return;
     const base = c.baseName || c.name;
-    const existing = state.combatants.filter(x=>x.baseName===base || x.name===base).length;
-    const copyNum = Math.max(existing, 1) + 1;
-    const newName = base + ' ' + copyNum;
-    if (existing === 1){
+    const inGroup = x => x.baseName === base || x.name === base;
+    if (state.combatants.filter(inGroup).length === 1){
       // First duplicate — number the original too
-      const oi = state.combatants.findIndex(x=>x.baseName===base || x.name===base);
+      const oi = state.combatants.findIndex(inGroup);
       if (oi >= 0) state.combatants[oi] = {...state.combatants[oi], name: base+' 1', baseName: base};
     }
+    // Lowest unused suffix, not count+1. Counting produced collisions as soon
+    // as anything was removed from the middle of a group: kill "Goblin 2" out
+    // of four and the next duplicate was a second "Goblin 4", which makes the
+    // group card's HP rows ambiguous about which one you're damaging.
+    const taken = new Set(state.combatants.filter(inGroup).map(x => {
+      const m = String(x.name || '').match(/\s(\d+)$/);
+      return m ? parseInt(m[1]) : 1;
+    }));
+    let copyNum = 1;
+    while (taken.has(copyNum)) copyNum++;
     state.combatants.splice(i+1, 0, {
       ...c,
       id: uid(),
-      name: newName,
+      name: base + ' ' + copyNum,
       baseName: base,
       hp: c.hpMax || c.hp,
       conditions: [],
@@ -1729,7 +1742,12 @@ registerPanel('combat',{
           if (beastHealed > 0) logHealParts.push(beastHealed + ' ' + ws.name);
         }
       }
-      const before = c.hp || 0;
+      // Math.max(0, …) heals UP from a negative pool rather than through it.
+      // The damage path and the HP field both floor at 0 now, but combat state
+      // saved before that could still hold a negative, and without this guard
+      // such a combatant would keep swallowing every heal until the DM noticed.
+      // Mirrors party.js, which does the same for the same reason.
+      const before = Math.max(0, c.hp || 0);
       const cap = c.hpMax || c.hp || 0;
       c.hp = Math.min(cap, before + remainingHeal);
       const actual = c.hp - before;

@@ -1296,3 +1296,39 @@ Regression-guarded in the same run: ordinary damage, temp HP absorption (6 vs 8
 temp leaves HP untouched and temp at 2), resistance still halving via the
 negative-delta `Math.ceil` (21 fire → 10), immunity, revivify clearing `dead`,
 repeated hits on an already-dead PC, and a real click on the panel's − button.
+
+### The last two ways back into negative HP
+
+Clamping the damage path left two doors open, and both were verified to
+reproduce the original swallowed-heal symptom exactly.
+
+**The HP field still accepted negatives.** `_onFieldChange`'s clamp table had
+`hp: {min: -9999}` with a comment justifying it as "downed PCs can dip below 0
+from massive hits" — i.e. the behavior that had just been removed. Typing -10
+stuck, and an 8-point heal then left the PC at **-2**. Floored at 0. Initiative
+and initBonus keep their negative ranges; only HP changed.
+
+**Combat state saved before the clamp could already hold a negative.** The heal
+path read `c.hp` directly, so such a combatant would keep absorbing heals until
+someone noticed. `Math.max(0, c.hp || 0)` heals *up* from a negative rather than
+through it, so any pre-existing bad value repairs itself the first time it is
+touched. party.js already did this, for the same reason.
+
+Confirmed: a legacy combatant at -26/59 healed for 8 now lands on 8, and healed
+for 100 lands on 59 rather than 74.
+
+### Duplicate monsters could share a name
+
+`_duplicate` numbered copies as `count + 1`, which collides as soon as anything
+is removed from the middle of a group: from Goblin 1/3/4, killing Goblin 2 and
+duplicating again produced a **second Goblin 4**. Ids stay distinct so damage
+still lands on the right creature, but the group card renders one HP row per
+member labelled by name, so the DM has two identical rows and no way to tell
+which is which. Now takes the lowest unused suffix, which also fills gaps left
+by casualties (Goblin 1/3/4 → next copy is Goblin 2).
+
+Verified across repeated duplication, removal from the middle, two independent
+groups not interfering, and copies still starting at full HP with no inherited
+conditions. Buffs are deliberately still copied — the buff's AC/HP delta is
+already baked into the fields being copied, so dropping the buff without
+reversing its delta would leave the duplicate permanently inflated.
