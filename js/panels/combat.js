@@ -134,7 +134,12 @@ registerPanel('combat',{
   },
   unmount(){
     // Close any open PiP window when the panel unmounts (full layout reset).
-    try { this._closePiP(/*silent*/true); } catch(e){}
+    // This passed silent:true, which is the one flag that tells _closePiP NOT
+    // to close the window — so the comment described the opposite of what
+    // happened. The orphan stayed open showing a frozen tracker whose buttons
+    // still mutated state and saved it, while the render went nowhere because
+    // _body had just been nulled.
+    try { this._closePiP(); } catch(e){}
     this._body=null;
   },
 
@@ -562,7 +567,11 @@ registerPanel('combat',{
       bar.style.setProperty('--hp-color', col);
       bar.title = c.hp + '/' + (c.hpMax || c.hp) + ' HP';
     }
-    const act = document.activeElement;
+    // activeElement must come from the document the card actually lives in.
+    // While popped out, `document.activeElement` is the MAIN window's focus,
+    // never the PiP input being typed into, so the guard below always passed
+    // and a sync could overwrite the HP value mid-edit.
+    const act = (b.ownerDocument || document).activeElement;
     const hpInp = card.querySelector('input[data-cf="hp"][data-ci="'+i+'"]');
     if (hpInp && hpInp !== act && String(c.hp) !== hpInp.value) hpInp.value = c.hp;
     const acInp = card.querySelector('input[data-cf="ac"][data-ci="'+i+'"]');
@@ -1818,10 +1827,22 @@ registerPanel('combat',{
   // Show a small popout near (x,y) with the PC's saves and passive Perception.
   // Reads from the matched party member's imported abilities.
   _showPcQuickRef(combatant, x, y){
-    // Remove any prior popout.
-    document.querySelectorAll('.pc-quickref').forEach(el => el.remove());
+    // Render into whichever document the panel currently lives in. This was
+    // hard-coded to `document`, so with the tracker popped out the DM clicked
+    // a PC name and nothing appeared — the popup was built in the main window,
+    // behind the "in Picture-in-Picture" placeholder, positioned against the
+    // wrong viewport, and it stayed there because its dismiss listener was
+    // also on a document the DM wasn't clicking in.
+    const doc = (this._body && this._body.ownerDocument) || document;
+    const win = doc.defaultView || window;
+    // Sweep both documents — the panel may have moved since the last popup.
+    doc.querySelectorAll('.pc-quickref').forEach(el => el.remove());
+    if (doc !== document) document.querySelectorAll('.pc-quickref').forEach(el => el.remove());
     const p = state.party.find(pp => pp.id === combatant.id);
     const ab = (p && p.abilities) || null;
+    const sh = (p && p.sheet) || {};
+    const saves = sh.saves || {};
+    const skills = sh.skills || {};
     const fmtMod = m => (m >= 0 ? '+' : '') + m;
     const modOf = score => score == null ? null : Math.floor((score - 10) / 2);
     const row = (label, val) => `<div class="pc-quickref-row"><span>${esc(label)}</span><span>${esc(val)}</span></div>`;
@@ -1829,37 +1850,47 @@ registerPanel('combat',{
     html += row('AC', combatant.ac ?? p?.ac ?? '?');
     html += row('HP', `${combatant.hp ?? '?'} / ${combatant.hpMax ?? p?.hpMax ?? '?'}`);
     html += row('Speed', (p && p.spd) ? p.spd + ' ft' : '—');
-    if (ab){
+    if (ab || Object.keys(saves).length){
       html += '<div class="pc-quickref-section">Saves</div>';
+      // Prefer the imported save TOTALS. These were the bare ability modifier,
+      // which silently dropped save proficiency — a fighter's +5 CON save read
+      // +2 on the card a DM checks mid-fight.
       ['str','dex','con','int','wis','cha'].forEach(k => {
-        const m = modOf(ab[k]);
-        html += row(k.toUpperCase(), m == null ? '—' : fmtMod(m));
+        const v = (typeof saves[k] === 'number') ? saves[k] : modOf(ab && ab[k]);
+        html += row(k.toUpperCase(), v == null ? '—' : fmtMod(v));
       });
-      const wisMod = modOf(ab.wis);
-      if (wisMod != null) html += row('Passive Perception', 10 + wisMod);
+      // Passive = 10 + the skill's TOTAL modifier, which already includes
+      // proficiency and expertise. Computing it from the WIS mod alone showed
+      // a rogue with expertise 12 instead of 20 — the same defect party.js had
+      // (see AUDIT); this was a second copy of the stale formula.
+      const wisMod = modOf(ab && ab.wis);
+      const pp = sh.passivePerception
+        ?? (typeof skills.perception === 'number' ? 10 + skills.perception
+            : (wisMod == null ? null : 10 + wisMod));
+      if (pp != null) html += row('Passive Perception', pp);
     } else {
       html += '<div class="pc-quickref-empty">No imported abilities. Use 📄 Import PDF on the party tracker for save bonuses and passive perception.</div>';
     }
-    const div = document.createElement('div');
+    const div = doc.createElement('div');
     div.className = 'pc-quickref';
     div.innerHTML = html;
-    document.body.appendChild(div);
-    // Position with viewport clamping.
+    doc.body.appendChild(div);
+    // Position with viewport clamping — against the popup's OWN viewport.
     const rect = div.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const vw = win.innerWidth, vh = win.innerHeight;
     div.style.left = Math.min(x, vw - rect.width - 8) + 'px';
     div.style.top  = Math.min(y, vh - rect.height - 8) + 'px';
     // Dismiss on outside click or Escape.
     const dismiss = (ev) => {
       if (ev && ev.type === 'mousedown' && div.contains(ev.target)) return;
       div.remove();
-      document.removeEventListener('mousedown', dismiss);
-      document.removeEventListener('keydown', onKey);
+      doc.removeEventListener('mousedown', dismiss);
+      doc.removeEventListener('keydown', onKey);
     };
     const onKey = (ev) => { if (ev.key === 'Escape') dismiss(); };
     setTimeout(() => {
-      document.addEventListener('mousedown', dismiss);
-      document.addEventListener('keydown', onKey);
+      doc.addEventListener('mousedown', dismiss);
+      doc.addEventListener('keydown', onKey);
     }, 0);
   },
 

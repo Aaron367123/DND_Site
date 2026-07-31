@@ -1332,3 +1332,51 @@ groups not interfering, and copies still starting at full HP with no inherited
 conditions. Buffs are deliberately still copied — the buff's AC/HP delta is
 already baked into the fields being copied, so dropping the buff without
 reversing its delta would leave the duplicate permanently inflated.
+
+### Pop-out (PiP) — three things bound to the wrong document, one zombie window
+
+The pop-out swaps `this._body` to a node in *another document*. `_wireDelegated`
+already handles that properly (a WeakSet, so each body wires exactly once and
+re-wiring the restored original is a no-op). Three other places did not.
+
+**The PC quick-ref rendered into the window the DM wasn't looking at.**
+`_showPcQuickRef` was hard-bound to `document`: it built the popup with
+`document.createElement`, appended to the main `document.body`, clamped against
+the main `window.innerWidth/innerHeight`, and registered its dismiss listeners
+on the main document. Popped out, clicking a PC name appeared to do nothing —
+the card was real, just built in the main window behind the "Combat tracker is
+in Picture-in-Picture" placeholder, positioned against the wrong viewport, and
+unable to dismiss because the DM was clicking in a different document. Now
+resolves `this._body.ownerDocument` and its `defaultView`, and sweeps stale
+popups from both documents since the panel may have moved since the last one.
+
+**`_patchHp` read the wrong document's focus.** The guard that stops a sync
+overwriting an HP field mid-edit is `hpInp !== document.activeElement`. Popped
+out, `document.activeElement` is the *main* window's focus and can never be the
+PiP input being typed into, so the guard always passed. Verified: with "3" typed
+into a popped-out HP field and a sync landing, the old code clobbered it; it now
+survives, and still syncs to 40 once the field is blurred.
+
+**`unmount()` left a zombie window.** The comment read "Close any open PiP window
+when the panel unmounts", and the call passed `silent:true` — the one flag that
+tells `_closePiP` *not* to close it. On a layout reset the orphan stayed open
+showing a frozen tracker whose buttons still mutated and saved state, while the
+repaint went nowhere because `_body` had just been nulled. Now closes for real.
+The re-entrancy this introduces is safe and was checked rather than assumed:
+`close()` fires `pagehide`, whose listener calls `_closePiP(true)` again, but
+both fields are already null by then so it early-outs — one close, two entries,
+no recursion.
+
+**Bonus, found while reading it: the quick-ref's saves and passive Perception
+were a second copy of the stale formula.** Saves showed the bare ability
+modifier, so a fighter's +5 CON save read **+2**; passive Perception was
+`10 + WIS mod`, so a rogue with expertise read **12 instead of 20** — the exact
+defect fixed in party.js earlier, living on in the card a DM checks mid-fight.
+Both now prefer the imported sheet totals, falling back to the ability modifier
+only when the sheet has nothing.
+
+Verification note: the document-routing fixes were exercised against a real
+second document (an iframe), which is what a PiP window is from the code's point
+of view. A live `documentPictureInPicture` window was **not** opened —
+`requestWindow` requires a user gesture that can't be synthesized here. The PiP
+plumbing itself (stylesheet mirroring, body swap) was not modified.
