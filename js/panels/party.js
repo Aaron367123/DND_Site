@@ -3153,28 +3153,52 @@ registerPanel('party',{
       const get = id => backdrop.querySelector('#'+id).value;
       const num = id => parseInt(get(id)) || 0;
       const slot = get('pdf-slot');
+      // The character this is being applied over, if any. Needed so a partial
+      // import can fall back to what's already there instead of erasing it.
+      const prior = (slot === 'new') ? {} : (state.party[parseInt(slot)] || {});
+      // Blank field → keep the existing value rather than 0. A blank HP box
+      // used to import as 0 and drop the character unconscious on the spot;
+      // blank ability boxes became 0, i.e. a -5 modifier on everything.
+      const numKeep = (id, key) => {
+        const raw = get(id).trim();
+        if (raw === '') return prior[key];
+        const n = parseInt(raw);
+        return Number.isFinite(n) ? n : prior[key];
+      };
+      const abilKeep = (id, key) => {
+        const raw = get(id).trim();
+        if (raw === '') return (prior.abilities || {})[key];
+        const n = parseInt(raw);
+        return Number.isFinite(n) ? n : (prior.abilities || {})[key];
+      };
       const data2 = {
         name: get('pdf-name').trim() || 'New Character',
         cls: get('pdf-cls').trim().toLowerCase() || 'fighter',
         level: num('pdf-lvl') || 1,
         race: get('pdf-race').trim(),
         background: get('pdf-bg').trim(),
-        hp: num('pdf-hp'),
-        hpMax: num('pdf-hpmax') || num('pdf-hp'),
-        ac: num('pdf-ac') || 10,
-        spd: num('pdf-spd') || 30,
-        init: num('pdf-init'),
+        hp: numKeep('pdf-hp', 'hp'),
+        hpMax: numKeep('pdf-hpmax', 'hpMax') ?? numKeep('pdf-hp', 'hp'),
+        ac: num('pdf-ac') || prior.ac || 10,
+        spd: num('pdf-spd') || prior.spd || 30,
+        init: numKeep('pdf-init', 'init'),
         abilities: {
-          str: num('pdf-str'), dex: num('pdf-dex'), con: num('pdf-con'),
-          int: num('pdf-int'), wis: num('pdf-wis'), cha: num('pdf-cha'),
+          str: abilKeep('pdf-str','str'), dex: abilKeep('pdf-dex','dex'),
+          con: abilKeep('pdf-con','con'), int: abilKeep('pdf-int','int'),
+          wis: abilKeep('pdf-wis','wis'), cha: abilKeep('pdf-cha','cha'),
         },
-        // Hit dice come straight from the parser — not exposed in the modal
-        // since they're auto-derived from class + level.
-        hitDice: data.hitDice || null,
-        // Full character sheet payload (skills, saves, attacks, spells, bio…)
-        // — surfaced via the expand-sheet toggle on each card.
-        sheet: data.sheet || null,
       };
+      // Hit dice and the sheet aren't in the modal — they come straight from
+      // the parser. Assign them ONLY when the import actually produced them.
+      //
+      // These used to be `data.hitDice || null` inside the literal above, and
+      // the result was spread over the existing character. So re-importing a
+      // PDF that extracted only the header fields — a scan, or the positional
+      // fallback — replaced the sheet with null and destroyed that character's
+      // skills, saves, spell slots, attacks, spells and bio in one click.
+      // Confirmed by applying such an import over a populated character.
+      if (data.hitDice) data2.hitDice = data.hitDice;
+      if (data.sheet)   data2.sheet   = data.sheet;
       if (slot === 'new'){
         state.party.push({
           id: uid(),
