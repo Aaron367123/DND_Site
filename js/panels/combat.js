@@ -643,9 +643,21 @@ registerPanel('combat',{
       : mode === 'conceal'
         ? `<span class="card-stat-tier" title="Concealed health">${esc(this._hpTier(c))}</span>`
         : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">${tempBadge}`;
-    const acField = mode === 'show'
-      ? `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`
-      : '<span class="card-stat-hidden">?</span>';
+    // While a PC is wild shaped the AC in play is the BEAST's — attacks resolve
+    // against the form you're wearing. The mirrored c.ac is the druid's own and
+    // was what the card showed, so the DM was rolling against the wrong number
+    // for the whole transformation.
+    //
+    // Shown read-only rather than mirrored into c.ac on purpose:
+    // syncCombatToParty copies AC back the other way, so writing the beast's
+    // value into the shared field would overwrite the druid's real AC the
+    // moment anything synced.
+    const wsForAc = isPC && partyMatch?.wildshape?.ac ? partyMatch.wildshape : null;
+    const acField = mode !== 'show'
+      ? '<span class="card-stat-hidden">?</span>'
+      : wsForAc
+        ? `<span title="${esc(wsForAc.name)} form — AC ${wsForAc.ac} (${esc(c.name)}'s own AC is ${c.ac})">${wsForAc.ac}</span>`
+        : `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`;
 
     // HP bar — thin gradient fill across the card. Hidden in player-view
     // hide/conceal modes to avoid leaking remaining HP visually.

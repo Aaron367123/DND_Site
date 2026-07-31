@@ -945,6 +945,32 @@ registerPanel('party',{
   // Snapshot a 5etools beast entry into c.wildshape. Pulls HP / AC / speed /
   // actions / traits / saves / damage modifiers verbatim from the parsed
   // _raw block. Druid concentration drops on initial transform (5e RAW).
+  // Pull individual damage types out of a monster's resist/immune/vuln list.
+  //
+  // The converted data does NOT give one type per entry. A single element is
+  // often a comma-joined run — "bludgeoning, piercing, slashing" — and may
+  // carry a qualifier, "…from nonmagical attacks". The old mapping lowercased
+  // each element whole, so the stored list held one long string and
+  // _applyHpDelta's exact-match test could never match "slashing" against it.
+  // Every wild-shaped beast's resistances were therefore stored and then
+  // silently ignored: an Earth Elemental took full damage from the very types
+  // it resists.
+  //
+  // Qualifiers are dropped, so "…from nonmagical attacks" resists magical ones
+  // too. That is over-generous, but it is the smaller error — until now the
+  // resistance simply never applied, and the damage toast names the reason so
+  // the DM can override.
+  _DMG_TYPES: ['acid','bludgeoning','cold','fire','force','lightning','necrotic',
+               'piercing','poison','psychic','radiant','slashing','thunder'],
+  _damageTypesFrom(arr){
+    const out = new Set();
+    (Array.isArray(arr) ? arr : []).forEach(x => {
+      const s = String(typeof x === 'string' ? x : (x && x.name) || '').toLowerCase();
+      this._DMG_TYPES.forEach(t => { if (s.includes(t)) out.add(t); });
+    });
+    return [...out];
+  },
+
   _applyWildShape(i, beast){
     const c = state.party[i]; if (!c || !beast) return;
     const raw = beast._raw || {};
@@ -961,9 +987,9 @@ registerPanel('party',{
       source: beast._source,
       hp, hpMax: hp,
       ac,
-      resistances:    (raw.damage_resistances    || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
-      immunities:     (raw.damage_immunities     || []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
-      vulnerabilities:(raw.damage_vulnerabilities|| []).map(x => (typeof x === 'string' ? x : x.name || '').toLowerCase()).filter(Boolean),
+      resistances:    this._damageTypesFrom(raw.damage_resistances),
+      immunities:     this._damageTypesFrom(raw.damage_immunities),
+      vulnerabilities:this._damageTypesFrom(raw.damage_vulnerabilities),
       cr: raw.challenge_rating ?? null,
     };
     const wasFresh = !c.wildshape;
