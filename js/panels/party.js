@@ -1293,14 +1293,15 @@ registerPanel('party',{
   },
 
   // Long rest applied to the whole party. 5e RAW:
-  //   • HP back to max
+  //   • HP back to max — including anyone who was down but not dead
   //   • All spell slots restored
-  //   • Hit dice restored by half (rounded up, min 1)
+  //   • Hit dice restored by half of TOTAL, rounded DOWN, min 1
   //   • Exhaustion -1 (2024 rules: same)
-  //   • Concentration dropped
-  //   • Death saves cleared (PCs that survived stabilize)
-  // Players that survived the day get a clean slate; downed PCs come back at
-  // 1 HP (5e rule: a stabilized creature wakes with 1 HP after a long rest).
+  //   • Concentration dropped, rage and wild shape end
+  //   • Death-save pips and the "stable" flag cleared on the combat card
+  // A character flagged DEAD is skipped entirely — a night's sleep doesn't
+  // raise them, so their HP, flag and pips are all left alone for the DM to
+  // resolve deliberately.
   _longRestAll(){
     if (!state.party.length){ showToast('No party to rest'); return; }
     if (typeof showConfirm !== 'function'){
@@ -1335,12 +1336,33 @@ registerPanel('party',{
 
   _applyLongRest(){
     state.party.forEach((c, i) => {
-      // HP: stabilize downed PCs at 1, else full heal.
-      c.hp = (c.hp <= 0) ? 1 : (c.hpMax || c.hp);
+      // Death-save state lives on the COMBATANT, not the party member, and
+      // nothing used to clear it — so after a rest the combat card still
+      // showed "⚕ Stable" with its pips filled while the party card showed a
+      // recovered character. Worse, a PC flagged dead was quietly healed to
+      // 1 HP by the rest while the combat card still read "💀 Dead".
+      const ci = (typeof _findCombatantForPartyMember === 'function')
+        ? _findCombatantForPartyMember(c) : -1;
+      const combatant = ci >= 0 ? state.combatants[ci] : null;
+      // A long rest does not raise the dead. Leave them exactly as they are;
+      // reviving is a deliberate act (revivify, or clearing the flag by hand).
+      if (combatant && combatant.dead) return;
+      if (combatant){
+        combatant.stable = false;
+        combatant.deathSaves = null;
+      }
+      // HP to max — which is what the confirm dialog promises, and what RAW
+      // gives you. A character who drops, stabilises and then sleeps eight
+      // hours is not left on 1 HP; that was this function's own house rule
+      // contradicting its own prompt.
+      c.hp = c.hpMax || c.hp;
       c.tempHp = 0;
-      // Hit dice: half back, rounded up, min 1.
+      // Hit dice: half of TOTAL back, minimum 1. Rounded DOWN — the PHB's
+      // general rule is to round down when you divide, so a level 5 character
+      // regains 2, not 3. This rounded up and quietly handed every
+      // odd-levelled character a spare die every night.
       if (c.hitDice && c.hitDice.max){
-        const back = Math.max(1, Math.ceil(c.hitDice.max / 2));
+        const back = Math.max(1, Math.floor(c.hitDice.max / 2));
         c.hitDice.current = Math.min(c.hitDice.max, (c.hitDice.current || 0) + back);
       }
       // Spell slots: clear all expended counters.
@@ -2144,9 +2166,15 @@ registerPanel('party',{
       {title:'Spend hit die', confirmLabel:'Roll & Heal'}).then(ok => {
         if (!ok) return;
         const roll = Math.floor(Math.random()*sides) + 1;
-        const heal = Math.max(1, roll + conMod); // can't go below 1 even with negative CON
+        const heal = Math.max(1, roll + conMod); // house rule: RAW floor is 0
         c.hitDice.current -= 1;
-        c.hp = Math.min(c.hpMax, (c.hp||0) + heal);
+        // Same cap expression as the heal path in _applyHpDelta. This used
+        // c.hpMax directly, so a character with no hpMax recorded got
+        // Math.min(undefined, n) === NaN — their HP became NaN and the die was
+        // spent anyway. Math.max(0, …) additionally heals up from a negative
+        // rather than from it, for anyone saved before HP was floored at 0.
+        const cap = c.hpMax || c.hp || 0;
+        c.hp = Math.min(cap, Math.max(0, c.hp || 0) + heal);
         save();
         syncPartyToCombat(i);
         this._render();
