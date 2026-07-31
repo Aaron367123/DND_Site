@@ -926,12 +926,27 @@ registerPanel('battlemap',{
   // radius gets removed and the canvas is repainted. Returns true on a hit.
   _eraseStrokeAt(x, y){
     if (!this._drawings || !this._drawings.length) return false;
-    // Hit radius scales with the stroke width so thicker lines are also
-    // easier to grab. Floor of 8 screen-pixels regardless of zoom.
+    // Hit radius scales with the stroke width so thicker lines are also easier
+    // to grab, plus a fixed grab affordance around it.
+    //
+    // The affordance has to be in SCREEN pixels, which is what the old comment
+    // claimed ("8 screen-pixels regardless of zoom") and what the arithmetic
+    // did not deliver: x/y arrive from _stagePoint in STAGE pixels, so a bare
+    // 8 was 8 stage px and the on-screen slop moved with the zoom. Zoomed out
+    // to 0.4 it shrank to ~3 screen px and erasing a thin line became a game
+    // of pixel-hunting; zoomed in to 2.5 it grew to ~20 and grabbed lines the
+    // cursor wasn't near. Dividing by the stage→screen factor holds it at a
+    // constant on-screen size. (Listed as an optional one-liner in the
+    // per-device zoom plan and never actually done.)
+    //
+    // The stroke's own half-width stays in world units on purpose — a thick
+    // line really is thicker on the map.
+    const scr = this._screenScale() || 1;
     for (let i = this._drawings.length - 1; i >= 0; i--){
       const s = this._drawings[i];
       const p = s.p; if (!p || p.length < 2) continue;
-      const radius = Math.max(8, ((s.s || 4) * (this._bgMapScale || 1)) / 2 + 6);
+      const halfW = ((s.s || 4) * (this._bgMapScale || 1)) / 2;
+      const radius = Math.max(8 / scr, halfW + 6 / scr);
       let hit = false;
       if (p.length === 2){
         // Single-point stroke (a dot).

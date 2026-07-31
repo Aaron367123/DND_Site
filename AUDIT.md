@@ -1692,3 +1692,46 @@ change (see the undo section above), that is irreversible. Loading from a picker
 conventionally replaces, and prompting every time would be tiresome — but it is
 the one remaining unguarded way to lose unsaved tokens and fog, so it is the
 user's call whether it should ask when the current scene has content.
+
+### Stroke erase
+
+The geometry is sound — `_distToSegment` is a correct point-to-segment
+distance with the parameter clamped to [0,1], the segment walk indexes
+correctly for pair-packed points, single-point dots have their own branch, and
+both call sites (mouse and touch) drag-erase and then `_saveMap()` once on
+release rather than per move. Nothing wrong there.
+
+**The grab radius was in the wrong unit.** The comment promised "a floor of 8
+screen-pixels regardless of zoom"; the arithmetic used a bare `8`, and `x`/`y`
+arrive from `_stagePoint` in **stage** pixels. So the on-screen slop scaled with
+the view instead of resisting it:
+
+| view scale | on-screen grab radius, thin line | |
+|---|---|---|
+| 0.25 | **2 px** | unusable |
+| 0.4  | **3 px** | pixel-hunting |
+| 1.0  | 8 px | as intended |
+| 2.5  | **20 px** | grabs lines you aren't pointing at |
+| 6.0 (touch cap) | **48 px** | erases most of the screen |
+
+Measured both directions. Zoomed out to 0.4, a pointer 7 screen px from a line
+sat 17.5 stage px away against an 8-stage-px radius and **missed**; it now hits.
+Zoomed in to 2.5, a pointer 15 screen px away sat 6 stage px out, inside the old
+20-screen-px radius, and **erased a line the cursor wasn't near**; it now
+correctly leaves it alone.
+
+Dividing the affordance by `_screenScale()` — which is the same stage→screen
+factor `_stagePoint` divides by, so the two agree by construction — makes the
+grab zone `max(8, strokeHalfWidthOnScreen + 6)` screen px. The stroke's own
+half-width deliberately stays in world units: a thick line really is thicker on
+the map, so it keeps a proportionally larger target, which is why the effective
+radius is 11 px at 2.5× rather than a flat 8.
+
+This was listed in the per-device-zoom plan as an optional one-liner alongside
+the token-label floors, and was the item from that list that never got done. The
+label floors were counter-scaled at the time; this wasn't.
+
+12 assertions: erasing at a constant 7 screen px offset across 0.4/1/2.5, not
+erasing at 30 screen px across the same, thick strokes still grabbed at their
+edge while thin ones there are not, topmost overlapping stroke removed and only
+one per call, single-point dots, and empty/null point arrays ignored.
