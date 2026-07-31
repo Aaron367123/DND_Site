@@ -1566,23 +1566,28 @@ registerPanel('party',{
     const prof = sh.profBonus;
     const pp = sh.passivePerception;
     const dexMod = (typeof ab.dex==='number') ? Math.floor((ab.dex-10)/2) : null;
-    const computedPP = (typeof ab.wis==='number') ? 10+Math.floor((ab.wis-10)/2) : null;
-    // Passive Insight / Investigation — DM-side reference values that come up
-    // constantly. 10 + ability mod + (skill prof level × proficiency bonus).
-    // Skill prof level uses the same 'expert'/'proficient'/'half'/null values
-    // the Skills tab already inspects.
+    // Passive score = 10 + the skill's TOTAL modifier.
+    //
+    // sheet.skills[key] already holds that total — ability mod, proficiency
+    // and expertise included; _classifyCharSkill works by subtracting the
+    // ability mod back out of it. So there is nothing to reconstruct.
+    //
+    // This previously fed the raw NUMBER into a helper that compared it
+    // against the strings 'expert' / 'proficient' / 'half'. No branch ever
+    // matched, the bonus came out 0, and every passive score was just
+    // 10 + ability mod. A level 9 rogue with expertise in Perception showed
+    // 12 instead of 20 — eight points low, and silently, on the number a DM
+    // checks every single stealth roll.
     const skills = sh.skills || {};
-    const skillBonus = (lvl) => {
-      if (lvl === 'expert' && prof != null)     return prof * 2;
-      if (lvl === 'proficient' && prof != null) return prof;
-      if (lvl === 'half' && prof != null)       return Math.floor(prof / 2);
-      return 0;
-    };
     const passiveOf = (abilKey, skillKey) => {
+      const skillMod = skills[skillKey];
+      if (typeof skillMod === 'number') return 10 + skillMod;
+      // Skill not on the sheet — fall back to the bare ability mod. Still
+      // approximate, but it's all the character record gives us.
       const m = (typeof ab[abilKey] === 'number') ? Math.floor((ab[abilKey]-10)/2) : null;
-      if (m == null) return null;
-      return 10 + m + skillBonus(skills[skillKey]);
+      return m == null ? null : 10 + m;
     };
+    const computedPP = passiveOf('wis', 'perception');
     const piVal = passiveOf('wis', 'insight');
     const pIVal = passiveOf('int', 'investigation');
     return this._renderLastRoll(c)
