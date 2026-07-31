@@ -370,17 +370,24 @@ registerPanel('battlemap',{
       return;
     }
     const cur = this._undoSnapshot();
-    const target = from.pop();
-    to.push(cur);
-    if (to.length > this._UNDO_MAX) to.shift();
+    const target = from[from.length - 1];
     // _undoRestoring keeps _captureUndo from treating this restore as a fresh
     // action — otherwise undo would push its own result and you could never
     // get further back than one step.
     this._undoRestoring = true;
+    let ok = false;
     try {
-      if (!this._applyUndoSnapshot(target)) return;
-      this._saveMap();          // propagate: an undo should reach other devices
+      ok = this._applyUndoSnapshot(target);
+      if (ok) this._saveMap();  // propagate: an undo should reach other devices
     } finally { this._undoRestoring = false; }
+    // Move the stacks only once the restore has actually landed. This used to
+    // pop `from` and push `to` up front and then bail on a parse failure,
+    // which discarded the target step and left a bogus entry on the other
+    // stack — the one state where undo history is worth being careful with.
+    if (!ok) return;
+    from.pop();
+    to.push(cur);
+    if (to.length > this._UNDO_MAX) to.shift();
     this._closePanel?.();
     // Force the token pass: _repaintLayers skips it when the hash matches, and
     // a restore must always redraw regardless of what the last hash was.
@@ -1136,6 +1143,10 @@ registerPanel('battlemap',{
         showToast('Loaded — re-upload the background image (uploads are session-only)');
       }
     }
+    // Same reasoning as _resetMapScene: a restored snapshot is a different
+    // scene, so the history that led here no longer applies to it. This path
+    // doesn't go through _resetMapScene, so it needs its own reset.
+    this._resetUndoBaseline();
     this._saveMap();
     this._broadcast();
   },
@@ -1161,6 +1172,16 @@ registerPanel('battlemap',{
     this._scaleTokensTo(1);
     this._drawings = [];
     this._fog = null;
+    //   4. Drop the undo history. It describes the OLD map's content, and the
+    //      snapshot deliberately excludes the map image — so a single Ctrl+Z
+    //      after a swap pasted the previous map's tokens, drawings and fog
+    //      cells onto the new one. Measured: switch from a map with two
+    //      tokens, a stroke and two fog cells to an empty map, press undo
+    //      once, and all of it reappears. Resetting HERE rather than at the
+    //      callers means the swap itself also stops being undoable, because
+    //      the _saveMap() that follows sees a baseline equal to the state it
+    //      is about to write and pushes nothing.
+    this._resetUndoBaseline();
   },
 
   _scaleTokensTo(newScale){

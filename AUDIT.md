@@ -1514,3 +1514,46 @@ would rather not ship behavior I can't verify.
 This is the third distinct copy of the "look it up by slug" mistake and the
 second copy of the 200-row cap. The pattern, not the symptom — as noted one
 section above, and evidently worth repeating.
+
+## Battle map — undo/redo (2026-07-31)
+
+The undo system is snapshot-based and deliberately covers content only —
+tokens, fog, fog strokes, drawings — on the stated grounds that "Ctrl+Z
+silently swapping the map back would be a worse surprise than not undoing".
+That reasoning is right, but excluding the map from the *snapshot* without also
+clearing the *history* on a map change produced a worse surprise than either.
+
+**One Ctrl+Z after switching maps pasted the previous map's content onto the new
+one.** Measured: map A with two tokens, one stroke and two fog cells → switch to
+map B → press undo once → the stroke and both fog cells reappear, on a map whose
+grid dimensions they were never keyed to. `_resetUndoBaseline` existed and was
+wired for *remote* changes only; the three local swap paths and
+`_restoreMapSnapshot` never called it.
+
+The reset now lives at the end of `_resetMapScene`, which its own comment
+already nominates as the choke point — "Called by every map-swap path … so the
+bug doesn't reappear when a fourth call site is added later". Putting it there
+also makes the swap itself non-undoable for free: the `_saveMap()` that follows
+finds a baseline equal to the state it is about to write, so `_captureUndo`
+pushes nothing. `_restoreMapSnapshot` doesn't route through `_resetMapScene`, so
+it gets its own call.
+
+Worth noting what is deliberately *not* changed: tokens still carry across a map
+swap (the party follows you to the next map) while drawings and fog do not.
+Verified that still holds.
+
+**`_undoRedo` could corrupt its own stacks.** It popped `from` and pushed `to`
+before attempting the restore, then bailed on a parse failure — discarding the
+target step and leaving a bogus entry on the opposite stack, with
+`_updateUndoButtons` skipped so the buttons lied about it too. The stacks now
+move only after the restore lands. Verified by planting malformed JSON in the
+stack: both stacks and the scene come through unchanged.
+
+Twelve assertions: swap isolation both directions, ordinary undo/redo within a
+map across two edit types, redo branch invalidation on a new action, snapshot
+restore, and the corrupt-entry case.
+
+Everything else in this area held up. `_startUndoKeys` guards against
+double-binding and against stealing Ctrl+Z from text inputs and unfocused
+windows; `unmount` removes the handler along with the resize observer, the
+document mouseup, the queued rAF and the requality timer. No leaks found.
