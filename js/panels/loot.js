@@ -105,8 +105,23 @@ registerPanel('loot',{
       Object.keys(obj || {}).forEach(c => { coins[c] = (coins[c] || 0) + this._rollDice(obj[c]); });
     };
 
-    const set = kind === 'hoard' ? T.hoard : T.individual;
-    const band = (set || []).find(x => x.crMin === crBand.min) || (set || [])[0];
+    // Pin the edition. loot.json carries BOTH the 2014 tables (source 'DMG')
+    // and the 2024 revision ('XDMG'), and they use identical band names, so a
+    // plain find-by-CR picks whichever the file happens to list first. That
+    // worked only because DMG currently occupies indices 0–3; a regenerated
+    // dump with the order flipped would silently switch editions and nothing
+    // on screen would look wrong.
+    //
+    // 2014 is the deliberate choice: its hoards carry gems, art objects and
+    // the A–I magic item tables, which is what the rest of this roller
+    // implements. The 2024 hoard is a different shape — one row, pure gp, and
+    // 1d3 magic items drawn by character level — and would need its own
+    // handling for the `randomByLevel` type before it could be offered.
+    const EDITION = 'DMG';
+    const set = (kind === 'hoard' ? T.hoard : T.individual) || [];
+    const band = set.find(x => x.source === EDITION && x.crMin === crBand.min)
+              || set.find(x => x.crMin === crBand.min)   // dump without the 2014 tables
+              || set[0];
     if (!band) return null;
 
     if (kind === 'hoard'){
