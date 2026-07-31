@@ -1557,3 +1557,52 @@ Everything else in this area held up. `_startUndoKeys` guards against
 double-binding and against stealing Ctrl+Z from text inputs and unfocused
 windows; `unmount` removes the handler along with the resize observer, the
 document mouseup, the queued rAF and the requality timer. No leaks found.
+
+### Fog of war — the two-way brush ignored the order you painted in
+
+`_drawFog` rendered free-brush strokes in two passes grouped **by operation**:
+every `reveal`, then every `hide`. The strokes array is chronological and each
+entry carries its op, so that grouping threw away the only thing that makes a
+two-way brush behave.
+
+Measured on the real renderer by sampling the fog canvas: **reveal → hide →
+re-reveal** over one spot left alpha at **140** (fogged) instead of 0. The
+re-reveal was drawn first and the hide painted over it, so an area hidden with
+the free brush could never be revealed again — the reveal brush simply looked
+broken there.
+
+The same probe exposed a second defect. `reveal→hide→reveal` and
+`hide→reveal→hide` returned **140 vs 203**, because hides repainted at 0.55 over
+whatever was already there: 0.55, then 0.80, then 0.91. Brushing back and forth
+drove the DM's see-through fog toward opaque, even though the code comment said
+it repainted "at the same opacity as the base layer".
+
+Both come from compositing at display opacity while painting. Fog coverage is
+now built as an **opaque binary mask** on a cached scratch layer — chronological
+order, `destination-out` for reveal and `source-over` for hide — then stamped
+once at 0.55 (DM) or 1.0 (player). Order is preserved and fog is exactly one
+opacity everywhere it exists, however many times it has been brushed. The
+scratch canvas is cached and resized on the same terms as `_sizeLayer`, since
+this runs on every fog-paint mousemove.
+
+**A mistake worth recording, because the first round of tests passed it.** The
+cached mask context keeps its `globalCompositeOperation` between calls, and the
+loops leave it on `destination-out`. Without an explicit reset, the *next*
+repaint's base fill runs as an erase — the map comes back almost entirely
+unfogged, showing fog only where a hide stroke happened to land. A single
+`_drawFog()` call renders perfectly, so a one-shot probe says everything is
+fine; it only appears from the second repaint onward, which in practice is
+every real frame. Caught by asserting on points *outside* the brushed area
+rather than only on the spot under test — three "untouched" samples read 0 when
+they should have read 140, and chasing that discrepancy instead of dismissing it
+found a regression that would have blanked fog across the table.
+
+21 assertions: ordering both directions, non-compounding across four stacked
+hides, cell reveals, a hide re-covering a cell, circle vs square brushes,
+player-view opacity, stability across repeated repaints, mask reuse, and fog
+disabled.
+
+Also verified while in here: `_drawFog` passes the full stage size to
+`_sizeLayer`, which clips to `_visibleStageRect` internally — so fog already
+inherits the viewport-sizing work from earlier this session and does not
+allocate a full-map backing store at high zoom.

@@ -3641,11 +3641,52 @@ registerPanel('battlemap',{
     // Player view: fully opaque — players shouldn't see anything in unrevealed
     // cells. Detected via the body class set by initPlayerView().
     const isPlayer = document.body.classList.contains('player-mode');
-    ctx.fillStyle = isPlayer ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0,0,W,H);
+    const alpha = isPlayer ? 1 : 0.55;
+
+    // Fog coverage is built as an OPAQUE mask on a scratch layer and stamped
+    // once at the display opacity. Painting straight onto the visible canvas
+    // at 0.55 had two failures, both measured:
+    //
+    //  1. Reveals and hides were drawn in two passes grouped BY OPERATION —
+    //     every reveal, then every hide — which threw away the order they
+    //     were painted in. "Reveal, hide, re-reveal" over one spot rendered
+    //     the re-reveal first and the hide last, so the spot stayed fogged
+    //     and the reveal brush looked broken. Chronological order is the only
+    //     thing that makes a two-way brush behave.
+    //  2. Overlapping hide strokes compounded: 0.55 over 0.55 is 0.80, then
+    //     0.91. Brushing back and forth turned the DM's see-through fog
+    //     effectively opaque, though the code comment said it was repainting
+    //     "at the same opacity as the base layer".
+    //
+    // Working in binary coverage fixes both: order is preserved, and fog is
+    // exactly one opacity everywhere it exists.
+    //
+    // The scratch canvas is cached and resized on the same terms as
+    // _sizeLayer, because this runs on every fog-paint mousemove and
+    // allocating a full-size canvas per frame is exactly what that guards
+    // against.
+    let mask = this._fogMask;
+    if (!mask){ mask = this._fogMask = document.createElement('canvas'); }
+    if (mask.width !== fogCanvas.width || mask.height !== fogCanvas.height){
+      mask.width = fogCanvas.width; mask.height = fogCanvas.height;
+    }
+    const mctx = mask.getContext('2d');
+    // Match the k-scale/offset transform _sizeLayer applied, so everything
+    // below stays in stage coordinates.
+    const t = ctx.getTransform();
+    mctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
+    // Reset the composite op FIRST. The mask context is cached across repaints
+    // and the loops below leave it on 'destination-out', so without this the
+    // next repaint's base fill runs as an erase and the whole map comes back
+    // unfogged except wherever a hide stroke happened to paint. A single call
+    // looks perfect — it only shows up from the second repaint onward.
+    mctx.globalCompositeOperation = 'source-over';
+    mctx.clearRect(0, 0, W, H);
+    mctx.fillStyle = '#000';
+    mctx.fillRect(0, 0, W, H);
+
     // Cut out revealed cells fully
-    ctx.globalCompositeOperation='destination-out';
-    ctx.fillStyle='rgba(0,0,0,1)';
+    mctx.globalCompositeOperation='destination-out';
     // Offset cells to match the drawn grid (Align-tool offset) — same formula
     // as _drawGrid + fogPaint, so painted cells render on the squares.
     const _fScale = _mapBgImage ? (this._bgMapScale || 1) : 1;
@@ -3653,26 +3694,31 @@ registerPanel('battlemap',{
     const _offY = (((this._gridOffsetY || 0) * _fScale) % cs + cs) % cs;
     this._fog.forEach(key=>{
       const [gx,gy]=key.split(',').map(Number);
-      ctx.fillRect(_offX + gx*cs, _offY + gy*cs, cs, cs);
+      mctx.fillRect(_offX + gx*cs, _offY + gy*cs, cs, cs);
     });
-    // Free-mode strokes — two passes: reveals (destination-out, punches more
-    // holes) then hides (source-over, repaints fog over previously revealed
-    // areas). Stroke coords are in cell fractions, scaled to the current cs.
+    // Free-mode strokes, in the order they were painted. Coords are cell
+    // fractions, scaled to the current cs so they survive zoom.
     const strokes = this._fogStrokes || [];
-    const stamp = (s, alpha) => {
+    const stamp = (s) => {
       const x = s.xc * cs, y = s.yc * cs, rad = s.r * cs;
       if (s.shape === 'circle'){
-        ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI*2); ctx.fill();
+        mctx.beginPath(); mctx.arc(x, y, rad, 0, Math.PI*2); mctx.fill();
       } else {
-        ctx.fillRect(x - rad, y - rad, rad*2, rad*2);
+        mctx.fillRect(x - rad, y - rad, rad*2, rad*2);
       }
     };
-    // Reveal pass
-    strokes.forEach(s => { if (s.op === 'reveal') stamp(s); });
-    // Hide pass — repaint fog at the same opacity as the base layer.
-    ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle = isPlayer ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0.55)';
-    strokes.forEach(s => { if (s.op === 'hide') stamp(s); });
+    strokes.forEach(s => {
+      mctx.globalCompositeOperation = (s.op === 'hide') ? 'source-over' : 'destination-out';
+      stamp(s);
+    });
+
+    // Stamp the finished mask once, at identity, so the already-baked
+    // transform isn't applied a second time.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(mask, 0, 0);
+    ctx.restore();
     // Apply per-user hardness (0% = sharp cells, 100% = blurred fog edges).
     this._applyFogBlur();
   },
