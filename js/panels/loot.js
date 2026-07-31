@@ -27,6 +27,174 @@ registerPanel('loot',{
   unmount(){this._body=null;},
   _save(){saveJson('skt-loot-v1', this._loot, 'loot');},
 
+  // ─── Random treasure (DMG loot tables) ─────────────────────────────────────
+  // data/loot.json ships with the 5etools dump but nothing read it. It holds
+  // the individual/hoard treasure tables by CR band, the gem and art-object
+  // lists by value, and magic item tables A–I.
+  //
+  // Fetched on FIRST USE, not at boot: it's 158 KB that most sessions never
+  // open, and the boot path is already the app's slowest moment.
+  _lootTables: null,
+  _lootTablesPromise: null,
+  _ensureLootTables(){
+    if (this._lootTables) return Promise.resolve(this._lootTables);
+    if (this._lootTablesPromise) return this._lootTablesPromise;
+    this._lootTablesPromise = fetch('data/loot.json')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(j => { this._lootTables = j; return j; })
+      .catch(e => {
+        this._lootTablesPromise = null;   // let a later attempt retry
+        if (typeof sktErrors !== 'undefined') sktErrors.report('loot:tables', e);
+        if (typeof showToast === 'function') showToast('Could not load the treasure tables');
+        return null;
+      });
+    return this._lootTablesPromise;
+  },
+
+  // "5d6", "6d6*100", "2d6*10", "1d6" — the only shapes these tables use.
+  // A bare number is allowed so a fixed quantity can't blow up the roll.
+  _rollDice(expr){
+    if (typeof expr === 'number') return expr;
+    const m = /^\s*(\d+)\s*d\s*(\d+)\s*(?:\*\s*(\d+))?\s*$/i.exec(String(expr||''));
+    if (!m) { const n = parseInt(expr, 10); return isNaN(n) ? 0 : n; }
+    const count = +m[1], sides = +m[2], mult = m[3] ? +m[3] : 1;
+    let total = 0;
+    for (let i = 0; i < count; i++) total += 1 + Math.floor(Math.random() * sides);
+    return total * mult;
+  },
+
+  // d100 against a [{min,max,...}] table. Returns the matching row.
+  _rollOnTable(table){
+    const roll = 1 + Math.floor(Math.random() * 100);
+    return (table || []).find(r => roll >= (r.min ?? 1) && roll <= (r.max ?? r.min ?? 100)) || null;
+  },
+
+  // gems/artObjects are listed twice — once from the DMG and once from the
+  // 2024 revision — so `type` alone is ambiguous. Prefer the DMG list, which
+  // is what the hoard tables' page references point at.
+  _lootListByType(arr, type){
+    const hits = (arr || []).filter(x => String(x.type) === String(type));
+    return hits.find(x => x.source === 'DMG') || hits[0] || null;
+  },
+
+  _clean(s){
+    // Gem and art-object entries carry flavour text OUTSIDE the item tag:
+    //     "{@item Azurite} (opaque mottled deep blue)"
+    // Magic items carry meaning INSIDE it:
+    //     "{@item Spell Scroll (Cantrip)}"
+    // So a trailing parenthetical is only dropped when it sits after the
+    // closing brace. Stripping unconditionally — which is what this did first
+    // — turned every scroll into a bare "Spell Scroll" with the level gone.
+    const str = String(s || '').replace(/\}\s*\([^)]*\)\s*$/, '}');
+    return (typeof _stripTags === 'function' ? _stripTags(str) : str).trim();
+  },
+
+  // Roll one treasure result. Returns {coins:{cp,sp,...}, items:[{name,qty,value}]}
+  // without touching panel state — the caller decides whether to keep it.
+  _rollTreasure(kind, crBand){
+    const T = this._lootTables; if (!T) return null;
+    const coins = {};
+    const bucket = new Map();   // name → {name, qty, value}
+    const addItem = (name, value) => {
+      const n = this._clean(name); if (!n) return;
+      const key = n + '|' + (value || '');
+      const cur = bucket.get(key);
+      if (cur) cur.qty++; else bucket.set(key, { name: n, qty: 1, value: value || '' });
+    };
+    const addCoins = obj => {
+      Object.keys(obj || {}).forEach(c => { coins[c] = (coins[c] || 0) + this._rollDice(obj[c]); });
+    };
+
+    const set = kind === 'hoard' ? T.hoard : T.individual;
+    const band = (set || []).find(x => x.crMin === crBand.min) || (set || [])[0];
+    if (!band) return null;
+
+    if (kind === 'hoard'){
+      addCoins(band.coins);                      // hoard coins are unconditional
+      const row = this._rollOnTable(band.table);
+      if (row){
+        if (row.gems){
+          const list = this._lootListByType(T.gems, row.gems.type);
+          const n = this._rollDice(row.gems.amount);
+          for (let i = 0; i < n; i++){
+            const pick = list && list.table[Math.floor(Math.random() * list.table.length)];
+            addItem(pick || (row.gems.type + ' gp gemstone'), row.gems.type + ' gp');
+          }
+        }
+        if (row.artObjects){
+          const list = this._lootListByType(T.artObjects, row.artObjects.type);
+          const n = this._rollDice(row.artObjects.amount);
+          for (let i = 0; i < n; i++){
+            const pick = list && list.table[Math.floor(Math.random() * list.table.length)];
+            addItem(pick || (row.artObjects.type + ' gp art object'), row.artObjects.type + ' gp');
+          }
+        }
+        (row.magicItems || []).forEach(mi => {
+          const tbl = (T.magicItems || []).find(x => String(x.type) === String(mi.type));
+          const n = this._rollDice(mi.amount);
+          for (let i = 0; i < n; i++){
+            const hit = tbl && this._rollOnTable(tbl.table);
+            if (hit && hit.item) addItem(hit.item, '');
+          }
+        });
+      }
+    } else {
+      const row = this._rollOnTable(band.table);
+      if (row) addCoins(row.coins);              // individual treasure is coins only
+    }
+    return { coins, items: [...bucket.values()] };
+  },
+
+  _describeTreasure(res){
+    const coinStr = ['pp','gp','ep','sp','cp']
+      .filter(c => res.coins[c]).map(c => res.coins[c] + ' ' + c).join(', ');
+    const itemStr = res.items
+      .map(i => (i.qty > 1 ? i.qty + '× ' : '') + i.name + (i.value ? ' (' + i.value + ')' : ''))
+      .join(' · ');
+    if (!coinStr && !itemStr) return 'Nothing — the tables came up empty.';
+    return (coinStr ? 'Coins: ' + coinStr : 'No coins')
+         + (itemStr ? '  ·  ' + itemStr : '  ·  no items');
+  },
+
+  _openTreasureRoller(){
+    const BANDS = [
+      { label: 'Challenge 0–4',   min: 0  },
+      { label: 'Challenge 5–10',  min: 5  },
+      { label: 'Challenge 11–16', min: 11 },
+      { label: 'Challenge 17+',   min: 17 },
+    ];
+    this._ensureLootTables().then(T => {
+      if (!T) return;   // _ensureLootTables already toasted
+      return showModal('Roll treasure', [
+        { id:'kind', label:'Type', type:'select', value:'hoard',
+          options:[{value:'hoard', label:'Hoard (coins, gems, art, magic items)'},
+                   {value:'individual', label:'Individual (coins only)'}] },
+        { id:'band', label:'Challenge rating', type:'select', value:'0',
+          options: BANDS.map(x => ({ value:String(x.min), label:x.label })) },
+      ], 'Roll').then(r => {
+        if (!r) return;
+        const band = BANDS.find(x => String(x.min) === String(r.band)) || BANDS[0];
+        const res = this._rollTreasure(r.kind, band);
+        if (!res) { if (typeof showToast === 'function') showToast('No table for that combination'); return; }
+        // Show the result BEFORE committing — a roll you can't preview is a
+        // roll you end up undoing by hand.
+        return showConfirm(this._describeTreasure(res),
+          { title: (r.kind === 'hoard' ? 'Hoard' : 'Individual') + ' — ' + band.label,
+            confirmLabel: 'Add to loot' }).then(ok => {
+          if (!ok) return;
+          ['cp','sp','ep','gp','pp'].forEach(c => {
+            if (res.coins[c]) this._loot[c] = (this._loot[c] || 0) + res.coins[c];
+          });
+          res.items.forEach(i => this._loot.items.push({
+            id: uid(), name: i.name, qty: i.qty, value: i.value, assignedTo: null }));
+          this._save();
+          this._render();
+          if (typeof showToast === 'function') showToast('Treasure added to the loot pool');
+        });
+      });
+    });
+  },
+
   // Resolve an `assignedTo` id to a display name. Works for both party-member
   // ids and custom tab-group ids; returns null for unassigned / orphaned.
   _memberName(id){
@@ -541,6 +709,7 @@ registerPanel('loot',{
           <span>⚖ Weight</span>
         </label>
         <span style="flex:1"></span>
+        <button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">🎲 Roll treasure</button>
         <button class="btn small" id="loot-divvy">Divvy up</button>
       </div>
       <div class="loot-add-row">
@@ -725,6 +894,9 @@ registerPanel('loot',{
         }
       });
     });
+
+    // Random treasure
+    b.querySelector('#loot-roll')?.addEventListener('click',()=>this._openTreasureRoller());
 
     // Divvy
     b.querySelector('#loot-divvy').addEventListener('click',()=>{
