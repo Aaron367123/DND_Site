@@ -1194,6 +1194,15 @@ registerPanel('party',{
         // if it's B/P/S). Show a small reminder in the toast though.
         typeSuffix = ' (untyped — rage applies only to B/P/S)';
       }
+      // Damage for the concentration check is captured HERE — after the
+      // resist/immune/vulnerable math but BEFORE any pool absorbs it. Per RAW
+      // you have taken the damage even when temporary hit points or a wild
+      // shape's beast pool soak all of it, so the save is still owed. Reading
+      // the post-absorption figure instead silently swallowed every check in
+      // exactly the situation a concentrating caster is most likely to be in.
+      // combat.js already does this — its comment even claims it mirrors this
+      // function, which it did not.
+      const damageForConc = remaining;
       // Wild Shape: damage hits the BEAST pool first. Once beast HP ≤ 0,
       // overflow drops the form and carries to druid HP (5e RAW).
       if (c.wildshape && c.wildshape.name){
@@ -1225,20 +1234,27 @@ registerPanel('party',{
       }
       const taken = Math.max(0, remaining);
       if (taken > 0){
-        c.hp = (c.hp || 0) - taken;
+        // Floor at 0. Damage that would take you below 0 sets you to 0 in 5e;
+        // the excess only matters for instant death, which this tracker does
+        // not model. Letting it run negative made healing a downed PC useless:
+        // at -15, a 5-point Healing Word moved them to -10 and they stayed
+        // down, when RAW says they wake at 5.
+        c.hp = Math.max(0, (c.hp || 0) - taken);
       }
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
-      if (c.concentration && taken > 0){
-        const dc = Math.max(10, Math.floor(taken / 2));
+      if (c.concentration && damageForConc > 0){
+        const dc = Math.max(10, Math.floor(damageForConc / 2));
         if (typeof showToast === 'function'){
           showToast('🌀 ' + c.name + ': DC ' + dc + ' CON save to maintain ' + c.concentration);
         }
       }
-      // Damage-type readout in a small toast so the DM sees the resist/etc.
-      // applied. Untyped damage stays silent (no extra toast — the HP bar
-      // is the feedback).
+      // Damage-type readout so the DM sees the resist/etc. applied. Report
+      // what was DEALT, noting anything a pool soaked — "took 0 damage" when
+      // temp HP ate a hit reads as though the attack missed.
       if (dmgType && typeof showToast === 'function'){
-        showToast(c.name + ' took ' + taken + ' damage' + typeSuffix);
+        const soaked = damageForConc - taken;
+        showToast(c.name + ' took ' + damageForConc + ' damage' + typeSuffix
+          + (soaked > 0 ? ' — ' + soaked + ' absorbed' : ''));
       }
     } else if (delta > 0){
       // Healing routes to the beast pool first while wildshape is active —
@@ -1260,7 +1276,10 @@ registerPanel('party',{
         }
       } else {
         const cap = c.hpMax || c.hp || 0;
-        c.hp = Math.min(cap, (c.hp || 0) + delta);
+        // Heal up from 0, never from a negative. The clamp on the damage side
+        // keeps new values at 0, and Math.max here repairs any character
+        // already sitting on a negative HP from before that clamp existed.
+        c.hp = Math.min(cap, Math.max(0, c.hp || 0) + delta);
       }
     }
     save();
