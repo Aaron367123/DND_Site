@@ -291,8 +291,17 @@ registerPanel('notes', {
   _isDescendant(descId, ancestorId){
     if (descId === ancestorId) return true;
     let cur = this._data.items.find(x => x.id === descId);
+    // A cycle in the parent chain made this spin forever and hang the tab —
+    // verified: with a↔b and an ancestor outside the loop, the early
+    // `cur.parent === ancestorId` exit never fires and the walk never ends.
+    // The drop handler can't create a cycle (it calls this to prevent exactly
+    // that), but a sync merge can: two devices moving A into B and B into A
+    // reconcile to one. Track what we've walked and stop.
+    const seen = new Set();
     while (cur && cur.parent){
       if (cur.parent === ancestorId) return true;
+      if (seen.has(cur.id)) return false;   // cycle — not a descendant, just broken
+      seen.add(cur.id);
       cur = this._data.items.find(x => x.id === cur.parent);
     }
     return false;
@@ -339,8 +348,29 @@ registerPanel('notes', {
   // so the visual hierarchy stays clean even after manual ordering.
   _buildTree(){
     const byParent = new Map();
+    // _renderTree only ever walks down from '__root__', so an item whose
+    // parent id doesn't resolve lands in a bucket nobody visits: it stays in
+    // items[], keeps saving, keeps syncing, and is invisible and unreachable
+    // in the UI. Local deletes cascade so they can't cause this, but a sync
+    // can — delete a folder on one device while another adds a note inside
+    // it, and the merge leaves that note pointing at something gone. Surface
+    // dangling parents at the root instead of losing them.
+    const byId = new Map(this._data.items.map(x => [x.id, x]));
+    const limit = this._data.items.length + 1;
+    const bucketFor = (it) => {
+      if (!it.parent || !byId.has(it.parent)) return '__root__';
+      // Anything inside a parent cycle is equally unreachable from the root,
+      // so walk up and bail out if the chain runs longer than the number of
+      // items — which it can only do by looping.
+      let cur = it, steps = 0;
+      while (cur && cur.parent && byId.has(cur.parent)){
+        if (++steps > limit) return '__root__';
+        cur = byId.get(cur.parent);
+      }
+      return it.parent;
+    };
     this._data.items.forEach(it => {
-      const k = it.parent || '__root__';
+      const k = bucketFor(it);
       if (!byParent.has(k)) byParent.set(k, []);
       byParent.get(k).push(it);
     });
@@ -1498,7 +1528,27 @@ registerPanel('notes', {
   _deletePrompt(id){
     const it = this._data.items.find(x => x.id === id); if (!it) return;
     const isFolder = it.type === 'folder';
-    const desc = isFolder ? 'Folder and ALL its contents' : 'File';
+    // Count the cascade up front and say it. "Folder and ALL its contents"
+    // read identically whether the folder held nothing or forty sessions of
+    // notes, on an action with no undo — the tree has no history, only file
+    // content does.
+    let desc;
+    if (!isFolder) desc = 'File';
+    else {
+      const doomed = new Set([id]);
+      for (let grew = true; grew; ){
+        grew = false;
+        this._data.items.forEach(x => {
+          if (x.parent && doomed.has(x.parent) && !doomed.has(x.id)){ doomed.add(x.id); grew = true; }
+        });
+      }
+      const files   = this._data.items.filter(x => doomed.has(x.id) && x.id !== id && x.type === 'file').length;
+      const folders = this._data.items.filter(x => doomed.has(x.id) && x.id !== id && x.type === 'folder').length;
+      const parts = [];
+      if (files)   parts.push(files + ' note' + (files === 1 ? '' : 's'));
+      if (folders) parts.push(folders + ' subfolder' + (folders === 1 ? '' : 's'));
+      desc = parts.length ? ('Folder and ' + parts.join(' and ')) : 'Empty folder';
+    }
     showModal('Delete '+desc+'?', [], 'Delete '+it.name).then(r => {
       if (!r) return;
       // Compute the Dropbox path BEFORE mutating items[] — once the item

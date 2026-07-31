@@ -1782,3 +1782,53 @@ one is precisely the trap that produced this bug; 64 lines removed, 52 added.
 and the history continuing *past* it into the typing before, h2, table,
 codeblock and Tab each reversed, and blur still committing to the file with the
 editing flag cleared.
+
+### Notes folder tree
+
+The drag-and-drop reparenting is sound. `_isDescendant` is called before every
+move and correctly rejects both dropping a folder *into* its own descendant and
+dropping it *between* rows inside its own subtree (the second case would set
+`from.parent` to something in `from`'s subtree, which is the same cycle by
+another route). `_reorderSiblings` re-numbers correctly after the caller has
+already reparented, and `_deletePrompt` BFS-cascades children, reassigns the
+selection, and captures the Dropbox path before mutating. Field naming is
+consistent — `.parent` throughout, no stray `.parentId`.
+
+Three things were wrong.
+
+**A note whose parent no longer exists became invisible and unreachable.**
+`_buildTree` buckets by `it.parent`, `_renderTree` only ever walks down from
+`__root__`, so an item pointing at a deleted id lands in a bucket nobody
+visits. It stays in `items[]`, keeps being saved, keeps being synced, and
+cannot be seen or opened. Measured: a note holding real content next to a
+normal folder rendered as `Keep, Visible.md` — the third note simply absent.
+Local deletes cascade so they can't cause this, but sync can: delete a folder
+on one device while another adds a note inside it, and the merge leaves that
+note pointing at something gone. Dangling parents now surface at the root.
+
+**A parent cycle hung the tab.** `_isDescendant` walks up the chain with no
+loop guard. The first probe returned instantly and looked fine — but only
+because the ancestor being tested *was* in the cycle, so the early
+`cur.parent === ancestorId` exit fired. Asking about an ancestor outside the
+loop never terminates: 50 000 lookups and still going. The drop handler can't
+create a cycle (this function is what prevents it), but the same concurrent-sync
+merge can — two devices moving A into B and B into A. Now guarded by a visited
+set, and `_buildTree` surfaces cycle members at the root too rather than
+leaving them in an unreachable bucket.
+
+That near-miss is worth recording on its own: the first cycle test *passed* and
+would have gone in the notes as "cycles are safe". It only failed once the test
+was built so the early-exit couldn't fire. A guard test has to be constructed
+against the code path it's guarding, not against the happy accident next to it.
+
+**The delete prompt didn't say what it was destroying.** "Delete Folder and ALL
+its contents?" read identically for an empty folder and for one holding forty
+sessions of notes — on an action with no undo, since the tree has no history
+and only file *content* does. It now counts the cascade:
+`Delete Folder and 3 notes and 1 subfolder?`, or `Delete Empty folder?` when
+there is nothing inside. Files are unchanged.
+
+11 assertions: orphan recovery, cycle members still reachable, `_isDescendant`
+terminating on a cycle while still correctly identifying real
+descendants/non-descendants/self, normal nesting still bucketing normally
+(not flattened by the new guard), and all three delete-prompt wordings.
