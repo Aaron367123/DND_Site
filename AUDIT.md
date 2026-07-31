@@ -1030,6 +1030,47 @@ pass rather than being bolted onto this one.
     the DM adds a stroke in the same instant, whichever array lands second is
     the one kept.
 
+## The three map-update paths are now one (2026-07-31)
+
+Structural fix for the pattern behind several of this session's bugs. Every
+live map update arrives on one of three routes — the DM's own window, a
+same-browser BroadcastChannel message, or a cross-device Firebase apply — and
+two of those were independent copies of the same logic. They drifted apart
+repeatedly, and three separate bugs all had the shape *"make path B do what
+path A already does"*:
+
+- the cross-device apply silently missed `gridType`, `fogStrokes`, the align
+  offsets, scale and rotation for a long time;
+- later the BroadcastChannel path was the one missing the geometry check, so a
+  cell-size change left a same-browser player on a stale stage;
+- and the same handler dropped every inbound message, blocking a whole role.
+
+`battlemap.applyMapState(src, opts)` is now the only code that knows how to
+take a map snapshot and put it on screen. `src` uses the field names the stored
+map JSON and the broadcast payload already share, so either can be passed
+unchanged. The transports only decide WHAT to hand it:
+
+- BroadcastChannel keeps the live `strokeTick`/`strokeEnd` preview messages and
+  the player-role policy (the DM accepts a player's drawings and nothing else),
+  then delegates.
+- `realtime.js` hands over the parsed localStorage value and nothing more.
+
+**149 lines of duplicated logic removed.** One behaviour change fell out for
+free: the mid-drag guard (`if (this._drag) return`) existed only on the
+Firebase route, so a BroadcastChannel update could previously yank the map out
+from under a token drag. Both routes have it now.
+
+Verified with two live tabs after the refactor:
+
+| direction | result |
+|---|---|
+| DM → player, token move | arrives, renders in the DOM |
+| DM → player, cellSize 50 → 90 | propagates, stage resized to 2160x1620 to match |
+| player → DM, drawing | arrives with exact coordinates |
+| player → DM, ghost token + hex grid | **rejected** — drawings only |
+
+Smoke suite green, 13 checks.
+
 ### Measured and deliberately NOT changed
 
 Recording these so the next pass doesn't re-investigate them:

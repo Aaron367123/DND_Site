@@ -549,83 +549,16 @@ function _reloadPanel(id) {
   if (!def || !def._body) return;
 
   if (id === 'battlemap') {
-    // A token drag is in flight — replacing _tokens and re-rendering now
-    // would destroy the dragged element and orphan the drag's object, so
-    // the move would be silently discarded on mouseup. Skip this update;
-    // the map is last-write-wins, and the drag-end _saveMap() makes this
-    // device's state canonical moments later anyway.
-    if (def._drag) return;
-    // Update internal data directly so the BroadcastChannel doesn't fire
-    // a duplicate event into the player view.
-    //
-    // This is the ONLY live-update path a cross-device client (phone/tablet
-    // on another machine) has — BroadcastChannel is same-browser only. It
-    // must therefore apply every shared map field. It used to skip gridType,
-    // fogStrokes, the align offsets, scale, and rotation, which is why grid
-    // changes and free-fog paint never showed up on other devices.
+    // One applier, shared with the same-browser BroadcastChannel route (see
+    // battlemap.applyMapState). This block used to be a second, independent
+    // copy of the same logic and the two drifted apart repeatedly — the
+    // cross-device path silently missed gridType, fogStrokes, the align
+    // offsets, scale and rotation for a long time, and later the BC path was
+    // the one missing a geometry check. Whatever the panel learns to handle,
+    // both routes now get for free.
     try {
-      const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
-      // Everything that changes the STAGE's geometry. If none of it moved,
-      // this update can be painted with _repaintRemote() instead of a full
-      // _render(). Captured before the fields are overwritten below.
-      const _struct = () => [def._cols, def._rows, def._cellSize, def._gridType,
-        def._bgMapScale, def._mapRotation, def._gridOffsetX, def._gridOffsetY].join('|');
-      const _structBefore = _struct();
-      def._tokens     = d.tokens   || [];
-      def._fog        = d.fog      ? new Set(d.fog) : null;
-      def._drawings   = Array.isArray(d.drawings)   ? d.drawings   : [];
-      def._fogStrokes = Array.isArray(d.fogStrokes) ? d.fogStrokes : [];
-      def._bgColor    = d.bgColor  || def._bgColor;
-      def._cellSize   = d.cellSize || def._cellSize;
-      def._cols       = d.cols     || def._cols;
-      def._rows       = d.rows     || def._rows;
-      def._gridType   = d.gridType || (d.showGrid !== false ? 'square' : 'none');
-      def._showGrid   = def._gridType !== 'none';
-      if (d.gridOffsetX != null) def._gridOffsetX = d.gridOffsetX;
-      if (d.gridOffsetY != null) def._gridOffsetY = d.gridOffsetY;
-      const _prevPath = def._bgMapPath || null;
-      const _nextPath = d.bgMapPath || null;
-      if (d.bgMapScale  != null) {
-        // Zoom is per-device now, so bgMapScale only moves for a real reason:
-        // a map swap, a saved-map restore, or a device still on old code that
-        // zoomed. In the last two cases absorb the change into this device's
-        // view scale so its on-screen size doesn't lurch. A map swap re-fits
-        // below regardless, so skip it there.
-        if (_nextPath === _prevPath) def._absorbWorldScaleChange?.(def._bgMapScale || 1, d.bgMapScale);
-        def._bgMapScale = d.bgMapScale; def._lastTokenScale = d.bgMapScale;
-      }
-      if (d.mapRotation != null) def._mapRotation = d.mapRotation;
-      if (d.gridOpacity != null) def._gridOpacity = d.gridOpacity;
-      if (d.gridWidth   != null) def._gridWidth   = d.gridWidth;
-      def._bgMapPath  = _nextPath;
-
-      // Three tiers, most expensive first. Only the last one is common.
-      if (def._bgMapPath && (_nextPath !== _prevPath || !def._bgMapNaturalW)){
-        // A genuinely different map (or the image isn't loaded on this device
-        // yet). Reload it; _loadBgFromPath renders on load. autoFit only when
-        // the map actually changed, so each device re-fits to its own screen.
-        // Previously this ran on EVERY update — a fog tick re-created the
-        // Image and forced a second full render on top of the one above.
-        def._loadBgFromPath?.(def._bgMapPath, _nextPath !== _prevPath);
-      } else if (_struct() !== _structBefore || (!def._bgMapPath && _prevPath)){
-        // Stage geometry moved (grid resize, Align offset, rotation, world
-        // scale) or the map was cleared — the canvases have to be rebuilt.
-        // _repaintRemote isn't involved on this branch, so re-baseline undo
-        // here too: the stack would otherwise describe a history that no
-        // longer matches shared state.
-        def._resetUndoBaseline?.();
-        def._render();
-      } else {
-        // The common case by far: a token moved or fog changed. Repaint the
-        // canvas layers only. Same path the same-browser BroadcastChannel
-        // handler has always used; cross-device clients were paying a full
-        // innerHTML rebuild for it.
-        if (typeof def._repaintRemote === 'function'){
-          def._repaintRemote({ drawings: true, tokens: def._tokens });
-        } else {
-          def._render();
-        }
-      }
+      def.applyMapState(JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}'),
+                        { source: 'firebase' });
     } catch(e) { _diag('apply battlemap', e); }
     return;
   }

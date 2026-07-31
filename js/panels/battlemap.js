@@ -1353,76 +1353,93 @@ registerPanel('battlemap',{
         // cleared.
         if (msg.kind === 'strokeTick'){ this._applyPreviewStroke(msg.stroke); return; }
         if (msg.kind === 'strokeEnd'){ this._clearPreviewStroke(); return; }
-        // Apply incoming state directly. Avoid a full _render() — that would
-        // tear down the canvas and cause a visible flicker on every fog
-        // sample. For typical paint events we just need the fog canvas and
-        // the token positions repainted in place.
-        const prevPath = this._bgMapPath;
-        // Snapshot of everything that determines the STAGE's pixel size, taken
-        // before the incoming fields overwrite it. _repaintRemote's contract
-        // is that callers fall back to _render() when geometry moves, because
-        // only _setupMap resizes the stage and re-tiles the background. The
-        // Firebase apply in realtime.js has always compared this; this handler
-        // only checked scale and rotation, so a cell-size change from the DM
-        // left a same-browser player tab on the OLD stage size with the grid
-        // and background out of step. Measured: cellSize 80 -> 110 left the
-        // stage at 800x1040 when it should have been 880x1100.
-        const _struct = () => [this._cols, this._rows, this._cellSize, this._gridType,
-          this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY].join('|');
-        const _structBefore = _struct();
-        if (msg.tokens)   this._tokens   = msg.tokens;
-        if (msg.cellSize) this._cellSize = msg.cellSize;
-        if (msg.cols)     this._cols     = msg.cols;
-        if (msg.rows)     this._rows     = msg.rows;
-        if (msg.bgColor)  this._bgColor  = msg.bgColor;
-        if (msg.gridType){ this._gridType = msg.gridType; this._showGrid = msg.gridType !== 'none'; }
-        this._fog = msg.fog ? new Set(msg.fog) : null;
-        if (Array.isArray(msg.drawings))   this._drawings   = msg.drawings;
-        if (Array.isArray(msg.fogStrokes)) this._fogStrokes = msg.fogStrokes;
-        if (msg.bgMapPath !== undefined) this._bgMapPath = msg.bgMapPath;
-        // Align offsets repaint fine on the lightweight path; scale and
-        // rotation resize/transform the stage, so they need a full render.
-        const scaleChanged = msg.bgMapScale  != null && msg.bgMapScale !== (this._bgMapScale || 1);
-        const rotChanged   = msg.mapRotation != null && (msg.mapRotation || 0) !== (this._mapRotation || 0);
-        if (msg.gridOffsetX != null) this._gridOffsetX = msg.gridOffsetX;
-        if (msg.gridOffsetY != null) this._gridOffsetY = msg.gridOffsetY;
-        if (msg.bgMapScale  != null){
-          // Same map, different world scale (an old-code tab zooming, or a
-          // saved-map restore). Keep this window's on-screen size steady
-          // instead of lurching; a genuine map change re-fits below anyway.
-          if (msg.bgMapPath === prevPath) this._absorbWorldScaleChange(this._bgMapScale || 1, msg.bgMapScale);
-          this._bgMapScale = msg.bgMapScale; this._lastTokenScale = msg.bgMapScale;
-        }
-        if (msg.mapRotation != null) this._mapRotation = msg.mapRotation;
-        if (msg.gridOpacity != null) this._gridOpacity = msg.gridOpacity;
-        if (msg.gridWidth   != null) this._gridWidth   = msg.gridWidth;
-
-        // Map path changed → reload the bg image, then full re-render so the
-        // canvas is sized to the new map.
-        if (msg.bgMapPath && msg.bgMapPath !== prevPath){
-          // autoFit: a different map means this window re-fits to its OWN
-          // viewport, independently of whatever the sender is looking at.
-          if (this._loadBgFromPath) this._loadBgFromPath(this._bgMapPath, /*autoFit=*/true);
-          return; // _loadBgFromPath triggers _render() on image load
-        }
-        // Map was cleared on the DM side → drop the cached image and re-render
-        // so the player sees the empty background instead of stale art.
-        if (!msg.bgMapPath && prevPath){
-          _mapBgImage = null;
-          if (this._render) this._render();
-          return;
-        }
-        // scaleChanged/rotChanged are kept as explicit flags because they're
-        // computed against the message rather than the applied state; the
-        // struct comparison catches cols/rows/cellSize/gridType/offsets.
-        if ((scaleChanged || rotChanged || _struct() !== _structBefore) && this._body){
-          this._render();
-          return;
-        }
-        // Lightweight repaint — fog + drawings + tokens only. No flicker.
-        this._repaintRemote({ drawings: Array.isArray(msg.drawings), tokens: msg.tokens });
+        // Everything else is a full state snapshot. Hand it to the one
+        // applier so this route can't drift from the Firebase one again.
+        this.applyMapState(msg, { source: 'bc' });
       };
     }catch(e){}
+  },
+
+  // ─── The single way an incoming map update is applied ──────────────────────
+  // Every live update arrives on one of three routes: the DM's own window, a
+  // same-browser BroadcastChannel message, or a cross-device Firebase apply.
+  // Those used to be three separate blocks doing the same job, and they drifted
+  // apart repeatedly — a repaint missing from one, a geometry check present in
+  // one and not the other, an inbound guard that silently blocked a whole role.
+  // Three bugs in one session all had the shape "make path B do what path A
+  // already does". This is now the one place that knows how to take a map
+  // snapshot and put it on screen; the transports only decide WHAT to hand it.
+  //
+  // `src` is a plain object using the same field names the stored map JSON and
+  // the broadcast payload both already use, so either can be passed unchanged.
+  applyMapState(src, opts){
+    if (!src || !this._body) return;
+    opts = opts || {};
+    // A token drag is in flight — replacing _tokens and re-rendering now would
+    // destroy the dragged element and orphan the drag's object, so the move
+    // would be silently discarded on mouseup. The map is last-write-wins and
+    // the drag-end _saveMap() makes this device canonical moments later. This
+    // guard existed only on the Firebase route; BroadcastChannel could still
+    // yank the map out from under a drag.
+    if (this._drag) return;
+
+    const prevPath = this._bgMapPath || null;
+    const nextPath = src.bgMapPath !== undefined ? (src.bgMapPath || null) : prevPath;
+    // Everything that determines the STAGE's pixel size. Only _setupMap resizes
+    // the stage and re-tiles the background, so any change here has to fall
+    // through to a full _render() rather than the cheap repaint.
+    const struct = () => [this._cols, this._rows, this._cellSize, this._gridType,
+      this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY].join('|');
+    const structBefore = struct();
+
+    if (src.tokens)   this._tokens   = src.tokens;
+    if (src.cellSize) this._cellSize = src.cellSize;
+    if (src.cols)     this._cols     = src.cols;
+    if (src.rows)     this._rows     = src.rows;
+    if (src.bgColor)  this._bgColor  = src.bgColor;
+    // showGrid fallback keeps legacy payloads (written before gridType existed)
+    // readable.
+    this._gridType = src.gridType || (src.showGrid !== false ? 'square' : 'none');
+    this._showGrid = this._gridType !== 'none';
+    this._fog        = src.fog ? new Set(src.fog) : null;
+    if (Array.isArray(src.drawings))   this._drawings   = src.drawings;
+    if (Array.isArray(src.fogStrokes)) this._fogStrokes = src.fogStrokes;
+    if (src.gridOffsetX != null) this._gridOffsetX = src.gridOffsetX;
+    if (src.gridOffsetY != null) this._gridOffsetY = src.gridOffsetY;
+    if (src.bgMapScale  != null){
+      // Same map, different world scale — an old-code tab zooming, or a
+      // saved-map restore. Absorb it into this device's view scale so the
+      // on-screen size doesn't lurch. A genuine map change re-fits below.
+      if (nextPath === prevPath) this._absorbWorldScaleChange?.(this._bgMapScale || 1, src.bgMapScale);
+      this._bgMapScale = src.bgMapScale;
+      this._lastTokenScale = src.bgMapScale;
+    }
+    if (src.mapRotation != null) this._mapRotation = src.mapRotation;
+    if (src.gridOpacity != null) this._gridOpacity = src.gridOpacity;
+    if (src.gridWidth   != null) this._gridWidth   = src.gridWidth;
+    this._bgMapPath = nextPath;
+
+    // Three tiers, most expensive first. Only the last one is common.
+    if (nextPath && (nextPath !== prevPath || !this._bgMapNaturalW)){
+      // A different map, or one whose image this device hasn't loaded yet.
+      // autoFit only when the map actually changed, so each device re-fits to
+      // its own screen rather than inheriting the sender's zoom.
+      // _loadBgFromPath renders on image load.
+      this._loadBgFromPath?.(nextPath, nextPath !== prevPath);
+      return;
+    }
+    if (struct() !== structBefore || (!nextPath && prevPath)){
+      // Stage geometry moved, or the map was cleared — the canvases have to be
+      // rebuilt. Re-baseline undo too: the stack would otherwise describe a
+      // history that no longer matches shared state.
+      if (!nextPath && prevPath) _mapBgImage = null;
+      this._resetUndoBaseline?.();
+      this._render();
+      return;
+    }
+    // The common case by far: a token moved or fog changed. Repaint the canvas
+    // layers only, no innerHTML teardown.
+    this._repaintRemote({ drawings: Array.isArray(src.drawings), tokens: src.tokens });
   },
 
   // Repaint the canvas layers for an incoming REMOTE update, without the
