@@ -135,9 +135,8 @@ registerPanel('notes', {
   // 'picker' = source-selector screen, 'local' = current tree+editor pinned
   // to a connected vault. Future: 'onenote'.
   _view: 'picker',
-  // Per-file content-history stacks for undo/redo. Keyed by file id.
-  _undoStacks: {},
-  _redoStacks: {},
+  // Undo/redo is the browser's own, not ours — every edit path goes through
+  // execCommand so the textarea's native history stays intact.
   // Toolbar collapse state. Matches the battlemap pattern — same localStorage
   // contract, same UX (small "▾ Toolbar" chip to restore when hidden). The
   // formatting bar eats 70px of vertical space on a phone, so being able to
@@ -820,19 +819,28 @@ registerPanel('notes', {
       if (e.key === 'Escape') { e.preventDefault(); ta.blur(); return; }
       if (e.key === 'Tab') {
         e.preventDefault();
-        const s = ta.selectionStart;
-        ta.value = ta.value.slice(0,s) + '  ' + ta.value.slice(s);
-        ta.selectionStart = ta.selectionEnd = s + 2;
+        // execCommand, not a value assignment, so Tab stays undoable — see
+        // the note in _insert.
+        try { document.execCommand('insertText', false, '  '); }
+        catch(err){
+          const s = ta.selectionStart;
+          ta.value = ta.value.slice(0,s) + '  ' + ta.value.slice(s);
+          ta.selectionStart = ta.selectionEnd = s + 2;
+        }
       }
       if ((e.ctrlKey||e.metaKey) && !e.shiftKey) {
-        if (e.key === 'b') { e.preventDefault(); this._pushUndo(); this._insert(ta,'bold'); }
-        if (e.key === 'i') { e.preventDefault(); this._pushUndo(); this._insert(ta,'italic'); }
+        if (e.key === 'b') { e.preventDefault(); this._insert(ta,'bold'); }
+        if (e.key === 'i') { e.preventDefault(); this._insert(ta,'italic'); }
         if (e.key === 's') { e.preventDefault(); this._download(); }
-        if (e.key === 'z') { e.preventDefault(); this._undo(); }
       }
-      if ((e.ctrlKey||e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
-        e.preventDefault(); this._redo();
-      }
+      // Ctrl+Z / Ctrl+Shift+Z are deliberately NOT intercepted. They used to
+      // preventDefault and call the hand-rolled _undo, whose stack is only
+      // ever pushed by the bold/italic/toolbar actions — so in a textarea full
+      // of typed text the stack was empty, the handler returned silently, and
+      // the browser's own perfectly good undo had already been suppressed.
+      // Ctrl+Z in a note simply did nothing. Now that every programmatic edit
+      // goes through execCommand, native undo covers typing and toolbar
+      // inserts alike, so the right thing to do is get out of its way.
     });
     ta.addEventListener('blur', () => this._exitEdit());
     ta.focus();
@@ -880,27 +888,41 @@ registerPanel('notes', {
   },
 
   _insert(ta, act){
-    if (act === 'undo'){ this._undo(); return; }
-    if (act === 'redo'){ this._redo(); return; }
     const s = ta.selectionStart, end = ta.selectionEnd;
     const selected = ta.value.slice(s, end);
+    // Insert through execCommand so the BROWSER's undo stack records the edit.
+    // Assigning ta.value wipes that stack outright (verified: type, assign,
+    // Ctrl+Z → the assignment survives because there is no history left), and
+    // wiping it is what forced the hand-rolled _undoStacks into existence —
+    // stacks that were only ever fed by these same insert actions, so plain
+    // typing was never undoable at all. execCommand('insertText') is
+    // deprecated but is the only supported way to make a programmatic edit
+    // that native undo can reverse; the value fallback keeps the insert
+    // working if an engine refuses it, at the cost of that one undo step.
+    const put = (text, from, to) => {
+      ta.focus();
+      ta.setSelectionRange(from, to);
+      let ok = false;
+      try { ok = document.execCommand('insertText', false, text); } catch(e){ ok = false; }
+      if (!ok) ta.value = ta.value.slice(0, from) + text + ta.value.slice(to);
+    };
     const wrap   = {bold:'**', italic:'_', strike:'~~', code:'`'}[act];
     const prefix = {h1:'# ', h2:'## ', h3:'### ', hr:'---', bullet:'- ', numlist:'1. ', indent:'  ', quote:'> '}[act];
     let newCursor = s;
     if (wrap) {
       const insert = wrap + (selected||'') + wrap;
-      ta.value = ta.value.slice(0,s) + insert + ta.value.slice(end);
+      put(insert, s, end);
       newCursor = selected ? s + insert.length : s + wrap.length;
     } else if (prefix) {
       const lineStart = ta.value.lastIndexOf('\n', s-1) + 1;
-      ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
+      put(prefix, lineStart, lineStart);
       newCursor = s + prefix.length;
     } else if (act === 'codeblock') {
       // Wrap selection (or empty cursor) with triple-backtick fences on their
       // own lines. Insert a blank line inside if the selection was empty.
       const body = selected || '';
       const insert = '```\n' + (body || '') + (body ? '\n' : '') + '```\n';
-      ta.value = ta.value.slice(0,s) + insert + ta.value.slice(end);
+      put(insert, s, end);
       newCursor = s + 4; // place caret on the empty line between the fences
     } else if (act === 'table') {
       // 3×3 GFM table template at the start of the current line.
@@ -910,51 +932,11 @@ registerPanel('notes', {
         '|----------|----------|----------|\n'+
         '| Row 1 c1 | Row 1 c2 | Row 1 c3 |\n'+
         '| Row 2 c1 | Row 2 c2 | Row 2 c3 |\n';
-      ta.value = ta.value.slice(0, lineStart) + template + ta.value.slice(lineStart);
+      put(template, lineStart, lineStart);
       newCursor = lineStart + 2; // first header cell
     }
     ta.focus();
     ta.setSelectionRange(newCursor, newCursor);
-  },
-
-  // Per-file content-history stacks. We snapshot the current textarea value
-  // (when in edit mode) or the saved file content into _undoStacks before
-  // each mutating action. Capped at 50 entries; oldest dropped first.
-  _pushUndo(){
-    const file = this._selected(); if (!file) return;
-    const id = file.id;
-    const ta = this._body && this._body.querySelector('#note-textarea');
-    const cur = ta ? ta.value : (file.content || '');
-    if (!this._undoStacks[id]) this._undoStacks[id] = [];
-    const stack = this._undoStacks[id];
-    if (stack.length && stack[stack.length-1] === cur) return; // no-op duplicates
-    stack.push(cur);
-    if (stack.length > 50) stack.shift();
-    this._redoStacks[id] = [];
-  },
-  _undo(){
-    const file = this._selected(); if (!file) return;
-    const id = file.id;
-    const stack = this._undoStacks[id] || [];
-    if (!stack.length) return;
-    const ta = this._body && this._body.querySelector('#note-textarea');
-    const cur = ta ? ta.value : (file.content || '');
-    const prev = stack.pop();
-    (this._redoStacks[id] = this._redoStacks[id] || []).push(cur);
-    if (ta){ ta.value = prev; ta.focus(); }
-    else { file.content = prev; this._save(); this._pushActive(file); this._render(); }
-  },
-  _redo(){
-    const file = this._selected(); if (!file) return;
-    const id = file.id;
-    const stack = this._redoStacks[id] || [];
-    if (!stack.length) return;
-    const ta = this._body && this._body.querySelector('#note-textarea');
-    const cur = ta ? ta.value : (file.content || '');
-    const next = stack.pop();
-    (this._undoStacks[id] = this._undoStacks[id] || []).push(cur);
-    if (ta){ ta.value = next; ta.focus(); }
-    else { file.content = next; this._save(); this._pushActive(file); this._render(); }
   },
 
   _wire(){
@@ -1153,19 +1135,26 @@ registerPanel('notes', {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const act = btn.dataset.nact;
-        // Undo/redo can run without entering edit mode (operate on saved content).
-        if (act === 'undo'){ this._undo(); return; }
-        if (act === 'redo'){ this._redo(); return; }
+        if (act === 'undo' || act === 'redo'){
+          // While the editor is open the browser owns the history — every
+          // edit path now goes through execCommand, so drive its undo rather
+          // than the hand-rolled stacks, which no longer see the inserts.
+          const openTa = b.querySelector('#note-textarea');
+          if (openTa){
+            openTa.focus();
+            try { document.execCommand(act); } catch(e){}
+          }
+          // Nothing to do when the editor isn't open: undo history belongs to
+          // the textarea, and there isn't one.
+          return;
+        }
         if (!this._editing) {
           const file = this._selected();
           const total = ((file && file.content) || '').split('\n').length;
           this._enterEdit(Math.max(0, total - 1));
         }
         const ta = b.querySelector('#note-textarea');
-        if (ta){
-          this._pushUndo();
-          this._insert(ta, act);
-        }
+        if (ta) this._insert(ta, act);
       });
     });
 

@@ -1735,3 +1735,50 @@ label floors were counter-scaled at the time; this wasn't.
 erasing at 30 screen px across the same, thick strokes still grabbed at their
 edge while thin ones there are not, topmost overlapping stroke removed and only
 one per call, single-point dots, and empty/null point arrays ignored.
+
+## Notes (2026-07-31)
+
+### Ctrl+Z did nothing while writing a note
+
+The editor bound Ctrl+Z to `e.preventDefault(); this._undo()`, where `_undo`
+read a hand-rolled per-file stack. That stack was pushed from exactly three
+places — the Ctrl+B handler, the Ctrl+I handler, and the toolbar insert — and
+from nowhere else. **Typing never pushed anything.** So in a textarea full of
+typed prose the stack was empty, `_undo` returned silently, and the browser's
+own undo had already been suppressed by the `preventDefault`. Ctrl+Z in a note
+was a no-op, and the working native undo was actively disabled to make it so.
+
+The reason a hand-rolled stack existed at all is the real defect underneath:
+`_insert` mutated the textarea with `ta.value = …`, and a direct value
+assignment **destroys** the native undo history. Verified rather than assumed —
+type into a textarea, assign `.value`, then `execCommand('undo')`: the call
+returns `true` and the assigned text stays, because there is no history left to
+walk. So bold/italic wiped the history, the hand-rolled stack was written to
+paper over that, and the patch only ever covered the actions that caused the
+problem, never the typing in between.
+
+Fixed at the cause. Every programmatic edit — bold, italic, headings, bullets,
+quote, code, code fence, the 3×3 table template, and the Tab key — now goes
+through `document.execCommand('insertText')`, which the browser records in its
+own undo stack (verified: insert, undo, redo all round-trip). With that true,
+the Ctrl+Z/Ctrl+Shift+Z interception is simply removed and native undo covers
+typing and toolbar inserts uniformly. `execCommand` is deprecated but has no
+standard replacement for undoable programmatic text insertion; each call keeps
+a value-assignment fallback so an engine that refuses only loses that one undo
+step rather than the edit.
+
+The toolbar's undo/redo buttons now drive `document.execCommand('undo'/'redo')`
+while the editor is open. With the stacks gone they have nothing to fall back
+on when it is closed, which matches reality — undo history belongs to the
+textarea, and the previous "operates on saved content" path could only ever
+have fired if a stack survived from an earlier edit session in the same page
+load.
+
+`_pushUndo`, `_undo`, `_redo`, `_undoStacks` and `_redoStacks` are deleted
+rather than left dormant. A dead parallel undo sitting next to a working native
+one is precisely the trap that produced this bug; 64 lines removed, 52 added.
+
+18 assertions against the real editor: typing undone and redone, bold undone
+and the history continuing *past* it into the typing before, h2, table,
+codeblock and Tab each reversed, and blur still committing to the file with the
+editing flag cleared.
