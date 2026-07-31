@@ -1380,3 +1380,54 @@ second document (an iframe), which is what a PiP window is from the code's point
 of view. A live `documentPictureInPicture` window was **not** opened —
 `requestWindow` requires a user gesture that can't be synthesized here. The PiP
 plumbing itself (stylesheet mirroring, body swap) was not modified.
+
+### Buffs and conditions
+
+Conditions themselves came out clean — `_toggleCondAtIdx`, `applyCondition` and
+`_removeCond` all replace the combatant immutably and all three already nudge
+the party panel, which doesn't subscribe to combat changes. Nothing to fix.
+
+**Timed buffs never expired on a PC.** Three places apply a buff's AC/HP delta.
+Adding one and removing one by hand both knew that PC stats are *owned by the
+party slot* — `syncPartyToCombat` overwrites the combatant's hp/hpMax/ac on
+every party-side edit, so a delta written only to the combatant gets reverted
+the next time anything touches the party. The timed expiry in `_startRound` did
+not know that, and reversed on the combatant alone. Measured on a PC with
+Bless (+2 AC, +5 HP):
+
+| | combatant | party slot |
+|---|---|---|
+| after applying | AC 17, 25/25 | AC 17, 25/25 |
+| after it expires | AC 15, 20/20 | **AC 17, 25/25** |
+| after any party sync | **AC 17, 25/25** | AC 17, 25/25 |
+
+So the party card kept the bonus forever and the next sync pushed it back onto
+the combatant too — a duration-limited buff on a PC was permanent in practice.
+Monsters were unaffected, which is why it could sit unnoticed.
+
+All three paths now share `_applyBuffDelta(idx, buff, sign)`. It returns whether
+a party slot was touched so callers repaint the party panel once rather than per
+buff, and it clamps HP into `[0, newMax]` on both directions, consistent with
+the negative-HP work above.
+
+Restructuring the expiry loop exposed a latent trap worth recording: the old
+code mutated `c.ac`/`c.hp` in place and assigned `c.buffs = next` at the end.
+Once expiry routes through a helper that *replaces* `state.combatants[ci]`, that
+trailing assignment would have written to an orphaned object. The trimmed buff
+list is now written before any delta is reversed. Same stale-reference family as
+the `_render()`-invalidated-DOM-node mistakes logged earlier.
+
+**Concentration never ended when a creature went down.** RAW you lose
+concentration when incapacitated or when you die, and dropping to 0 knocks you
+unconscious. Nothing cleared it, so the 🌀 chip stayed lit on an unconscious
+character indefinitely, and the very hit that downed them still popped a
+"DC N CON save to maintain X" toast for a save that RAW never happens. Now the
+spell ends at 0 HP, on both the PC (party slot) and monster paths, and the save
+prompt is suppressed for that hit. Because the chip vanishing is structural and
+mirrored on the party card, this case forces a real repaint instead of the
+HP-only patch.
+
+Checked that the change is narrow: a concentrating PC who survives the hit still
+gets the DC prompt and keeps the spell, and a hit fully absorbed by temp HP
+still prompts (RAW — damage soaked by temp HP is still damage taken) while
+leaving concentration intact.

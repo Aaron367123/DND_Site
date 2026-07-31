@@ -820,29 +820,8 @@ registerPanel('combat',{
         const bf = c.buffs[bi]; if (!bf) return;
         // Reverse the AC/HP delta when removing — symmetrical to _promptAddBuff.
         const next = c.buffs.slice(); next.splice(bi, 1);
-        const pi = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
-        if (pi >= 0){
-          // PC: reverse the delta on the party slot (the stat owner) and let
-          // the mirror propagate — see _promptAddBuff for the rationale.
-          const p = state.party[pi];
-          const newMax = Math.max(1, (p.hpMax || 0) - (bf.hp || 0));
-          state.party[pi] = {...p,
-            ac: (p.ac || 0) - (bf.ac || 0),
-            hpMax: newMax,
-            hp: Math.min(newMax, (p.hp || 0) - (bf.hp || 0)),
-          };
-          state.combatants[i] = {...c, buffs: next};
-          syncPartyToCombat(pi);
-          panelDefs.party?._render?.();
-        } else {
-          const patch = {buffs: next};
-          if (bf.ac){ patch.ac = (c.ac || 0) - bf.ac; }
-          if (bf.hp){
-            patch.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
-            patch.hp    = Math.min(patch.hpMax, (c.hp || 0) - bf.hp);
-          }
-          state.combatants[i] = {...c, ...patch};
-        }
+        state.combatants[i] = {...c, buffs: next};
+        if (this._applyBuffDelta(i, bf, -1)) panelDefs.party?._render?.();
         save(); this._render();
       }
       else if(act==='open-bestiary') this._openBestiaryDetail(parseInt(el.dataset.idx));
@@ -1278,31 +1257,28 @@ registerPanel('combat',{
     // Tick down buff durations. A buff at rounds==0 expires after this
     // round's start — drop it. Negative/undefined durations are permanent
     // (until manually removed) and don't tick.
-    state.combatants.forEach(c => {
+    let partyTouched = false;
+    state.combatants.forEach((c, ci) => {
       if (!Array.isArray(c.buffs) || !c.buffs.length) return;
-      const next = [];
+      const next = [], expired = [];
       for (const bf of c.buffs){
         if (bf.rounds == null || bf.rounds < 0) { next.push(bf); continue; }
         // rounds is "ticks remaining". rounds<=1 → expires at THIS round
         // tick. rounds>1 → decrement and keep.
-        if (bf.rounds <= 1){
-          this._log(`${c.name} — buff "${bf.label||'buff'}" expired`);
-          // Reverse the AC/HP delta on expiry so the chip removal mirrors
-          // a manual ×-click. HP delta backs out of both current and max.
-          if (bf.ac){ c.ac = (c.ac || 0) - bf.ac; }
-          if (bf.hp){
-            c.hpMax = Math.max(1, (c.hpMax || 0) - bf.hp);
-            // Clamp at 0. A creature that was already hurt when a +HP buff
-            // expired went NEGATIVE here, which reads as a live creature with
-            // a nonsense bar rather than one that has dropped.
-            c.hp    = Math.max(0, Math.min(c.hpMax, (c.hp || 0) - bf.hp));
-          }
-          continue;
-        }
+        if (bf.rounds <= 1){ expired.push(bf); continue; }
         next.push({...bf, rounds: bf.rounds - 1});
       }
-      c.buffs = next;
+      // Trim the list BEFORE reversing any deltas: _applyBuffDelta replaces
+      // the combatant object, so the old code's `c.buffs = next` at the end
+      // would have written to an orphan once expiry stopped mutating in place.
+      state.combatants[ci] = {...c, buffs: next};
+      expired.forEach(bf => {
+        this._log(`${c.name} — buff "${bf.label||'buff'}" expired`);
+        // Reverse the AC/HP delta on expiry so it mirrors a manual ×-click.
+        if (this._applyBuffDelta(ci, bf, -1)) partyTouched = true;
+      });
     });
+    if (partyTouched) panelDefs.party?._render?.();
   },
 
   _nextTurn(){
@@ -1479,6 +1455,46 @@ registerPanel('combat',{
   // Buff prompt — collects label / AC delta / HP delta / duration.
   // Stored on combatant as {label, ac, hp, rounds}. Duration in rounds:
   // 0 = expires at start of next round; -1 (or undefined) = permanent.
+  // Apply (sign +1) or reverse (sign -1) a buff's AC/HP delta. Returns true if
+  // a party slot was touched, so the caller can repaint the party panel once.
+  //
+  // PC stats are OWNED by the party slot: syncPartyToCombat overwrites the
+  // combatant's hp/hpMax/ac on every party-side edit, so a delta written only
+  // to the combatant is silently reverted the next time anything touches the
+  // party. Adding a buff and removing one by hand both knew that; the timed
+  // EXPIRY in _startRound did not, and reversed on the combatant alone. A
+  // 10-round Bless on a PC therefore dropped the combatant's AC on schedule
+  // while the party card kept the bonus forever — and the next party sync
+  // pushed it back onto the combatant too, making the buff permanent.
+  // One implementation now, three callers.
+  _applyBuffDelta(idx, bf, sign){
+    const c = state.combatants[idx];
+    if (!c || !bf) return false;
+    const ac = (bf.ac || 0) * sign;
+    const hp = (bf.hp || 0) * sign;
+    if (!ac && !hp) return false;
+    const pi = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
+    if (pi >= 0){
+      const p = state.party[pi];
+      const newMax = Math.max(1, (p.hpMax || 0) + hp);
+      state.party[pi] = {...p,
+        ac: (p.ac || 0) + ac,
+        hpMax: newMax,
+        hp: Math.max(0, Math.min(newMax, (p.hp || 0) + hp)),
+      };
+      syncPartyToCombat(pi);
+      return true;
+    }
+    const patch = {};
+    if (ac) patch.ac = (c.ac || 0) + ac;
+    if (hp){
+      patch.hpMax = Math.max(1, (c.hpMax || c.hp || 0) + hp);
+      patch.hp    = Math.max(0, Math.min(patch.hpMax, (c.hp || 0) + hp));
+    }
+    state.combatants[idx] = {...c, ...patch};
+    return false;
+  },
+
   _promptAddBuff(i){
     const c0 = state.combatants[i]; if (!c0) return;
     // Resolve by id when the modal closes — the list can be reordered,
@@ -1499,30 +1515,15 @@ registerPanel('combat',{
       const ac = r.ac === '' || r.ac == null ? 0 : (parseInt(r.ac) || 0);
       const hp = r.hp === '' || r.hp == null ? 0 : (parseInt(r.hp) || 0);
       const rounds = (r.rounds === '' || r.rounds == null) ? null : Math.max(0, parseInt(r.rounds) || 0);
-      next.push({label: String(r.label).trim(), ac, hp, rounds});
+      const buff = {label: String(r.label).trim(), ac, hp, rounds};
+      next.push(buff);
+      // Record the buff first — _applyBuffDelta replaces the combatant object,
+      // so writing `buffs` afterwards would land on an orphaned copy.
+      state.combatants[idx] = {...c, buffs: next};
       // Apply the AC/HP delta immediately so the visible stats reflect the
       // buff. We DON'T track an "original AC" anywhere — the DM uses the
       // buff chip's remove (×) to subtract it back manually OR re-edits AC.
-      const pi = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
-      if (pi >= 0){
-        // PC stats are OWNED by the party slot — syncPartyToCombat overwrites
-        // the combatant's hp/hpMax/ac on every party-side edit, which
-        // silently reverted buffs applied only to the combatant. Apply the
-        // delta to the party slot and let the mirror carry it back here.
-        const p = state.party[pi];
-        const newMax = Math.max(1, (p.hpMax || 0) + hp);
-        state.party[pi] = {...p, ac: (p.ac || 0) + ac, hpMax: newMax, hp: (p.hp || 0) + hp};
-        state.combatants[idx] = {...c, buffs: next};
-        syncPartyToCombat(pi);
-        panelDefs.party?._render?.();
-      } else {
-        if (ac) state.combatants[idx] = {...c, ac: (c.ac || 0) + ac, buffs: next};
-        else    state.combatants[idx] = {...c, buffs: next};
-        if (hp){
-          state.combatants[idx].hpMax = (state.combatants[idx].hpMax || c.hp || 0) + hp;
-          state.combatants[idx].hp    = (state.combatants[idx].hp    || 0)        + hp;
-        }
-      }
+      if (this._applyBuffDelta(idx, buff, +1)) panelDefs.party?._render?.();
       save(); this._render();
     });
   },
@@ -1545,6 +1546,7 @@ registerPanel('combat',{
     let remaining = delta;
     let logParts = [];
     let typeSuffix = '';
+    let concDropped = false;
     if (delta < 0){
       // Apply 5e resist / vulnerable / immune. For PCs, we union the party
       // slot's resist/immune/vuln (DM-authored) PLUS the beast's lists when
@@ -1725,10 +1727,24 @@ registerPanel('combat',{
       const conc = c.isPC
         ? (state.party.find(p => p.id === c.id)?.concentration || '')
         : (c.concentration || '');
+      // Concentration ENDS at 0 HP — RAW you lose it when incapacitated or
+      // when you die, and dropping to 0 knocks you unconscious. Nothing cleared
+      // it, so the 🌀 chip stayed lit on an unconscious character indefinitely
+      // and the hit that downed them still prompted a CON save that RAW never
+      // happens. `partySlot` is mutated in place here for the same reason the
+      // temp-HP drain above does: replacing the object would strand the
+      // reference the rest of this branch still holds.
+      if (conc && (c.hp || 0) <= 0){
+        if (c.isPC){ if (partySlot) partySlot.concentration = null; }
+        else c.concentration = null;
+        concDropped = true;
+        this._log(`${c.name} dropped to 0 HP — ${conc} ends`);
+        showToast(`🌀 ${conc} ends — ${c.name} is down`);
+      }
       // Use damageForConc (after resist/vuln math, before absorption) so
       // the check fires even when the beast pool / temp HP ate everything.
       // damageDealt is post-absorption and would show 0 in that case.
-      if (conc && damageForConc > 0){
+      else if (conc && damageForConc > 0){
         const dc = Math.max(10, Math.floor(damageForConc / 2));
         showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
       }
@@ -1776,10 +1792,14 @@ registerPanel('combat',{
     // repaints the party card itself (surgically when it can) — don't
     // re-render party afterwards.
     if (c.isPC && typeof syncCombatToParty === 'function') syncCombatToParty(c.id);
+    // Losing the concentration chip is structural, and the party card mirrors
+    // it, so that case needs a real repaint on both sides rather than the
+    // HP-only patch.
+    if (concDropped && c.isPC) panelDefs.party?._render?.();
     // Surgical repaint of just this card when nothing structural changed.
     // A full _render() here re-serialized every combatant on every hit.
     const ci = state.combatants.indexOf(c);
-    if (ci < 0 || !this._patchHp(ci)) this._render();
+    if (concDropped || ci < 0 || !this._patchHp(ci)) this._render();
   },
 
   _removeCond(i,cond){
