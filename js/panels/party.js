@@ -992,12 +992,11 @@ registerPanel('party',{
       vulnerabilities:this._damageTypesFrom(raw.damage_vulnerabilities),
       cr: raw.challenge_rating ?? null,
     };
-    const wasFresh = !c.wildshape;
     state.party[i] = {...c, wildshape: ws};
-    // Druids drop concentration when they wildshape (5e RAW).
-    if (wasFresh && state.party[i].concentration){
-      state.party[i].concentration = null;
-    }
+    // Concentration SURVIVES wild shape. This used to clear it, citing RAW;
+    // the Sage Advice Compendium says the opposite — a druid can keep
+    // concentrating on a spell while transformed, because Wild Shape forbids
+    // *casting* and maintaining a spell already in flight isn't casting.
     save();
     this._render();
     // Combat tracker mirrors rage/wildshape chips from partyMatch — nudge it
