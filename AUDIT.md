@@ -1252,3 +1252,47 @@ Verified with ten assertions covering mid-order removal, last-in-order removal
 `_prevTurn` with a dangling id, an ordinary wrap still ticking exactly once, and
 the buff clamp — plus real DOM clicks on the panel's ✕ and the party panel's
 "remove from combat", since both had their own copy of the logic.
+
+### _applyHpDelta — HP ran negative, and three RAW gaps behind it
+
+`c.hp = (c.hp || 0) - damageDealt` had no lower bound. A PC at 5 of 20 who took
+15 sat at **-10**, and the damage stayed invisible until someone tried to heal:
+
+| | before | RAW |
+|---|---|---|
+| PC 5/20 takes 15 | hp **-10** | hp 0 |
+| …then healed 10 | hp **0**, still unconscious, death saves not cleared, log reads "healed 10 HP" | hp 10, saves cleared |
+| PC 5/20 takes 40 | hp **-35**, alive | dead — 35 overflow ≥ 20 max |
+| downed PC hit again | **nothing happens** | +1 failed death save |
+| monster 4/59 takes 30 | hp **-26** | hp 0 |
+
+The heal case is the one that bites at the table: the cleric spends a spell, the
+log says it worked, and the character stays down because the heal was eaten by a
+phantom negative pool and `c.hp > 0` never became true, so the death-save state
+survived. This is the same defect party.js had (fixed earlier); combat.js had its
+own copy.
+
+Clamping at 0 exposed two rules the clamp then made implementable:
+
+**Massive damage.** PHB: reduced to 0 with damage remaining, you die instantly if
+the remainder equals or exceeds your hit point maximum. The overflow is measured
+*after* temp HP and the wild-shape pool take their share, which is why it is
+computed at the HP write and not off the incoming delta. Verified on the
+interesting case: a druid at 6/20 inside a 30 HP bear taking 45 has 30 absorbed
+by the bear and 15 reach her — overflow 9, so she is downed, not dead. At 60
+damage the overflow is 24 and she dies. Boundary checked both ways: 24 damage to
+a 5/20 PC is 19 overflow and does *not* kill.
+
+**Damage to a creature already at 0 costs a death save.** This did nothing, on
+the stated theory that the DM was mid-roll clicking pips — which quietly made a
+downed PC the safest place on the battlefield, and was inconsistent with the
+branch immediately above it that already charges a stable creature a failure for
+the same event. Third failure marks them dead, matching what the pip row does.
+
+A PC with no `hpMax` can't trigger massive damage (`cap > 0` guard) — they just
+go down, which is the safe reading for incomplete data.
+
+Regression-guarded in the same run: ordinary damage, temp HP absorption (6 vs 8
+temp leaves HP untouched and temp at 2), resistance still halving via the
+negative-delta `Math.ceil` (21 fire → 10), immunity, revivify clearing `dead`,
+repeated hits on an already-dead PC, and a real click on the panel's − button.

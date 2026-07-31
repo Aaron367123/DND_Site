@@ -1642,21 +1642,54 @@ registerPanel('combat',{
       }
       const damageDealt = remaining < 0 ? -remaining : 0;
       if (remaining < 0){
-        c.hp = (c.hp || 0) - damageDealt;
+        const hpBefore = c.hp || 0;
+        // Clamp at 0. HP used to run negative, and the damage was invisible
+        // until someone tried to heal: a PC at 5 of 20 who took 15 sat at -10,
+        // so a 10-point Cure Wounds brought them to 0 rather than 10, the
+        // death-save state never cleared because `c.hp > 0` stayed false, and
+        // the log still read "healed 10 HP" over a character who was still
+        // unconscious. RAW there is no such thing as negative hit points —
+        // excess damage is discarded (except for the massive-damage rule
+        // below). Same defect party.js had; see AUDIT.
+        c.hp = Math.max(0, hpBefore - damageDealt);
         logParts.push(damageDealt + ' HP');
-        // PC dropped to 0 (or took damage while already at 0):
+        // PC dropped to 0, or took damage while already there:
         //   • Already dead → stays dead, no death-save state changes.
-        //   • Stable but downed → un-stabilize and start fresh death saves
-        //     with one failure (RAW: damage to a stable creature counts
-        //     as a failed death save; crit = two failures, but we don't
-        //     track crits here).
-        //   • Already downed with active deathSaves → leave them alone
-        //     (the user is mid-roll, clicking pips manually).
-        //   • Otherwise → initialize fresh {success:0, fail:0}.
+        //   • Massive damage → instant death (see below).
+        //   • Stable but downed → un-stabilize and record one failure.
+        //   • Already at 0 → one more failed death save, per RAW.
+        //   • Freshly dropped to 0 → start fresh saves at {0, 0}. Falling
+        //     unconscious is not itself a failure.
         if (c.isPC && c.hp <= 0 && !c.dead){
-          if (c.stable){
+          // PHB: "if damage reduces you to 0 hit points and there is damage
+          // remaining, you die instantly if the remaining damage equals or
+          // exceeds your hit point maximum." The overflow is measured after
+          // temp HP and the wild-shape pool have absorbed their share, which
+          // is why this is computed here and not off the raw delta.
+          const overflow = damageDealt - Math.max(0, hpBefore);
+          const cap = c.hpMax || 0;
+          if (cap > 0 && overflow >= cap){
+            c.deathSaves = null; c.stable = false; c.dead = true;
+            this._log(`${c.name} — massive damage (${overflow} past 0 vs ${cap} max): dies instantly`);
+            showToast(`💀 ${c.name} dies instantly — massive damage`);
+          } else if (c.stable){
             c.stable = false;
             c.deathSaves = {success:0, fail:1};
+          } else if (hpBefore <= 0){
+            // Damage to a creature already at 0 costs a death save. This used
+            // to do nothing on the theory that the DM was mid-roll clicking
+            // pips, which quietly made a downed PC the safest place on the
+            // battlefield — the stable branch right above already charges a
+            // failure for the same event.
+            const ds = {...(c.deathSaves || {success:0, fail:0})};
+            ds.fail = Math.min(3, (ds.fail || 0) + 1);
+            if (ds.fail >= 3){
+              c.deathSaves = null; c.dead = true;
+              this._log(`${c.name} — third failed death save: dies`);
+              showToast(`💀 ${c.name} has died`);
+            } else {
+              c.deathSaves = ds;
+            }
           } else if (!c.deathSaves){
             c.deathSaves = {success:0, fail:0};
           }
