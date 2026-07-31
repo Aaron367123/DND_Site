@@ -618,6 +618,15 @@ registerPanel('combat',{
       ['thunder','thunder','th'],
     ];
     const lastType = this._lastDmgType || '';
+    // Weapon property of the incoming attack. Qualified resistances — "from
+    // nonmagical attacks that aren't silvered" — can only be judged if we know
+    // this, so it's a one-click cycling chip rather than a per-hit prompt, and
+    // it persists across renders exactly like the damage type does.
+    const atkProp = this._lastAtkProp || '';
+    const atkPropIcon = { magical:'✦', silvered:'☾', adamantine:'⬥' }[atkProp] || '○';
+    const atkPropTitle = atkProp
+      ? 'Attack is ' + atkProp + ' — click to cycle (plain → magical → silvered → adamantine)'
+      : 'Attack is plain — click to cycle (magical / silvered / adamantine). Qualified resistances like "nonmagical attacks" depend on this.';
     const lastAbbr = (dmgTypes.find(t => t[0] === lastType) || dmgTypes[0])[2];
     // Heal/damage strip is now a HORIZONTAL row that sits between the stats
     // grid and the HP bar (rendered separately below — see `dmgStripRow`).
@@ -630,6 +639,7 @@ registerPanel('combat',{
           <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
           <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount">
           <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
+          <button class="hp-dmg-btn atk-prop${atkProp?' on':''}" data-act="cycle-atk-prop" data-idx="${i}" title="${atkPropTitle}">${atkPropIcon}</button>
           <span class="hp-dmg-type-wrap" title="Damage type — applies monster resist/vuln/immune (current: ${lastType||'untyped'})">
             <span class="hp-dmg-type-label">${lastAbbr}</span>
             <select class="hp-dmg-type" data-idx="${i}">
@@ -878,6 +888,12 @@ registerPanel('combat',{
         // (used = N+1). If it's filled (N < used), refund (used = N).
         c.legendaryUsed = n < used ? n : (n + 1);
         save(); this._render();
+      }
+      else if(act==='cycle-atk-prop'){
+        const order = ['', 'magical', 'silvered', 'adamantine'];
+        const cur = order.indexOf(this._lastAtkProp || '');
+        this._lastAtkProp = order[(cur + 1) % order.length];
+        this._render();
       }
       else if(act==='hp-damage' || act==='hp-heal'){
         const i = parseInt(el.dataset.idx);
@@ -1465,16 +1481,24 @@ registerPanel('combat',{
       const ws = (partySlot && partySlot.wildshape && partySlot.wildshape.name) ? partySlot.wildshape : null;
       if (dmgType){
         const t = dmgType.toLowerCase();
-        const has = (arr) => Array.isArray(arr) && arr.some(x => {
-          const s = (typeof x === 'string' ? x : (x?.resist || x?.immune || x?.vulnerable || x?.name || '')) + '';
-          return s.toLowerCase().includes(t);
-        });
+        // Qualifier-aware. A plain substring test made every entry
+        // unconditional, so "bludgeoning, piercing, slashing from nonmagical
+        // attacks" read as immunity to all three however the blow was
+        // delivered — a Werewolf shrugged off a silvered longsword. The
+        // attack's property comes from the cycling chip on the damage bar.
+        const atk = this._lastAtkProp ? { [this._lastAtkProp]: true } : {};
+        const has = (arr) => sktAnyResistApplies(arr, t, atk);
         const ragingBPS = partySlot?.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
         if (c.isPC){
           if (has(partySlot?.immunities) || has(ws?.immunities)){
             remaining = 0;
             typeSuffix = ` (${dmgType} — immune${ws ? ' [beast]' : ''})`;
           } else if (has(partySlot?.resistances) || has(ws?.resistances) || ragingBPS){
+            // ceil, NOT floor, and that is deliberate: `remaining` here is a
+            // NEGATIVE delta, so rounding the DAMAGE down means rounding this
+            // number toward zero. 21 damage resisted is Math.ceil(-21/2) = -10.
+            // party.js works with a positive amount and correctly uses floor —
+            // the two look inconsistent and are not.
             remaining = Math.ceil(remaining / 2);
             typeSuffix = ` (${dmgType} — ${ragingBPS ? 'rage resist' : has(ws?.resistances) ? 'beast resist' : 'resisted'}, ½)`;
           } else if (has(partySlot?.vulnerabilities) || has(ws?.vulnerabilities)){
@@ -1511,6 +1535,11 @@ registerPanel('combat',{
             remaining = 0;
             typeSuffix = ` (${dmgType} — immune)`;
           } else if (has(src._resist)){
+            // ceil, NOT floor, and that is deliberate: `remaining` here is a
+            // NEGATIVE delta, so rounding the DAMAGE down means rounding this
+            // number toward zero. 21 damage resisted is Math.ceil(-21/2) = -10.
+            // party.js works with a positive amount and correctly uses floor —
+            // the two look inconsistent and are not.
             remaining = Math.ceil(remaining / 2);
             typeSuffix = ` (${dmgType} — resisted, ½)`;
           } else if (has(src._vulnerable)){

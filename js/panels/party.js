@@ -1209,7 +1209,14 @@ registerPanel('party',{
       // body taking the hit). Order of priority is immune → resist → vuln.
       if (dmgType){
         const t = String(dmgType).toLowerCase();
-        const has = (arr) => Array.isArray(arr) && arr.some(x => String(x).toLowerCase() === t);
+        // Qualifier-aware and shared with the combat tracker. The old exact
+        // match also meant a comma-joined entry never matched at all; see
+        // sktResistApplies in js/core/utils.js. The party panel has no attack
+        // -property control of its own, so it reads the combat tracker's — one
+        // fight, one weapon in hand.
+        const atk = (panelDefs.combat && panelDefs.combat._lastAtkProp)
+          ? { [panelDefs.combat._lastAtkProp]: true } : {};
+        const has = (arr) => sktAnyResistApplies(arr, t, atk);
         const ws = c.wildshape;
         const ragingBPS = c.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
         if (has(c.immunities) || has(ws?.immunities)){

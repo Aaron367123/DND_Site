@@ -405,6 +405,53 @@ function _runCrop(img, outSize, shape, title, resolve) {
 
 function d20(){return Math.floor(Math.random()*20)+1}
 function mod(s){return Math.floor((s-10)/2)}
+
+// ─── Qualified damage resistance ─────────────────────────────────────────────
+// A resist/immune/vulnerable entry is a plain string, and may carry a
+// qualifier: "bludgeoning, piercing, slashing from nonmagical attacks that
+// aren't silvered". Matching those by substring alone made every such entry
+// unconditional, so a Werewolf was immune to ALL slashing — a silvered or
+// magical weapon did nothing. Every classic "needs a magic weapon" monster was
+// invulnerable to weapons.
+//
+// SKT_ATTACK_PROPS is the set of properties an attack can have that a qualifier
+// can refer to. A qualifier naming a property means the entry applies ONLY when
+// the attack lacks it: "from nonmagical attacks that aren't silvered" applies
+// unless the attack is magical OR silvered.
+//
+// Qualifiers with no attack property in them — "while in dim light or darkness"
+// — can't be judged from the damage alone and stay unconditional, which is the
+// long-standing behaviour.
+const SKT_ATTACK_PROPS = ['magical', 'silvered', 'adamantine'];
+
+function sktResistQualifiers(entry){
+  const s = String(entry || '').toLowerCase();
+  const need = [];
+  if (/non-?magical/.test(s)) need.push('magical');
+  if (/silver/.test(s))       need.push('silvered');
+  if (/adamantine/.test(s))   need.push('adamantine');
+  return need;
+}
+
+// Does `entry` apply to `dmgType` delivered by an attack with `attack`
+// ({magical, silvered, adamantine})? `attack` may be omitted for an unqualified
+// check — in which case a qualified entry is treated as NOT applying, because
+// the caller has told us nothing that would satisfy it.
+function sktResistApplies(entry, dmgType, attack){
+  const s = String(entry || '').toLowerCase();
+  const t = String(dmgType || '').toLowerCase();
+  if (!t || !s.includes(t)) return false;
+  const need = sktResistQualifiers(s);
+  if (!need.length) return true;                       // unconditional
+  return !need.some(p => attack && attack[p]);          // any named property blocks it
+}
+
+// Convenience: does any entry in the list apply?
+function sktAnyResistApplies(arr, dmgType, attack){
+  return Array.isArray(arr) && arr.some(x => sktResistApplies(
+    (typeof x === 'string' ? x : (x && (x.resist || x.immune || x.vulnerable || x.name)) || ''),
+    dmgType, attack));
+}
 // Stacking toast system — up to 3 simultaneous toasts so fast repeat calls
 // don't overwrite each other (the previous single-element implementation
 // would clobber an "X saved" notification when the next one fired 100ms

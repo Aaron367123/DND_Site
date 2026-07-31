@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '5f80240934';
+const BUILD = 'c1c95bfbd8';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=35667c8e20',
@@ -43,11 +43,11 @@ const PRECACHE = [
   'js/core/theme.js?v=533ffb6fb1',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
-  'js/core/utils.js?v=3ede2d8e37',
+  'js/core/utils.js?v=5cee43d608',
   'js/core/state.js?v=f59175b98e',
   'js/core/window-manager.js?v=e88d7a8da0',
-  'js/panels/combat.js?v=24b9d128c6',
-  'js/panels/party.js?v=c57805ae44',
+  'js/panels/combat.js?v=01e365ecea',
+  'js/panels/party.js?v=3618df62d6',
   'js/panels/shop.js?v=39acf9d21b',
   'js/sync/notes-sync.js?v=8c42540638',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -65,7 +65,7 @@ const PRECACHE = [
   'js/panels/soundboard.js?v=611bf224d4',
   'js/panels/weather.js?v=b318dd7112',
   'js/panels/timetracker.js?v=3906d0ae60',
-  'js/content/data-loader.js?v=6545556640',
+  'js/content/data-loader.js?v=1fdc77be82',
   'js/content/search.js?v=b9d72e0409',
   'js/features/backup.js?v=aa3d74defd',
   'js/ui/settings.js?v=19cb2d3859',
@@ -87,7 +87,7 @@ const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build
 // invalidates the HTTP cache too, from the same single source of truth.
 // The activate handler deletes any skt-data-* bucket that isn't this one, so
 // the changeover is automatic.
-const DATA_STAMP  = '20260729d';
+const DATA_STAMP  = '20260731a';
 const DATA_CACHE  = 'skt-data-' + DATA_STAMP;
 const IMG_CACHE   = 'skt-img-v1';           // survives builds; capped
 const IMG_MAX_ENTRIES = 120;

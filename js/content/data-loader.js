@@ -234,13 +234,30 @@ function _parseProficiencies(d) {
   return p;
 }
 
+// Flatten a 5etools resist/immune/vulnerable list to strings.
+//
+// The `note` on an entry is the QUALIFIER — "from nonmagical attacks", "that
+// aren't silvered" — and it used to be dropped here. That turned
+//   {resist:['bludgeoning','piercing','slashing'], note:'from nonmagical attacks'}
+// into a flat "bludgeoning, piercing, slashing", i.e. unconditional. Since the
+// combat tracker matches these by substring, a Werewolf came out immune to ALL
+// bludgeoning, piercing and slashing — a silvered or magical weapon did nothing
+// to it. Same for vampires, rakshasas, gargoyles: every classic
+// "needs-a-magic-weapon" monster was invulnerable to weapons.
+//
+// Keeping the note in the STRING (rather than switching to objects) means the
+// stored shape is unchanged and every existing reader keeps working; the
+// matcher parses the qualifier back out. See _resistApplies in js/core/utils.js.
 function _damageArr(arr) {
   return (arr||[]).map(v => {
     if (typeof v === 'string') return _stripTags(v);
     if (Array.isArray(v)) return v.map(x => typeof x==='string'?_stripTags(x):'').filter(Boolean).join(', ');
     const inner = v.resist||v.immune||v.vulnerable||v.special||'';
-    if (Array.isArray(inner)) return inner.map(x => typeof x==='string'?_stripTags(x):'').filter(Boolean).join(', ');
-    return _stripTags(inner);
+    const types = Array.isArray(inner)
+      ? inner.map(x => typeof x==='string'?_stripTags(x):'').filter(Boolean).join(', ')
+      : _stripTags(inner);
+    const note = v.note ? _stripTags(v.note) : '';
+    return note ? (types ? types + ' ' + note : note) : types;
   }).filter(Boolean);
 }
 
@@ -679,7 +696,7 @@ function _normSearchIdx(s) {
 // Escape hatch for a forgotten bump: Settings → "Rebuild data index".
 // 20260729a — _copy resolution added for races/backgrounds/decks/items.
 // 20260729b — lair actions / regional effects + spell class lists joined in.
-const DATA_STAMP   = '20260729d';
+const DATA_STAMP   = '20260731a';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
 const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';
