@@ -1431,3 +1431,42 @@ Checked that the change is narrow: a concentrating PC who survives the hit still
 gets the DC prompt and keeps the spell, and a hit fully absorbed by temp HP
 still prompts (RAW — damage soaked by temp HP is still damage taken) while
 leaving concentration intact.
+
+### Monster picker
+
+**Clicking a row could add a different book's stat block.** The click handler
+resolved the row with `all.find(x => x._slug === row.dataset.slug)`, and slugs
+are not unique: **685 of the 4454 monster rows share a slug with another
+source**, and **273 of those collisions have genuinely different stat blocks**.
+`find` returns the first, so the second row of a pair was unreachable. Proved
+both directions rather than asserting it — Space Hamster appears as BAM
+10 HP/15 AC and WDMM 1 HP/10 AC, the old lookup resolved to BAM either way, and
+rows now add 10/15 and 1/10 respectively.
+
+Relevant to this campaign specifically: `tressym` collides between BGDIA and
+**SKT**. (That pair happens to have identical stats, so it was harmless — but it
+shows the collision set isn't exotic.)
+
+Rows are now looked up by index into the pool that produced them. The source
+badge was already rendered, so the two entries were always distinguishable on
+screen; only the lookup was ambiguous.
+
+**The list was silently capped at 200.** With no query that is 200 of 4454 — 4%
+— and "dragon" alone matches 294. Nothing on screen admitted the cut, so a
+monster that was merely off the end looked like a monster the dataset didn't
+have. The modal now states it: "Showing first 200 of 294 matches — keep typing
+to narrow it down", and plain "60 matches" when nothing is hidden.
+
+**`addMonster` had the same numbering collision `_duplicate` did, and fixing
+only `_duplicate` left the more common path broken.** Adding four Goblins,
+removing Goblin 2, then adding another produced a second **Goblin 4** — the
+group card labels its HP rows by name, so two rows became indistinguishable.
+Both paths now share `_nextGroupSuffix` / `_numberFirstOfGroup`; the suffix is
+the lowest unused number, which also reuses gaps left by casualties. Verified
+the whole sequence across both entry points, plus that the first monster stays
+unnumbered and the second retroactively renames the first.
+
+Worth noting as a process point: the duplicate-numbering bug was fixed one
+commit earlier and I did not check whether the same logic existed elsewhere. It
+did, in the path a DM uses far more often. Grep for the pattern, not just the
+symptom.

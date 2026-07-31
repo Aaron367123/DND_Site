@@ -1163,20 +1163,37 @@ registerPanel('combat',{
       <input type="search" id="cmb-pick-search" placeholder="🔎 Search 5e monsters…" autocomplete="off"
         style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
       <div id="cmb-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
+      <div id="cmb-pick-count" style="font-size:11px;color:var(--text-muted);padding:6px 2px 0"></div>
       <div class="modal-actions"><button class="btn" id="cmb-pick-close">Close</button></div>
     </div>`;
     document.body.appendChild(backdrop);
     const list = backdrop.querySelector('#cmb-pick-list');
+    const countEl = backdrop.querySelector('#cmb-pick-count');
+    const LIMIT = 200;
+    // Rows are looked up by their position in THIS pool, not by slug. 685 of
+    // the 4454 monster slugs are shared across sources (tressym appears in
+    // both BGDIA and SKT, space-hamster in BAM and WDMM, …), so `find` by slug
+    // returned whichever came first and clicking the second row added the
+    // other book's stat block. The source badge already tells them apart on
+    // screen; only the lookup was ambiguous.
+    let pool = [];
     const renderList = q=>{
       const qn=(q||'').toLowerCase().trim();
-      const pool = qn ? all.filter(d=>d.name.toLowerCase().includes(qn)||(d.meta||'').toLowerCase().includes(qn)||(d._source||'').toLowerCase().includes(qn)||(_formatSource(d._source)||'').toLowerCase().includes(qn)).slice(0,200) : all.slice(0,200);
-      list.innerHTML = pool.map(d=>`<div class="bestiary-pick-row" data-slug="${esc(d._slug)}">
+      const matches = qn ? all.filter(d=>d.name.toLowerCase().includes(qn)||(d.meta||'').toLowerCase().includes(qn)||(d._source||'').toLowerCase().includes(qn)||(_formatSource(d._source)||'').toLowerCase().includes(qn)) : all;
+      pool = matches.slice(0, LIMIT);
+      list.innerHTML = pool.map((d, k)=>`<div class="bestiary-pick-row" data-i="${k}">
         <div class="bestiary-pick-left">
           <span class="bestiary-pick-name">${esc(d.name)}</span>
           ${d._source ? `<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>` : ''}
         </div>
         <span class="bestiary-pick-meta">${esc(d.meta||'')}</span>
       </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No matches</div>';
+      // Say when the list is cut off. It always was — with no query this shows
+      // 200 of 4454, and "dragon" alone matches 294 — but nothing on screen
+      // admitted it, so an absent monster looked like a missing monster.
+      countEl.textContent = matches.length > LIMIT
+        ? `Showing first ${LIMIT} of ${matches.length} matches — keep typing to narrow it down`
+        : `${matches.length} match${matches.length === 1 ? '' : 'es'}`;
     };
     renderList('');
     // Escape on document, not the backdrop — a plain div isn't focusable, so
@@ -1194,7 +1211,7 @@ registerPanel('combat',{
     backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
     list.addEventListener('click', e=>{
       const row = e.target.closest('.bestiary-pick-row'); if (!row) return;
-      const d = all.find(x=>x._slug===row.dataset.slug); if (!d) return;
+      const d = pool[parseInt(row.dataset.i)]; if (!d) return;
       this.addMonster(d);
       close();
     });
@@ -1203,32 +1220,48 @@ registerPanel('combat',{
 
   _remove(i){this._removeCombatantAt(i);save();this._render();},
 
+  // Members of a same-named group: "Goblin", or anything the group renamed to
+  // "Goblin 1" / "Goblin 2" and stamped with baseName.
+  _inGroup(base){ return x => x.baseName === base || x.name === base; },
+
+  // Lowest unused "<base> N" suffix. Counting the group and adding one
+  // collides the moment anything is removed from the middle: from
+  // Goblin 1/3/4 it proposes 4 again, and the group card labels its HP rows by
+  // name, so the DM gets two identical rows with no way to tell them apart.
+  // Taking the lowest free number also reuses the gaps left by casualties.
+  // Shared by _duplicate and addMonster — the two had the same bug, and fixing
+  // only the first one left the more common path (adding another of the same
+  // monster from the picker) still broken.
+  _nextGroupSuffix(base){
+    const taken = new Set(state.combatants.filter(this._inGroup(base)).map(x => {
+      const m = String(x.name || '').match(/\s(\d+)$/);
+      return m ? parseInt(m[1]) : 1;
+    }));
+    let n = 1;
+    while (taken.has(n)) n++;
+    return n;
+  },
+
+  // On the SECOND member, retroactively number the first so the group reads
+  // "Goblin 1 / Goblin 2" rather than "Goblin / Goblin 2".
+  _numberFirstOfGroup(base){
+    const members = state.combatants.filter(this._inGroup(base));
+    if (members.length !== 1) return;
+    const oi = state.combatants.findIndex(this._inGroup(base));
+    if (oi >= 0) state.combatants[oi] = {...state.combatants[oi], name: base + ' 1', baseName: base};
+  },
+
   // Duplicate a monster card. Re-uses the same baseName logic addMonster
   // uses so a second Goblin becomes "Goblin 2" (and the original gets
   // renamed to "Goblin 1" so the group is unambiguous).
   _duplicate(i){
     const c = state.combatants[i]; if (!c || c.isPC) return;
     const base = c.baseName || c.name;
-    const inGroup = x => x.baseName === base || x.name === base;
-    if (state.combatants.filter(inGroup).length === 1){
-      // First duplicate — number the original too
-      const oi = state.combatants.findIndex(inGroup);
-      if (oi >= 0) state.combatants[oi] = {...state.combatants[oi], name: base+' 1', baseName: base};
-    }
-    // Lowest unused suffix, not count+1. Counting produced collisions as soon
-    // as anything was removed from the middle of a group: kill "Goblin 2" out
-    // of four and the next duplicate was a second "Goblin 4", which makes the
-    // group card's HP rows ambiguous about which one you're damaging.
-    const taken = new Set(state.combatants.filter(inGroup).map(x => {
-      const m = String(x.name || '').match(/\s(\d+)$/);
-      return m ? parseInt(m[1]) : 1;
-    }));
-    let copyNum = 1;
-    while (taken.has(copyNum)) copyNum++;
+    this._numberFirstOfGroup(base);
     state.combatants.splice(i+1, 0, {
       ...c,
       id: uid(),
-      name: base + ' ' + copyNum,
+      name: base + ' ' + this._nextGroupSuffix(base),
       baseName: base,
       hp: c.hpMax || c.hp,
       conditions: [],
@@ -2102,12 +2135,12 @@ registerPanel('combat',{
   // job now, so we don't auto-sort by initiative.
   addMonster(m){
     const initMod = m.dex ? mod(m.dex) : 0;
-    const existing = state.combatants.filter(c=>c.baseName===m.name).length;
-    const displayName = existing ? `${m.name} ${existing+1}` : m.name;
-    if (existing === 1){
-      const oi = state.combatants.findIndex(c=>c.baseName===m.name);
-      if (oi >= 0) state.combatants[oi] = {...state.combatants[oi], name:`${m.name} 1`};
-    }
+    // Count BEFORE renaming — _numberFirstOfGroup turns a lone "Goblin" into
+    // "Goblin 1", which would otherwise make the first duplicate look like a
+    // fresh unnumbered add.
+    const already = state.combatants.filter(this._inGroup(m.name)).length;
+    this._numberFirstOfGroup(m.name);
+    const displayName = already ? `${m.name} ${this._nextGroupSuffix(m.name)}` : m.name;
     let portrait = null;
     if (m._img){
       // Prefer the head-shot token over the full creature art for the small
