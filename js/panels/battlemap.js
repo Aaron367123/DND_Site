@@ -560,7 +560,10 @@ registerPanel('battlemap',{
     if (!navigator.onLine) bits.push('browser reports offline');
     try {
       const r = await fetch(url, { mode: 'cors', cache: 'no-store' });
-      bits.push('HTTP ' + r.status + ' ' + r.type);
+      // statusText matters: the service worker converts a rejected fetch into a
+      // synthetic 504 (so it doesn't log an unhandled rejection) and puts the
+      // real reason there. Without this the toast would just say "HTTP 504".
+      bits.push('HTTP ' + r.status + (r.statusText ? ' ' + r.statusText : '') + ' ' + r.type);
       // A fetch that succeeds where the <img> failed narrows it to the image
       // pipeline — decode, or a CORS check the fetch didn't have to satisfy.
       if (r.ok) bits.push('fetch OK but image decode failed');

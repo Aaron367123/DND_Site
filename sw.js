@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '427c65853c';
+const BUILD = 'a570d18d8b';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=1c57e1b12c',
@@ -54,7 +54,7 @@ const PRECACHE = [
   'js/sync/dropbox-config.js?v=ccf8533d50',
   'js/sync/dropbox-sync.js?v=ab773edfd6',
   'js/panels/notes.js?v=7acb6047fb',
-  'js/panels/battlemap.js?v=f3ea49adc4',
+  'js/panels/battlemap.js?v=d3a07a9780',
   'js/panels/npc-library.js?v=ef2e523574',
   'js/panels/bestiary.js?v=8c3c72219f',
   'js/panels/content-panel.js?v=4d5ee5f31a',
@@ -173,12 +173,37 @@ function trimCache(name, max){
   return next;
 }
 
+// Write-behind. Never awaited, so its rejection has to be swallowed HERE or it
+// surfaces as an unhandled rejection in the page console. A put can fail for
+// reasons that are none of the caller's business — origin quota, a partial
+// (206) response, the bucket being deleted by a concurrent activate sweep — and
+// none of them should turn a served response into a visible error.
+function _putQuiet(cache, request, res){
+  try { cache.put(request, res).catch(() => {}); } catch (e) { /* sync throw */ }
+}
+
 async function cacheFirst(request, cacheName){
   const cache = await caches.open(cacheName);
   const hit = await cache.match(request);
   if (hit) return hit;
-  const res = await fetch(request);
-  if (res && res.ok) cache.put(request, res.clone());
+  let res;
+  try {
+    res = await fetch(request);
+  } catch (e) {
+    // Observed against the R2 CDN: an edge node answered without an
+    // Access-Control-Allow-Origin header, so this CORS fetch rejected with
+    // "TypeError: Failed to fetch" and logged `Uncaught (in promise) ... at
+    // cacheFirst` for every retry. Reject the respondWith and Chrome reports it
+    // as an uncaught rejection; resolve with a synthetic error response and the
+    // consumer sees exactly the same failure — an <img> still fires onerror,
+    // fetch() still sees !res.ok — with no console noise and no lost detail,
+    // because the reason travels in the status text.
+    return new Response('', {
+      status: 504,
+      statusText: 'SW fetch failed: ' + ((e && e.name) || 'Error'),
+    });
+  }
+  if (res && res.ok) _putQuiet(cache, request, res.clone());
   return res;
 }
 
@@ -186,11 +211,14 @@ async function networkFirst(request, cacheName){
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(request);
-    if (res && res.ok) cache.put(request, res.clone());
+    if (res && res.ok) _putQuiet(cache, request, res.clone());
     return res;
   } catch (e) {
     const hit = await cache.match(request) || await cache.match('skt-workspace.html');
     if (hit) return hit;
+    // Nothing cached and no network. Rethrowing here is deliberate and
+    // different from cacheFirst: this is a NAVIGATION, and a browser error page
+    // is far more useful to a DM mid-session than a blank 504 body.
     throw e;
   }
 }
