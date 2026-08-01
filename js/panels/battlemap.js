@@ -442,9 +442,52 @@ registerPanel('battlemap',{
   // Load an image at img/{path} into _mapBgImage and refresh the canvas.
   // When autoFit is true (called from the picker), also fit the loaded image
   // to the panel viewport so the user gets a sensible default zoom.
-  _loadBgFromPath(path, autoFit){
+  //
+  // Loads are SEQUENCED and RETRIED. Two rapid picks used to race: whichever
+  // image decoded last won, which for a big map beaten by a small one meant the
+  // wrong art. And a single onerror was terminal — "Could not load map image"
+  // with no way to tell a 404 from a poisoned cache entry from a CORS problem.
+  _bgLoadSeq: 0,
+  // Attempt ladder, in order. Each one addresses a different cause, so the map
+  // only stays broken if all three fail.
+  //   1. Plain CORS load — the normal path.
+  //   2. Same thing after evicting the URL from every Cache Storage bucket.
+  //      A service worker serving a bad cached entry is cache-FIRST, so it
+  //      would otherwise keep serving it forever, including across reloads.
+  //   3. Cache-busted and WITHOUT crossOrigin. If CORS itself is the problem
+  //      this still shows the DM their map; the only casualty is _bgLuminance,
+  //      which already treats a tainted canvas as "couldn't sample" and falls
+  //      back to the default grid colour. A visible map beats a correct grid.
+  _BG_ATTEMPTS: [
+    { cors: true,  evict: false, bust: false },
+    { cors: true,  evict: true,  bust: false },
+    { cors: false, evict: false, bust: true  },
+  ],
+  // URL of the last load that exhausted the whole ladder. See fromSync below.
+  _bgFailedUrl: null,
+  // fromSync marks a reload triggered by an incoming Firebase/BroadcastChannel
+  // update rather than by the DM. Those arrive on EVERY battlemap write — a fog
+  // tick, a token nudge — and the tier that dispatches them re-enters on
+  // `!this._bgMapNaturalW`, which a failed load never sets. So one unreachable
+  // image turned into an unbounded reload loop: five identical ERR_FAILEDs in
+  // the reported console, and 3× that once retries existed. A sync update for
+  // the URL we just gave up on is therefore ignored. Any user action still
+  // retries, because picking the same map again doesn't come through here, and
+  // picking a different one has a different URL.
+  _loadBgFromPath(path, autoFit, fromSync){
+    const url = assetUrl(path);
+    if (fromSync && url && url === this._bgFailedUrl) return;
+    const seq = ++this._bgLoadSeq;
+    this._bgAttempt(url, autoFit, seq, 0);
+  },
+  _bgAttempt(url, autoFit, seq, n){
+    const plan = this._BG_ATTEMPTS[n];
     const img = new Image();
     img.onload = () => {
+      // A newer pick started while this one was in flight — drop it on the
+      // floor rather than overwriting the map the DM actually chose.
+      if (seq !== this._bgLoadSeq) return;
+      this._bgFailedUrl = null;
       _mapBgImage = img;
       this._bgMapNaturalW = img.naturalWidth;
       this._bgMapNaturalH = img.naturalHeight;
@@ -473,15 +516,61 @@ registerPanel('battlemap',{
       }
       this._render();
     };
-    img.onerror = () => { showToast('Could not load map image'); };
-    // MUST be set before .src, and MUST stay set while images are served
-    // cross-origin. _drawGrid samples this image with getImageData() to pick
-    // a grid colour that contrasts with the map; a cross-origin image loaded
-    // without CORS taints the canvas, that read throws, and the adaptive
-    // contrast silently falls back to the default for every map. It's also
-    // what makes the response non-opaque so the service worker can cache it.
-    img.crossOrigin = 'anonymous';
-    img.src = assetUrl(path);
+    img.onerror = () => {
+      if (seq !== this._bgLoadSeq) return;
+      if (n + 1 < this._BG_ATTEMPTS.length){
+        this._bgAttempt(url, autoFit, seq, n + 1);
+      } else {
+        this._bgFailedUrl = url;
+        this._reportBgFailure(url);
+      }
+    };
+    // crossOrigin MUST be set before .src. While images are served
+    // cross-origin it is also what keeps the response non-opaque, so
+    // _bgLuminance can sample the art with getImageData() to pick a grid
+    // colour that contrasts with the map, and so the service worker's
+    // res.ok check passes and the map gets cached at all. Only the last-ditch
+    // attempt drops it, and only because a tainted canvas degrades cleanly.
+    if (plan.cors) img.crossOrigin = 'anonymous';
+    const go = () => {
+      if (seq !== this._bgLoadSeq) return;
+      img.src = plan.bust ? url + (url.indexOf('?') === -1 ? '?' : '&') + 'cb=' + seq : url;
+    };
+    if (plan.evict) this._evictCached(url).then(go, go);
+    else go();
+  },
+
+  // Drop one URL from every Cache Storage bucket we own. ignoreVary matters:
+  // R2 answers with `Vary: Origin`, so a Request built from a bare URL string
+  // does not match the stored one and the delete silently does nothing.
+  async _evictCached(url){
+    try {
+      const names = await caches.keys();
+      await Promise.all(names
+        .filter(n => /^skt-/.test(n))
+        .map(async n => { try { await (await caches.open(n)).delete(url, {ignoreVary:true}); } catch(e){} }));
+    } catch(e){ /* no Cache Storage (private mode, old browser) — fine */ }
+  },
+
+  // Every attempt failed. An <img> error event carries no reason at all, so
+  // probe the same URL with fetch(), which does, and put the answer somewhere
+  // a report can quote instead of "it doesn't work".
+  async _reportBgFailure(url){
+    const bits = [];
+    if (!navigator.onLine) bits.push('browser reports offline');
+    try {
+      const r = await fetch(url, { mode: 'cors', cache: 'no-store' });
+      bits.push('HTTP ' + r.status + ' ' + r.type);
+      // A fetch that succeeds where the <img> failed narrows it to the image
+      // pipeline — decode, or a CORS check the fetch didn't have to satisfy.
+      if (r.ok) bits.push('fetch OK but image decode failed');
+    } catch (e){
+      bits.push('fetch threw ' + ((e && e.name) || 'Error') + ': ' + ((e && e.message) || ''));
+    }
+    if (navigator.serviceWorker && !navigator.serviceWorker.controller) bits.push('no SW controller');
+    const why = bits.join('; ');
+    console.warn('[battlemap] map image failed after ' + this._BG_ATTEMPTS.length + ' attempts', url, why);
+    showToast('Could not load map image — ' + why);
   },
 
   // Grow/shrink _cols and _rows so the grid covers the map at its current
@@ -1461,7 +1550,7 @@ registerPanel('battlemap',{
       // autoFit only when the map actually changed, so each device re-fits to
       // its own screen rather than inheriting the sender's zoom.
       // _loadBgFromPath renders on image load.
-      this._loadBgFromPath?.(nextPath, nextPath !== prevPath);
+      this._loadBgFromPath?.(nextPath, nextPath !== prevPath, /*fromSync=*/true);
       return;
     }
     if (struct() !== structBefore || (!nextPath && prevPath)){
