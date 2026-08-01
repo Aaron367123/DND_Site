@@ -1455,24 +1455,34 @@ registerPanel('battlemap',{
           // never reached the DM window, and only turned up later via the
           // Firebase round trip, or not at all when offline.
           //
-          // Accept pencil annotations from a player, and NOTHING else. A
-          // player's payload carries the whole map state, and applying all of
-          // it would let a stale player tab push its tokens or fog back over
-          // the DM's. Drawing (and erasing) is the only shared state a player
-          // can actually change — everything else in their toolbar is
-          // per-device — so that is the whole of what we take.
+          // Take exactly two things from a player: pencil annotations, and
+          // where an EXISTING token sits. A player's payload carries the whole
+          // map state, and applying all of it would let a stale player tab push
+          // its fog, its map, or a deleted token back over the DM's.
           //
-          // Last-write-wins, as everywhere else on this map: if the DM adds a
-          // stroke in the same instant, whichever array lands second is the
-          // one kept.
+          // Taking drawings alone was worse than incomplete, because the
+          // _saveMap() below broadcasts the DM's FULL state straight back. A
+          // player who dragged a token saw it snap home ~200ms later: the move
+          // wasn't merely dropped, the echo actively undid it, on this device
+          // and on every other one the DM then pushed to.
+          //
+          // Last-write-wins, as everywhere else on this map: if the DM moves
+          // the same token in the same instant, whichever lands second wins.
           if (msg.role !== 'player') return;
-          if (!Array.isArray(msg.drawings)) return;
-          this._drawings = msg.drawings;
-          this._previewStroke = null;
-          this._drawAllStrokes();
+          let touched = false;
+          if (Array.isArray(msg.drawings)){
+            this._drawings = msg.drawings;
+            this._previewStroke = null;
+            this._drawAllStrokes();
+            touched = true;
+          }
+          if (this._mergeTokenPositions(msg.tokens)){
+            this._renderTokens();
+            touched = true;
+          }
           // Persist so it reaches Firebase and every other device — without
-          // this the DM would see the stroke but never pass it on.
-          this._saveMap();
+          // this the DM would see the change but never pass it on.
+          if (touched) this._saveMap();
           return;
         }
         // Live-drawing messages — applied to a transient preview that doesn't
@@ -1486,6 +1496,34 @@ registerPanel('battlemap',{
         this.applyMapState(msg, { source: 'bc' });
       };
     }catch(e){}
+  },
+
+  // Merge ONLY x/y, matched by token id, from a payload we don't fully trust.
+  // Unknown ids are dropped, so this can never add a token; tokens absent from
+  // the payload are left alone, so it can never remove one; and no other field
+  // is read, so a stale sender can't rename, resize, revive or recolour
+  // anything. That is what makes it safe to accept from a player when
+  // applyMapState (which takes the lot) is not.
+  //
+  // Returns whether anything actually moved, so the caller can skip a
+  // re-render and a sync push for a payload that changed nothing — every
+  // player broadcast carries tokens, most of them identical.
+  _mergeTokenPositions(incoming){
+    if (!Array.isArray(incoming) || !Array.isArray(this._tokens)) return false;
+    // Mid-drag, skip entirely. Same reasoning as applyMapState's guard: the
+    // DM's own drag is authoritative until mouseup, and rewriting coordinates
+    // underneath it would fight the pointer.
+    if (this._drag) return false;
+    const byId = new Map();
+    incoming.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
+    let moved = false;
+    this._tokens.forEach(t => {
+      const src = (t && t.id != null) ? byId.get(t.id) : null;
+      if (!src) return;
+      if (typeof src.x === 'number' && src.x !== t.x){ t.x = src.x; moved = true; }
+      if (typeof src.y === 'number' && src.y !== t.y){ t.y = src.y; moved = true; }
+    });
+    return moved;
   },
 
   // ─── The single way an incoming map update is applied ──────────────────────
