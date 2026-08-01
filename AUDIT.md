@@ -2095,3 +2095,55 @@ both panels.
 
 Massive damage auto-marking a PC dead is confirmed as intended behaviour and
 re-asserted here rather than changed.
+
+## Battle map images: thumbnails were evicting the maps (2026-08-01)
+
+Reported as "the maps aren't loading — I can see the previews load".
+
+**I could not reproduce a map failing to load.** On localhost and on the
+deployed site, picking a map set `_mapBgImage` (2400×3300), the stage
+background URL, and rendered. Fog was off, nothing was painting over it. Two of
+my own measurements along the way were artifacts and are worth recording so the
+next person doesn't chase them:
+
+- Thumbnails reported 0/68 loaded. They carry `loading="lazy"`, and in a
+  headless pane that isn't compositing, off-screen lazy images are never
+  fetched at all — `complete=false`, `currentSrc=""`. Forcing `loading="eager"`
+  loaded 10/10. Nothing was wrong with them.
+- The map picker showed zero cards on first probe. That is the initial state
+  before an adventure is selected, not a failure.
+
+**What is genuinely broken is the image cache routing, and it produces exactly
+the reported symptom.** The service worker has a dedicated thumbnail bucket,
+`skt-thumb-v1`, capped at 1500 — deliberately separate because thumbnails are
+~27 KB and numerous while full maps are ~500 KB and few. The comment on that
+route says, in as many words, that mixing them would mean "a single map-picker
+scroll would otherwise evict every cached full-size map from IMG_CACHE".
+
+That route sits **after** the `url.origin !== self.location.origin` early
+return. Once the images moved to the R2 CDN, every thumbnail became
+cross-origin and stopped reaching it — they were all filed into `IMG_CACHE`
+instead, which is capped at **120**. Confirmed by observation rather than
+inference: on the live site the cache list was `skt-shell / skt-data / skt-img`
+with **no `skt-thumb-v1` at all**, and after loading a handful of thumbnails
+locally, 7 of the 8 `skt-img-v1` entries were thumbnails.
+
+Opening the picker fires **68** thumbnail requests. Two visits overflow the
+120-entry cap and evict the full-size maps that share it. After that, a map the
+DM had already used is a cache miss — so on a slow or offline connection the
+previews (just cached) appear while the map (just evicted) does not. That is
+the reported symptom, arrived at from the other direction.
+
+Fixed by testing `/thumbs/` inside the cross-origin branch and routing to the
+right bucket, plus a one-time repair on activate that evicts misfiled
+thumbnails from `IMG_CACHE` — that bucket is in `KEEP`, so the existing bad
+entries would otherwise survive every future update.
+
+Also serialized `trimCache`. It was invoked per image request via
+`waitUntil`, so 68 concurrent trims each read the same pre-trim key list and
+each computed "delete `keys.length - max`" from it, deleting far more than the
+actual overflow and repeatedly emptying a cache that was only slightly over.
+
+Verified after a clean re-register: 25 thumbnails and a full map load,
+`skt-thumb-v1` holds 25 entries and only thumbnails, `skt-img-v1` holds the map
+and zero thumbnails.

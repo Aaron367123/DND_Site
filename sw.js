@@ -133,6 +133,16 @@ self.addEventListener('activate', event => {
       if (!/^skt-(shell|data|img|thumb)-/.test(n)) return null;
       return caches.delete(n);
     }));
+    // One-time repair: thumbnails were being filed into IMG_CACHE because the
+    // /thumbs/ route was unreachable for cross-origin URLs. IMG_CACHE is in
+    // KEEP, so those entries survive the sweep above and go on crowding the
+    // 120-entry cap that full-size maps share. Evict them here; they will be
+    // re-fetched into THUMB_CACHE where they belong.
+    try {
+      const img = await caches.open(IMG_CACHE);
+      const stale = (await img.keys()).filter(k => /\/thumbs\//i.test(new URL(k.url).pathname));
+      await Promise.all(stale.map(k => img.delete(k)));
+    } catch (e) { /* a failed repair must never block activation */ }
     await self.clients.claim();
   })());
 });
@@ -143,12 +153,24 @@ self.addEventListener('message', event => {
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-async function trimCache(name, max){
-  const cache = await caches.open(name);
-  const keys = await cache.keys();
-  // Cache.keys() returns insertion order, so the oldest entries are first.
-  if (keys.length <= max) return;
-  await Promise.all(keys.slice(0, keys.length - max).map(k => cache.delete(k)));
+// Serialized per cache name. Opening the map picker fires ~68 image requests
+// at once, each of which schedules a trim; run concurrently they every one
+// read the same pre-trim key list and each compute "delete keys.length - max"
+// from it, so they collectively delete far more than the overflow — repeatedly
+// emptying a cache that was only a little over its cap. Chaining them means
+// each trim sees the previous one's result.
+const _trimQueue = Object.create(null);
+function trimCache(name, max){
+  const prev = _trimQueue[name] || Promise.resolve();
+  const next = prev.then(async () => {
+    const cache = await caches.open(name);
+    const keys = await cache.keys();
+    // Cache.keys() returns insertion order, so the oldest entries are first.
+    if (keys.length <= max) return;
+    await Promise.all(keys.slice(0, keys.length - max).map(k => cache.delete(k)));
+  }).catch(() => {});
+  _trimQueue[name] = next;
+  return next;
 }
 
 async function cacheFirst(request, cacheName){
@@ -198,8 +220,21 @@ self.addEventListener('fetch', event => {
     // padding PER ENTRY against origin quota, risking eviction of the app
     // shell itself. CORS is the fix; do not relax the res.ok check.
     if (IMG_ORIGINS.length && IMG_ORIGINS.indexOf(url.origin) !== -1) {
-      event.respondWith(cacheFirst(req, IMG_CACHE));
-      event.waitUntil(trimCache(IMG_CACHE, IMG_MAX_ENTRIES));
+      // Thumbnails go in their OWN bucket, and the check has to happen HERE.
+      // The /thumbs/ route further down sits after this early return, so once
+      // the images moved to the CDN it became unreachable: every thumbnail
+      // was filed in IMG_CACHE instead, which is capped at 120 against
+      // THUMB_CACHE's 1500. Opening the map picker fires ~68 thumbnail
+      // requests at once, so a couple of picker visits blow straight through
+      // the cap and evict the full-size maps — exactly the failure the
+      // comment on the /thumbs/ route was written to prevent. skt-thumb-v1
+      // never even got created on the deployed site; the live cache list was
+      // shell/data/img only, which is what gave it away.
+      const isThumb = /\/thumbs\//i.test(url.pathname);
+      const bucket  = isThumb ? THUMB_CACHE : IMG_CACHE;
+      const cap     = isThumb ? THUMB_MAX_ENTRIES : IMG_MAX_ENTRIES;
+      event.respondWith(cacheFirst(req, bucket));
+      event.waitUntil(trimCache(bucket, cap));
     }
     return;
   }
