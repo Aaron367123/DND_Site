@@ -400,12 +400,16 @@ function _convertMonster(d) {
     languages: _stripTags(typeof d.languages==='string' ? d.languages : (d.languages||[]).join(', ')),
     challenge_rating: _parseCR(d.cr),
     xp:               _crToXP(d.cr),
-    special_abilities: (d.trait    ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
-    actions:           (d.action   ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
-    bonus_actions:     (d.bonus    ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
-    legendary_actions: (d.legendary||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
-    reactions:         (d.reaction ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
-    mythic_actions:    (d.mythic   ||[]).map(a=>({name:a.name||'', desc:_parseEntries(a.entries)})),
+    // Names go through _stripTags too, not just descriptions. 5etools puts the
+    // recharge marker in the action NAME — "Fire Breath {@recharge 5}" — so
+    // leaving names raw printed the tag verbatim in the stat block while every
+    // other tag around it rendered properly.
+    special_abilities: (d.trait    ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
+    actions:           (d.action   ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
+    bonus_actions:     (d.bonus    ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
+    legendary_actions: (d.legendary||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
+    reactions:         (d.reaction ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
+    mythic_actions:    (d.mythic   ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
   };
 }
 
@@ -696,7 +700,9 @@ function _normSearchIdx(s) {
 // Escape hatch for a forgotten bump: Settings → "Rebuild data index".
 // 20260729a — _copy resolution added for races/backgrounds/decks/items.
 // 20260729b — lair actions / regional effects + spell class lists joined in.
-const DATA_STAMP   = '20260731a';
+// 20260801a — action/trait NAMES are now tag-stripped, so a cached index built
+// before this still carries raw "{@recharge 5}" in every recharge ability.
+const DATA_STAMP   = '20260801a';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
 const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';

@@ -2147,3 +2147,39 @@ actual overflow and repeatedly emptying a cache that was only slightly over.
 Verified after a clean re-register: 25 thumbnails and a full map load,
 `skt-thumb-v1` holds 25 entries and only thumbnails, `skt-img-v1` holds the map
 and zero thumbnails.
+
+### `{@recharge 5}` printed raw in stat blocks
+
+Reported from a stat block reading "Fire Breath {@recharge 5}" while every
+other tag around it rendered fine. `_stripTags` has handled `{@recharge N}` →
+`(Recharge N–6)` all along — the converter just never ran action **names**
+through it. Descriptions went through `_parseEntries`; names were passed as
+`a.name || ''`, raw. 5etools puts the recharge marker in the NAME, so it was the
+one tag with nowhere to be cleaned.
+
+Fixed for all six groups at once (traits, actions, bonus actions, legendary,
+reactions, mythic) rather than just actions. Verified across the whole
+bestiary: **zero `{@…}` tags remain in any action or trait name**, and 661
+creatures carry a recharge ability. The creature in the report turned out to be
+"The Demogorgon" (IMR), an ettin variant, which now reads
+`Fire Breath (Recharge 5–6)`.
+
+`DATA_STAMP` bumped to `20260801a`. Without that, anyone with a cached index
+keeps the old names — the stamp gates both the IndexedDB index and the service
+worker's data bucket, which is exactly the case it exists for.
+
+Knock-on, handled: the Attack Runner's parser stripped the raw `{@recharge …}`
+form from names. With the loader now emitting `(Recharge 5–6)` that strip would
+have stopped matching and the text would have leaked into attack titles
+instead. The parser now recognises both forms, and returns recharge as its own
+field so the panel shows it as a `↺ 5–6` chip — better than either, since a DM
+needs to know the breath isn't available every round.
+
+### The align-grid button and the missing maps are the same report
+
+The 📐 button renders only when `_mapBgImage` is set — you cannot align a grid
+to a map that isn't there. Confirmed by toggling it: present with a map loaded,
+absent when the image is null, and it returns on its own once
+`_loadBgFromPath` resolves (~300 ms). So it is not a separate bug; it is the
+visible consequence of the map not loading, and it should come back with the
+image-cache fix above.

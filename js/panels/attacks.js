@@ -144,6 +144,11 @@ registerPanel('attacks', {
       ? `<span class="atk-save">DC ${a.save.dc} ${esc(String(a.save.ability).slice(0,3).toUpperCase())}</span>`
       : (a.toHit ? `<span class="atk-tohit">${esc(a.toHit)}</span>` : '');
     const grp = a.group ? `<span class="atk-tag">${esc(a.group)}</span>` : '';
+    // Recharge belongs on the row, not buried in the name — a DM needs to know
+    // the breath weapon isn't available every round.
+    const rech = a.recharge
+      ? `<span class="atk-tag recharge" title="Recharges on a d6 roll of ${esc(a.recharge)} at the start of the creature's turn">↺ ${esc(a.recharge)}</span>`
+      : '';
     const btns = a.save
       ? `<button class="atk-btn" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg"  data-half="0">Failed</button>
          ${a.save.half ? `<button class="atk-btn ghost" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg" data-half="1">Saved ½</button>` : ''}
@@ -159,7 +164,7 @@ registerPanel('attacks', {
       : '';
     return `<div class="atk-row">
       <div class="atk-row-main">
-        <span class="atk-name">${esc(a.name)}</span>${grp}${meta}
+        <span class="atk-name">${esc(a.name)}</span>${grp}${rech}${meta}
         <span class="atk-dmg">${this._dmgSummary(a.parts)}</span>
       </div>
       <div class="atk-actions">${btns}</div>
