@@ -2148,6 +2148,47 @@ Verified after a clean re-register: 25 thumbnails and a full map load,
 `skt-thumb-v1` holds 25 entries and only thumbnails, `skt-img-v1` holds the map
 and zero thumbnails.
 
+**Follow-up: eviction reproduced on the deployed site, before and after
+(2026-08-01).** Asked to try SKT's "Map 3.1: The North"
+(`adventure/SKT/027-skt03-thenorth.webp`, 3000×1905, 2,635,152 bytes).
+
+The map itself is fine. It loads on localhost and on Pages — `naturalWidth`
+3000, stage background set, no error toast, and the 📐 Align button present.
+So "The North specifically is broken" is ruled out.
+
+The eviction, though, reproduced exactly, on the live site, on the still-active
+pre-fix worker (`skt-shell-d5e4709898` controlling, `skt-data-20260731a`, no
+`skt-thumb-v1`):
+
+| | before fix | after fix |
+|---|---|---|
+| thumbnails fetched | 140 | 200 |
+| `skt-thumb-v1` | *did not exist* | 200 entries, all thumbnails |
+| `skt-img-v1` | 140 entries, **all thumbnails** | 2 entries, **zero** thumbnails |
+| The North still cached | **no — evicted** | yes, 2,635,152 bytes |
+
+Accepting the update (`SKIP_WAITING`) ran the activate repair, which swept all
+140 misfiled thumbnails out of `IMG_CACHE` in one pass, then the 200-thumbnail
+re-flood left the map untouched.
+
+Two notes on measuring this:
+
+- The pre-fix `IMG_CACHE` sat at **140** entries against a cap of 120 — the
+  un-serialized `trimCache` doesn't hold the cap under a burst either. The
+  post-fix run never exceeded a cap, so the serialization change is verified
+  only by reading, not by measurement.
+- `caches.match(urlString)` returns **null** for these entries even when they
+  are present. `Cache.keys()` hands back Requests whose `mode` reads
+  `no-cors`, and a plain string doesn't reconstruct the same Request.
+  `cache.match(storedRequest)` returns the full 2.6 MB body. Nearly logged as
+  "cached but unmatchable"; it is an artifact.
+
+What this still does **not** explain is a map failing while the network is
+healthy. Eviction only turns into a visible failure when the browser can't
+refetch — offline, or a connection slow enough that the 2.6 MB never arrives
+while the 28 KB preview does. If maps still fail on good wifi after the update,
+the cause is elsewhere.
+
 ### `{@recharge 5}` printed raw in stat blocks
 
 Reported from a stat block reading "Fire Breath {@recharge 5}" while every
