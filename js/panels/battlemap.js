@@ -248,7 +248,17 @@ registerPanel('battlemap',{
     // Re-fit if the stored zoom was chosen for a different map — e.g. this
     // device was closed while the DM swapped maps. Otherwise a phone reopens
     // showing a corner of a map it has never fitted.
-    this._pendingRefit = !_vs || _vs.p !== (this._bgMapPath || '');
+    //
+    // ALSO re-fit whenever the stored zoom came from a Fit rather than from
+    // the user, because a fit means "fill THIS viewport" and is worthless once
+    // the viewport differs. Storing only the path let a fit computed against a
+    // 1207x784 box be restored into a 373x555 phone: measured 0.402 where the
+    // correct fit was 0.120, i.e. the map rendered 3.3x too big, and it stuck
+    // because nothing ever invalidated it. `f` is absent on states written
+    // before this, so treat missing as a fit — that repairs existing devices
+    // on their next open. A MANUAL zoom is a deliberate choice and is kept.
+    const _wasFit = !_vs || _vs.f !== false;
+    this._pendingRefit = !_vs || _vs.p !== (this._bgMapPath || '') || _wasFit;
     // Undo baseline = the state as loaded. Set before the first _saveMap so
     // the first edit of a session has something to return to.
     this._undoStack.length = 0; this._redoStack.length = 0;
@@ -617,6 +627,9 @@ registerPanel('battlemap',{
     try {
       localStorage.setItem(this._viewKey(), JSON.stringify({
         p: this._bgMapPath || '', v: this._viewScale || 1,
+        // Did this value come from a Fit, or did the user choose it? Only a
+        // user's choice is worth restoring verbatim — see mount().
+        f: !!this._isFitted,
       }));
     } catch(e){}
   },

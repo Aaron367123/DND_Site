@@ -199,6 +199,17 @@ const _ENTITY_KEYS = {
       return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: parse('drawings', []) });
     },
     postApply(){ _reloadPanel('battlemap'); },
+    // The only nodes a PLAYER view may write. Mirrors what the battle map
+    // panel accepts from a player over BroadcastChannel, so the two routes
+    // can't drift: pencil strokes, and moves of tokens that ALREADY EXIST on
+    // the server. A token id absent from `prev` would be a creation, which a
+    // player isn't allowed to make — the panel-side merge drops unknown ids
+    // for the same reason. `meta`, `fog` and `fogStrokes` are DM-only.
+    playerWritable(node, prev){
+      if (node === 'drawings') return true;
+      if (node.indexOf('tokens/') === 0) return (node in prev);
+      return false;
+    },
     // Don't stomp an in-flight token drag — the drag-end save re-pushes
     // local state (LWW) and reconciles.
     holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.battlemap; return !!(d && d._drag); },
@@ -265,6 +276,12 @@ function _flattenEntitySnap(val){
 // (or if there was nothing to do). Callers that just want fire-and-forget
 // can ignore it; the backup restore awaits it, because it must not reload
 // the page until the server actually holds the restored data.
+// Read at call time, never cached: body.player-mode is added by
+// initPlayerView() long after this file parses.
+function _isPlayerMode(){
+  try { return document.body.classList.contains('player-mode'); } catch(e){ return false; }
+}
+
 function _flushEntityKey(k){
   if (!_fbDb) return Promise.resolve(false);
   const spec = _ENTITY_KEYS[k];
@@ -283,12 +300,42 @@ function _flushEntityKey(k){
   try { nodes = spec.explode(local); } catch(e){ return Promise.resolve(false); }
   const prev = _entityCache[k] || {};
   const updates = {};
-  Object.keys(nodes).forEach(n => { if (prev[n] !== nodes[n]) updates[spec.base + '/' + n] = nodes[n]; });
-  Object.keys(prev).forEach(n => { if (!(n in nodes)) updates[spec.base + '/' + n] = null; });
+  // A player view is a RESTRICTED writer. The battle map panel already limits
+  // what it accepts FROM a player (token positions and pencil strokes, nothing
+  // else) but that guard lives on the receiving end, and Firebase bypasses it
+  // entirely: whatever a player's localStorage holds gets exploded and pushed
+  // like any other client's. So a phone that was momentarily behind would push
+  // its stale `meta` — one node holding the map path, grid, cols/rows and
+  // scale — over everyone's, and the deletion sweep below would drop
+  // `tokens/<id>` for any token the phone hadn't heard about yet. Intermittent,
+  // and exactly as destructive as it sounds.
+  //
+  // Enforce the same allowlist here, where the write actually happens.
+  const restrict = (spec.playerWritable && _isPlayerMode()) ? spec.playerWritable : null;
+  // What this client will believe the server holds afterwards. Built from prev
+  // rather than assigning `nodes` wholesale, because a filtered-out node was
+  // NOT pushed and must stay diffable — claiming otherwise would make the next
+  // legitimate change to it look unchanged and silently skip it. With no
+  // filter this is byte-identical to `nodes`.
+  const applied = {...prev};
+  Object.keys(nodes).forEach(n => {
+    if (prev[n] === nodes[n]) return;
+    if (restrict && !restrict(n, prev)) return;
+    updates[spec.base + '/' + n] = nodes[n];
+    applied[n] = nodes[n];
+  });
+  Object.keys(prev).forEach(n => {
+    if (n in nodes) return;
+    // A player never deletes. Their absent node means "I don't know about it",
+    // not "remove it" — only the DM can actually remove anything.
+    if (restrict) return;
+    updates[spec.base + '/' + n] = null;
+    delete applied[n];
+  });
   if (!Object.keys(updates).length) return Promise.resolve(true);
   // Optimistic cache update — the echo snapshot must match the cache so it
   // gets recognized and skipped. Rolled back on failure so a retry re-diffs.
-  _entityCache[k] = nodes;
+  _entityCache[k] = applied;
   return _fbDb.ref().update(updates).then(() => {
     delete _retryCounts[k];
     return true;
