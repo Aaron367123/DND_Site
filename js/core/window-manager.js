@@ -109,6 +109,11 @@ function ensurePanel(id){
   def.mount(el.querySelector('.window-body'));
   mounted.add(id);
   wireWindow(el,id);
+  // A panel whose stored geometry predates a smaller window — or a default
+  // authored for the old 5000px canvas — would otherwise open off-screen with
+  // nowhere to scroll to. Clamp on the way in; the canvas then grows if it has
+  // to (zoomed in), so nothing is ever stranded.
+  if (typeof wsClampAll === 'function') wsClampAll();
   _updateToolbarOcclusion();
 }
 
@@ -211,6 +216,14 @@ function _wmOnMove(e){
     let ny = Math.max(0, drag.oy + (e.clientY - drag.sy) / z);
     const snapped = _snapMove(id, nx, ny, layout[id].w, layout[id].h);
     nx = snapped.x; ny = snapped.y;
+    // Keep the window inside the workspace. The canvas is viewport-sized now,
+    // so anything dragged past the edge would be unreachable rather than
+    // merely off to one side. Applied AFTER snapping, so an edge snap can't
+    // push it back out.
+    if (typeof wsClampPos === 'function'){
+      const c = wsClampPos(nx, ny, layout[id].w, layout[id].h);
+      nx = c.x; ny = c.y;
+    }
     el.style.left = nx + 'px'; el.style.top = ny + 'px';
     drag.pending = _detectEdgeSnap(e.clientX, e.clientY);
     if (drag.pending) _showSnapPreview(drag.pending.zone);
@@ -227,6 +240,14 @@ function _wmOnMove(e){
     if (rs.dir.includes('w')){ const nw = Math.max(240, rs.ow - dx); x = rs.ox + (rs.ow - nw); w = nw; }
     if (rs.dir.includes('n')){ const nh = Math.max(120, rs.oh - dy); y = rs.oy + (rs.oh - nh); h = nh; }
     const snapped = _snapResize(id, x, y, w, h, rs.dir);
+    // Cap the moving edge at the canvas rather than repositioning: a resize
+    // must not teleport the opposite edge, so this trims the size instead of
+    // shifting x/y the way the drag clamp does.
+    if (typeof wsCanvasBox === 'function'){
+      const box = wsCanvasBox();
+      if (snapped.x + snapped.w > box.w) snapped.w = Math.max(240, box.w - snapped.x);
+      if (snapped.y + snapped.h > box.h) snapped.h = Math.max(120, box.h - snapped.y);
+    }
     el.style.left = snapped.x + 'px'; el.style.top = snapped.y + 'px';
     el.style.width = snapped.w + 'px'; el.style.height = snapped.h + 'px';
     _updateToolbarOcclusion();

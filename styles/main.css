@@ -154,10 +154,24 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
 .dock-btn.active{background:var(--panel-3);color:var(--accent);border-color:var(--accent)}
 .dock-btn:disabled{opacity:.3;cursor:not-allowed}
 .dock-divider{height:1px;background:var(--border);width:24px;margin:4px 0}
+/* Workspace switcher — sits above the panel icons. Its buttons reuse
+   .dock-btn but read as labels rather than icons, so the active one is filled
+   instead of merely tinted: which workspace you're on has to be obvious at a
+   glance, unlike "is this panel open". */
+.ws-switch{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.ws-btn{font-size:11px;font-weight:600;letter-spacing:.02em}
+.ws-btn.on{background:var(--accent,#d4a574);border-color:var(--accent,#d4a574);color:#1a1a1a}
+.ws-btn.on:hover{background:var(--accent,#d4a574);color:#1a1a1a}
+.ws-add{font-size:16px;line-height:1;opacity:.6}
+.ws-add:hover{opacity:1}
 
 /* WORKSPACE */
 .workspace{grid-area:workspace;position:relative;overflow:auto;background:var(--bg)}
-.workspace-canvas{position:relative;width:5000px;height:5000px;transform-origin:0 0;background-image:radial-gradient(circle,rgba(255,255,255,.02) 1px,transparent 1px);background-size:24px 24px;background-color:var(--bg)}
+/* Size is set by wsSizeCanvas() in js/ui/workspaces.js — the viewport divided
+   by zoom, grown to cover any window left outside by a zoom-in. It used to be
+   a fixed 5000x5000, which is what made it possible to drag a window into
+   empty space and lose it. These are only the pre-JS fallback. */
+.workspace-canvas{position:relative;width:100%;height:100%;transform-origin:0 0;background-image:radial-gradient(circle,rgba(255,255,255,.02) 1px,transparent 1px);background-size:24px 24px;background-color:var(--bg)}
 .zoom-controls{position:fixed;bottom:14px;right:14px;display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9000}
 .zoom-btn{background:transparent;border:none;color:var(--text-muted);width:30px;height:26px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .1s}
 .zoom-btn:hover{background:var(--panel-2);color:var(--text)}

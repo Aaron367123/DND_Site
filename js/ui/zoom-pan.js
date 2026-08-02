@@ -38,6 +38,10 @@ function _applyZoom(){
   const lbl = document.getElementById('zoom-reset');
   if (lbl) lbl.textContent = Math.round(_zoom*100)+'%';
   try { localStorage.setItem('skt-zoom-v1', String(_zoom)); } catch(e){}
+  // The canvas is sized in LAYOUT px but painted scaled, so its extent has to
+  // be recomputed whenever the scale changes or zooming out would leave dead
+  // space and zooming in would clip windows out of reach.
+  if (typeof wsSizeCanvas === 'function') wsSizeCanvas();
   // Zoom changes screen positions of every window; re-evaluate whether any
   // title bar now overlaps the floating top-right toolbar.
   if (typeof _updateToolbarOcclusion === 'function') _updateToolbarOcclusion();

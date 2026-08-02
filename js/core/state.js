@@ -69,7 +69,15 @@ function loadDomain(domain){
     }
   }catch(e){}
 }
-function saveLayout(){try{localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout))}catch(e){}}
+function saveLayout(){
+  try{localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout))}catch(e){}
+  // Mirror into the active workspace. Hooking it here rather than at each
+  // caller is the same reasoning as _saveMap capturing undo: there are a dozen
+  // places that move, resize, open or close a window and every one of them
+  // ends here, so anything else would guarantee a missed one. No-op until
+  // workspaces.js has initialised, and in the player view where it never does.
+  if (typeof wsCommitLayout === 'function') wsCommitLayout();
+}
 function load(){
   try{
     const hasSplit=[PARTY_KEY,COMBAT_KEY,SHOP_KEY,SETTINGS_KEY].some(k=>localStorage.getItem(k)!=null);

@@ -89,6 +89,10 @@ function init(){
         if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
       });
       Object.entries(layout).forEach(([id,l])=>{if(l.open)ensurePanel(id);});updateDock();
+      // Defaults were authored for a wide canvas; on a narrow window some of
+      // them start past the right edge, which there is no longer any way to
+      // scroll to.
+      if (typeof wsClampAll === 'function') wsClampAll();
     });
   });
   Object.entries(layout).forEach(([id,l])=>{if(l.open)ensurePanel(id);});
@@ -97,6 +101,9 @@ function init(){
   initSettings();
   initWorkspaceContextMenu();
   initZoomPan();
+  // After initZoomPan: sizing the canvas needs the restored zoom, and after
+  // the ensurePanel loop above so the first clamp sees the real windows.
+  if (typeof initWorkspaces === 'function') initWorkspaces();
   if (typeof initOnboarding === 'function') initOnboarding();
   initServiceWorker();
   // Rolling local snapshots. Starts its own timer; the first fires a minute
