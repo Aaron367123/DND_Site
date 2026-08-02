@@ -2224,3 +2224,75 @@ absent when the image is null, and it returns on its own once
 `_loadBgFromPath` resolves (~300 ms). So it is not a separate bug; it is the
 visible consequence of the map not loading, and it should come back with the
 image-cache fix above.
+
+## Player view on a phone: wrong zoom, and a phone writing DM-only state (2026-08-01)
+
+Reported together: "when I make a change on my phone the map desyncs at times"
+and "the mobile view is super zoomed in".
+
+**Zoom.** `_pendingRefit` compared only the map PATH, so a stored zoom was
+restored into whatever viewport happened to be there. Measured on a 375-wide
+player view: a fit computed against a 1207x784 box came back as `viewScale`
+0.402 in a 373x555 scroller, where the correct fit is 0.120 — the map rendered
+3.3x too large, and nothing invalidated it because the path still matched.
+`_saveViewState` now records `f` (did this come from a Fit?) and mount re-fits
+when it did. A fit means "fill THIS viewport"; it has no meaning on another
+screen. Legacy states have no `f`, so they are treated as fits and repair
+themselves on the next open. A manual zoom is a deliberate choice and survives.
+
+**Desync.** Letting players move tokens made a phone a WRITER of the shared
+map. The allowlist limiting players to positions lives in the battle map
+panel's BroadcastChannel handler — the receiving end — and Firebase does not go
+through it. `_flushEntityKey` explodes whatever the phone's localStorage holds
+and pushes it, so:
+
+- a phone momentarily behind pushed its stale `meta`, the single node holding
+  `bgMapPath`, `cols`, `rows`, `cellSize`, `bgMapScale` and every grid setting,
+  over everyone's;
+- the deletion sweep (`Object.keys(prev)` → any node not in `nodes` is set to
+  `null`) removed `tokens/<id>` for tokens the phone had not yet heard about.
+
+The same allowlist is now enforced at the write, via a `playerWritable(node,
+prev)` predicate on the entity spec: `drawings`, plus `tokens/<id>` for ids
+already on the server. Never `meta`, never `fog`/`fogStrokes`, never a
+deletion, never a token the player invented — a player's absent node means "I
+don't know about it", not "delete it".
+
+The optimistic cache update had to change with it. `_entityCache[k] = nodes`
+would claim the filtered-out nodes had been pushed, so the next real change to
+one of them would diff as unchanged and be silently dropped. It now records
+only what actually went out. With no filter the result is byte-identical.
+
+Verified against the real `_flushEntityKey` with a stubbed db, feeding a local
+state that differed in every way at once (meta, fog, one token moved, one
+added, one omitted, drawings changed):
+
+| | wrote | deletes |
+|---|---|---|
+| as player | `drawings`, `tokens/A` | none |
+| as DM | `drawings`, `fog`, `meta`, `tokens/A`, `tokens/B`, `tokens/C` | `tokens/B` |
+
+The player's cache still held `meta`/`fog`/`tokens/B` at their prev values, so
+suppressed nodes stay diffable. Mount decisions were asserted directly rather
+than through their effects: stored fit → re-fit, manual same map → keep, manual
+different map → re-fit, legacy no flag → re-fit.
+
+**Not tested: the Firebase round trip.** Everything ran under `?nosync=1`; no
+writes reached the live campaign. The predicate and the diff are verified, the
+wire is not.
+
+### Two more measurement artifacts
+
+Both nearly reported as bugs, both the same family as the `loading="lazy"` one:
+
+- **ResizeObserver never fires in the Browser pane.** The panel re-fits on
+  resize via a ResizeObserver, and it appeared dead — a second, independent
+  observer I attached to the same element also logged zero callbacks while the
+  box demonstrably went 373x555 → 318x407. The pane is not compositing frames
+  (the same reason `screenshot` times out), and ResizeObserver callbacks are
+  delivered during the rendering steps. Nothing is wrong with the re-fit.
+- **A cached image's `onload` beats a scripted resize.** Remount tests sized
+  the window 60ms after `openPanel`, but `_loadBgFromPath` resolves from cache
+  within a frame, so the fit had already run against the default 680x500
+  window. Both "re-fit failed" results traced to this; the assertion had to
+  move to the mount DECISION (the `autoFit` argument) rather than its outcome.
