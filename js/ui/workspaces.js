@@ -52,7 +52,7 @@ function wsSave(){
 // Runs once; after this WS_KEY is authoritative and the focus key is left
 // alone as a rollback copy (never written again).
 function _wsMigrate(){
-  const list = [{ id: _wsId(), name: 'Main', icon: '1', panels: _wsClone(layout) }];
+  const list = [{ id: _wsId(), name: 'Main', panels: _wsClone(layout) }];
   let focuses = [];
   try { focuses = JSON.parse(localStorage.getItem(WS_LEGACY_FOCUS_KEY) || '[]') || []; } catch(e){}
   focuses.forEach((f, i) => {
@@ -66,8 +66,7 @@ function _wsMigrate(){
     Object.keys(snap).forEach(pid => {
       panels[pid] = { ...(layout[pid] || {}), ...snap[pid], open: true };
     });
-    list.push({ id: _wsId(), name: String(f.name || ('Focus ' + (i+1))).slice(0, 24),
-                icon: String(list.length + 1), panels });
+    list.push({ id: _wsId(), name: String(f.name || ('Focus ' + (i+1))).slice(0, 24), panels });
   });
   return { active: list[0].id, list };
 }
@@ -208,8 +207,9 @@ function wsAdd(name, panels){
     panels = {};
     Object.keys(layout).forEach(pid => { panels[pid] = { ...layout[pid], open: false }; });
   }
-  const ws = { id: _wsId(), name: String(name || 'Workspace').slice(0, 24),
-               icon: String(_wsState.list.length + 1), panels };
+  // No default icon: the dock label falls back to the workspace's POSITION, so
+  // it always matches the 1–9 shortcut even after a delete renumbers things.
+  const ws = { id: _wsId(), name: String(name || 'Workspace').slice(0, 24), panels };
   _wsState.list.push(ws);
   wsSave();
   return ws;
@@ -237,10 +237,12 @@ function wsRenderSwitcher(){
   const host = document.getElementById('ws-switch');
   if (!host || !_wsState) return;
   const active = _wsState.active;
-  host.innerHTML = _wsState.list.map(w => {
-    const label = esc(w.name);
+  host.innerHTML = _wsState.list.map((w, i) => {
+    const num = i + 1;
+    const key = num <= 9 ? ` (press ${num})` : '';
     return `<button class="dock-btn ws-btn${w.id === active ? ' on' : ''}" data-ws="${esc(w.id)}"
-      title="${label} — click to switch, right-click to rename or delete">${esc(w.icon || label.slice(0,1))}</button>`;
+      title="${esc(w.name)}${key} — click to switch, right-click to rename or delete"
+      >${esc(w.icon || String(num))}</button>`;
   }).join('')
   + (_wsState.list.length < WS_MAX
       ? `<button class="dock-btn ws-add" id="ws-add-btn" title="New workspace">+</button>` : '');
@@ -267,14 +269,17 @@ async function _wsPromptEdit(id){
   const canDelete = _wsState.list.length > 1;
   const r = await showModal('Workspace: ' + w.name, [
     { id:'name', label:'Name', value:w.name },
-    { id:'icon', label:'Dock label (1–2 characters)', value:w.icon || '' },
+    { id:'icon', label:'Dock label (1–2 characters, blank = its number)', value:w.icon || '' },
     ...(canDelete ? [{ id:'del', label:'Delete this workspace', type:'select', value:'no',
                        options:[{value:'no',label:'No'},{value:'yes',label:'Yes, delete it'}] }] : []),
   ], 'Save');
   if (!r) return;
   if (canDelete && r.del === 'yes'){ wsDelete(id); return; }
   w.name = String(r.name || w.name).slice(0, 24);
-  w.icon = String(r.icon || '').slice(0, 2) || w.name.slice(0, 1);
+  // Blank clears back to the position number rather than defaulting to the
+  // first letter — the number is what the keyboard shortcut uses.
+  const ic = String(r.icon || '').trim().slice(0, 2);
+  if (ic) w.icon = ic; else delete w.icon;
   wsSave();
   wsRenderSwitcher();
 }
@@ -314,6 +319,31 @@ function initWorkspaces(){
       _wsPromptEdit(btn.dataset.ws);
     });
   }
+
+  // 1–9 jump straight to a workspace. Bare digits were entirely unbound —
+  // Ctrl+0 (zoom reset) is the only digit shortcut in the app, and it carries
+  // a modifier, so there is no conflict.
+  //
+  // The number is the workspace's POSITION in the dock, not a stored id, so it
+  // always matches what you can see. Deleting one renumbers the rest, which is
+  // the behaviour that matches a visible strip.
+  document.addEventListener('keydown', e => {
+    if (!_wsState) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key < '1' || e.key > '9') return;
+    // Never steal a digit from a field. contentEditable covers the notes
+    // panel, whose editor is a div — a bare keydown listener that ignored it
+    // would eat every number the DM typed into their session notes.
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+    // A modal is a focus trap; switching underneath one would leave it
+    // floating over a workspace it was never opened from.
+    if (document.querySelector('.modal-backdrop')) return;
+    const target = _wsState.list[+e.key - 1];
+    if (!target || target.id === _wsState.active) return;
+    e.preventDefault();
+    wsSwitch(target.id);
+  });
 
   wsSizeCanvas();
   wsClampAll();

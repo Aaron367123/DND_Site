@@ -521,6 +521,10 @@ function showHelpOverlay(){
       ['Middle-mouse drag','Pan workspace'],
       ['Right-click drag', 'Pan workspace'],
     ]},
+    { group: 'Workspaces', items: [
+      ['1 … 9',            'Switch to that workspace (by dock position)'],
+      ['Click the active one', 'Rename, relabel or delete it'],
+    ]},
     { group: 'Windows', items: [
       ['Ctrl + Shift + A', 'Smart arrange — auto-tile all open panels'],
       ['Right-click empty workspace', 'Toggle panels / restore focuses'],
