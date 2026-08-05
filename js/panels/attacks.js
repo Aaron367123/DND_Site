@@ -74,6 +74,7 @@ registerPanel('attacks', {
           entry,
           attacks: raw ? sktParseMonsterAttacks(raw) : [],
           magical: raw ? sktMonsterAttacksAreMagical(raw) : false,
+          multi:   raw ? sktParseMultiattack(raw) : null,
         };
       });
   },
@@ -114,12 +115,24 @@ registerPanel('attacks', {
     const open = this._open[c.id] !== false;   // expanded by default
     const hp = `${c.hp ?? '?'}/${c.hpMax ?? '?'}`;
     const dead = (c.hp || 0) <= 0;
+    // Multiattack is the instruction for the whole turn, so it sits above the
+    // individual attacks rather than among them. Shown VERBATIM: the ×N chips
+    // below only appear where a name resolved, and the roughly 4-in-10 that
+    // say "makes two melee attacks" resolve to nothing — the DM still needs
+    // the sentence, so it is never replaced by the parse.
+    const multi = r.multi
+      ? `<div class="atk-multi" title="Multiattack, from the stat block">
+           <span class="atk-multi-tag">Multiattack</span>
+           <span class="atk-multi-text">${esc(r.multi.text)}</span>
+         </div>`
+      : '';
     if (!r.attacks.length){
       return `<div class="atk-mon${dead?' dead':''}">
         <div class="atk-mon-head" data-aact="toggle" data-cid="${esc(c.id)}">
           <span class="atk-mon-name">${esc(c.name)}</span>
           <span class="atk-mon-hp">${esc(hp)}</span>
         </div>
+        ${open ? multi : ''}
         <div class="atk-none">${r.entry ? 'No parsable attacks in this stat block' : 'Stat block not found'}</div>
       </div>`;
     }
@@ -130,6 +143,7 @@ registerPanel('attacks', {
         ${r.magical ? '<span class="atk-tag magical" title="This creature\'s attacks count as magical, so resistance to nonmagical damage will not apply">magical</span>' : ''}
         <span class="atk-mon-hp">${esc(hp)}</span>
       </div>
+      ${open ? multi : ''}
       ${open ? r.attacks.map((a, ai) => this._renderAttack(r, a, ai)).join('') : ''}
     </div>`;
   },
@@ -155,6 +169,24 @@ registerPanel('attacks', {
          <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">🎲</button>`
       : `<button class="atk-btn" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg" data-half="0" title="Use the stat block's average">Avg</button>
          <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">🎲 Roll</button>`;
+    // How many times Multiattack says this specific attack is made. 0 when the
+    // wording named nothing we could resolve, in which case no chip and no
+    // repeat button appear — better to show nothing than a number that might
+    // be wrong. Save-based effects are excluded: "two Claw attacks" is a
+    // repeat, a breath weapon inside a multiattack is not something you fire
+    // twice at one target.
+    const rep = (!a.save && r.multi) ? sktMultiattackCountFor(r.multi.counts, a.name) : 0;
+    const repChip = rep > 1
+      ? `<span class="atk-tag rep" title="Multiattack makes this attack ${rep} times">×${rep}</span>` : '';
+    const repBtns = rep > 1
+      ? `<div class="atk-alt">
+           <span class="atk-alt-label">all ${rep}, one target</span>
+           <button class="atk-btn small" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg"
+             data-rep="${rep}" data-half="0" title="Average damage, ${rep} hits">Avg ×${rep}</button>
+           <button class="atk-btn small roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll"
+             data-rep="${rep}" data-half="0" title="Roll each of the ${rep} hits separately">🎲 ×${rep}</button>
+         </div>`
+      : '';
     const altBtns = a.alt
       ? `<div class="atk-alt">
            <span class="atk-alt-label">${esc(a.altLabel || 'alternate')}: ${this._dmgSummary(a.alt)}</span>
@@ -164,10 +196,11 @@ registerPanel('attacks', {
       : '';
     return `<div class="atk-row">
       <div class="atk-row-main">
-        <span class="atk-name">${esc(a.name)}</span>${grp}${rech}${meta}
+        <span class="atk-name">${esc(a.name)}</span>${grp}${repChip}${rech}${meta}
         <span class="atk-dmg">${this._dmgSummary(a.parts)}</span>
       </div>
       <div class="atk-actions">${btns}</div>
+      ${repBtns}
       ${altBtns}
     </div>`;
   },
@@ -214,7 +247,8 @@ registerPanel('attacks', {
         this._render();
       } else if (act === 'go'){
         this._prepare(el.dataset.cid, +el.dataset.ai, el.dataset.mode,
-                      el.dataset.alt === '1', el.dataset.half === '1');
+                      el.dataset.alt === '1', el.dataset.half === '1',
+                      Math.max(1, parseInt(el.dataset.rep || '1', 10) || 1));
       } else if (act === 'cancel'){
         this._pending = null; this._render();
       } else if (act === 'hit'){
@@ -224,25 +258,39 @@ registerPanel('attacks', {
   },
 
   // Work out the numbers, then wait for a target.
-  _prepare(cid, ai, mode, useAlt, halved){
+  _prepare(cid, ai, mode, useAlt, halved, reps){
     const row = this._rows().find(r => r.c.id === cid); if (!row) return;
     const a = row.attacks[ai]; if (!a) return;
     const parts = (useAlt && a.alt) ? a.alt : a.parts;
+    const n = Math.max(1, reps || 1);
     const details = [];
     const amount = parts.map(p => {
-      let amt, detail;
-      if (mode === 'roll'){ const r = this._roll(p.dice); amt = r.total; detail = p.type + ' ' + r.detail; }
-      else { amt = p.avg; detail = ''; }
+      let amt = 0;
+      // Each repeat is rolled SEPARATELY and summed. Rolling once and
+      // multiplying would collapse the spread — two claws at 2d6 is 2–24, not
+      // an even number between 4 and 24 — and would double a maximum roll into
+      // a guaranteed one.
+      for (let i = 0; i < n; i++){
+        if (mode === 'roll'){
+          const r = this._roll(p.dice);
+          amt += r.total;
+          details.push(p.type + ' ' + r.detail);
+        } else {
+          amt += p.avg;
+        }
+      }
       // Halve BEFORE resistance, and round down — a successful save halves the
       // damage, then resistance halves what's left, and 5e rounds down at each
-      // step. Doing it after would hand the target a point back.
+      // step. Doing it after would hand the target a point back. Applied to
+      // the summed total, matching how a save against one effect works; the
+      // repeat buttons are suppressed for save-based attacks anyway.
       if (halved) amt = Math.floor(amt / 2);
-      if (detail) details.push(detail);
       return { amt, type: p.type };
     });
     this._pending = {
       srcId: cid, magical: row.magical,
-      label: row.c.name + ' · ' + a.name + (halved ? ' (saved)' : '') + (useAlt ? ' (' + (a.altLabel||'alt') + ')' : ''),
+      label: row.c.name + ' · ' + a.name + (n > 1 ? ' ×' + n : '')
+             + (halved ? ' (saved)' : '') + (useAlt ? ' (' + (a.altLabel||'alt') + ')' : ''),
       amount,
       detail: details.join(' · '),
     };

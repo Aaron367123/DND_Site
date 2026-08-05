@@ -1180,6 +1180,61 @@ function sktMonsterInitiative(raw){
   return { bonus, passive: 10 + bonus, mode };
 }
 
+// Multiattack, from a converted _raw entry. Returns {text, counts} or null.
+//
+// `text` is the stat block's own wording and is ALWAYS the authority — it gets
+// shown verbatim. `counts` maps a lowercased attack name to how many times the
+// creature makes it, and is a best-effort convenience only: measured across
+// the 2,138 multiattacks in the bestiary, every parsed name resolves to a real
+// action 61% of the time and at least one does 68%. The rest are generic
+// wording ("makes two melee attacks", "uses Spellcasting") that names nothing
+// to link to. So callers must treat counts as "annotate if present", never as
+// a substitute for reading the text — which is why both come back together.
+const _SKT_NUMWORD = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10 };
+function _sktCount(w){
+  const s = String(w||'').toLowerCase();
+  if (_SKT_NUMWORD[s] != null) return _SKT_NUMWORD[s];
+  const n = parseInt(s, 10);
+  return (isFinite(n) && n > 0 && n <= 20) ? n : null;
+}
+function sktParseMultiattack(raw){
+  if (!raw) return null;
+  const act = (raw.actions || []).find(a => /^multiattack/i.test(String(a && a.name || '').trim()));
+  if (!act) return null;
+  const text = _stripTagsIfAvailable(act.desc || '');
+  if (!text) return null;
+  const counts = {};
+  // "makes two Slam attacks", "makes up to three Bite attacks"
+  const reNamed = /makes\s+(?:up\s+to\s+)?(\w+)\s+([A-Za-z][\w'’\- ]*?)\s+attacks?\b/gi;
+  // "three attacks: one with its mandibles and two with its claws"
+  const reWith  = /(\w+)\s+with\s+(?:its|his|her|their|the)?\s*([A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|and\b|or\b|$))/gi;
+  let m;
+  while ((m = reNamed.exec(text))){ const n = _sktCount(m[1]); if (n) counts[m[2].trim().toLowerCase()] = n; }
+  while ((m = reWith.exec(text))){  const n = _sktCount(m[1]); if (n) counts[m[2].trim().toLowerCase()] = n; }
+  return { text, counts };
+}
+// _stripTags lives in data-loader.js, which is not guaranteed to have parsed
+// yet in every context that loads utils.js. Descriptions are already stripped
+// by the converter, so this is belt-and-braces for hand-fed data.
+function _stripTagsIfAvailable(s){
+  if (typeof _stripTags === 'function'){ try { return _stripTags(s); } catch(e){} }
+  return String(s || '');
+}
+
+// Look up how many times `name` appears in a multiattack's counts, tolerating
+// the plural the prose uses against the singular the action is named with
+// ("two with its claws" → the action is "Claw"). Returns 0 when there is no
+// confident match — the caller then shows nothing rather than a wrong number.
+function sktMultiattackCountFor(counts, name){
+  if (!counts || !name) return 0;
+  const n = String(name).trim().toLowerCase();
+  if (counts[n]) return counts[n];
+  if (counts[n + 's']) return counts[n + 's'];
+  const dep = n.replace(/s$/, '');
+  if (dep !== n && counts[dep]) return counts[dep];
+  return 0;
+}
+
 function sktMonsterAttacksAreMagical(raw){
   const blocks = [].concat(raw && raw.special_abilities || [], raw && raw.actions || []);
   return blocks.some(b => /attacks?\s+(?:are|count as)\s+magical/i.test(String(b && b.desc || '')));
