@@ -3167,3 +3167,15 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 /* ×N on an attack the multiattack repeats. Same weight as the recharge chip —
    both are "read this before you pick a button". */
 .atk-tag.rep { color:#ffd9a0; border-color:#8a6a35; }
+.atk-multi-run { display:flex; align-items:center; gap:4px; margin-left:auto; flex-shrink:0; }
+.atk-multi-run-label { font-size:10px; color:var(--text-dim); }
+/* A running sequence gets a warm edge so it's obvious the panel is mid-turn
+   and the next click lands on a target rather than starting something new. */
+.atk-targetbar.multi { border-left:2px solid #c8a45c; }
+.atk-queue-step { font-size:10px; font-weight:600; color:#e0c07a; flex-shrink:0;
+  padding:1px 5px; border:1px solid #8a6a35; border-radius:3px; }
+.atk-queue-rest { display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px 6px; }
+.atk-queue-pip { font-size:9px; padding:1px 5px; border-radius:3px;
+  border:1px solid var(--border); color:var(--text-dim); }
+.atk-queue-pip.done { opacity:.45; text-decoration:line-through; }
+.atk-queue-pip.now { color:#1a1a1a; background:#e0c07a; border-color:#e0c07a; font-weight:600; }

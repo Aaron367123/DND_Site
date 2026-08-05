@@ -23,6 +23,9 @@ registerPanel('attacks', {
   _open: {},        // combatant id → expanded?
   _lastTargetId: null,
   _pending: null,   // { srcId, atk, amount:[{amt,type}], label }
+  // An in-flight multiattack: one entry per swing, each picking its own target.
+  // { srcId, mode, items:[{ai,name}], i, hits, misses }
+  _queue: null,
   _log: [],
 
   mount(body){
@@ -79,6 +82,22 @@ registerPanel('attacks', {
       });
   },
 
+  // Expand a monster's Multiattack into one entry per swing, in stat-block
+  // order: a dragon's "one with its bite and two with its claws" becomes
+  // [Bite, Claw, Claw]. Only attacks the wording actually named are included —
+  // same confidence rule as the ×N chips — and save-based effects are left out
+  // for the same reason they get no chip.
+  _plan(r){
+    if (!r || !r.multi) return [];
+    const out = [];
+    r.attacks.forEach((a, ai) => {
+      if (a.save) return;
+      const n = sktMultiattackCountFor(r.multi.counts, a.name);
+      for (let k = 0; k < n; k++) out.push({ ai, name: a.name });
+    });
+    return out;
+  },
+
   _targets(){
     return (state.combatants || []).map((c) => ({ c, idx: state.combatants.indexOf(c) }));
   },
@@ -120,10 +139,25 @@ registerPanel('attacks', {
     // below only appear where a name resolved, and the roughly 4-in-10 that
     // say "makes two melee attacks" resolve to nothing — the DM still needs
     // the sentence, so it is never replaced by the parse.
+    // "Run" only appears when the wording resolved to real attacks. On the
+    // ~4-in-10 that say "makes two melee attacks" there is nothing to queue,
+    // and offering a button that silently did less than the sentence says
+    // would be worse than offering none.
+    const plan = this._plan(r);
+    const runBtns = plan.length
+      ? `<div class="atk-multi-run">
+           <span class="atk-multi-run-label">Run ${plan.length}:</span>
+           <button class="atk-btn small" data-aact="multi" data-cid="${esc(c.id)}" data-mode="avg"
+             title="${esc(plan.map(p=>p.name).join(' → '))} — average damage, choose a target for each">Avg</button>
+           <button class="atk-btn small roll" data-aact="multi" data-cid="${esc(c.id)}" data-mode="roll"
+             title="${esc(plan.map(p=>p.name).join(' → '))} — roll each, choose a target for each">🎲 Roll</button>
+         </div>`
+      : '';
     const multi = r.multi
       ? `<div class="atk-multi" title="Multiattack, from the stat block">
            <span class="atk-multi-tag">Multiattack</span>
            <span class="atk-multi-text">${esc(r.multi.text)}</span>
+           ${runBtns}
          </div>`
       : '';
     if (!r.attacks.length){
@@ -217,14 +251,26 @@ registerPanel('attacks', {
         data-aact="hit" data-idx="${t.idx}" title="${esc(t.c.name)} — ${t.c.hp}/${t.c.hpMax} HP">
         ${esc(t.c.name)}<span class="atk-target-hp">${t.c.hp}</span></button>`;
     }).join('');
-    return `<div class="atk-targetbar">
+    const q = this._queue;
+    // Miss is not optional polish. The DM rolls to hit outside this panel, so
+    // a sequence with no way to say "that one missed" would force them to
+    // cancel and restart the rest by hand.
+    const queueUi = q
+      ? `<span class="atk-queue-step">${q.i + 1} / ${q.items.length}</span>
+         <button class="atk-btn ghost small" data-aact="miss" title="This attack missed — skip to the next">Miss</button>`
+      : '';
+    return `<div class="atk-targetbar${q ? ' multi' : ''}">
       <div class="atk-pending">
+        ${queueUi}
         <span class="atk-pending-label">${esc(p.label)}</span>
         <span class="atk-pending-amt">${amt}</span>
         ${p.detail ? `<span class="atk-pending-detail">${esc(p.detail)}</span>` : ''}
-        <button class="atk-btn ghost small" data-aact="cancel">Cancel</button>
+        <button class="atk-btn ghost small" data-aact="cancel">${q ? 'Stop' : 'Cancel'}</button>
       </div>
       <div class="atk-targets">${chips}</div>
+      ${q ? `<div class="atk-queue-rest">${q.items.map((it, k) =>
+              `<span class="atk-queue-pip${k < q.i ? ' done' : k === q.i ? ' now' : ''}">${esc(it.name)}</span>`
+            ).join('')}</div>` : ''}
     </div>`;
   },
 
@@ -249,12 +295,64 @@ registerPanel('attacks', {
         this._prepare(el.dataset.cid, +el.dataset.ai, el.dataset.mode,
                       el.dataset.alt === '1', el.dataset.half === '1',
                       Math.max(1, parseInt(el.dataset.rep || '1', 10) || 1));
+      } else if (act === 'multi'){
+        this._startMulti(el.dataset.cid, el.dataset.mode);
       } else if (act === 'cancel'){
-        this._pending = null; this._render();
+        // Stops the whole sequence, not just this swing — the alternative
+        // (cancel one, keep going) has no obvious meaning and no button for it.
+        if (this._queue) this._finishMulti(true);
+        else { this._pending = null; this._render(); }
+      } else if (act === 'miss'){
+        if (this._queue){ this._queue.misses++; this._advanceQueue(); }
       } else if (act === 'hit'){
         this._apply(+el.dataset.idx);
       }
     });
+  },
+
+  // ─── Multiattack sequence ─────────────────────────────────────────────────
+  // Each swing picks its own target, so the queue holds the plan and _pending
+  // holds the current swing's numbers — the existing single-attack machinery
+  // does the actual work, one step at a time.
+  //
+  // Damage is rolled at the START of each step rather than all up front, so
+  // what the DM sees is what a target is about to take. Rolling the whole
+  // multiattack in advance would mean the numbers were decided before they
+  // chose who each one hit.
+  _startMulti(cid, mode){
+    const row = this._rows().find(r => r.c.id === cid); if (!row) return;
+    const items = this._plan(row); if (!items.length) return;
+    // Name is captured HERE, not read back at the end: the creature can be
+    // killed by a reaction mid-sequence, and the summary line shouldn't
+    // degrade to "Monster" just because its row has gone.
+    this._queue = { srcId: cid, name: row.c.name, mode, items, i: 0, hits: 0, misses: 0 };
+    this._prepareQueueStep();
+  },
+  _prepareQueueStep(){
+    const q = this._queue; if (!q) return;
+    const it = q.items[q.i];
+    // The monster can leave the tracker mid-sequence (killed by a reaction,
+    // removed by the DM). Abandon rather than throw.
+    const row = this._rows().find(r => r.c.id === q.srcId);
+    if (!row || !it || !row.attacks[it.ai]){ this._finishMulti(true); return; }
+    this._prepare(q.srcId, it.ai, q.mode, false, false, 1);
+    if (this._pending) this._pending.label += ` (${q.i + 1}/${q.items.length})`;
+    this._render();
+  },
+  _advanceQueue(){
+    const q = this._queue; if (!q) return;
+    q.i++;
+    if (q.i >= q.items.length){ this._finishMulti(false); return; }
+    this._prepareQueueStep();
+  },
+  _finishMulti(aborted){
+    const q = this._queue; if (!q) return;
+    this._log.unshift(`${q.name} · Multiattack ${aborted ? 'stopped' : 'done'}`
+      + ` — ${q.hits} hit${q.hits === 1 ? '' : 's'}`
+      + (q.misses ? `, ${q.misses} missed` : ''));
+    this._queue = null;
+    this._pending = null;
+    this._render();
   },
 
   // Work out the numbers, then wait for a target.
@@ -301,7 +399,10 @@ registerPanel('attacks', {
     const p = this._pending; if (!p) return;
     const C = panelDefs.combat;
     const target = state.combatants[targetIdx];
-    if (!C || !target){ this._pending = null; this._render(); return; }
+    if (!C || !target){
+      if (this._queue) this._finishMulti(true); else { this._pending = null; this._render(); }
+      return;
+    }
 
     // Tell the combat tracker how the blow was delivered so qualified
     // resistances ("nonmagical bludgeoning") resolve correctly. Natural
@@ -325,7 +426,11 @@ registerPanel('attacks', {
                       + (p.amount.length>1 ? ` (${total} before resistances)` : ''));
     this._lastTargetId = target.id;
     this._pending = null;
-    this._render();
     panelDefs.combat?._render?.();
+    // Mid-sequence: roll the next swing instead of returning to the list. The
+    // combat tracker is re-rendered FIRST so the target chips in the next step
+    // show HP that already includes this hit.
+    if (this._queue){ this._queue.hits++; this._advanceQueue(); return; }
+    this._render();
   },
 });
