@@ -47,6 +47,15 @@ function save(){
     // silently discarded while the session looks fine.
     if (typeof warnStorageFailure === 'function') warnStorageFailure('party & combat', e);
   }
+  // The Attack Runner is driven entirely by the combat tracker, so it has to
+  // notice when that changes. Hooked HERE rather than in combat's _render for
+  // two reasons: that returns early when the combat panel is closed, so adding
+  // a monster from search would never reach it; and every path that changes a
+  // combatant ends up in save() anyway. The panel does its own cheap
+  // signature check and only redraws when something it displays moved.
+  if (typeof panelDefs !== 'undefined' && panelDefs.attacks && panelDefs.attacks._syncFromCombat){
+    try { panelDefs.attacks._syncFromCombat(); } catch(e){}
+  }
 }
 
 // Re-read ONE domain from localStorage into `state`. Used at boot (via

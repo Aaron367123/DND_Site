@@ -21,6 +21,8 @@ registerPanel('attacks', {
   title: 'Attack Runner', icon: '🎯',
 
   _open: {},        // combatant id → expanded?
+  _sig: null,       // last-rendered combat-tracker signature; see _syncFromCombat
+  _applying: false, // guards the re-entrant save() during _apply
   _lastTargetId: null,
   _pending: null,   // { srcId, atk, amount:[{amt,type}], label }
   // An in-flight multiattack: one entry per swing, each picking its own target.
@@ -64,6 +66,21 @@ registerPanel('attacks', {
 
   // ─── Data ─────────────────────────────────────────────────────────────────
   // NPC combatants that have a resolvable stat block, with their attacks.
+  // Parsing a stat block is not free, and now that _syncFromCombat fires on
+  // every HP tick this runs constantly. The result depends only on the _raw
+  // object, which is shared and immutable, so memoise against it — a WeakMap
+  // so unloading the bestiary doesn't leak the entries.
+  _parseCache: new WeakMap(),
+  _parsed(raw){
+    let v = this._parseCache.get(raw);
+    if (!v){
+      v = { attacks: sktParseMonsterAttacks(raw),
+            magical: sktMonsterAttacksAreMagical(raw),
+            multi:   sktParseMultiattack(raw) };
+      this._parseCache.set(raw, v);
+    }
+    return v;
+  },
   _rows(){
     const C = panelDefs.combat;
     if (!C || typeof C.statBlockFor !== 'function') return [];
@@ -72,14 +89,39 @@ registerPanel('attacks', {
       .map((c, i) => {
         const entry = C.statBlockFor(c);
         const raw = entry && entry._raw;
+        const p = raw ? this._parsed(raw) : null;
         return {
           c, idx: state.combatants.indexOf(c),
           entry,
-          attacks: raw ? sktParseMonsterAttacks(raw) : [],
-          magical: raw ? sktMonsterAttacksAreMagical(raw) : false,
-          multi:   raw ? sktParseMultiattack(raw) : null,
+          attacks: p ? p.attacks : [],
+          magical: p ? p.magical : false,
+          multi:   p ? p.multi   : null,
         };
       });
+  },
+
+  // Everything about the combat tracker that this panel actually shows. Only
+  // these fields; a change to initiative order or a condition doesn't move
+  // anything here and shouldn't cost a redraw.
+  _combatSig(){
+    return (state.combatants || [])
+      .map(c => [c.id, c.name, c.hp, c.hpMax, c.isPC ? 1 : 0, c._slug || '', c._source || ''].join('~'))
+      .join('|');
+  },
+  // Called from save(), i.e. after every change anywhere in the app. Cheap by
+  // design: build the signature, compare, and do nothing the vast majority of
+  // the time. Without this the panel showed whatever the tracker held when it
+  // was opened, so adding a monster mid-fight left it invisible here until you
+  // reopened the panel.
+  _syncFromCombat(){
+    if (!this._body) return;
+    // _apply calls into the combat tracker, which saves, which lands back
+    // here — mid-way through, with _pending already spent. Let _apply finish
+    // and render once itself.
+    if (this._applying) return;
+    const sig = this._combatSig();
+    if (sig === this._sig) return;
+    this._render();
   },
 
   // Expand a monster's Multiattack into one entry per swing, in stat-block
@@ -105,6 +147,7 @@ registerPanel('attacks', {
   // ─── Render ───────────────────────────────────────────────────────────────
   _render(){
     const b = this._body; if (!b) return;
+    this._sig = this._combatSig();
     const ready = (typeof _5eLoaded !== 'undefined') && _5eLoaded;
     const rows = ready ? this._rows() : [];
 
@@ -410,6 +453,7 @@ registerPanel('attacks', {
     // null is exactly that statement, not a missing value.
     const prevProp = C._lastAtkProp;
     C._lastAtkProp = p.magical ? 'magical' : null;
+    this._applying = true;
     try {
       // One call PER TYPE. _applyHpDelta resolves resistance against the type
       // it is given, so a combined number would apply the target's fire
@@ -419,7 +463,7 @@ registerPanel('attacks', {
         if (i < 0 || !part.amt) return;
         C._applyHpDelta(i, -part.amt, part.type);
       });
-    } finally { C._lastAtkProp = prevProp; }
+    } finally { C._lastAtkProp = prevProp; this._applying = false; }
 
     const total = p.amount.reduce((s,x)=>s+x.amt, 0);
     this._log.unshift(`${p.label} → ${target.name}: ${p.amount.map(x=>x.amt+' '+x.type).join(' + ')}`
