@@ -81,6 +81,11 @@ registerPanel('battlemap',{
   _mapRotation:0,                // 0 / 90 / 180 / 270
   _fogHardness:50,               // 0–100 → blur on fog canvas
   _gridOpacity:60,               // 0–100 → grid line alpha
+  // Grid line colour. null = Auto: sample the map art and pick black or white
+  // for contrast (see _drawGrid). A '#rrggbb' string overrides that. Kept
+  // nullable rather than defaulting to a hex so Auto stays a real state — a
+  // stored '#ffffff' would silently disable adaptation on dark-then-light maps.
+  _gridColor:null,
   _gridWidth:1,                  // 1–4 px grid line thickness (shared — syncs to player view)
   _tokensVisible:true, _namesVisible:true, _pcsVisible:true, _npcsVisible:true,
   _fogPaintMode:'reveal',        // 'reveal' | 'hide' — replaces the boolean _fogTool
@@ -190,6 +195,7 @@ registerPanel('battlemap',{
         this._mapRotation   = d.mapRotation   || 0;
         this._fogHardness   = (d.fogHardness   != null) ? d.fogHardness   : 50;
         this._gridOpacity   = (d.gridOpacity   != null) ? d.gridOpacity   : 60;
+        this._gridColor     = d.gridColor || null;
         this._gridWidth     = (d.gridWidth     != null) ? d.gridWidth     : 1;
         this._tokensVisible = d.tokensVisible !== false;
         this._namesVisible  = d.namesVisible  !== false;
@@ -315,7 +321,7 @@ registerPanel('battlemap',{
     this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){
       // Fog sets and freehand strokes grow without bound on large maps — this
       // is a realistic place to hit the quota, and silently dropping the write
@@ -1209,6 +1215,7 @@ registerPanel('battlemap',{
       fogBrushShape:this._fogBrushShape || 'square',
       fogHardness:  this._fogHardness,
       gridOpacity:  this._gridOpacity,
+      gridColor:    this._gridColor || null,
       gridWidth:    this._gridWidth,
       drawings:     JSON.parse(JSON.stringify(this._drawings || [])),
       // Flag uploaded-image state — restore-time we can warn the user that
@@ -1244,6 +1251,7 @@ registerPanel('battlemap',{
     this._fogBrushShape= snap.fogBrushShape || 'square';
     if (snap.fogHardness != null) this._fogHardness = snap.fogHardness;
     if (snap.gridOpacity != null) this._gridOpacity = snap.gridOpacity;
+    this._gridColor = snap.gridColor || null;
     if (snap.gridWidth   != null) this._gridWidth   = snap.gridWidth;
     this._drawings     = Array.isArray(snap.drawings) ? JSON.parse(JSON.stringify(snap.drawings)) : [];
     this._lastTokenScale = this._bgMapScale;
@@ -1385,6 +1393,29 @@ registerPanel('battlemap',{
   // token drawn at cs was therefore ~15% taller than the hex holding it and
   // spilled into its neighbours on every side. The inscribed circle — the
   // flat-to-flat height — is the largest circle that actually fits.
+  // '#rgb' or '#rrggbb' → {r,g,b}, or null. Tolerates the short form because
+  // a hand-edited backup or a synced value from another client can carry it;
+  // <input type="color"> itself always emits the long form.
+  _hexToRgb(hex){
+    if (typeof hex !== 'string') return null;
+    let h = hex.trim().replace(/^#/, '');
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    if (!/^[0-9a-f]{6}$/i.test(h)) return null;
+    return { r: parseInt(h.slice(0,2),16), g: parseInt(h.slice(2,4),16), b: parseInt(h.slice(4,6),16) };
+  },
+
+  // What Auto currently resolves to, as a hex — seeds the colour input so
+  // opening the picker starts from what's on screen rather than from black.
+  _autoGridHex(){
+    let lum = null;
+    if (_mapBgImage){ lum = _bgLuminance(); }
+    else {
+      const c = this._hexToRgb(this._bgColor);
+      if (c) lum = (c.r*299 + c.g*587 + c.b*114) / 1000;
+    }
+    return (lum != null && lum > 128) ? '#000000' : '#ffffff';
+  },
+
   _tokenUnit(){
     return (this._gridType === 'hex') ? this._cellSize * Math.sqrt(3) / 2 : this._cellSize;
   },
@@ -1610,6 +1641,7 @@ registerPanel('battlemap',{
     }
     if (src.mapRotation != null) this._mapRotation = src.mapRotation;
     if (src.gridOpacity != null) this._gridOpacity = src.gridOpacity;
+    if ('gridColor' in src) this._gridColor = src.gridColor || null;
     if (src.gridWidth   != null) this._gridWidth   = src.gridWidth;
     this._bgMapPath = nextPath;
 
@@ -1723,6 +1755,7 @@ registerPanel('battlemap',{
         // Grid look is shared state — the DM dials in opacity/width and the
         // player view renders the same grid.
         gridOpacity: this._gridOpacity != null ? this._gridOpacity : 60,
+        gridColor: this._gridColor || null,
         gridWidth: this._gridWidth || 1,
         bgImageData: _mapBgImage?'present':null,
         bgMapPath: this._bgMapPath,
@@ -2921,6 +2954,18 @@ registerPanel('battlemap',{
       if (k === 'fog-fill'){
         this._fog = new Set(); this._fogStrokes=[]; this._saveMap(); this._drawFog(); this._broadcast(); return;
       }
+      // Before the grid-TYPE branch below, which slices k at 5 chars.
+      // 'grid-color-auto' doesn't match any of its three exact keys, but
+      // keeping this first makes that independent of how that check evolves.
+      if (k === 'grid-color-auto'){
+        this._gridColor = null;      // back to sampling the map art
+        this._saveMap();
+        const c = b.querySelector('#map-canvas');
+        if (c) this._drawGrid(c, this._csScreen());
+        this._refreshSettings();
+        this._broadcast();
+        return;
+      }
       if (k === 'grid-square' || k === 'grid-hex' || k === 'grid-none'){
         this._gridType = k.slice(5); this._showGrid = this._gridType !== 'none';
         this._saveMap();
@@ -3028,6 +3073,23 @@ registerPanel('battlemap',{
         if (grid) this._drawGrid(grid, this._csScreen());
       });
       gwEl.addEventListener('change', () => this._saveMap());
+    }
+    const gcEl = b.querySelector('#bm-set-gridcolor');
+    if (gcEl){
+      // Repaint live on drag (same as the sliders), persist on release. A
+      // colour input fires `input` continuously while the picker is open, and
+      // _saveMap on each would push a Firebase write per mouse-move.
+      gcEl.addEventListener('input', e => {
+        this._gridColor = e.target.value;
+        const row = gcEl.closest('.bm-set-slider');
+        const out = row && row.querySelector('.bm-set-slider-val');
+        if (out) out.textContent = this._gridColor;
+        const auto = b.querySelector('[data-bmset="grid-color-auto"]');
+        if (auto) auto.classList.remove('active');
+        const grid = b.querySelector('#map-canvas');
+        if (grid) this._drawGrid(grid, this._csScreen());
+      });
+      gcEl.addEventListener('change', () => { this._saveMap(); this._broadcast(); });
     }
   },
 
@@ -3603,7 +3665,14 @@ registerPanel('battlemap',{
 
     // Determine if background is light or dark for adaptive grid color
     let gridColor='rgba(255,255,255,'+alphaFor(0.18).toFixed(3)+')';
-    if(_mapBgImage){
+    if (this._gridColor){
+      // Explicit colour. Runs the SAME alphaFor curve as the adaptive branches
+      // so the Opacity slider behaves identically either way — 0.3 base, i.e.
+      // between the two adaptive bases, so switching to a custom colour doesn't
+      // jump in weight. 100% still reaches fully opaque.
+      const c = this._hexToRgb(this._gridColor);
+      if (c) gridColor = 'rgba('+c.r+','+c.g+','+c.b+','+alphaFor(0.3).toFixed(3)+')';
+    } else if(_mapBgImage){
       // Average brightness of the map art, cached per Image — see
       // _bgLuminance(). null means the sample wasn't available (tainted
       // canvas), in which case we keep the default light grid.
@@ -4018,6 +4087,21 @@ registerPanel('battlemap',{
       + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)
       + slider('opacity',  'Opacity',   this._gridOpacity, '%', 0, 100)
       + slider('gridwidth','Line Width', this._gridWidth || 1, 'px', 1, 4)
+      // Colour. Auto samples the map art for contrast; the swatch overrides it.
+      // Auto is shown as a pressed state rather than a separate "reset" button
+      // so it reads as the two-way choice it is.
+      + '<div class="bm-set-slider">'
+      +   '<div class="bm-set-slider-row"><span>Line Colour</span>'
+      +     '<span class="bm-set-slider-val">' + (this._gridColor ? esc(this._gridColor) : 'Auto') + '</span></div>'
+      +   '<div style="display:flex;gap:6px;align-items:center">'
+      +     '<input type="color" id="bm-set-gridcolor" value="' + esc(this._gridColor || this._autoGridHex()) + '"'
+      +       ' style="flex:1;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;background:var(--panel-2);cursor:pointer"'
+      +       ' title="Pick a grid line colour">'
+      +     '<button class="bm-set-tile' + (this._gridColor ? '' : ' active') + '" data-bmset="grid-color-auto"'
+      +       ' style="flex:0 0 auto;padding:4px 10px" title="Match the map automatically">'
+      +       '<span class="bm-set-tile-label">Auto</span></button>'
+      +   '</div>'
+      + '</div>'
 
       + '<div class="bm-set-section-head">TOKENS</div>'
       + '<div class="bm-set-tiles four">'
