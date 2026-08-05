@@ -1143,6 +1143,43 @@ function sktParseMonsterAttacks(raw){
 // attacks are magical". Matters because a target resistant to nonmagical
 // bludgeoning/piercing/slashing should NOT halve these, and sktResistApplies
 // already knows how to honour that once it's told.
+// Proficiency bonus from a challenge rating. CR arrives as a STRING and can be
+// fractional ("1/8", "1/2") or "None"/"—" for unrated creatures, so parse
+// rather than coerce. PB tops out at +9 (CR 30) and floors at +2.
+function sktPbForCR(cr){
+  if (cr == null) return 2;
+  const s = String(cr).trim();
+  let n;
+  if (s.includes('/')){ const [a,b] = s.split('/'); n = parseFloat(a) / parseFloat(b); }
+  else n = parseFloat(s);
+  if (!isFinite(n)) return 2;                       // "None", "—", "Unknown"
+  return Math.max(2, Math.min(9, Math.ceil(n / 4) + 1));
+}
+
+// A monster's initiative, from a converted _raw entry.
+// Returns {bonus, passive, mode} or null when there's nothing to go on.
+//
+// Most creatures simply use their DEX modifier. 2024-era stat blocks add an
+// explicit `initiative` field in one of three shapes — {proficiency:N} meaning
+// N x PB ON TOP of the DEX mod, {advantageMode:'adv'|'dis'}, or a flat number.
+// `passive` is 10 + bonus, which is what the 2024 books print in parentheses
+// and what a DM uses when they don't want to roll for a creature.
+function sktMonsterInitiative(raw){
+  if (!raw) return null;
+  const dexMod = Math.floor(((raw.dexterity != null ? raw.dexterity : 10) - 10) / 2);
+  const init = raw.initiative;
+  let bonus = dexMod, mode = '';
+  if (typeof init === 'number'){
+    bonus = init;
+  } else if (init && typeof init === 'object'){
+    if (init.advantageMode === 'adv' || init.advantageMode === 'dis') mode = init.advantageMode;
+    if (typeof init.proficiency === 'number'){
+      bonus = dexMod + init.proficiency * sktPbForCR(raw.challenge_rating);
+    }
+  }
+  return { bonus, passive: 10 + bonus, mode };
+}
+
 function sktMonsterAttacksAreMagical(raw){
   const blocks = [].concat(raw && raw.special_abilities || [], raw && raw.actions || []);
   return blocks.some(b => /attacks?\s+(?:are|count as)\s+magical/i.test(String(b && b.desc || '')));

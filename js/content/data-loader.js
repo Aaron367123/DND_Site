@@ -400,6 +400,12 @@ function _convertMonster(d) {
     languages: _stripTags(typeof d.languages==='string' ? d.languages : (d.languages||[]).join(', ')),
     challenge_rating: _parseCR(d.cr),
     xp:               _crToXP(d.cr),
+    // 2024-era stat blocks print an explicit Initiative line. 256 creatures
+    // carry it, in three shapes: {proficiency:N} (adds N x PB on top of the
+    // DEX mod), {advantageMode:'adv'}, or a bare number. Everything else
+    // derives initiative from DEX alone, so this is passed through as-is and
+    // interpreted at render time rather than normalised here.
+    initiative: (d.initiative != null) ? d.initiative : null,
     // Names go through _stripTags too, not just descriptions. 5etools puts the
     // recharge marker in the action NAME — "Fire Breath {@recharge 5}" — so
     // leaving names raw printed the tag verbatim in the stat block while every
@@ -702,7 +708,7 @@ function _normSearchIdx(s) {
 // 20260729b — lair actions / regional effects + spell class lists joined in.
 // 20260801a — action/trait NAMES are now tag-stripped, so a cached index built
 // before this still carries raw "{@recharge 5}" in every recharge ability.
-const DATA_STAMP   = '20260801a';
+const DATA_STAMP   = '20260804a';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
 const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';

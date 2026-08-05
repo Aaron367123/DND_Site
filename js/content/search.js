@@ -37,10 +37,23 @@ function renderMonsterFull(d, localData) {
     const rows=arr.map(a=>'<em>'+esc(a.name||'')+'</em> '+_renderInline(esc(a.desc||''))).join('<br><br>');
     return'<div class="action-block"><strong>'+label+'.</strong><br>'+rows+'</div>';
   };
+  // Initiative sits next to AC because that's where the 2024 books put it, and
+  // because a DM reaching for it is mid-encounter-start, not mid-turn.
+  // Rendered as "+3 (13)": the modifier to roll with, then the passive value
+  // for when you'd rather not roll for this creature at all.
+  const _ini = (typeof sktMonsterInitiative === 'function') ? sktMonsterInitiative(r) : null;
+  const iniHtml = _ini
+    ? '<div class="stat-block"><div class="lab">Init</div><div class="val">'
+      + (_ini.bonus >= 0 ? '+' : '') + _ini.bonus + ' (' + _ini.passive + ')'
+      + (_ini.mode === 'adv' ? ' <span title="Rolls initiative with advantage">adv</span>'
+        : _ini.mode === 'dis' ? ' <span title="Rolls initiative with disadvantage">dis</span>' : '')
+      + '</div></div>'
+    : '';
   let html = '';
   html += '<div class="detail-stats">'
     + '<div class="stat-block"><div class="lab">HP</div><div class="val">'+hp+(r.hit_dice?' ('+r.hit_dice+')':'')+'</div></div>'
     + '<div class="stat-block"><div class="lab">AC</div><div class="val">'+acVal+(acType?' ('+acType+')':'')+'</div></div>'
+    + iniHtml
     + '<div class="stat-block"><div class="lab">Speed</div><div class="val">'+esc(speed)+'</div></div>'
     + '</div>';
   html += '<div class="ability-grid">'+ab('STR',str)+ab('DEX',dex)+ab('CON',con)+ab('INT',int)+ab('WIS',wis)+ab('CHA',cha)+'</div>';
