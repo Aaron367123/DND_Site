@@ -1377,12 +1377,27 @@ registerPanel('battlemap',{
     if (pct) pct.textContent = Math.round(vs * (this._bgMapScale || 1) * 100) + '%';
   },
 
+  // Diameter of a size-1 token, in NATURAL (pre-bgMapScale) pixels.
+  //
+  // On a square grid that's the cell size. On a hex grid it is NOT: _cellSize
+  // is the hex's corner-to-corner width (see _drawHexGrid), so the hex is only
+  // cs·√3/2 ≈ 0.866·cs from flat to flat, and columns sit 0.75·cs apart. A
+  // token drawn at cs was therefore ~15% taller than the hex holding it and
+  // spilled into its neighbours on every side. The inscribed circle — the
+  // flat-to-flat height — is the largest circle that actually fits.
+  _tokenUnit(){
+    return (this._gridType === 'hex') ? this._cellSize * Math.sqrt(3) / 2 : this._cellSize;
+  },
+  // Same thing in STAGE pixels — what the edge clamps compare against, since
+  // they work in the same space as _csScreen().
+  _tokenUnitScreen(){ return this._tokenUnit() * (this._bgMapScale || 1); },
+
   // Font sizes with a minimum are minimums in SCREEN pixels by intent, but the
   // CSS transform silently reinterprets them as stage pixels. Divide the floor
   // by the view scale so "at least 11px" keeps meaning 11px on the display.
   _counterScaleLabels(vs){
     const b = this._body; if (!b) return;
-    const csNat = this._cellSize, bg = this._bgMapScale || 1;
+    const bg = this._bgMapScale || 1;
     b.querySelectorAll('.map-token-name').forEach(el => {
       el.style.fontSize = Math.max(11 / vs, 10 * bg).toFixed(1) + 'px';
     });
@@ -1392,7 +1407,7 @@ registerPanel('battlemap',{
       const isImgIcon = typeof iconSource === 'string' && (iconSource.startsWith('data:image/') || iconSource.startsWith('img/') || /^https?:\/\//.test(iconSource));
       const isSvgIcon = typeof iconSource === 'string' && iconSource.startsWith('<svg');
       if (!(!!(t.icon || t.portrait) && !isImgIcon && !isSvgIcon)) return;   // glyph icons only
-      const dim = ((t.size || 1) * csNat - 4) * bg;
+      const dim = ((t.size || 1) * this._tokenUnit() - 4) * bg;
       el.style.fontSize = Math.max(14 / vs, dim * 0.6).toFixed(1) + 'px';
     });
   },
@@ -4030,7 +4045,6 @@ registerPanel('battlemap',{
     stage.querySelectorAll('.map-token, .map-token-name, .map-token-facing').forEach(el=>el.remove());
 
     const tokScale = this._bgMapScale || 1;
-    const csNat = this._cellSize;
     // Player view: hide non-PC tokens that sit in unrevealed cells. The DM
     // sees everything regardless. Fog set is keyed by "gx,gy" — derive cell
     // from the token's pixel center.
@@ -4052,7 +4066,7 @@ registerPanel('battlemap',{
       const py=t.y;
       // Visual diameter scales with the bg image so tokens stay proportional
       // to the map at any zoom level.
-      const dim=(size*csNat-4) * tokScale;
+      const dim=(size*this._tokenUnit()-4) * tokScale;
 
       const el=document.createElement('div');
       const hasIcon = !!(t.icon || t.portrait);
@@ -4201,7 +4215,7 @@ registerPanel('battlemap',{
             // half-extent is just size*cs/2. Multiplying by _bgMapScale again
             // double-scaled the clamp — at 2x zoom, tokens released near the
             // right/bottom edge jumped inward by an extra full natural-cell.
-            const half = size * cs / 2;
+            const half = size * this._tokenUnitScreen() / 2;
             t.x = Math.max(half, Math.min(stageW - half, nx));
             t.y = Math.max(half, Math.min(stageH - half, ny));
             this._saveMap();
@@ -4296,7 +4310,7 @@ registerPanel('battlemap',{
             const stageW = this._cols * cs, stageH = this._rows * cs;
             // Same double-scale fix as the mouse handler above. `cs` already
             // includes _bgMapScale via _csScreen() — don't apply it twice.
-            const half = size * cs / 2;
+            const half = size * this._tokenUnitScreen() / 2;
             t.x = Math.max(half, Math.min(stageW - half, nx));
             t.y = Math.max(half, Math.min(stageH - half, ny));
             this._saveMap();
