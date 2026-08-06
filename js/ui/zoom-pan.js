@@ -14,6 +14,45 @@ let _zoom = 1.0;
 
 function getZoom(){ return _zoom; }
 
+// Workspace zoom is meaningless on the phone layout — every panel is already
+// fullscreen — and the zoom controls are display:none there. But the canvas
+// transform was still being applied, so a stored or pinched zoom scaled the
+// 100dvw window right off the screen with no on-screen way back. Measured at
+// zoom 1.6 in a 375x812 viewport: the "fullscreen" panel rendered 600x1203 at
+// (-113,-244), and #zoom-reset measured 0x0.
+//
+// Two ways a phone picked up a non-1 zoom: a two-finger gesture whose midpoint
+// landed off a window (the bottom tab bar is position:fixed, so the pinch
+// handler's `closest('.window')` guard doesn't catch it), and restoring a
+// desktop backup, which used to carry skt-zoom-v1 across.
+//
+// So: hard-lock the effective zoom to 1 while that layout is active. getZoom()
+// has to return the locked value, not the user's stored one, because
+// clientToCanvas() and battlemap's _screenScale() divide by it and would
+// otherwise disagree with the transform actually on screen.
+function _zoomLocked(){
+  return typeof _isMobileLayout === 'function' && _isMobileLayout();
+}
+
+function _clampZoom(z){ return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)); }
+
+// Re-evaluate the lock after a resize or rotation. Leaving the phone layout
+// restores whatever this browser had stored, so a tablet rotating between the
+// two layouts doesn't lose its zoom.
+function _syncZoomLock(){
+  const locked = _zoomLocked();
+  let want = _zoom;
+  if (locked) {
+    want = 1;
+  } else {
+    const saved = parseFloat(localStorage.getItem('skt-zoom-v1'));
+    want = _clampZoom(isNaN(saved) ? 1 : saved);
+  }
+  if (Math.abs(want - _zoom) < 0.001) return;
+  _zoom = want;
+  _applyZoom();
+}
+
 // Per-call hint: when true, the next _applyZoom adds a brief CSS transition
 // so button/keyboard zoom changes ease instead of snapping. Wheel zoom
 // keeps it false because cursor-anchor scroll math needs the new transform
@@ -37,7 +76,12 @@ function _applyZoom(){
   canvas.style.transform = `scale(${_zoom})`;
   const lbl = document.getElementById('zoom-reset');
   if (lbl) lbl.textContent = Math.round(_zoom*100)+'%';
-  try { localStorage.setItem('skt-zoom-v1', String(_zoom)); } catch(e){}
+  // Don't persist while locked — the 1 we force on the phone layout is not a
+  // preference, and writing it would wipe the zoom this same browser uses when
+  // the window is desktop-sized.
+  if (!_zoomLocked()){
+    try { localStorage.setItem('skt-zoom-v1', String(_zoom)); } catch(e){}
+  }
   // The canvas is sized in LAYOUT px but painted scaled, so its extent has to
   // be recomputed whenever the scale changes or zooming out would leave dead
   // space and zooming in would clip windows out of reach.
@@ -50,7 +94,11 @@ function _applyZoom(){
 // Set zoom while keeping the point under the cursor (or viewport center)
 // stationary on screen.
 function setZoom(target, pivotClientX, pivotClientY){
-  target = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, target));
+  // Every zoom entry point funnels through here — slider, buttons, keyboard,
+  // Ctrl+wheel, pinch, and the workspace-snapshot restore in context-menu.js —
+  // so one guard covers all of them.
+  if (_zoomLocked()) return;
+  target = _clampZoom(target);
   if (Math.abs(target - _zoom) < 0.001) return;
   const ws = document.getElementById('workspace');
   if (!ws) { _zoom = target; _applyZoom(); return; }
@@ -115,8 +163,12 @@ function initZoomPan(){
   // Restore persisted zoom
   try {
     const saved = parseFloat(localStorage.getItem('skt-zoom-v1'));
-    if (!isNaN(saved)) _zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, saved));
+    if (!isNaN(saved)) _zoom = _clampZoom(saved);
   } catch(e){}
+  // ...unless the phone layout is active, in which case a stored zoom is
+  // exactly the trap described at _zoomLocked(). Overrides after the read so
+  // the stored value survives for this browser's desktop-sized sessions.
+  if (_zoomLocked()) _zoom = 1;
   _applyZoom();
 
   // Buttons
@@ -130,10 +182,14 @@ function initZoomPan(){
   ws.addEventListener('scroll', () => {
     if (typeof _updateToolbarOcclusion === 'function') _updateToolbarOcclusion();
   });
-  // Browser window resize moves the fixed toolbar in screen space too.
+  // Browser window resize moves the fixed toolbar in screen space too. A
+  // resize (or a phone rotating) can also cross the layout breakpoint, so
+  // re-check the zoom lock here rather than duplicating the media query.
   window.addEventListener('resize', () => {
+    _syncZoomLock();
     if (typeof _updateToolbarOcclusion === 'function') _updateToolbarOcclusion();
   });
+  window.addEventListener('orientationchange', () => { _syncZoomLock(); });
 
   // Ctrl + wheel = zoom (centered on cursor)
   ws.addEventListener('wheel', e => {

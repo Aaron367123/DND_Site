@@ -60,6 +60,12 @@ const EXCLUDE = new Set([
   // of different sizes stop inheriting each other's view.
   'skt-bm-view-v1',
   'skt-bm-view-player-v1',
+  // Workspace canvas zoom. Same reasoning one step out: it is fitted to the
+  // screen that set it. Restoring a desktop's zoom onto a phone was one of the
+  // two ways a phone ended up scaled off its own screen (see _zoomLocked() in
+  // zoom-pan.js); the phone layout now ignores it, but carrying it across is
+  // still wrong on any device.
+  'skt-zoom-v1',
 ]);
 
 // Friendly names for the restore preview. Anything unlisted still gets
