@@ -23,6 +23,41 @@ function _nextZ(){
   return zCounter;
 }
 
+// Panel id → sprite symbol. Single source of truth for a panel's icon, used by
+// the window title bar and the player view's tab bar. The dock buttons in
+// skt-workspace.html carry the same ids in static markup; _checkPanelIcons()
+// below asserts the two agree, because a silent mismatch would show one icon
+// in the dock and a different one on the same panel's title bar.
+//
+// Panels still declare an emoji `icon:` and it is kept as the fallback — an
+// entry with no sprite (or a floating window created ad hoc) renders that
+// instead of a blank.
+const PANEL_ICON = {
+  combat:'i-combat', attacks:'i-target', party:'i-heart', shop:'i-coins',
+  notes:'i-note', battlemap:'i-map', npclib:'i-user', bestiary:'i-paw',
+  adventures:'i-book-open', books:'i-books', npcgen:'i-dice', loot:'i-chest',
+  encounter:'i-bolt', soundboard:'i-speaker', weather:'i-cloud', time:'i-clock',
+};
+// Icon markup for a panel: sprite when we have one, the panel's own emoji when
+// we don't. Both callers go through here so they can't drift apart.
+function panelIconHtml(id, def){
+  const sym = PANEL_ICON[id];
+  if (sym && typeof ICO === 'function') return ICO(sym);
+  return (def && def.icon) || '◇';
+}
+// Dev check: every dock button's sprite must match PANEL_ICON. Returns the
+// mismatches rather than throwing — a wrong icon is cosmetic and must never
+// stop the app booting.
+function _checkPanelIcons(){
+  const out = [];
+  document.querySelectorAll('.dock-btn[data-panel]').forEach(b => {
+    const id = b.dataset.panel;
+    const used = b.querySelector('use')?.getAttribute('href')?.replace('#','') || null;
+    if (PANEL_ICON[id] !== used) out.push({ panel:id, dock:used, map:PANEL_ICON[id] || null });
+  });
+  return out;
+}
+
 function registerPanel(id,def){panelDefs[id]=def;}
 
 function openPanel(id){
@@ -112,7 +147,7 @@ function ensurePanel(id){
   // Share / lock / snap collapse into a single ⋯ overflow menu so the title
   // bar stays uncluttered; only minimize and close are always-visible. The
   // current share/lock states are surfaced inside the menu items themselves.
-  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions"><button class="btn icon-btn" data-wact="menu" title="Window options"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dots"/></svg></button><button class="btn icon-btn" data-wact="min" title="Minimize"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-minus"/></svg></button><button class="btn icon-btn" data-wact="close" title="Close"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg></button></div></div><div class="window-body" id="panel-body-${id}"></div>
+  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${panelIconHtml(id, def)}</span><span>${def.title}</span></div><div class="window-actions"><button class="btn icon-btn" data-wact="menu" title="Window options"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dots"/></svg></button><button class="btn icon-btn" data-wact="min" title="Minimize"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-minus"/></svg></button><button class="btn icon-btn" data-wact="close" title="Close"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg></button></div></div><div class="window-body" id="panel-body-${id}"></div>
     <div class="rh rh-n"  data-rh="n"></div>
     <div class="rh rh-s"  data-rh="s"></div>
     <div class="rh rh-e"  data-rh="e"></div>

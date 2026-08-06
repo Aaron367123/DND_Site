@@ -122,7 +122,7 @@ function _renderPlayerDock(){
   dock.innerHTML = shared.map(id => {
     const def = panelDefs[id]; if (!def) return '';
     const visible = _playerVisible.has(id);
-    return `<button class="pv-dock-btn ${visible?'active':''}" data-pv-toggle="${id}" title="${def.title}">${def.icon || '◇'}</button>`;
+    return `<button class="pv-dock-btn ${visible?'active':''}" data-pv-toggle="${id}" title="${def.title}">${typeof panelIconHtml === 'function' ? panelIconHtml(id, def) : (def.icon || '◇')}</button>`;
   }).join('');
   // First-run discoverability hint on mobile — if the DM has shared multiple
   // panels but the player can only see one at a time, surface a one-time

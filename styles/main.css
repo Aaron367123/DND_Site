@@ -232,7 +232,13 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
 .window-head{touch-action:none;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--panel-2);border-bottom:1px solid var(--border);cursor:grab;user-select:none;flex:0 0 auto}
 .window-head:active{cursor:grabbing}
 .window-title{font-size:var(--fs-md);font-weight:500;display:flex;align-items:center;gap:6px}
-.window-title-icon{color:var(--accent)}
+/* The title icon is now a sprite for known panels (see PANEL_ICON) and an
+   emoji fallback otherwise, so it has to lay out sensibly either way:
+   inline-flex centres both, and the .ico override sizes the SVG down to sit
+   with 13px title text rather than the 18px the dock uses. */
+.window-title-icon{color:var(--accent);display:inline-flex;align-items:center}
+.window-title-icon .ico{width:14px;height:14px}
+.pv-dock-btn .ico{width:20px;height:20px}
 .window-actions{display:flex;gap:2px}
 .window-actions .btn{padding:2px 6px;font-size:var(--fs-sm);background:transparent;border-color:transparent;color:var(--text-muted)}
 .window-actions .btn:hover{background:var(--panel-3);color:var(--text)}
