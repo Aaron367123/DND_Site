@@ -229,7 +229,7 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
 .window.focused{border-color:var(--accent-dark);box-shadow:var(--sh-4)}
 .window.minimized{height:32px!important;min-height:32px}
 .window.minimized .window-body{display:none}
-.window-head{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--panel-2);border-bottom:1px solid var(--border);cursor:grab;user-select:none;flex:0 0 auto}
+.window-head{touch-action:none;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--panel-2);border-bottom:1px solid var(--border);cursor:grab;user-select:none;flex:0 0 auto}
 .window-head:active{cursor:grabbing}
 .window-title{font-size:var(--fs-md);font-weight:500;display:flex;align-items:center;gap:6px}
 .window-title-icon{color:var(--accent)}
@@ -304,7 +304,89 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
    Gated on `pointer: coarse` so this only triggers on actual touch devices
    (phones/tablets) — a narrow DESKTOP window keeps the multi-window player
    layout instead of collapsing to the mobile single-panel view. */
+/* ── Mobile: the DM view ────────────────────────────────────────────────────
+   The player view has had a mobile layout for a long time; the DM view had
+   almost none — 52 of 68 mobile rules were player-mode-scoped. On a phone the
+   workspace was a floating-window canvas with 680px windows on a 331px
+   workspace, and the window manager is mouse-only, so those windows could not
+   be moved or resized by touch at all.
+
+   Rather than make floating windows work on a 375px screen, phones get the
+   layout the player view already proves: every panel fills the screen and the
+   dock is a bottom tab bar. Stacking + z-order does the "one at a time" work
+   for free — tapping a dock icon raises that panel — so no new state, and
+   drag/resize stops mattering here.
+
+   Scoped to `pointer: coarse` so a narrow DESKTOP window keeps the real
+   multi-window workspace, matching the existing breakpoint's reasoning. */
 @media (max-width: 768px) and (pointer: coarse){
+  /* One step up the type ramp, phones only. This is what stage 1's token pass
+     bought: the whole app rescales coherently from here instead of needing 578
+     declarations edited. Desktop density is untouched. */
+  :root{
+    --fs-2xs:10px; --fs-xs:11px;  --fs-sm:12px;  --fs-md:13px; --fs-lg:15px;
+    --fs-xl:16px;  --fs-2xl:20px; --fs-3xl:24px;
+  }
+
+  body:not(.player-mode) .window{
+    left:0 !important; top:0 !important;
+    width:100vw !important; width:100dvw !important;
+    height:calc(100vh - 60px - env(safe-area-inset-bottom, 0px)) !important;
+    height:calc(100dvh - 60px - env(safe-area-inset-bottom, 0px)) !important;
+    border-radius:0; border-left:none; border-right:none; border-top:none;
+    box-shadow:none;
+  }
+  body:not(.player-mode) .window.minimized{display:none}
+  body:not(.player-mode) .rh{display:none}          /* nothing to resize */
+  body:not(.player-mode) .window-head{cursor:default}
+  body:not(.player-mode) .window-body{
+    padding-left:env(safe-area-inset-left, 0px);
+    padding-right:env(safe-area-inset-right, 0px);
+  }
+  /* The dock becomes a bottom tab bar. 16 panels won't fit across a phone, so
+     it scrolls horizontally — same approach as the player dock. */
+  body:not(.player-mode) .panel-dock{
+    position:fixed; left:0; right:0; bottom:0; top:auto;
+    flex-direction:row; width:100%;
+    height:calc(60px + env(safe-area-inset-bottom, 0px));
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    gap:6px; justify-content:flex-start;
+    overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+    border-right:none; border-top:1px solid var(--border);
+    z-index:9500;
+  }
+  /* The dock is position:fixed at the bottom now, so its grid column must go —
+     otherwise the workspace still starts 44px in and every fullscreen window
+     hangs that far off the right edge. Measured: window w=375 at x=44. */
+  body:not(.player-mode) .app{
+    grid-template-columns:1fr; grid-template-areas:"workspace";
+  }
+  /* 16 buttons in a 375px row: flexbox shrinks them back under the target size
+     unless told not to. Measured 32px wide before this despite width:44px. */
+  body:not(.player-mode) .panel-dock .dock-btn{flex-shrink:0}
+  body:not(.player-mode) .panel-dock .spacer{display:none}
+  body:not(.player-mode) .dock-divider{
+    width:1px; height:24px; margin:0 2px; flex-shrink:0; align-self:center;
+  }
+  body:not(.player-mode) .ws-switch{flex-direction:row; gap:6px}
+  /* The canvas is sized in JS (wsSizeCanvas). Zoom/pan is meaningless when
+     every panel is fullscreen, so the controls go. */
+  body:not(.player-mode) .zoom-controls{display:none}
+  body:not(.player-mode) .workspace{overflow:hidden}
+
+  /* Touch targets. WCAG 2.5.5 and Apple's HIG both want 44px; these were
+     32x32 and 30x30, which is most of why the dock felt like a dartboard.
+     Applied to BOTH views — the player view had the same undersized controls. */
+  .dock-btn{width:44px; height:44px}
+  .float-btn{width:44px; height:44px}
+  .btn{min-height:44px; padding:10px 14px}
+  .btn.small{min-height:36px; padding:7px 10px}
+  .icon-btn{min-width:44px; min-height:44px}
+  .search-tab{min-height:40px; padding:10px 12px}
+  /* Window controls stay compact — they sit in a title bar, not a toolbar,
+     and 44px each would eat a third of it. 36px still clears a thumb. */
+  .window-actions .btn{min-height:36px; min-width:36px; padding:6px}
+
   body.player-mode .window{
     left:0 !important; top:0 !important;
     /* `dvw`/`dvh` shrink to the visible area on mobile (excluding the
@@ -579,7 +661,7 @@ body.player-mode .window-actions [data-wact="share"],
 body.player-mode .window-actions [data-wact="lock"]{display:none}
 .window-body{flex:1;overflow:auto;position:relative}
 /* Resize handles — invisible hit zones around the window edges + corners */
-.rh{position:absolute;z-index:2}
+.rh{position:absolute;z-index:2;touch-action:none}
 .rh-n{top:-3px;left:6px;right:6px;height:6px;cursor:ns-resize}
 .rh-s{bottom:-3px;left:6px;right:6px;height:6px;cursor:ns-resize}
 .rh-e{top:6px;right:-3px;bottom:6px;width:6px;cursor:ew-resize}

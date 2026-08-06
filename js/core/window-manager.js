@@ -41,7 +41,23 @@ function closePanel(id){
   updateDock();
   _updateToolbarOcclusion();
 }
+// True when the phone layout is active: every panel is fullscreen and stacked,
+// and the dock is a bottom tab bar. Matches the CSS breakpoint exactly — if one
+// moves, the other has to.
+function _isMobileLayout(){
+  try { return window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches; }
+  catch(e){ return false; }
+}
 function togglePanel(id){
+  // On the mobile layout the dock is a SWITCHER, not a toggle. Panels are
+  // fullscreen and stacked, so tapping one that's already open — but behind
+  // another — has to bring it forward; closing it instead would look like the
+  // tap did nothing except lose your place. Closing is the title bar's ✕.
+  if (_isMobileLayout()){
+    if (layout[id]?.open && !layout[id]?.minimized) focusPanel(id);
+    else openPanel(id);
+    return;
+  }
   if(layout[id]?.open&&!layout[id]?.minimized)closePanel(id);else openPanel(id);
 }
 function focusPanel(id){
@@ -280,28 +296,45 @@ function _wmOnUp(){
   _updateToolbarOcclusion();
 }
 
+// POINTER events, not mouse. The window manager was mouse-only — 13 mouse
+// listeners, zero touch — so on any touch device a window could not be dragged,
+// resized or snapped at all. Phones now get a fullscreen layout where that
+// doesn't matter, but a tablet in landscape is over the mobile breakpoint and
+// still uses real floating windows, so it very much does.
+//
+// Pointer events are one code path for mouse, touch and pen, which is why this
+// is a migration rather than a second set of touch handlers bolted alongside —
+// two paths would drift, and the snap/clamp logic is subtle enough already.
 function _ensureWmGlobalHandlers(){
   if (_wmGlobalsWired) return;
   _wmGlobalsWired = true;
-  document.addEventListener('mousemove', _wmOnMove);
-  document.addEventListener('mouseup',   _wmOnUp);
+  document.addEventListener('pointermove', _wmOnMove);
+  document.addEventListener('pointerup',   _wmOnUp);
+  // A touch drag that leaves the screen, or is stolen by the browser, fires
+  // pointercancel and NOT pointerup. Without this the window would stay stuck
+  // to the finger and the next tap anywhere would teleport it.
+  document.addEventListener('pointercancel', _wmOnUp);
 }
 
 function wireWindow(el,id){
   _ensureWmGlobalHandlers();
-  el.addEventListener('mousedown',()=>focusPanel(id));
+  el.addEventListener('pointerdown',()=>focusPanel(id));
   const head=el.querySelector('.window-head');
-  head.addEventListener('mousedown',e=>{
+  head.addEventListener('pointerdown',e=>{
     if(e.target.closest('button')) return;
     if(layout[id]?.locked) return;       // locked → no drag
+    // Primary contact only: a second finger landing mid-drag would otherwise
+    // re-anchor the drag and make the window jump.
+    if(e.isPrimary === false) return;
     const l=layout[id];
     _wmDrag.set(id, { sx:e.clientX, sy:e.clientY, ox:l.x, oy:l.y });
     e.preventDefault();
   });
   el.querySelectorAll('.rh').forEach(handle => {
-    handle.addEventListener('mousedown', e => {
+    handle.addEventListener('pointerdown', e => {
       e.stopPropagation();
       if(layout[id]?.locked) return;     // locked → no resize
+      if(e.isPrimary === false) return;
       const l=layout[id];
       _wmResize.set(id, { sx:e.clientX, sy:e.clientY, ox:l.x, oy:l.y, ow:l.w, oh:l.h, dir:handle.dataset.rh });
       e.preventDefault();

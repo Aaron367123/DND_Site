@@ -145,6 +145,11 @@ function wsClampPos(x, y, w, h){
 // past the right edge with no way to pan to them.
 function wsClampAll(){
   if (document.body.classList.contains('player-mode')) return;
+  // On the phone layout CSS forces every window fullscreen with !important, so
+  // clamping would only rewrite stored x/y/w/h to phone-sized values for no
+  // visible effect — and skt-layout-v1 is per-device, so that junk would be
+  // what this phone reopens with forever.
+  if (typeof _isMobileLayout === 'function' && _isMobileLayout()) return;
   const box = wsCanvasBox();
   let changed = false;
   Object.keys(layout).forEach(id => {
