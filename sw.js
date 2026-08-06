@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '6220d6c19b';
+const BUILD = '22183b7681';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=a34b9ae5de',
+  'styles/main.css?v=05a2c15131',
   'js/core/errors.js?v=568f89ffd1',
   'js/core/data.js?v=4271d26464',
   'js/core/theme.js?v=533ffb6fb1',
@@ -67,7 +67,7 @@ const PRECACHE = [
   'js/panels/weather.js?v=b318dd7112',
   'js/panels/timetracker.js?v=3906d0ae60',
   'js/content/data-loader.js?v=7bd91b7bcf',
-  'js/content/search.js?v=d4d45ef09c',
+  'js/content/search.js?v=6eaa5d18fe',
   'js/features/backup.js?v=aa3d74defd',
   'js/ui/settings.js?v=19cb2d3859',
   'js/ui/context-menu.js?v=92f9a49378',

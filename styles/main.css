@@ -94,6 +94,9 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
 .tools5e-link{font-size:9px;padding:1px 5px;background:rgba(212,165,116,.1);color:var(--accent);border:1px solid rgba(212,165,116,.3);border-radius:3px;text-decoration:none;letter-spacing:.3px;white-space:nowrap}
 .tools5e-link:hover{background:rgba(212,165,116,.25)}
 .search-empty{padding:24px;text-align:center;color:var(--text-muted);font-size:12px}
+/* Shown only when the 80-row cap actually truncated something. */
+.search-more{padding:8px 12px;text-align:center;color:var(--text-dim);font-size:10.5px;
+  border-top:1px solid var(--border);background:var(--panel-2)}
 /* Match highlight — kept subtle so it doesn't visually overwhelm the result
    name. <mark> normally has yellow bg; restyled to mute into the theme. */
 .search-result mark.search-hit{background:rgba(212,165,116,.22);color:var(--accent);padding:0 2px;border-radius:2px}

@@ -850,6 +850,12 @@ function searchForSpell(slug) {
 // rename / add / remove / notes-first-line change rebuilds it.
 let _poolCache = null;   // {sig, arr, visible, visibleVer, byCat}
 let _lastResults = [];   // last list produced by renderSearchResults, reused by keydown nav
+// How many rows doSearch() matched BEFORE the 80-row cap. "dragon" matches 738
+// and always did; showing 80 of them with no indication read as "that's all
+// there is", so a DM narrowing a search had no idea there was anything to
+// narrow. Set on every doSearch(), read by the renderer.
+const SEARCH_LIMIT = 80;
+let _lastTotal = 0;
 
 function _poolSig(){
   const party = state.party.map(p => p.id + ':' + p.name + ':' + ((p.notes||'').split('\n')[0]||'')).join('|');
@@ -991,10 +997,13 @@ function doSearch(){
     if (tokens.length === 1 && q.length >= 3 && pool.length < 5){
       const maxDist = q.length <= 3 ? 1 : 2;
       const seen = new Set(pool.map(r => r.name + '|' + (r._source||'')));
-      // NOTE: intentionally the BASE pool (not _getVisiblePool) — fuzzy
-      // fallback has always searched without the hidden-sources filter.
-      // Preserved as-is; changing it is a behavior decision, not a perf one.
-      const basePool = getSearchPool();
+      // The VISIBLE pool, same as the strict path above. This used to be the
+      // base pool, with a note deferring the question as "a behavior decision,
+      // not a perf one" — so it got measured: with MM hidden, "dragon"
+      // correctly returned nothing from MM, but the typo "drangon" surfaced
+      // MM's Dragon Turtle. Hiding a source and then having a fumbled
+      // keystroke reveal it is not a defensible behaviour, so it is decided.
+      const basePool = _getVisiblePool();
       const fullPool = (sel === 'all')
         ? basePool
         : basePool.filter(r => _catMatches(r.cat, sel));
@@ -1026,7 +1035,8 @@ function doSearch(){
       }
     }
   }else pool.sort((a,b)=>a.name.localeCompare(b.name));
-  return pool.slice(0,80);
+  _lastTotal = pool.length;
+  return pool.slice(0, SEARCH_LIMIT);
 }
 
 
@@ -1075,13 +1085,29 @@ function renderSearchTabs(){
 // Wrap every case-insensitive occurrence of `q` inside `text` with <mark>.
 // Operates on already-escaped HTML so it's safe to inject. Empty query →
 // returns the input unchanged.
-function _highlightMatch(escapedText, q){
-  if (!q) return escapedText;
-  // Escape regex specials so user input doesn't break the pattern.
-  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  try {
-    return escapedText.replace(new RegExp('('+safe+')', 'gi'), '<mark class="search-hit">$1</mark>');
-  } catch(e){ return escapedText; }
+// Highlight `q` inside RAW text, escaping as it goes. Takes raw rather than
+// pre-escaped text on purpose: matching over already-escaped HTML meant a query
+// could land inside an entity, and "amp" rendered `Bag of Devouring &<mark>amp
+// </mark>; Co` — which the browser then showed as a literal "&amp;". Same for
+// "quot" against a quoted name and "#39" against every apostrophe. Never an
+// injection (the replacement re-inserted escaped text), but visibly wrong.
+// Splitting on the match and escaping each side keeps entities intact.
+function _highlightMatch(rawText, q){
+  const text = String(rawText == null ? '' : rawText);
+  if (!q) return esc(text);
+  // Escape regex specials so user input can't break the pattern.
+  const safe = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let re;
+  try { re = new RegExp(safe, 'gi'); } catch(e){ return esc(text); }
+  let out = '', last = 0, m;
+  while ((m = re.exec(text)) !== null){
+    // A zero-length match would spin forever; nothing produces one today, but
+    // the loop must not depend on that.
+    if (!m[0]){ re.lastIndex++; continue; }
+    out += esc(text.slice(last, m.index)) + '<mark class="search-hit">' + esc(m[0]) + '</mark>';
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
 }
 
 // Recent-searches helpers. Backed by localStorage so the strip survives
@@ -1142,15 +1168,18 @@ function renderSearchResults(){
   container.innerHTML = results.map((r,i)=>`
     <div class="search-result ${i===state.searchState.focused?'focused':''} ${r._fuzzy?'fuzzy':''}" data-idx="${i}">
       <div class="res-name">
-        <span>${_highlightMatch(esc(r.name), q)}</span>
+        <span>${_highlightMatch(r.name, q)}</span>
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
           ${r._fuzzy?'<span class="res-fuzzy" title="Approximate match — your query didn\'t exactly match this entry">~</span>':''}
           ${r._source?`<span style="font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(r._source))}</span>`:''}
           <span class="res-tag ${r.cat}">${r.cat}</span>
         </div>
       </div>
-      <div class="res-meta">${_highlightMatch(esc(r.meta||''), q)}</div>
-    </div>`).join('');
+      <div class="res-meta">${_highlightMatch(r.meta||'', q)}</div>
+    </div>`).join('')
+    + (_lastTotal > results.length
+        ? `<div class="search-more">Showing ${results.length} of ${_lastTotal} matches — keep typing to narrow it down.</div>`
+        : '');
   container.querySelectorAll('.search-result').forEach((el,i)=>el.addEventListener('click', e => {
     e.stopPropagation();
     state.searchState.detail=results[i];
@@ -1425,8 +1454,19 @@ function initSearch(){
   });
   document.addEventListener('mousedown', () => { if(!_insideSearch)closeSearch(); _insideSearch=false; });
   document.addEventListener('keydown',e=>{
-    if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)){
-      e.preventDefault(); openSearch(); setTimeout(()=>inp.focus(), 50);
-    }
+    if(e.key!=='/') return;
+    // Modifiers pass through. Ctrl+/ and Cmd+/ are "toggle comment" almost
+    // everywhere else, and hijacking them to open a search box is startling.
+    if(e.ctrlKey||e.metaKey||e.altKey) return;
+    const ae=document.activeElement;
+    // isContentEditable, not just the three tag names. The NPC Library's notes
+    // field is a contenteditable div (npc-library.js), so typing a slash
+    // mid-sentence there used to open the search and yank focus out of what
+    // the DM was writing. The ? help overlay already guarded this; search
+    // didn't, which is what makes it an oversight rather than a decision.
+    if(ae&&(ae.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(ae.tagName))) return;
+    // A modal is a focus trap; opening search underneath one strands it.
+    if(document.querySelector('.modal-backdrop')) return;
+    e.preventDefault(); openSearch(); setTimeout(()=>inp.focus(), 50);
   });
 }

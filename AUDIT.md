@@ -2296,3 +2296,73 @@ Both nearly reported as bugs, both the same family as the `loading="lazy"` one:
   within a frame, so the fit had already run against the default 680x500
   window. Both "re-fit failed" results traced to this; the assertion had to
   move to the mount DECISION (the `autoFit` argument) rather than its outcome.
+
+## Search bar audit (2026-08-01)
+
+Probed against the live 16,251-row pool. Four real defects, all fixed; the rest
+of the surface held up.
+
+### Fixed
+
+**`/` hijacked typing in contenteditable fields.** The shortcut guarded
+`INPUT`/`TEXTAREA`/`SELECT` but not `isContentEditable`, and the NPC Library's
+notes field is a contenteditable div (`npc-library.js:595`). Typing a slash
+mid-sentence opened the search and pulled focus out of what the DM was
+writing — reproduced: search opened, `document.activeElement` moved off the
+editor. The `?` help overlay in `zoom-pan.js` already guarded this, which is
+what marks it an oversight rather than a decision. Also now ignores
+Ctrl/Cmd/Alt (Ctrl+/ is "toggle comment" almost everywhere else and used to
+open the search) and refuses to fire under an open `.modal-backdrop`.
+
+**Fuzzy fallback leaked hidden sources.** The strict path filtered through
+`_getVisiblePool()`; the fuzzy path deliberately used the unfiltered base pool,
+with a comment deferring it as "a behavior decision, not a perf one". Measured
+with MM hidden: `dragon` correctly returned nothing from MM, but the typo
+`drangon` surfaced MM's Dragon Turtle. Hiding a source and then having a
+fumbled keystroke reveal it isn't defensible, so the fuzzy path now uses the
+visible pool too. Fuzzy matching still works — `drangon` returns Dragon from
+PSK/WDH/TCE.
+
+**The 80-row cap was silent.** `dragon` matches **738** rows, `sword` 273,
+`fire` 234 — all showed 80 with no indication, reading as "that's all there
+is". A footer now appears only when the cap actually truncated: "Showing 80 of
+738 matches". Verified it appears for `dragon` (80 rows), and is absent for
+`healing` (36 rows) and for a no-match query.
+
+**`_highlightMatch` corrupted HTML entities.** It ran a regex over
+already-escaped text, so a query could land inside an entity: `amp` rendered
+`Bag of Devouring &<mark>amp</mark>; Co`, which the browser then displayed as a
+literal `&amp;`. Same for `quot` against a quoted name, `39` against every
+apostrophe, `lt` against `&lt;`. Never an injection — the replacement
+re-inserted already-escaped text — but visibly wrong. It now takes RAW text and
+escapes each side of the match, so entities stay intact and searching `&`
+correctly highlights a real ampersand.
+
+### Checked and sound
+
+- **No crash on hostile input.** 17 pathological queries (`(`, `[`, `\`, `.*`,
+  `((((`, `^$`, `|`, `<script>`, 500 chars) — none threw. Regex specials are
+  escaped and the constructor is wrapped.
+- **Prefix ranking works.** `_n` is precomputed by the loader (`_normSearchIdx`
+  is byte-identical to `_normSearch`), so the `startsWith` boost fires;
+  `fire` leads with Fire (Genasi) / Fire Bolt.
+- **Keyboard nav.** Arrow/Enter flush the 80 ms input debounce first, so they
+  never act on the previous query's list.
+- **Timing** on the full pool: 1.2 ms typical, 3.7 ms single char, 10.8 ms on
+  the fuzzy path (16k edit-distance candidates). Debounced, so acceptable.
+- **Comma categories** (`cult,boon`, `trap,hazard`) resolve to exactly those
+  cats. **Recent searches** cap at 8 and are escaped on render.
+- **The empty-query sort mutates a cached array** in place, but it is the
+  filtered copy from `_getVisiblePool()`, not the base pool, and sorting by
+  name is idempotent. Left alone.
+
+### Known, not changed
+
+- **Duplicate names dominate results** — `fire` returns Fire (Genasi) twice and
+  Fire Bolt twice, from different sources. That is the `reprintPolicy` setting
+  working as designed (default `all`); the source badge distinguishes them.
+  Changing the default is a content decision, not a bug.
+- **Punctuation-only queries** (`(`, `*`, `'`) normalise to an empty string and
+  return the first 80 rows alphabetically rather than "no results", because
+  `doSearch` tests the normalised query while the renderer tests the raw one.
+  Cosmetic; noted rather than fixed.
