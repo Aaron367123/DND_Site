@@ -1,0 +1,60 @@
+# Deploy the site to GitHub Pages.
+#
+# Replaces the legacy Pages builder, which had stopped working entirely. Every
+# build failed instantly (duration: 0ms, "Page build failed") because that
+# builder does a FULL clone, and this repo's history is 5.75 GB — over
+# GitHub's own 5 GB repository ceiling. Untracking img/ dropped the working
+# tree to 114 MB but could not help, because the images are still in history.
+#
+# `fetch-depth: 1` is the entire point: the runner fetches only the tip commit,
+# so it pulls the 114 MB tree instead of 5.75 GB of history. The artifact
+# uploaded is that tree.
+#
+# This also buys real build logs. The legacy builder's only diagnostic was the
+# string "Page build failed", which is what made the original failure so hard
+# to place.
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; let a newer push supersede an in-flight one, but
+# don't cancel a deploy that is already mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: false
+
+      # img/ and thumbs/ are gitignored and untracked, so a clean checkout
+      # simply doesn't contain them — images serve from the R2 CDN (see
+      # js/core/asset-config.js). Printed so a future size regression is
+      # visible in the log rather than showing up as a mystery failure.
+      - name: Report deploy size
+        run: |
+          du -sh . --exclude=.git
+          echo "files: $(find . -path ./.git -prune -o -type f -print | wc -l)"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
