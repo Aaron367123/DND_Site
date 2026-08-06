@@ -1,0 +1,26 @@
+Publish this repo as static files — do not run Jekyll over it.
+
+GitHub Pages runs Jekyll by default. This site has no use for it: there is no
+_config.yml, no _layouts, no _includes, and not one file carries YAML front
+matter. Jekyll's only effect was to walk all 14,842 tracked files (~13,700 of
+them images under img/) and copy them out unchanged.
+
+That cost real time, and it grew until it broke the deploy:
+
+    604fbba1   341,958 ms   built
+    aa7ee02c   391,390 ms   built
+    c577ca3f   398,616 ms   built
+    c577ca3f   412,003 ms   built     <- 6m52s, last one to make it
+    0f936d8d        errored           <- "Page build failed"
+
+Pages caps a build at 10 minutes. The trend was going one way, so the failure
+was going to happen on whichever commit crossed the line — it had nothing to do
+with the contents of that commit.
+
+With this file present Pages skips Jekyll and publishes the tree directly, so
+a deploy is a file copy and the timeout stops being reachable.
+
+Related, and NOT fixed here: img/ is still tracked even though the images now
+serve from the R2 CDN (js/core/asset-config.js). Untracking them would remove
+~13,700 files from the repo, but it needs a history rewrite and a force-push —
+see tools/purge-img-history.sh, which is deliberately still waiting.
