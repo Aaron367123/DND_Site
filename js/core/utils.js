@@ -109,6 +109,15 @@ function sanitizeHtml(html) {
 // Local-only per-browser identity used by the Notes panel for per-line author
 // coloring. Stored under skt-me-v1, intentionally NOT in SKT_SYNC_KEYS — same
 // pattern as skt-layout-v1 (each browser stays its own user).
+// One sprite icon, as markup. The ONLY place JS builds one, so the viewBox and
+// the class can't drift between call sites — and the viewBox has to be here
+// because it is an SVG attribute, not something CSS can set. Sprite lives at
+// the top of skt-workspace.html; `id` is a symbol name without the leading #.
+function ICO(id, cls){
+  return '<svg class="ico' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">'
+       + '<use href="#' + id + '"/></svg>';
+}
+
 function _getMe() {
   try {
     const raw = localStorage.getItem('skt-me-v1');

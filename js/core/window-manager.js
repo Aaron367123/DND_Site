@@ -96,7 +96,7 @@ function ensurePanel(id){
   // Share / lock / snap collapse into a single ⋯ overflow menu so the title
   // bar stays uncluttered; only minimize and close are always-visible. The
   // current share/lock states are surfaced inside the menu items themselves.
-  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions"><button class="btn icon-btn" data-wact="menu" title="Window options">⋯</button><button class="btn" data-wact="min">_</button><button class="btn" data-wact="close">✕</button></div></div><div class="window-body" id="panel-body-${id}"></div>
+  el.innerHTML=`<div class="window-head"><div class="window-title"><span class="window-title-icon">${def.icon||'◇'}</span><span>${def.title}</span></div><div class="window-actions"><button class="btn icon-btn" data-wact="menu" title="Window options"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dots"/></svg></button><button class="btn icon-btn" data-wact="min" title="Minimize"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-minus"/></svg></button><button class="btn icon-btn" data-wact="close" title="Close"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg></button></div></div><div class="window-body" id="panel-body-${id}"></div>
     <div class="rh rh-n"  data-rh="n"></div>
     <div class="rh rh-s"  data-rh="s"></div>
     <div class="rh rh-e"  data-rh="e"></div>
