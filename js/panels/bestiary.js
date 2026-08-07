@@ -103,8 +103,8 @@ registerPanel('bestiary', {
           ? `<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)">
               <div style="font-size:32px;margin-bottom:8px">🐲</div>
               <div>Click <strong>+ Add</strong> to put a monster in your bestiary.</div>
-              <div style="font-size:11px;margin-top:10px"><a href="#" id="best-template-link" style="color:var(--accent);text-decoration:none;border-bottom:1px dashed rgba(212,165,116,.5)">📁 Or start with template folders</a></div>
-              ${ready?'':'<div style="font-size:11px;margin-top:6px;color:var(--text-dim)">Loading 5e data…</div>'}
+              <div style="font-size:var(--fs-sm);margin-top:10px"><a href="#" id="best-template-link" style="color:var(--accent);text-decoration:none;border-bottom:1px dashed rgba(212,165,116,.5)">📁 Or start with template folders</a></div>
+              ${ready?'':'<div style="font-size:var(--fs-sm);margin-top:6px;color:var(--text-dim)">Loading 5e data…</div>'}
             </div>`
           : folderSections.join('')}
       </div>
@@ -170,9 +170,9 @@ registerPanel('bestiary', {
         : '';
       body.innerHTML = countStrip + (sections.join('') ||
         `<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)">
-          <div style="font-size:28px;margin-bottom:6px">🔎</div>
+          <div style="font-size:var(--fs-5xl);margin-bottom:6px">🔎</div>
           <div>No monsters match "${esc(this._searchQ)}".</div>
-          <div style="font-size:11px;margin-top:4px;color:var(--text-dim)">Try fewer terms, or click <strong>+ Add</strong> to add this monster.</div>
+          <div style="font-size:var(--fs-sm);margin-top:4px;color:var(--text-dim)">Try fewer terms, or click <strong>+ Add</strong> to add this monster.</div>
         </div>`);
     });
 
@@ -332,7 +332,7 @@ registerPanel('bestiary', {
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:92vw;max-height:90vh;display:flex;flex-direction:column">
       <h3 style="margin:0 0 4px">New folders</h3>
-      <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted)">Pick one or more templates, or type a custom name. All selected become new folders.</p>
+      <p style="margin:0 0 14px;font-size:var(--fs-sm);color:var(--text-muted)">Pick one or more templates, or type a custom name. All selected become new folders.</p>
       <div style="flex:1;overflow-y:auto;padding-right:4px">
         ${groups.map(g => `
           <div class="best-template-section">
@@ -347,11 +347,11 @@ registerPanel('bestiary', {
         `).join('')}
         <div class="best-template-section">
           <div class="best-template-section-head">Custom</div>
-          <input type="text" id="best-template-custom" placeholder="Type a one-off folder name…" autocomplete="off" style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:5px;font-size:12px">
+          <input type="text" id="best-template-custom" placeholder="Type a one-off folder name…" autocomplete="off" style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:5px;font-size:var(--fs-md)">
         </div>
       </div>
       <div class="modal-actions" style="margin-top:10px">
-        <span style="font-size:11px;color:var(--text-muted);align-self:center" id="best-template-count">0 folders selected</span>
+        <span style="font-size:var(--fs-sm);color:var(--text-muted);align-self:center" id="best-template-count">0 folders selected</span>
         <span style="flex:1"></span>
         <button class="btn" id="best-template-close">Cancel</button>
         <button class="btn primary" id="best-template-create" disabled>Create</button>
@@ -580,7 +580,7 @@ registerPanel('bestiary', {
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:90vw">
       <h3>Add Monster</h3>
       <input type="search" id="best-pick-search" placeholder="Search 5e monsters…" autocomplete="off"
-        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
+        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:var(--fs-md);margin-bottom:10px">
       ${this._data.folders.length ? `<div class="modal-field" style="margin-bottom:10px">
         <label>Folder</label>
         <select id="best-pick-folder">
@@ -589,7 +589,7 @@ registerPanel('bestiary', {
         </select>
       </div>` : ''}
       <div id="best-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
-      <div id="best-pick-count" style="font-size:11px;color:var(--text-muted);padding:6px 2px 0"></div>
+      <div id="best-pick-count" style="font-size:var(--fs-sm);color:var(--text-muted);padding:6px 2px 0"></div>
       <div class="modal-actions"><button class="btn" id="best-pick-close">Close</button></div>
     </div>`;
     document.body.appendChild(backdrop);
@@ -616,7 +616,7 @@ registerPanel('bestiary', {
           ${d._source ? `<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>` : ''}
         </div>
         <span class="bestiary-pick-meta">${esc(d.meta||'')}</span>
-      </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No matches</div>';
+      </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">No matches</div>';
       if (countEl) countEl.textContent = matches.length > LIMIT
         ? `Showing first ${LIMIT} of ${matches.length} matches — keep typing to narrow it down`
         : `${matches.length} match${matches.length === 1 ? '' : 'es'}`;

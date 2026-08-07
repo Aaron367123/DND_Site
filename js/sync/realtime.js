@@ -1035,7 +1035,7 @@ function _openConflictCompare(key){
   const label = _CONFLICT_LABELS[key] || key;
   back.innerHTML = '<div class="modal rt-conflict-modal" role="dialog" aria-modal="true" style="width:880px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column">'
     + '<h3 style="margin:0 0 4px">Compare conflict — ' + _esc(label) + '</h3>'
-    + '<p style="margin:0 0 10px;font-size:11px;color:var(--text-muted)">Local copy is what you just edited. Remote is what arrived from another tab / device.</p>'
+    + '<p style="margin:0 0 10px;font-size:var(--fs-sm);color:var(--text-muted)">Local copy is what you just edited. Remote is what arrived from another tab / device.</p>'
     + '<div class="rt-conflict-diff">'
     + '<div class="rt-conflict-pane"><div class="rt-conflict-pane-head">Mine (local)</div><pre>' + _esc(pretty(c.local))   + '</pre></div>'
     + '<div class="rt-conflict-pane"><div class="rt-conflict-pane-head">Theirs (remote)</div><pre>' + _esc(pretty(c.remote)) + '</pre></div>'

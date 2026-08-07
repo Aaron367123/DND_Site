@@ -173,7 +173,7 @@ registerPanel('soundboard', {
     html+='<div class="sb-master">'
       +'<span class="sb-master-label">'+ICO('i-speaker')+' Master</span>'
       +'<input type="range" class="sb-vol-slider" id="sb-mvol" min="0" max="1" step="0.01" value="'+_sb.vol+'">'
-      +'<span id="sb-mpct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right">'+Math.round(_sb.vol*100)+'%</span>'
+      +'<span id="sb-mpct" style="font-size:var(--fs-xs);color:var(--text-muted);width:34px;text-align:right">'+Math.round(_sb.vol*100)+'%</span>'
       +(playing.length?'<button class="btn small danger" id="sb-stop-all" style="margin-left:auto">⏹ Stop all</button>':'')
     +'</div>';
 
@@ -247,7 +247,7 @@ registerPanel('soundboard', {
       +'<label class="btn" style="cursor:pointer;flex-shrink:0">'+ICO('i-folder')+' Upload sounds'
         +'<input type="file" id="sb-upload" accept="audio/*" multiple style="display:none">'
       +'</label>'
-      +'<span style="font-size:10px;color:var(--text-muted)">MP3 · WAV · OGG · saved on this device</span>'
+      +'<span style="font-size:var(--fs-xs);color:var(--text-muted)">MP3 · WAV · OGG · saved on this device</span>'
     +'</div>';
 
     b.innerHTML=html;

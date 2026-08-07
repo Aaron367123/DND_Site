@@ -606,7 +606,7 @@ registerPanel('notes', {
         <button class="btn small" id="note-download" title="Save to desktop">${ICO('i-save')}</button>
         <button class="btn icon-btn" data-act="notes-refresh" title="Sync now (pull latest from disk)">${ICO('i-refresh')}</button>
         <button class="btn icon-btn" data-act="notes-settings" title="Display settings">${ICO('i-gear')}</button>
-        <button class="btn icon-btn ${tbHidden?'':'active'}" data-act="notes-toggle-toolbar" title="${tbHidden?'Show formatting toolbar':'Hide formatting toolbar (more room to write)'}" style="font-size:13px">${tbHidden?'▼ Tools':'▲'}</button>
+        <button class="btn icon-btn ${tbHidden?'':'active'}" data-act="notes-toggle-toolbar" title="${tbHidden?'Show formatting toolbar':'Hide formatting toolbar (more room to write)'}" style="font-size:var(--fs-lg)">${tbHidden?'▼ Tools':'▲'}</button>
       </div>
       ${tbHidden ? '' : `<div class="notes-toolbar-2">
         <button class="btn" data-nact="bold"   title="Bold (Ctrl+B)"><b>B</b></button>
@@ -647,7 +647,7 @@ registerPanel('notes', {
     const ids = Object.keys(authors);
     if (!ids.length){
       return `<div class="nvs-field"><div class="nvs-row"><span class="nvs-label">Authors</span></div>
-        <p style="font-size:10px;color:var(--text-dim);margin:2px 0 0">No collaborators yet — each browser that edits a note will appear here with its identity color.</p>
+        <p style="font-size:var(--fs-xs);color:var(--text-dim);margin:2px 0 0">No collaborators yet — each browser that edits a note will appear here with its identity color.</p>
       </div>`;
     }
     // Put "me" first.
@@ -1385,20 +1385,20 @@ registerPanel('notes', {
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:760px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
       <h3 style="margin:0 0 4px">⚠ Sync conflict — "${esc(c.name)}"</h3>
-      <p style="margin:0 0 12px;font-size:11px;color:var(--text-muted)">Both the app and the file on disk changed since the last sync. Pick which version wins, or merge by hand.</p>
+      <p style="margin:0 0 12px;font-size:var(--fs-sm);color:var(--text-muted)">Both the app and the file on disk changed since the last sync. Pick which version wins, or merge by hand.</p>
       <div style="flex:1;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:200px">
         <div style="display:flex;flex-direction:column;min-height:0">
-          <div style="font-size:10px;color:var(--accent);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">📱 App version</div>
-          <pre id="notes-conflict-app" style="flex:1;overflow:auto;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px;margin:0;font-size:11px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word">${esc(c.appContent || '')}</pre>
+          <div style="font-size:var(--fs-xs);color:var(--accent);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">📱 App version</div>
+          <pre id="notes-conflict-app" style="flex:1;overflow:auto;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px;margin:0;font-size:var(--fs-sm);line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word">${esc(c.appContent || '')}</pre>
         </div>
         <div style="display:flex;flex-direction:column;min-height:0">
-          <div style="font-size:10px;color:#9ad1ff;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">💾 Disk version</div>
-          <pre id="notes-conflict-disk" style="flex:1;overflow:auto;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px;margin:0;font-size:11px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word">${esc(c.diskContent || '')}</pre>
+          <div style="font-size:var(--fs-xs);color:#9ad1ff;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">💾 Disk version</div>
+          <pre id="notes-conflict-disk" style="flex:1;overflow:auto;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:10px;margin:0;font-size:var(--fs-sm);line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word">${esc(c.diskContent || '')}</pre>
         </div>
       </div>
-      <details style="margin-top:8px;font-size:11px">
+      <details style="margin-top:8px;font-size:var(--fs-sm)">
         <summary style="cursor:pointer;color:var(--text-muted)">✎ Manual merge — edit a combined version</summary>
-        <textarea id="notes-conflict-manual" style="width:100%;height:140px;margin-top:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:8px;font-size:11px;font-family:'Cascadia Code',Consolas,monospace;resize:vertical">${esc(c.appContent || '')}</textarea>
+        <textarea id="notes-conflict-manual" style="width:100%;height:140px;margin-top:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:8px;font-size:var(--fs-sm);font-family:'Cascadia Code',Consolas,monospace;resize:vertical">${esc(c.appContent || '')}</textarea>
       </details>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn" id="notes-conflict-cancel">Decide later</button>

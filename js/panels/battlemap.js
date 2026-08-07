@@ -1142,7 +1142,7 @@ registerPanel('battlemap',{
       </div>`;
     }).join('');
     return `<div id="mapsel-starred-host" style="margin-bottom:14px">
-      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+      <div style="font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">
         <span>★ Starred maps</span>
         <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400">${set.size}</span>
       </div>
@@ -1167,16 +1167,16 @@ registerPanel('battlemap',{
         fogN     ? fogN + ' fog'    : null,
         drawingN ? drawingN + ' drw' : null,
       ].filter(Boolean).join(' · ');
-      return `<div class="mapsel-saved-row" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:12px">
-        <button data-savedmap-load="${esc(s.id)}" style="flex:1;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:12px;cursor:pointer;text-align:left;padding:2px 4px;display:flex;flex-direction:column;gap:1px" title="Load this saved map">
+      return `<div class="mapsel-saved-row" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:var(--fs-md)">
+        <button data-savedmap-load="${esc(s.id)}" style="flex:1;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:var(--fs-md);cursor:pointer;text-align:left;padding:2px 4px;display:flex;flex-direction:column;gap:1px" title="Load this saved map">
           <span style="font-weight:600">${esc(s.name)}</span>
-          <span style="font-size:10px;color:var(--text-dim)">${esc(bgLabel)}${stats ? ' · ' + esc(stats) : ''}</span>
+          <span style="font-size:var(--fs-xs);color:var(--text-dim)">${esc(bgLabel)}${stats ? ' · ' + esc(stats) : ''}</span>
         </button>
-        <button class="btn icon-btn danger" data-savedmap-del="${esc(s.id)}" title="Delete this saved map" style="padding:2px 6px;font-size:11px">×</button>
+        <button class="btn icon-btn danger" data-savedmap-del="${esc(s.id)}" title="Delete this saved map" style="padding:2px 6px;font-size:var(--fs-sm)">×</button>
       </div>`;
     }).join('');
     return `<div id="mapsel-saved-host" style="margin-bottom:14px">
-      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px">Saved maps</div>
+      <div style="font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px">Saved maps</div>
       <div style="max-height:200px;overflow-y:auto">${rows}</div>
     </div>`;
   },
@@ -1868,7 +1868,7 @@ registerPanel('battlemap',{
       if(onMap)return '';
       // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.
       const iconHtml = renderIcon(p.icon||'⚔', p.name);
-      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at the centre of your current view, or drag onto the map for precise placement" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;cursor:grab">'
+      return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at the centre of your current view, or drag onto the map for precise placement" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:4px;cursor:grab">'
         +'<span class="map-party-icon">'+iconHtml+'</span>'
         +'<span>'+esc(p.name)+'</span>'
       +'</button>';
@@ -1880,7 +1880,7 @@ registerPanel('battlemap',{
       // so right-click pan / token interactions on the map underneath aren't
       // captured by the overlay. Only the button itself receives clicks.
       html += '<div style="position:absolute;top:6px;left:6px;z-index:30;pointer-events:none">'
-        + '<button class="btn small" data-mact="toggle-toolbar" style="pointer-events:auto;padding:2px 8px;font-size:10px;opacity:.85" title="Show toolbar">▾ Tools</button>'
+        + '<button class="btn small" data-mact="toggle-toolbar" style="pointer-events:auto;padding:2px 8px;font-size:var(--fs-xs);opacity:.85" title="Show toolbar">▾ Tools</button>'
         + '</div>';
     } else if (_isPlayer) {
     // Player-view toolbar — minimal: Draw + Erase tools, zoom, Clear
@@ -1890,7 +1890,7 @@ registerPanel('battlemap',{
       +'<button class="btn icon-btn" data-mact="toggle-toolbar" style="flex-shrink:0;padding:2px 5px" title="Hide toolbar (more map space)">▲</button>'
       +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">'+ICO('i-pencil')+'<span class="bt-l">Draw</span></button>'
       +(this._tool==='draw' ? '<input type="color" id="draw-color" value="'+this._drawColor+'" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Brush color">' : '')
-      +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:11px;padding:2px 4px;flex-shrink:0">'
+      +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0">'
         +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
@@ -1899,7 +1899,7 @@ registerPanel('battlemap',{
       // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
       +(_mapBgImage?'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>':'')
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Zoom">':'')
-      +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
+      +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:var(--fs-xs);color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
       +'<div class="bm-spacer" style="flex:1"></div>'
       // Undo/redo sit next to the destructive buttons on purpose — that's
@@ -1917,15 +1917,15 @@ registerPanel('battlemap',{
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase tokens and drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
       +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">'+ICO('i-pencil')+'<span class="bt-l">Draw</span></button>'
       +(this._tool==='draw' ? '<input type="color" id="draw-color" value="'+this._drawColor+'" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Brush color">' : '')
-      +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:11px;padding:2px 4px;flex-shrink:0">'
+      +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0">'
         +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
       +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
-      +'<span class="bt-l" style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'
-      +'<input type="number" id="map-size" min="8" max="400" step="1" value="'+cs+'" style="width:54px;font-size:11px;padding:2px 4px;flex-shrink:0" title="Cell size in pixels (try 30, 50, 64, 80, 100, 120…)">'
-      +'<select id="map-size-preset" style="width:34px;font-size:11px;padding:2px 1px;flex-shrink:0" title="Common sizes">'
+      +'<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'
+      +'<input type="number" id="map-size" min="8" max="400" step="1" value="'+cs+'" style="width:54px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Cell size in pixels (try 30, 50, 64, 80, 100, 120…)">'
+      +'<select id="map-size-preset" style="width:34px;font-size:var(--fs-sm);padding:2px 1px;flex-shrink:0" title="Common sizes">'
         +'<option value="">…</option>'
         +'<option value="30">30</option>'
         +'<option value="40">40</option>'
@@ -1941,7 +1941,7 @@ registerPanel('battlemap',{
       +'<button class="btn" data-mact="pick-map" style="flex-shrink:0" title="Choose a map image">'+ICO('i-map')+'<span class="bt-l">Map</span></button>'
       +(_mapBgImage?'<button class="btn danger" data-mact="clear-img" style="flex-shrink:0" title="Remove the map image">'+ICO('i-close')+'<span class="bt-l">Map</span></button>':'')
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
-      +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
+      +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:var(--fs-xs);color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
       +'<button class="btn icon-btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Grid style: cycle square → hex → none">'+ICO('i-grid')+'</button>'
       +'<button class="btn icon-btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">'+ICO('i-magnet')+'</button>'
@@ -1972,7 +1972,7 @@ registerPanel('battlemap',{
       // inline style beats any selector without !important, so with it here
       // the phone layout could not switch this row to a single scroller.
       html+='<div class="map-party-bar" style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);background:var(--panel-2);align-items:center">'
-        +'<span class="bt-l" style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
+        +'<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
     }
 
     // Map area + settings sidebar side-by-side. Settings sidebar is rendered
@@ -2007,38 +2007,38 @@ registerPanel('battlemap',{
       + (this._settingsOpen ? this._renderSettingsSidebar() : '')
     +'</div>';
 
-    html+='<div class="map-foot" style="padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-2);font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-shrink:0">'
+    html+='<div class="map-foot" style="padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-2);font-size:var(--fs-xs);color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-shrink:0">'
       +'<span>1 sq = <strong>'+ft+' ft</strong></span>'
       +'<span class="bt-l" style="color:var(--text-dim)">'+this._cols+'×'+this._rows+' squares ('+this._cols*ft+'×'+this._rows*ft+' ft)</span>'
       +'<span style="flex:1"></span>'
       // Hidden on touch by CSS: there is no right-click on a phone, so this
       // hint spent a row of a 390px screen telling you to do something you
       // can't.
-      +'<span class="map-foot-hint" style="font-size:9px;color:var(--text-dim)">Drag tokens freely · Right-click for options</span>'
+      +'<span class="map-foot-hint" style="font-size:var(--fs-2xs);color:var(--text-dim)">Drag tokens freely · Right-click for options</span>'
     +'</div>';
 
-    html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:164px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
+    html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:164px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:var(--fs-sm);z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
       +'<div style="font-weight:500;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
         +'<span id="tp-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">Token</span>'
-        +'<button class="btn icon-btn" id="tp-close" style="padding:0 4px;font-size:13px;flex-shrink:0">'+ICO('i-close')+'</button>'
+        +'<button class="btn icon-btn" id="tp-close" style="padding:0 4px;font-size:var(--fs-lg);flex-shrink:0">'+ICO('i-close')+'</button>'
       +'</div>'
       +'<label class="field-label">Label</label>'
-      +'<input type="text" id="tp-label" style="margin-bottom:6px;font-size:11px">'
+      +'<input type="text" id="tp-label" style="margin-bottom:6px;font-size:var(--fs-sm)">'
       +'<label class="field-label">Color</label>'
       +'<input type="color" id="tp-color" style="width:100%;height:26px;margin-bottom:6px;cursor:pointer">'
       +'<label class="field-label">Size (cells)</label>'
       +'<div style="display:flex;gap:4px;margin-bottom:8px;align-items:center">'
-        +'<button class="btn icon-btn" id="tp-size-down" title="Smaller (¼ cell)" style="padding:1px 6px;font-size:13px">−</button>'
+        +'<button class="btn icon-btn" id="tp-size-down" title="Smaller (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
         +'<input type="range" id="tp-size" min="0.25" max="6" step="0.25" value="1" style="flex:1">'
-        +'<button class="btn icon-btn" id="tp-size-up" title="Bigger (¼ cell)" style="padding:1px 6px;font-size:13px">+</button>'
-        +'<span id="tp-size-val" style="font-size:11px;color:var(--text-muted);min-width:52px;text-align:right">1.00 cells</span>'
+        +'<button class="btn icon-btn" id="tp-size-up" title="Bigger (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
+        +'<span id="tp-size-val" style="font-size:var(--fs-sm);color:var(--text-muted);min-width:52px;text-align:right">1.00 cells</span>'
       +'</div>'
       +'<label class="field-label">Facing</label>'
       +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
-        +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:11px">↺</button>'
+        +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:var(--fs-sm)">↺</button>'
         +'<input type="range" id="tp-rot" min="0" max="359" step="5" value="0" style="flex:1">'
-        +'<button class="btn icon-btn" id="tp-rot-right" title="Rotate +45°" style="padding:1px 6px;font-size:11px">↻</button>'
-        +'<span id="tp-rot-val" style="font-size:10px;color:var(--text-muted);min-width:30px;text-align:right">0°</span>'
+        +'<button class="btn icon-btn" id="tp-rot-right" title="Rotate +45°" style="padding:1px 6px;font-size:var(--fs-sm)">↻</button>'
+        +'<span id="tp-rot-val" style="font-size:var(--fs-xs);color:var(--text-muted);min-width:30px;text-align:right">0°</span>'
       +'</div>'
       +'<div style="display:flex;gap:4px">'
         +'<button class="btn small" id="tp-kill" style="flex:1">☠</button>'
@@ -3122,13 +3122,13 @@ registerPanel('battlemap',{
         ${this._renderStarredMapsSection()}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
           <input id="mapsel-search" type="search" autocomplete="off" placeholder="Search maps across every adventure…"
-            style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+            style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:var(--fs-md)">
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
           <input id="mapsel-adv-filter" type="search" autocomplete="off" placeholder="Filter adventures…"
-            style="width:170px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+            style="width:170px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:var(--fs-md)">
           <select id="mapsel-adv" disabled
-            style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
+            style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:var(--fs-md)">
             <option value="">Loading adventures…</option>
           </select>
         </div>
@@ -3412,7 +3412,7 @@ registerPanel('battlemap',{
 
     const renderCards = (cards, opts={})=>{
       if (!cards.length){
-        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">'+(opts.emptyMsg||'No maps.')+'</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">'+(opts.emptyMsg||'No maps.')+'</div>';
         return;
       }
       const starred = this._starredMaps || new Set();
@@ -3585,7 +3585,7 @@ registerPanel('battlemap',{
       if (searchInput.value) searchInput.value = '';
       const advId = adv.id;
       if (!this._mapsByAdv[advId]){
-        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Loading maps…</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">Loading maps…</div>';
         await loadOneAdvMaps(advId);
       }
       renderCards(this._mapsByAdv[advId] || [], { emptyMsg: 'No maps in this adventure.' });
@@ -3599,7 +3599,7 @@ registerPanel('battlemap',{
       const qn = (q||'').toLowerCase().trim();
       if (!qn){ handlePick(); return; }
       if (!this._allMaps){
-        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Indexing every adventure for search…</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">Indexing every adventure for search…</div>';
         await ensureAllMaps();
         // Bail if the user has typed a different query while we were loading.
         if (searchInput.value.trim().toLowerCase() !== qn) return;

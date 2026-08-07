@@ -34,7 +34,7 @@ registerPanel('shop',{
       <div class="shop-controls">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px">
           <span class="field-label" style="margin:0">Shop</span>
-          <button class="btn icon-btn" data-act="settings" title="Pricing settings (currency, jitter, rounding)" style="padding:2px 6px;font-size:13px;line-height:1">'+ICO('i-gear')+'</button>
+          <button class="btn icon-btn" data-act="settings" title="Pricing settings (currency, jitter, rounding)" style="padding:2px 6px;font-size:var(--fs-lg);line-height:1">'+ICO('i-gear')+'</button>
         </div>
         <div><label class="field-label">Shop Type</label><select id="shop-type">${types.map(t=>`<option ${state.shop?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div><label class="field-label">Shop Price</label><select id="shop-price"><option>Cheap</option><option selected>Average</option><option>Expensive</option><option>Premium</option></select></div>
@@ -75,9 +75,9 @@ registerPanel('shop',{
     if (!this._saved.length) return '';
     return '<div style="margin-top:10px"><div class="field-label">Saved shops</div>'
       + '<div style="display:flex;flex-direction:column;gap:3px;max-height:160px;overflow-y:auto">'
-      + this._saved.map(s => `<div style="display:flex;align-items:center;gap:4px;background:var(--panel-2);border:1px solid var(--border);border-radius:3px;padding:3px 5px;font-size:11px">
-          <button class="btn small" data-act="load-shop" data-sid="${esc(s.id)}" style="flex:1;text-align:left;padding:2px 6px;font-size:11px;justify-content:flex-start" title="Load — ${esc(s.shop?.type||'')}">${esc(s.name)}</button>
-          <button class="btn icon-btn danger" data-act="del-shop" data-sid="${esc(s.id)}" title="Delete saved shop" style="padding:1px 4px;font-size:10px">×</button>
+      + this._saved.map(s => `<div style="display:flex;align-items:center;gap:4px;background:var(--panel-2);border:1px solid var(--border);border-radius:3px;padding:3px 5px;font-size:var(--fs-sm)">
+          <button class="btn small" data-act="load-shop" data-sid="${esc(s.id)}" style="flex:1;text-align:left;padding:2px 6px;font-size:var(--fs-sm);justify-content:flex-start" title="Load — ${esc(s.shop?.type||'')}">${esc(s.name)}</button>
+          <button class="btn icon-btn danger" data-act="del-shop" data-sid="${esc(s.id)}" title="Delete saved shop" style="padding:1px 4px;font-size:var(--fs-xs)">×</button>
         </div>`).join('')
       + '</div></div>';
   },
@@ -164,9 +164,9 @@ registerPanel('shop',{
     if (detail && typeof renderItemFull === 'function'){
       bodyHtml = renderItemFull(detail);
     } else if (detail && detail.desc){
-      bodyHtml = '<div style="white-space:pre-wrap;font-size:12px;line-height:1.55">' + esc(detail.desc) + '</div>';
+      bodyHtml = '<div style="white-space:pre-wrap;font-size:var(--fs-md);line-height:1.55">' + esc(detail.desc) + '</div>';
     } else {
-      bodyHtml = '<div style="color:var(--text-muted);font-size:12px;font-style:italic">No description available for this item — likely a curated shop extra (food, lodging, etc.).</div>';
+      bodyHtml = '<div style="color:var(--text-muted);font-size:var(--fs-md);font-style:italic">No description available for this item — likely a curated shop extra (food, lodging, etc.).</div>';
     }
     // Source-book tag — pulled from the canonical _5eData entry when available,
     // falling back to the shop catalog's stored _source. Renders as a small
@@ -177,9 +177,9 @@ registerPanel('shop',{
       if (!src) return '';
       return '<span class="shop-item-source-tag" title="Source book">' + esc(src) + '</span>';
     })();
-    const priceLine = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px"><span>Category: ' + esc(item.category) + ' · Rarity: ' + esc(item.rarity) + ' · Price: ' + esc(this._fmtPrice(item.price)) + '</span><span style="flex:1"></span>' + sourceTag + '</div>';
+    const priceLine = '<div style="font-size:var(--fs-sm);color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px"><span>Category: ' + esc(item.category) + ' · Rarity: ' + esc(item.rarity) + ' · Price: ' + esc(this._fmtPrice(item.price)) + '</span><span style="flex:1"></span>' + sourceTag + '</div>';
     backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column">'
-      + '<h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px"><span style="font-size:18px">📜</span> ' + esc(item.name) + '</h3>'
+      + '<h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px"><span style="font-size:var(--fs-2xl)">📜</span> ' + esc(item.name) + '</h3>'
       + priceLine
       + '<div style="flex:1;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>'
       + '<div class="modal-actions" style="margin-top:12px">'
@@ -283,7 +283,7 @@ registerPanel('shop',{
           <input type="text" id="shop-cur" value="${esc(cur)}" maxlength="6" autocomplete="off">
         </div>
         <div class="modal-field" style="margin-bottom:10px">
-          <label>Price jitter <span id="shop-jit-val" style="float:right;color:var(--text-muted);font-size:11px">${jit}%</span></label>
+          <label>Price jitter <span id="shop-jit-val" style="float:right;color:var(--text-muted);font-size:var(--fs-sm)">${jit}%</span></label>
           <input type="range" id="shop-jit" min="0" max="50" value="${jit}">
         </div>
         <div class="modal-field" style="margin-bottom:14px">
@@ -326,7 +326,7 @@ registerPanel('shop',{
             ${cb('shop-hide-art',   'Hide artifacts',                   !!sf.hideArtifacts)}
             ${cb('shop-no-cons',    'Exclude consumables',              !!sf.excludeConsumables)}
           </div>
-          <p class="shop-filter-note" style="margin:4px 0 8px;font-size:10px">Consumables = potions, scrolls, ammunition.</p>
+          <p class="shop-filter-note" style="margin:4px 0 8px;font-size:var(--fs-xs)">Consumables = potions, scrolls, ammunition.</p>
           <div class="shop-filter-slider">
             <div class="shop-filter-slider-row">
               <span>Max spell scroll level</span>
@@ -352,7 +352,7 @@ registerPanel('shop',{
         <div class="shop-filter-section">
           <div class="shop-filter-head"><span>Price cap</span></div>
           <div class="shop-filter-price-row">
-            <label for="shop-maxprice" style="font-size:11px;color:var(--text-muted)">Max item price (gp)</label>
+            <label for="shop-maxprice" style="font-size:var(--fs-sm);color:var(--text-muted)">Max item price (gp)</label>
             <input type="number" id="shop-maxprice" min="0" step="50" value="${sf.maxPrice||0}" placeholder="0 = no cap" style="width:120px">
           </div>
           <p class="shop-filter-note" style="margin-top:4px">Try <strong>100</strong> for a village peddler, <strong>5000</strong> for a city emporium, <strong>50000</strong> for a capital city. <strong>0</strong> = no limit.</p>
@@ -548,9 +548,9 @@ registerPanel('shop',{
         <td>${esc(item.category)}</td>
         <td><span class="rarity-badge rarity-${item.rarity.replace(/\s/,'')}">${item.rarity}</span></td>
         <td>${this._fmtPrice(item.price)}</td>
-        <td>${out ? '<span style="color:var(--text-dim);font-size:11px">out</span>' : '×'+item.stock}</td>
+        <td>${out ? '<span style="color:var(--text-dim);font-size:var(--fs-sm)">out</span>' : '×'+item.stock}</td>
         <td style="text-align:right;padding-right:14px">
-          <button class="btn small" data-act="buy-item" data-idx="${i}" ${out?'disabled title="Out of stock"':'title="Buy one (decrements stock, adds to Loot tracker)"'} style="padding:1px 8px;font-size:11px">Buy</button>
+          <button class="btn small" data-act="buy-item" data-idx="${i}" ${out?'disabled title="Out of stock"':'title="Buy one (decrements stock, adds to Loot tracker)"'} style="padding:1px 8px;font-size:var(--fs-sm)">Buy</button>
         </td>
       </tr>`;
     }).join('');
@@ -561,12 +561,12 @@ registerPanel('shop',{
     ${inv.length
       ? `<table class="shop-table"><thead><tr><th>Item</th><th>Category</th><th>Rarity</th><th>Price</th><th>Stock</th><th></th></tr></thead>
          <tbody>${rowsHtml}</tbody></table>
-         <div style="padding:8px 14px;font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:10px">
+         <div style="padding:8px 14px;font-size:var(--fs-sm);color:var(--text-muted);display:flex;align-items:center;gap:10px">
            <span>Showing ${shown.length} of ${inv.length} item(s)</span>
-           ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" style="padding:2px 8px;font-size:11px">Show ${Math.min(20, remaining)} more</button>` : ''}
-           ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" data-mode="all" style="padding:2px 8px;font-size:11px">Show all</button>` : ''}
+           ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" style="padding:2px 8px;font-size:var(--fs-sm)">Show ${Math.min(20, remaining)} more</button>` : ''}
+           ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" data-mode="all" style="padding:2px 8px;font-size:var(--fs-sm)">Show all</button>` : ''}
          </div>`
-      : `<div style="padding:18px 14px;font-size:12px;color:var(--text-muted);text-align:center">No items match the active filters. Open <strong>⚙</strong> to allow more rarities or categories.</div>`
+      : `<div style="padding:18px 14px;font-size:var(--fs-md);color:var(--text-muted);text-align:center">No items match the active filters. Open <strong>⚙</strong> to allow more rarities or categories.</div>`
     }
     </div>`;
   },

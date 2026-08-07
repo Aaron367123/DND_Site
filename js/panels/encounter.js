@@ -124,28 +124,28 @@ registerPanel('encounter',{
           <h3>Party</h3>
           <div class="enc-party-adj">
             <label>Level</label>
-            <input type="number" id="enc-level" value="${this._partyLevel}" min="1" max="20" style="font-size:11px;margin-bottom:6px">
+            <input type="number" id="enc-level" value="${this._partyLevel}" min="1" max="20" style="font-size:var(--fs-sm);margin-bottom:6px">
             <label>Size</label>
-            <input type="number" id="enc-size" value="${this._partySize}" min="1" max="10" style="font-size:11px">
+            <input type="number" id="enc-size" value="${this._partySize}" min="1" max="10" style="font-size:var(--fs-sm)">
           </div>
         </div>
         <div class="enc-section" style="flex:1;overflow-y:auto">
           <h3>Monsters</h3>
           <div class="enc-monsters-list" id="enc-monster-list">
-            ${!this._monsters.length?'<div style="font-size:11px;color:var(--text-dim)">Search and add monsters below.</div>':
+            ${!this._monsters.length?'<div style="font-size:var(--fs-sm);color:var(--text-dim)">Search and add monsters below.</div>':
               this._monsters.map((m,i)=>{
                 const srcDisplay = m._source ? (typeof _formatSource==='function' ? _formatSource(m._source) : m._source) : '';
                 const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
                 return `<div class="enc-monster-row">
-                  <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" style="width:38px;font-size:11px;padding:2px 4px">
+                  <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" style="width:38px;font-size:var(--fs-sm);padding:2px 4px">
                   <span class="enc-name" title="${esc(m.name)}">${esc(m.name)}${srcBadge}</span>
                   <span class="enc-cr">CR ${m.cr}</span>
-                  <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" style="padding:2px 5px;font-size:11px">×</button>
+                  <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
                 </div>`;
               }).join('')}
           </div>
           <div class="enc-add-input">
-            <input type="text" id="enc-search" placeholder="Search monster..." style="font-size:11px">
+            <input type="text" id="enc-search" placeholder="Search monster..." style="font-size:var(--fs-sm)">
           </div>
           <div class="enc-search-results" id="enc-search-results"></div>
         </div>
@@ -153,7 +153,7 @@ registerPanel('encounter',{
       <div class="enc-right">
         <div class="enc-stats">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px">
-            <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:0">XP Budget</h3>
+            <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:0">XP Budget</h3>
             <div class="enc-system-toggle" title="Encounter-building system. 2024 drops the count multiplier and reads closer to real play.">
               <button class="enc-sys-btn ${system==='2024'?'active':''}" data-eact="sys" data-sys="2024" title="2024 DMG — XP budget, no multiplier">2024</button>
               <button class="enc-sys-btn ${system==='2014'?'active':''}" data-eact="sys" data-sys="2014" title="2014 DMG — adjusted XP with count multiplier">2014</button>
@@ -161,29 +161,29 @@ registerPanel('encounter',{
           </div>
           ${this._renderEncStats(system, xp, diff)}
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Scale to:</label>
-            <select id="enc-scale-target" style="font-size:11px;padding:3px 6px;flex:0 0 auto;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
+            <label style="font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Scale to:</label>
+            <select id="enc-scale-target" style="font-size:var(--fs-sm);padding:3px 6px;flex:0 0 auto;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
               <option value="">—</option>
               ${(system==='2024'?['Moderate','High','Deadly']:['Easy','Medium','Hard','Deadly']).map(o=>`<option value="${o}">${o}</option>`).join('')}
             </select>
-            <span style="font-size:10px;color:var(--text-dim)">multiplies counts</span>
+            <span style="font-size:var(--fs-xs);color:var(--text-dim)">multiplies counts</span>
           </div>
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn small primary" id="enc-push-combat" ${!this._monsters.length?'disabled':''}>▶ Push to Combat Tracker</button>
             <button class="btn small danger" id="enc-clear">Clear encounter</button>
           </div>
-          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:14px 0 8px">Saved encounters</h3>
+          <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:14px 0 8px">Saved encounters</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
             <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>${ICO('i-save')} Save current…</button>
           </div>
           <div id="enc-saved-list" style="display:flex;flex-direction:column;gap:4px">
             ${!this._saved.length
-              ? '<div style="font-size:11px;color:var(--text-dim)">No saved encounters yet.</div>'
+              ? '<div style="font-size:var(--fs-sm);color:var(--text-dim)">No saved encounters yet.</div>'
               : this._saved.map(s => {
                   const count = (s.monsters||[]).reduce((n,m)=>n+(m.count||1),0);
                   return `<div class="enc-saved-row" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
-                    <button class="btn small" data-eact="load-enc" data-eid="${esc(s.id)}" style="flex:1;text-align:left;justify-content:flex-start" title="Load this encounter">${esc(s.name)} <span style="color:var(--text-dim);font-size:10px">· ${count} mon</span></button>
-                    <button class="btn icon-btn danger" data-eact="del-enc" data-eid="${esc(s.id)}" title="Delete saved encounter" style="padding:2px 5px;font-size:11px">×</button>
+                    <button class="btn small" data-eact="load-enc" data-eid="${esc(s.id)}" style="flex:1;text-align:left;justify-content:flex-start" title="Load this encounter">${esc(s.name)} <span style="color:var(--text-dim);font-size:var(--fs-xs)">· ${count} mon</span></button>
+                    <button class="btn icon-btn danger" data-eact="del-enc" data-eid="${esc(s.id)}" title="Delete saved encounter" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
                   </div>`;
                 }).join('')}
           </div>
@@ -349,11 +349,11 @@ registerPanel('encounter',{
             <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
           </div>
           ${this._renderGauge2024(xp.raw)}
-          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">XP budget (full party)</h3>
+          <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">XP budget (full party)</h3>
           <div class="enc-stat-grid">
-            <div class="enc-stat-box"><div class="l">Low</div><div class="v" style="font-size:12px">${bg.low.toLocaleString()} XP</div></div>
-            <div class="enc-stat-box"><div class="l">Moderate</div><div class="v" style="font-size:12px">${bg.moderate.toLocaleString()} XP</div></div>
-            <div class="enc-stat-box"><div class="l">High</div><div class="v" style="font-size:12px">${bg.high.toLocaleString()} XP</div></div>
+            <div class="enc-stat-box"><div class="l">Low</div><div class="v" style="font-size:var(--fs-md)">${bg.low.toLocaleString()} XP</div></div>
+            <div class="enc-stat-box"><div class="l">Moderate</div><div class="v" style="font-size:var(--fs-md)">${bg.moderate.toLocaleString()} XP</div></div>
+            <div class="enc-stat-box"><div class="l">High</div><div class="v" style="font-size:var(--fs-md)">${bg.high.toLocaleString()} XP</div></div>
           </div>`;
     }
     const l = Math.min(Math.max(this._partyLevel,1),20)-1;
@@ -365,8 +365,8 @@ registerPanel('encounter',{
             <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
           </div>
           ${this._renderDifficultyGauge(xp.adjusted)}
-          <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">Thresholds (full party)</h3>
-          <div class="enc-stat-grid">${['Easy','Medium','Hard','Deadly'].map((lab,i)=>`<div class="enc-stat-box"><div class="l">${lab}</div><div class="v" style="font-size:12px">${(t[i]*this._partySize).toLocaleString()} XP</div></div>`).join('')}</div>`;
+          <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">Thresholds (full party)</h3>
+          <div class="enc-stat-grid">${['Easy','Medium','Hard','Deadly'].map((lab,i)=>`<div class="enc-stat-box"><div class="l">${lab}</div><div class="v" style="font-size:var(--fs-md)">${(t[i]*this._partySize).toLocaleString()} XP</div></div>`).join('')}</div>`;
   },
 
   // 2024 gauge — Low / Moderate / High zones at the party budget, marker at the

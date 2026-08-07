@@ -430,7 +430,7 @@ registerPanel('combat',{
 
       ${inCombat
         ? `<div class="combatant-list${compact?' compact':''}${grouped?' grouped':''}${(state.settings&&state.settings.combatHpBar===false)?' no-hp-bar':''}" id="combat-list">`+this._renderCombatants()+'</div>'
-        : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}
+        : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:var(--fs-4xl);margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}
 
       ${inCombat ? this._renderLog() : ''}
 
@@ -576,11 +576,14 @@ registerPanel('combat',{
     return Math.max(0, Math.min(100, Math.round((c.hp / max) * 100)));
   },
   // HP-bar color ramp: green (75+) → yellow (35-75) → red (under 35).
+  // Tokens, not literals: these feed inline style="background:..." so a
+  // var() resolves normally, and the HP bar now follows the theme instead of
+  // staying the dark theme's green on a light one. The 0-HP grey has no token.
   _hpColor(pct){
     if (pct <= 0) return '#5a3a3a';
-    if (pct < 35) return '#c25450';
-    if (pct < 75) return '#d4a574';
-    return '#6b9e6b';
+    if (pct < 35) return 'var(--danger)';
+    if (pct < 75) return 'var(--accent)';
+    return 'var(--success)';
   },
 
   _renderCard(c, i, isParty){
@@ -1118,9 +1121,9 @@ registerPanel('combat',{
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:90vw">
       <h3>Add Monster to Combat</h3>
       <input type="search" id="cmb-pick-search" placeholder="Search 5e monsters…" autocomplete="off"
-        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
+        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:var(--fs-md);margin-bottom:10px">
       <div id="cmb-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
-      <div id="cmb-pick-count" style="font-size:11px;color:var(--text-muted);padding:6px 2px 0"></div>
+      <div id="cmb-pick-count" style="font-size:var(--fs-sm);color:var(--text-muted);padding:6px 2px 0"></div>
       <div class="modal-actions"><button class="btn" id="cmb-pick-close">Close</button></div>
     </div>`;
     document.body.appendChild(backdrop);
@@ -1144,7 +1147,7 @@ registerPanel('combat',{
           ${d._source ? `<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>` : ''}
         </div>
         <span class="bestiary-pick-meta">${esc(d.meta||'')}</span>
-      </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No matches</div>';
+      </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">No matches</div>';
       // Say when the list is cut off. It always was — with no query this shows
       // 200 of 4454, and "dragon" alone matches 294 — but nothing on screen
       // admitted it, so an absent monster looked like a missing monster.
@@ -2013,7 +2016,7 @@ registerPanel('combat',{
     const renderModal = () => {
       backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:380px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;padding:18px 20px">
         <h3 style="margin:0 0 6px">Health tiers</h3>
-        <p style="font-size:11px;color:var(--text-muted);margin:0 0 12px">Used in <strong>Conceal</strong> mode. Each row is the HP% floor for the label — the highest matching tier is shown to players.</p>
+        <p style="font-size:var(--fs-sm);color:var(--text-muted);margin:0 0 12px">Used in <strong>Conceal</strong> mode. Each row is the HP% floor for the label — the highest matching tier is shown to players.</p>
         <div class="ht-list" style="flex:1;overflow-y:auto">${renderRows()}</div>
         <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:space-between">
           <button class="btn" id="ht-add">+ Add Tier</button>
@@ -2068,12 +2071,12 @@ registerPanel('combat',{
           <input class="qn-input" data-i="${i}" value="${esc(v)}">
           <button class="btn icon-btn danger" data-rm="${i}" title="Remove">×</button>
         </div>`
-      ).join('') || '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No options yet — add one below.</div>';
+      ).join('') || '<div style="color:var(--text-muted);font-size:var(--fs-sm);padding:8px 0">No options yet — add one below.</div>';
     };
     const renderModal = () => {
       backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="min-width:320px">
         <h3>Quick-pick Name Options</h3>
-        <p style="color:var(--text-muted);font-size:11px;margin:0 0 10px">Used by the dropdown next to combatant names. Edit or remove existing options, or add new ones below.</p>
+        <p style="color:var(--text-muted);font-size:var(--fs-sm);margin:0 0 10px">Used by the dropdown next to combatant names. Edit or remove existing options, or add new ones below.</p>
         <div class="qn-list">${renderList()}</div>
         <div class="qn-add-row">
           <input class="qn-add-input" placeholder="New option (e.g. axe, bow, mage)" autocomplete="off">

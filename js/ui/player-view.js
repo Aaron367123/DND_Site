@@ -87,9 +87,9 @@ function _applySharedPanelsToPlayerView(){
     // DM hasn't shared anything.
     if (!empty){
       canvas.insertAdjacentHTML('beforeend',
-        '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#666;font-size:14px;text-align:center;pointer-events:none;padding:20px">'
+        '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:14px;text-align:center;pointer-events:none;padding:20px">'
         + '<div>Waiting for the DM to share something…<br><br>'
-        + '<span style="font-size:11px">The DM clicks the 👁 in any panel\'s title bar to share.</span></div>'
+        + '<span style="font-size:var(--fs-sm)">The DM clicks the 👁 in any panel\'s title bar to share.</span></div>'
         + '</div>');
     }
   } else if (shared.size && desired.size === 0){
@@ -100,7 +100,7 @@ function _applySharedPanelsToPlayerView(){
     canvas.insertAdjacentHTML('beforeend',
       '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:14px;text-align:center;pointer-events:none;padding:20px">'
       + '<div>No panel selected.<br><br>'
-      + '<span style="font-size:13px;color:var(--accent)">' + arrow + ' Tap an icon in the dock to view a shared panel.</span></div>'
+      + '<span style="font-size:var(--fs-lg);color:var(--accent)">' + arrow + ' Tap an icon in the dock to view a shared panel.</span></div>'
       + '</div>');
   } else if (empty){
     empty.remove();

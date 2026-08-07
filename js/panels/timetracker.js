@@ -189,7 +189,7 @@ registerPanel('time', {
           <div class="time-date" data-edit="date" title="Click to edit">${esc(monthName)} ${t.day}</div>
           ${realMonth ? `<div class="time-date-real" data-edit="date" title="Click to edit">(${esc(realMonth)})</div>` : ''}
           <div class="time-year" data-edit="year" title="Click to edit">${t.year||0} DR</div>
-          <div class="time-moon" title="${esc(moon.name)} (28-day cycle)">${moon.ic} <span style="font-size:9px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase">${esc(moon.name)}</span></div>
+          <div class="time-moon" title="${esc(moon.name)} (28-day cycle)">${moon.ic} <span style="font-size:var(--fs-2xs);color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase">${esc(moon.name)}</span></div>
         </div>
       </div>
       <div class="time-edit-row" id="time-edit-row" style="display:none">

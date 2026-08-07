@@ -113,7 +113,7 @@ function renderSpellFull(d) {
     const tags = [];
     if(r.concentration) tags.push('<span style="color:var(--warning)">⚡ Concentration</span>');
     if(r.ritual)        tags.push('<span style="color:var(--accent)">📿 Ritual</span>');
-    html += `<div class="detail-section" style="font-size:11px">${tags.join(' · ')}</div>`;
+    html += `<div class="detail-section" style="font-size:var(--fs-sm)">${tags.join(' · ')}</div>`;
   }
   html += renderEntriesText(desc);
   if(higherLevel)html+=`<div class="detail-section"><strong class="detail-label">At Higher Levels.</strong> ${_renderInline(esc(higherLevel))}</div>`;
@@ -733,7 +733,7 @@ function renderTableFull(d) {
   }
   let html = '';
   if (caption) html += `<div class="detail-section" style="font-style:italic;color:var(--text-muted)">${esc(caption)}</div>`;
-  html += '<div class="detail-section" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<div class="detail-section" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">';
   if (cols.length) {
     html += '<thead><tr>' + cols.map(c => `<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);color:var(--text-muted);font-weight:500">${esc(_stripCell(c))}</th>`).join('') + '</tr></thead>';
   }
@@ -1137,7 +1137,7 @@ function renderSearchResults(){
 
   if(!results.length && !q){
     const hint = !_5eLoaded
-      ? '<div style="font-size:11px;color:var(--text-dim);margin-top:4px">Loading 5etools data…</div>'
+      ? '<div style="font-size:var(--fs-sm);color:var(--text-dim);margin-top:4px">Loading 5etools data…</div>'
       : '';
     const recent = _searchGetRecent();
     const recentHtml = recent.length
@@ -1160,7 +1160,7 @@ function renderSearchResults(){
     return;
   }
   if(!results.length){
-    const hint = !_5eLoaded ? ' <span style="font-size:11px;color:var(--text-dim)">(data still loading…)</span>' : '';
+    const hint = !_5eLoaded ? ' <span style="font-size:var(--fs-sm);color:var(--text-dim)">(data still loading…)</span>' : '';
     container.innerHTML=`<div class="search-empty">No results for "${esc(q)}"${hint}</div>`;
     return;
   }
@@ -1171,7 +1171,7 @@ function renderSearchResults(){
         <span>${_highlightMatch(r.name, q)}</span>
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
           ${r._fuzzy?'<span class="res-fuzzy" title="Approximate match — your query didn\'t exactly match this entry">~</span>':''}
-          ${r._source?`<span style="font-size:9px;color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(r._source))}</span>`:''}
+          ${r._source?`<span style="font-size:var(--fs-2xs);color:var(--text-dim);padding:1px 4px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(r._source))}</span>`:''}
           <span class="res-tag ${r.cat}">${r.cat}</span>
         </div>
       </div>
@@ -1267,7 +1267,7 @@ function buildDetailBody(d) {
 // idSuffix lets multiple instances coexist (search popup vs popped-out windows).
 function buildDetailCard(d, idSuffix) {
   const isMonster=d.cat==='monster', isCond=d.cat==='condition', isParty=d.cat==='party';
-  const srcBadge = d._source ? `<span style="font-size:9px;color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(d._source))}</span>` : '';
+  const srcBadge = d._source ? `<span style="font-size:var(--fs-2xs);color:var(--text-dim);padding:1px 5px;background:var(--panel-3);border-radius:3px">${esc(_formatSource(d._source))}</span>` : '';
   let actionsHtml = '';
   if (!isParty) {
     actionsHtml = '<div class="detail-actions">';

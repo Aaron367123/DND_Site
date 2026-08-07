@@ -158,7 +158,7 @@ function _ctxRender(menu){
   html += `<div class="ctx-item" data-ctx-act="smart-arrange">
     <span class="ctx-radio-icon">▦</span>
     <span class="ctx-item-label">Smart arrange (auto-tile)</span>
-    <span class="ctx-shortcut" style="margin-left:auto;font-size:9px;color:var(--text-dim);letter-spacing:.04em">Ctrl+Shift+A</span>
+    <span class="ctx-shortcut" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--text-dim);letter-spacing:.04em">Ctrl+Shift+A</span>
   </div>`;
   menu.innerHTML = html;
 }

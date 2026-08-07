@@ -86,8 +86,8 @@ registerPanel('npcgen',{
     const sel=(label,key,opts)=>{
       const cur=this._filters[key]||'';
       return '<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:100px">'
-        +'<label style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">'+label+'</label>'
-        +'<select data-fkey="'+key+'" style="font-size:11px;padding:3px 5px">'
+        +'<label style="font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">'+label+'</label>'
+        +'<select data-fkey="'+key+'" style="font-size:var(--fs-sm);padding:3px 5px">'
         +'<option value="">Any</option>'
         +opts.map(o=>'<option value="'+o+'" '+(cur===o?'selected':'')+'>'+o+'</option>').join('')
         +'</select></div>';
@@ -128,10 +128,10 @@ registerPanel('npcgen',{
       // Name & identity (editable)
       html+='<div style="margin-bottom:12px">'
         +'<div style="display:flex;align-items:center;gap:4px">'
-          +'<input class="npcgen-name" data-nf="name" value="'+esc(n.name)+'" style="flex:1;font-size:18px;font-weight:700;color:var(--accent);background:transparent;border:1px solid transparent;padding:2px 4px;border-radius:3px;margin-bottom:2px">'
+          +'<input class="npcgen-name" data-nf="name" value="'+esc(n.name)+'" style="flex:1;font-size:var(--fs-2xl);font-weight:700;color:var(--accent);background:transparent;border:1px solid transparent;padding:2px 4px;border-radius:3px;margin-bottom:2px">'
           +lock('name')
         +'</div>'
-        +'<div class="npcgen-identity" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">'
+        +'<div class="npcgen-identity" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:var(--fs-md);color:var(--text-muted)">'
           +'<input data-nf="gender" value="'+esc(n.gender)+'" class="npcgen-inline" placeholder="Gender">'+lock('gender')
           +'<input data-nf="race" value="'+esc(n.race)+'" class="npcgen-inline" placeholder="Race">'+lock('race')
           +'<span>·</span>'
@@ -156,14 +156,14 @@ registerPanel('npcgen',{
       const field=(label,key,val,col,isSecret)=>{
         const hidden = isSecret && !this._secretRevealed;
         const reveal = isSecret
-          ? '<button class="btn small npcgen-reveal" data-act="toggle-secret" style="margin-left:auto;font-size:10px">'
+          ? '<button class="btn small npcgen-reveal" data-act="toggle-secret" style="margin-left:auto;font-size:var(--fs-xs)">'
               +(this._secretRevealed?'🙈 Hide':'👁 Reveal')
             +'</button>'
           : '';
         const on = !!this._locks[key];
         const lockBtn = '<button class="npcgen-lock '+(on?'on':'')+'" data-lock-key="'+key+'" title="'+(on?'Locked — preserved on re-roll':'Lock this field')+'" style="margin-left:auto;'+(isSecret?'margin-right:6px':'')+'">'+(on?LOCK_SVG_LOCKED:LOCK_SVG_UNLOCKED)+'</button>';
         return '<div class="npcgen-field" style="margin-bottom:8px">'
-          +'<div style="display:flex;align-items:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:'+(col||'var(--text-muted)')+';margin-bottom:3px;gap:4px">'
+          +'<div style="display:flex;align-items:center;font-size:var(--fs-2xs);text-transform:uppercase;letter-spacing:.5px;color:'+(col||'var(--text-muted)')+';margin-bottom:3px;gap:4px">'
             +'<span>'+label+'</span>'+lockBtn+reveal
           +'</div>'
           +'<textarea data-nf="'+key+'" rows="2" class="npcgen-field-input'+(hidden?' redacted':'')+'" style="border-left:2px solid '+(col||'var(--border)')+'">'+esc(val||'')+'</textarea>'

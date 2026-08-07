@@ -562,7 +562,7 @@ function showHelpOverlay(){
     </div>`).join('');
   back.innerHTML = `<div class="modal help-modal" role="dialog" aria-modal="true">
     <h3 style="margin:0 0 4px">Keyboard shortcuts</h3>
-    <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted)">Press <kbd>?</kbd> any time to toggle this overlay.</p>
+    <p style="margin:0 0 14px;font-size:var(--fs-sm);color:var(--text-muted)">Press <kbd>?</kbd> any time to toggle this overlay.</p>
     <div class="help-grid">${groupHtml}</div>
     <div class="modal-actions" style="margin-top:14px"><button class="btn primary" id="help-close">Close (Esc)</button></div>
   </div>`;
@@ -618,7 +618,7 @@ function showModal(title, fields, confirmLabel) {
 
     var bodyHtml = fields.length
       ? '<div class="modal-fields">' + fieldHtml + '</div>'
-      : '<p style="color:var(--text-muted);font-size:12px;margin:0 0 20px;line-height:1.5">'
+      : '<p style="color:var(--text-muted);font-size:var(--fs-md);margin:0 0 20px;line-height:1.5">'
         + 'Click confirm to proceed, or Cancel to go back.</p>';
 
     backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true">'
@@ -682,7 +682,7 @@ function showConfirm(message, opts){
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true">'
       + '<h3>' + esc(title) + '</h3>'
-      + '<p style="color:var(--text-muted);font-size:13px;margin:0 0 20px;line-height:1.5">' + esc(message) + '</p>'
+      + '<p style="color:var(--text-muted);font-size:var(--fs-lg);margin:0 0 20px;line-height:1.5">' + esc(message) + '</p>'
       + '<div class="modal-actions">'
       + '<button class="btn" id="conf-cancel">Cancel</button>'
       + '<button class="btn ' + (danger ? 'danger' : 'primary') + '" id="conf-ok">' + esc(confirmLabel) + '</button>'

@@ -175,11 +175,11 @@ function initThemeControls(){
     autoRow.id = 'theme-auto-row';
     autoRow.style.cssText = 'display:flex;gap:6px;margin-top:6px;flex-wrap:wrap';
     autoRow.innerHTML = `
-      <label style="flex:1;min-width:120px;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:3px">
+      <label style="flex:1;min-width:120px;font-size:var(--fs-sm);color:var(--text-muted);display:flex;flex-direction:column;gap:3px">
         🌙 When OS is dark
         <select id="theme-auto-dark">${presetOptions}</select>
       </label>
-      <label style="flex:1;min-width:120px;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:3px">
+      <label style="flex:1;min-width:120px;font-size:var(--fs-sm);color:var(--text-muted);display:flex;flex-direction:column;gap:3px">
         ☀ When OS is light
         <select id="theme-auto-light">${presetOptions}</select>
       </label>`;

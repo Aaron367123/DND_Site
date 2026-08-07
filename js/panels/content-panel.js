@@ -134,7 +134,7 @@ const CONTENT_PANEL_SHARED = {
   // weapon/armor stats too). Everything else uses the generic entries path.
   _renderAdvPop(tag, name, source){
     const d = this._lookup(tag, name, source);
-    if (!d) return '<div class="adv-pop-empty"><strong>' + esc(name) + '</strong><br><span style="color:var(--text-dim);font-size:11px">Reference unavailable (no local data)</span></div>';
+    if (!d) return '<div class="adv-pop-empty"><strong>' + esc(name) + '</strong><br><span style="color:var(--text-dim);font-size:var(--fs-sm)">Reference unavailable (no local data)</span></div>';
     // Pre-render the name header so every card has the title up top —
     // the search-panel renderers (creature/spell/item) don't include one
     // because the search UI shows the name separately above the card.
@@ -495,7 +495,7 @@ const CONTENT_PANEL_SHARED = {
         <div class="adv-body">
           <div class="adv-toc">
             <div class="adv-toc-head">Chapters · ${chapters.length}</div>
-            <div class="adv-toc-list">${tocHtml || '<div class="empty-state" style="padding:20px;font-size:11px">No chapters in this file.</div>'}</div>
+            <div class="adv-toc-list">${tocHtml || '<div class="empty-state" style="padding:20px;font-size:var(--fs-sm)">No chapters in this file.</div>'}</div>
           </div>
           <div class="adv-content" id="adv-content">${contentHtml}</div>
         </div>
@@ -548,18 +548,18 @@ const CONTENT_PANEL_SHARED = {
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:92vw;max-height:90vh;display:flex;flex-direction:column">
       <h3 style="margin:0 0 4px">Print "${esc(adv.name|| this._kindLabel)}"</h3>
-      <p style="margin:0 0 12px;font-size:11px;color:var(--text-muted)">Pick chapters → opens a print-friendly view. Use your browser's File → Print to save as PDF.</p>
+      <p style="margin:0 0 12px;font-size:var(--fs-sm);color:var(--text-muted)">Pick chapters → opens a print-friendly view. Use your browser's File → Print to save as PDF.</p>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <button class="btn small" id="adv-print-all">Select all</button>
         <button class="btn small" id="adv-print-none">Select none</button>
         <span style="flex:1"></span>
-        <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
+        <label style="font-size:var(--fs-sm);color:var(--text-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
           <input type="checkbox" id="adv-print-images" checked> Include images
         </label>
       </div>
       <div style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:5px;padding:6px;background:var(--panel-2)">
         ${chapters.map((c, i) => `
-          <label class="adv-print-row" style="display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:12px;cursor:pointer;border-radius:3px">
+          <label class="adv-print-row" style="display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:var(--fs-md);cursor:pointer;border-radius:3px">
             <input type="checkbox" class="adv-print-chk" data-ci="${i}" checked>
             <span style="color:var(--text-dim);min-width:24px">${i+1}.</span>
             <span style="flex:1;color:var(--text)">${esc(c.name || 'Untitled')}</span>
@@ -567,7 +567,7 @@ const CONTENT_PANEL_SHARED = {
         `).join('')}
       </div>
       <div class="modal-actions" style="margin-top:10px">
-        <span id="adv-print-count" style="font-size:11px;color:var(--text-muted);align-self:center">${chapters.length} chapters selected</span>
+        <span id="adv-print-count" style="font-size:var(--fs-sm);color:var(--text-muted);align-self:center">${chapters.length} chapters selected</span>
         <span style="flex:1"></span>
         <button class="btn" id="adv-print-close">Cancel</button>
         <button class="btn primary" id="adv-print-go">Open print view</button>
@@ -631,33 +631,33 @@ const CONTENT_PANEL_SHARED = {
     const css = `
       *,*::before,*::after{box-sizing:border-box}
       html,body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-      body{background:#1a1a1a;color:#e8e8e8;font-size:13px;line-height:1.55;padding:30px 50px;max-width:900px;margin:0 auto}
-      h1.title{font-size:34px;margin:0 0 4px;color:#d4a574}
-      h1.title + .meta{color:#999;font-size:13px;margin-bottom:30px}
-      h2.toc-title{margin:30px 0 8px;font-size:18px;border-bottom:1px solid #3a3a3a;padding-bottom:5px}
+      body{background:#1a1a1a;color:var(--text);font-size:var(--fs-lg);line-height:1.55;padding:30px 50px;max-width:900px;margin:0 auto}
+      h1.title{font-size:34px;margin:0 0 4px;color:var(--accent)}
+      h1.title + .meta{color:var(--text-muted);font-size:var(--fs-lg);margin-bottom:30px}
+      h2.toc-title{margin:30px 0 8px;font-size:var(--fs-2xl);border-bottom:1px solid #3a3a3a;padding-bottom:5px}
       ol.toc{list-style:none;padding:0;margin:0 0 30px}
-      ol.toc li{padding:3px 0;font-size:13px}
-      ol.toc a{color:#d4a574;text-decoration:none}
+      ol.toc li{padding:3px 0;font-size:var(--fs-lg)}
+      ol.toc a{color:var(--accent);text-decoration:none}
       ol.toc a:hover{text-decoration:underline}
-      ol.toc .num{display:inline-block;width:30px;color:#999;font-variant-numeric:tabular-nums}
+      ol.toc .num{display:inline-block;width:30px;color:var(--text-muted);font-variant-numeric:tabular-nums}
       .chap{page-break-before:always;break-before:page;padding-top:20px}
       .chap-title{font-size:26px;border-bottom:2px solid #d4a574;padding-bottom:6px;margin:0 0 14px}
       .chap p{margin:0 0 10px}
-      .chap h3,.chap h4,.chap h5{color:#d4a574;margin:18px 0 6px}
+      .chap h3,.chap h4,.chap h5{color:var(--accent);margin:18px 0 6px}
       .chap ul,.chap ol{margin:0 0 10px;padding-left:24px}
       .chap li{margin:2px 0}
-      .chap table{border-collapse:collapse;margin:10px 0;width:100%;font-size:12px}
-      .chap th,.chap td{border:1px solid #3a3a3a;padding:5px 9px;text-align:left}
-      .chap th{background:#2a2a2a;color:#d4a574}
+      .chap table{border-collapse:collapse;margin:10px 0;width:100%;font-size:var(--fs-md)}
+      .chap th,.chap td{border:1px solid var(--border);padding:5px 9px;text-align:left}
+      .chap th{background:var(--panel-2);color:var(--accent)}
       .chap img{max-width:100%;height:auto;display:block;margin:10px 0;border-radius:4px}
       .chap blockquote,.chap .inset{background:rgba(212,165,116,0.08);border-left:3px solid #d4a574;margin:10px 0;padding:8px 14px}
-      .chap .read-aloud,.chap .inset-readaloud{background:#2a2a2a;border:1px solid #3a3a3a;border-radius:4px;padding:10px 14px;font-style:italic;margin:10px 0}
-      .adv-tag{color:#d4a574}
+      .chap .read-aloud,.chap .inset-readaloud{background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:10px 14px;font-style:italic;margin:10px 0}
+      .adv-tag{color:var(--accent)}
       .toolbar{position:sticky;top:0;background:#1a1a1a;border-bottom:1px solid #3a3a3a;padding:10px 0;margin:-30px 0 20px;display:flex;gap:8px;align-items:center;z-index:10}
-      .toolbar button{background:#333;border:1px solid #3a3a3a;color:#e8e8e8;padding:6px 14px;font-size:13px;border-radius:4px;cursor:pointer;font-family:inherit}
+      .toolbar button{background:var(--panel-3);border:1px solid var(--border);color:var(--text);padding:6px 14px;font-size:var(--fs-lg);border-radius:4px;cursor:pointer;font-family:inherit}
       .toolbar button:hover{background:#444}
-      .toolbar .primary{background:#d4a574;color:#1a1a1a;border-color:#d4a574;font-weight:600}
-      .toolbar .meta{color:#999;font-size:12px;flex:1;text-align:right}
+      .toolbar .primary{background:#d4a574;color:#1a1a1a;border-color:var(--accent);font-weight:600}
+      .toolbar .meta{color:var(--text-muted);font-size:var(--fs-md);flex:1;text-align:right}
       @media print{
         body{background:#fff;color:#000;padding:0;font-size:11pt;max-width:none}
         .toolbar{display:none}
@@ -665,7 +665,7 @@ const CONTENT_PANEL_SHARED = {
         h1.title + .meta{color:#444}
         h2.toc-title{border-color:#000}
         ol.toc a{color:#000;text-decoration:none}
-        ol.toc .num{color:#666}
+        ol.toc .num{color:var(--text-dim)}
         .chap-title{color:#5a3a14;border-color:#5a3a14}
         .chap h3,.chap h4,.chap h5{color:#5a3a14}
         .chap th{background:#f0e8d8;color:#5a3a14}

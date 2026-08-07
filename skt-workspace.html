@@ -373,55 +373,55 @@
 <!-- 1. Data (no deps) -->
 <script defer src="js/core/data.js?v=6dc8428695"></script>
 <!-- 1b. Theme (no deps; applies CSS vars before any panels render) -->
-<script defer src="js/core/theme.js?v=533ffb6fb1"></script>
+<script defer src="js/core/theme.js?v=369235bbcc"></script>
 <!-- 1c. Asset config (where images are served from; read by utils' assetUrl) -->
 <script defer src="js/core/asset-config.js?v=9b018a4988"></script>
 <!-- 1d. Which bestiary art lacks a token crop (generated; read by utils'
      bestiaryPortraitPath). Must load before anything renders a portrait. -->
 <script defer src="js/generated/token-index.js?v=e043a461be"></script>
 <!-- 2. Pure utilities (no deps) -->
-<script defer src="js/core/utils.js?v=b3488668a0"></script>
+<script defer src="js/core/utils.js?v=cfdfd8b7c1"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/core/state.js?v=dbbd331c36"></script>
 <!-- 4. Window manager (depends on state) -->
 <script defer src="js/core/window-manager.js?v=54923214c2"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=7e1742854c"></script>
+<script defer src="js/panels/combat.js?v=690034ef3c"></script>
 <script defer src="js/panels/attacks.js?v=8432f5f81d"></script>
-<script defer src="js/panels/party.js?v=d868d7936f"></script>
-<script defer src="js/panels/shop.js?v=3edd9aa468"></script>
+<script defer src="js/panels/party.js?v=e44bac9274"></script>
+<script defer src="js/panels/shop.js?v=cdbe8e12a2"></script>
 <script defer src="js/sync/notes-sync.js?v=8c42540638"></script>
 <script defer src="js/sync/dropbox-config.js?v=ccf8533d50"></script>
 <script defer src="js/sync/dropbox-sync.js?v=ab773edfd6"></script>
-<script defer src="js/panels/notes.js?v=af095b4baa"></script>
-<script defer src="js/panels/battlemap.js?v=41cbbf1ad1"></script>
+<script defer src="js/panels/notes.js?v=ad742c5036"></script>
+<script defer src="js/panels/battlemap.js?v=ccb768f5e8"></script>
 <script defer src="js/panels/npc-library.js?v=6986b9c7c2"></script>
-<script defer src="js/panels/bestiary.js?v=2fe0a694ab"></script>
+<script defer src="js/panels/bestiary.js?v=f24a0de1e9"></script>
 <!-- Behaviour shared by the Adventures and Books panels. Must load BEFORE
      both, since each calls applyContentPanelShared() at the end of its file. -->
-<script defer src="js/panels/content-panel.js?v=4d5ee5f31a"></script>
+<script defer src="js/panels/content-panel.js?v=5e25eeb8a7"></script>
 <script defer src="js/panels/adventures.js?v=adbf195007"></script>
 <script defer src="js/panels/books.js?v=beba2c9cfd"></script>
-<script defer src="js/panels/npc-generator.js?v=b93335dc60"></script>
-<script defer src="js/panels/loot.js?v=d789dc97dc"></script>
-<script defer src="js/panels/encounter.js?v=8ae3629311"></script>
-<script defer src="js/panels/soundboard.js?v=c345ae84db"></script>
+<script defer src="js/panels/npc-generator.js?v=924ebfdef8"></script>
+<script defer src="js/panels/loot.js?v=f26a13f53d"></script>
+<script defer src="js/panels/encounter.js?v=ff2a8bbb72"></script>
+<script defer src="js/panels/soundboard.js?v=6ee51d8589"></script>
 <script defer src="js/panels/weather.js?v=ab1bd498ab"></script>
-<script defer src="js/panels/timetracker.js?v=94543d2fa7"></script>
+<script defer src="js/panels/timetracker.js?v=9749770a5a"></script>
 <!-- 6. Features (depend on state + utils + panels) -->
 <script defer src="js/content/data-loader.js?v=7bd91b7bcf"></script>
-<script defer src="js/content/search.js?v=6eaa5d18fe"></script>
+<script defer src="js/content/search.js?v=833e7d7f77"></script>
 <!-- Whole-state snapshot/restore. Before settings.js, which wires its UI. -->
 <script defer src="js/features/backup.js?v=748e46a5d8"></script>
 <script defer src="js/ui/settings.js?v=19cb2d3859"></script>
-<script defer src="js/ui/context-menu.js?v=32564cc96d"></script>
+<script defer src="js/ui/context-menu.js?v=5402b4bfbf"></script>
 <script defer src="js/ui/zoom-pan.js?v=31a2882b02"></script>
 <script defer src="js/ui/workspaces.js?v=bdaf579267"></script>
 <script defer src="js/features/pdf-import.js?v=d8c25ed1b9"></script>
-<script defer src="js/ui/player-view.js?v=f6632400cc"></script>
-<script defer src="js/sync/realtime.js?v=86e367bc57"></script>
+<script defer src="js/ui/player-view.js?v=5bfb2e6a05"></script>
+<script defer src="js/sync/realtime.js?v=e9ea6d1af8"></script>
 <script defer src="js/ui/tutorial.js?v=e47e670b86"></script>
-<script defer src="js/ui/onboarding.js?v=7e4c89c909"></script>
+<script defer src="js/ui/onboarding.js?v=42199a671a"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->
 <script defer src="js/app.js?v=957b026bfd"></script>
 </body>

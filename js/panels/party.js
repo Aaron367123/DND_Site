@@ -128,10 +128,10 @@ registerPanel('party',{
   // etc.) so the player sees they're over-cap. Surplus uses a cool-blue fill
   // so it's visually distinct from the green/yellow/red ladder of normal HP.
   _hpBarStyle(c){
-    if (!(c.hpMax > 0)) return { pct:0, color:'#c25450', surplus:false };
+    if (!(c.hpMax > 0)) return { pct:0, color:'var(--danger)', surplus:false };
     if (c.hp > c.hpMax) return { pct:100, color:'#4a8ec9', surplus:true };
     const pct = Math.max(0, Math.min(100, (c.hp / c.hpMax) * 100));
-    const color = pct > 50 ? '#6b9e6b' : pct > 25 ? '#c9a050' : '#c25450';
+    const color = pct > 50 ? 'var(--success)' : pct > 25 ? 'var(--warning)' : 'var(--danger)';
     return { pct, color, surplus:false };
   },
 
@@ -646,7 +646,7 @@ registerPanel('party',{
     };
     return `<div class="sheet-block">
       <h5>Damage Resistances <span class="resist-legend">click to cycle: — → RES → IMM → VUL</span>
-        <button class="btn icon-btn" data-act="resist-toggle" data-cid="${esc(c.id)}" title="Hide editor" style="margin-left:auto;padding:1px 6px;font-size:11px">×</button>
+        <button class="btn icon-btn" data-act="resist-toggle" data-cid="${esc(c.id)}" title="Hide editor" style="margin-left:auto;padding:1px 6px;font-size:var(--fs-sm)">×</button>
       </h5>
       <div class="resist-grid">${TYPES.map(chip).join('')}</div>
     </div>`;
@@ -794,7 +794,7 @@ registerPanel('party',{
     if (!ws || !ws.name) return '';
     const max = ws.hpMax || ws.hp || 1;
     const pct = Math.max(0, Math.min(100, Math.round((ws.hp / max) * 100)));
-    const color = pct > 50 ? '#6b9e6b' : pct > 25 ? '#c9a050' : '#c25450';
+    const color = pct > 50 ? 'var(--success)' : pct > 25 ? 'var(--warning)' : 'var(--danger)';
     // Hydrate display-only fields from _5eData on demand. The snapshot only
     // stores name/slug/hp/ac/resist/etc. — keeps every save() tiny. If the
     // dataset isn't loaded yet (rare; race on a fresh refresh), we render
@@ -953,18 +953,18 @@ registerPanel('party',{
           </div>
           <span class="bestiary-pick-meta">CR ${esc(crStr)} · HP ${esc(String(hp))} · AC ${esc(String(ac))}</span>
         </div>`;
-      }).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">No beasts match.</div>';
+      }).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">No beasts match.</div>';
     };
     const cur = c.wildshape || {};
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:540px;max-width:92vw">
       <h3>🐺 Wild Shape — ${esc(c.name)}</h3>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-        <span style="font-size:11px;color:var(--text-muted)">Druid lv ${druidLvl} · CR cap ≤ ${crCap}</span>
+        <span style="font-size:var(--fs-sm);color:var(--text-muted)">Druid lv ${druidLvl} · CR cap ≤ ${crCap}</span>
         <span style="flex:1"></span>
         ${cur.name ? `<button class="btn small" id="ws-revert" title="Drop the current form">↩ Revert (${esc(cur.name)})</button>` : ''}
       </div>
       <input type="search" id="ws-pick-search" placeholder="Search beasts by name or source (Wolf · Volo · MM …)" autocomplete="off"
-        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
+        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:var(--fs-md);margin-bottom:10px">
       <div id="ws-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
       <div class="modal-actions"><button class="btn" id="ws-pick-close">Close</button></div>
     </div>`;
@@ -1914,11 +1914,11 @@ registerPanel('party',{
     backdrop.className = 'modal-backdrop';
     const renderList = () => state.settings.inspirationReasons.map((r,i) =>
       `<div class="qn-row"><input class="qn-input" data-i="${i}" value="${esc(r)}"><button class="btn icon-btn danger" data-rm="${i}" title="Remove">×</button></div>`
-    ).join('') || '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No reasons yet — add one below.</div>';
+    ).join('') || '<div style="color:var(--text-muted);font-size:var(--fs-sm);padding:8px 0">No reasons yet — add one below.</div>';
     const renderModal = () => {
       backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="min-width:340px">
         <h3>Inspiration Award Reasons</h3>
-        <p style="color:var(--text-muted);font-size:11px;margin:0 0 10px">Right-click the Heroic Inspiration toggle on a party card to pick from this list. Award reasons are reminders for you — they show up as a toast when used.</p>
+        <p style="color:var(--text-muted);font-size:var(--fs-sm);margin:0 0 10px">Right-click the Heroic Inspiration toggle on a party card to pick from this list. Award reasons are reminders for you — they show up as a toast when used.</p>
         <div class="qn-list">${renderList()}</div>
         <div class="qn-add-row">
           <input class="qn-add-input" placeholder="New reason (e.g. Saved an NPC)" autocomplete="off">
@@ -2160,7 +2160,7 @@ registerPanel('party',{
                  <input class="mp-input" type="number" data-ri="${ri}" data-k="max" value="${r.max}" style="width:60px">`}
             <button class="btn icon-btn danger" data-rm="${ri}" title="Remove resource">×</button>
           </div>`).join('')
-      : '<div style="color:var(--text-muted);font-size:11px;padding:8px 0">No resources yet — add one below.</div>');
+      : '<div style="color:var(--text-muted);font-size:var(--fs-sm);padding:8px 0">No resources yet — add one below.</div>');
     const renderModal = () => {
       backdrop.innerHTML = `<div class="modal mp-edit-modal" role="dialog" aria-modal="true">
         <div class="mp-head"><h3 style="margin:0">Resources — ${esc(c.name)}</h3><button class="btn icon-btn" data-close>×</button></div>
@@ -3114,7 +3114,7 @@ registerPanel('party',{
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:94vw;max-height:82vh;display:flex;flex-direction:column;padding:18px 20px">
       <h3 style="margin:0 0 4px">Party Skills</h3>
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
+      <div style="font-size:var(--fs-sm);color:var(--text-muted);margin-bottom:10px">
         Inferred from each character's skill modifier vs ability score and proficiency bonus.
         <span class="ps-badge expert" style="margin:0 2px">◉ Expert</span>
         <span class="ps-badge prof"   style="margin:0 2px">● Prof</span>
@@ -3161,7 +3161,7 @@ registerPanel('party',{
     const ab = data.abilities || {};
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:92vw">
       <h3>Import character sheet</h3>
-      <p style="color:var(--text-muted);font-size:11px;margin:0 0 12px">Review the values pulled from the PDF and pick which party slot to apply them to. Anything that didn't extract cleanly can be edited before saving.</p>
+      <p style="color:var(--text-muted);font-size:var(--fs-sm);margin:0 0 12px">Review the values pulled from the PDF and pick which party slot to apply them to. Anything that didn't extract cleanly can be edited before saving.</p>
       <div class="modal-fields">
         <div class="modal-field"><label>Apply to</label><select id="pdf-slot">${slotOptions}</select></div>
         <div class="modal-field"><label>Name</label><input id="pdf-name" type="text" value="${esc(data.name||'')}"></div>

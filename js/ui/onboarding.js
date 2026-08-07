@@ -213,10 +213,10 @@ function openChangelog(isAuto){
   }).join('');
   back.innerHTML = `<div class="modal changelog-modal" role="dialog" aria-modal="true" style="width:640px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column">
     <h3 style="margin:0 0 4px">📜 What's new</h3>
-    <p style="margin:0 0 12px;font-size:11px;color:var(--text-muted)">Recent updates to the workspace. ${isAuto ? 'This popped up because the version bumped since you last visited.' : ''}</p>
+    <p style="margin:0 0 12px;font-size:var(--fs-sm);color:var(--text-muted)">Recent updates to the workspace. ${isAuto ? 'This popped up because the version bumped since you last visited.' : ''}</p>
     <div style="flex:1;overflow-y:auto;padding-right:4px">${sectionsHtml}</div>
     <div class="modal-actions" style="margin-top:12px">
-      <span style="font-size:11px;color:var(--text-dim);align-self:center">v ${esc(latest)}</span>
+      <span style="font-size:var(--fs-sm);color:var(--text-dim);align-self:center">v ${esc(latest)}</span>
       <span style="flex:1"></span>
       <button class="btn primary" id="onb-changelog-close">Got it</button>
     </div>
@@ -269,29 +269,29 @@ function openAbout(){
   let windowCount = 0;
   try { windowCount = document.querySelectorAll('.window').length; } catch(e){}
   back.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column">
-    <h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px"><span style="font-size:22px">⚔</span> SKT Campaign Workspace</h3>
-    <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted)">A single-page workspace for running 5e games. Vanilla JS, no framework.</p>
+    <h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px"><span style="font-size:var(--fs-3xl)">⚔</span> SKT Campaign Workspace</h3>
+    <p style="margin:0 0 14px;font-size:var(--fs-sm);color:var(--text-muted)">A single-page workspace for running 5e games. Vanilla JS, no framework.</p>
     <div style="flex:1;overflow-y:auto;padding-right:4px">
-      <h4 style="margin:0 0 6px;font-size:12px;color:var(--accent)">Version</h4>
-      <p style="margin:0 0 14px;font-size:12px">v ${esc(version || '—')} · <a href="javascript:void(0)" id="about-open-changelog" style="color:var(--accent)">View full changelog →</a></p>
+      <h4 style="margin:0 0 6px;font-size:var(--fs-md);color:var(--accent)">Version</h4>
+      <p style="margin:0 0 14px;font-size:var(--fs-md)">v ${esc(version || '—')} · <a href="javascript:void(0)" id="about-open-changelog" style="color:var(--accent)">View full changelog →</a></p>
 
-      <h4 style="margin:0 0 6px;font-size:12px;color:var(--accent)">Data storage</h4>
-      <p style="margin:0 0 4px;font-size:12px">${esc(_onbFormatBytes(bytes))} used of ~${quotaMB} MB localStorage quota · ${windowCount} open window${windowCount===1?'':'s'}</p>
+      <h4 style="margin:0 0 6px;font-size:var(--fs-md);color:var(--accent)">Data storage</h4>
+      <p style="margin:0 0 4px;font-size:var(--fs-md)">${esc(_onbFormatBytes(bytes))} used of ~${quotaMB} MB localStorage quota · ${windowCount} open window${windowCount===1?'':'s'}</p>
       <div style="background:var(--panel-2);height:6px;border-radius:3px;overflow:hidden;margin-bottom:14px">
         <div style="width:${pct.toFixed(1)}%;height:100%;background:var(--accent);transition:width .2s"></div>
       </div>
-      <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted)">Everything auto-saves to this browser. Use Export / Import (above) to back up or move devices. Optional Firebase + Dropbox sync are configured in <code>SETUP.md</code>.</p>
+      <p style="margin:0 0 14px;font-size:var(--fs-sm);color:var(--text-muted)">Everything auto-saves to this browser. Use Export / Import (above) to back up or move devices. Optional Firebase + Dropbox sync are configured in <code>SETUP.md</code>.</p>
 
-      <h4 style="margin:0 0 6px;font-size:12px;color:var(--accent)">Credits</h4>
-      <p style="margin:0 0 6px;font-size:12px">Stat blocks, spells, items, and adventure content are sourced from <a href="https://5e.tools/" target="_blank" rel="noopener" style="color:var(--accent)">5etools</a> (CC-licensed game-mechanics data). Module licenses live alongside the source.</p>
-      <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted)">Built for a long-running Storm King's Thunder campaign — hence the name.</p>
+      <h4 style="margin:0 0 6px;font-size:var(--fs-md);color:var(--accent)">Credits</h4>
+      <p style="margin:0 0 6px;font-size:var(--fs-md)">Stat blocks, spells, items, and adventure content are sourced from <a href="https://5e.tools/" target="_blank" rel="noopener" style="color:var(--accent)">5etools</a> (CC-licensed game-mechanics data). Module licenses live alongside the source.</p>
+      <p style="margin:0 0 14px;font-size:var(--fs-sm);color:var(--text-muted)">Built for a long-running Storm King's Thunder campaign — hence the name.</p>
 
-      <h4 style="margin:0 0 6px;font-size:12px;color:var(--accent)">Quick actions</h4>
+      <h4 style="margin:0 0 6px;font-size:var(--fs-md);color:var(--accent)">Quick actions</h4>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
         <button class="btn small" id="about-open-tutorial">📖 Reopen tutorial</button>
         <button class="btn small" id="about-reset-onboarding">↺ Reset onboarding flag</button>
       </div>
-      <p style="margin:0;font-size:11px;color:var(--text-dim)">"Reset onboarding flag" makes the tutorial auto-pop on next reload (handy when showing a friend).</p>
+      <p style="margin:0;font-size:var(--fs-sm);color:var(--text-dim)">"Reset onboarding flag" makes the tutorial auto-pop on next reload (handy when showing a friend).</p>
     </div>
     <div class="modal-actions" style="margin-top:12px">
       <span style="flex:1"></span>
