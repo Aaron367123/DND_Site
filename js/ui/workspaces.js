@@ -111,11 +111,22 @@ function wsSizeCanvas(){
   const z = ((typeof getZoom === 'function' ? getZoom() : 1) || 1);
   let w = Math.max(1, ws.clientWidth  / z);
   let h = Math.max(1, ws.clientHeight / z);
-  Object.values(layout).forEach(l => {
-    if (!l || !l.open) return;
-    w = Math.max(w, (l.x || 0) + (l.w || 0));
-    h = Math.max(h, (l.y || 0) + (l.h || 0));
-  });
+  // On the phone layout CSS pins every window to 0,0 at 100dvw/dvh with
+  // !important, so the stored x/y/w/h describe nothing that is actually on
+  // screen — and wsClampAll() skips this layout for the same reason, so those
+  // values stay at whatever a desktop last wrote. Growing the canvas to cover
+  // them made it 1074px wide inside a 390px viewport: a composited layer 2.75x
+  // the screen, holding content that cannot even be scrolled to, since
+  // .workspace is overflow:hidden here. Measured 23fps with it, and it made
+  // headless captures of the workspace intermittently come back blank.
+  const phone = (typeof _isMobileLayout === 'function') && _isMobileLayout();
+  if (!phone){
+    Object.values(layout).forEach(l => {
+      if (!l || !l.open) return;
+      w = Math.max(w, (l.x || 0) + (l.w || 0));
+      h = Math.max(h, (l.y || 0) + (l.h || 0));
+    });
+  }
   c.style.width  = Math.round(w) + 'px';
   c.style.height = Math.round(h) + 'px';
 }

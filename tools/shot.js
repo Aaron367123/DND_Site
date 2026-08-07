@@ -59,8 +59,8 @@ const CHROME_CANDIDATES = [
 
 // ── Args ──────────────────────────────────────────────────────────────────
 function parseArgs(argv){
-  const a = { preset:'desktop', url:null, out:null, full:false, wait:400,
-              evalJs:null, seed:null, tour:false, player:false, size:null,
+  const a = { preset:'desktop', url:null, out:null, full:false, wait:800,
+              evalJs:null, seed:null, ready:null, tour:false, player:false, size:null,
               touch:null };
   for (let i = 0; i < argv.length; i++){
     const k = argv[i];
@@ -71,6 +71,7 @@ function parseArgs(argv){
     else if (k === '--wait')   a.wait   = parseInt(argv[++i], 10) || 0;
     else if (k === '--eval')   a.evalJs = argv[++i];
     else if (k === '--seed')   a.seed   = argv[++i];
+    else if (k === '--ready')  a.ready  = argv[++i];
     else if (k === '--tour')   a.tour   = true;
     else if (k === '--full')   a.full   = true;
     else if (k === '--player') a.player = true;
@@ -88,6 +89,7 @@ function usage(){
   console.log('');
   console.log('  --seed JS  runs BEFORE page scripts (use for localStorage setup)');
   console.log('  --eval JS  runs AFTER load (use to open panels, click things)');
+  console.log('  --ready JS poll until truthy before shooting (default: workspace built)');
   console.log('  --tour     keep the onboarding overlay (suppressed by default)');
 }
 
@@ -191,7 +193,19 @@ function findChrome(){
     '--user-data-dir=' + profile,
     '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--disable-background-networking',
+    // Software compositing. Headless GPU compositing on this machine returned
+    // captures with the whole transformed #workspace-canvas layer missing.
+    '--disable-gpu',
     '--force-device-scale-factor=1',   // dpr comes from the emulation override
+    // Match the real browser window to the emulated viewport. Left at the
+    // default 800x600, captures of the phone layout came back with the
+    // position:fixed chrome (toolbar, dock) painted but the whole
+    // #workspace-canvas subtree blank — that canvas carries a transform, so
+    // it composites on its own layer, and its tiles were only rasterised for
+    // the mismatched surface. The DOM was correct in every one of those runs;
+    // only the picture was wrong, which is the worst possible failure for a
+    // tool whose entire job is to be looked at.
+    '--window-size=' + dev.w + ',' + dev.h,
     'about:blank',
   ], { stdio: 'ignore' });
 
@@ -269,6 +283,34 @@ function findChrome(){
     const loaded = cdp.once('Page.loadEventFired');
     await cdp.send('Page.navigate', { url });
     await Promise.race([loaded, sleep(20000)]);
+
+    // load ≠ ready. The workspace builds itself after load (panels mount, the
+    // workspace switcher renders), and a fixed sleep was a coin flip: about
+    // half the runs captured a page with the toolbar and dock painted but the
+    // entire workspace subtree still empty — a screenshot that looks like a
+    // real one and shows a UI that never existed. Poll for a readiness
+    // signal instead of guessing at a duration.
+    // Default signal: the workspace switcher has been POPULATED by
+    // workspaces.js. `.ws-switch` itself ships in the static HTML, so testing
+    // for its existence — the obvious first guess — returns true immediately
+    // and waits for nothing. Its children only appear once the app has built
+    // the workspace, which is the thing worth waiting for. The player view has
+    // no switcher, so its dock counts instead.
+    const readyExpr = a.ready
+      || "!!(document.querySelector('.ws-switch')?.children.length"
+       + " || document.querySelector('.pv-dock-btn'))";
+    let ready = false;
+    for (let i = 0; i < 100 && !ready; i++){
+      const rr = await cdp.send('Runtime.evaluate', {
+        expression: readyExpr, returnByValue: true,
+      }).catch(() => null);
+      ready = !!(rr && rr.result && rr.result.value);
+      if (!ready) await sleep(100);
+    }
+    if (!ready){
+      console.error('[shot] WARNING: never became ready: ' + readyExpr);
+      code = 5;
+    }
     await sleep(a.wait);
 
     if (a.evalJs){
@@ -307,6 +349,17 @@ function findChrome(){
     });
     const info = JSON.parse(probe.result.value);
 
+    // --full captures the whole scroll height, so the clip needs the real
+    // document height rather than the viewport's.
+    let fullH = dev.h;
+    if (a.full){
+      const hr = await cdp.send('Runtime.evaluate', {
+        returnByValue: true,
+        expression: 'Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, innerHeight)',
+      }).catch(() => null);
+      if (hr && hr.result && hr.result.value) fullH = Math.min(hr.result.value, 20000);
+    }
+
     // Nudge the compositor into committing a frame before asking for one.
     // An idle page (everything settled, nothing animating) commits no new
     // frame, and captureScreenshot then waits for one indefinitely — the hang
@@ -319,15 +372,59 @@ function findChrome(){
       expression: 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))',
     }).catch(() => {});
 
+    // Capture until two consecutive frames agree, then keep the biggest.
+    //
+    // Headless intermittently hands back a frame with the position:fixed
+    // chrome painted and the transformed #workspace-canvas layer missing —
+    // roughly one run in six even after the page has settled, and the DOM was
+    // verified correct in every one of those runs. A screenshot that is wrong
+    // but plausible is the worst thing this tool can produce, so one shot is
+    // not trusted: a partial frame is dramatically smaller than a complete one
+    // (24KB vs 40KB here), and two captures landing on the same byte length is
+    // good evidence the compositor has stopped changing its mind.
+    let best = null, prevLen = -1, stable = false;
+    for (let attempt = 0; attempt < 4 && !stable; attempt++){
+      const one = await captureOnce();
+      const buf = Buffer.from(one.data, 'base64');
+      if (!best || buf.length > best.length) best = buf;
+      if (buf.length === prevLen) stable = true;
+      prevLen = buf.length;
+      if (!stable && attempt < 3) await sleep(250);
+    }
+    if (!stable){
+      console.error('[shot] WARNING: frames never stabilised — kept the largest. '
+        + 'Treat this image with suspicion and re-run.');
+      code = 6;
+    }
+    fs.writeFileSync(out, best);
+
+    async function captureOnce(){
     // captureScreenshot has been seen to never resolve — a page that stops
     // producing frames leaves the CDP request outstanding forever, and there
     // is no error to catch. Race it so the run fails loudly instead of
     // hanging until something else kills it.
-    const shot = await Promise.race([
-      cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: !!a.full }),
+    return Promise.race([
+      // An explicit clip with captureBeyondViewport forces a fresh raster of
+      // the requested region instead of reading back whatever the browser
+      // window's compositor surface happens to hold. Without it, captures
+      // came back with the position:fixed chrome painted and the transformed
+      // #workspace-canvas layer blank — the DOM was correct in every one of
+      // those runs, so only the picture lied.
+      cdp.send('Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: true,
+        clip: {
+          x: 0, y: 0,
+          width: dev.w,
+          height: a.full ? fullH : dev.h,
+          // 1, not dev.dpr: setDeviceMetricsOverride already applies the
+          // device scale factor, so passing it again here produced a 4x image.
+          scale: 1,
+        },
+      }),
       sleep(20000).then(() => { throw new Error('captureScreenshot timed out after 20s'); }),
     ]);
-    fs.writeFileSync(out, Buffer.from(shot.data, 'base64'));
+    }
 
     const bytes = fs.statSync(out).size;
     console.log('[shot] ' + out);
