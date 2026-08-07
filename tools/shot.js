@@ -223,6 +223,19 @@ function findChrome(){
 
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
+    // Forward page errors. Without this a screenshot of a broken page looks
+    // exactly like a screenshot of a working one, and the reason is sitting
+    // unread in a console nobody is attached to.
+    const pageErrors = [];
+    cdp.handlers.set('Runtime.exceptionThrown', p => {
+      const d = p && p.exceptionDetails;
+      pageErrors.push((d && (d.exception && d.exception.description || d.text)) || 'error');
+    });
+    cdp.handlers.set('Runtime.consoleAPICalled', p => {
+      if (p.type !== 'error' && p.type !== 'warning') return;
+      pageErrors.push(p.type + ': ' + (p.args || [])
+        .map(x => x.value !== undefined ? x.value : (x.description || x.type)).join(' '));
+    });
     // Order matters: metrics and touch go on BEFORE the navigation, so
     // load-time device gates (matchMedia reads in window-manager.js,
     // battlemap's mount) see the phone and not a desktop.
@@ -262,7 +275,14 @@ function findChrome(){
       const r = await cdp.send('Runtime.evaluate', {
         expression: a.evalJs, awaitPromise: true, returnByValue: true,
       });
-      if (r.exceptionDetails) throw new Error('--eval threw: ' + r.exceptionDetails.text);
+      if (r.exceptionDetails){
+        // .text is usually just "Uncaught" — the useful part is the thrown
+        // value's description (message + stack).
+        const d = r.exceptionDetails;
+        const detail = (d.exception && (d.exception.description || d.exception.value))
+          || d.text || 'unknown';
+        throw new Error('--eval threw: ' + String(detail).split('\n').slice(0, 3).join(' | '));
+      }
       // Print whatever it returned — --eval doubles as a probe, and silently
       // dropping the value meant writing a screenshot to inspect a number.
       if (r.result && r.result.value !== undefined){
@@ -287,6 +307,18 @@ function findChrome(){
     });
     const info = JSON.parse(probe.result.value);
 
+    // Nudge the compositor into committing a frame before asking for one.
+    // An idle page (everything settled, nothing animating) commits no new
+    // frame, and captureScreenshot then waits for one indefinitely — the hang
+    // reproduced reliably on the phone layout with a panel open, while rAF
+    // showed the page happily rendering at 68fps. Two frames: the first
+    // flushes pending style and layout, the second is the one that gets
+    // captured.
+    await cdp.send('Runtime.evaluate', {
+      awaitPromise: true,
+      expression: 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))',
+    }).catch(() => {});
+
     // captureScreenshot has been seen to never resolve — a page that stops
     // producing frames leaves the CDP request outstanding forever, and there
     // is no error to catch. Race it so the run fails loudly instead of
@@ -302,6 +334,11 @@ function findChrome(){
     console.log('[shot] ' + info.w + 'x' + info.h + ' @' + info.dpr + 'x'
       + '  coarse=' + info.coarse + '  phoneLayout=' + info.phoneLayout
       + '  player=' + info.playerMode + '  ' + Math.round(bytes/1024) + 'KB');
+    if (pageErrors.length){
+      console.error('[shot] ' + pageErrors.length + ' page error(s):');
+      pageErrors.slice(0, 8).forEach(m => console.error('  ' + String(m).split('\n')[0]));
+      code = 4;
+    }
     if (dev.touch && !info.coarse){
       console.error('[shot] WARNING: touch emulation did not produce pointer:coarse — '
         + 'the phone-only CSS is NOT in this screenshot.');

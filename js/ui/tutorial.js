@@ -506,12 +506,30 @@ function openTutorial(startIdx) {
   backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
 }
 
-function _initTutorial() {
-  // Hook the toolbar button.
-  const btn = document.getElementById('tutorial-btn');
-  if (btn) btn.addEventListener('click', () => openTutorial(0));
+// The tour is a DM tour: 16 pages about floating windows, the icon dock,
+// workspaces, the bestiary and the encounter builder — none of which a player
+// has. It was greeting players with "Welcome to the DM Workspace" and walking
+// them through tools they can't see.
+//
+// Read from the URL rather than body.player-mode: initPlayerView() adds that
+// class, and there's no ordering guarantee that it has run by DOMContentLoaded.
+// The query string is true before any script executes.
+function _isPlayerUrl(){
+  try { return new URLSearchParams(location.search).get('player') === '1'; }
+  catch(e){ return false; }
+}
 
-  // Auto-show on first visit.
+function _initTutorial() {
+  const player = _isPlayerUrl();
+
+  // Hook the toolbar button. Players don't get it — CSS hides the ❓ for them
+  // (body.player-mode #tutorial-btn), and leaving the handler off means a
+  // keyboard or accessibility path can't reach DM content either.
+  const btn = document.getElementById('tutorial-btn');
+  if (btn && !player) btn.addEventListener('click', () => openTutorial(0));
+
+  // Auto-show on first visit — DM view only.
+  if (player) return;
   let seen = '0';
   try { seen = localStorage.getItem(TUTORIAL_KEY) || '0'; } catch(e){}
   if (seen !== '1') {

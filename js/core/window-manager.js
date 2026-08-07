@@ -103,12 +103,17 @@ function focusPanel(id){
   _updateToolbarOcclusion();
 }
 
-// Toolbar-occlusion helper: when any open window's title bar overlaps the
-// floating top-right toolbar, fade the toolbar via a body class so the
-// window's ⋯ _ ✕ controls are usable. CSS handles the actual opacity +
-// hover-restore. This function is cheap (a few rect reads) so we call it on
-// every event that could move a title bar (drag, resize, open/close/focus,
-// scroll, zoom).
+// Toolbar-occlusion helper: when an open window's ⋯ _ ✕ controls slide under
+// the floating top-right toolbar, fade the toolbar via a body class so those
+// controls stay usable. CSS handles the actual opacity + hover-restore. This
+// function is cheap (a few rect reads) so we call it on every event that could
+// move a title bar (drag, resize, open/close/focus, scroll, zoom).
+//
+// It tests `.window-actions`, not the whole `.window-head`. The head spans the
+// full window width, so on the phone layout — where every window is fullscreen
+// at top 0 — it ALWAYS intersected the toolbar and the fade was permanently
+// on, leaving the toolbar ghosted at 20% forever. Only the buttons need
+// protecting; the title text underneath is not interactive.
 function _updateToolbarOcclusion(){
   const tb = document.getElementById('float-toolbar');
   if (!tb) return;
@@ -117,12 +122,17 @@ function _updateToolbarOcclusion(){
     document.body.classList.remove('toolbar-occluded');
     return;
   }
+  // Publish the measured width so the phone layout can reserve room for the
+  // toolbar in the title bar. Measured rather than hard-coded because the
+  // toolbar grows and shrinks with the sync indicator's label.
+  document.documentElement.style.setProperty('--toolbar-w', Math.ceil(r.width) + 'px');
+  document.documentElement.style.setProperty('--toolbar-h', Math.ceil(r.height) + 'px');
   let occluded = false;
   document.querySelectorAll('.window:not(.minimized)').forEach(w => {
     if (occluded) return;
-    const head = w.querySelector('.window-head');
-    if (!head) return;
-    const h = head.getBoundingClientRect();
+    const acts = w.querySelector('.window-actions');
+    if (!acts) return;
+    const h = acts.getBoundingClientRect();
     if (h.right > r.left && h.left < r.right && h.bottom > r.top && h.top < r.bottom){
       occluded = true;
     }

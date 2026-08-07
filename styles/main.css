@@ -266,6 +266,12 @@ body.hide-window-focus .window.focused{border-color:var(--border);box-shadow:var
    AND the search bar — players use search to look up monsters, spells, and
    items they encounter during the session as a quick reference. */
 body.player-mode #player-view-btn{display:none}
+/* The tour is 16 pages of DM material — floating windows, the icon dock,
+   workspaces, the bestiary — and greeted players with "Welcome to the DM
+   Workspace". tutorial.js suppresses the auto-show; this hides the ❓ that
+   would otherwise open it by hand. Done in CSS rather than by adding a body
+   class at init, because that class did not survive to first paint. */
+body.player-mode #tutorial-btn{display:none}
 body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w) 1fr;grid-template-areas:". workspace"}
 /* Player-view floating dock — chips for the DM-shared panels */
 /* Player dock: styled to match the DM's left-edge panel-dock — full-height
@@ -377,7 +383,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   body:not(.player-mode) .ws-switch{flex-direction:row; gap:6px}
   /* The canvas is sized in JS (wsSizeCanvas). Zoom/pan is meaningless when
      every panel is fullscreen, so the controls go. */
-  body:not(.player-mode) .zoom-controls{display:none}
+  /* Not scoped to the DM view: the player view rendered these too, at
+     (216,794) 160x36, floating over panel content. Workspace zoom is locked
+     to 1 on this layout (see _zoomLocked in zoom-pan.js), so they were
+     controls that could not do anything in either view. */
+  .zoom-controls{display:none}
   body:not(.player-mode) .workspace{overflow:hidden}
 
   /* Touch targets. WCAG 2.5.5 and Apple's HIG both want 44px; these were
@@ -392,6 +402,59 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   /* Window controls stay compact — they sit in a title bar, not a toolbar,
      and 44px each would eat a third of it. 36px still clears a thumb. */
   .window-actions .btn{min-height:36px; min-width:36px; padding:6px}
+
+  /* ── The two top bars stop fighting ──────────────────────────────────────
+     Every panel is fullscreen at top 0 here, so its title bar and the
+     top-right float-toolbar occupy the same strip. Hit-testing each control's
+     centre found ⋯ → float-btn, _ → float-toolbar, ✕ → float-btn: not one
+     window control was reachable on a phone. That's worse than it sounds,
+     because the mobile dock is a SWITCHER, not a toggle, so ✕ was the only
+     way to close a panel and there wasn't one.
+
+     Reserving room for the toolbar can't work at this width — measured, it is
+     230px of a 390px screen. So the window controls move to the LEFT end of
+     the bar, where nothing overlaps them, and the toolbar is slimmed down. */
+  .window-actions{order:-1; margin-right:8px}
+  /* Minimize is meaningless here: panels are fullscreen and stacked, and the
+     dock already switches between them. Dropping it buys back 36px for the
+     title and removes a control that did nothing useful. */
+  .window-actions .btn[data-wact="min"]{display:none}
+  /* 44px is right for the bottom dock, oversized for a utility pill that has
+     to share a 390px row. 36px matches the window controls beside it. */
+  .float-toolbar .float-btn{width:36px; height:36px}
+  /* Keep the title clear of the toolbar rather than running underneath it.
+     --toolbar-w is measured and published by _updateToolbarOcclusion(), so
+     this tracks the sync indicator's label growing and shrinking. */
+  /* flex-start, not the default space-between: with the controls moved to
+     order -1 there are two items, so space-between flung the title to the far
+     right — straight back under the toolbar, which is the thing this padding
+     exists to prevent. Left-aligned, the title reads as a label on the
+     controls and truncates at the reserved edge. */
+  .window-head{
+    justify-content:flex-start;
+    padding-right:calc(var(--toolbar-w, 200px) + 18px);
+  }
+  .window-title{min-width:0; overflow:hidden}
+  .window-title span:not(.window-title-icon){
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+
+  /* Search results were 480px wide inside a 390px viewport, anchored to the
+     toolbar's right edge — measured at x=-281, so 281px of the popup hung off
+     the left of the screen and most results were simply unreachable. Pinned
+     to the viewport instead of to the toolbar. */
+  .search-popup{
+    position:fixed;
+    left:8px; right:8px; width:auto; max-width:none;
+    top:calc(10px + var(--toolbar-h, 46px) + 6px);
+    max-height:min(460px, 70dvh);
+  }
+
+  /* NOTE: the onboarding-modal mobile rules are NOT here. They live in their
+     own media block directly after the .tutorial-* rules further down. A
+     media query adds no specificity, so overrides written up here lost to the
+     equally-specific defaults declared later in the file — verified: the card
+     kept `bottom:24px` and stayed behind the dock. */
 
   body.player-mode .window{
     left:0 !important; top:0 !important;
@@ -2896,7 +2959,16 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .sb-stop-all{margin-left:auto}
 
 /* MODAL */
-.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:flex;align-items:center;justify-content:center}
+/* z-index 9700, not 500. A z-index on the backdrop creates a stacking
+   context, so every modal inside it — including .tutorial-modal's 9999 — was
+   really competing at 500, below the panel dock (9500). On the phone layout
+   that put the bottom tab bar on top of the tutorial's Skip / Prev / Next:
+   hit-testing each button's centre returned `panel-dock`, so the tour could
+   not be advanced or dismissed. On desktop the same thing left the dock and
+   toolbar undimmed and clickable through the backdrop.
+   Sits above the dock (9500) and toolbar (9000), below toasts (10001) and the
+   spotlight variant (10000), which deliberately floats over the tour. */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9700;display:flex;align-items:center;justify-content:center}
 .modal{background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:var(--r-lg);padding:22px 24px;min-width:300px;max-width:420px;width:90%;box-shadow:var(--sh-4)}
 .divvy-list{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-md);padding:6px 8px;background:var(--panel-2)}
 .divvy-row{display:flex;justify-content:space-between;align-items:center;padding:4px 6px;border-bottom:1px dotted var(--border);font-size:var(--fs-md)}
@@ -3003,6 +3075,27 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .tutorial-dontshow input{margin:0;cursor:pointer}
 .tutorial-nav{display:flex;gap:6px}
 .tutorial-nav .btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Onboarding modal on a phone ──────────────────────────────────────────
+   Placed here, AFTER the defaults above, on purpose: a media query adds no
+   specificity, so the same rules written in the mobile block near the top of
+   this file lost to these and had no effect at all.
+
+   The footer laid out as one row — a "Don't show on startup" label plus
+   Skip / ‹ Prev / Next ›. At 390px, with mobile's 44px-min buttons, that row
+   cannot fit; the labels wrapped and were clipped off the card's bottom edge.
+   The checkbox now takes its own row with the buttons right-aligned beneath. */
+@media (max-width: 768px) and (pointer: coarse){
+  .tutorial-footer{flex-wrap:wrap; justify-content:flex-end; row-gap:10px}
+  .tutorial-dontshow{flex:1 0 100%; order:-1}
+  .tutorial-nav{flex-wrap:wrap; justify-content:flex-end}
+  /* dvh, not vh: vh is the LARGE viewport and ignores the browser's own
+     chrome, so on a real phone an 82vh card is taller than the visible area. */
+  .tutorial-modal{max-height:82dvh}
+  .tutorial-modal-docked{max-height:calc(100dvh - 96px)}
+  /* Clear the bottom tab bar. `bottom:24px` put the footer behind it. */
+  .tutorial-modal-dock-bottom{bottom:calc(70px + env(safe-area-inset-bottom, 0px))}
+}
 
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);color:var(--text);padding:8px 16px;border-radius:var(--r-sm);font-size:var(--fs-md);z-index:10001;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
