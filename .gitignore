@@ -20,3 +20,6 @@ upload.log
 # editor file-search stop drowning in it. Nothing in js/, styles/, tools/,
 # skt-workspace.html, sw.js or manifest.json references it.
 /5etools-v2.28.0/
+
+# Screenshots from tools/shot.js — local artifacts, not source.
+tools/shots/
