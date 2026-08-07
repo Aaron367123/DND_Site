@@ -215,10 +215,15 @@ function findChrome(){
     const portFile = path.join(profile, 'DevToolsActivePort');
     let port = null;
     for (let i = 0; i < 100 && port === null; i++){
-      if (fs.existsSync(portFile)){
-        const first = fs.readFileSync(portFile, 'utf8').split('\n')[0].trim();
-        if (first) port = parseInt(first, 10);
-      }
+      // Guarded: Chrome writes this file while we're polling for it, and on
+      // Windows catching it mid-write throws EBUSY. That's a normal race, not
+      // a failure — just try again on the next tick.
+      try {
+        if (fs.existsSync(portFile)){
+          const first = fs.readFileSync(portFile, 'utf8').split('\n')[0].trim();
+          if (first) port = parseInt(first, 10);
+        }
+      } catch(e){ /* EBUSY / partial write — retry */ }
       if (port === null) await sleep(100);
     }
     if (!port) throw new Error('Chrome never reported a debugging port');
@@ -269,6 +274,29 @@ function findChrome(){
     // BEFORE the page's own scripts read those keys, which --eval (post-load)
     // is too late for — hence addScriptToEvaluateOnNewDocument.
     const seedParts = [];
+    // Never let the service worker register. Two reasons, both bit hard:
+    //
+    // Every run uses a fresh profile, so the SW installs and claims the client
+    // — and js/app.js listens for `controllerchange` and calls
+    // location.reload(). That reload navigated the target out from under the
+    // CDP session mid-run: "Inspected target navigated or closed", reliably
+    // on the first runs after a stamp changed sw.js.
+    //
+    // And a screenshot must show the files on disk. A cached shell served the
+    // previous build twice today and both times the picture looked entirely
+    // plausible while being of the wrong code.
+    // A stub, not `undefined`: the app feature-detects with
+    // `'serviceWorker' in navigator`, which stays true for an own property, so
+    // removing the value just moved the failure to `.register` of undefined.
+    // register() returns a promise that never settles, so no update path runs.
+    seedParts.push(
+      "try{var _swStub={register:function(){return new Promise(function(){})},"
+      + "getRegistration:function(){return Promise.resolve(undefined)},"
+      + "getRegistrations:function(){return Promise.resolve([])},"
+      + "addEventListener:function(){},removeEventListener:function(){},"
+      + "ready:new Promise(function(){}),controller:null};"
+      + "Object.defineProperty(navigator,'serviceWorker',"
+      + "{configurable:true,get:function(){return _swStub}})}catch(e){}");
     if (!a.tour){
       seedParts.push("localStorage.setItem('skt-tutorial-seen-v2','1');"
                    + "localStorage.setItem('skt-pv-dock-hint-seen','1');");

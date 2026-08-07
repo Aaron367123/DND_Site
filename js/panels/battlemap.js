@@ -1888,42 +1888,42 @@ registerPanel('battlemap',{
     // omitted entirely.
     html+='<div class="map-toolbar">'
       +'<button class="btn icon-btn" data-mact="toggle-toolbar" style="flex-shrink:0;padding:2px 5px" title="Hide toolbar (more map space)">▲</button>'
-      +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">🖊 Draw</button>'
+      +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">'+ICO('i-pencil')+'<span class="bt-l">Draw</span></button>'
       +(this._tool==='draw' ? '<input type="color" id="draw-color" value="'+this._drawColor+'" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Brush color">' : '')
       +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:11px;padding:2px 4px;flex-shrink:0">'
         +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
-      +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase">🗑 Erase</button>'
+      +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
       // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
-      +(_mapBgImage?'<div style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>':'')
+      +(_mapBgImage?'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>':'')
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Zoom">':'')
       +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
-      +'<div style="flex:1"></div>'
+      +'<div class="bm-spacer" style="flex:1"></div>'
       // Undo/redo sit next to the destructive buttons on purpose — that's
       // where you look after a misclick.
-      +'<button class="btn icon-btn" data-mact="undo" style="flex-shrink:0;padding:2px 6px" title="Undo (Ctrl+Z)">↶</button>'
-      +'<button class="btn icon-btn" data-mact="redo" style="flex-shrink:0;padding:2px 6px" title="Redo (Ctrl+Shift+Z)">↷</button>'
-      +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">🗑 Drawings</button>'
+      +'<button class="btn icon-btn" data-mact="undo" style="flex-shrink:0;padding:2px 6px" title="Undo (Ctrl+Z)">'+ICO('i-undo')+'</button>'
+      +'<button class="btn icon-btn" data-mact="redo" style="flex-shrink:0;padding:2px 6px" title="Redo (Ctrl+Shift+Z)">'+ICO('i-redo')+'</button>'
+      +'<button class="btn" data-mact="clear-draw" style="flex-shrink:0" title="Clear all drawings">'+ICO('i-trash')+'<span class="bt-l">Drawings</span></button>'
       +'<button class="btn danger" data-mact="clear-tokens" style="flex-shrink:0">Clear</button>'
     +'</div>';
     } else {
     html+='<div class="map-toolbar">'
       +'<button class="btn icon-btn" data-mact="toggle-toolbar" style="flex-shrink:0;padding:2px 5px" title="Hide toolbar (more map space)">▲</button>'
-      +'<button class="btn '+(this._tool==='add-pc'?'active':'')+'" data-mact="tool-add-pc">+ PC</button>'
-      +'<button class="btn '+(this._tool==='add-npc'?'active':'')+'" data-mact="tool-add-npc">+ NPC</button>'
-      +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase">🗑 Erase</button>'
-      +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">🖊 Draw</button>'
+      +'<button class="btn '+(this._tool==='add-pc'?'active':'')+'" data-mact="tool-add-pc" title="Place a party member"><span class="bt-l">+ PC</span><span class="bt-s">PC</span></button>'
+      +'<button class="btn '+(this._tool==='add-npc'?'active':'')+'" data-mact="tool-add-npc" title="Place an NPC or monster"><span class="bt-l">+ NPC</span><span class="bt-s">NPC</span></button>'
+      +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase tokens and drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
+      +'<button class="btn '+(this._tool==='draw'?'active':'')+'" data-mact="tool-draw" title="Pencil — draw on the map">'+ICO('i-pencil')+'<span class="bt-l">Draw</span></button>'
       +(this._tool==='draw' ? '<input type="color" id="draw-color" value="'+this._drawColor+'" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Brush color">' : '')
       +(this._tool==='draw' ? '<select id="draw-size" style="width:64px;font-size:11px;padding:2px 4px;flex-shrink:0">'
         +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
-      +'<div style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
-      +'<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'
+      +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
+      +'<span class="bt-l" style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'
       +'<input type="number" id="map-size" min="8" max="400" step="1" value="'+cs+'" style="width:54px;font-size:11px;padding:2px 4px;flex-shrink:0" title="Cell size in pixels (try 30, 50, 64, 80, 100, 120…)">'
       +'<select id="map-size-preset" style="width:34px;font-size:11px;padding:2px 1px;flex-shrink:0" title="Common sizes">'
         +'<option value="">…</option>'
@@ -1938,29 +1938,29 @@ registerPanel('battlemap',{
         +'<option value="150">150</option>'
       +'</select>'
       +'<input type="color" id="map-bg-color" value="'+this._bgColor+'" style="width:28px;height:24px;padding:1px;border-radius:3px;cursor:pointer;flex-shrink:0" title="Background color">'
-      +'<button class="btn" data-mact="pick-map" style="flex-shrink:0">🗺 Map</button>'
-      +(_mapBgImage?'<button class="btn danger" data-mact="clear-img" style="flex-shrink:0">✕ Map</button>':'')
+      +'<button class="btn" data-mact="pick-map" style="flex-shrink:0" title="Choose a map image">'+ICO('i-map')+'<span class="bt-l">Map</span></button>'
+      +(_mapBgImage?'<button class="btn danger" data-mact="clear-img" style="flex-shrink:0" title="Remove the map image">'+ICO('i-close')+'<span class="bt-l">Map</span></button>':'')
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
       +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:10px;color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
-      +'<button class="btn icon-btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Grid style: cycle square → hex → none">⊞</button>'
-      +'<button class="btn icon-btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">🧲</button>'
-      +(_mapBgImage?'<button class="btn icon-btn '+(this._tool==='align'?'active':'')+'" data-mact="tool-align" style="flex-shrink:0" title="Align grid to printed map grid: click two opposite corners of one cell">📐</button>':'')
-      +((this._gridOffsetX||this._gridOffsetY)?'<button class="btn icon-btn" data-mact="reset-align" style="flex-shrink:0" title="Reset grid alignment (offset back to 0,0)">↺</button>':'')
+      +'<button class="btn icon-btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Grid style: cycle square → hex → none">'+ICO('i-grid')+'</button>'
+      +'<button class="btn icon-btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">'+ICO('i-magnet')+'</button>'
+      +(_mapBgImage?'<button class="btn icon-btn '+(this._tool==='align'?'active':'')+'" data-mact="tool-align" style="flex-shrink:0" title="Align grid to printed map grid: click two opposite corners of one cell">'+ICO('i-ruler')+'</button>':'')
+      +((this._gridOffsetX||this._gridOffsetY)?'<button class="btn icon-btn" data-mact="reset-align" style="flex-shrink:0" title="Reset grid alignment (offset back to 0,0)">'+ICO('i-refresh')+'</button>':'')
       // Fog cluster — only the toggle is visible by default. When fog is on,
       // its sub-controls (paint mode, brush radius, hide/show all) appear.
-      +'<div style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
-      +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">🌫 Fog</button>'
-      +(this._fog!==null?'<button class="btn icon-btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">🖌</button>':'')
+      +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
+      +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">'+ICO('i-cloud')+'<span class="bt-l">Fog</span></button>'
+      +(this._fog!==null?'<button class="btn icon-btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">'+ICO('i-pencil')+'</button>':'')
       +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:50px;flex-shrink:0" title="Brush size">':'')
-      +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide entire map (fog everything)">🚫</button>':'')
-      +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal entire map">👁</button>':'')
-      +'<div style="flex:1"></div>'
+      +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide entire map (fog everything)">'+ICO('i-eye-off')+'</button>':'')
+      +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal entire map">'+ICO('i-eye')+'</button>':'')
+      +'<div class="bm-spacer" style="flex:1"></div>'
       // Undo/redo for fog, drawings and tokens. Fog is the one that matters:
       // a stray reveal shows the party a room you hadn't got to yet.
-      +'<button class="btn icon-btn" data-mact="undo" style="flex-shrink:0" title="Undo (Ctrl+Z)">↶</button>'
-      +'<button class="btn icon-btn" data-mact="redo" style="flex-shrink:0" title="Redo (Ctrl+Shift+Z)">↷</button>'
-      +'<button class="btn icon-btn '+(this._settingsOpen?'active':'')+'" data-mact="toggle-settings" style="flex-shrink:0" title="Map settings">⚙</button>'
+      +'<button class="btn icon-btn" data-mact="undo" style="flex-shrink:0" title="Undo (Ctrl+Z)">'+ICO('i-undo')+'</button>'
+      +'<button class="btn icon-btn" data-mact="redo" style="flex-shrink:0" title="Redo (Ctrl+Shift+Z)">'+ICO('i-redo')+'</button>'
+      +'<button class="btn icon-btn '+(this._settingsOpen?'active':'')+'" data-mact="toggle-settings" style="flex-shrink:0" title="Map settings">'+ICO('i-gear')+'</button>'
     +'</div>';
 
     } // end !_toolbarHidden
@@ -1968,8 +1968,11 @@ registerPanel('battlemap',{
     // in both DM and player toolbars (when the toolbar isn't collapsed) so
     // players can see their party-icon row mirrored from the DM view.
     if (partyBtns && !this._toolbarHidden){
-      html+='<div style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap;align-items:center">'
-        +'<span style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
+      // flex-wrap lives in the stylesheet (.map-party-bar), not inline: an
+      // inline style beats any selector without !important, so with it here
+      // the phone layout could not switch this row to a single scroller.
+      html+='<div class="map-party-bar" style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);background:var(--panel-2);align-items:center">'
+        +'<span class="bt-l" style="font-size:10px;color:var(--text-muted)">Party:</span>'+partyBtns+'</div>';
     }
 
     // Map area + settings sidebar side-by-side. Settings sidebar is rendered
@@ -2004,11 +2007,14 @@ registerPanel('battlemap',{
       + (this._settingsOpen ? this._renderSettingsSidebar() : '')
     +'</div>';
 
-    html+='<div style="padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-2);font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-shrink:0">'
+    html+='<div class="map-foot" style="padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-2);font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-shrink:0">'
       +'<span>1 sq = <strong>'+ft+' ft</strong></span>'
-      +'<span style="color:var(--text-dim)">'+this._cols+'×'+this._rows+' squares ('+this._cols*ft+'×'+this._rows*ft+' ft)</span>'
+      +'<span class="bt-l" style="color:var(--text-dim)">'+this._cols+'×'+this._rows+' squares ('+this._cols*ft+'×'+this._rows*ft+' ft)</span>'
       +'<span style="flex:1"></span>'
-      +'<span style="font-size:9px;color:var(--text-dim)">Drag tokens freely · Right-click for options</span>'
+      // Hidden on touch by CSS: there is no right-click on a phone, so this
+      // hint spent a row of a 390px screen telling you to do something you
+      // can't.
+      +'<span class="map-foot-hint" style="font-size:9px;color:var(--text-dim)">Drag tokens freely · Right-click for options</span>'
     +'</div>';
 
     html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:164px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'

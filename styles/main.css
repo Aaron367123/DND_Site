@@ -439,6 +439,12 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
 
+  /* NOTE: the battle-map mobile rules are NOT here — they sit in their own
+     media block right after the .map-toolbar defaults further down, for the
+     same specificity reason as the onboarding modal. Written up here, the
+     later .map-toolbar{flex-wrap:wrap} won and the toolbar kept wrapping;
+     measured scrollWidth == clientWidth, which is what gave it away. */
+
   /* Search results were 480px wide inside a 390px viewport, anchored to the
      toolbar's right edge — measured at x=-281, so 281px of the popup hung off
      the left of the screen and most results were simply unreachable. Pinned
@@ -2326,9 +2332,63 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .notes-tree-row.drop-into{background:rgba(212,165,116,.2);box-shadow:inset 0 0 0 1px var(--accent)}
 /* BATTLE MAP */
 .map-toolbar{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--panel-2);align-items:center;flex-wrap:wrap;flex-shrink:0}
+/* Icon + label buttons. `.bt-l` is the full label, `.bt-s` an abbreviation
+   used only where a button has no icon to fall back on (+ PC / + NPC). The
+   phone layout swaps which one shows; everywhere else it's the long one. */
+.map-party-bar{flex-wrap:wrap}
+.map-toolbar .btn{display:inline-flex;align-items:center;gap:5px;line-height:1}
+.map-toolbar .btn .ico{width:15px;height:15px}
+.bt-s{display:none}
 .map-party-icon{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
 .map-party-icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .map-toolbar .btn{font-size:var(--fs-sm);padding:2px 8px} .map-toolbar .btn.active{background:var(--accent);color:#1a1a1a;border-color:var(--accent)}
+
+/* ── Battle map on a phone: give the map back the screen ───────────────────
+   Placed AFTER the defaults above, deliberately. A media query adds no
+   specificity, so the same rules written in the mobile block near the top of
+   this file lost to `.map-toolbar{flex-wrap:wrap}` and the toolbar carried on
+   wrapping — scrollWidth == clientWidth was the tell.
+
+   Measured on a 390x844 phone: the map had 421px of a 752px panel, 56%. The
+   toolbar alone was 161px, ~20 controls wrapped into three ragged rows, and
+   the party bar took another 85px.
+
+   One horizontally-scrolling row each instead — the pattern the bottom dock
+   already uses — with the buttons icon-only. That's what the sprite additions
+   were for: at this width a label costs more than it explains, and every
+   button keeps its title. */
+@media (max-width: 768px) and (pointer: coarse){
+  .map-toolbar{
+    flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    padding:6px 8px; gap:6px;
+  }
+  .map-toolbar .btn{flex-shrink:0; min-height:34px; padding:5px 9px}
+  .map-toolbar .btn .ico{width:17px; height:17px}
+  /* The flex:1 spacer that right-aligns undo/redo/settings on desktop has
+     nothing to push against in a scrolling row — it would only add dead width
+     you have to scroll past to reach them. */
+  .map-toolbar .bm-spacer{display:none}
+  .map-toolbar .bt-l{display:none}
+  .map-toolbar .bt-s{display:inline}
+  /* Separators cost width and read as noise in a scroller. */
+  .map-toolbar .bm-div{display:none}
+  /* Grid size, the size preset and the background colour are setup, not play.
+     They sat ahead of Map / Fog / undo in source order, so the controls you
+     touch mid-combat were the ones off the right edge. flex `order` moves them
+     to the end without reordering the markup, so desktop is untouched. */
+  .map-toolbar > #map-size,
+  .map-toolbar > #map-size-preset,
+  .map-toolbar > #map-bg-color{order:5}
+  /* Same for the party bar, minus the "Party:" caption — the row of character
+     chips is self-evident and the label cost a chip's worth of width. */
+  .map-party-bar{flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden}
+  .map-party-bar .btn{flex-shrink:0}
+  .map-party-bar .bt-l{display:none}
+  /* Footer keeps the scale readout; the grid dimensions and the
+     right-click hint go. */
+  .map-foot .bt-l, .map-foot-hint{display:none}
+}
 #map-scroll.map-drop-active{outline:2px dashed var(--accent);outline-offset:-4px;background:rgba(212,165,116,.06)}
 .map-container{flex:1;overflow:hidden;position:relative;cursor:crosshair}
 #battle-map-canvas{display:block;image-rendering:pixelated}

@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
-<link rel="stylesheet" href="styles/main.css?v=6e9ee5a3bb">
+<link rel="stylesheet" href="styles/main.css?v=c97a37c851">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -50,6 +50,19 @@
   <g id="i-dots"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></g>
   <g id="i-minus"><path d="M5 12h14"/></g>
   <g id="i-close"><path d="m6 6 12 12M18 6 6 18"/></g>
+  <!-- Battle-map toolbar. Added so that toolbar can drop its emoji: on the
+       phone layout the buttons collapse to icon-only, and a row mixing 🧲 and
+       stroked SVG reads as unfinished. Same 24x24 box and stroke weight as
+       everything above. -->
+  <g id="i-trash"><path d="M4 7h16M10 4h4M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6"/></g>
+  <g id="i-pencil"><path d="M4 20h4L20 8a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m15 6 3 3"/></g>
+  <g id="i-magnet"><path d="M6 3H3v8a9 9 0 0 0 18 0V3h-3v8a6 6 0 0 1-12 0z"/><path d="M3 8h3M18 8h3"/></g>
+  <g id="i-grid"><rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/></g>
+  <g id="i-ruler"><path d="m14.5 2.5 7 7L9.5 21.5l-7-7z"/><path d="m7 10 2 2M10 7l2 2M13 4l2 2M4 13l2 2"/></g>
+  <g id="i-eye"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></g>
+  <g id="i-eye-off"><path d="M9.9 5.8A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.3 4.1M6.4 7.6A17 17 0 0 0 2.5 12S6 18.5 12 18.5a9.4 9.4 0 0 0 3.6-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/></g>
+  <g id="i-undo"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3"/><path d="M3.5 4v5h5"/></g>
+  <g id="i-redo"><path d="M20.5 12a8.5 8.5 0 1 1-2.8-6.3"/><path d="M20.5 4v5h-5"/></g>
 </defs></svg>
 
 <div class="app" id="app">
@@ -359,7 +372,7 @@
 <script defer src="js/sync/dropbox-config.js?v=ccf8533d50"></script>
 <script defer src="js/sync/dropbox-sync.js?v=ab773edfd6"></script>
 <script defer src="js/panels/notes.js?v=7acb6047fb"></script>
-<script defer src="js/panels/battlemap.js?v=ae38eecb9c"></script>
+<script defer src="js/panels/battlemap.js?v=a429f1de3d"></script>
 <script defer src="js/panels/npc-library.js?v=ef2e523574"></script>
 <script defer src="js/panels/bestiary.js?v=8c3c72219f"></script>
 <!-- Behaviour shared by the Adventures and Books panels. Must load BEFORE
