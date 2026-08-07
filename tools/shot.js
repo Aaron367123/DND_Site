@@ -61,7 +61,7 @@ const CHROME_CANDIDATES = [
 function parseArgs(argv){
   const a = { preset:'desktop', url:null, out:null, full:false, wait:400,
               evalJs:null, seed:null, tour:false, player:false, size:null,
-              touch:null, port:9377 };
+              touch:null };
   for (let i = 0; i < argv.length; i++){
     const k = argv[i];
     if      (k === '--preset') a.preset = argv[++i];
@@ -72,7 +72,6 @@ function parseArgs(argv){
     else if (k === '--eval')   a.evalJs = argv[++i];
     else if (k === '--seed')   a.seed   = argv[++i];
     else if (k === '--tour')   a.tour   = true;
-    else if (k === '--port')   a.port   = parseInt(argv[++i], 10);
     else if (k === '--full')   a.full   = true;
     else if (k === '--player') a.player = true;
     else if (k === '--touch')  a.touch  = true;
@@ -181,9 +180,14 @@ function findChrome(){
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'skt-shot-'));
 
+  // Port 0 = let the OS choose, and read back what Chrome picked from
+  // DevToolsActivePort in the profile dir. A fixed port meant a stray Chrome
+  // left over from an interrupted run (a `| head` closing the pipe is enough)
+  // kept listening, and the next run silently attached to that dead session
+  // and hung instead of failing.
   const proc = spawn(chrome, [
     '--headless=new',
-    '--remote-debugging-port=' + a.port,
+    '--remote-debugging-port=0',
     '--user-data-dir=' + profile,
     '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--disable-background-networking',
@@ -194,8 +198,19 @@ function findChrome(){
   let code = 0;
   let ws = null;
   try {
-    const list = await fetchJson('http://127.0.0.1:' + a.port + '/json/list', 60, 120);
-    if (!list) throw new Error('Chrome never opened a debugging port on ' + a.port);
+    const portFile = path.join(profile, 'DevToolsActivePort');
+    let port = null;
+    for (let i = 0; i < 100 && port === null; i++){
+      if (fs.existsSync(portFile)){
+        const first = fs.readFileSync(portFile, 'utf8').split('\n')[0].trim();
+        if (first) port = parseInt(first, 10);
+      }
+      if (port === null) await sleep(100);
+    }
+    if (!port) throw new Error('Chrome never reported a debugging port');
+
+    const list = await fetchJson('http://127.0.0.1:' + port + '/json/list', 60, 120);
+    if (!list) throw new Error('Chrome opened port ' + port + ' but served no target list');
     const page = list.find(t => t.type === 'page');
     if (!page) throw new Error('No page target');
 
@@ -248,6 +263,12 @@ function findChrome(){
         expression: a.evalJs, awaitPromise: true, returnByValue: true,
       });
       if (r.exceptionDetails) throw new Error('--eval threw: ' + r.exceptionDetails.text);
+      // Print whatever it returned — --eval doubles as a probe, and silently
+      // dropping the value meant writing a screenshot to inspect a number.
+      if (r.result && r.result.value !== undefined){
+        console.log('[eval] ' + (typeof r.result.value === 'string'
+          ? r.result.value : JSON.stringify(r.result.value, null, 2)));
+      }
       await sleep(a.wait);
     }
 
@@ -266,10 +287,14 @@ function findChrome(){
     });
     const info = JSON.parse(probe.result.value);
 
-    const shot = await cdp.send('Page.captureScreenshot', {
-      format: 'png',
-      captureBeyondViewport: !!a.full,
-    });
+    // captureScreenshot has been seen to never resolve — a page that stops
+    // producing frames leaves the CDP request outstanding forever, and there
+    // is no error to catch. Race it so the run fails loudly instead of
+    // hanging until something else kills it.
+    const shot = await Promise.race([
+      cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: !!a.full }),
+      sleep(20000).then(() => { throw new Error('captureScreenshot timed out after 20s'); }),
+    ]);
     fs.writeFileSync(out, Buffer.from(shot.data, 'base64'));
 
     const bytes = fs.statSync(out).size;
@@ -289,7 +314,18 @@ function findChrome(){
     // Close the socket BEFORE exiting. Tearing the process down with an open
     // libuv handle tripped an assertion in the Node runtime on the error path.
     try { if (ws) ws.close(); } catch(e){}
-    proc.kill();
+    // Chrome spawns a tree of renderer/GPU children; killing only the process
+    // we spawned left them alive, and they accumulate across runs. /T takes
+    // the tree. Scoped to OUR pid — never a blanket kill of chrome.exe, since
+    // the user's own browser is running on this machine.
+    if (process.platform === 'win32'){
+      try {
+        require('child_process').execFileSync(
+          'taskkill', ['/T', '/F', '/PID', String(proc.pid)], { stdio: 'ignore' });
+      } catch(e){ try { proc.kill(); } catch(e2){} }
+    } else {
+      try { proc.kill(); } catch(e){}
+    }
     try { fs.rmSync(profile, { recursive: true, force: true }); } catch(e){}
   }
   await sleep(50);
