@@ -675,7 +675,8 @@ registerPanel('loot',{
     return num;
   },
   _renderAllView(){
-    if (!this._loot.items.length) return '<div class="empty-state">No items yet. Add loot above.</div>';
+    if (!this._loot.items.length) return emptyState({ icon:'i-chest', title:'No loot yet',
+      hint:'Add an item above, or roll random treasure.' });
     return this._loot.items.map((item,i)=>this._itemRow(item,i)).join('');
   },
   // True if this assignedTo value still resolves to a current party member or
@@ -757,7 +758,8 @@ registerPanel('loot',{
   // live in their own dedicated tab — the Group tab — and don't appear here.)
   _renderPartyView(){
     if (!state.party.length) return '<div class="empty-state">Add party members in the Party panel first.</div>';
-    if (!this._loot.items.length) return '<div class="empty-state">No items yet. Add loot above.</div>';
+    if (!this._loot.items.length) return emptyState({ icon:'i-chest', title:'No loot yet',
+      hint:'Add an item above, or roll random treasure.' });
     let out = '';
     state.party.forEach(p => {
       const matched = [];

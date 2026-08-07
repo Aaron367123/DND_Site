@@ -450,7 +450,8 @@ registerPanel('notes', {
         </div>
         <div class="notes-divider" id="notes-divider" title="Drag to resize"></div>
         <div class="notes-editor">
-          ${sel ? this._renderEditor(sel) : '<div class="empty-state" style="padding:40px;text-align:center">Select a file, or click 📄+ to create one.</div>'}
+          ${sel ? this._renderEditor(sel) : emptyState({ icon:'i-note', title:'No file open',
+              hint:'Pick one from the tree, or use the new-file button above.' })}
         </div>
       </div>`;
   },
@@ -564,7 +565,8 @@ registerPanel('notes', {
         </div>
         <div class="notes-divider" id="notes-divider" title="Drag to resize"></div>
         <div class="notes-editor">
-          ${sel ? this._renderEditor(sel) : '<div class="empty-state" style="padding:40px;text-align:center">Select a file, or click 📄+ to create one.</div>'}
+          ${sel ? this._renderEditor(sel) : emptyState({ icon:'i-note', title:'No file open',
+              hint:'Pick one from the tree, or use the new-file button above.' })}
         </div>
       </div>`;
   },

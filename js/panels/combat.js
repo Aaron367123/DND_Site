@@ -430,7 +430,8 @@ registerPanel('combat',{
 
       ${inCombat
         ? `<div class="combatant-list${compact?' compact':''}${grouped?' grouped':''}${(state.settings&&state.settings.combatHpBar===false)?' no-hp-bar':''}" id="combat-list">`+this._renderCombatants()+'</div>'
-        : '<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)"><div style="font-size:var(--fs-4xl);margin-bottom:6px">⚔</div>Drag a party member or monster here, or use the + / 🐲 buttons above.</div>'}
+        : emptyState({ icon:'i-combat', title:'No one in the fight yet',
+            hint:'Drag a party member or a monster here, or use the + and paw buttons above.' })}
 
       ${inCombat ? this._renderLog() : ''}
 

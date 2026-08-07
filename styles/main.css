@@ -2875,7 +2875,13 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 
 /* LOOT */
 .loot-panel{display:flex;flex-direction:column;height:100%;min-width:0;overflow:hidden}
-.loot-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+/* Five denominations, five columns. At repeat(4,1fr) the fifth — PP — wrapped
+   onto a row of its own and sat there alone next to three empty cells, which
+   read as a layout accident rather than a design. They are short numeric
+   fields, so five across is comfortable even in a narrow panel; below that the
+   auto-fit floor takes over and they wrap evenly instead of leaving one
+   stranded. */
+.loot-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px;padding:10px;border-bottom:1px solid var(--border);background:var(--panel-2)}
 .loot-coin{background:var(--panel-3);border-radius:var(--r-sm);padding:6px 8px;text-align:center}
 .loot-coin .l{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
 .loot-coin input{background:transparent;border:none;text-align:center;font-weight:600;font-size:var(--fs-xl);padding:2px 0;width:100%}
@@ -3033,7 +3039,30 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .enc-search-result .enc-result-name{display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .enc-src-badge{font-size:var(--fs-2xs);font-weight:700;color:#a13531;letter-spacing:.04em;background:rgba(161,53,49,.1);border:1px solid rgba(161,53,49,.3);padding:1px 5px;border-radius:var(--r-sm);flex-shrink:0;font-variant:small-caps}
 .enc-monster-row .enc-src-badge{margin-left:6px}
-.empty-state{padding:30px 20px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)}
+/* ── Empty states ─────────────────────────────────────────────────────────
+   Every panel used to invent its own: a big colour emoji, a sentence, and
+   ad-hoc inline padding, all different sizes. This is the shared shape —
+   optional sprite, a line telling you what's here, an optional dimmer line
+   telling you how to fill it. Build them with emptyState() in utils.js so a
+   new panel gets the right one for free.
+
+   The bare .empty-state (no children) is still styled, because a dozen call
+   sites pass plain text and there is no reason to force them to change. */
+.empty-state{
+  padding:34px 22px; text-align:center;
+  color:var(--text-muted); font-size:var(--fs-md); line-height:1.55;
+  display:flex; flex-direction:column; align-items:center; gap:7px;
+}
+.empty-state-icon{line-height:0; color:var(--text-dim); opacity:.75}
+.empty-state-icon .ico{width:30px; height:30px; stroke-width:1.4}
+.empty-state-title{color:var(--text-muted); font-size:var(--fs-lg)}
+/* Capped so a long hint wraps into a readable column instead of one wide
+   line across a 900px panel. */
+.empty-state-hint{font-size:var(--fs-sm); color:var(--text-dim); max-width:38ch}
+.empty-state-action{margin-top:4px}
+.empty-state-link{color:var(--accent);text-decoration:none;border-bottom:1px dashed rgba(212,165,116,.5)}
+.empty-state-link:hover{border-bottom-style:solid}
+.empty-state-loading{margin-top:6px;color:var(--text-dim)}
 
 /* SOUNDBOARD */
 .sb-layout{display:flex;flex-direction:column;height:100%;overflow:hidden}
@@ -3295,6 +3324,10 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .weather-condition{color:var(--accent);font-size:var(--fs-lg);font-weight:600;letter-spacing:.04em}
 .weather-feels{color:var(--text-muted);font-size:var(--fs-sm);margin-top:2px}
 .weather-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+/* Five tiles in two columns left Pressure alone on row three beside a hole.
+   An odd last tile spans the row instead, so the block always ends flush —
+   and it stays correct if a sixth reading is ever added. */
+.weather-stats .weather-stat:last-child:nth-child(odd){grid-column:1 / -1}
 .weather-stat{background:var(--panel-2);padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--border)}
 .weather-stat .lab{font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .weather-stat .val{font-size:var(--fs-xl);font-weight:500;color:var(--text)}

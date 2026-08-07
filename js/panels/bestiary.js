@@ -100,12 +100,10 @@ registerPanel('bestiary', {
       </div>
       <div class="bestiary-body">
         ${empty
-          ? `<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)">
-              <div style="font-size:32px;margin-bottom:8px">🐲</div>
-              <div>Click <strong>+ Add</strong> to put a monster in your bestiary.</div>
-              <div style="font-size:var(--fs-sm);margin-top:10px"><a href="#" id="best-template-link" style="color:var(--accent);text-decoration:none;border-bottom:1px dashed rgba(212,165,116,.5)">📁 Or start with template folders</a></div>
-              ${ready?'':'<div style="font-size:var(--fs-sm);margin-top:6px;color:var(--text-dim)">Loading 5e data…</div>'}
-            </div>`
+          ? emptyState({ icon:'i-paw',
+              title:'Click <strong>+ Add</strong> to put a monster in your bestiary.',
+              hint:'<a href="#" id="best-template-link" class="empty-state-link">Or start with template folders</a>'
+                   + (ready ? '' : '<div class="empty-state-loading">Loading 5e data…</div>') })
           : folderSections.join('')}
       </div>
     </div>`;
@@ -169,11 +167,9 @@ registerPanel('bestiary', {
         ? `<div class="bestiary-match-count">${matched.length} match${matched.length===1?'':'es'} for "${esc(this._searchQ)}"</div>`
         : '';
       body.innerHTML = countStrip + (sections.join('') ||
-        `<div class="empty-state" style="padding:30px;text-align:center;color:var(--text-muted)">
-          <div style="font-size:var(--fs-5xl);margin-bottom:6px">🔎</div>
-          <div>No monsters match "${esc(this._searchQ)}".</div>
-          <div style="font-size:var(--fs-sm);margin-top:4px;color:var(--text-dim)">Try fewer terms, or click <strong>+ Add</strong> to add this monster.</div>
-        </div>`);
+        emptyState({ icon:'i-search',
+          title:`No monsters match "${esc(this._searchQ)}".`,
+          hint:'Try fewer terms, or click <strong>+ Add</strong> to add this monster.' }));
     });
 
     b.querySelector('#best-add-folder').addEventListener('click', ()=>this._addFolder());

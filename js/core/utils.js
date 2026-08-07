@@ -118,6 +118,28 @@ function ICO(id, cls){
        + '<use href="#' + id + '"/></svg>';
 }
 
+// Shared empty state. Panels each grew their own — a big colour emoji, a
+// sentence, and whatever inline padding looked right at the time — so no two
+// matched. One shape, built here:
+//
+//   emptyState({ icon:'i-combat', title:'No combatants yet',
+//                hint:'Drag a party member here, or use + above.' })
+//
+// `icon` is a sprite id, not an emoji, so it follows the theme. `hint` is
+// optional and renders dimmer and narrower; `action` takes raw HTML for a
+// button when there is one obvious next step. Everything is escaped by the
+// caller as usual — title and hint are inserted as HTML so they can carry
+// <strong> and the like.
+function emptyState(opts){
+  const o = opts || {};
+  return '<div class="empty-state">'
+    + (o.icon  ? '<div class="empty-state-icon">' + ICO(o.icon) + '</div>' : '')
+    + (o.title ? '<div class="empty-state-title">' + o.title + '</div>' : '')
+    + (o.hint  ? '<div class="empty-state-hint">' + o.hint + '</div>' : '')
+    + (o.action ? '<div class="empty-state-action">' + o.action + '</div>' : '')
+    + '</div>';
+}
+
 function _getMe() {
   try {
     const raw = localStorage.getItem('skt-me-v1');

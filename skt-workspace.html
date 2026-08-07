@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
-<link rel="stylesheet" href="styles/main.css?v=ed1af27bdf">
+<link rel="stylesheet" href="styles/main.css?v=dbedfd8795">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -380,30 +380,30 @@
      bestiaryPortraitPath). Must load before anything renders a portrait. -->
 <script defer src="js/generated/token-index.js?v=e043a461be"></script>
 <!-- 2. Pure utilities (no deps) -->
-<script defer src="js/core/utils.js?v=cfdfd8b7c1"></script>
+<script defer src="js/core/utils.js?v=2d857a6913"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/core/state.js?v=dbbd331c36"></script>
 <!-- 4. Window manager (depends on state) -->
 <script defer src="js/core/window-manager.js?v=54923214c2"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=690034ef3c"></script>
+<script defer src="js/panels/combat.js?v=3ed023582e"></script>
 <script defer src="js/panels/attacks.js?v=8432f5f81d"></script>
 <script defer src="js/panels/party.js?v=e44bac9274"></script>
 <script defer src="js/panels/shop.js?v=cdbe8e12a2"></script>
 <script defer src="js/sync/notes-sync.js?v=8c42540638"></script>
 <script defer src="js/sync/dropbox-config.js?v=ccf8533d50"></script>
 <script defer src="js/sync/dropbox-sync.js?v=ab773edfd6"></script>
-<script defer src="js/panels/notes.js?v=ad742c5036"></script>
+<script defer src="js/panels/notes.js?v=a610a21e2c"></script>
 <script defer src="js/panels/battlemap.js?v=ccb768f5e8"></script>
 <script defer src="js/panels/npc-library.js?v=6986b9c7c2"></script>
-<script defer src="js/panels/bestiary.js?v=f24a0de1e9"></script>
+<script defer src="js/panels/bestiary.js?v=bc58b530c6"></script>
 <!-- Behaviour shared by the Adventures and Books panels. Must load BEFORE
      both, since each calls applyContentPanelShared() at the end of its file. -->
 <script defer src="js/panels/content-panel.js?v=5e25eeb8a7"></script>
 <script defer src="js/panels/adventures.js?v=adbf195007"></script>
 <script defer src="js/panels/books.js?v=beba2c9cfd"></script>
 <script defer src="js/panels/npc-generator.js?v=924ebfdef8"></script>
-<script defer src="js/panels/loot.js?v=f26a13f53d"></script>
+<script defer src="js/panels/loot.js?v=43eb831b43"></script>
 <script defer src="js/panels/encounter.js?v=ff2a8bbb72"></script>
 <script defer src="js/panels/soundboard.js?v=6ee51d8589"></script>
 <script defer src="js/panels/weather.js?v=ab1bd498ab"></script>
