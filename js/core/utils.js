@@ -822,7 +822,7 @@ function createFloatingWindow(opts) {
         +'<span class="window-title-icon">'+(opts.icon||'◇')+'</span>'
         +'<span>'+esc(opts.title||'')+'</span>'
       +'</div>'
-      +'<div class="window-actions"><button class="btn" data-wact="close">✕</button></div>'
+      +'<div class="window-actions"><button class="btn" data-wact="close">'+ICO('i-close')+'</button></div>'
     +'</div>'
     +'<div class="window-body"></div>'
     +'<div class="rh rh-n"  data-rh="n"></div>'

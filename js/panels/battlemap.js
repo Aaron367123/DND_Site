@@ -2020,7 +2020,7 @@ registerPanel('battlemap',{
     html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:164px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
       +'<div style="font-weight:500;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
         +'<span id="tp-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">Token</span>'
-        +'<button class="btn icon-btn" id="tp-close" style="padding:0 4px;font-size:13px;flex-shrink:0">✕</button>'
+        +'<button class="btn icon-btn" id="tp-close" style="padding:0 4px;font-size:13px;flex-shrink:0">'+ICO('i-close')+'</button>'
       +'</div>'
       +'<label class="field-label">Label</label>'
       +'<input type="text" id="tp-label" style="margin-bottom:6px;font-size:11px">'
@@ -3121,7 +3121,7 @@ registerPanel('battlemap',{
         ${this._renderSavedMapsSection()}
         ${this._renderStarredMapsSection()}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-          <input id="mapsel-search" type="search" autocomplete="off" placeholder="🔎 Search maps across every adventure…"
+          <input id="mapsel-search" type="search" autocomplete="off" placeholder="Search maps across every adventure…"
             style="flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px">
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
@@ -3135,7 +3135,7 @@ registerPanel('battlemap',{
         <div id="mapsel-grid" class="mapsel-grid"></div>
       </div>
       <div class="modal-actions" style="margin-top:10px">
-        ${(this._bgMapPath || _mapBgImage || (this._tokens||[]).length) ? '<button class="btn" id="mapsel-save">💾 Save current as…</button>' : ''}
+        ${(this._bgMapPath || _mapBgImage || (this._tokens||[]).length) ? '<button class="btn" id="mapsel-save">'+ICO('i-save')+' Save current as…</button>' : ''}
         ${this._bgMapPath ? '<button class="btn danger" id="mapsel-clear">Clear current map</button>' : ''}
         <button class="btn" id="mapsel-upload-btn">📷 Upload image…</button>
         <input type="file" id="mapsel-upload-input" accept="image/*" style="display:none">

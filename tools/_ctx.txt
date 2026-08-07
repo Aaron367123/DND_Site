@@ -1,0 +1,178 @@
+search.js:114 [bolt] if(r.concentration) tags.push('<span style="color:var(--warning)">⚡ Concentration</span>');
+search.js:882 [book] // own dedicated panel (Adventures 📖) with a chapter-tree browser. (The
+search.js:1311 [bolt] const _detailIcon = {monster:'⚔', spell:'✦', item:'📿', condition:'⚡', feat:'⭐', party:'☻'};
+search.js:1443 [search] // The 🔎 toggle button on the floating toolbar opens (and focuses) the input.
+errors.js:14 [check] //   ✓ Uncaught exceptions and unhandled promise rejections. These should
+errors.js:16 [check] //   ✓ Anything routed through console.error / console.warn — which is where
+errors.js:244 [close] + '<button class="btn icon-btn" data-erract="close">✕</button></div>'
+theme.js:310 [close] const icon = ok ? '✓' : warn ? '⚠' : '✕';
+utils.js:544 [eye] ['👁 in window menu',  'Share / unshare panel with players'],
+utils.js:750 [check] btn.textContent = (it.checked ? '✓ ' : '   ') + it.label;
+utils.js:825 [close] +'<div class="window-actions"><button class="btn" data-wact="close">✕</button></div>'
+window-manager.js:171 [close] // tap did nothing except lose your place. Closing is the title bar's ✕.
+window-manager.js:187 [close] // Toolbar-occlusion helper: when an open window's ⋯ _ ✕ controls slide under
+window-manager.js:800 [eye] items.push({ act:'share', label: (isShared?'👁':'◌')+' '+(isShared?'Shared with players (click to unshare)':'Share with player view') });
+window-manager.js:802 [lock] items.push({ act:'lock',  label: (isLocked?'🔒':'🔓')+' '+(isLocked?'Locked (click to unlock)':'Lock window') });
+pdf-import.js:380 [check] const expended = (s.raw.match(/[●Xx✓✔■▲]/g) || []).length;
+adventures.js:14 [book] title: 'Adventures', icon: '📖',
+adventures.js:141 [book] ? `<img class="adv-card-img" crossorigin="anonymous" src="${esc(coverPath)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"
+adventures.js:142 [book] : `<div class="adv-card-nopic" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px">📖</div>`;
+adventures.js:205 [search] <input type="search" id="adv-search" placeholder="🔎 Filter adventures…" value="${esc(this._searchQ||'')}" autocomplete="off">
+attacks.js:196 [dice] title="${esc(plan.map(p=>p.name).join(' → '))} — roll each, choose a target for each">🎲 Roll</button>
+attacks.js:246 [dice] <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">🎲</button>`
+attacks.js:248 [dice] <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">🎲 Roll</button>`;
+attacks.js:264 [dice] data-rep="${rep}" data-half="0" title="Roll each of the ${rep} hits separately">🎲 ×${rep}</button>
+attacks.js:271 [dice] <button class="atk-btn small roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-alt="1" data-half="0">🎲</button>
+battlemap.js:57 [trash] { label: '🗑 Clear all drawings', run: () => {
+battlemap.js:66 [close] { label: '✕ Clear all tokens', run: () => {
+battlemap.js:1164 [warn] : (s.snapshot?.hadUploadedImage ? '⚠ Upload (no bg)' : 'No background');
+battlemap.js:2023 [close] +'<button class="btn icon-btn" id="tp-close" style="padding:0 4px;font-size:13px;flex-shrink:0">✕</button>'
+battlemap.js:3124 [search] <input id="mapsel-search" type="search" autocomplete="off" placeholder="🔎 Search maps across every adventure…"
+battlemap.js:3138 [save] ${(this._bgMapPath || _mapBgImage || (this._tokens||[]).length) ? '<button class="btn" id="mapsel-save">💾 Save current as…</button>' : ''}
+bestiary.js:13 [folder] // Curated folder templates surfaced by the "+ 📁" picker. Flat array of
+bestiary.js:97 [search] <input type="search" id="best-search" placeholder="🔎 Search bestiary..." value="${esc(this._searchQ)}">
+bestiary.js:98 [folder] <button class="btn icon-btn" id="best-add-folder" title="New folder">📁</button>
+bestiary.js:106 [folder] <div style="font-size:11px;margin-top:10px"><a href="#" id="best-template-link" style="color:var(--accent);text-decoration:none;border-bottom:1px dashed rgba(21
+bestiary.js:143 [heart] <span title="HP">♥ ${m.hp||'?'}</span>
+bestiary.js:144 [shield] <span title="AC">⛨ ${m.ac||'?'}</span>
+bestiary.js:173 [search] <div style="font-size:28px;margin-bottom:6px">🔎</div>
+bestiary.js:181 [folder] // toolbar 📁 button.
+bestiary.js:343 [check] return `<button class="best-template-pill${taken?' taken':''}" data-template="${esc(t.name)}" ${taken?'disabled title="Already exists"':''}>${taken?'✓ ':''}${es
+bestiary.js:458 [pencil] {label:'✎ Edit HP / AC / CR…', onClick:()=>this._editSnapshot(mid)},
+bestiary.js:582 [search] <input type="search" id="best-pick-search" placeholder="🔎 Search 5e monsters…" autocomplete="off"
+books.js:282 [search] <input type="search" id="adv-search" placeholder="🔎 Filter books…" value="${esc(this._searchQ||'')}" autocomplete="off">
+combat.js:323 [gear] { label: '⚙ Manage quick-pick names…',
+combat.js:414 [dice] ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for every NPC (d20 + their bonus; PCs keep their own rolls)">🎲</button>':''
+combat.js:427 [eye] if (m === 'conceal') return '<div class="combat-hide-banner">👁 Monster HP shown as health tier (Healthy / Bloodied / …) to players</div>';
+combat.js:482 [bolt] <div class="group-init" title="Initiative — grouped monsters act together; editing sets every member">⚡ Init
+combat.js:616 [heart] // ♥ ⛨ ⚡ layout at its natural height.
+combat.js:728 [gear] <option value="__manage__">⚙ Manage…</option>
+combat.js:731 [book] ${nameClickable?`<button class="btn icon-btn" data-act="open-bestiary" data-idx="${i}" title="Open ${esc(c.baseName)} stat block in bestiary popout">📖</button>`
+combat.js:735 [heart] <div class="card-stat" title="HP"><span class="lab">♥</span>${hpField}</div>
+combat.js:736 [shield] <div class="card-stat" title="AC"><span class="lab">⛨</span>${acField}</div>
+combat.js:737 [bolt] <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
+combat.js:745 [skull] ${(isPC && c.dead)   ? '<div class="death-saves dead-banner" title="The PC is dead. Heal them above 0 HP (revivify, etc.) to bring them back.">💀 Dead</div>' : '
+combat.js:937 [close] items.push({ label:'✕ Disable legendary tracker', onClick:()=>{
+combat.js:1120 [search] <input type="search" id="cmb-pick-search" placeholder="🔎 Search 5e monsters…" autocomplete="off"
+combat.js:1324 [close] // funnels through here — the panel's ✕, the group card, and the party
+combat.js:1731 [skull] showToast(`💀 ${c.name} dies instantly — massive damage`);
+combat.js:1746 [skull] showToast(`💀 ${c.name} has died`);
+combat.js:1942 [file] html += '<div class="pc-quickref-empty">No imported abilities. Use 📄 Import PDF on the party tracker for save bonuses and passive perception.</div>';
+encounter.js:25 [bolt] title:'Encounter Builder',icon:'⚡',
+encounter.js:177 [save] <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>💾 Save current…</button>
+loot.js:650 [check] <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?'✓':'○'}</button>
+loot.js:652 [book] <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">📖</button>
+loot.js:720 [user] const icon = member.icon || '👤';
+loot.js:810 [dice] <button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">🎲 Roll treasure</button>
+loot.js:815 [search] <input type="text" id="loot-new-name" placeholder="Item name or 🔎 search 5e items..." autocomplete="off" value="${esc(this._searchQ)}">
+loot.js:826 [user] return `<button class="loot-view-tab ${view==='party'?'active':''}" data-view="party" title="All party members, grouped by character"><span class="loot-tab-icon
+loot.js:835 [gear] <span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">⚙</span>
+loot.js:860 [gear] // ⚙ icon inside each custom-tab chip (opens the edit modal for that tab).
+loot.js:862 [gear] // ⚙ edit click — handle first so it doesn't also switch tabs.
+loot.js:945 [check] // Toggle paid/collected status with a timestamp. Hover the ✓ to see
+notes.js:453 [file] ${sel ? this._renderEditor(sel) : '<div class="empty-state" style="padding:40px;text-align:center">Select a file, or click 📄+ to create one.</div>'}
+notes.js:530 [folder] <span class="tile-icon">📁</span>
+notes.js:548 [warn] ⚠ ${conflicts.length} sync conflict${conflicts.length===1?'':'s'} — click to resolve
+notes.js:567 [file] ${sel ? this._renderEditor(sel) : '<div class="empty-state" style="padding:40px;text-align:center">Select a file, or click 📄+ to create one.</div>'}
+notes.js:636 [gear] // Floating settings popover anchored under the ⚙ button. Holds the
+notes.js:1263 [gear] // Settings popover (the ⚙ button next to refresh).
+notes.js:1300 [warn] pill.textContent = '⚠ No token';
+notes.js:1313 [warn] pill.textContent = '⚠ ' + (s.error || 'Disconnected');
+notes.js:1331 [warn] pill.textContent = '⚠ Chromium only';
+notes.js:1354 [unlock] pill.textContent = '🔓 Grant vault access';
+notes.js:1387 [warn] <h3 style="margin:0 0 4px">⚠ Sync conflict — "${esc(c.name)}"</h3>
+notes.js:1395 [save] <div style="font-size:10px;color:#9ad1ff;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">💾 Disk version</div>
+notes.js:1400 [pencil] <summary style="cursor:pointer;color:var(--text-muted)">✎ Manual merge — edit a combined version</summary>
+notes.js:1444 [folder] { label: '📁 Switch vault…', onClick: async () => {
+npc-generator.js:61 [dice] title:'NPC Generator',icon:'🎲',
+npc-generator.js:109 [dice] +'<button class="btn primary" id="npcgen-roll" style="flex:1;min-width:140px" title="'+(anyLocked?'Re-roll only unlocked fields':'Re-roll every field')+'">🎲 '+(
+npc-generator.js:111 [save] +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Save to NPC Library and open the entry">💾 Save</button>'
+npc-generator.js:120 [lock] // emoji 🔒/🔓 rendered chunky and inconsistent across platforms.
+npc-generator.js:160 [eye] +(this._secretRevealed?'🙈 Hide':'👁 Reveal')
+npc-generator.js:176 [lock] html+=field('🔒 Secret','secret',n.secret,'var(--danger)',true);
+npc-library.js:49 [user] title:'NPC Library', icon:'👤',
+npc-library.js:52 [eye] // click 👁 Reveal to see it. Reset to hidden whenever a different NPC
+npc-library.js:355 [heart] { label: 'HP',  glyph: '♥', val: n.hp ?? 0 },
+npc-library.js:356 [shield] { label: 'AC',  glyph: '⛨', val: n.ac ?? 0 },
+npc-library.js:357 [bolt] { label: 'INIT',glyph: '⚡', val: (n.init >= 0 ? '+' : '') + (n.init ?? 0) },
+npc-library.js:476 [search] <input type="search" id="npclib-search" placeholder="🔎 Search NPCs..." value="${esc(this._searchQ)}">
+npc-library.js:477 [check] <button class="icon-btn npclib-tool-btn ${this._bulkMode?'active':''}" id="npclib-bulk-toggle" title="${this._bulkMode?'Exit bulk-select mode':'Bulk-select mode
+npc-library.js:572 [heart] <div class="npclib-stat"><div class="lab">♥</div><input type="number" value="${n.hp||0}" data-field="hp"></div>
+npc-library.js:573 [shield] <div class="npclib-stat"><div class="lab">⛨</div><input type="number" value="${n.ac||0}" data-field="ac"></div>
+npc-library.js:574 [bolt] <div class="npclib-stat"><div class="lab">⚡</div><input type="number" value="${n.init||0}" data-field="init"></div>
+npc-library.js:597 [lock] <div class="npclib-section-label npclib-secret-label">🔒 SECRET
+npc-library.js:598 [eye] <button class="btn small npclib-secret-toggle" data-act="toggle-secret" title="${this._secretRevealed?'Hide the secret again':'Reveal — keep your screen private
+npc-library.js:889 [eye] // 👁 Reveal / 🙈 Hide toggle (panel-local, not persisted between
+party.js:4 [eye] const PARTY_ICONS=['⚔','🗡','🏹','🪄','🔮','🛡','🪓','👊','🌿','🎵','🔥','❄️','⚡','☀','🌙','💀','🐉','🦅','🐺','🌊','📿','🏺','🎭','🌟','💎','🩸','🦴','🌀','👁','🗝'];
+party.js:7 [heart] title:'Party Tracker',icon:'♥',
+party.js:65 [file] { label:'📄 Import PDF',   run: () => this._importPdf() },
+party.js:226 [dice] // the dedicated 🎲 button has been removed.
+party.js:292 [skull] ? '<div class="char-downed-badge" title="At 0 HP — see combat tracker for death saves">💀 Downed' + (
+party.js:309 [shield] +'<div class="char-stat"><div class="l">⛨ AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'" title="'+esc(this._acBreakdown(c))+'"><
+party.js:310 [bolt] +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
+party.js:315 [close] // toggle becomes a pill with quick-reference rules and a ✕ to drop.
+party.js:779 [pencil] parts.push(`<button class="form-pill ws-edit" data-act="ws-edit" data-idx="${i}" title="Edit the beast's HP, AC, speed, attacks">✎</button>`);
+party.js:850 [heart] <span title="Beast HP — damage from the strip drains here first">♥ ${ws.hp}/${ws.hpMax||ws.hp}</span>
+party.js:851 [shield] ${ws.ac!=null ? `<span title="Beast AC">⛨ ${ws.ac}</span>` : ''}
+party.js:952 [warn] ${overCap?'<span class="ws-cr-warn" title="Above your druid-level CR cap (vanilla 5e) — Circle of the Moon may override">⚠</span>':''}
+party.js:966 [search] <input type="search" id="ws-pick-search" placeholder="🔎 Search beasts by name or source (Wolf · Volo · MM …)" autocomplete="off"
+party.js:1056 [close] // beast was at 0 (rare on a manual ✕ click but handled cleanly).
+party.js:1438 [skull] // 1 HP by the rest while the combat card still read "💀 Dead".
+party.js:1988 [check] ? `<span class="mp-res-chip">${esc(r.name)} ${r.current?'✓':'—'}</span>`
+party.js:2006 [pencil] <td class="mp-cell mp-cell-details"><button class="btn icon-btn" data-act="mp-details" data-i="${i}" title="Edit class, level, race, abilities, hit dice">✎</but
+party.js:2007 [trash] <td class="mp-cell mp-cell-del"><button class="btn icon-btn danger" data-act="mp-del" data-i="${i}" title="Remove character">🗑</button></td>
+party.js:2331 [dice] <span class="hd-label">🎲 ${esc(hd.dieType||'d8')}</span>
+party.js:2635 [dice] label: '🎲 Roll d20…',
+party.js:2644 [bolt] rollItems.push({ label:'⚡ Initiative', onClick: () => {
+party.js:2669 [skull] rollItems.push({ label:'💀 Death save', onClick: () => {
+party.js:2722 [dice] label: `🎲 Spend a hit die (${c.hitDice.current||0}/${c.hitDice.max})`,
+party.js:2751 [pencil] items.push({ label:'✎ Edit details…',  onClick: () => {
+party.js:2756 [trash] items.push({ label:'🗑 Remove from party', onClick: () => {
+shop.js:37 [gear] <button class="btn icon-btn" data-act="settings" title="Pricing settings (currency, jitter, rounding)" style="padding:2px 6px;font-size:13px;line-height:1">⚙</b
+shop.js:45 [save] <button class="btn small" data-act="save-shop" style="flex:1" ${!state.shop?'disabled title="Generate a shop first"':''}>💾 Save</button>
+shop.js:225 [gear] // These used to live in the global ⚙ Settings drawer but are scoped to the
+shop.js:569 [gear] : `<div style="padding:18px 14px;font-size:12px;color:var(--text-muted);text-align:center">No items match the active filters. Open <strong>⚙</strong> to allow m
+soundboard.js:93 [speaker] title:'Sound Board', icon:'🔊',
+soundboard.js:174 [speaker] +'<span class="sb-master-label">🔊 Master</span>'
+soundboard.js:213 [save] html += '<button class="btn small" id="sb-save-scene" title="Save the currently-looping sounds as a named scene">💾 Save scene…</button>';
+soundboard.js:247 [folder] +'<label class="btn" style="cursor:pointer;flex-shrink:0">📁 Upload sounds'
+timetracker.js:202 [check] <button class="btn small primary" id="time-edit-done">✓</button>
+timetracker.js:236 [check] // Commit on ✓ click or Enter — picks up every field including the
+weather.js:238 [dice] <button class="btn primary weather-reroll" id="weather-reroll" style="flex:1;min-width:140px">🎲 Reroll Weather</button>
+realtime.js:15 [warn] // ⚠ The REPLACE_ME values below will prevent sync until you fill them in.
+realtime.js:981 [warn] bar.innerHTML = '<div class="rt-conflict-head">⚠ ' + entries.length + ' sync conflict' + (entries.length===1?'':'s')
+context-menu.js:145 [save] <button class="ctx-mini-btn" data-focus-update="${i}" title="Update with current layout">💾</button>
+context-menu.js:146 [trash] <button class="ctx-mini-btn" data-focus-delete="${i}" title="Delete">🗑</button>
+onboarding.js:116 [dice] banner.innerHTML = `<span>🎲 Demo combat active — your campaign data is saved.</span>
+onboarding.js:291 [book] <button class="btn small" id="about-open-tutorial">📖 Reopen tutorial</button>
+player-view.js:7 [eye] // constrained to whatever panels the DM has shared via the 👁 button on
+player-view.js:92 [eye] + '<span style="font-size:11px">The DM clicks the 👁 in any panel\'s title bar to share.</span></div>'
+settings.js:44 [gear] // uses to hide the matching widget. Settings (⚙) and search (🔎) intentionally
+settings.js:84 [gear] // via a small ⚙ button so the settings drawer focuses on global preferences.
+settings.js:255 [check] setStat('✓ ' + results.join(', ') + ' · ' + hhmm);
+settings.js:292 [warn] msg += '\n\n⚠ Old-format file — it only contains party, combat, shop and'
+settings.js:296 [warn] msg += '\n\n⚠ Not in this file, so it will be CLEARED:\n• ' + info.localOnly.join('\n• ');
+settings.js:374 [warn] if (info.localOnly.length) msg += '\n\n⚠ Will be CLEARED:\n• ' + info.localOnly.join('\n• ');
+settings.js:485 [warn] showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{
+tutorial.js:28 [search] icon: '🔎',
+tutorial.js:56 [lock] <li><strong>🔒 Lock</strong> to prevent accidental moves.</li>
+tutorial.js:57 [eye] <li><strong>👁 Share</strong> (DM-only) to expose the window to Player View.</li>
+tutorial.js:87 [heart] title: 'Party Tracker ♥',
+tutorial.js:88 [heart] icon: '♥',
+tutorial.js:102 [file] Click <strong>📄 Import PDF</strong> to parse a D&amp;D Beyond character sheet, or build one manually.
+tutorial.js:125 [dice] title: 'NPC Library 👤 & Generator 🎲',
+tutorial.js:126 [user] icon: '👤',
+tutorial.js:151 [book] assignment. Click <strong>📖</strong> next to a name to pop open the 5e detail.</li>
+tutorial.js:154 [user] <p><strong>Tabs</strong> across the top: <strong>All</strong>, a single <strong>👤 Party</strong>
+tutorial.js:163 [bolt] title: 'Encounter Builder ⚡',
+tutorial.js:164 [bolt] icon: '⚡',
+tutorial.js:206 [trash] <li><strong>🖊 Draw</strong> annotations in colored pencil. <strong>🗑 Erase</strong> now also
+tutorial.js:229 [gear] table priced by your settings (currency symbol &amp; jitter live in <strong>⚙ Settings</strong>).</p>
+tutorial.js:233 [speaker] title: 'Soundboard 🔊',
+tutorial.js:234 [speaker] icon: '🔊',
+tutorial.js:253 [eye] that mirrors only the windows you've marked with the <strong>👁 share</strong> icon —
+tutorial.js:267 [gear] title: 'Settings & themes ⚙',
+tutorial.js:269 [gear] icon: '⚙',
+tutorial.js:271 [gear] <p>The <strong>⚙</strong> button in the top toolbar opens settings:</p>
+tutorial.js:282 [dice] title: "You're set 🎲",
+tutorial.js:283 [dice] icon: '🎲',

@@ -241,7 +241,7 @@ function show(){
   wrap.innerHTML =
     '<div class="modal errlog-modal">'
     + '<div class="modal-head"><h3>Diagnostics</h3>'
-    + '<button class="btn icon-btn" data-erract="close">✕</button></div>'
+    + '<button class="btn icon-btn" data-erract="close">'+ICO('i-close')+'</button></div>'
     + '<div class="errlog-body">' + (rows || '<p class="drawer-note">Nothing logged this session.</p>') + '</div>'
     + '<div class="modal-actions">'
     + '<button class="btn small" data-erract="copy">Copy all</button>'

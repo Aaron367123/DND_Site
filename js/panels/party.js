@@ -306,8 +306,8 @@ registerPanel('party',{
       // a number looks right. Manual c.acSources entries override the
       // inferred breakdown for DMs who track gear explicitly.
       +'<div class="char-stats-row">'
-        +'<div class="char-stat"><div class="l">⛨ AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'" title="'+esc(this._acBreakdown(c))+'"></div>'
-        +'<div class="char-stat"><div class="l">⚡ Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
+        +'<div class="char-stat"><div class="l">'+ICO('i-shield')+' AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'" title="'+esc(this._acBreakdown(c))+'"></div>'
+        +'<div class="char-stat"><div class="l">'+ICO('i-bolt')+' Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
       +'</div>'
       // Active-form row — class-aware buttons for rage (barbarian) and wild
@@ -345,7 +345,7 @@ registerPanel('party',{
           const bd = this._bardicDie(c);
           const parts = [];
           if (!c.inspiration){
-            parts.push(`<button class="insp-give-btn" data-act="insp" data-idx="${i}" title="Grant Heroic Inspiration · right-click for award reasons">✨ Grant</button>`);
+            parts.push(`<button class="insp-give-btn" data-act="insp" data-idx="${i}" title="Grant Heroic Inspiration · right-click for award reasons">${ICO('i-sparkle')} Grant</button>`);
           }
           if (!c.bardicInspiration){
             parts.push(`<button class="insp-give-btn bardic" data-act="bardic-insp" data-idx="${i}" title="Grant Bardic Inspiration${bd?' ('+bd+')':' (set by the bard granting it)'}">🎵 Bardic${bd?' '+bd:''}</button>`);
@@ -776,7 +776,7 @@ registerPanel('party',{
     if (isDruid){
       if (wildshape){
         parts.push(`<button class="form-pill ws-on" data-act="ws-end" data-idx="${i}" title="Wild Shape active as ${esc(wildshape.name)} — Druid stats hidden, beast HP routes damage first. Click to revert.">🐺 ${esc(wildshape.name)} <span class="form-pill-x">×</span></button>`);
-        parts.push(`<button class="form-pill ws-edit" data-act="ws-edit" data-idx="${i}" title="Edit the beast's HP, AC, speed, attacks">✎</button>`);
+        parts.push(`<button class="form-pill ws-edit" data-act="ws-edit" data-idx="${i}" title="Edit the beast's HP, AC, speed, attacks">${ICO('i-pencil')}</button>`);
       } else {
         parts.push(`<button class="form-pill ws-off" data-act="ws-start" data-idx="${i}" title="Transform into a beast — opens an editor for the beast's HP, AC, speed, and attacks">🐺 Wild Shape</button>`);
       }
@@ -963,7 +963,7 @@ registerPanel('party',{
         <span style="flex:1"></span>
         ${cur.name ? `<button class="btn small" id="ws-revert" title="Drop the current form">↩ Revert (${esc(cur.name)})</button>` : ''}
       </div>
-      <input type="search" id="ws-pick-search" placeholder="🔎 Search beasts by name or source (Wolf · Volo · MM …)" autocomplete="off"
+      <input type="search" id="ws-pick-search" placeholder="Search beasts by name or source (Wolf · Volo · MM …)" autocomplete="off"
         style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
       <div id="ws-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
       <div class="modal-actions"><button class="btn" id="ws-pick-close">Close</button></div>
@@ -2003,8 +2003,8 @@ registerPanel('party',{
       return `<tr>
         <td class="mp-cell mp-cell-icon">${renderIcon(c.icon||'⚔', c.name)}</td>
         ${cells}
-        <td class="mp-cell mp-cell-details"><button class="btn icon-btn" data-act="mp-details" data-i="${i}" title="Edit class, level, race, abilities, hit dice">✎</button></td>
-        <td class="mp-cell mp-cell-del"><button class="btn icon-btn danger" data-act="mp-del" data-i="${i}" title="Remove character">🗑</button></td>
+        <td class="mp-cell mp-cell-details"><button class="btn icon-btn" data-act="mp-details" data-i="${i}" title="Edit class, level, race, abilities, hit dice">${ICO('i-pencil')}</button></td>
+        <td class="mp-cell mp-cell-del"><button class="btn icon-btn danger" data-act="mp-del" data-i="${i}" title="Remove character">${ICO('i-trash')}</button></td>
       </tr>`;
     }).join('');
     const renderModal = () => {

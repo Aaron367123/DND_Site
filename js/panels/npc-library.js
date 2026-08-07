@@ -473,7 +473,7 @@ registerPanel('npclib', {
     b.innerHTML = `<div class="npclib-root">
       <div class="npclib-left" ${leftStyle}>
         <div class="npclib-toolbar">
-          <input type="search" id="npclib-search" placeholder="🔎 Search NPCs..." value="${esc(this._searchQ)}">
+          <input type="search" id="npclib-search" placeholder="Search NPCs..." value="${esc(this._searchQ)}">
           <button class="icon-btn npclib-tool-btn ${this._bulkMode?'active':''}" id="npclib-bulk-toggle" title="${this._bulkMode?'Exit bulk-select mode':'Bulk-select mode (checkboxes + bulk actions)'}">${this._bulkMode?'✓':'☐'}</button>
           <button class="icon-btn npclib-tool-btn" id="npclib-add" title="New NPC">+</button>
         </div>
@@ -569,9 +569,9 @@ registerPanel('npclib', {
       </div>
 
       <div class="npclib-stats">
-        <div class="npclib-stat"><div class="lab">♥</div><input type="number" value="${n.hp||0}" data-field="hp"></div>
-        <div class="npclib-stat"><div class="lab">⛨</div><input type="number" value="${n.ac||0}" data-field="ac"></div>
-        <div class="npclib-stat"><div class="lab">⚡</div><input type="number" value="${n.init||0}" data-field="init"></div>
+        <div class="npclib-stat"><div class="lab">${ICO('i-heart')}</div><input type="number" value="${n.hp||0}" data-field="hp"></div>
+        <div class="npclib-stat"><div class="lab">${ICO('i-shield')}</div><input type="number" value="${n.ac||0}" data-field="ac"></div>
+        <div class="npclib-stat"><div class="lab">${ICO('i-bolt')}</div><input type="number" value="${n.init||0}" data-field="init"></div>
       </div>
 
       <div class="npclib-section-label">TAGS</div>
@@ -594,7 +594,7 @@ registerPanel('npclib', {
       </div>
       <div class="npclib-notes" contenteditable="true" data-field="notes" data-placeholder="Click here to start typing.">${sanitizeHtml(n.notes||'')}</div>
 
-      <div class="npclib-section-label npclib-secret-label">🔒 SECRET
+      <div class="npclib-section-label npclib-secret-label">${ICO('i-lock')} SECRET
         <button class="btn small npclib-secret-toggle" data-act="toggle-secret" title="${this._secretRevealed?'Hide the secret again':'Reveal — keep your screen private!'}">${this._secretRevealed?'🙈 Hide':'👁 Reveal'}</button>
       </div>
       <textarea class="npclib-secret${this._secretRevealed?'':' redacted'}" data-field="secret" placeholder="DM-only — what this NPC is hiding.">${esc(n.secret||'')}</textarea>

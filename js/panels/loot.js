@@ -647,9 +647,9 @@ registerPanel('loot',{
       : '';
     return `<div class="loot-item ${item.assignedTo?'assigned':''} ${paid?'paid':''}" data-i="${i}" draggable="true">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
-      <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?'✓':'○'}</button>
+      <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?ICO('i-check'):'<span class="loot-unpaid">○</span>'}</button>
       <div class="loot-name">
-        <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">📖</button>
+        <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
         <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="Click to rename" spellcheck="false">
         ${assignedName?`<span class="loot-assigned-pill" title="${esc(assignedName)}">→ ${esc(assignedName)}</span>`:''}
       </div>
@@ -804,15 +804,15 @@ registerPanel('loot',{
         <span>· Per party member: <strong style="color:var(--warning)">${state.party.length?(totalGp/state.party.length).toFixed(2):totalGp} gp</strong></span>
         <label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
           <input type="checkbox" id="loot-encumbrance-toggle" ${state.settings?.lootEncumbrance?'checked':''}>
-          <span>⚖ Weight</span>
+          <span>${ICO('i-scale')} Weight</span>
         </label>
         <span style="flex:1"></span>
-        <button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">🎲 Roll treasure</button>
+        <button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">${ICO('i-dice')} Roll treasure</button>
         <button class="btn small" id="loot-divvy">Divvy up</button>
       </div>
       <div class="loot-add-row">
         <div class="loot-search-wrap">
-          <input type="text" id="loot-new-name" placeholder="Item name or 🔎 search 5e items..." autocomplete="off" value="${esc(this._searchQ)}">
+          <input type="text" id="loot-new-name" placeholder="Item name or search 5e items..." autocomplete="off" value="${esc(this._searchQ)}">
           <div class="loot-search-dropdown" id="loot-search-results"></div>
         </div>
         <input type="number" id="loot-new-qty" value="1" min="1" placeholder="Qty">
@@ -823,24 +823,24 @@ registerPanel('loot',{
         <button class="loot-view-tab ${view==='all'?'active':''}" data-view="all" title="All items">All${this._loot.items.length?` <span class="loot-tab-count">${this._loot.items.length}</span>`:''}</button>
         ${state.party.length ? (() => {
           const cnt = this._loot.items.filter(it => state.party.some(p => this._itemBelongsToMember(it, p.id))).length;
-          return `<button class="loot-view-tab ${view==='party'?'active':''}" data-view="party" title="All party members, grouped by character"><span class="loot-tab-icon emoji">👤</span><span class="loot-tab-name">Party</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          return `<button class="loot-view-tab ${view==='party'?'active':''}" data-view="party" title="All party members, grouped by character"><span class="loot-tab-icon">${ICO('i-user')}</span><span class="loot-tab-name">Party</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         })() : ''}
         ${(this._loot.tabGroups||[]).map(g => {
           const cnt = this._itemsForTabGroup(g).length;
           const key = 'tabgroup:'+g.id;
           return `<button class="loot-view-tab tabgroup ${view===key?'active':''}" data-view="${esc(key)}" title="${esc(g.name)} — ${(g.memberIds||[]).length} member(s)">
-            <span class="loot-tab-icon emoji">👥</span>
+            <span class="loot-tab-icon">${ICO('i-user')}</span>
             <span class="loot-tab-name">${esc(g.name)}</span>
             ${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}
-            <span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">⚙</span>
+            <span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">${ICO('i-gear')}</span>
           </button>`;
         }).join('')}
-        <button class="loot-view-tab loot-tab-add" data-tg-add="1" title="Create a custom tab grouping party members"><span class="loot-tab-icon emoji">＋</span><span class="loot-tab-name">Tab</span></button>
+        <button class="loot-view-tab loot-tab-add" data-tg-add="1" title="Create a custom tab grouping party members"><span class="loot-tab-icon">${ICO('i-tag')}</span><span class="loot-tab-name">Tab</span></button>
         ${(() => {
           // "Group" tab = shared / unassigned loot (treats items pointing at
           // a deleted party member as unassigned too).
           const cnt = this._loot.items.filter(it => !this._isAssignedTo(it.assignedTo)).length;
-          return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Shared / group loot"><span class="loot-tab-icon emoji">📦</span><span class="loot-tab-name">Group</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Shared / group loot"><span class="loot-tab-icon">${ICO('i-chest')}</span><span class="loot-tab-name">Group</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         })()}
       </div>
       <div class="loot-items">

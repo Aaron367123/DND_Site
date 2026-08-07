@@ -174,7 +174,7 @@ registerPanel('encounter',{
           </div>
           <h3 style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:14px 0 8px">Saved encounters</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-            <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>💾 Save current…</button>
+            <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>${ICO('i-save')} Save current…</button>
           </div>
           <div id="enc-saved-list" style="display:flex;flex-direction:column;gap:4px">
             ${!this._saved.length

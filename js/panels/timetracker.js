@@ -199,7 +199,7 @@ registerPanel('time', {
         <input type="number" id="time-hour" min="0" max="23" value="${t.hour}" title="Hour">
         <input type="number" id="time-minute" min="0" max="59" value="${t.minute||0}" title="Minute">
         <input type="number" id="time-second" min="0" max="59" value="${t.second||0}" title="Second">
-        <button class="btn small primary" id="time-edit-done">✓</button>
+        <button class="btn small primary" id="time-edit-done">${ICO('i-check')}</button>
       </div>
       <div class="time-advance-label">ADVANCE</div>
       <div class="time-buttons">

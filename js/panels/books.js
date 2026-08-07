@@ -279,7 +279,7 @@ registerPanel('books', {
     b.innerHTML = `
       <div class="adv-panel">
         <div class="adv-list-head">
-          <input type="search" id="adv-search" placeholder="🔎 Filter books…" value="${esc(this._searchQ||'')}" autocomplete="off">
+          <input type="search" id="adv-search" placeholder="Filter books…" value="${esc(this._searchQ||'')}" autocomplete="off">
           <span class="adv-list-count">${visible.length} / ${this._adventures.length}</span>
         </div>
         ${scopeRow}

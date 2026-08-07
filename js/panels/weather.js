@@ -235,9 +235,9 @@ registerPanel('weather', {
         </label>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <button class="btn primary weather-reroll" id="weather-reroll" style="flex:1;min-width:140px">🎲 Reroll Weather</button>
-        <button class="btn" id="weather-tick-day" title="Push the current weather to history and roll fresh — like the in-game day rolled over">📅 Tick day</button>
-        <button class="btn" id="weather-sync-season" title="Read the current in-game month from the Time Tracker and match the season">🔗 Sync season</button>
+        <button class="btn primary weather-reroll" id="weather-reroll" style="flex:1;min-width:140px">${ICO('i-dice')} Reroll Weather</button>
+        <button class="btn" id="weather-tick-day" title="Push the current weather to history and roll fresh — like the in-game day rolled over">${ICO('i-calendar')} Tick day</button>
+        <button class="btn" id="weather-sync-season" title="Read the current in-game month from the Time Tracker and match the season">${ICO('i-link')} Sync season</button>
       </div>
       ${this._renderHistoryStrip()}
     `;

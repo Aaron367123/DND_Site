@@ -193,7 +193,7 @@ registerPanel('attacks', {
            <button class="atk-btn small" data-aact="multi" data-cid="${esc(c.id)}" data-mode="avg"
              title="${esc(plan.map(p=>p.name).join(' → '))} — average damage, choose a target for each">Avg</button>
            <button class="atk-btn small roll" data-aact="multi" data-cid="${esc(c.id)}" data-mode="roll"
-             title="${esc(plan.map(p=>p.name).join(' → '))} — roll each, choose a target for each">🎲 Roll</button>
+             title="${esc(plan.map(p=>p.name).join(' → '))} — roll each, choose a target for each">${ICO('i-dice')} Roll</button>
          </div>`
       : '';
     const multi = r.multi
@@ -243,9 +243,9 @@ registerPanel('attacks', {
     const btns = a.save
       ? `<button class="atk-btn" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg"  data-half="0">Failed</button>
          ${a.save.half ? `<button class="atk-btn ghost" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg" data-half="1">Saved ½</button>` : ''}
-         <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">🎲</button>`
+         <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">${ICO('i-dice')}</button>`
       : `<button class="atk-btn" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg" data-half="0" title="Use the stat block's average">Avg</button>
-         <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">🎲 Roll</button>`;
+         <button class="atk-btn roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll" data-half="0" title="Roll the damage dice">${ICO('i-dice')} Roll</button>`;
     // How many times Multiattack says this specific attack is made. 0 when the
     // wording named nothing we could resolve, in which case no chip and no
     // repeat button appear — better to show nothing than a number that might
@@ -261,7 +261,7 @@ registerPanel('attacks', {
            <button class="atk-btn small" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="avg"
              data-rep="${rep}" data-half="0" title="Average damage, ${rep} hits">Avg ×${rep}</button>
            <button class="atk-btn small roll" data-aact="go" data-cid="${cid}" data-ai="${ai}" data-mode="roll"
-             data-rep="${rep}" data-half="0" title="Roll each of the ${rep} hits separately">🎲 ×${rep}</button>
+             data-rep="${rep}" data-half="0" title="Roll each of the ${rep} hits separately">${ICO('i-dice')} ×${rep}</button>
          </div>`
       : '';
     const altBtns = a.alt

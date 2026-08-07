@@ -106,9 +106,9 @@ registerPanel('npcgen',{
 
     const anyLocked = Object.values(this._locks).some(Boolean);
     html+='<div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
-      +'<button class="btn primary" id="npcgen-roll" style="flex:1;min-width:140px" title="'+(anyLocked?'Re-roll only unlocked fields':'Re-roll every field')+'">🎲 '+(anyLocked?'Reroll unlocked':'Generate NPC')+'</button>'
+      +'<button class="btn primary" id="npcgen-roll" style="flex:1;min-width:140px" title="'+(anyLocked?'Re-roll only unlocked fields':'Re-roll every field')+'">'+ICO('i-dice')+' '+(anyLocked?'Reroll unlocked':'Generate NPC')+'</button>'
       +'<button class="btn" id="npcgen-bulk" style="flex-shrink:0" title="Generate 5 NPCs straight into the NPC Library">+5 to Library</button>'
-      +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Save to NPC Library and open the entry">💾 Save</button>'
+      +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Save to NPC Library and open the entry">'+ICO('i-save')+' Save</button>'
       +'<button class="btn" id="npcgen-combat" style="flex-shrink:0" title="Add to combat">⚔ Combat</button>'
     +'</div>';
 

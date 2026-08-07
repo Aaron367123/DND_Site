@@ -408,10 +408,10 @@ registerPanel('combat',{
         ${inCombat?'<button class="btn icon-btn" data-act="prev" title="Step back one turn (undo turn advance)">◀</button>':''}
         <button class="btn icon-btn" data-act="next" title="Advance turn">▶</button>
         <button class="btn icon-btn" data-act="add" title="Add custom combatant">+</button>
-        <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">🐲</button>
+        <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">${ICO('i-paw')}</button>
         <button class="btn icon-btn ${compact?'active':''}" data-act="toggle-compact" title="${compact?'Show full cards':'Compact card mode'}">${compact?'▤':'▦'}</button>
         <button class="btn icon-btn ${grouped?'active':''}" data-act="toggle-group" title="${grouped?'Show every monster individually':'Group identical monsters into one card'}">${grouped?'▣':'⊞'}</button>
-        ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for every NPC (d20 + their bonus; PCs keep their own rolls)">🎲</button>':''}
+        ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for every NPC (d20 + their bonus; PCs keep their own rolls)">'+ICO('i-dice')+'</button>':''}
         ${inCombat?'<button class="btn icon-btn" data-act="sort-init" title="Sort by initiative — highest first, Dex breaks ties">⇅</button>':''}
         ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
         <span style="flex:1"></span>
@@ -423,8 +423,8 @@ registerPanel('combat',{
         // players are seeing. Players themselves don't need to see it.
         if (document.body.classList.contains('player-mode')) return '';
         const m = this._statsMode();
-        if (m === 'hide')    return '<div class="combat-hide-banner">🙈 Monster HP &amp; AC hidden from players</div>';
-        if (m === 'conceal') return '<div class="combat-hide-banner">👁 Monster HP shown as health tier (Healthy / Bloodied / …) to players</div>';
+        if (m === 'hide')    return '<div class="combat-hide-banner">'+ICO('i-eye-off')+' Monster HP &amp; AC hidden from players</div>';
+        if (m === 'conceal') return '<div class="combat-hide-banner">'+ICO('i-eye')+' Monster HP shown as health tier (Healthy / Bloodied / …) to players</div>';
         return '';
       })()}
 
@@ -728,13 +728,13 @@ registerPanel('combat',{
                   <option value="__manage__">⚙ Manage…</option>
                 </select>`;
               })()}
-              ${nameClickable?`<button class="btn icon-btn" data-act="open-bestiary" data-idx="${i}" title="Open ${esc(c.baseName)} stat block in bestiary popout">📖</button>`:''}
+              ${nameClickable?`<button class="btn icon-btn" data-act="open-bestiary" data-idx="${i}" title="Open ${esc(c.baseName)} stat block in bestiary popout">${ICO('i-book-open')}</button>`:''}
               ${active?'<span class="turn-marker">◀</span>':''}
             </div>`}
         <div class="card-stats">
-          <div class="card-stat" title="HP"><span class="lab">♥</span>${hpField}</div>
-          <div class="card-stat" title="AC"><span class="lab">⛨</span>${acField}</div>
-          <div class="card-stat" title="Initiative"><span class="lab">⚡</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
+          <div class="card-stat" title="HP"><span class="lab">${ICO('i-heart')}</span>${hpField}</div>
+          <div class="card-stat" title="AC"><span class="lab">${ICO('i-shield')}</span>${acField}</div>
+          <div class="card-stat" title="Initiative"><span class="lab">${ICO('i-bolt')}</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
         </div>
         ${dmgStripRow}
         ${hpBar}
@@ -742,7 +742,7 @@ registerPanel('combat',{
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
         ${(!isPC && (c.legendaryMax || c.legendaryMax === 0)) ? this._renderLegendary(i, c) : ''}
         ${(isPC && (c.hp||0) <= 0 && !c.dead && !c.stable) ? this._renderDeathSaves(i, c) : ''}
-        ${(isPC && c.dead)   ? '<div class="death-saves dead-banner" title="The PC is dead. Heal them above 0 HP (revivify, etc.) to bring them back.">💀 Dead</div>' : ''}
+        ${(isPC && c.dead)   ? '<div class="death-saves dead-banner" title="The PC is dead. Heal them above 0 HP (revivify, etc.) to bring them back.">'+ICO('i-skull')+' Dead</div>' : ''}
         ${(isPC && c.stable && (c.hp||0) <= 0) ? '<div class="death-saves stable-banner" title="Stable at 0 HP — no more death saves unless they take damage (which will start fresh saves with one failure, per RAW).">⚕ Stable</div>' : ''}
       </div>
       <div class="card-actions">
@@ -1117,7 +1117,7 @@ registerPanel('combat',{
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:90vw">
       <h3>Add Monster to Combat</h3>
-      <input type="search" id="cmb-pick-search" placeholder="🔎 Search 5e monsters…" autocomplete="off"
+      <input type="search" id="cmb-pick-search" placeholder="Search 5e monsters…" autocomplete="off"
         style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
       <div id="cmb-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
       <div id="cmb-pick-count" style="font-size:11px;color:var(--text-muted);padding:6px 2px 0"></div>

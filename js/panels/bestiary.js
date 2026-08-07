@@ -94,8 +94,8 @@ registerPanel('bestiary', {
 
     b.innerHTML = `<div class="bestiary-root">
       <div class="bestiary-toolbar">
-        <input type="search" id="best-search" placeholder="🔎 Search bestiary..." value="${esc(this._searchQ)}">
-        <button class="btn icon-btn" id="best-add-folder" title="New folder">📁</button>
+        <input type="search" id="best-search" placeholder="Search bestiary..." value="${esc(this._searchQ)}">
+        <button class="btn icon-btn" id="best-add-folder" title="New folder">${ICO('i-folder')}</button>
         <button class="btn primary small" id="best-add-monster" title="${ready?'Add monster':'Loading 5e data…'}" ${ready?'':'disabled'}>+ Add</button>
       </div>
       <div class="bestiary-body">
@@ -140,8 +140,8 @@ registerPanel('bestiary', {
       <div class="bestiary-card-avatar">${img}</div>
       <div class="bestiary-card-name">${esc(m.name)}</div>
       <div class="bestiary-card-stats">
-        <span title="HP">♥ ${m.hp||'?'}</span>
-        <span title="AC">⛨ ${m.ac||'?'}</span>
+        <span title="HP">${ICO('i-heart')} ${m.hp||'?'}</span>
+        <span title="AC">${ICO('i-shield')} ${m.ac||'?'}</span>
         <span title="CR">CR ${esc(String(m.cr??'?'))}</span>
       </div>
     </div>`;
@@ -579,7 +579,7 @@ registerPanel('bestiary', {
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:90vw">
       <h3>Add Monster</h3>
-      <input type="search" id="best-pick-search" placeholder="🔎 Search 5e monsters…" autocomplete="off"
+      <input type="search" id="best-pick-search" placeholder="Search 5e monsters…" autocomplete="off"
         style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:12px;margin-bottom:10px">
       ${this._data.folders.length ? `<div class="modal-field" style="margin-bottom:10px">
         <label>Folder</label>

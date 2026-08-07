@@ -142,8 +142,8 @@ function _ctxRender(menu){
       html += `<div class="ctx-item" data-focus-i="${i}">
         <span class="ctx-radio${_ctxLastFocusId===f.id?' on':''}"></span>
         <span class="ctx-item-label">${esc(f.name)}</span>
-        <button class="ctx-mini-btn" data-focus-update="${i}" title="Update with current layout">💾</button>
-        <button class="ctx-mini-btn" data-focus-delete="${i}" title="Delete">🗑</button>
+        <button class="ctx-mini-btn" data-focus-update="${i}" title="Update with current layout">${ICO('i-save')}</button>
+        <button class="ctx-mini-btn" data-focus-delete="${i}" title="Delete">${ICO('i-trash')}</button>
       </div>`;
     });
   }

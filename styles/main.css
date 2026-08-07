@@ -194,7 +194,14 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
    and without it the 24-unit paths would render 1:1 inside an 18px box and
    clip. See ICO() in js/core/utils.js, which is the only place icons are
    built in JS so that can't drift. */
-.ico{width:18px;height:18px;flex-shrink:0;display:block;
+/* inline-block, not block. As `block` a sprite forced its own line, so every
+   label sitting beside one — "Grant", "Roll treasure", the Weight checkbox —
+   got pushed underneath the icon and the control doubled in height. Chasing
+   that with per-container flex rules only fixed the containers I thought of;
+   flowing inline fixes it everywhere, including the next one added. Inside a
+   flex container (the dock, icon-only buttons) it is a flex item regardless,
+   so nothing there changes. */
+.ico{width:18px;height:18px;flex-shrink:0;display:inline-block;vertical-align:middle;
   fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .dock-btn .ico{width:18px;height:18px}
 .float-btn .ico{width:17px;height:17px}
@@ -2370,6 +2377,37 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 /* Icon + label buttons. `.bt-l` is the full label, `.bt-s` an abbreviation
    used only where a button has no icon to fall back on (+ PC / + NPC). The
    phone layout swaps which one shows; everywhere else it's the long one. */
+/* ── Icons inside buttons and stat labels ─────────────────────────────────
+   The emoji these replaced sat on the text baseline and brought their own
+   colour. A sprite needs to be told both: inline-flex to centre it against the
+   label, and a size, since .ico defaults to 18px which is too big next to
+   12-13px stat text. currentColor does the rest, so an icon in a danger button
+   goes red and one in an active chip goes dark on gold, for free. */
+.btn .ico, .icon-btn .ico{vertical-align:middle}
+/* Any button holding a sprite becomes a flex row. Not `:has(> .ico + *)` —
+   most of these buttons label themselves with a bare text node, which is not
+   an element, so the sibling combinator never matched and .ico's display:block
+   pushed the label onto its own line. "Roll treasure" rendered as a die with
+   the words underneath it. */
+.btn:has(> .ico), .icon-btn:has(> .ico){
+  display:inline-flex; align-items:center; justify-content:center;
+  gap:5px; line-height:1;
+}
+/* HP / AC / initiative labels on combat, party, NPC-library and bestiary
+   cards. These read as units, not decoration, so they stay muted and small. */
+.card-stat .lab .ico,
+.npclib-stat .lab .ico,
+.char-stat .l .ico,
+.bestiary-card .ico{width:13px; height:13px}
+.card-stat .lab, .npclib-stat .lab, .char-stat .l{
+  display:inline-flex; align-items:center; justify-content:center; gap:3px;
+}
+.loot-paid-btn .ico{width:14px; height:14px}
+/* .loot-tab-icon is a 16px circle, so the sprite has to be smaller than the
+   18px default or it fills the disc edge to edge. */
+.loot-tab-icon .ico{width:11px; height:11px}
+.loot-tab-edit .ico{width:13px; height:13px}
+.loot-unpaid{opacity:.5}
 .map-party-bar{flex-wrap:wrap}
 .map-toolbar .btn{display:inline-flex;align-items:center;gap:5px;line-height:1}
 .map-toolbar .btn .ico{width:15px;height:15px}
