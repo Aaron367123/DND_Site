@@ -2251,6 +2251,41 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .notes-toolbar-2 .btn{font-size:var(--fs-md);padding:4px 9px;min-width:28px;background:transparent;border:1px solid transparent;color:var(--text-muted);border-radius:var(--r-md);line-height:1.2}
 .notes-toolbar-2 .btn:hover{background:var(--panel-3);color:var(--text);border-color:transparent}
 .notes-tb-sep{width:1px;height:18px;background:var(--border);margin:0 5px}
+/* Sprite sizing inside the notes chrome. The formatting row already had
+   hand-rolled 14px SVGs for bullet/quote/table, so the sprites match those
+   rather than the 18px default, and undo/redo now sit on the same optical
+   weight as the rest of the row instead of being ↶/↷ text glyphs. */
+.notes-toolbar-2 .ico{width:14px;height:14px}
+.notes-editor-head .ico{width:16px;height:16px}
+.notes-tree-head .ico{width:15px;height:15px}
+.notes-tree-head .btn{display:inline-flex;align-items:center;gap:1px}
+.tb-plus{font-size:var(--fs-sm);line-height:1}
+
+/* ── Notes on a phone ──────────────────────────────────────────────────────
+   After the defaults above on purpose — a media query adds no specificity, so
+   overrides written earlier in the file lose to these.
+
+   Measured on 390x844: the formatting toolbar was 104px of a 734px panel,
+   16 buttons and 4 separators wrapped onto two rows inside an inset card with
+   22px side margins. The edit area got 59%.
+
+   One horizontally-scrolling row, matching the battle map and the dock. The
+   separators stay — they group bold/italic from headings from lists, which is
+   worth more than the ~40px they cost — but their margins tighten. */
+@media (max-width: 768px) and (pointer: coarse){
+  .notes-toolbar-2{
+    flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    margin:0 10px 8px; padding:4px 6px;
+  }
+  .notes-toolbar-2 .btn{flex-shrink:0; min-height:32px}
+  .notes-tb-sep{flex-shrink:0; margin:0 2px}
+  /* The tree head wrapped "LOCAL FOLDER" onto two lines and pushed the
+     Connect-vault button off the right edge. One scrolling row instead. */
+  .notes-tree-head{flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden}
+  .notes-tree-head > *{flex-shrink:0}
+  .notes-tree-head .notes-tree-title{white-space:nowrap}
+}
 
 .notes-textarea-2{flex:1;display:block;width:100%;max-width:var(--note-line-width,100%);margin-left:auto;margin-right:auto;height:100%;resize:none;border:none;background:transparent;color:var(--text);font-family:'Cascadia Code',Consolas,monospace;font-size:var(--fs-lg);line-height:1.7;padding:0;outline:none}
 /* Notes click-to-edit area: rendered-markdown look by default, plus a subtle hover hint */

@@ -442,8 +442,8 @@ registerPanel('notes', {
             <button class="btn icon-btn" data-act="back-to-picker" title="Choose a different source">←</button>
             <span class="notes-tree-title">DROPBOX</span>
             <span style="flex:1"></span>
-            <button class="btn icon-btn" data-act="add-folder" title="New folder">📁+</button>
-            <button class="btn icon-btn" data-act="add-file" title="New file">📄+</button>
+            <button class="btn icon-btn" data-act="add-folder" title="New folder">${ICO('i-folder')}<span class="tb-plus">+</span></button>
+            <button class="btn icon-btn" data-act="add-file" title="New file">${ICO('i-note')}<span class="tb-plus">+</span></button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
           <div class="notes-tree-body">${this._renderTree(tree, null, 0)}</div>
@@ -555,8 +555,8 @@ registerPanel('notes', {
             <button class="btn icon-btn" data-act="back-to-picker" title="Choose a different source">←</button>
             <span class="notes-tree-title">LOCAL FOLDER</span>
             <span style="flex:1"></span>
-            <button class="btn icon-btn" data-act="add-folder" title="New folder">📁+</button>
-            <button class="btn icon-btn" data-act="add-file" title="New file">📄+</button>
+            <button class="btn icon-btn" data-act="add-folder" title="New folder">${ICO('i-folder')}<span class="tb-plus">+</span></button>
+            <button class="btn icon-btn" data-act="add-file" title="New file">${ICO('i-note')}<span class="tb-plus">+</span></button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
           ${conflictBanner}
@@ -603,9 +603,9 @@ registerPanel('notes', {
         <input class="notes-file-title" type="text" value="${esc(file.name)}" data-act="rename-inline">
         <span class="notes-file-tag">MARKDOWN</span>
         <span style="flex:1"></span>
-        <button class="btn small" id="note-download" title="Save to desktop">💾</button>
-        <button class="btn icon-btn" data-act="notes-refresh" title="Sync now (pull latest from disk)">↻</button>
-        <button class="btn icon-btn" data-act="notes-settings" title="Display settings">⚙</button>
+        <button class="btn small" id="note-download" title="Save to desktop">${ICO('i-save')}</button>
+        <button class="btn icon-btn" data-act="notes-refresh" title="Sync now (pull latest from disk)">${ICO('i-refresh')}</button>
+        <button class="btn icon-btn" data-act="notes-settings" title="Display settings">${ICO('i-gear')}</button>
         <button class="btn icon-btn ${tbHidden?'':'active'}" data-act="notes-toggle-toolbar" title="${tbHidden?'Show formatting toolbar':'Hide formatting toolbar (more room to write)'}" style="font-size:13px">${tbHidden?'▼ Tools':'▲'}</button>
       </div>
       ${tbHidden ? '' : `<div class="notes-toolbar-2">
@@ -627,8 +627,8 @@ registerPanel('notes', {
         <button class="btn" data-nact="hr"        title="Horizontal rule">—</button>
         <button class="btn" data-nact="table"     title="Insert table"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="10" rx="1"/><line x1="2" y1="7" x2="14" y2="7"/><line x1="2" y1="10" x2="14" y2="10"/><line x1="6" y1="3" x2="6" y2="13"/><line x1="10" y1="3" x2="10" y2="13"/></svg></button>
         <span class="notes-tb-sep"></span>
-        <button class="btn" data-nact="undo" title="Undo (Ctrl+Z)">↶</button>
-        <button class="btn" data-nact="redo" title="Redo (Ctrl+Shift+Z)">↷</button>
+        <button class="btn" data-nact="undo" title="Undo (Ctrl+Z)">${ICO('i-undo')}</button>
+        <button class="btn" data-nact="redo" title="Redo (Ctrl+Shift+Z)">${ICO('i-redo')}</button>
       </div>`}
       <div class="notes-edit-area" id="note-edit-area">${this._renderColored(file)}</div>`;
   },
@@ -1316,7 +1316,7 @@ registerPanel('notes', {
         return;
       }
       pill.className = 'notes-vault-pill connected';
-      pill.textContent = '📦 ' + (s.vaultName || 'Dropbox');
+      pill.textContent = s.vaultName || 'Dropbox';
       const ago = s.lastSync ? Math.round((Date.now() - s.lastSync)/1000) : null;
       pill.title = ago != null ? ('Last synced '+ago+'s ago') : '';
       pill.onclick = null;
@@ -1335,7 +1335,7 @@ registerPanel('notes', {
     }
     if (!s.connected) {
       pill.className = 'notes-vault-pill disconnected';
-      pill.textContent = '🔌 Connect vault…';
+      pill.textContent = 'Connect vault…';
       pill.title = 'Connect an Obsidian vault folder';
       pill.onclick = async () => {
         const ok = await window.notesSync.connect();
