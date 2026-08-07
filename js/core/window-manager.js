@@ -60,8 +60,89 @@ function _checkPanelIcons(){
 
 function registerPanel(id,def){panelDefs[id]=def;}
 
+// ── Window placement ───────────────────────────────────────────────────────
+// DEFAULT_LAYOUT gives every panel a fixed x/y, and they were chosen panel by
+// panel rather than as a set: opening the eight main panels put 24 of the 28
+// possible pairs on top of each other. Weather landed on Combat, Bestiary and
+// Shop both landed on Party.
+//
+// So a window that is still sitting at its DEFAULT position gets placed at open
+// time instead. Keying on "still at the default" is deliberate — it means this
+// can never fight a position the user chose. Move a window once and it reopens
+// exactly where you left it, forever.
+function _wmIsAtDefaultPos(id){
+  const d = (typeof DEFAULT_LAYOUT !== 'undefined') && DEFAULT_LAYOUT[id];
+  const l = layout[id];
+  if (!d || !l) return false;
+  return l.x === d.x && l.y === d.y;
+}
+
+// Cascade until the rect clears every open window, then clamp into view.
+// Cascade rather than a tiling/first-fit search: with panels this varied in
+// size, tiling leaves odd gaps, while a stagger keeps every title bar visible
+// and reads as a deliberate stack.
+function _wmPlaceWindow(id){
+  if (_isMobileLayout()) return;              // fullscreen there; nothing to place
+  if (!_wmIsAtDefaultPos(id)) return;         // user has moved it — leave alone
+  const l = layout[id];
+  if (!l) return;
+
+  const ws = document.getElementById('workspace');
+  const zoom = (typeof getZoom === 'function' ? getZoom() : 1) || 1;
+  const maxW = ws ? ws.clientWidth  / zoom : 1440;
+  const maxH = ws ? ws.clientHeight / zoom : 900;
+
+  const others = [];
+  Object.keys(layout).forEach(k => {
+    if (k === id) return;
+    const o = layout[k];
+    if (o && o.open && !o.minimized) others.push(o);
+  });
+  if (!others.length) return;
+
+  // Total area this rect would cover of other windows. A window peeking out
+  // from behind another is fine and normal; what isn't is one landing almost
+  // exactly on top of another, so we score by area rather than yes/no.
+  const cost = (x, y) => others.reduce((sum, o) => {
+    const ox = Math.max(x, o.x), oy = Math.max(y, o.y);
+    const ex = Math.min(x + l.w, o.x + o.w), ey = Math.min(y + l.h, o.y + o.h);
+    return sum + Math.max(0, ex - ox) * Math.max(0, ey - oy);
+  }, 0);
+  // "Clear enough to stop looking". Deliberately strict: at 45% the search
+  // settled for the first merely-tolerable spot and left the battle map
+  // covering 40% of the party panel. 12% means it keeps hunting for a genuinely
+  // free slot and only falls back to the best-scoring one when the workspace
+  // really is full — which it legitimately is once you open eight panels, whose
+  // combined area is 1.9x the screen.
+  const FREE = 0.12 * l.w * l.h;
+
+  // Candidates: the panel's own default first (so a tidy layout stays put),
+  // then a cascade, then a coarse grid sweep. The first attempt at this just
+  // cascaded and reset to a handful of fallback spots when it ran out of room
+  // — and three panels promptly landed on the same fallback. Scoring every
+  // candidate and keeping the best is what stops that.
+  const STEP = 30;
+  const cands = [[l.x, l.y]];
+  for (let i = 1; i <= 8; i++) cands.push([l.x + i * STEP, l.y + i * STEP]);
+  for (let gy = 16; gy + l.h <= maxH; gy += 90)
+    for (let gx = 16; gx + l.w <= maxW; gx += 120) cands.push([gx, gy]);
+
+  let best = [l.x, l.y], bestCost = Infinity;
+  for (const [cx, cy] of cands){
+    if (cx < 0 || cy < 0 || cx + l.w > maxW || cy + l.h > maxH) continue;
+    const c = cost(cx, cy);
+    if (c < bestCost){ best = [cx, cy]; bestCost = c; }
+    if (c < FREE) break;           // good enough — take the earliest such spot
+  }
+  l.x = Math.max(0, Math.min(best[0], Math.max(0, maxW - l.w)));
+  l.y = Math.max(0, Math.min(best[1], Math.max(0, maxH - l.h)));
+}
+
 function openPanel(id){
+  const wasOpen = layout[id] && layout[id].open;
   layout[id]={...layout[id],open:true,minimized:false,z:_nextZ()};
+  // Only on an actual open — re-focusing an already-open panel must not move it.
+  if (!wasOpen) _wmPlaceWindow(id);
   saveLayout();ensurePanel(id);updateDock();
 }
 function closePanel(id){

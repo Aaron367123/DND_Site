@@ -30,10 +30,19 @@ const DEFAULT_PARTY = [
    resources:[{name:'Focus Points',type:'pool',current:6,max:6},{name:'Stunning Strike',type:'toggle',current:1,max:1}]},
 ];
 
+// Default window geometry. Heights are chosen so a panel never opens showing a
+// control sliced in half — measure before changing one. Windows opening on top
+// of each other is handled at open time (see _wmPlaceWindow in
+// window-manager.js), not by hand-picking non-overlapping x/y here.
 const DEFAULT_LAYOUT = {
   combat:     {x:16,  y:16,  w:320, h:560, open:true,  minimized:false, z:1},
-  party:      {x:354, y:16,  w:720, h:380, open:true,  minimized:false, z:2},
-  shop:       {x:354, y:412, w:720, h:400, open:false, minimized:false, z:3},
+  // 500, not 380. A party card measures 414px tall and the grid is 210px
+  // columns, so at 380 the window showed roughly half a card — the
+  // STATS/SKILLS/SPELLS/FEATURES tabs and the temp-HP field were cut off, and
+  // the body overflowed by 475px. 500 shows one complete row; a 5-person party
+  // still scrolls for the second, which is fine — being cut mid-control isn't.
+  party:      {x:354, y:16,  w:720, h:500, open:true,  minimized:false, z:2},
+  shop:       {x:354, y:412, w:720, h:430, open:false, minimized:false, z:3},
   notes:      {x:400, y:60,  w:820, h:640, open:false, minimized:false, z:4},
   battlemap:  {x:60,  y:60,  w:680, h:500, open:false, minimized:false, z:5},
   npclib:     {x:100, y:80,  w:760, h:660, open:false, minimized:false, z:6},
