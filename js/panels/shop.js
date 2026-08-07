@@ -34,7 +34,7 @@ registerPanel('shop',{
       <div class="shop-controls">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px">
           <span class="field-label" style="margin:0">Shop</span>
-          <button class="btn icon-btn" data-act="settings" title="Pricing settings (currency, jitter, rounding)" style="padding:2px 6px;font-size:var(--fs-lg);line-height:1">'+ICO('i-gear')+'</button>
+          <button class="btn icon-btn" data-act="settings" title="Pricing settings (currency, jitter, rounding)" style="padding:2px 6px;font-size:var(--fs-lg);line-height:1">${ICO('i-gear')}</button>
         </div>
         <div><label class="field-label">Shop Type</label><select id="shop-type">${types.map(t=>`<option ${state.shop?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div><label class="field-label">Shop Price</label><select id="shop-price"><option>Cheap</option><option selected>Average</option><option>Expensive</option><option>Premium</option></select></div>
@@ -42,7 +42,7 @@ registerPanel('shop',{
         <div><label class="field-label">Assortment</label><select id="shop-assort"><option>Sparse</option><option selected>Standard</option><option>Abundant</option></select></div>
         <button class="btn primary" data-act="gen" style="margin-top:4px">Generate Shop</button>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <button class="btn small" data-act="save-shop" style="flex:1" ${!state.shop?'disabled title="Generate a shop first"':''}>'+ICO('i-save')+' Save</button>
+          <button class="btn small" data-act="save-shop" style="flex:1" ${!state.shop?'disabled title="Generate a shop first"':''}>${ICO('i-save')} Save</button>
         </div>
         ${this._renderSavedShops()}
       </div>
@@ -566,7 +566,7 @@ registerPanel('shop',{
            ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" style="padding:2px 8px;font-size:var(--fs-sm)">Show ${Math.min(20, remaining)} more</button>` : ''}
            ${remaining > 0 ? `<button class="btn small" data-act="show-more-inv" data-mode="all" style="padding:2px 8px;font-size:var(--fs-sm)">Show all</button>` : ''}
          </div>`
-      : `<div style="padding:18px 14px;font-size:var(--fs-md);color:var(--text-muted);text-align:center">No items match the active filters. Open <strong>⚙</strong> to allow more rarities or categories.</div>`
+      : `<div style="padding:18px 14px;font-size:var(--fs-md);color:var(--text-muted);text-align:center">No items match the active filters. Open <strong>settings</strong> to allow more rarities or categories.</div>`
     }
     </div>`;
   },

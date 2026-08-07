@@ -42,7 +42,12 @@ const DEFAULT_LAYOUT = {
   // the body overflowed by 475px. 500 shows one complete row; a 5-person party
   // still scrolls for the second, which is fine — being cut mid-control isn't.
   party:      {x:354, y:16,  w:720, h:500, open:true,  minimized:false, z:2},
-  shop:       {x:354, y:412, w:720, h:430, open:false, minimized:false, z:3},
+  // 620. The earlier 430 was sized against an EMPTY shop, which is the one
+  // state a shop generator is almost never in — with a standard assortment
+  // generated, the body overflowed by 823px and about two stock rows were
+  // visible. This clears the name/keeper/flavour header plus a useful slice of
+  // inventory; the display column scrolls on its own for the rest.
+  shop:       {x:354, y:412, w:720, h:620, open:false, minimized:false, z:3},
   notes:      {x:400, y:60,  w:820, h:640, open:false, minimized:false, z:4},
   battlemap:  {x:60,  y:60,  w:680, h:500, open:false, minimized:false, z:5},
   npclib:     {x:100, y:80,  w:760, h:660, open:false, minimized:false, z:6},

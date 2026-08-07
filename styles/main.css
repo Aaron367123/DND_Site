@@ -1822,9 +1822,30 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .icon-picker button{background:transparent;border:none;font-size:var(--fs-2xl);cursor:pointer;padding:3px;border-radius:var(--r-sm);line-height:1;width:28px;height:28px}
 .icon-picker button:hover{background:var(--panel-3)}
 /* SHOP */
-.shop-layout{display:grid;grid-template-columns:220px 1fr;gap:12px;padding:12px}
-.shop-controls{display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--border);align-self:start}
-.shop-display{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+/* The layout fills the panel and the two columns scroll independently.
+   Before, neither column had a height, so the whole window body scrolled as
+   one: reading down an 18-item inventory carried the controls off the top with
+   it, and "Generate Shop" was somewhere above the fold. Measured 823px of
+   overflow on a standard shop. */
+.shop-layout{
+  display:grid;grid-template-columns:220px 1fr;gap:12px;padding:12px;
+  height:100%;min-height:0;box-sizing:border-box;
+}
+.shop-controls{
+  display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--panel-2);
+  border-radius:var(--r-md);border:1px solid var(--border);
+  /* start, not stretch: the controls are short, and stretching them left a
+     tall empty box beside the inventory. max-height keeps them scrollable
+     anyway once a few saved shops pile up. */
+  align-self:start;max-height:100%;min-height:0;overflow-y:auto;
+}
+.shop-display{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);
+  min-height:0;overflow-y:auto;
+}
+/* No sticky header here on purpose: name, keeper and aesthetic total ~240px,
+   which would permanently occupy 39% of the display column. Scrolling past
+   them costs one flick; losing 240px costs every row. */
 .shop-section{padding:12px 14px;border-bottom:1px solid var(--border)}
 .shop-section:last-child{border-bottom:none}
 .shop-section h3{margin:0 0 6px;font-size:var(--fs-lg);font-weight:500}
@@ -1840,6 +1861,24 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
    on hover so it reads as a real link without screaming for attention. */
 .shop-item-name{color:var(--text);text-decoration:none;cursor:pointer;border-bottom:1px dashed transparent;transition:color .12s,border-color .12s}
 .shop-item-name:hover{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ── Shop on a phone ──────────────────────────────────────────────────────
+   After the base rules, per the specificity lesson: a media query adds none.
+
+   The 220px config column plus a 6-column inventory table does not fit 390px.
+   It rendered as a 220px form beside a ~135px sliver of table with the
+   Category and Rarity headers sliced through the middle. Stacked instead:
+   configure at the top, read the shop below, one scroll for the lot.
+
+   Category and Rarity are dropped from the table here — not hidden data, just
+   not what you need at the counter. Item, price, stock and Buy are. */
+@media (max-width: 768px) and (pointer: coarse){
+  .shop-layout{grid-template-columns:1fr; height:auto; min-height:100%; overflow-y:auto}
+  .shop-controls{align-self:stretch; max-height:none; overflow:visible}
+  .shop-display{overflow:visible}
+  .shop-table th:nth-child(2), .shop-table td:nth-child(2),
+  .shop-table th:nth-child(3), .shop-table td:nth-child(3){display:none}
+}
 /* Source-book pill in the item-detail modal header (which book this item
    came from — PHB, DMG, XGE, etc.). Sits right-aligned next to the
    category/rarity/price line. */
