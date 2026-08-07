@@ -57,15 +57,6 @@ registerPanel('combat',{
       if (v > 0) this._lastDmgAmount = v;
       return;
     }
-    if (t.matches('.hp-dmg-type')){
-      const ABBR = {'':'—','acid':'ac','bludgeoning':'bl','cold':'co','fire':'fi','force':'fo','lightning':'li','necrotic':'ne','piercing':'pi','poison':'po','psychic':'ps','radiant':'ra','slashing':'sl','thunder':'th'};
-      this._lastDmgType = t.value;
-      const lbl = t.parentElement?.querySelector('.hp-dmg-type-label');
-      if (lbl) lbl.textContent = ABBR[t.value] || '—';
-      const wrap = t.parentElement;
-      if (wrap) wrap.title = 'Damage type — applies monster resist/vuln/immune (current: ' + (t.value || 'untyped') + ')';
-      return;
-    }
     if (t.matches('input[data-cf]')){
       // Combatant fields (hp, ac, initiative, name) — clamped to sane ranges
       // to prevent fat-finger inputs and 9-digit overflow values sticking.
@@ -614,34 +605,11 @@ registerPanel('combat',{
     // didn't work at all on touch. Conditionally suppressed only when the
     // HP itself is hidden/concealed (monsters in player view at non-show
     // stats mode).
-    // Damage-type select. State-cached in this._lastDmgType so it persists
-    // across re-renders. Empty = untyped (no resist/vuln/immune math).
-    //
-    // We want the OPEN dropdown panel to show full type names ("fire",
-    // "bludgeoning") but the COLLAPSED chip to show the 2-letter abbreviation
-    // so it fits the strip. Native <select> always shows the selected
-    // option's text — to break that, the select is rendered with its text
-    // visually hidden and an overlay span shows the abbreviation. The
-    // overlay updates from JS on `change`.
-    const dmgTypes = [
-      ['', '— untyped', '—'],
-      ['acid','acid','ac'],['bludgeoning','bludgeoning','bl'],['cold','cold','co'],
-      ['fire','fire','fi'],['force','force','fo'],['lightning','lightning','li'],
-      ['necrotic','necrotic','ne'],['piercing','piercing','pi'],['poison','poison','po'],
-      ['psychic','psychic','ps'],['radiant','radiant','ra'],['slashing','slashing','sl'],
-      ['thunder','thunder','th'],
-    ];
-    const lastType = this._lastDmgType || '';
-    // Weapon property of the incoming attack. Qualified resistances — "from
-    // nonmagical attacks that aren't silvered" — can only be judged if we know
-    // this, so it's a one-click cycling chip rather than a per-hit prompt, and
-    // it persists across renders exactly like the damage type does.
-    const atkProp = this._lastAtkProp || '';
-    const atkPropIcon = { magical:'✦', silvered:'☾', adamantine:'⬥' }[atkProp] || '○';
-    const atkPropTitle = atkProp
-      ? 'Attack is ' + atkProp + ' — click to cycle (plain → magical → silvered → adamantine)'
-      : 'Attack is plain — click to cycle (magical / silvered / adamantine). Qualified resistances like "nonmagical attacks" depend on this.';
-    const lastAbbr = (dmgTypes.find(t => t[0] === lastType) || dmgTypes[0])[2];
+    // The damage-type select and the attack-property chip that used to sit on
+    // this row are gone — the strip is now just − / amount / +, and manual
+    // damage is untyped. Typed damage still happens: the Attack Runner passes
+    // a real type per damage part to _applyHpDelta (and sets _lastAtkProp
+    // around the call), so resist/vuln/immune math is unchanged on that path.
     // Heal/damage strip is now a HORIZONTAL row that sits between the stats
     // grid and the HP bar (rendered separately below — see `dmgStripRow`).
     // We keep `dmgStrip` empty here so the stats grid stays a clean 3-column
@@ -649,17 +617,10 @@ registerPanel('combat',{
     const dmgStrip = '';
     const dmgStripRow = (mode !== 'show')
       ? ''
-      : `<div class="hp-dmg-bar" data-idx="${i}" title="Type amount, click − to damage (drains temp HP first, applies resist/vuln/immune) or + to heal">
+      : `<div class="hp-dmg-bar" data-idx="${i}" title="Type amount, click − to damage (drains temp HP first) or + to heal">
           <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
           <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount">
           <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
-          <button class="hp-dmg-btn atk-prop${atkProp?' on':''}" data-act="cycle-atk-prop" data-idx="${i}" title="${atkPropTitle}">${atkPropIcon}</button>
-          <span class="hp-dmg-type-wrap" title="Damage type — applies monster resist/vuln/immune (current: ${lastType||'untyped'})">
-            <span class="hp-dmg-type-label">${lastAbbr}</span>
-            <select class="hp-dmg-type" data-idx="${i}">
-              ${dmgTypes.map(([val,full]) => `<option value="${val}" ${val===lastType?'selected':''}>${full}</option>`).join('')}
-            </select>
-          </span>
         </div>`;
     const tempBadge = tempHp > 0 ? `<span class="hp-temp-badge" title="Temporary HP (absorbs damage first)">+${tempHp}</span>` : '';
     const hpField = mode === 'hide'
@@ -883,12 +844,6 @@ registerPanel('combat',{
         c.legendaryUsed = n < used ? n : (n + 1);
         save(); this._render();
       }
-      else if(act==='cycle-atk-prop'){
-        const order = ['', 'magical', 'silvered', 'adamantine'];
-        const cur = order.indexOf(this._lastAtkProp || '');
-        this._lastAtkProp = order[(cur + 1) % order.length];
-        this._render();
-      }
       else if(act==='hp-damage' || act==='hp-heal'){
         const i = parseInt(el.dataset.idx);
         // Read the amount from THIS row's input. Group rows have their own
@@ -896,18 +851,12 @@ registerPanel('combat',{
         // via the same data-idx attribute on the input.
         const card = el.closest('.combatant-card');
         const amtInp = card?.querySelector(`.hp-dmg-amt[data-idx="${i}"]`) || card?.querySelector('.hp-dmg-amt');
-        // Damage type: prefer the local card's type select. Group rows
-        // don't render a select at all (no room), so fall back to
-        // this._lastDmgType — the same panel-scoped value that keeps
-        // single-card selects in sync across renders. Without this fallback
-        // group rows always passed type='' and silently bypassed every
-        // monster's resist/immune/vulnerable.
-        const typeSel = card?.querySelector('.hp-dmg-type');
         const amt = Math.max(0, parseInt(amtInp?.value) || 0);
         if (!amt) return;
         this._lastDmgAmount = amt;
-        const type = typeSel ? typeSel.value : (this._lastDmgType || '');
-        if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
+        // No damage type — the strip's type select is gone, so manual damage
+        // lands raw. The Attack Runner still passes a type on its own path.
+        if (act === 'hp-damage') this._applyHpDelta(i, -amt);
         else                     this._applyHpDelta(i, +amt);
       }
       else if(act==='death-save'){
@@ -1645,8 +1594,12 @@ registerPanel('combat',{
         // Qualifier-aware. A plain substring test made every entry
         // unconditional, so "bludgeoning, piercing, slashing from nonmagical
         // attacks" read as immunity to all three however the blow was
-        // delivered — a Werewolf shrugged off a silvered longsword. The
-        // attack's property comes from the cycling chip on the damage bar.
+        // delivered — a Werewolf shrugged off a silvered longsword.
+        //
+        // _lastAtkProp is now written only by the Attack Runner, which sets it
+        // from the monster's own attack and restores the previous value in a
+        // `finally` (see attacks.js). The cycling chip that used to set it by
+        // hand is gone, so at rest this is empty and the attack reads as plain.
         const atk = this._lastAtkProp ? { [this._lastAtkProp]: true } : {};
         const has = (arr) => sktAnyResistApplies(arr, t, atk);
         const ragingBPS = partySlot?.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
@@ -1871,7 +1824,9 @@ registerPanel('combat',{
       const cap = c.hpMax || c.hp || 0;
       c.hp = Math.min(cap, before + remainingHeal);
       const actual = c.hp - before;
-      if (actual > 0) logHealParts.push(actual + ' HP');
+      // No unit here — the template below appends " HP" to the joined string,
+      // so including it made a plain heal log "healed 5 HP HP".
+      if (actual > 0) logHealParts.push(String(actual));
       // Any heal above 0 wipes downed-related state — death saves, stable
       // flag, dead flag. Even dead PCs come back if revivified, so we
       // honor the heal rather than silently swallowing it.
