@@ -682,16 +682,23 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   body.player-mode .window[data-panel="battlemap"] #map-scroll{
     touch-action: none;
   }
-  /* Token tap targets — keep token visual size scaled with the map but ensure
-     the hit area is at least 32px even at very low zoom.
-     Divided by --bm-vs (this device's map zoom, set on #map-stage by
-     _applyViewScale) because the map now sits inside a CSS scale(): without
-     it, 32px would silently become 32 STAGE px and a zoomed-out phone would
-     get tap targets far under the 32px minimum this rule exists to guarantee. */
-  body.player-mode .window[data-panel="battlemap"] .map-token{
-    min-width: calc(32px / var(--bm-vs, 1));
-    min-height: calc(32px / var(--bm-vs, 1));
-  }
+  /* NO minimum token size here, deliberately.
+     There used to be `min-width: calc(32px / var(--bm-vs,1))` to guarantee a
+     32px tap target at low zoom. It worked, and it was wrong: a token stops
+     shrinking with the map once the floor bites, so it no longer covers the
+     square the creature is standing on. Measured on a 390px phone —
+       zoom 2.0  token 92px / cell 100px  ratio 0.92
+       zoom 1.0  token 46px / cell  50px  ratio 0.92
+       zoom 0.5  token 32px / cell  25px  ratio 1.28
+       zoom 0.25 token 32px / cell 12.5px ratio 2.56
+     At 0.25 a Medium creature covered two and a half squares. On a battle map
+     the token IS the footprint; drawing it wrong to make it easier to tap
+     trades correctness for convenience, and position is the whole point.
+
+     Expanding just the hit area is the right answer, but .map-token is
+     overflow:hidden (it clips portrait images to the circle), so a
+     pseudo-element expander gets clipped along with everything else — that
+     needs a wrapper element, not a CSS tweak. Until then: zoom in to tap. */
 }
 
 /* ============ MOBILE — OTHER PANEL TWEAKS ============ */
