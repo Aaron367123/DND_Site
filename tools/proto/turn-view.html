@@ -1,0 +1,650 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turn View — prototype</title>
+
+<style>
+/* ── Design note ───────────────────────────────────────────────────────────
+   This is a prototype of a combat surface for an existing app, so it does not
+   get its own visual identity — it borrows the app's, exactly. Every token
+   below is copied verbatim from styles/main.css: the same greys, the same
+   parchment-gold accent, the same ten-step type scale, the same radii. That is
+   the point. A prototype dressed in a nicer palette than the thing it will
+   live inside tells you nothing about whether it will actually fit.
+
+   Self-contained rather than <link>-ing the real stylesheet, so it runs
+   anywhere — the local dev server, or hosted.
+
+   Dark only, deliberately. The app is dark, and this gets used at a table in
+   low light. A light variant would misrepresent how it looks in situ. */
+:root{
+  --bg:#1a1a1a; --panel:#232323; --panel-2:#2a2a2a; --panel-3:#333;
+  --border:#3a3a3a; --text:#e8e8e8; --text-muted:#999; --text-dim:#666;
+  --accent:#d4a574; --danger:#c25450; --success:#6b9e6b; --warning:#c9a050;
+  --fs-2xs:9px;  --fs-xs:10px;  --fs-sm:11px;  --fs-md:12px; --fs-lg:13px;
+  --fs-xl:15px;  --fs-2xl:18px; --fs-3xl:22px;
+  --r-sm:4px; --r-md:6px; --r-lg:10px; --r-pill:999px; --r-full:50%;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:var(--fs-lg);
+}
+.btn{
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text);
+  padding:5px 10px;border-radius:var(--r-sm);font-size:var(--fs-md);cursor:pointer;
+  transition:background .15s;font-family:inherit
+}
+.btn:hover{background:#404040}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);color:#1a1a1a;border-color:var(--accent);font-weight:500}
+.btn.primary:hover{background:#e0b582}
+.ico{width:18px;height:18px;flex-shrink:0;display:inline-block;vertical-align:middle;
+  fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── Framing ──────────────────────────────────────────────────────────── */
+.brief{
+  padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--border);
+}
+.brief h1{margin:0 0 3px;font-size:var(--fs-2xl);font-weight:600;letter-spacing:-.01em}
+.brief p{margin:0;font-size:var(--fs-md);color:var(--text-muted);max-width:78ch;line-height:1.55}
+.brief b{color:var(--accent);font-weight:600}
+.brief ol{margin:8px 0 0;padding-left:18px;font-size:var(--fs-md);color:var(--text-muted);
+  max-width:78ch;line-height:1.6}
+.brief li{margin-bottom:1px}
+.brief li b{color:var(--text)}
+
+/* Tall enough for the extra rows the reaction bar adds, capped so the brief
+   above it stays on screen on a laptop. */
+.tv{display:flex;flex-direction:column;height:min(82vh,640px);min-height:520px;
+  border-bottom:1px solid var(--border)}
+
+/* Initiative strip. A horizontal ordered run because the order IS the
+   information — this is a genuine sequence, not decoration. */
+.tv-init{
+  display:flex;gap:6px;padding:10px 12px;overflow-x:auto;
+  background:var(--panel-2);border-bottom:1px solid var(--border);flex-shrink:0
+}
+.tv-pip{
+  flex-shrink:0;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;
+  background:var(--panel-3);border:1px solid var(--border);border-radius:var(--r-pill);
+  cursor:pointer;transition:border-color .12s,background .12s;color:inherit;font:inherit
+}
+.tv-pip:hover{border-color:var(--accent)}
+.tv-pip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tv-pip.cur{background:var(--accent);color:#1a1a1a;border-color:var(--accent)}
+.tv-pip.done{opacity:.4}
+.tv-pip-init{
+  width:24px;height:24px;border-radius:var(--r-full);background:rgba(0,0,0,.35);
+  display:flex;align-items:center;justify-content:center;
+  font-size:var(--fs-sm);font-weight:700;flex-shrink:0;font-variant-numeric:tabular-nums
+}
+.tv-pip.cur .tv-pip-init{background:rgba(0,0,0,.22)}
+.tv-pip-name{font-size:var(--fs-md);font-weight:500;white-space:nowrap;text-align:left}
+.tv-pip-hp{font-size:var(--fs-2xs);opacity:.7;font-variant-numeric:tabular-nums;text-align:left}
+
+.tv-main{display:grid;grid-template-columns:1fr 250px;gap:14px;padding:14px;flex:1;min-height:0}
+
+/* ── Active creature ──────────────────────────────────────────────────── */
+.tv-actor{display:flex;flex-direction:column;min-height:0;gap:11px}
+.tv-actor-head{display:flex;align-items:center;gap:14px}
+.tv-avatar{
+  width:54px;height:54px;border-radius:var(--r-full);flex-shrink:0;
+  background:linear-gradient(135deg,#3d2a2a,#6b3939);border:2px solid var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:var(--fs-3xl);font-weight:600
+}
+.tv-actor-id{flex:1;min-width:0}
+.tv-actor-name{font-size:var(--fs-3xl);font-weight:600;letter-spacing:-.01em}
+.tv-actor-sub{font-size:var(--fs-sm);color:var(--text-muted);margin-top:1px}
+.tv-vitals{display:flex;gap:8px;flex-shrink:0}
+.tv-vital{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:6px 12px;text-align:center;min-width:62px
+}
+.tv-vital .l{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.tv-vital .v{font-size:var(--fs-2xl);font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums}
+
+.tv-conds{display:flex;gap:5px;flex-wrap:wrap}
+.tv-cond{
+  font-size:var(--fs-2xs);text-transform:uppercase;letter-spacing:.05em;
+  background:rgba(194,84,80,.2);color:#d97a76;padding:2px 8px;border-radius:var(--r-pill)
+}
+
+/* Derived reaction list. Muted by default; the ones the hit prompt will
+   actually offer are marked, so you can see the heuristic's decision. */
+.tv-rxlist{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.tv-rx-l{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;
+  letter-spacing:.07em;margin-right:1px}
+.tv-rx{
+  font-size:var(--fs-2xs);border:1px solid var(--border);border-radius:var(--r-pill);
+  padding:2px 8px;color:var(--text-muted);display:inline-flex;align-items:center;gap:5px
+}
+.tv-rx.hit{border-color:var(--accent);color:var(--accent)}
+.tv-rx.spent{opacity:.4;text-decoration:line-through}
+.tv-rx-src{opacity:.6;text-transform:uppercase;letter-spacing:.05em;font-size:8px}
+.tv-actions{display:flex;flex-direction:column;gap:8px;flex:0 0 auto}
+.tv-group-label{
+  font-size:var(--fs-2xs);color:var(--accent);text-transform:uppercase;letter-spacing:.08em
+}
+.tv-act{
+  display:flex;align-items:center;gap:12px;padding:10px 12px;
+  background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md)
+}
+.tv-act-body{flex:1;min-width:0}
+.tv-act-name{font-size:var(--fs-lg);font-weight:600}
+.tv-act-line{font-size:var(--fs-sm);color:var(--text-muted);margin-top:2px}
+.tv-act .btn{flex-shrink:0;display:inline-flex;align-items:center;gap:5px}
+
+.tv-log{
+  border-top:1px solid var(--border);padding-top:9px;margin-top:auto;
+  display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex-shrink:0;max-height:120px
+}
+.tv-log-line{font-size:var(--fs-sm);color:var(--text-muted)}
+.tv-log-line strong{color:var(--text);font-weight:600}
+
+/* ── Targets ──────────────────────────────────────────────────────────── */
+.tv-targets{
+  display:flex;flex-direction:column;gap:5px;min-height:0;overflow-y:auto;
+  background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);padding:10px
+}
+.tv-targets h4{
+  margin:0 0 2px;font-size:var(--fs-2xs);color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.08em;font-weight:600
+}
+.tv-tgt{
+  display:block;width:100%;text-align:left;padding:7px 8px;border-radius:var(--r-sm);
+  border:1px solid transparent;background:none;color:inherit;font:inherit;cursor:pointer;
+  transition:border-color .12s,background .12s
+}
+.tv-tgt:hover{background:var(--panel-3)}
+.tv-tgt:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.tv-tgt.armed{border-color:var(--accent);background:rgba(212,165,116,.12)}
+.tv-tgt-row{display:flex;align-items:center;gap:8px}
+.tv-tgt-name{flex:1;min-width:0;font-size:var(--fs-md);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-tgt-hp,.tv-tgt-ac{font-size:var(--fs-sm);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.tv-tgt-ac{display:inline-flex;align-items:center;gap:3px}
+.tv-tgt-ac .ico{width:12px;height:12px}
+/* display:block matters — as an inline span it ignored its own height and took
+   the child's, so the bar came out chunky and the track never showed. */
+.tv-hpbar{display:block;height:5px;border-radius:3px;background:var(--panel-3);margin-top:5px;overflow:hidden}
+.tv-hpbar i{display:block;height:100%;transition:width .18s ease}
+
+/* ── Result + end turn ────────────────────────────────────────────────── */
+.tv-foot{
+  display:flex;align-items:center;gap:14px;padding:11px 14px;
+  background:var(--panel-2);border-top:1px solid var(--border);flex-shrink:0
+}
+.tv-result{flex:1;min-width:0;font-size:var(--fs-xl);line-height:1.4}
+.tv-result .hit{color:var(--success);font-weight:600}
+.tv-result .miss{color:var(--text-dim);font-weight:600}
+.tv-result .crit{color:var(--accent);font-weight:700}
+.tv-result .dim{color:var(--text-muted);font-size:var(--fs-md)}
+.tv-end{font-size:var(--fs-lg);padding:10px 20px;white-space:nowrap}
+.tv-kbd{font-size:var(--fs-2xs);color:rgba(26,26,26,.55);margin-left:8px}
+
+.tv-empty{
+  padding:26px 20px;text-align:center;color:var(--text-muted);
+  display:flex;flex-direction:column;align-items:center;gap:6px
+}
+.tv-empty-t{font-size:var(--fs-xl);color:var(--text)}
+.tv-empty-h{font-size:var(--fs-sm);color:var(--text-dim);max-width:38ch;line-height:1.5}
+
+/* ── Manual entry ─────────────────────────────────────────────────────────
+   The app cannot be the only way to roll. Players roll their own attacks with
+   real dice, DMs roll behind a screen, and someone will always want to just
+   set a number. Every automated path here has a hand-driven twin. */
+.tv-manual{
+  background:var(--panel-2);border:1px dashed var(--border);border-radius:var(--r-md);
+  padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap
+}
+.tv-manual.lead{border-style:solid;border-color:var(--accent)}
+.tv-manual-l{font-size:var(--fs-sm);color:var(--text-muted);margin-right:2px}
+.tv-in{
+  width:56px;background:var(--panel-3);border:1px solid var(--border);color:var(--text);
+  border-radius:var(--r-sm);padding:5px 7px;font:inherit;font-size:var(--fs-md);
+  text-align:center;font-variant-numeric:tabular-nums
+}
+.tv-in:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tv-in.wide{width:96px;text-align:left}
+
+/* HP stepper for the armed target — the "just take 7" path, no attack. */
+.tv-adjust{
+  margin-top:auto;padding-top:9px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:6px;flex-shrink:0
+}
+.tv-adjust-name{flex:1;min-width:0;font-size:var(--fs-sm);color:var(--text-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-adjust .btn{padding:4px 9px;font-size:var(--fs-lg);line-height:1}
+
+/* ── Reaction prompt ──────────────────────────────────────────────────────
+   A hit is held un-committed only when the target actually has an unused
+   reaction that could change it. Everyone else takes the damage immediately —
+   the decision point appears exactly where a decision exists, and nowhere
+   else, so the common case stays two clicks. */
+.tv-react{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:9px 14px;background:rgba(212,165,116,.12);
+  border-top:1px solid var(--accent);flex-shrink:0
+}
+.tv-react-l{font-size:var(--fs-md);color:var(--accent);font-weight:600;margin-right:2px}
+.tv-react .btn{font-size:var(--fs-md);text-align:left;max-width:100%}
+.tv-pip-r{
+  font-size:var(--fs-2xs);opacity:.75;border:1px solid currentColor;border-radius:var(--r-sm);
+  padding:0 3px;margin-left:5px;vertical-align:1px
+}
+
+@media (prefers-reduced-motion: reduce){*{transition:none !important}}
+
+@media (max-width: 760px){
+  .tv{height:auto}
+  .tv-main{grid-template-columns:1fr;gap:10px;padding:10px}
+  .tv-targets{flex-direction:row;overflow-x:auto;align-items:center;padding:8px;gap:8px;flex-shrink:0}
+  .tv-targets h4{display:none}
+  .tv-tgt{flex:0 0 auto;width:auto;min-width:136px}
+  .tv-log{margin-top:12px;max-height:none}
+  .tv-actor-name{font-size:var(--fs-2xl)}
+  .tv-avatar{width:44px;height:44px;font-size:var(--fs-2xl)}
+  .tv-foot{flex-direction:column;align-items:stretch;gap:9px}
+  .tv-end{width:100%}
+}
+</style>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><defs>
+  <g id="i-shield"><path d="M12 2.8 4.5 6v6.2c0 4.4 3.1 7.6 7.5 9 4.4-1.4 7.5-4.6 7.5-9V6z"/></g>
+  <g id="i-dice"><path d="m12 2 8.5 5v10L12 22l-8.5-5V7z"/><path d="M3.5 7 12 12l8.5-5M12 12v10"/></g>
+</defs></svg>
+
+<div class="brief">
+  <h1>Turn view — prototype</h1>
+  <p>Running one combat turn currently takes <b>four windows</b>: the tracker for whose turn
+  it is, the stat block for what the creature can do, the Attack Runner to roll it, and the
+  map. This collapses them into one surface. Click a target, then <b>Roll</b> on an action —
+  or type a roll in by hand. <kbd>Space</kbd> ends the turn; any initiative pip jumps.</p>
+  <p style="margin-top:7px"><b>Every automated path has a manual twin.</b> Enter a to-hit and
+  damage yourself for a roll made with real dice — it goes through the same pipeline, so
+  reactions still apply. The <b>−/+</b> under the target list changes HP with no attack at all.
+  On a player's turn, hand entry <i>is</i> the surface, since they roll their own.</p>
+  <p style="margin-top:7px"><b>Reactions</b> fire on someone else's turn, so they are offered
+  at the moment of the hit. Attack Zoey to see <b>Uncanny Dodge</b> halve it; Zindle has
+  <b>Cutting Words</b>, which subtracts a d8 and can turn a hit into a miss. An <b>R</b> beside
+  a name means they hold an unspent reaction that could answer an attack; it refreshes on their
+  turn. The prompt only interrupts when one is actually available, so everything else stays two
+  clicks.</p>
+  <p style="margin-top:7px"><b>Nothing here is typed in.</b> Each creature's reactions are
+  derived from class, subclass, level and feats against a table extracted from your own
+  <code>data/class/*.json</code> — 5 reactions come from base classes, 79 from subclasses,
+  17 from feats. Zoey has Uncanny Dodge because she is a level-6 rogue. Class and level alone
+  would have found 5 of 101, which is why subclass isn't optional. The chips under each
+  creature show what was derived and where each came from; gold ones are what the prompt will
+  offer. Only three have real mechanics — the rest would be spent, logged and adjudicated by
+  you, because faking a hundred is worse than admitting to three.</p>
+  <ol>
+    <li><b>The dead space</b> under a two-action monster. An Ogre leaves a hole; a dragon fills it. Worth using for the stat block's traits?</li>
+    <li><b>The result line sits at the bottom</b>, while your eye is on the Roll buttons at the top. Should it move directly under the actions?</li>
+    <li><b>Reactions that protect someone else</b> don't fit yet. Ulrick's <i>Spirit Shield</i> triggers when an ally within 30 ft is damaged, not when he is — so it derives correctly but never gets offered, because the prompt only asks the creature being hit. That needs a second trigger model.</li>
+  </ol>
+</div>
+
+<div class="tv">
+  <div class="tv-init" id="init"></div>
+  <div class="tv-main">
+    <div class="tv-actor">
+      <div class="tv-actor-head">
+        <div class="tv-avatar" id="avatar">O</div>
+        <div class="tv-actor-id">
+          <div class="tv-actor-name" id="actorName">Ogre</div>
+          <div class="tv-actor-sub" id="actorSub"></div>
+        </div>
+        <div class="tv-vitals">
+          <div class="tv-vital"><div class="l">HP</div><div class="v" id="actorHp">59</div></div>
+          <div class="tv-vital"><div class="l">AC</div><div class="v" id="actorAc">11</div></div>
+        </div>
+      </div>
+      <div class="tv-conds" id="conds"></div>
+      <div class="tv-rxlist" id="rxlist"></div>
+      <div class="tv-actions" id="actions"></div>
+      <div class="tv-log" id="log"></div>
+    </div>
+    <div class="tv-targets" id="targets"></div>
+  </div>
+  <div class="tv-react" id="react" style="display:none"></div>
+  <div class="tv-foot">
+    <div class="tv-result" id="result" role="status" aria-live="polite"></div>
+    <button class="btn primary tv-end" id="end">End turn<span class="tv-kbd">SPACE</span></button>
+  </div>
+</div>
+
+<!-- Derived by tools/extract-reactions.js from data/class/*.json and
+     data/feats.json. Inlined so this runs standalone; the real panel would
+     derive the same thing live from the loaded 5etools data. -->
+<script type="application/json" id="rx">{"generated":"node tools/extract-reactions.js","universal":[{"name":"Opportunity Attack","note":"When a hostile creature you can see leaves your reach, make one melee attack against it."},{"name":"Ready","note":"A readied action triggers on its condition and uses your reaction."}],"classes":[{"cls":"Artificer","lvl":7,"name":"Flash of Genius","src":"TCE","note":"When you or another creature you can see within 30 feet of you makes an ability check or a saving throw, you can use your reaction to add your…"},{"cls":"Artificer","lvl":20,"name":"Soul of Artifice","src":"TCE","note":"If you're reduced to 0 hit points but not killed outright, you can use your reaction to end one of your artificer infusions, causing you to drop…"},{"cls":"Monk","lvl":3,"name":"Deflect Missiles","src":"PHB","note":"Starting at 3rd level, you can use your reaction to deflect or catch the missile when you are hit by a ranged weapon attack."},{"cls":"Monk","lvl":4,"name":"Slow Fall","src":"PHB","note":"Beginning at 4th level, you can use your reaction when you fall to reduce any falling damage you take by an amount equal to five times your monk…"},{"cls":"Rogue","lvl":5,"name":"Uncanny Dodge","src":"PHB","note":"Starting at 5th level, when an attacker that you can see hits you with an attack, you can use your reaction to halve the attack's damage against you."}],"subclasses":[{"cls":"Artificer","sub":"Armorer","lvl":15,"name":"Guardian","src":"TCE","note":"When a Huge or smaller creature you can see ends its turn within 30 feet of you, you can use your reaction to magically force it to make a…"},{"cls":"Barbarian","sub":"Berserker","lvl":14,"name":"Retaliation","src":"PHB","note":"Starting at 14th level, when you take damage from a creature that is within 5 feet of you, you can use your reaction to make a melee weapon attack…"},{"cls":"Barbarian","sub":"Beast","lvl":3,"name":"Form of the Beast","src":"TCE","note":"If a creature you can see within 10 feet of you hits you with an attack roll, you can use your reaction to swipe your tail and roll a d8, applying…"},{"cls":"Barbarian","sub":"Wild Magic","lvl":10,"name":"Unstable Backlash","src":"TCE","note":"10th-level Path of Wild Magic feature When you are imperiled during your rage, the magic within you can lash out; immediately after you take…"},{"cls":"Barbarian","sub":"Ancestral Guardian","lvl":6,"name":"Spirit Shield","src":"XGE","note":"If you are raging and another creature you can see within 30 feet of you takes damage, you can use your reaction to reduce that damage by 2d6."},{"cls":"Barbarian","sub":"Storm Herald","lvl":14,"name":"Desert","src":"XGE","note":"Immediately after a creature in your aura hits you with an attack, you can use your reaction to force that creature to make a Dexterity saving throw."},{"cls":"Barbarian","sub":"Storm Herald","lvl":14,"name":"Sea","src":"XGE","note":"When you hit a creature in your aura with an attack, you can use your reaction to force that creature to make a Strength saving throw."},{"cls":"Bard","sub":"Lore","lvl":3,"name":"Cutting Words","src":"PHB","note":"When a creature that you can see within 60 feet of you makes an attack roll, an ability check, or a damage roll, you can use your reaction to…"},{"cls":"Bard","sub":"Eloquence","lvl":14,"name":"Infectious Inspiration","src":"TCE","note":"When a creature within 60 feet of you adds one of your Bardic Inspiration dice to its ability check, attack roll, or saving throw and the roll…"},{"cls":"Bard","sub":"Whispers","lvl":6,"name":"Mantle of Whispers","src":"XGE","note":"When a humanoid dies within 30 feet of you, you can magically capture its shadow using your reaction."},{"cls":"Cleric","sub":"Light","lvl":1,"name":"Warding Flare","src":"PHB","note":"When you are attacked by a creature within 30 feet of you that you can see, you can use your reaction to impose disadvantage on the attack roll,…"},{"cls":"Cleric","sub":"Nature","lvl":6,"name":"Dampen Elements","src":"PHB","note":"Starting at 6th level, when you or a creature within 30 feet of you takes acid, cold, fire, lightning, or thunder damage, you can use your…"},{"cls":"Cleric","sub":"Tempest","lvl":1,"name":"Wrath of the Storm","src":"PHB","note":"When a creature within 5 feet of you that you can see hits you with an attack, you can use your reaction to cause the creature to make a Dexterity…"},{"cls":"Cleric","sub":"War","lvl":6,"name":"Channel Divinity: War God's Blessing","src":"PHB","note":"At 6th level, when a creature within 30 feet of you makes an attack roll, you can use your reaction to grant that creature a +10 bonus to the…"},{"cls":"Cleric","sub":"Ambition (PSA)","lvl":1,"name":"Warding Flare","src":"PSA","note":"When you are attacked by a creature within 30 feet of you that you can see, you can use your reaction to impose disadvantage on the attack roll,…"},{"cls":"Cleric","sub":"Solidarity (PSA)","lvl":6,"name":"Oketra's Blessing","src":"PSA","note":"At 6th level, when a creature within 30 feet of you makes an attack roll, you can use your reaction to grant that creature a +10 bonus to the…"},{"cls":"Cleric","sub":"Strength (PSA)","lvl":6,"name":"Rhonas's Blessing","src":"PSA","note":"At 6th level, when a creature within 30 feet of you makes an attack roll, ability check, or saving throw using Strength, you can use your reaction…"},{"cls":"Cleric","sub":"Zeal (PSA)","lvl":17,"name":"Blaze of Glory","src":"PSA","note":"When you are reduced to 0 hit points by an attacker you can see, even if you would be killed outright, you can use your reaction to move up to…"},{"cls":"Cleric","sub":"Grave","lvl":6,"name":"Sentinel at Death's Door","src":"XGE","note":"As a reaction when you or a creature you can see within 30 feet of you suffers a critical hit, you can turn that hit into a normal hit."},{"cls":"Druid","sub":"Spores","lvl":2,"name":"Halo of Spores","src":"TCE","note":"When a creature you can see moves into a space within 10 feet of you or starts its turn there, you can use your reaction to deal 1d4 necrotic…"},{"cls":"Druid","sub":"Spores","lvl":6,"name":"Fungal Infestation","src":"TCE","note":"If a beast or a humanoid that is Small or Medium dies within 10 feet of you, you can use your reaction to animate it, causing it to stand up…"},{"cls":"Druid","sub":"Stars","lvl":6,"name":"Cosmic Omen","src":"TCE","note":"Until you finish your next long rest, you gain access to a special reaction based on whether you rolled an even or an odd number on the die: list…"},{"cls":"Druid","sub":"Wildfire","lvl":10,"name":"Cauterizing Flames","src":"TCE","note":"When a creature you can see enters that space, you can use your reaction to extinguish the spectral flame there and either heal the creature or…"},{"cls":"Druid","sub":"Shepherd","lvl":2,"name":"Spirit Totem","src":"XGE","note":"When a creature makes an attack roll against a target in the spirit's aura, you can use your reaction to grant advantage to that attack roll."},{"cls":"Fighter","sub":"Echo Knight","lvl":3,"name":"Manifest Echo","src":"EGW","note":"When a creature that you can see within 5 feet of your echo moves at least 5 feet away from it, you can use your reaction to make an opportunity…"},{"cls":"Fighter","sub":"Echo Knight","lvl":10,"name":"Shadow Martyr","src":"EGW","note":"Before the attack roll is made, you can use your reaction to teleport the echo to an unoccupied space within 5 feet of the targeted creature."},{"cls":"Fighter","sub":"Psi Warrior","lvl":3,"name":"Protective Field","src":"TCE","note":"When you or another creature you can see within 30 feet of you takes damage, you can use your reaction to expend one Psionic Energy die, roll the…"},{"cls":"Fighter","sub":"Rune Knight","lvl":7,"name":"Runic Shield","src":"TCE","note":"When another creature you can see within 60 feet of you is hit by an attack roll, you can use your reaction to force the attacker to reroll the…"},{"cls":"Fighter","sub":"Cavalier","lvl":7,"name":"Warding Maneuver","src":"XGE","note":"If you or a creature you can see within 5 feet of you is hit by an attack, you can roll 1d8 as a reaction if you're wielding a melee weapon or a…"},{"cls":"Fighter","sub":"Samurai","lvl":18,"name":"Strength before Death","src":"XGE","note":"If you take damage that reduces you to 0 hit points and doesn't kill you outright, you can use your reaction to delay falling unconscious, and you…"},{"cls":"Monk","sub":"Ascendant Dragon","lvl":3,"name":"Draconic Disciple","src":"FTD","note":"You gain the following benefits: list list-hang-notitle Draconic Presence item If you fail a Charisma (Intimidation) or Charisma (Persuasion)…"},{"cls":"Monk","sub":"Shadow","lvl":17,"name":"Opportunist","src":"PHB","note":"Whenever a creature within 5 feet of you is hit by an attack made by a creature other than you, you can use your reaction to make a melee attack…"},{"cls":"Monk","sub":"Astral Self","lvl":11,"name":"Body of the Astral Self","src":"TCE","note":"Deflect Energy entries When you take acid, cold, fire, force, lightning, or thunder damage, you can use your reaction to deflect it."},{"cls":"Monk","sub":"Drunken Master","lvl":6,"name":"Redirect Attack","src":"XGE","note":"When a creature misses you with a melee attack roll, you can spend 1 ki point as a reaction to cause that attack to hit one creature of your…"},{"cls":"Monk","sub":"Sun Soul","lvl":17,"name":"Sun Shield","src":"XGE","note":"If a creature hits you with a melee attack while this light shines, you can use your reaction to deal radiant damage to the creature."},{"cls":"Mystic","sub":"Immortal","lvl":6,"name":"Surge of Health","src":"UATheMysticClass","note":"As a reaction when you take damage, you can halve that damage against you."},{"cls":"Mystic","sub":"Nomad","lvl":3,"name":"Memory of One Thousand Steps","src":"UATheMysticClass","note":"As a reaction when you are hit by an attack, you can teleport to an unoccupied space that you occupied since the start of your last turn, and the…"},{"cls":"Mystic","sub":"Wu Jen","lvl":14,"name":"Elemental Mastery","src":"UATheMysticClass","note":"Starting at 14th level, if you have resistance to a type of damage, you can spend 2 psi points as a reaction when you take damage of that type to…"},{"cls":"Paladin","sub":"Vengeance","lvl":15,"name":"Soul of Vengeance","src":"PHB","note":"When a creature under the effect of your Vow of Enmity makes an attack, you can use your reaction to make a melee weapon attack against that…"},{"cls":"Paladin","sub":"Crown","lvl":7,"name":"Divine Allegiance","src":"SCAG","note":"Starting at 7th level, when a creature within 5 feet of you takes damage, you can use your reaction to magically substitute your own health for…"},{"cls":"Paladin","sub":"Glory","lvl":15,"name":"Glorious Defense","src":"TCE","note":"When you or another creature you can see within 10 feet of you is hit by an attack roll, you can use your reaction to grant a bonus to the…"},{"cls":"Paladin","sub":"Glory","lvl":20,"name":"Living Legend","src":"TCE","note":"If you fail a saving throw, you can use your reaction to reroll it."},{"cls":"Paladin","sub":"Watchers","lvl":15,"name":"Vigilant Rebuke","src":"TCE","note":"Whenever you or a creature you can see within 30 feet of you succeeds on an Intelligence, a Wisdom, or a Charisma saving throw, you can use your…"},{"cls":"Paladin","sub":"Redemption","lvl":3,"name":"Rebuke the Violent","src":"XGE","note":"Immediately after an attacker within 30 feet of you deals damage with an attack against a creature other than you, you can use your reaction to…"},{"cls":"Paladin","sub":"Redemption","lvl":7,"name":"Aura of the Guardian","src":"XGE","note":"When a creature within 10 feet of you takes damage, you can use your reaction to magically take that damage, instead of that creature taking it."},{"cls":"Ranger","sub":"Drakewarden","lvl":15,"name":"Perfected Bond","src":"FTD","note":"Reflexive Resistance item When either you or the drake takes damage while you're within 30 feet of each other, you can use your reaction to give…"},{"cls":"Ranger","sub":"Hunter","lvl":3,"name":"Giant Killer","src":"PHB","note":"When a Large or larger creature within 5 feet of you hits or misses you with an attack, you can use your reaction to attack that creature…"},{"cls":"Ranger","sub":"Hunter","lvl":15,"name":"Stand Against the Tide","src":"PHB","note":"When a hostile creature misses you with a melee attack, you can use your reaction to force that creature to repeat the same attack against another…"},{"cls":"Ranger","sub":"Hunter","lvl":15,"name":"Uncanny Dodge","src":"PHB","note":"When an attacker that you can see hits you with an attack, you can use your reaction to halve the attack's damage against you."},{"cls":"Ranger","sub":"Fey Wanderer","lvl":7,"name":"Beguiling Twist","src":"TCE","note":"In addition, whenever you or a creature you can see within 120 feet of you succeeds on a saving throw against being charmed or frightened, you can…"},{"cls":"Ranger","sub":"Swarmkeeper","lvl":15,"name":"Swarming Dispersal","src":"TCE","note":"When you take damage, you can use your reaction to give yourself resistance to that damage."},{"cls":"Ranger","sub":"Gloom Stalker","lvl":15,"name":"Shadowy Dodge","src":"XGE","note":"Whenever a creature makes an attack roll against you and doesn't have advantage on the roll, you can use your reaction to impose disadvantage on it."},{"cls":"Ranger","sub":"Horizon Walker","lvl":15,"name":"Spectral Defense","src":"XGE","note":"When you take damage from an attack, you can use your reaction to give yourself resistance to all of that attack's damage on this turn."},{"cls":"Ranger","sub":"Monster Slayer","lvl":11,"name":"Magic-User's Nemesis","src":"XGE","note":"When you see a creature casting a spell or teleporting within 60 feet of you, you can use your reaction to try to magically foil it."},{"cls":"Ranger","sub":"Monster Slayer","lvl":15,"name":"Slayer's Counter","src":"XGE","note":"If the target of your Slayer's Prey forces you to make a saving throw, you can use your reaction to make one weapon attack against the quarry."},{"cls":"Rogue","sub":"Arcane Trickster","lvl":17,"name":"Spell Thief","src":"PHB","note":"Immediately after a creature casts a spell that targets you or includes you in its area of effect, you can use your reaction to force the creature…"},{"cls":"Rogue","sub":"Phantom","lvl":9,"name":"Tokens of the Departed","src":"TCE","note":"9th-level Phantom feature When a life ends in your presence, you're able to snatch a token from the departing soul, a sliver of its life essence…"},{"cls":"Rogue","sub":"Mastermind","lvl":13,"name":"Misdirection","src":"XGE","note":"When you are targeted by an attack while a creature within 5 feet of you is granting you cover against that attack, you can use your reaction to…"},{"cls":"Rogue","sub":"Scout","lvl":3,"name":"Skirmisher","src":"XGE","note":"You can move up to half your speed as a reaction when an enemy ends its turn within 5 feet of you."},{"cls":"Sorcerer","sub":"Wild","lvl":6,"name":"Bend Luck","src":"PHB","note":"When another creature you can see makes an attack roll, an ability check, or a saving throw, you can use your reaction and spend 2 sorcery points…"},{"cls":"Sorcerer","sub":"Pyromancer (PSK)","lvl":14,"name":"Pyromancer's Fury","src":"PSK","note":"Starting at 14th level, when you are hit by a melee attack, you can use your reaction to deal fire damage to the attacker."},{"cls":"Sorcerer","sub":"Clockwork Soul","lvl":1,"name":"Restore Balance","src":"TCE","note":"When a creature you can see within 60 feet of you is about to roll a d20 with advantage or disadvantage, you can use your reaction to prevent the…"},{"cls":"Sorcerer","sub":"Storm","lvl":14,"name":"Storm's Fury","src":"XGE","note":"Starting at 14th level, when you are hit by a melee attack, you can use your reaction to deal lightning damage to the attacker."},{"cls":"Warlock","sub":"Archfey","lvl":6,"name":"Misty Escape","src":"PHB","note":"When you take damage, you can use your reaction to turn invisible and teleport up to 60 feet to an unoccupied space you can see."},{"cls":"Warlock","sub":"Archfey","lvl":10,"name":"Beguiling Defenses","src":"PHB","note":"You are immune to being charmed, and when another creature attempts to charm you, you can use your reaction to attempt to turn the charm back on…"},{"cls":"Warlock","sub":"Great Old One","lvl":6,"name":"Entropic Ward","src":"PHB","note":"When a creature makes an attack roll against you, you can use your reaction to impose disadvantage on that roll."},{"cls":"Warlock","sub":"Fathomless","lvl":6,"name":"Guardian Coil","src":"TCE","note":"When you or a creature you can see takes damage while within 10 feet of the tentacle, you can use your reaction to choose one of those creatures…"},{"cls":"Warlock","sub":"Undead","lvl":10,"name":"Necrotic Husk","src":"VRGR","note":"In addition, when you would be reduced to 0 hit points, you can use your reaction to drop to 1 hit point instead and cause your body to erupt with…"},{"cls":"Warlock","sub":"Hexblade","lvl":10,"name":"Armor of Hexes","src":"XGE","note":"If the target cursed by your Hexblade's Curse hits you with an attack roll, you can use your reaction to roll a d6."},{"cls":"Warlock","sub":"Archfey","lvl":6,"name":"Misty Escape","src":"XPHB","note":"You can cast Misty Step as a Reaction in response to taking damage."},{"cls":"Wizard","sub":"Chronurgy","lvl":2,"name":"Chronal Shift","src":"EGW","note":"As a reaction, after you or a creature you can see within 30 feet of you makes an attack roll, an ability check, or a saving throw, you can force…"},{"cls":"Wizard","sub":"Chronurgy","lvl":14,"name":"Convergent Future","src":"EGW","note":"When you or a creature you can see within 60 feet of you makes an attack roll, an ability check, or a saving throw, you can use your reaction to…"},{"cls":"Wizard","sub":"Graviturgy","lvl":10,"name":"Violent Attraction","src":"EGW","note":"10th-level Graviturgy Magic feature When another creature that you can see within 60 feet of you hits with a weapon attack, you can use your…"},{"cls":"Wizard","sub":"Abjuration","lvl":6,"name":"Projected Ward","src":"PHB","note":"Starting at 6th level, when a creature that you can see within 30 feet of you takes damage, you can use your reaction to cause your Arcane Ward to…"},{"cls":"Wizard","sub":"Enchantment","lvl":6,"name":"Instinctive Charm","src":"PHB","note":"Beginning at 6th level, when a creature you can see within 30 feet of you makes an attack roll against you, you can use your reaction to divert…"},{"cls":"Wizard","sub":"Illusion","lvl":10,"name":"Illusory Self","src":"PHB","note":"Beginning at 10th level, you can create an illusory duplicate of yourself as an instant, almost instinctual reaction to danger."},{"cls":"Wizard","sub":"Bladesinging","lvl":10,"name":"Song of Defense","src":"TCE","note":"When you take damage, you can use your reaction to expend one spell slot and reduce that damage to you by an amount equal to five times the…"},{"cls":"Wizard","sub":"Scribes","lvl":14,"name":"One with the Word","src":"TCE","note":"Moreover, if you take damage while your spellbook's mind is manifested, you can prevent all of that damage to you by using your reaction to…"},{"cls":"Wizard","sub":"War","lvl":2,"name":"Arcane Deflection","src":"XGE","note":"When you are hit by an attack or you fail a saving throw, you can use your reaction to gain a +2 bonus to your AC against that attack or a +4…"}],"feats":[{"name":"Adept of the White Robes","src":"DSotDQ","note":"Protective Ward item When you or a creature you can see within 30 feet of you takes damage, you can use your reaction to expend a spell slot and…"},{"name":"Bountiful Luck","src":"XGE","note":"Surely a sign of fortune's favor! When an ally you can see within 30 feet of you rolls a 1 on the d20 for an attack roll, an ability check, or a…"},{"name":"Defensive Duelist","src":"PHB","note":"When you are wielding a finesse weapon with which you are proficient and another creature hits you with a melee attack, you can use your reaction…"},{"name":"Fury of the Frost Giant","src":"BGG","note":"Frigid Retaliation item Immediately after a creature you can see within 30 feet of you hits you with an attack roll and deals damage, you can use…"},{"name":"Gift of the Chromatic Dragon","src":"FTD","note":"Reactive Resistance item When you take acid, cold, fire, lightning, or poison damage, you can use your reaction to give yourself resistance to…"},{"name":"Gift of the Gem Dragon","src":"FTD","note":"You've manifested some of the power of gem dragons, granting you the following benefits: list list-hang-notitle Telekinetic Reprisal item When you…"},{"name":"Gift of the Metallic Dragon","src":"FTD","note":"When you or another creature you can see within 5 feet of you is hit by an attack roll, you can use your reaction to manifest spectral wings from…"},{"name":"Guile of the Cloud Giant","src":"BGG","note":"You've manifested the confounding magic emblematic of cloud giants, granting you the following benefits: list list-hang-notitle Cloudy Escape item…"},{"name":"Knight of the Crown","src":"DSotDQ","note":"If that ally can see or hear you, they can immediately make one weapon attack as a reaction."},{"name":"Mage Slayer","src":"PHB","note":"You have practiced techniques useful in melee combat against spellcasters, gaining the following benefits: list When a creature within 5 feet of…"},{"name":"Orcish Fury","src":"XGE","note":"Immediately after you use your Relentless Endurance trait, you can use your reaction to make one weapon attack."},{"name":"Righteous Heritor","src":"SatO","note":"You can channel cosmic forces of good to gain these benefits: list list-hang-notitle Soothe Pain item When you or a creature within 30 feet of you…"},{"name":"Second Chance","src":"XGE","note":"You gain the following benefits: list When a creature you can see hits you with an attack roll, you can use your reaction to force that creature…"},{"name":"Sentinel","src":"PHB","note":"When a creature within 5 feet of you makes an attack against a target other than you (and that target doesn't have this feat), you can use your…"},{"name":"Shield Master","src":"PHB","note":"If you are subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you can use your reaction to take no…"},{"name":"Vigor of the Hill Giant","src":"BGG","note":"You've manifested the resilience emblematic of hill giants, granting you the following benefits: list list-hang-notitle Bulwark item When you are…"},{"name":"War Caster","src":"PHB","note":"When a hostile creature's movement provokes an opportunity attack from you, you can use your reaction to cast a spell at the creature, rather than…"}]}</script>
+
+<script>
+// Stand-in combat: the app's demo party plus two monsters the bestiary has.
+// Enough to judge the interaction. Reads nothing from the app, writes nothing.
+const order = [
+  { id:'ogre', name:'Ogre', init:18, hp:59, hpMax:59, ac:11, icon:'O',
+    sub_:'Large giant · CR 2 · Speed 40 ft',
+    actions:[
+      { name:'Greatclub', bonus:6, dice:[2,8], mod:4, type:'bludgeoning', reach:'reach 5 ft.' },
+      { name:'Javelin',   bonus:6, dice:[2,6], mod:4, type:'piercing',    reach:'range 30/120 ft.' },
+    ] },
+  // Reactions are NOT listed here. They are derived from class, subclass and
+  // level against the table extracted from data/class/*.json — see
+  // deriveReactions(). Zoey gets Uncanny Dodge because she is a level-6 rogue,
+  // not because anyone typed it in.
+  { id:'zoey', name:'Zoey', init:14, hp:42, hpMax:42, ac:16, icon:'Z',
+    cls:'Rogue', sub:'Thief', lvl:6, feats:['Defensive Duelist'],
+    sub_:'Rogue 6 · Passive Perception 16', conds:['Prone'] },
+  { id:'bugbear', name:'Bugbear', init:12, hp:27, hpMax:27, ac:16, icon:'B',
+    sub_:'Medium humanoid · CR 1 · Speed 30 ft', conds:['Bane'],
+    multiattack:'the bugbear makes two attacks',
+    actions:[
+      { name:'Morningstar', bonus:4, dice:[2,8], mod:2, type:'piercing', reach:'reach 5 ft.' },
+      { name:'Javelin',     bonus:4, dice:[1,6], mod:2, type:'piercing', reach:'reach 5 ft. or range 30/120 ft.' },
+    ] },
+  { id:'zindle', name:'Zindle', init:11, hp:45, hpMax:45, ac:15, icon:'Z',
+    cls:'Bard', sub:'Lore', lvl:6, sub_:'Bard 6 (College of Lore) · Passive Perception 14' },
+  { id:'namroc', name:'Namroc', init:9,  hp:44, hpMax:44, ac:14, icon:'N',
+    cls:'Druid', sub:'Moon', lvl:6, sub_:'Druid 6 (Circle of the Moon) · Passive Perception 15' },
+  { id:'ulrick', name:'Ulrick', init:7,  hp:65, hpMax:65, ac:14, icon:'U',
+    cls:'Barbarian', sub:'Ancestral Guardian', lvl:6,
+    sub_:'Barbarian 6 (Path of the Ancestral Guardian) · Passive Perception 12' },
+];
+let cur = 0, armed = null, log = [], pending = null;
+
+// ── Reaction derivation ───────────────────────────────────────────────────
+// The table is extracted from data/class/*.json and data/feats.json by
+// tools/extract-reactions.js. Counted there: 5 reactions come from base
+// classes, 79 from subclasses, 17 from feats. Deriving from class + level
+// alone would find 5 of 101 — which is why subclass is not optional.
+const RX = JSON.parse(document.getElementById('rx').textContent);
+
+// The handful with real mechanics here. Everything else is offered, spent and
+// logged, and the DM adjudicates with the manual controls — pretending to
+// automate a hundred features would be worse than admitting to two.
+const MECH = {
+  'Uncanny Dodge':   { when:'damage', apply:d => Math.floor(d/2) },
+  'Cutting Words':   { when:'tohit',  die:8 },
+  'Defensive Duelist':{ when:'tohit', flat:4 },
+};
+
+// Which reactions are plausibly a response to BEING HIT, as opposed to ones
+// like Opportunity Attack that trigger on something else entirely. A heuristic
+// over the feature text, and deliberately visible as one: the full derived
+// list always shows under the creature, so nothing is hidden by a bad guess.
+const HIT_TRIGGER = /hits you|hit by an attack|when you take damage|makes an attack roll|attack roll against|reduced to 0/i;
+
+function deriveReactions(c){
+  if (!c.cls) return [];
+  const cls = c.cls.toLowerCase(), sub = (c.sub||'').toLowerCase(), lvl = c.lvl||0, out = [];
+  RX.classes.forEach(r => {
+    if (r.cls.toLowerCase() === cls && r.lvl <= lvl) out.push({...r, from:'class'});
+  });
+  RX.subclasses.forEach(r => {
+    if (r.cls.toLowerCase() === cls && String(r.sub||'').toLowerCase() === sub && r.lvl <= lvl)
+      out.push({...r, from:'subclass'});
+  });
+  (c.feats||[]).forEach(fn => {
+    const f = RX.feats.find(x => x.name.toLowerCase() === fn.toLowerCase());
+    if (f) out.push({...f, from:'feat'});
+  });
+  RX.universal.forEach(r => out.push({...r, from:'always'}));
+  // The same feature appears once per sourcebook — keep the first.
+  const seen = new Set();
+  return out.filter(r => !seen.has(r.name) && seen.add(r.name))
+            .map(r => ({ ...r, key:r.name, onHit:HIT_TRIGGER.test(r.note||''), ...(MECH[r.name]||{}) }));
+}
+
+order.forEach(c => { c.reactions = deriveReactions(c); c.reactionUsed = false; });
+
+const d = n => 1 + Math.floor(Math.random() * n);
+const el = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Semantic, not the accent: green healthy, amber hurt, red bloodied.
+const hpColor = p => p <= 0 ? '#5a3a3a' : p < 35 ? 'var(--danger)' : p < 75 ? 'var(--warning)' : 'var(--success)';
+
+function renderInit(){
+  el('init').innerHTML = order.map((c,i) => `
+    <button class="tv-pip ${i===cur?'cur':''} ${i<cur?'done':''}" data-i="${i}"
+            aria-current="${i===cur?'true':'false'}">
+      <span class="tv-pip-init">${c.init}</span>
+      <span><span class="tv-pip-name">${esc(c.name)}</span><br>
+      <span class="tv-pip-hp">${c.hp}/${c.hpMax}</span></span>
+    </button>`).join('');
+}
+
+function renderActor(){
+  const c = order[cur];
+  el('avatar').textContent = c.icon;
+  el('actorName').textContent = c.name;
+  el('actorSub').textContent = c.sub_ || '';
+  el('actorHp').textContent = c.hp;
+  el('actorAc').textContent = c.ac;
+  el('conds').innerHTML = (c.conds||[]).map(x => `<span class="tv-cond">${esc(x)}</span>`).join('');
+  // Everything this creature has, with where it came from — so a wrong guess
+  // by the derivation is visible rather than silently shaping the prompt.
+  const rx = c.reactions || [];
+  el('rxlist').innerHTML = !rx.length ? '' :
+    `<span class="tv-rx-l">Reactions</span>` + rx.map(r =>
+      `<span class="tv-rx ${c.reactionUsed?'spent':''} ${r.onHit?'hit':''}" title="${esc(r.note||'')}">
+         ${esc(r.name)}<span class="tv-rx-src">${esc(r.from)}${r.lvl?' L'+r.lvl:''}</span>
+       </span>`).join('');
+
+  // Manual entry is always available — on a monster's turn because the DM may
+  // have rolled physical dice, and on a PC's turn because it is the only way
+  // their roll gets in. On a PC turn it leads rather than trails.
+  const manual = `
+    <div class="tv-manual ${c.actions ? '' : 'lead'}">
+      <span class="tv-manual-l">${c.actions ? 'Rolled it yourself?' : `${esc(c.name)} rolls — enter the result:`}</span>
+      <input class="tv-in" id="mTohit" type="number" placeholder="hit" aria-label="Attack roll total">
+      <input class="tv-in" id="mDmg" type="number" placeholder="dmg" aria-label="Damage">
+      <input class="tv-in wide" id="mType" type="text" placeholder="type" aria-label="Damage type">
+      <button class="btn ${c.actions ? '' : 'primary'}" data-manual="1">Apply</button>
+    </div>`;
+
+  if (!c.actions){
+    el('actions').innerHTML = manual + `<div class="tv-empty">
+      <div class="tv-empty-h">Or use the −/+ under the target list for damage and healing
+      that isn't an attack.</div></div>`;
+    return;
+  }
+  let h = '';
+  if (c.multiattack) h += `<div class="tv-group-label">Multiattack — ${esc(c.multiattack)}</div>`;
+  h += c.actions.map((a,i) => `
+    <div class="tv-act">
+      <div class="tv-act-body">
+        <div class="tv-act-name">${esc(a.name)}</div>
+        <div class="tv-act-line">+${a.bonus} to hit, ${esc(a.reach)} · ${a.dice[0]}d${a.dice[1]}+${a.mod} ${a.type}</div>
+      </div>
+      <button class="btn" data-act="${i}" aria-label="Roll ${esc(a.name)}">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dice"/></svg>Roll
+      </button>
+    </div>`).join('');
+  el('actions').innerHTML = h + manual;
+}
+
+function renderTargets(){
+  const c = order[cur];
+  const armedC = order.find(x => x.id === armed);
+  el('targets').innerHTML = '<h4>Target</h4>' + order
+    .filter(t => t.id !== c.id)
+    .map(t => {
+      const pct = Math.max(0, t.hp / t.hpMax * 100);
+      // A creature holding an unused reaction is worth seeing BEFORE you
+      // commit an attack at it, not only once the prompt appears.
+      // Only when they hold something that could answer an ATTACK. Everyone has
+      // Opportunity Attack, so flagging that would mark the whole table.
+      const r = (!t.reactionUsed && (t.reactions||[]).some(x => x.onHit))
+        ? '<span class="tv-pip-r" title="Has an unspent reaction that can answer an attack">R</span>' : '';
+      return `<button class="tv-tgt ${armed===t.id?'armed':''}" data-tgt="${t.id}"
+                      aria-pressed="${armed===t.id}">
+        <span class="tv-tgt-row">
+          <span class="tv-tgt-name">${esc(t.name)}${r}</span>
+          <span class="tv-tgt-hp">${t.hp}/${t.hpMax}</span>
+          <span class="tv-tgt-ac"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>${t.ac}</span>
+        </span>
+        <span class="tv-hpbar"><i style="width:${pct}%;background:${hpColor(pct)}"></i></span>
+      </button>`;
+    }).join('')
+    + `<div class="tv-adjust">
+         <span class="tv-adjust-name">${armedC ? esc(armedC.name) : 'Pick a target'}</span>
+         <button class="btn" data-adj="-1" ${armedC?'':'disabled'} aria-label="Damage">−</button>
+         <input class="tv-in" id="adjAmt" type="number" value="5" style="width:46px" aria-label="Amount">
+         <button class="btn" data-adj="1" ${armedC?'':'disabled'} aria-label="Heal">+</button>
+       </div>`;
+}
+
+function renderPending(){
+  const bar = el('react');
+  if (!pending){ bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const o = pending, t = o.target;
+  const opts = availableReactions(t, o).map(r => {
+    const preview = r.when === 'damage' ? ` → ${r.apply(o.dmg)}` : '';
+    const short = (r.note||'').length > 54 ? r.note.slice(0,51).replace(/\s\S*$/,'')+'…' : (r.note||'');
+    return `<button class="btn" data-react="${r.key}" title="${esc(r.note||'')}">${esc(r.name)}${preview}
+      <span class="dim" style="opacity:.7">· ${esc(short)}</span></button>`;
+  }).join('');
+  bar.style.display = '';
+  bar.innerHTML = `<span class="tv-react-l">${esc(t.name)} may react</span>
+    <span class="dim" style="font-size:var(--fs-md);color:var(--text-muted)">
+      ${o.hit ? `hit for ${o.dmg} ${esc(o.type)}` : 'missed'} — ${o.total} vs AC ${t.ac}
+    </span>${opts}
+    <button class="btn primary" data-react="__none">${o.hit ? `Take ${o.dmg}` : 'Let it miss'}</button>`;
+}
+
+function renderLog(){
+  el('log').innerHTML = log.length
+    ? log.slice(0,5).map(l => `<div class="tv-log-line">${l}</div>`).join('')
+    : '<div class="tv-log-line" style="opacity:.55">Rolls this combat appear here.</div>';
+}
+function render(){ renderInit(); renderActor(); renderTargets(); renderLog(); renderPending(); }
+
+// Reactions the target could still spend against this specific outcome.
+function availableReactions(t, o){
+  if (!t.reactions || t.reactionUsed) return [];
+  return t.reactions.filter(r =>
+    r.onHit && (r.when === 'damage' ? o.hit : true));
+}
+
+function resolve(o){
+  // o: {attacker, label, target, total, nat, crit, hit, dmg, rolls, mod, type, manual}
+  const react = availableReactions(o.target, o);
+  if (react.length){ pending = o; render(); return; }   // hold for a decision
+  commit(o, null);
+}
+
+function commit(o, usedName){
+  const t = o.target, tag = usedName ? ` <span class="dim">(${esc(usedName)})</span>` : '';
+  if (!o.hit){
+    el('result').innerHTML = `<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:
+      <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span>${tag}`;
+    log.unshift(`<strong>${esc(o.attacker)}</strong> missed <strong>${esc(t.name)}</strong> with ${esc(o.label)}${usedName?` — ${esc(usedName)}`:''}`);
+    pending = null; render(); return;
+  }
+  const before = t.hp;
+  t.hp = Math.max(0, t.hp - o.dmg);
+  const breakdown = o.rolls ? ` <span class="dim">[${o.rolls.join('+')}+${o.mod}]</span>` : '';
+  el('result').innerHTML =
+    `<span class="${o.crit?'crit':'hit'}">${o.crit?'Critical hit':'Hit'}</span> — ${esc(o.label)} vs ${esc(t.name)}:
+     <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span> ·
+     <strong>${o.dmg} ${esc(o.type)}</strong>${breakdown}${tag}
+     <span class="dim">· ${esc(t.name)} ${before} → ${t.hp}</span>`;
+  log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${o.dmg}</strong> ${esc(o.type)}${o.crit?' (crit)':''}${usedName?` — ${esc(usedName)}`:''} <span style="opacity:.7">· ${before} → ${t.hp}</span>`);
+  pending = null; render();
+}
+
+function useReaction(key){
+  if (!pending) return;
+  const o = pending, t = o.target;
+  const r = (t.reactions||[]).find(x => x.key === key);
+  if (!r) return;
+  t.reactionUsed = true;
+  if (r.when === 'damage'){
+    o.dmg = r.apply(o.dmg);
+    commit(o, r.name);
+  } else {
+    // A to-hit reaction can turn a hit into a miss, so re-test against AC.
+    const sub = r.flat != null ? r.flat : d(r.die);
+    o.total -= sub;
+    o.hit = o.crit || o.total >= t.ac;
+    commit(o, `${r.name}, −${sub}`);
+  }
+}
+
+function roll(ai){
+  const c = order[cur], a = c.actions[ai];
+  const t = order.find(x => x.id === armed);
+  if (!t){ el('result').innerHTML = '<span class="dim">Pick a target on the right first.</span>'; return; }
+  const nat = d(20), total = nat + a.bonus;
+  const crit = nat === 20, hit = crit || (nat !== 1 && total >= t.ac);
+  const rolls = [];
+  for (let i = 0, n = a.dice[0] * (crit ? 2 : 1); i < n; i++) rolls.push(d(a.dice[1]));
+  resolve({ attacker:c.name, label:a.name, target:t, nat, total, crit, hit,
+            dmg:rolls.reduce((s,x)=>s+x,0) + a.mod, rolls, mod:a.mod, type:a.type });
+}
+
+// Hand-entered attack: the player rolled real dice, or the DM rolled behind a
+// screen. Goes through the SAME pipeline, so reactions still get offered.
+function manualAttack(){
+  const t = order.find(x => x.id === armed);
+  if (!t){ el('result').innerHTML = '<span class="dim">Pick a target on the right first.</span>'; return; }
+  const total = parseInt(el('mTohit').value, 10);
+  const dmg   = parseInt(el('mDmg').value, 10);
+  if (isNaN(total) || isNaN(dmg)){
+    el('result').innerHTML = '<span class="dim">Enter both the attack total and the damage.</span>';
+    return;
+  }
+  const type = (el('mType').value || 'damage').trim();
+  resolve({ attacker:order[cur].name, label:'attack', target:t, total,
+            crit:false, hit: total >= t.ac, dmg, rolls:null, mod:0, type, manual:true });
+}
+
+// No attack at all — "you take 7", "you regain 12".
+function adjust(delta){
+  const t = order.find(x => x.id === armed); if (!t) return;
+  const n = Math.abs(parseInt(el('adjAmt').value, 10) || 0); if (!n) return;
+  const before = t.hp;
+  t.hp = Math.max(0, Math.min(t.hpMax, t.hp + (delta < 0 ? -n : n)));
+  const word = delta < 0 ? 'took' : 'regained';
+  el('result').innerHTML = `<span class="dim">${esc(t.name)} ${word} <strong>${n}</strong> — ${before} → ${t.hp}</span>`;
+  log.unshift(`<strong>${esc(t.name)}</strong> ${word} <strong>${n}</strong> <span style="opacity:.7">· ${before} → ${t.hp}</span>`);
+  render();
+}
+
+function nextTurn(){
+  if (pending) return;                       // resolve the reaction first
+  cur = (cur + 1) % order.length; armed = null;
+  order[cur].reactionUsed = false;            // a reaction refreshes on your turn
+  el('result').innerHTML = '<span class="dim">Pick a target, then roll an attack.</span>';
+  render();
+}
+
+document.addEventListener('click', e => {
+  const pip = e.target.closest('.tv-pip');
+  if (pip){ cur = +pip.dataset.i; armed = null; render(); return; }
+  const tgt = e.target.closest('.tv-tgt');
+  if (tgt){ armed = tgt.dataset.tgt; renderTargets(); return; }
+  const rea = e.target.closest('[data-react]');
+  if (rea){
+    const k = rea.dataset.react;
+    if (k === '__none') commit(pending, null); else useReaction(k);
+    return;
+  }
+  const act = e.target.closest('[data-act]');
+  if (act){ roll(+act.dataset.act); return; }
+  if (e.target.closest('[data-manual]')){ manualAttack(); return; }
+  const adj = e.target.closest('[data-adj]');
+  if (adj){ adjust(+adj.dataset.adj); return; }
+  if (e.target.closest('#end')) nextTurn();
+});
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !/^(INPUT|TEXTAREA|BUTTON)$/.test(document.activeElement.tagName)){
+    e.preventDefault(); nextTurn();
+  }
+});
+
+el('result').innerHTML = '<span class="dim">Pick a target, then roll an attack.</span>';
+render();
+</script>
