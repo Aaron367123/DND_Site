@@ -4189,7 +4189,14 @@ registerPanel('battlemap',{
       } else {
         fontSize = (size > 1 ? 13 : Math.max(8, 11 - (displayLabel.length > 5 ? 2 : 0))) * tokScale;
       }
-      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:hidden;box-sizing:border-box`;
+      // overflow:visible, and it has to be set HERE rather than in the
+      // stylesheet — this inline cssText overrides .map-token entirely, which
+      // is why setting it in CSS looked right and computed to hidden.
+      // Visible is what lets .map-token::after extend past the circle to give
+      // touch a 32px tap target without drawing the token any bigger. Nothing
+      // is actually clipped by it: portraits carry their own border-radius,
+      // icon SVGs sit at 90%, and the name label is a sibling.
+      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:visible;box-sizing:border-box`;
       if (hasIcon){
         el.innerHTML = (typeof renderIcon === 'function')
           ? renderIcon(iconSource, displayLabel)

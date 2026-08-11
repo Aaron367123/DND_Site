@@ -682,23 +682,21 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   body.player-mode .window[data-panel="battlemap"] #map-scroll{
     touch-action: none;
   }
-  /* NO minimum token size here, deliberately.
-     There used to be `min-width: calc(32px / var(--bm-vs,1))` to guarantee a
-     32px tap target at low zoom. It worked, and it was wrong: a token stops
-     shrinking with the map once the floor bites, so it no longer covers the
-     square the creature is standing on. Measured on a 390px phone —
+  /* Touch gets a 32px minimum HIT area — not a minimum token size.
+     The earlier attempt used `min-width: calc(32px / var(--bm-vs,1))` on the
+     token itself. It produced the target, and it was wrong: once the floor
+     bit, the token stopped shrinking with the map and no longer covered the
+     square the creature stands on. Measured on a 390px phone —
        zoom 2.0  token 92px / cell 100px  ratio 0.92
        zoom 1.0  token 46px / cell  50px  ratio 0.92
        zoom 0.5  token 32px / cell  25px  ratio 1.28
        zoom 0.25 token 32px / cell 12.5px ratio 2.56
      At 0.25 a Medium creature covered two and a half squares. On a battle map
-     the token IS the footprint; drawing it wrong to make it easier to tap
-     trades correctness for convenience, and position is the whole point.
-
-     Expanding just the hit area is the right answer, but .map-token is
-     overflow:hidden (it clips portrait images to the circle), so a
-     pseudo-element expander gets clipped along with everything else — that
-     needs a wrapper element, not a CSS tweak. Until then: zoom in to tap. */
+     the token IS the footprint.
+     --bm-hit drives the transparent ::after disc instead, so the drawn token
+     keeps its true size and only the tappable region grows. Left at 0 for
+     mouse pointers, which don't need it. */
+  .map-token{--bm-hit:32px}
 }
 
 /* ============ MOBILE — OTHER PANEL TWEAKS ============ */
@@ -2511,7 +2509,30 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 #map-scroll.map-drop-active{outline:2px dashed var(--accent);outline-offset:-4px;background:rgba(212,165,116,.06)}
 .map-container{flex:1;overflow:hidden;position:relative;cursor:crosshair}
 #battle-map-canvas{display:block;image-rendering:pixelated}
-.map-token{position:absolute;width:40px;height:40px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:var(--fs-sm);font-weight:600;cursor:pointer;user-select:none;transform:translate(-50%,-50%);transition:box-shadow .1s;z-index:2;text-align:center;line-height:1.1;overflow:hidden;word-break:break-word}
+/* overflow:visible, not hidden. The clip existed to keep portraits and text
+   inside the circle, but it clips nothing: portraits carry their own
+   border-radius:50%, icon SVGs are drawn at 90%, and the visible name is a
+   SIBLING element precisely because the clip used to be here. Measured across
+   glyph, portrait and long-name tokens — scrollWidth equals clientWidth in
+   every case. Dropping it is what lets ::after below escape the box. */
+.map-token{position:absolute;width:40px;height:40px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:var(--fs-sm);font-weight:600;cursor:pointer;user-select:none;transform:translate(-50%,-50%);transition:box-shadow .1s;z-index:2;text-align:center;line-height:1.1;overflow:visible;word-break:break-word}
+/* Hit area, not size. A transparent disc centred on the token, at least
+   --bm-hit screen px across, so a token that is legitimately 12px on screen at
+   low zoom is still tappable — WITHOUT drawing it bigger than the square it
+   occupies, which is what the old min-width did.
+     max(100%, …) means it never shrinks a token below its own size.
+     / var(--bm-vs) converts screen px to stage px, since the map sits inside
+     a CSS scale() and a bare 32px here would mean 32 STAGE px.
+   Tradeoff, deliberate: zoomed right out, adjacent tokens' hit discs overlap
+   and the one on top wins. Being able to tap the wrong neighbour beats not
+   being able to tap anything. */
+.map-token::after{
+  content:'';position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:max(100%, calc(var(--bm-hit, 0px) / var(--bm-vs, 1)));
+  height:max(100%, calc(var(--bm-hit, 0px) / var(--bm-vs, 1)));
+  border-radius:50%;
+}
 .map-token.has-icon{padding:0;background:#222}
 .map-token.has-icon img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .map-token.has-icon svg{width:90%;height:90%}
