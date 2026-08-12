@@ -79,6 +79,15 @@ const ATTACKER = /makes an attack roll/i;
 // the party.
 const ALLY_IS_ATTACKER = /another creature[^.]{0,30}(hits|attacks|makes an attack against) you/i;
 
+// How far away the trigger can be, in feet, straight out of the wording:
+// "another creature you can see within 30 feet of you". Only meaningful for
+// reactions that answer something happening to someone else — a self-scoped
+// one is always in range of itself.
+function rangeOf(txt){
+  const m = txt.match(/within (\d+) feet/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 function scopeOf(txt){
   const self = SELF.test(txt);
   const ally = ALLY.test(txt) && !ALLY_IS_ATTACKER.test(txt);
@@ -99,14 +108,14 @@ for (const f of fs.readdirSync(path.join(DATA, 'class'))){
     const txt = detag(strings(cf.entries || [], []).join(' '));
     if (!RE.test(txt)) continue;
     classes.push({ cls: cf.className, lvl: cf.level, name: cf.name,
-                   src: cf.source, note: note(cf.entries), scope: scopeOf(txt) });
+                   src: cf.source, note: note(cf.entries), scope: scopeOf(txt), range: rangeOf(txt) });
   }
   for (const sf of dat.subclassFeature || []){
     const txt = detag(strings(sf.entries || [], []).join(' '));
     if (!RE.test(txt)) continue;
     subclasses.push({ cls: sf.className, sub: sf.subclassShortName, lvl: sf.level,
                       name: sf.name, src: sf.source, note: note(sf.entries),
-                      scope: scopeOf(txt) });
+                      scope: scopeOf(txt), range: rangeOf(txt) });
   }
 }
 
@@ -115,7 +124,8 @@ const fd = readJson(path.join(DATA, 'feats.json'));
 for (const ft of (fd && fd.feat) || []){
   const txt = detag(strings(ft.entries || [], []).join(' '));
   if (!RE.test(txt)) continue;
-  feats.push({ name: ft.name, src: ft.source, note: note(ft.entries), scope: scopeOf(txt) });
+  feats.push({ name: ft.name, src: ft.source, note: note(ft.entries),
+              scope: scopeOf(txt), range: rangeOf(txt) });
 }
 
 // Spells cast as a reaction. These can't come from class + level — they depend
