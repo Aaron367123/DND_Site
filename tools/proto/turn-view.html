@@ -75,11 +75,16 @@ body{
   border-bottom:1px solid var(--border)}
 
 /* Initiative strip. A horizontal ordered run because the order IS the
-   information — this is a genuine sequence, not decoration. */
-.tv-init{
-  display:flex;gap:6px;padding:10px 12px;overflow-x:auto;
-  background:var(--panel-2);border-bottom:1px solid var(--border);flex-shrink:0
+   information — this is a genuine sequence, not decoration.
+   The strip scrolls; the controls sit OUTSIDE it, or the button you need to
+   fix the order would scroll away exactly when the order is long. */
+.tv-initbar{
+  display:flex;align-items:center;background:var(--panel-2);
+  border-bottom:1px solid var(--border);flex-shrink:0
 }
+.tv-init{display:flex;gap:6px;padding:10px 12px;overflow-x:auto;flex:1;min-width:0}
+.tv-init-tools{display:flex;gap:6px;padding:0 12px 0 2px;flex-shrink:0}
+.tv-init-tools .btn{font-size:var(--fs-xs);padding:5px 10px;white-space:nowrap}
 .tv-pip{
   flex-shrink:0;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;
   background:var(--panel-3);border:1px solid var(--border);border-radius:var(--r-pill);
@@ -97,6 +102,19 @@ body{
 .tv-pip.cur .tv-pip-init{background:rgba(0,0,0,.22)}
 .tv-pip-name{font-size:var(--fs-md);font-weight:500;white-space:nowrap;text-align:left}
 .tv-pip-hp{font-size:var(--fs-2xs);opacity:.7;font-variant-numeric:tabular-nums;text-align:left}
+/* Editing initiative is a mode, not a hidden gesture on the pip. The pip is
+   already a button that jumps the turn, and hanging a second meaning off the
+   number inside it would make one tap target mean two things. */
+.tv-pip.edit{cursor:default;background:var(--panel-3);color:inherit;border-color:var(--border)}
+.tv-pip.edit:hover{border-color:var(--border)}
+.tv-pip.edit.cur{border-color:var(--accent)}
+.tv-init-in{
+  width:42px;height:26px;flex-shrink:0;text-align:center;
+  background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:var(--r-sm);
+  color:var(--text);font:inherit;font-size:var(--fs-sm);font-weight:700;
+  font-variant-numeric:tabular-nums;padding:0 2px
+}
+.tv-init-in:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 .tv-main{display:grid;grid-template-columns:1fr 250px;gap:14px;padding:14px;flex:1;min-height:0}
 
@@ -432,6 +450,15 @@ body{
   creature show what was derived and where each came from; gold ones are what the prompt will
   offer. Six have real mechanics — the rest are spent, logged and adjudicated by you, because
   faking a hundred is worse than admitting to six.</p>
+  <p style="margin-top:7px"><b>Initiative is editable, and the order follows.</b> The strip was a
+  readout of a number with nowhere to come from. <b>Initiative</b> at the right of the strip turns
+  every value into a field; typing one re-sorts the order immediately, and the turn stays with the
+  <i>creature</i> rather than the slot — drop the Ogre from 18 to 3 mid-turn and it is still the
+  Ogre's turn, now at the bottom. <b>Roll NPCs</b> rolls d20 + modifier for the monsters only,
+  because players call their own out loud; that inverts the rest of the panel, where the automated
+  path is the common one and the manual path is the twin. Ties keep the order the table already
+  settled on instead of shuffling on every keystroke — 5e breaks them by Dexterity or by DM call,
+  and leaving them alone is a DM call.</p>
   <p style="margin-top:7px"><b>Opportunity attacks live on the map.</b> Every other reaction here
   is triggered by a roll, so it belongs at the moment of the hit — an opportunity attack is
   triggered by <i>movement</i>, which is why the hit prompt could never house it. Drag Zoey out
@@ -459,7 +486,10 @@ body{
 </div>
 
 <div class="tv">
-  <div class="tv-init" id="init"></div>
+  <div class="tv-initbar">
+    <div class="tv-init" id="init"></div>
+    <div class="tv-init-tools" id="initTools"></div>
+  </div>
   <div class="tv-main">
     <div class="tv-actor">
       <div class="tv-actor-head">
@@ -514,7 +544,7 @@ const order = [
   // to be dead space under a two-action monster. Typed in here because the
   // extractor only emits reactions; the real panel reads them from the same
   // bestiary entry and data/class/*.json it already reads everything else from.
-  { id:'ogre', name:'Ogre', init:18, hp:59, hpMax:59, ac:11, icon:'O', cell:[3,3],
+  { id:'ogre', name:'Ogre', init:18, initMod:-1, hp:59, hpMax:59, ac:11, icon:'O', cell:[3,3],
     sub_:'Large giant · CR 2 · Speed 40 ft',
     passive:['Darkvision 60 ft', 'Passive Perception 8', 'Common, Giant'],
     traits:[],
@@ -526,7 +556,7 @@ const order = [
   // level against the table extracted from data/class/*.json — see
   // deriveReactions(). Zoey gets Uncanny Dodge because she is a level-6 rogue,
   // not because anyone typed it in.
-  { id:'zoey', name:'Zoey', init:14, hp:42, hpMax:42, ac:16, icon:'Z',
+  { id:'zoey', name:'Zoey', init:14, initMod:4, hp:42, hpMax:42, ac:16, icon:'Z',
     cls:'Rogue', sub:'Thief', lvl:6, feats:['Defensive Duelist'], cell:[4,3],
     resources:[{name:'Sneak Attack',type:'toggle',current:1,max:1},
                {name:'Psychic Dice',type:'pool',current:6,max:6}],
@@ -537,7 +567,7 @@ const order = [
       { name:'Cunning Action', text:'Dash, Disengage or Hide as a bonus action — Disengage is why she may not provoke.' },
     ],
     sub_:'Rogue 6 · Passive Perception 16', conds:['Prone'] },
-  { id:'bugbear', name:'Bugbear', init:12, hp:27, hpMax:27, ac:16, icon:'B', cell:[2,4],
+  { id:'bugbear', name:'Bugbear', init:12, initMod:2, hp:27, hpMax:27, ac:16, icon:'B', cell:[2,4],
     sub_:'Medium humanoid · CR 1 · Speed 30 ft', conds:['Bane'],
     passive:['Darkvision 60 ft', 'Stealth +6', 'Passive Perception 10', 'Common, Goblin'],
     traits:[
@@ -549,7 +579,7 @@ const order = [
       { name:'Morningstar', bonus:4, dice:[2,8], mod:2, type:'piercing', reach:'reach 5 ft.' },
       { name:'Javelin',     bonus:4, dice:[1,6], mod:2, type:'piercing', reach:'reach 5 ft. or range 30/120 ft.' },
     ] },
-  { id:'zindle', name:'Zindle', init:11, hp:45, hpMax:45, ac:15, icon:'Z',
+  { id:'zindle', name:'Zindle', init:11, initMod:2, hp:45, hpMax:45, ac:15, icon:'Z',
     cls:'Bard', sub:'Lore', lvl:6, spells:['Silvery Barbs'], cell:[6,4],
     resources:[{name:'Spell Slots L1',type:'pool',current:4,max:4},
                {name:'Spell Slots L2',type:'pool',current:3,max:3},
@@ -562,7 +592,7 @@ const order = [
       { name:'Song of Rest (d6)', text:'Allies who spend Hit Dice on a short rest regain an extra d6.' },
     ],
     sub_:'Bard 6 (College of Lore) · Passive Perception 14' },
-  { id:'namroc', name:'Namroc', init:9,  hp:44, hpMax:44, ac:14, icon:'N',
+  { id:'namroc', name:'Namroc', init:9, initMod:1,  hp:44, hpMax:44, ac:14, icon:'N',
     cls:'Druid', sub:'Moon', lvl:6, spells:['Absorb Elements'], cell:[9,6],
     resources:[{name:'Spell Slots L1',type:'pool',current:4,max:4},
                {name:'Spell Slots L2',type:'pool',current:3,max:3},
@@ -573,7 +603,7 @@ const order = [
       { name:'Circle Forms', text:'Beast shapes up to CR 2 at this level — a dire wolf or a giant spider.' },
     ],
     sub_:'Druid 6 (Circle of the Moon) · Passive Perception 15' },
-  { id:'ulrick', name:'Ulrick', init:7,  hp:65, hpMax:65, ac:14, icon:'U',
+  { id:'ulrick', name:'Ulrick', init:7, initMod:2,  hp:65, hpMax:65, ac:14, icon:'U',
     cls:'Barbarian', sub:'Ancestral Guardian', lvl:6, cell:[5,2], raging:true,
     resources:[{name:'Rage',type:'pool',current:3,max:4},
                {name:'Reckless Attack',type:'toggle',current:1,max:1}],
@@ -765,14 +795,60 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':
 // Semantic, not the accent: green healthy, amber hurt, red bloodied.
 const hpColor = p => p <= 0 ? '#5a3a3a' : p < 35 ? 'var(--danger)' : p < 75 ? 'var(--warning)' : 'var(--success)';
 
+// ── Initiative ────────────────────────────────────────────────────────────
+// The strip showed the order and gave you no way to set it, which made it a
+// readout of a number that has to come from somewhere. It comes from the
+// table: players call theirs out, the DM rolls the monsters. So the roll
+// button covers NPCs only and every value stays typeable — the same
+// automated-path-with-a-manual-twin rule the attack side follows, except
+// here the manual path is the common one.
+let editInit = false;
+
+// High to low. Array#sort is stable, so a tie keeps the order the table
+// already settled on rather than shuffling on every keystroke — 5e breaks
+// ties by Dexterity or by DM call, and "leave it where it is" is a DM call.
+// cur is an index, so it has to be re-pinned to the CREATURE across a sort
+// or changing someone's number would silently hand the turn to a neighbour.
+function sortInit(){
+  const curId = order[cur] && order[cur].id;
+  order.sort((a, b) => b.init - a.init);
+  const i = order.findIndex(c => c.id === curId);
+  if (i >= 0) cur = i;
+}
+
 function renderInit(){
-  el('init').innerHTML = order.map((c,i) => `
-    <button class="tv-pip ${i===cur?'cur':''} ${i<cur?'done':''}" data-i="${i}"
-            aria-current="${i===cur?'true':'false'}">
-      <span class="tv-pip-init">${c.init}</span>
-      <span><span class="tv-pip-name">${esc(c.name)}</span><br>
-      <span class="tv-pip-hp">${c.hp}/${c.hpMax}</span></span>
-    </button>`).join('');
+  el('init').innerHTML = editInit
+    ? order.map((c,i) => `
+      <span class="tv-pip edit ${i===cur?'cur':''}">
+        <input class="tv-init-in" type="number" data-init="${esc(c.id)}" value="${c.init}"
+               aria-label="${esc(c.name)} initiative">
+        <span><span class="tv-pip-name">${esc(c.name)}</span><br>
+        <span class="tv-pip-hp">${(c.initMod||0) >= 0 ? '+' : ''}${c.initMod||0} init</span></span>
+      </span>`).join('')
+    : order.map((c,i) => `
+      <button class="tv-pip ${i===cur?'cur':''} ${i<cur?'done':''}" data-i="${i}"
+              aria-current="${i===cur?'true':'false'}">
+        <span class="tv-pip-init">${c.init}</span>
+        <span><span class="tv-pip-name">${esc(c.name)}</span><br>
+        <span class="tv-pip-hp">${c.hp}/${c.hpMax}</span></span>
+      </button>`).join('');
+  el('initTools').innerHTML = editInit
+    ? `<button class="btn" data-initroll="1" title="Roll d20 + modifier for the monsters only — players call their own">Roll NPCs</button>
+       <button class="btn primary" data-initdone="1">Done</button>`
+    : `<button class="btn" data-initedit="1" title="Set initiative and re-sort the order">Initiative</button>`;
+}
+
+function setInit(id, v){
+  const c = order.find(x => x.id === id);
+  if (!c || isNaN(v)) return;
+  c.init = v; sortInit(); render();
+}
+function rollNpcInit(){
+  order.forEach(c => { if (!c.cls) c.init = d(20) + (c.initMod||0); });
+  sortInit();
+  setResult(`<span class="dim">Rolled initiative for ${
+    order.filter(c=>!c.cls).map(c=>esc(c.name)+' '+c.init).join(', ')}.</span>`, true);
+  render();
 }
 
 function renderActor(){
@@ -1225,8 +1301,13 @@ function nextTurn(){
 }
 
 document.addEventListener('click', e => {
+  if (e.target.closest('[data-initedit]')){ editInit = true;  render(); return; }
+  if (e.target.closest('[data-initdone]')){ editInit = false; render(); return; }
+  if (e.target.closest('[data-initroll]')){ rollNpcInit(); return; }
   const pip = e.target.closest('.tv-pip');
-  if (pip){ cur = +pip.dataset.i; armed = null; render(); return; }
+  // In edit mode a pip is a container for an input, not a jump button — and
+  // without the data-i guard, clicking the input would set cur to NaN.
+  if (pip && pip.dataset.i != null){ cur = +pip.dataset.i; armed = null; render(); return; }
   const tgt = e.target.closest('.tv-tgt');
   if (tgt){ armed = tgt.dataset.tgt; renderTargets(); return; }
   const oa = e.target.closest('[data-oa]');
@@ -1247,6 +1328,12 @@ document.addEventListener('click', e => {
   const adj = e.target.closest('[data-adj]');
   if (adj){ adjust(+adj.dataset.adj); return; }
   if (e.target.closest('#end')) nextTurn();
+});
+// 'change', not 'input' — re-sorting on every keystroke would rip the field
+// out from under the cursor halfway through typing "12".
+document.addEventListener('change', e => {
+  const f = e.target.closest('[data-init]');
+  if (f) setInit(f.dataset.init, parseInt(f.value, 10));
 });
 document.addEventListener('keydown', e => {
   if (e.code === 'Space' && !/^(INPUT|TEXTAREA|BUTTON)$/.test(document.activeElement.tagName)){
