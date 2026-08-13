@@ -115,6 +115,26 @@ body{
   font-variant-numeric:tabular-nums;padding:0 2px
 }
 .tv-init-in:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tv-pip-x{
+  width:18px;height:18px;flex-shrink:0;margin-left:2px;padding:0;line-height:1;
+  border:1px solid var(--border);border-radius:var(--r-full);background:none;
+  color:var(--text-muted);font:inherit;font-size:var(--fs-sm);cursor:pointer
+}
+.tv-pip-x:hover{border-color:var(--danger);color:var(--danger)}
+.tv-pip-x:disabled{opacity:.3;cursor:not-allowed}
+.tv-pip-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* Second row rather than crowded into the strip: the strip is a sequence and
+   an input that isn't part of the sequence shouldn't sit inside it. */
+.tv-init-add{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px 12px;
+  background:var(--panel-2);border-bottom:1px solid var(--border);flex-shrink:0
+}
+.tv-init-add[hidden]{display:none}
+.tv-init-add select{
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text);
+  border-radius:var(--r-sm);padding:5px 7px;font:inherit;font-size:var(--fs-md)
+}
+.tv-init-add .note{font-size:var(--fs-2xs);color:var(--text-dim);max-width:34ch;line-height:1.4}
 
 .tv-main{display:grid;grid-template-columns:1fr 250px;gap:14px;padding:14px;flex:1;min-height:0}
 
@@ -344,10 +364,13 @@ body{
 .tv-in:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .tv-in.wide{width:96px;text-align:left}
 
-/* HP stepper for the armed target — the "just take 7" path, no attack. */
+/* HP stepper for the armed target — the "just take 7" path, no attack.
+   Its own box beside the target list rather than the last row inside it: as a
+   child of a scroller it scrolled away with a long order, and the add-combatant
+   row shortening the panel clipped it outright. */
 .tv-adjust{
-  margin-top:auto;padding-top:9px;border-top:1px solid var(--border);
-  display:flex;align-items:center;gap:6px;flex-shrink:0
+  display:flex;align-items:center;gap:6px;flex-shrink:0;padding:8px 10px;
+  background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md)
 }
 .tv-adjust-name{flex:1;min-width:0;font-size:var(--fs-sm);color:var(--text-muted);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -381,6 +404,9 @@ body{
   .tv-targets h4{display:none}
   .tv-tgt{flex:0 0 auto;width:auto;min-width:136px}
   .tv-tail{overflow:visible}
+  /* Four wrapped lines of explanation cost more than they teach on a phone,
+     and the same words are in the notes above. */
+  .tv-init-add .note{display:none}
   .tv-actor-name{font-size:var(--fs-2xl)}
   .tv-avatar{width:44px;height:44px;font-size:var(--fs-2xl)}
   .tv-foot{flex-direction:column;align-items:stretch;gap:9px}
@@ -458,7 +484,13 @@ body{
   because players call their own out loud; that inverts the rest of the panel, where the automated
   path is the common one and the manual path is the twin. Ties keep the order the table already
   settled on instead of shuffling on every keystroke — 5e breaks them by Dexterity or by DM call,
-  and leaving them alone is a DM call.</p>
+  and leaving them alone is a DM call. The same mode <b>adds and removes combatants</b>: reinforcements
+  arrive and creatures leave, so an order you can only edit the numbers of is still half a tool.
+  Removing the creature whose turn it is passes the turn on rather than losing it; removing someone
+  above it doesn't move it at all. The <b>Foe / Ally</b> picker is not decoration — side is guessed
+  from character class for the stand-ins, and a summoned wolf has no class, so without it the party's
+  own opportunity attacks would fire at their own wolf. The last combatant can't be removed, because
+  nothing here models a fight with no one in it and there'd be no way back.</p>
   <p style="margin-top:7px"><b>Opportunity attacks live on the map.</b> Every other reaction here
   is triggered by a roll, so it belongs at the moment of the hit — an opportunity attack is
   triggered by <i>movement</i>, which is why the hit prompt could never house it. Drag Zoey out
@@ -489,6 +521,17 @@ body{
   <div class="tv-initbar">
     <div class="tv-init" id="init"></div>
     <div class="tv-init-tools" id="initTools"></div>
+  </div>
+  <div class="tv-init-add" id="initAdd" hidden>
+    <span class="tv-manual-l">Add</span>
+    <input class="tv-in wide" id="adName" placeholder="name" aria-label="Name">
+    <input class="tv-in" id="adInit" type="number" placeholder="init" aria-label="Initiative">
+    <input class="tv-in" id="adHp" type="number" placeholder="hp" aria-label="Hit points">
+    <input class="tv-in" id="adAc" type="number" placeholder="ac" aria-label="Armour class">
+    <select id="adSide" aria-label="Side"><option value="foe">Foe</option><option value="party">Ally</option></select>
+    <button class="btn primary" data-add="1">Add</button>
+    <span class="note">Blank initiative rolls a d20. In the panel this row would also
+      search the bestiary, so adding a second ogre brings its stat block with it.</span>
   </div>
   <div class="tv-main">
     <div class="tv-actor">
@@ -522,6 +565,7 @@ body{
         <div class="tv-map-hint" id="mapHint">hover to enlarge · drag a token</div>
       </div>
       <div class="tv-targets" id="targets"></div>
+      <div class="tv-adjust" id="adjust"></div>
     </div>
   </div>
   <div class="tv-react" id="react" style="display:none"></div>
@@ -720,8 +764,12 @@ function deriveReactions(c){
       const sp = RX.spells.find(x => x.name.toLowerCase() === sn.toLowerCase());
       if (sp) out.push({...sp, from:'spell', scope:'self'});
     });
-    RX.universal.forEach(r => out.push({...r, from:'always', scope:'self'}));
   }
+  // Outside the class check on purpose. Every creature has these, monsters
+  // included — nesting them under `if (c.cls)` meant the Ogre's reaction list
+  // came out empty even though it plainly has an opportunity attack, which
+  // now matters because opportunity attacks are modelled.
+  RX.universal.forEach(r => out.push({...r, from:'always', scope:'self'}));
   const seen = new Set();
   return out.filter(r => !seen.has(r.name) && seen.add(r.name))
             .map(r => ({ ...r, key:r.name, ...(MECH[r.name]||{}) }));
@@ -764,7 +812,9 @@ function gatherReactions(o){
 // roll — it's movement — so the map is where it belongs: drop a token out of
 // an enemy's reach and the prompt appears. Same reaction economy as everything
 // else, one per creature, refreshing on their own turn.
-const sideOf  = c => c.cls ? 'party' : 'foe';
+// Guessed from `cls` for the stand-ins, but an explicit side wins — a summoned
+// ally has no class and would otherwise be treated as a foe by its own party.
+const sideOf  = c => c.side || (c.cls ? 'party' : 'foe');
 const meleeOf = c => (c.actions||[]).find(a => /reach/i.test(a.reach||''));
 // Reach read off the creature's own melee actions rather than assumed, so a
 // creature with a glaive or a whip provokes from 10 ft. Defaults to 5 for
@@ -824,6 +874,9 @@ function renderInit(){
                aria-label="${esc(c.name)} initiative">
         <span><span class="tv-pip-name">${esc(c.name)}</span><br>
         <span class="tv-pip-hp">${(c.initMod||0) >= 0 ? '+' : ''}${c.initMod||0} init</span></span>
+        <button class="tv-pip-x" data-rm="${esc(c.id)}" ${order.length<2?'disabled':''}
+                title="Remove ${esc(c.name)} from the fight"
+                aria-label="Remove ${esc(c.name)}">&times;</button>
       </span>`).join('')
     : order.map((c,i) => `
       <button class="tv-pip ${i===cur?'cur':''} ${i<cur?'done':''}" data-i="${i}"
@@ -835,7 +888,8 @@ function renderInit(){
   el('initTools').innerHTML = editInit
     ? `<button class="btn" data-initroll="1" title="Roll d20 + modifier for the monsters only — players call their own">Roll NPCs</button>
        <button class="btn primary" data-initdone="1">Done</button>`
-    : `<button class="btn" data-initedit="1" title="Set initiative and re-sort the order">Initiative</button>`;
+    : `<button class="btn" data-initedit="1" title="Set initiative, add or remove combatants">Initiative</button>`;
+  el('initAdd').hidden = !editInit;
 }
 
 function setInit(id, v){
@@ -843,6 +897,70 @@ function setInit(id, v){
   if (!c || isNaN(v)) return;
   c.init = v; sortInit(); render();
 }
+// ── Adding and removing combatants ────────────────────────────────────────
+// Reinforcements arrive and creatures leave, so an order you can only edit
+// the numbers of is still half a tool. Ad-hoc here; in the panel this row
+// would search the bestiary and bring the stat block with the name, the same
+// way the Attack Runner already resolves a creature to its actions.
+let nextId = 1;
+// Somewhere to stand. Anywhere occupied would stack two tokens on one square
+// and make every reach test between them read 0 ft.
+function freeCell(){
+  const taken = new Set(order.filter(c => c.cell).map(c => c.cell.join(',')));
+  for (let y = 0; y < GRID.rows; y++)
+    for (let x = 0; x < GRID.cols; x++)
+      if (!taken.has(x + ',' + y)) return [x, y];
+  return [0, 0];
+}
+function addCombatant(){
+  const name = (el('adName').value || '').trim();
+  if (!name){
+    setResult('<span class="dim">Give the combatant a name.</span>');
+    el('adName').focus(); return;
+  }
+  const iv = parseInt(el('adInit').value, 10);
+  const hp = Math.max(1, parseInt(el('adHp').value, 10) || 10);
+  const c = {
+    id: 'add' + (nextId++), name,
+    init: isNaN(iv) ? d(20) : iv, initMod: 0,
+    hp, hpMax: hp, ac: Math.max(1, parseInt(el('adAc').value, 10) || 10),
+    icon: name[0].toUpperCase(), cell: freeCell(),
+    // Explicit, because side is guessed from `cls` for the stand-ins and a
+    // summoned ally has no class — without this the party's own opportunity
+    // attacks would fire at their own wolf.
+    side: el('adSide').value,
+    passive: ['Added mid-fight'], traits: [],
+  };
+  c.reactions = deriveReactions(c); c.reactionUsed = false;
+  order.push(c); sortInit();
+  ['adName','adInit','adHp','adAc'].forEach(k => el(k).value = '');
+  log.unshift(`<strong>${esc(name)}</strong> joined the fight <span style="opacity:.7">· initiative ${c.init}</span>`);
+  setResult(`<span class="dim"><strong>${esc(name)}</strong> added at initiative ${c.init}, ${hp} HP.</span>`, true);
+  render();
+  el('adName').focus();
+}
+function removeCombatant(id){
+  // Nothing here models a combat with no one in it, and there is no way back
+  // from that state, so the last one stays.
+  if (order.length <= 1) return;
+  const i = order.findIndex(c => c.id === id);
+  if (i < 0) return;
+  const gone = order[i];
+  order.splice(i, 1);
+  if (armed === id) armed = null;
+  if (pending && ((pending.target && pending.target.id === id) ||
+                  (pending.mover  && pending.mover.id  === id))) pending = null;
+  // Keep the turn where it was. Removing someone ABOVE the current creature
+  // shifts every later index down by one; removing the current creature
+  // passes the turn to whoever now stands in that slot.
+  if (i < cur) cur--;
+  if (cur >= order.length) cur = 0;
+  if (i === cur) order[cur].reactionUsed = false;   // as if their turn began
+  log.unshift(`<strong>${esc(gone.name)}</strong> left the fight`);
+  setResult(`<span class="dim"><strong>${esc(gone.name)}</strong> removed.</span>`, true);
+  render();
+}
+
 function rollNpcInit(){
   order.forEach(c => { if (!c.cls) c.init = d(20) + (c.initMod||0); });
   sortInit();
@@ -958,13 +1076,12 @@ function renderTargets(){
         </span>
         <span class="tv-hpbar"><i style="width:${pct}%;background:${hpColor(pct)}"></i></span>
       </button>`;
-    }).join('')
-    + `<div class="tv-adjust">
-         <span class="tv-adjust-name">${armedC ? esc(armedC.name) : 'Pick a target'}</span>
-         <button class="btn" data-adj="-1" ${armedC?'':'disabled'} aria-label="Damage">−</button>
-         <input class="tv-in" id="adjAmt" type="number" value="5" style="width:46px" aria-label="Amount">
-         <button class="btn" data-adj="1" ${armedC?'':'disabled'} aria-label="Heal">+</button>
-       </div>`;
+    }).join('');
+  el('adjust').innerHTML = `
+    <span class="tv-adjust-name">${armedC ? esc(armedC.name) : 'Pick a target'}</span>
+    <button class="btn" data-adj="-1" ${armedC?'':'disabled'} aria-label="Damage">−</button>
+    <input class="tv-in" id="adjAmt" type="number" value="5" style="width:46px" aria-label="Amount">
+    <button class="btn" data-adj="1" ${armedC?'':'disabled'} aria-label="Heal">+</button>`;
 }
 
 // Movement out of reach. One button per provoker; a creature with a melee
@@ -1304,6 +1421,9 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-initedit]')){ editInit = true;  render(); return; }
   if (e.target.closest('[data-initdone]')){ editInit = false; render(); return; }
   if (e.target.closest('[data-initroll]')){ rollNpcInit(); return; }
+  if (e.target.closest('[data-add]')){ addCombatant(); return; }
+  const rm = e.target.closest('[data-rm]');            // before the pip check —
+  if (rm){ removeCombatant(rm.dataset.rm); return; }   // the × sits inside one
   const pip = e.target.closest('.tv-pip');
   // In edit mode a pip is a container for an input, not a jump button — and
   // without the data-i guard, clicking the input would set cur to NaN.
@@ -1336,6 +1456,11 @@ document.addEventListener('change', e => {
   if (f) setInit(f.dataset.init, parseInt(f.value, 10));
 });
 document.addEventListener('keydown', e => {
+  // Enter anywhere in the add row adds, so a DM entering three goblins never
+  // has to leave the keyboard.
+  if (e.key === 'Enter' && e.target.closest && e.target.closest('#initAdd')){
+    e.preventDefault(); addCombatant(); return;
+  }
   if (e.code === 'Space' && !/^(INPUT|TEXTAREA|BUTTON)$/.test(document.activeElement.tagName)){
     e.preventDefault(); nextTurn();
   }
