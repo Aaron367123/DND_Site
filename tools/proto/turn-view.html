@@ -54,10 +54,24 @@ body{
   max-width:78ch;line-height:1.6}
 .brief li{margin-bottom:1px}
 .brief li b{color:var(--text)}
+/* The notes outgrew the thing they describe — nine paragraphs pushed the
+   prototype below the fold, which is the wrong way round for a prototype.
+   Folded, so it opens on the surface you are meant to click. */
+.brief details{margin-top:9px}
+.brief summary{
+  cursor:pointer;font-size:var(--fs-md);color:var(--accent);font-weight:600;
+  list-style:none;display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--border);border-radius:var(--r-pill);padding:4px 12px
+}
+.brief summary::-webkit-details-marker{display:none}
+.brief summary:hover{border-color:var(--accent)}
+.brief summary::before{content:'▸';font-size:var(--fs-sm)}
+.brief details[open] summary::before{content:'▾'}
+.brief details[open] summary{margin-bottom:6px}
 
 /* Tall enough for the extra rows the reaction bar adds, capped so the brief
    above it stays on screen on a laptop. */
-.tv{display:flex;flex-direction:column;height:min(82vh,640px);min-height:520px;
+.tv{display:flex;flex-direction:column;height:min(86vh,700px);min-height:520px;
   border-bottom:1px solid var(--border)}
 
 /* Initiative strip. A horizontal ordered run because the order IS the
@@ -87,7 +101,11 @@ body{
 .tv-main{display:grid;grid-template-columns:1fr 250px;gap:14px;padding:14px;flex:1;min-height:0}
 
 /* ── Active creature ──────────────────────────────────────────────────── */
-.tv-actor{display:flex;flex-direction:column;min-height:0;gap:11px}
+/* min-width:0 is load-bearing, not tidying. Without it a grid item's automatic
+   minimum size is its min-content, and the horizontally-scrolling target strip
+   reported ~900px of it — so the single-column phone layout laid itself out
+   928px wide inside a 375px viewport and scrolled sideways. */
+.tv-actor{display:flex;flex-direction:column;min-height:0;min-width:0;gap:11px}
 .tv-actor-head{display:flex;align-items:center;gap:14px}
 .tv-avatar{
   width:54px;height:54px;border-radius:var(--r-full);flex-shrink:0;
@@ -144,9 +162,34 @@ body{
 .tv-act-line{font-size:var(--fs-sm);color:var(--text-muted);margin-top:2px}
 .tv-act .btn{flex-shrink:0;display:inline-flex;align-items:center;gap:5px}
 
+/* ── The stat block's tail ────────────────────────────────────────────────
+   An Ogre has two actions and leaves a hole under them; a dragon overflows the
+   column. Both directions have to be handled by the same structure or fixing
+   one creates the other — the first attempt filled the Ogre's hole and pushed
+   Zoey's log 86px off the bottom.
+
+   So: one flexible region holding traits then history. The LOG inside it takes
+   the surplus (flex:1), which is why an Ogre has no dead space — the spare
+   becomes visible combat history. When there is no surplus the region scrolls,
+   as ONE scroller rather than a traits box nested inside a log box. */
+.tv-tail{
+  flex:1 1 auto;min-height:0;overflow-y:auto;
+  display:flex;flex-direction:column;gap:9px
+}
+.tv-traits{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+.tv-passive{
+  font-size:var(--fs-sm);color:var(--text-muted);display:flex;flex-wrap:wrap;gap:2px 12px
+}
+.tv-trait{font-size:var(--fs-sm);color:var(--text-muted);line-height:1.45}
+.tv-trait b{color:var(--text);font-weight:600}
+.tv-traits-l{
+  font-size:var(--fs-2xs);color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em
+}
+/* grow into surplus, never shrink below its own lines — squeezed to flex:1 1
+   it collapsed to a 10px sliver on every creature that has traits. */
 .tv-log{
-  border-top:1px solid var(--border);padding-top:9px;margin-top:auto;
-  display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex-shrink:0;max-height:120px
+  border-top:1px solid var(--border);padding-top:9px;
+  display:flex;flex-direction:column;gap:4px;flex:1 0 auto;min-height:0
 }
 .tv-log-line{font-size:var(--fs-sm);color:var(--text-muted)}
 .tv-log-line strong{color:var(--text);font-weight:600}
@@ -157,7 +200,7 @@ body{
    able to Spirit Shield and not, so the turn view has to know where everyone
    is standing. Drag a token and the reaction list changes. In the real panel
    this reads battlemap's own token positions rather than owning any. */
-.tv-side{display:flex;flex-direction:column;gap:10px;min-height:0;position:relative}
+.tv-side{display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0;position:relative}
 /* Compact by default, big when you go to it. Expanding on hover rather than on
    click means it is already the right size by the time the cursor arrives —
    and it grows as an OVERLAY, so the target list underneath doesn't jump.
@@ -203,7 +246,7 @@ body{
 .tv-tok:active{cursor:grabbing}
 /* ── Targets ──────────────────────────────────────────────────────────── */
 .tv-targets{
-  display:flex;flex-direction:column;gap:5px;min-height:0;overflow-y:auto;
+  display:flex;flex-direction:column;gap:5px;flex:1 1 auto;min-height:0;overflow-y:auto;
   background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);padding:10px
 }
 .tv-targets h4{
@@ -228,16 +271,33 @@ body{
 .tv-hpbar{display:block;height:5px;border-radius:3px;background:var(--panel-3);margin-top:5px;overflow:hidden}
 .tv-hpbar i{display:block;height:100%;transition:width .18s ease}
 
-/* ── Result + end turn ────────────────────────────────────────────────── */
-.tv-foot{
-  display:flex;align-items:center;gap:14px;padding:11px 14px;
-  background:var(--panel-2);border-top:1px solid var(--border);flex-shrink:0
+/* ── Result ───────────────────────────────────────────────────────────────
+   Sits directly under the Roll buttons, because that is where your eye
+   already is. At the bottom of the panel it was two hundred pixels from the
+   thing that caused it, and you had to go looking for the answer to a
+   question you had just asked. The left edge lights when it holds a real
+   outcome, so the prompt state and the result state are distinguishable
+   without reading. */
+.tv-result{
+  flex:0 0 auto;min-width:0;font-size:var(--fs-lg);line-height:1.45;
+  padding:9px 11px;border-radius:var(--r-md);background:var(--panel-2);
+  border:1px solid var(--border);border-left:3px solid var(--panel-3)
 }
-.tv-result{flex:1;min-width:0;font-size:var(--fs-xl);line-height:1.4}
+.tv-result.on{border-left-color:var(--accent)}
 .tv-result .hit{color:var(--success);font-weight:600}
 .tv-result .miss{color:var(--text-dim);font-weight:600}
 .tv-result .crit{color:var(--accent);font-weight:700}
 .tv-result .dim{color:var(--text-muted);font-size:var(--fs-md)}
+
+/* ── End turn ─────────────────────────────────────────────────────────────
+   With the result moved up, the footer says whose turn it is and who is
+   next — information the initiative strip only implies by position. */
+.tv-foot{
+  display:flex;align-items:center;gap:14px;padding:11px 14px;
+  background:var(--panel-2);border-top:1px solid var(--border);flex-shrink:0
+}
+.tv-turnline{flex:1;min-width:0;font-size:var(--fs-md);color:var(--text-muted)}
+.tv-turnline b{color:var(--text);font-weight:600}
 .tv-end{font-size:var(--fs-lg);padding:10px 20px;white-space:nowrap}
 .tv-kbd{font-size:var(--fs-2xs);color:rgba(26,26,26,.55);margin-left:8px}
 
@@ -302,7 +362,7 @@ body{
   .tv-targets{flex-direction:row;overflow-x:auto;align-items:center;padding:8px;gap:8px;flex-shrink:0}
   .tv-targets h4{display:none}
   .tv-tgt{flex:0 0 auto;width:auto;min-width:136px}
-  .tv-log{margin-top:12px;max-height:none}
+  .tv-tail{overflow:visible}
   .tv-actor-name{font-size:var(--fs-2xl)}
   .tv-avatar{width:44px;height:44px;font-size:var(--fs-2xl)}
   .tv-foot{flex-direction:column;align-items:stretch;gap:9px}
@@ -321,7 +381,9 @@ body{
   it is, the stat block for what the creature can do, the Attack Runner to roll it, and the
   map. This collapses them into one surface. Click a target, then <b>Roll</b> on an action —
   or type a roll in by hand. <kbd>Space</kbd> ends the turn; any initiative pip jumps.</p>
-  <p style="margin-top:7px"><b>Every automated path has a manual twin.</b> Enter a to-hit and
+  <details>
+  <summary>How it works, and what changed in this pass</summary>
+  <p><b>Every automated path has a manual twin.</b> Enter a to-hit and
   damage yourself for a roll made with real dice — it goes through the same pipeline, so
   reactions still apply. The <b>−/+</b> under the target list changes HP with no attack at all.
   On a player's turn, hand entry <i>is</i> the surface, since they roll their own.</p>
@@ -370,12 +432,30 @@ body{
   creature show what was derived and where each came from; gold ones are what the prompt will
   offer. Six have real mechanics — the rest are spent, logged and adjudicated by you, because
   faking a hundred is worse than admitting to six.</p>
+  <p style="margin-top:7px"><b>Opportunity attacks live on the map.</b> Every other reaction here
+  is triggered by a roll, so it belongs at the moment of the hit — an opportunity attack is
+  triggered by <i>movement</i>, which is why the hit prompt could never house it. Drag Zoey out
+  from beside the Bugbear and the prompt appears; reach is read off each creature's own melee
+  action rather than assumed to be 5 ft, and moving <i>within</i> reach provokes nothing. A
+  creature with a stat block rolls it for real, and one without hands the roll to its player.
+  It goes back through the same pipeline, so the mover can answer an opportunity attack with
+  <b>Uncanny Dodge</b> — one reaction triggering another is correct, not an edge case.</p>
+  <p style="margin-top:7px"><b>Three smaller decisions taken since the last pass.</b> The
+  <b>result now sits under the Roll buttons</b> rather than at the foot of the panel, because
+  that is where your eye already is; its left edge lights when it holds an outcome rather than
+  an instruction, and the footer took over saying whose turn it is and who is next. The dead
+  space under a two-action monster is now <b>the rest of the stat block</b> — traits, senses,
+  languages — with the log growing into whatever is still left, so the column is full whether
+  the creature is an Ogre or a dragon. And <b>map art defaults to auto</b>: grid when compact,
+  art when enlarged. At 16px a token on plain grid is unambiguous and on dungeon floor it
+  competes with texture for the same pixels. The toggle still pins it on or off, so the
+  comparison that produced that default is there to make rather than just asserted.</p>
   <ol>
-    <li><b>The dead space</b> under a two-action monster. An Ogre leaves a hole; a dragon fills it. Worth using for the stat block's traits?</li>
-    <li><b>The result line sits at the bottom</b>, while your eye is on the Roll buttons at the top. Should it move directly under the actions?</li>
-    <li><b>Is the art worth it at thumbnail size?</b> Toggle it off and compare. Tokens read more clearly on a plain grid; the art only starts earning its place once the map is enlarged. It may be right to show the grid small and the art only when expanded.</li>
-    <li><b>Reactions on a monster's own turn</b> — an opportunity attack when someone runs past — have no home here. The prompt only exists at the moment of a hit.</li>
+    <li><b>Traits are typed in for these stand-ins.</b> Reactions are derived; traits aren't, only because the extractor emits reactions alone. The real panel would read them from the same bestiary entry and <code>data/class/*.json</code>.</li>
+    <li><b>The result line and the top of the log now say the same thing.</b> Two views of one event, one detailed and one historical — but worth deciding whether the log should skip the entry it is already sitting under.</li>
+    <li><b>A move can only provoke once here</b>, on the drop. Dragging across three squares of a foe's reach in real play is one provoke, so this is right — but a real move tool that animates a path would need to decide that deliberately.</li>
   </ol>
+  </details>
 </div>
 
 <div class="tv">
@@ -397,13 +477,18 @@ body{
       <div class="tv-rxlist" id="rxlist"></div>
       <div class="tv-res" id="res"></div>
       <div class="tv-actions" id="actions"></div>
-      <div class="tv-log" id="log"></div>
+      <div class="tv-result" id="result" role="status" aria-live="polite"></div>
+      <div class="tv-tail">
+        <div class="tv-traits" id="traits"></div>
+        <div class="tv-log" id="log"></div>
+      </div>
     </div>
     <div class="tv-side">
       <div class="tv-map" id="map">
         <canvas id="mapart"></canvas>
         <div class="tv-map-grid"></div>
-        <button class="tv-map-art" id="artToggle">map art: on</button>
+        <button class="tv-map-art" id="artToggle"
+                title="Grid when compact, art when enlarged">map art: auto</button>
         <div class="tv-map-hint" id="mapHint">hover to enlarge · drag a token</div>
       </div>
       <div class="tv-targets" id="targets"></div>
@@ -411,7 +496,7 @@ body{
   </div>
   <div class="tv-react" id="react" style="display:none"></div>
   <div class="tv-foot">
-    <div class="tv-result" id="result" role="status" aria-live="polite"></div>
+    <div class="tv-turnline" id="turnline"></div>
     <button class="btn primary tv-end" id="end">End turn<span class="tv-kbd">SPACE</span></button>
   </div>
 </div>
@@ -425,8 +510,14 @@ body{
 // Stand-in combat: the app's demo party plus two monsters the bestiary has.
 // Enough to judge the interaction. Reads nothing from the app, writes nothing.
 const order = [
+  // `passive` and `traits` are the rest of the stat block — the part that used
+  // to be dead space under a two-action monster. Typed in here because the
+  // extractor only emits reactions; the real panel reads them from the same
+  // bestiary entry and data/class/*.json it already reads everything else from.
   { id:'ogre', name:'Ogre', init:18, hp:59, hpMax:59, ac:11, icon:'O', cell:[3,3],
     sub_:'Large giant · CR 2 · Speed 40 ft',
+    passive:['Darkvision 60 ft', 'Passive Perception 8', 'Common, Giant'],
+    traits:[],
     actions:[
       { name:'Greatclub', bonus:6, dice:[2,8], mod:4, type:'bludgeoning', reach:'reach 5 ft.' },
       { name:'Javelin',   bonus:6, dice:[2,6], mod:4, type:'piercing',    reach:'range 30/120 ft.' },
@@ -439,9 +530,20 @@ const order = [
     cls:'Rogue', sub:'Thief', lvl:6, feats:['Defensive Duelist'], cell:[4,3],
     resources:[{name:'Sneak Attack',type:'toggle',current:1,max:1},
                {name:'Psychic Dice',type:'pool',current:6,max:6}],
+    passive:['Speed 30 ft', 'Passive Perception 16', 'Thieves’ Cant'],
+    traits:[
+      { name:'Sneak Attack (3d6)', text:'Once per turn, extra damage when she has advantage or an ally is adjacent to the target.' },
+      { name:'Evasion', text:'On a Dex save for half damage: no damage on a success, half on a failure.' },
+      { name:'Cunning Action', text:'Dash, Disengage or Hide as a bonus action — Disengage is why she may not provoke.' },
+    ],
     sub_:'Rogue 6 · Passive Perception 16', conds:['Prone'] },
   { id:'bugbear', name:'Bugbear', init:12, hp:27, hpMax:27, ac:16, icon:'B', cell:[2,4],
     sub_:'Medium humanoid · CR 1 · Speed 30 ft', conds:['Bane'],
+    passive:['Darkvision 60 ft', 'Stealth +6', 'Passive Perception 10', 'Common, Goblin'],
+    traits:[
+      { name:'Brute', text:'A melee weapon deals one extra die of its damage when the bugbear hits with it — already in the 2d8 above.' },
+      { name:'Surprise Attack', text:'If it surprises a creature and hits in the first round, the target takes an extra 2d6 damage.' },
+    ],
     multiattack:'the bugbear makes two attacks',
     actions:[
       { name:'Morningstar', bonus:4, dice:[2,8], mod:2, type:'piercing', reach:'reach 5 ft.' },
@@ -452,16 +554,35 @@ const order = [
     resources:[{name:'Spell Slots L1',type:'pool',current:4,max:4},
                {name:'Spell Slots L2',type:'pool',current:3,max:3},
                {name:'Spell Slots L3',type:'pool',current:3,max:3},
-               {name:'Bardic Inspiration',type:'pool',current:3,max:3}], sub_:'Bard 6 (College of Lore) · Passive Perception 14' },
+               {name:'Bardic Inspiration',type:'pool',current:3,max:3}],
+    passive:['Speed 30 ft', 'Passive Perception 14', 'Spell save DC 14'],
+    traits:[
+      { name:'Bardic Inspiration (d8)', text:'A bonus action grants an ally a d8 to add to one roll — the same die Cutting Words spends.' },
+      { name:'Jack of All Trades', text:'Half proficiency on any ability check that doesn’t already include it.' },
+      { name:'Song of Rest (d6)', text:'Allies who spend Hit Dice on a short rest regain an extra d6.' },
+    ],
+    sub_:'Bard 6 (College of Lore) · Passive Perception 14' },
   { id:'namroc', name:'Namroc', init:9,  hp:44, hpMax:44, ac:14, icon:'N',
     cls:'Druid', sub:'Moon', lvl:6, spells:['Absorb Elements'], cell:[9,6],
     resources:[{name:'Spell Slots L1',type:'pool',current:4,max:4},
                {name:'Spell Slots L2',type:'pool',current:3,max:3},
-               {name:'Wild Shape',type:'pool',current:2,max:2}], sub_:'Druid 6 (Circle of the Moon) · Passive Perception 15' },
+               {name:'Wild Shape',type:'pool',current:2,max:2}],
+    passive:['Speed 30 ft', 'Passive Perception 15', 'Spell save DC 14', 'Druidic'],
+    traits:[
+      { name:'Combat Wild Shape', text:'Wild Shape as a bonus action, and spend a slot while shaped to regain 1d8 HP per slot level.' },
+      { name:'Circle Forms', text:'Beast shapes up to CR 2 at this level — a dire wolf or a giant spider.' },
+    ],
+    sub_:'Druid 6 (Circle of the Moon) · Passive Perception 15' },
   { id:'ulrick', name:'Ulrick', init:7,  hp:65, hpMax:65, ac:14, icon:'U',
     cls:'Barbarian', sub:'Ancestral Guardian', lvl:6, cell:[5,2], raging:true,
     resources:[{name:'Rage',type:'pool',current:3,max:4},
                {name:'Reckless Attack',type:'toggle',current:1,max:1}],
+    passive:['Speed 40 ft', 'Passive Perception 12', 'Resistant to bludgeoning, piercing, slashing while raging'],
+    traits:[
+      { name:'Rage (+2 damage)', text:'Resistance to physical damage and advantage on Strength checks — and the condition Spirit Shield needs.' },
+      { name:'Ancestral Protectors', text:'The first creature he hits each rage has disadvantage attacking anyone but him.' },
+      { name:'Danger Sense', text:'Advantage on Dex saves against effects he can see.' },
+    ],
     sub_:'Barbarian 6 (Path of the Ancestral Guardian) · Passive Perception 12' },
 ];
 let cur = 0, armed = null, log = [], pending = null;
@@ -607,6 +728,35 @@ function gatherReactions(o){
   return rows;
 }
 
+// ── Opportunity attacks ───────────────────────────────────────────────────
+// The reaction that fires on the MOVER's turn rather than at the moment of a
+// hit, which is why the hit prompt could never house it. Its trigger isn't a
+// roll — it's movement — so the map is where it belongs: drop a token out of
+// an enemy's reach and the prompt appears. Same reaction economy as everything
+// else, one per creature, refreshing on their own turn.
+const sideOf  = c => c.cls ? 'party' : 'foe';
+const meleeOf = c => (c.actions||[]).find(a => /reach/i.test(a.reach||''));
+// Reach read off the creature's own melee actions rather than assumed, so a
+// creature with a glaive or a whip provokes from 10 ft. Defaults to 5 for
+// anyone without a stat block of attacks here.
+function reachOf(c){
+  let r = 5;
+  (c.actions||[]).forEach(a => {
+    const m = /reach (\d+) ft/i.exec(a.reach||''); if (m) r = Math.max(r, +m[1]);
+  });
+  return r;
+}
+// Had them in reach where they started, and doesn't any more. Moving WITHIN
+// reach provokes nothing, which is the whole point of the two tests.
+function provokedBy(mover, from){
+  const at = { cell: from };
+  return order.filter(c =>
+    c.id !== mover.id && c.hp > 0 && !c.reactionUsed &&
+    sideOf(c) !== sideOf(mover) &&
+    feetBetween(c, at) <= reachOf(c) &&
+    feetBetween(c, mover) > reachOf(c));
+}
+
 order.forEach(c => { c.reactions = deriveReactions(c); c.reactionUsed = false; });
 
 const d = n => 1 + Math.floor(Math.random() * n);
@@ -660,9 +810,12 @@ function renderActor(){
     </div>`;
 
   if (!c.actions){
-    el('actions').innerHTML = manual + `<div class="tv-empty">
-      <div class="tv-empty-h">Or use the −/+ under the target list for damage and healing
-      that isn't an attack.</div></div>`;
+    // A one-line hint, not a padded empty state. The empty state existed to
+    // fill a column that had nothing else in it; the traits below now do that
+    // job with real content, and the block was costing ~50px of the space
+    // they need.
+    el('actions').innerHTML = manual + `<div class="tv-act-line" style="padding:0 2px">
+      Or use the −/+ under the target list for damage and healing that isn't an attack.</div>`;
     return;
   }
   let h = '';
@@ -678,6 +831,33 @@ function renderActor(){
       </button>
     </div>`).join('');
   el('actions').innerHTML = h + manual;
+}
+
+// The rest of the stat block. Not decoration for a gap — it is the half of the
+// creature the turn view was making you keep a second window open for.
+function renderTraits(){
+  const c = order[cur];
+  const p = (c.passive||[]).map(x => `<span>${esc(x)}</span>`).join('');
+  const t = (c.traits||[]).map(x =>
+    `<div class="tv-trait"><b>${esc(x.name)}</b> — ${esc(x.text)}</div>`).join('');
+  el('traits').innerHTML = (p ? `<div class="tv-passive">${p}</div>` : '')
+    + (t ? `<div class="tv-traits-l">Traits</div>${t}` : '');
+}
+
+// Whose turn, and who is next. The initiative strip only implies the second by
+// position, and position is exactly what you lose track of mid-fight.
+function renderFoot(){
+  const c = order[cur], n = order[(cur + 1) % order.length];
+  el('turnline').innerHTML = `<b>${esc(c.name)}</b>'s turn · next up <b>${esc(n.name)}</b>`;
+}
+
+// `live` marks a real outcome rather than an instruction, which is what lights
+// the left edge — so you can tell at a glance whether the panel is answering
+// you or waiting on you.
+function setResult(html, live){
+  const r = el('result');
+  r.innerHTML = html;
+  r.classList.toggle('on', !!live);
 }
 
 function renderTargets(){
@@ -711,9 +891,30 @@ function renderTargets(){
        </div>`;
 }
 
+// Movement out of reach. One button per provoker; a creature with a melee
+// action rolls it for real against the mover, and one without hands the roll
+// to the player — the same honesty line the rest of the reaction bar holds.
+function renderMovePrompt(o, bar){
+  const moved = feetBetween({ cell:o.from }, o.mover);
+  const opts = o.rows.map(w => {
+    const melee = meleeOf(w);
+    return `<button class="btn" data-oa="${esc(w.id)}"
+                    title="${esc(w.name)} had ${esc(o.mover.name)} within ${reachOf(w)} ft">
+      <span class="tv-react-who">${esc(w.name)}</span>Opportunity Attack
+      <span class="dim" style="opacity:.7">· ${melee ? esc(melee.name) : 'you roll it'}</span>
+    </button>`;
+  }).join('');
+  bar.innerHTML = `<span class="tv-react-l">Opportunity attack?</span>
+    <span class="dim" style="font-size:var(--fs-md);color:var(--text-muted)">
+      ${esc(o.mover.name)} moved ${moved} ft, out of reach
+    </span>${opts}
+    <button class="btn primary" data-oa="">No reaction</button>`;
+}
+
 function renderPending(){
   const bar = el('react');
   if (!pending){ bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  if (pending.kind === 'move'){ bar.style.display = ''; renderMovePrompt(pending, bar); return; }
   const o = pending, rows = gatherReactions(o);
   const opts = rows.map(({who, r, ft, problem}) => {
     let preview = '';
@@ -741,7 +942,15 @@ function renderPending(){
 
 // ── Map ───────────────────────────────────────────────────────────────────
 const GRID = { cols:12, rows:8 };
-let mapBig = false, showArt = true, dragging = null;
+let mapBig = false, dragging = null;
+// Grid when compact, art when enlarged. Toggling the two against each other
+// settled it: at 16px a token on plain grid is unambiguous, and on dungeon
+// floor it competes with texture for the same handful of pixels — the art only
+// has room to be worth anything once the map has grown. 'on' and 'off' pin it
+// either way, so the comparison that produced this default is still there to
+// make rather than being asserted.
+let artMode = 'auto';
+const artOn = () => artMode === 'on' || (artMode === 'auto' && mapBig);
 
 // A stand-in for a real battle map. Deliberately synthetic — drawing something
 // that looked like one of your actual maps would flatter the design without
@@ -754,7 +963,7 @@ function drawArt(w, h){
   const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
-  if (!showArt) return;
+  if (!artOn()) return;
   const cw = w / GRID.cols, ch = h / GRID.rows;
   g.fillStyle = '#191713'; g.fillRect(0, 0, w, h);                     // rock
   const rooms = [[1,1,5,4],[7,0,4,3],[6,4,5,4]];                       // in cells
@@ -788,8 +997,11 @@ function renderMap(){
     frag.appendChild(n);
   });
   m.appendChild(frag);
-  el('mapHint').textContent = mapBig ? 'drag a token — reach updates live'
-                                     : 'hover to enlarge · drag a token';
+  // "hover" is a lie on a phone, where pointerenter fires from a tap.
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  el('mapHint').textContent = mapBig
+    ? 'drag a token — reach updates live, and leaving it provokes'
+    : (coarse ? 'tap to enlarge · drag a token' : 'hover to enlarge · drag a token');
 }
 
 function setBig(v){
@@ -807,8 +1019,10 @@ addEventListener('resize', () => renderMap());
 
 el('artToggle').addEventListener('click', e => {
   e.stopPropagation();
-  showArt = !showArt;
-  el('artToggle').textContent = 'map art: ' + (showArt ? 'on' : 'off');
+  artMode = artMode === 'auto' ? 'on' : artMode === 'on' ? 'off' : 'auto';
+  el('artToggle').textContent = 'map art: ' + artMode;
+  el('artToggle').title = artMode === 'auto'
+    ? 'Grid when compact, art when enlarged' : 'Pinned ' + artMode;
   renderMap();
 });
 
@@ -820,9 +1034,12 @@ el('artToggle').addEventListener('click', e => {
     return [ Math.max(0, Math.min(GRID.cols-1, Math.floor((e.clientX - r.left) / (r.width / GRID.cols)))),
              Math.max(0, Math.min(GRID.rows-1, Math.floor((e.clientY - r.top)  / (r.height / GRID.rows)))) ];
   };
+  let from = null;                       // the cell the drag started in
   document.addEventListener('pointerdown', e => {
     const t = e.target.closest('.tv-tok'); if (!t) return;
     dragging = t.dataset.tok; t.setPointerCapture(e.pointerId); e.preventDefault();
+    const c = order.find(x => x.id === dragging);
+    from = c && c.cell ? c.cell.slice() : null;
   });
   document.addEventListener('pointermove', e => {
     if (!dragging) return;
@@ -831,17 +1048,37 @@ el('artToggle').addEventListener('click', e => {
   });
   document.addEventListener('pointerup', () => {
     if (!dragging) return;
+    const mover = order.find(x => x.id === dragging);
     dragging = null;
     if (!el('map').matches(':hover')) setBig(false);
+    // Not while a hit is still undecided — two prompts in one bar would leave
+    // it ambiguous which decision the buttons answer.
+    const stayed = !mover || !from || (from[0] === mover.cell[0] && from[1] === mover.cell[1]);
+    if (!stayed && !pending){
+      const rows = provokedBy(mover, from);
+      if (rows.length){ pending = { kind:'move', mover, from, rows }; render(); }
+    }
+    from = null;
   });
 })();
 
 function renderLog(){
+  // Eight rather than five: on a two-action creature the tail has room for
+  // them, and history is the most useful thing to spend surplus space on.
   el('log').innerHTML = log.length
-    ? log.slice(0,5).map(l => `<div class="tv-log-line">${l}</div>`).join('')
+    ? log.slice(0,8).map(l => `<div class="tv-log-line">${l}</div>`).join('')
     : '<div class="tv-log-line" style="opacity:.55">Rolls this combat appear here.</div>';
+  // Once the tail does overflow, the newest entries win the visible space and
+  // traits scroll back — reference is something you go looking for, the log is
+  // the thing that just changed. Newest is at the TOP of the log, so this
+  // scrolls to the log's start, not the tail's end.
+  const tail = document.querySelector('.tv-tail');
+  if (tail) tail.scrollTop = el('log').offsetTop;
 }
-function render(){ renderInit(); renderActor(); renderTargets(); renderMap(); renderLog(); renderPending(); }
+function render(){
+  renderInit(); renderActor(); renderTraits(); renderTargets();
+  renderMap(); renderLog(); renderFoot(); renderPending();
+}
 
 // Reactions the target could still spend against this specific outcome.
 function resolve(o){
@@ -849,26 +1086,26 @@ function resolve(o){
   // Only a HIT is worth interrupting for. Every reaction modelled here exists
   // to blunt or negate a hit — offering to raise AC against an attack that
   // already missed would be a trap, not an option.
-  if (o.hit && gatherReactions(o).length){ pending = o; render(); return; }
+  if (o.hit && gatherReactions(o).length){ o.kind = 'hit'; pending = o; render(); return; }
   commit(o, null);
 }
 
 function commit(o, usedName){
   const t = o.target, tag = usedName ? ` <span class="dim">(${esc(usedName)})</span>` : '';
   if (!o.hit){
-    el('result').innerHTML = `<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:
-      <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span>${tag}`;
+    setResult(`<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:
+      <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span>${tag}`, true);
     log.unshift(`<strong>${esc(o.attacker)}</strong> missed <strong>${esc(t.name)}</strong> with ${esc(o.label)}${usedName?` — ${esc(usedName)}`:''}`);
     pending = null; render(); return;
   }
   const before = t.hp;
   t.hp = Math.max(0, t.hp - o.dmg);
   const breakdown = o.rolls ? ` <span class="dim">[${o.rolls.join('+')}+${o.mod}]</span>` : '';
-  el('result').innerHTML =
+  setResult(
     `<span class="${o.crit?'crit':'hit'}">${o.crit?'Critical hit':'Hit'}</span> — ${esc(o.label)} vs ${esc(t.name)}:
      <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span> ·
      <strong>${o.dmg} ${esc(o.type)}</strong>${breakdown}${tag}
-     <span class="dim">· ${esc(t.name)} ${before} → ${t.hp}</span>`;
+     <span class="dim">· ${esc(t.name)} ${before} → ${t.hp}</span>`, true);
   log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${o.dmg}</strong> ${esc(o.type)}${o.crit?' (crit)':''}${usedName?` — ${esc(usedName)}`:''} <span style="opacity:.7">· ${before} → ${t.hp}</span>`);
   pending = null; render();
 }
@@ -880,7 +1117,7 @@ function useReaction(whoId, key){
   if (!r) return;
   const problem = costProblem(who, r);
   if (problem){                                   // shouldn't be clickable, but don't trust that
-    el('result').innerHTML = `<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`;
+    setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
     return;
   }
   who.reactionUsed = true;
@@ -909,10 +1146,40 @@ function useReaction(whoId, key){
   commit(o, by);
 }
 
+function useOA(whoId){
+  const o = pending;
+  if (!o || o.kind !== 'move') return;
+  const who = order.find(c => c.id === whoId);
+  pending = null;
+  if (!who){ render(); return; }
+  who.reactionUsed = true;
+  const melee = meleeOf(who);
+  if (melee){
+    const nat = d(20), total = nat + melee.bonus, crit = nat === 20;
+    const hit = crit || (nat !== 1 && total >= o.mover.ac);
+    const rolls = [];
+    for (let i = 0, n = melee.dice[0] * (crit ? 2 : 1); i < n; i++) rolls.push(d(melee.dice[1]));
+    // Back through resolve(), not straight to commit — an opportunity attack
+    // is still an attack, so the mover can answer it with Uncanny Dodge like
+    // any other. One reaction triggering another is the correct behaviour.
+    resolve({ attacker:who.name, label:melee.name + ' (opportunity attack)', target:o.mover,
+              nat, total, crit, hit, dmg:rolls.reduce((s,x)=>s+x,0) + melee.mod,
+              rolls, mod:melee.mod, type:melee.type });
+    return;
+  }
+  // No stat block of attacks here, so the player rolls it and applies it with
+  // the manual row — the same line every unmodelled reaction takes.
+  setResult(`<strong>${esc(who.name)}</strong> takes an opportunity attack on
+    <strong>${esc(o.mover.name)}</strong> <span class="dim">— roll it, then use the manual
+    row or the −/+ under the target list.</span>`, true);
+  log.unshift(`<strong>${esc(who.name)}</strong> opportunity attack on <strong>${esc(o.mover.name)}</strong> <span style="opacity:.7">· reaction spent</span>`);
+  render();
+}
+
 function roll(ai){
   const c = order[cur], a = c.actions[ai];
   const t = order.find(x => x.id === armed);
-  if (!t){ el('result').innerHTML = '<span class="dim">Pick a target on the right first.</span>'; return; }
+  if (!t){ setResult('<span class="dim">Pick a target on the right first.</span>'); return; }
   const nat = d(20), total = nat + a.bonus;
   const crit = nat === 20, hit = crit || (nat !== 1 && total >= t.ac);
   const rolls = [];
@@ -925,11 +1192,11 @@ function roll(ai){
 // screen. Goes through the SAME pipeline, so reactions still get offered.
 function manualAttack(){
   const t = order.find(x => x.id === armed);
-  if (!t){ el('result').innerHTML = '<span class="dim">Pick a target on the right first.</span>'; return; }
+  if (!t){ setResult('<span class="dim">Pick a target on the right first.</span>'); return; }
   const total = parseInt(el('mTohit').value, 10);
   const dmg   = parseInt(el('mDmg').value, 10);
   if (isNaN(total) || isNaN(dmg)){
-    el('result').innerHTML = '<span class="dim">Enter both the attack total and the damage.</span>';
+    setResult('<span class="dim">Enter both the attack total and the damage.</span>');
     return;
   }
   const type = (el('mType').value || 'damage').trim();
@@ -944,7 +1211,7 @@ function adjust(delta){
   const before = t.hp;
   t.hp = Math.max(0, Math.min(t.hpMax, t.hp + (delta < 0 ? -n : n)));
   const word = delta < 0 ? 'took' : 'regained';
-  el('result').innerHTML = `<span class="dim">${esc(t.name)} ${word} <strong>${n}</strong> — ${before} → ${t.hp}</span>`;
+  setResult(`<span class="dim">${esc(t.name)} ${word} <strong>${n}</strong> — ${before} → ${t.hp}</span>`, true);
   log.unshift(`<strong>${esc(t.name)}</strong> ${word} <strong>${n}</strong> <span style="opacity:.7">· ${before} → ${t.hp}</span>`);
   render();
 }
@@ -953,7 +1220,7 @@ function nextTurn(){
   if (pending) return;                       // resolve the reaction first
   cur = (cur + 1) % order.length; armed = null;
   order[cur].reactionUsed = false;            // a reaction refreshes on your turn
-  el('result').innerHTML = '<span class="dim">Pick a target, then roll an attack.</span>';
+  setResult('<span class="dim">Pick a target, then roll an attack.</span>');
   render();
 }
 
@@ -962,6 +1229,12 @@ document.addEventListener('click', e => {
   if (pip){ cur = +pip.dataset.i; armed = null; render(); return; }
   const tgt = e.target.closest('.tv-tgt');
   if (tgt){ armed = tgt.dataset.tgt; renderTargets(); return; }
+  const oa = e.target.closest('[data-oa]');
+  if (oa){
+    if (oa.dataset.oa) useOA(oa.dataset.oa);
+    else { pending = null; render(); }       // declined — movement stands
+    return;
+  }
   const rea = e.target.closest('[data-react]');
   if (rea){
     const k = rea.dataset.react;
@@ -981,6 +1254,6 @@ document.addEventListener('keydown', e => {
   }
 });
 
-el('result').innerHTML = '<span class="dim">Pick a target, then roll an attack.</span>';
+setResult('<span class="dim">Pick a target, then roll an attack.</span>');
 render();
 </script>
