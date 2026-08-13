@@ -157,18 +157,44 @@ body{
    able to Spirit Shield and not, so the turn view has to know where everyone
    is standing. Drag a token and the reaction list changes. In the real panel
    this reads battlemap's own token positions rather than owning any. */
-.tv-side{display:flex;flex-direction:column;gap:10px;min-height:0}
+.tv-side{display:flex;flex-direction:column;gap:10px;min-height:0;position:relative}
+/* Compact by default, big when you go to it. Expanding on hover rather than on
+   click means it is already the right size by the time the cursor arrives —
+   and it grows as an OVERLAY, so the target list underneath doesn't jump.
+   It also stays big while you drag, or leaving the small box mid-drag would
+   collapse it under your own cursor. */
 .tv-map{
   position:relative;flex-shrink:0;height:172px;
   background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);
-  background-image:linear-gradient(var(--border) 1px,transparent 1px),
-                   linear-gradient(90deg,var(--border) 1px,transparent 1px);
-  background-size:calc(100%/12) calc(100%/8);overflow:hidden
+  overflow:hidden;transition:width .16s ease,height .16s ease,box-shadow .16s ease
 }
+.tv-map.big{
+  position:absolute;top:0;right:0;z-index:30;
+  width:min(560px,54vw);height:392px;box-shadow:var(--sh-4);border-color:var(--accent)
+}
+.tv-map canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.tv-map-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.09) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.09) 1px,transparent 1px);
+  background-size:calc(100%/12) calc(100%/8)
+}
+.tv-map-hint{
+  position:absolute;left:6px;bottom:5px;z-index:2;pointer-events:none;
+  font-size:var(--fs-2xs);color:var(--text-muted);background:rgba(0,0,0,.55);
+  padding:1px 6px;border-radius:var(--r-sm)
+}
+.tv-map-art{
+  position:absolute;right:5px;top:5px;z-index:3;font-size:var(--fs-2xs);
+  padding:2px 7px;border-radius:var(--r-sm);background:rgba(0,0,0,.5);
+  border:1px solid var(--border);color:var(--text-muted);cursor:pointer;font-family:inherit
+}
+.tv-map-art:hover{color:var(--text);border-color:var(--accent)}
 .tv-tok{
-  position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:var(--r-full);
+  position:absolute;width:var(--tok,22px);height:var(--tok,22px);
+  margin:calc(var(--tok,22px)/-2) 0 0 calc(var(--tok,22px)/-2);border-radius:var(--r-full);
   display:flex;align-items:center;justify-content:center;
-  font-size:var(--fs-2xs);font-weight:700;cursor:grab;user-select:none;
+  font-size:var(--fs-2xs);font-weight:700;cursor:grab;user-select:none;z-index:4;
   border:2px solid var(--accent);background:linear-gradient(135deg,#3d2a2a,#6b3939);color:#fff
 }
 .tv-tok.pc{background:linear-gradient(135deg,#4a3d2a,#6b5439)}
@@ -311,12 +337,21 @@ body{
   on an <i>ally</i> taking damage, so it could never have appeared while the prompt only asked
   the victim. Each reactor spends their own reaction. Whether a feature answers your own hit,
   an ally's, or either is read out of the feature's wording by the extractor.</p>
-  <p style="margin-top:7px"><b>It knows where everyone is standing.</b> Drag a token on the map
-  and the offers change as you do it. Spirit Shield reaches 30 ft, Cutting Words 60 ft — walk
-  Ulrick into the far corner and his drops off the list. Distance is Chebyshev, because 5e
-  counts a diagonal as 5 ft like any other square; measuring in straight lines would put a
+  <p style="margin-top:7px"><b>It knows where everyone is standing.</b> The map sits small in
+  the corner and <b>enlarges when you go to it</b> — it grows as an overlay, so nothing below
+  it jumps, and it stays big while you drag rather than collapsing under your own cursor. Drag
+  a token and the offers change as you do it: Spirit Shield reaches 30 ft, Cutting Words 60 ft,
+  so walking Ulrick into the far corner drops his off the list. Distance is Chebyshev, because
+  5e counts a diagonal as 5 ft like any other square; straight-line distance would put a
   creature three squares away diagonally at 21 ft instead of 15 and quietly change who can
   react.</p>
+  <p style="margin-top:7px"><b>Yes — the real one would show your actual map.</b> The art here
+  is a synthetic stand-in, drawn rather than borrowed, because dressing this in one of your
+  real maps would flatter the design without testing it. In the panel it would render the
+  battle map's own background and its own token positions — the same relationship it has with
+  the party tracker, one copy of the data rather than a synced duplicate. What the stand-in IS
+  good for is the question worth settling now: whether a token stays readable on top of map art
+  at thumbnail size. Use the <b>map art</b> toggle to compare.</p>
   <p style="margin-top:7px"><b>Reactions spend real resources.</b> Cutting Words costs a Bardic
   Inspiration die, Absorb Elements and Silvery Barbs a spell slot, Spirit Shield needs Ulrick
   raging — each button shows the pool it will draw from, and greys out when it can't be paid.
@@ -334,6 +369,7 @@ body{
   <ol>
     <li><b>The dead space</b> under a two-action monster. An Ogre leaves a hole; a dragon fills it. Worth using for the stat block's traits?</li>
     <li><b>The result line sits at the bottom</b>, while your eye is on the Roll buttons at the top. Should it move directly under the actions?</li>
+    <li><b>Is the art worth it at thumbnail size?</b> Toggle it off and compare. Tokens read more clearly on a plain grid; the art only starts earning its place once the map is enlarged. It may be right to show the grid small and the art only when expanded.</li>
     <li><b>Line of sight still isn't checked</b> — only distance. Every one of these reactions says "you can see", and a wall between you and the ally should stop it. That needs the fog and wall data the battle map already has.</li>
     <li><b>Reactions on a monster's own turn</b> — an opportunity attack when someone runs past — have no home here. The prompt only exists at the moment of a hit.</li>
   </ol>
@@ -361,7 +397,12 @@ body{
       <div class="tv-log" id="log"></div>
     </div>
     <div class="tv-side">
-      <div class="tv-map" id="map" title="Drag a token — reach is recomputed live"></div>
+      <div class="tv-map" id="map">
+        <canvas id="mapart"></canvas>
+        <div class="tv-map-grid"></div>
+        <button class="tv-map-art" id="artToggle">map art: on</button>
+        <div class="tv-map-hint" id="mapHint">hover to enlarge · drag a token</div>
+      </div>
       <div class="tv-targets" id="targets"></div>
     </div>
   </div>
@@ -697,37 +738,101 @@ function renderPending(){
 
 // ── Map ───────────────────────────────────────────────────────────────────
 const GRID = { cols:12, rows:8 };
+let mapBig = false, showArt = true, dragging = null;
+
+// A stand-in for a real battle map. Deliberately synthetic — drawing something
+// that looked like one of your actual maps would flatter the design without
+// testing it. What it IS good for is the question this answers: whether a
+// token stays readable on top of map art at thumbnail size. It doesn't, which
+// is the argument for the expand.
+function drawArt(w, h){
+  const cv = el('mapart'), dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  if (!showArt) return;
+  const cw = w / GRID.cols, ch = h / GRID.rows;
+  g.fillStyle = '#191713'; g.fillRect(0, 0, w, h);                     // rock
+  const rooms = [[1,1,5,4],[7,0,4,3],[6,4,5,4]];                       // in cells
+  g.fillStyle = '#4d4438';
+  rooms.forEach(([x,y,rw,rh]) => g.fillRect(x*cw, y*ch, rw*cw, rh*ch)); // floor
+  g.fillRect(5.6*cw, 2*ch, 1.6*cw, 1*ch);                              // corridor
+  g.strokeStyle = '#7a6e59'; g.lineWidth = 2;
+  rooms.forEach(([x,y,rw,rh]) => g.strokeRect(x*cw, y*ch, rw*cw, rh*ch));
+  g.fillStyle = 'rgba(0,0,0,.28)';                                     // rubble
+  for (let i = 0; i < 26; i++){
+    const px = (i*97 % 100)/100*w, py = (i*61 % 100)/100*h;
+    g.beginPath(); g.arc(px, py, 1 + (i % 3), 0, 6.284); g.fill();
+  }
+}
+
 function renderMap(){
   const m = el('map'), W = m.clientWidth || 250, H = m.clientHeight || 172;
   const cw = W / GRID.cols, ch = H / GRID.rows;
-  m.innerHTML = order.filter(c => c.cell && c.hp > 0).map(c => {
-    const x = (c.cell[0] + 0.5) * cw, y = (c.cell[1] + 0.5) * ch;
-    const cls = (c.cls ? 'pc ' : '') + (order[cur].id === c.id ? 'cur ' : '')
-              + (armed === c.id ? 'tgt' : '');
-    return `<div class="tv-tok ${cls}" data-tok="${c.id}"
-                 style="left:${x}px;top:${y}px" title="${esc(c.name)}">${esc(c.icon)}</div>`;
-  }).join('');
+  drawArt(W, H);
+  // One token = one square, so it reads as a footprint at either size.
+  m.style.setProperty('--tok', Math.max(14, Math.min(cw, ch) * 0.78) + 'px');
+  m.querySelectorAll('.tv-tok').forEach(n => n.remove());
+  const frag = document.createDocumentFragment();
+  order.filter(c => c.cell && c.hp > 0).forEach(c => {
+    const n = document.createElement('div');
+    n.className = 'tv-tok ' + (c.cls ? 'pc ' : '')
+                + (order[cur].id === c.id ? 'cur ' : '') + (armed === c.id ? 'tgt' : '');
+    n.dataset.tok = c.id; n.title = c.name; n.textContent = c.icon;
+    n.style.left = ((c.cell[0] + 0.5) * cw) + 'px';
+    n.style.top  = ((c.cell[1] + 0.5) * ch) + 'px';
+    frag.appendChild(n);
+  });
+  m.appendChild(frag);
+  el('mapHint').textContent = mapBig ? 'drag a token — reach updates live'
+                                     : 'hover to enlarge · drag a token';
 }
-// Drag to a cell. Snapping to the grid keeps distances whole numbers of
-// squares, which is what the 5 ft per square rule assumes.
+
+function setBig(v){
+  if (mapBig === v) return;
+  mapBig = v; el('map').classList.toggle('big', v);
+  requestAnimationFrame(renderMap);          // after the box has its new size
+}
+el('map').addEventListener('pointerenter', () => setBig(true));
+el('map').addEventListener('pointerleave', () => { if (!dragging) setBig(false); });
+el('map').addEventListener('focusin',  () => setBig(true));
+// Token positions are computed from the map's pixel size, so they have to be
+// recomputed whenever that changes — a window resize or a phone rotating
+// otherwise leaves every token at its old offset.
+addEventListener('resize', () => renderMap());
+
+el('artToggle').addEventListener('click', e => {
+  e.stopPropagation();
+  showArt = !showArt;
+  el('artToggle').textContent = 'map art: ' + (showArt ? 'on' : 'off');
+  renderMap();
+});
+
+// Drag to a cell. Snapping keeps distances whole squares, which is what the
+// 5 ft per square rule assumes.
 (function mapDrag(){
-  let id = null;
   const cellAt = e => {
-    const m = el('map'), r = m.getBoundingClientRect();
+    const r = el('map').getBoundingClientRect();
     return [ Math.max(0, Math.min(GRID.cols-1, Math.floor((e.clientX - r.left) / (r.width / GRID.cols)))),
              Math.max(0, Math.min(GRID.rows-1, Math.floor((e.clientY - r.top)  / (r.height / GRID.rows)))) ];
   };
   document.addEventListener('pointerdown', e => {
     const t = e.target.closest('.tv-tok'); if (!t) return;
-    id = t.dataset.tok; t.setPointerCapture(e.pointerId); e.preventDefault();
+    dragging = t.dataset.tok; t.setPointerCapture(e.pointerId); e.preventDefault();
   });
   document.addEventListener('pointermove', e => {
-    if (!id) return;
-    const c = order.find(x => x.id === id); if (!c) return;
+    if (!dragging) return;
+    const c = order.find(x => x.id === dragging); if (!c) return;
     c.cell = cellAt(e); renderMap(); renderPending();   // reach updates live
   });
-  document.addEventListener('pointerup', () => { id = null; });
+  document.addEventListener('pointerup', () => {
+    if (!dragging) return;
+    dragging = null;
+    if (!el('map').matches(':hover')) setBig(false);
+  });
 })();
+
 function renderLog(){
   el('log').innerHTML = log.length
     ? log.slice(0,5).map(l => `<div class="tv-log-line">${l}</div>`).join('')
