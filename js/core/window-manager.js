@@ -33,7 +33,7 @@ function _nextZ(){
 // entry with no sprite (or a floating window created ad hoc) renders that
 // instead of a blank.
 const PANEL_ICON = {
-  combat:'i-combat', attacks:'i-target', party:'i-heart', shop:'i-coins',
+  combat:'i-combat', attacks:'i-target', turnview:'i-turn', party:'i-heart', shop:'i-coins',
   notes:'i-note', battlemap:'i-map', npclib:'i-user', bestiary:'i-paw',
   adventures:'i-book-open', books:'i-books', npcgen:'i-dice', loot:'i-chest',
   encounter:'i-bolt', soundboard:'i-speaker', weather:'i-cloud', time:'i-clock',

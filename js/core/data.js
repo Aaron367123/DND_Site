@@ -47,6 +47,12 @@ const DEFAULT_LAYOUT = {
   // generated, the body overflowed by 823px and about two stock rows were
   // visible. This clears the name/keeper/flavour header plus a useful slice of
   // inventory; the display column scrolls on its own for the rest.
+  // Wide and tall on purpose: this is the panel that exists so the DM doesn't
+  // have four windows open, so it has to hold a two-column layout — actions and
+  // history on the left, map and targets on the right — without either column
+  // scrolling before it has to. Measured against an Ogre (two actions) and a
+  // level-6 PC (no stat block, so the manual row leads).
+  turnview:   {x:16,  y:16,  w:960, h:660, open:false, minimized:false, z:2},
   shop:       {x:354, y:412, w:720, h:620, open:false, minimized:false, z:3},
   notes:      {x:400, y:60,  w:820, h:640, open:false, minimized:false, z:4},
   battlemap:  {x:60,  y:60,  w:680, h:500, open:false, minimized:false, z:5},

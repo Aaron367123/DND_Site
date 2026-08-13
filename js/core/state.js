@@ -53,8 +53,17 @@ function save(){
   // a monster from search would never reach it; and every path that changes a
   // combatant ends up in save() anyway. The panel does its own cheap
   // signature check and only redraws when something it displays moved.
-  if (typeof panelDefs !== 'undefined' && panelDefs.attacks && panelDefs.attacks._syncFromCombat){
-    try { panelDefs.attacks._syncFromCombat(); } catch(e){}
+  // Generalised from a hard-coded call to the Attack Runner once the Turn View
+  // needed the same hook — both are driven entirely by the combat tracker, and
+  // a list of two names here would have become a list of names to forget to
+  // add the third to.
+  if (typeof panelDefs !== 'undefined'){
+    for (const id in panelDefs){
+      const d = panelDefs[id];
+      if (d && typeof d._syncFromCombat === 'function'){
+        try { d._syncFromCombat(); } catch(e){}
+      }
+    }
   }
 }
 

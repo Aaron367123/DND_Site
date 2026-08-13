@@ -3593,3 +3593,256 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
   border:1px solid var(--border); color:var(--text-dim); }
 .atk-queue-pip.done { opacity:.45; text-decoration:line-through; }
 .atk-queue-pip.now { color:#1a1a1a; background:#e0c07a; border-color:#e0c07a; font-weight:600; }
+
+/* ── Turn View ────────────────────────────────────────────────────────────
+   One creature's turn on one surface. Two columns: what it can do and what has
+   happened on the left, where everyone is standing and who to hit on the
+   right. Every rule below uses the shared tokens — this panel introduces no
+   colours, sizes or radii of its own, because a panel that looks like a
+   different app is exactly what four separate windows already felt like. */
+.tv-root { display:flex; flex-direction:column; height:100%; min-height:0; }
+.tv-root-empty { justify-content:center; }
+
+/* Initiative strip. A horizontal ordered run because the order IS the
+   information. The strip scrolls; the controls sit OUTSIDE it, or the button
+   that fixes a long order would scroll away exactly when the order is long. */
+.tv-initbar { display:flex; align-items:center; background:var(--panel-2);
+  border-bottom:1px solid var(--border); flex-shrink:0; }
+.tv-init { display:flex; gap:6px; padding:8px 10px; overflow-x:auto; flex:1; min-width:0; }
+.tv-init-tools { display:flex; align-items:center; gap:6px; padding:0 10px 0 2px; flex-shrink:0; }
+.tv-init-tools .btn { font-size:var(--fs-xs); padding:5px 10px; white-space:nowrap; }
+.tv-round { font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;
+  letter-spacing:.07em; white-space:nowrap; }
+.tv-pip { flex-shrink:0; display:flex; align-items:center; gap:8px; padding:5px 11px 5px 5px;
+  background:var(--panel-3); border:1px solid var(--border); border-radius:var(--r-pill);
+  cursor:pointer; transition:border-color .12s,background .12s; color:inherit; font:inherit; }
+.tv-pip:hover { border-color:var(--accent); }
+.tv-pip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.tv-pip.cur { background:var(--accent); color:#1a1a1a; border-color:var(--accent); }
+.tv-pip.done { opacity:.45; }
+.tv-pip.dead { opacity:.35; text-decoration:line-through; }
+.tv-pip-init { width:24px; height:24px; border-radius:var(--r-full); background:rgba(0,0,0,.35);
+  display:flex; align-items:center; justify-content:center; font-size:var(--fs-sm);
+  font-weight:700; flex-shrink:0; font-variant-numeric:tabular-nums; }
+.tv-pip.cur .tv-pip-init { background:rgba(0,0,0,.22); }
+.tv-pip-name { font-size:var(--fs-md); font-weight:500; white-space:nowrap; text-align:left; }
+.tv-pip-hp { font-size:var(--fs-2xs); opacity:.7; font-variant-numeric:tabular-nums; text-align:left; }
+/* Editing initiative is a mode, not a hidden gesture on the pip: the pip is
+   already a button that jumps the turn, and hanging a second meaning off the
+   number inside it would make one tap target mean two things. */
+.tv-pip.edit { cursor:default; background:var(--panel-3); color:inherit; border-color:var(--border); }
+.tv-pip.edit:hover { border-color:var(--border); }
+.tv-pip.edit.cur { border-color:var(--accent); }
+.tv-init-in { width:44px; height:26px; flex-shrink:0; text-align:center; padding:0 2px;
+  background:rgba(0,0,0,.35); border:1px solid var(--border); border-radius:var(--r-sm);
+  color:var(--text); font:inherit; font-size:var(--fs-sm); font-weight:700;
+  font-variant-numeric:tabular-nums; }
+.tv-pip-x { width:18px; height:18px; flex-shrink:0; margin-left:2px; padding:0; line-height:1;
+  border:1px solid var(--border); border-radius:var(--r-full); background:none;
+  color:var(--text-muted); font:inherit; font-size:var(--fs-sm); cursor:pointer; }
+.tv-pip-x:hover { border-color:var(--danger); color:var(--danger); }
+.tv-init-add { display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:8px 10px;
+  background:var(--panel-2); border-bottom:1px solid var(--border); flex-shrink:0; }
+.tv-note { font-size:var(--fs-2xs); color:var(--text-dim); max-width:38ch; line-height:1.4; }
+
+.tv-main { display:grid; grid-template-columns:1fr 250px; gap:12px; padding:12px;
+  flex:1; min-height:0; }
+
+/* ── Active creature ──────────────────────────────────────────────────── */
+/* min-width:0 is load-bearing. Without it a grid item's automatic minimum size
+   is its min-content, and the horizontally-scrolling target strip in the phone
+   layout reports ~900px of it — enough to lay the panel out wider than the
+   window and scroll it sideways. */
+.tv-actor { display:flex; flex-direction:column; min-height:0; min-width:0; gap:10px; }
+.tv-actor-head { display:flex; align-items:center; gap:12px; }
+.tv-avatar { width:48px; height:48px; border-radius:var(--r-full); flex-shrink:0;
+  background:linear-gradient(135deg,#3d2a2a,#6b3939); border:2px solid var(--accent);
+  display:flex; align-items:center; justify-content:center; font-size:var(--fs-2xl); font-weight:600; }
+.tv-actor-id { flex:1; min-width:0; }
+.tv-actor-name { font-size:var(--fs-3xl); font-weight:600; letter-spacing:-.01em; }
+.tv-actor-sub { font-size:var(--fs-sm); color:var(--text-muted); margin-top:1px; }
+.tv-vitals { display:flex; gap:8px; flex-shrink:0; }
+.tv-vital { background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md);
+  padding:5px 12px; text-align:center; min-width:60px; }
+.tv-vital .l { font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+.tv-vital .v { font-size:var(--fs-2xl); font-weight:700; line-height:1.15; font-variant-numeric:tabular-nums; }
+.tv-conds { display:flex; gap:5px; flex-wrap:wrap; }
+.tv-cond { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em;
+  background:rgba(194,84,80,.2); color:#d97a76; padding:2px 8px; border-radius:var(--r-pill); }
+
+/* Derived reactions, muted by default; the ones the prompt will actually offer
+   are marked, so the derivation's decision is visible rather than silently
+   shaping the prompt. */
+.tv-rxlist { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+.tv-rx-l { font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.07em; }
+.tv-rx { font-size:var(--fs-2xs); border:1px solid var(--border); border-radius:var(--r-pill);
+  padding:2px 8px; color:var(--text-muted); display:inline-flex; align-items:center; gap:5px; }
+.tv-rx.hit { border-color:var(--accent); color:var(--accent); }
+.tv-rx.spent { opacity:.4; text-decoration:line-through; }
+.tv-rx-src { opacity:.6; text-transform:uppercase; letter-spacing:.05em; font-size:8px; }
+.tv-res { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.tv-res-i { display:flex; align-items:center; gap:6px; font-size:var(--fs-2xs); color:var(--text-muted); }
+.tv-pips { display:flex; gap:3px; }
+.tv-pip-o { width:9px; height:9px; border-radius:2px; background:var(--accent); }
+.tv-pip-o.off { background:var(--panel-3); }
+
+.tv-actions { display:flex; flex-direction:column; gap:7px; flex:0 0 auto; }
+.tv-act { display:flex; align-items:center; gap:12px; padding:9px 11px;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); }
+.tv-act-body { flex:1; min-width:0; }
+.tv-act-name { font-size:var(--fs-lg); font-weight:600; }
+.tv-act-line { font-size:var(--fs-sm); color:var(--text-muted); margin-top:2px; }
+.tv-act-note { font-size:var(--fs-2xs); color:var(--text-dim); flex-shrink:0; }
+.tv-act .btn { flex-shrink:0; display:inline-flex; align-items:center; gap:5px; }
+/* Every automated path has a hand-driven twin: players roll their own dice and
+   DMs roll behind a screen, so the app can never be the only way in. */
+.tv-manual { background:var(--panel-2); border:1px dashed var(--border); border-radius:var(--r-md);
+  padding:9px 11px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tv-manual.lead { border-style:solid; border-color:var(--accent); }
+.tv-manual-l { font-size:var(--fs-sm); color:var(--text-muted); }
+.tv-in { width:56px; background:var(--panel-3); border:1px solid var(--border); color:var(--text);
+  border-radius:var(--r-sm); padding:5px 7px; font:inherit; font-size:var(--fs-md);
+  text-align:center; font-variant-numeric:tabular-nums; }
+.tv-in.wide { width:96px; text-align:left; }
+
+/* The result sits directly under the Roll buttons, where the eye already is.
+   At the foot of the panel it was 200px from the thing that caused it. The
+   left edge lights when it holds an outcome rather than an instruction. */
+.tv-result { flex:0 0 auto; min-width:0; font-size:var(--fs-lg); line-height:1.45;
+  padding:8px 11px; border-radius:var(--r-md); background:var(--panel-2);
+  border:1px solid var(--border); border-left:3px solid var(--panel-3); }
+.tv-result.on { border-left-color:var(--accent); }
+.tv-result .hit { color:var(--success); font-weight:600; }
+.tv-result .miss { color:var(--text-dim); font-weight:600; }
+.tv-result .crit { color:var(--accent); font-weight:700; }
+.tv-result .dim { color:var(--text-muted); font-size:var(--fs-md); }
+
+/* The rest of the stat block, then history. An Ogre has two actions and leaves
+   a hole under them; a dragon overflows the column. Both directions have to be
+   handled by the same structure or fixing one creates the other — so: one
+   flexible region, the log inside it takes the surplus, and when there is none
+   the whole region scrolls as ONE scroller rather than two nested boxes. */
+.tv-tail { flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+.tv-traits { display:flex; flex-direction:column; gap:5px; flex:0 0 auto; }
+.tv-passive { font-size:var(--fs-sm); color:var(--text-muted); display:flex; flex-wrap:wrap; gap:2px 12px; }
+.tv-traits-l { font-size:var(--fs-2xs); color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; }
+.tv-trait { font-size:var(--fs-sm); color:var(--text-muted); line-height:1.45; }
+.tv-trait b { color:var(--text); font-weight:600; }
+.tv-log { border-top:1px solid var(--border); padding-top:8px; display:flex; flex-direction:column;
+  gap:4px; flex:1 0 auto; min-height:0; }
+.tv-log-line { font-size:var(--fs-sm); color:var(--text-muted); }
+.tv-log-line strong { color:var(--text); font-weight:600; }
+
+/* ── Map ───────────────────────────────────────────────────────────────────
+   Small, and it earns its place: reach decides who can react, so the turn view
+   has to know where everyone is standing. These are battlemap's own tokens —
+   dragging one here moves it there. Compact by default and big when you go to
+   it, as an OVERLAY so the target list underneath doesn't jump, and it stays
+   big while dragging or it would collapse under your own cursor. */
+.tv-side { display:flex; flex-direction:column; gap:9px; min-height:0; min-width:0; position:relative; }
+.tv-map { position:relative; flex-shrink:0; height:168px; background:var(--panel-2);
+  border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden;
+  transition:width .16s ease,height .16s ease,box-shadow .16s ease; }
+.tv-map.big { position:absolute; top:0; right:0; z-index:30;
+  width:min(560px,54vw); height:392px; box-shadow:var(--sh-4); border-color:var(--accent); }
+.tv-map-grid { position:absolute; inset:0; pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.09) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.09) 1px,transparent 1px); }
+.tv-map-hint { position:absolute; left:6px; bottom:5px; z-index:2; pointer-events:none;
+  font-size:var(--fs-2xs); color:var(--text-muted); background:rgba(0,0,0,.55);
+  padding:1px 6px; border-radius:var(--r-sm); }
+.tv-tok { position:absolute; width:var(--tok,20px); height:var(--tok,20px);
+  margin:calc(var(--tok,20px)/-2) 0 0 calc(var(--tok,20px)/-2); border-radius:var(--r-full);
+  display:flex; align-items:center; justify-content:center; font-size:var(--fs-2xs);
+  font-weight:700; cursor:grab; user-select:none; z-index:4; touch-action:none;
+  border:2px solid #993333; background:linear-gradient(135deg,#3d2a2a,#6b3939); color:#fff; }
+.tv-tok.pc { border-color:var(--accent); background:linear-gradient(135deg,#4a3d2a,#6b5439); }
+.tv-tok.cur { box-shadow:0 0 0 2px var(--accent); }
+.tv-tok.tgt { box-shadow:0 0 0 2px #fff; }
+.tv-tok.dead { opacity:.4; }
+.tv-tok:active { cursor:grabbing; }
+
+/* ── Targets ──────────────────────────────────────────────────────────── */
+.tv-targets { display:flex; flex-direction:column; gap:4px; flex:1 1 auto; min-height:0;
+  overflow-y:auto; background:var(--panel-2); border:1px solid var(--border);
+  border-radius:var(--r-md); padding:9px; }
+.tv-targets h4 { margin:0 0 2px; font-size:var(--fs-2xs); color:var(--text-muted);
+  text-transform:uppercase; letter-spacing:.08em; font-weight:600; }
+.tv-tgt { display:block; width:100%; text-align:left; padding:6px 8px; border-radius:var(--r-sm);
+  border:1px solid transparent; background:none; color:inherit; font:inherit; cursor:pointer;
+  transition:border-color .12s,background .12s; }
+.tv-tgt:hover { background:var(--panel-3); }
+.tv-tgt.armed { border-color:var(--accent); background:rgba(212,165,116,.12); }
+.tv-tgt-row { display:flex; align-items:center; gap:8px; }
+.tv-tgt-name { flex:1; min-width:0; font-size:var(--fs-md); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.tv-tgt-hp,.tv-tgt-ac { font-size:var(--fs-sm); color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.tv-tgt-ac { display:inline-flex; align-items:center; gap:3px; }
+.tv-tgt-ac .ico { width:12px; height:12px; }
+/* display:block matters — as an inline span it ignores its own height and takes
+   the child's, so the bar comes out chunky and the track never shows. */
+.tv-hpbar { display:block; height:5px; border-radius:3px; background:var(--panel-3);
+  margin-top:4px; overflow:hidden; }
+.tv-hpbar i { display:block; height:100%; transition:width .18s ease; }
+.tv-pip-r { font-size:var(--fs-2xs); opacity:.75; border:1px solid currentColor;
+  border-radius:var(--r-sm); padding:0 3px; margin-left:5px; vertical-align:1px; }
+/* The HP stepper is its own box beside the target list, not the last row inside
+   it: as a child of a scroller it scrolled away with a long order. */
+.tv-adjust { display:flex; align-items:center; gap:6px; flex-shrink:0; padding:7px 9px;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); }
+.tv-adjust-name { flex:1; min-width:0; font-size:var(--fs-sm); color:var(--text-muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tv-adjust .btn { padding:3px 9px; font-size:var(--fs-lg); line-height:1; }
+
+/* ── Reaction prompt ──────────────────────────────────────────────────────
+   A hit is held un-committed only when someone actually holds an unused
+   reaction that could change it. Everyone else takes the damage immediately,
+   so the decision point appears exactly where a decision exists and the common
+   case stays two clicks. */
+.tv-react { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 12px;
+  background:rgba(212,165,116,.12); border-top:1px solid var(--accent); flex-shrink:0; }
+.tv-react[hidden] { display:none; }
+.tv-react-l { font-size:var(--fs-md); color:var(--accent); font-weight:600; }
+.tv-react-who { color:var(--accent); font-weight:600; margin-right:5px; }
+.tv-react-note { font-size:var(--fs-md); color:var(--text-muted); }
+.tv-react-cost { opacity:.7; margin-left:4px; }
+.tv-react .btn { font-size:var(--fs-md); text-align:left; max-width:100%; }
+.tv-react .btn.tv-cant { opacity:.45; cursor:not-allowed; }
+
+.tv-foot { display:flex; align-items:center; gap:12px; padding:9px 12px; background:var(--panel-2);
+  border-top:1px solid var(--border); flex-shrink:0; }
+.tv-turnline { flex:1; min-width:0; font-size:var(--fs-md); color:var(--text-muted); }
+.tv-turnline b { color:var(--text); font-weight:600; }
+.tv-end { font-size:var(--fs-lg); padding:8px 18px; white-space:nowrap; }
+
+/* Phone layout. Declared AFTER the defaults on purpose: a media query adds no
+   specificity, so an override written earlier loses to an equally-specific rule
+   declared later. */
+@media (max-width: 760px){
+  /* One column, and the whole thing scrolls. grid-auto-rows:min-content plus
+     overflow-y is load-bearing: the default `auto` rows get compressed when the
+     container is shorter than the content, and the content then overflows its
+     own row and draws on top of the next one — the map landed across the manual
+     entry row and the target strip across the log. */
+  .tv-main { grid-template-columns:1fr; gap:9px; padding:9px;
+    overflow-y:auto; grid-auto-rows:min-content; }
+  .tv-actor, .tv-side { min-height:0; }
+  /* Targets above the actions on a phone. The flow is "pick a target, then
+     roll", and in source order the target strip sits below the whole stat
+     block — so on a 390px screen you scrolled past the Roll buttons to reach
+     the thing you have to tap first. */
+  .tv-side { order:-1; }
+  .tv-targets { order:1; }
+  .tv-map { order:2; height:200px; }
+  .tv-adjust { order:3; }
+  .tv-targets { flex:0 0 auto; flex-direction:row; overflow-x:auto; align-items:center; padding:7px; gap:8px; }
+  .tv-targets h4 { display:none; }
+  .tv-tgt { flex:0 0 auto; width:auto; min-width:132px; }
+  .tv-tail { overflow:visible; }
+  .tv-actor-name { font-size:var(--fs-2xl); }
+  .tv-avatar { width:40px; height:40px; font-size:var(--fs-xl); }
+  .tv-foot { flex-direction:column; align-items:stretch; gap:8px; }
+  .tv-end { width:100%; }
+  /* Four wrapped lines of explanation cost more than they teach on a phone. */
+  .tv-note { display:none; }
+}

@@ -1404,8 +1404,12 @@ registerPanel('combat',{
   // (5e PHB ch.9: "If a tie occurs, the DM decides... or roll a d20").
   // We use Dex mod because it's the canonical tiebreaker most tables use.
   // Active combatant ID is preserved so the turn marker survives the sort.
-  _sortByInitiative(){
-    if (!state.combatants.length){ showToast('No combatants yet'); return; }
+  // `quiet` suppresses the toast and the confirmation, for callers that sort as
+  // a side effect of something else the DM is already watching happen — the
+  // Turn View re-sorts on every initiative edit, and a toast per keystroke
+  // would bury the workspace in them.
+  _sortByInitiative(quiet){
+    if (!state.combatants.length){ if (!quiet) showToast('No combatants yet'); return; }
     const dexMod = c => {
       if (c.isPC){
         const p = state.party.find(pp => pp.id === c.id);
@@ -1421,7 +1425,7 @@ registerPanel('combat',{
       return dexMod(b) - dexMod(a);
     });
     save(); this._render();
-    showToast('Sorted by initiative (Dex breaks ties)');
+    if (!quiet) showToast('Sorted by initiative (Dex breaks ties)');
   },
 
   // Open the bestiary detail popout for a monster combatant. Looks up the
