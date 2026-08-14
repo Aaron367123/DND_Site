@@ -114,13 +114,36 @@ registerPanel('turnview', {
   // offered, spent and logged for the DM to adjudicate: automating a hundred
   // features badly would be worse than automating six honestly.
   MECH: {
+    // Damage-side: these change what lands.
     'Uncanny Dodge':    { when:'damage', halve:true },
     'Spirit Shield':    { when:'damage', reduce:[2,6], needs:'raging' },
     'Absorb Elements':  { when:'damage', halve:true,
                           onlyTypes:['acid','cold','fire','lightning','thunder'] },
+    // To-hit side: these can turn a hit into a miss, so the roll is re-tested.
     'Cutting Words':    { when:'tohit',  die:8 },
     'Defensive Duelist':{ when:'tohit',  pb:true },
     'Shield':           { when:'tohit',  ac:5 },
+    'Arcane Deflection':{ when:'tohit',  ac:2 },
+    // Disadvantage: reroll the d20 and keep the lower. Modelled rather than
+    // approximated as a flat penalty because the two aren't the same shape —
+    // disadvantage bites hardest in the middle of the range and barely at all
+    // at the ends, and against a low AC it often changes nothing.
+    'Warding Flare':    { when:'tohit', disadv:true },
+    'Entropic Ward':    { when:'tohit', disadv:true },
+    'Shadowy Dodge':    { when:'tohit', disadv:true },
+    'Instinctive Charm':{ when:'tohit', disadv:true },
+    // Reroll: a fresh d20, not the lower of two. Silvery Barbs makes the
+    // creature reroll and it must use the new roll even if it is better.
+    'Silvery Barbs':    { when:'tohit', reroll:true },
+    'Second Chance':    { when:'tohit', reroll:true },
+  },
+  // A monster's Parry says how much it adds in its own text — "adds 2 to its
+  // AC", "adds 3". Read rather than assumed, so a Bandit Captain and a
+  // Githyanki Knight get their own numbers.
+  _statBlockMech(r){
+    const m = /adds? (\d+) to its AC/i.exec(String(r.note || ''));
+    if (m) return { when:'tohit', ac: parseInt(m[1], 10) };
+    return null;
   },
   // What a reaction spends, named to match the party tracker's own pools. In
   // this panel those ARE the party tracker's pools — spending here decrements
@@ -189,7 +212,8 @@ registerPanel('turnview', {
 
     const seen = new Set();
     return out.filter(r => !seen.has(r.name) && seen.add(r.name))
-              .map(r => ({ ...r, key: r.name, ...(this.MECH[r.name] || {}) }));
+              .map(r => ({ ...r, key: r.name,
+                           ...(this.MECH[r.name] || this._statBlockMech(r) || {}) }));
   },
 
   // The loaded bestiary is the open5e-shaped normalisation, where a trait is
@@ -409,7 +433,7 @@ registerPanel('turnview', {
       this._reactionsFor(c).forEach(r => {
         // Only things with mechanics or an explicit hit trigger. Opportunity
         // Attack shouldn't appear every time someone is punched.
-        if (!this.MECH[r.name] &&
+        if (!r.when &&
             !/hits you|hit by an attack|takes damage|makes an attack roll|suffers a critical/i.test(r.note || '')) return;
         const ok = isTarget ? (r.scope === 'self' || r.scope === 'both')
                             : (r.scope === 'ally' || r.scope === 'both');
@@ -547,7 +571,7 @@ registerPanel('turnview', {
     const rx = this._reactionsFor(c);
     const rxHtml = !rx.length ? '' :
       `<span class="tv-rx-l">Reactions</span>` + rx.map(r =>
-        `<span class="tv-rx ${c.reactionUsed ? 'spent' : ''} ${this.MECH[r.name] ? 'hit' : ''}"
+        `<span class="tv-rx ${c.reactionUsed ? 'spent' : ''} ${r.when ? 'hit' : ''}"
                title="${esc(r.note || '')}">${esc(r.name)}<span class="tv-rx-src">${esc(r.from)}${r.lvl ? ' L' + r.lvl : ''}${
           r.scope === 'ally' ? ' · ally' : r.scope === 'both' ? ' · either' : ''}</span></span>`).join('');
     return `<div class="tv-actor-head">
@@ -781,7 +805,7 @@ registerPanel('turnview', {
       // A creature holding an unspent reaction that could ANSWER an attack is
       // worth seeing before you commit, not only once the prompt appears.
       // Everyone has Opportunity Attack, so flagging that would mark the table.
-      const r = (!t.reactionUsed && this._reactionsFor(t).some(x => this.MECH[x.name]))
+      const r = (!t.reactionUsed && this._reactionsFor(t).some(x => x.when))
         ? '<span class="tv-pip-r" title="Has an unspent reaction that can answer an attack">R</span>' : '';
       return `<button class="tv-tgt ${this._armed === t.id ? 'armed' : ''}" data-tv="arm" data-id="${esc(t.id)}"
                       aria-pressed="${this._armed === t.id}">
@@ -885,7 +909,10 @@ registerPanel('turnview', {
       let preview = '';
       if (r.when === 'damage' && r.halve) preview = ` → ${Math.floor(o.dmg / 2)}`;
       if (r.when === 'damage' && r.reduce) preview = ` −${r.reduce[0]}d${r.reduce[1]}`;
-      if (r.when === 'tohit' && r.ac) preview = ` AC +${r.ac}`;
+      if (r.when === 'tohit' && r.ac)     preview = ` AC +${r.ac}`;
+      if (r.when === 'tohit' && r.die)    preview = ` −d${r.die}`;
+      if (r.when === 'tohit' && r.disadv) preview = ' disadv';
+      if (r.when === 'tohit' && r.reroll) preview = ' reroll';
       const mine = who.id === o.target.id;
       const cost = this._costLabel(who, r);
       const far = mine || ft == null ? '' : ` ${ft} ft`;
@@ -1008,15 +1035,29 @@ registerPanel('turnview', {
       return;
     }
     if (r.when === 'tohit'){
-      // A to-hit reaction can turn a hit into a miss, so the roll is re-tested
-      // against AC rather than assumed still to land.
+      // A to-hit reaction can turn a hit into a miss, so the roll is always
+      // re-tested against AC rather than assumed still to land.
       let desc;
-      if (r.ac != null){ o.acBonus = (o.acBonus || 0) + r.ac; desc = `${by}, AC +${r.ac}`; }
-      else {
+      if (r.ac != null){
+        o.acBonus = (o.acBonus || 0) + r.ac; desc = `${by}, AC +${r.ac}`;
+      } else if (r.disadv || r.reroll){
+        // Nothing to reroll on a hand-entered total — the DM typed a number,
+        // not a d20. Spend it and let them re-roll at the table.
+        if (o.nat == null){ this._commit(o, `${by} — reroll it yourself`); return; }
+        const n2 = this._d(20);
+        const keep = r.disadv ? Math.min(o.nat, n2) : n2;
+        desc = `${by}, ${o.nat}${r.disadv ? ' / ' : ' → '}${n2}${r.disadv ? ' → ' + keep : ''}`;
+        o.nat = keep;
+        o.total = keep + (o.bonus || 0);
+        o.crit = keep === 20;
+      } else {
         const sub = r.pb ? this._pb(r._lvl || (this._partyOf(who) || {}).level) : this._d(r.die);
         o.total -= sub; desc = `${by}, −${sub}`;
       }
-      o.hit = o.crit || o.total >= ((o.target.ac || 0) + (o.acBonus || 0));
+      const ac = (o.target.ac || 0) + (o.acBonus || 0);
+      // A natural 1 misses whatever the total says — which a reroll can now
+      // produce, so the rule has to be applied here and not only at roll time.
+      o.hit = o.crit || (o.nat !== 1 && o.total >= ac);
       this._commit(o, desc);
       return;
     }
@@ -1058,7 +1099,7 @@ registerPanel('turnview', {
     }
     const dmg = parts.reduce((s, x) => s + x.amt, 0);
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
-                    total, crit, hit, dmg, parts, queued: !!o.queued,
+                    total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus,
                     type: parts.length ? parts[0].type : '', detail,
                     magical: !a.pc && panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
