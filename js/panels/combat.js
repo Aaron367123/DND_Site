@@ -1240,13 +1240,18 @@ registerPanel('combat',{
     state.combatRound = round;
     showToast(`Round ${round}`);
     this._log('— Round ' + round + ' —');
-    // Refresh legendary actions + reaction availability at the start of
-    // every round (5e rule: both refresh on a creature's own turn, but the
-    // common simplification is "everyone resets on round tick" — close
-    // enough for the table, and saves per-combatant accounting).
+    // Legendary actions still refresh on the round tick. The 5e rule is "at
+    // the start of its turn", and for a solo legendary creature those are the
+    // same moment; keeping it here avoids per-combatant accounting for the
+    // one creature in the fight that has them.
+    //
+    // Reactions no longer refresh here — see _refreshReaction. Doing it on the
+    // round tick refunded a reaction spent between the tick and the creature's
+    // own turn, which was an invisible approximation while reactions were a
+    // toggle and a visible one now that the Turn View offers them by name and
+    // spends real resources for them.
     state.combatants.forEach(c => {
       if (c.legendaryMax){ c.legendaryUsed = 0; }
-      if (c.reactionUsed){ c.reactionUsed = false; }
     });
     // Tick down buff durations. A buff at rounds==0 expires after this
     // round's start — drop it. Negative/undefined durations are permanent
@@ -1301,6 +1306,14 @@ registerPanel('combat',{
     if (partyTouched) panelDefs.party?._render?.();
   },
 
+  // 5e: a creature regains its reaction at the start of its own turn, not on a
+  // shared round tick. Every path that changes whose turn it is comes through
+  // here so the two can't drift.
+  _refreshReaction(id){
+    const c = state.combatants.find(x => x.id === id);
+    if (c && c.reactionUsed) c.reactionUsed = false;
+  },
+
   _nextTurn(){
     if(!state.combatants.length){ showToast('No combatants yet'); return; }
     const id = state.activeCombatantId;
@@ -1313,6 +1326,7 @@ registerPanel('combat',{
       // silently rewound the whole order to the first combatant.
       state.activeCombatantId = state.combatants[0].id;
       state.combatRound = Math.max(1, state.combatRound || 0);
+      this._refreshReaction(state.activeCombatantId);
     } else {
       let ni = cur + 1;
       if (ni >= state.combatants.length){
@@ -1320,6 +1334,7 @@ registerPanel('combat',{
         this._startRound((state.combatRound || 1) + 1);
       }
       state.activeCombatantId = state.combatants[ni].id;
+      this._refreshReaction(state.activeCombatantId);
     }
     save();this._render();
   },
@@ -1351,6 +1366,7 @@ registerPanel('combat',{
       this._startRound((state.combatRound || 1) + 1);
     }
     state.activeCombatantId = state.combatants[ni].id;
+    this._refreshReaction(state.activeCombatantId);
     this._log(`${c.name} removed — turn passes to ${state.combatants[ni].name}`);
   },
 

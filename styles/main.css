@@ -3837,6 +3837,12 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-multi-pip.done { opacity:.45; text-decoration:line-through; }
 .tv-multi-pip.now { color:#1a1a1a; background:var(--accent); border-color:var(--accent); font-weight:600; }
 .tv-multi .btn { flex-shrink:0; display:inline-flex; align-items:center; gap:5px; }
+/* Legendary actions read as a different kind of thing from the creature's
+   own turn — they belong to somebody who is not acting. */
+.tv-multi.legend { border-style:dashed; }
+.tv-multi.legend .tv-multi-tag { color:var(--warning); }
+.tv-multi.legend .tv-multi-text { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+.tv-multi .btn.tv-cant { opacity:.45; cursor:not-allowed; }
 /* A save-based action has no attack roll, so it gets a DC and two outcomes
    instead of one Roll button. */
 .tv-act-ctl { display:flex; align-items:center; gap:6px; flex-shrink:0; }

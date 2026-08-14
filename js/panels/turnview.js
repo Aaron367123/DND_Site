@@ -461,6 +461,7 @@ registerPanel('turnview', {
         <div class="tv-actor">
           ${this._renderActorHead(c)}
           ${this._renderActions(c)}
+          ${this._renderLegendary()}
           <div class="tv-result${this._resultLive ? ' on' : ''}" role="status" aria-live="polite">${this._result
             || '<span class="dim">Pick a target, then roll an attack.</span>'}</div>
           <div class="tv-tail">
@@ -664,6 +665,74 @@ registerPanel('turnview', {
       </div>`;
     }
     return `<div class="tv-actions">${head}${rows}${manual}</div>`;
+  },
+
+  // ─── Legendary actions ────────────────────────────────────────────────────
+  // These fire at the END of somebody else's turn, which is exactly the moment
+  // this panel is showing and exactly why they had no home in it. So they are
+  // offered for every legendary creature that ISN'T the one acting — on the
+  // dragon's own turn there is nothing to spend.
+  //
+  // The pool is the tracker's own legendaryUsed/legendaryMax, so spending here
+  // empties the same pips the Combat Tracker draws.
+  _legendaryRows(){
+    const cur = this._active();
+    return this._order()
+      .filter(c => c.legendaryMax && (c.hp || 0) > 0 && c.id !== (cur && cur.id))
+      .map(c => ({
+        c,
+        left: (c.legendaryMax || 0) - (c.legendaryUsed || 0),
+        acts: this._rawList((this._entryOf(c) || {})._raw, ['legendary_actions', 'legendary']),
+      }));
+  },
+  // "Wing Attack (Costs 2 Actions)" — the price is written into the name.
+  _legendaryCost(name){
+    const m = /costs?\s+(\d+)\s+actions?/i.exec(String(name));
+    return m ? parseInt(m[1], 10) : 1;
+  },
+  _renderLegendary(){
+    const rows = this._legendaryRows().filter(r => r.acts.length);
+    if (!rows.length) return '';
+    return rows.map(r => {
+      const pips = Array.from({ length: r.c.legendaryMax }, (_, i) =>
+        `<span class="tv-pip-o ${i < r.left ? '' : 'off'}"></span>`).join('');
+      const btns = r.acts.map((a, ai) => {
+        const cost = this._legendaryCost(a.name);
+        const over = cost > r.left;
+        return `<button class="btn ${over ? 'tv-cant' : ''}" data-tv="legend" data-id="${esc(r.c.id)}"
+                        data-ai="${ai}" ${over ? 'disabled' : ''} title="${esc(a.text)}">
+          ${esc(a.name.replace(/\s*\(costs?[^)]*\)/i, ''))}${cost > 1 ? ` <span class="tv-react-cost">· ${cost}</span>` : ''}
+        </button>`;
+      }).join('');
+      return `<div class="tv-multi legend">
+        <span class="tv-multi-tag">Legendary</span>
+        <span class="tv-multi-text"><b>${esc(r.c.name)}</b><span class="tv-pips">${pips}</span></span>
+        ${btns}
+      </div>`;
+    }).join('');
+  },
+  _useLegendary(id, ai){
+    const c = this._order().find(x => x.id === id); if (!c) return;
+    const acts = this._rawList((this._entryOf(c) || {})._raw, ['legendary_actions', 'legendary']);
+    const a = acts[ai]; if (!a) return;
+    const cost = this._legendaryCost(a.name);
+    const left = (c.legendaryMax || 0) - (c.legendaryUsed || 0);
+    if (cost > left) return;
+    c.legendaryUsed = (c.legendaryUsed || 0) + cost;
+    const bare = a.name.replace(/\s*\(costs?[^)]*\)/i, '').trim();
+    // "Tail Attack" is an instruction to make the Tail attack, so roll it if
+    // the stat block has one by that name. Everything else is spent, logged
+    // and adjudicated — the same line the reaction bar holds.
+    const list = this._attacksFor(c);
+    const idx = list.findIndex(x => x.name && new RegExp('\\b' + x.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(bare));
+    const t = this._order().find(x => x.id === this._armed);
+    this._log.unshift(`<strong>${esc(c.name)}</strong> legendary — ${esc(bare)} <span style="opacity:.7">· ${c.legendaryMax - c.legendaryUsed}/${c.legendaryMax} left</span>`);
+    if (idx >= 0 && t && !list[idx].save){
+      this._rollAttack(idx, { attacker: c, target: t, label: list[idx].name + ' (legendary)' });
+      return;
+    }
+    this._setResult(`<strong>${esc(c.name)}</strong> — ${esc(bare)}. <span class="dim">${esc(a.text)}</span>`, true);
+    save(); panelDefs.combat?._render?.(); this._render();
   },
 
   // The rest of the stat block — the part a two-action monster otherwise
@@ -1203,7 +1272,13 @@ registerPanel('turnview', {
     b.addEventListener('click', e => {
       const el = e.target.closest('[data-tv]'); if (!el) return;
       const act = el.dataset.tv;
-      if (act === 'jump'){ state.activeCombatantId = el.dataset.id; this._armed = null; save(); panelDefs.combat?._render?.(); this._render(); }
+      if (act === 'jump'){
+        // Jumping to a pip makes it that creature's turn, so their reaction
+        // comes back with it — same rule as advancing normally.
+        state.activeCombatantId = el.dataset.id;
+        panelDefs.combat?._refreshReaction?.(el.dataset.id);
+        this._armed = null; save(); panelDefs.combat?._render?.(); this._render();
+      }
       else if (act === 'initedit'){ this._editInit = true;  this._render(); }
       else if (act === 'initdone'){ this._editInit = false; this._render(); }
       else if (act === 'rollinit'){ this._rollNpcInit(); }
@@ -1218,6 +1293,7 @@ registerPanel('turnview', {
       else if (act === 'roll'){ this._rollAttack(+el.dataset.ai); }
       else if (act === 'save'){ this._rollSave(+el.dataset.ai, el.dataset.half === '1'); }
       else if (act === 'multi'){ this._startMulti(); }
+      else if (act === 'legend'){ this._useLegendary(el.dataset.id, +el.dataset.ai); }
       else if (act === 'qmiss'){ if (this._queue){ this._queue.misses++; this._advanceQueue(); } }
       else if (act === 'qstop'){ this._finishMulti(true); }
       else if (act === 'manual'){ this._manualAttack(); }
