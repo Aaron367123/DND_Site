@@ -3910,61 +3910,205 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
   .tv-note { display:none; }
 }
 
-/* ── Player view: the turn bar ─────────────────────────────────────────────
-   Whose turn it is, and how many until yours. Its own grid row rather than an
-   overlay, so it never covers a window title bar — the handle a player uses to
-   move things. Only rendered when the DM has shared the combat panel, and
-   monster HP follows that panel's own show/conceal/hide setting. */
-body.player-mode.pv-has-turn .app{
-  grid-template-rows:auto 1fr; grid-template-areas:". turnbar" ". workspace";
+/* ── Player app ────────────────────────────────────────────────────────────
+   One screen and a tab bar, on purpose. The old player view was a floating
+   workspace and most of its code existed to make that survive a phone. There
+   are no windows here to place, stack, minimise or accidentally bury.
+
+   Sized off --pv-vh rather than 100vh: some mobile webviews measure vh as the
+   layout viewport, which leaves the tab bar under the browser chrome. */
+body.player-app .app{
+  display:flex; flex-direction:column; height:var(--pv-vh, 100dvh);
+  grid-template-areas:none; grid-template-columns:none; grid-template-rows:none;
+  overflow:hidden;
 }
-.pv-turn{
-  grid-area:turnbar; display:flex; flex-direction:column; gap:5px;
-  padding:7px 12px; background:var(--panel); border-bottom:1px solid var(--border);
-  /* Clear the floating search pill, which is fixed at z-index 9000 over this
-     corner. Measured from the element at runtime — see _updatePlayerViewportVars. */
-  padding-right:calc(12px + var(--pv-topright, 0px));
-  /* Load-bearing, and the same trap as the Turn View's columns: a grid item's
-     automatic minimum size is its min-content, so the initiative strip sized
-     this bar to 502px inside a 390px phone. Everything past the viewport edge
-     — including the padding meant to clear the search pill — went off-screen,
-     which is what actually put a creature under it. */
-  min-width:0;
+body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv-dock{display:none}
+.pa{display:flex; flex-direction:column; flex:1; min-height:0}
+
+/* Turn strip. Clears the floating search pill, which is fixed over this
+   corner — see _updatePlayerViewportVars for where the number comes from. */
+.pa-turn{
+  flex:0 0 auto; background:var(--panel); border-bottom:1px solid var(--border);
+  padding:7px 12px; padding-right:calc(12px + var(--pv-topright, 0px));
+  display:flex; flex-direction:column; gap:5px; min-width:0;
 }
-.pv-turn-head, .pv-turn-strip{min-width:0}
-.pv-turn-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
-.pv-turn-round{
-  font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em;
-  color:var(--text-muted); white-space:nowrap;
-}
-.pv-turn-now{font-size:var(--fs-xl); color:var(--text-muted)}
-.pv-turn-now b{color:var(--accent); font-weight:600}
-.pv-turn-next{font-size:var(--fs-md); color:var(--text-dim)}
-.pv-turn-next b{color:var(--text-muted); font-weight:600}
-/* The order scrolls sideways rather than wrapping: it is a sequence, and a
-   wrapped sequence stops reading as one. */
-.pv-turn-strip{display:flex; gap:5px; overflow-x:auto; padding-bottom:1px}
-.pv-turn-pip{
-  flex-shrink:0; display:inline-flex; align-items:baseline; gap:6px;
+.pa-turn[hidden]{display:none}
+.pa-turn-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; min-width:0}
+.pa-round{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em;
+  color:var(--text-muted); white-space:nowrap}
+.pa-now{font-size:var(--fs-xl); color:var(--text-muted)}
+.pa-now b{color:var(--text); font-weight:600}
+/* Your turn is the one thing on this screen worth shouting. */
+.pa-now.mine{color:var(--accent); font-weight:700; letter-spacing:-.01em}
+.pa-until{font-size:var(--fs-md); color:var(--text-dim)}
+.pa-strip{display:flex; gap:5px; overflow-x:auto; min-width:0; padding-bottom:1px}
+.pa-pip{flex-shrink:0; display:inline-flex; align-items:baseline; gap:6px;
   padding:3px 10px; border-radius:var(--r-pill);
-  background:var(--panel-3); border:1px solid var(--border);
-}
-.pv-turn-pip b{font-size:var(--fs-md); font-weight:500; white-space:nowrap}
-.pv-turn-pip i{font-size:var(--fs-2xs); font-style:normal; opacity:.7;
+  background:var(--panel-3); border:1px solid var(--border)}
+.pa-pip b{font-size:var(--fs-md); font-weight:500; white-space:nowrap}
+.pa-pip i{font-size:var(--fs-2xs); font-style:normal; opacity:.7;
   font-variant-numeric:tabular-nums; white-space:nowrap}
-.pv-turn-pip.pc b{color:var(--accent)}
-.pv-turn-pip.cur{background:var(--accent); border-color:var(--accent)}
-.pv-turn-pip.cur b, .pv-turn-pip.cur i{color:#1a1a1a}
-.pv-turn-pip.down{opacity:.4; text-decoration:line-through}
-@media (max-width: 768px){
-  /* Beats the single-column rule below it: same media query, more classes,
-     and !important to answer its own. */
-  body.player-mode.pv-has-turn .app{
-    grid-template-columns:1fr !important;
-    grid-template-rows:auto 1fr !important;
-    grid-template-areas:"turnbar" "workspace" !important;
-  }
-  .pv-turn{padding:6px 10px; padding-right:calc(10px + var(--pv-topright, 0px))}
-  .pv-turn-now{font-size:var(--fs-lg)}
-  .pv-turn-next{display:none}
+.pa-pip.pc b{color:var(--accent)}
+.pa-pip.me{border-color:var(--accent)}
+.pa-pip.cur{background:var(--accent); border-color:var(--accent)}
+.pa-pip.cur b, .pa-pip.cur i{color:#1a1a1a}
+.pa-pip.down{opacity:.4; text-decoration:line-through}
+
+.pa-screen{flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch}
+.pa-card{padding:12px; display:flex; flex-direction:column; gap:12px}
+.pa-empty{padding:28px 16px; text-align:center; color:var(--text-muted)}
+.pa-sec h4{margin:0 0 6px; font-size:var(--fs-2xs); color:var(--text-muted);
+  text-transform:uppercase; letter-spacing:.08em; font-weight:600}
+
+/* ── You ─────────────────────────────────────────────────────────────────── */
+.pa-you-head{display:flex; align-items:center; gap:12px}
+.pa-avatar{width:52px; height:52px; border-radius:var(--r-full); flex-shrink:0;
+  background:linear-gradient(135deg,#4a3d2a,#6b5439); border:2px solid var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  font-size:var(--fs-2xl); font-weight:600}
+.pa-avatar.sm{width:34px; height:34px; font-size:var(--fs-lg)}
+.pa-you-id{flex:1; min-width:0}
+.pa-you-name{font-size:var(--fs-3xl); font-weight:600; letter-spacing:-.01em}
+.pa-you-sub{font-size:var(--fs-sm); color:var(--text-muted); margin-top:1px}
+.pa-swap{flex-shrink:0; background:none; border:1px solid var(--border);
+  color:var(--text-muted); border-radius:var(--r-pill); padding:4px 11px;
+  font:inherit; font-size:var(--fs-2xs); cursor:pointer}
+.pa-swap:hover{border-color:var(--accent); color:var(--text)}
+
+.pa-hp{display:flex; flex-direction:column; gap:7px}
+.pa-hp-row{display:flex; align-items:baseline; gap:6px; flex-wrap:wrap}
+.pa-hp-n{font-size:var(--fs-5xl); font-weight:700; line-height:1;
+  font-variant-numeric:tabular-nums}
+.pa-hp-max{font-size:var(--fs-xl); color:var(--text-muted)}
+.pa-hp-temp{font-size:var(--fs-xl); color:var(--success); font-weight:600}
+.pa-hp-sp{flex:1}
+.pa-stat{font-size:var(--fs-sm); color:var(--text-muted); white-space:nowrap}
+.pa-stat b{color:var(--text); font-size:var(--fs-lg); font-weight:600}
+.pa-hp-bar{display:block; height:9px; border-radius:5px; background:var(--panel-3);
+  overflow:hidden}
+.pa-hp-bar.sm{height:5px}
+.pa-hp-bar i{display:block; height:100%; transition:width .2s ease}
+/* Your own hit points, and nobody else's. The single biggest reduction in the
+   DM's bookkeeping, and it is your character. Writes go through the Combat
+   Tracker's _applyHpDelta so resistances and death saves behave identically. */
+.pa-hp-ctl{display:flex; align-items:center; gap:8px}
+.pa-hp-ctl .btn{flex:1; padding:11px 8px; font-size:var(--fs-md)}
+.pa-in{width:64px; flex-shrink:0; text-align:center; background:var(--panel-3);
+  border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm);
+  padding:10px 6px; font:inherit; font-size:var(--fs-lg);
+  font-variant-numeric:tabular-nums}
+
+.pa-conds{display:flex; gap:5px; flex-wrap:wrap}
+.pa-cond{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em;
+  background:rgba(194,84,80,.2); color:#d97a76; padding:3px 9px;
+  border-radius:var(--r-pill)}
+.pa-cond.sm{font-size:8px; padding:1px 6px}
+
+.pa-death{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:10px 12px; background:var(--panel-2);
+  border:1px solid var(--danger); border-radius:var(--r-md)}
+.pa-death-l{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.07em;
+  color:var(--danger); font-weight:600}
+.pa-ds{display:inline-flex; align-items:center; gap:4px; font-size:var(--fs-sm);
+  color:var(--text-muted)}
+.pa-ds-pip{width:11px; height:11px; border-radius:var(--r-full);
+  border:1px solid var(--border)}
+.pa-ds-pip.success.on{background:var(--success); border-color:var(--success)}
+.pa-ds-pip.fail.on{background:var(--danger); border-color:var(--danger)}
+
+.pa-res{display:flex; align-items:center; gap:8px; padding:3px 0}
+.pa-res-n{flex:1; min-width:0; font-size:var(--fs-sm); color:var(--text-muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.pa-res-pips{display:flex; gap:3px; flex-wrap:wrap; justify-content:flex-end}
+.pa-res-pip{width:10px; height:10px; border-radius:2px; background:var(--accent)}
+.pa-res-pip.off{background:var(--panel-3)}
+.pa-res-c{font-size:var(--fs-2xs); color:var(--text-dim); min-width:34px;
+  text-align:right; font-variant-numeric:tabular-nums}
+
+/* Attacks roll and SHOW. They don't apply — the player reads the number out,
+   the DM decides whether it hit. Applying a player's damage to a monster from
+   here would be the player running the other side of the table. */
+.pa-atks{display:flex; flex-direction:column; gap:6px}
+.pa-atk{display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:11px 12px; background:var(--panel-2); border:1px solid var(--border);
+  border-radius:var(--r-md); color:inherit; font:inherit; cursor:pointer}
+.pa-atk:hover{border-color:var(--accent)}
+.pa-atk-n{font-size:var(--fs-lg); font-weight:600}
+.pa-atk-d{flex:1; font-size:var(--fs-sm); color:var(--text-muted)}
+.pa-atk .ico{width:18px; height:18px; flex-shrink:0; color:var(--accent)}
+
+.pa-roll:empty{display:none}
+.pa-roll-in{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+  padding:11px 13px; background:var(--panel-2); border:1px solid var(--border);
+  border-left:3px solid var(--accent); border-radius:var(--r-md)}
+.pa-roll-in.crit{border-left-color:var(--success)}
+.pa-roll-in.fumble{border-left-color:var(--danger)}
+.pa-roll-l{font-size:var(--fs-md); color:var(--text-muted)}
+.pa-roll-hit{font-size:var(--fs-3xl); font-weight:700; font-variant-numeric:tabular-nums}
+.pa-roll-hit i{font-size:var(--fs-sm); font-style:normal; color:var(--text-muted);
+  font-weight:400; margin-left:3px}
+.pa-roll-d{font-size:var(--fs-2xs); color:var(--text-dim)}
+.pa-roll-dmg{font-size:var(--fs-2xl); font-weight:700; color:var(--danger);
+  font-variant-numeric:tabular-nums}
+.pa-roll-dmg i{font-size:var(--fs-sm); font-style:normal; color:var(--text-muted);
+  font-weight:400; margin-left:3px}
+.pa-roll-tag{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.07em;
+  padding:2px 8px; border-radius:var(--r-pill); background:var(--accent); color:#1a1a1a;
+  font-weight:700}
+
+/* ── Pick your character ─────────────────────────────────────────────────── */
+.pa-pick-h{margin:0; font-size:var(--fs-2xl); font-weight:600}
+.pa-pick-p{margin:0; font-size:var(--fs-sm); color:var(--text-muted);
+  max-width:48ch; line-height:1.5}
+.pa-pick{display:flex; flex-direction:column; gap:8px}
+.pa-pick-b{display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+  padding:12px; background:var(--panel-2); border:1px solid var(--border);
+  border-radius:var(--r-md); color:inherit; font:inherit; cursor:pointer}
+.pa-pick-b:hover{border-color:var(--accent); background:var(--panel-3)}
+.pa-pick-n{flex:1; font-size:var(--fs-xl); font-weight:600}
+.pa-pick-s{font-size:var(--fs-sm); color:var(--text-muted)}
+
+/* ── Party ───────────────────────────────────────────────────────────────── */
+.pa-mate{padding:10px 12px; background:var(--panel-2); border:1px solid var(--border);
+  border-radius:var(--r-md); display:flex; flex-direction:column; gap:6px}
+.pa-mate + .pa-mate{margin-top:8px}
+.pa-mate.me{border-color:var(--accent)}
+.pa-mate-row{display:flex; align-items:baseline; gap:10px}
+.pa-mate-n{flex:1; min-width:0; font-size:var(--fs-lg); font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.pa-mate-n i{font-size:var(--fs-2xs); font-style:normal; color:var(--accent);
+  text-transform:uppercase; letter-spacing:.06em; margin-left:5px}
+.pa-mate-hp, .pa-mate-ac{font-size:var(--fs-sm); color:var(--text-muted);
+  font-variant-numeric:tabular-nums; white-space:nowrap}
+
+/* ── Mounted DM panels (map, notes) ──────────────────────────────────────────
+   Reused whole rather than rewritten: the map carries fog, the background
+   image, rotation, scale and its own live sync, and a second renderer would be
+   a second set of those to keep correct. Their editing chrome is hidden here,
+   which is what "read-only by construction" costs when the thing being reused
+   was built to be written to. */
+.pa-mount{position:relative; height:100%; min-height:0; display:flex;
+  flex-direction:column; overflow:hidden}
+.pa-mount .map-toolbar, .pa-mount .map-side, .pa-mount .map-settings,
+.pa-mount .notes-tree-actions, .pa-mount .notes-toolbar{display:none !important}
+.pa-mount .map-wrap, .pa-mount #map-scroll{flex:1; min-height:0}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+.pa-tabs{flex:0 0 auto; display:flex; background:var(--panel);
+  border-top:1px solid var(--border);
+  padding-bottom:env(safe-area-inset-bottom, 0px)}
+.pa-tab{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:9px 4px; background:none; border:none; border-top:2px solid transparent;
+  color:var(--text-dim); font:inherit; font-size:var(--fs-2xs); cursor:pointer;
+  text-transform:uppercase; letter-spacing:.06em}
+.pa-tab .ico{width:21px; height:21px}
+.pa-tab:hover{color:var(--text-muted)}
+.pa-tab.on{color:var(--accent); border-top-color:var(--accent)}
+
+/* Roomier on a desktop, where the player view is a second monitor rather than
+   a phone: the character column stops stretching to 1400px. */
+@media (min-width: 900px){
+  .pa-screen > .pa-card{max-width:760px; margin:0 auto; padding:18px}
+  .pa-tabs{justify-content:center}
+  .pa-tab{flex:0 0 132px; flex-direction:row; gap:8px; font-size:var(--fs-md)}
 }

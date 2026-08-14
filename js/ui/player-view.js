@@ -1,340 +1,60 @@
 // ============================================================
-// PLAYER VIEW
+// PLAYER VIEW — boot
 // ============================================================
-// Activated by opening this same HTML file with ?player=1 in the URL.
+// Activated by opening this same HTML file with ?player=1.
 //
-// Reuses the regular workspace + panel system, gated to read-only and
-// constrained to whatever panels the DM has shared via the 👁 button on
-// each window. Live updates come through the same per-key Firebase sync
-// the DM tab uses, so a remote player on their own laptop sees changes
-// without any custom transport.
-
-// The player keeps their own "visible" set in localStorage — a subset of what
-// the DM has shared. First-time players see everything; afterwards their
-// closed-window choices stick across reloads.
-const _PV_VISIBLE_KEY = 'skt-player-visible-v1';
-function _readPlayerVisible(){
-  try {
-    const raw = localStorage.getItem(_PV_VISIBLE_KEY);
-    if (raw == null) return null; // null = first run, show everything
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch(e){ return new Set(); }
-}
-function _writePlayerVisible(set){
-  try { localStorage.setItem(_PV_VISIBLE_KEY, JSON.stringify([...set])); } catch(e){}
-}
-let _playerVisible = null; // populated in initPlayerView
-
-function _applySharedPanelsToPlayerView(){
-  const shared = new Set(state.sharedPanels || []);
-  const isMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches
-    || window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
-  // First time: default to first shared panel on mobile, all on desktop.
-  if (_playerVisible == null){
-    if (isMobile){
-      const first = [...shared][0];
-      _playerVisible = new Set(first ? [first] : []);
-    } else {
-      _playerVisible = new Set(shared);
-    }
-  }
-  // Remove anything from _playerVisible that's no longer shared.
-  for (const id of [..._playerVisible]) if (!shared.has(id)) _playerVisible.delete(id);
-  // Mobile invariant: at most ONE panel visible at a time. Without this,
-  // a desktop visit's saved set (every shared panel) carries over into the
-  // next mobile visit and stacks 4–5 fullscreen windows on top of each
-  // other — the user's complaint. Always trim to the first kept panel
-  // when the viewport is mobile-sized.
-  if (isMobile && _playerVisible.size > 1){
-    const keep = [..._playerVisible][0];
-    _playerVisible = new Set([keep]);
-  }
-
-  const desired = new Set([..._playerVisible].filter(id => shared.has(id)));
-  const open = new Set(Array.from(document.querySelectorAll('.window[data-panel]'))
-    .map(el => el.dataset.panel));
-
-  desired.forEach(id => {
-    if (!open.has(id) && panelDefs[id]){
-      if (!layout[id]) layout[id] = (DEFAULT_LAYOUT[id] ? {...DEFAULT_LAYOUT[id]} : {x:40,y:40,w:480,h:520,open:true,minimized:false,z:1});
-      // Fresh open from the player dock → put this window on top of every
-      // currently-visible window. Without bumping z, a panel reopened from
-      // the dock would inherit its previous (possibly low) z value and
-      // appear behind already-open windows.
-      layout[id] = {...layout[id], open:true, minimized:false, z:_nextZ()};
-      // Place before mounting. openPanel() does this for the DM and the player
-      // view calls ensurePanel directly, so the cascade never ran here: with
-      // four panels shared, three opened mostly underneath another one — the
-      // Combat Tracker 77% under the battle map, the Party Tracker 85% under
-      // the notes. Measured, not guessed.
-      if (typeof _wmPlaceWindow === 'function') _wmPlaceWindow(id);
-      ensurePanel(id);
-    }
-  });
-  open.forEach(id => {
-    if (!desired.has(id)) closePanel(id);
-  });
-
-  _renderPlayerDock();
-  _renderPlayerTurnBar();
-  _writePlayerVisible(_playerVisible);
-
-  // Empty-state placeholder. Two flavors:
-  //  • Nothing shared by DM yet — original "waiting" message.
-  //  • DM has shared but the player has closed every panel they were viewing
-  //    — point them at the pv-dock so they don't think the app is broken.
-  const canvas = document.getElementById('workspace-canvas');
-  if (!canvas) return;
-  const empty = canvas.querySelector('#pv-empty');
-  // `isMobile` is already declared at the top of this function (line ~31).
-  // We just need the landscape orientation check for the arrow direction.
-  const isLandscape = window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
-  if (!shared.size){
-    // DM hasn't shared anything.
-    if (!empty){
-      canvas.insertAdjacentHTML('beforeend',
-        '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:14px;text-align:center;pointer-events:none;padding:20px">'
-        + '<div>Waiting for the DM to share something…<br><br>'
-        + '<span style="font-size:var(--fs-sm)">The DM clicks the 👁 in any panel\'s title bar to share.</span></div>'
-        + '</div>');
-    }
-  } else if (shared.size && desired.size === 0){
-    // DM has shared something but the player closed every panel. On mobile
-    // this happens easily — point them back at the dock.
-    if (empty) empty.remove();
-    const arrow = isLandscape ? '→' : (isMobile ? '↓' : '↑');
-    canvas.insertAdjacentHTML('beforeend',
-      '<div id="pv-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:14px;text-align:center;pointer-events:none;padding:20px">'
-      + '<div>No panel selected.<br><br>'
-      + '<span style="font-size:var(--fs-lg);color:var(--accent)">' + arrow + ' Tap an icon in the dock to view a shared panel.</span></div>'
-      + '</div>');
-  } else if (empty){
-    empty.remove();
-  }
-}
-
-// ── Turn bar ────────────────────────────────────────────────────────────────
-// The one thing a player asks all evening is "whose turn is it, and how many
-// until mine". Answering it needed the Combat Tracker unburied and scrolled to
-// the right row; now it is a strip that is always there, above everything,
-// costing no window.
+// This used to be the DM workspace with panels subtracted: floating windows
+// gated by what the DM had shared, plus a pile of machinery to make that
+// bearable on a phone — an at-most-one-panel invariant, a rotate-back
+// ratchet, a scroll-hiding dock, a patched closePanel. All of it existed to
+// fight the fact that a draggable workspace is the wrong shape for someone
+// glancing at a phone at a table.
 //
-// It reveals nothing new. It appears only when the DM has shared the combat
-// panel, and monster HP follows that panel's own show / conceal / hide setting
-// through the same _statsMode and _hpTier it uses — so a DM who has chosen to
-// conceal numbers sees them concealed here too, rather than leaking out of a
-// second surface that forgot to ask.
-function _renderPlayerTurnBar(){
-  let bar = document.getElementById('pv-turn');
-  const list = state.combatants || [];
-  const shared = new Set(state.sharedPanels || []);
-  if (!shared.has('combat') || !list.length){
-    bar?.remove();
-    document.body.classList.remove('pv-has-turn');
-    return;
-  }
-  if (!bar){
-    bar = document.createElement('div');
-    bar.id = 'pv-turn';
-    bar.className = 'pv-turn';
-    // Into the app grid as its own row, not floated over the canvas. An
-    // overlay would sit on top of the windows' title bars, which are the
-    // handles a player uses to move them.
-    (document.querySelector('.app') || document.body).appendChild(bar);
-  }
-  document.body.classList.add('pv-has-turn');
-  const C = panelDefs.combat;
-  const mode = (C && typeof C._statsMode === 'function') ? C._statsMode() : 'show';
-  const activeId = state.activeCombatantId;
-  const i = list.findIndex(c => c.id === activeId);
-  const cur = list[i] || list[0];
-  const next = list[(Math.max(0, i) + 1) % list.length];
-  const pips = list.map(c => {
-    let hp = '';
-    if (c.isPC || mode === 'show') hp = `${c.hp}/${c.hpMax}`;
-    else if (mode === 'conceal' && C && typeof C._hpTier === 'function') hp = C._hpTier(c);
-    const down = (c.hp || 0) <= 0;
-    return `<span class="pv-turn-pip${c.id === activeId ? ' cur' : ''}${down ? ' down' : ''}${c.isPC ? ' pc' : ''}">`
-      + `<b>${esc(c.name)}</b>${hp ? `<i>${esc(hp)}</i>` : ''}</span>`;
-  }).join('');
-  bar.innerHTML =
-    `<div class="pv-turn-head">
-       <span class="pv-turn-round">Round ${state.combatRound || 1}</span>
-       <span class="pv-turn-now"><b>${esc(cur ? cur.name : '—')}</b>'s turn</span>
-       <span class="pv-turn-next">next up <b>${esc(next ? next.name : '—')}</b></span>
-     </div>
-     <div class="pv-turn-strip">${pips}</div>`;
-}
+// It is now a boot file. The player's actual surface is js/player/player-app.js
+// — one screen, a tab bar, and a character it knows is yours. Live updates
+// arrive through the same per-key Firebase sync the DM tab uses.
 
-// Floating mini-dock for the player: one chip per DM-shared panel. Click to
-// toggle visibility. Active = currently open in this player view.
-function _renderPlayerDock(){
-  const shared = state.sharedPanels || [];
-  let dock = document.getElementById('pv-dock');
-  if (!shared.length){ dock?.remove(); return; }
-  if (!dock){
-    dock = document.createElement('div');
-    dock.id = 'pv-dock';
-    dock.className = 'pv-dock';
-    document.body.appendChild(dock);
-  }
-  dock.innerHTML = shared.map(id => {
-    const def = panelDefs[id]; if (!def) return '';
-    const visible = _playerVisible.has(id);
-    return `<button class="pv-dock-btn ${visible?'active':''}" data-pv-toggle="${id}" title="${def.title}">${typeof panelIconHtml === 'function' ? panelIconHtml(id, def) : (def.icon || '◇')}</button>`;
-  }).join('');
-  // First-run discoverability hint on mobile — if the DM has shared multiple
-  // panels but the player can only see one at a time, surface a one-time
-  // "tap a chip to switch" tip so they don't miss the other shared panels.
-  // Arrow direction is keyed to dock orientation (bottom in portrait, right
-  // in landscape) so the hint actually points at the dock.
-  const isMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
-  const isLandscape = window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
-  const HINT_KEY = 'skt-pv-dock-hint-seen';
-  if ((isMobile || isLandscape) && shared.length > 1){
-    let seen = false;
-    try { seen = localStorage.getItem(HINT_KEY) === '1'; } catch(e){}
-    if (!seen && !document.getElementById('pv-dock-hint')){
-      const hint = document.createElement('div');
-      hint.id = 'pv-dock-hint';
-      hint.textContent = isLandscape ? '→ Tap an icon to switch panels' : '↓ Tap an icon below to switch panels';
-      document.body.appendChild(hint);
-      // Dismiss after 6s or on first interaction with any dock button.
-      const dismiss = () => {
-        hint.remove();
-        try { localStorage.setItem(HINT_KEY, '1'); } catch(e){}
-      };
-      setTimeout(dismiss, 6000);
-      dock.addEventListener('click', dismiss, { once:true });
-    }
-  }
-  dock.querySelectorAll('[data-pv-toggle]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.pvToggle;
-      const isMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
-      if (isMobile){
-        // Tab-bar behavior: tapping a chip shows ONLY that panel; tapping the
-        // active chip again hides it (back to empty state).
-        if (_playerVisible.has(id) && _playerVisible.size === 1) {
-          _playerVisible.delete(id);
-        } else {
-          _playerVisible = new Set([id]);
-        }
-        _applySharedPanelsToPlayerView();
-        return;
-      }
-      // Desktop: a chip click means "I want this panel in focus." If it's
-      // already open, bring it to the front (z-bump) instead of closing it
-      // — that previously caused the "panel ends up behind another window"
-      // complaint, since the only way to raise z was clicking the window
-      // itself (which can be impossible if it's fully obscured). Close
-      // happens via the window's × button.
-      const el = document.querySelector('.window[data-panel="'+id+'"]');
-      const alreadyOpen = !!el && _playerVisible.has(id);
-      if (alreadyOpen){
-        if (typeof focusPanel === 'function') focusPanel(id);
-        return;
-      }
-      _playerVisible.add(id);
-      _applySharedPanelsToPlayerView();
-      // Belt-and-suspenders: after the panel mounts, make sure it's on top.
-      if (typeof focusPanel === 'function') focusPanel(id);
-    });
-  });
-}
-
-// Patch closePanel so player-mode closes also remove the panel from the
-// player-visible set (without this, the next sync would reopen it).
-function _patchClosePanelForPlayer(){
-  if (typeof closePanel !== 'function') return;
-  const orig = closePanel;
-  window.closePanel = function(id){
-    if (document.body.classList.contains('player-mode') && _playerVisible){
-      _playerVisible.delete(id);
-      _writePlayerVisible(_playerVisible);
-      _renderPlayerDock();
-    }
-    return orig.call(this, id);
-  };
-}
-
-// Hide the bottom dock on scroll-down, reveal on scroll-up. Only active on
-// mobile breakpoint. Listens in capture phase because scroll events don't
-// bubble — this catches scrolls inside any .window-body in the player view.
-function _initMobileDockHideOnScroll(){
-  const dockSelector = () => document.getElementById('pv-dock');
-  // Per-element last-scroll-Y, so panels with independent scroll positions
-  // don't clobber each other when the user switches tabs.
-  const lastY = new WeakMap();
-  let ticking = false;
-  document.addEventListener('scroll', e => {
-    // Active on both portrait mobile and short-screen landscape (where the
-    // dock pivots to a side rail). Without the landscape branch the side
-    // dock never hides, eating screen width permanently.
-    const mobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches
-      || window.matchMedia('(max-height: 820px) and (orientation: landscape) and (pointer: coarse)').matches;
-    if (!mobile) return;
-    const target = e.target;
-    if (!target || target.nodeType !== 1) return;
-    if (!target.classList || !target.classList.contains('window-body')) return;
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => {
-      const cur = target.scrollTop;
-      const prev = lastY.get(target) ?? 0;
-      const dock = dockSelector();
-      if (dock){
-        // Always show when at the very top.
-        if (cur <= 4) dock.classList.remove('hidden-on-scroll');
-        else if (cur > prev + 6) dock.classList.add('hidden-on-scroll');
-        else if (cur < prev - 6) dock.classList.remove('hidden-on-scroll');
-      }
-      lastY.set(target, cur);
-      ticking = false;
-    });
-  }, true);
-}
-
-// Belt-and-suspenders fullscreen sizing for the player view on mobile.
-// CSS `dvh` covers most browsers but some embedded webviews and older Opera
-// builds still measure 100vh as the layout viewport. Push the actual visible
-// height into a CSS variable that the mobile rules can consume. Updated on
-// every resize / orientationchange / visualViewport scroll (iOS).
+// Belt-and-suspenders fullscreen sizing on mobile. CSS `dvh` covers most
+// browsers but some embedded webviews still measure 100vh as the layout
+// viewport, so push the real visible height into a variable the CSS consumes.
 function _updatePlayerViewportVars(){
   if (!document.body.classList.contains('player-mode')) return;
   const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
   const w = (window.visualViewport && window.visualViewport.width)  || window.innerWidth;
   document.documentElement.style.setProperty('--pv-vh', h + 'px');
   document.documentElement.style.setProperty('--pv-vw', w + 'px');
-  // The floating search/settings pill is position:fixed at z-index 9000 in the
-  // top-right corner, so anything the turn bar puts under it is unreadable —
-  // on a 390px phone that was the fourth creature in the order. Measured from
-  // the element rather than assumed, so it stays right if the pill changes.
+  // The floating search/settings pill is fixed at z-index 9000 over the
+  // top-right corner. Measured from the element rather than assumed, so the
+  // turn strip stops short of it instead of running underneath.
   const ft = document.getElementById('float-toolbar');
   const clear = ft ? Math.max(0, w - ft.getBoundingClientRect().left) + 8 : 0;
   document.documentElement.style.setProperty('--pv-topright', clear + 'px');
 }
 
+// Realtime calls these by name after applying a remote change. Both now mean
+// the same thing — redraw the player screen — and are kept as separate names
+// so the sync layer doesn't have to know the player view was rewritten.
+function _applySharedPanelsToPlayerView(){ if (typeof paRender === 'function') paRender(); }
+function _renderPlayerTurnBar(){ if (typeof paRender === 'function') paRender(); }
+
 function initPlayerView(){
   document.body.classList.add('player-mode');
   load();
   initRealtime();
-  initZoomPan();
   if (typeof initSettings === 'function'){
     try { initSettings(); } catch(e){ console.warn('initSettings failed in player view', e); }
   }
-  _playerVisible = _readPlayerVisible();
-  _patchClosePanelForPlayer();
-  _applySharedPanelsToPlayerView();
-  _initMobileDockHideOnScroll();
-  // Search is enabled in player mode too — players use it to look up
-  // monsters/spells/items they encounter. DM-only actions inside results
-  // (e.g. "+ Add to combat") still appear but no-op for players since
-  // they don't have the combat tracker open by default.
+  // Search stays: a player looking up a spell mid-turn is the single most
+  // common thing they do that isn't their own character sheet.
   if (typeof initSearch === 'function'){
     try { initSearch(); } catch(e){ console.warn('initSearch failed in player view', e); }
   }
+  initPlayerApp();
+  // The bestiary/spell data the search needs, and the class data the
+  // character screen reads for subclass features.
+  if (typeof load5eData === 'function') load5eData();
+  if (typeof on5eLoaded === 'function') on5eLoaded(() => { if (typeof paRender === 'function') paRender(); });
+
   _updatePlayerViewportVars();
   window.addEventListener('resize', _updatePlayerViewportVars);
   window.addEventListener('orientationchange', _updatePlayerViewportVars);
@@ -342,28 +62,18 @@ function initPlayerView(){
     window.visualViewport.addEventListener('resize', _updatePlayerViewportVars);
     window.visualViewport.addEventListener('scroll', _updatePlayerViewportVars);
   }
-  // Re-apply on viewport flip (rotate, desktop⇄mobile breakpoint cross).
-  // - Entering mobile: collapse to the single currently-visible panel so the
-  //   player isn't fighting tiny stacked windows.
-  // - Leaving mobile: restore every shared panel so the desktop user gets the
-  //   full view they had before. Previously this was a one-way ratchet —
-  //   rotating an iPad back to landscape left the player stuck on one panel.
-  let _wasMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
-  window.addEventListener('resize', () => {
-    const nowMobile = window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
-    if (nowMobile && !_wasMobile && _playerVisible && _playerVisible.size > 1){
-      const first = [..._playerVisible][0];
-      _playerVisible = new Set([first]);
-      _applySharedPanelsToPlayerView();
-    } else if (!nowMobile && _wasMobile){
-      // Coming back to desktop — restore the full shared set if the player
-      // hadn't deliberately closed any panels. We approximate "deliberately"
-      // as "_playerVisible contains every shared panel" — since on mobile
-      // we always trim to one, the post-rotate state would otherwise look
-      // like the player asked to close everything else.
-      _playerVisible = new Set(state.sharedPanels || []);
-      _applySharedPanelsToPlayerView();
+  // Same-browser DM tab and player tab: localStorage fires `storage` in the
+  // other tab, which is the cheapest possible live link for the common
+  // "second window on the same laptop" setup.
+  window.addEventListener('storage', e => {
+    if (!e.key || !/^skt-(combat|party|shared-panels|battlemap|settings)/.test(e.key)) return;
+    const domain = e.key.includes('combat') ? 'combat'
+                 : e.key.includes('party') ? 'party'
+                 : e.key.includes('settings') ? 'settings' : null;
+    if (domain && typeof loadDomain === 'function') loadDomain(domain);
+    if (e.key.includes('shared-panels')){
+      try { const a = JSON.parse(e.newValue || '[]'); if (Array.isArray(a)) state.sharedPanels = a; } catch(err){}
     }
-    _wasMobile = nowMobile;
+    if (typeof paRender === 'function') paRender();
   });
 }

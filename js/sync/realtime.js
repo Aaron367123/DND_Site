@@ -173,8 +173,7 @@ const _ENTITY_KEYS = {
     // it — and it is the one surface a player watches between their turns.
     postApply(){
       loadDomain('combat'); ['combat','party'].forEach(_reloadPanel);
-      if (typeof _renderPlayerTurnBar === 'function'
-          && document.body.classList.contains('player-mode')) _renderPlayerTurnBar();
+      if (typeof paRender === 'function') paRender();
     },
   },
   'skt-battlemap-v1': {
@@ -204,7 +203,7 @@ const _ENTITY_KEYS = {
       const parse = (n, fb) => { try { return nodes[n] != null ? JSON.parse(nodes[n]) : fb; } catch(e){ return fb; } };
       return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: parse('drawings', []) });
     },
-    postApply(){ _reloadPanel('battlemap'); },
+    postApply(){ _reloadPanel('battlemap'); if (typeof paRender === 'function') paRender(); },
     // The only nodes a PLAYER view may write. Mirrors what the battle map
     // panel accepts from a player over BroadcastChannel, so the two routes
     // can't drift: pencil strokes, and moves of tokens that ALREADY EXIST on
@@ -253,7 +252,7 @@ const _ENTITY_KEYS = {
       if (!selectedId) selectedId = (items.find(i => i.type === 'file') || {}).id || null;
       return JSON.stringify({ items, selectedId, authors: meta.authors || {} });
     },
-    postApply(){ _reloadPanel('notes'); },
+    postApply(){ _reloadPanel('notes'); if (typeof paRender === 'function') paRender(); },
     // Never re-render under the user's cursor mid-edit; the next event or
     // the focus-refresh reconciles once they're done typing.
     holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.notes; return !!(d && d._editing); },
