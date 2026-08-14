@@ -381,6 +381,10 @@ function paYouScreen(){
       ${res || slots ? `<div class="pa-sec"><h4>Resources</h4>${res}${slots}</div>` : ''}
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
       <div class="pa-roll" id="pa-roll"></div>
+      <button class="pa-sheet-t" data-pa-mate="${paEsc(pc.id)}">
+        ${paOpenMates.has(pc.id) ? '▾ Hide full sheet' : '▸ Full sheet'}
+      </button>
+      ${paOpenMates.has(pc.id) ? paSheetDetail(pc) : ''}
     </div>`;
 }
 
@@ -419,8 +423,93 @@ function paPickerScreen(){
 }
 
 // ─── Party ───────────────────────────────────────────────────────────────────
-// Read-only, and deliberately thin: names, HP bars, conditions. The DM's party
-// panel is 172KB of editors; a player wants to know who is hurt.
+// Collapsed it answers the question a player asks at a glance — who is hurt.
+// Expanded it is the rest of the character sheet, because the other half of
+// what a player asks is "what can you actually do?" and the alternative is
+// leaning over to read somebody else's phone.
+const PA_ABIL = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
+const PA_SKILLS = {
+  acrobatics:'Acrobatics', animalHandling:'Animal Handling', arcana:'Arcana',
+  athletics:'Athletics', deception:'Deception', history:'History', insight:'Insight',
+  intimidation:'Intimidation', investigation:'Investigation', medicine:'Medicine',
+  nature:'Nature', perception:'Perception', performance:'Performance',
+  persuasion:'Persuasion', religion:'Religion', sleightOfHand:'Sleight of Hand',
+  stealth:'Stealth', survival:'Survival',
+};
+const paSign = n => (n >= 0 ? '+' : '') + n;
+const paMod = v => (typeof v === 'number' ? Math.floor((v - 10) / 2) : null);
+
+// Which sheets are open, by character id. Kept in memory, not stored: a
+// glance at somebody else's sheet is not a preference.
+const paOpenMates = new Set();
+
+// Everything a player might reasonably want off another character's sheet,
+// read-only, and each block skipped entirely when there is nothing in it —
+// a hand-entered character with no imported skills shows no skills section
+// rather than eighteen dashes.
+function paSheetDetail(p){
+  const sh = p.sheet || {};
+  const ab = p.abilities || {};
+  const bits = [];
+  if (p.spd) bits.push(`Speed ${p.spd} ft`);
+  if (sh.passivePerception || p.pp) bits.push(`Passive Perception ${sh.passivePerception || p.pp}`);
+  if (sh.profBonus) bits.push(`Proficiency ${paSign(sh.profBonus)}`);
+  if (sh.spellSaveDc) bits.push(`Spell save DC ${sh.spellSaveDc}`);
+  if (sh.spellAtkBonus) bits.push(`Spell attack ${paSign(sh.spellAtkBonus)}`);
+  if (p.hitDice) bits.push(`Hit dice ${p.hitDice.current}/${p.hitDice.max}${p.hitDice.dieType || ''}`);
+
+  const abils = PA_ABIL.filter(([k]) => typeof ab[k] === 'number').map(([k, l]) =>
+    `<div class="pa-ab"><span class="pa-ab-l">${l}</span><span class="pa-ab-v">${ab[k]}</span>
+      <span class="pa-ab-m">${paSign(paMod(ab[k]))}</span></div>`).join('');
+
+  const saves = Object.keys(sh.saves || {}).filter(k => typeof sh.saves[k] === 'number')
+    .map(k => `<span class="pa-kv"><b>${k.toUpperCase()}</b> ${paSign(sh.saves[k])}</span>`).join('');
+
+  const skills = Object.keys(sh.skills || {}).filter(k => typeof sh.skills[k] === 'number')
+    .sort((a, b) => (PA_SKILLS[a] || a).localeCompare(PA_SKILLS[b] || b))
+    .map(k => `<span class="pa-kv"><b>${paEsc(PA_SKILLS[k] || k)}</b> ${paSign(sh.skills[k])}</span>`).join('');
+
+  // Spell slots can live in TWO places — a resource pool named "Spell Slots
+  // L1" and sheet.spellSlots — and a character can carry both with different
+  // numbers. Showing each would print the same slot twice and disagree with
+  // itself. The resource pool wins, matching what the Turn View spends from,
+  // and only levels it doesn't cover fall back to the sheet.
+  const res = (p.resources || []).map(r =>
+    `<span class="pa-kv"><b>${paEsc(r.name)}</b> ${r.current}/${r.max}</span>`).join('');
+  const covered = new Set((p.resources || [])
+    .map(r => /^Spell Slots L(\d)$/.exec(r.name)).filter(Boolean).map(m => +m[1]));
+  const slots = sh.spellSlots ? Object.keys(sh.spellSlots).map(n => parseInt(n))
+    .filter(n => n >= 1 && !covered.has(n) && (sh.spellSlots[n].total || 0) > 0).sort((a, b) => a - b)
+    .map(l => { const s = sh.spellSlots[l];
+      return `<span class="pa-kv"><b>Slots L${l}</b> ${(s.total || 0) - (s.expended || 0)}/${s.total || 0}</span>`;
+    }).join('') : '';
+
+  const atks = (Array.isArray(sh.attacks) ? sh.attacks : []).filter(a => a && a.name).map(a =>
+    `<div class="pa-mate-atk"><b>${paEsc(a.name)}</b>
+      <span>${paEsc(a.atkBonus || '')}${a.atkBonus && a.damage ? ' · ' : ''}${paEsc(a.damage || '')}</span></div>`).join('');
+
+  const spells = (Array.isArray(sh.spells) ? sh.spells : [])
+    .map(s => `<span class="pa-chip">${paEsc(s)}</span>`).join('');
+  const feats = (Array.isArray(p.feats) ? p.feats : [])
+    .map(f => `<span class="pa-chip">${paEsc(f)}</span>`).join('');
+
+  const sec = (title, body) => body ? `<div class="pa-mate-sec"><h5>${title}</h5><div class="pa-kvs">${body}</div></div>` : '';
+  const any = bits.length || abils || saves || skills || res || slots || atks || spells || feats;
+  if (!any) return `<div class="pa-mate-body"><div class="pa-mate-none">
+    Nothing on this sheet yet — the DM fills these in on the party card, or a
+    character-sheet PDF import brings them across.</div></div>`;
+  return `<div class="pa-mate-body">
+    ${bits.length ? `<div class="pa-mate-line">${bits.map(paEsc).join(' · ')}</div>` : ''}
+    ${abils ? `<div class="pa-abs">${abils}</div>` : ''}
+    ${sec('Saving throws', saves)}
+    ${sec('Skills', skills)}
+    ${sec('Resources', res + slots)}
+    ${atks ? `<div class="pa-mate-sec"><h5>Attacks</h5>${atks}</div>` : ''}
+    ${sec('Feats', feats)}
+    ${sec('Spells', spells)}
+  </div>`;
+}
+
 function paPartyScreen(){
   const list = state.party || [];
   const meId = paMe().pcId;
@@ -431,14 +520,21 @@ function paPartyScreen(){
     const pct = hpMax ? Math.max(0, (hp / hpMax) * 100) : 0;
     const col = pct <= 0 ? '#5a3a3a' : pct < 35 ? 'var(--danger)' : pct < 75 ? 'var(--warning)' : 'var(--success)';
     const conds = (c && c.conditions || []).map(x => `<span class="pa-cond sm">${paEsc(x)}</span>`).join('');
-    return `<div class="pa-mate${p.id === meId ? ' me' : ''}">
-      <div class="pa-mate-row">
-        <span class="pa-mate-n">${paEsc(p.name)}${p.id === meId ? ' <i>you</i>' : ''}</span>
-        <span class="pa-mate-hp">${hp}/${hpMax}</span>
-        <span class="pa-mate-ac">AC ${p.ac ?? '–'}</span>
-      </div>
-      <div class="pa-hp-bar sm"><i style="width:${pct}%;background:${col}"></i></div>
+    const open = paOpenMates.has(p.id);
+    const sub = [p.cls, p.subclass, p.level ? 'lvl ' + p.level : ''].filter(Boolean).join(' · ');
+    return `<div class="pa-mate${p.id === meId ? ' me' : ''}${open ? ' open' : ''}">
+      <button class="pa-mate-head" data-pa-mate="${paEsc(p.id)}" aria-expanded="${open}">
+        <span class="pa-mate-row">
+          <span class="pa-caret">${open ? '▾' : '▸'}</span>
+          <span class="pa-mate-n">${paEsc(p.name)}${p.id === meId ? ' <i>you</i>' : ''}</span>
+          <span class="pa-mate-hp">${hp}/${hpMax}</span>
+          <span class="pa-mate-ac">AC ${p.ac ?? '–'}</span>
+        </span>
+        <span class="pa-hp-bar sm"><i style="width:${pct}%;background:${col}"></i></span>
+        ${sub ? `<span class="pa-mate-sub">${paEsc(sub)}</span>` : ''}
+      </button>
       ${conds ? `<div class="pa-conds sm">${conds}</div>` : ''}
+      ${open ? paSheetDetail(p) : ''}
     </div>`;
   }).join('')}</div>`;
 }
@@ -531,6 +627,12 @@ function paOnClick(e){
   const atk = e.target.closest('[data-pa-atk]');
   if (atk){ paRollAttack(+atk.dataset.paAtk); return; }
   if (e.target.closest('[data-pa-death]')){ paRollDeathSave(); return; }
+  const mate = e.target.closest('[data-pa-mate]');
+  if (mate){
+    const id = mate.dataset.paMate;
+    if (paOpenMates.has(id)) paOpenMates.delete(id); else paOpenMates.add(id);
+    paRenderScreen(); return;
+  }
   const draw = e.target.closest('[data-pa-draw]');
   if (draw){ paDraw(draw.dataset.paDraw); return; }
   const react = e.target.closest('[data-pa-react]');

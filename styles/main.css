@@ -4171,3 +4171,43 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .notes-shell.tree-hidden > .notes-tree,
 .notes-shell.tree-hidden > .notes-divider{display:none}
 .notes-shell.tree-hidden > .notes-editor{flex:1 1 100%}
+
+/* Expanded party sheets. Collapsed answers "who is hurt"; expanded answers
+   "what can you actually do?", which is the other half of what a player asks
+   and otherwise means leaning over to read somebody else's phone. */
+.pa-mate{padding:0; overflow:hidden}
+.pa-mate-head{display:block; width:100%; text-align:left; background:none; border:none;
+  color:inherit; font:inherit; cursor:pointer; padding:10px 12px}
+.pa-mate.open .pa-mate-head{padding-bottom:7px}
+.pa-caret{color:var(--text-dim); font-size:var(--fs-sm); margin-right:2px}
+.pa-mate-sub{display:block; margin-top:4px; font-size:var(--fs-2xs); color:var(--text-dim)}
+.pa-mate > .pa-conds{padding:0 12px 8px}
+.pa-mate-body{padding:2px 12px 12px; display:flex; flex-direction:column; gap:10px;
+  border-top:1px solid var(--border)}
+.pa-mate-line{font-size:var(--fs-sm); color:var(--text-muted); line-height:1.5; padding-top:9px}
+.pa-mate-none{padding-top:9px; font-size:var(--fs-sm); color:var(--text-dim); line-height:1.5}
+.pa-mate-sec h5{margin:0 0 5px; font-size:var(--fs-2xs); color:var(--text-muted);
+  text-transform:uppercase; letter-spacing:.08em; font-weight:600}
+/* Six columns on a phone, because an ability block that wraps stops reading
+   as an ability block. */
+.pa-abs{display:grid; grid-template-columns:repeat(6,1fr); gap:5px}
+.pa-ab{display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 2px;
+  background:var(--panel-3); border-radius:var(--r-sm)}
+.pa-ab-l{font-size:8px; letter-spacing:.06em; color:var(--text-muted)}
+.pa-ab-v{font-size:var(--fs-lg); font-weight:700; font-variant-numeric:tabular-nums}
+.pa-ab-m{font-size:var(--fs-2xs); color:var(--accent); font-variant-numeric:tabular-nums}
+.pa-kvs{display:flex; flex-wrap:wrap; gap:4px 6px}
+.pa-kv{font-size:var(--fs-2xs); color:var(--text-muted); background:var(--panel-3);
+  border-radius:var(--r-sm); padding:3px 7px; font-variant-numeric:tabular-nums}
+.pa-kv b{color:var(--text); font-weight:600}
+.pa-chip{font-size:var(--fs-2xs); color:var(--text-muted); border:1px solid var(--border);
+  border-radius:var(--r-pill); padding:2px 8px}
+.pa-mate-atk{display:flex; align-items:baseline; gap:8px; font-size:var(--fs-sm);
+  color:var(--text-muted); padding:2px 0}
+.pa-mate-atk b{color:var(--text); font-weight:600}
+.pa-sheet-t{align-self:flex-start; background:none; border:1px solid var(--border);
+  border-radius:var(--r-pill); color:var(--text-muted); font:inherit;
+  font-size:var(--fs-2xs); padding:5px 12px; cursor:pointer;
+  text-transform:uppercase; letter-spacing:.06em}
+.pa-sheet-t:hover{border-color:var(--accent); color:var(--text)}
+.pa-you .pa-mate-body{border-top:1px solid var(--border); padding:0 0 4px}
