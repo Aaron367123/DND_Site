@@ -3954,7 +3954,10 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .pa-pip.cur b, .pa-pip.cur i{color:#1a1a1a}
 .pa-pip.down{opacity:.4; text-decoration:line-through}
 
-.pa-screen{flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch}
+.pa-screen{flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  /* Containing block for the floating draw bar, which is a child of this
+     element rather than of the mounted map. */
+  position:relative}
 .pa-card{padding:12px; display:flex; flex-direction:column; gap:12px}
 .pa-empty{padding:28px 16px; text-align:center; color:var(--text-muted)}
 .pa-sec h4{margin:0 0 6px; font-size:var(--fs-2xs); color:var(--text-muted);
@@ -4091,6 +4094,22 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
   flex-direction:column; overflow:hidden}
 .pa-mount .map-toolbar, .pa-mount .map-side, .pa-mount .map-settings,
 .pa-mount .notes-tree-actions, .pa-mount .notes-toolbar{display:none !important}
+/* Drawing on the map is table conversation, not DM authority — a player
+   marking a route or circling the thing they want to look at. Its own small
+   bar rather than the DM toolbar unhidden, which also carries rotate, scale,
+   fog, grid alignment and the token controls. */
+.pa-draw{position:absolute; left:50%; transform:translateX(-50%);
+  bottom:calc(10px + env(safe-area-inset-bottom, 0px)); z-index:20;
+  display:flex; gap:4px; padding:4px; border-radius:var(--r-pill);
+  background:rgba(26,26,26,.86); border:1px solid var(--border);
+  box-shadow:var(--sh-2); backdrop-filter:blur(6px)}
+.pa-draw-b{display:inline-flex; align-items:center; gap:6px; padding:8px 14px;
+  border-radius:var(--r-pill); border:1px solid transparent; background:none;
+  color:var(--text-muted); font:inherit; font-size:var(--fs-md); cursor:pointer}
+.pa-draw-b .ico{width:17px; height:17px}
+.pa-draw-b:hover{color:var(--text)}
+.pa-draw-b.on{background:var(--accent); border-color:var(--accent); color:#1a1a1a;
+  font-weight:600}
 .pa-mount .map-wrap, .pa-mount #map-scroll{flex:1; min-height:0}
 
 /* ── Tabs ─────────────────────────────────────────────────────────────────── */
@@ -4145,3 +4164,10 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
   text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);
   border:1px solid var(--border); border-radius:var(--r-pill); padding:2px 9px}
 .tv-waiting .ico{width:13px; height:13px}
+
+/* Hide the file tree and give the whole panel to the note. The toggle sits at
+   the left of the editor head — where the tree it hides is — and stays there
+   when hidden, so there is always a way back. */
+.notes-shell.tree-hidden > .notes-tree,
+.notes-shell.tree-hidden > .notes-divider{display:none}
+.notes-shell.tree-hidden > .notes-editor{flex:1 1 100%}

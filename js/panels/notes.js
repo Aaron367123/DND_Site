@@ -143,6 +143,14 @@ registerPanel('notes', {
   // tuck it away while reading / writing long notes is worth more than the
   // taps it saves on power users.
   _toolbarHidden: (function(){ try { return localStorage.getItem('skt-notes-toolbar-hidden') === '1'; } catch(e){ return false; } })(),
+  // Hide the file tree and give the whole panel to the note. Same idiom and
+  // same persistence as the formatting toolbar above: set it once and it
+  // stays set, because a DM reading out a session's worth of prose wants the
+  // width, not the list of everything they didn't open.
+  // Only ever applied when a file is actually open: the toggle that brings the
+  // tree back lives in the editor header, so hiding it with nothing selected
+  // would leave an empty panel and no way out of it.
+  _treeHidden: (function(){ try { return localStorage.getItem('skt-notes-tree-hidden') === '1'; } catch(e){ return false; } })(),
 
   mount(body){
     this._body = body;
@@ -436,7 +444,7 @@ registerPanel('notes', {
     const sel = this._selected();
     const tree = this._buildTree();
     b.innerHTML = `
-      <div class="notes-shell">
+      <div class="notes-shell${(this._treeHidden && sel) ? ' tree-hidden' : ''}">
         <div class="notes-tree">
           <div class="notes-tree-head">
             <button class="btn icon-btn" data-act="back-to-picker" title="Choose a different source">←</button>
@@ -561,7 +569,7 @@ registerPanel('notes', {
          </div>`
       : '';
     b.innerHTML = `
-      <div class="notes-shell">
+      <div class="notes-shell${(this._treeHidden && sel) ? ' tree-hidden' : ''}">
         <div class="notes-tree">
           <div class="notes-tree-head">
             <button class="btn icon-btn" data-act="back-to-picker" title="Choose a different source">←</button>
@@ -612,7 +620,11 @@ registerPanel('notes', {
 
   _renderEditor(file){
     const tbHidden = !!this._toolbarHidden;
+    const trHidden = !!this._treeHidden;
     return `<div class="notes-editor-head">
+        <button class="btn icon-btn" data-act="notes-toggle-tree"
+          title="${trHidden ? 'Show the file list' : 'Hide the file list — the whole panel becomes the note'}"
+          >${trHidden ? '☰' : '⇤'}</button>
         <input class="notes-file-title" type="text" value="${esc(file.name)}" data-act="rename-inline">
         <span class="notes-file-tag">MARKDOWN</span>
         <span style="flex:1"></span>
@@ -1282,6 +1294,11 @@ registerPanel('notes', {
     // Toolbar collapse toggle — mirrors the battlemap's ▲/▾ tools button.
     // Persisted across sessions so a player who hates the toolbar can lose
     // it once and have it stay gone.
+    b.querySelector('[data-act="notes-toggle-tree"]')?.addEventListener('click', () => {
+      this._treeHidden = !this._treeHidden;
+      try { localStorage.setItem('skt-notes-tree-hidden', this._treeHidden ? '1' : '0'); } catch(e){}
+      this._render();
+    });
     b.querySelector('[data-act="notes-toggle-toolbar"]')?.addEventListener('click', () => {
       this._toolbarHidden = !this._toolbarHidden;
       try { localStorage.setItem('skt-notes-toolbar-hidden', this._toolbarHidden ? '1' : '0'); } catch(e){}

@@ -238,7 +238,11 @@ function paRenderScreen(){
   // remounting the battle map on every HP tick would throw away its scroll,
   // its zoom and its canvases.
   const mount = el.querySelector('.pa-mount');
-  if (mount && mount.dataset.paMount === paTab){ paRefreshMount(paTab); return; }
+  if (mount && mount.dataset.paMount === paTab){
+    paRefreshMount(paTab);
+    if (paTab === 'map' && !el.querySelector('.pa-draw')) paAddDrawBar(el);
+    return;
+  }
   el.innerHTML = '';
   if (paTab === 'you')   { el.innerHTML = paYouScreen(); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
@@ -257,6 +261,49 @@ function paMountPanel(host, id){
   host.appendChild(box);
   if (!def){ box.innerHTML = '<div class="pa-empty">Not available.</div>'; return; }
   try { def.mount(box); } catch(e){ box.innerHTML = '<div class="pa-empty">Could not load.</div>'; }
+  if (id === 'battlemap') paAddDrawBar(host);
+}
+
+// ─── Drawing on the map ──────────────────────────────────────────────────────
+// Players draw on the map — marking a route, circling the thing they want to
+// investigate, sketching the room as they picture it. That is table
+// conversation, not DM authority, so it stays.
+//
+// It is a small bar of our own rather than the DM's toolbar unhidden, because
+// that toolbar also carries rotate, scale, fog, grid alignment and the token
+// controls. Three buttons, driven by the panel's own actions so the drawing,
+// the undo stack and the sync are all the ones that already work.
+const PA_DRAW = [
+  { act:'tool-draw',  icon:'i-pencil', label:'Draw',  tool:'draw'  },
+  { act:'tool-erase', icon:'i-trash',  label:'Erase', tool:'erase' },
+  { act:'undo',       icon:'i-undo',   label:'Undo'                },
+];
+function paAddDrawBar(host){
+  const B = panelDefs.battlemap;
+  const bar = document.createElement('div');
+  bar.className = 'pa-draw';
+  bar.innerHTML = PA_DRAW.map(d =>
+    `<button class="pa-draw-b ${d.tool && B && B._tool === d.tool ? 'on' : ''}" data-pa-draw="${d.act}">
+       ${typeof ICO === 'function' ? ICO(d.icon) : ''}<span>${d.label}</span>
+     </button>`).join('');
+  host.appendChild(bar);
+}
+function paDraw(act){
+  const B = panelDefs.battlemap; if (!B) return;
+  // Straight through the panel's own toolbar handler, so a player's stroke is
+  // the same object the DM's is and lands in the same undo stack.
+  const btn = document.querySelector('.pa-mount [data-mact="' + act + '"]');
+  if (btn){ btn.click(); }
+  else if (act.startsWith('tool-')){
+    const t = act.slice(5);
+    B._tool = B._tool === t ? '' : t;
+    try { B._render(); } catch(e){}
+  } else if (typeof B._undo === 'function'){ try { B._undo(); } catch(e){} }
+  // The panel re-rendered its own DOM; put our bar back on top of it.
+  const host = document.getElementById('pa-screen');
+  const old = host && host.querySelector('.pa-draw');
+  if (old) old.remove();
+  if (host) paAddDrawBar(host);
 }
 function paRefreshMount(tab){
   const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes' : null;
@@ -484,6 +531,8 @@ function paOnClick(e){
   const atk = e.target.closest('[data-pa-atk]');
   if (atk){ paRollAttack(+atk.dataset.paAtk); return; }
   if (e.target.closest('[data-pa-death]')){ paRollDeathSave(); return; }
+  const draw = e.target.closest('[data-pa-draw]');
+  if (draw){ paDraw(draw.dataset.paDraw); return; }
   const react = e.target.closest('[data-pa-react]');
   if (react){ paAnswerPrompt(+react.dataset.paReact); return; }
   if (e.target.closest('[data-pa-pass]')){
