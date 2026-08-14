@@ -730,7 +730,7 @@ registerPanel('turnview', {
       <span class="tv-note">Sticky for the turn — Reckless Attack lasts all of it.
         Shift-click a Roll for advantage, Alt-click for disadvantage.</span>
     </div>`;
-    return `<div class="tv-actions">${head}${advBar}${rows}${manual}</div>`;
+    return `<div class="tv-actions">${this._renderEconomy(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}${manual}</div>`;
   },
 
   // ─── Legendary actions ────────────────────────────────────────────────────
@@ -986,6 +986,7 @@ registerPanel('turnview', {
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
         id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
+        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging,
         legendaryUsed:c.legendaryUsed,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
@@ -1169,15 +1170,24 @@ registerPanel('turnview', {
     // Advantage and disadvantage, the most-used modifier in the game and the
     // one thing the panel had no way to express. Both dice are shown, because
     // a DM reading "18" wants to know it was 18 and 4.
-    const mode = o.mode != null ? o.mode : this._adv;
+    // 5e: ANY source of advantage and ANY source of disadvantage cancel to a
+    // straight roll — they don't stack or net out. So the toggle and a dodging
+    // target are collected as two booleans, not summed.
+    const asked = o.mode != null ? o.mode : this._adv;
+    const adv = asked > 0, dis = asked < 0 || !!t.dodging;
+    const mode = (adv && dis) ? 0 : adv ? 1 : dis ? -1 : 0;
     let nat = this._d(20), hitNote = '';
+    if (t.dodging) hitNote = adv ? 'dodge, cancelled by advantage' : 'target dodging';
     if (mode){
       const n2 = this._d(20);
       const keep = mode > 0 ? Math.max(nat, n2) : Math.min(nat, n2);
-      hitNote = `${nat}/${n2} → ${keep} ${mode > 0 ? 'adv' : 'dis'}`;
+      hitNote = `${nat}/${n2} → ${keep} ${mode > 0 ? 'adv' : 'dis'}`
+        + (t.dodging && mode < 0 ? ' (dodging)' : '');
       nat = keep;
     }
     if (a.recharge) this._markRechargeSpent(c, a.name);
+    // A multiattack is one action for the whole sequence, not one per swing.
+    if (!o.queued || (this._queue && this._queue.i === 0)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     const total = nat + bonus;
     const crit = nat === 20;
@@ -1245,6 +1255,78 @@ registerPanel('turnview', {
     // removed by the DM. Abandon rather than throw.
     if (!src || !t || !it){ this._finishMulti(true); return; }
     this._rollAttack(it.ai, { attacker: src, target: t, queued: true });
+  },
+
+  // ─── Action economy ───────────────────────────────────────────────────────
+  // A turn is an action, a bonus action, a reaction and movement, and the panel
+  // modelled exactly one of them. These three are the ones with a yes/no answer
+  // the panel can actually keep: the reaction flag already existed and the
+  // tracker already draws it, so this reads the same field rather than a copy.
+  //
+  // Marked automatically when you roll something, and clickable, because a DM
+  // does plenty the panel doesn't model and the pips have to be able to tell
+  // the truth about it.
+  _spend(c, what){ if (c && !c[what]) { c[what] = true; } },
+  _renderEconomy(c){
+    const pip = (key, label, title) =>
+      `<button class="tv-econ ${c[key] ? 'spent' : ''}" data-tv="econ" data-k="${key}"
+               title="${title}" aria-pressed="${!!c[key]}">${label}</button>`;
+    // The six a DM actually reaches for. Dodge is the only one of them with a
+    // mechanic this panel can enforce, so it is the only one that does more
+    // than log — the rest are recorded and adjudicated, same rule as the
+    // reactions with no mechanics.
+    const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'];
+    return `<div class="tv-econ-bar">
+      ${pip('actionUsed', 'Action', 'This turn&rsquo;s action')}
+      ${pip('bonusUsed', 'Bonus', 'This turn&rsquo;s bonus action')}
+      ${pip('reactionUsed', 'Reaction', 'Refreshes at the start of its own turn')}
+      <span class="tv-econ-sep"></span>
+      ${acts.map(a => `<button class="btn tv-econ-act ${a === 'Dodge' && c.dodging ? 'primary' : ''}"
+          data-tv="stdact" data-a="${a}"
+          title="${a === 'Dodge' ? 'Attacks against this creature have disadvantage until the start of its next turn — applied automatically' : 'Take the ' + a + ' action: spends the action and logs it'}"
+          >${a}</button>`).join('')}
+    </div>`;
+  },
+  _takeStandardAction(name){
+    const c = this._active(); if (!c) return;
+    this._snapshot(`${c.name} · ${name}`);
+    this._spend(c, 'actionUsed');
+    if (name === 'Dodge'){
+      c.dodging = true;
+      this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Dodge</strong> action —
+        attacks against them have disadvantage until the start of their next turn.`, true);
+    } else {
+      this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>${esc(name)}</strong> action.`, true);
+    }
+    this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(name)}`);
+    save(); panelDefs.combat?._render?.(); this._render();
+  },
+
+  // Monster bonus actions, straight from the stat block. 543 of the 4,454
+  // creatures in the loaded bestiary have them; a PC's live on their sheet and
+  // there is nothing to derive, so the manual row covers those.
+  _bonusActionsFor(c){
+    if (c.isPC) return [];
+    return this._rawList((this._entryOf(c) || {})._raw, ['bonus_actions', 'bonus']);
+  },
+  _renderBonusActions(c){
+    const list = this._bonusActionsFor(c);
+    if (!list.length) return '';
+    return `<div class="tv-multi bonus">
+      <span class="tv-multi-tag">Bonus</span>
+      ${list.map((a, i) => `<button class="btn" data-tv="bonusact" data-ai="${i}"
+          title="${esc(a.text)}">${esc(a.name)}</button>`).join('')}
+    </div>`;
+  },
+  _useBonusAction(ai){
+    const c = this._active(); if (!c) return;
+    const a = this._bonusActionsFor(c)[ai]; if (!a) return;
+    this._snapshot(`${c.name} · ${a.name}`);
+    this._spend(c, 'bonusUsed');
+    this._setResult(`<strong>${esc(c.name)}</strong> — <strong>${esc(a.name)}</strong>.
+      <span class="dim">${esc(a.text)}</span>`, true);
+    this._log.unshift(`<strong>${esc(c.name)}</strong> bonus action — ${esc(a.name)}`);
+    save(); panelDefs.combat?._render?.(); this._render();
   },
 
   // ─── Recharge ─────────────────────────────────────────────────────────────
@@ -1344,6 +1426,7 @@ registerPanel('turnview', {
     const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
     this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
     if (a.recharge) this._markRechargeSpent(c, a.name);
+    this._spend(c, 'actionUsed');
     let detail = '';
     const parts = (a.parts || []).map(pt => {
       const r = this._roll(pt.dice);
@@ -1511,7 +1594,7 @@ registerPanel('turnview', {
         // Jumping to a pip makes it that creature's turn, so their reaction
         // comes back with it — same rule as advancing normally.
         state.activeCombatantId = el.dataset.id;
-        panelDefs.combat?._refreshReaction?.(el.dataset.id);
+        panelDefs.combat?._refreshTurnEconomy?.(el.dataset.id);
         this._armed = null; save(); panelDefs.combat?._render?.(); this._render();
       }
       else if (act === 'initedit'){ this._editInit = true;  this._render(); }
@@ -1532,6 +1615,12 @@ registerPanel('turnview', {
         this._rollAttack(+el.dataset.ai, mode == null ? undefined : { mode });
       }
       else if (act === 'adv'){ this._adv = +el.dataset.v; this._render(); }
+      else if (act === 'econ'){
+        const cur = this._active();
+        if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }
+      }
+      else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
+      else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
       else if (act === 'undo'){ this._undoLast(); }
       else if (act === 'dsroll'){ this._rollDeathSave(); }
       else if (act === 'ds'){

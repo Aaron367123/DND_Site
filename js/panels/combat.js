@@ -1245,7 +1245,7 @@ registerPanel('combat',{
     // same moment; keeping it here avoids per-combatant accounting for the
     // one creature in the fight that has them.
     //
-    // Reactions no longer refresh here — see _refreshReaction. Doing it on the
+    // Reactions no longer refresh here — see _refreshTurnEconomy. Doing it on the
     // round tick refunded a reaction spent between the tick and the creature's
     // own turn, which was an invisible approximation while reactions were a
     // toggle and a visible one now that the Turn View offers them by name and
@@ -1330,12 +1330,17 @@ registerPanel('combat',{
     return null;
   },
 
-  // 5e: a creature regains its reaction at the start of its own turn, not on a
-  // shared round tick. Every path that changes whose turn it is comes through
-  // here so the two can't drift.
-  _refreshReaction(id){
+  // 5e: a creature gets its action, bonus action and reaction back at the
+  // start of its OWN turn, not on a shared round tick. Every path that changes
+  // whose turn it is comes through here so they can't drift. Dodging ends here
+  // too — it lasts "until the start of your next turn", which is this moment.
+  _refreshTurnEconomy(id){
     const c = state.combatants.find(x => x.id === id);
-    if (c && c.reactionUsed) c.reactionUsed = false;
+    if (!c) return;
+    c.reactionUsed = false;
+    c.actionUsed = false;
+    c.bonusUsed = false;
+    c.dodging = false;
   },
 
   _nextTurn(){
@@ -1350,7 +1355,7 @@ registerPanel('combat',{
       // silently rewound the whole order to the first combatant.
       state.activeCombatantId = state.combatants[0].id;
       state.combatRound = Math.max(1, state.combatRound || 0);
-      this._refreshReaction(state.activeCombatantId);
+      this._refreshTurnEconomy(state.activeCombatantId);
     } else {
       let ni = cur + 1;
       if (ni >= state.combatants.length){
@@ -1358,7 +1363,7 @@ registerPanel('combat',{
         this._startRound((state.combatRound || 1) + 1);
       }
       state.activeCombatantId = state.combatants[ni].id;
-      this._refreshReaction(state.activeCombatantId);
+      this._refreshTurnEconomy(state.activeCombatantId);
     }
     save();this._render();
   },
@@ -1390,7 +1395,7 @@ registerPanel('combat',{
       this._startRound((state.combatRound || 1) + 1);
     }
     state.activeCombatantId = state.combatants[ni].id;
-    this._refreshReaction(state.activeCombatantId);
+    this._refreshTurnEconomy(state.activeCombatantId);
     this._log(`${c.name} removed — turn passes to ${state.combatants[ni].name}`);
   },
 

@@ -3691,7 +3691,13 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-pip-o { width:9px; height:9px; border-radius:2px; background:var(--accent); }
 .tv-pip-o.off { background:var(--panel-3); }
 
-.tv-actions { display:flex; flex-direction:column; gap:7px; flex:0 0 auto; }
+/* Shrinkable and scrollable, not fixed. A dragon carries an economy strip, a
+   Multiattack line, an advantage bar, five actions and the manual row; at
+   flex:0 0 auto that stack pushed the result line and the whole log off the
+   bottom of the panel. The result is the answer to what you just did and has
+   to stay on screen, so the actions give way first. */
+.tv-actions { display:flex; flex-direction:column; gap:7px; flex:0 1 auto;
+  min-height:0; overflow-y:auto; }
 .tv-act { display:flex; align-items:center; gap:12px; padding:9px 11px;
   background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); }
 .tv-act-body { flex:1; min-width:0; }
