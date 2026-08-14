@@ -507,6 +507,13 @@ registerPanel('turnview', {
     </div>`;
     this._wire();
     this._placeTokens();
+    // When the tail has to scroll, the live end wins the visible space. A
+    // dragon's five actions leave it 40px tall, and left at the top that
+    // showed a "Traits" heading with its content and the whole log below the
+    // fold. Measured against the tail rather than via offsetTop, which is
+    // relative to the nearest positioned ancestor and not this box.
+    const tail = b.querySelector('.tv-tail'), lg = b.querySelector('.tv-log');
+    if (tail && lg) tail.scrollTop = lg.offsetTop - tail.offsetTop;
   },
 
   _renderInit(){
