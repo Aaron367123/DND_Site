@@ -3909,3 +3909,62 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
   /* Four wrapped lines of explanation cost more than they teach on a phone. */
   .tv-note { display:none; }
 }
+
+/* ── Player view: the turn bar ─────────────────────────────────────────────
+   Whose turn it is, and how many until yours. Its own grid row rather than an
+   overlay, so it never covers a window title bar — the handle a player uses to
+   move things. Only rendered when the DM has shared the combat panel, and
+   monster HP follows that panel's own show/conceal/hide setting. */
+body.player-mode.pv-has-turn .app{
+  grid-template-rows:auto 1fr; grid-template-areas:". turnbar" ". workspace";
+}
+.pv-turn{
+  grid-area:turnbar; display:flex; flex-direction:column; gap:5px;
+  padding:7px 12px; background:var(--panel); border-bottom:1px solid var(--border);
+  /* Clear the floating search pill, which is fixed at z-index 9000 over this
+     corner. Measured from the element at runtime — see _updatePlayerViewportVars. */
+  padding-right:calc(12px + var(--pv-topright, 0px));
+  /* Load-bearing, and the same trap as the Turn View's columns: a grid item's
+     automatic minimum size is its min-content, so the initiative strip sized
+     this bar to 502px inside a 390px phone. Everything past the viewport edge
+     — including the padding meant to clear the search pill — went off-screen,
+     which is what actually put a creature under it. */
+  min-width:0;
+}
+.pv-turn-head, .pv-turn-strip{min-width:0}
+.pv-turn-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
+.pv-turn-round{
+  font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em;
+  color:var(--text-muted); white-space:nowrap;
+}
+.pv-turn-now{font-size:var(--fs-xl); color:var(--text-muted)}
+.pv-turn-now b{color:var(--accent); font-weight:600}
+.pv-turn-next{font-size:var(--fs-md); color:var(--text-dim)}
+.pv-turn-next b{color:var(--text-muted); font-weight:600}
+/* The order scrolls sideways rather than wrapping: it is a sequence, and a
+   wrapped sequence stops reading as one. */
+.pv-turn-strip{display:flex; gap:5px; overflow-x:auto; padding-bottom:1px}
+.pv-turn-pip{
+  flex-shrink:0; display:inline-flex; align-items:baseline; gap:6px;
+  padding:3px 10px; border-radius:var(--r-pill);
+  background:var(--panel-3); border:1px solid var(--border);
+}
+.pv-turn-pip b{font-size:var(--fs-md); font-weight:500; white-space:nowrap}
+.pv-turn-pip i{font-size:var(--fs-2xs); font-style:normal; opacity:.7;
+  font-variant-numeric:tabular-nums; white-space:nowrap}
+.pv-turn-pip.pc b{color:var(--accent)}
+.pv-turn-pip.cur{background:var(--accent); border-color:var(--accent)}
+.pv-turn-pip.cur b, .pv-turn-pip.cur i{color:#1a1a1a}
+.pv-turn-pip.down{opacity:.4; text-decoration:line-through}
+@media (max-width: 768px){
+  /* Beats the single-column rule below it: same media query, more classes,
+     and !important to answer its own. */
+  body.player-mode.pv-has-turn .app{
+    grid-template-columns:1fr !important;
+    grid-template-rows:auto 1fr !important;
+    grid-template-areas:"turnbar" "workspace" !important;
+  }
+  .pv-turn{padding:6px 10px; padding-right:calc(10px + var(--pv-topright, 0px))}
+  .pv-turn-now{font-size:var(--fs-lg)}
+  .pv-turn-next{display:none}
+}

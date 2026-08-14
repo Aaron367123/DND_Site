@@ -63,6 +63,12 @@ function _applySharedPanelsToPlayerView(){
       // the dock would inherit its previous (possibly low) z value and
       // appear behind already-open windows.
       layout[id] = {...layout[id], open:true, minimized:false, z:_nextZ()};
+      // Place before mounting. openPanel() does this for the DM and the player
+      // view calls ensurePanel directly, so the cascade never ran here: with
+      // four panels shared, three opened mostly underneath another one — the
+      // Combat Tracker 77% under the battle map, the Party Tracker 85% under
+      // the notes. Measured, not guessed.
+      if (typeof _wmPlaceWindow === 'function') _wmPlaceWindow(id);
       ensurePanel(id);
     }
   });
@@ -71,6 +77,7 @@ function _applySharedPanelsToPlayerView(){
   });
 
   _renderPlayerDock();
+  _renderPlayerTurnBar();
   _writePlayerVisible(_playerVisible);
 
   // Empty-state placeholder. Two flavors:
@@ -105,6 +112,59 @@ function _applySharedPanelsToPlayerView(){
   } else if (empty){
     empty.remove();
   }
+}
+
+// ── Turn bar ────────────────────────────────────────────────────────────────
+// The one thing a player asks all evening is "whose turn is it, and how many
+// until mine". Answering it needed the Combat Tracker unburied and scrolled to
+// the right row; now it is a strip that is always there, above everything,
+// costing no window.
+//
+// It reveals nothing new. It appears only when the DM has shared the combat
+// panel, and monster HP follows that panel's own show / conceal / hide setting
+// through the same _statsMode and _hpTier it uses — so a DM who has chosen to
+// conceal numbers sees them concealed here too, rather than leaking out of a
+// second surface that forgot to ask.
+function _renderPlayerTurnBar(){
+  let bar = document.getElementById('pv-turn');
+  const list = state.combatants || [];
+  const shared = new Set(state.sharedPanels || []);
+  if (!shared.has('combat') || !list.length){
+    bar?.remove();
+    document.body.classList.remove('pv-has-turn');
+    return;
+  }
+  if (!bar){
+    bar = document.createElement('div');
+    bar.id = 'pv-turn';
+    bar.className = 'pv-turn';
+    // Into the app grid as its own row, not floated over the canvas. An
+    // overlay would sit on top of the windows' title bars, which are the
+    // handles a player uses to move them.
+    (document.querySelector('.app') || document.body).appendChild(bar);
+  }
+  document.body.classList.add('pv-has-turn');
+  const C = panelDefs.combat;
+  const mode = (C && typeof C._statsMode === 'function') ? C._statsMode() : 'show';
+  const activeId = state.activeCombatantId;
+  const i = list.findIndex(c => c.id === activeId);
+  const cur = list[i] || list[0];
+  const next = list[(Math.max(0, i) + 1) % list.length];
+  const pips = list.map(c => {
+    let hp = '';
+    if (c.isPC || mode === 'show') hp = `${c.hp}/${c.hpMax}`;
+    else if (mode === 'conceal' && C && typeof C._hpTier === 'function') hp = C._hpTier(c);
+    const down = (c.hp || 0) <= 0;
+    return `<span class="pv-turn-pip${c.id === activeId ? ' cur' : ''}${down ? ' down' : ''}${c.isPC ? ' pc' : ''}">`
+      + `<b>${esc(c.name)}</b>${hp ? `<i>${esc(hp)}</i>` : ''}</span>`;
+  }).join('');
+  bar.innerHTML =
+    `<div class="pv-turn-head">
+       <span class="pv-turn-round">Round ${state.combatRound || 1}</span>
+       <span class="pv-turn-now"><b>${esc(cur ? cur.name : '—')}</b>'s turn</span>
+       <span class="pv-turn-next">next up <b>${esc(next ? next.name : '—')}</b></span>
+     </div>
+     <div class="pv-turn-strip">${pips}</div>`;
 }
 
 // Floating mini-dock for the player: one chip per DM-shared panel. Click to
@@ -247,6 +307,13 @@ function _updatePlayerViewportVars(){
   const w = (window.visualViewport && window.visualViewport.width)  || window.innerWidth;
   document.documentElement.style.setProperty('--pv-vh', h + 'px');
   document.documentElement.style.setProperty('--pv-vw', w + 'px');
+  // The floating search/settings pill is position:fixed at z-index 9000 in the
+  // top-right corner, so anything the turn bar puts under it is unreadable —
+  // on a 390px phone that was the fourth creature in the order. Measured from
+  // the element rather than assumed, so it stays right if the pill changes.
+  const ft = document.getElementById('float-toolbar');
+  const clear = ft ? Math.max(0, w - ft.getBoundingClientRect().left) + 8 : 0;
+  document.documentElement.style.setProperty('--pv-topright', clear + 'px');
 }
 
 function initPlayerView(){

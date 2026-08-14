@@ -515,6 +515,17 @@ registerPanel('notes', {
   // swaps the view to 'local'. OneNote tile is disabled (coming soon).
   _renderPickerView(){
     const b = this._body;
+    // A player has no note source to pick — Dropbox and the local folder are
+    // the DM's machine, and the tiles do nothing for them. Shared before the
+    // DM has opened anything, this was the largest thing on a player's screen
+    // and it read as a broken file dialog. Say what is actually happening.
+    if (document.body.classList.contains('player-mode')){
+      b.innerHTML = typeof emptyState === 'function'
+        ? emptyState({ icon:'i-note', title:'No note open',
+                       hint:'The DM hasn\'t opened a note yet. Whatever they open here will appear for you.' })
+        : '<div class="notes-picker-empty">The DM hasn\'t opened a note yet.</div>';
+      return;
+    }
     const chromiumOnly = window.notesSync && !window.notesSync.isSupported();
     const dropboxConfigured = window.dropboxSync && window.dropboxSync.isConfigured();
     b.innerHTML = `

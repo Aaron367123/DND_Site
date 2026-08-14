@@ -169,7 +169,13 @@ const _ENTITY_KEYS = {
       Object.keys(items).forEach(id => { if (!used.has(id)) combatants.push(items[id]); });
       return JSON.stringify({ combatants, combatRound: meta.combatRound || 0, activeCombatantId: meta.activeCombatantId ?? null });
     },
-    postApply(){ loadDomain('combat'); ['combat','party'].forEach(_reloadPanel); },
+    // The player view's turn bar is not a panel, so _reloadPanel can't reach
+    // it — and it is the one surface a player watches between their turns.
+    postApply(){
+      loadDomain('combat'); ['combat','party'].forEach(_reloadPanel);
+      if (typeof _renderPlayerTurnBar === 'function'
+          && document.body.classList.contains('player-mode')) _renderPlayerTurnBar();
+    },
   },
   'skt-battlemap-v1': {
     base: 'skt/battlemap_v2',
