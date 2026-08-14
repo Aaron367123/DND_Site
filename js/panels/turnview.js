@@ -44,6 +44,17 @@ registerPanel('turnview', {
   mount(body){
     this._body = body;
     this._render();
+    // Same-browser DM tab + player tab. Firebase covers separate devices;
+    // this covers the second window on one laptop, where nothing goes over
+    // the network at all.
+    if (!this._promptWired){
+      this._promptWired = true;
+      window.addEventListener('storage', e => {
+        if (e.key !== 'skt-prompt-v1') return;
+        try { state.prompt = e.newValue ? JSON.parse(e.newValue) : null; } catch(err){ state.prompt = null; }
+        this._onPromptChange();
+      });
+    }
     if (typeof on5eLoaded === 'function' && !(typeof _5eLoaded !== 'undefined' && _5eLoaded)){
       on5eLoaded(() => { if (this._body) this._render(); });
     }
@@ -964,7 +975,10 @@ registerPanel('turnview', {
         <span class="tv-react-cost">${problem ? '· ' + esc(problem) : (cost ? '· ' + esc(cost) : '')}${esc(far)}</span>
       </button>`;
     }).join('');
-    return `<div class="tv-react"><span class="tv-react-l">Reaction?</span>
+    const waiting = state.prompt && state.prompt.id === this._promptId && !state.prompt.answer
+      ? `<span class="tv-waiting">${ICO('i-monitor')}asked ${esc(state.prompt.offers.map(x => x.who)
+          .filter((v, i, a) => a.indexOf(v) === i).join(', '))}</span>` : '';
+    return `<div class="tv-react"><span class="tv-react-l">Reaction?</span>${waiting}
       <span class="tv-react-note">${esc(o.target.name)} ${o.hit ? `takes ${o.dmg} ${esc(o.type || 'damage')}` : 'was missed'}
         — ${o.total} vs AC ${(o.target.ac || 0) + (o.acBonus || 0)}</span>
       ${opts}
@@ -1027,10 +1041,75 @@ registerPanel('turnview', {
   // reaction that could change it, so the common case stays two clicks.
   _resolve(o){
     o.kind = 'hit';
-    if (o.hit && this._gatherReactions(o).length){ this._pending = o; this._render(); return; }
+    if (o.hit && this._gatherReactions(o).length){ this._pending = o; this._publishPrompt(o); this._render(); return; }
     this._commit(o, null);
   },
+
+  // ─── Pushed reactions ─────────────────────────────────────────────────────
+  // The reason the rest of this exists. Everything needed was already here —
+  // the derivation knows who can react and what it costs, the spend already
+  // writes to shared state — so the only new thing is a place to put the
+  // question and a way to hear the answer.
+  //
+  // One prompt at a time, matching what the DM's own bar already does: the
+  // first reaction answered resolves the hit. Three decisions, stated because
+  // they are rulings rather than mechanics:
+  //
+  //   Two players could answer     → first write wins, exactly as the first
+  //                                  shout at the table would.
+  //   DM commits while they decide → the prompt is cleared, and a late answer
+  //                                  carrying a stale id is dropped.
+  //   The DM's tab goes away       → a prompt older than five minutes is
+  //                                  ignored, so nobody is left staring at a
+  //                                  question that will never be answered.
+  _publishPrompt(o){
+    const rows = this._gatherReactions(o).filter(r => r.who.isPC && !r.problem);
+    if (!rows.length){ return; }          // nobody's phone can answer this one
+    state.prompt = {
+      id: 'p_' + (typeof uid === 'function' ? uid() : String(Math.random()).slice(2)),
+      ts: Date.now(),
+      attacker: o.attacker, label: o.label,
+      target: { id: o.target.id, name: o.target.name },
+      hit: !!o.hit, total: o.total, ac: o.target.ac, dmg: o.dmg, type: o.type || '',
+      offers: rows.map(({ who, r, ft }) => ({
+        pcId: who.id, who: who.name, key: r.key, name: r.name,
+        note: r.note || '', cost: this._costLabel(who, r) || '',
+        ft: who.id === o.target.id ? 0 : ft,
+        preview: r.when === 'damage' && r.halve ? `${o.dmg} → ${Math.floor(o.dmg / 2)}`
+               : r.when === 'damage' && r.reduce ? `−${r.reduce[0]}d${r.reduce[1]}`
+               : r.when === 'tohit' && r.ac ? `AC +${r.ac}`
+               : r.when === 'tohit' && r.disadv ? 'disadvantage'
+               : r.when === 'tohit' && r.reroll ? 'reroll'
+               : r.when === 'tohit' && r.die ? `−d${r.die}` : '',
+      })),
+      answer: null,
+    };
+    this._promptId = state.prompt.id;
+    save();
+  },
+  _clearPrompt(){
+    if (!state.prompt) { this._promptId = null; return; }
+    state.prompt = null;
+    this._promptId = null;
+    save();
+  },
+  // Called by the sync layer whenever the prompt key changes, from either end.
+  _onPromptChange(){
+    const p = state.prompt;
+    if (!p || !p.answer) { if (this._body) this._render(); return; }
+    // A late answer to a prompt this panel has already moved past.
+    if (!this._pending || this._pending.kind !== 'hit' || p.id !== this._promptId){
+      this._clearPrompt(); return;
+    }
+    const a = p.answer;
+    this._promptId = null;
+    state.prompt = null;                  // cleared before applying, so the
+    this._log.unshift(                    // apply's own save() ships it away
+      `<strong>${esc(a.who || 'A player')}</strong> answered from their own screen`);
+    this._useReaction(a.pcId, a.key);
+  },
   _commit(o, usedName){
+    this._clearPrompt();          // whatever happens next, the question is closed
     const t = o.target;
     const tag = usedName ? ` <span class="dim">(${esc(usedName)})</span>` : '';
     // A save has no attack roll, so there is no "18 vs AC 16" to show.
@@ -1571,6 +1650,7 @@ registerPanel('turnview', {
   },
   _endTurn(){
     if (this._pending){ showToast('Resolve the reaction first'); return; }
+    this._clearPrompt();
     if (this._queue) this._finishMulti(true);   // the turn ends, so the sequence does
     // Advantage was set for THIS turn (Reckless Attack, a prone target), and
     // an undo that reaches back across a turn boundary would rewind the turn

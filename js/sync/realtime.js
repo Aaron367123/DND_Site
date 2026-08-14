@@ -47,6 +47,7 @@ const SKT_SYNC_KEYS = [
   'skt-npcs-v2',       // NPC library
   'skt-bestiary-v1',   // bestiary
   'skt-shared-panels-v1',  // which panels the DM is sharing with players
+  'skt-prompt-v1',         // the open reaction prompt, DM → players → DM
   'skt-books-hidden-v1',   // hidden-books filter — propagates to every tab
                            // so the DM's curated source list affects every
                            // player's search / shop / encounter dropdowns too
@@ -545,8 +546,16 @@ function _applyRemoteKey(key, fbVal) {
   // The split state keys back the global `state` object — re-read just the
   // domain that changed (a party update no longer re-parses combat/shop/
   // settings, and vice versa).
-  const _STATE_DOMAINS = {'skt-party-v1':'party','skt-combat-v1':'combat','skt-shop-v1':'shop','skt-settings-v1':'settings'};
+  const _STATE_DOMAINS = {'skt-party-v1':'party','skt-combat-v1':'combat','skt-shop-v1':'shop','skt-settings-v1':'settings','skt-prompt-v1':'prompt'};
   if (_STATE_DOMAINS[key]) loadDomain(_STATE_DOMAINS[key]);
+
+  // A reaction prompt travels both ways: the DM raises it, a player answers
+  // it, the DM applies the answer. Both ends are told the moment it changes.
+  if (key === 'skt-prompt-v1'){
+    if (typeof paRender === 'function') paRender();
+    try { panelDefs.turnview && panelDefs.turnview._onPromptChange(); } catch(e){ _diag('prompt', e); }
+    return;
+  }
 
   // Shared-panels list is its own little world — apply it to the player tab
   // by mounting/unmounting panels, and refresh the DM tab's share toggles.

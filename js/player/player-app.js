@@ -98,6 +98,7 @@ function initPlayerApp(){
   shell.className = 'pa';
   shell.innerHTML = `
     <div class="pa-turn" id="pa-turn"></div>
+    <div class="pa-prompt" id="pa-prompt" hidden></div>
     <main class="pa-screen" id="pa-screen"></main>
     <nav class="pa-tabs" id="pa-tabs"></nav>`;
   app.appendChild(shell);
@@ -114,8 +115,75 @@ function paRender(){
   const tabs = paVisibleTabs();
   if (!tabs.some(t => t.id === paTab)) paTab = 'you';
   paRenderTurn();
+  paRenderPrompt();
   paRenderTabs(tabs);
   paRenderScreen();
+}
+
+// ─── The reaction prompt ─────────────────────────────────────────────────────
+// The one thing this app can do that a shared screen can't: the DM swings, and
+// the question "do you want to spend your reaction?" arrives on the phone of
+// the person whose reaction it is, with the cost and the effect already worked
+// out. They answer; the DM's screen applies it.
+//
+// It takes over the screen deliberately. This is the one moment in a fight
+// where the table is waiting on THIS player, and a chip somewhere would be
+// missed.
+const PA_PROMPT_MAX_AGE = 5 * 60 * 1000;
+
+function paMyOffers(){
+  const p = state.prompt;
+  const meId = paMe().pcId;
+  if (!p || !meId || p.answer) return null;
+  // A prompt whose DM has gone away must not sit on a phone forever.
+  if (p.ts && Date.now() - p.ts > PA_PROMPT_MAX_AGE) return null;
+  const mine = (p.offers || []).filter(o => o.pcId === meId);
+  return mine.length ? { p, mine } : null;
+}
+
+function paRenderPrompt(){
+  const host = document.getElementById('pa-prompt');
+  if (!host) return;
+  const got = paMyOffers();
+  if (!got || paDismissed === (state.prompt && state.prompt.id)){ host.innerHTML = ''; host.hidden = true; return; }
+  const { p, mine } = got;
+  const others = (p.offers || []).map(o => o.who).filter((v, i, a) => a.indexOf(v) === i && v !== mine[0].who);
+  host.hidden = false;
+  host.innerHTML = `<div class="pa-prompt-in">
+    <div class="pa-prompt-what">
+      <span class="pa-prompt-l">Reaction?</span>
+      <span class="pa-prompt-line"><b>${paEsc(p.attacker)}</b>'s ${paEsc(p.label)}
+        ${p.target.name ? `hits <b>${paEsc(p.target.name)}</b>` : ''}
+        for <b>${p.dmg} ${paEsc(p.type || 'damage')}</b></span>
+    </div>
+    ${mine.map((o, i) => `
+      <button class="pa-prompt-b" data-pa-react="${i}">
+        <span class="pa-prompt-n">${paEsc(o.name)}</span>
+        ${o.preview ? `<span class="pa-prompt-p">${paEsc(o.preview)}</span>` : ''}
+        ${o.cost ? `<span class="pa-prompt-c">${paEsc(o.cost)}</span>` : ''}
+        ${o.ft ? `<span class="pa-prompt-c">${o.ft} ft away</span>` : ''}
+      </button>`).join('')}
+    <button class="pa-prompt-pass" data-pa-pass="1">Pass</button>
+    ${others.length ? `<div class="pa-prompt-else">${paEsc(others.join(' and '))} can also answer —
+      whoever gets there first resolves it.</div>` : ''}
+  </div>`;
+}
+
+// Passing hides it here only. Somebody else may still want to answer, so it
+// would be wrong for one player's "no" to take the question off everyone.
+let paDismissed = null;
+
+function paAnswerPrompt(i){
+  const got = paMyOffers(); if (!got) return;
+  const o = got.mine[i]; if (!o) return;
+  // First write wins. If two phones answer at once one of them loses the
+  // race, which is the same thing that happens when two people shout.
+  state.prompt = { ...got.p, answer: { pcId:o.pcId, who:o.who, key:o.key, at: Date.now() } };
+  save();
+  const box = document.getElementById('pa-prompt');
+  if (box) box.innerHTML = `<div class="pa-prompt-in sent">
+    <span class="pa-prompt-l">Sent</span>
+    <span class="pa-prompt-line">${paEsc(o.name)} — over to the DM.</span></div>`;
 }
 
 function paRenderTabs(tabs){
@@ -416,5 +484,11 @@ function paOnClick(e){
   const atk = e.target.closest('[data-pa-atk]');
   if (atk){ paRollAttack(+atk.dataset.paAtk); return; }
   if (e.target.closest('[data-pa-death]')){ paRollDeathSave(); return; }
+  const react = e.target.closest('[data-pa-react]');
+  if (react){ paAnswerPrompt(+react.dataset.paReact); return; }
+  if (e.target.closest('[data-pa-pass]')){
+    paDismissed = state.prompt && state.prompt.id;
+    paRenderPrompt(); return;
+  }
 }
 function paOnChange(){ /* inputs are read on use; nothing to do */ }

@@ -12,6 +12,10 @@ const SHOP_KEY='skt-shop-v1';
 const SETTINGS_KEY='skt-settings-v1';
 const LAYOUT_KEY='skt-layout-v1';
 const SHARED_PANELS_KEY='skt-shared-panels-v1';
+// A reaction the DM is holding open, pushed to the players who could answer
+// it. Its own key so it syncs on its own — a prompt is raised and cleared
+// several times a round and has no business riding along with combat state.
+const PROMPT_KEY='skt-prompt-v1';
 
 const state={
   party:JSON.parse(JSON.stringify(DEFAULT_PARTY)),
@@ -25,6 +29,9 @@ const state={
   // "Reset to Defaults" couldn't restore them.
   settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
   searchState:{category:'all',query:'',focused:-1,detail:null},
+  // The open reaction prompt, or null. Written by the DM's Turn View,
+  // answered by a player's phone. See turnview._publishPrompt.
+  prompt:null,
   // Panel ids the DM has opted to share with the player view. Synced through
   // Firebase as its own key so toggling share doesn't push the whole workspace.
   sharedPanels:[],
@@ -42,6 +49,7 @@ function save(){
     localStorage.setItem(COMBAT_KEY,JSON.stringify({combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId}));
     localStorage.setItem(SHOP_KEY,JSON.stringify(state.shop));
     localStorage.setItem(SETTINGS_KEY,JSON.stringify(state.settings));
+    localStorage.setItem(PROMPT_KEY,JSON.stringify(state.prompt||null));
   }catch(e){
     // Don't swallow: a full quota here means party/combat changes are being
     // silently discarded while the session looks fine.
@@ -81,6 +89,9 @@ function loadDomain(domain){
     }else if(domain==='shop'){
       const r=localStorage.getItem(SHOP_KEY);
       if(r)state.shop=JSON.parse(r);
+    }else if(domain==='prompt'){
+      const r=localStorage.getItem(PROMPT_KEY);
+      state.prompt=r?JSON.parse(r):null;
     }else if(domain==='settings'){
       const r=localStorage.getItem(SETTINGS_KEY);
       if(r){const s=JSON.parse(r);if(s&&typeof s==='object')state.settings={...state.settings,...s};}
@@ -113,7 +124,7 @@ function load(){
       if(d.settings)state.settings={...state.settings,...d.settings};
       save(); // seed the split keys (and, via the sync layer, Firebase)
     }else{
-      loadDomain('party');loadDomain('combat');loadDomain('shop');loadDomain('settings');
+      loadDomain('party');loadDomain('combat');loadDomain('shop');loadDomain('settings');loadDomain('prompt');
     }
     const lr=localStorage.getItem(LAYOUT_KEY);
     if(lr)layout={...layout,...JSON.parse(lr)};

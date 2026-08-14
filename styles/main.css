@@ -4112,3 +4112,36 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
   .pa-tabs{justify-content:center}
   .pa-tab{flex:0 0 132px; flex-direction:row; gap:8px; font-size:var(--fs-md)}
 }
+
+/* ── The pushed reaction prompt ────────────────────────────────────────────
+   It takes over the top of the screen on purpose. This is the one moment in a
+   fight where the whole table is waiting on THIS player, and a chip somewhere
+   would be missed. */
+.pa-prompt{flex:0 0 auto; background:rgba(212,165,116,.14);
+  border-bottom:1px solid var(--accent)}
+.pa-prompt[hidden]{display:none}
+.pa-prompt-in{display:flex; flex-direction:column; gap:8px; padding:12px}
+.pa-prompt-what{display:flex; flex-direction:column; gap:2px}
+.pa-prompt-l{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.09em;
+  color:var(--accent); font-weight:700}
+.pa-prompt-line{font-size:var(--fs-lg); color:var(--text-muted); line-height:1.4}
+.pa-prompt-line b{color:var(--text); font-weight:600}
+.pa-prompt-b{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; width:100%;
+  text-align:left; padding:13px 14px; background:var(--accent); border:none;
+  border-radius:var(--r-md); color:#1a1a1a; font:inherit; cursor:pointer}
+.pa-prompt-b:active{transform:translateY(1px)}
+.pa-prompt-n{font-size:var(--fs-xl); font-weight:700}
+.pa-prompt-p{font-size:var(--fs-lg); font-weight:600; opacity:.85}
+.pa-prompt-c{font-size:var(--fs-2xs); opacity:.7; text-transform:uppercase;
+  letter-spacing:.05em}
+.pa-prompt-pass{padding:10px; background:none; border:1px solid var(--border);
+  border-radius:var(--r-md); color:var(--text-muted); font:inherit;
+  font-size:var(--fs-md); cursor:pointer}
+.pa-prompt-else{font-size:var(--fs-2xs); color:var(--text-dim); line-height:1.4}
+.pa-prompt-in.sent{flex-direction:row; align-items:baseline; gap:9px}
+
+/* On the DM's own bar: the question is out with a player. */
+.tv-waiting{display:inline-flex; align-items:center; gap:5px; font-size:var(--fs-2xs);
+  text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);
+  border:1px solid var(--border); border-radius:var(--r-pill); padding:2px 9px}
+.tv-waiting .ico{width:13px; height:13px}
