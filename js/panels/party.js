@@ -3298,6 +3298,28 @@ registerPanel('party',{
       // Confirmed by applying such an import over a populated character.
       if (data.hitDice) data2.hitDice = data.hitDice;
       if (data.sheet)   data2.sheet   = data.sheet;
+      // Subclass and feats are best-effort reads — the sheet may not say. Only
+      // written when the parse actually found something, for the same reason
+      // the sheet is: a re-import that came up empty must not wipe what the DM
+      // typed in by hand.
+      if (data.subclass) data2.subclass = data.subclass;
+      if (Array.isArray(data.feats) && data.feats.length){
+        data2.feats = [...new Set([...(prior.feats || []), ...data.feats])];
+      }
+      // Resource pools are DERIVED from class and level, so re-importing would
+      // otherwise refill everything mid-session. Merge by name and keep the
+      // current value of any pool that already exists — an import updates the
+      // maximum, it doesn't hand back a spent rage.
+      if (Array.isArray(data.resources) && data.resources.length){
+        const have = Array.isArray(prior.resources) ? prior.resources : [];
+        const merged = have.map(r => ({...r}));
+        data.resources.forEach(r => {
+          const ex = merged.find(x => x.name === r.name);
+          if (ex){ ex.max = r.max; ex.current = Math.min(ex.current, r.max); }
+          else merged.push({...r});
+        });
+        data2.resources = merged;
+      }
       // Damage defenses parsed out of the sheet's "Defenses" line. Unioned with
       // whatever the DM already set by hand rather than replacing it, and only
       // written when the parse actually found types — otherwise a PDF with no
@@ -3311,7 +3333,7 @@ registerPanel('party',{
           id: uid(),
           icon: '⚔',
           pp: 10,
-          inspiration: false, resources: [],
+          inspiration: false, resources: [],   // data2 supplies derived pools when it has them
           ...data2,
         });
       } else {

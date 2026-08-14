@@ -163,8 +163,16 @@ function _fromFields(f){
   };
 
   const name = get('CharacterName', 'Character Name');
-  const classLevel = get('ClassLevel', 'CLASS & LEVEL', 'Class & Level', 'Class and Level');
-  let cls = null, level = null, classLevels = null;
+  let classLevel = get('ClassLevel', 'CLASS & LEVEL', 'Class & Level', 'Class and Level');
+  let cls = null, level = null, classLevels = null, subclassHint = null;
+  if (classLevel){
+    // "Rogue (Thief) 6" — the parenthetical is the subclass. Taken out before
+    // the pair matcher runs, which otherwise stops at the bracket and hands
+    // back the whole string as a class name.
+    const paren = String(classLevel).match(/\(([^)]+)\)/);
+    if (paren) subclassHint = paren[1].trim();
+    classLevel = String(classLevel).replace(/\([^)]*\)/g, ' ');
+  }
   if (classLevel){
     // Multiclass sheets write "Wizard 5 / Fighter 3". The old pattern was
     // anchored at the start and stopped after the first pair, so a level-8
@@ -392,6 +400,18 @@ function _fromFields(f){
   const spellLikeKeys = Object.keys(f).filter(k => /spell|slot/i.test(k));
   console.log('[PDF Import] spell-related fields ('+spellLikeKeys.length+'), extracted spells ('+spellsUniq.length+'), slots:', spellSlots);
 
+  // Best-effort, and honest about it: an explicit field if the template has
+  // one, then the parenthetical from Class & Level, then the Features & Traits
+  // prose. Null when the sheet simply doesn't say.
+  const subclass = _matchSubclass(cls, [
+    get('Subclass', 'SubClass', 'Archetype', 'ClassArchetype', 'Sub Class', 'ClassSubclass'),
+    subclassHint,
+    bio.features,
+  ]);
+  const feats = _matchFeats(bio.features);
+  const resources = _deriveResources(
+    classLevels || (cls && level ? [{ cls, level }] : []), abilities);
+
   const sheet = {
     skills, saves, profBonus, passivePerception, classLevels,
     languages, attacks, spellSlots,
@@ -404,7 +424,7 @@ function _fromFields(f){
 
   return {
     name: String(name||''),
-    cls, level,
+    cls, level, subclass, feats, resources,
     race: String(race||''),
     background: String(background||''),
     alignment: String(alignment||''),
@@ -417,6 +437,122 @@ function _fromFields(f){
     sheet,
     _rawFields: f,
   };
+}
+
+// ── Subclass, feats, class resources ────────────────────────────────────────
+// None of the three were imported, and all three matter more than they used to:
+// subclass gates both the Features tab and the Turn View's reaction derivation
+// (79 of 101 reactions come from a subclass), feats are 17 more, and the
+// resource pools are what those reactions spend. An imported character behaved
+// differently from a hand-entered one, which is the whole thing this is meant
+// to avoid.
+//
+// Subclass and feats are matched against the LOADED 5e data rather than a list
+// written here, because a list written here goes stale the moment a book is
+// added. Both are best-effort: the sheet may simply not say.
+
+function _wordIn(hay, needle){
+  const n = String(needle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('(^|[^a-z0-9])' + n + '($|[^a-z0-9])', 'i').test(hay);
+}
+
+// Candidate strings in priority order; the first that resolves wins. Returns
+// the 5etools SHORT name ("Moon", "Thief"), which is what the reaction table
+// keys on and what the party panel's fuzzy lookup also accepts.
+function _matchSubclass(cls, candidates){
+  if (typeof _5eData === 'undefined' || typeof _5eLoaded === 'undefined' || !_5eLoaded) return null;
+  if (!cls) return null;
+  const c = String(cls).toLowerCase();
+  const subs = [];
+  _5eData.forEach(d => {
+    if (d.cat !== 'class' || !d._raw || !d._raw.subclassFeatures) return;
+    if (String(d._raw.className || '').toLowerCase() !== c) return;
+    const short = String(d._raw.shortName || '').trim();
+    const full  = String(d._raw.name || d.name.replace(/\s*\([^)]*\)\s*$/, '')).trim();
+    if (short || full) subs.push({ short: short || full, full: full || short });
+  });
+  if (!subs.length) return null;
+  // Longest form first: "Circle of the Moon" has to win over "Moon", or a
+  // features box mentioning Moonbeam decides a druid's subclass.
+  const forms = [];
+  subs.forEach(s => {
+    forms.push({ text: s.full, short: s.short });
+    if (s.short && s.short.length >= 4 && s.short !== s.full) forms.push({ text: s.short, short: s.short });
+  });
+  forms.sort((a, b) => b.text.length - a.text.length);
+  // A bare string iterates as characters and silently matches nothing, which
+  // is a failure mode with no symptom. Accept either shape.
+  for (const cand of (Array.isArray(candidates) ? candidates : [candidates])){
+    const hay = String(cand || '');
+    if (!hay.trim()) continue;
+    for (const f of forms) if (_wordIn(hay, f.text)) return f.short;
+  }
+  return null;
+}
+
+// Feat names found in the sheet's free-text Features & Traits box. Nothing
+// else in a character sheet lists them in a structured way.
+const _FEAT_SKIP = /^(ability score improvement)$/i;
+function _matchFeats(text){
+  if (typeof _5eData === 'undefined' || typeof _5eLoaded === 'undefined' || !_5eLoaded) return [];
+  const hay = String(text || '');
+  if (!hay.trim()) return [];
+  const names = new Set();
+  _5eData.forEach(d => { if (d.cat === 'feat' && d.name && !_FEAT_SKIP.test(d.name)) names.add(d.name); });
+  const out = [];
+  [...names].sort((a, b) => b.length - a.length).forEach(n => {
+    if (_wordIn(hay, n) && !out.some(o => _wordIn(o, n))) out.push(n);
+  });
+  return out.sort();
+}
+
+// Class resources by class and level, PHB 2014. Derived the same way hit dice
+// already are — the sheet doesn't carry these as fields, but they follow from
+// two numbers it does carry. Names match the ones the party tracker and the
+// Turn View's reaction costs already use ("Rage", "Bardic Inspiration"), so a
+// derived pool is spendable the moment it appears.
+function _deriveResources(pairs, abilities){
+  const mod = k => (abilities && typeof abilities[k] === 'number') ? Math.floor((abilities[k] - 10) / 2) : 0;
+  const out = [];
+  const pool   = (name, n) => { if (n > 0) out.push({ name, type:'pool',   current:n, max:n }); };
+  const toggle = (name)    => out.push({ name, type:'toggle', current:1, max:1 });
+  const band = (lvl, steps) => { let v = 0; steps.forEach(([at, n]) => { if (lvl >= at) v = n; }); return v; };
+
+  pairs.forEach(({ cls, level }) => {
+    const c = String(cls || '').toLowerCase(), L = level || 0;
+    if (!c || !L) return;
+    if (c === 'barbarian'){
+      pool('Rage', band(L, [[1,2],[3,3],[6,4],[12,5],[17,6]]));
+      if (L >= 2) toggle('Reckless Attack');
+    } else if (c === 'bard'){
+      pool('Bardic Inspiration', Math.max(1, mod('cha')));
+    } else if (c === 'cleric'){
+      pool('Channel Divinity', band(L, [[2,1],[6,2],[18,3]]));
+    } else if (c === 'druid'){
+      if (L >= 2) pool('Wild Shape', 2);
+    } else if (c === 'fighter'){
+      pool('Second Wind', 1);
+      if (L >= 2) pool('Action Surge', L >= 17 ? 2 : 1);
+      if (L >= 9) pool('Indomitable', band(L, [[9,1],[13,2],[17,3]]));
+    } else if (c === 'monk'){
+      if (L >= 2) pool('Ki Points', L);
+    } else if (c === 'paladin'){
+      pool('Lay on Hands', L * 5);
+      if (L >= 3) pool('Channel Divinity', 1);
+    } else if (c === 'rogue'){
+      toggle('Sneak Attack');
+    } else if (c === 'sorcerer'){
+      if (L >= 2) pool('Sorcery Points', L);
+    } else if (c === 'wizard'){
+      pool('Arcane Recovery', 1);
+    } else if (c === 'artificer'){
+      if (L >= 7) pool('Flash of Genius', Math.max(1, mod('int')));
+    }
+  });
+  // A multiclass paladin/cleric has one Channel Divinity pool, not two.
+  const seen = new Map();
+  out.forEach(r => { const p = seen.get(r.name); if (!p || r.max > p.max) seen.set(r.name, r); });
+  return [...seen.values()];
 }
 
 const _PDF_DMG_TYPES = ['acid','bludgeoning','cold','fire','force','lightning','necrotic',

@@ -178,8 +178,18 @@ registerPanel('turnview', {
       T.classes.forEach(r => {
         if (r.cls.toLowerCase() === cls && r.lvl <= lvl) out.push({ ...r, from:'class' });
       });
+      // Matched the same fuzzy way the Party panel's Features tab matches, so
+      // "Circle of the Moon", "Moon" and "circle of the moon" all resolve.
+      // Exact equality meant a DM who typed the full name got no subclass
+      // reactions at all — 79 of the 101 in the table.
+      const normSub = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const subN = normSub(sub);
+      const subHit = rs => {
+        const n = normSub(rs);
+        return !!n && !!subN && (n === subN || n.includes(subN) || subN.includes(n));
+      };
       T.subclasses.forEach(r => {
-        if (r.cls.toLowerCase() === cls && String(r.sub || '').toLowerCase() === sub && r.lvl <= lvl)
+        if (r.cls.toLowerCase() === cls && subHit(r.sub) && r.lvl <= lvl)
           out.push({ ...r, from:'subclass' });
       });
       // Feats aren't a structured field anywhere in the app — the closest thing
