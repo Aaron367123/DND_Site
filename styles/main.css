@@ -3849,6 +3849,29 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-save { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em;
   color:var(--warning); border:1px solid currentColor; border-radius:var(--r-sm); padding:1px 5px; }
 
+/* Advantage is the most-used modifier in the game and had no expression here.
+   Sticky for the turn, because Reckless Attack and a prone target both last
+   the whole of it rather than one swing. */
+.tv-advbar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:5px 2px; }
+.tv-advbar .btn { font-size:var(--fs-xs); padding:4px 10px; }
+.tv-advbar .tv-note { max-width:none; flex:1; min-width:140px; }
+.tv-save.rech { color:var(--text-muted); }
+/* Temp HP absorbs damage first, so it belongs beside the HP it sits on top
+   of, not in a list somewhere else. */
+.tv-temp { font-size:var(--fs-sm); color:var(--success); margin-left:3px; vertical-align:2px; }
+/* A dying PC's turn: the only legal action. */
+.tv-death { display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:8px 11px;
+  background:var(--panel-2); border:1px solid var(--danger); border-radius:var(--r-md); }
+.tv-death .tv-multi-tag { color:var(--danger); }
+.tv-ds { display:inline-flex; align-items:center; gap:4px; }
+.tv-ds-l { font-size:var(--fs-sm); color:var(--text-muted); }
+.tv-ds-pip { width:10px; height:10px; border-radius:var(--r-full); border:1px solid var(--border); }
+.tv-ds-pip.success.on { background:var(--success); border-color:var(--success); }
+.tv-ds-pip.fail.on { background:var(--danger); border-color:var(--danger); }
+.tv-undo { float:right; margin-left:10px; font-size:var(--fs-xs); padding:3px 9px;
+  display:inline-flex; align-items:center; gap:4px; }
+.tv-undo .ico { width:13px; height:13px; }
+
 /* Phone layout. Declared AFTER the defaults on purpose: a media query adds no
    specificity, so an override written earlier loses to an equally-specific rule
    declared later. */

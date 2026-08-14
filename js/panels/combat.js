@@ -1306,6 +1306,30 @@ registerPanel('combat',{
     if (partyTouched) panelDefs.party?._render?.();
   },
 
+  // Add to a PC's death saves and apply the two transitions that follow.
+  // The pip row in this panel toggles one specific pip; the Turn View rolls a
+  // d20 and adds one or two. Both end in the same stabilise-at-3-successes and
+  // die-at-3-failures rules, and those rules are the part that must not be
+  // written twice — see the 'death-save' handler for the toggle semantics.
+  // Returns 'stable', 'dead', or null.
+  _addDeathSave(id, kind, n){
+    const i = state.combatants.findIndex(c => c.id === id);
+    const c = state.combatants[i];
+    if (!c || c.dead) return null;
+    const ds = {...(c.deathSaves || {success:0, fail:0})};
+    ds[kind] = Math.max(0, Math.min(3, (ds[kind] || 0) + n));
+    state.combatants[i] = {...c, deathSaves: ds};
+    if (ds.success >= 3){
+      state.combatants[i] = {...state.combatants[i], deathSaves: null, stable: true};
+      return 'stable';
+    }
+    if (ds.fail >= 3){
+      state.combatants[i] = {...state.combatants[i], deathSaves: null, dead: true};
+      return 'dead';
+    }
+    return null;
+  },
+
   // 5e: a creature regains its reaction at the start of its own turn, not on a
   // shared round tick. Every path that changes whose turn it is comes through
   // here so the two can't drift.

@@ -28,6 +28,8 @@ registerPanel('turnview', {
   title: 'Turn View', icon: '⚔',
 
   _log: [],
+  _adv: 0,            // -1 disadvantage, 0 straight, +1 advantage — sticky for the turn
+  _undo: null,        // one step back: HP, saves, pools, spent reactions
   _queue: null,       // an in-flight multiattack: one entry per swing
   _pending: null,     // {kind:'hit'|'move', …} — an outcome awaiting a decision
   _armed: null,       // combatant id the next roll will hit
@@ -484,6 +486,7 @@ registerPanel('turnview', {
       return;
     }
     const c = this._active();
+    this._rollRecharges(c);
 
     b.innerHTML = `<div class="tv-root">
       <div class="tv-initbar">
@@ -497,7 +500,9 @@ registerPanel('turnview', {
           ${this._renderActions(c)}
           ${this._renderLegendary()}
           <div class="tv-result${this._resultLive ? ' on' : ''}" role="status" aria-live="polite">${this._result
-            || '<span class="dim">Pick a target, then roll an attack.</span>'}</div>
+            || '<span class="dim">Pick a target, then roll an attack.</span>'}${
+            this._undo ? `<button class="btn tv-undo" data-tv="undo"
+              title="Undo ${esc(this._undo.label)} — HP, death saves, pools and spent reactions">${ICO('i-undo')}Undo</button>` : ''}</div>
           <div class="tv-tail">
             <div class="tv-traits">${this._renderTraits(c)}</div>
             <div class="tv-log">${this._renderLog()}</div>
@@ -598,7 +603,9 @@ registerPanel('turnview', {
           <div class="tv-actor-sub">${esc(sub)}</div>
         </div>
         <div class="tv-vitals">
-          <div class="tv-vital"><div class="l">HP</div><div class="v">${c.hp}</div></div>
+          <div class="tv-vital"><div class="l">HP</div><div class="v">${c.hp}${
+            (p && p.tempHp > 0) ? `<span class="tv-temp" title="Temporary HP — absorbs damage first">+${p.tempHp}</span>` : ''
+          }</div></div>
           <div class="tv-vital"><div class="l">AC</div><div class="v">${c.ac ?? '–'}</div></div>
         </div>
       </div>
@@ -640,6 +647,8 @@ registerPanel('turnview', {
   },
 
   _renderActions(c){
+    // Exactly one legal action when a PC is dying, so offer exactly that.
+    if (this._isDowned(c)) return this._renderDeathSaves(c);
     const list = this._attacksFor(c);
     const manual = `<div class="tv-manual ${list.length ? '' : 'lead'}">
       <span class="tv-manual-l">${list.length ? 'Rolled it yourself?' : esc(c.name) + ' rolls — enter the result:'}</span>
@@ -657,16 +666,22 @@ registerPanel('turnview', {
       const line = a.pc
         ? `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`
         : `${esc(a.toHit || '')}${a.toHit ? ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg} (${esc(pt.dice)}) ${esc(pt.type)}`).join(' + ')}`;
+      const spent = (c.rechargeSpent || []).includes(a.name);
+      const rech = a.recharge
+        ? `<span class="tv-save rech" title="Recharges on a d6 roll of ${esc(String(a.recharge))} at the start of its turn">↺ ${esc(String(a.recharge))}</span>`
+        : '';
       let ctl;
-      if (a.save){
+      if (spent){
+        ctl = `${rech}<span class="tv-act-note">spent — recharges on its turn</span>`;
+      } else if (a.save){
         // A breath weapon has no attack roll, so there is nothing to roll to
         // hit — the decision is whether the target made its save. Two buttons
         // instead of one, and no d20.
-        ctl = `<span class="tv-save">DC ${a.save.dc} ${esc(String(a.save.ability).slice(0,3).toUpperCase())}</span>
+        ctl = `${rech}<span class="tv-save">DC ${a.save.dc} ${esc(String(a.save.ability).slice(0,3).toUpperCase())}</span>
           <button class="btn" data-tv="save" data-ai="${i}" data-half="0" title="Target failed the save — full damage">Failed</button>
           ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>` : ''}`;
       } else if (a.pc ? !!a.dmgText : (a.parts || []).length){
-        ctl = `<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`;
+        ctl = `${rech}<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`;
       } else {
         ctl = `<span class="tv-act-note">no damage parsed</span>`;
       }
@@ -705,7 +720,17 @@ registerPanel('turnview', {
             >${ICO('i-dice')}Run ${m.plan.length}</button>` : ''}
       </div>`;
     }
-    return `<div class="tv-actions">${head}${rows}${manual}</div>`;
+    const advBtn = (v, label, title) =>
+      `<button class="btn ${this._adv === v ? 'primary' : ''}" data-tv="adv" data-v="${v}" title="${title}">${label}</button>`;
+    const advBar = `<div class="tv-advbar">
+      <span class="tv-manual-l">Roll</span>
+      ${advBtn(-1, 'Disadv', 'Roll two d20 and keep the lower')}
+      ${advBtn(0, 'Straight', 'One d20')}
+      ${advBtn(1, 'Adv', 'Roll two d20 and keep the higher')}
+      <span class="tv-note">Sticky for the turn — Reckless Attack lasts all of it.
+        Shift-click a Roll for advantage, Alt-click for disadvantage.</span>
+    </div>`;
+    return `<div class="tv-actions">${head}${advBar}${rows}${manual}</div>`;
   },
 
   // ─── Legendary actions ────────────────────────────────────────────────────
@@ -949,6 +974,53 @@ registerPanel('turnview', {
 
   _setResult(html, live){ this._result = html; this._resultLive = !!live; },
 
+  // ─── One step back ────────────────────────────────────────────────────────
+  // Everything here writes through to the tracker and the party, so a misclick
+  // on Roll was permanent and had to be unpicked with the −/+ stepper and
+  // arithmetic. One snapshot, taken before a whole attack resolves, so undo
+  // rewinds the attack AND any reaction spent answering it — the two are one
+  // decision at the table and should be one step here.
+  _snapshot(label){
+    this._undo = {
+      label,
+      round: state.combatRound, active: state.activeCombatantId,
+      combat: this._order().map(c => ({
+        id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
+        legendaryUsed:c.legendaryUsed,
+        deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
+        rechargeSpent: (c.rechargeSpent || []).slice(),
+      })),
+      party: (state.party || []).map(p => ({
+        id:p.id, tempHp:p.tempHp,
+        resources: (p.resources || []).map(r => ({...r})),
+        sheet: p.sheet && p.sheet.spellSlots ? JSON.parse(JSON.stringify(p.sheet.spellSlots)) : null,
+      })),
+    };
+  },
+  _undoLast(){
+    const u = this._undo; if (!u) return;
+    u.combat.forEach(s => {
+      const c = this._order().find(x => x.id === s.id);
+      if (c) Object.assign(c, s);
+    });
+    u.party.forEach(s => {
+      const p = (state.party || []).find(x => x.id === s.id);
+      if (!p) return;
+      p.tempHp = s.tempHp;
+      p.resources = s.resources.map(r => ({...r}));
+      if (s.sheet && p.sheet) p.sheet.spellSlots = s.sheet;
+    });
+    state.combatRound = u.round;
+    state.activeCombatantId = u.active;
+    this._log.unshift(`<span style="opacity:.7">undid — ${esc(u.label)}</span>`);
+    this._setResult(`<span class="dim">Undone: ${esc(u.label)}.</span>`);
+    this._undo = null;
+    this._pending = null;
+    save();
+    panelDefs.combat?._render?.(); panelDefs.party?._render?.();
+    this._render();
+  },
+
   // ─── Resolving an attack ──────────────────────────────────────────────────
   // A hit is held un-committed only when someone actually has an unused
   // reaction that could change it, so the common case stays two clicks.
@@ -961,7 +1033,8 @@ registerPanel('turnview', {
     const t = o.target;
     const tag = usedName ? ` <span class="dim">(${esc(usedName)})</span>` : '';
     // A save has no attack roll, so there is no "18 vs AC 16" to show.
-    const vs = o.total == null ? '' : ` <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span>`;
+    const vs = o.total == null ? ''
+      : ` <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}${o.hitNote ? ' · ' + esc(o.hitNote) : ''}</span>`;
     this._pending = null;
     if (!o.hit){
       this._setResult(`<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:${vs}${tag}`, true);
@@ -1092,7 +1165,19 @@ registerPanel('turnview', {
     const t = o.target || this._order().find(x => x.id === this._armed);
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
     const a = this._attacksFor(c)[ai]; if (!a) return;
-    const nat = this._d(20);
+    this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
+    // Advantage and disadvantage, the most-used modifier in the game and the
+    // one thing the panel had no way to express. Both dice are shown, because
+    // a DM reading "18" wants to know it was 18 and 4.
+    const mode = o.mode != null ? o.mode : this._adv;
+    let nat = this._d(20), hitNote = '';
+    if (mode){
+      const n2 = this._d(20);
+      const keep = mode > 0 ? Math.max(nat, n2) : Math.min(nat, n2);
+      hitNote = `${nat}/${n2} → ${keep} ${mode > 0 ? 'adv' : 'dis'}`;
+      nat = keep;
+    }
+    if (a.recharge) this._markRechargeSpent(c, a.name);
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     const total = nat + bonus;
     const crit = nat === 20;
@@ -1116,7 +1201,7 @@ registerPanel('turnview', {
     }
     const dmg = parts.reduce((s, x) => s + x.amt, 0);
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
-                    total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus,
+                    total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote,
                     type: parts.length ? parts[0].type : '', detail,
                     magical: !a.pc && panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
@@ -1162,6 +1247,91 @@ registerPanel('turnview', {
     this._rollAttack(it.ai, { attacker: src, target: t, queued: true });
   },
 
+  // ─── Recharge ─────────────────────────────────────────────────────────────
+  // "Recharge 5–6" means the breath weapon is gone until a d6 says otherwise
+  // at the start of the creature's next turn. Nothing tracked it, so the panel
+  // would happily let a dragon breathe three rounds running.
+  //
+  // The roll happens automatically when the turn comes round, and is LOGGED
+  // either way — a DM who wants to roll it at the table can see what it came
+  // up as, and one who forgets doesn't get a free breath weapon. Keyed on the
+  // round so a re-render can't roll it twice.
+  _rechargeMin(v){ const m = String(v || '').match(/\d+/); return m ? parseInt(m[0], 10) : 6; },
+  _markRechargeSpent(c, name){
+    c.rechargeSpent = c.rechargeSpent || [];
+    if (!c.rechargeSpent.includes(name)) c.rechargeSpent.push(name);
+  },
+  _rollRecharges(c){
+    if (!c) return;
+    if (c._rechRound === state.combatRound) return;
+    // Stamp the round BEFORE the has-anything-spent check, not after. With the
+    // check first, the first render of the turn returned early without
+    // stamping, so firing the breath weapon and re-rendering rolled its
+    // recharge in the same turn it was spent — the dragon breathed every round.
+    c._rechRound = state.combatRound;
+    if (!(c.rechargeSpent || []).length) return;
+    const list = this._attacksFor(c);
+    const still = [];
+    c.rechargeSpent.forEach(name => {
+      const a = list.find(x => x.name === name);
+      const min = this._rechargeMin(a && a.recharge);
+      const roll = this._d(6);
+      if (roll >= min){
+        this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(name)} recharged <span style="opacity:.7">· d6 ${roll}</span>`);
+      } else {
+        still.push(name);
+        this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(name)} did not recharge <span style="opacity:.7">· d6 ${roll}</span>`);
+      }
+    });
+    c.rechargeSpent = still;
+  },
+
+  // ─── Death saves ──────────────────────────────────────────────────────────
+  // A downed PC's turn has exactly one legal action, and the panel was
+  // offering attacks. The pips and the stabilise/die rules belong to the
+  // tracker; this is the roll and the three shortcuts around it.
+  _isDowned(c){ return !!(c && c.isPC && (c.hp || 0) <= 0 && !c.dead && !c.stable); },
+  _renderDeathSaves(c){
+    const ds = c.deathSaves || { success:0, fail:0 };
+    const row = (kind, n) => Array.from({ length:3 }, (_, i) =>
+      `<span class="tv-ds-pip ${kind} ${(ds[kind] || 0) > i ? 'on' : ''}"></span>`).join('');
+    return `<div class="tv-actions"><div class="tv-death">
+      <span class="tv-multi-tag">Death saves</span>
+      <span class="tv-ds"><span class="tv-ds-l">✓</span>${row('success')}</span>
+      <span class="tv-ds"><span class="tv-ds-l">✗</span>${row('fail')}</span>
+      <button class="btn primary" data-tv="dsroll">${ICO('i-dice')}Roll</button>
+      <button class="btn" data-tv="ds" data-kind="success" title="Record a success without rolling">+ ✓</button>
+      <button class="btn" data-tv="ds" data-kind="fail" title="Record a failure without rolling">+ ✗</button>
+      <span class="tv-note">A 20 brings them back at 1 HP; a 1 counts twice.</span>
+    </div></div>`;
+  },
+  _rollDeathSave(){
+    const c = this._active(); if (!this._isDowned(c)) return;
+    this._snapshot(`${c.name} · death save`);
+    const nat = this._d(20);
+    const C = panelDefs.combat;
+    if (nat === 20){
+      // Back on their feet at 1 HP, saves cleared — the one result that isn't
+      // just a pip.
+      const i = this._order().indexOf(c);
+      c.deathSaves = null;
+      this._applying = true;
+      try { C._applyHpDelta(i, 1, null); } finally { this._applying = false; }
+      this._setResult(`<span class="hit">Natural 20</span> — <strong>${esc(c.name)}</strong> is conscious at 1 HP.`, true);
+      this._log.unshift(`<strong>${esc(c.name)}</strong> death save — <strong>natural 20</strong>, up at 1 HP`);
+    } else {
+      const kind = nat >= 10 ? 'success' : 'fail';
+      const n = nat === 1 ? 2 : 1;
+      const outcome = C._addDeathSave(c.id, kind, n);
+      const word = nat === 1 ? 'natural 1 — two failures' : (kind === 'success' ? 'success' : 'failure');
+      this._setResult(`Death save <strong>${nat}</strong> — ${esc(word)}${
+        outcome === 'stable' ? '. <span class="hit">Stable.</span>' :
+        outcome === 'dead' ? '. <span class="miss">Dead.</span>' : '.'}`, true);
+      this._log.unshift(`<strong>${esc(c.name)}</strong> death save <strong>${nat}</strong> — ${esc(word)}${outcome ? ' · ' + outcome : ''}`);
+    }
+    save(); C._render?.(); this._render();
+  },
+
   // ─── Saving throws ────────────────────────────────────────────────────────
   // No attack roll to make, so no d20 and no to-hit reactions: the decision is
   // whether the target made its save. Halve BEFORE resistance and round down,
@@ -1172,6 +1342,8 @@ registerPanel('turnview', {
     const t = this._order().find(x => x.id === this._armed);
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
     const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
+    this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
+    if (a.recharge) this._markRechargeSpent(c, a.name);
     let detail = '';
     const parts = (a.parts || []).map(pt => {
       const r = this._roll(pt.dice);
@@ -1209,6 +1381,7 @@ registerPanel('turnview', {
     const t = this._order().find(x => x.id === this._armed); if (!t) return;
     const el = this._body.querySelector('[data-tvadj="amt"]');
     const n = Math.abs(parseInt(el && el.value, 10) || 0); if (!n) return;
+    this._snapshot(`${t.name} ${sign < 0 ? '−' : '+'}${n}`);
     const before = t.hp;
     const C = panelDefs.combat; if (!C) return;
     const i = this._order().indexOf(t);
@@ -1316,6 +1489,10 @@ registerPanel('turnview', {
   _endTurn(){
     if (this._pending){ showToast('Resolve the reaction first'); return; }
     if (this._queue) this._finishMulti(true);   // the turn ends, so the sequence does
+    // Advantage was set for THIS turn (Reckless Attack, a prone target), and
+    // an undo that reaches back across a turn boundary would rewind the turn
+    // pointer too. Both end here.
+    this._adv = 0; this._undo = null;
     this._armed = null;
     this._setResult('');
     panelDefs.combat?._nextTurn?.();
@@ -1348,7 +1525,24 @@ registerPanel('turnview', {
         // already the thing you were reaching for.
         if (this._queue) this._rollQueueStep(el.dataset.id); else this._render();
       }
-      else if (act === 'roll'){ this._rollAttack(+el.dataset.ai); }
+      // Shift/Alt on a Roll matches the Party panel's attack rows, which have
+      // worked that way since before this panel existed.
+      else if (act === 'roll'){
+        const mode = e.shiftKey ? 1 : (e.altKey ? -1 : null);
+        this._rollAttack(+el.dataset.ai, mode == null ? undefined : { mode });
+      }
+      else if (act === 'adv'){ this._adv = +el.dataset.v; this._render(); }
+      else if (act === 'undo'){ this._undoLast(); }
+      else if (act === 'dsroll'){ this._rollDeathSave(); }
+      else if (act === 'ds'){
+        const c = this._active();
+        if (this._isDowned(c)){
+          this._snapshot(`${c.name} · death save`);
+          const outcome = panelDefs.combat._addDeathSave(c.id, el.dataset.kind, 1);
+          this._log.unshift(`<strong>${esc(c.name)}</strong> death save recorded — ${esc(el.dataset.kind)}${outcome ? ' · ' + outcome : ''}`);
+          save(); panelDefs.combat._render?.(); this._render();
+        }
+      }
       else if (act === 'save'){ this._rollSave(+el.dataset.ai, el.dataset.half === '1'); }
       else if (act === 'multi'){ this._startMulti(); }
       else if (act === 'legend'){ this._useLegendary(el.dataset.id, +el.dataset.ai); }
