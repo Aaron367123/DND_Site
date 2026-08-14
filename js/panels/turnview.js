@@ -799,7 +799,7 @@ registerPanel('turnview', {
       save(); this._render(); return;
     }
     const before = t.hp;
-    this._applyDamage(t, o.dmg, o.type, o.magical);
+    this._applyDamage(t, o.parts || [{ amt: o.dmg, type: o.type }], o.magical);
     const after = (this._order().find(x => x.id === t.id) || t).hp;
     const breakdown = o.detail ? ` <span class="dim">[${esc(o.detail)}]</span>` : '';
     this._setResult(`<span class="${o.crit ? 'crit' : 'hit'}">${o.crit ? 'Critical hit' : 'Hit'}</span> —
@@ -812,16 +812,44 @@ registerPanel('turnview', {
   // Straight through the Combat Tracker, so resistances, immunities,
   // concentration checks, death saves and the party write-back all happen
   // exactly as they do when the damage is typed in there by hand.
-  _applyDamage(target, amount, type, magical){
+  //
+  // ONE CALL PER TYPE, which is not a detail. A young red dragon's bite is
+  // 2d10+6 piercing PLUS 1d6 fire; _applyHpDelta resolves resistance against
+  // the single type it is handed, so passing the sum under one label applied
+  // the target's fire resistance to the piercing as well, or to neither. The
+  // first version of this rolled both parts correctly and then threw the
+  // second away — 17 piercing + 5 fire went in as "22 piercing".
+  _applyDamage(target, parts, magical){
     const C = panelDefs.combat; if (!C) return;
-    const i = this._order().indexOf(target);
-    if (i < 0 || !amount) return;
     const prev = C._lastAtkProp;
     C._lastAtkProp = magical ? 'magical' : null;
     this._applying = true;
-    try { C._applyHpDelta(i, -amount, type || null); }
-    finally { C._lastAtkProp = prev; this._applying = false; }
+    try {
+      parts.forEach(p => {
+        const i = this._order().indexOf(target);   // re-find: the list can shift
+        if (i < 0 || !p.amt) return;
+        C._applyHpDelta(i, -p.amt, p.type || null);
+      });
+    } finally { C._lastAtkProp = prev; this._applying = false; }
     C._render?.();
+  },
+  // Damage parts, kept in step with the total. A reaction that halves the
+  // damage halves each type — 5e halves "the attack's damage", and halving
+  // per part is also what keeps the per-type application above honest.
+  _scaleParts(o, fn){
+    o.parts = (o.parts || [{ amt: o.dmg, type: o.type }]).map(p => ({ ...p, amt: fn(p.amt) }));
+    o.dmg = o.parts.reduce((s, p) => s + p.amt, 0);
+  },
+  // A flat reduction (Spirit Shield's 2d6) comes off the largest part first.
+  // 5e doesn't say how to split a reduction across damage types; taking it
+  // off the biggest is the common ruling and the one that can't produce a
+  // negative part.
+  _reduceParts(o, n){
+    o.parts = (o.parts || [{ amt: o.dmg, type: o.type }]).map(p => ({ ...p }));
+    o.parts.sort((a, b) => b.amt - a.amt);
+    let left = n;
+    o.parts.forEach(p => { const take = Math.min(p.amt, left); p.amt -= take; left -= take; });
+    o.dmg = o.parts.reduce((s, p) => s + p.amt, 0);
   },
 
   _useReaction(whoId, key){
@@ -837,8 +865,11 @@ registerPanel('turnview', {
 
     if (r.when === 'damage'){
       const was = o.dmg;
-      if (r.halve) o.dmg = Math.floor(o.dmg / 2);
-      else if (r.reduce){ let n = 0; for (let i = 0; i < r.reduce[0]; i++) n += this._d(r.reduce[1]); o.dmg = Math.max(0, o.dmg - n); }
+      if (r.halve) this._scaleParts(o, a => Math.floor(a / 2));
+      else if (r.reduce){
+        let n = 0; for (let i = 0; i < r.reduce[0]; i++) n += this._d(r.reduce[1]);
+        this._reduceParts(o, n);
+      }
       this._commit(o, `${by}, ${was} → ${o.dmg}`);
       return;
     }
@@ -858,9 +889,15 @@ registerPanel('turnview', {
     this._commit(o, by);   // no mechanics: spent, logged, the DM adjudicates
   },
 
-  _rollAttack(ai){
-    const c = this._active();
-    const t = this._order().find(x => x.id === this._armed);
+  // `opts` lets an opportunity attack say who is swinging and at whom without
+  // borrowing state.activeCombatantId to say it. Borrowing was a real bug:
+  // _applyHpDelta calls save(), so the wrong creature's id reached
+  // localStorage — the turn looked right on this screen and had moved to the
+  // reactor everywhere the state syncs to.
+  _rollAttack(ai, opts){
+    const o = opts || {};
+    const c = o.attacker || this._active();
+    const t = o.target || this._order().find(x => x.id === this._armed);
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
     const a = this._attacksFor(c)[ai]; if (!a) return;
     const nat = this._d(20);
@@ -868,30 +905,26 @@ registerPanel('turnview', {
     const total = nat + bonus;
     const crit = nat === 20;
     const hit = crit || (nat !== 1 && total >= (t.ac || 10));
-    let dmg = 0, type = '', detail = '';
+    // Damage is carried as PARTS all the way to the tracker, never flattened.
+    let parts = [], detail = '';
+    const dbl = d => String(d).replace(/^(\d*)d/, (s, n) => (2 * (parseInt(n || '1'))) + 'd');
     if (a.pc){
       // "1d8+3 slashing" off the imported sheet.
       const m = String(a.dmgText).match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)\s*(.*)/i);
-      const r = this._roll(m ? m[1] : a.dmgText);
-      const r2 = crit ? this._roll((m ? m[1] : '').replace(/^(\d*)d/, (s, n) => (2 * (parseInt(n || '1'))) + 'd')) : null;
-      dmg = (r2 || r).total; detail = (r2 || r).detail;
-      type = (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, '');
+      const dice = m ? m[1] : a.dmgText;
+      const r = this._roll(crit ? dbl(dice) : dice);
+      parts = [{ amt: r.total, type: (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, '') }];
+      detail = r.detail;
     } else {
-      // Every damage part is rolled and applied on its own type, the same rule
-      // the Attack Runner follows — a dragon's bite is piercing PLUS fire, and
-      // a target resistant to fire must halve only the fire half.
-      const parts = (a.parts || []).map(pt => {
-        const dice = crit ? String(pt.dice).replace(/^(\d*)d/, (s, n) => (2 * (parseInt(n || '1'))) + 'd') : pt.dice;
-        const r = this._roll(dice);
-        return { amt: r.total, type: pt.type, detail: pt.type + ' ' + r.detail };
+      parts = (a.parts || []).map(pt => {
+        const r = this._roll(crit ? dbl(pt.dice) : pt.dice);
+        detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail;
+        return { amt: r.total, type: pt.type };
       });
-      dmg = parts.reduce((s, x) => s + x.amt, 0);
-      type = parts.length ? parts[0].type : '';
-      detail = parts.map(x => x.detail).join(' · ');
-      if (parts.length > 1) this._multi = parts;
     }
-    this._resolve({ attackerId: c.id, attacker: c.name, label: a.name, target: t,
-                    total, crit, hit, dmg, type, detail,
+    const dmg = parts.reduce((s, x) => s + x.amt, 0);
+    this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
+                    total, crit, hit, dmg, parts, type: parts.length ? parts[0].type : '', detail,
                     magical: !a.pc && panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
@@ -951,17 +984,14 @@ registerPanel('turnview', {
     this._pending = null;
     if (!who){ this._render(); return; }
     who.reactionUsed = true;
-    const melee = this._attacksFor(who).find(a => !a.save && (a.pc ? a.dmgText : (a.parts || []).length));
+    const list = this._attacksFor(who);
+    const melee = list.find(a => !a.save && (a.pc ? a.dmgText : (a.parts || []).length));
     if (melee){
-      const prevArmed = this._armed, prevActive = state.activeCombatantId;
-      // Roll it as that creature's attack against the mover, then put the turn
-      // pointer back — an opportunity attack does not take anyone's turn.
-      state.activeCombatantId = who.id;
-      this._armed = o.mover.id;
-      const idx = this._attacksFor(who).indexOf(melee);
-      this._rollAttack(idx);
-      state.activeCombatantId = prevActive;
-      if (!this._pending) this._armed = prevArmed;
+      // Attacker and target passed explicitly. An opportunity attack takes
+      // nobody's turn, so the turn pointer must not move even for an instant —
+      // _applyHpDelta saves, and a borrowed pointer got written to storage.
+      this._rollAttack(list.indexOf(melee),
+        { attacker: who, target: o.mover, label: melee.name + ' (opportunity attack)' });
       return;
     }
     this._setResult(`<strong>${esc(who.name)}</strong> takes an opportunity attack on
