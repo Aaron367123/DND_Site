@@ -3820,6 +3820,29 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-turnline b { color:var(--text); font-weight:600; }
 .tv-end { font-size:var(--fs-lg); padding:8px 18px; white-space:nowrap; }
 
+/* Multiattack is the instruction for the whole turn, so it sits above the
+   individual attacks rather than among them. Shown verbatim — roughly four in
+   ten stat blocks say "makes two melee attacks" and name nothing resolvable,
+   and the DM still needs the sentence. */
+.tv-multi { display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:7px 11px;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); }
+.tv-multi.run { border-color:var(--accent); background:rgba(212,165,116,.1); }
+.tv-multi-tag { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.07em;
+  color:var(--accent); font-weight:600; white-space:nowrap; }
+.tv-multi-text { font-size:var(--fs-sm); color:var(--text-muted); flex:1; min-width:120px; }
+.tv-multi-text b { color:var(--text); }
+.tv-multi-pips { display:flex; gap:4px; flex-wrap:wrap; }
+.tv-multi-pip { font-size:var(--fs-2xs); padding:1px 6px; border-radius:var(--r-sm);
+  border:1px solid var(--border); color:var(--text-dim); }
+.tv-multi-pip.done { opacity:.45; text-decoration:line-through; }
+.tv-multi-pip.now { color:#1a1a1a; background:var(--accent); border-color:var(--accent); font-weight:600; }
+.tv-multi .btn { flex-shrink:0; display:inline-flex; align-items:center; gap:5px; }
+/* A save-based action has no attack roll, so it gets a DC and two outcomes
+   instead of one Roll button. */
+.tv-act-ctl { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.tv-save { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em;
+  color:var(--warning); border:1px solid currentColor; border-radius:var(--r-sm); padding:1px 5px; }
+
 /* Phone layout. Declared AFTER the defaults on purpose: a media query adds no
    specificity, so an override written earlier loses to an equally-specific rule
    declared later. */

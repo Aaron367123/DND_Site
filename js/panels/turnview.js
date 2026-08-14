@@ -28,6 +28,7 @@ registerPanel('turnview', {
   title: 'Turn View', icon: '⚔',
 
   _log: [],
+  _queue: null,       // an in-flight multiattack: one entry per swing
   _pending: null,     // {kind:'hit'|'move', …} — an outcome awaiting a decision
   _armed: null,       // combatant id the next roll will hit
   _editInit: false,
@@ -414,6 +415,10 @@ registerPanel('turnview', {
                             : (r.scope === 'ally' || r.scope === 'both');
         if (!ok) return;
         if (r.when === 'damage' && !o.hit) return;          // nothing to reduce
+        // A saving throw is not an attack roll, so nothing that modifies one
+        // can answer it. Absorb Elements still can, because it triggers on
+        // taking the damage.
+        if (o.save && r.when === 'tohit') return;
         if (r.onlyTypes && !r.onlyTypes.includes(String(o.type || '').toLowerCase())) return;
         let ft = 0;
         if (!isTarget){
@@ -579,6 +584,19 @@ registerPanel('turnview', {
     return panelDefs.attacks._parsed(raw).attacks || [];
   },
 
+  // The Multiattack sentence, and the plan it resolves to. Reuses the Attack
+  // Runner's parse rather than a second one — about four in ten stat blocks
+  // say "makes two melee attacks" and name nothing resolvable, and the two
+  // panels have to agree about which those are.
+  _multiOf(c){
+    if (c.isPC) return null;
+    const raw = (this._entryOf(c) || {})._raw;
+    if (!raw || !panelDefs.attacks) return null;
+    const p = panelDefs.attacks._parsed(raw);
+    if (!p.multi) return null;
+    return { text: p.multi.text, plan: panelDefs.attacks._plan({ multi: p.multi, attacks: p.attacks }) };
+  },
+
   _renderActions(c){
     const list = this._attacksFor(c);
     const manual = `<div class="tv-manual ${list.length ? '' : 'lead'}">
@@ -597,17 +615,55 @@ registerPanel('turnview', {
       const line = a.pc
         ? `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`
         : `${esc(a.toHit || '')}${a.toHit ? ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg} (${esc(pt.dice)}) ${esc(pt.type)}`).join(' + ')}`;
-      const rollable = a.pc ? !!a.dmgText : !a.save && (a.parts || []).length;
+      let ctl;
+      if (a.save){
+        // A breath weapon has no attack roll, so there is nothing to roll to
+        // hit — the decision is whether the target made its save. Two buttons
+        // instead of one, and no d20.
+        ctl = `<span class="tv-save">DC ${a.save.dc} ${esc(String(a.save.ability).slice(0,3).toUpperCase())}</span>
+          <button class="btn" data-tv="save" data-ai="${i}" data-half="0" title="Target failed the save — full damage">Failed</button>
+          ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>` : ''}`;
+      } else if (a.pc ? !!a.dmgText : (a.parts || []).length){
+        ctl = `<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`;
+      } else {
+        ctl = `<span class="tv-act-note">no damage parsed</span>`;
+      }
       return `<div class="tv-act">
         <div class="tv-act-body">
           <div class="tv-act-name">${esc(a.name)}</div>
           <div class="tv-act-line">${line}</div>
         </div>
-        ${rollable ? `<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`
-                   : `<span class="tv-act-note">${a.save ? 'save — use the Attack Runner' : 'no damage parsed'}</span>`}
+        <div class="tv-act-ctl">${ctl}</div>
       </div>`;
     }).join('');
-    return `<div class="tv-actions">${rows}${manual}</div>`;
+
+    // Multiattack is the instruction for the whole turn, so it sits above the
+    // individual attacks. Shown VERBATIM: "Run 3" only appears when the
+    // wording resolved to real attacks, because a button that silently did
+    // less than the sentence says is worse than no button.
+    const m = this._multiOf(c);
+    const q = this._queue;
+    let head = '';
+    if (q){
+      const it = q.items[q.i];
+      head = `<div class="tv-multi run">
+        <span class="tv-multi-tag">Multiattack ${q.i + 1}/${q.items.length}</span>
+        <span class="tv-multi-text"><b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
+        <span class="tv-multi-pips">${q.items.map((x, k) =>
+          `<span class="tv-multi-pip${k < q.i ? ' done' : k === q.i ? ' now' : ''}">${esc(x.name)}</span>`).join('')}</span>
+        <button class="btn" data-tv="qmiss" title="This one missed — skip to the next">Miss</button>
+        <button class="btn" data-tv="qstop">Stop</button>
+      </div>`;
+    } else if (m){
+      head = `<div class="tv-multi">
+        <span class="tv-multi-tag">Multiattack</span>
+        <span class="tv-multi-text">${esc(m.text)}</span>
+        ${m.plan.length ? `<button class="btn" data-tv="multi"
+            title="${esc(m.plan.map(p => p.name).join(' → '))} — roll each in turn, choosing a target for every one"
+            >${ICO('i-dice')}Run ${m.plan.length}</button>` : ''}
+      </div>`;
+    }
+    return `<div class="tv-actions">${head}${rows}${manual}</div>`;
   },
 
   // The rest of the stat block — the part a two-action monster otherwise
@@ -791,22 +847,31 @@ registerPanel('turnview', {
   _commit(o, usedName){
     const t = o.target;
     const tag = usedName ? ` <span class="dim">(${esc(usedName)})</span>` : '';
+    // A save has no attack roll, so there is no "18 vs AC 16" to show.
+    const vs = o.total == null ? '' : ` <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span>`;
     this._pending = null;
     if (!o.hit){
-      this._setResult(`<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:
-        <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span>${tag}`, true);
+      this._setResult(`<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:${vs}${tag}`, true);
       this._log.unshift(`<strong>${esc(o.attacker)}</strong> missed <strong>${esc(t.name)}</strong> with ${esc(o.label)}${usedName ? ' — ' + esc(usedName) : ''}`);
-      save(); this._render(); return;
+      save();
+      if (o.queued && this._queue){ this._queue.misses++; this._advanceQueue(); return; }
+      this._render(); return;
     }
     const before = t.hp;
     this._applyDamage(t, o.parts || [{ amt: o.dmg, type: o.type }], o.magical);
     const after = (this._order().find(x => x.id === t.id) || t).hp;
     const breakdown = o.detail ? ` <span class="dim">[${esc(o.detail)}]</span>` : '';
-    this._setResult(`<span class="${o.crit ? 'crit' : 'hit'}">${o.crit ? 'Critical hit' : 'Hit'}</span> —
-      ${esc(o.label)} vs ${esc(t.name)}: <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}</span> ·
-      <strong>${o.dmg} ${esc(o.type || 'damage')}</strong>${breakdown}${tag}
+    // Every type, not just the first: "22 piercing" hid the fire half.
+    const dmgText = (o.parts && o.parts.length > 1)
+      ? o.parts.filter(p => p.amt).map(p => `${p.amt} ${esc(p.type)}`).join(' + ')
+      : `${o.dmg} ${esc(o.type || 'damage')}`;
+    this._setResult(`<span class="${o.crit ? 'crit' : o.save ? 'dim' : 'hit'}">${
+        o.crit ? 'Critical hit' : o.save ? 'Save' : 'Hit'}</span> —
+      ${esc(o.label)} vs ${esc(t.name)}:${vs}${vs ? ' ·' : ''}
+      <strong>${dmgText}</strong>${breakdown}${tag}
       <span class="dim">· ${esc(t.name)} ${before} → ${after}</span>`, true);
     this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${o.dmg}</strong> ${esc(o.type || '')}${o.crit ? ' (crit)' : ''}${usedName ? ' — ' + esc(usedName) : ''} <span style="opacity:.7">· ${before} → ${after}</span>`);
+    if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
   // Straight through the Combat Tracker, so resistances, immunities,
@@ -924,9 +989,78 @@ registerPanel('turnview', {
     }
     const dmg = parts.reduce((s, x) => s + x.amt, 0);
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
-                    total, crit, hit, dmg, parts, type: parts.length ? parts[0].type : '', detail,
+                    total, crit, hit, dmg, parts, queued: !!o.queued,
+                    type: parts.length ? parts[0].type : '', detail,
                     magical: !a.pc && panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
+  },
+
+  // ─── Multiattack ──────────────────────────────────────────────────────────
+  // One swing at a time, each choosing its own target — which is why the queue
+  // lives here rather than reusing the Attack Runner's chip bar: the target
+  // list is already on screen, so a swing costs one click on the creature you
+  // want it to hit. Damage is rolled AT each step, not all up front, so what
+  // you see is what the target is about to take.
+  _startMulti(){
+    const c = this._active(); if (!c) return;
+    const m = this._multiOf(c); if (!m || !m.plan.length) return;
+    this._queue = { srcId: c.id, name: c.name, items: m.plan, i: 0, hits: 0, misses: 0 };
+    this._setResult(`<span class="dim">Multiattack — <b>${esc(m.plan[0].name)}</b>: pick a target.</span>`);
+    this._render();
+  },
+  _advanceQueue(){
+    const q = this._queue; if (!q) return;
+    q.i++;
+    if (q.i >= q.items.length){ this._finishMulti(false); return; }
+    this._setResultAppend(`<span class="dim"> · next <b>${esc(q.items[q.i].name)}</b></span>`);
+    this._render();
+  },
+  _finishMulti(stopped){
+    const q = this._queue; if (!q) return;
+    this._log.unshift(`<strong>${esc(q.name)}</strong> Multiattack ${stopped ? 'stopped' : 'done'}`
+      + ` — ${q.hits} hit${q.hits === 1 ? '' : 's'}` + (q.misses ? `, ${q.misses} missed` : ''));
+    this._queue = null;
+    this._render();
+  },
+  _setResultAppend(html){ this._result = (this._result || '') + html; },
+  // A queue step: roll the current item at whoever was just clicked.
+  _rollQueueStep(targetId){
+    const q = this._queue; if (!q) return;
+    const src = this._order().find(c => c.id === q.srcId);
+    const t = this._order().find(c => c.id === targetId);
+    const it = q.items[q.i];
+    // The creature can leave the fight mid-sequence — killed by a reaction, or
+    // removed by the DM. Abandon rather than throw.
+    if (!src || !t || !it){ this._finishMulti(true); return; }
+    this._rollAttack(it.ai, { attacker: src, target: t, queued: true });
+  },
+
+  // ─── Saving throws ────────────────────────────────────────────────────────
+  // No attack roll to make, so no d20 and no to-hit reactions: the decision is
+  // whether the target made its save. Halve BEFORE resistance and round down,
+  // because 5e rounds down at each step and doing it after would hand a point
+  // back.
+  _rollSave(ai, half){
+    const c = this._active();
+    const t = this._order().find(x => x.id === this._armed);
+    if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
+    const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
+    let detail = '';
+    const parts = (a.parts || []).map(pt => {
+      const r = this._roll(pt.dice);
+      const amt = half ? Math.floor(r.total / 2) : r.total;
+      detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (half ? ' ÷2' : '');
+      return { amt, type: pt.type };
+    });
+    this._resolve({
+      attackerId: c.id, attacker: c.name, target: t, save: true,
+      label: a.name + (half ? ' (saved)' : ' (failed)'),
+      total: null, crit: false, hit: true, parts, detail,
+      dmg: parts.reduce((s, x) => s + x.amt, 0),
+      type: parts.length ? parts[0].type : '',
+      magical: panelDefs.attacks && (this._entryOf(c) || {})._raw
+               ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false,
+    });
   },
 
   _manualAttack(){
@@ -1054,6 +1188,7 @@ registerPanel('turnview', {
   },
   _endTurn(){
     if (this._pending){ showToast('Resolve the reaction first'); return; }
+    if (this._queue) this._finishMulti(true);   // the turn ends, so the sequence does
     this._armed = null;
     this._setResult('');
     panelDefs.combat?._nextTurn?.();
@@ -1074,8 +1209,17 @@ registerPanel('turnview', {
       else if (act === 'rollinit'){ this._rollNpcInit(); }
       else if (act === 'add'){ this._addCombatant(); }
       else if (act === 'rm'){ this._removeCombatant(el.dataset.id); }
-      else if (act === 'arm'){ this._armed = el.dataset.id; this._render(); }
+      else if (act === 'arm'){
+        this._armed = el.dataset.id;
+        // Mid-multiattack, clicking a target IS the swing — the target list is
+        // already the thing you were reaching for.
+        if (this._queue) this._rollQueueStep(el.dataset.id); else this._render();
+      }
       else if (act === 'roll'){ this._rollAttack(+el.dataset.ai); }
+      else if (act === 'save'){ this._rollSave(+el.dataset.ai, el.dataset.half === '1'); }
+      else if (act === 'multi'){ this._startMulti(); }
+      else if (act === 'qmiss'){ if (this._queue){ this._queue.misses++; this._advanceQueue(); } }
+      else if (act === 'qstop'){ this._finishMulti(true); }
       else if (act === 'manual'){ this._manualAttack(); }
       else if (act === 'adj'){ this._adjust(+el.dataset.sign); }
       else if (act === 'end'){ this._endTurn(); }
