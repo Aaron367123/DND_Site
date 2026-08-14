@@ -1154,6 +1154,11 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .mp-edit-section-head{font-size:var(--fs-xs);letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--text-muted)}
 .mp-edit-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .mp-edit-grid-3{grid-template-columns:repeat(3,1fr)}
+/* One attack per row, with the delete sharing the baseline of the inputs
+   rather than the label above them. */
+.mp-atk-row{display:grid;grid-template-columns:1.3fr 80px 1.5fr 32px;gap:8px;
+  align-items:end;margin-bottom:6px}
+.mp-atk-row .btn{padding:5px 0}
 .mp-edit-grid label,.mp-ability-grid label{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
 .mp-edit-grid label input,.mp-edit-grid label select,.mp-ability-grid label input{font-size:var(--fs-lg);padding:6px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400}
 .mp-ability-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}

@@ -2212,13 +2212,20 @@ registerPanel('party',{
 
   // Per-character details editor: class, level, race, background, abilities, hit dice.
   _openCharDetailsEditor(i, onClose){
-    const c = state.party[i]; if (!c) return;
+    // `let`, not const: the attack editor replaces state.party[i] wholesale
+    // (the panel's copy-on-write idiom) and the modal has to re-read it or it
+    // would keep rendering the pre-edit object.
+    let c = state.party[i]; if (!c) return;
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
     const abKeys = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
     const renderModal = () => {
       const ab = c.abilities || {};
       const hd = c.hitDice;
+      // Same array a PDF import fills, deliberately. A second list of weapons
+      // would mean an imported character and a hand-entered one behaved
+      // differently everywhere that reads them — the card, and the Turn View.
+      const atks = (c.sheet && Array.isArray(c.sheet.attacks)) ? c.sheet.attacks : [];
       backdrop.innerHTML = `<div class="modal mp-edit-modal" role="dialog" aria-modal="true">
         <div class="mp-head"><h3 style="margin:0">Edit details — ${esc(c.name)}</h3><button class="btn icon-btn" data-close>×</button></div>
         <div class="mp-edit-body">
@@ -2229,6 +2236,9 @@ registerPanel('party',{
               <label>Level<input class="mp-input" type="number" data-k="level" value="${c.level==null?'':c.level}"></label>
               <label>Race<input class="mp-input" data-k="race" value="${esc(c.race||'')}" placeholder="Human, High Elf, …"></label>
               <label>Background<input class="mp-input" data-k="background" value="${esc(c.background||'')}"></label>
+              <label>Feats<input class="mp-input" data-featlist value="${esc((c.feats||[]).join(', '))}"
+                placeholder="Defensive Duelist, War Caster"
+                title="Comma separated. Feats that grant a reaction are offered in the Turn View."></label>
             </div>
           </div>
           <div class="mp-edit-section">
@@ -2236,6 +2246,19 @@ registerPanel('party',{
             <div class="mp-ability-grid">
               ${abKeys.map(([k,lbl]) => `<label>${lbl}<input class="mp-input" type="number" data-ak="${k}" value="${ab[k]==null?'':ab[k]}"></label>`).join('')}
             </div>
+          </div>
+          <div class="mp-edit-section">
+            <div class="mp-edit-section-head">Attacks</div>
+            ${(atks.length ? atks.map((a, ai) => `
+              <div class="mp-atk-row">
+                <label>Name<input class="mp-input" data-atk="${ai}" data-af="name" value="${esc(a.name||'')}" placeholder="Longsword"></label>
+                <label>To hit<input class="mp-input" data-atk="${ai}" data-af="atkBonus" value="${esc(a.atkBonus||'')}" placeholder="+7"></label>
+                <label>Damage<input class="mp-input" data-atk="${ai}" data-af="damage" value="${esc(a.damage||'')}" placeholder="1d8+3 slashing"></label>
+                <button class="btn icon-btn" data-atk-rm="${ai}" title="Remove ${esc(a.name||'this attack')}">×</button>
+              </div>`).join('')
+              : `<div class="sheet-empty">No attacks yet. A PDF import fills these in; otherwise add them here
+                   and they become one-click rolls on the card and in the Turn View.</div>`)}
+            <button class="btn" data-atk-add>+ Add attack</button>
           </div>
           <div class="mp-edit-section">
             <div class="mp-edit-section-head">Hit dice</div>
@@ -2279,6 +2302,37 @@ registerPanel('party',{
         state.party[i] = {...state.party[i], hitDice: hd};
         save(); this._render();
       }));
+      // Feats as a comma-separated list. There was no structured field for
+      // them anywhere, so the Turn View had to name-match against the
+      // free-text "Features and Traits" box a PDF import fills — which finds
+      // nothing at all for a character entered by hand.
+      backdrop.querySelector('[data-featlist]')?.addEventListener('change', e => {
+        const list = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+        state.party[i] = {...state.party[i], feats: list};
+        save(); this._render();
+      });
+      const setAtks = (fn) => {
+        const cur = state.party[i];
+        const sheet = {...(cur.sheet || {})};
+        const list = Array.isArray(sheet.attacks) ? sheet.attacks.map(a => ({...a})) : [];
+        fn(list);
+        sheet.attacks = list;
+        state.party[i] = {...cur, sheet};
+        c = state.party[i];
+        save(); this._render();
+      };
+      backdrop.querySelectorAll('[data-atk][data-af]').forEach(el => el.addEventListener('change', e => {
+        const ai = +e.target.dataset.atk, f = e.target.dataset.af, v = e.target.value;
+        setAtks(list => { if (list[ai]) list[ai][f] = v; });
+      }));
+      backdrop.querySelectorAll('[data-atk-rm]').forEach(el => el.addEventListener('click', e => {
+        setAtks(list => list.splice(+el.dataset.atkRm, 1));
+        renderModal();
+      }));
+      backdrop.querySelector('[data-atk-add]')?.addEventListener('click', () => {
+        setAtks(list => list.push({ name:'', atkBonus:'', damage:'' }));
+        renderModal();
+      });
       backdrop.querySelector('[data-hd-init]')?.addEventListener('click', () => {
         const lvl = state.party[i].level || 1;
         state.party[i] = {...state.party[i], hitDice: {dieType:'d8', current:lvl, max:lvl}};
