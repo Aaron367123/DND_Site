@@ -17,13 +17,19 @@ const CLASS_ICONS = {
   enemy:     '<svg viewBox="0 0 24 24" fill="none" stroke="#c25450" stroke-width="2"><path d="M5 8L19 8L17 18L7 18Z"/><circle cx="9" cy="12" r="1" fill="#c25450"/><circle cx="15" cy="12" r="1" fill="#c25450"/></svg>',
 };
 
+// Spell slots live in sheet.spellSlots, never in `resources` — that is the
+// structure with the pip row, the warlock pact refresh and, decisively, the
+// long-rest restore. `resources` is for class features: Rage, Ki, Bardic
+// Inspiration. See migratePartySpellSlots in state.js.
 const DEFAULT_PARTY = [
   {id:'zoey',    name:'Zoey',                  cls:'rogue',     hp:42,hpMax:42,ac:16,init:4,spd:30,pp:16,gp:50,inspiration:false,icon:'⚔',
    resources:[{name:'Sneak Attack',type:'toggle',current:1,max:1},{name:'Psychic Dice',type:'pool',current:6,max:6}]},
   {id:'zindle',  name:'Zindle "Deathwhistle"', cls:'bard',      hp:45,hpMax:45,ac:15,init:2,spd:30,pp:14,gp:50,inspiration:false,icon:'🎵',
-   resources:[{name:'Spell Slots L1',type:'pool',current:4,max:4},{name:'Spell Slots L2',type:'pool',current:3,max:3},{name:'Spell Slots L3',type:'pool',current:3,max:3},{name:'Bardic Inspiration',type:'pool',current:3,max:3}]},
+   sheet:{spellSlots:{1:{total:4,expended:0},2:{total:3,expended:0},3:{total:3,expended:0}}},
+   resources:[{name:'Bardic Inspiration',type:'pool',current:3,max:3}]},
   {id:'namroc',  name:'Namroc',                cls:'druid',     hp:44,hpMax:44,ac:14,init:1,spd:30,pp:15,gp:50,inspiration:false,icon:'🌿',
-   resources:[{name:'Spell Slots L1',type:'pool',current:4,max:4},{name:'Spell Slots L2',type:'pool',current:3,max:3},{name:'Spell Slots L3',type:'pool',current:3,max:3},{name:'Wild Shape',type:'pool',current:2,max:2}]},
+   sheet:{spellSlots:{1:{total:4,expended:0},2:{total:3,expended:0},3:{total:3,expended:0}}},
+   resources:[{name:'Wild Shape',type:'pool',current:2,max:2}]},
   {id:'ulrick',  name:'Ulrick Axeborne',       cls:'barbarian', hp:65,hpMax:65,ac:14,init:2,spd:40,pp:12,gp:50,inspiration:false,icon:'🪓',
    resources:[{name:'Rage',type:'pool',current:4,max:4},{name:'Reckless Attack',type:'toggle',current:1,max:1}]},
   {id:'creambak',name:'Creambak',              cls:'monk',      hp:47,hpMax:47,ac:16,init:3,spd:40,pp:17,gp:50,inspiration:false,icon:'👊',

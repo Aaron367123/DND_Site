@@ -303,14 +303,16 @@ registerPanel('turnview', {
     const p = this._partyOf(c);
     return p && Array.isArray(p.resources) ? p.resources.find(r => r.name === name) || null : null;
   },
+  // Lowest slot at or above `min` that still has a charge. One store only:
+  // sheet.spellSlots. The "Spell Slots L1" resource pools this used to also
+  // read are migrated into it on load — see migratePartySpellSlots.
   _slot(c, min){
     const p = this._partyOf(c);
-    if (!p) return null;
+    const slots = p && p.sheet && p.sheet.spellSlots;
+    if (!slots) return null;
     for (let l = min; l <= 9; l++){
-      const r = this._pool(c, 'Spell Slots L' + l);
-      if (r && r.current > 0) return { kind:'res', res:r, lvl:l };
-      const s = p.sheet && p.sheet.spellSlots && p.sheet.spellSlots[l];
-      if (s && (s.total || 0) - (s.expended || 0) > 0) return { kind:'sheet', slot:s, lvl:l };
+      const s = slots[l];
+      if (s && (s.total || 0) - (s.expended || 0) > 0) return { slot:s, lvl:l };
     }
     return null;
   },
@@ -326,7 +328,6 @@ registerPanel('turnview', {
     return null;
   },
   _hasAnySlotTracking(p){
-    if (Array.isArray(p.resources) && p.resources.some(r => /^Spell Slots L\d$/.test(r.name))) return true;
     return !!(p.sheet && p.sheet.spellSlots && Object.keys(p.sheet.spellSlots).length);
   },
   _costLabel(c, r){
@@ -347,8 +348,10 @@ registerPanel('turnview', {
     }
     if (k.slot){
       const s = this._slot(c, k.slot);
-      if (s && s.kind === 'res'){ s.res.current--; spent = `${s.res.name} ${s.res.current}/${s.res.max}`; }
-      else if (s && s.kind === 'sheet'){ s.slot.expended = (s.slot.expended || 0) + 1; spent = `slot L${s.lvl} ${(s.slot.total||0)-s.slot.expended}/${s.slot.total||0}`; }
+      if (s){
+        s.slot.expended = (s.slot.expended || 0) + 1;
+        spent = `slot L${s.lvl} ${(s.slot.total || 0) - s.slot.expended}/${s.slot.total || 0}`;
+      }
     }
     if (spent){ panelDefs.party?._render?.(); }
     return spent;

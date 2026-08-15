@@ -83,6 +83,7 @@ function loadDomain(domain){
     if(domain==='party'){
       const r=localStorage.getItem(PARTY_KEY);
       if(r){const a=JSON.parse(r);if(Array.isArray(a))state.party=a;}
+      migratePartySpellSlots();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
       if(r){const d=JSON.parse(r);if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;}
@@ -98,6 +99,41 @@ function loadDomain(domain){
     }
   }catch(e){}
 }
+// ── One home for spell slots ────────────────────────────────────────────────
+// They used to live in two places: a generic resource pool named "Spell Slots
+// L1", and sheet.spellSlots. A character could carry both, with different
+// numbers, and the party screen printed the same slot twice saying 4/4 and
+// 3/4.
+//
+// sheet.spellSlots wins, and not by preference — it is the one with the
+// behaviour. It has the clickable pip row in the Spells tab, it is what a PDF
+// import fills, it carries the warlock pact-slot refresh on a short rest, and
+// it is what a LONG REST restores. Slots kept as a resource pool were never
+// given back by a rest at all.
+//
+// Where both exist the pool wins the number, because the pool is the one the
+// Turn View has been spending from. Runs on every party load rather than once:
+// another device still on the old build can push the old shape back at any
+// time, and the pass is idempotent.
+function migratePartySpellSlots(){
+  const SLOT = /^Spell Slots L(\d)$/;
+  (state.party || []).forEach(p => {
+    if (!Array.isArray(p.resources) || !p.resources.some(r => SLOT.test(r.name || ''))) return;
+    const sheet = { ...(p.sheet || {}) };
+    const slots = { ...(sheet.spellSlots || {}) };
+    p.resources = p.resources.filter(r => {
+      const m = SLOT.exec(r.name || '');
+      if (!m) return true;
+      const lvl = +m[1];
+      const total = Math.max(0, r.max || 0);
+      slots[lvl] = { total, expended: Math.max(0, total - Math.max(0, r.current || 0)) };
+      return false;
+    });
+    sheet.spellSlots = slots;
+    p.sheet = sheet;
+  });
+}
+
 function saveLayout(){
   try{localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout))}catch(e){}
   // Mirror into the active workspace. Hooking it here rather than at each

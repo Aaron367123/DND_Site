@@ -469,17 +469,12 @@ function paSheetDetail(p){
     .sort((a, b) => (PA_SKILLS[a] || a).localeCompare(PA_SKILLS[b] || b))
     .map(k => `<span class="pa-kv"><b>${paEsc(PA_SKILLS[k] || k)}</b> ${paSign(sh.skills[k])}</span>`).join('');
 
-  // Spell slots can live in TWO places — a resource pool named "Spell Slots
-  // L1" and sheet.spellSlots — and a character can carry both with different
-  // numbers. Showing each would print the same slot twice and disagree with
-  // itself. The resource pool wins, matching what the Turn View spends from,
-  // and only levels it doesn't cover fall back to the sheet.
+  // One store for slots — resource pools named "Spell Slots L1" are migrated
+  // into sheet.spellSlots on load, so there is nothing to de-duplicate here.
   const res = (p.resources || []).map(r =>
     `<span class="pa-kv"><b>${paEsc(r.name)}</b> ${r.current}/${r.max}</span>`).join('');
-  const covered = new Set((p.resources || [])
-    .map(r => /^Spell Slots L(\d)$/.exec(r.name)).filter(Boolean).map(m => +m[1]));
   const slots = sh.spellSlots ? Object.keys(sh.spellSlots).map(n => parseInt(n))
-    .filter(n => n >= 1 && !covered.has(n) && (sh.spellSlots[n].total || 0) > 0).sort((a, b) => a - b)
+    .filter(n => n >= 1 && (sh.spellSlots[n].total || 0) > 0).sort((a, b) => a - b)
     .map(l => { const s = sh.spellSlots[l];
       return `<span class="pa-kv"><b>Slots L${l}</b> ${(s.total || 0) - (s.expended || 0)}/${s.total || 0}</span>`;
     }).join('') : '';
