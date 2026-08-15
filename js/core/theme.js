@@ -50,8 +50,15 @@ const THEME_PRESETS = {
     label: 'Parchment (warm light)',
     vars: {
       '--bg':'#e8dfc8','--panel':'#dfd4b8','--panel-2':'#d6c9aa','--panel-3':'#cab999',
-      '--border':'#a89770','--text':'#2e2618','--text-muted':'#5a4f3a','--text-dim':'#857658',
+      // #857658 measured 1.99:1 against --panel-3 — the drag handles and the
+      // "Human · rogue 6" sublines were most of 61 unreadable elements.
+      '--border':'#a89770','--text':'#2e2618','--text-muted':'#5a4f3a','--text-dim':'#6a5c40',
       '--accent':'#8b3a1f','--accent-dark':'#5a2410',
+      // The only light preset, and the only one that has to restate these.
+      // They were left at their dark-theme values on every preset, so on
+      // parchment the HP − and + buttons — the most-clicked control in the
+      // app — sat at 2.02:1 and 1.62:1 against the card. Effectively invisible.
+      '--danger':'#9e2f2b','--success':'#3d6b3d','--warning':'#7d5a10',
     },
   },
   midnight: {
@@ -113,8 +120,21 @@ function applyTheme(id, custom, pref){
   } else {
     vars = (THEME_PRESETS[id] || THEME_PRESETS.default).vars;
   }
+  // Clear anything the PREVIOUS preset set that this one doesn't define,
+  // before applying. applyTheme only ever set keys, which was invisible while
+  // every preset defined the same ten — and stopped being invisible the
+  // moment parchment gained --danger/--success/--warning. Without this,
+  // switching parchment → any dark preset kept parchment's dark red and green
+  // as inline styles on <html>, outranking the :root defaults forever.
+  _ALL_THEME_VARS.forEach(k => { if (!(k in vars)) root.style.removeProperty(k); });
   Object.entries(vars).forEach(([k,v]) => root.style.setProperty(k, v));
 }
+
+// Every variable any preset can set. Custom themes are built on the default
+// preset's keys, so the union covers them too.
+const _ALL_THEME_VARS = Array.from(new Set(
+  Object.values(THEME_PRESETS).flatMap(p => Object.keys(p.vars || {}))
+));
 
 // Apply on script load so the page paints with the right colors.
 (function(){
