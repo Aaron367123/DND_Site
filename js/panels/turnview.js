@@ -374,18 +374,44 @@ registerPanel('turnview', {
     if (B && Array.isArray(B._tokens) && B._tokens.length){
       let cs = B._cellSize || 50;
       try { if (B._csScreen) cs = B._csScreen() || cs; } catch(e){}
-      return { live:true, tokens:B._tokens, cs, cols:B._cols || 24, rows:B._rows || 18 };
+      return { live:true, tokens:B._tokens, cs, cols:B._cols || 24, rows:B._rows || 18,
+               gridType:B._gridType || 'square', bgPath:B._bgMapPath || null,
+               bgScale:B._bgMapScale || 1 };
     }
     try {
       const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || 'null');
       if (d && Array.isArray(d.tokens)){
         return { live:false, tokens:d.tokens, cols:d.cols || 24, rows:d.rows || 18,
-                 cs: (d.cellSize || 50) * (d.bgMapPath ? (d.bgMapScale || 1) : 1) };
+                 cs: (d.cellSize || 50) * (d.bgMapPath ? (d.bgMapScale || 1) : 1),
+                 gridType:d.gridType || (d.showGrid === false ? 'none' : 'square'),
+                 bgPath:d.bgMapPath || null, bgScale:d.bgMapScale || 1 };
       }
     } catch(e){}
-    return { live:false, tokens:[], cs:50, cols:24, rows:18 };
+    return { live:false, tokens:[], cs:50, cols:24, rows:18,
+             gridType:'square', bgPath:null, bgScale:1 };
   },
   _map(){ return this._mapCache || (this._mapCache = this._mapSrc()); },
+
+  // The map art. Normally the battle map has already loaded it into
+  // _mapBgImage; when that panel has never been opened it hasn't, and the
+  // thumbnail would fall back to a bare grid on a session that plainly has a
+  // map. One load per path, cached, and a re-place when it arrives.
+  _bgImage(){
+    const src = this._map();
+    if (typeof _mapBgImage !== 'undefined' && _mapBgImage && src.live) return _mapBgImage;
+    if (!src.bgPath) return null;
+    if (this._bgCache && this._bgCache.path === src.bgPath) return this._bgCache.img;
+    const img = new Image();
+    this._bgCache = { path: src.bgPath, img: null };
+    img.onload = () => {
+      if (this._bgCache && this._bgCache.path === src.bgPath){
+        this._bgCache.img = img;
+        this._placeTokens();
+      }
+    };
+    img.src = assetUrl(src.bgPath);
+    return null;
+  },
 
   // Which slice of the battle map to show. Not the whole thing: a 24×18 map
   // with the fight happening in one corner renders as five dots in the top
@@ -416,9 +442,33 @@ registerPanel('turnview', {
     const y = Math.max(0, Math.min(Math.round(cy - h / 2), m.rows - h));
     return (this._vp = { x, y, w, h });
   },
+  // Name matching, forgiving in the ways real data is inconsistent: exact
+  // first, then trimmed and case-folded, then the group base name a numbered
+  // duplicate carries ("Ogre 1 2" → "Ogre"). Strict equality matched two of
+  // eight creatures in a real fight.
+  _norm(s){ return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); },
   _tokenFor(c){
     if (!c) return null;
-    return this._map().tokens.find(t => t.label === c.name) || null;
+    const toks = this._map().tokens;
+    const exact = toks.find(t => t.label === c.name);
+    if (exact) return exact;
+    const n = this._norm(c.name);
+    return toks.find(t => this._norm(t.label) === n)
+        || toks.find(t => c.baseName && this._norm(t.label) === this._norm(c.baseName))
+        || toks.find(t => t.baseName && this._norm(t.baseName) === n)
+        || null;
+  },
+  // The reverse lookup, for drawing the map rather than the order.
+  _combatantForToken(t){
+    if (!t) return null;
+    const order = this._order();
+    const exact = order.find(c => c.name === t.label);
+    if (exact) return exact;
+    const n = this._norm(t.label);
+    return order.find(c => this._norm(c.name) === n)
+        || order.find(c => c.baseName && this._norm(c.baseName) === n)
+        || (t.baseName ? order.find(c => this._norm(c.name) === this._norm(t.baseName)) : null)
+        || null;
   },
   _cs(){ return this._map().cs || 50; },
   // 5e counts a diagonal as 5 ft like any other square, so the metric is
@@ -896,7 +946,7 @@ registerPanel('turnview', {
   },
 
   _renderMap(){
-    const onMap = this._order().filter(c => this._tokenFor(c)).length;
+    const onMap = this._map().tokens.length;
     // The grid is sized in _placeTokens, once the box has real pixels.
     return `<div class="tv-map${this._mapBig ? ' big' : ''}">
       <div class="tv-map-grid"></div>
@@ -912,6 +962,13 @@ registerPanel('turnview', {
   },
   // Tokens are absolutely positioned from the real ones' stage coordinates, so
   // the thumbnail is a view of battlemap's data rather than a second copy.
+  //
+  // It iterates THE MAP'S tokens, not the initiative order. Walking the order
+  // and looking up a token for each meant anything on the map without a
+  // matching combatant simply wasn't drawn — on a real fight that left two
+  // dots on an empty grid next to a battle map with eight creatures on it,
+  // because monster tokens and their tracker entries don't always carry the
+  // same name. A map that omits most of the map is worse than no map.
   _placeTokens(){
     const b = this._body; if (!b) return;
     const m = b.querySelector('.tv-map'); if (!m) return;
@@ -924,24 +981,61 @@ registerPanel('turnview', {
     // squares aren't square misreports the one thing this map exists to show.
     const cell = Math.min(W / vp.w, H / vp.h);
     const offX = (W - cell * vp.w) / 2, offY = (H - cell * vp.h) / 2;
+    const k = cell / cs;                       // thumbnail px per stage px
+
+    // The actual map art, positioned exactly as the battle map positions it:
+    // natural size × bgMapScale, from stage origin. Without this the panel
+    // drew an abstract grid beside a hex map of Ice Peak and called it the
+    // same place.
+    const B = this._bm();
+    const img = this._bgImage();
+    const hasArt = !!img;
+    if (hasArt){
+      const scale = src.bgScale || 1;
+      const natW = (B && B._bgMapNaturalW) || img.naturalWidth;
+      const natH = (B && B._bgMapNaturalH) || img.naturalHeight;
+      const dispW = natW * scale * k, dispH = natH * scale * k;
+      const url = src.bgPath ? assetUrl(src.bgPath) : img.src;
+      m.style.backgroundImage = `url("${url}")`;
+      m.style.backgroundRepeat = 'no-repeat';
+      m.style.backgroundSize = `${dispW}px ${dispH}px`;
+      m.style.backgroundPosition = `${offX - vp.x * cell}px ${offY - vp.y * cell}px`;
+    } else {
+      m.style.backgroundImage = '';
+      m.style.backgroundSize = '';
+      m.style.backgroundPosition = '';
+    }
+
+    // The overlay grid is only ever right for a square grid with no art. A map
+    // image carries its own grid — printed, and hex on this one — so drawing
+    // squares over it produces two grids that disagree.
     const g = m.querySelector('.tv-map-grid');
     if (g){
-      g.style.left = offX + 'px'; g.style.top = offY + 'px';
-      g.style.width = (cell * vp.w) + 'px'; g.style.height = (cell * vp.h) + 'px';
-      g.style.right = 'auto'; g.style.bottom = 'auto';
-      g.style.backgroundSize = cell + 'px ' + cell + 'px';
+      const square = !hasArt && src.gridType === 'square';
+      g.hidden = !square;
+      if (square){
+        g.style.left = offX + 'px'; g.style.top = offY + 'px';
+        g.style.width = (cell * vp.w) + 'px'; g.style.height = (cell * vp.h) + 'px';
+        g.style.right = 'auto'; g.style.bottom = 'auto';
+        g.style.backgroundSize = cell + 'px ' + cell + 'px';
+      }
     }
+
     m.style.setProperty('--tok', Math.max(12, cell * 0.9) + 'px');
     const frag = document.createDocumentFragment();
-    this._order().forEach(c => {
-      const t = this._tokenFor(c); if (!t) return;
+    src.tokens.forEach(t => {
+      const c = this._combatantForToken(t);
       const n = document.createElement('div');
-      n.className = 'tv-tok ' + (c.isPC ? 'pc ' : '')
-        + (c.id === state.activeCombatantId ? 'cur ' : '') + (this._armed === c.id ? 'tgt ' : '')
-        + ((c.hp || 0) <= 0 ? 'dead' : '');
-      n.dataset.tvtok = c.id;
-      n.title = c.name + ' — ' + c.hp + '/' + c.hpMax;
-      n.textContent = String(c.name || '?').trim().charAt(0).toUpperCase();
+      const label = String((c && c.name) || t.label || '?').trim();
+      n.className = 'tv-tok ' + ((c ? c.isPC : t.isPC) ? 'pc ' : '')
+        + (c && c.id === state.activeCombatantId ? 'cur ' : '')
+        + (c && this._armed === c.id ? 'tgt ' : '')
+        + (((c && (c.hp || 0) <= 0) || t.dead) ? 'dead ' : '')
+        + (c ? '' : 'loose');
+      if (c) n.dataset.tvtok = c.id;
+      n.dataset.tvlabel = t.label || '';
+      n.title = label + (c ? ` — ${c.hp}/${c.hpMax}` : ' — not in the initiative order');
+      n.textContent = label.charAt(0).toUpperCase();
       n.style.left = (offX + ((t.x / cs) - vp.x + 0.5) * cell) + 'px';
       n.style.top  = (offY + ((t.y / cs) - vp.y + 0.5) * cell) + 'px';
       frag.appendChild(n);
@@ -1755,17 +1849,20 @@ registerPanel('turnview', {
       const t = e.target.closest('.tv-tok'); if (!t) return;
       // Read-only when the battle map hasn't mounted — see _mapSrc.
       if (!this._map().live){ showToast('Open the Battle Map to move tokens'); return; }
-      const c = this._order().find(x => x.id === t.dataset.tvtok);
-      const tok = this._tokenFor(c); if (!tok) return;
-      this._drag = { id: c.id, from: { x: tok.x, y: tok.y } };
+      // Tokens with no combatant are draggable too — they are on the map, so
+      // they are part of the picture — they just can't provoke anything.
+      const c = t.dataset.tvtok ? this._order().find(x => x.id === t.dataset.tvtok) : null;
+      const tok = c ? this._tokenFor(c)
+                    : this._map().tokens.find(x => x.label === t.dataset.tvlabel);
+      if (!tok) return;
+      this._drag = { id: c ? c.id : null, tok, from: { x: tok.x, y: tok.y } };
       try { t.setPointerCapture(e.pointerId); } catch(err){}
       e.preventDefault();
     });
     b.addEventListener('pointermove', e => {
       if (!this._drag) return;
       const m = b.querySelector('.tv-map'); if (!m) return;
-      const c = this._order().find(x => x.id === this._drag.id);
-      const tok = this._tokenFor(c); if (!tok) return;
+      const tok = this._drag.tok; if (!tok) return;
       const src = this._map(), vp = this._viewport(), r = m.getBoundingClientRect();
       const cs = src.cs || 50;
       // Same letterbox the tokens are drawn with, or the drop lands a square
@@ -1782,13 +1879,15 @@ registerPanel('turnview', {
       const d = this._drag; if (!d) return;
       this._drag = null;
       const B = this._bm();
-      const mover = this._order().find(x => x.id === d.id);
-      const tok = this._tokenFor(mover);
+      const mover = d.id ? this._order().find(x => x.id === d.id) : null;
+      const tok = d.tok;
       // Write through to the battle map — this IS its token, so the panel and
       // the map can't disagree about where anyone is standing.
       B?._renderTokens?.(); B?._saveMap?.();
+      // A token with no combatant can be moved but can't provoke — there is
+      // nobody in the order for the opportunity attack to belong to.
       const moved = tok && (tok.x !== d.from.x || tok.y !== d.from.y);
-      if (moved && !this._pending){
+      if (moved && mover && !this._pending){
         const rows = this._provokedBy(mover, d.from);
         if (rows.length){
           const cs = this._cs() || 50;

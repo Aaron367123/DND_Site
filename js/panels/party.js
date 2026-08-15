@@ -1403,7 +1403,7 @@ registerPanel('party',{
       this._applyLongRest();
       return;
     }
-    showConfirm('Long rest the whole party? HP to max, all spell slots restored, hit dice ½ back, exhaustion −1, concentration dropped.',
+    showConfirm('Long rest the whole party? HP to max, all spell slots and class resources restored, hit dice ½ back, exhaustion −1, concentration dropped.',
       {title:'Long rest', confirmLabel:'Rest', danger:false}).then(ok => {
         if (ok) this._applyLongRest();
       });
@@ -1464,6 +1464,16 @@ registerPanel('party',{
       const slots = c.sheet?.spellSlots;
       if (slots){
         Object.keys(slots).forEach(k => { slots[k] = {...slots[k], expended: 0}; });
+      }
+      // Class resources: everything back to full. Nothing restored these at
+      // all, so Rage, Ki, Bardic Inspiration, Wild Shape, Channel Divinity and
+      // every toggle had to be topped up by hand after each night — and the
+      // short rest only ever refreshed pools with "short rest" in the name.
+      // Almost every class resource in 5e recharges on a long rest, and this
+      // model is for expendables: {name, type, current, max}. Anything that
+      // genuinely shouldn't come back doesn't belong in it.
+      if (Array.isArray(c.resources)){
+        c.resources = c.resources.map(r => ({ ...r, current: r.max ?? r.current }));
       }
       // Exhaustion: -1 (clamped at 0).
       c.exhaustion = Math.max(0, (+c.exhaustion || 0) - 1);
