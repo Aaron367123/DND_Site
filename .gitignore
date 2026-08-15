@@ -23,3 +23,8 @@ upload.log
 
 # Screenshots from tools/shot.js — local artifacts, not source.
 tools/shots/
+
+# Live campaign snapshots pulled by tools/pull-state.js, plus the cached
+# anonymous session it reuses. Real campaign data and a refresh token — the
+# repo is public, so neither belongs in it.
+/.state/
