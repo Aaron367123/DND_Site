@@ -22,6 +22,12 @@
 //   node tools/shot.js --preset mobile --full   # whole scroll height
 //   node tools/shot.js --size 844x390 --touch   # landscape phone
 //   node tools/shot.js --eval "openPanel('battlemap')" --wait 1200
+//   node tools/shot.js --state skt-backup-2026-08-14.json   # the REAL campaign
+//
+// --state loads a Settings → Export backup into localStorage before the page
+// boots. Firebase rules require auth, so the live campaign can't be read
+// directly; an exported backup is the only way this tool sees real data
+// instead of whatever synthetic fight --seed invents.
 //
 // Needs the static server up (tools are served over http, not file://):
 //   python -m http.server 8765
@@ -61,7 +67,7 @@ const CHROME_CANDIDATES = [
 function parseArgs(argv){
   const a = { preset:'desktop', url:null, out:null, full:false, wait:800,
               evalJs:null, seed:null, ready:null, tour:false, player:false, size:null,
-              touch:null };
+              touch:null, state:null };
   for (let i = 0; i < argv.length; i++){
     const k = argv[i];
     if      (k === '--preset') a.preset = argv[++i];
@@ -71,6 +77,7 @@ function parseArgs(argv){
     else if (k === '--wait')   a.wait   = parseInt(argv[++i], 10) || 0;
     else if (k === '--eval')   a.evalJs = argv[++i];
     else if (k === '--seed')   a.seed   = argv[++i];
+    else if (k === '--state')  a.state  = argv[++i];
     else if (k === '--ready')  a.ready  = argv[++i];
     else if (k === '--tour')   a.tour   = true;
     else if (k === '--full')   a.full   = true;
@@ -87,6 +94,9 @@ function usage(){
   console.log('       [--size WxH] [--touch|--no-touch] [--url URL] [--player]');
   console.log('       [--out FILE] [--full] [--wait MS] [--eval JS] [--seed JS] [--tour]');
   console.log('');
+  console.log('       [--state BACKUP.json]');
+  console.log('');
+  console.log('  --state F  load a Settings → Export backup as the starting state');
   console.log('  --seed JS  runs BEFORE page scripts (use for localStorage setup)');
   console.log('  --eval JS  runs AFTER load (use to open panels, click things)');
   console.log('  --ready JS poll until truthy before shooting (default: workspace built)');
@@ -146,6 +156,35 @@ function findChrome(){
 // ── Main ──────────────────────────────────────────────────────────────────
 (async function main(){
   const a = parseArgs(process.argv.slice(2));
+
+  // Read the backup before spawning anything — a typo'd path should fail in a
+  // millisecond, not after a browser launch.
+  let stateKeys = null;
+  if (a.state){
+    let doc;
+    try { doc = JSON.parse(fs.readFileSync(a.state, 'utf8')); }
+    catch(e){ console.error('[shot] --state: ' + e.message); process.exit(2); }
+    // Both shapes js/features/backup.js can write: the current wrapper, and a
+    // bare {key: value} map for hand-assembled states.
+    stateKeys = (doc && doc.keys && typeof doc.keys === 'object') ? doc.keys : doc;
+    if (!stateKeys || typeof stateKeys !== 'object'){
+      console.error('[shot] --state: not a backup file (no `keys`)'); process.exit(2);
+    }
+    // Values must be the raw strings localStorage holds. backup.js is careful
+    // never to re-serialize them; anything else here means the file was
+    // rewritten by something that was not careful, and restoring an object
+    // would put "[object Object]" in localStorage.
+    for (const k of Object.keys(stateKeys)){
+      if (typeof stateKeys[k] !== 'string') stateKeys[k] = JSON.stringify(stateKeys[k]);
+    }
+    const n = Object.keys(stateKeys).length;
+    const kb = Math.round(JSON.stringify(stateKeys).length / 1024);
+    console.log('[shot] state: ' + n + ' keys, ' + kb + 'KB from ' + a.state);
+    if (kb > 4500){
+      console.error('[shot] WARNING: ' + kb + 'KB may exceed the localStorage quota; '
+        + 'the app will boot with whatever fit and no error.');
+    }
+  }
 
   let dev = PRESETS[a.preset];
   if (a.size){
@@ -300,6 +339,12 @@ function findChrome(){
     if (!a.tour){
       seedParts.push("localStorage.setItem('skt-tutorial-seen-v2','1');"
                    + "localStorage.setItem('skt-pv-dock-hint-seen','1');");
+    }
+    // Before --seed, so a --seed can still override one key of a real backup.
+    if (stateKeys){
+      seedParts.push('(function(){var S=' + JSON.stringify(stateKeys) + ';'
+        + 'for(var k in S){try{localStorage.setItem(k,S[k])}catch(e){'
+        + "console.error('seed quota: '+k)}}})();");
     }
     if (a.seed) seedParts.push(a.seed);
     if (seedParts.length){
