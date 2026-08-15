@@ -3931,14 +3931,20 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .pa{display:flex; flex-direction:column; flex:1; min-height:0}
 
 /* Turn strip. Clears the floating search pill, which is fixed over this
-   corner — see _updatePlayerViewportVars for where the number comes from. */
+   corner — see _updatePlayerViewportVars for where the numbers come from.
+   The clearance goes on the HEAD ROW only: it is the row beside the pill.
+   Reserving it across the whole bar also narrowed the initiative strip
+   underneath, which cost more than half the strip's width on a phone. */
 .pa-turn{
   flex:0 0 auto; background:var(--panel); border-bottom:1px solid var(--border);
-  padding:7px 12px; padding-right:calc(12px + var(--pv-topright, 0px));
+  padding:7px 12px;
   display:flex; flex-direction:column; gap:5px; min-width:0;
 }
 .pa-turn[hidden]{display:none}
-.pa-turn-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; min-width:0}
+.pa-turn-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; min-width:0;
+  padding-right:var(--pv-topright, 0px);
+  /* Push the strip below the pill so it can run the full width. */
+  min-height:max(0px, calc(var(--pv-topright-h, 0px) - 12px))}
 .pa-round{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em;
   color:var(--text-muted); white-space:nowrap}
 .pa-now{font-size:var(--fs-xl); color:var(--text-muted)}

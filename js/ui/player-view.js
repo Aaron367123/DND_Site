@@ -25,10 +25,22 @@ function _updatePlayerViewportVars(){
   document.documentElement.style.setProperty('--pv-vw', w + 'px');
   // The floating search/settings pill is fixed at z-index 9000 over the
   // top-right corner. Measured from the element rather than assumed, so the
-  // turn strip stops short of it instead of running underneath.
+  // turn bar clears it instead of running underneath.
+  //
+  // Two numbers, not one. Reserving the WIDTH across the whole turn bar also
+  // shrank the initiative strip, which sits BELOW the pill and does not need
+  // to avoid it: on a 390px phone the strip rendered 246px wide out of 1101px
+  // of chips, i.e. two combatants out of eight, with the second sliced in
+  // half at the reservation edge. The height lets the strip start below the
+  // pill and use the full width instead.
   const ft = document.getElementById('float-toolbar');
-  const clear = ft ? Math.max(0, w - ft.getBoundingClientRect().left) + 8 : 0;
-  document.documentElement.style.setProperty('--pv-topright', clear + 'px');
+  const r  = ft ? ft.getBoundingClientRect() : null;
+  // Both are measured from the viewport edges, which is what the turn bar is
+  // flush against in the player app.
+  document.documentElement.style.setProperty('--pv-topright',
+    (r ? Math.max(0, w - r.left) + 8 : 0) + 'px');
+  document.documentElement.style.setProperty('--pv-topright-h',
+    (r ? Math.max(0, r.bottom) + 4 : 0) + 'px');
 }
 
 // Realtime calls these by name after applying a remote change. Both now mean

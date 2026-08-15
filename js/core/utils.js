@@ -1281,10 +1281,20 @@ function sktNormName(s){
   return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-// Find the token for a combatant: exact label, then case/space-insensitive,
-// then via the group base name a numbered duplicate carries on either side.
+// Find the token for a combatant: the explicit link first, then exact label,
+// then case/space-insensitive, then via the group base name a numbered
+// duplicate carries on either side.
+//
+// `cid` is the strong match and only auto-placed tokens carry it. Without it,
+// renaming a combatant orphaned its token: the reconciler culled the old one
+// and placed a new one at the view centre, so a rename mid-fight silently
+// teleported the creature across the map.
 function sktTokenForCombatant(tokens, c){
   if (!c || !Array.isArray(tokens)) return null;
+  if (c.id != null){
+    const linked = tokens.find(t => t.cid != null && t.cid === c.id);
+    if (linked) return linked;
+  }
   const exact = tokens.find(t => t.label === c.name);
   if (exact) return exact;
   const n = sktNormName(c.name);

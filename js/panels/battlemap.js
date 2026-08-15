@@ -4576,6 +4576,9 @@ function _sktTokenForNewCombatant(c, x, y){
     ? (state.party || []).find(p => sktNormName(p.name) === sktNormName(c.name)) : null;
   const tok = {
     id: (typeof uid === 'function' ? uid() : String(Math.random()).slice(2)),
+    // The link back to the combatant. Everything else here can be edited by
+    // the DM; this is what survives a rename on either side.
+    cid: c.id,
     label: c.name,
     x, y,
     isPC,
@@ -4593,24 +4596,49 @@ function _sktTokenForNewCombatant(c, x, y){
 // The reconciliation, over a plain view of the map. Mutates `tokens`.
 function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre){
   const list = Array.isArray(combatants) ? combatants : [];
-  let added = 0, removed = 0;
+  let added = 0, removed = 0, renamed = 0;
 
-  // Drop auto tokens whose combatant has left the fight.
+  // Drop auto tokens whose combatant has left the fight, and any duplicate
+  // that shares a `cid` with an earlier one.
+  //
+  // The duplicate case is a two-DM-device race: device A adds a monster and
+  // pushes combat and battlemap as separate keys, so B can see the new
+  // combatant before the token that came with it. A local save() on B in that
+  // window places a second token for the same creature. Both then merge by
+  // token id and the map keeps both. Cheaper to make it self-healing here
+  // than to try to order two independent Firebase keys.
+  const seenCid = new Set();
+  for (let i = 0; i < tokens.length; i++){
+    const t = tokens[i];
+    if (!t || t.cid == null) continue;
+    if (seenCid.has(t.cid)){ tokens.splice(i, 1); i--; removed++; continue; }
+    seenCid.add(t.cid);
+  }
   for (let i = tokens.length - 1; i >= 0; i--){
     const t = tokens[i];
     if (!t || !t.auto) continue;
     if (!list.some(c => sktTokenForCombatant([t], c))){ tokens.splice(i, 1); removed++; }
   }
 
-  // Place anyone missing.
   list.forEach(c => {
-    if (sktTokenForCombatant(tokens, c)) return;
+    const t = sktTokenForCombatant(tokens, c);
+    if (t){
+      // A linked token follows its combatant's name — the tracker is the
+      // roster. Renaming IN PLACE is the point: culling and re-placing would
+      // move the creature, which is what the `cid` link exists to prevent.
+      if (t.cid != null && t.cid === c.id && t.label !== c.name){
+        t.label = c.name;
+        if (c.baseName) t.baseName = c.baseName; else delete t.baseName;
+        renamed++;
+      }
+      return;
+    }
     const { x, y } = sktFreeCell(tokens, cols, rows, cs, centre.x, centre.y);
     tokens.push(_sktTokenForNewCombatant(c, x, y));
     added++;
   });
 
-  return { added, removed };
+  return { added, removed, renamed };
 }
 
 // Roster signature. Cheap enough to run on every save(), and it means an HP
@@ -4644,7 +4672,7 @@ function sktEnsureCombatTokens(force){
         || { x: def._cols * def._csScreen() / 2, y: def._rows * def._csScreen() / 2 };
       const r = sktReconcileTokens(def._tokens, state.combatants,
                                    def._cols, def._rows, def._csScreen(), centre);
-      if (r.added || r.removed){ def._renderTokens(); def._saveMap(); }
+      if (r.added || r.removed || r.renamed){ def._renderTokens(); def._saveMap(); }
       return r;
     }
 
@@ -4662,7 +4690,7 @@ function sktEnsureCombatTokens(force){
           y: placed.reduce((s, t) => s + t.y, 0) / placed.length }
       : { x: cols * cs / 2, y: rows * cs / 2 };
     const r = sktReconcileTokens(d.tokens, state.combatants, cols, rows, cs, centre);
-    if (r.added || r.removed){
+    if (r.added || r.removed || r.renamed){
       // setItem is enough to sync: realtime.js patches Storage.prototype and
       // pushes any dirtied SKT_SYNC_KEYS key. Deliberately NOT broadcast on
       // the 'skt-battlemap' channel — a listener there treats any message
