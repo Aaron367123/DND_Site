@@ -65,6 +65,14 @@ function save(){
   // needed the same hook — both are driven entirely by the combat tracker, and
   // a list of two names here would have become a list of names to forget to
   // add the third to.
+  // Give every combatant a token before the panels above redraw, so the Turn
+  // View's map has something to centre on for a creature added a moment ago.
+  // Same reasoning as the loop below for the placement: every path that adds
+  // or removes a combatant ends in save(), and the reconciler no-ops unless
+  // the roster itself changed.
+  if (typeof sktEnsureCombatTokens === 'function'){
+    try { sktEnsureCombatTokens(); } catch(e){}
+  }
   if (typeof panelDefs !== 'undefined'){
     for (const id in panelDefs){
       const d = panelDefs[id];
@@ -84,9 +92,11 @@ function loadDomain(domain){
       const r=localStorage.getItem(PARTY_KEY);
       if(r){const a=JSON.parse(r);if(Array.isArray(a))state.party=a;}
       migratePartySpellSlots();
+      reconcilePcHp();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
       if(r){const d=JSON.parse(r);if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;}
+      reconcilePcHp();
     }else if(domain==='shop'){
       const r=localStorage.getItem(SHOP_KEY);
       if(r)state.shop=JSON.parse(r);
@@ -99,6 +109,49 @@ function loadDomain(domain){
     }
   }catch(e){}
 }
+// ── One number, two records ─────────────────────────────────────────────────
+// A PC in a fight has hit points in TWO places: the party slot and the
+// combatant. Every edit path is supposed to mirror to the other one, and a
+// live campaign was found where two of five had drifted — Zoey read 50 on her
+// party card and 32 in the tracker, Creambak 44 and 26 — with no way to tell
+// which was right by looking.
+//
+// So the drift is resolved by a rule instead of by hoping every call site
+// remembers: WHILE A PC IS IN THE FIGHT, THE COMBATANT WINS. Not arbitrary —
+// the tracker is where damage lands blow by blow, and every party-side edit
+// already writes through syncPartyToCombat() first, so a legitimate party
+// edit reaches the combatant and then comes back here unchanged. The only
+// value this can discard is one written by a path that skipped the mirror,
+// which is the bug itself; now it corrects visibly instead of leaving two
+// panels quietly disagreeing for the rest of the campaign.
+//
+// In memory only. Writing here would push a party update back out during a
+// remote apply, and the correction persists on the next ordinary save anyway.
+let _pcHpWarned = false;
+function reconcilePcHp(){
+  if (!Array.isArray(state.party) || !Array.isArray(state.combatants)) return;
+  const fixed = [];
+  state.combatants.forEach(c => {
+    if (!c || !c.isPC) return;
+    const pi = (typeof _findPartyMemberForCombatant === 'function')
+      ? _findPartyMemberForCombatant(c)
+      : state.party.findIndex(p => p.id === c.id);
+    if (pi < 0) return;
+    const p = state.party[pi];
+    if (p.hp === c.hp && p.hpMax === c.hpMax) return;
+    if (p.hp !== c.hp) fixed.push(`${p.name} ${p.hp}→${c.hp}`);
+    state.party[pi] = { ...p, hp: c.hp, hpMax: c.hpMax };
+  });
+  // Say it once per session. Silently rewriting a character's hit points is
+  // exactly the kind of thing a DM should get to see happen.
+  if (fixed.length && !_pcHpWarned){
+    _pcHpWarned = true;
+    if (typeof showToast === 'function'){
+      showToast('HP synced from the tracker — ' + fixed.join(', '));
+    }
+  }
+}
+
 // ── One home for spell slots ────────────────────────────────────────────────
 // They used to live in two places: a generic resource pool named "Spell Slots
 // L1", and sheet.spellSlots. A character could carry both, with different

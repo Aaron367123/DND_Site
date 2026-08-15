@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'c7239f852c';
+const BUILD = '835b03fb58';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=1326c8eb2b',
@@ -43,20 +43,20 @@ const PRECACHE = [
   'js/core/theme.js?v=369235bbcc',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
-  'js/core/utils.js?v=2d857a6913',
-  'js/core/state.js?v=d84a04d0fd',
+  'js/core/utils.js?v=1373a9092f',
+  'js/core/state.js?v=9fa4df5c19',
   'js/core/window-manager.js?v=2d4dbcfede',
   'js/panels/combat.js?v=cd6d0a5ea0',
   'js/panels/attacks.js?v=8432f5f81d',
   'js/generated/reactions.js?v=faa668dc18',
-  'js/panels/turnview.js?v=16453cbcc0',
+  'js/panels/turnview.js?v=e9c85a0c73',
   'js/panels/party.js?v=7e061c63ce',
   'js/panels/shop.js?v=f8d558f372',
   'js/sync/notes-sync.js?v=8c42540638',
   'js/sync/dropbox-config.js?v=ccf8533d50',
   'js/sync/dropbox-sync.js?v=ab773edfd6',
   'js/panels/notes.js?v=62f28fa4d6',
-  'js/panels/battlemap.js?v=ea9ef7edb4',
+  'js/panels/battlemap.js?v=461bc5d7fb',
   'js/panels/npc-library.js?v=6986b9c7c2',
   'js/panels/bestiary.js?v=bc58b530c6',
   'js/panels/content-panel.js?v=5e25eeb8a7',
@@ -76,7 +76,7 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=bdaf579267',
   'js/features/pdf-import.js?v=e617232987',
-  'js/player/player-app.js?v=52ee32d7c6',
+  'js/player/player-app.js?v=39c710e7f7',
   'js/ui/player-view.js?v=e437d0a850',
   'js/sync/realtime.js?v=f4a0ecb9f5',
   'js/ui/tutorial.js?v=e47e670b86',

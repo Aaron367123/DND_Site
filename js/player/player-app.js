@@ -549,9 +549,16 @@ function paApplyHp(sign){
     const i = (state.combatants || []).indexOf(c);
     if (i >= 0) C._applyHpDelta(i, sign < 0 ? -n : n, null);
   } else {
-    // Not in the fight — write to the party slot directly.
+    // Not in the fight — write to the party slot directly, then mirror. The
+    // mirror is not dead code just because paCombatant() found nothing:
+    // paCombatant() matches on id only, while syncPartyToCombat falls back to
+    // a normalized name, so a PC added to the tracker by hand under a
+    // slightly different id lands here and MUST still update their combat
+    // card. Without it the two records drift and never converge.
     const before = pc.hp;
     pc.hp = Math.max(0, Math.min(pc.hpMax, before + (sign < 0 ? -n : n)));
+    const pi = (state.party || []).indexOf(pc);
+    if (pi >= 0 && typeof syncPartyToCombat === 'function') syncPartyToCombat(pi);
   }
   save(); paRender();
 }

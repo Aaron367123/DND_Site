@@ -1270,3 +1270,26 @@ function sktMonsterAttacksAreMagical(raw){
   const blocks = [].concat(raw && raw.special_abilities || [], raw && raw.actions || []);
   return blocks.some(b => /attacks?\s+(?:are|count as)\s+magical/i.test(String(b && b.desc || '')));
 }
+
+// ─── Combatant ⇄ token name matching ─────────────────────────────────────────
+// Tokens are matched to combatants BY NAME — there is no shared id — so this
+// is the single place that decides whether "Hill Giant 1 1" on the map is the
+// same creature as "hill giant 1 1" in the tracker. It lived in three copies
+// before; the strict `===` one silently matched two of eight creatures and the
+// Turn View drew a map with most of the fight missing.
+function sktNormName(s){
+  return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Find the token for a combatant: exact label, then case/space-insensitive,
+// then via the group base name a numbered duplicate carries on either side.
+function sktTokenForCombatant(tokens, c){
+  if (!c || !Array.isArray(tokens)) return null;
+  const exact = tokens.find(t => t.label === c.name);
+  if (exact) return exact;
+  const n = sktNormName(c.name);
+  return tokens.find(t => sktNormName(t.label) === n)
+      || (c.baseName ? tokens.find(t => sktNormName(t.label) === sktNormName(c.baseName)) : null)
+      || tokens.find(t => t.baseName && sktNormName(t.baseName) === n)
+      || null;
+}

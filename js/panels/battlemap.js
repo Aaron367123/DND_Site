@@ -269,6 +269,14 @@ registerPanel('battlemap',{
     // the first edit of a session has something to return to.
     this._undoStack.length = 0; this._redoStack.length = 0;
     this._lastCommitted = this._undoSnapshot();
+    // Catch up on anyone added to the tracker while this panel was closed.
+    // The save()-driven reconciler skips a fight whose map has never been
+    // created — there is nowhere to put a token before a map exists — and
+    // the roster signature then stops it retrying. Opening the map is that
+    // moment, so it forces a pass regardless of the signature.
+    if (typeof sktEnsureCombatTokens === 'function'){
+      try { sktEnsureCombatTokens(true); } catch(e){}
+    }
     this._render();
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath, this._pendingRefit);
     this._startBroadcast();
@@ -795,32 +803,13 @@ registerPanel('battlemap',{
   // Pick a free cell centre at or near a stage point, spiralling outward so
   // adding the whole party doesn't stack everyone on one square. Clamped to
   // the map, so a view centre that sits off the edge still lands on it.
+  //
+  // The spiral itself is sktFreeCell() below, because the auto-token
+  // reconciler has to place tokens with this panel CLOSED — at which point
+  // there is no `this._tokens` to read, only the stored JSON. One copy of the
+  // search, two callers.
   _freeCellNear(px, py){
-    const cs = this._csScreen();
-    const maxCol = Math.max(0, this._cols - 1), maxRow = Math.max(0, this._rows - 1);
-    const clampC = c => Math.max(0, Math.min(maxCol, c));
-    const clampR = r => Math.max(0, Math.min(maxRow, r));
-    const col0 = clampC(Math.floor(px / cs)), row0 = clampR(Math.floor(py / cs));
-    const taken = (c, r) => {
-      const x = (c + 0.5) * cs, y = (r + 0.5) * cs;
-      return this._tokens.some(t => t.x != null &&
-        Math.abs(t.x - x) < cs / 2 && Math.abs(t.y - y) < cs / 2);
-    };
-    if (!taken(col0, row0)) return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
-    // Rings outward from the centre cell. Bounded by the map, so this always
-    // terminates; if every cell is occupied we fall back to the centre.
-    const maxRing = Math.max(this._cols, this._rows);
-    for (let ring = 1; ring <= maxRing; ring++){
-      for (let dc = -ring; dc <= ring; dc++){
-        for (let dr = -ring; dr <= ring; dr++){
-          if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;   // ring edge only
-          const c = col0 + dc, r = row0 + dr;
-          if (c < 0 || r < 0 || c > maxCol || r > maxRow) continue;
-          if (!taken(c, r)) return { x: (c + 0.5) * cs, y: (r + 0.5) * cs };
-        }
-      }
-    }
-    return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
+    return sktFreeCell(this._tokens, this._cols, this._rows, this._csScreen(), px, py);
   },
 
   // The part of the stage currently on screen, in STAGE coordinates, or null
@@ -4528,3 +4517,163 @@ registerPanel('battlemap',{
     showToast(placed?`${placed} token(s) added`:'Party already placed');
   },
 });
+
+// ─── Free-cell search ────────────────────────────────────────────────────────
+// Pure, so the auto-token reconciler below can place tokens with the panel
+// CLOSED, where `this._tokens` does not exist. Callers mutate `tokens`
+// between calls, which is the point: placing five creatures walks five
+// different cells instead of stacking them all on the first free one.
+function sktFreeCell(tokens, cols, rows, cs, px, py){
+  const list = Array.isArray(tokens) ? tokens : [];
+  const maxCol = Math.max(0, (cols || 1) - 1), maxRow = Math.max(0, (rows || 1) - 1);
+  const col0 = Math.max(0, Math.min(maxCol, Math.floor(px / cs)));
+  const row0 = Math.max(0, Math.min(maxRow, Math.floor(py / cs)));
+  const taken = (c, r) => {
+    const x = (c + 0.5) * cs, y = (r + 0.5) * cs;
+    return list.some(t => t.x != null &&
+      Math.abs(t.x - x) < cs / 2 && Math.abs(t.y - y) < cs / 2);
+  };
+  if (!taken(col0, row0)) return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
+  // Rings outward from the centre cell. Bounded by the map, so this always
+  // terminates; if every cell is occupied we fall back to the centre.
+  const maxRing = Math.max(cols || 1, rows || 1);
+  for (let ring = 1; ring <= maxRing; ring++){
+    for (let dc = -ring; dc <= ring; dc++){
+      for (let dr = -ring; dr <= ring; dr++){
+        if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;   // ring edge only
+        const c = col0 + dc, r = row0 + dr;
+        if (c < 0 || r < 0 || c > maxCol || r > maxRow) continue;
+        if (!taken(c, r)) return { x: (c + 0.5) * cs, y: (r + 0.5) * cs };
+      }
+    }
+  }
+  return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
+}
+
+// ─── Auto-tokens: the tracker is the roster, the map is the picture ──────────
+// Adding a creature to the Combat Tracker drops a token for it on the map.
+// Before this the two lists were maintained by hand and drifted immediately —
+// a live campaign was found with five PC tokens and three monsters that
+// existed only in the tracker, which leaves the Turn View with no square to
+// centre on, no reach ring and no opportunity attacks on a monster's turn.
+//
+// RECONCILIATION, not an add-hook. Six places across four files push a
+// combatant, and hooking each one guarantees the seventh gets missed. This
+// derives the tokens the map SHOULD have from the roster, and runs off save().
+//
+// Only tokens it created carry `auto: true`, and only those are removed again:
+// a token the DM placed by hand is theirs and outlives the fight.
+
+function _sktTokenForNewCombatant(c, x, y){
+  const isPC = !!c.isPC;
+  const glyph = (typeof CLASS_ICONS !== 'undefined'
+    ? (CLASS_ICONS[c.cls] || (isPC ? CLASS_ICONS.fighter : CLASS_ICONS.enemy)) : null)
+    || (isPC ? '⚔' : '🐲');
+  // A combatant carries a portrait when it came from the bestiary. For PCs
+  // fall back to the party slot, so an auto-placed PC token looks the same as
+  // a hand-placed one.
+  const mate = isPC && typeof state !== 'undefined'
+    ? (state.party || []).find(p => sktNormName(p.name) === sktNormName(c.name)) : null;
+  const tok = {
+    id: (typeof uid === 'function' ? uid() : String(Math.random()).slice(2)),
+    label: c.name,
+    x, y,
+    isPC,
+    color: isPC ? '#696969' : '#993333',
+    size: 1,
+    dead: (c.hp || 0) <= 0,
+    icon: c.icon || (mate && mate.icon) || glyph,
+    portrait: c.portrait || (mate && mate.portrait) || null,
+    auto: true,
+  };
+  if (c.baseName) tok.baseName = c.baseName;
+  return tok;
+}
+
+// The reconciliation, over a plain view of the map. Mutates `tokens`.
+function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre){
+  const list = Array.isArray(combatants) ? combatants : [];
+  let added = 0, removed = 0;
+
+  // Drop auto tokens whose combatant has left the fight.
+  for (let i = tokens.length - 1; i >= 0; i--){
+    const t = tokens[i];
+    if (!t || !t.auto) continue;
+    if (!list.some(c => sktTokenForCombatant([t], c))){ tokens.splice(i, 1); removed++; }
+  }
+
+  // Place anyone missing.
+  list.forEach(c => {
+    if (sktTokenForCombatant(tokens, c)) return;
+    const { x, y } = sktFreeCell(tokens, cols, rows, cs, centre.x, centre.y);
+    tokens.push(_sktTokenForNewCombatant(c, x, y));
+    added++;
+  });
+
+  return { added, removed };
+}
+
+// Roster signature. Cheap enough to run on every save(), and it means an HP
+// tick — the highest-frequency save there is — reconciles nothing.
+function _sktRosterSig(){
+  if (typeof state === 'undefined' || !Array.isArray(state.combatants)) return '';
+  return state.combatants.map(c => sktNormName(c.name)).join('|');
+}
+let _sktLastRosterSig = null;
+
+// Entry point, called from save(). Works whether or not the panel is mounted:
+// with it closed the STORED JSON is edited directly, because the panel's
+// in-memory _tokens is an empty array until mount() and writing that back
+// would erase the map.
+function sktEnsureCombatTokens(force){
+  try {
+    // Players never create tokens. The battle map drops unknown token ids
+    // arriving from a player for the same reason, and the Firebase rules
+    // cannot tell the two apart — so the check has to be here.
+    if (document.body.classList.contains('player-mode')) return;
+    if (typeof state === 'undefined' || !Array.isArray(state.combatants)) return;
+
+    const sig = _sktRosterSig();
+    if (!force && sig === _sktLastRosterSig) return;
+    _sktLastRosterSig = sig;
+    if (!state.combatants.length) return;
+
+    const def = (typeof panelDefs !== 'undefined') && panelDefs.battlemap;
+    if (def && def._body){
+      const centre = def._viewCenterStage()
+        || { x: def._cols * def._csScreen() / 2, y: def._rows * def._csScreen() / 2 };
+      const r = sktReconcileTokens(def._tokens, state.combatants,
+                                   def._cols, def._rows, def._csScreen(), centre);
+      if (r.added || r.removed){ def._renderTokens(); def._saveMap(); }
+      return r;
+    }
+
+    const raw = localStorage.getItem('skt-battlemap-v1');
+    if (!raw) return;                     // no map yet — nothing to place onto
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.tokens)) return;
+    const cs   = (d.cellSize || 50) * (d.bgMapPath ? (d.bgMapScale || 1) : 1);
+    const cols = d.cols || 24, rows = d.rows || 18;
+    // No viewport to read with the panel closed, so aim at the middle of what
+    // is already placed — beside the party, not in a far corner.
+    const placed = d.tokens.filter(t => t.x != null);
+    const centre = placed.length
+      ? { x: placed.reduce((s, t) => s + t.x, 0) / placed.length,
+          y: placed.reduce((s, t) => s + t.y, 0) / placed.length }
+      : { x: cols * cs / 2, y: rows * cs / 2 };
+    const r = sktReconcileTokens(d.tokens, state.combatants, cols, rows, cs, centre);
+    if (r.added || r.removed){
+      // setItem is enough to sync: realtime.js patches Storage.prototype and
+      // pushes any dirtied SKT_SYNC_KEYS key. Deliberately NOT broadcast on
+      // the 'skt-battlemap' channel — a listener there treats any message
+      // without a `kind` as a full state snapshot and hands it to
+      // applyMapState(), so a partial payload would blank a player's map.
+      localStorage.setItem('skt-battlemap-v1', JSON.stringify(d));
+    }
+    return r;
+  } catch(e){
+    // A token that failed to place must never take down the save() that
+    // triggered it.
+    console.warn('[SKT] auto-token', e);
+  }
+}

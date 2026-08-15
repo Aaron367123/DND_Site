@@ -369,8 +369,13 @@ function findChrome(){
     // and waits for nothing. Its children only appear once the app has built
     // the workspace, which is the thing worth waiting for. The player view has
     // no switcher, so its dock counts instead.
+    // `.pa-tab` is the player app's tab strip. The older `.pv-dock-btn` no
+    // longer exists — the player view was rebuilt around player-app.js — so
+    // on its own it meant every --player run burned the full 10s poll and
+    // then warned that a page which had built perfectly well was not ready.
     const readyExpr = a.ready
       || "!!(document.querySelector('.ws-switch')?.children.length"
+       + " || document.querySelector('.pa-tab')"
        + " || document.querySelector('.pv-dock-btn'))";
     let ready = false;
     for (let i = 0; i < 100 && !ready; i++){

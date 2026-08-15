@@ -446,18 +446,12 @@ registerPanel('turnview', {
   // first, then trimmed and case-folded, then the group base name a numbered
   // duplicate carries ("Ogre 1 2" → "Ogre"). Strict equality matched two of
   // eight creatures in a real fight.
-  _norm(s){ return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); },
-  _tokenFor(c){
-    if (!c) return null;
-    const toks = this._map().tokens;
-    const exact = toks.find(t => t.label === c.name);
-    if (exact) return exact;
-    const n = this._norm(c.name);
-    return toks.find(t => this._norm(t.label) === n)
-        || toks.find(t => c.baseName && this._norm(t.label) === this._norm(c.baseName))
-        || toks.find(t => t.baseName && this._norm(t.baseName) === n)
-        || null;
-  },
+  // Both live in js/core/utils.js now. The auto-token reconciler has to make
+  // exactly the same call about whether a token already exists, and a second
+  // copy of this rule drifting from the first is how the map ended up drawing
+  // two of eight creatures in the first place.
+  _norm(s){ return sktNormName(s); },
+  _tokenFor(c){ return sktTokenForCombatant(this._map().tokens, c); },
   // The reverse lookup, for drawing the map rather than the order.
   _combatantForToken(t){
     if (!t) return null;
