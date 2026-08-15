@@ -4626,10 +4626,17 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre){
       // A linked token follows its combatant's name — the tracker is the
       // roster. Renaming IN PLACE is the point: culling and re-placing would
       // move the creature, which is what the `cid` link exists to prevent.
-      if (t.cid != null && t.cid === c.id && t.label !== c.name){
-        t.label = c.name;
-        if (c.baseName) t.baseName = c.baseName; else delete t.baseName;
-        renamed++;
+      if (t.cid != null && t.cid === c.id){
+        if (t.label !== c.name){
+          t.label = c.name;
+          if (c.baseName) t.baseName = c.baseName; else delete t.baseName;
+          renamed++;
+        }
+        // Death follows the tracker too. Nothing propagated it before, so a
+        // monster killed in the tracker went on standing upright on the map
+        // until the DM remembered to hit the skull button on its token.
+        const isDead = !!c.dead || (c.hp || 0) <= 0;
+        if (!!t.dead !== isDead){ t.dead = isDead; renamed++; }
       }
       return;
     }
@@ -4641,11 +4648,15 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre){
   return { added, removed, renamed };
 }
 
-// Roster signature. Cheap enough to run on every save(), and it means an HP
-// tick — the highest-frequency save there is — reconciles nothing.
+// Roster signature. Cheap enough to run on every save(), and it means an
+// ordinary HP tick — the highest-frequency save there is — reconciles
+// nothing. Liveness is in the signature because a token's `dead` mark follows
+// the tracker, and dying is the one HP change the map has to notice.
 function _sktRosterSig(){
   if (typeof state === 'undefined' || !Array.isArray(state.combatants)) return '';
-  return state.combatants.map(c => sktNormName(c.name)).join('|');
+  return state.combatants
+    .map(c => sktNormName(c.name) + ((c.dead || (c.hp || 0) <= 0) ? '†' : ''))
+    .join('|');
 }
 let _sktLastRosterSig = null;
 
@@ -4664,7 +4675,11 @@ function sktEnsureCombatTokens(force){
     const sig = _sktRosterSig();
     if (!force && sig === _sktLastRosterSig) return;
     _sktLastRosterSig = sig;
-    if (!state.combatants.length) return;
+    // No early return on an empty roster. Ending combat clears every
+    // combatant at once, and skipping the pass there meant removing seven of
+    // eight creatures took seven tokens with them while removing the eighth
+    // took none — the map kept a full set of dead monsters after every fight.
+    // Hand-placed tokens are untouched either way.
 
     const def = (typeof panelDefs !== 'undefined') && panelDefs.battlemap;
     if (def && def._body){

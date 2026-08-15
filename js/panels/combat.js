@@ -801,11 +801,11 @@ registerPanel('combat',{
           if (typeof showToast === 'function') showToast('Combat ended');
         };
         if (typeof showConfirm === 'function'){
-          showConfirm('End combat? All combatants will be removed.',
+          showConfirm('End combat? All combatants will be removed, along with the tokens the tracker placed for them. Tokens you placed yourself stay.',
             {title:'End combat', confirmLabel:'End', danger:true}).then(proceed);
         } else {
           // Fallback if utils.js failed to load — at least don't crash.
-          proceed(window.confirm('End combat? All combatants will be removed.'));
+          proceed(window.confirm('End combat? All combatants will be removed, along with the tokens the tracker placed for them. Tokens you placed yourself stay.'));
         }
       }
       else if(act==='add')            this._addPrompt();
@@ -1240,19 +1240,21 @@ registerPanel('combat',{
     state.combatRound = round;
     showToast(`Round ${round}`);
     this._log('— Round ' + round + ' —');
-    // Legendary actions still refresh on the round tick. The 5e rule is "at
-    // the start of its turn", and for a solo legendary creature those are the
-    // same moment; keeping it here avoids per-combatant accounting for the
-    // one creature in the fight that has them.
+    // Legendary actions do NOT refresh here — see _refreshTurnEconomy, same
+    // reasoning as reactions below. The round tick was said to be equivalent
+    // for a solo legendary creature, but that only holds if the creature also
+    // has the highest initiative. A dragon at initiative 12 in a party that
+    // rolls 20 and 15 spends its three legendary actions before its own turn
+    // ever arrives, and then gets nothing back until the top of the next
+    // round — the rule is "regains at the START OF ITS TURN", so it should be
+    // holding three again for the rest of the round. The round tick
+    // under-granted them to every legendary creature that isn't first.
     //
-    // Reactions no longer refresh here — see _refreshTurnEconomy. Doing it on the
-    // round tick refunded a reaction spent between the tick and the creature's
-    // own turn, which was an invisible approximation while reactions were a
-    // toggle and a visible one now that the Turn View offers them by name and
-    // spends real resources for them.
-    state.combatants.forEach(c => {
-      if (c.legendaryMax){ c.legendaryUsed = 0; }
-    });
+    // Reactions don't refresh here either. Doing it on the round tick
+    // refunded a reaction spent between the tick and the creature's own turn,
+    // which was an invisible approximation while reactions were a toggle and
+    // a visible one now that the Turn View offers them by name and spends
+    // real resources for them.
     // Tick down buff durations. A buff at rounds==0 expires after this
     // round's start — drop it. Negative/undefined durations are permanent
     // (until manually removed) and don't tick.
@@ -1341,6 +1343,9 @@ registerPanel('combat',{
     c.actionUsed = false;
     c.bonusUsed = false;
     c.dodging = false;
+    // "The creature regains spent legendary actions at the start of its
+    // turn." Same moment as the rest of its economy, so the same place.
+    if (c.legendaryMax) c.legendaryUsed = 0;
   },
 
   _nextTurn(){
