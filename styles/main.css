@@ -3707,6 +3707,35 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
    flex:0 0 auto that stack pushed the result line and the whole log off the
    bottom of the panel. The result is the answer to what you just did and has
    to stay on screen, so the actions give way first. */
+/* Action-economy bar. _renderEconomy() shipped with its class names and
+   without a single rule for them, so the three pips fell back to the browser's
+   native button styling while the six standard actions beside them carried
+   .btn: 13.3px UA font against the app's 12px, 21px tall against 28px, and
+   sitting 4px off the shared baseline. The bar itself was not even a flex row.
+   The `spent` state is the load-bearing part — it had no styling at all, so a
+   used action was indistinguishable from an unused one, which is the entire
+   job of the pip. */
+.tv-econ-bar { display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+.tv-econ {
+  display:inline-flex; align-items:center; padding:5px 10px;
+  border-radius:var(--r-pill); background:var(--panel-3);
+  border:1px solid var(--border); color:var(--text-muted);
+  /* line-height deliberately left at normal: .btn does not set one either,
+     and any explicit value here puts the two groups a couple of pixels apart
+     in the row they share. */
+  font-family:inherit; font-size:var(--fs-md); font-weight:600;
+  cursor:pointer; user-select:none;
+  transition:background .12s, border-color .12s, color .12s;
+}
+.tv-econ:hover { border-color:var(--accent); color:var(--text); }
+.tv-econ.spent {
+  background:transparent; color:var(--text-dim); border-style:dashed;
+  text-decoration:line-through; text-decoration-thickness:1px;
+}
+.tv-econ.spent:hover { color:var(--text-muted); }
+.tv-econ-sep { width:1px; align-self:stretch; margin:1px 4px; background:var(--border); }
+.tv-econ-act { white-space:nowrap; }
+
 .tv-actions { display:flex; flex-direction:column; gap:7px; flex:0 1 auto;
   min-height:0; overflow-y:auto; }
 .tv-act { display:flex; align-items:center; gap:12px; padding:9px 11px;
