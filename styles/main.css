@@ -3736,8 +3736,19 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-econ-sep { width:1px; align-self:stretch; margin:1px 4px; background:var(--border); }
 .tv-econ-act { white-space:nowrap; }
 
+/* The scroller and the row pinned under it. .tv-actions is what gives way
+   when the attack list is long; the manual row must not, because it is the
+   fallback for every attack the parser missed. */
+.tv-actions-wrap { display:flex; flex-direction:column; gap:7px; flex:0 1 auto; min-height:0; }
+/* The rule reads as a pinned footer. Without it the last attack row is
+   simply sliced by the scroller's edge and looks like a rendering fault
+   rather than content continuing above. */
+.tv-actions-wrap > .tv-manual { flex:0 0 auto; border-top:1px solid var(--border); padding-top:7px; }
 .tv-actions { display:flex; flex-direction:column; gap:7px; flex:0 1 auto;
   min-height:0; overflow-y:auto; }
+/* Rage / Wild Shape, borrowed wholesale from the Party panel's forms row. */
+.tv-classrow { display:flex; flex-wrap:wrap; gap:6px; }
+.tv-classrow .char-forms-row { display:flex; flex-wrap:wrap; gap:6px; margin:0; }
 .tv-act { display:flex; align-items:center; gap:12px; padding:9px 11px;
   background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); }
 .tv-act-body { flex:1; min-width:0; }

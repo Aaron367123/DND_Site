@@ -739,6 +739,40 @@ registerPanel('turnview', {
     </select>`;
   },
 
+  // ─── Class mechanics ──────────────────────────────────────────────────────
+  // Rage and Wild Shape are turn decisions, and the Turn View could only point
+  // at the Party panel for them — so running a barbarian meant leaving the
+  // panel built for running a turn.
+  //
+  // The MARKUP is the Party panel's own _formsRow(), not a second copy: it
+  // carries the level-scaled rage damage, the rounds-left counter and the
+  // rules text in its tooltips, and a reimplementation here would be a second
+  // thing to keep in step with the barbarian table. Clicks are delegated to
+  // the same handlers, so the two surfaces cannot disagree about state.
+  _renderClassRow(c){
+    const p = this._partyOf(c);
+    const P = panelDefs.party;
+    if (!p || !P || typeof P._formsRow !== 'function') return '';
+    const i = state.party.indexOf(p);
+    if (i < 0) return '';
+    let row = '';
+    try { row = P._formsRow(p, i) || ''; } catch(e){ return ''; }
+    if (!row) return '';                 // not a barbarian or a druid
+    return `<div class="tv-classrow">${row}</div>`;
+  },
+
+  // The Party panel binds its own click handler to its own body, so nothing
+  // it renders is live inside this panel. Route the two actions to the same
+  // methods rather than duplicating what they do.
+  _classAction(act, i){
+    const P = panelDefs.party; if (!P) return false;
+    if (act === 'rage-on')  { P._setRage(i, true);  this._render(); return true; }
+    if (act === 'rage-off') { P._setRage(i, false); this._render(); return true; }
+    if (act === 'ws-start' || act === 'ws-edit'){ P._editWildShape(i); return true; }
+    if (act === 'ws-end')   { P._endWildShape(i); this._render(); return true; }
+    return false;
+  },
+
   _renderActions(c){
     // Exactly one legal action when a PC is dying, so offer exactly that.
     if (this._isDowned(c)) return this._renderDeathSaves(c);
@@ -751,9 +785,9 @@ registerPanel('turnview', {
       <button class="btn ${list.length ? '' : 'primary'}" data-tv="manual">Apply</button>
     </div>`;
     if (!list.length){
-      return `<div class="tv-actions">${manual}
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderClassRow(c)}${manual}
         <div class="tv-act-line" style="padding:0 2px">Or use the −/+ under the target list for damage
-        and healing that isn't an attack.</div></div>`;
+        and healing that isn't an attack.</div></div></div>`;
     }
     const rows = list.map((a, i) => {
       const line = a.pc
@@ -823,7 +857,15 @@ registerPanel('turnview', {
       <span class="tv-note">Sticky for the turn — Reckless Attack lasts all of it.
         Shift-click a Roll for advantage, Alt-click for disadvantage.</span>
     </div>`;
-    return `<div class="tv-actions">${this._renderEconomy(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}${manual}</div>`;
+    // The manual row sits OUTSIDE the scroller. .tv-actions gives way so the
+    // result line stays on screen, which meant that on a creature with three
+    // or more attacks the "rolled it yourself" row scrolled out of reach —
+    // and that row is the fallback for every attack the parser didn't get,
+    // so it is the last thing that should disappear when the list gets long.
+    return `<div class="tv-actions-wrap">
+      <div class="tv-actions">${this._renderEconomy(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
+      ${manual}
+    </div>`;
   },
 
   // ─── Legendary actions ────────────────────────────────────────────────────
@@ -1794,6 +1836,13 @@ registerPanel('turnview', {
     b._tvWired = true;
 
     b.addEventListener('click', e => {
+      // The class row is the Party panel's own markup, which speaks data-act
+      // rather than data-tv. Checked before the data-tv lookup because those
+      // buttons carry no data-tv at all and would otherwise be inert.
+      const cls = e.target.closest('[data-act]');
+      if (cls && cls.closest('.tv-classrow')){
+        if (this._classAction(cls.dataset.act, +cls.dataset.idx)) return;
+      }
       const el = e.target.closest('[data-tv]'); if (!el) return;
       const act = el.dataset.tv;
       if (act === 'jump'){
