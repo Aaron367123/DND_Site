@@ -3755,6 +3755,19 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
   border-radius:var(--r-sm); padding:5px 7px; font:inherit; font-size:var(--fs-md);
   text-align:center; font-variant-numeric:tabular-nums; }
 .tv-in.wide { width:96px; text-align:left; }
+/* The damage-type picker is a <select>, and .tv-in erases the global select
+   styling twice over: `background:` is the SHORTHAND, which resets
+   background-image and takes the caret with it, and `.tv-in` outranks the
+   bare `select` selector on padding, so the 26px reserved for the arrow goes
+   too. Both have to be restored here or the control looks like a text box
+   that quietly refuses to be typed in. Caret markup matches the global rule. */
+select.tv-in {
+  padding-right:26px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 9px center;
+}
+select.tv-in.wide { width:126px; }
 
 /* The result sits directly under the Roll buttons, where the eye already is.
    At the foot of the panel it was 200px from the thing that caused it. The

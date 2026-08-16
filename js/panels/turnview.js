@@ -704,6 +704,41 @@ registerPanel('turnview', {
     return { text: p.multi.text, plan: panelDefs.attacks._plan({ multi: p.multi, attacks: p.attacks }) };
   },
 
+  // The damage types THIS creature can actually deal, read off the same parse
+  // the attack rows are drawn from, in the order the stat block lists them.
+  // A dragon offers piercing and fire; a rogue offers whatever is on their
+  // sheet. Everything else is still reachable below the divider — a DM
+  // improvises, and a picker that refuses to say "radiant" because the ogre
+  // has no radiant attack would be worse than the free-text box it replaces.
+  _dmgTypesFor(c){
+    const seen = [];
+    const add = t => {
+      const n = String(t || '').trim().toLowerCase();
+      if (n && SKT_DAMAGE_TYPES.includes(n) && !seen.includes(n)) seen.push(n);
+    };
+    (this._attacksFor(c) || []).forEach(a => {
+      (a.parts || []).forEach(p => add(p.type));
+      // A PC's sheet attack carries its damage as free text ("1d8+3 slashing").
+      if (a.dmgText){ const m = SKT_DMG_TYPE_RE.exec(String(a.dmgText).toLowerCase()); if (m) add(m[0]); }
+    });
+    return seen;
+  },
+
+  // Free text was the wrong control here: the value is compared against
+  // c.resistances / c.immunities / c.vulnerabilities, so "Fire ", "slash" or a
+  // typo silently skipped resistance maths and applied full damage with no
+  // error anywhere. A select can only emit one of the thirteen.
+  _dmgTypeSelect(c){
+    const mine = this._dmgTypesFor(c);
+    const rest = SKT_DAMAGE_TYPES.filter(t => !mine.includes(t));
+    const opt = t => `<option value="${t}">${t}</option>`;
+    return `<select class="tv-in wide" data-tvman="type" aria-label="Damage type">
+      <option value="">type…</option>
+      ${mine.length ? `<optgroup label="${esc(c.name)}">${mine.map(opt).join('')}</optgroup>` : ''}
+      <optgroup label="${mine.length ? 'Other' : 'Damage type'}">${rest.map(opt).join('')}</optgroup>
+    </select>`;
+  },
+
   _renderActions(c){
     // Exactly one legal action when a PC is dying, so offer exactly that.
     if (this._isDowned(c)) return this._renderDeathSaves(c);
@@ -712,7 +747,7 @@ registerPanel('turnview', {
       <span class="tv-manual-l">${list.length ? 'Rolled it yourself?' : esc(c.name) + ' rolls — enter the result:'}</span>
       <input class="tv-in" data-tvman="tohit" type="number" placeholder="hit" aria-label="Attack roll total">
       <input class="tv-in" data-tvman="dmg" type="number" placeholder="dmg" aria-label="Damage">
-      <input class="tv-in wide" data-tvman="type" type="text" placeholder="type" aria-label="Damage type">
+      ${this._dmgTypeSelect(c)}
       <button class="btn ${list.length ? '' : 'primary'}" data-tv="manual">Apply</button>
     </div>`;
     if (!list.length){

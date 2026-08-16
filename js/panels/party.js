@@ -616,7 +616,7 @@ registerPanel('party',{
   // type strings. Backward-compat: if a PDF later imports these, the lists
   // get unioned (combat tracker style).
   _renderResistances(c){
-    const TYPES = ['acid','bludgeoning','cold','fire','force','lightning','necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
+    const TYPES = SKT_DAMAGE_TYPES;
     const i = state.party.findIndex(p => p.id === c.id);
     const res = new Set((c.resistances    || []).map(x => String(x).toLowerCase()));
     const imm = new Set((c.immunities     || []).map(x => String(x).toLowerCase()));

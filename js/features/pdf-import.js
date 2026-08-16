@@ -555,8 +555,7 @@ function _deriveResources(pairs, abilities){
   return [...seen.values()];
 }
 
-const _PDF_DMG_TYPES = ['acid','bludgeoning','cold','fire','force','lightning','necrotic',
-                        'piercing','poison','psychic','radiant','slashing','thunder'];
+const _PDF_DMG_TYPES = SKT_DAMAGE_TYPES;
 
 // Parse a free-text defenses line into the three lists the party card already
 // understands (c.resistances / c.immunities / c.vulnerabilities, lowercase

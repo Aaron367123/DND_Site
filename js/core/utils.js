@@ -974,7 +974,16 @@ function sktFindMonster(slug, source){
 // Returns [] for anything with no damage in it (Multiattack, Frightful
 // Presence, and so on) so callers can just concat.
 
-const SKT_DMG_TYPE_RE = /acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder/;
+// The thirteen 5e damage types, in the alphabetical order every stat block
+// and every resistance list uses. This was the same list written out four
+// times — here as a regex, in party.js twice and in pdf-import.js — so the
+// array is the source and the regex is built from it. A type that parses out
+// of a stat block but is missing from a picker is exactly the drift that
+// makes resistances silently not apply.
+const SKT_DAMAGE_TYPES = ['acid','bludgeoning','cold','fire','force','lightning',
+  'necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
+
+const SKT_DMG_TYPE_RE = new RegExp(SKT_DAMAGE_TYPES.join('|'));
 
 // "19 (2d10 + 8) piercing damage" → {avg:19, dice:'2d10+8', type:'piercing'}
 //
