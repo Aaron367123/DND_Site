@@ -779,7 +779,9 @@ registerPanel('turnview', {
     const list = this._attacksFor(c);
     const manual = `<div class="tv-manual ${list.length ? '' : 'lead'}">
       <span class="tv-manual-l">${list.length ? 'Rolled it yourself?' : esc(c.name) + ' rolls — enter the result:'}</span>
-      <input class="tv-in" data-tvman="tohit" type="number" placeholder="hit" aria-label="Attack roll total">
+      <input class="tv-in" data-tvman="tohit" type="number" placeholder="hit?"
+             title="Optional — leave it blank and the damage just lands. Fill it in to have the panel check it against the target's AC."
+             aria-label="Attack roll total (optional)">
       <input class="tv-in" data-tvman="dmg" type="number" placeholder="dmg" aria-label="Damage">
       ${this._dmgTypeSelect(c)}
       <button class="btn ${list.length ? '' : 'primary'}" data-tv="manual">Apply</button>
@@ -1147,8 +1149,8 @@ registerPanel('turnview', {
       ? `<span class="tv-waiting">${ICO('i-monitor')}asked ${esc(state.prompt.offers.map(x => x.who)
           .filter((v, i, a) => a.indexOf(v) === i).join(', '))}</span>` : '';
     return `<div class="tv-react"><span class="tv-react-l">Reaction?</span>${waiting}
-      <span class="tv-react-note">${esc(o.target.name)} ${o.hit ? `takes ${o.dmg} ${esc(o.type || 'damage')}` : 'was missed'}
-        — ${o.total} vs AC ${(o.target.ac || 0) + (o.acBonus || 0)}</span>
+      <span class="tv-react-note">${esc(o.target.name)} ${o.hit ? `takes ${o.dmg} ${esc(o.type || 'damage')}` : 'was missed'}${
+        o.total == null ? '' : ` — ${o.total} vs AC ${(o.target.ac || 0) + (o.acBonus || 0)}`}</span>
       ${opts}
       <button class="btn primary" data-tv="react" data-who="" data-key="__none">${o.hit ? `Take ${o.dmg}` : 'Let it miss'}</button>
     </div>`;
@@ -1696,15 +1698,24 @@ registerPanel('turnview', {
     const b = this._body;
     const t = this._order().find(x => x.id === this._armed);
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
-    const total = parseInt(b.querySelector('[data-tvman="tohit"]').value, 10);
+    const raw = parseInt(b.querySelector('[data-tvman="tohit"]').value, 10);
     const dmg = parseInt(b.querySelector('[data-tvman="dmg"]').value, 10);
-    if (isNaN(total) || isNaN(dmg)){
-      this._setResult('<span class="dim">Enter both the attack total and the damage.</span>'); this._render(); return;
+    if (isNaN(dmg)){
+      this._setResult('<span class="dim">Enter the damage.</span>'); this._render(); return;
     }
+    // The attack total is OPTIONAL. Somebody rolling their own dice does not
+    // come to this row to report a miss — they say "missed" and the turn moves
+    // on — so requiring the number meant typing one in purely to get past the
+    // check. Blank means it hit: no roll to compare, and _commit already omits
+    // the "18 vs AC 16" clause when total is null, which is the same path a
+    // saving throw takes. Filling it in still adjudicates against AC, because
+    // letting the panel make that call is a legitimate reason to enter it.
+    const rolled = !isNaN(raw);
     const type = (b.querySelector('[data-tvman="type"]').value || '').trim();
     const c = this._active();
     this._resolve({ attackerId: c && c.id, attacker: c ? c.name : 'Someone', label: 'attack', target: t,
-                    total, crit: false, hit: total >= (t.ac || 10), dmg, type, detail: '' });
+                    total: rolled ? raw : null, crit: false,
+                    hit: rolled ? raw >= (t.ac || 10) : true, dmg, type, detail: '' });
   },
 
   _adjust(sign){
