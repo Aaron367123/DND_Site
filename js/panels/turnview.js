@@ -35,6 +35,12 @@ registerPanel('turnview', {
   _armed: null,       // combatant id the next roll will hit
   _editInit: false,
   _mapBig: false,
+  // Manual zoom over the automatic framing. 1 = fit the fight. Deliberately
+  // per-session and not persisted: the frame follows whoever is acting, so a
+  // zoom that made sense for one creature's turn is rarely right for the next
+  // session's opening round.
+  _mapZoom: 1,
+  _MAP_ZOOMS: [0.5, 0.75, 1, 1.5, 2, 3, 4, 6],
   _artMode: 'auto',   // grid when compact, map art when enlarged
   _sig: null,
   _result: '',
@@ -457,7 +463,19 @@ registerPanel('turnview', {
     x0 -= PAD; y0 -= PAD; x1 += PAD + 1; y1 += PAD + 1;   // +1: a token fills its own square
     let w = Math.max(MINW, x1 - x0), h = Math.max(MINH, y1 - y0);
     if (w / h < RATIO) w = Math.ceil(h * RATIO); else h = Math.ceil(w / RATIO);
+    // Manual zoom on top of the automatic framing. The auto frame is a good
+    // default and a bad cage: sometimes you want the next room, sometimes one
+    // corner of a melee. Fewer cells in the box = more zoomed in, so the
+    // multiplier divides. MINCELL keeps a zoom-in from collapsing to a single
+    // square you can no longer aim in.
+    const z = this._mapZoom || 1;
+    const MINCELL = 4;
+    w = Math.max(MINCELL, Math.round(w / z));
+    h = Math.max(MINCELL, Math.round(h / z));
     w = Math.min(w, m.cols); h = Math.min(h, m.rows);
+    // Zoomed IN, frame the actor rather than the group — the group no longer
+    // fits, and the creature whose turn it is outranks the bounding box.
+    if (z > 1 && cur){ x0 = x1 = cur.x / cs; y0 = y1 = cur.y / cs; }
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const x = Math.max(0, Math.min(Math.round(cx - w / 2), m.cols - w));
     const y = Math.max(0, Math.min(Math.round(cy - h / 2), m.rows - h));
@@ -1103,11 +1121,18 @@ registerPanel('turnview', {
     // and the tokens turn together — exactly as the battle map's own stage
     // does. The hint stays outside it, because a caption reading bottom-to-top
     // helps nobody.
+    const z = this._mapZoom || 1;
     return `<div class="tv-map${this._mapBig ? ' big' : ''}">
       <div class="tv-map-rot">
         <canvas class="tv-map-draw"></canvas>
       </div>
       <div class="tv-map-grid"></div>
+      <div class="tv-map-zoom">
+        <button data-tv="mapzoom" data-d="-1" title="Zoom out — show more of the map" aria-label="Zoom out">−</button>
+        <button data-tv="mapzoom" data-d="0" title="Back to framing the fight" aria-label="Fit to the fight"
+                class="${z === 1 ? 'off' : ''}">${z === 1 ? 'fit' : Math.round(z * 100) + '%'}</button>
+        <button data-tv="mapzoom" data-d="1" title="Zoom in on whoever is acting" aria-label="Zoom in">+</button>
+      </div>
       <div class="tv-map-hint">${esc(this._mapHint(onMap))}</div>
     </div>`;
   },
@@ -2031,6 +2056,7 @@ registerPanel('turnview', {
         panelDefs.combat?._refreshTurnEconomy?.(el.dataset.id);
         this._armed = null; save(); panelDefs.combat?._render?.(); this._render();
       }
+      else if (act === 'mapzoom'){ this._zoomMap(+el.dataset.d); }
       else if (act === 'initedit'){ this._editInit = true;  this._render(); }
       else if (act === 'initdone'){ this._editInit = false; this._render(); }
       else if (act === 'rollinit'){ this._rollNpcInit(); }
@@ -2102,6 +2128,15 @@ registerPanel('turnview', {
     // the cursor, which raised another pair: the map flickered open and shut
     // for as long as you moved over it. Only act when the pointer has actually
     // crossed the box's own boundary.
+    // The wheel is what a hand reaches for on a map. passive:false because it
+    // has to preventDefault — otherwise the panel scrolls under the pointer at
+    // the same time and the zoom is unusable.
+    b.addEventListener('wheel', e => {
+      const map = e.target.closest && e.target.closest('.tv-map'); if (!map) return;
+      e.preventDefault();
+      this._zoomMap(e.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
+
     const leftTheMap = (map, to) => !to || !map.contains(to);
     b.addEventListener('pointerenter', e => {
       const map = e.target.closest && e.target.closest('.tv-map'); if (!map) return;
@@ -2148,8 +2183,15 @@ registerPanel('turnview', {
       // Measured from the box CENTRE because that is the transform origin.
       const deg = src.rotation || 0;
       const quarter = deg === 90 || deg === 270;
-      const W = quarter ? r.height : r.width, H = quarter ? r.width : r.height;
-      const sx = e.clientX - r.left - r.width / 2, sy = e.clientY - r.top - r.height / 2;
+      // getBoundingClientRect INCLUDES the 1px border; _placeTokens lays out
+      // against clientWidth/clientHeight, which does not. Mixing the two put
+      // every drop about a pixel off what the eye had aimed at. Measure the
+      // content box, exactly as the drawing does.
+      const boxW = m.clientWidth, boxH = m.clientHeight;
+      const bx = (r.width - boxW) / 2, by = (r.height - boxH) / 2;
+      const W = quarter ? boxH : boxW, H = quarter ? boxW : boxH;
+      const sx = e.clientX - r.left - bx - boxW / 2;
+      const sy = e.clientY - r.top  - by - boxH / 2;
       const un = deg === 90  ? { x:  sy, y: -sx }
                : deg === 180 ? { x: -sx, y: -sy }
                : deg === 270 ? { x: -sy, y:  sx }
@@ -2207,6 +2249,26 @@ registerPanel('turnview', {
 
   // The enlarge is a class swap, but token offsets are computed from the box's
   // pixel size — so they have to be recomputed once it has the new one.
+  // dir: -1 out, +1 in, 0 back to the automatic frame. Steps through a fixed
+  // ladder rather than multiplying, so the readout is always a round number
+  // and repeated clicks can't drift to 137%.
+  _zoomMap(dir){
+    const L = this._MAP_ZOOMS;
+    if (!dir){ this._mapZoom = 1; }
+    else {
+      let i = L.indexOf(this._mapZoom);
+      if (i < 0){ i = L.indexOf(1); }
+      this._mapZoom = L[Math.max(0, Math.min(L.length - 1, i + dir))];
+    }
+    this._vp = null;              // the frame is derived, so drop the cache
+    this._placeTokens();
+    const rd = this._body && this._body.querySelector('.tv-map-zoom [data-d="0"]');
+    if (rd){
+      rd.textContent = this._mapZoom === 1 ? 'fit' : Math.round(this._mapZoom * 100) + '%';
+      rd.classList.toggle('off', this._mapZoom === 1);
+    }
+  },
+
   _reflowMap(){
     const b = this._body; if (!b) return;
     const m = b.querySelector('.tv-map'); if (!m) return;

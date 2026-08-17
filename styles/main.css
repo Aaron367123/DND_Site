@@ -3832,6 +3832,19 @@ select.tv-in.wide { width:126px; }
    quarter turn swaps the box's width and height. */
 .tv-map-rot { position:absolute; transform-origin:50% 50%; }
 .tv-map-draw { position:absolute; inset:0; pointer-events:none; }
+/* Zoom cluster, opposite corner to the hint. Faint until the map is hovered
+   so a 250px thumbnail isn't mostly chrome. */
+.tv-map-zoom { position:absolute; top:4px; right:4px; z-index:5; display:flex; gap:2px;
+  opacity:.35; transition:opacity .12s; }
+.tv-map:hover .tv-map-zoom, .tv-map.big .tv-map-zoom { opacity:1; }
+.tv-map-zoom button {
+  min-width:22px; height:20px; padding:0 5px; cursor:pointer;
+  background:rgba(0,0,0,.55); color:var(--text); border:1px solid var(--border);
+  border-radius:var(--r-sm); font:inherit; font-size:var(--fs-2xs); line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.tv-map-zoom button:hover { background:rgba(0,0,0,.8); border-color:var(--accent); }
+.tv-map-zoom button.off { color:var(--text-dim); }
 .tv-map-grid[hidden]{display:none}
 .tv-map-grid { position:absolute; inset:0; pointer-events:none;
   background-image:linear-gradient(rgba(255,255,255,.09) 1px,transparent 1px),
