@@ -376,7 +376,9 @@ registerPanel('turnview', {
       try { if (B._csScreen) cs = B._csScreen() || cs; } catch(e){}
       return { live:true, tokens:B._tokens, cs, cols:B._cols || 24, rows:B._rows || 18,
                gridType:B._gridType || 'square', bgPath:B._bgMapPath || null,
-               bgScale:B._bgMapScale || 1 };
+               bgScale:B._bgMapScale || 1,
+               rotation:((B._mapRotation || 0) % 360 + 360) % 360,
+               drawings:Array.isArray(B._drawings) ? B._drawings : [] };
     }
     try {
       const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || 'null');
@@ -384,11 +386,13 @@ registerPanel('turnview', {
         return { live:false, tokens:d.tokens, cols:d.cols || 24, rows:d.rows || 18,
                  cs: (d.cellSize || 50) * (d.bgMapPath ? (d.bgMapScale || 1) : 1),
                  gridType:d.gridType || (d.showGrid === false ? 'none' : 'square'),
-                 bgPath:d.bgMapPath || null, bgScale:d.bgMapScale || 1 };
+                 bgPath:d.bgMapPath || null, bgScale:d.bgMapScale || 1,
+                 rotation:((d.mapRotation || 0) % 360 + 360) % 360,
+                 drawings:Array.isArray(d.drawings) ? d.drawings : [] };
       }
     } catch(e){}
     return { live:false, tokens:[], cs:50, cols:24, rows:18,
-             gridType:'square', bgPath:null, bgScale:1 };
+             gridType:'square', bgPath:null, bgScale:1, rotation:0, drawings:[] };
   },
   _map(){ return this._mapCache || (this._mapCache = this._mapSrc()); },
 
@@ -426,8 +430,23 @@ registerPanel('turnview', {
     if (this._drag && this._vp) return this._vp;      // don't pan under a drag
     const m = this._map(), cs = m.cs || 50;
     const RATIO = 1.45, PAD = 2, MINW = 10, MINH = 7;
+    // Frame the FIGHT, not the map. Framing every token meant one creature
+    // parked twenty squares away — a scout, or someone left behind by the
+    // last scene — stretched the box to 37x25 on a real campaign and shrank
+    // every cell to 7px. So: anchor on whoever is acting and take only what
+    // is within reach of the action. A token further out is still on the map,
+    // it just doesn't get to decide the zoom.
+    //
+    // NEAR is generous on purpose — 14 squares is 70 ft, past any melee reach
+    // and most spell ranges, so the whole engagement stays in frame and only
+    // genuine stragglers drop out.
+    const NEAR = 14;
+    const cur = this._tokenFor(this._active());
+    const inFrame = cur
+      ? m.tokens.filter(t => Math.max(Math.abs(t.x - cur.x), Math.abs(t.y - cur.y)) / cs <= NEAR)
+      : m.tokens;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    m.tokens.forEach(t => {
+    (inFrame.length ? inFrame : m.tokens).forEach(t => {
       const x = Math.round(t.x / cs), y = Math.round(t.y / cs);
       x0 = Math.min(x0, x); y0 = Math.min(y0, y);
       x1 = Math.max(x1, x); y1 = Math.max(y1, y);
@@ -1078,7 +1097,14 @@ registerPanel('turnview', {
   _renderMap(){
     const onMap = this._map().tokens.length;
     // The grid is sized in _placeTokens, once the box has real pixels.
+    // .tv-map-rot carries the map's rotation, so the art, the pencil strokes
+    // and the tokens turn together — exactly as the battle map's own stage
+    // does. The hint stays outside it, because a caption reading bottom-to-top
+    // helps nobody.
     return `<div class="tv-map${this._mapBig ? ' big' : ''}">
+      <div class="tv-map-rot">
+        <canvas class="tv-map-draw"></canvas>
+      </div>
       <div class="tv-map-grid"></div>
       <div class="tv-map-hint">${esc(this._mapHint(onMap))}</div>
     </div>`;
@@ -1102,10 +1128,23 @@ registerPanel('turnview', {
   _placeTokens(){
     const b = this._body; if (!b) return;
     const m = b.querySelector('.tv-map'); if (!m) return;
-    m.querySelectorAll('.tv-tok').forEach(n => n.remove());
+    const rot = m.querySelector('.tv-map-rot') || m;
+    rot.querySelectorAll('.tv-tok').forEach(n => n.remove());
     const src = this._map(), vp = this._viewport();
     const cs = src.cs || 50;
-    const W = m.clientWidth || 250, H = m.clientHeight || 172;
+    // Under a 90/270 rotation the rotated layer's own width and height are
+    // the box's swapped, so everything inside is laid out against those and
+    // the transform does the rest. transform-origin is the layer's centre, so
+    // centring the swapped box inside the outer one lands it square.
+    const deg = src.rotation || 0;
+    const quarter = deg === 90 || deg === 270;
+    const boxW = m.clientWidth || 250, boxH = m.clientHeight || 172;
+    const W = quarter ? boxH : boxW, H = quarter ? boxW : boxH;
+    rot.style.width = W + 'px';
+    rot.style.height = H + 'px';
+    rot.style.left = ((boxW - W) / 2) + 'px';
+    rot.style.top  = ((boxH - H) / 2) + 'px';
+    rot.style.transform = deg ? `rotate(${deg}deg)` : '';
     // ONE cell size for both axes, letterboxed. Fitting the viewport to the box
     // independently per axis would give rectangular cells, and a grid whose
     // squares aren't square misreports the one thing this map exists to show.
@@ -1126,15 +1165,21 @@ registerPanel('turnview', {
       const natH = (B && B._bgMapNaturalH) || img.naturalHeight;
       const dispW = natW * scale * k, dispH = natH * scale * k;
       const url = src.bgPath ? assetUrl(src.bgPath) : img.src;
-      m.style.backgroundImage = `url("${url}")`;
-      m.style.backgroundRepeat = 'no-repeat';
-      m.style.backgroundSize = `${dispW}px ${dispH}px`;
-      m.style.backgroundPosition = `${offX - vp.x * cell}px ${offY - vp.y * cell}px`;
+      rot.style.backgroundImage = `url("${url}")`;
+      rot.style.backgroundRepeat = 'no-repeat';
+      rot.style.backgroundSize = `${dispW}px ${dispH}px`;
+      rot.style.backgroundPosition = `${offX - vp.x * cell}px ${offY - vp.y * cell}px`;
     } else {
-      m.style.backgroundImage = '';
-      m.style.backgroundSize = '';
-      m.style.backgroundPosition = '';
+      rot.style.backgroundImage = '';
+      rot.style.backgroundSize = '';
+      rot.style.backgroundPosition = '';
     }
+
+    // Pencil annotations. Stored as {c:colour, s:width, p:[x1,y1,x2,y2,…]} in
+    // stage pixels, so the same k and offsets the art uses put them in the
+    // right place. They are the DM's own marks — a spell area, a line of
+    // retreat — and the panel simply wasn't drawing them.
+    this._drawStrokes(rot.querySelector('.tv-map-draw'), src, vp, cell, offX, offY, W, H);
 
     // The overlay grid is only ever right for a square grid with no art. A map
     // image carries its own grid — printed, and hex on this one — so drawing
@@ -1191,7 +1236,36 @@ registerPanel('turnview', {
       n.style.top  = (offY + ((t.y / cs) - vp.y) * cell) + 'px';
       frag.appendChild(n);
     });
-    m.appendChild(frag);
+    rot.appendChild(frag);
+  },
+
+  // Pencil strokes onto the thumbnail's own canvas. Same k and offsets the
+  // art uses, so a stroke lands on the same feature it was drawn over.
+  _drawStrokes(cv, src, vp, cell, offX, offY, W, H){
+    if (!cv) return;
+    const list = src.drawings || [];
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.max(1, Math.round(W * dpr));
+    cv.height = Math.max(1, Math.round(H * dpr));
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    const ctx = cv.getContext('2d'); if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (!list.length) return;
+    const cs = src.cs || 50, k = cell / cs;
+    const px = v => offX + (v / cs - vp.x) * cell;
+    const py = v => offY + (v / cs - vp.y) * cell;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    list.forEach(s => {
+      const p = s && s.p; if (!p || p.length < 4) return;
+      ctx.strokeStyle = s.c || '#ff4040';
+      // Widths are stage px; scaled down they vanish, so keep a hairline floor.
+      ctx.lineWidth = Math.max(0.75, (s.s || 4) * k);
+      ctx.beginPath();
+      ctx.moveTo(px(p[0]), py(p[1]));
+      for (let i = 2; i + 1 < p.length; i += 2) ctx.lineTo(px(p[i]), py(p[i + 1]));
+      ctx.stroke();
+    });
   },
 
   _renderPending(){
@@ -2046,12 +2120,25 @@ registerPanel('turnview', {
       const tok = this._drag.tok; if (!tok) return;
       const src = this._map(), vp = this._viewport(), r = m.getBoundingClientRect();
       const cs = src.cs || 50;
+      // Undo the map's rotation before doing any cell maths. The pointer is in
+      // screen space and the layout inside .tv-map-rot is not, so on a turned
+      // map the un-rotated version dropped tokens on the wrong axis entirely.
+      // Measured from the box CENTRE because that is the transform origin.
+      const deg = src.rotation || 0;
+      const quarter = deg === 90 || deg === 270;
+      const W = quarter ? r.height : r.width, H = quarter ? r.width : r.height;
+      const sx = e.clientX - r.left - r.width / 2, sy = e.clientY - r.top - r.height / 2;
+      const un = deg === 90  ? { x:  sy, y: -sx }
+               : deg === 180 ? { x: -sx, y: -sy }
+               : deg === 270 ? { x: -sy, y:  sx }
+               :               { x:  sx, y:  sy };
+      const lx = un.x + W / 2, ly = un.y + H / 2;
       // Same letterbox the tokens are drawn with, or the drop lands a square
       // off wherever the black bars are.
-      const cell = Math.min(r.width / vp.w, r.height / vp.h);
-      const offX = (r.width - cell * vp.w) / 2, offY = (r.height - cell * vp.h) / 2;
-      const cx = vp.x + Math.floor((e.clientX - r.left - offX) / cell);
-      const cy = vp.y + Math.floor((e.clientY - r.top - offY) / cell);
+      const cell = Math.min(W / vp.w, H / vp.h);
+      const offX = (W - cell * vp.w) / 2, offY = (H - cell * vp.h) / 2;
+      const cx = vp.x + Math.floor((lx - offX) / cell);
+      const cy = vp.y + Math.floor((ly - offY) / cell);
       // Snap to the CENTRE of the dropped cell, the same convention the battle
       // map's own drop uses. Writing the corner put the token half a square up
       // and to the left of the square it was dropped on, on the real map —

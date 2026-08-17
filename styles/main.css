@@ -3827,6 +3827,11 @@ select.tv-in.wide { width:126px; }
   transition:width .16s ease,height .16s ease,box-shadow .16s ease; }
 .tv-map.big { position:absolute; top:0; right:0; z-index:30;
   width:min(560px,54vw); height:392px; box-shadow:var(--sh-4); border-color:var(--accent); }
+/* The rotated layer: map art, pencil strokes and tokens turn together, the
+   same way the battle map's stage does. Sized and positioned in JS because a
+   quarter turn swaps the box's width and height. */
+.tv-map-rot { position:absolute; transform-origin:50% 50%; }
+.tv-map-draw { position:absolute; inset:0; pointer-events:none; }
 .tv-map-grid[hidden]{display:none}
 .tv-map-grid { position:absolute; inset:0; pointer-events:none;
   background-image:linear-gradient(rgba(255,255,255,.09) 1px,transparent 1px),
