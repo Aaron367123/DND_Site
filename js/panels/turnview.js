@@ -1164,10 +1164,31 @@ registerPanel('turnview', {
         + (c ? '' : 'loose');
       if (c) n.dataset.tvtok = c.id;
       n.dataset.tvlabel = t.label || '';
+      // A Large creature covers four squares and a Huge one nine, and the
+      // battle map draws them that way — this panel drew every token the same
+      // 12px dot, so the giant and the ogre in a Storm King fight looked like
+      // the rogue. .tv-tok reads --tok for width, height AND its centring
+      // margin, so one property per token is the whole change.
+      //
+      // Multiply the FLOORED base, not the raw cell size. There is a 12px
+      // minimum so a token stays legible, and on a wide viewport the cell is
+      // ~7px — so `max(12, cell*0.9*2)` floored a Large creature to the same
+      // 12px as everyone else and the sizing did nothing at all. Scaling the
+      // floor keeps the proportion true whatever the zoom.
+      const sz = Math.max(1, t.size || 1);
+      if (sz > 1) n.style.setProperty('--tok', Math.max(12, cell * 0.9) * sz + 'px');
       n.title = label + (c ? ` — ${c.hp}/${c.hpMax}` : ' — not in the initiative order');
       n.textContent = label.charAt(0).toUpperCase();
-      n.style.left = (offX + ((t.x / cs) - vp.x + 0.5) * cell) + 'px';
-      n.style.top  = (offY + ((t.y / cs) - vp.y + 0.5) * cell) + 'px';
+      // t.x/t.y are the token's CENTRE in stage pixels — that is the
+      // convention the battle map stores (sktFreeCell returns cs/2 for the
+      // first cell, and its own drop snaps to `floor(x/cs)*cs + cs/2`). The
+      // extra half-cell here treated them as a corner, so every token was
+      // drawn half a square down and to the right of where it stands: 3px at
+      // this thumbnail's scale, enough to sit a creature off the road it is
+      // standing on. `.tv-tok` already centres itself on this point with a
+      // negative margin, so no half-cell belongs in the maths at all.
+      n.style.left = (offX + ((t.x / cs) - vp.x) * cell) + 'px';
+      n.style.top  = (offY + ((t.y / cs) - vp.y) * cell) + 'px';
       frag.appendChild(n);
     });
     m.appendChild(frag);
@@ -2031,8 +2052,13 @@ registerPanel('turnview', {
       const offX = (r.width - cell * vp.w) / 2, offY = (r.height - cell * vp.h) / 2;
       const cx = vp.x + Math.floor((e.clientX - r.left - offX) / cell);
       const cy = vp.y + Math.floor((e.clientY - r.top - offY) / cell);
-      tok.x = Math.max(0, Math.min(src.cols - 1, cx)) * cs;
-      tok.y = Math.max(0, Math.min(src.rows - 1, cy)) * cs;
+      // Snap to the CENTRE of the dropped cell, the same convention the battle
+      // map's own drop uses. Writing the corner put the token half a square up
+      // and to the left of the square it was dropped on, on the real map —
+      // this is the panel writing through to shared state, so the error was
+      // not cosmetic.
+      tok.x = (Math.max(0, Math.min(src.cols - 1, cx)) + 0.5) * cs;
+      tok.y = (Math.max(0, Math.min(src.rows - 1, cy)) + 0.5) * cs;
       this._placeTokens();
     });
     b.addEventListener('pointerup', () => {
