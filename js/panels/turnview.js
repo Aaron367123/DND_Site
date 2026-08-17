@@ -378,6 +378,7 @@ registerPanel('turnview', {
                gridType:B._gridType || 'square', bgPath:B._bgMapPath || null,
                bgScale:B._bgMapScale || 1,
                rotation:((B._mapRotation || 0) % 360 + 360) % 360,
+               snap:!!B._snapToGrid,
                drawings:Array.isArray(B._drawings) ? B._drawings : [] };
     }
     try {
@@ -388,11 +389,12 @@ registerPanel('turnview', {
                  gridType:d.gridType || (d.showGrid === false ? 'none' : 'square'),
                  bgPath:d.bgMapPath || null, bgScale:d.bgMapScale || 1,
                  rotation:((d.mapRotation || 0) % 360 + 360) % 360,
+                 snap:!!d.snapToGrid,
                  drawings:Array.isArray(d.drawings) ? d.drawings : [] };
       }
     } catch(e){}
-    return { live:false, tokens:[], cs:50, cols:24, rows:18,
-             gridType:'square', bgPath:null, bgScale:1, rotation:0, drawings:[] };
+    return { live:false, tokens:[], cs:50, cols:24, rows:18, gridType:'square',
+             bgPath:null, bgScale:1, rotation:0, snap:false, drawings:[] };
   },
   _map(){ return this._mapCache || (this._mapCache = this._mapSrc()); },
 
@@ -2093,11 +2095,31 @@ registerPanel('turnview', {
     // Map: enlarge on approach so it is already the right size by the time the
     // cursor arrives, and stay big while dragging or it would collapse under
     // the pointer mid-drag.
+    // pointerenter/pointerleave fire for EVERY descendant, not just the box —
+    // so crossing onto a token raised an enter and crossing off it raised a
+    // leave while the cursor had never left the map. The panel duly collapsed,
+    // which re-ran _placeTokens, which destroyed and rebuilt the node under
+    // the cursor, which raised another pair: the map flickered open and shut
+    // for as long as you moved over it. Only act when the pointer has actually
+    // crossed the box's own boundary.
+    const leftTheMap = (map, to) => !to || !map.contains(to);
     b.addEventListener('pointerenter', e => {
-      if (e.target.closest && e.target.closest('.tv-map') && !this._mapBig){ this._mapBig = true; this._reflowMap(); }
+      const map = e.target.closest && e.target.closest('.tv-map'); if (!map) return;
+      if (!leftTheMap(map, e.relatedTarget)) return;   // moved WITHIN the map
+      if (!this._mapBig){ this._mapBig = true; this._reflowMap(); }
     }, true);
     b.addEventListener('pointerleave', e => {
-      if (e.target.closest && e.target.closest('.tv-map') && this._mapBig && !this._drag){ this._mapBig = false; this._reflowMap(); }
+      const map = e.target.closest && e.target.closest('.tv-map'); if (!map) return;
+      if (!leftTheMap(map, e.relatedTarget)) return;
+      // relatedTarget is null when the pointer leaves the window OR when the
+      // element under it was just re-rendered, so fall back to geometry: if
+      // the cursor is still inside the (now larger) box, it hasn't left.
+      if (e.relatedTarget == null && e.clientX != null){
+        const r = map.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right &&
+            e.clientY >= r.top  && e.clientY <= r.bottom) return;
+      }
+      if (this._mapBig && !this._drag){ this._mapBig = false; this._reflowMap(); }
     }, true);
 
     b.addEventListener('pointerdown', e => {
@@ -2137,6 +2159,17 @@ registerPanel('turnview', {
       // off wherever the black bars are.
       const cell = Math.min(W / vp.w, H / vp.h);
       const offX = (W - cell * vp.w) / 2, offY = (H - cell * vp.h) / 2;
+      // Free placement unless the map itself asks for snapping. Forcing a
+      // square snap here was wrong twice over: it overrode the DM's own
+      // setting, and this campaign's map is a HEX grid, so the lattice being
+      // snapped to is not the one printed on the map.
+      if (!src.snap){
+        const fx = vp.x + (lx - offX) / cell, fy = vp.y + (ly - offY) / cell;
+        tok.x = Math.max(0, Math.min(src.cols, fx)) * cs;
+        tok.y = Math.max(0, Math.min(src.rows, fy)) * cs;
+        this._placeTokens();
+        return;
+      }
       const cx = vp.x + Math.floor((lx - offX) / cell);
       const cy = vp.y + Math.floor((ly - offY) / cell);
       // Snap to the CENTRE of the dropped cell, the same convention the battle
@@ -2181,6 +2214,22 @@ registerPanel('turnview', {
     const h = m.querySelector('.tv-map-hint');
     if (h) h.textContent = this._mapBig ? 'drag a token — reach updates live, and leaving it provokes'
                                         : (matchMedia('(pointer: coarse)').matches ? 'tap to enlarge' : 'hover to enlarge');
+    // .tv-map ANIMATES its width and height over 160ms. One rAF lands in the
+    // middle of that, so _placeTokens measured a box part-way through growing
+    // and laid the art, the strokes and every token out at that stale size —
+    // the enlarged map ended up with its contents stuck in a small patch of a
+    // wide empty box. Place once immediately so the change is instant, then
+    // again when the transition actually finishes.
     requestAnimationFrame(() => this._placeTokens());
+    const settle = e => {
+      if (e.target !== m || (e.propertyName !== 'width' && e.propertyName !== 'height')) return;
+      m.removeEventListener('transitionend', settle);
+      this._placeTokens();
+    };
+    m.addEventListener('transitionend', settle);
+    // A belt-and-braces re-place: transitionend never fires if the size did
+    // not actually change (already at that width) or if the panel is hidden.
+    clearTimeout(this._reflowT);
+    this._reflowT = setTimeout(() => this._placeTokens(), 220);
   },
 });
