@@ -3845,6 +3845,14 @@ select.tv-in.wide { width:126px; }
 }
 .tv-map-zoom button:hover { background:rgba(0,0,0,.8); border-color:var(--accent); }
 .tv-map-zoom button.off { color:var(--text-dim); }
+/* A touch screen has no hover and, since the map no longer enlarges there,
+   never gets .big either — so the faint state would have been the only state.
+   Full opacity and a bigger target instead; zooming in place is now the whole
+   answer to a small map. */
+@media (pointer: coarse){
+  .tv-map-zoom { opacity:1; gap:4px; }
+  .tv-map-zoom button { min-width:30px; height:28px; font-size:var(--fs-xs); }
+}
 .tv-map-grid[hidden]{display:none}
 .tv-map-grid { position:absolute; inset:0; pointer-events:none;
   background-image:linear-gradient(rgba(255,255,255,.09) 1px,transparent 1px),
@@ -3991,6 +3999,11 @@ select.tv-in.wide { width:126px; }
   .tv-side { order:-1; }
   .tv-targets { order:1; }
   .tv-map { order:2; height:200px; }
+  /* No hover-to-enlarge below this width — see _canExpandMap(). The rule is
+     here too so a map left enlarged by a resize can't stay that way: at 390px
+     the "enlarged" box was 210px wide and thrown on top of the controls. */
+  .tv-map.big { position:relative; top:auto; right:auto; width:auto; height:200px;
+    box-shadow:none; border-color:var(--border); }
   .tv-adjust { order:3; }
   .tv-targets { flex:0 0 auto; flex-direction:row; overflow-x:auto; align-items:center; padding:7px; gap:8px; }
   .tv-targets h4 { display:none; }

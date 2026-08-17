@@ -1136,12 +1136,18 @@ registerPanel('turnview', {
       <div class="tv-map-hint">${esc(this._mapHint(onMap))}</div>
     </div>`;
   },
+  // Enlarging on hover is a desktop affordance. On a phone the panel is
+  // already one column and the map already 200px of a 390px screen, so the
+  // "enlarged" version was a 210px-wide box thrown on top of the controls —
+  // it cost more than it showed. 760px is the same breakpoint .tv-main uses
+  // to go single-column, so the CSS and this agree about what "small" means.
+  _canExpandMap(){ return !matchMedia('(max-width: 760px)').matches; },
   _mapHint(onMap){
     if (!onMap) return 'no tokens on the battle map';
     if (!this._map().live) return 'open the Battle Map to move tokens';
     if (this._mapBig) return 'drag a token — reach updates live, and leaving it provokes';
-    // "hover" is a lie on a phone, where pointerenter fires from a tap.
-    return matchMedia('(pointer: coarse)').matches ? 'tap to enlarge' : 'hover to enlarge';
+    if (!this._canExpandMap()) return 'drag a token — leaving reach provokes';
+    return 'hover to enlarge';
   },
   // Tokens are absolutely positioned from the real ones' stage coordinates, so
   // the thumbnail is a view of battlemap's data rather than a second copy.
@@ -1155,6 +1161,9 @@ registerPanel('turnview', {
   _placeTokens(){
     const b = this._body; if (!b) return;
     const m = b.querySelector('.tv-map'); if (!m) return;
+    // Dropping below the breakpoint with the map already enlarged — resizing
+    // the window, or rotating a tablet — would otherwise strand it big.
+    if (this._mapBig && !this._canExpandMap()){ this._mapBig = false; m.classList.remove('big'); }
     const rot = m.querySelector('.tv-map-rot') || m;
     rot.querySelectorAll('.tv-tok').forEach(n => n.remove());
     const src = this._map(), vp = this._viewport();
@@ -2139,6 +2148,7 @@ registerPanel('turnview', {
 
     const leftTheMap = (map, to) => !to || !map.contains(to);
     b.addEventListener('pointerenter', e => {
+      if (!this._canExpandMap()) return;
       const map = e.target.closest && e.target.closest('.tv-map'); if (!map) return;
       if (!leftTheMap(map, e.relatedTarget)) return;   // moved WITHIN the map
       if (!this._mapBig){ this._mapBig = true; this._reflowMap(); }
