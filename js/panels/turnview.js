@@ -1233,7 +1233,14 @@ registerPanel('turnview', {
         rechargeSpent: (c.rechargeSpent || []).slice(),
       })),
       party: (state.party || []).map(p => ({
-        id:p.id, tempHp:p.tempHp,
+        // hp was missing here, so undoing damage to a PC put the combatant
+        // back and left the party card on the damaged number — the same two
+        // records disagreeing that reconcilePcHp() exists to stop, arriving
+        // through the undo door instead.
+        id:p.id, tempHp:p.tempHp, hp:p.hp, hpMax:p.hpMax,
+        // Damage to a wild-shaped druid drains the BEAST pool, and dropping
+        // the beast to 0 clears the form outright — neither was undoable.
+        wildshape: p.wildshape ? {...p.wildshape} : p.wildshape,
         resources: (p.resources || []).map(r => ({...r})),
         sheet: p.sheet && p.sheet.spellSlots ? JSON.parse(JSON.stringify(p.sheet.spellSlots)) : null,
       })),
@@ -1249,6 +1256,8 @@ registerPanel('turnview', {
       const p = (state.party || []).find(x => x.id === s.id);
       if (!p) return;
       p.tempHp = s.tempHp;
+      p.hp = s.hp; p.hpMax = s.hpMax;
+      p.wildshape = s.wildshape ? {...s.wildshape} : s.wildshape;
       p.resources = s.resources.map(r => ({...r}));
       if (s.sheet && p.sheet) p.sheet.spellSlots = s.sheet;
     });
@@ -1770,6 +1779,11 @@ registerPanel('turnview', {
     const rolled = !isNaN(raw);
     const type = (b.querySelector('[data-tvman="type"]').value || '').trim();
     const c = this._active();
+    // Every other path that changes HP takes an undo snapshot — rolled
+    // attacks, saves, death saves, the ±  adjuster. This one didn't, which
+    // left the only route where the number is TYPED as the only route with no
+    // way back. A stray zero here is the likeliest mistake in the panel.
+    this._snapshot(`${c ? c.name : 'Someone'} · manual ${dmg}${type ? ' ' + type : ''} → ${t.name}`);
     this._resolve({ attackerId: c && c.id, attacker: c ? c.name : 'Someone', label: 'attack', target: t,
                     total: rolled ? raw : null, crit: false,
                     hit: rolled ? raw >= (t.ac || 10) : true, dmg, type, detail: '' });
