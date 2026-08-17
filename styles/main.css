@@ -3824,7 +3824,12 @@ select.tv-in.wide { width:126px; }
 .tv-side { display:flex; flex-direction:column; gap:9px; min-height:0; min-width:0; position:relative; }
 .tv-map { position:relative; flex-shrink:0; height:168px; background:var(--panel-2);
   border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden;
+  /* The map is pannable by drag, so the browser must not claim the gesture
+     for scrolling the panel — on a phone that is the difference between
+     moving the map and moving the page. cursor:grab says it is draggable. */
+  touch-action:none; cursor:grab;
   transition:width .16s ease,height .16s ease,box-shadow .16s ease; }
+.tv-map:active { cursor:grabbing; }
 .tv-map.big { position:absolute; top:0; right:0; z-index:30;
   width:min(560px,54vw); height:392px; box-shadow:var(--sh-4); border-color:var(--accent); }
 /* The rotated layer: map art, pencil strokes and tokens turn together, the

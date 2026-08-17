@@ -41,6 +41,12 @@ registerPanel('turnview', {
   // session's opening round.
   _mapZoom: 1,
   _MAP_ZOOMS: [0.5, 0.75, 1, 1.5, 2, 3, 4, 6],
+  // Manual pan, in CELLS, on top of the automatic frame. Same reasoning as
+  // the zoom: the auto frame is the right default and the wrong cage. Cleared
+  // by ⊙ fit and whenever the turn moves on, because the frame re-centres on
+  // the new actor and a pan carried over from someone else's turn is just an
+  // offset nobody asked for.
+  _panX: 0, _panY: 0,
   _artMode: 'auto',   // grid when compact, map art when enlarged
   _sig: null,
   _result: '',
@@ -95,6 +101,11 @@ registerPanel('turnview', {
   _syncFromCombat(){
     if (!this._body || this._applying) return;
     if (this._combatSig() === this._sig) return;
+    // A new turn re-frames on a new creature, so a pan left over from the last
+    // one is just an offset nobody asked for. Zoom is kept — that reads as a
+    // preference for how close you like to sit.
+    if (state.activeCombatantId !== this._panTurn){ this._panX = 0; this._panY = 0; }
+    this._panTurn = state.activeCombatantId;
     this._render();
   },
 
@@ -477,8 +488,8 @@ registerPanel('turnview', {
     // fits, and the creature whose turn it is outranks the bounding box.
     if (z > 1 && cur){ x0 = x1 = cur.x / cs; y0 = y1 = cur.y / cs; }
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    const x = Math.max(0, Math.min(Math.round(cx - w / 2), m.cols - w));
-    const y = Math.max(0, Math.min(Math.round(cy - h / 2), m.rows - h));
+    const x = Math.max(0, Math.min(Math.round(cx - w / 2 + (this._panX || 0)), m.cols - w));
+    const y = Math.max(0, Math.min(Math.round(cy - h / 2 + (this._panY || 0)), m.rows - h));
     return (this._vp = { x, y, w, h });
   },
   // Name matching, forgiving in the ways real data is inconsistent: exact
@@ -2167,6 +2178,43 @@ registerPanel('turnview', {
       if (this._mapBig && !this._drag){ this._mapBig = false; this._reflowMap(); }
     }, true);
 
+    // Pan by dragging the map itself. Without it the frame was whatever the
+    // panel decided, and on a phone — where the map no longer enlarges — there
+    // was no way at all to look at a square that wasn't already in shot.
+    // Anything that is a token or a control keeps its own handler.
+    b.addEventListener('pointerdown', e => {
+      if (e.target.closest('.tv-tok') || e.target.closest('.tv-map-zoom')) return;
+      const map = e.target.closest('.tv-map'); if (!map) return;
+      const vp = this._viewport();
+      this._pan = { x: e.clientX, y: e.clientY, px: this._panX || 0, py: this._panY || 0, vp };
+      try { map.setPointerCapture(e.pointerId); } catch(err){}
+    });
+    b.addEventListener('pointermove', e => {
+      const p = this._pan; if (!p) return;
+      const m = b.querySelector('.tv-map'); if (!m) return;
+      const src = this._map();
+      const deg = src.rotation || 0;
+      const quarter = deg === 90 || deg === 270;
+      const boxW = m.clientWidth, boxH = m.clientHeight;
+      const W = quarter ? boxH : boxW, H = quarter ? boxW : boxH;
+      const cell = Math.min(W / p.vp.w, H / p.vp.h) || 1;
+      // Screen delta → map delta: the same inverse rotation the token drag
+      // uses, or dragging left would pan up on a quarter-turned map.
+      const sx = e.clientX - p.x, sy = e.clientY - p.y;
+      const d = deg === 90  ? { x:  sy, y: -sx }
+              : deg === 180 ? { x: -sx, y: -sy }
+              : deg === 270 ? { x: -sy, y:  sx }
+              :               { x:  sx, y:  sy };
+      // Drag right, the map follows the finger — so the viewport moves left.
+      this._panX = p.px - d.x / cell;
+      this._panY = p.py - d.y / cell;
+      this._vp = null;
+      this._placeTokens();
+      e.preventDefault();
+    });
+    b.addEventListener('pointerup',     () => { this._pan = null; });
+    b.addEventListener('pointercancel', () => { this._pan = null; });
+
     b.addEventListener('pointerdown', e => {
       const t = e.target.closest('.tv-tok'); if (!t) return;
       // Read-only when the battle map hasn't mounted — see _mapSrc.
@@ -2264,7 +2312,7 @@ registerPanel('turnview', {
   // and repeated clicks can't drift to 137%.
   _zoomMap(dir){
     const L = this._MAP_ZOOMS;
-    if (!dir){ this._mapZoom = 1; }
+    if (!dir){ this._mapZoom = 1; this._panX = 0; this._panY = 0; }
     else {
       let i = L.indexOf(this._mapZoom);
       if (i < 0){ i = L.indexOf(1); }
