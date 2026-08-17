@@ -636,10 +636,33 @@ registerPanel('turnview', {
     </div>`;
   },
 
+  // ─── Wild Shape ───────────────────────────────────────────────────────────
+  // A wild-shaped druid IS the beast for the length of the form: damage lands
+  // on the beast's pool (combat.js routes it there), the AC is the beast's,
+  // and the actions are the beast's. The panel was showing the druid's HP, the
+  // druid's AC and the druid's weapon list the whole time — every number on
+  // the card was the wrong one.
+  _wsOf(c){
+    const p = this._partyOf(c);
+    const ws = p && p.wildshape;
+    return (ws && ws.name) ? ws : null;
+  },
+  // The beast's stat block, for actions/speed/senses. Only name/slug/hp/ac are
+  // snapshotted onto the character — the rest is looked up, exactly as the
+  // Party panel's overlay does, and absent until the dataset has loaded.
+  _wsRaw(ws){
+    if (!ws || !ws.slug) return null;
+    if (typeof _5eData === 'undefined' || !Array.isArray(_5eData)) return null;
+    const e = _5eData.find(d => d.cat === 'monster' && d._slug === ws.slug);
+    return (e && e._raw) || null;
+  },
+
   _renderActorHead(c){
     const p = this._partyOf(c);
     const entry = this._entryOf(c);
-    const sub = p ? [p.cls, p.subclass, p.level ? 'level ' + p.level : ''].filter(Boolean).join(' · ')
+    const ws = this._wsOf(c);
+    const sub = ws ? `Wild Shape · ${ws.name}${ws.cr != null ? ' · CR ' + ws.cr : ''}`
+              : p ? [p.cls, p.subclass, p.level ? 'level ' + p.level : ''].filter(Boolean).join(' · ')
                   : (entry && entry.meta) || (c.isPC ? 'Player character' : 'No stat block');
     const conds = (c.conditions || []).map(x => `<span class="tv-cond">${esc(x)}</span>`).join('');
     const res = p && Array.isArray(p.resources) ? p.resources.map(r => {
@@ -661,10 +684,11 @@ registerPanel('turnview', {
           <div class="tv-actor-sub">${esc(sub)}</div>
         </div>
         <div class="tv-vitals">
-          <div class="tv-vital"><div class="l">HP</div><div class="v">${c.hp}${
-            (p && p.tempHp > 0) ? `<span class="tv-temp" title="Temporary HP — absorbs damage first">+${p.tempHp}</span>` : ''
+          <div class="tv-vital"><div class="l">${ws ? 'BEAST HP' : 'HP'}</div><div class="v">${
+            ws ? `${ws.hp}<span class="tv-temp" title="${esc(p.name)}'s own hit points — the form drops back to these when the beast reaches 0">${p.hp} ${esc(String(p.cls || 'druid'))}</span>`
+               : `${c.hp}${(p && p.tempHp > 0) ? `<span class="tv-temp" title="Temporary HP — absorbs damage first">+${p.tempHp}</span>` : ''}`
           }</div></div>
-          <div class="tv-vital"><div class="l">AC</div><div class="v">${c.ac ?? '–'}</div></div>
+          <div class="tv-vital"><div class="l">AC</div><div class="v">${(ws && ws.ac != null ? ws.ac : c.ac) ?? '–'}</div></div>
         </div>
       </div>
       ${conds ? `<div class="tv-conds">${conds}</div>` : ''}
@@ -677,6 +701,17 @@ registerPanel('turnview', {
   // the same places the rest of the app reads them.
   _attacksFor(c){
     if (c.isPC){
+      // In a beast's body you make the beast's attacks, not the druid's. The
+      // stat block goes through the same Attack Runner parse a monster's does,
+      // so a Bite is rollable here exactly like an ogre's Greatclub.
+      const ws = this._wsOf(c);
+      if (ws){
+        const raw = this._wsRaw(ws);
+        const parsed = (raw && panelDefs.attacks) ? (panelDefs.attacks._parsed(raw).attacks || []) : [];
+        // Fall back to the druid's own list rather than an empty panel when
+        // the beast has no slug or the dataset hasn't loaded yet.
+        if (parsed.length) return parsed;
+      }
       const p = this._partyOf(c);
       const rows = (p && p.sheet && Array.isArray(p.sheet.attacks)) ? p.sheet.attacks : [];
       return rows.filter(a => a && a.name).map(a => ({
@@ -696,8 +731,11 @@ registerPanel('turnview', {
   // say "makes two melee attacks" and name nothing resolvable, and the two
   // panels have to agree about which those are.
   _multiOf(c){
-    if (c.isPC) return null;
-    const raw = (this._entryOf(c) || {})._raw;
+    // A wild-shaped druid runs the beast's Multiattack if it has one — the
+    // usual PC short-circuit would have hidden it.
+    const ws = c.isPC ? this._wsOf(c) : null;
+    if (c.isPC && !ws) return null;
+    const raw = ws ? this._wsRaw(ws) : (this._entryOf(c) || {})._raw;
     if (!raw || !panelDefs.attacks) return null;
     const p = panelDefs.attacks._parsed(raw);
     if (!p.multi) return null;
@@ -943,7 +981,26 @@ registerPanel('turnview', {
   _renderTraits(c){
     const p = this._partyOf(c);
     const bits = [], traits = [];
-    if (p){
+    const ws = this._wsOf(c);
+    if (p && ws){
+      // The beast's own passives — the druid's speed and senses are not the
+      // ones in play, and a wolf's 40 ft matters on the very turn this shows.
+      const raw = this._wsRaw(ws);
+      // speed.walk is sometimes a number (30) and sometimes an already-worded
+      // string ("50 ft."), so only add the unit when it isn't there — the
+      // obvious concatenation produced "Speed 50 ft. ft".
+      const w = raw && (typeof raw.speed === 'string' ? raw.speed : (raw.speed && raw.speed.walk));
+      const sp = w == null || w === '' ? ''
+               : (typeof w === 'number' ? w + ' ft' : String(w));
+      if (sp) bits.push('Speed ' + this._plain(sp));
+      if (raw){ const sen = this._plain(raw.senses); if (sen) bits.push(sen); }
+      if (ws.resistances && ws.resistances.length)  bits.push('Resists ' + ws.resistances.join(', '));
+      if (ws.immunities && ws.immunities.length)    bits.push('Immune ' + ws.immunities.join(', '));
+      bits.push(`Wild Shape — ${p.name} has ${p.hp} HP of their own`);
+      if (p.concentration) bits.push('Concentrating on ' + p.concentration);
+      if (raw) this._rawList(raw, ['special_abilities', 'trait']).forEach(t => traits.push(t));
+      (p.buffs || []).forEach(b => traits.push({ name: b.label || 'Buff', text: b.note || '' }));
+    } else if (p){
       if (p.spd) bits.push('Speed ' + p.spd + ' ft');
       if (p.pp) bits.push('Passive Perception ' + p.pp);
       if (p.rage) bits.push('Raging');
