@@ -2175,7 +2175,12 @@ registerPanel('turnview', {
         if (e.clientX >= r.left && e.clientX <= r.right &&
             e.clientY >= r.top  && e.clientY <= r.bottom) return;
       }
-      if (this._mapBig && !this._drag){ this._mapBig = false; this._reflowMap(); }
+      // Not while a gesture is in flight. The token-drag guard was here from
+      // the start; the PAN needs it just as much — grabbing the enlarged map
+      // and dragging carries the pointer past its edge almost immediately, and
+      // collapsing then resized the box under the hand mid-drag. The cell size
+      // changes with it, so the map lurched and the pan read as broken.
+      if (this._mapBig && !this._drag && !this._pan){ this._mapBig = false; this._reflowMap(); }
     }, true);
 
     // Pan by dragging the map itself. Without it the frame was whatever the
@@ -2212,8 +2217,21 @@ registerPanel('turnview', {
       this._placeTokens();
       e.preventDefault();
     });
-    b.addEventListener('pointerup',     () => { this._pan = null; });
-    b.addEventListener('pointercancel', () => { this._pan = null; });
+    const endPan = e => {
+      if (!this._pan) return;
+      this._pan = null;
+      // The collapse was suppressed for the length of the drag, so settle it
+      // now: if the hand finished outside the box, let it shrink back.
+      const m = b.querySelector('.tv-map');
+      if (!m || !this._mapBig || !this._canExpandMap()) return;
+      const r = m.getBoundingClientRect();
+      const inside = e && e.clientX != null &&
+        e.clientX >= r.left && e.clientX <= r.right &&
+        e.clientY >= r.top  && e.clientY <= r.bottom;
+      if (!inside){ this._mapBig = false; this._reflowMap(); }
+    };
+    b.addEventListener('pointerup', endPan);
+    b.addEventListener('pointercancel', endPan);
 
     b.addEventListener('pointerdown', e => {
       const t = e.target.closest('.tv-tok'); if (!t) return;
