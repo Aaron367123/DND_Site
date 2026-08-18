@@ -2556,6 +2556,13 @@ registerPanel('turnview', {
     });
     b.addEventListener('pointerup', () => {
       const d = this._drag; if (!d) return;
+      // Hold the camera still. _viewport() freezes while _drag is set, so the
+      // map looks right DURING the drag and then jumped the instant you let
+      // go — the automatic frame is the bounding box of the creatures near
+      // the actor, and you had just moved one of them. Moving a token should
+      // move the token. Convert the frozen frame into the pan offset that
+      // reproduces it, so the fit button and the next turn still reset it.
+      this._holdFrame();
       this._drag = null;
       const B = this._bm();
       const mover = d.id ? this._order().find(x => x.id === d.id) : null;
@@ -2594,6 +2601,18 @@ registerPanel('turnview', {
 
   // The enlarge is a class swap, but token offsets are computed from the box's
   // pixel size — so they have to be recomputed once it has the new one.
+  // Pin the frame exactly where it is now, expressed as a pan offset so
+  // everything that clears a pan clears this too.
+  _holdFrame(){
+    const frozen = this._vp; if (!frozen) return;
+    const px = this._panX || 0, py = this._panY || 0;
+    this._panX = 0; this._panY = 0; this._vp = null;
+    const auto = this._viewport();                 // where it would land unaided
+    this._panX = px + (frozen.x - auto.x);
+    this._panY = py + (frozen.y - auto.y);
+    this._vp = null;
+  },
+
   // dir: -1 out, +1 in, 0 back to the automatic frame. Steps through a fixed
   // ladder rather than multiplying, so the readout is always a round number
   // and repeated clicks can't drift to 137%.
