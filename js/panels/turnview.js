@@ -1176,7 +1176,15 @@ registerPanel('turnview', {
     // the window, or rotating a tablet — would otherwise strand it big.
     if (this._mapBig && !this._canExpandMap()){ this._mapBig = false; m.classList.remove('big'); }
     const rot = m.querySelector('.tv-map-rot') || m;
-    rot.querySelectorAll('.tv-tok').forEach(n => n.remove());
+    // Reuse the existing token nodes when the map's roster hasn't changed.
+    // Tearing down and rebuilding every node is fine once per render; at
+    // pointermove rate during a pan it is a full layout thrash per frame, and
+    // it also destroys the node the pointer is captured on.
+    const existing = rot.querySelectorAll('.tv-tok');
+    const sig = (this._map().tokens || []).map(t => t.id).join('|');
+    const reuse = existing.length && sig === this._tokSig && sig !== '';
+    if (!reuse){ existing.forEach(n => n.remove()); }
+    this._tokSig = sig;
     const src = this._map(), vp = this._viewport();
     const cs = src.cs || 50;
     // Under a 90/270 rotation the rotated layer's own width and height are
@@ -1245,9 +1253,10 @@ registerPanel('turnview', {
 
     m.style.setProperty('--tok', Math.max(12, cell * 0.9) + 'px');
     const frag = document.createDocumentFragment();
-    src.tokens.forEach(t => {
+    src.tokens.forEach((t, ti) => {
       const c = this._combatantForToken(t);
-      const n = document.createElement('div');
+      const n = reuse ? existing[ti] : document.createElement('div');
+      if (!n) return;
       const label = String((c && c.name) || t.label || '?').trim();
       n.className = 'tv-tok ' + ((c ? c.isPC : t.isPC) ? 'pc ' : '')
         + (c && c.id === state.activeCombatantId ? 'cur ' : '')
@@ -1281,9 +1290,9 @@ registerPanel('turnview', {
       // negative margin, so no half-cell belongs in the maths at all.
       n.style.left = (offX + ((t.x / cs) - vp.x) * cell) + 'px';
       n.style.top  = (offY + ((t.y / cs) - vp.y) * cell) + 'px';
-      frag.appendChild(n);
+      if (!reuse) frag.appendChild(n);
     });
-    rot.appendChild(frag);
+    if (!reuse) rot.appendChild(frag);
   },
 
   // Pencil strokes onto the thumbnail's own canvas. Same k and offsets the
@@ -1292,9 +1301,15 @@ registerPanel('turnview', {
     if (!cv) return;
     const list = src.drawings || [];
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = Math.max(1, Math.round(W * dpr));
-    cv.height = Math.max(1, Math.round(H * dpr));
-    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    // Assigning canvas.width REALLOCATES the backing store and resets every
+    // bit of context state. During a pan the size never changes, so doing it
+    // on each pointermove was the most expensive thing in the frame for no
+    // effect at all. Only touch it when the box has genuinely resized.
+    const wantW = Math.max(1, Math.round(W * dpr)), wantH = Math.max(1, Math.round(H * dpr));
+    if (cv.width !== wantW || cv.height !== wantH){
+      cv.width = wantW; cv.height = wantH;
+      cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    }
     const ctx = cv.getContext('2d'); if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -2214,12 +2229,21 @@ registerPanel('turnview', {
       this._panX = p.px - d.x / cell;
       this._panY = p.py - d.y / cell;
       this._vp = null;
-      this._placeTokens();
+      // Coalesce to one repaint per FRAME. A pointermove can fire several
+      // times between frames — more on a 120Hz phone — and every one of them
+      // was doing the full re-place, so the work piled up behind the display
+      // and the pan stuttered instead of tracking the finger.
+      if (!this._panRaf){
+        this._panRaf = requestAnimationFrame(() => { this._panRaf = 0; this._placeTokens(); });
+      }
       e.preventDefault();
     });
     const endPan = e => {
       if (!this._pan) return;
       this._pan = null;
+      // Land on the final position rather than wherever the last frame got to.
+      if (this._panRaf){ cancelAnimationFrame(this._panRaf); this._panRaf = 0; }
+      this._placeTokens();
       // The collapse was suppressed for the length of the drag, so settle it
       // now: if the hand finished outside the box, let it shrink back.
       const m = b.querySelector('.tv-map');
