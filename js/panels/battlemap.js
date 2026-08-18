@@ -79,6 +79,13 @@ registerPanel('battlemap',{
   // Settings sidebar state — toggles persisted via _saveMap.
   _settingsOpen:false,
   _mapRotation:0,                // 0 / 90 / 180 / 270
+  // How much ground one cell covers. Was INFERRED from the cell's pixel
+  // size via {40:5,50:5,64:5,80:10} — a table that only matched the app's
+  // own preset grids, so any map aligned with the Align tool (fractional
+  // cell size, 38.46 on the current one) missed it and silently got 5 ft.
+  // On an overland map that is not a rounding error, it is three orders of
+  // magnitude: the footer read "390x250 ft" for a map of the North.
+  _ftPerCell: 5,
   _fogHardness:50,               // 0–100 → blur on fog canvas
   _gridOpacity:60,               // 0–100 → grid line alpha
   // Grid line colour. null = Auto: sample the map art and pick black or white
@@ -193,6 +200,7 @@ registerPanel('battlemap',{
         this._gridOffsetY = d.gridOffsetY || 0;
         // Settings sidebar state (new in v2 — defaults preserve old look).
         this._mapRotation   = d.mapRotation   || 0;
+        this._ftPerCell     = +d.ftPerCell > 0 ? +d.ftPerCell : 5;
         this._fogHardness   = (d.fogHardness   != null) ? d.fogHardness   : 50;
         this._gridOpacity   = (d.gridOpacity   != null) ? d.gridOpacity   : 60;
         this._gridColor     = d.gridColor || null;
@@ -329,7 +337,7 @@ registerPanel('battlemap',{
     this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){
       // Fog sets and freehand strokes grow without bound on large maps — this
       // is a realistic place to hit the quota, and silently dropping the write
@@ -1186,6 +1194,7 @@ registerPanel('battlemap',{
       bgMapPath:    this._bgMapPath || null,
       bgMapScale:   this._bgMapScale || 1,
       mapRotation:  this._mapRotation || 0,
+      ftPerCell:    this._ftPerCell || 5,
       gridOffsetX:  this._gridOffsetX || 0,
       gridOffsetY:  this._gridOffsetY || 0,
       cellSize:     this._cellSize,
@@ -1221,6 +1230,7 @@ registerPanel('battlemap',{
     this._bgMapPath    = snap.bgMapPath || null;
     this._bgMapScale   = snap.bgMapScale || 1;
     this._mapRotation  = snap.mapRotation || 0;
+    this._ftPerCell    = +snap.ftPerCell > 0 ? +snap.ftPerCell : 5;
     this._gridOffsetX  = snap.gridOffsetX || 0;
     this._gridOffsetY  = snap.gridOffsetY || 0;
     this._cellSize     = snap.cellSize || this._cellSize;
@@ -1847,7 +1857,7 @@ registerPanel('battlemap',{
     // shouldn't be able to toggle/paint it.
     const _isPlayer = document.body.classList.contains('player-mode');
     const cs=this._cellSize;
-    const ft={40:5,50:5,64:5,80:10}[cs]||5;
+    const ft = this._ftPerCell || 5;
     this._tool=this._tool==='move'?'add-pc':this._tool; // default to add-pc if somehow move
     // Always allow dragging regardless of tool — move is always active
     b.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;position:relative';
@@ -1997,8 +2007,8 @@ registerPanel('battlemap',{
     +'</div>';
 
     html+='<div class="map-foot" style="padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-2);font-size:var(--fs-xs);color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-shrink:0">'
-      +'<span>1 sq = <strong>'+ft+' ft</strong></span>'
-      +'<span class="bt-l" style="color:var(--text-dim)">'+this._cols+'×'+this._rows+' squares ('+this._cols*ft+'×'+this._rows*ft+' ft)</span>'
+      +'<span>1 '+(this._gridType==='hex'?'hex':'sq')+' = <strong>'+_bmDist(ft)+'</strong></span>'
+      +'<span class="bt-l" style="color:var(--text-dim)">'+this._cols+'×'+this._rows+' '+(this._gridType==='hex'?'hexes':'squares')+' ('+_bmDist(this._cols*ft)+' × '+_bmDist(this._rows*ft)+')</span>'
       +'<span style="flex:1"></span>'
       // Hidden on touch by CSS: there is no right-click on a phone, so this
       // hint spent a row of a 390px screen telling you to do something you
@@ -3047,6 +3057,24 @@ registerPanel('battlemap',{
         this._saveMap(); this._render();
       });
     }
+    // Scale. Stored in FEET whatever the unit box says — one canonical unit
+    // downstream, so nothing that measures a distance has to ask which it is.
+    const ftEl = b.querySelector('#bm-set-ftper'), unEl = b.querySelector('#bm-set-ftunit');
+    if (ftEl && unEl){
+      const commit = () => {
+        const n = parseFloat(ftEl.value);
+        if (!(n > 0)) { ftEl.value = this._ftPerCell || 5; return; }
+        this._ftPerCell = unEl.value === 'mi' ? n * 5280 : n;
+        this._saveMap(); this._render();
+      };
+      ftEl.addEventListener('change', commit);
+      unEl.addEventListener('change', () => {
+        // Switching the unit re-reads the SAME number in the new unit, which
+        // is what someone means by picking "miles" next to a 5 — not a
+        // conversion of 5 ft into 0.00095 miles.
+        commit();
+      });
+    }
     const opEl = b.querySelector('#bm-set-opacity');
     if (opEl){
       opEl.addEventListener('input', e => {
@@ -4080,6 +4108,21 @@ registerPanel('battlemap',{
       +   tile('grid-cell',   'Cell',   '', !!this._cellHighlight, {title:'Hover highlight'})
       + '</div>'
       + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)
+      // Scale is a PROPERTY OF THE MAP, not something to infer from how many
+      // pixels a cell happens to be. A dungeon square is 5 ft, a city block
+      // map might be 20, and an overland hex is miles — nothing about the
+      // pixel size distinguishes them.
+      + '<div class="bm-set-slider">'
+      +   '<div class="bm-set-slider-row"><span>Scale</span>'
+      +   '<span class="bm-set-slider-val">per ' + (this._gridType === 'hex' ? 'hex' : 'square') + '</span></div>'
+      +   '<div class="bm-set-scale">'
+      +     '<input type="number" id="bm-set-ftper" min="0" step="any" value="' + (this._ftPerCell || 5) + '" aria-label="Distance per cell">'
+      +     '<select id="bm-set-ftunit" aria-label="Unit">'
+      +       '<option value="ft"' + ((this._ftPerCell||5) < 5280 ? ' selected' : '') + '>ft</option>'
+      +       '<option value="mi">miles</option>'
+      +     '</select>'
+      +   '</div>'
+      + '</div>'
       + slider('opacity',  'Opacity',   this._gridOpacity, '%', 0, 100)
       + slider('gridwidth','Line Width', this._gridWidth || 1, 'px', 1, 4)
       // Colour. Auto samples the map art for contrast; the swatch overrides it.
@@ -4719,4 +4762,15 @@ function sktEnsureCombatTokens(force){
     // triggered it.
     console.warn('[SKT] auto-token', e);
   }
+}
+
+// Feet, or miles once feet stop being readable. 390 ft is a room; 2,059,200 ft
+// is a map of the North and nobody can see that it means 390 miles.
+function _bmDist(ft){
+  if (!(ft > 0)) return '0 ft';
+  if (ft >= 5280){
+    const mi = ft / 5280;
+    return (mi >= 10 ? Math.round(mi) : Math.round(mi * 10) / 10) + ' mi';
+  }
+  return (Math.round(ft * 10) / 10) + ' ft';
 }

@@ -398,6 +398,7 @@ registerPanel('turnview', {
                snap:!!B._snapToGrid,
                gridOffsetX:B._gridOffsetX || 0, gridOffsetY:B._gridOffsetY || 0,
                gridColor:B._gridColor || null,
+               ftPerCell:+B._ftPerCell > 0 ? +B._ftPerCell : 5,
                drawings:Array.isArray(B._drawings) ? B._drawings : [] };
     }
     try {
@@ -411,12 +412,13 @@ registerPanel('turnview', {
                  snap:!!d.snapToGrid,
                  gridOffsetX:d.gridOffsetX || 0, gridOffsetY:d.gridOffsetY || 0,
                  gridColor:d.gridColor || null,
+                 ftPerCell:+d.ftPerCell > 0 ? +d.ftPerCell : 5,
                  drawings:Array.isArray(d.drawings) ? d.drawings : [] };
       }
     } catch(e){}
     return { live:false, tokens:[], cs:50, cols:24, rows:18, gridType:'square',
              bgPath:null, bgScale:1, rotation:0, snap:false,
-             gridOffsetX:0, gridOffsetY:0, gridColor:null, drawings:[] };
+             gridOffsetX:0, gridOffsetY:0, gridColor:null, ftPerCell:5, drawings:[] };
   },
   _map(){ return this._mapCache || (this._mapCache = this._mapSrc()); },
 
@@ -529,12 +531,16 @@ registerPanel('turnview', {
   // 5e counts a diagonal as 5 ft like any other square, so the metric is
   // Chebyshev. Euclidean would put a creature three squares away diagonally at
   // 21 ft instead of 15 and quietly change who can react.
+  // How much ground one cell covers, as the MAP says rather than as this
+  // panel assumes. It was a literal 5 in three places, which is right for a
+  // dungeon and wrong by a factor of thousands on an overland map.
+  _ftPerCell(){ const n = +this._map().ftPerCell; return n > 0 ? n : 5; },
   _feetBetween(a, b){
     const ta = this._tokenFor(a), tb = this._tokenFor(b);
     if (!ta || !tb) return null;                 // not on the map: unknown, not zero
     const cs = this._cs() || 50;
     const dx = Math.abs(ta.x - tb.x) / cs, dy = Math.abs(ta.y - tb.y) / cs;
-    return Math.round(Math.max(dx, dy)) * 5;
+    return Math.round(Math.max(dx, dy)) * this._ftPerCell();
   },
   _reachOf(c){
     if (c.isPC) return 5;
@@ -2138,7 +2144,7 @@ registerPanel('turnview', {
   _provokedBy(mover, fromXY){
     const cs = this._cs() || 50;
     const at = { x: fromXY.x, y: fromXY.y };
-    const ft = (t, q) => Math.round(Math.max(Math.abs(t.x - q.x), Math.abs(t.y - q.y)) / cs) * 5;
+    const ft = (t, q) => Math.round(Math.max(Math.abs(t.x - q.x), Math.abs(t.y - q.y)) / cs) * this._ftPerCell();
     const now = this._tokenFor(mover);
     if (!now) return [];
     return this._order().filter(c => {
@@ -2578,7 +2584,7 @@ registerPanel('turnview', {
         const rows = this._provokedBy(mover, d.from);
         if (rows.length){
           const cs = this._cs() || 50;
-          const ft = Math.round(Math.max(Math.abs(tok.x - d.from.x), Math.abs(tok.y - d.from.y)) / cs) * 5;
+          const ft = Math.round(Math.max(Math.abs(tok.x - d.from.x), Math.abs(tok.y - d.from.y)) / cs) * this._ftPerCell();
           this._pending = { kind:'move', mover, rows, moved: ft };
         }
       }
