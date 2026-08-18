@@ -4343,3 +4343,22 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .tv-pip-r[data-tv] { cursor:pointer; }
 .tv-pip-r[data-tv]:hover { border-color:var(--accent); color:var(--text); }
 .tv-pip-r.spent { opacity:.4; text-decoration:line-through; }
+
+/* Manual damage row in the Attack Runner. Everything else in that panel comes
+   out of a stat block; this is the way in for what the parser missed, what
+   the DM improvised, and what a player rolled themselves. */
+.atk-manual { display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+  padding:7px 9px; background:var(--panel-2); border-bottom:1px solid var(--border); }
+.atk-manual-l { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.07em;
+  color:var(--text-muted); }
+.atk-manual-mag { display:inline-flex; align-items:center; gap:4px;
+  font-size:var(--fs-sm); color:var(--text-muted); cursor:pointer; }
+.atk-in { width:64px; background:var(--panel-3); border:1px solid var(--border);
+  color:var(--text); border-radius:var(--r-sm); padding:4px 7px; font:inherit;
+  font-size:var(--fs-md); text-align:center; font-variant-numeric:tabular-nums; }
+.atk-in.wide { width:126px; text-align:left; }
+/* .atk-in resets background with the shorthand, which drops the global select
+   caret and its 26px of padding — restore both, same as the Turn View picker. */
+select.atk-in { cursor:pointer; padding-right:26px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat; background-position:right 9px center; }

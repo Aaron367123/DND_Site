@@ -166,10 +166,54 @@ registerPanel('attacks', {
 
     b.innerHTML = `<div class="atk-root">
       ${this._pending ? this._renderTargetBar() : ''}
+      ${this._renderManual()}
       <div class="atk-list">${inner}</div>
       ${this._renderLog()}
     </div>`;
     this._wire();
+  },
+
+  // Hand-entered damage. Everything else here comes out of a stat block, so
+  // anything the parser missed, anything improvised, and anything a PLAYER
+  // rolled had no route into the tracker from this panel at all — the DM had
+  // to go and find the target's own +/- buttons and lose the type with it.
+  // Arms exactly like a parsed attack does, so it inherits the whole target
+  // strip, the per-type application and the log.
+  _renderManual(){
+    const opt = t => `<option value="${t}">${t}</option>`;
+    return `<div class="atk-manual">
+      <span class="atk-manual-l">Manual</span>
+      <input class="atk-in" data-aman="dmg" type="number" min="0" placeholder="dmg"
+             aria-label="Damage amount">
+      <select class="atk-in wide" data-aman="type" aria-label="Damage type">
+        <option value="">type…</option>
+        ${(typeof SKT_DAMAGE_TYPES !== 'undefined' ? SKT_DAMAGE_TYPES : []).map(opt).join('')}
+      </select>
+      <label class="atk-manual-mag" title="Counts as magical — matters against &ldquo;nonmagical bludgeoning&rdquo; style resistances">
+        <input type="checkbox" data-aman="magical"> magical
+      </label>
+      <button class="atk-btn small roll" data-aact="manual"
+              title="Arm this damage, then pick a target">Pick target</button>
+    </div>`;
+  },
+
+  _armManual(){
+    const b = this._body; if (!b) return;
+    const amt = parseInt((b.querySelector('[data-aman="dmg"]') || {}).value, 10);
+    if (isNaN(amt) || amt <= 0){
+      showToast('Enter the damage first');
+      return;
+    }
+    const type = ((b.querySelector('[data-aman="type"]') || {}).value || '').trim();
+    const magical = !!(b.querySelector('[data-aman="magical"]') || {}).checked;
+    this._queue = null;                 // a manual hit is not part of a sequence
+    this._pending = {
+      srcId: null, magical,
+      label: 'Manual' + (magical ? ' (magical)' : ''),
+      amount: [{ amt, type }],
+      detail: '',
+    };
+    this._render();
   },
 
   _renderMonster(r){
@@ -349,7 +393,15 @@ registerPanel('attacks', {
         if (this._queue){ this._queue.misses++; this._advanceQueue(); }
       } else if (act === 'hit'){
         this._apply(+el.dataset.idx);
+      } else if (act === 'manual'){
+        this._armManual();
       }
+    });
+    b.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      if (!e.target.closest || !e.target.closest('[data-aman]')) return;
+      e.preventDefault();
+      this._armManual();
     });
   },
 
