@@ -396,6 +396,8 @@ registerPanel('turnview', {
                bgScale:B._bgMapScale || 1,
                rotation:((B._mapRotation || 0) % 360 + 360) % 360,
                snap:!!B._snapToGrid,
+               gridOffsetX:B._gridOffsetX || 0, gridOffsetY:B._gridOffsetY || 0,
+               gridColor:B._gridColor || null,
                drawings:Array.isArray(B._drawings) ? B._drawings : [] };
     }
     try {
@@ -407,11 +409,14 @@ registerPanel('turnview', {
                  bgPath:d.bgMapPath || null, bgScale:d.bgMapScale || 1,
                  rotation:((d.mapRotation || 0) % 360 + 360) % 360,
                  snap:!!d.snapToGrid,
+                 gridOffsetX:d.gridOffsetX || 0, gridOffsetY:d.gridOffsetY || 0,
+                 gridColor:d.gridColor || null,
                  drawings:Array.isArray(d.drawings) ? d.drawings : [] };
       }
     } catch(e){}
     return { live:false, tokens:[], cs:50, cols:24, rows:18, gridType:'square',
-             bgPath:null, bgScale:1, rotation:0, snap:false, drawings:[] };
+             bgPath:null, bgScale:1, rotation:0, snap:false,
+             gridOffsetX:0, gridOffsetY:0, gridColor:null, drawings:[] };
   },
   _map(){ return this._mapCache || (this._mapCache = this._mapSrc()); },
 
@@ -1195,16 +1200,27 @@ registerPanel('turnview', {
     const quarter = deg === 90 || deg === 270;
     const boxW = m.clientWidth || 250, boxH = m.clientHeight || 172;
     const W = quarter ? boxH : boxW, H = quarter ? boxW : boxH;
-    rot.style.width = W + 'px';
-    rot.style.height = H + 'px';
-    rot.style.left = ((boxW - W) / 2) + 'px';
-    rot.style.top  = ((boxH - H) / 2) + 'px';
+    // OVERDRAW. The layer is drawn larger than the window onto it, so a pan
+    // slides pre-drawn map into view instead of blank edges — that is what
+    // lets the drag be a composited transform rather than a repaint per
+    // frame. Half a box in each direction is enough for any realistic flick
+    // and costs one extra background paint per re-place, not per frame.
+    const MX = Math.round(W * 0.5), MY = Math.round(H * 0.5);
+    this._overdrawX = MX; this._overdrawY = MY;
+    const LW = W + MX * 2, LH = H + MY * 2;
+    rot.style.width = LW + 'px';
+    rot.style.height = LH + 'px';
+    rot.style.left = ((boxW - W) / 2 - MX) + 'px';
+    rot.style.top  = ((boxH - H) / 2 - MY) + 'px';
     rot.style.transform = deg ? `rotate(${deg}deg)` : '';
     // ONE cell size for both axes, letterboxed. Fitting the viewport to the box
     // independently per axis would give rectangular cells, and a grid whose
     // squares aren't square misreports the one thing this map exists to show.
     const cell = Math.min(W / vp.w, H / vp.h);
-    const offX = (W - cell * vp.w) / 2, offY = (H - cell * vp.h) / 2;
+    // The letterbox is measured against the VISIBLE box, then shifted by the
+    // overdraw margin, so the viewport still lands centred in the window
+    // while the layer extends past it on every side.
+    const offX = (W - cell * vp.w) / 2 + MX, offY = (H - cell * vp.h) / 2 + MY;
     const k = cell / cs;                       // thumbnail px per stage px
 
     // The actual map art, positioned exactly as the battle map positions it:
@@ -1234,15 +1250,17 @@ registerPanel('turnview', {
     // stage pixels, so the same k and offsets the art uses put them in the
     // right place. They are the DM's own marks — a spell area, a line of
     // retreat — and the panel simply wasn't drawing them.
-    this._drawStrokes(rot.querySelector('.tv-map-draw'), src, vp, cell, offX, offY, W, H);
+    this._drawStrokes(rot.querySelector('.tv-map-draw'), src, vp, cell, offX, offY, LW, LH);
 
     // The overlay grid is only ever right for a square grid with no art. A map
     // image carries its own grid — printed, and hex on this one — so drawing
     // squares over it produces two grids that disagree.
     const g = m.querySelector('.tv-map-grid');
     if (g){
-      const square = !hasArt && src.gridType === 'square';
-      g.hidden = !square;
+      // Always hidden now: the canvas draws the grid for every case, over
+      // the art included, and two grid implementations is one too many.
+      const square = false;
+      g.hidden = true;
       if (square){
         g.style.left = offX + 'px'; g.style.top = offY + 'px';
         g.style.width = (cell * vp.w) + 'px'; g.style.height = (cell * vp.h) + 'px';
@@ -1313,10 +1331,52 @@ registerPanel('turnview', {
     const ctx = cv.getContext('2d'); if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    if (!list.length) return;
     const cs = src.cs || 50, k = cell / cs;
     const px = v => offX + (v / cs - vp.x) * cell;
     const py = v => offY + (v / cs - vp.y) * cell;
+
+    // The grid, drawn over the art the way the battle map draws its own. It
+    // used to be suppressed whenever there was a map image, on the grounds
+    // that the art carries a printed grid — but the printed one is invisible
+    // at thumbnail scale, and on a hex map there was then no way to judge a
+    // distance at all. Same geometry as the real map: same cell size, same
+    // Align offset, and _drawHexGrid borrowed outright rather than a second
+    // hex lattice that could disagree with the first.
+    const gt = src.gridType || 'square';
+    if (gt !== 'none'){
+      ctx.save();
+      // Stage pixels in, thumbnail pixels out — then everything below is in
+      // the same coordinates the battle map uses.
+      ctx.translate(offX - vp.x * cell, offY - vp.y * cell);
+      ctx.scale(k, k);
+      // Colour it the way the battle map does — from the ART's brightness,
+      // and from the DM's own grid colour when they have set one. A fixed
+      // white at 34% was invisible on this campaign's map: sea, snow and pale
+      // tan, so a white grid over it painted 29,000 pixels nobody could see.
+      let gc = 'rgba(255,255,255,.34)';
+      if (src.gridColor){
+        gc = src.gridColor;
+      } else if (typeof _bgLuminance === 'function'){
+        const lum = _bgLuminance();
+        if (lum != null) gc = lum > 128 ? 'rgba(0,0,0,.42)' : 'rgba(255,255,255,.34)';
+      }
+      ctx.strokeStyle = gc;
+      ctx.lineWidth = Math.max(0.6, 1) / k;
+      const SW = (src.cols || 24) * cs, SH = (src.rows || 18) * cs;
+      const gx = (((src.gridOffsetX || 0) * (src.bgScale || 1)) % cs + cs) % cs;
+      const gy = (((src.gridOffsetY || 0) * (src.bgScale || 1)) % cs + cs) % cs;
+      const B = this._bm();
+      if (gt === 'hex' && B && typeof B._drawHexGrid === 'function'){
+        B._drawHexGrid(ctx, cs, SW, SH, gx, gy);
+      } else if (gt !== 'hex') {
+        ctx.beginPath();
+        for (let x = gx; x <= SW + .01; x += cs){ ctx.moveTo(x, 0); ctx.lineTo(x, SH); }
+        for (let y = gy; y <= SH + .01; y += cs){ ctx.moveTo(0, y); ctx.lineTo(SW, y); }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (!list.length) return;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     list.forEach(s => {
       const p = s && s.p; if (!p || p.length < 4) return;
@@ -2225,24 +2285,63 @@ registerPanel('turnview', {
               : deg === 180 ? { x: -sx, y: -sy }
               : deg === 270 ? { x: -sy, y:  sx }
               :               { x:  sx, y:  sy };
-      // Drag right, the map follows the finger — so the viewport moves left.
-      this._panX = p.px - d.x / cell;
-      this._panY = p.py - d.y / cell;
-      this._vp = null;
-      // Coalesce to one repaint per FRAME. A pointermove can fire several
-      // times between frames — more on a 120Hz phone — and every one of them
-      // was doing the full re-place, so the work piled up behind the display
-      // and the pan stuttered instead of tracking the finger.
-      if (!this._panRaf){
-        this._panRaf = requestAnimationFrame(() => { this._panRaf = 0; this._placeTokens(); });
+      // Move the LAYER, don't redraw the map.
+      //
+      // Re-placing on every frame meant repainting a 3000px background image,
+      // re-running the grid and stroke canvas and writing left/top on every
+      // token — all on the main thread, all inside the frame budget. Even
+      // coalesced to one per frame that is too much work to hit 60fps, and
+      // the pan lagged the finger.
+      //
+      // A transform on the rotation layer is composited: no layout, no paint,
+      // no main-thread work per frame. The layer is drawn with a margin of
+      // overdraw around the visible box (see _placeTokens), so sliding it
+      // reveals real map rather than blank edges. The true coordinates are
+      // committed once, on release — or mid-drag if the finger travels past
+      // the overdraw and we run out of pre-drawn map.
+      const mx = this._overdrawX || 0, my = this._overdrawY || 0;
+      if (mx && (Math.abs(d.x) > mx * 0.85 || Math.abs(d.y) > my * 0.85)){
+        // Out of pre-drawn map: commit what we have and start a fresh drag
+        // from here, so the pan can continue indefinitely.
+        this._panX = p.px - d.x / cell;
+        this._panY = p.py - d.y / cell;
+        this._vp = null;
+        this._placeTokens();
+        this._pan = { x: e.clientX, y: e.clientY, px: this._panX, py: this._panY, vp: this._viewport() };
+        e.preventDefault();
+        return;
+      }
+      const rot = m.querySelector('.tv-map-rot');
+      if (rot){
+        const deg2 = src.rotation || 0;
+        rot.style.transform = (deg2 ? `rotate(${deg2}deg) ` : '')
+          + `translate3d(${d.x}px, ${d.y}px, 0)`;
       }
       e.preventDefault();
     });
     const endPan = e => {
       if (!this._pan) return;
+      const p = this._pan;
       this._pan = null;
-      // Land on the final position rather than wherever the last frame got to.
-      if (this._panRaf){ cancelAnimationFrame(this._panRaf); this._panRaf = 0; }
+      // Convert the composited offset into real coordinates and draw once.
+      if (p && e && e.clientX != null){
+        const mEl = b.querySelector('.tv-map');
+        if (mEl){
+          const src = this._map(), deg = src.rotation || 0;
+          const quarter = deg === 90 || deg === 270;
+          const W = quarter ? mEl.clientHeight : mEl.clientWidth;
+          const H = quarter ? mEl.clientWidth  : mEl.clientHeight;
+          const cell = Math.min(W / p.vp.w, H / p.vp.h) || 1;
+          const sx = e.clientX - p.x, sy = e.clientY - p.y;
+          const d = deg === 90  ? { x:  sy, y: -sx }
+                  : deg === 180 ? { x: -sx, y: -sy }
+                  : deg === 270 ? { x: -sy, y:  sx }
+                  :               { x:  sx, y:  sy };
+          this._panX = p.px - d.x / cell;
+          this._panY = p.py - d.y / cell;
+          this._vp = null;
+        }
+      }
       this._placeTokens();
       // The collapse was suppressed for the length of the drag, so settle it
       // now: if the hand finished outside the box, let it shrink back.
