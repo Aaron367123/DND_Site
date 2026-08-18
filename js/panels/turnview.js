@@ -1559,6 +1559,16 @@ registerPanel('turnview', {
     if (!this._pending || this._pending.kind !== 'hit' || p.id !== this._promptId){
       this._clearPrompt(); return;
     }
+    // Too old to still be the question being asked. The five-minute rule was
+    // written down as a property of the system but only ever enforced on the
+    // PHONE, in paMyOffers — and the phone is not the side that applies the
+    // damage. A client that skipped the check, or an answer delayed in the
+    // sync, would have been honoured here however stale.
+    const MAX_AGE = (typeof PA_PROMPT_MAX_AGE !== 'undefined') ? PA_PROMPT_MAX_AGE : 5 * 60 * 1000;
+    if (p.ts && Date.now() - p.ts > MAX_AGE){
+      this._log.unshift('<span style="opacity:.7">a reaction answer arrived too late to count</span>');
+      this._clearPrompt(); return;
+    }
     const a = p.answer;
     this._promptId = null;
     state.prompt = null;                  // cleared before applying, so the
