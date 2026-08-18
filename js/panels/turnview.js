@@ -1102,8 +1102,20 @@ registerPanel('turnview', {
       // A creature holding an unspent reaction that could ANSWER an attack is
       // worth seeing before you commit, not only once the prompt appears.
       // Everyone has Opportunity Attack, so flagging that would mark the table.
-      const r = (!t.reactionUsed && this._reactionsFor(t).some(x => x.when))
-        ? '<span class="tv-pip-r" title="Has an unspent reaction that can answer an attack">R</span>' : '';
+      // The R pip is now a CONTROL, not a badge. Reactions could only be
+      // spent in answer to a hit this panel had rolled — so a Counterspell, a
+      // Shield against something narrated rather than rolled, a Sentinel, a
+      // Hellish Rebuke after a trap, all left the tracker believing the
+      // reaction was still in hand. And a table where not everyone runs the
+      // app needs the DM able to spend one on a player's behalf at any point,
+      // not only when a prompt happens to be up.
+      const rx = this._reactionsFor(t);
+      const r = rx.length
+        ? `<span class="tv-pip-r ${t.reactionUsed ? 'spent' : ''}" data-tv="rx" data-id="${esc(t.id)}"
+                 role="button" tabindex="0" title="${t.reactionUsed
+                   ? esc(t.name) + ' has used their reaction — click to give it back'
+                   : 'Spend ' + esc(t.name) + '&rsquo;s reaction'}">R</span>`
+        : '';
       return `<button class="tv-tgt ${this._armed === t.id ? 'armed' : ''}" data-tv="arm" data-id="${esc(t.id)}"
                       aria-pressed="${this._armed === t.id}">
         <span class="tv-tgt-row">
@@ -1115,6 +1127,59 @@ registerPanel('turnview', {
       </button>`;
     }).join('');
     return '<h4>Target</h4>' + (rows || '<div class="tv-act-line">No one else in the fight.</div>');
+  },
+
+  // The reaction picker, opened from a target's R pip. Spends the reaction and
+  // pays whatever it costs — no damage maths, because there is no hit here to
+  // modify: this is the economy and the resource, which is exactly the part
+  // the tracker can get wrong on its own.
+  _renderRxMenu(){
+    const id = this._rxMenu; if (!id) return '';
+    const who = this._order().find(c => c.id === id); if (!who) return '';
+    if (who.reactionUsed){
+      return `<div class="tv-react tv-rxmenu">
+        <div class="tv-rxmenu-l">${esc(who.name)} — reaction spent</div>
+        <button class="btn" data-tv="rxback" data-id="${esc(id)}">Give it back</button>
+        <button class="btn" data-tv="rxclose">Close</button>
+      </div>`;
+    }
+    const rows = this._reactionsFor(who).map(r => {
+      const cost = this._costLabel(who, r);
+      const problem = this._costProblem(who, r);
+      return `<button class="btn ${problem ? 'tv-cant' : ''}" data-tv="rxuse"
+              data-id="${esc(id)}" data-key="${esc(r.key)}" ${problem ? 'disabled' : ''}
+              title="${esc(r.note || '')}">${esc(r.name)}
+        <span class="tv-react-cost">${problem ? '· ' + esc(problem) : (cost ? '· ' + esc(cost) : '')}</span>
+      </button>`;
+    }).join('');
+    return `<div class="tv-react tv-rxmenu">
+      <div class="tv-rxmenu-l">${esc(who.name)}&rsquo;s reaction</div>
+      ${rows}
+      <button class="btn" data-tv="rxuse" data-id="${esc(id)}" data-key="__other"
+              title="Something this panel doesn't model — spends the reaction and logs it">Something else</button>
+      <button class="btn" data-tv="rxclose">Close</button>
+    </div>`;
+  },
+
+  // Spend a reaction with no pending hit attached. _useReaction can't do this
+  // — it exists to modify an attack in flight and returns early without one.
+  _spendReactionFor(id, key){
+    const who = this._order().find(c => c.id === id); if (!who) return;
+    if (who.reactionUsed){ this._setResult(`<span class="dim">${esc(who.name)} has already reacted.</span>`, true); return; }
+    let label = 'a reaction';
+    if (key !== '__other'){
+      const r = this._reactionsFor(who).find(x => x.key === key); if (!r) return;
+      const problem = this._costProblem(who, r);
+      if (problem){ this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true); this._render(); return; }
+      const spent = this._payCost(who, r);
+      label = r.name + (spent ? ` · ${spent}` : '');
+    }
+    this._snapshot(`${who.name} · ${label}`);
+    who.reactionUsed = true;
+    this._rxMenu = null;
+    this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(label)}`);
+    this._setResult(`<strong>${esc(who.name)}</strong> uses their reaction — ${esc(label)}.`, true);
+    save(); panelDefs.combat?._render?.(); this._render();
   },
   _renderAdjust(){
     const a = this._order().find(x => x.id === this._armed);
@@ -1397,6 +1462,11 @@ registerPanel('turnview', {
 
   _renderPending(){
     const o = this._pending;
+    // The manual reaction picker lands HERE, in the same full-width strip a
+    // pushed reaction uses, rather than under the target list — that column
+    // scrolls, so the menu opened out of sight and clicking R looked like it
+    // did nothing at all.
+    if (!o && this._rxMenu) return this._renderRxMenu();
     if (!o) return '<div class="tv-react" hidden></div>';
     if (o.kind === 'move'){
       const opts = o.rows.map(w => `<button class="btn" data-tv="oa" data-id="${esc(w.id)}"
@@ -2166,6 +2236,20 @@ registerPanel('turnview', {
         panelDefs.combat?._refreshTurnEconomy?.(el.dataset.id);
         this._armed = null; save(); panelDefs.combat?._render?.(); this._render();
       }
+      // Checked before 'arm': the pip lives INSIDE the target button, and
+      // closest('[data-tv]') finds the innermost, so this wins the click and
+      // opening the menu does not also re-target the attack.
+      else if (act === 'rx'){
+        this._rxMenu = (this._rxMenu === el.dataset.id) ? null : el.dataset.id;
+        this._render();
+      }
+      else if (act === 'rxuse'){ this._spendReactionFor(el.dataset.id, el.dataset.key); }
+      else if (act === 'rxback'){
+        const w = this._order().find(x => x.id === el.dataset.id);
+        if (w){ w.reactionUsed = false; this._log.unshift(`<strong>${esc(w.name)}</strong> — reaction handed back`); }
+        this._rxMenu = null; save(); panelDefs.combat?._render?.(); this._render();
+      }
+      else if (act === 'rxclose'){ this._rxMenu = null; this._render(); }
       else if (act === 'mapzoom'){ this._zoomMap(+el.dataset.d); }
       else if (act === 'initedit'){ this._editInit = true;  this._render(); }
       else if (act === 'initdone'){ this._editInit = false; this._render(); }

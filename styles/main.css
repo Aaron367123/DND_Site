@@ -4329,3 +4329,17 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
   text-transform:uppercase; letter-spacing:.06em}
 .pa-sheet-t:hover{border-color:var(--accent); color:var(--text)}
 .pa-you .pa-mate-body{border-top:1px solid var(--border); padding:0 0 4px}
+
+/* Reaction picker, opened from a target's R pip. The DM has to be able to
+   spend a player's reaction themselves — not every table has every player on
+   the app, and a reaction to something the panel never rolled (a Counterspell,
+   a Shield against a narrated attack) has no prompt to answer. */
+.tv-rxmenu { display:flex; flex-wrap:wrap; align-items:center; gap:5px;
+  margin-top:6px; padding:7px 8px; background:var(--panel-3);
+  border:1px solid var(--accent); border-radius:var(--r-md); }
+.tv-rxmenu-l { width:100%; font-size:var(--fs-2xs); text-transform:uppercase;
+  letter-spacing:.07em; color:var(--text-muted); }
+.tv-rxmenu .btn { font-size:var(--fs-sm); padding:4px 8px; }
+.tv-pip-r[data-tv] { cursor:pointer; }
+.tv-pip-r[data-tv]:hover { border-color:var(--accent); color:var(--text); }
+.tv-pip-r.spent { opacity:.4; text-decoration:line-through; }
