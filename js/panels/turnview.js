@@ -493,8 +493,14 @@ registerPanel('turnview', {
     // fits, and the creature whose turn it is outranks the bounding box.
     if (z > 1 && cur){ x0 = x1 = cur.x / cs; y0 = y1 = cur.y / cs; }
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    const x = Math.max(0, Math.min(Math.round(cx - w / 2 + (this._panX || 0)), m.cols - w));
-    const y = Math.max(0, Math.min(Math.round(cy - h / 2 + (this._panY || 0)), m.rows - h));
+    // The AUTO frame rounds to whole cells so a fresh turn lands tidily; the
+    // manual pan must not, or releasing a drag snapped the map to the nearest
+    // cell — up to half a square of jump at the exact moment you let go, which
+    // is the most visible moment there is. Add the pan after the rounding and
+    // let the origin be fractional; every consumer of vp.x/vp.y is continuous
+    // maths, so nothing else cares.
+    const x = Math.max(0, Math.min(Math.round(cx - w / 2) + (this._panX || 0), m.cols - w));
+    const y = Math.max(0, Math.min(Math.round(cy - h / 2) + (this._panY || 0), m.rows - h));
     return (this._vp = { x, y, w, h });
   },
   // Name matching, forgiving in the ways real data is inconsistent: exact
@@ -1160,7 +1166,6 @@ registerPanel('turnview', {
   _canExpandMap(){ return !matchMedia('(max-width: 760px)').matches; },
   _mapHint(onMap){
     if (!onMap) return 'no tokens on the battle map';
-    if (!this._map().live) return 'open the Battle Map to move tokens';
     if (this._mapBig) return 'drag a token — reach updates live, and leaving it provokes';
     if (!this._canExpandMap()) return 'drag a token — leaving reach provokes';
     return 'hover to enlarge';
@@ -2358,8 +2363,12 @@ registerPanel('turnview', {
 
     b.addEventListener('pointerdown', e => {
       const t = e.target.closest('.tv-tok'); if (!t) return;
-      // Read-only when the battle map hasn't mounted — see _mapSrc.
-      if (!this._map().live){ showToast('Open the Battle Map to move tokens'); return; }
+      // Movable whether or not the Battle Map panel happens to be open. It
+      // used to refuse — the panel owns the token array, so with it closed
+      // there was nothing to write to — but the auto-token reconciler already
+      // edits the stored JSON directly for exactly this case, so the route
+      // exists. Refusing meant the map sat there, right in front of you, inert,
+      // and on a phone the Battle Map is rarely the panel you have open.
       // Tokens with no combatant are draggable too — they are on the map, so
       // they are part of the picture — they just can't provoke anything.
       const c = t.dataset.tvtok ? this._order().find(x => x.id === t.dataset.tvtok) : null;
@@ -2430,7 +2439,21 @@ registerPanel('turnview', {
       const tok = d.tok;
       // Write through to the battle map — this IS its token, so the panel and
       // the map can't disagree about where anyone is standing.
-      B?._renderTokens?.(); B?._saveMap?.();
+      if (B && B._body){ B._renderTokens?.(); B._saveMap?.(); }
+      else {
+        // Panel closed: edit the stored JSON, the same way the auto-token
+        // reconciler does. setItem is enough to sync — realtime.js patches
+        // Storage.prototype and pushes any dirtied key.
+        try {
+          const raw = localStorage.getItem('skt-battlemap-v1');
+          const dd = raw ? JSON.parse(raw) : null;
+          if (dd && Array.isArray(dd.tokens)){
+            const t2 = dd.tokens.find(x => x && x.id === tok.id);
+            if (t2){ t2.x = tok.x; t2.y = tok.y;
+                     localStorage.setItem('skt-battlemap-v1', JSON.stringify(dd)); }
+          }
+        } catch(err){ console.warn('[SKT] token move', err); }
+      }
       // A token with no combatant can be moved but can't provoke — there is
       // nobody in the order for the opportunity attack to belong to.
       const moved = tok && (tok.x !== d.from.x || tok.y !== d.from.y);
