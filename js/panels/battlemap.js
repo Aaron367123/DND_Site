@@ -345,6 +345,29 @@ registerPanel('battlemap',{
       if (typeof warnStorageFailure === 'function') warnStorageFailure('battle map', e);
     }
     this._broadcast();
+    this._notifyMapChanged();
+  },
+
+  // Tell the other panels the map moved.
+  //
+  // The Turn View only ever redrew off save() — the COMBAT save — and a token
+  // move does not touch combat state, so dragging someone on the battle map
+  // left the Turn View's picture stale until something else happened to
+  // re-place it. Hovering to enlarge did, which is why it looked like the map
+  // had to be expanded before it would update.
+  //
+  // BroadcastChannel cannot do this job: it never delivers to the context
+  // that posted, and both panels live in the same tab. Same shape as the
+  // _syncFromCombat dispatch in save() — panels opt in by defining the hook,
+  // so nothing here needs a list of who is listening.
+  _notifyMapChanged(){
+    if (typeof panelDefs === 'undefined') return;
+    for (const id in panelDefs){
+      const d = panelDefs[id];
+      if (d && d !== this && typeof d._syncFromMap === 'function'){
+        try { d._syncFromMap(); } catch(e){}
+      }
+    }
   },
 
   // ─── Undo / redo ───────────────────────────────────────────────────────────
@@ -1712,6 +1735,9 @@ registerPanel('battlemap',{
     if (tokenHash !== this._lastTokenHash){
       this._lastTokenHash = tokenHash;
       this._renderTokens();
+      // A map arriving from another device or another tab has to reach the
+      // other panels too — this path does not go through _saveMap.
+      this._notifyMapChanged();
     }
   },
   _stopBroadcast(){

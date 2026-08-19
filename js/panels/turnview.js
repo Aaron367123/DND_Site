@@ -98,6 +98,24 @@ registerPanel('turnview', {
            c.reactionUsed ? 1 : 0, (c.conditions || []).join(',')].join('~')
         ).join('|');
   },
+  // The battle map moved. Cheap by design: _placeTokens is ~1.3ms and the
+  // full _render would throw away the reaction bar, an open picker and any
+  // half-typed manual damage — none of which a token move should disturb.
+  _syncFromMap(){
+    if (!this._body) return;
+    if (this._drag || this._pan) return;      // we are the one moving it
+    // Invalidate FIRST, then pin: _holdFrame compares the frame we are showing
+    // against the one the NEW positions would produce, and it can only do that
+    // once the cache is gone. Pinning against stale data would leave the
+    // existing offset untouched and the camera would drift after all.
+    this._mapCache = null;
+    // Same rule as dragging a token in this panel: someone moving a creature
+    // on the battle map should not also move the camera here. Measured an
+    // eight-cell move dragging the frame from 9,4 to 11,5 before this.
+    this._holdFrame();
+    this._placeTokens();
+  },
+
   _syncFromCombat(){
     if (!this._body || this._applying) return;
     if (this._combatSig() === this._sig) return;
@@ -2605,11 +2623,14 @@ registerPanel('turnview', {
   // everything that clears a pan clears this too.
   _holdFrame(){
     const frozen = this._vp; if (!frozen) return;
-    const px = this._panX || 0, py = this._panY || 0;
     this._panX = 0; this._panY = 0; this._vp = null;
     const auto = this._viewport();                 // where it would land unaided
-    this._panX = px + (frozen.x - auto.x);
-    this._panY = py + (frozen.y - auto.y);
+    // frozen ALREADY contains the pan that produced it, so the new offset is
+    // the whole difference — not the old pan plus it. Adding px here counted
+    // it twice, and since this runs on every map change the error compounded:
+    // five token moves walked the camera from 9,4 to 0,0.
+    this._panX = frozen.x - auto.x;
+    this._panY = frozen.y - auto.y;
     this._vp = null;
   },
 
