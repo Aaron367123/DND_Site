@@ -218,7 +218,7 @@ const _ENTITY_KEYS = {
     },
     // Don't stomp an in-flight token drag — the drag-end save re-pushes
     // local state (LWW) and reconciles.
-    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.battlemap; return !!(d && d._drag); },
+    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.battlemap; return !!(d && d._body && d._drag); },
   },
   'skt-notes-v2': {
     base: 'skt/notes_v3',
@@ -256,7 +256,11 @@ const _ENTITY_KEYS = {
     postApply(){ _reloadPanel('notes'); if (typeof paRender === 'function') paRender(); },
     // Never re-render under the user's cursor mid-edit; the next event or
     // the focus-refresh reconciles once they're done typing.
-    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.notes; return !!(d && d._editing); },
+    // Only while the panel is actually MOUNTED. A flag left set by a panel
+    // that is no longer on screen cannot be cleared by anything the user
+    // does, so requiring _body as well turns a permanent stall into a
+    // temporary one whatever else goes wrong upstream.
+    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.notes; return !!(d && d._body && d._editing); },
   },
 };
 function _fbSafeId(id){ return String(id).replace(/[.#$\/\[\]]/g, '_'); }

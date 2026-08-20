@@ -273,6 +273,15 @@ registerPanel('notes', {
   },
   unmount(){
     this._commitEditing();
+    // Clear the editing flag on the way out. realtime.js asks this panel
+    // whether it is mid-edit before applying a remote note update — and with
+    // the panel closed nothing else ever clears the flag, because the only
+    // other place that does is _render(). Closing the panel while the cursor
+    // sat in a note therefore held off every note update for the rest of the
+    // session: another device's writes arrived, were skipped, and the DM went
+    // on seeing their own copy. Silent, permanent, and invisible.
+    this._editing = false;
+    this._editingOriginal = null;
     // Flush any debounced push before tearing down so a just-typed edit isn't
     // stranded in the 800 ms window when the panel closes.
     if (window.notesSync   && window.notesSync.flushPending)   window.notesSync.flushPending();
