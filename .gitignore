@@ -28,3 +28,7 @@ tools/shots/
 # anonymous session it reuses. Real campaign data and a refresh token — the
 # repo is public, so neither belongs in it.
 /.state/
+
+# Windows: a stray "nul" file gets created by shell redirections that treat
+# it as the null device. Never content.
+nul
