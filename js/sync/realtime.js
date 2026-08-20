@@ -466,9 +466,22 @@ function _flushDirtyKeys() {
       delete _retryCounts[k];
       return true;
     }).catch((err) => {
-      // Failure — re-mark the key dirty + bump retry counter so the next
-      // debounce tick (300ms) tries again. After _MAX_RETRIES attempts give
-      // up silently rather than spinning. The next user edit re-enqueues it.
+      // The push never landed, so no echo is coming for it — take the entry
+      // back out of the echo multiset. Left in, it suppresses a LATER
+      // legitimate update that happens to carry the same bytes, and that is
+      // a real desync rather than a wasted entry: push V, fail, edit locally
+      // to X, then another device sets it back to V — we drop their update
+      // as our own echo and sit on X while the table is on V. A retry
+      // re-registers it, so the bookkeeping stays honest either way.
+      const pend = _justWrote[k];
+      if (pend){
+        const c = pend.get(norm) || 0;
+        if (c > 1) pend.set(norm, c - 1);
+        else { pend.delete(norm); if (pend.size === 0) delete _justWrote[k]; }
+      }
+      // Re-mark the key dirty + bump retry counter so the next debounce tick
+      // (300ms) tries again. After _MAX_RETRIES attempts give up silently
+      // rather than spinning. The next user edit re-enqueues it.
       const n = (_retryCounts[k] || 0) + 1;
       _retryCounts[k] = n;
       if (n <= _MAX_RETRIES){
