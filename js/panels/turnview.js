@@ -72,7 +72,9 @@ registerPanel('turnview', {
     }
     if (typeof load5eData === 'function') load5eData();
   },
-  unmount(){ this._body = null; this._pending = null; },
+  // Drop the kept map node with the panel — it holds a decoded background,
+  // and a closed panel should not.
+  unmount(){ this._body = null; this._pending = null; this._mapNode = null; },
 
   menuItems(){
     return [
@@ -663,6 +665,9 @@ registerPanel('turnview', {
         <button class="btn primary tv-end" data-tv="end">End turn</button>
       </div>
     </div>`;
+    const slot = b.querySelector('[data-tvmapslot]');
+    if (slot) slot.replaceWith(this._mapEl());
+    this._refreshMapChrome();
     this._wire();
     this._placeTokens();
     // When the tail has to scroll, the live end wins the visible space. A
@@ -1225,27 +1230,49 @@ registerPanel('turnview', {
       : '<div class="tv-log-line" style="opacity:.55">Rolls this combat appear here.</div>';
   },
 
-  _renderMap(){
-    const onMap = this._map().tokens.length;
-    // The grid is sized in _placeTokens, once the box has real pixels.
-    // .tv-map-rot carries the map's rotation, so the art, the pencil strokes
-    // and the tokens turn together — exactly as the battle map's own stage
-    // does. The hint stays outside it, because a caption reading bottom-to-top
-    // helps nobody.
+  // Only a PLACEHOLDER. _render rewrites the whole panel's innerHTML, which
+  // destroyed and rebuilt the map every time — and a full render happens on
+  // every combat change, so a single point of damage tore down the
+  // background, the canvas and every token and painted them again. That is
+  // the flash. The real element is built once by _mapEl() and swapped back
+  // into this slot afterwards, so the art is never detached at all.
+  _renderMap(){ return '<div data-tvmapslot></div>'; },
+
+  // The map element itself, created once and kept across renders.
+  // .tv-map-rot carries the map's rotation, so the art, the pencil strokes
+  // and the tokens turn together — exactly as the battle map's own stage
+  // does. The hint stays outside it, because a caption reading bottom-to-top
+  // helps nobody.
+  _mapEl(){
+    if (!this._mapNode){
+      const d = document.createElement('div');
+      d.className = 'tv-map';
+      d.innerHTML = `<div class="tv-map-rot"><canvas class="tv-map-draw"></canvas></div>
+        <div class="tv-map-grid"></div>
+        <div class="tv-map-zoom">
+          <button data-tv="mapzoom" data-d="-1" title="Zoom out — show more of the map" aria-label="Zoom out">−</button>
+          <button data-tv="mapzoom" data-d="0" title="Back to framing the fight" aria-label="Fit to the fight">fit</button>
+          <button data-tv="mapzoom" data-d="1" title="Zoom in on whoever is acting" aria-label="Zoom in">+</button>
+        </div>
+        <div class="tv-map-hint"></div>`;
+      this._mapNode = d;
+    }
+    return this._mapNode;
+  },
+
+  // The parts of the map element that DO change per render, updated in place
+  // rather than by rebuilding it.
+  _refreshMapChrome(){
+    const m = this._mapNode; if (!m) return;
+    m.classList.toggle('big', !!this._mapBig);
     const z = this._mapZoom || 1;
-    return `<div class="tv-map${this._mapBig ? ' big' : ''}">
-      <div class="tv-map-rot">
-        <canvas class="tv-map-draw"></canvas>
-      </div>
-      <div class="tv-map-grid"></div>
-      <div class="tv-map-zoom">
-        <button data-tv="mapzoom" data-d="-1" title="Zoom out — show more of the map" aria-label="Zoom out">−</button>
-        <button data-tv="mapzoom" data-d="0" title="Back to framing the fight" aria-label="Fit to the fight"
-                class="${z === 1 ? 'off' : ''}">${z === 1 ? 'fit' : Math.round(z * 100) + '%'}</button>
-        <button data-tv="mapzoom" data-d="1" title="Zoom in on whoever is acting" aria-label="Zoom in">+</button>
-      </div>
-      <div class="tv-map-hint">${esc(this._mapHint(onMap))}</div>
-    </div>`;
+    const rd = m.querySelector('.tv-map-zoom [data-d="0"]');
+    if (rd){
+      rd.textContent = z === 1 ? 'fit' : Math.round(z * 100) + '%';
+      rd.classList.toggle('off', z === 1);
+    }
+    const h = m.querySelector('.tv-map-hint');
+    if (h) h.textContent = this._mapHint(this._map().tokens.length);
   },
   // Enlarging on hover is a desktop affordance. On a phone the panel is
   // already one column and the map already 200px of a 390px screen, so the
