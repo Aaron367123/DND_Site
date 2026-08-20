@@ -1525,6 +1525,19 @@ registerPanel('battlemap',{
           this._applyPreviewStroke(val.stroke);
         });
       }
+      // Token movement streams to EVERY device, both roles. Strokes only ever
+      // travelled DM to player because only the DM draws; a token can be
+      // dragged by either, and a DM watching a player reposition themselves is
+      // as useful as the reverse. Firebase does echo a write back to its
+      // sender, so a tick naming a token we are currently dragging is dropped
+      // by _applyLiveToken's own _drag guard.
+      if (window.realtimeLive){
+        try { if (this._unsubTok) this._unsubTok(); } catch(e){}
+        this._unsubTok = window.realtimeLive.listen(this._LIVE_TOKEN_PATH, val => {
+          if (!val || val.id == null) return;
+          this._applyLiveToken(val.id, val.x, val.y);
+        });
+      }
       this._bc.onmessage = ev => {
         const msg = ev.data; if (!msg) return;
         if (!isPlayer){
@@ -1549,6 +1562,12 @@ registerPanel('battlemap',{
           //
           // Last-write-wins, as everywhere else on this map: if the DM moves
           // the same token in the same instant, whichever lands second wins.
+          // Live ticks first: they carry no state, only where a token is at
+          // this instant, so the role gate below — which exists to stop a
+          // stale player payload overwriting fog or the map — does not apply.
+          if (msg.kind === 'tokenTick'){ this._applyLiveToken(msg.id, msg.x, msg.y); return; }
+          if (msg.kind === 'tokenEnd') return;
+          if (msg.kind === 'strokeTick' || msg.kind === 'strokeEnd') return;
           if (msg.role !== 'player') return;
           let touched = false;
           if (Array.isArray(msg.drawings)){
@@ -1572,6 +1591,8 @@ registerPanel('battlemap',{
         // cleared.
         if (msg.kind === 'strokeTick'){ this._applyPreviewStroke(msg.stroke); return; }
         if (msg.kind === 'strokeEnd'){ this._clearPreviewStroke(); return; }
+        if (msg.kind === 'tokenTick'){ this._applyLiveToken(msg.id, msg.x, msg.y); return; }
+        if (msg.kind === 'tokenEnd'){ return; }   // the real position follows
         // Everything else is a full state snapshot. Hand it to the one
         // applier so this route can't drift from the Firebase one again.
         this.applyMapState(msg, { source: 'bc' });
@@ -1743,7 +1764,8 @@ registerPanel('battlemap',{
   _stopBroadcast(){
     try { this._bc?.close(); } catch(e){}
     try { if (this._unsubLive) this._unsubLive(); } catch(e){}
-    this._unsubLive = null;
+    try { if (this._unsubTok) this._unsubTok(); } catch(e){}
+    this._unsubLive = null; this._unsubTok = null;
   },
 
   // Tiny circular marker shown at the first click during grid-align mode so
@@ -1835,6 +1857,58 @@ registerPanel('battlemap',{
   _broadcastStrokeEnd(){
     try { if (this._bc) this._bc.postMessage({ kind:'strokeEnd' }); } catch(e){}
     try { if (window.realtimeLive) window.realtimeLive.clear('skt_battlemap_live_v1'); } catch(e){}
+  },
+
+  // ─── Live token movement ──────────────────────────────────────────────────
+  // A drag used to be invisible to everyone else until it was released: the
+  // handler moved the local element and nothing left the tab until _saveMap
+  // on mouseup. So a player watching the shared screen saw creatures teleport
+  // rather than move, and lost the one thing the movement itself tells you —
+  // which way round something is going, and how far it is getting.
+  //
+  // This is the pencil's live-stroke path with a different payload, because
+  // that path is already proven: same 10fps throttle, same BroadcastChannel
+  // for tabs on this machine and the same realtimeLive node for other
+  // devices, same explicit "ended" message so nothing is left stranded.
+  //
+  // EPHEMERAL by construction. A tick carries an id and a position and is
+  // never written to state or to localStorage — the authoritative move is
+  // still the _saveMap at the end of the drag. If a tab dies mid-drag the
+  // worst case is a token drawn a few pixels out until the next real update
+  // repaints it, rather than a wrong position persisted to everyone.
+  _LIVE_TOKEN_PATH: 'skt_battlemap_tokmove_v1',
+  _broadcastTokenTick(id, x, y){
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (now - (this._lastTokTick || 0) < 100) return;      // 10fps, as strokes
+    this._lastTokTick = now;
+    const msg = { kind:'tokenTick', id, x, y };
+    try { if (this._bc) this._bc.postMessage(msg); } catch(e){}
+    try { if (window.realtimeLive) window.realtimeLive.push(this._LIVE_TOKEN_PATH, { id, x, y, ts: Date.now() }); } catch(e){}
+  },
+  _broadcastTokenEnd(){
+    this._lastTokTick = 0;
+    try { if (this._bc) this._bc.postMessage({ kind:'tokenEnd' }); } catch(e){}
+    try { if (window.realtimeLive) window.realtimeLive.clear(this._LIVE_TOKEN_PATH); } catch(e){}
+  },
+
+  // Move the drawn element only. Deliberately does NOT touch this._tokens:
+  // a live tick is somebody else's in-progress gesture, not a fact about the
+  // map, and writing it to state would let a half-finished drag be saved or
+  // synced onward by anything else that happens to fire.
+  _applyLiveToken(id, x, y){
+    const b = this._body; if (!b || x == null || y == null) return;
+    if (this._drag) return;                      // our own drag wins locally
+    const el = b.querySelector('.map-token[data-tid="' + CSS.escape(String(id)) + '"]');
+    if (el){ el.style.left = x + 'px'; el.style.top = y + 'px'; }
+    const nm = b.querySelector('.map-token-name[data-tid="' + CSS.escape(String(id)) + '"]');
+    if (nm){ nm.style.left = x + 'px'; nm.style.top = y + 'px'; }
+    // The Turn View draws the same creature; let it follow too.
+    const T = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+    if (T && T._body && typeof T._syncFromMap === 'function'){
+      const tok = (this._tokens || []).find(t => t && t.id === id);
+      if (tok){ const ox = tok.x, oy = tok.y; tok.x = x; tok.y = y;
+                try { T._syncFromMap(); } finally { tok.x = ox; tok.y = oy; } }
+    }
   },
 
   // Preview-stroke layer (player view only). Lives on the existing draw-canvas
@@ -4353,11 +4427,13 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
+          this._broadcastTokenTick(t.id, curPx, curPy);
         };
 
         const onUp=ev=>{
           document.removeEventListener('mousemove',onMove);
           document.removeEventListener('mouseup',onUp);
+          if (moved) this._broadcastTokenEnd();
           if(moved){
             let nx = curPx, ny = curPy;
             const wantSnap = ev && ev.shiftKey ? !this._snapToGrid : this._snapToGrid;
@@ -4446,12 +4522,17 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
+          this._broadcastTokenTick(t.id, curPx, curPy);
         };
         const onEnd = ev => {
           clearTimeout(longPressTimer);
           document.removeEventListener('touchmove', onMove);
           document.removeEventListener('touchend', onEnd);
           document.removeEventListener('touchcancel', onEnd);
+          // touchcancel lands here too, which is the case that matters: a
+          // gesture interrupted by a call or a notification must still tell
+          // everyone the drag is over, or the last tick sits there forever.
+          if (moved) this._broadcastTokenEnd();
           // Same defer-clear as the mouse path — prevents the drag's "moved"
           // state from poisoning the next tap on the canvas.
           setTimeout(() => { this._drag = null; }, 0);
