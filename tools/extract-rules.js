@@ -1,0 +1,130 @@
+#!/usr/bin/env node
+// ============================================================
+// EXTRACT THE RULES TABLES OUT OF THE BOOKS
+// ============================================================
+//   node tools/extract-rules.js
+//
+// The encounter builder's XP thresholds were wrong on nineteen of twenty
+// rows, its multiplier table wrong on fourteen of the first sixteen monster
+// counts, and its CR list stopped at 24 so a Scion of Surtur counted for zero
+// XP. Every one of those answers was already in this repo, in
+// data/book/book-dmg.json, sitting next to the code that got them wrong.
+//
+// So: read the tables, don't retype them. Anything transcribed by hand is a
+// table that can silently disagree with the book. This generator is the same
+// shape as tools/extract-reactions.js and its output is loaded the same way.
+
+const fs = require('fs');
+const path = require('path');
+const ROOT = path.join(__dirname, '..');
+
+const num = v => parseInt(String(v).replace(/[^0-9-]/g, ''), 10);
+
+// Find the first table in a book whose caption matches.
+function findTable(bookFile, re){
+  const p = path.join(ROOT, 'data', 'book', bookFile);
+  if (!fs.existsSync(p)) return null;
+  const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+  let hit = null;
+  (function walk(n){
+    if (hit) return;
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (n && typeof n === 'object'){
+      if (n.type === 'table' && re.test(n.caption || '')) { hit = n; return; }
+      Object.values(n).forEach(walk);
+    }
+  })(d);
+  return hit;
+}
+
+const problems = [];
+const need = (v, what) => { if (!v) problems.push(what); return v; };
+
+// ── 2014 XP thresholds by character level: [easy, medium, hard, deadly] ──
+const tThresh = need(findTable('book-dmg.json', /XP Thresholds by Character Level/i),
+                     'DMG XP threshold table');
+const XP_THRESH = tThresh ? tThresh.rows.map(r => r.slice(1, 5).map(num)) : [];
+
+// ── 2014 encounter multipliers, as [maxCount, multiplier] steps ──
+const tMult = need(findTable('book-dmg.json', /^Encounter Multipliers$/i),
+                   'DMG encounter multiplier table');
+const ENC_MULT = tMult ? tMult.rows.map(r => {
+  const range = String(r[0]);
+  const mult = parseFloat(String(r[1]).replace(/[^0-9.]/g, ''));
+  // "1", "3-6", "15 or more"
+  const m = /^(\d+)\s*-\s*(\d+)$/.exec(range);
+  const upto = m ? +m[2] : (/more/i.test(range) ? Infinity : +range);
+  return [upto, mult];
+}) : [];
+
+// ── XP by challenge rating ──
+const tCr = need(findTable('book-dmg.json', /Experience Points by Challenge Rating/i),
+                 'DMG CR/XP table');
+const CR_XP = {};
+if (tCr) tCr.rows.forEach(r => { const xp = num(r[1]); if (!isNaN(xp)) CR_XP[String(r[0]).trim()] = xp; });
+
+// ── 2024 XP budget per character: [low, moderate, high] ──
+const tBudget = need(findTable('book-xdmg.json', /XP Budget per Character/i),
+                     '2024 DMG XP budget table');
+const XP_BUDGET_2024 = tBudget ? tBudget.rows.map(r => r.slice(1, 4).map(num)) : [];
+
+// ── Hit die by class, from the class data rather than the books ──
+const HIT_DIE = {};
+const classDir = path.join(ROOT, 'data', 'class');
+if (fs.existsSync(classDir)){
+  fs.readdirSync(classDir).filter(f => /^class-.*\.json$/.test(f)).forEach(f => {
+    let d; try { d = JSON.parse(fs.readFileSync(path.join(classDir, f), 'utf8')); } catch(e){ return; }
+    (d.class || []).forEach(c => {
+      if (!c.hd || !c.name) return;
+      const k = String(c.name).toLowerCase();
+      if (!HIT_DIE[k]) HIT_DIE[k] = 'd' + c.hd.faces;
+    });
+  });
+}
+
+// ── Sanity, before anything is written ──
+if (XP_THRESH.length !== 20) problems.push('expected 20 threshold rows, got ' + XP_THRESH.length);
+if (XP_BUDGET_2024.length !== 20) problems.push('expected 20 budget rows, got ' + XP_BUDGET_2024.length);
+if (Object.keys(CR_XP).length < 30) problems.push('only ' + Object.keys(CR_XP).length + ' CR rows');
+if (!ENC_MULT.length) problems.push('no multiplier steps');
+if (Object.keys(HIT_DIE).length < 12) problems.push('only ' + Object.keys(HIT_DIE).length + ' classes');
+// Thresholds must rise across a row and down a column, or a parse went wrong.
+XP_THRESH.forEach((r, i) => {
+  for (let j = 1; j < 4; j++) if (!(r[j] > r[j-1])) problems.push('L' + (i+1) + ' thresholds not ascending');
+  if (i && !(r[3] > XP_THRESH[i-1][3])) problems.push('L' + (i+1) + ' deadly not above L' + i);
+});
+if (problems.length){
+  console.error('REFUSING to write — the tables did not parse as expected:');
+  problems.forEach(p => console.error('  ' + p));
+  process.exit(1);
+}
+
+const out = {
+  generated: 'node tools/extract-rules.js',
+  xpThresholds2014: XP_THRESH,
+  xpBudget2024: XP_BUDGET_2024,
+  crXp: CR_XP,
+  encounterMultipliers: ENC_MULT.map(([u, m]) => [u === Infinity ? null : u, m]),
+  hitDieByClass: HIT_DIE,
+};
+
+const dest = path.join(ROOT, 'js', 'generated', 'rules.js');
+fs.writeFileSync(dest,
+  '// GENERATED by tools/extract-rules.js — do not hand-edit.\n'
+  + '// Rules tables read out of data/book/*.json and data/class/*.json rather\n'
+  + '// than transcribed. Hand-typed copies of these were wrong on 19 of 20 XP\n'
+  + '// threshold rows, 14 of 16 multiplier counts, and stopped at CR 24 — while\n'
+  + '// the books sat in this repo the whole time.\n'
+  + '// ' + XP_THRESH.length + ' threshold rows, ' + XP_BUDGET_2024.length + ' budget rows, '
+  + Object.keys(CR_XP).length + ' CRs, ' + ENC_MULT.length + ' multiplier steps, '
+  + Object.keys(HIT_DIE).length + ' classes.\n'
+  + 'window.SKT_RULES = ' + JSON.stringify(out) + ';\n');
+
+console.log('thresholds  ' + XP_THRESH.length + ' rows (L1 ' + XP_THRESH[0].join('/') + ')');
+console.log('budget 2024 ' + XP_BUDGET_2024.length + ' rows');
+console.log('CR -> XP    ' + Object.keys(CR_XP).length + ' entries (up to CR '
+  + Object.keys(CR_XP).pop() + ')');
+console.log('multipliers ' + ENC_MULT.map(([u,m]) => (u===Infinity?'15+':'<='+u)+':x'+m).join('  '));
+console.log('hit dice    ' + Object.keys(HIT_DIE).length + ' classes');
+console.log('-> ' + path.relative(process.cwd(), dest)
+  + '  (' + Math.round(fs.statSync(dest).size/1024) + ' KB)');

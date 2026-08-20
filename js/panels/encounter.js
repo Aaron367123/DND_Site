@@ -1,23 +1,19 @@
 // ============================================================
 // ENCOUNTER BUILDER PANEL
 // ============================================================
-// XP thresholds by character level [easy, medium, hard, deadly]
-// Verbatim from the DMG's "XP Thresholds by Character Level", which ships in
-// this repo at data/book/book-dmg.json — nineteen of these twenty rows were
-// previously wrong, with the Deadly column inflated two to four times over.
-// A party of five level-6 characters facing a hill giant, an ogre and a
-// kraken priest read "Medium" when the table says Deadly.
-const XP_THRESH=[[25,50,75,100],[50,100,150,200],[75,150,225,400],[125,250,375,500],[250,500,750,1100],[300,600,900,1400],[350,750,1100,1700],[450,900,1400,2100],[550,1100,1600,2400],[600,1200,1900,2800],[800,1600,2400,3600],[1000,2000,3000,4500],[1100,2200,3400,5100],[1250,2500,3800,5700],[1400,2800,4300,6400],[1600,3200,4800,7200],[2000,3900,5900,8800],[2100,4200,6300,9500],[2400,4900,7300,10900],[2800,5700,8500,12700]];
-const CR_XP={'0':10,'1/8':25,'1/4':50,'1/2':100,'1':200,'2':450,'3':700,'4':1100,'5':1800,'6':2300,'7':2900,'8':3900,'9':5000,'10':5900,'11':7200,'12':8400,'13':10000,'14':11500,'15':13000,'16':15000,'17':18000,'18':20000,'19':22000,'20':25000,'21':33000,'22':41000,'23':50000,'24':62000,
-  // The table used to stop at 24, and _calcXP falls back to `|| 0` — so a
-  // CR 25+ creature counted for NOTHING. Sixty-five monsters in the loaded
-  // bestiary are above it, among them the Scions of Memnor, Stronmaus and
-  // Surtur, which is to say the back half of Storm King's Thunder.
-  '25':75000,'26':90000,'27':105000,'28':120000,'29':135000,'30':155000};
+// The rules tables come from js/generated/rules.js, extracted from the books
+// that ship in this repo by tools/extract-rules.js. Hand-typed copies of
+// these were wrong on 19 of 20 threshold rows and 14 of 16 multiplier counts,
+// and stopped at CR 24 — so a Scion of Surtur scored zero. The fallbacks are
+// the correct values, used only if the generated file failed to load; the
+// generator refuses to write at all if a table does not parse.
+const _R = (typeof window !== 'undefined' && window.SKT_RULES) || {};
+const XP_THRESH = _R.xpThresholds2014 || [[25,50,75,100]];
+const CR_XP = _R.crXp || {};
 // 2024 DMG XP budget PER CHARACTER by level (1–20): [Low, Moderate, High].
 // The 2024 system drops the encounter multiplier entirely — you just spend the
 // summed budget on monsters (raw XP), which reads far closer to actual play.
-const XP_BUDGET_2024=[[50,75,100],[100,150,200],[150,225,400],[250,375,500],[500,750,1100],[600,1000,1400],[750,1300,1700],[1000,1700,2100],[1300,2000,2600],[1600,2300,3100],[1900,2900,4100],[2200,3700,4700],[2600,4200,5400],[2900,4900,6200],[3300,5400,7800],[3800,6100,9800],[4500,7200,11700],[5000,8700,14200],[5500,10700,17200],[6400,13200,22000]];
+const XP_BUDGET_2024 = _R.xpBudget2024 || [];
 // Sample monster list for encounter search
 const MONSTER_LIST=[
   {name:'Goblin',cr:'1/4',hp:7,ac:15},{name:'Orc',cr:'1/2',hp:15,ac:13},{name:'Hobgoblin',cr:'1/2',hp:11,ac:18},
@@ -74,8 +70,10 @@ registerPanel('encounter',{
     // got x1.5 and two got x2 — and the values themselves did not match the
     // table either. Fourteen of the first sixteen counts came out wrong.
     // A range test rather than an array, because that is what the book is.
-    const mult = count <= 1 ? 1 : count === 2 ? 1.5 : count <= 6 ? 2
-               : count <= 10 ? 2.5 : count <= 14 ? 3 : 4;
+    // Stepped table from the book: [maxCount, multiplier], last step open-ended.
+    const steps = _R.encounterMultipliers || [[1,1],[2,1.5],[6,2],[10,2.5],[14,3],[null,4]];
+    const step = steps.find(([upto]) => upto == null || count <= upto);
+    const mult = step ? step[1] : 4;
     return{raw:total,adjusted:Math.round(total*mult),mult,count};
   },
   _difficulty(adjXP){

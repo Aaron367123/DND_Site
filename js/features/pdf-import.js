@@ -597,8 +597,13 @@ function _parseDefenses(raw){
   return out;
 }
 
-// 5e hit-die size by class (default d8 for unknowns/multiclass).
-const _HD_BY_CLASS = {
+// 5e hit-die size by class, read out of data/class/*.json by
+// tools/extract-rules.js rather than transcribed. Default d8 for unknowns and
+// multiclass. The literal below is the fallback if the generated file is
+// missing; it matched the class data when last checked, but the generated
+// copy cannot drift from it.
+const _HD_BY_CLASS = (typeof window !== 'undefined' && window.SKT_RULES
+                      && window.SKT_RULES.hitDieByClass) || {
   barbarian:'d12', fighter:'d10', paladin:'d10', ranger:'d10',
   bard:'d8', cleric:'d8', druid:'d8', monk:'d8', rogue:'d8', warlock:'d8', artificer:'d8',
   sorcerer:'d6', wizard:'d6',
