@@ -40,7 +40,10 @@ registerPanel('attacks', {
     }
     if (typeof load5eData === 'function') load5eData();
   },
-  unmount(){ this._body = null; },
+  // Drop the paint cache with the body: the next mount builds a fresh
+  // skeleton, and a cache keyed to nodes that no longer exist would make
+  // the first paint decide nothing had changed.
+  unmount(){ this._body = null; this._painted = {}; },
 
   menuItems(){
     return [
@@ -156,13 +159,39 @@ registerPanel('attacks', {
       inner = rows.map(r => this._renderMonster(r)).join('');
     }
 
-    b.innerHTML = `<div class="atk-root">
-      ${this._pending ? this._renderTargetBar() : ''}
-      ${this._renderManual()}
-      <div class="atk-list">${inner}</div>
-      ${this._renderLog()}
-    </div>`;
-    this._wire();
+    // Skeleton once, then paint only what changed. This panel re-rendered
+    // whole on every combat change, and the manual damage row is the casualty:
+    // a DM part-way through typing an amount lost it the instant any creature
+    // anywhere took a point of damage. Its markup is STATIC — the value lives
+    // in the DOM, not the template — so under a per-region paint it is never
+    // rewritten and what you typed stays typed. Same treatment the Turn View
+    // got; this panel is small enough that four regions cover it.
+    if (!b.querySelector('.atk-root')){
+      this._painted = {};
+      b.innerHTML = `<div class="atk-root">
+        <div class="atk-barwrap"></div>
+        <div class="atk-manualwrap"></div>
+        <div class="atk-list"></div>
+        <div class="atk-logwrap"></div>
+      </div>`;
+      this._wire();
+    }
+    const regions = [
+      ['.atk-barwrap',    this._pending ? this._renderTargetBar() : ''],
+      ['.atk-manualwrap', this._renderManual()],
+      ['.atk-list',       inner],
+      ['.atk-logwrap',    this._renderLog()],
+    ];
+    this._painted = this._painted || {};
+    let wrote = 0;
+    regions.forEach(([sel, html]) => {
+      const el = b.querySelector(sel); if (!el) return;
+      if (this._painted[sel] === html) return;
+      this._painted[sel] = html;
+      el.innerHTML = html;
+      wrote++;
+    });
+    return wrote;
   },
 
   // Hand-entered damage. Everything else here comes out of a stat block, so
