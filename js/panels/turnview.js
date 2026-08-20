@@ -94,10 +94,17 @@ registerPanel('turnview', {
   // a turn in the Combat Tracker would leave this panel showing the previous
   // creature — the exact desync the "owns nothing" rule exists to prevent.
   _combatSig(){
+    // The whole turn economy, not just the reaction. action/bonus/dodging and
+    // the legendary pool were missing, so a change to any of them from
+    // ANOTHER surface — a second DM device, a sync — left this panel showing
+    // a pip that disagreed with the tracker. Its own clicks re-render
+    // directly, which is why it looked fine.
     return String(state.activeCombatantId) + '#' + (state.combatRound || 0) + '#'
       + (state.combatants || []).map(c =>
           [c.id, c.name, c.hp, c.hpMax, c.ac, c.initiative, c.isPC ? 1 : 0,
-           c.reactionUsed ? 1 : 0, (c.conditions || []).join(',')].join('~')
+           c.reactionUsed ? 1 : 0, c.actionUsed ? 1 : 0, c.bonusUsed ? 1 : 0,
+           c.dodging ? 1 : 0, c.legendaryUsed || 0,
+           (c.conditions || []).join(',')].join('~')
         ).join('|');
   },
   // The battle map moved. Cheap by design: _placeTokens is ~1.3ms and the
@@ -618,6 +625,7 @@ registerPanel('turnview', {
     const order = this._order();
 
     if (!order.length){
+      this._painted = {};
       b.innerHTML = `<div class="tv-root tv-root-empty">` + emptyState({
         icon:'i-combat',
         title:'No one is in the fight yet',
@@ -628,50 +636,63 @@ registerPanel('turnview', {
     const c = this._active();
     this._rollRecharges(c);
 
-    b.innerHTML = `<div class="tv-root">
+    // The SKELETON, written once. Everything inside it is filled by _paint,
+    // which only touches a region whose markup actually changed.
+    if (!b.querySelector('.tv-root') || b.querySelector('.tv-root-empty')){
+      this._painted = {};
+      b.innerHTML = `<div class="tv-root">
       <div class="tv-initbar">
-        <div class="tv-init">${this._renderInit()}</div>
-        <div class="tv-init-tools">${this._renderInitTools()}</div>
+        <div class="tv-init"></div>
+        <div class="tv-init-tools"></div>
       </div>
-      ${this._editInit ? this._renderAddRow() : ''}
+      <div class="tv-addrow" hidden></div>
       <div class="tv-main">
         <div class="tv-actor">
-          ${this._renderActorHead(c)}
-          ${this._renderActions(c)}
-          ${this._renderLegendary()}
-          <div class="tv-result${this._resultLive ? ' on' : ''}" role="status" aria-live="polite">${this._result
-            || '<span class="dim">Pick a target, then roll an attack.</span>'}${
-            this._undo ? `<button class="btn tv-undo" data-tv="undo"
-              title="Undo ${esc(this._undo.label)} — HP, death saves, pools and spent reactions">${ICO('i-undo')}Undo</button>` : ''}</div>
+          <div class="tv-headwrap"></div>
+          <div class="tv-actbody"></div>
+          <div class="tv-legendary"></div>
+          <div class="tv-result" role="status" aria-live="polite"></div>
           <div class="tv-tail">
-            <div class="tv-traits">${this._renderTraits(c)}</div>
-            <div class="tv-log">${this._renderLog()}</div>
+            <div class="tv-traits"></div>
+            <div class="tv-log"></div>
           </div>
         </div>
         <div class="tv-side">
           ${this._renderMap()}
-          <div class="tv-targets">${this._renderTargets(c)}</div>
-          <div class="tv-adjust">${this._renderAdjust()}</div>
+          <div class="tv-targets"></div>
+          <div class="tv-adjust"></div>
         </div>
       </div>
-      ${this._renderPending()}
+      <div class="tv-pendingwrap"></div>
       <div class="tv-foot">
-        <div class="tv-turnline">${this._renderTurnline(c)}</div>
+        <div class="tv-turnline"></div>
         <button class="btn primary tv-end" data-tv="end">End turn</button>
       </div>
     </div>`;
-    const slot = b.querySelector('[data-tvmapslot]');
-    if (slot) slot.replaceWith(this._mapEl());
+      const slot = b.querySelector('[data-tvmapslot]');
+      if (slot) slot.replaceWith(this._mapEl());
+      this._wire();
+      this._freshSkeleton = true;
+    }
+
     this._refreshMapChrome();
-    this._wire();
+    const wrote = this._paint(c);
     this._placeTokens();
     // When the tail has to scroll, the live end wins the visible space. A
     // dragon's five actions leave it 40px tall, and left at the top that
     // showed a "Traits" heading with its content and the whole log below the
     // fold. Measured against the tail rather than via offsetTop, which is
     // relative to the nearest positioned ancestor and not this box.
-    const tail = b.querySelector('.tv-tail'), lg = b.querySelector('.tv-log');
-    if (tail && lg) tail.scrollTop = lg.offsetTop - tail.offsetTop;
+    //
+    // Only when the log or the skeleton actually changed. Forcing the scroll
+    // on every render would undo a DM who had scrolled up to read something.
+    if (this._freshSkeleton || this._lastLogHtml !== this._painted['.tv-log']){
+      this._lastLogHtml = this._painted['.tv-log'];
+      const tail = b.querySelector('.tv-tail'), lg = b.querySelector('.tv-log');
+      if (tail && lg) tail.scrollTop = lg.offsetTop - tail.offsetTop;
+    }
+    this._freshSkeleton = false;
+    return wrote;
   },
 
   _renderInit(){
@@ -991,6 +1012,60 @@ registerPanel('turnview', {
       <div class="tv-actions">${this._renderEconomy(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
       ${manual}
     </div>`;
+  },
+
+  // ─── Painting only what changed ───────────────────────────────────────────
+  // _render used to rewrite the panel's entire innerHTML, and it runs on every
+  // combat change — so one point of damage to anyone destroyed and rebuilt
+  // every node in the panel. Measured: a DM part-way through typing 27 into
+  // the manual damage box, with a damage type picked and the cursor in the
+  // field, lost all three the moment a player took a point of damage
+  // elsewhere. Scroll position and focus went with them.
+  //
+  // The fix is not a diffing library. Each region already has a builder that
+  // returns a string; keep the last string written and only touch the DOM
+  // when the new one differs. A region whose markup is static — the manual
+  // row, whose VALUES live in the DOM and not the template — is then never
+  // rewritten at all, so what you typed stays typed.
+  _regions(c){
+    const list = this._isDowned(c) ? [] : this._attacksFor(c);
+    return [
+      ['.tv-init',       () => this._renderInit()],
+      ['.tv-init-tools', () => this._renderInitTools()],
+      ['.tv-headwrap',   () => this._renderActorHead(c)],
+      ['.tv-actbody',    () => this._renderActions(c)],
+      ['.tv-legendary',  () => this._renderLegendary()],
+      ['.tv-result',     () => (this._result || '<span class="dim">Pick a target, then roll an attack.</span>')
+          + (this._undo ? `<button class="btn tv-undo" data-tv="undo"
+              title="Undo ${esc(this._undo.label)} — HP, death saves, pools and spent reactions">${ICO('i-undo')}Undo</button>` : '')],
+      ['.tv-traits',     () => this._renderTraits(c)],
+      ['.tv-log',        () => this._renderLog()],
+      ['.tv-targets',    () => this._renderTargets(c)],
+      ['.tv-adjust',     () => this._renderAdjust()],
+      ['.tv-pendingwrap',() => this._renderPending()],
+      ['.tv-turnline',   () => this._renderTurnline(c)],
+      ['.tv-addrow',     () => this._editInit ? this._renderAddRow() : ''],
+    ];
+  },
+
+  _paint(c){
+    const b = this._body; if (!b) return;
+    this._painted = this._painted || {};
+    let wrote = 0;
+    this._regions(c).forEach(([sel, fn]) => {
+      const el = b.querySelector(sel); if (!el) return;
+      let html; try { html = fn(); } catch(e){ return; }
+      if (this._painted[sel] === html) return;      // byte-identical: leave it
+      this._painted[sel] = html;
+      el.innerHTML = html;
+      wrote++;
+    });
+    // Classes that live on containers rather than in their content.
+    const res = b.querySelector('.tv-result');
+    if (res) res.classList.toggle('on', !!this._resultLive);
+    const add = b.querySelector('.tv-addrow');
+    if (add) add.hidden = !this._editInit;
+    return wrote;
   },
 
   // ─── Legendary actions ────────────────────────────────────────────────────
