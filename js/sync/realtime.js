@@ -545,8 +545,11 @@ function _applyRemoteKey(key, fbVal) {
   // during play; parking a conflict then silently FREEZES all map updates on
   // this device until the bar is resolved (easy to miss, especially on
   // mobile — "the map stopped updating"). Losing one in-flight stroke to a
-  // race is far cheaper than a frozen map, and the local push that's still
-  // queued re-asserts this device's latest state moments later anyway.
+  // race is far cheaper than a frozen map; the panel saves again at the end
+  // of the next drag or stroke, which re-marks the key dirty and re-asserts
+  // this device's state. (The queued push does NOT do that — _flushDirtyKeys
+  // re-reads localStorage at flush time, which by then holds the value we
+  // just applied.)
   if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1'){
     const localVal = localStorage.getItem(key);
     if (localVal != null && localVal !== fbVal){
@@ -573,6 +576,24 @@ function _applyRemoteKey(key, fbVal) {
   } finally {
     _remoteUpdate = false;
   }
+
+  // localStorage now byte-matches what the server holds, so a queued push for
+  // this key has nothing left to send. Clear the dirty flag — _resolveConflict
+  // already does exactly this before applying 'theirs', for exactly this
+  // reason; the ordinary apply path just never did.
+  //
+  // Leaving it set is not merely a wasted write. The flush pushes bytes the
+  // node already holds, Firebase raises no value event for an unchanged set,
+  // so nothing ever consumes the _justWrote entry that push registered. That
+  // entry then swallows the next genuine remote update carrying those same
+  // bytes: the table goes V -> W -> V and this device applies W, drops the
+  // return to V as its own echo, and sits on W for the rest of the session.
+  //
+  // Reachable whenever a remote value lands inside the 300ms dirty window
+  // holding what we were about to send — two people making the same change,
+  // or the DM window and the player window on one machine, which share
+  // localStorage and both push.
+  _dirtyKeys.delete(key);
 
   // The split state keys back the global `state` object — re-read just the
   // domain that changed (a party update no longer re-parses combat/shop/
