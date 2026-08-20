@@ -566,7 +566,7 @@ function paApplyHp(sign){
 function paRollAttack(i){
   const pc = paPc(); if (!pc) return;
   const a = (pc.sheet && pc.sheet.attacks || [])[i]; if (!a) return;
-  const d = n => 1 + Math.floor(Math.random() * n);
+  const d = sktD;                       // shared roller, see js/core/utils.js
   const bonus = parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0;
   const nat = d(20), total = nat + bonus;
   // Damage expression off the sheet: "1d8+3 slashing".
@@ -597,7 +597,7 @@ function paRollAttack(i){
 function paRollDeathSave(){
   const c = paCombatant(); if (!c) return;
   const C = panelDefs.combat; if (!C) return;
-  const d = n => 1 + Math.floor(Math.random() * n);
+  const d = sktD;                       // shared roller, see js/core/utils.js
   const nat = d(20);
   let msg;
   if (nat === 20){

@@ -61,7 +61,7 @@ registerPanel('loot',{
     if (!m) { const n = parseInt(expr, 10); return isNaN(n) ? 0 : n; }
     const count = +m[1], sides = +m[2], mult = m[3] ? +m[3] : 1;
     let total = 0;
-    for (let i = 0; i < count; i++) total += 1 + Math.floor(Math.random() * sides);
+    for (let i = 0; i < count; i++) total += sktD(sides);
     total *= mult;
     if (m[4]) total += (m[4] === '-' ? -1 : 1) * (+m[5]);
     return Math.max(0, total);
@@ -119,7 +119,7 @@ registerPanel('loot',{
 
   // d100 against a [{min,max,...}] table. Returns the matching row.
   _rollOnTable(table){
-    const roll = 1 + Math.floor(Math.random() * 100);
+    const roll = sktD(100);
     return (table || []).find(r => roll >= (r.min ?? 1) && roll <= (r.max ?? r.min ?? 100)) || null;
   },
 

@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'a6f5abf401';
+const BUILD = '33ae9502b0';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=d8864195ea',
@@ -43,14 +43,14 @@ const PRECACHE = [
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
-  'js/core/utils.js?v=19daa5b79d',
+  'js/core/utils.js?v=c0048acff0',
   'js/core/state.js?v=9fa4df5c19',
   'js/core/window-manager.js?v=2d4dbcfede',
-  'js/panels/combat.js?v=1378a90b32',
-  'js/panels/attacks.js?v=7938c6faea',
+  'js/panels/combat.js?v=665cf8f17c',
+  'js/panels/attacks.js?v=e7d0c95289',
   'js/generated/reactions.js?v=faa668dc18',
-  'js/panels/turnview.js?v=d617fb08f0',
-  'js/panels/party.js?v=c3c9e17f40',
+  'js/panels/turnview.js?v=4a4cd6491b',
+  'js/panels/party.js?v=6b217665d0',
   'js/panels/shop.js?v=f8d558f372',
   'js/sync/notes-sync.js?v=8c42540638',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -63,7 +63,7 @@ const PRECACHE = [
   'js/panels/adventures.js?v=adbf195007',
   'js/panels/books.js?v=beba2c9cfd',
   'js/panels/npc-generator.js?v=924ebfdef8',
-  'js/panels/loot.js?v=43eb831b43',
+  'js/panels/loot.js?v=3ae11e003f',
   'js/panels/encounter.js?v=102d087f3e',
   'js/panels/soundboard.js?v=6ee51d8589',
   'js/panels/weather.js?v=ab1bd498ab',
@@ -76,7 +76,7 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=bdaf579267',
   'js/features/pdf-import.js?v=f1a3004aec',
-  'js/player/player-app.js?v=39c710e7f7',
+  'js/player/player-app.js?v=8d9671d642',
   'js/ui/player-view.js?v=7519877ed8',
   'js/sync/realtime.js?v=8d93a6e12d',
   'js/ui/tutorial.js?v=e47e670b86',

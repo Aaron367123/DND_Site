@@ -1441,7 +1441,7 @@ registerPanel('combat',{
     state.combatants.forEach((c, i) => {
       if (c.isPC) return;
       const bonus = c.initBonus || 0;
-      const d20 = 1 + Math.floor(Math.random() * 20);
+      const d20 = sktD(20);
       state.combatants[i] = {...c, initiative: d20 + bonus};
       rolled++;
     });

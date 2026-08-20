@@ -434,7 +434,7 @@ function _runCrop(img, outSize, shape, title, resolve) {
   });
 }
 
-function d20(){return Math.floor(Math.random()*20)+1}
+function d20(){ return sktD(20); }
 function mod(s){return Math.floor((s-10)/2)}
 
 // ─── Qualified damage resistance ─────────────────────────────────────────────
@@ -1311,4 +1311,40 @@ function sktTokenForCombatant(tokens, c){
       || (c.baseName ? tokens.find(t => sktNormName(t.label) === sktNormName(c.baseName)) : null)
       || tokens.find(t => t.baseName && sktNormName(t.baseName) === n)
       || null;
+}
+
+// ─── Dice ────────────────────────────────────────────────────────────────────
+// One home for rolling. There were two byte-identical copies of the
+// expression parser (turnview._roll and attacks._roll) and thirty hand-written
+// `1 + Math.floor(Math.random() * n)` across nine files. Duplicated RULES code
+// is the class that has already produced real bugs here twice — the token name
+// matcher existed in three copies and one matched two of eight creatures, and
+// the damage-type list existed in four.
+//
+// sktRandom is a seam, not a feature: it defaults to Math.random and exists so
+// a test can make a run deterministic. Nothing in the app sets it.
+let sktRandom = Math.random;
+function sktSetRandom(fn){ sktRandom = (typeof fn === 'function') ? fn : Math.random; }
+
+// One die. 1..sides, or 0 for a nonsense number of sides rather than NaN.
+function sktD(sides){
+  const s = Math.floor(+sides);
+  if (!(s > 0)) return 0;
+  return 1 + Math.floor(sktRandom() * s);
+}
+
+// "2d6+3" → {total, detail:"4+5+3"}. Unparseable input gives {total:0,
+// detail:'—'} rather than throwing, because callers render the detail straight
+// into the log. Total is floored at 0: a modifier must not heal the target.
+function sktRollDice(expr){
+  const m = String(expr || '').replace(/\s+/g, '').match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+  if (!m) return { total: 0, detail: '—' };
+  const n = parseInt(m[1] || '1'), sides = parseInt(m[2]), mod = parseInt(m[3] || '0');
+  const rolls = [];
+  for (let i = 0; i < n; i++) rolls.push(sktD(sides));
+  const sum = rolls.reduce((a, b) => a + b, 0);
+  return {
+    total: Math.max(0, sum + mod),
+    detail: rolls.join('+') + (mod ? (mod > 0 ? '+' + mod : String(mod)) : ''),
+  };
 }

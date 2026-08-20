@@ -52,17 +52,9 @@ registerPanel('attacks', {
   // ─── Dice ─────────────────────────────────────────────────────────────────
   // "2d10+8" / "1d4-1" / "18d6". Returns {total, detail} so the log can show
   // the individual dice — a DM reading "19" wants to know it was 7+4+8.
-  _roll(dice){
-    const m = String(dice||'').replace(/\s+/g,'').match(/^(\d*)d(\d+)([+-]\d+)?$/i);
-    if (!m) return { total: 0, detail: '—' };
-    const n = parseInt(m[1] || '1'), sides = parseInt(m[2]), mod = parseInt(m[3] || '0');
-    const rolls = [];
-    for (let i = 0; i < n; i++) rolls.push(1 + Math.floor(Math.random() * sides));
-    const sum = rolls.reduce((a,b)=>a+b, 0);
-    // Damage never goes below 0 even if a modifier drags it negative.
-    return { total: Math.max(0, sum + mod),
-             detail: rolls.join('+') + (mod ? (mod > 0 ? '+' + mod : String(mod)) : '') };
-  },
+  // Shared with the Turn View via js/core/utils.js. This was a byte-identical
+  // second copy; damage never going below 0 is enforced there.
+  _roll(dice){ return sktRollDice(dice); },
 
   // ─── Data ─────────────────────────────────────────────────────────────────
   // NPC combatants that have a resolvable stat block, with their attacks.

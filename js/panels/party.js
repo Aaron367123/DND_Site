@@ -1220,7 +1220,7 @@ registerPanel('party',{
         if (crit) n *= 2;             // crit doubles the dice
         const rolls = [];
         for (let i = 0; i < n; i++){
-          rolls.push(1 + Math.floor(Math.random() * sides));
+          rolls.push(sktD(sides));
         }
         const sub = rolls.reduce((a,b)=>a+b, 0) * sign;
         total += sub;
@@ -2373,7 +2373,7 @@ registerPanel('party',{
     showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? You'll roll ${c.hitDice.dieType||'d8'} + ${conMod>=0?'+':''}${conMod} (CON) and heal that much.`,
       {title:'Spend hit die', confirmLabel:'Roll & Heal'}).then(ok => {
         if (!ok) return;
-        const roll = Math.floor(Math.random()*sides) + 1;
+        const roll = sktD(sides);
         const heal = Math.max(1, roll + conMod); // house rule: RAW floor is 0
         c.hitDice.current -= 1;
         // Same cap expression as the heal path in _applyHpDelta. This used
