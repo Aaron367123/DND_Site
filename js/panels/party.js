@@ -1430,7 +1430,21 @@ registerPanel('party',{
   },
 
   _applyLongRest(){
-    state.party.forEach((c, i) => {
+    state.party.forEach((c, i) => this._longRestOne(c, i));
+    save();
+    this._render();
+    panelDefs.combat?._render?.();
+    showToast('🛌 Long rest — party fully recovered');
+  },
+
+  // One character's long rest. Split out because there were TWO of these: the
+  // party-wide pass here and a per-character button that set hit dice to
+  // FULL, restored no spell slots or class resources, and cleared no
+  // exhaustion, concentration, rage or death saves — while announcing itself
+  // as a long rest. Two implementations of one rule is one too many, and the
+  // shorter one was wrong in five different ways.
+  _longRestOne(c, i){
+    {
       // Death-save state lives on the COMBATANT, not the party member, and
       // nothing used to clear it — so after a rest the combat card still
       // showed "⚕ Stable" with its pips filled while the party card showed a
@@ -1485,11 +1499,7 @@ registerPanel('party',{
       c.wildshape = null;
       // Silent mirror — one combat render at the bottom, not N.
       this._mirrorPartyToCombatSilent(i);
-    });
-    save();
-    this._render();
-    panelDefs.combat?._render?.();
-    showToast('🛌 Long rest — party fully recovered');
+    }
   },
 
   // Short rest applied to the whole party. 5e RAW: PCs spend hit dice to
@@ -3004,11 +3014,13 @@ registerPanel('party',{
       // (Inventory tab removed.)
       else if(act==='hd-rest'){
         const idx = +el.dataset.idx;
-        const c = state.party[idx]; if (!c || !c.hitDice) return;
-        c.hitDice.current = c.hitDice.max;
-        c.hp = c.hpMax; // long rest also restores HP fully
+        const c = state.party[idx]; if (!c) return;
+        // The same rules the party-wide rest uses. This used to be its own
+        // half-implementation: all hit dice back instead of half, and nothing
+        // else restored at all.
+        this._longRestOne(c, idx);
         save(); this._render();
-        syncPartyToCombat(idx);
+        panelDefs.combat?._render?.();
         showToast(c.name + ' took a long rest');
       }
       else if(act==='icon-btn'){
