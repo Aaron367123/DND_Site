@@ -2,8 +2,18 @@
 // ENCOUNTER BUILDER PANEL
 // ============================================================
 // XP thresholds by character level [easy, medium, hard, deadly]
-const XP_THRESH=[[25,50,75,100],[200,450,600,800],[400,700,1100,1600],[500,900,1400,2100],[700,1100,1800,2700],[1000,1400,2300,3400],[1300,1700,2900,4300],[1400,2100,3900,5900],[1600,2400,4700,7200],[2000,2800,5700,8800],[2200,3200,6400,9600],[2500,3600,7300,10900],[2800,4000,8200,12300],[3200,4400,9100,13700],[3500,4800,10000,15000],[3800,5200,10900,15000],[4000,5600,11800,15000],[4300,6000,12700,15000],[4700,6400,13600,15000],[5000,6800,14400,15000]];
-const CR_XP={'0':10,'1/8':25,'1/4':50,'1/2':100,'1':200,'2':450,'3':700,'4':1100,'5':1800,'6':2300,'7':2900,'8':3900,'9':5000,'10':5900,'11':7200,'12':8400,'13':10000,'14':11500,'15':13000,'16':15000,'17':18000,'18':20000,'19':22000,'20':25000,'21':33000,'22':41000,'23':50000,'24':62000};
+// Verbatim from the DMG's "XP Thresholds by Character Level", which ships in
+// this repo at data/book/book-dmg.json — nineteen of these twenty rows were
+// previously wrong, with the Deadly column inflated two to four times over.
+// A party of five level-6 characters facing a hill giant, an ogre and a
+// kraken priest read "Medium" when the table says Deadly.
+const XP_THRESH=[[25,50,75,100],[50,100,150,200],[75,150,225,400],[125,250,375,500],[250,500,750,1100],[300,600,900,1400],[350,750,1100,1700],[450,900,1400,2100],[550,1100,1600,2400],[600,1200,1900,2800],[800,1600,2400,3600],[1000,2000,3000,4500],[1100,2200,3400,5100],[1250,2500,3800,5700],[1400,2800,4300,6400],[1600,3200,4800,7200],[2000,3900,5900,8800],[2100,4200,6300,9500],[2400,4900,7300,10900],[2800,5700,8500,12700]];
+const CR_XP={'0':10,'1/8':25,'1/4':50,'1/2':100,'1':200,'2':450,'3':700,'4':1100,'5':1800,'6':2300,'7':2900,'8':3900,'9':5000,'10':5900,'11':7200,'12':8400,'13':10000,'14':11500,'15':13000,'16':15000,'17':18000,'18':20000,'19':22000,'20':25000,'21':33000,'22':41000,'23':50000,'24':62000,
+  // The table used to stop at 24, and _calcXP falls back to `|| 0` — so a
+  // CR 25+ creature counted for NOTHING. Sixty-five monsters in the loaded
+  // bestiary are above it, among them the Scions of Memnor, Stronmaus and
+  // Surtur, which is to say the back half of Storm King's Thunder.
+  '25':75000,'26':90000,'27':105000,'28':120000,'29':135000,'30':155000};
 // 2024 DMG XP budget PER CHARACTER by level (1–20): [Low, Moderate, High].
 // The 2024 system drops the encounter multiplier entirely — you just spend the
 // summed budget on monsters (raw XP), which reads far closer to actual play.
@@ -58,8 +68,14 @@ registerPanel('encounter',{
   _calcXP(){
     const total=this._monsters.reduce((sum,m)=>{const xp=CR_XP[m.cr]||0;return sum+(xp*(m.count||1));},0);
     const count=this._monsters.reduce((s,m)=>s+(m.count||1),0);
-    // Multiplier table
-    const mults=[1,1.5,2,2,2,3,3,3,4,4,4,4,5];const mi=Math.min(count,12);const mult=mults[mi]||5;
+    // DMG "Encounter Multipliers": 1 monster x1, 2 x1.5, 3-6 x2, 7-10 x2.5,
+    // 11-14 x3, 15+ x4. The old lookup was a list indexed by the COUNT while
+    // its values were written as if it were indexed from zero, so one monster
+    // got x1.5 and two got x2 — and the values themselves did not match the
+    // table either. Fourteen of the first sixteen counts came out wrong.
+    // A range test rather than an array, because that is what the book is.
+    const mult = count <= 1 ? 1 : count === 2 ? 1.5 : count <= 6 ? 2
+               : count <= 10 ? 2.5 : count <= 14 ? 3 : 4;
     return{raw:total,adjusted:Math.round(total*mult),mult,count};
   },
   _difficulty(adjXP){
