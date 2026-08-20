@@ -4369,3 +4369,11 @@ select.atk-in { cursor:pointer; padding-right:26px;
   border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm);
   padding:4px 7px; font:inherit; font-size:var(--fs-md); }
 .bm-set-scale select { flex:0 0 84px; }
+
+/* Turn View tokens carrying real art rather than an initial. The disc keeps
+   its ring and colour; the art fills it. overflow:hidden here and not on the
+   plain-initial case, because a letter has nothing to clip and the dead/cur
+   outlines read better unclipped. */
+.tv-tok.has-icon { overflow:hidden; padding:0; }
+.tv-tok.has-icon img { width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
+.tv-tok.has-icon svg { width:76%; height:76%; display:block; }

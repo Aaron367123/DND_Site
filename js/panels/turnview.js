@@ -1418,7 +1418,27 @@ registerPanel('turnview', {
       const sz = Math.max(1, t.size || 1);
       if (sz > 1) n.style.setProperty('--tok', Math.max(12, cell * 0.9) * sz + 'px');
       n.title = label + (c ? ` — ${c.hp}/${c.hpMax}` : ' — not in the initiative order');
-      n.textContent = label.charAt(0).toUpperCase();
+      // The same face the battle map draws: the bestiary head-shot, the party
+      // member's chosen glyph, or the class icon — through renderIcon(), which
+      // is where the path repair and the emoji/SVG/image branching already
+      // live. An initial is the fallback, not the design: a map of C, Z, N, U
+      // asks you to remember which letter is which, and two of this party
+      // start with Z.
+      const art = t.portrait || t.icon;
+      const dim = Math.max(12, cell * 0.9) * sz;
+      if (art && typeof renderIcon === 'function'){
+        n.innerHTML = renderIcon(art, label);
+        n.classList.add('has-icon');
+        // An emoji is TEXT, so it takes the class's fixed --fs-2xs and stays
+        // tiny however big the disc gets — a 40px token with a 9px glyph
+        // rattling around inside it. Images and SVG scale on their own; only
+        // the text case needs telling. The battle map sizes its glyph off the
+        // token diameter for the same reason.
+        n.style.fontSize = Math.round(dim * 0.58) + 'px';
+      } else {
+        n.textContent = label.charAt(0).toUpperCase();
+        n.style.fontSize = Math.round(Math.max(8, dim * 0.5)) + 'px';
+      }
       // t.x/t.y are the token's CENTRE in stage pixels — that is the
       // convention the battle map stores (sktFreeCell returns cs/2 for the
       // first cell, and its own drop snaps to `floor(x/cs)*cs + cs/2`). The
