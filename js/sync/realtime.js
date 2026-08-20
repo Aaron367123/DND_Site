@@ -556,9 +556,23 @@ function _applyRemoteKey(key, fbVal) {
     }
   }
 
+  // try/finally, like the other two sites. This one was bare, and the flag it
+  // sets gates the dirty-marking hook in _patchLocalStorage — so a throw here
+  // leaves _remoteUpdate stuck true and NOTHING this client does is ever
+  // marked dirty again. Not notes, not combat, not the map: every local
+  // change stops reaching the table, silently, for the rest of the session.
+  // setItem throwing is not hypothetical either; quota is the realistic case
+  // and this app already carries warnStorageFailure because it happens.
   _remoteUpdate = true;
-  localStorage.setItem(key, fbVal);
-  _remoteUpdate = false;
+  try {
+    localStorage.setItem(key, fbVal);
+  } catch(e){
+    _diag('apply ' + key, e);
+    if (typeof warnStorageFailure === 'function') warnStorageFailure('incoming ' + key, e);
+    return;                       // finally still clears the flag
+  } finally {
+    _remoteUpdate = false;
+  }
 
   // The split state keys back the global `state` object — re-read just the
   // domain that changed (a party update no longer re-parses combat/shop/
