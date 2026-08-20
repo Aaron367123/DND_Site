@@ -964,7 +964,12 @@ registerPanel('shop',{
     const inventory=chosen.map(item=>{
       const j=state.settings.priceJitter/100,v=1+(Math.random()*2-1)*j;
       let p=item.basePrice*pm*em*v;const r=state.settings.rounding;
-      if(r==='none')p=p<1?Math.round(p*100)/100:Math.round(p*10)/10;
+      // Floor at a copper piece. Rounding to 2dp sent anything under half a
+      // copper to zero, and the cheapest ammunition is 2cp before a jitter
+      // that can take 27% off it — so roughly one item in forty was on sale
+      // for nothing. The other rounding branch already floors at 1gp; this
+      // one floored at nothing at all.
+      if(r==='none')p=Math.max(0.01, p<1?Math.round(p*100)/100:Math.round(p*10)/10);
       else{const n=parseInt(r)||1;p=Math.max(1,Math.round(p/n)*n);}
       const stock=Math.max(1,Math.floor(Math.random()*10)+(assortment==='Abundant'?4:assortment==='Sparse'?0:2));
       return{...item,price:p,stock};
