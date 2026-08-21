@@ -1011,6 +1011,53 @@
       save();
     }
 
+    // Fog of war. A player must not see the map under fog, and must not see a
+    // monster standing in it. Checked at the PIXEL level as well as the DOM,
+    // because "hidden" that is only CSS is still readable by anyone curious.
+    {
+      const SH = JSON.stringify(state.sharedPanels || []);
+      state.sharedPanels = ['battlemap']; save();
+      if (typeof paRender === 'function') paRender();
+      await sleep(500);
+      const tab = [...document.querySelectorAll('.pa-tab')].find(t => /map/i.test(t.textContent));
+      if (tab){ tab.click(); await sleep(800); }
+      const B = panelDefs.battlemap;
+      ok('player: the shared map mounts', !!(B && B._body));
+      if (B && B._body){
+        const tok0 = JSON.stringify(B._tokens || []);
+        const fog0 = B._fog, str0 = B._fogStrokes;
+        const cs = B._csScreen();
+        B._tokens = [
+          { id:'st_pc', label:'Zoey', name:'Zoey', isPC:true,  x:cs*1.5, y:cs*1.5, size:1 },
+          { id:'st_mo', label:'Ogre', name:'Ogre', isPC:false, x:cs*5.5, y:cs*5.5, size:1 }];
+        B._fog = new Set(['1,1']); B._fogStrokes = [];
+        B._renderTokens(); B._drawFog();
+        await sleep(320);
+        const fc = B._body.querySelector('#fog-canvas');
+        const stage = B._body.querySelector('#map-stage');
+        ok('player: the fog layer exists', !!fc);
+        if (fc && stage){
+          // The canvas is sized in VIEW-SCALED pixels while token coordinates
+          // and _isFogged are in stage pixels, so sampling needs the ratio.
+          // Reading stage coords straight off the canvas looks like a fog bug
+          // and is not one.
+          const g = fc.getContext('2d');
+          const k = fc.width / (stage.offsetWidth || fc.width);
+          const at = (sx, sy) => g.getImageData(Math.round(sx*k), Math.round(sy*k), 1, 1).data[3];
+          ok('player: fog is fully opaque over an unrevealed cell',
+             at(cs*5.5, cs*5.5) === 255, 'alpha ' + at(cs*5.5, cs*5.5));
+          ok('player: a revealed cell is see-through',
+             at(cs*1.5, cs*1.5) === 0, 'alpha ' + at(cs*1.5, cs*1.5));
+        }
+        ok('player: a monster in fog is absent from the DOM, not just hidden',
+           !/Ogre/.test(B._body.innerHTML));
+        ok('player: a PC in a revealed cell is drawn', /Zoey/.test(B._body.innerHTML));
+        B._tokens = JSON.parse(tok0); B._fog = fog0; B._fogStrokes = str0;
+        try { B._renderTokens(); B._drawFog(); } catch(e){}
+      }
+      state.sharedPanels = JSON.parse(SH); save();
+    }
+
     ok('player: no horizontal overflow',
        document.documentElement.scrollWidth <= window.innerWidth + 1,
        document.documentElement.scrollWidth + ' > ' + window.innerWidth);
