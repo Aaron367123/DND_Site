@@ -571,12 +571,27 @@ function _allScalars(a){
 }
 const _eq = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
 
-// Returns the merged value. `base` may be undefined (never seen), in which
-// case a changed local value wins — the old "mine" button, minus the question.
-function _merge3(base, mine, theirs){
+// Returns the merged value.
+//
+// `baseKnown` decides who wins a leaf both sides genuinely changed, and it has
+// to be THEIRS whenever we can tell. "Mine wins" is symmetric — both clients
+// keep their own copy, and since a merge that keeps something of ours re-marks
+// the key dirty, both re-push on every exchange and never converge. Two tabs
+// sat on gp 20 and gp 30 will trade writes forever. Preferring the remote value
+// is the one answer both sides compute identically: it converges in a single
+// exchange, and because the result then equals what the server already holds,
+// neither side pushes at all.
+//
+// The exception is a base we never had (first sync of the session, edits made
+// offline). There we cannot tell what either side changed, and defaulting to
+// theirs would throw the local work away — so mine wins. That is a one-shot:
+// applying the update records a base, so the next exchange resolves normally.
+function _merge3(base, mine, theirs, baseKnown){
   if (_eq(mine, theirs)) return theirs;
-  if (_eq(base, mine))   return theirs;    // we didn't touch it
-  if (_eq(base, theirs)) return mine;      // they didn't touch it
+  if (baseKnown){
+    if (_eq(base, mine))   return theirs;   // we didn't touch it
+    if (_eq(base, theirs)) return mine;     // they didn't touch it
+  }
 
   // Both sides changed. Try to push the decision down a level.
   if (_isPlainObj(mine) && _isPlainObj(theirs)){
@@ -589,7 +604,7 @@ function _merge3(base, mine, theirs){
       if (inB && !inT) return;             // they deleted it
       if (!inM) { out[k] = theirs[k]; return; }
       if (!inT) { out[k] = mine[k];   return; }
-      out[k] = _merge3(b[k], mine[k], theirs[k]);
+      out[k] = _merge3(b[k], mine[k], theirs[k], baseKnown);
     });
     return out;
   }
@@ -608,7 +623,7 @@ function _merge3(base, mine, theirs){
       seen.add(id);
       const inB = id in bAt, inM = id in mAt;
       if (inB && !inM) return;             // I deleted this record
-      out.push(inM ? _merge3(bAt[id], mAt[id], tAt[id]) : tAt[id]);
+      out.push(inM ? _merge3(bAt[id], mAt[id], tAt[id], baseKnown) : tAt[id]);
     });
     mIds.forEach(id => {
       if (seen.has(id)) return;
@@ -630,7 +645,9 @@ function _merge3(base, mine, theirs){
     return out;
   }
 
-  return mine;   // shapes disagree, or an anonymous array — local wins
+  // Shapes disagree, an array with no stable identity, or two scalars that
+  // both moved. Deterministic tiebreak — see baseKnown above.
+  return baseKnown ? theirs : mine;
 }
 
 // String wrapper. Any parse failure falls back to the remote value: the server
@@ -640,8 +657,9 @@ function _mergeJsonStr(baseStr, mineStr, theirsStr){
   let mine, theirs, base;
   try { mine = JSON.parse(mineStr); theirs = JSON.parse(theirsStr); }
   catch(e){ return theirsStr; }
-  try { base = baseStr == null ? undefined : JSON.parse(baseStr); } catch(e){ base = undefined; }
-  try { return JSON.stringify(_merge3(base, mine, theirs)); }
+  let baseKnown = false;
+  try { if (baseStr != null){ base = JSON.parse(baseStr); baseKnown = true; } } catch(e){ baseKnown = false; }
+  try { return JSON.stringify(_merge3(base, mine, theirs, baseKnown)); }
   catch(e){ return theirsStr; }
 }
 
