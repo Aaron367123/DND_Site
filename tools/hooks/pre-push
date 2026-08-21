@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# Run the self test before anything leaves this machine.
+#
+# WHY: this repo deploys straight to GitHub Pages, so a push IS a release —
+# there is no staging step between here and the table. Regressions have shipped
+# that way: a merge that could ping-pong forever went out and was only caught
+# by property-testing it afterwards, and a database rule was missed entirely so
+# party sync failed silently for a whole session.
+#
+# The runner is self-contained — it starts its own static server, builds
+# nothing, and needs no arguments. About 90 seconds for 313 checks across the
+# DM view, the player view and the phone layout.
+#
+# Installed to .git/hooks/pre-push by tools/hooks/install.sh.
+# .git/hooks is not version-controlled, so re-run the installer after a fresh
+# clone (or on a second machine).
+#
+# Bypass for one push if you must:  git push --no-verify
+#   Reasonable when pushing docs or a work-in-progress branch. Not reasonable
+#   for anything under js/, styles/ or data/ going to main.
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root" || exit 1
+
+# Nothing to check if the push carries no app code. Docs and tooling-only
+# pushes should not cost 90 seconds.
+if ! git diff --name-only --diff-filter=ACMR "@{push}..HEAD" 2>/dev/null \
+     | grep -qE '^(js/|styles/|data/|sw\.js|skt-workspace\.html)'; then
+  # No upstream yet (new branch) — fall back to comparing against main.
+  if ! git diff --name-only --diff-filter=ACMR main..HEAD 2>/dev/null \
+       | grep -qE '^(js/|styles/|data/|sw\.js|skt-workspace\.html)'; then
+    exit 0
+  fi
+fi
+
+echo "pre-push: running the self test (about 90s — git push --no-verify to skip)"
+if ! node tools/selftest-run.js; then
+  echo ""
+  echo "pre-push: BLOCKED — the self test failed above."
+  echo "  Fix it, or push with --no-verify if you know why it is failing."
+  exit 1
+fi
+exit 0

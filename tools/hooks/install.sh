@@ -6,6 +6,8 @@
 # here (tracked) and get copied into place by this script.
 set -e
 root="$(git rev-parse --show-toplevel)"
-cp "$root/tools/hooks/pre-commit" "$root/.git/hooks/pre-commit"
-chmod +x "$root/.git/hooks/pre-commit"
-echo "installed: .git/hooks/pre-commit"
+for h in pre-commit pre-push; do
+  cp "$root/tools/hooks/$h" "$root/.git/hooks/$h"
+  chmod +x "$root/.git/hooks/$h"
+  echo "installed: .git/hooks/$h"
+done

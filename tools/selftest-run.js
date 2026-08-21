@@ -73,6 +73,44 @@ const MODES = [
   { name: 'mobile', extra: ['--preset', 'mobile'] },
 ].filter(m => !only || m.name === only);
 
+// ── Static server ────────────────────────────────────────────────────────────
+// shot.js loads http://localhost:8765/..., so something must be serving the
+// repo. Relying on a human to have started one by hand means the suite fails
+// for a reason that has nothing to do with the code.
+//
+// A SEPARATE PROCESS, not an in-process http server: the mode loop below uses
+// spawnSync, which blocks this process's event loop, so an in-process listener
+// could never answer the child's request. That deadlock is easy to write and
+// presents as "shot.js failed to run this mode", which points nowhere near the
+// real cause.
+const PORT = 8765;
+function serving(){
+  const probe = "require('http').get({host:'127.0.0.1',port:" + PORT
+    + ",path:'/skt-workspace.html',timeout:1000}, r => process.exit(r.statusCode===200?0:1))"
+    + ".on('error',()=>process.exit(1)).on('timeout',()=>process.exit(1));";
+  return spawnSync(process.execPath, ['-e', probe], { encoding:'utf8' }).status === 0;
+}
+
+let serverProc = null;
+const stopServer = () => { if (serverProc){ try { serverProc.kill(); } catch(e){} serverProc = null; } };
+if (serving()){
+  console.log('server: reusing localhost:' + PORT);
+} else {
+  serverProc = require('child_process').spawn(
+    process.execPath, [path.join(ROOT, 'tools', 'static-server.js'), String(PORT)],
+    { cwd: ROOT, stdio: 'ignore' });
+  // Each probe is its own process, so the loop paces itself without a sleep.
+  let up = false;
+  for (let i = 0; i < 30 && !up; i++) up = serving();
+  if (!up){
+    stopServer();
+    console.error('could not start tools/static-server.js on ' + PORT);
+    process.exit(2);
+  }
+  console.log('server: started tools/static-server.js on localhost:' + PORT);
+}
+process.on('exit', stopServer);
+
 let totalPass = 0, totalFail = 0;
 const failedModes = [];
 
@@ -111,6 +149,8 @@ for (const m of MODES){
   totalFail += fails.length;
   if (fails.length || !summary) failedModes.push(m.name);
 }
+
+stopServer();
 
 console.log('\n' + '-'.repeat(46));
 console.log(totalFail === 0
