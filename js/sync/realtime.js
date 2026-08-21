@@ -550,10 +550,25 @@ function _applyRemoteKey(key, fbVal) {
   // this device's state. (The queued push does NOT do that — _flushDirtyKeys
   // re-reads localStorage at flush time, which by then holds the value we
   // just applied.)
-  if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1'){
+  //
+  // `|| _conflicts[key]` keeps the key protected once a conflict is parked.
+  // Parking clears the dirty flag (below), so without this the NEXT remote
+  // update would skip this check and apply silently underneath the bar the
+  // user is still reading. Re-parking instead refreshes `remote` to the
+  // newest value while `local` stays put, because we never applied.
+  if ((_dirtyKeys.has(key) || _conflicts[key]) && key !== 'skt-battlemap-v1'){
     const localVal = localStorage.getItem(key);
     if (localVal != null && localVal !== fbVal){
       _conflicts[key] = { local: localVal, remote: fbVal, ts: Date.now() };
+      // Stop the outgoing push for this key. The debounce is still pending
+      // (this whole branch runs inside its 300ms window), and letting it fire
+      // means we ship the local value to everyone while the bar is asking the
+      // user which side to keep. Then 'theirs' leaves them as the only device
+      // on the remote value with the server holding theirs — their choice
+      // inverted — and 'mine' was already done behind their back. Nothing
+      // moves in either direction until they pick; _resolveConflict re-adds
+      // the flag for 'mine'.
+      _dirtyKeys.delete(key);
       _renderConflictBar();
       return; // Don't apply; user decides.
     }
@@ -594,6 +609,11 @@ function _applyRemoteKey(key, fbVal) {
   // or the DM window and the player window on one machine, which share
   // localStorage and both push.
   _dirtyKeys.delete(key);
+
+  // Reaching the apply with a conflict parked means the two sides converged
+  // on their own (the check above only falls through when local === remote),
+  // so the bar is asking about a disagreement that no longer exists.
+  if (_conflicts[key]){ delete _conflicts[key]; _renderConflictBar(); }
 
   // The split state keys back the global `state` object — re-read just the
   // domain that changed (a party update no longer re-parses combat/shop/
