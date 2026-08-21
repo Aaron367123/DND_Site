@@ -84,25 +84,6 @@ const _dirtyKeys  = new Set();    // sync keys that have changed since last flus
 // inbound echo to whichever value it carries, regardless of how many
 // flushes have piled up in flight.
 const _justWrote  = {};
-// True conflicts: keys where a remote value arrived while a local change was
-// still pending its first flush. {[key]: {local, remote, ts}} until the user
-// resolves via the conflict bar. No automatic merge — JSON shapes vary too
-// much. Display labels for the keys are in _CONFLICT_LABELS below.
-const _conflicts = {};
-const _CONFLICT_LABELS = {
-  'skt-party-v1':         'Party tracker',
-  'skt-combat-v1':        'Combat tracker',
-  'skt-shop-v1':          'Shop',
-  'skt-settings-v1':      'Settings',
-  'skt-shared-panels-v1': 'Shared panels',
-  'skt-notes-data':       'Notes',
-  'skt-bestiary-v1':      'Bestiary',
-  'skt-loot-data':        'Loot',
-  'skt-npclib-data':      'NPC Library',
-  'skt-battlemap-v1':     'Battle map',
-  'skt-books-hidden-v1':      'Hidden books',
-  'skt-adventures-hidden-v1': 'Hidden adventures',
-};
 
 // Which panels to refresh when a particular sync key changes. Avoids re-rendering
 // the whole world when a single subsystem updates.
@@ -513,6 +494,7 @@ function _flushDirtyKeys() {
     return _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).then(() => {
       // Success — clear retry counter so a future failure starts fresh.
       delete _retryCounts[k];
+      _lastServer[k] = val;   // the server now holds this; base for next merge
       return true;
     }).catch((err) => {
       // The push never landed, so no echo is coming for it — take the entry
@@ -554,6 +536,115 @@ function _flushDirtyKeys() {
 // ─── Apply one incoming remote key ────────────────────────────────────────────
 // Called per-listener when a single sync key changes on the server. Only the
 // panels that depend on that key get refreshed.
+// ============================================================
+// THREE-WAY MERGE for whole-key JSON domains
+// ============================================================
+// Entity-split keys merge per record because _applyEntitySnapshot has a base
+// to diff against (_entityCache). The whole-key domains had no base, so the
+// only thing the code could do when both sides changed was ask the user which
+// copy to throw away — and for the collision that actually happens (two people
+// editing different parts of the same blob) neither answer was right.
+//
+// _lastServer gives those keys the same base, so they can merge instead of
+// asking. Structural, not textual: recurse objects per field, match records by
+// id, treat scalar arrays as sets.
+const _lastServer = {};   // key -> last value we know the server held
+
+function _idOf(o){
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  if (o.id != null) return 'id:' + o.id;
+  if (o.name != null) return 'name:' + o.name;
+  return null;
+}
+function _isPlainObj(v){ return v !== null && typeof v === 'object' && !Array.isArray(v); }
+// An array we can merge element-wise: every entry is a record with a stable
+// identity. Mixed or anonymous arrays (settings.healthTiers) fail this and
+// fall back to whole-value resolution, which is the honest answer for them.
+function _keyedArray(a){
+  if (!Array.isArray(a) || !a.length) return null;
+  const ids = a.map(_idOf);
+  if (ids.some(x => x == null) || new Set(ids).size !== ids.length) return null;
+  return ids;
+}
+function _allScalars(a){
+  return Array.isArray(a) && a.every(v => v === null || typeof v !== 'object');
+}
+const _eq = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+
+// Returns the merged value. `base` may be undefined (never seen), in which
+// case a changed local value wins — the old "mine" button, minus the question.
+function _merge3(base, mine, theirs){
+  if (_eq(mine, theirs)) return theirs;
+  if (_eq(base, mine))   return theirs;    // we didn't touch it
+  if (_eq(base, theirs)) return mine;      // they didn't touch it
+
+  // Both sides changed. Try to push the decision down a level.
+  if (_isPlainObj(mine) && _isPlainObj(theirs)){
+    const b = _isPlainObj(base) ? base : {};
+    const out = {};
+    const keys = new Set([...Object.keys(b), ...Object.keys(mine), ...Object.keys(theirs)]);
+    keys.forEach(k => {
+      const inB = k in b, inM = k in mine, inT = k in theirs;
+      if (inB && !inM) return;             // I deleted the field
+      if (inB && !inT) return;             // they deleted it
+      if (!inM) { out[k] = theirs[k]; return; }
+      if (!inT) { out[k] = mine[k];   return; }
+      out[k] = _merge3(b[k], mine[k], theirs[k]);
+    });
+    return out;
+  }
+
+  const mIds = _keyedArray(mine), tIds = _keyedArray(theirs);
+  if (mIds && tIds){
+    const bIds = _keyedArray(base) || [];
+    const bAt = {}, mAt = {}, tAt = {};
+    bIds.forEach((id, i) => bAt[id] = base[i]);
+    mIds.forEach((id, i) => mAt[id] = mine[i]);
+    tIds.forEach((id, i) => tAt[id] = theirs[i]);
+    const out = [], seen = new Set();
+    // Their order is the spine; records only I have are appended. Keeps a
+    // reorder on either side from scrambling the list.
+    tIds.forEach(id => {
+      seen.add(id);
+      const inB = id in bAt, inM = id in mAt;
+      if (inB && !inM) return;             // I deleted this record
+      out.push(inM ? _merge3(bAt[id], mAt[id], tAt[id]) : tAt[id]);
+    });
+    mIds.forEach(id => {
+      if (seen.has(id)) return;
+      if (id in bAt) return;               // they deleted it
+      out.push(mAt[id]);                   // I added it
+    });
+    return out;
+  }
+
+  if (_allScalars(mine) && _allScalars(theirs)){
+    // Set semantics — this is what the hidden-source lists and the shared
+    // panel list actually are. Two people hiding different books both stick.
+    const b = _allScalars(base) ? base : [];
+    const bs = new Set(b), ms = new Set(mine), ts = new Set(theirs);
+    const keep = v => (bs.has(v) ? (ms.has(v) && ts.has(v)) : (ms.has(v) || ts.has(v)));
+    const out = [];
+    theirs.forEach(v => { if (keep(v) && !out.includes(v)) out.push(v); });
+    mine.forEach(v => { if (keep(v) && !out.includes(v)) out.push(v); });
+    return out;
+  }
+
+  return mine;   // shapes disagree, or an anonymous array — local wins
+}
+
+// String wrapper. Any parse failure falls back to the remote value: the server
+// copy is the one every other client already has, so converging on it beats
+// keeping unparseable local bytes.
+function _mergeJsonStr(baseStr, mineStr, theirsStr){
+  let mine, theirs, base;
+  try { mine = JSON.parse(mineStr); theirs = JSON.parse(theirsStr); }
+  catch(e){ return theirsStr; }
+  try { base = baseStr == null ? undefined : JSON.parse(baseStr); } catch(e){ base = undefined; }
+  try { return JSON.stringify(_merge3(base, mine, theirs)); }
+  catch(e){ return theirsStr; }
+}
+
 function _applyRemoteKey(key, fbVal) {
   // Defensive: some Firebase configurations auto-decode JSON-looking strings
   // into objects. Re-stringify so the rest of the pipeline always sees a string.
@@ -585,47 +676,29 @@ function _applyRemoteKey(key, fbVal) {
 
   // Conflict detection: if the local copy is "dirty" (queued for the next
   // flush) AND differs from the incoming remote value, both sides have
-  // diverged. Park the conflict in `_conflicts` and let the user resolve.
-  // Without this, the apply below would silently overwrite their pending
-  // local edit.
   //
   // Only the whole-key domains get here at all. Every entity-split key
   // (combat, battle map, notes, party) is routed to _applyEntitySnapshot by
-  // both the live listener and the focus refresh, and merges per record
-  // instead — so none of them can ever park a conflict or raise the bar.
+  // both the live listener and the focus refresh, and merges per record.
   //
   // The battle-map name check below is therefore unreachable today. It is
-  // kept as a backstop because that key is the one where parking would do
-  // the most damage: both sides write it on every token drag and fog stroke,
-  // so the 300ms dirty window is hit constantly during play, and a parked
-  // conflict silently FREEZES all map updates on this device until the bar is
-  // resolved — easy to miss on a phone, and it reads as "the map stopped
-  // updating". Last-write-wins costs at most one in-flight stroke, and the
-  // panel saves again at the end of the next drag, which re-marks the key
-  // dirty and re-asserts this device's state. (The already-queued push does
-  // NOT do that — _flushDirtyKeys re-reads localStorage at flush time, which
-  // by then holds the value we just applied.)
+  // kept as a backstop because that key is the one where getting this wrong
+  // does the most damage: both sides write it on every token drag and fog
+  // stroke, so the 300ms dirty window is hit constantly during play.
   //
-  // `|| _conflicts[key]` keeps the key protected once a conflict is parked.
-  // Parking clears the dirty flag (below), so without this the NEXT remote
-  // update would skip this check and apply silently underneath the bar the
-  // user is still reading. Re-parking instead refreshes `remote` to the
-  // newest value while `local` stays put, because we never applied.
-  if ((_dirtyKeys.has(key) || _conflicts[key]) && key !== 'skt-battlemap-v1'){
+  // Both sides changed this key inside that window. There is no need to ask
+  // which copy to keep — with _lastServer as the base we can work out what
+  // each side actually did and apply both. If the merge contributes anything
+  // of ours, the key stays dirty so the result propagates and the other
+  // client converges on it; if it comes out identical to the server's copy we
+  // had nothing to add, and the flag is cleared (below) so we don't push bytes
+  // the node already holds.
+  let applyVal = fbVal, mergedOurs = false;
+  if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1'){
     const localVal = localStorage.getItem(key);
     if (localVal != null && localVal !== fbVal){
-      _conflicts[key] = { local: localVal, remote: fbVal, ts: Date.now() };
-      // Stop the outgoing push for this key. The debounce is still pending
-      // (this whole branch runs inside its 300ms window), and letting it fire
-      // means we ship the local value to everyone while the bar is asking the
-      // user which side to keep. Then 'theirs' leaves them as the only device
-      // on the remote value with the server holding theirs — their choice
-      // inverted — and 'mine' was already done behind their back. Nothing
-      // moves in either direction until they pick; _resolveConflict re-adds
-      // the flag for 'mine'.
-      _dirtyKeys.delete(key);
-      _renderConflictBar();
-      return; // Don't apply; user decides.
+      applyVal = _mergeJsonStr(_lastServer[key], localVal, fbVal);
+      mergedOurs = (applyVal !== fbVal);
     }
   }
 
@@ -638,7 +711,7 @@ function _applyRemoteKey(key, fbVal) {
   // and this app already carries warnStorageFailure because it happens.
   _remoteUpdate = true;
   try {
-    localStorage.setItem(key, fbVal);
+    localStorage.setItem(key, applyVal);
   } catch(e){
     _diag('apply ' + key, e);
     if (typeof warnStorageFailure === 'function') warnStorageFailure('incoming ' + key, e);
@@ -648,9 +721,7 @@ function _applyRemoteKey(key, fbVal) {
   }
 
   // localStorage now byte-matches what the server holds, so a queued push for
-  // this key has nothing left to send. Clear the dirty flag — _resolveConflict
-  // already does exactly this before applying 'theirs', for exactly this
-  // reason; the ordinary apply path just never did.
+  // this key has nothing left to send, so clear the dirty flag.
   //
   // Leaving it set is not merely a wasted write. The flush pushes bytes the
   // node already holds, Firebase raises no value event for an unchanged set,
@@ -663,12 +734,18 @@ function _applyRemoteKey(key, fbVal) {
   // holding what we were about to send — two people making the same change,
   // or the DM window and the player window on one machine, which share
   // localStorage and both push.
-  _dirtyKeys.delete(key);
+  // Base for the next merge is what the SERVER holds, not what we just wrote.
+  _lastServer[key] = fbVal;
 
-  // Reaching the apply with a conflict parked means the two sides converged
-  // on their own (the check above only falls through when local === remote),
-  // so the bar is asking about a disagreement that no longer exists.
-  if (_conflicts[key]){ delete _conflicts[key]; _renderConflictBar(); }
+  if (mergedOurs){
+    // The merge kept something of ours, so the server's copy is now stale.
+    // Push the result rather than leaving the two sides different.
+    _dirtyKeys.add(key);
+    clearTimeout(_pushTimer);
+    _pushTimer = setTimeout(_flushDirtyKeys, 100);
+  } else {
+    _dirtyKeys.delete(key);
+  }
 
   // The split state keys back the global `state` object — re-read just the
   // domain that changed (a party update no longer re-parses combat/shop/
@@ -702,7 +779,7 @@ function _applyRemoteKey(key, fbVal) {
   // it's mounted so the user sees the new state immediately.
   if (key === 'skt-books-hidden-v1'){
     try {
-      const arr = JSON.parse(fbVal) || [];
+      const arr = JSON.parse(applyVal) || [];
       if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
       const def = panelDefs && panelDefs.books;
       if (def){
@@ -715,7 +792,7 @@ function _applyRemoteKey(key, fbVal) {
   // Same handling for hidden adventures.
   if (key === 'skt-adventures-hidden-v1'){
     try {
-      const arr = JSON.parse(fbVal) || [];
+      const arr = JSON.parse(applyVal) || [];
       if (typeof window.SKT_HIDDEN_SOURCES_REBUILD === 'function') window.SKT_HIDDEN_SOURCES_REBUILD();
       const def = panelDefs && panelDefs.adventures;
       if (def){
@@ -1104,95 +1181,4 @@ window.realtimeLive = {
   },
 };
 
-// ─── Conflict UI ──────────────────────────────────────────────────────────
-// Paints (or updates, or removes) a fixed-bottom bar listing every key that
-// currently has a local↔remote conflict. Each row gets three resolver
-// buttons. The bar auto-removes when _conflicts becomes empty.
-function _renderConflictBar(){
-  let bar = document.getElementById('rt-conflict-bar');
-  const entries = Object.entries(_conflicts);
-  if (entries.length === 0){ bar?.remove(); return; }
-  if (!bar){
-    bar = document.createElement('div');
-    bar.id = 'rt-conflict-bar';
-    bar.className = 'rt-conflict-bar';
-    document.body.appendChild(bar);
-  }
-  const _esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  bar.innerHTML = '<div class="rt-conflict-head">⚠ ' + entries.length + ' sync conflict' + (entries.length===1?'':'s')
-    + '<span class="rt-conflict-hint">Remote changes arrived while you were editing. Pick one per row.</span></div>'
-    + entries.map(([k]) => {
-        const label = _CONFLICT_LABELS[k] || k;
-        return '<div class="rt-conflict-row" data-rtkey="' + _esc(k) + '">'
-          + '<span class="rt-conflict-label">' + _esc(label) + '</span>'
-          + '<div class="rt-conflict-actions">'
-          + '<button class="btn small" data-rtact="compare">Compare</button>'
-          + '<button class="btn small" data-rtact="theirs">Use theirs</button>'
-          + '<button class="btn small primary" data-rtact="mine">Keep mine</button>'
-          + '</div></div>';
-      }).join('');
-  bar.querySelectorAll('[data-rtact]').forEach(btn => btn.addEventListener('click', e => {
-    e.stopPropagation();
-    const row = btn.closest('[data-rtkey]');
-    const key = row?.dataset.rtkey;
-    if (!key || !_conflicts[key]) return;
-    const act = btn.dataset.rtact;
-    if (act === 'mine') _resolveConflict(key, 'mine');
-    else if (act === 'theirs') _resolveConflict(key, 'theirs');
-    else if (act === 'compare') _openConflictCompare(key);
-  }));
-}
-
-function _resolveConflict(key, choice){
-  const c = _conflicts[key];
-  if (!c) return;
-  delete _conflicts[key];
-  if (choice === 'mine'){
-    // Re-push local as the canonical value. _flushDirtyKeys handles the
-    // actual network write; just ensure the key is dirty.
-    _dirtyKeys.add(key);
-    clearTimeout(_pushTimer);
-    _pushTimer = setTimeout(_flushDirtyKeys, 100);
-  } else {
-    // Apply remote — runs the normal apply path, but bypass conflict
-    // detection by clearing dirty first (we're explicitly accepting remote).
-    _dirtyKeys.delete(key);
-    _applyRemoteKey(key, c.remote);
-  }
-  _renderConflictBar();
-}
-
-// Side-by-side diff modal for a single key. Pretty-prints both sides as
-// JSON so the user can eyeball what differs before picking a side.
-function _openConflictCompare(key){
-  const c = _conflicts[key]; if (!c) return;
-  const pretty = (s) => {
-    try { return JSON.stringify(JSON.parse(s), null, 2); }
-    catch(e){ return String(s); }
-  };
-  const _esc = s => String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  const back = document.createElement('div');
-  back.className = 'modal-backdrop';
-  const label = _CONFLICT_LABELS[key] || key;
-  back.innerHTML = '<div class="modal rt-conflict-modal" role="dialog" aria-modal="true" style="width:880px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column">'
-    + '<h3 style="margin:0 0 4px">Compare conflict — ' + _esc(label) + '</h3>'
-    + '<p style="margin:0 0 10px;font-size:var(--fs-sm);color:var(--text-muted)">Local copy is what you just edited. Remote is what arrived from another tab / device.</p>'
-    + '<div class="rt-conflict-diff">'
-    + '<div class="rt-conflict-pane"><div class="rt-conflict-pane-head">Mine (local)</div><pre>' + _esc(pretty(c.local))   + '</pre></div>'
-    + '<div class="rt-conflict-pane"><div class="rt-conflict-pane-head">Theirs (remote)</div><pre>' + _esc(pretty(c.remote)) + '</pre></div>'
-    + '</div>'
-    + '<div class="modal-actions" style="margin-top:12px">'
-    + '<button class="btn" data-rtact="cancel">Cancel</button>'
-    + '<span style="flex:1"></span>'
-    + '<button class="btn" data-rtact="theirs">Use theirs</button>'
-    + '<button class="btn primary" data-rtact="mine">Keep mine</button>'
-    + '</div></div>';
-  document.body.appendChild(back);
-  const close = () => back.remove();
-  back.addEventListener('mousedown', e => { if (e.target === back) close(); });
-  back.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-  back.querySelector('[data-rtact="cancel"]').addEventListener('click', close);
-  back.querySelector('[data-rtact="mine"]').addEventListener('click', () => { _resolveConflict(key, 'mine'); close(); });
-  back.querySelector('[data-rtact="theirs"]').addEventListener('click', () => { _resolveConflict(key, 'theirs'); close(); });
-}
 

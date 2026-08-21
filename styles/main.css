@@ -2153,18 +2153,6 @@ input.card-name-input.clickable:hover{background:rgba(212,165,116,.08)}
 /* Realtime conflict bar — pinned to the bottom of the workspace while one
    or more sync keys have local↔remote divergence. Each row gets its own
    set of three resolver buttons. Stays out of the way until needed. */
-.rt-conflict-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:760px;width:94%;background:var(--panel);border:1px solid rgba(212,90,80,.7);border-radius:var(--r-lg);padding:10px 14px;box-shadow:var(--sh-4);z-index:9500;color:var(--text);font-size:var(--fs-md)}
-.rt-conflict-head{font-weight:600;color:#f3a0a0;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.rt-conflict-hint{font-weight:400;color:var(--text-muted);font-size:var(--fs-sm)}
-.rt-conflict-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px dashed var(--border)}
-.rt-conflict-row:first-of-type{border-top:none}
-.rt-conflict-label{flex:1;font-size:var(--fs-md)}
-.rt-conflict-actions{display:flex;gap:5px}
-.rt-conflict-modal .rt-conflict-diff{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;overflow:hidden}
-.rt-conflict-modal .rt-conflict-pane{display:flex;flex-direction:column;min-width:0;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
-.rt-conflict-modal .rt-conflict-pane-head{padding:6px 10px;font-size:var(--fs-sm);font-weight:600;color:var(--accent);border-bottom:1px solid var(--border);background:var(--panel-3)}
-.rt-conflict-modal .rt-conflict-pane pre{flex:1;overflow:auto;margin:0;padding:8px 10px;font-size:var(--fs-sm);line-height:1.45;white-space:pre-wrap;word-break:break-word;color:var(--text)}
-@media (max-width:720px){.rt-conflict-modal .rt-conflict-diff{grid-template-columns:1fr}}
 .theme-contrast-strip{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
 .theme-contrast-chip{font-size:var(--fs-xs);padding:3px 7px;border-radius:var(--r-lg);border:1px solid var(--border);font-variant-numeric:tabular-nums;line-height:1.3;letter-spacing:.01em}
 .theme-contrast-chip.ok{background:rgba(60,160,80,.18);border-color:rgba(60,160,80,.55);color:#a6e3b3}
