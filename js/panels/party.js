@@ -1245,6 +1245,33 @@ registerPanel('party',{
   // (death-save territory). Triggers a concentration-save toast on damage.
   _applyHpDelta(i, delta, dmgType){
     const c = state.party[i]; if (!c) return;
+    // If this character is in the fight, the combat tracker owns the rules.
+    // It is the only side that carries death-save state — deathSaves, stable
+    // and dead live on the COMBATANT — and it is the side that implements
+    // massive-damage instant death and the failed save for taking damage at
+    // 0 hp. This function implemented neither, so the same trap did different
+    // things depending on which card the DM happened to click: 30 damage to a
+    // PC on 5 of 20 killed them from the combat tracker and merely downed them
+    // from the party card.
+    //
+    // Delegating rather than copying, because a second implementation of the
+    // death rules is exactly how the two drifted apart in the first place.
+    // combat._applyHpDelta already mutates this party slot for temp hp, wild
+    // shape, concentration and rage, and save() runs reconcilePcHp, which
+    // brings the party card's hp back in line.
+    const C = panelDefs.combat;
+    const ci = (typeof _findCombatantForPartyMember === 'function')
+      ? _findCombatantForPartyMember(c) : -1;
+    if (C && ci >= 0 && typeof C._applyHpDelta === 'function'){
+      C._applyHpDelta(ci, delta, dmgType);
+      save();
+      if (!this._patchHp(i)) this._render();
+      return;
+    }
+    // Out of combat there is no combatant to hold death saves, so the local
+    // path stays: resistances, pools and hp, with the dying rules left to the
+    // table. Adding a parallel death-save store on the party slot would be a
+    // second source of truth for the same fact.
     if (delta < 0){
       let remaining = -delta; // positive amount of damage
       let typeSuffix = '';

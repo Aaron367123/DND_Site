@@ -578,6 +578,46 @@
       ok('dmg: manual mundane is still shrugged off', mundane === 0, 'took ' + mundane);
       ok('dmg: manual magical lands in full', magicked === 14, 'took ' + magicked);
 
+      // The party card and the combat tracker must agree. They are two entry
+      // points to the same event, and the party one used to skip both rules
+      // that decide whether a character dies.
+      {
+        openPanel('party'); await sleep(360);
+        const P = panelDefs.party;
+        const inFight = extra => {
+          state.party = [Object.assign({ id:'st_p', name:'Pat', hp:20, hpMax:20 }, extra || {})];
+          state.combatants = [Object.assign({ id:'st_p', name:'Pat', hp:20, hpMax:20, isPC:true },
+                                            (extra && extra._c) || {})];
+          save();
+        };
+        const solo = extra => {
+          state.party = [Object.assign({ id:'st_p', name:'Pat', hp:20, hpMax:20 }, extra || {})];
+          state.combatants = []; save();
+        };
+        inFight({ hp:5, _c:{ hp:5 } }); P._applyHpDelta(0,-30,'fire');
+        ok('party card: massive damage kills', !!state.combatants[0].dead);
+        inFight({ hp:5, _c:{ hp:5 } }); P._applyHpDelta(0,-24,'fire');
+        ok('party card: one short does not kill', !state.combatants[0].dead);
+        inFight({ hp:0, _c:{ hp:0, deathSaves:{success:0,fail:0} } }); P._applyHpDelta(0,-3,'fire');
+        ok('party card: damage at 0 costs a death save',
+           eqJ(state.combatants[0].deathSaves, {success:0,fail:1}),
+           JSON.stringify(state.combatants[0].deathSaves));
+        inFight({ resistances:['fire'], _c:{} }); P._applyHpDelta(0,-21,'fire');
+        ok('party card: resistance still halves', 20 - state.combatants[0].hp === 10);
+        inFight({ tempHp:5, _c:{} }); P._applyHpDelta(0,-8,'fire');
+        ok('party card: temp hp still absorbs',
+           state.party[0].tempHp === 0 && state.combatants[0].hp === 17);
+        inFight({ _c:{} }); P._applyHpDelta(0,+5,null);
+        ok('party card: healing caps at max', state.combatants[0].hp === 20);
+        // Out of combat there is no combatant to hold death saves, so the
+        // local path stays and must still be right.
+        solo({ resistances:['fire'] }); P._applyHpDelta(0,-21,'fire');
+        ok('out of combat: resistance still halves', 20 - state.party[0].hp === 10);
+        solo(); P._applyHpDelta(0,-50,'fire');
+        ok('out of combat: hp still clamps at 0', state.party[0].hp === 0);
+        closePanel('party');
+      }
+
       // Death saves. Every one of these is a printed rule with one right
       // answer, and they decide whether a character lives.
       {
