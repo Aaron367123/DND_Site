@@ -967,6 +967,50 @@
       }
     }
 
+    // Monster numbers must not reach a player's screen when the DM has hidden
+    // them. Scanned against the whole DOM rather than the one element that
+    // renders HP, because a leak is just as real in a title attribute.
+    {
+      const K0 = JSON.stringify(state.combatants), M0 = (state.settings || {}).monsterStatsMode;
+      const SH = JSON.stringify(state.sharedPanels || []);
+      state.combatants = [
+        { id:'st_pc', name:'Zoey', hp:32, hpMax:55, isPC:true,  ac:17, initiative:15 },
+        { id:'st_og', name:'Ogre', hp:23, hpMax:59, isPC:false, ac:11, initiative:8 }];
+      state.activeCombatantId = 'st_og';
+      state.sharedPanels = ['combat','battlemap','party'];
+      save();
+      const leaks = () => {
+        const html = document.body.innerHTML, text = document.body.innerText;
+        if (/23\s*\/\s*59/.test(html) || /23\s*\/\s*59/.test(text)) return 'body';
+        const attr = [...document.querySelectorAll('[title],[aria-label]')].some(e =>
+          /23\s*\/\s*59/.test((e.getAttribute('title') || '') + ' ' + (e.getAttribute('aria-label') || '')));
+        return attr ? 'attribute' : '';
+      };
+      const paint = async m => {
+        state.settings.monsterStatsMode = m; save();
+        if (typeof paRender === 'function') paRender();
+        if (panelDefs.combat && panelDefs.combat._body) panelDefs.combat._render();
+        await sleep(320);
+      };
+      await paint('show');
+      ok('player: monster hp IS shown when the DM allows it', leaks() === 'body');
+      await paint('conceal');
+      ok('player: concealed monster hp does not leak', leaks() === '', 'leaked via ' + leaks());
+      await paint('hide');
+      ok('player: hidden monster hp does not leak', leaks() === '', 'leaked via ' + leaks());
+      ok('player: their own character is still visible',
+         /32\s*\/\s*55/.test(document.body.innerText));
+      // The mode reader must fail closed if it cannot reach the DM's setting.
+      const realC = panelDefs.combat;
+      panelDefs.combat = undefined;
+      ok('player: an unreachable stats setting defaults to hidden', paStatsMode() === 'hide');
+      panelDefs.combat = realC;
+      state.combatants = JSON.parse(K0);
+      state.sharedPanels = JSON.parse(SH);
+      if (M0) state.settings.monsterStatsMode = M0;
+      save();
+    }
+
     ok('player: no horizontal overflow',
        document.documentElement.scrollWidth <= window.innerWidth + 1,
        document.documentElement.scrollWidth + ' > ' + window.innerWidth);

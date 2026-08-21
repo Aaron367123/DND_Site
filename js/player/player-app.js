@@ -59,7 +59,13 @@ const paEsc = s => (typeof esc === 'function' ? esc(s) : String(s == null ? '' :
 // first about what has been hidden.
 function paStatsMode(){
   const C = panelDefs.combat;
-  return (C && typeof C._statsMode === 'function') ? C._statsMode() : 'show';
+  // Fail CLOSED. The combat panel is loaded in the player view today, so this
+  // fallback does not fire — but it guards an information-hiding control, and
+  // 'show' as the default meant "if I cannot find out what the DM hid, reveal
+  // everything". A lighter player bundle later would start leaking exact
+  // monster HP with nothing failing to signal it. 'hide' is the answer that is
+  // wrong in a way somebody notices and asks about.
+  return (C && typeof C._statsMode === 'function') ? C._statsMode() : 'hide';
 }
 function paHpText(c){
   if (c.isPC || paStatsMode() === 'show') return `${c.hp}/${c.hpMax}`;
