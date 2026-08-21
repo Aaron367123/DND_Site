@@ -589,16 +589,22 @@ function _applyRemoteKey(key, fbVal) {
   // Without this, the apply below would silently overwrite their pending
   // local edit.
   //
-  // EXCEPTION — battle map is last-write-wins. Both sides write it on every
-  // token drag / fog stroke, so the 300ms dirty window is hit constantly
-  // during play; parking a conflict then silently FREEZES all map updates on
-  // this device until the bar is resolved (easy to miss, especially on
-  // mobile — "the map stopped updating"). Losing one in-flight stroke to a
-  // race is far cheaper than a frozen map; the panel saves again at the end
-  // of the next drag or stroke, which re-marks the key dirty and re-asserts
-  // this device's state. (The queued push does NOT do that — _flushDirtyKeys
-  // re-reads localStorage at flush time, which by then holds the value we
-  // just applied.)
+  // Only the whole-key domains get here at all. Every entity-split key
+  // (combat, battle map, notes, party) is routed to _applyEntitySnapshot by
+  // both the live listener and the focus refresh, and merges per record
+  // instead — so none of them can ever park a conflict or raise the bar.
+  //
+  // The battle-map name check below is therefore unreachable today. It is
+  // kept as a backstop because that key is the one where parking would do
+  // the most damage: both sides write it on every token drag and fog stroke,
+  // so the 300ms dirty window is hit constantly during play, and a parked
+  // conflict silently FREEZES all map updates on this device until the bar is
+  // resolved — easy to miss on a phone, and it reads as "the map stopped
+  // updating". Last-write-wins costs at most one in-flight stroke, and the
+  // panel saves again at the end of the next drag, which re-marks the key
+  // dirty and re-asserts this device's state. (The already-queued push does
+  // NOT do that — _flushDirtyKeys re-reads localStorage at flush time, which
+  // by then holds the value we just applied.)
   //
   // `|| _conflicts[key]` keeps the key protected once a conflict is parked.
   // Parking clears the dirty flag (below), so without this the NEXT remote
