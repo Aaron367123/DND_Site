@@ -928,6 +928,9 @@ registerPanel('turnview', {
              aria-label="Attack roll total (optional)">
       <input class="tv-in" data-tvman="dmg" type="number" placeholder="dmg" aria-label="Damage">
       ${this._dmgTypeSelect(c)}
+      <label class="tv-manual-mag" title="Magical, silvered or adamantine — ticks past &quot;resistance to nonmagical attacks&quot;. A rolled attack reads this off the stat block; a number you typed carries no such clue, so without it a magic longsword does nothing to a werewolf.">
+        <input type="checkbox" data-tvman="magical"><span>✦ magic</span>
+      </label>
       <button class="btn ${list.length ? '' : 'primary'}" data-tv="manual">Apply</button>
     </div>`;
     if (!list.length){
@@ -2244,6 +2247,13 @@ registerPanel('turnview', {
     // letting the panel make that call is a legitimate reason to enter it.
     const rolled = !isNaN(raw);
     const type = (b.querySelector('[data-tvman="type"]').value || '').trim();
+    // A rolled attack gets `magical` from the monster's own stat block. A
+    // typed number carries no such clue, and defaulting it to false is not
+    // neutral — it asserts "nonmagical", which is the one thing that makes
+    // "immune to bludgeoning, piercing and slashing from nonmagical attacks"
+    // bite. A paladin's magic longsword hand-rolled at a werewolf did 0.
+    const magEl = b.querySelector('[data-tvman="magical"]');
+    const magical = !!(magEl && magEl.checked);
     const c = this._active();
     // Every other path that changes HP takes an undo snapshot — rolled
     // attacks, saves, death saves, the ±  adjuster. This one didn't, which
@@ -2251,7 +2261,7 @@ registerPanel('turnview', {
     // way back. A stray zero here is the likeliest mistake in the panel.
     this._snapshot(`${c ? c.name : 'Someone'} · manual ${dmg}${type ? ' ' + type : ''} → ${t.name}`);
     this._resolve({ attackerId: c && c.id, attacker: c ? c.name : 'Someone', label: 'attack', target: t,
-                    total: rolled ? raw : null, crit: false,
+                    total: rolled ? raw : null, crit: false, magical,
                     hit: rolled ? raw >= (t.ac || 10) : true, dmg, type, detail: '' });
   },
 

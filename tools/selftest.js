@@ -413,6 +413,107 @@
       ok('a negative modifier floors at 0', sktRollDice('1d4-100').total === 0);
     }
 
+    // 9b. damage maths. Wrong numbers here change what happens at the table,
+    // and every one of these is a 5e rule rather than a preference.
+    {
+      openPanel('combat'); await sleep(320);
+      const C = panelDefs.combat;
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants);
+      const A0 = state.activeCombatantId;
+      const mon = f => { state.combatants = [Object.assign(
+        { id:'st_m', name:'Dummy', hp:200, hpMax:200, isPC:false }, f)]; };
+      const took = () => 200 - state.combatants[0].hp;
+
+      mon({});                     C._applyHpDelta(0,-10,'fire');
+      ok('dmg: plain damage lands', took() === 10, 'took ' + took());
+      mon({_resist:['fire']});     C._applyHpDelta(0,-21,'fire');
+      ok('dmg: resistance halves, rounding down', took() === 10, 'took ' + took());
+      mon({_resist:['fire']});     C._applyHpDelta(0,-1,'fire');
+      ok('dmg: resisting 1 leaves 0', took() === 0, 'took ' + took());
+      mon({_immune:['fire']});     C._applyHpDelta(0,-21,'fire');
+      ok('dmg: immunity zeroes it', took() === 0, 'took ' + took());
+      mon({_vulnerable:['fire']}); C._applyHpDelta(0,-21,'fire');
+      ok('dmg: vulnerability doubles', took() === 42, 'took ' + took());
+      mon({_immune:['fire'],_resist:['fire']}); C._applyHpDelta(0,-21,'fire');
+      ok('dmg: immunity beats resistance', took() === 0, 'took ' + took());
+      mon({_resist:['cold']});     C._applyHpDelta(0,-21,'fire');
+      ok('dmg: a different type is not resisted', took() === 21, 'took ' + took());
+
+      state.combatants = [{ id:'st_m', name:'D', hp:5, hpMax:20, isPC:false }];
+      C._applyHpDelta(0,-30,'fire');
+      ok('dmg: hp clamps at 0, never negative', state.combatants[0].hp === 0);
+
+      const pc = (hp, max, extra) => {
+        state.party = [Object.assign({ id:'st_pc', name:'Tester', hp, hpMax:max }, extra || {})];
+        state.combatants = [{ id:'st_pc', name:'Tester', hp, hpMax:max, isPC:true }];
+      };
+      pc(5,20); C._applyHpDelta(0,-30,'fire');
+      ok('dmg: massive damage is instant death', !!state.combatants[0].dead);
+      pc(5,20); C._applyHpDelta(0,-24,'fire');
+      ok('dmg: one short of hpMax overflow is not', !state.combatants[0].dead);
+      pc(5,20); C._applyHpDelta(0,-25,'fire');
+      ok('dmg: overflow exactly equal to hpMax kills', !!state.combatants[0].dead);
+      pc(20,20,{tempHp:5});  C._applyHpDelta(0,-8,'fire');
+      ok('dmg: temp hp absorbs first, then hp',
+         state.party[0].tempHp === 0 && state.combatants[0].hp === 17);
+      pc(20,20,{tempHp:10}); C._applyHpDelta(0,-8,'fire');
+      ok('dmg: temp hp can soak it all',
+         state.party[0].tempHp === 2 && state.combatants[0].hp === 20);
+      pc(20,20,{tempHp:100,resistances:['fire']}); C._applyHpDelta(0,-21,'fire');
+      ok('dmg: resistance applies before temp hp', state.party[0].tempHp === 90,
+         'temp ' + state.party[0].tempHp);
+
+      // Multi-part: a dragon's bite is piercing PLUS fire, and each part
+      // resolves its own resistance. Passing the sum under one label applied
+      // the wrong resistance to the whole thing.
+      openPanel('turnview'); await sleep(420);
+      const T = panelDefs.turnview;
+      const hit = (facets, parts, magical) => {
+        state.combatants = [Object.assign(
+          { id:'st_m', name:'Dummy', hp:200, hpMax:200, isPC:false }, facets)];
+        T._applyDamage(state.combatants[0], parts, !!magical);
+        return 200 - state.combatants[0].hp;
+      };
+      ok('dmg: multi-part resists only the matching type',
+         hit({_resist:['fire']}, [{amt:17,type:'piercing'},{amt:6,type:'fire'}]) === 20);
+      ok('dmg: multi-part resists the other type correctly',
+         hit({_resist:['piercing']}, [{amt:17,type:'piercing'},{amt:6,type:'fire'}]) === 14);
+
+      // The werewolf case: a qualifier must actually gate on the qualifier.
+      const NONMAG = ['bludgeoning, piercing, and slashing from nonmagical attacks'];
+      ok('dmg: a nonmagical slash is shrugged off',
+         hit({_immune:NONMAG}, [{amt:12,type:'slashing'}], false) === 0);
+      ok('dmg: a magical slash gets through',
+         hit({_immune:NONMAG}, [{amt:12,type:'slashing'}], true) === 12);
+
+      // Manual entry must be able to say "magical" — without it a hand-rolled
+      // magic longsword did nothing to a werewolf.
+      state.combatants = [
+        { id:'st_a', name:'Paladin', hp:40, hpMax:40, isPC:true, initiative:20 },
+        { id:'st_w', name:'Werewolf', hp:58, hpMax:58, isPC:false, initiative:10, _immune:NONMAG }];
+      state.activeCombatantId = 'st_a'; save();
+      const manual = magic => {
+        state.combatants[1].hp = 58;
+        T._render(); T._armed = 'st_w'; T._render();
+        const b = T._body;
+        b.querySelector('[data-tvman="dmg"]').value = '14';
+        b.querySelector('[data-tvman="type"]').value = 'slashing';
+        const m = b.querySelector('[data-tvman="magical"]');
+        if (!m) return null;
+        m.checked = magic;
+        T._manualAttack();
+        return 58 - state.combatants.find(c => c.id === 'st_w').hp;
+      };
+      const mundane = manual(false), magicked = manual(true);
+      ok('dmg: manual row has a magical toggle', mundane !== null);
+      ok('dmg: manual mundane is still shrugged off', mundane === 0, 'took ' + mundane);
+      ok('dmg: manual magical lands in full', magicked === 14, 'took ' + magicked);
+
+      state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
+      state.activeCombatantId = A0; save();
+      closePanel('turnview'); closePanel('combat');
+    }
+
     // 10. interactions - click the controls a DM actually clicks
     openPanel('time'); await sleep(320);
     {

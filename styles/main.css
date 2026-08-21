@@ -3757,6 +3757,16 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
   padding:9px 11px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .tv-manual.lead { border-style:solid; border-color:var(--accent); }
 .tv-manual-l { font-size:var(--fs-sm); color:var(--text-muted); }
+/* Magical / silvered / adamantine toggle on the manual row. Sized like the
+   inputs beside it so the row keeps one baseline, and it lights up when armed
+   because "did I tick that?" is the question it exists to answer. */
+.tv-manual-mag { display:inline-flex; align-items:center; gap:4px; cursor:pointer;
+  padding:4px 7px; border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--panel-3); user-select:none; line-height:1; }
+.tv-manual-mag span { font-size:var(--fs-sm); color:var(--text-dim); white-space:nowrap; }
+.tv-manual-mag input { margin:0; cursor:pointer; }
+.tv-manual-mag:has(input:checked) { border-color:var(--accent); background:var(--panel-2); }
+.tv-manual-mag:has(input:checked) span { color:var(--accent); }
 .tv-in { width:56px; background:var(--panel-3); border:1px solid var(--border); color:var(--text);
   border-radius:var(--r-sm); padding:5px 7px; font:inherit; font-size:var(--fs-md);
   text-align:center; font-variant-numeric:tabular-nums; }
