@@ -177,6 +177,50 @@ const _ENTITY_KEYS = {
       if (typeof paRender === 'function') paRender();
     },
   },
+  // Party is a bare array of characters with stable string ids, so this split
+  // is simpler than combat's — the only shared state is the display order.
+  //
+  // It is also the one that was most worth doing. Party is 15KB of five
+  // records that the DM and the players both edit constantly, and as a single
+  // blob two people touching DIFFERENT characters inside the 300ms window
+  // produced a conflict whose two buttons were "lose their edit" and "lose
+  // mine" — knock Zoey to 9 while a player heals Namroc to 19 and the correct
+  // answer, both, was not on offer. Per-character nodes make that collision
+  // a merge instead of a question.
+  'skt-party-v1': {
+    base: 'skt/party_v2',
+    legacyNode: 'skt/skt_party_v1',   // whole-key node written by older clients
+    explode(s){
+      const parsed = JSON.parse(s);
+      const arr = Array.isArray(parsed) ? parsed : [];
+      const nodes = { meta: JSON.stringify({ order: arr.map((c, i) => _partyNodeId(c, i)) }) };
+      arr.forEach((c, i) => { nodes['items/' + _partyNodeId(c, i)] = JSON.stringify(c); });
+      return nodes;
+    },
+    assemble(nodes){
+      let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){ _diag('party meta', e); }
+      // Keyed by NODE NAME, not by a re-derived c.id. They agree whenever the
+      // record has an id, and when it doesn't this still round-trips instead
+      // of dropping the character on the floor.
+      const items = {};
+      Object.keys(nodes).forEach(n => {
+        if (!n.startsWith('items/')) return;
+        try { const c = JSON.parse(nodes[n]); if (c) items[n.slice(6)] = c; } catch(e){ _diag('party node ' + n, e); }
+      });
+      const out = [], used = new Set();
+      (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
+        if (items[id]){ out.push(items[id]); used.add(id); }
+      });
+      // Anything the server has that `order` doesn't mention — a character
+      // added by a client whose meta push hasn't landed yet — still appears.
+      Object.keys(items).forEach(id => { if (!used.has(id)) out.push(items[id]); });
+      return JSON.stringify(out);
+    },
+    postApply(){
+      loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
+      if (typeof paRender === 'function') paRender();
+    },
+  },
   'skt-battlemap-v1': {
     base: 'skt/battlemap_v2',
     legacyNode: 'skt/skt_battlemap_v1',
@@ -264,6 +308,11 @@ const _ENTITY_KEYS = {
   },
 };
 function _fbSafeId(id){ return String(id).replace(/[.#$\/\[\]]/g, '_'); }
+// Node name for one party character. Both push sites assign uid(), so the
+// fallback only fires for a record that arrived without one (hand-edited
+// backup, older import). An index keeps such records distinct rather than
+// letting them collapse onto a single "undefined" node and eat each other.
+function _partyNodeId(c, i){ return _fbSafeId(c && c.id != null ? c.id : ('idx_' + i)); }
 // Last known SERVER state per entity key: {nodeName: jsonString}. Flush
 // diffs against it (only changed nodes go out); receive compares against it
 // (identical snapshot = our own echo / no-op → skip).

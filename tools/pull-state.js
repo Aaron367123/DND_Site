@@ -117,6 +117,21 @@ function assembleCombat(n){
                           activeCombatantId: meta.activeCombatantId ?? null });
 }
 
+function assembleParty(n){
+  let meta = {}; try { meta = JSON.parse(n.meta || '{}') || {}; } catch(e){}
+  const items = {};
+  Object.keys(n).forEach(k => {
+    if (!k.startsWith('items/')) return;
+    try { const c = JSON.parse(n[k]); if (c) items[k.slice(6)] = c; } catch(e){}
+  });
+  const out = [], used = new Set();
+  (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
+    if (items[id]){ out.push(items[id]); used.add(id); }
+  });
+  Object.keys(items).forEach(id => { if (!used.has(id)) out.push(items[id]); });
+  return JSON.stringify(out);
+}
+
 function assembleBattlemap(n){
   let meta = {}; try { meta = JSON.parse(n.meta || '{}') || {}; } catch(e){}
   const tokens = [];
@@ -165,6 +180,7 @@ function flatten(val){
 
 const ENTITY = {
   combat_v2:    { key: 'skt-combat-v1',    assemble: assembleCombat },
+  party_v2:     { key: 'skt-party-v1',      assemble: assembleParty },
   battlemap_v2: { key: 'skt-battlemap-v1', assemble: assembleBattlemap },
   notes_v3:     { key: 'skt-notes-v2',     assemble: assembleNotes },
 };
