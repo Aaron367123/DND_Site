@@ -72,9 +72,23 @@ registerPanel('encounter',{
     // A range test rather than an array, because that is what the book is.
     // Stepped table from the book: [maxCount, multiplier], last step open-ended.
     const steps = _R.encounterMultipliers || [[1,1],[2,1.5],[6,2],[10,2.5],[14,3],[null,4]];
-    const step = steps.find(([upto]) => upto == null || count <= upto);
-    const mult = step ? step[1] : 4;
-    return{raw:total,adjusted:Math.round(total*mult),mult,count};
+    let si = steps.findIndex(([upto]) => upto == null || count <= upto);
+    if (si < 0) si = steps.length - 1;
+    // DMG p.83, "Party Size": a party of fewer than three characters uses the
+    // next HIGHER multiplier, six or more the next LOWER. Only the count table
+    // was here, so a party of six read every fight as harder than the book
+    // says, and a duo read every fight as easier — in the direction that gets
+    // someone killed.
+    //
+    // Stepping below the first row is a real value, not a clamp: the book's
+    // own sidebar puts a single monster against six-plus characters at x0.5.
+    // Stepping above the last is not, so it clamps.
+    let si2 = si;
+    if (this._partySize < 3)       si2 = Math.min(steps.length - 1, si + 1);
+    else if (this._partySize >= 6) si2 = si - 1;
+    const mult = si2 < 0 ? 0.5 : steps[si2][1];
+    const sizeAdj = si2 === si ? 0 : (si2 > si ? 1 : -1);
+    return{raw:total,adjusted:Math.round(total*mult),mult,count,sizeAdj};
   },
   _difficulty(adjXP){
     const level=Math.min(Math.max(this._partyLevel,1),20)-1;
@@ -374,7 +388,11 @@ registerPanel('encounter',{
     const t = XP_THRESH[l] || XP_THRESH[0];
     return `<div class="enc-stat-grid">
             <div class="enc-stat-box"><div class="l">Raw XP</div><div class="v">${xp.raw.toLocaleString()}</div></div>
-            <div class="enc-stat-box"><div class="l">Adjusted XP (×${xp.mult})</div><div class="v">${xp.adjusted.toLocaleString()}</div></div>
+            <div class="enc-stat-box" title="${xp.sizeAdj
+              ? 'DMG p.83: a party of ' + (xp.sizeAdj > 0 ? 'fewer than three uses the next higher multiplier'
+                                                          : 'six or more uses the next lower multiplier')
+              : 'DMG Encounter Multipliers, by monster count'}"><div class="l">Adjusted XP (×${xp.mult}${
+              xp.sizeAdj ? (xp.sizeAdj > 0 ? ' ↑' : ' ↓') : ''})</div><div class="v">${xp.adjusted.toLocaleString()}</div></div>
             <div class="enc-stat-box"><div class="l">Difficulty</div><div class="v ${diff.cls}">${diff.label}</div></div>
             <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
           </div>

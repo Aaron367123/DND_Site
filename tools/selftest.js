@@ -739,6 +739,46 @@
     }
     closePanel('encounter');
 
+    // Encounter multipliers, including the party-size rule most tools skip.
+    openPanel('encounter'); await sleep(360);
+    {
+      const E = panelDefs.encounter;
+      const S0 = E._partySize, M0 = JSON.stringify(E._monsters);
+      const mult = (size, count) => {
+        E._partySize = size; E._monsters = [{ name:'X', cr:'1', count }];
+        return E._calcXP().mult;
+      };
+      const cases = [
+        [4, 1,  1,   'one monster'],
+        [4, 2,  1.5, 'two monsters'],
+        [4, 4,  2,   'three to six'],
+        [5, 8,  2.5, 'seven to ten'],
+        [4, 12, 3,   'eleven to fourteen'],
+        [4, 20, 4,   'fifteen or more'],
+      ];
+      cases.forEach(([sz, n, want, what]) => {
+        const got = mult(sz, n);
+        ok('xp mult: ' + what + ' is x' + want, got === want, 'got x' + got);
+      });
+      // DMG p.83 — the rule that was missing entirely.
+      const sizeCases = [
+        [6, 4,  1.5, 'six PCs step down'],
+        [7, 8,  2,   'seven PCs step down'],
+        [6, 1,  0.5, 'six PCs vs one monster go to x0.5'],
+        [2, 4,  2.5, 'two PCs step up'],
+        [1, 1,  1.5, 'a solo PC steps up'],
+        [2, 20, 4,   'stepping up clamps at x4'],
+        [3, 4,  2,   'three PCs are not adjusted'],
+        [5, 4,  2,   'five PCs are not adjusted'],
+      ];
+      sizeCases.forEach(([sz, n, want, what]) => {
+        const got = mult(sz, n);
+        ok('xp mult: ' + what, got === want, 'got x' + got);
+      });
+      E._partySize = S0; E._monsters = JSON.parse(M0);
+    }
+    closePanel('encounter');
+
     openPanel('shop'); await sleep(340);
     {
       const before = errs.length;
