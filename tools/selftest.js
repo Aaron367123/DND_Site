@@ -311,6 +311,89 @@
       }
     }
 
+    // 7b. restore actually brings the campaign back. This is the path that
+    // matters most on the worst day of the campaign's life, and nothing
+    // exercised it before.
+    if (window.sktBackup){
+      const B = sktBackup.snapshot();
+      const partyBefore = localStorage.getItem('skt-party-v1');
+      const zoomKey = 'skt-bm-view-v1', zoomVal = '{"p":"selftest","v":2.5}';
+
+      // Wreck it the way a bad session would.
+      const wrecked = JSON.parse(partyBefore); wrecked[0].hp = 1; wrecked.pop();
+      localStorage.setItem('skt-party-v1', JSON.stringify(wrecked));
+      localStorage.setItem('skt-npcs-v2', JSON.stringify([]));
+      localStorage.setItem('skt-selftest-stray-v1', 'junk');
+      localStorage.removeItem('skt-loot-v1');
+      localStorage.setItem(zoomKey, zoomVal);          // per-device, EXCLUDEd
+
+      let r = null;
+      try { r = await sktBackup.restore(B, { syncTimeoutMs: 300 }); }
+      catch(e){ ok('restore runs', false, e.message); }
+      if (r){
+        ok('restore runs', true);
+        const wrong = Object.keys(B.keys).filter(k => localStorage.getItem(k) !== B.keys[k]);
+        ok('restore returns every key byte-exact', wrong.length === 0, wrong.join(','));
+        ok('restore recovers a deleted key', localStorage.getItem('skt-loot-v1') != null);
+        ok('restore refills a wiped list',
+           JSON.parse(localStorage.getItem('skt-npcs-v2') || '[]').length > 0);
+        // Replace, don't merge - otherwise anything deleted before the backup
+        // was taken comes back to life.
+        ok('restore clears keys the file predates',
+           localStorage.getItem('skt-selftest-stray-v1') === null);
+        ok('restore leaves per-device keys alone', localStorage.getItem(zoomKey) === zoomVal);
+        ok('restore leaves no empty-string debris',
+           Object.keys(localStorage).filter(k => /^skt/.test(k)
+             && localStorage.getItem(k) === '').length === 0);
+      }
+      localStorage.removeItem(zoomKey);
+    }
+
+    // 7c. the rolling snapshots are the safety net nobody clicks. Two rings,
+    // newest KEEP of each, and timed snapshots must never push out the
+    // deliberate ones - those are the ones taken just before something risky.
+    if (window.sktBackup && window.sktBackup.autosave && window.indexedDB){
+      const A = sktBackup.autosave;
+      const bump = n => localStorage.setItem('skt-settings-v1', JSON.stringify(
+        Object.assign(JSON.parse(localStorage.getItem('skt-settings-v1')), { fontScale: 100 + n })));
+      try {
+        const w = await A.write('manual');
+        ok('autosave writes and returns an id', !!(w && w.id != null));
+        const seen = await A.list();
+        ok('autosave lists what it wrote', seen.some(x => x.id === (w && w.id)));
+        const got = w && await A.get(w.id);
+        ok('a snapshot carries a full payload',
+           !!(got && got.snap && got.snap.keys && Object.keys(got.snap.keys).length > 0));
+        if (got){
+          const pb = localStorage.getItem('skt-party-v1');
+          const p2 = JSON.parse(pb); p2[0].hp = 1;
+          localStorage.setItem('skt-party-v1', JSON.stringify(p2));
+          await sktBackup.restore(got.snap, { syncTimeoutMs: 200 });
+          ok('a snapshot is restorable', localStorage.getItem('skt-party-v1') === pb);
+        }
+        await A.write('auto');
+        ok('an unchanged auto snapshot is skipped', (await A.write('auto')) === null);
+
+        for (let i = 0; i < A.KEEP + 3; i++){ bump(i); await A.write('auto'); }
+        const l2 = await A.list();
+        ok('the auto ring caps at KEEP',
+           l2.filter(x => x.reason === 'auto').length === A.KEEP,
+           l2.filter(x => x.reason === 'auto').length + ' kept');
+        ok('timed snapshots do not evict deliberate ones',
+           l2.filter(x => x.reason !== 'auto').length > 0);
+
+        for (let i = 0; i < A.KEEP + 3; i++){ bump(100 + i); await A.write('manual'); }
+        const l3 = await A.list();
+        ok('the deliberate ring caps too (no unbounded disk)',
+           l3.filter(x => x.reason !== 'auto').length === A.KEEP,
+           l3.filter(x => x.reason !== 'auto').length + ' kept');
+        ok('deliberate snapshots do not evict the autos',
+           l3.filter(x => x.reason === 'auto').length === A.KEEP);
+      } catch(e){
+        ok('autosave ring', false, e.message);
+      }
+    }
+
     // 8. generated data present and the right shape
     ok('rules table loaded', !!(window.SKT_RULES && window.SKT_RULES.xpThresholds2014
          && window.SKT_RULES.xpThresholds2014.length === 20));
