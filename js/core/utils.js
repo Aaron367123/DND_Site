@@ -458,10 +458,30 @@ const SKT_ATTACK_PROPS = ['magical', 'silvered', 'adamantine'];
 function sktResistQualifiers(entry){
   const s = String(entry || '').toLowerCase();
   const need = [];
-  if (/non-?magical/.test(s)) need.push('magical');
-  if (/silver/.test(s))       need.push('silvered');
-  if (/adamantine/.test(s))   need.push('adamantine');
+  // "(from stoneskin)" is written on 27 stat blocks and means exactly the
+  // spell's own wording: resistance to NONMAGICAL bludgeoning, piercing and
+  // slashing. Unrecognised, it read as unconditional and halved magic weapons
+  // too.
+  if (/non-?magical|stoneskin/.test(s)) need.push('magical');
+  if (/silver/.test(s))                 need.push('silvered');
+  if (/adamantine/.test(s))             need.push('adamantine');
   return need;
+}
+
+// Conditions this matcher cannot evaluate — lighting, the attacker's alignment,
+// a specific weapon. An entry carrying one is applied in full, because that is
+// what it said before anything understood qualifiers at all and quietly
+// dropping a monster's defence would be worse. But the DM is told, so a call
+// that is actually theirs to make does not pass as arithmetic.
+//
+// Only fires when conditional language is present AND no qualifier was
+// recognised, so the ordinary "from nonmagical attacks" entries stay silent.
+const SKT_RESIST_COND_RE = /\b(?:from|while|wielded|except|unless|made with|that aren't|that are)\b/;
+function sktResistCaveat(entry){
+  const s = String(entry || '').toLowerCase().trim();
+  if (!s || !SKT_RESIST_COND_RE.test(s)) return '';
+  if (sktResistQualifiers(s).length) return '';
+  return s;
 }
 
 // Does `entry` apply to `dmgType` delivered by an attack with `attack`
@@ -478,6 +498,18 @@ function sktResistApplies(entry, dmgType, attack){
 }
 
 // Convenience: does any entry in the list apply?
+// The entry that actually matched, so a caller can explain itself. Same walk
+// as sktAnyResistApplies; that one is kept because most callers only want the
+// boolean.
+function sktFirstResistApplying(arr, dmgType, attack){
+  if (!Array.isArray(arr)) return null;
+  for (const x of arr){
+    const e = (typeof x === 'string' ? x : (x && (x.resist || x.immune || x.vulnerable || x.name)) || '');
+    if (sktResistApplies(e, dmgType, attack)) return e;
+  }
+  return null;
+}
+
 function sktAnyResistApplies(arr, dmgType, attack){
   return Array.isArray(arr) && arr.some(x => sktResistApplies(
     (typeof x === 'string' ? x : (x && (x.resist || x.immune || x.vulnerable || x.name)) || ''),

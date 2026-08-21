@@ -506,6 +506,32 @@
       ok('dmg: resistance applies before temp hp', state.party[0].tempHp === 90,
          'temp ' + state.party[0].tempHp);
 
+      // Qualifiers this matcher cannot evaluate. "(from stoneskin)" IS
+      // modellable — it is the spell's own nonmagical wording — and was being
+      // read as unconditional, halving magic weapons on 28 stat blocks. The
+      // rest (lighting, the attacker's alignment, a named weapon) still apply
+      // in full, but the DM is told which condition to check.
+      {
+        const SS = ['bludgeoning, piercing, slashing (from stoneskin)'];
+        const lastLog = () => { const l = state.combatLog || []; return l.length ? l[l.length-1].text : ''; };
+        const shot = (facets, type, magical) => {
+          state.combatants = [Object.assign({ id:'st_x', name:'Thing', hp:100, hpMax:100, isPC:false }, facets)];
+          const pv = C._lastAtkProp; C._lastAtkProp = magical ? 'magical' : null;
+          C._applyHpDelta(0, -20, type); C._lastAtkProp = pv;
+          return { took: 100 - state.combatants[0].hp, log: lastLog() };
+        };
+        ok('stoneskin halves a mundane weapon', shot({_resist:SS},'slashing',false).took === 10);
+        ok('stoneskin does NOT halve a magic weapon', shot({_resist:SS},'slashing',true).took === 20,
+           'took ' + shot({_resist:SS},'slashing',true).took);
+        const dim = shot({_resist:['bludgeoning, piercing, slashing while in dim light or darkness']},'slashing',false);
+        ok('an unevaluable condition still applies', dim.took === 10);
+        ok('...and says which condition to check', /check: .*dim light/.test(dim.log), dim.log.slice(-60));
+        ok('an ordinary resistance stays quiet',
+           !/check:/.test(shot({_resist:['fire']},'fire',false).log));
+        ok('a nonmagical qualifier stays quiet',
+           !/check:/.test(shot({_resist:["bludgeoning, piercing, slashing from nonmagical attacks"]},'slashing',false).log));
+      }
+
       // Multi-part: a dragon's bite is piercing PLUS fire, and each part
       // resolves its own resistance. Passing the sum under one label applied
       // the wrong resistance to the whole thing.

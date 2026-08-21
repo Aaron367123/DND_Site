@@ -382,13 +382,13 @@
      bestiaryPortraitPath). Must load before anything renders a portrait. -->
 <script defer src="js/generated/token-index.js?v=e043a461be"></script>
 <!-- 2. Pure utilities (no deps) -->
-<script defer src="js/core/utils.js?v=c0048acff0"></script>
+<script defer src="js/core/utils.js?v=81d99e3852"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/core/state.js?v=9fa4df5c19"></script>
 <!-- 4. Window manager (depends on state) -->
 <script defer src="js/core/window-manager.js?v=2d4dbcfede"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=03241b33b5"></script>
+<script defer src="js/panels/combat.js?v=c6af9aaec1"></script>
 <script defer src="js/panels/attacks.js?v=cbee1aeeb4"></script>
 <!-- Turn View reads combat, attacks and battlemap through panelDefs at call
      time, so load order only has to put it among the panels. -->

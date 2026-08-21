@@ -1666,11 +1666,23 @@ registerPanel('combat',{
         // hand is gone, so at rest this is empty and the attack reads as plain.
         const atk = this._lastAtkProp ? { [this._lastAtkProp]: true } : {};
         const has = (arr) => sktAnyResistApplies(arr, t, atk);
+        // Some stat blocks gate a resistance on something this code cannot
+        // evaluate — the lighting, the attacker's alignment, a named weapon.
+        // Those are applied in full (dropping a monster's defence silently
+        // would be worse) but the DM is told which condition to check, so a
+        // ruling that is theirs to make does not pass as arithmetic.
+        const cav = (...arrs) => {
+          for (const a of arrs){
+            const e = sktFirstResistApplying(a, t, atk);
+            if (e){ const c = sktResistCaveat(e); if (c) return ' · check: ' + c; }
+          }
+          return '';
+        };
         const ragingBPS = partySlot?.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
         if (c.isPC){
           if (has(partySlot?.immunities) || has(ws?.immunities)){
             remaining = 0;
-            typeSuffix = ` (${dmgType} — immune${ws ? ' [beast]' : ''})`;
+            typeSuffix = ` (${dmgType} — immune${ws ? ' [beast]' : ''})` + cav(partySlot?.immunities, ws?.immunities);
           } else if (has(partySlot?.resistances) || has(ws?.resistances) || ragingBPS){
             // ceil, NOT floor, and that is deliberate: `remaining` here is a
             // NEGATIVE delta, so rounding the DAMAGE down means rounding this
@@ -1678,10 +1690,10 @@ registerPanel('combat',{
             // party.js works with a positive amount and correctly uses floor —
             // the two look inconsistent and are not.
             remaining = Math.ceil(remaining / 2);
-            typeSuffix = ` (${dmgType} — ${ragingBPS ? 'rage resist' : has(ws?.resistances) ? 'beast resist' : 'resisted'}, ½)`;
+            typeSuffix = ` (${dmgType} — ${ragingBPS ? 'rage resist' : has(ws?.resistances) ? 'beast resist' : 'resisted'}, ½)` + cav(partySlot?.resistances, ws?.resistances);
           } else if (has(partySlot?.vulnerabilities) || has(ws?.vulnerabilities)){
             remaining = remaining * 2;
-            typeSuffix = ` (${dmgType} — vulnerable, ×2${has(ws?.vulnerabilities) ? ' [beast]' : ''})`;
+            typeSuffix = ` (${dmgType} — vulnerable, ×2${has(ws?.vulnerabilities) ? ' [beast]' : ''})` + cav(partySlot?.vulnerabilities, ws?.vulnerabilities);
           } else {
             typeSuffix = ` (${dmgType})`;
           }
@@ -1706,7 +1718,7 @@ registerPanel('combat',{
           }
           if (has(src._immune)){
             remaining = 0;
-            typeSuffix = ` (${dmgType} — immune)`;
+            typeSuffix = ` (${dmgType} — immune)` + cav(src._immune);
           } else if (has(src._resist)){
             // ceil, NOT floor, and that is deliberate: `remaining` here is a
             // NEGATIVE delta, so rounding the DAMAGE down means rounding this
@@ -1714,10 +1726,10 @@ registerPanel('combat',{
             // party.js works with a positive amount and correctly uses floor —
             // the two look inconsistent and are not.
             remaining = Math.ceil(remaining / 2);
-            typeSuffix = ` (${dmgType} — resisted, ½)`;
+            typeSuffix = ` (${dmgType} — resisted, ½)` + cav(src._resist);
           } else if (has(src._vulnerable)){
             remaining = remaining * 2;
-            typeSuffix = ` (${dmgType} — vulnerable, ×2)`;
+            typeSuffix = ` (${dmgType} — vulnerable, ×2)` + cav(src._vulnerable);
           } else {
             typeSuffix = ` (${dmgType})`;
           }
