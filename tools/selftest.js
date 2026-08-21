@@ -582,6 +582,62 @@
       state.activeCombatantId = A0; save();
     }
 
+    // 7g. Names are rendered into HTML all over the app, and anything with a
+    // Firebase connection can write one — the DM's other tab, a player's
+    // phone, a restored backup. Escaping has to hold in BOTH contexts: as text
+    // between tags, and inside value="..." where only a quote can break out.
+    {
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants);
+      const A0 = state.activeCombatantId;
+      const TEXT = '<i class="sktxss">x</i>';        // becomes an element if unescaped
+      const ATTR = '" data-sktpwn="1';               // breaks out of an attribute
+      const PANELS7 = ['party','combat','turnview','attacks','battlemap','loot','npclib'];
+      const seed = nm => {
+        state.party = [{ id:'st_x', name:nm, cls:'fighter', hp:10, hpMax:10, ac:12, conditions:[nm] }];
+        state.combatants = [{ id:'st_x', name:nm, isPC:true, hp:10, hpMax:10, ac:12,
+                              initiative:10, conditions:[nm], concentration:nm }];
+        state.activeCombatantId = 'st_x'; save();
+      };
+      const sweep = async sel => {
+        const bad = [];
+        for (const id of PANELS7){
+          try { closePanel(id); } catch(e){}
+          try { openPanel(id); } catch(e){ continue; }
+          await sleep(230);
+          const d = panelDefs[id];
+          if (d && d._body && d._body.querySelectorAll(sel).length) bad.push(id);
+          closePanel(id);
+        }
+        return bad;
+      };
+      seed(TEXT);
+      const asText = await sweep('.sktxss');
+      ok('a name containing HTML is escaped as text', asText.length === 0, asText.join(', '));
+      seed(ATTR);
+      const asAttr = await sweep('[data-sktpwn]');
+      ok('a name containing a quote cannot break out of an attribute',
+         asAttr.length === 0, asAttr.join(', '));
+
+      // Positive control: the panels really did render the character, so the
+      // two checks above are not passing because nothing was on screen.
+      seed('PlainBob');
+      try { closePanel('party'); } catch(e){}
+      openPanel('party'); await sleep(380);
+      ok('the injection sweep actually rendered the character',
+         /PlainBob/.test(panelDefs.party._body.innerHTML));
+
+      // ...and escaping must not corrupt the stored value.
+      seed(ATTR);
+      panelDefs.party._render(); await sleep(300);
+      const inp = panelDefs.party._body.querySelector('.char-name');
+      ok('an escaped name round-trips through the editor unchanged',
+         !!inp && inp.value === ATTR, inp ? inp.value : 'no input');
+      closePanel('party');
+
+      state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
+      state.activeCombatantId = A0; save();
+    }
+
     // 8. generated data present and the right shape
     ok('rules table loaded', !!(window.SKT_RULES && window.SKT_RULES.xpThresholds2014
          && window.SKT_RULES.xpThresholds2014.length === 20));
