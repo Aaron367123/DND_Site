@@ -437,6 +437,59 @@
       }
     }
 
+    // 7d. Treasure tables. A d100 table with a gap silently rolls nothing, and
+    // one with an overlap makes later rows unreachable — both are invisible in
+    // play, you just never see that result. Hand-entered game data has already
+    // been wrong once in this repo (19 of 20 encounter threshold rows), so the
+    // invariant is worth pinning rather than trusting.
+    if (panelDefs.loot && typeof panelDefs.loot._ensureLootTables === 'function'){
+      let T = null;
+      try { T = await panelDefs.loot._ensureLootTables(); } catch(e){}
+      ok('treasure tables load', !!T);
+      if (T){
+        const broken = [];
+        let tables = 0;
+        const cover = (rows, label) => {
+          if (!Array.isArray(rows) || !rows.length) return;
+          if (typeof rows[0] !== 'object') return;      // a plain name list, not a roll table
+          tables++;
+          const hits = new Array(101).fill(0);
+          rows.forEach(r => {
+            const lo = r.min != null ? r.min : 1, hi = r.max != null ? r.max : lo;
+            for (let n = lo; n <= hi; n++) if (n >= 1 && n <= 100) hits[n]++;
+          });
+          for (let n = 1; n <= 100; n++){
+            if (hits[n] !== 1){ broken.push(label + ' @' + n + (hits[n] ? ' overlap' : ' gap')); break; }
+          }
+        };
+        ['individual','hoard','dragon'].forEach(k => (T[k] || []).forEach(b => {
+          cover(b.table, k + '/' + (b.name || ''));
+          (b.table || []).forEach((r, i) => ['gems','artObjects','magicItems'].forEach(sub => {
+            if (r[sub] && Array.isArray(r[sub].table)) cover(r[sub].table, k + ' row' + i + ' ' + sub);
+          }));
+        }));
+        (T.magicItems || []).forEach((t, i) => cover(t.table, 'magicItems[' + i + ']'));
+        ok('every d100 treasure table covers 1-100 exactly once (' + tables + ' tables)',
+           broken.length === 0, broken.slice(0, 4).join('; '));
+
+        // Every dice expression in the file must parse. loot has its own
+        // parser (it needs "2d6*100", which sktRollDice does not do) and an
+        // unparseable string returns 0 rather than throwing.
+        const exprs = new Set();
+        (function walk(v){
+          if (typeof v === 'string'){ if (/\d\s*d\s*\d/i.test(v)) exprs.add(v); return; }
+          if (Array.isArray(v)) return v.forEach(walk);
+          if (v && typeof v === 'object') return Object.values(v).forEach(walk);
+        })(T);
+        const dead = [...exprs].filter(e => {
+          for (let i = 0; i < 200; i++) if (panelDefs.loot._rollDice(e) !== 0) return false;
+          return true;    // always zero across 200 rolls = a parse failure, not luck
+        });
+        ok('every treasure dice expression parses (' + exprs.size + ' distinct)',
+           dead.length === 0, dead.slice(0, 4).join(', '));
+      }
+    }
+
     // 8. generated data present and the right shape
     ok('rules table loaded', !!(window.SKT_RULES && window.SKT_RULES.xpThresholds2014
          && window.SKT_RULES.xpThresholds2014.length === 20));
