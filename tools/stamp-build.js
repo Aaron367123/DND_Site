@@ -33,7 +33,21 @@ const SW   = path.join(ROOT, 'sw.js');
 const LOADER = path.join(ROOT, 'js', 'content', 'data-loader.js');
 const CHECK_ONLY = process.argv.includes('--check');
 
-const hash = buf => crypto.createHash('sha1').update(buf).digest('hex').slice(0, 10);
+// Hash the CONTENT, not the bytes on this particular disk.
+//
+// .gitattributes normalises to LF in the repo while core.autocrlf hands Windows
+// a CRLF working tree, so the same commit hashes differently depending on who
+// checked it out. That made the stamps machine-specific: a fresh clone would
+// disagree with every ?v= in the committed HTML, and because verify-assets
+// gates the pre-push hook, a clean clone could not push at all. Dropping CR
+// before hashing makes the stamp identical everywhere while still changing
+// whenever the content genuinely does — the only property a cache key needs.
+// The served bytes never had to equal this value.
+const CR = String.fromCharCode(13);
+const stripCR = b => Buffer.from(b.toString('binary').split(CR).join(''), 'binary');
+const hash = buf => crypto.createHash('sha1')
+  .update(stripCR(Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf))))
+  .digest('hex').slice(0, 10);
 
 function main(){
   let html = fs.readFileSync(HTML, 'utf8');

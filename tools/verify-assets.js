@@ -35,7 +35,13 @@ function check(){
       const target = path.join(ROOT, ref);
       if (!fs.existsSync(target)){ problems.push(page + ' -> ' + ref + ' (file does not exist)'); continue; }
       if (!ver){ problems.push(ref + ' has no ?v= — edits to it will be served stale'); continue; }
-      const hash = crypto.createHash('sha1').update(fs.readFileSync(target)).digest('hex');
+      // Same normalisation as tools/stamp-build.js — see the note there. These
+      // two must agree exactly, or the check fails on any clone whose line
+      // endings differ from the machine that stamped.
+      const CR = String.fromCharCode(13);
+      const raw = fs.readFileSync(target);
+      const norm = Buffer.from(raw.toString('binary').split(CR).join(''), 'binary');
+      const hash = crypto.createHash('sha1').update(norm).digest('hex');
       if (!hash.startsWith(ver)){
         problems.push(ref + ' is stamped ?v=' + ver + ' but hashes to ' + hash.slice(0, ver.length)
                       + ' — run: node tools/stamp-build.js');
