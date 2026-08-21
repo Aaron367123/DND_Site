@@ -66,7 +66,7 @@ const CHROME_CANDIDATES = [
 // ── Args ──────────────────────────────────────────────────────────────────
 function parseArgs(argv){
   const a = { preset:'desktop', url:null, out:null, full:false, wait:800,
-              evalJs:null, seed:null, ready:null, tour:false, player:false, size:null,
+              evalJs:null, evalFile:null, seed:null, ready:null, tour:false, player:false, size:null,
               touch:null, state:null };
   for (let i = 0; i < argv.length; i++){
     const k = argv[i];
@@ -76,6 +76,9 @@ function parseArgs(argv){
     else if (k === '--size')   a.size   = argv[++i];
     else if (k === '--wait')   a.wait   = parseInt(argv[++i], 10) || 0;
     else if (k === '--eval')   a.evalJs = argv[++i];
+    // --eval-file keeps big batteries (tools/selftest.js) off the command
+    // line; Windows caps a command at ~32KB and the suite is past that.
+    else if (k === '--eval-file') a.evalFile = argv[++i];
     else if (k === '--seed')   a.seed   = argv[++i];
     else if (k === '--state')  a.state  = argv[++i];
     else if (k === '--ready')  a.ready  = argv[++i];
@@ -99,6 +102,7 @@ function usage(){
   console.log('  --state F  load a Settings → Export backup as the starting state');
   console.log('  --seed JS  runs BEFORE page scripts (use for localStorage setup)');
   console.log('  --eval JS  runs AFTER load (use to open panels, click things)');
+  console.log('  --eval-file F  same, read from a file (no command-line size cap)');
   console.log('  --ready JS poll until truthy before shooting (default: workspace built)');
   console.log('  --tour     keep the onboarding overlay (suppressed by default)');
 }
@@ -391,6 +395,10 @@ function findChrome(){
     }
     await sleep(a.wait);
 
+    if (a.evalFile && !a.evalJs){
+      try { a.evalJs = require('fs').readFileSync(a.evalFile, 'utf8'); }
+      catch(e){ console.error('[shot] --eval-file: ' + e.message); process.exit(2); }
+    }
     if (a.evalJs){
       const r = await cdp.send('Runtime.evaluate', {
         expression: a.evalJs, awaitPromise: true, returnByValue: true,
