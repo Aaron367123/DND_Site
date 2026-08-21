@@ -32,7 +32,9 @@ if (!fs.existsSync(state)){
 }
 
 const MODES = [
-  { name: 'dm',     extra: [] },
+  // DM mode waits for the bestiary: the damage checks resolve a real Deva and
+  // Werewolf out of _5eData, and without it they would quietly skip.
+  { name: 'dm',     extra: ['--ready', "typeof _5eLoaded !== 'undefined' && _5eLoaded"] },
   { name: 'player', extra: ['--player'] },
   { name: 'mobile', extra: ['--preset', 'mobile'] },
 ].filter(m => !only || m.name === only);

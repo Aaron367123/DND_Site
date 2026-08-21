@@ -509,6 +509,37 @@
       ok('dmg: manual mundane is still shrugged off', mundane === 0, 'took ' + mundane);
       ok('dmg: manual magical lands in full', magicked === 14, 'took ' + magicked);
 
+      // End to end on real bestiary data: stat-block text -> magical flag ->
+      // qualifier match -> damage. Every link is tested above in isolation;
+      // this is the one that proves they are wired to each other. A Deva's
+      // mace must get past a Werewolf, a mundane club must not.
+      if (typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded){
+        const all = Array.from(_5eData || []);
+        const deva = all.find(m => String(m.name).toLowerCase() === 'deva');
+        const wolf = all.find(m => String(m.name).toLowerCase() === 'werewolf');
+        ok('5e: found a Deva and a Werewolf to test with', !!(deva && wolf));
+        if (deva && wolf && deva._raw){
+          ok('5e: the Deva reads as having magical attacks',
+             panelDefs.attacks._parsed(deva._raw).magical === true);
+          state.combatants = [{ id:'st_w', name:'Werewolf', hp:58, hpMax:58,
+                                isPC:false, _immune: wolf._immune }];
+          const prevProp = C._lastAtkProp;
+          C._lastAtkProp = 'magical';
+          C._applyHpDelta(0, -12, 'bludgeoning');
+          const magicked = 58 - state.combatants[0].hp;
+          state.combatants[0].hp = 58;
+          C._lastAtkProp = null;
+          C._applyHpDelta(0, -12, 'bludgeoning');
+          const mundane = 58 - state.combatants[0].hp;
+          C._lastAtkProp = prevProp;
+          ok('5e: a magical attack gets past the Werewolf', magicked === 12, 'took ' + magicked);
+          ok('5e: a mundane one does not', mundane === 0, 'took ' + mundane);
+        }
+      } else {
+        ok('5e: bestiary loaded for the end-to-end damage check', false,
+           'run via tools/selftest-run.js, which waits for _5eLoaded');
+      }
+
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
       state.activeCombatantId = A0; save();
       closePanel('turnview'); closePanel('combat');
