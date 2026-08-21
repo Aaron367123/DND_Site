@@ -175,6 +175,29 @@
       _dirtyKeys.clear();
     }
 
+    // 4b. an atomic key must never be field-merged. The prompt is one question
+    // bound to one answer: merging p1-with-an-answer against a freshly
+    // published p2 would take `id` from the server and `answer` from us, and
+    // the DM would spend the wrong character's reaction on the wrong attack.
+    {
+      const P = 'skt-prompt-v1';
+      const p1 = { id:'p1', ts:1000, label:'Claw',  target:{id:'zoey',name:'Zoey'},
+                   dmg:11, offers:[{pcId:'zoey',key:'shield'}], answer:null };
+      const p2 = { id:'p2', ts:2000, label:'Bite',  target:{id:'namroc',name:'Namroc'},
+                   dmg:7,  offers:[{pcId:'namroc',key:'absorb'}], answer:null };
+      const answered = Object.assign({}, p1,
+        { answer:{ pcId:'zoey', who:'Zoey', key:'shield', at:1500 } });
+      _lastServer[P] = JSON.stringify(p1);
+      _remoteUpdate = true; localStorage.setItem(P, JSON.stringify(answered)); _remoteUpdate = false;
+      _dirtyKeys.add(P);
+      _applyRemoteKey(P, JSON.stringify(p2));
+      const got = JSON.parse(localStorage.getItem(P) || 'null');
+      ok('prompt is taken whole, never field-merged',
+         got && got.id === 'p2' && got.answer == null,
+         'got id=' + (got && got.id) + ' answer=' + JSON.stringify(got && got.answer));
+      _dirtyKeys.clear();
+    }
+
     // 5. sync bookkeeping never strands
     ok('conflict dialog is gone',
        typeof _renderConflictBar === 'undefined' && !document.getElementById('rt-conflict-bar'));

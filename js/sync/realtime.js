@@ -550,6 +550,25 @@ function _flushDirtyKeys() {
 // id, treat scalar arrays as sets.
 const _lastServer = {};   // key -> last value we know the server held
 
+// Keys whose value is ONE indivisible fact. Field-wise merging is not just
+// unnecessary for these, it is wrong: it can assemble a record that neither
+// side ever held.
+//
+// skt-prompt-v1 is the whole of it today. A reaction prompt is one question
+// and one answer, bound together. The DM rolls a second attack, which clears
+// the prompt and publishes p2, at the moment a player taps their answer to
+// p1 — merge the two and `id` comes from the server (p2, it changed) while
+// `answer` comes from us (the server's is still null, so ours looks like the
+// only edit). The result is question p2 carrying p1's answer, and the DM's
+// staleness guard cannot see it: it compares p.id against _promptId, and the
+// id says p2. It would spend the wrong character's reaction against an attack
+// aimed at somebody else.
+//
+// Atomic keys take the remote value whole, which is what this key did before
+// merging existed. Add a key here when its fields are only meaningful
+// together.
+const _ATOMIC_KEYS = new Set(['skt-prompt-v1']);
+
 function _idOf(o){
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
   if (o.id != null) return 'id:' + o.id;
@@ -712,7 +731,7 @@ function _applyRemoteKey(key, fbVal) {
   // had nothing to add, and the flag is cleared (below) so we don't push bytes
   // the node already holds.
   let applyVal = fbVal, mergedOurs = false;
-  if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1'){
+  if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1' && !_ATOMIC_KEYS.has(key)){
     const localVal = localStorage.getItem(key);
     if (localVal != null && localVal !== fbVal){
       applyVal = _mergeJsonStr(_lastServer[key], localVal, fbVal);
