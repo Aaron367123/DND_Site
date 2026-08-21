@@ -198,6 +198,30 @@
       _dirtyKeys.clear();
     }
 
+    // 4c. a regenerated shop must not keep the old stock. Its inventory has
+    // duplicate item names, so the array is unkeyable and a field-wise merge
+    // reverts the stock while keeping the new keeper.
+    {
+      const SH = 'skt-shop-v1', s0 = localStorage.getItem(SH);
+      if (s0){
+        const regen  = JSON.parse(s0);
+        regen.keeper = 'Dorn'; regen.name = 'Ironhand Supply';
+        regen.inventory = [{ name:'New Blade', price:15 }, { name:'New Rope', price:1 }];
+        const edited = JSON.parse(s0);
+        if (edited.inventory && edited.inventory[0]) edited.inventory[0].bought = true;
+        _lastServer[SH] = s0;
+        _remoteUpdate = true; localStorage.setItem(SH, JSON.stringify(regen)); _remoteUpdate = false;
+        _dirtyKeys.add(SH);
+        _applyRemoteKey(SH, JSON.stringify(edited));
+        const g = JSON.parse(localStorage.getItem(SH));
+        const names = (g.inventory || []).map(i => i.name);
+        const mixed = g.keeper === 'Dorn' && !names.some(n => /^New /.test(n));
+        ok('shop never mixes a new keeper with the old stock', !mixed,
+           'keeper=' + g.keeper + ' stock=' + names.slice(0, 2).join(','));
+        _dirtyKeys.clear();
+      }
+    }
+
     // 5. sync bookkeeping never strands
     ok('conflict dialog is gone',
        typeof _renderConflictBar === 'undefined' && !document.getElementById('rt-conflict-bar'));

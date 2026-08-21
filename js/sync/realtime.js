@@ -564,10 +564,26 @@ const _lastServer = {};   // key -> last value we know the server held
 // id says p2. It would spend the wrong character's reaction against an attack
 // aimed at somebody else.
 //
-// Atomic keys take the remote value whole, which is what this key did before
+// skt-shop-v1 is the same argument with a different surface. A shop is one
+// GENERATED thing — name, keeper, tone, aesthetic, quirks and stock all come
+// out of a single roll — so a regeneration replaces all of it at once. Merging
+// it field-wise mixes two shops, and here it does so badly: a shop may
+// legitimately stock two "Splint Armor", duplicate keys make the inventory
+// unkeyable, and an array the merge cannot key resolves wholesale to the
+// remote copy. So a regenerated shop keeps its new keeper and name while
+// silently reverting to the OLD stock. Measured on the live shop, not
+// theorised: 18 items, "Splint Armor" twice.
+//
+// Atomic keys take the remote value whole, which is what both keys did before
 // merging existed. Add a key here when its fields are only meaningful
 // together.
-const _ATOMIC_KEYS = new Set(['skt-prompt-v1']);
+//
+// Known and left alone: skt-settings-v1.healthTiers is six anonymous records,
+// so it degrades the same way — but only when BOTH sides edit it (otherwise
+// base===mine or base===theirs short-circuits first), it is one sub-array of
+// an otherwise well-merging key, and two people retuning health tiers at the
+// same instant is not a thing that happens.
+const _ATOMIC_KEYS = new Set(['skt-prompt-v1', 'skt-shop-v1']);
 
 function _idOf(o){
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
