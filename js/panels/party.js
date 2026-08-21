@@ -2401,7 +2401,15 @@ registerPanel('party',{
       {title:'Spend hit die', confirmLabel:'Roll & Heal'}).then(ok => {
         if (!ok) return;
         const roll = sktD(sides);
-        const heal = Math.max(1, roll + conMod); // house rule: RAW floor is 0
+        // Minimum 1, where the PHB says minimum 0. A deliberate table ruling,
+        // confirmed and kept — spending a die and healing nothing is a bad
+        // beat nobody enjoys. It can only differ for a character with a
+        // NEGATIVE Con modifier (roll + mod <= 0), so at CON 8 on a natural 1
+        // and not otherwise; every current party member is at +2 or better,
+        // where it can never fire at all.
+        // Recorded rather than left as a bare "house rule" note so the next
+        // pass over the rest rules does not raise it again.
+        const heal = Math.max(1, roll + conMod);
         c.hitDice.current -= 1;
         // Same cap expression as the heal path in _applyHpDelta. This used
         // c.hpMax directly, so a character with no hpMax recorded got
