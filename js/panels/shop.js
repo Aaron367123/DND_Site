@@ -531,7 +531,16 @@ registerPanel('shop',{
     setTimeout(()=>sym.focus(),30);
   },
   _renderDisplay(){
-    if(!state.shop)return'<div class="empty-state">Configure settings and click Generate Shop.</div>';
+    // A shop object that is missing the fields the render needs is not a shop.
+    // `!state.shop` alone let an empty object through — {} is truthy — and the
+    // render then read s.meta.economy off undefined and threw, which takes the
+    // whole panel down: no shop, no controls, no way back short of a reload.
+    // An empty object is not exotic either. It is what a partial sync, a
+    // restore from a backup written before a field existed, or a hand-edited
+    // key all look like.
+    const _shopIsUsable = s => !!(s && typeof s === 'object' && !Array.isArray(s)
+      && s.meta && Array.isArray(s.inventory) && Array.isArray(s.quirks));
+    if(!_shopIsUsable(state.shop))return'<div class="empty-state">Configure settings and click Generate Shop.</div>';
     const s=state.shop;
     const inv = s.inventory || [];
     const limit = Math.max(0, Math.min(this._invLimit || 20, inv.length));

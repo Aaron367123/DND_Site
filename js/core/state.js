@@ -90,12 +90,18 @@ function loadDomain(domain){
   try{
     if(domain==='party'){
       const r=localStorage.getItem(PARTY_KEY);
-      if(r){const a=JSON.parse(r);if(Array.isArray(a))state.party=a;}
+      // Drop null/non-object entries on the way in. A single null in the array
+      // is not a character anyone can lose, but it takes the whole panel down:
+      // _pruneTransientState maps p.id over every member on every render, so
+      // the party screen throws before it draws. Filtering here rather than at
+      // that one call site fixes every consumer at once — there are dozens
+      // that assume a member is an object.
+      if(r){const a=JSON.parse(r);if(Array.isArray(a))state.party=a.filter(p=>p&&typeof p==='object');}
       migratePartySpellSlots();
       reconcilePcHp();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
-      if(r){const d=JSON.parse(r);if(Array.isArray(d.combatants))state.combatants=d.combatants;if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;}
+      if(r){const d=JSON.parse(r)||{};if(Array.isArray(d.combatants))state.combatants=d.combatants.filter(c=>c&&typeof c==='object');if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;}
       reconcilePcHp();
     }else if(domain==='shop'){
       const r=localStorage.getItem(SHOP_KEY);

@@ -490,6 +490,48 @@
       }
     }
 
+    // 7e. Malformed state must not take a panel down. A key can arrive empty,
+    // truncated or the wrong shape from a partial sync, a restore written
+    // before a field existed, or a hand-edited backup - and a panel that
+    // throws on mount is gone for the session with no way back but a reload.
+    {
+      const KEYS = ['skt-party-v1','skt-combat-v1','skt-shop-v1','skt-settings-v1',
+        'skt-battlemap-v1','skt-enc-v1','skt-loot-v1','skt-notes-v2','skt-npcs-v2','skt-bestiary-v1'];
+      const OWNER = { 'skt-party-v1':'party','skt-combat-v1':'combat','skt-shop-v1':'shop',
+        'skt-settings-v1':'combat','skt-battlemap-v1':'battlemap','skt-enc-v1':'encounter',
+        'skt-loot-v1':'loot','skt-notes-v2':'notes','skt-npcs-v2':'npclib','skt-bestiary-v1':'bestiary' };
+      const BAD = { 'empty string':'', 'null literal':'null', 'empty object':'{}',
+        'empty array':'[]', 'garbage':'{not json', 'wrong type':'\u0022a string\u0022',
+        'nulls inside':'[null,null]' };
+      const before = {}; KEYS.forEach(k => before[k] = localStorage.getItem(k));
+      const casualties = [];
+      for (const k of KEYS){
+        for (const label of Object.keys(BAD)){
+          const seen = [];
+          const h = e => seen.push(e.message);
+          window.addEventListener('error', h);
+          try {
+            _remoteUpdate = true; localStorage.setItem(k, BAD[label]); _remoteUpdate = false;
+            ['party','combat','shop','settings'].forEach(d => { try { loadDomain(d); } catch(e){} });
+            const id = OWNER[k];
+            try { closePanel(id); } catch(e){}
+            try { openPanel(id); } catch(e){ casualties.push(k + ' + ' + label + ' threw'); }
+            await sleep(130);
+            const d = panelDefs[id];
+            if (!d || !d._body || !d._body.children.length) casualties.push(k + ' + ' + label + ' empty');
+            else if (seen.length) casualties.push(k + ' + ' + label + ' ' + seen[0].slice(0, 40));
+          } finally { window.removeEventListener('error', h); }
+        }
+        _remoteUpdate = true; localStorage.setItem(k, before[k]); _remoteUpdate = false;
+      }
+      _remoteUpdate = true;
+      KEYS.forEach(k => { if (before[k] != null) localStorage.setItem(k, before[k]); });
+      _remoteUpdate = false;
+      ['party','combat','shop','settings'].forEach(d => { try { loadDomain(d); } catch(e){} });
+      ok('every panel survives malformed state (' + (KEYS.length * Object.keys(BAD).length) + ' combinations)',
+         casualties.length === 0, casualties.slice(0, 5).join('; '));
+    }
+
     // 8. generated data present and the right shape
     ok('rules table loaded', !!(window.SKT_RULES && window.SKT_RULES.xpThresholds2014
          && window.SKT_RULES.xpThresholds2014.length === 20));
