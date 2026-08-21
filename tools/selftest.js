@@ -74,6 +74,38 @@
   // ══════════════════════════════════════════════════════════ DM / desktop
   if (MODE === 'dm'){
 
+    // 0. Preconditions. Every check below is only as good as the data it runs
+    // against, and several of them pass for free when that data is missing.
+    // The spell-slot check read "6 checked" one morning and "0 checked" that
+    // afternoon — still printing pass — because the migration had run and the
+    // pools no longer existed. Assert the bench is loaded before trusting a
+    // single green line from it.
+    {
+      const party = JSON.parse(localStorage.getItem('skt-party-v1') || '[]');
+      const combat = JSON.parse(localStorage.getItem('skt-combat-v1') || '{}');
+      const map = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+      const notes = JSON.parse(localStorage.getItem('skt-notes-v2') || '{}');
+      const shop = JSON.parse(localStorage.getItem('skt-shop-v1') || '{}');
+      const pools = party.reduce((n, c) => n +
+        (c.resources || []).filter(r => /^Spell Slots L\d$/.test(r.name || '')).length, 0);
+      const inv = (shop.inventory || []).map(i => i.name);
+      const need = [
+        ['at least 2 party members',        party.length >= 2],
+        ['spell-slot pools to migrate',     pools > 0],
+        ['at least 2 combatants',           (combat.combatants || []).length >= 2],
+        ['a monster in the fight',          (combat.combatants || []).some(c => !c.isPC)],
+        ['a qualifier-gated immunity',      (combat.combatants || []).some(c =>
+                                              (c._immune || []).some(x => /nonmagical/i.test(x)))],
+        ['at least 2 map tokens',           (map.tokens || []).length >= 2],
+        ['notes to keep out of sight',      (notes.items || []).length >= 2],
+        ['a shop with duplicate item names', inv.length > 0 && new Set(inv).size !== inv.length],
+      ];
+      const absent = need.filter(n => !n[1]).map(n => n[0]);
+      ok('the test bench is loaded (' + (need.length - absent.length) + '/' + need.length + ')',
+         absent.length === 0, 'missing: ' + absent.join(', ')
+           + ' — run node tools/make-fixture.js, or the checks below pass for free');
+    }
+
     // 1. every panel mounts, renders, unmounts, remounts, and stays quiet
     for (const id of PANELS){
       const before = errs.length;
@@ -338,7 +370,8 @@
         });
       });
       ok('slot pools migrate into sheet, none lost (' + checked + ' checked)',
-         lost.length === 0, lost.join(', '));
+         checked > 0 && lost.length === 0,
+         checked === 0 ? 'NOTHING CHECKED — the fixture has no slot pools' : lost.join(', '));
     }
 
     // 7. backup covers what it should and excludes what it must

@@ -20,16 +20,35 @@ let only = null, state = null;
 for (let i = 0; i < args.length; i++){
   if (args[i] === '--mode') only = args[++i];
   else if (args[i] === '--help' || args[i] === '-h'){
-    console.log('usage: node tools/selftest-run.js [BACKUP.json] [--mode dm|player|mobile]');
+    console.log('usage: node tools/selftest-run.js [BACKUP.json|--live] [--mode dm|player|mobile]');
+    console.log('  default: tools/fixture.json (frozen bench — build with make-fixture.js)');
+    console.log('  --live : .state/live.json (real campaign; bench checks may flag drift)');
     process.exit(0);
   } else state = args[i];
 }
-if (!state) state = path.join(ROOT, '.state', 'live.json');
+// Default to the frozen fixture, not the live campaign.
+//
+// The live snapshot is a moving target and coverage drains out of it without
+// anything going red: the spell-slot migration check read "6 checked" one
+// morning and "0 checked" that afternoon, because the migration had run and
+// the pools were gone from the data. It still printed pass. tools/fixture.json
+// is deliberately awkward and never changes, so a green line means the same
+// thing next month as it does today.
+//
+// Pass a path (or --live) to run against real data instead. That pass is still
+// worth doing occasionally — it exercises real shapes and the real bestiary —
+// but expect the bench precondition to flag whatever the campaign has moved on
+// from.
+if (state === '--live') state = path.join(ROOT, '.state', 'live.json');
+if (!state) state = path.join(ROOT, 'tools', 'fixture.json');
 if (!fs.existsSync(state)){
   console.error('no state file at ' + state);
-  console.error('pass one explicitly, or refresh with: node tools/pull-state.js');
+  console.error(/fixture\.json$/.test(state)
+    ? 'build it with: node tools/make-fixture.js'
+    : 'pass one explicitly, or refresh with: node tools/pull-state.js');
   process.exit(2);
 }
+console.log('state: ' + path.relative(ROOT, state));
 
 // Pre-flight. A stale ?v= means the browser runs the previous build, so the
 // suite would report green for code that is not the code on disk — the one
