@@ -52,6 +52,26 @@ function check(){
     }
   }
 
+  // Every entity subtree the code writes must have a matching block in
+  // firebase-rules.json. The catch-all `$wholeKey` rule requires a STRING, so
+  // an entity base with no block of its own is rejected by the database on
+  // every write — the client retries, gives up, and the DM gets "Live sync
+  // failed" with no clue which key or why. That is not hypothetical: adding
+  // party_v2 without its rules block did exactly this, and the only visible
+  // symptom was the toast.
+  try {
+    const rulesFile = path.join(ROOT, 'firebase-rules.json');
+    if (fs.existsSync(rulesFile)){
+      const skt = (JSON.parse(fs.readFileSync(rulesFile, 'utf8')).rules || {}).skt || {};
+      const code = fs.readFileSync(path.join(ROOT, 'js', 'sync', 'realtime.js'), 'utf8');
+      const bases = [...code.matchAll(/base:\s*'skt\/([A-Za-z0-9_]+)'/g)].map(m => m[1]);
+      bases.forEach(b => {
+        if (!(b in skt)) problems.push('firebase-rules.json has no block for skt/' + b
+          + ' — the $wholeKey catch-all requires a string, so every write to it is rejected');
+      });
+    }
+  } catch(e){ problems.push('could not cross-check firebase-rules.json: ' + e.message); }
+
   // The service worker's own BUILD stamp has to move too, or the shell cache
   // is never swapped and the old index keeps being served.
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');

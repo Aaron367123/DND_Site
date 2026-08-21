@@ -22,6 +22,12 @@
         "$other": { ".validate": false }
       },
 
+      "party_v2": {
+        "meta":  { ".validate": "newData.isString() && newData.val().length < 20000" },
+        "items": { "$id": { ".validate": "newData.isString() && newData.val().length < 200000" } },
+        "$other": { ".validate": false }
+      },
+
       "notes_v3": {
         "meta":  { ".validate": "newData.isString() && newData.val().length < 50000" },
         "items": { "$id": { ".validate": "newData.isString() && newData.val().length < 500000" } },
