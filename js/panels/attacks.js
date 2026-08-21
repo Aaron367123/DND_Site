@@ -524,8 +524,13 @@ registerPanel('attacks', {
     // resistances ("nonmagical bludgeoning") resolve correctly. Natural
     // monster attacks are nonmagical unless the stat block says otherwise —
     // null is exactly that statement, not a missing value.
-    const prevProp = C._lastAtkProp;
+    const prevProp = C._lastAtkProp, prevCrit = C._lastAtkCrit;
     C._lastAtkProp = p.magical ? 'magical' : null;
+    // This panel rolls a monster's damage; it has no to-hit roll and so no
+    // crit concept — the DM adjudicates that at the table. Set false rather
+    // than leaving it, so a crit from a Turn View attack cannot leak in and
+    // charge a downed PC two death-save failures for an unrelated blow.
+    C._lastAtkCrit = false;
     this._applying = true;
     try {
       // One call PER TYPE. _applyHpDelta resolves resistance against the type
@@ -536,7 +541,7 @@ registerPanel('attacks', {
         if (i < 0 || !part.amt) return;
         C._applyHpDelta(i, -part.amt, part.type);
       });
-    } finally { C._lastAtkProp = prevProp; this._applying = false; }
+    } finally { C._lastAtkProp = prevProp; C._lastAtkCrit = prevCrit; this._applying = false; }
 
     const total = p.amount.reduce((s,x)=>s+x.amt, 0);
     this._log.unshift(`${p.label} → ${target.name}: ${p.amount.map(x=>x.amt+' '+x.type).join(' + ')}`

@@ -552,6 +552,61 @@
       ok('dmg: manual mundane is still shrugged off', mundane === 0, 'took ' + mundane);
       ok('dmg: manual magical lands in full', magicked === 14, 'took ' + magicked);
 
+      // Death saves. Every one of these is a printed rule with one right
+      // answer, and they decide whether a character lives.
+      {
+        const force = v => sktSetRandom(() => (v - 1) / 20 + 1e-9);
+        const downed = extra => {
+          state.party = [{ id:'st_p', name:'Pat', hp:0, hpMax:20 }];
+          state.combatants = [Object.assign({ id:'st_p', name:'Pat', hp:0, hpMax:20,
+            isPC:true, deathSaves:{ success:0, fail:0 } }, extra || {})];
+          state.activeCombatantId = 'st_p'; save(); T._render();
+          return state.combatants[0];
+        };
+        const dsv = () => state.combatants[0].deathSaves;
+
+        force(20); downed(); T._rollDeathSave();
+        ok('death: nat 20 wakes them at 1 hp',
+           state.combatants[0].hp === 1 && dsv() == null && !state.combatants[0].dead);
+        force(1);  downed(); T._rollDeathSave();
+        ok('death: nat 1 is two failures', eqJ(dsv(), {success:0,fail:2}), JSON.stringify(dsv()));
+        force(1);  downed(); T._rollDeathSave(); T._rollDeathSave();
+        ok('death: two nat 1s kill', !!state.combatants[0].dead);
+        force(10); downed(); T._rollDeathSave();
+        ok('death: 10 is a success', eqJ(dsv(), {success:1,fail:0}));
+        force(9);  downed(); T._rollDeathSave();
+        ok('death: 9 is a failure', eqJ(dsv(), {success:0,fail:1}));
+        force(15); downed(); T._rollDeathSave(); T._rollDeathSave(); T._rollDeathSave();
+        ok('death: three successes stabilise',
+           dsv() == null && !!state.combatants[0].stable);
+        sktSetRandom(null);
+
+        downed(); C._applyHpDelta(0,-3,'fire');
+        ok('death: damage at 0 hp is a failure', eqJ(dsv(), {success:0,fail:1}));
+        downed({ stable:true, deathSaves:null }); C._applyHpDelta(0,-3,'fire');
+        ok('death: damage un-stabilises with a failure',
+           !state.combatants[0].stable && eqJ(dsv(), {success:0,fail:1}));
+        downed({ deathSaves:{success:1,fail:2} }); C._applyHpDelta(0,+5,null);
+        ok('death: healing above 0 clears the saves',
+           state.combatants[0].hp === 5 && (dsv() || null) == null);
+
+        // PHB: a critical hit at 0 hp is TWO failures, not one.
+        let tg = downed(); T._applyDamage(tg,[{amt:5,type:'slashing'}],false,false);
+        ok('death: an ordinary hit at 0 hp is one failure', eqJ(dsv(), {success:0,fail:1}));
+        tg = downed(); T._applyDamage(tg,[{amt:5,type:'slashing'}],false,true);
+        ok('death: a CRIT at 0 hp is two failures', eqJ(dsv(), {success:0,fail:2}),
+           JSON.stringify(dsv()));
+        tg = downed({ deathSaves:{success:0,fail:1} });
+        T._applyDamage(tg,[{amt:5,type:'slashing'}],false,true);
+        ok('death: a crit at one failure kills', !!state.combatants[0].dead);
+        tg = downed({ stable:true, deathSaves:null });
+        T._applyDamage(tg,[{amt:5,type:'slashing'}],false,true);
+        ok('death: a crit on a stable PC is two failures', eqJ(dsv(), {success:0,fail:2}));
+        ok('death: the crit flag does not outlive the blow', C._lastAtkCrit === false);
+        tg = downed(); C._applyHpDelta(0,-5,'slashing');
+        ok('death: a bare hp tick is not a crit', eqJ(dsv(), {success:0,fail:1}));
+      }
+
       // End to end on real bestiary data: stat-block text -> magical flag ->
       // qualifier match -> damage. Every link is tested above in isolation;
       // this is the one that proves they are wired to each other. A Deva's

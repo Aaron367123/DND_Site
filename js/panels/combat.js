@@ -1633,6 +1633,12 @@ registerPanel('combat',{
   // temporary HP first (mirrored from the Party tracker) before chipping
   // into real HP. Positive delta = heal, clamped to hpMax. Mirrors to party
   // afterward so HP bars stay in sync.
+  // How the current blow was delivered. _lastAtkProp carries 'magical' for
+  // qualified resistances; _lastAtkCrit carries whether it was a critical hit,
+  // which RAW doubles the death-save failure at 0 hp. Both are set by the
+  // Attack Runner and Turn View around their damage loops and restored in a
+  // `finally`, so at rest a blow reads as an ordinary, nonmagical one.
+  _lastAtkCrit: false,
   _applyHpDelta(i, delta, dmgType){
     const c = state.combatants[i]; if (!c) return;
     let remaining = delta;
@@ -1789,15 +1795,20 @@ registerPanel('combat',{
             showToast(`💀 ${c.name} dies instantly — massive damage`);
           } else if (c.stable){
             c.stable = false;
-            c.deathSaves = {success:0, fail:1};
+            c.deathSaves = {success:0, fail: this._lastAtkCrit ? 2 : 1};
           } else if (hpBefore <= 0){
             // Damage to a creature already at 0 costs a death save. This used
             // to do nothing on the theory that the DM was mid-roll clicking
             // pips, which quietly made a downed PC the safest place on the
             // battlefield — the stable branch right above already charges a
             // failure for the same event.
+            // PHB: "If you take any damage while you have 0 hit points, you
+            // suffer a death saving throw failure. If the damage is from a
+            // critical hit, you suffer two failures instead." Only the first
+            // half of that was here, which is the same shape as the bug the
+            // comment above describes — a downed PC being safer than RAW.
             const ds = {...(c.deathSaves || {success:0, fail:0})};
-            ds.fail = Math.min(3, (ds.fail || 0) + 1);
+            ds.fail = Math.min(3, (ds.fail || 0) + (this._lastAtkCrit ? 2 : 1));
             if (ds.fail >= 3){
               c.deathSaves = null; c.dead = true;
               this._log(`${c.name} — third failed death save: dies`);

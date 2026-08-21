@@ -1829,7 +1829,7 @@ registerPanel('turnview', {
       this._render(); return;
     }
     const before = t.hp;
-    this._applyDamage(t, o.parts || [{ amt: o.dmg, type: o.type }], o.magical);
+    this._applyDamage(t, o.parts || [{ amt: o.dmg, type: o.type }], o.magical, o.crit);
     const after = (this._order().find(x => x.id === t.id) || t).hp;
     const breakdown = o.detail ? ` <span class="dim">[${esc(o.detail)}]</span>` : '';
     // Every type, not just the first: "22 piercing" hid the fire half.
@@ -1855,10 +1855,11 @@ registerPanel('turnview', {
   // the target's fire resistance to the piercing as well, or to neither. The
   // first version of this rolled both parts correctly and then threw the
   // second away — 17 piercing + 5 fire went in as "22 piercing".
-  _applyDamage(target, parts, magical){
+  _applyDamage(target, parts, magical, crit){
     const C = panelDefs.combat; if (!C) return;
-    const prev = C._lastAtkProp;
+    const prev = C._lastAtkProp, prevCrit = C._lastAtkCrit;
     C._lastAtkProp = magical ? 'magical' : null;
+    C._lastAtkCrit = !!crit;
     this._applying = true;
     try {
       parts.forEach(p => {
@@ -1866,7 +1867,7 @@ registerPanel('turnview', {
         if (i < 0 || !p.amt) return;
         C._applyHpDelta(i, -p.amt, p.type || null);
       });
-    } finally { C._lastAtkProp = prev; this._applying = false; }
+    } finally { C._lastAtkProp = prev; C._lastAtkCrit = prevCrit; this._applying = false; }
     C._render?.();
   },
   // Damage parts, kept in step with the total. A reaction that halves the
