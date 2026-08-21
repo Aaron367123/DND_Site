@@ -113,6 +113,49 @@
       ok('roundtrip ' + k, eqJ(canon(JSON.parse(got)), canon(JSON.parse(cur))), 'values differ');
     }
 
+    // 2b. duplicate ids must not collapse two records onto one node. Every
+    // path that creates a record assigns a unique id, but a restore, an
+    // import or a hand-edited backup is not something the sync layer
+    // controls — and the damage is quiet: the second write wins and
+    // assemble() hands the SAME record back twice, so the count still looks
+    // right while one creature's hp has become another's.
+    {
+      const dup = (k, data, count) => {
+        const spec = _ENTITY_KEYS[k];
+        const nodes = spec.explode(JSON.stringify(data));
+        const pre = k === 'skt-battlemap-v1' ? 'tokens/' : 'items/';
+        const n = Object.keys(nodes).filter(x => x.startsWith(pre)).length;
+        ok('dup ids get distinct nodes: ' + k, n === count, n + ' nodes for ' + count + ' records');
+        return JSON.parse(spec.assemble(nodes));
+      };
+      const c = dup('skt-combat-v1',
+        { combatants:[{id:'z',name:'Zoey',hp:50},{id:'z',name:'Dup',hp:12},{id:'og',name:'Ogre',hp:59}],
+          combatRound:2, activeCombatantId:'z' }, 3);
+      ok('dup ids keep both combatants distinct',
+         eqJ(c.combatants.map(x => x.name + '/' + x.hp), ['Zoey/50','Dup/12','Ogre/59']),
+         JSON.stringify(c.combatants.map(x => x.name + '/' + x.hp)));
+      const pty = dup('skt-party-v1', [{id:'x',name:'A'},{id:'x',name:'B'},{id:'y',name:'C'}], 3);
+      ok('dup ids keep both characters distinct', eqJ(pty.map(x => x.name), ['A','B','C']),
+         JSON.stringify(pty.map(x => x.name)));
+      const nts = dup('skt-notes-v2',
+        { items:[{id:'n',name:'One',type:'file'},{id:'n',name:'Two',type:'file'}], authors:{} }, 2);
+      ok('dup ids keep both notes distinct', eqJ(nts.items.map(x => x.name), ['One','Two']),
+         JSON.stringify(nts.items.map(x => x.name)));
+      const bm = dup('skt-battlemap-v1', { tokens:[{id:'t',x:1},{id:'t',x:2}], cellSize:50 }, 2);
+      ok('dup ids keep both tokens distinct',
+         eqJ((bm.tokens || []).map(t => t.x).sort(), [1,2]));
+
+      // ...and ordinary data must produce the SAME node names as before, or
+      // every client re-pushes everything once on upgrade.
+      const live = localStorage.getItem('skt-party-v1');
+      if (live){
+        const names = Object.keys(_ENTITY_KEYS['skt-party-v1'].explode(live))
+          .filter(x => x.startsWith('items/'));
+        ok('unique ids are left completely alone', !names.some(n => /__dup/.test(n)),
+           names.filter(n => /__dup/.test(n)).join(','));
+      }
+    }
+
     // 3. entity merge keeps both sides of a disjoint edit
     const nest = flat => {
       const o = {};

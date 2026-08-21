@@ -129,12 +129,13 @@ const _ENTITY_KEYS = {
     explode(s){
       const d = JSON.parse(s) || {};
       const list = Array.isArray(d.combatants) ? d.combatants : [];
+      const ids = _entityNodeIds(list);
       const nodes = { meta: JSON.stringify({
         combatRound: d.combatRound || 0,
         activeCombatantId: d.activeCombatantId ?? null,
-        order: list.map(c => _fbSafeId(c.id)),
+        order: ids,
       }) };
-      list.forEach(c => { nodes['items/' + _fbSafeId(c.id)] = JSON.stringify(c); });
+      list.forEach((c, i) => { nodes['items/' + ids[i]] = JSON.stringify(c); });
       return nodes;
     },
     assemble(nodes){
@@ -142,7 +143,10 @@ const _ENTITY_KEYS = {
       const items = {};
       Object.keys(nodes).forEach(n => {
         if (!n.startsWith('items/')) return;
-        try { const c = JSON.parse(nodes[n]); if (c && c.id != null) items[_fbSafeId(c.id)] = c; } catch(e){ _diag('combat node ' + n, e); }
+        // Keyed by NODE NAME, not a re-derived c.id — those agree only while
+        // ids are unique, which is the assumption _entityNodeIds exists to stop
+        // relying on.
+        try { const c = JSON.parse(nodes[n]); if (c) items[n.slice(6)] = c; } catch(e){ _diag('combat node ' + n, e); }
       });
       const combatants = [], used = new Set();
       (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
@@ -174,8 +178,9 @@ const _ENTITY_KEYS = {
     explode(s){
       const parsed = JSON.parse(s);
       const arr = Array.isArray(parsed) ? parsed : [];
-      const nodes = { meta: JSON.stringify({ order: arr.map((c, i) => _partyNodeId(c, i)) }) };
-      arr.forEach((c, i) => { nodes['items/' + _partyNodeId(c, i)] = JSON.stringify(c); });
+      const ids = _entityNodeIds(arr);
+      const nodes = { meta: JSON.stringify({ order: ids }) };
+      arr.forEach((c, i) => { nodes['items/' + ids[i]] = JSON.stringify(c); });
       return nodes;
     },
     assemble(nodes){
@@ -208,8 +213,10 @@ const _ENTITY_KEYS = {
     explode(s){
       const d = JSON.parse(s) || {};
       const nodes = {};
-      (Array.isArray(d.tokens) ? d.tokens : []).forEach(t => {
-        nodes['tokens/' + _fbSafeId(t.id)] = JSON.stringify(t);
+      const toks = Array.isArray(d.tokens) ? d.tokens : [];
+      const tokIds = _entityNodeIds(toks);
+      toks.forEach((t, ti) => {
+        nodes['tokens/' + tokIds[ti]] = JSON.stringify(t);
       });
       nodes.fog        = JSON.stringify(d.fog ?? null);
       nodes.fogStrokes = JSON.stringify(d.fogStrokes || []);
@@ -251,11 +258,12 @@ const _ENTITY_KEYS = {
     explode(s){
       const d = JSON.parse(s) || {};
       const items = Array.isArray(d.items) ? d.items : [];
+      const ids = _entityNodeIds(items);
       const nodes = { meta: JSON.stringify({
-        order: items.map(i => _fbSafeId(i.id)),
+        order: ids,
         authors: d.authors || {},
       }) };
-      items.forEach(it => { nodes['items/' + _fbSafeId(it.id)] = JSON.stringify(it); });
+      items.forEach((it, i) => { nodes['items/' + ids[i]] = JSON.stringify(it); });
       return nodes;
     },
     assemble(nodes){
@@ -263,7 +271,7 @@ const _ENTITY_KEYS = {
       const map = {};
       Object.keys(nodes).forEach(n => {
         if (!n.startsWith('items/')) return;
-        try { const it = JSON.parse(nodes[n]); if (it && it.id != null) map[_fbSafeId(it.id)] = it; } catch(e){ _diag('notes node ' + n, e); }
+        try { const it = JSON.parse(nodes[n]); if (it) map[n.slice(6)] = it; } catch(e){ _diag('notes node ' + n, e); }
       });
       const items = [], used = new Set();
       (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
@@ -289,11 +297,28 @@ const _ENTITY_KEYS = {
   },
 };
 function _fbSafeId(id){ return String(id).replace(/[.#$\/\[\]]/g, '_'); }
-// Node name for one party character. Both push sites assign uid(), so the
-// fallback only fires for a record that arrived without one (hand-edited
-// backup, older import). An index keeps such records distinct rather than
-// letting them collapse onto a single "undefined" node and eat each other.
-function _partyNodeId(c, i){ return _fbSafeId(c && c.id != null ? c.id : ('idx_' + i)); }
+// Node names for one exploded list, guaranteed distinct.
+//
+// Every path that CREATES a record assigns a unique id, but this layer does
+// not control what arrives: a restore, an import or a hand-edited backup can
+// carry two records with the same id, and one with none at all. Both collapse
+// onto a single Firebase node, and the damage is quiet — the second write wins
+// and assemble() then hands the SAME record back once per entry in `order`, so
+// the count still looks right while one creature's hp has become another's.
+// Measured before fixing: three combatants in, two nodes out, and the first
+// Zoey came back as a copy of the second.
+//
+// Only a repeat is renamed, so ordinary data produces byte-identical node
+// names to before this existed and nothing re-pushes.
+function _entityNodeIds(list, idOf){
+  const seen = Object.create(null);
+  return (list || []).map((item, i) => {
+    const raw = idOf ? idOf(item, i) : (item && item.id);
+    const base = _fbSafeId(raw != null ? raw : ('idx_' + i));
+    const n = (seen[base] = (seen[base] || 0) + 1);
+    return n === 1 ? base : base + '__dup' + n;
+  });
+}
 // Last known SERVER state per entity key: {nodeName: jsonString}. Flush
 // diffs against it (only changed nodes go out); receive compares against it
 // (identical snapshot = our own echo / no-op → skip).

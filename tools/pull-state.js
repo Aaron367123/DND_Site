@@ -106,7 +106,9 @@ function assembleCombat(n){
   const items = {};
   Object.keys(n).forEach(k => {
     if (!k.startsWith('items/')) return;
-    try { const c = JSON.parse(n[k]); if (c && c.id != null) items[String(c.id)] = c; } catch(e){}
+    // Keyed by node name, matching assemble() in realtime.js. Re-deriving
+    // from c.id only agrees while ids are unique.
+    try { const c = JSON.parse(n[k]); if (c) items[k.slice(6)] = c; } catch(e){}
   });
   const combatants = [], used = new Set();
   (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
@@ -149,7 +151,8 @@ function assembleNotes(n){
   const map = {};
   Object.keys(n).forEach(k => {
     if (!k.startsWith('items/')) return;
-    try { const it = JSON.parse(n[k]); if (it && it.id != null) map[String(it.id)] = it; } catch(e){}
+    // Keyed by node name, matching assemble() in realtime.js.
+    try { const it = JSON.parse(n[k]); if (it) map[k.slice(6)] = it; } catch(e){}
   });
   const items = [], used = new Set();
   (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
