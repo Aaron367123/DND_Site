@@ -31,6 +31,21 @@ if (!fs.existsSync(state)){
   process.exit(2);
 }
 
+// Pre-flight. A stale ?v= means the browser runs the previous build, so the
+// suite would report green for code that is not the code on disk — the one
+// failure that makes every other result meaningless.
+{
+  const v = spawnSync(process.execPath, [path.join(ROOT, 'tools', 'verify-assets.js')],
+                      { cwd: ROOT, encoding: 'utf8' });
+  process.stdout.write(v.stdout || '');
+  if (v.status !== 0){
+    process.stderr.write(v.stderr || '');
+    console.error('');
+    console.error('refusing to run: the suite would be testing stale assets');
+    process.exit(1);
+  }
+}
+
 const MODES = [
   // DM mode waits for the bestiary: the damage checks resolve a real Deva and
   // Werewolf out of _5eData, and without it they would quietly skip.
