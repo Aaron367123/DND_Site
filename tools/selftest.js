@@ -532,6 +532,56 @@
          casualties.length === 0, casualties.slice(0, 5).join('; '));
     }
 
+    // 7f. A record missing hp or hpMax must not print NaN or "undefined" at
+    // the DM. These arrive from a PDF import, a hand-typed monster or an old
+    // record, and the maths already tolerates them — it was only the rendering
+    // that leaked the gap onto the screen.
+    {
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants);
+      const A0 = state.activeCombatantId;
+      const SHAPES = {
+        'no hpMax'     : { id:'st_x', name:'Nomax', hp:10 },
+        'both missing' : { id:'st_x', name:'Blank' },
+        'hp null'      : { id:'st_x', name:'Nully', hp:null, hpMax:20 },
+        'hp zero'      : { id:'st_x', name:'Zero',  hp:0,    hpMax:20 },
+        'hp as string' : { id:'st_x', name:'Str',   hp:'12', hpMax:'20' },
+      };
+      const spoiled = [];
+      for (const label of Object.keys(SHAPES)){
+        const rec = SHAPES[label];
+        state.party = [Object.assign({}, rec)];
+        state.combatants = [Object.assign({}, rec, { isPC:true, initiative:10 })];
+        state.activeCombatantId = 'st_x'; save();
+        for (const id of ['party','combat','turnview','attacks']){
+          try { closePanel(id); } catch(e){}
+          try { openPanel(id); } catch(e){ spoiled.push(label + '/' + id + ' threw'); continue; }
+          await sleep(230);
+          const d = panelDefs[id];
+          if (!d || !d._body){ spoiled.push(label + '/' + id + ' no body'); continue; }
+          const t = d._body.innerText || '';
+          if (/\bNaN\b/.test(t)) spoiled.push(label + '/' + id + ' shows NaN');
+          if (/\bundefined\b/.test(t)) spoiled.push(label + '/' + id + ' shows undefined');
+          closePanel(id);
+        }
+      }
+      ok('no panel prints NaN or undefined for a partial record (' +
+         (Object.keys(SHAPES).length * 4) + ' combinations)',
+         spoiled.length === 0, spoiled.slice(0, 5).join('; '));
+
+      // The fallback must use ?? and not ||, or a character on exactly 0 hp
+      // renders as a dash and looks like missing data at the worst moment.
+      state.party = [{ id:'st_x', name:'Zero', hp:0, hpMax:20 }];
+      state.combatants = [{ id:'st_x', name:'Zero', hp:0, hpMax:20, isPC:true, initiative:10 }];
+      state.activeCombatantId = 'st_x'; save();
+      openPanel('turnview'); await sleep(380);
+      ok('a character on 0 hp still reads 0, not a dash',
+         /\b0\b/.test(panelDefs.turnview._body.innerText || ''));
+      closePanel('turnview');
+
+      state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
+      state.activeCombatantId = A0; save();
+    }
+
     // 8. generated data present and the right shape
     ok('rules table loaded', !!(window.SKT_RULES && window.SKT_RULES.xpThresholds2014
          && window.SKT_RULES.xpThresholds2014.length === 20));

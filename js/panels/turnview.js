@@ -718,7 +718,7 @@ registerPanel('turnview', {
                       data-tv="jump" data-id="${esc(c.id)}" aria-current="${cur}">
         <span class="tv-pip-init">${c.initiative ?? '–'}</span>
         <span><span class="tv-pip-name">${esc(c.name)}</span><br>
-        <span class="tv-pip-hp">${c.hp}/${c.hpMax}</span></span>
+        <span class="tv-pip-hp">${c.hp ?? 0}/${c.hpMax || c.hp || 0}</span></span>
       </button>`;
     }).join('');
   },
@@ -791,8 +791,8 @@ registerPanel('turnview', {
         </div>
         <div class="tv-vitals">
           <div class="tv-vital"><div class="l">${ws ? 'BEAST HP' : 'HP'}</div><div class="v">${
-            ws ? `${ws.hp}<span class="tv-temp" title="${esc(p.name)}'s own hit points — the form drops back to these when the beast reaches 0">${p.hp} ${esc(String(p.cls || 'druid'))}</span>`
-               : `${c.hp}${(p && p.tempHp > 0) ? `<span class="tv-temp" title="Temporary HP — absorbs damage first">+${p.tempHp}</span>` : ''}`
+            ws ? `${ws.hp ?? '–'}<span class="tv-temp" title="${esc(p.name)}'s own hit points — the form drops back to these when the beast reaches 0">${p.hp ?? '–'} ${esc(String(p.cls || 'druid'))}</span>`
+               : `${c.hp ?? '–'}${(p && p.tempHp > 0) ? `<span class="tv-temp" title="Temporary HP — absorbs damage first">+${p.tempHp}</span>` : ''}`
           }</div></div>
           <div class="tv-vital"><div class="l">AC</div><div class="v">${(ws && ws.ac != null ? ws.ac : c.ac) ?? '–'}</div></div>
         </div>
