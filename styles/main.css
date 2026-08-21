@@ -3833,7 +3833,18 @@ select.tv-in.wide { width:126px; }
 /* The rotated layer: map art, pencil strokes and tokens turn together, the
    same way the battle map's stage does. Sized and positioned in JS because a
    quarter turn swaps the box's width and height. */
-.tv-map-rot { position:absolute; transform-origin:50% 50%; }
+.tv-map-rot { position:absolute; transform-origin:50% 50%;
+  /* Keep this on its own compositing layer permanently.
+     Panning sets a transform and releasing clears it, so without this Chrome
+     promotes the layer on touchdown and destroys it on release — every single
+     time. The layer is 724x396 CSS px over a 1448x792 canvas backing store,
+     and while a phone rasterizes that afresh the element paints nothing, so
+     .tv-map's own dark background shows through: a black flash on every touch.
+     Measured, not guessed — transform is `none` at rest, a matrix mid-pan and
+     `none` again after, which is exactly the promote/destroy cycle.
+     Also helps the pan itself: a pre-promoted layer moves on the compositor
+     instead of repainting. */
+  will-change: transform; }
 .tv-map-draw { position:absolute; inset:0; pointer-events:none; }
 /* Zoom cluster, opposite corner to the hint. Faint until the map is hovered
    so a 250px thumbnail isn't mostly chrome. */
