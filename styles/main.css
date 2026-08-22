@@ -272,7 +272,11 @@ body.hide-window-focus .window.focused{border-color:var(--border);box-shadow:var
 /* Hide DM-only items in the float-toolbar; keep sync indicator, settings,
    AND the search bar — players use search to look up monsters, spells, and
    items they encounter during the session as a quick reference. */
+/* Hidden in the player view UNTIL it is given a job there. app.js turns it
+   into "Back to DM view" and adds .is-back-to-dm; on a phone the player view
+   replaces the DM view in the same window, so this is the only way back. */
 body.player-mode #player-view-btn{display:none}
+body.player-mode #player-view-btn.is-back-to-dm{display:inline-flex}
 /* The tour is 16 pages of DM material — floating windows, the icon dock,
    workspaces, the bestiary — and greeted players with "Welcome to the DM
    Workspace". tutorial.js suppresses the auto-show; this hides the ❓ that

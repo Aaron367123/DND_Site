@@ -799,6 +799,34 @@
       state.activeCombatantId = A0; save();
     }
 
+    // How the player view is opened, checked on the DESKTOP side where it is
+    // observable. A phone takes the other branch and NAVIGATES in place —
+    // Android gives an installed PWA no second window, so window.open there
+    // yields a Chrome Custom Tab with an address bar over the player view.
+    // That branch cannot be exercised here: clicking it leaves the page and
+    // takes the test run with it.
+    {
+      const btn = document.getElementById('player-view-btn');
+      ok('the player-view control exists', !!btn);
+      if (btn){
+        let call = null;
+        const real = window.open;
+        window.open = (u, t, f) => { call = { u:String(u), t, f: f || null }; return null; };
+        try { btn.click(); } catch(e){}
+        window.open = real;
+        ok('desktop opens the player view in a window', !!call);
+        if (call){
+          ok('...at the player URL', /[?&]player=1/.test(call.u), call.u);
+          // noopener is SPECIFIED to return null, which made the popup-blocked
+          // toast fire on every success and killed the fallback navigate.
+          ok('...without noopener, so the handle comes back',
+             !/noopener/.test(call.f || ''), call.f);
+          ok('...sized, so it is a second window rather than a full tab',
+             /width=/.test(call.f || ''), call.f);
+        }
+      }
+    }
+
     // 8. generated data present and the right shape
     ok('rules table loaded', !!(window.SKT_RULES && window.SKT_RULES.xpThresholds2014
          && window.SKT_RULES.xpThresholds2014.length === 20));
@@ -1441,6 +1469,23 @@
         try { B._renderTokens(); B._drawFog(); } catch(e){}
       }
       state.sharedPanels = JSON.parse(SH); save();
+    }
+
+    // The player view must be escapable. On a phone it replaces the DM view in
+    // the same window — Android gives an installed PWA no second window — so
+    // without this the only way back is the URL bar, which a standalone app
+    // does not show.
+    {
+      const back = document.getElementById('player-view-btn');
+      ok('player: a way back to the DM view exists', !!back);
+      if (back){
+        const cs = getComputedStyle(back);
+        ok('player: the back control is visible', cs.display !== 'none'
+           && back.getBoundingClientRect().width > 0, 'display ' + cs.display);
+        ok('player: it is labelled as the way back',
+           /back to dm/i.test(back.getAttribute('title') || ''),
+           back.getAttribute('title'));
+      }
     }
 
     ok('player: no horizontal overflow',

@@ -17,6 +17,24 @@ function init(){
   // Check if this is the player view tab
   if(new URLSearchParams(location.search).get('player')==='1'){
     initPlayerView();
+    // Repurpose the float button as the way OUT. Nothing else returns to the
+    // DM view — the button was simply hidden here, which was fine while the
+    // player view was always a second window you could close. On a phone it is
+    // now the same window, so there has to be a door.
+    const back = document.getElementById('player-view-btn');
+    if (back){
+      back.title = 'Back to DM view';
+      back.classList.add('is-back-to-dm');
+      back.addEventListener('click', () => {
+        try {
+          const u = new URL(window.location.href);
+          u.search = ''; u.hash = '';
+          window.location.href = u.toString();
+        } catch(e){
+          window.location.href = window.location.origin + window.location.pathname;
+        }
+      });
+    }
     return;
   }
 
@@ -83,6 +101,22 @@ function init(){
     const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches)
       || (window.matchMedia && matchMedia('(display-mode: window-controls-overlay)').matches)
       || navigator.standalone === true;
+
+    // A phone gets NO second window, it gets navigated.
+    //
+    // Android treats an installed PWA as a single window, so window.open there
+    // cannot produce another app window — it opens a Chrome Custom Tab, which
+    // is the close-button-plus-address-bar strip appearing over the player
+    // view. There is no argument to window.open that avoids that. And a second
+    // window is useless on a phone anyway: you can only look at one.
+    //
+    // Going back is the float button, which becomes "Back to DM view" in
+    // player mode (see initPlayerView) — without that this would be a one-way
+    // trip with only the URL bar to escape by.
+    const phone = (window.matchMedia && matchMedia('(max-width: 767px)').matches)
+      || (window.matchMedia && matchMedia('(pointer: coarse)').matches && window.innerWidth < 900);
+    if (phone){ window.location.href = url; return; }
+
     const target = 'skt-player-' + Date.now();
     const w = standalone
       ? window.open(url, target)
