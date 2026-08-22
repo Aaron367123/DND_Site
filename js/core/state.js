@@ -98,6 +98,7 @@ function loadDomain(domain){
       // that assume a member is an object.
       if(r){const a=JSON.parse(r);if(Array.isArray(a))state.party=a.filter(p=>p&&typeof p==='object');}
       migratePartySpellSlots();
+      migratePartyResourceAliases();
       reconcilePcHp();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
@@ -174,6 +175,26 @@ function reconcilePcHp(){
 // Turn View has been spending from. Runs on every party load rather than once:
 // another device still on the old build can push the old shape back at any
 // time, and the pass is idempotent.
+// Same shape as the spell-slot migration below: one pool that ended up under
+// two names, showing twice on the party card and spendable twice. The monk's
+// Ki Points is the 2024 rules' Focus Points, and the PDF importer derived the
+// old name while this app's class template used the new one.
+//
+// Runs on every party load, not once, for the reason the slot migration gives:
+// another device on an older build can push the old shape back at any time,
+// and the pass is idempotent.
+function migratePartyResourceAliases(){
+  if (typeof sktMergeResources !== 'function') return;
+  (state.party || []).forEach(p => {
+    if (!p || !Array.isArray(p.resources) || !p.resources.length) return;
+    const merged = sktMergeResources(p.resources);
+    if (merged.length !== p.resources.length
+        || merged.some((r, i) => r.name !== p.resources[i].name)){
+      p.resources = merged;
+    }
+  });
+}
+
 function migratePartySpellSlots(){
   const SLOT = /^Spell Slots L(\d)$/;
   (state.party || []).forEach(p => {

@@ -891,6 +891,58 @@
       }
     }
 
+    // One pool must not appear twice under two names. The monk's Ki Points is
+    // the 2024 rules' Focus Points; the PDF importer derived the old name while
+    // this app's own class template used the new one, and the import merged by
+    // EXACT string — so importing a monk sheet gave the character both, side by
+    // side, each spendable.
+    {
+      ok('resource aliases: Ki Points canonicalises to Focus Points',
+         sktCanonResource('Ki Points') === 'Focus Points');
+      ok('resource aliases: case and spacing do not matter',
+         sktCanonResource('  ki points ') === 'Focus Points');
+      ok('resource aliases: an unrelated pool is left alone',
+         sktCanonResource('Rage') === 'Rage');
+
+      const folded = sktMergeResources([
+        { name:'Focus Points', type:'pool', current:2, max:6 },
+        { name:'Flight',       type:'toggle', current:1, max:1 },
+        { name:'Ki Points',    type:'pool', current:6, max:6 },
+      ]);
+      ok('resource merge: the duplicate collapses', folded.length === 2,
+         JSON.stringify(folded.map(r => r.name)));
+      // A fresh import must not hand back points already spent, so the SMALLER
+      // current wins while the larger maximum does.
+      const fp = folded.find(r => r.name === 'Focus Points');
+      ok('resource merge: spending survives the merge',
+         !!fp && fp.current === 2 && fp.max === 6,
+         JSON.stringify(fp));
+      ok('resource merge: unrelated pools are untouched',
+         sktMergeResources([{ name:'Rage', current:2, max:3 },
+                            { name:'Wild Shape', current:1, max:2 }]).length === 2);
+      ok('resource merge: running it twice changes nothing',
+         JSON.stringify(sktMergeResources(folded)) === JSON.stringify(folded));
+
+      // And the load path applies it, so a character already carrying both is
+      // repaired without anyone editing anything.
+      const P0 = localStorage.getItem('skt-party-v1');
+      const doubled = JSON.parse(P0);
+      if (doubled[0]){
+        doubled[0].resources = [
+          { name:'Focus Points', type:'pool', current:4, max:6 },
+          { name:'Ki Points',    type:'pool', current:6, max:6 },
+        ];
+        _remoteUpdate = true; localStorage.setItem('skt-party-v1', JSON.stringify(doubled));
+        _remoteUpdate = false;
+        loadDomain('party');
+        const got = (state.party[0].resources || []).map(r => r.name);
+        ok('resource merge: loading a doubled character repairs it',
+           got.length === 1 && got[0] === 'Focus Points', JSON.stringify(got));
+        _remoteUpdate = true; localStorage.setItem('skt-party-v1', P0); _remoteUpdate = false;
+        loadDomain('party');
+      }
+    }
+
     // 8. generated data present and the right shape
     ok('rules table loaded', !!(window.SKT_RULES && window.SKT_RULES.xpThresholds2014
          && window.SKT_RULES.xpThresholds2014.length === 20));

@@ -535,7 +535,9 @@ function _deriveResources(pairs, abilities){
       if (L >= 2) pool('Action Surge', L >= 17 ? 2 : 1);
       if (L >= 9) pool('Indomitable', band(L, [[9,1],[13,2],[17,3]]));
     } else if (c === 'monk'){
-      if (L >= 2) pool('Ki Points', L);
+      // 'Focus Points' since 2024, and the name this app's own monk template
+      // uses. Deriving 'Ki Points' here gave a monk both pools at once.
+      if (L >= 2) pool('Focus Points', L);
     } else if (c === 'paladin'){
       pool('Lay on Hands', L * 5);
       if (L >= 3) pool('Channel Divinity', 1);

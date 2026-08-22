@@ -1344,6 +1344,48 @@ function sktMonsterAttacksAreMagical(raw){
 // same creature as "hill giant 1 1" in the tracker. It lived in three copies
 // before; the strict `===` one silently matched two of eight creatures and the
 // Turn View drew a map with most of the fight missing.
+// Resource pools that are the SAME pool under two names, so they merge instead
+// of stacking up. The monk's Ki Points became Focus Points in the 2024 rules;
+// the PDF importer derived one name while this app's own class template used
+// the other, and nothing compared them — so importing a monk sheet onto a monk
+// who already had the pool produced two of it, side by side, each spendable.
+//
+// Canonical side is the app's existing template name, so nothing that already
+// works has to be renamed.
+const SKT_RESOURCE_ALIASES = {
+  'ki points': 'Focus Points',
+  'ki':        'Focus Points',
+  'focus':     'Focus Points',
+};
+// Canonical display name for a resource, or the name unchanged. Comparison is
+// case- and space-insensitive on its own, which also folds "Ki points" and
+// "Focus  Points" into their canonical spelling.
+function sktCanonResource(name){
+  const k = sktNormName(name);
+  return SKT_RESOURCE_ALIASES[k] || String(name == null ? '' : name).trim();
+}
+// Fold a resource list so no two entries name the same pool. Keeps the larger
+// maximum and the SMALLER current — a fresh import must not hand back points
+// the character has already spent.
+function sktMergeResources(list){
+  if (!Array.isArray(list)) return list;
+  const out = [], byKey = new Map();
+  list.forEach(r => {
+    if (!r || typeof r !== 'object'){ return; }
+    const name = sktCanonResource(r.name);
+    const key = sktNormName(name);
+    const ex = byKey.get(key);
+    if (!ex){ const c = { ...r, name }; byKey.set(key, c); out.push(c); return; }
+    const max = Math.max(+ex.max || 0, +r.max || 0);
+    const cur = Math.min(
+      ex.current != null ? +ex.current : max,
+      r.current  != null ? +r.current  : max);
+    ex.max = max;
+    ex.current = Math.max(0, Math.min(max, cur));
+  });
+  return out;
+}
+
 function sktNormName(s){
   return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
 }

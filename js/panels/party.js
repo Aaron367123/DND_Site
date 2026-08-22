@@ -3370,12 +3370,18 @@ registerPanel('party',{
       if (Array.isArray(data.resources) && data.resources.length){
         const have = Array.isArray(prior.resources) ? prior.resources : [];
         const merged = have.map(r => ({...r}));
+        // Canonical comparison, not the raw string. An exact match let the
+        // importer's name and the app's name for the SAME pool both survive —
+        // a monk came out of an import holding Ki Points and Focus Points.
+        const canon = n => (typeof sktCanonResource === 'function')
+          ? sktCanonResource(n).toLowerCase() : String(n || '').trim().toLowerCase();
         data.resources.forEach(r => {
-          const ex = merged.find(x => x.name === r.name);
+          const ex = merged.find(x => canon(x.name) === canon(r.name));
           if (ex){ ex.max = r.max; ex.current = Math.min(ex.current, r.max); }
           else merged.push({...r});
         });
-        data2.resources = merged;
+        data2.resources = (typeof sktMergeResources === 'function')
+          ? sktMergeResources(merged) : merged;
       }
       // Damage defenses parsed out of the sheet's "Defenses" line. Unioned with
       // whatever the DM already set by hand rather than replacing it, and only
