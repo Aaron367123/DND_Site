@@ -1348,6 +1348,43 @@
           ok('the loot panel does not overflow the screen',
              document.documentElement.scrollWidth <= window.innerWidth + 1,
              document.documentElement.scrollWidth + ' > ' + window.innerWidth);
+      // A popout raised from a panel mounted in the player view. There is no
+      // workspace canvas here, so createFloatingWindow appended to null and
+      // threw — every detail popout died that way, the Loot tab's item button
+      // being simply the first one clicked. It also has to FIT: .window carries
+      // desktop sizing and a 240px floor, and body.player-mode is zoom:2 on a
+      // phone, so the default came out at twice the viewport.
+      {
+        const before = errs.length;
+        const info = panelDefs.loot._body.querySelector('[data-lact="info"]');
+        ok('loot rows offer an item-detail button', !!info);
+        if (info){
+          info.click();
+          await sleep(800);
+          const w = document.querySelector('.window[data-ephemeral="1"]');
+          ok('a detail popout opens in the player view', !!w);
+          ok('...without throwing', errs.length === before, errs.slice(before).join(' | '));
+          if (w){
+            const r = w.getBoundingClientRect();
+            ok('the popout is attached to the body, not a missing canvas',
+               w.parentElement === document.body);
+            ok('the popout fits on screen',
+               r.left >= -2 && r.top >= -2 && r.right <= window.innerWidth + 2
+               && r.bottom <= window.innerHeight + 2,
+               Math.round(r.width) + 'x' + Math.round(r.height) + ' at ' +
+               Math.round(r.left) + ',' + Math.round(r.top) +
+               ' in ' + window.innerWidth + 'x' + window.innerHeight);
+            ok('the popout has content', !!(w.querySelector('.window-body') || {}).innerHTML);
+            const close = w.querySelector('[data-wact="close"]');
+            ok('the popout can be closed', !!close);
+            if (close){
+              close.click(); await sleep(300);
+              ok('closing removes it', !document.querySelector('.window[data-ephemeral="1"]'));
+            }
+          }
+        }
+      }
+
         }
       }
       // Unsharing must take the tab away again.

@@ -469,7 +469,10 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
      equally-specific defaults declared later in the file — verified: the card
      kept `bottom:24px` and stayed behind the dock. */
 
-  body.player-mode .window{
+/* Mounted panels only. An ephemeral popout — an item detail, a stat block —
+     is not a docked panel and must not be forced to fill the screen; it was,
+     and inside zoom:2 the dvw/dvh came out at twice the viewport. */
+  body.player-mode .window:not([data-ephemeral]){
     left:0 !important; top:0 !important;
     /* `dvw`/`dvh` shrink to the visible area on mobile (excluding the
        address-bar overlay). The older `vw`/`vh` fallback comes first so
@@ -488,6 +491,11 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
     padding-right:env(safe-area-inset-right, 0px);
   }
   /* Hide resize handles */
+  /* .window carries min-width:240px for the desktop, which is wider than the
+     player view's CSS viewport once zoom:2 halves it — a popout clamped to fit
+     was forced back over the edge. Only the ephemeral ones; docked panels keep
+     the floor. */
+  body.player-mode .window[data-ephemeral]{min-width:0}
   body.player-mode .rh{display:none}
   /* Window head — disable drag visually */
   body.player-mode .window-head{cursor:default;padding:6px 8px}
@@ -619,7 +627,10 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
    ≈ 430h). Broadened from <=500h to <=820h to catch every typical landscape
    phone/tablet without conflicting with the desktop float-window experience. */
 @media (max-height: 820px) and (orientation: landscape) and (pointer: coarse){
-  body.player-mode .window{
+/* Mounted panels only. An ephemeral popout — an item detail, a stat block —
+     is not a docked panel and must not be forced to fill the screen; it was,
+     and inside zoom:2 the dvw/dvh came out at twice the viewport. */
+  body.player-mode .window:not([data-ephemeral]){
     left:0 !important; top:0 !important;
     /* Reserve room for the right dock + the iPhone notch (left when in
        landscape with home button on right; right when reversed). Use

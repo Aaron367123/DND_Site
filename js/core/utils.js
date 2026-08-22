@@ -845,22 +845,44 @@ function createFloatingWindow(opts) {
   // zoom) creates a separate stacking layer and the popout can never sink
   // behind a docked panel no matter what z-index a click sets.
   var canvas = document.getElementById('workspace-canvas') || document.getElementById('workspace');
+  // The player view has no workspace canvas — it is a tab strip, not a
+  // desktop — so this was null and appendChild threw. Every popout raised from
+  // a panel mounted there died the same way: the Loot tab's item-detail button
+  // was just the first one anybody clicked.
+  var onCanvas = !!canvas;
+  if (!canvas) canvas = document.body;
   var w = opts.w || 360, h = opts.h || 460;
+  // On the body there is no canvas to scroll, so the window has to fit the
+  // screen — and body.player-mode carries zoom:2 on a phone, which halves the
+  // CSS viewport a fixed element lives in. Divide it out rather than assume a
+  // factor, so this stays right if the zoom changes.
+  var availW = window.innerWidth, availH = window.innerHeight;
+  if (!onCanvas){
+    var bz = parseFloat(getComputedStyle(document.body).zoom) || 1;
+    availW = Math.round(availW / bz); availH = Math.round(availH / bz);
+    w = Math.min(w, Math.max(180, availW - 12));
+    h = Math.min(h, Math.max(200, availH - 76));   // clear of the tab bar
+  }
   // Cascade successive popouts a bit so they don't perfectly stack
   createFloatingWindow._n = (createFloatingWindow._n || 0) + 1;
   var off = (createFloatingWindow._n - 1) * 24;
   // Default position: viewport center, but converted into canvas-space so it
   // lands where the user is currently looking even if they've zoomed/scrolled.
   var defaultX, defaultY;
-  if (typeof clientToCanvas === 'function') {
+  // Only convert into canvas space when there IS a canvas. clientToCanvas
+  // describes a transform that does not exist in the player view, so using it
+  // there would place the window by coordinates from another geometry.
+  if (onCanvas && typeof clientToCanvas === 'function') {
     var cx = window.innerWidth / 2, cy = window.innerHeight / 2;
     var p = clientToCanvas(cx, cy);
     var z = (typeof getZoom === 'function') ? getZoom() : 1;
     defaultX = Math.max(20, Math.round(p.x - (w/2)/z)) + (off % 200);
     defaultY = Math.max(20, Math.round(p.y - (h/2)/z)) + ((off/2) % 120);
   } else {
-    defaultX = Math.max(20, Math.round(window.innerWidth/2  - w/2)) + (off % 200);
-    defaultY = Math.max(20, Math.round(window.innerHeight/2 - h/2)) + ((off/2) % 120);
+    // availW/availH, not innerWidth/innerHeight: under zoom they differ, and
+    // centring by the device viewport puts the window off the bottom.
+    defaultX = Math.max(6, Math.round(availW/2 - w/2)) + (onCanvas ? (off % 200) : 0);
+    defaultY = Math.max(6, Math.round(availH/2 - h/2)) + (onCanvas ? ((off/2) % 120) : 0);
   }
   var x = opts.x != null ? opts.x : defaultX;
   var y = opts.y != null ? opts.y : defaultY;
@@ -869,7 +891,11 @@ function createFloatingWindow(opts) {
   var el = document.createElement('div');
   el.className = 'window focused';
   el.dataset.ephemeral = '1';
-  Object.assign(el.style, {position:'absolute', left:x+'px', top:y+'px', width:w+'px', height:h+'px', zIndex:z});
+  // Absolute inside the canvas, which scrolls and scales with it. Fixed on the
+  // body, so a popout in the player view stays put instead of scrolling away
+  // with the panel underneath it.
+  Object.assign(el.style, {position: onCanvas ? 'absolute' : 'fixed',
+    left:x+'px', top:y+'px', width:w+'px', height:h+'px', zIndex:z});
   el.innerHTML =
     '<div class="window-head">'
       +'<div class="window-title">'
