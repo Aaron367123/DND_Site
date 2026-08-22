@@ -1571,7 +1571,10 @@ registerPanel('turnview', {
       if (src.gridColor){
         gc = src.gridColor;
       } else if (typeof _bgLuminance === 'function'){
-        const lum = _bgLuminance();
+        // OUR image, not the battle map panel's global. That global is only
+        // set once the Battle Map has been opened, and this panel loads its
+        // own copy precisely so it does not need that to have happened.
+        const lum = _bgLuminance(this._bgImage());
         if (lum != null) gc = lum > 128 ? 'rgba(0,0,0,.42)' : 'rgba(255,255,255,.34)';
       }
       ctx.strokeStyle = gc;

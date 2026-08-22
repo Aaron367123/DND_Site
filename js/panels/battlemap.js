@@ -14,15 +14,28 @@ let _mapBgImage = null; // holds the Image object
 // Image, so a different map is automatically a cache miss and there is no
 // invalidation to forget. `lum: null` means "couldn't sample" (tainted canvas)
 // and is cached too, so a failure doesn't retry the expensive resample forever.
-let _bgLumCache = { img: null, lum: null };
-function _bgLuminance(){
-  if (!_mapBgImage) return null;
-  if (_bgLumCache.img === _mapBgImage) return _bgLumCache.lum;
+//
+// A WeakMap rather than one slot, because there is now more than one image in
+// play. The Turn View loads its OWN copy of the map (see _bgImage there) so it
+// can draw a thumbnail without this panel ever being opened, and a single-slot
+// cache would thrash between the two.
+const _bgLumCache = new WeakMap();
+
+// `img` defaults to this panel's background, but any image may be passed. It
+// has to be: _mapBgImage is only assigned when the Battle Map panel loads a
+// map, and the Turn View is the panel a DM actually keeps open. Reading the
+// global unconditionally meant the Turn View's grid stayed on its white
+// fallback — invisible on a pale map — until the Battle Map had been opened
+// once, which is exactly how it was reported.
+function _bgLuminance(img){
+  const src = img || (typeof _mapBgImage !== 'undefined' ? _mapBgImage : null);
+  if (!src) return null;
+  if (_bgLumCache.has(src)) return _bgLumCache.get(src);
   let lum = null;
   try {
     const off = document.createElement('canvas'); off.width = 4; off.height = 4;
     const octx = off.getContext('2d');
-    octx.drawImage(_mapBgImage, 0, 0, 4, 4);
+    octx.drawImage(src, 0, 0, 4, 4);
     const d = octx.getImageData(0, 0, 4, 4).data;
     let t = 0;
     for (let i = 0; i < d.length; i += 4) t += (d[i]*299 + d[i+1]*587 + d[i+2]*114) / 1000;
@@ -32,7 +45,7 @@ function _bgLuminance(){
     // throws. Cache the failure so we stop paying for the resample.
     lum = null;
   }
-  _bgLumCache = { img: _mapBgImage, lum };
+  _bgLumCache.set(src, lum);
   return lum;
 }
 

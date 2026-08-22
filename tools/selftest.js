@@ -263,6 +263,48 @@
       }
     }
 
+    // 3c. The Turn View's grid colour must come from ITS OWN copy of the map.
+    // _mapBgImage is only assigned when the Battle Map panel loads a map, and
+    // that panel is usually closed — so reading the global meant the grid sat
+    // on its white fallback, invisible on a pale map, until the Battle Map had
+    // been opened once.
+    //
+    // The global has to be nulled deliberately here: the panel sweep above
+    // opens the Battle Map, which populates it, and the check would pass with
+    // the bug still present. The fixture's map is pale on purpose so "correct"
+    // means a DARK grid and the two outcomes are distinguishable.
+    {
+      const savedBg = (typeof _mapBgImage !== 'undefined') ? _mapBgImage : null;
+      try { _mapBgImage = null; } catch(e){}
+      openPanel('turnview'); await sleep(900);
+      const T = panelDefs.turnview;
+      const own = T._bgImage();
+      ok('turn view has its own copy of the map image', !!own);
+      const lum = (typeof _bgLuminance === 'function') ? _bgLuminance(own) : null;
+      ok('grid colour: luminance is read without the battle map panel',
+         lum != null, 'got ' + lum);
+      ok('grid colour: the fixture map reads as pale', lum != null && lum > 128, 'lum ' + lum);
+
+      T._mapCache = null;
+      try { T._placeTokens(); } catch(e){}
+      await sleep(300);
+      const cv = T._body && T._body.querySelector('.tv-map-draw');
+      ok('grid colour: the thumbnail drew a grid', !!cv);
+      if (cv){
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let dark = 0, light = 0;
+        for (let i = 0; i < d.length; i += 4){
+          if (d[i+3] < 8) continue;
+          const l = (d[i]*299 + d[i+1]*587 + d[i+2]*114) / 1000;
+          if (l < 96) dark++; else light++;
+        }
+        ok('grid colour: dark grid over a pale map, battle map never consulted',
+           dark > light, dark + ' dark vs ' + light + ' light');
+      }
+      try { _mapBgImage = savedBg; } catch(e){}
+      closePanel('turnview');
+    }
+
     // 4. whole-key merge, driven through the real apply path
     const K = 'skt-settings-v1', S0 = localStorage.getItem(K);
     if (S0){
