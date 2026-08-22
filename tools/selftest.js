@@ -352,6 +352,70 @@
       closePanel('battlemap'); closePanel('turnview');
     }
 
+    // Opportunity attacks. The rule lives in the Turn View because it owns the
+    // initiative order and the reaction bookkeeping, but the trigger has to
+    // reach it from the BATTLE MAP too — that is the map a DM drags on, and
+    // the check used to sit inline in the Turn View's own drag handler only.
+    //
+    // Tokens are resolved through _tokenFor at the point of use, never held
+    // across a step: an entity sync REPLACES the token objects, so a reference
+    // captured at the top of this block is stale by the time it is read and
+    // the geometry silently describes tokens that are no longer on the map.
+    {
+      openPanel('turnview'); await sleep(700);
+      openPanel('battlemap'); await sleep(700);
+      const T = panelDefs.turnview, B = panelDefs.battlemap;
+      const cs = B._csScreen();
+      const tokOf = id => T._tokenFor(T._order().find(c => c.id === id));
+      const wolf = T._order().find(c => c.id === 'wolf');
+      ok('oa: the bench has the tokens this needs',
+         !!tokOf('zoey') && !!tokOf('wolf') && !!tokOf('ogre1') && !!wolf);
+      if (tokOf('zoey') && tokOf('wolf') && tokOf('ogre1') && wolf){
+        const tok0 = JSON.stringify(B._tokens), hp0 = wolf.hp;
+        const provokes = (moverId, fx, fy, tx, ty) => {
+          const w = tokOf('wolf'); w.x = 200; w.y = 200;
+          const m = tokOf(moverId);
+          T._pending = null;
+          m.x = fx; m.y = fy;
+          const from = { x: fx, y: fy };
+          m.x = tx; m.y = ty;
+          T._checkProvoke(m, from);
+          return !!(T._pending && T._pending.kind === 'move');
+        };
+        delete wolf.reactionUsed; wolf.hp = 58;
+
+        ok('oa: leaving reach provokes', provokes('zoey', 200+cs, 200, 200+cs*4, 200));
+        ok('oa: the prompt carries the distance and the provoker', (() => {
+          const p = T._pending;
+          // rows are the COMBATANTS themselves, not {who,...} wrappers — the
+          // prompt renders w.name straight off them.
+          return !!(p && p.moved === 15 && (p.rows || []).some(r => r && r.id === 'wolf'));
+        })(), JSON.stringify(T._pending && { ft: T._pending.moved }));
+        ok('oa: moving within reach does not', !provokes('zoey', 200+cs, 200, 200, 200));
+        ok('oa: starting out of reach does not', !provokes('zoey', 200+cs*5, 200, 200+cs*9, 200));
+
+        wolf.reactionUsed = true;
+        ok('oa: a spent reaction does not', !provokes('zoey', 200+cs, 200, 200+cs*4, 200));
+        delete wolf.reactionUsed; wolf.hp = 0;
+        ok('oa: a downed watcher does not', !provokes('zoey', 200+cs, 200, 200+cs*4, 200));
+        wolf.hp = 58;
+        // Side is strictly PC vs non-PC, so two monsters never provoke.
+        ok('oa: a monster leaving a monster does not',
+           !provokes('ogre1', 200+cs, 200, 200+cs*4, 200));
+
+        // No Turn View means nowhere to prompt — a quiet no-op, not a throw.
+        T._pending = null;
+        closePanel('turnview');
+        let threw = false;
+        try { T._checkProvoke(tokOf('zoey') || { x:1, y:1 }, { x:0, y:0 }); } catch(e){ threw = true; }
+        ok('oa: no throw when the turn view is closed', !threw);
+
+        B._tokens = JSON.parse(tok0); wolf.hp = hp0; delete wolf.reactionUsed;
+        T._pending = null;
+      }
+      closePanel('battlemap');
+    }
+
     // 4. whole-key merge, driven through the real apply path
     const K = 'skt-settings-v1', S0 = localStorage.getItem(K);
     if (S0){

@@ -2298,6 +2298,32 @@ registerPanel('turnview', {
   // ─── Opportunity attacks ──────────────────────────────────────────────────
   // The one reaction triggered by movement rather than by a roll, which is why
   // the hit prompt could never house it. Its home is the map.
+  // Raise the opportunity-attack prompt for a token that just moved.
+  //
+  // Called from this panel's own drag AND from the Battle Map's — the check
+  // used to live inline in the drag handler here, so moving a creature on the
+  // big map provoked nothing at all. That is the map a DM actually drags on,
+  // which made the whole feature look broken.
+  //
+  // Safe to call with no combatant, no movement or a prompt already open; it
+  // decides. A token with no combatant can be moved but cannot provoke —
+  // there is nobody in the order for the reaction to belong to.
+  _checkProvoke(tok, from){
+    if (!this._body || !tok || !from) return;
+    if (tok.x === from.x && tok.y === from.y) return;
+    if (this._pending) return;
+    const mover = this._order().find(c => this._tokenFor(c) === tok)
+      || (tok.cid && this._order().find(c => c.id === tok.cid));
+    if (!mover) return;
+    const rows = this._provokedBy(mover, from);
+    if (!rows.length) return;
+    const cs = this._cs() || 50;
+    const ft = Math.round(Math.max(Math.abs(tok.x - from.x), Math.abs(tok.y - from.y)) / cs)
+             * this._ftPerCell();
+    this._pending = { kind:'move', mover, rows, moved: ft };
+    this._render();
+  },
+
   _provokedBy(mover, fromXY){
     const cs = this._cs() || 50;
     const at = { x: fromXY.x, y: fromXY.y };
@@ -2741,17 +2767,7 @@ registerPanel('turnview', {
           }
         } catch(err){ console.warn('[SKT] token move', err); }
       }
-      // A token with no combatant can be moved but can't provoke — there is
-      // nobody in the order for the opportunity attack to belong to.
-      const moved = tok && (tok.x !== d.from.x || tok.y !== d.from.y);
-      if (moved && mover && !this._pending){
-        const rows = this._provokedBy(mover, d.from);
-        if (rows.length){
-          const cs = this._cs() || 50;
-          const ft = Math.round(Math.max(Math.abs(tok.x - d.from.x), Math.abs(tok.y - d.from.y)) / cs) * this._ftPerCell();
-          this._pending = { kind:'move', mover, rows, moved: ft };
-        }
-      }
+      this._checkProvoke(tok, d.from);
       this._render();
     });
   },

@@ -4472,6 +4472,7 @@ registerPanel('battlemap',{
         // mousemove. (Local zoom no longer rescales anything — see
         // _applyViewScale — but a saved-map restore mid-drag still can.)
         this._drag = { moved:false, startPx:t.x, startPy:t.y };
+        const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
 
         const onMove=ev=>{
           // Token positions are stored in stage-pixel coords, but the cursor
@@ -4513,6 +4514,14 @@ registerPanel('battlemap',{
             t.y = Math.max(half, Math.min(stageH - half, ny));
             this._saveMap();
             this._renderTokens();
+            // Opportunity attacks. The prompt lives in the Turn View — it owns
+            // the initiative order and the reaction bookkeeping — so hand it
+            // the move and let it decide. It no-ops when that panel is closed,
+            // which is the honest outcome: there is nowhere to show a prompt.
+            const _tv = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+            if (_tv && typeof _tv._checkProvoke === 'function'){
+              try { _tv._checkProvoke(t, { x: _oaFrom.x, y: _oaFrom.y }); } catch(err){}
+            }
           }
           // Left-click no longer opens the options panel — right-click does.
           // Clear the drag flag AFTER the synthesized click event has had its
@@ -4560,6 +4569,7 @@ registerPanel('battlemap',{
         // when the user pinch-zooms mid-drag. See mouse handler above for
         // full rationale.
         this._drag = { moved:false, startPx:t.x, startPy:t.y };
+        const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
         const longPressTimer = setTimeout(() => {
           if (moved) return;
           longPressFired = true;
@@ -4613,6 +4623,14 @@ registerPanel('battlemap',{
             t.y = Math.max(half, Math.min(stageH - half, ny));
             this._saveMap();
             this._renderTokens();
+            // Opportunity attacks. The prompt lives in the Turn View — it owns
+            // the initiative order and the reaction bookkeeping — so hand it
+            // the move and let it decide. It no-ops when that panel is closed,
+            // which is the honest outcome: there is nowhere to show a prompt.
+            const _tv = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+            if (_tv && typeof _tv._checkProvoke === 'function'){
+              try { _tv._checkProvoke(t, { x: _oaFrom.x, y: _oaFrom.y }); } catch(err){}
+            }
           }
         };
         document.addEventListener('touchmove', onMove, { passive: false });
