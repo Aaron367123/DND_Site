@@ -49,6 +49,69 @@ function _bgLuminance(img){
   return lum;
 }
 
+// How a grid line should be painted, in one place.
+//
+// The Turn View draws its own thumbnail of the same map and was computing this
+// separately — badly. It honoured gridType, cellSize, the Align offsets and an
+// explicit colour, but ignored the Opacity and Width sliders completely and
+// applied a custom colour as raw hex with no alpha at all. So three of the
+// grid controls did nothing to the panel a DM actually watches.
+//
+// Shared rather than copied, because a copy is how they drifted in the first
+// place. Both callers pass their own scale factor `k` and their own luminance
+// sample; everything else is the stored settings.
+function sktGridPaint(opts){
+  const o = opts || {};
+  // Opacity ramps to FULLY opaque at 100% rather than capping at the base
+  // alpha, so a grid can be made bold over busy art.
+  const op = (o.gridOpacity != null ? o.gridOpacity : 60) / 100;
+  const alphaFor = base => op <= 0.6
+    ? base * op
+    : base * 0.6 + (1 - base * 0.6) * ((op - 0.6) / 0.4);
+
+  let color = 'rgba(255,255,255,' + alphaFor(0.18).toFixed(3) + ')';
+  if (o.gridColor){
+    // Base 0.3 — between the two adaptive bases — so switching to a custom
+    // colour does not jump in weight.
+    const h = String(o.gridColor).replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const n = parseInt(full, 16);
+    if (full.length === 6 && !isNaN(n)){
+      color = 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255)
+            + ',' + alphaFor(0.3).toFixed(3) + ')';
+    }
+  } else if (o.artLum != null){
+    // Sampled from the map ART. Heavier bases than the solid-colour branch
+    // because a grid has to compete with detail.
+    color = o.artLum > 128
+      ? 'rgba(0,0,0,'       + alphaFor(0.35).toFixed(3) + ')'
+      : 'rgba(255,255,255,' + alphaFor(0.25).toFixed(3) + ')';
+  } else if (o.solidLum != null){
+    // No art — brightness of the flat background colour instead.
+    color = o.solidLum > 128
+      ? 'rgba(0,0,0,'       + alphaFor(0.4).toFixed(3)  + ')'
+      : 'rgba(255,255,255,' + alphaFor(0.18).toFixed(3) + ')';
+  }
+
+  // Width is authored in device pixels and converted back through k so it
+  // survives the transform exactly.
+  const k = o.k || 1;
+  const w = Math.max(1, Math.min(4, o.gridWidth || 1));
+  if (o.crisp !== false){
+    // Battle map: a WHOLE number of backing pixels, because its pixel snapping
+    // needs an integer width and the matching half-pixel offset — an odd width
+    // straddles two rows without it.
+    const wDev = Math.max(1, Math.round(w * k));
+    return { color, wDev, lineWidth: wDev / k, half: (wDev % 2) ? 0.5 : 0 };
+  }
+  // Thumbnail: no snapping, so keep the width FRACTIONAL. Rounding here made
+  // every setting identical — at the Turn View's k of ~0.35, widths 1 through
+  // 4 all round to a single device pixel, so the Width slider appeared to do
+  // nothing. Floored at one device pixel so a thin grid stays visible.
+  const wDev = Math.max(1, w * k);
+  return { color, wDev, lineWidth: wDev / k, half: 0 };
+}
+
 registerPanel('battlemap',{
   title:'Battle Map',icon:'🗺',
 
@@ -3794,40 +3857,6 @@ registerPanel('battlemap',{
     // it ramps from that point up to FULLY opaque at 100%. The old mapping
     // capped at the base alpha (0.25–0.4) even with the slider maxed, so the
     // grid could never be made properly bold on busy map art.
-    const op = (this._gridOpacity != null ? this._gridOpacity : 60) / 100;
-    const alphaFor = base => op <= 0.6
-      ? base * op
-      : base * 0.6 + (1 - base * 0.6) * ((op - 0.6) / 0.4);
-
-    // Determine if background is light or dark for adaptive grid color
-    let gridColor='rgba(255,255,255,'+alphaFor(0.18).toFixed(3)+')';
-    if (this._gridColor){
-      // Explicit colour. Runs the SAME alphaFor curve as the adaptive branches
-      // so the Opacity slider behaves identically either way — 0.3 base, i.e.
-      // between the two adaptive bases, so switching to a custom colour doesn't
-      // jump in weight. 100% still reaches fully opaque.
-      const c = this._hexToRgb(this._gridColor);
-      if (c) gridColor = 'rgba('+c.r+','+c.g+','+c.b+','+alphaFor(0.3).toFixed(3)+')';
-    } else if(_mapBgImage){
-      // Average brightness of the map art, cached per Image — see
-      // _bgLuminance(). null means the sample wasn't available (tainted
-      // canvas), in which case we keep the default light grid.
-      const lum = _bgLuminance();
-      if (lum != null){
-        gridColor=lum>128?'rgba(0,0,0,'+alphaFor(0.35).toFixed(3)+')':'rgba(255,255,255,'+alphaFor(0.25).toFixed(3)+')';
-      }
-    } else {
-      // Parse bgColor hex to check brightness
-      const hex=this._bgColor.replace('#','');
-      if(hex.length===6){
-        const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),bv=parseInt(hex.slice(4,6),16);
-        const lum=(r*299+g*587+bv*114)/1000;
-        gridColor=lum>128?'rgba(0,0,0,'+alphaFor(0.4).toFixed(3)+')':'rgba(255,255,255,'+alphaFor(0.18).toFixed(3)+')';
-      }
-    }
-
-    ctx.strokeStyle=gridColor;
-
     // Pixel snapping has to happen in BACKING-STORE space, not stage space.
     //
     // _sizeLayer leaves a setTransform(k,0,0,k,0,0) on the context, so a stage
@@ -3848,12 +3877,32 @@ registerPanel('battlemap',{
     // pixel grid at any k, and the residual spacing error is bounded at ONE
     // device pixel, which is the floor for a non-integer cell size.
     const k = this._canvasK(W, H);
+    // One definition of how a grid line looks, shared with the Turn View's
+    // thumbnail — see sktGridPaint. It used to live only here, which is how
+    // the Turn View ended up ignoring Opacity and Width entirely.
+    let _solidLum = null;
+    if (!this._gridColor && !_mapBgImage){
+      const hex = String(this._bgColor || '').replace('#','');
+      if (hex.length === 6){
+        const r=parseInt(hex.slice(0,2),16), g=parseInt(hex.slice(2,4),16), bv=parseInt(hex.slice(4,6),16);
+        _solidLum = (r*299 + g*587 + bv*114) / 1000;
+      }
+    }
+    const _paint = sktGridPaint({
+      gridColor: this._gridColor, gridOpacity: this._gridOpacity,
+      gridWidth: this._gridWidth, k,
+      artLum: _mapBgImage ? _bgLuminance() : null,
+      solidLum: _solidLum,
+    });
+    const gridColor = _paint.color;
+
+    ctx.strokeStyle = _paint.color;
     // Pick a whole number of backing pixels for the stroke, then express it
     // back in stage units so it survives the k transform exactly. The
     // half-pixel offset applies only to odd widths — an even-width stroke
     // straddles an integer boundary cleanly.
-    const wDev = Math.max(1, Math.round(Math.max(1, Math.min(4, this._gridWidth || 1)) * k));
-    const half = (wDev % 2) ? 0.5 : 0;
+    const wDev = _paint.wDev;
+    const half = _paint.half;
     const snap = v => (Math.round(v * k - half) + half) / k;
     ctx.lineWidth = wDev / k;
     // Offsets are stored in image-pixel space; convert to on-screen pixels.

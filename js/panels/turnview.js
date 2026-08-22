@@ -420,6 +420,7 @@ registerPanel('turnview', {
                snap:!!B._snapToGrid,
                gridOffsetX:B._gridOffsetX || 0, gridOffsetY:B._gridOffsetY || 0,
                gridColor:B._gridColor || null,
+               gridOpacity:B._gridOpacity, gridWidth:B._gridWidth,
                ftPerCell:+B._ftPerCell > 0 ? +B._ftPerCell : 5,
                drawings:Array.isArray(B._drawings) ? B._drawings : [] };
     }
@@ -434,13 +435,15 @@ registerPanel('turnview', {
                  snap:!!d.snapToGrid,
                  gridOffsetX:d.gridOffsetX || 0, gridOffsetY:d.gridOffsetY || 0,
                  gridColor:d.gridColor || null,
+                 gridOpacity:d.gridOpacity, gridWidth:d.gridWidth,
                  ftPerCell:+d.ftPerCell > 0 ? +d.ftPerCell : 5,
                  drawings:Array.isArray(d.drawings) ? d.drawings : [] };
       }
     } catch(e){}
     return { live:false, tokens:[], cs:50, cols:24, rows:18, gridType:'square',
              bgPath:null, bgScale:1, rotation:0, snap:false,
-             gridOffsetX:0, gridOffsetY:0, gridColor:null, ftPerCell:5, drawings:[] };
+             gridOffsetX:0, gridOffsetY:0, gridColor:null,
+             gridOpacity:60, gridWidth:1, ftPerCell:5, drawings:[] };
   },
   _map(){ return this._mapCache || (this._mapCache = this._mapSrc()); },
 
@@ -1567,18 +1570,23 @@ registerPanel('turnview', {
       // and from the DM's own grid colour when they have set one. A fixed
       // white at 34% was invisible on this campaign's map: sea, snow and pale
       // tan, so a white grid over it painted 29,000 pixels nobody could see.
-      let gc = 'rgba(255,255,255,.34)';
-      if (src.gridColor){
-        gc = src.gridColor;
-      } else if (typeof _bgLuminance === 'function'){
-        // OUR image, not the battle map panel's global. That global is only
-        // set once the Battle Map has been opened, and this panel loads its
-        // own copy precisely so it does not need that to have happened.
-        const lum = _bgLuminance(this._bgImage());
-        if (lum != null) gc = lum > 128 ? 'rgba(0,0,0,.42)' : 'rgba(255,255,255,.34)';
-      }
-      ctx.strokeStyle = gc;
-      ctx.lineWidth = Math.max(0.6, 1) / k;
+      // Same definition the battle map uses — see sktGridPaint. This used to
+      // be a second, thinner implementation: it honoured gridColor but as raw
+      // hex with no alpha, and ignored the Opacity and Width sliders outright,
+      // so three of the grid controls did nothing to this panel.
+      //
+      // OUR image, not the battle map panel's _mapBgImage global. That global
+      // is only set once the Battle Map has been opened, and this panel loads
+      // its own copy precisely so it does not need that to have happened.
+      const paint = (typeof sktGridPaint === 'function')
+        ? sktGridPaint({
+            gridColor: src.gridColor, gridOpacity: src.gridOpacity,
+            gridWidth: src.gridWidth, k, crisp: false,
+            artLum: (typeof _bgLuminance === 'function') ? _bgLuminance(this._bgImage()) : null,
+          })
+        : { color: 'rgba(255,255,255,.34)', lineWidth: 1 / k };
+      ctx.strokeStyle = paint.color;
+      ctx.lineWidth = paint.lineWidth;
       const SW = (src.cols || 24) * cs, SH = (src.rows || 18) * cs;
       const gx = (((src.gridOffsetX || 0) * (src.bgScale || 1)) % cs + cs) % cs;
       const gy = (((src.gridOffsetY || 0) * (src.bgScale || 1)) % cs + cs) % cs;

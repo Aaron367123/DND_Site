@@ -305,6 +305,53 @@
       closePanel('turnview');
     }
 
+    // 3d. Every grid control on the battle map must reach the Turn View's
+    // thumbnail. It read gridType, cellSize, the Align offsets and gridColor,
+    // but ignored Opacity and Width outright and applied a custom colour as
+    // raw hex with no alpha — so three of the controls did nothing to the
+    // panel a DM actually watches.
+    {
+      openPanel('turnview'); await sleep(700);
+      openPanel('battlemap'); await sleep(700);
+      const T = panelDefs.turnview, B = panelDefs.battlemap;
+      const o0 = B._gridOpacity, w0 = B._gridWidth, c0 = B._gridColor;
+      const ink = () => {
+        const cv = T._body && T._body.querySelector('.tv-map-draw');
+        if (!cv) return null;
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let n = 0, a = 0;
+        for (let i = 0; i < d.length; i += 4){ if (d[i+3] > 4){ n++; a += d[i+3]; } }
+        return { px: n, alpha: n ? Math.round(a / n) : 0 };
+      };
+      const set = async (op, w, col) => {
+        B._gridOpacity = op; B._gridWidth = w; B._gridColor = col;
+        B._saveMap(); await sleep(420); return ink();
+      };
+      const faint = await set(20, 1, null);
+      const bold  = await set(100, 1, null);
+      ok('grid: the Opacity slider reaches the turn view',
+         faint && bold && bold.alpha > faint.alpha * 2,
+         JSON.stringify({ faint, bold }));
+
+      const thin  = await set(60, 1, null);
+      const thick = await set(60, 4, null);
+      // 1 vs 2 both fall under one device pixel at thumbnail scale and cannot
+      // differ; 1 vs 4 must.
+      ok('grid: the Width slider reaches the turn view',
+         thin && thick && thick.px > thin.px,
+         JSON.stringify({ thin, thick }));
+
+      const auto = await set(60, 1, null);
+      const red  = await set(60, 1, '#ff0000');
+      ok('grid: a custom colour reaches the turn view',
+         auto && red && (red.px !== auto.px || red.alpha !== auto.alpha),
+         JSON.stringify({ auto, red }));
+
+      B._gridOpacity = o0; B._gridWidth = w0; B._gridColor = c0;
+      B._saveMap(); await sleep(200);
+      closePanel('battlemap'); closePanel('turnview');
+    }
+
     // 4. whole-key merge, driven through the real apply path
     const K = 'skt-settings-v1', S0 = localStorage.getItem(K);
     if (S0){
