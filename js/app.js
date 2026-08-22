@@ -65,8 +65,28 @@ function init(){
     // was causing the player view to come up looking like the DM view in
     // Opera GX's named-target reuse. A timestamped name forces a fresh
     // window with the correct ?player=1 URL every click.
+    // INSTALLED (standalone) vs a browser tab, because the two need opposite
+    // things from window.open.
+    //
+    // Passing a features string is what makes a browser treat the result as a
+    // POPUP. In a tab that is what we want — a right-sized second window. From
+    // an installed app it is not: Chrome gives a popup with its own address bar
+    // instead of a clean app window, which is the Chrome top bar showing up on
+    // the player view. With no features an installed app opens another app
+    // window, and the URL is inside the manifest scope so it stays in the app.
+    //
+    // `noopener` is also dropped. It is SPECIFIED to return null, so `w` was
+    // always null: the popup-blocked toast fired on every successful open and
+    // the force-navigate fallback below could never run. It bought nothing
+    // here anyway — same origin, our own window, and the two already share
+    // localStorage.
+    const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches)
+      || (window.matchMedia && matchMedia('(display-mode: window-controls-overlay)').matches)
+      || navigator.standalone === true;
     const target = 'skt-player-' + Date.now();
-    const w = window.open(url, target, 'width=1280,height=720,noopener');
+    const w = standalone
+      ? window.open(url, target)
+      : window.open(url, target, 'width=1280,height=720');
     if (!w){
       showToast('Allow popups to open player view');
       return;

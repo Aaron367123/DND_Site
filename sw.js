@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'f05b91f8c2';
+const BUILD = '808a2cd2b6';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=b1d1084e13',
@@ -82,7 +82,7 @@ const PRECACHE = [
   'js/sync/realtime.js?v=719da8d73e',
   'js/ui/tutorial.js?v=e47e670b86',
   'js/ui/onboarding.js?v=42199a671a',
-  'js/app.js?v=957b026bfd',
+  'js/app.js?v=efdfab77e2',
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build
