@@ -1023,8 +1023,14 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
    between column-count breakpoints. */
 .party-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill, var(--party-card-w, 210px));
-  justify-content:start;
+  /* minmax(W, 1fr), not a fixed W. A fixed track leaves every leftover pixel
+     dead on the right: on a 390px phone a 273px card — the width the DM chose
+     on their monitor, since partyCardWidth SYNCS — stranded 89px of a 362px
+     row. The player view already carried a single-column override for exactly
+     this, which fixed it there and nowhere else.
+     The chosen width becomes a MINIMUM: the same number of columns still fit,
+     and they share the slack instead of pooling it at the edge. */
+  grid-template-columns:repeat(auto-fill, minmax(var(--party-card-w, 210px), 1fr));
   gap:10px;padding:10px
 }
 

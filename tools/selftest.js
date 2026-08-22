@@ -1579,6 +1579,28 @@
       await sleep(60);
     }
 
+    // Party cards must use the row they are given. The grid used a FIXED track
+    // width, so every leftover pixel pooled dead on the right — and because
+    // partyCardWidth syncs, a width chosen on a monitor followed the DM onto
+    // their phone and stranded 89px of a 362px row.
+    {
+      openPanel('party'); await sleep(800);
+      const b = panelDefs.party._body;
+      const card = b.querySelector('.char-card');
+      ok('party: a card renders', !!card);
+      if (card){
+        const grid = card.parentElement;
+        const R = e => e.getBoundingClientRect();
+        const top = R(card).top;
+        const row = [...grid.children].filter(c => Math.abs(R(c).top - top) < 2);
+        const pad = parseFloat(getComputedStyle(grid).paddingRight) || 0;
+        const dead = R(grid).right - R(row[row.length - 1]).right - pad;
+        ok('party: the last card in a row reaches the edge (' + Math.round(dead) + 'px slack)',
+           dead < 24, Math.round(dead) + 'px dead to the right of ' + row.length + ' card(s)');
+      }
+      closePanel('party');
+    }
+
     // Turn View's map must not offer the hover-expand on a phone - the screen
     // is already small, which is why the expansion was taken out.
     openPanel('turnview'); await sleep(460);
