@@ -797,7 +797,17 @@ function openWindowMenu(id, anchorBtn){
   // affect this tab's layout.
   const items = [];
   if (!isPlayer){
-    items.push({ act:'share', label: (isShared?'👁':'◌')+' '+(isShared?'Shared with players (click to unshare)':'Share with player view') });
+    // Only offer sharing for panels the player view can actually surface. It
+    // used to be offered on all seventeen, and for the rest it set a flag,
+    // lit the eye icon and synced to every device while showing the player
+    // nothing — indistinguishable from a bug. PA_SHAREABLE lives beside the
+    // player's tab list so adding a tab there enables sharing here.
+    const canShare = (typeof PA_SHAREABLE === 'undefined') || PA_SHAREABLE.has(id);
+    if (canShare){
+      items.push({ act:'share', label: (isShared?'👁':'◌')+' '+(isShared?'Shared with players (click to unshare)':'Share with player view') });
+    } else {
+      items.push({ label:'◌ No player view for this panel', disabled:true });
+    }
   }
   items.push({ act:'lock',  label: (isLocked?'🔒':'🔓')+' '+(isLocked?'Locked (click to unlock)':'Lock window') });
   items.push({ act:'snap',  label:'▢ Snap to layout…' });
@@ -820,10 +830,15 @@ function openWindowMenu(id, anchorBtn){
 
   const menu = document.createElement('div');
   menu.className = 'window-menu';
+  // `disabled` items render as plain text, not buttons. The renderer used to
+  // ignore the flag and emit a <button data-act="undefined"> — clickable,
+  // focusable and inert. party.js has been passing one for its separator.
   menu.innerHTML = items.map(it =>
     it.act === '__sep'
       ? '<div class="window-menu-sep"></div>'
-      : `<button class="window-menu-item" data-act="${it.act}">${it.label}</button>`
+      : it.disabled
+        ? `<div class="window-menu-item is-disabled">${it.label}</div>`
+        : `<button class="window-menu-item" data-act="${it.act}">${it.label}</button>`
   ).join('');
   document.body.appendChild(menu);
   _windowMenuEl = menu;

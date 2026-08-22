@@ -86,6 +86,17 @@ const PA_TABS = [
 ];
 let paTab = 'you';
 
+// What the player view can actually surface, kept next to the tab list so the
+// two cannot drift. The DM's per-window "Share with player view" menu reads
+// this: without it, every one of the seventeen panels offered to be shared and
+// only these did anything. Sharing Loot or Shop set a flag, showed the eye
+// icon, synced the list to every device — and produced nothing on the player's
+// screen, with no way to tell that from a bug.
+//
+// `combat` has no tab of its own but drives the turn strip and the monster-stat
+// reveal, so sharing it is meaningful.
+const PA_SHAREABLE = new Set(PA_TABS.filter(t => t.needs).map(t => t.needs).concat(['combat']));
+
 function paVisibleTabs(){
   const sh = paShared();
   return PA_TABS.filter(t => t.always || sh.has(t.needs));
