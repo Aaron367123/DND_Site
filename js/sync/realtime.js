@@ -236,7 +236,27 @@ const _ENTITY_KEYS = {
       const parse = (n, fb) => { try { return nodes[n] != null ? JSON.parse(nodes[n]) : fb; } catch(e){ return fb; } };
       return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: parse('drawings', []) });
     },
-    postApply(){ _reloadPanel('battlemap'); if (typeof paRender === 'function') paRender(); },
+    postApply(){
+      _reloadPanel('battlemap');
+      // The Turn View draws its own copy of the map, and _reloadPanel is not
+      // enough to reach it: that returns immediately when the battle map panel
+      // is not mounted, which is the normal case — the Turn View is the panel
+      // a DM keeps open, and the battle map is the one they open when needed.
+      // So an incoming grid change, a resized cell or a new Align offset
+      // updated localStorage and nothing redrew, and the Turn View kept the
+      // old grid until the battle map was opened and its own save path fired
+      // the notify. Reported exactly that way: "the grid syncs for the turn
+      // view only when I open the battle map."
+      //
+      // _notifyMapChanged does not touch the battle map's own DOM, so it is
+      // safe to call with that panel closed, and each consumer's _syncFromMap
+      // guards on its own _body.
+      const bm = (typeof panelDefs !== 'undefined') && panelDefs.battlemap;
+      if (bm && typeof bm._notifyMapChanged === 'function'){
+        try { bm._notifyMapChanged(); } catch(e){ _diag('notify map consumers', e); }
+      }
+      if (typeof paRender === 'function') paRender();
+    },
     // The only nodes a PLAYER view may write. Mirrors what the battle map
     // panel accepts from a player over BroadcastChannel, so the two routes
     // can't drift: pencil strokes, and moves of tokens that ALREADY EXIST on

@@ -224,6 +224,45 @@
       d => (!d.tokens[0] || d.tokens[0].x === 111)
         && (!d.tokens[1] || d.tokens[1].x === 222));
 
+    // 3b. A map change arriving from another device must reach the Turn View
+    // even when the Battle Map panel is CLOSED — which is the normal case, as
+    // the Turn View is the panel a DM keeps open. postApply used to call only
+    // _reloadPanel('battlemap'), which returns immediately for an unmounted
+    // panel, so a new grid type, cell size or Align offset landed in storage
+    // and nothing redrew until the battle map was opened.
+    {
+      const K = 'skt-battlemap-v1', spec = _ENTITY_KEYS[K];
+      const base = localStorage.getItem(K);
+      if (base){
+        openPanel('turnview'); await sleep(600);
+        try { closePanel('battlemap'); } catch(e){}
+        const T = panelDefs.turnview;
+        ok('map sync: the battle map panel is closed for this check', !panelDefs.battlemap._body);
+        ok('map sync: the turn view is open', !!T._body);
+
+        let told = 0;
+        const real = T._syncFromMap.bind(T);
+        T._syncFromMap = function(){ told++; return real(); };
+
+        const changed = JSON.parse(base);
+        changed.gridType = changed.gridType === 'hex' ? 'square' : 'hex';
+        changed.cellSize = (changed.cellSize || 50) + 30;
+        _entityCache[K] = spec.explode(base);
+        _applyEntitySnapshot(K, nest(spec.explode(JSON.stringify(changed))));
+        await sleep(350);
+
+        T._syncFromMap = real;
+        ok('map sync: a remote grid change reaches the turn view with the map closed',
+           told > 0, 'the turn view was never told');
+        ok('map sync: and the new grid is what got stored',
+           JSON.parse(localStorage.getItem(K)).gridType === changed.gridType);
+
+        _remoteUpdate = true; localStorage.setItem(K, base); _remoteUpdate = false;
+        delete _entityCache[K];
+        closePanel('turnview');
+      }
+    }
+
     // 4. whole-key merge, driven through the real apply path
     const K = 'skt-settings-v1', S0 = localStorage.getItem(K);
     if (S0){
