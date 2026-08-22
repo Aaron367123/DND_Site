@@ -83,6 +83,12 @@ const PA_TABS = [
   { id:'map',   label:'Map',   icon:'i-map',    needs:'battlemap' },
   { id:'party', label:'Party', icon:'i-user',   needs:'party' },
   { id:'notes', label:'Notes', icon:'i-note',   needs:'notes' },
+  // Loot is fully interactive for players, deliberately. The party's haul is
+  // the party's business — claiming an item, splitting coin and adding what
+  // they picked up is bookkeeping the DM should not have to relay. The panel
+  // mounts unrestricted, which is also why it needs no player-mode branches of
+  // its own.
+  { id:'loot',  label:'Loot',  icon:'i-chest',  needs:'loot'  },
 ];
 let paTab = 'you';
 
@@ -263,7 +269,9 @@ function paRenderScreen(){
   el.innerHTML = '';
   if (paTab === 'you')   { el.innerHTML = paYouScreen(); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
-  if (paTab === 'map' || paTab === 'notes') { paMountPanel(el, paTab === 'map' ? 'battlemap' : 'notes'); return; }
+  if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
+  if (paTab === 'notes') { paMountPanel(el, 'notes');     return; }
+  if (paTab === 'loot')  { paMountPanel(el, 'loot');      return; }
 }
 
 // The map and the notes are the DM panels, mounted whole. Not rewritten:

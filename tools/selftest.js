@@ -1320,6 +1320,45 @@
       save();
     }
 
+    // Loot is a full player-facing tab, unrestricted by choice: the party's
+    // haul is the party's business, so claiming, splitting and adding are all
+    // theirs. That is why loot.js needs no player-mode branches — but it also
+    // means a regression here hands players a panel that does not work rather
+    // than one that is merely read-only, so it is worth pinning.
+    {
+      const SH = JSON.stringify(state.sharedPanels || []);
+      ok('loot is offered as shareable', typeof PA_SHAREABLE !== 'undefined'
+         && PA_SHAREABLE.has('loot'));
+      state.sharedPanels = ['loot']; save();
+      paRender(); await sleep(600);
+      const tab = [...document.querySelectorAll('.pa-tab')].find(t => /loot/i.test(t.textContent));
+      ok('sharing loot produces a Loot tab', !!tab);
+      if (tab){
+        tab.click(); await sleep(900);
+        const L = panelDefs.loot;
+        ok('the loot panel mounts for a player', !!(L && L._body && L._body.children.length));
+        if (L && L._body){
+          ok('a player can see the coin totals', !!L._body.querySelector('.loot-summary'));
+          ok('a player gets the full controls',
+             !!L._body.querySelector('#loot-roll') && !!L._body.querySelector('#loot-divvy')
+             && !!L._body.querySelector('#loot-add-item'),
+             'missing one of roll/divvy/add');
+          ok('a player can claim items',
+             L._body.querySelectorAll('[data-lact="paid"]').length > 0);
+          ok('the loot panel does not overflow the screen',
+             document.documentElement.scrollWidth <= window.innerWidth + 1,
+             document.documentElement.scrollWidth + ' > ' + window.innerWidth);
+        }
+      }
+      // Unsharing must take the tab away again.
+      state.sharedPanels = []; save();
+      paRender(); await sleep(500);
+      ok('unsharing loot removes the tab',
+         ![...document.querySelectorAll('.pa-tab')].some(t => /loot/i.test(t.textContent)));
+      state.sharedPanels = JSON.parse(SH); save();
+      paRender(); await sleep(300);
+    }
+
     // Fog of war. A player must not see the map under fog, and must not see a
     // monster standing in it. Checked at the PIXEL level as well as the DOM,
     // because "hidden" that is only CSS is still readable by anyone curious.

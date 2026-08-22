@@ -801,7 +801,7 @@ registerPanel('loot',{
       <div class="loot-summary">
         ${['cp','sp','ep','gp','pp'].map(c=>`<div class="loot-coin"><div class="l">${c.toUpperCase()}</div><input type="number" id="loot-${c}" value="${this._loot[c]||0}" min="0"></div>`).join('')}
       </div>
-      <div style="padding:6px 10px;border-bottom:1px solid var(--border);font-size:var(--fs-sm);color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="loot-sumbar">
         <span>Total: <strong style="color:var(--warning)">${totalGp} gp</strong> equivalent</span>
         <span>· Per party member: <strong style="color:var(--warning)">${state.party.length?(totalGp/state.party.length).toFixed(2):totalGp} gp</strong></span>
         <label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">

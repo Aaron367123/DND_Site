@@ -2956,6 +2956,26 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .loot-coin{background:var(--panel-3);border-radius:var(--r-sm);padding:6px 8px;text-align:center}
 .loot-coin .l{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
 .loot-coin input{background:transparent;border:none;text-align:center;font-weight:600;font-size:var(--fs-xl);padding:2px 0;width:100%}
+/* The player view runs at zoom:2 on a phone, so this panel lays out in roughly
+   195 CSS px. Five full-size coin tiles wrap to three rows there and push the
+   item list — the thing a player opened the tab for — off the bottom of the
+   screen entirely. One compact row instead: still five across, still tappable
+   at 2x, and the loot itself is visible without scrolling. */
+body.player-mode .loot-summary{grid-template-columns:repeat(5,1fr);gap:3px;padding:6px 6px 5px}
+body.player-mode .loot-coin{padding:3px 1px}
+body.player-mode .loot-coin .l{font-size:9px;letter-spacing:0}
+body.player-mode .loot-coin input{font-size:var(--fs-md);padding:0}
+
+/* Was inline on the element. Lifted to a class verbatim so the player view can
+   compact it — inline styles cannot be overridden without !important, and the
+   DM view is unchanged by the move. */
+.loot-sumbar{padding:6px 10px;border-bottom:1px solid var(--border);font-size:var(--fs-sm);
+  color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* At zoom:2 on a phone this bar wrapped to five stacked lines and, with the
+   coin row above it, pushed every item off the screen. */
+body.player-mode .loot-sumbar{gap:4px 8px;padding:4px 6px;font-size:var(--fs-2xs)}
+body.player-mode .loot-sumbar .btn.small{padding:2px 6px;font-size:var(--fs-2xs)}
+body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .loot-items{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px;min-width:0}
 .loot-item{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;min-width:0}
 .loot-item .loot-name{flex:1 1 140px;font-size:var(--fs-md);min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
