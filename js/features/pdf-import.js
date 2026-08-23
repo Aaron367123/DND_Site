@@ -288,7 +288,8 @@ function _fromFields(f){
     bonds:     sStr('Bonds'),
     flaws:     sStr('Flaws'),
     allies:    sStr('Allies','AlliesOrgs','Allies & Organizations'),
-    features:  sStr('Feat+Traits','FeaturesandTraits','Features and Traits','Features+Traits'),
+    features:  sStr('Feat+Traits','FeaturesandTraits','Features and Traits','Features+Traits')
+                 || _ddbFeaturesText(f),
   };
 
   // Attacks — standard 5e form has 3 weapon slots ("Wpn Name", "Wpn Name 2", "Wpn Name 3").
@@ -401,14 +402,20 @@ function _fromFields(f){
   console.log('[PDF Import] spell-related fields ('+spellLikeKeys.length+'), extracted spells ('+spellsUniq.length+'), slots:', spellSlots);
 
   // Best-effort, and honest about it: an explicit field if the template has
-  // one, then the parenthetical from Class & Level, then the Features & Traits
-  // prose. Null when the sheet simply doesn't say.
+  // one, then D&D Beyond's "| <name>" line under the subclass marker, then the
+  // parenthetical from Class & Level, then the Features & Traits prose. Null
+  // when the sheet simply doesn't say.
   const subclass = _matchSubclass(cls, [
     get('Subclass', 'SubClass', 'Archetype', 'ClassArchetype', 'Sub Class', 'ClassSubclass'),
+    _ddbSubclassName(bio.features),
     subclassHint,
     bio.features,
   ]);
-  const feats = _matchFeats(bio.features);
+  // The bullet list first — it is exact, and it keeps feats _5eData does not
+  // carry. The prose scan stays as a fallback for templates that write feats
+  // as a plain list with no bullets.
+  const ddbFeats = _ddbFeats(bio.features);
+  const feats = ddbFeats.length ? ddbFeats : _matchFeats(_featsRegion(bio.features));
   const resources = _deriveResources(
     classLevels || (cls && level ? [{ cls, level }] : []), abilities);
 
@@ -488,6 +495,85 @@ function _matchSubclass(cls, candidates){
     for (const f of forms) if (_wordIn(hay, f.text)) return f.short;
   }
   return null;
+}
+
+// ── D&D Beyond's numbered features box ──────────────────────────────────────
+//
+// The 2024 D&D Beyond export does not have a field called "Features and
+// Traits". It has FeaturesTraits1 … FeaturesTraits6 — the same box, split
+// across as many parts as the text needs. None of the four aliases this
+// importer looked it up under matches any of them, so bio.features came back
+// as the empty string on every sheet exported since, and everything derived
+// from it came back empty too: the subclass, the feats, and the character's
+// entire Features & Traits section (7,127 characters on one of the sheets
+// that reported this bug).
+//
+// Joined in numeric order, because part 3 continues a sentence part 2 started
+// and lexical order puts 10 before 2.
+function _ddbFeaturesText(f){
+  return Object.keys(f)
+    .filter(k => /^FeaturesTraits\d*$/i.test(k))
+    .sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0)
+                  - (parseInt(b.replace(/\D/g, ''), 10) || 0))
+    .map(k => String(f[k] || ''))
+    .join('\n');
+}
+
+// D&D Beyond writes the chosen subclass as a marker line followed by an
+// indented pipe entry:
+//
+//     * Druid Subclass • PHB-2024 81
+//
+//        | Circle of the Land
+//
+// Reading it here is exact, needs no dataset, and does not care that the 2024
+// monk subclasses are called "Warrior of Mercy" rather than "Way of …". The
+// name still goes through _matchSubclass afterwards to become the short form
+// the reaction table keys on.
+function _ddbSubclassName(text){
+  const m = /^[^\S\n]*\*[^\n]*\bSubclass\b[^\n]*$/mi.exec(String(text || ''));
+  if (!m) return null;
+  const after = String(text).slice(m.index + m[0].length);
+  const pipe = /^[^\S\n]*\|[^\S\n]*(.+?)[^\S\n]*$/m.exec(after);
+  if (!pipe) return null;
+  // Only accept it if it is the next non-blank line. Anything further down
+  // belongs to some other feature's pipe list — "Natural Recovery: Cast
+  // Circle Spell" sits four lines below the subclass on one of these sheets.
+  const between = after.slice(0, pipe.index);
+  if (/\S/.test(between)) return null;
+  return pipe[1].trim() || null;
+}
+
+// Feat names from the "=== FEATS ===" section, read off the bullet lines
+// rather than scanned out of the prose:
+//
+//     === FEATS ===
+//     * Sentinel • PHB-2024 207
+//     Ability Score Increase. Increase your Str. or Dex. by 1.
+//
+// The prose under each feat names its own sub-features — "Guardian.",
+// "Halt.", "Defy Death." — and scanning it would hand back those as feats.
+// The bullet line is unambiguous, and taking it verbatim keeps feats the
+// dataset has never heard of: one of these sheets has Aberrant Dragonmark
+// out of Eberron, which a _5eData lookup would have silently dropped.
+function _ddbFeats(text){
+  const s = String(text || '');
+  const start = s.search(/===\s*FEATS?\s*===/i);
+  if (start < 0) return [];
+  const rest = s.slice(start);
+  const out = [];
+  const re = /^[^\S\n]*\*[^\S\n]*(.+?)[^\S\n]*•/gm;
+  let m;
+  while ((m = re.exec(rest)) !== null){
+    const name = m[1].trim();
+    // Ability score bumps ride in the same bullet list, both bare and named
+    // after the background that granted them ("Sage Ability Score
+    // Improvements" on one of these sheets). They are not feats.
+    if (name && !/ability score (increase|improvement)s?$/i.test(name) && out.indexOf(name) < 0){
+      out.push(name);
+    }
+  }
+  return out;
 }
 
 // Feat names found in the sheet's free-text Features & Traits box, or in a

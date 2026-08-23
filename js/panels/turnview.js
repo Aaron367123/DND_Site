@@ -248,7 +248,12 @@ registerPanel('turnview', {
       // is the free-text "Features and Traits" box a PDF import fills. Matching
       // names against that text finds Defensive Duelist when it is written
       // down and finds nothing when it isn't, which is the honest answer.
-      const featText = String(sheet.features || '') + ' ' + (Array.isArray(p.feats) ? p.feats.join(' ') : '');
+      // sheet.bio.features, not sheet.features — the PDF importer nests the
+      // free-text boxes under bio, so this read undefined on every character
+      // and the whole features-text half of the match never ran. It looked
+      // like it worked because p.feats usually carries the same names.
+      const featText = String((sheet.bio && sheet.bio.features) || sheet.features || '')
+                     + ' ' + (Array.isArray(p.feats) ? p.feats.join(' ') : '');
       if (featText.trim()){
         const hay = featText.toLowerCase();
         T.feats.forEach(f => { if (hay.includes(f.name.toLowerCase())) out.push({ ...f, from:'feat' }); });

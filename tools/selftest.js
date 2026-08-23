@@ -1279,6 +1279,101 @@
         ok('pdf: a subclass from the wrong class is not matched',
            _matchSubclass('wizard', [page]) === null,
            String(_matchSubclass('wizard', [page])));
+
+        // ── The real D&D Beyond 2024 export shape ────────────────────────
+        // Verbatim structure from three sheets that reported this bug: the
+        // features box is FeaturesTraits1..6, there is no Subclass field at
+        // all, Class & Level is "Monk 6" with no parenthetical, and the
+        // rendered page text is ~2 KB of blank-form labels because every bit
+        // of content lives in the AcroForm fields.
+        const ddb = {
+          'FeaturesTraits1': '=== MONK FEATURES === \n\n* Martial Arts • PHB-2024 101 \n',
+          // Deliberately out of lexical order: "10" sorts before "2" as text,
+          // and part 3 continues a sentence part 2 started.
+          'FeaturesTraits10': '=== FEATS === \n\n* Sentinel • PHB-2024 207 \n'
+            + 'Guardian. Immediately after a creature within 5 ft. of you takes the Disengage action... \n\n'
+            + '* Aberrant Dragonmark • WGtE 52 \n'
+            + '* Sage Ability Score Improvements • PHB-2024 178 \n',
+          'FeaturesTraits2': '* Monk Subclass • PHB-2024 103 \n\n   | Warrior of Mercy \n\n',
+          'FeaturesTraits3': '* Stunning Strike • PHB-2024 103 \n',
+        };
+        const joined = _ddbFeaturesText(ddb);
+        ok('pdf/ddb: the numbered features fields are joined in numeric order',
+           joined.indexOf('Martial Arts') < joined.indexOf('Monk Subclass')
+        && joined.indexOf('Monk Subclass') < joined.indexOf('Stunning Strike')
+        && joined.indexOf('Stunning Strike') < joined.indexOf('=== FEATS ==='),
+           'order came out wrong');
+        ok('pdf/ddb: nothing is dropped from the join',
+           joined.length > 300 && /Aberrant Dragonmark/.test(joined));
+
+        ok('pdf/ddb: the subclass is read off the pipe line',
+           _ddbSubclassName(joined) === 'Warrior of Mercy',
+           String(_ddbSubclassName(joined)));
+        // 2024 renamed the monk subclasses; "Warrior of Mercy" has to resolve
+        // to the same short name the reaction table and Features tab key on.
+        ok('pdf/ddb: a 2024 subclass name resolves to its short form',
+           _matchSubclass('monk', [_ddbSubclassName(joined)]) === 'Mercy',
+           String(_matchSubclass('monk', [_ddbSubclassName(joined)])));
+        // A pipe line further down belongs to some other feature's list.
+        ok('pdf/ddb: a distant pipe line is not taken as the subclass',
+           _ddbSubclassName('* Druid Subclass • PHB 81 \n* Natural Recovery • PHB 84 \n   | Cast Circle Spell \n') === null,
+           String(_ddbSubclassName('* Druid Subclass • PHB 81 \n* Natural Recovery • PHB 84 \n   | Cast Circle Spell \n')));
+
+        const df = _ddbFeats(joined);
+        ok('pdf/ddb: feats come off the bullet lines', df.indexOf('Sentinel') >= 0, JSON.stringify(df));
+        ok('pdf/ddb: a feat the dataset has never heard of is kept',
+           df.indexOf('Aberrant Dragonmark') >= 0, JSON.stringify(df));
+        ok('pdf/ddb: a background ability-score bump is not a feat',
+           !df.some(x => /ability score/i.test(x)), JSON.stringify(df));
+        // The prose under each feat names its own sub-features. Scanning it
+        // would return "Guardian" as a feat.
+        ok('pdf/ddb: sub-feature prose is not read as feats',
+           df.indexOf('Guardian') < 0, JSON.stringify(df));
+        ok('pdf/ddb: class features above the FEATS heading are not feats',
+           df.indexOf('Martial Arts') < 0 && df.indexOf('Stunning Strike') < 0, JSON.stringify(df));
+
+        // The INTEGRATION check, and the one that actually matters. Every
+        // check above tests a helper in isolation, and all of them stayed
+        // green when the wiring that calls them was reverted — the helpers
+        // were never the broken part. This drives _fromFields with a
+        // D&D Beyond-shaped field set and asserts the two fields come out the
+        // far end, which is the bug as the DM experienced it.
+        {
+          const parsed = _fromFields({
+            'CharacterName': 'ZZ Probe',
+            'CLASS  LEVEL': 'Monk 6',
+            'HPMax': '47', 'AC': '14', 'Speed': '30',
+            'STR': '9', 'DEX': '17', 'CON': '14', 'INT': '13', 'WIS': '13', 'CHA': '10',
+            'FeaturesTraits1': '=== MONK FEATURES === \n* Martial Arts • PHB-2024 101 \n',
+            'FeaturesTraits2': '* Monk Subclass • PHB-2024 103 \n\n   | Warrior of Mercy \n\n',
+            'FeaturesTraits3': '=== FEATS === \n* Sentinel • PHB-2024 207 \n',
+          });
+          ok('pdf/ddb: a D&D Beyond field set yields a subclass end to end',
+             parsed.subclass === 'Mercy', String(parsed.subclass));
+          ok('pdf/ddb: a D&D Beyond field set yields feats end to end',
+             eqJ(parsed.feats, ['Sentinel']), JSON.stringify(parsed.feats));
+          // The whole features box is worth keeping too — it was being
+          // dropped entirely, 7 KB of it on one of the reported sheets.
+          ok('pdf/ddb: the features text is kept, not dropped',
+             ((parsed.sheet || {}).bio || {}).features
+             && parsed.sheet.bio.features.indexOf('Martial Arts') >= 0,
+             String(((parsed.sheet || {}).bio || {}).features || '').slice(0, 60));
+        }
+
+        // The Turn View reads the features text to find feat reactions, and
+        // read sheet.features — which the importer never writes; it nests the
+        // free-text boxes under sheet.bio.
+        {
+          const p0 = JSON.stringify(state.party), k0 = JSON.stringify(state.combatants);
+          state.party = [{ id:'ddbprobe', name:'ZZ Probe', cls:'Monk', level:6,
+                           subclass:'Mercy', feats:[],
+                           sheet:{ bio:{ features:'* Sentinel • PHB-2024 207' } } }];
+          state.combatants = [{ id:'ddbprobe', name:'ZZ Probe', isPC:true, hp:1, hpMax:1 }];
+          const rx = (panelDefs.turnview._reactionsFor(state.combatants[0]) || []).map(x => x.name);
+          ok('pdf/ddb: a feat named only in sheet.bio.features still gives its reaction',
+             rx.indexOf('Sentinel') >= 0, JSON.stringify(rx));
+          state.party = JSON.parse(p0); state.combatants = JSON.parse(k0);
+        }
       }
 
       // The review modal must expose both fields, because the matchers miss
