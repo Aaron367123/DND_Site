@@ -1147,6 +1147,20 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 /* MANAGE PARTY modal */
 .modal.mp-modal{position:relative;width:min(1600px,96vw);max-width:96vw;height:auto;max-height:92vh;display:flex;flex-direction:column;padding:0;overflow:hidden;min-width:520px;min-height:280px}
 .modal.mp-modal .rh{z-index:1}
+/* On a phone the min-width WINS over max-width — that is the cascade, not a
+   bug in the browser — so the 96vw cap was ignored and the modal rendered
+   520px wide inside a 390px screen, centred to x:-65 and clipped at both
+   edges. The NAME column and the close button were both off-screen, which is
+   what made Manage Party unusable there.
+   The table itself stays wide and scrolls inside .mp-table-wrap, which already
+   has overflow:auto — nine columns will not fit a phone and squeezing them
+   would make every field untappable. */
+@media (max-width: 767px){
+  .modal.mp-modal{min-width:0;width:96vw;max-width:96vw;min-height:0;max-height:88vh}
+  .modal.mp-modal .rh{display:none}   /* resize grips are pointless on touch */
+  .mp-head{padding:10px 12px}
+  .mp-table-wrap{padding:6px}
+}
 .mp-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
 .mp-table-wrap{flex:1;overflow:auto;padding:8px 12px}
 .mp-table{width:100%;border-collapse:separate;border-spacing:0;font-size:var(--fs-sm)}

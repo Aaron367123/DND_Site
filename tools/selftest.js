@@ -99,6 +99,19 @@
         ['at least 2 map tokens',           (map.tokens || []).length >= 2],
         ['notes to keep out of sight',      (notes.items || []).length >= 2],
         ['a shop with duplicate item names', inv.length > 0 && new Set(inv).size !== inv.length],
+        // Settings must be inside the ranges the app actually uses, or the
+        // bench measures the wrong thing silently. fontScale is a MULTIPLIER
+        // and applyFontScale clamps to [0.5, 2]; the fixture once held 100,
+        // which clamped to 2 and ran every DM-mode pixel measurement at
+        // double zoom.
+        ['a sane fontScale', (() => {
+          const fs = (JSON.parse(localStorage.getItem('skt-settings-v1') || '{}') || {}).fontScale;
+          return fs == null || (fs >= 0.5 && fs <= 2);
+        })()],
+        ['no stray body zoom', (() => {
+          const z = parseFloat(getComputedStyle(document.body).zoom);
+          return !z || Math.abs(z - 1) < 0.01 || document.body.classList.contains('player-mode');
+        })()],
       ];
       const absent = need.filter(n => !n[1]).map(n => n[0]);
       ok('the test bench is loaded (' + (need.length - absent.length) + '/' + need.length + ')',
@@ -1649,6 +1662,51 @@
         const dead = R(grid).right - R(row[row.length - 1]).right - pad;
         ok('party: the last card in a row reaches the edge (' + Math.round(dead) + 'px slack)',
            dead < 24, Math.round(dead) + 'px dead to the right of ' + row.length + ' card(s)');
+      }
+      closePanel('party');
+    }
+
+    // Modals have to fit the screen they open on. Manage Party carried
+    // min-width:520px, and min-width BEATS max-width in the cascade, so its
+    // own 96vw cap was ignored: on a 390px phone it rendered 520 wide, centred
+    // to x:-65, with the NAME column and the close button both off the edge.
+    {
+      openPanel('party'); await sleep(700);
+      const R = e => e.getBoundingClientRect();
+      const fits = el => { const r = R(el); return r.left >= -2 && r.top >= -2
+        && r.right <= window.innerWidth + 2 && r.bottom <= window.innerHeight + 2; };
+
+      panelDefs.party._openManageParty();
+      await sleep(600);
+      const mp = document.querySelector('.mp-modal');
+      ok('mobile: Manage Party opens', !!mp);
+      if (mp){
+        ok('mobile: Manage Party fits the screen', fits(mp),
+           Math.round(R(mp).width) + 'px at x' + Math.round(R(mp).left)
+           + ' in ' + window.innerWidth);
+        const close = mp.querySelector('[data-act="mp-close"]');
+        ok('mobile: its close button is reachable', !!close && fits(close));
+        // Nine columns will never fit a phone; they scroll inside the wrap
+        // rather than being squeezed until nothing is tappable.
+        const wrap = mp.querySelector('.mp-table-wrap');
+        ok('mobile: the wide table scrolls inside the modal',
+           !!wrap && wrap.scrollWidth > wrap.clientWidth);
+        const bd = mp.closest('.modal-backdrop'); if (bd) bd.remove();
+      }
+
+      // The per-character editor was already sized correctly — pin it so it
+      // stays that way.
+      panelDefs.party._openCharDetailsEditor(0, () => {});
+      await sleep(600);
+      const ed = document.querySelector('.mp-edit-modal');
+      ok('mobile: the character details editor opens', !!ed);
+      if (ed){
+        ok('mobile: the details editor fits the screen', fits(ed),
+           Math.round(R(ed).width) + 'px at x' + Math.round(R(ed).left));
+        const off = [...ed.querySelectorAll('.mp-input')]
+          .filter(i => R(i).left < -2 || R(i).right > window.innerWidth + 2);
+        ok('mobile: every field in it is on screen', off.length === 0, off.length + ' off');
+        const bd2 = ed.closest('.modal-backdrop'); if (bd2) bd2.remove();
       }
       closePanel('party');
     }

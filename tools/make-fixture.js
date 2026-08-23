@@ -176,7 +176,12 @@ const shop = {
 // are the six anonymous records the merge deliberately cannot key.
 const settings = {
   currencySymbol:'gp', currencyFormat:'short', priceJitter:20, rounding:'none',
-  reprintPolicy:'all', snapWindows:true, fontScale:100,
+  reprintPolicy:'all', snapWindows:true,
+  // A MULTIPLIER, not a percentage — settings.js stores clampedNum/100 and
+  // applyFontScale clamps to [0.5, 2]. This said 100, which clamped to 2, so
+  // the whole suite ran the DM view at double zoom and every pixel measured
+  // against this bench was taken through it.
+  fontScale:1,
   healthTiers:[
     { threshold:100, label:'Healthy' }, { threshold:76, label:'Scratched' },
     { threshold:50,  label:'Bloodied' }, { threshold:25, label:'Wounded' },
