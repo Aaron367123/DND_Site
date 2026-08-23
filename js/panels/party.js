@@ -604,7 +604,7 @@ registerPanel('party',{
           const n = a.amount || 1;
           const unit = p ? (n === 1 ? String(p.name).replace(/s$/, '') : p.name) : '';
           const cost = p ? `${n} ${unit} · ${p.current}/${p.max}` : (a.uses || '');
-          return `<div class="sheet-act"><b>${esc(a.name)}</b>
+          return `<div class="sheet-act" title="${esc([a.feature && a.feature !== a.name ? a.feature : '', a.desc].filter(Boolean).join(' — '))}"><b>${esc(a.name)}</b>
             <span>${esc(a.action || '')}${cost ? ' · ' + esc(cost) : ''}</span></div>`;
         }).join('')}</div>
       </div>`);

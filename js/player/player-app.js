@@ -354,6 +354,14 @@ function paPoolFor(pc, a){
   const name = a.resource || a.name;
   return (Array.isArray(pc.resources) ? pc.resources : []).find(r => r.name === name) || null;
 }
+// Which feature's description is open, by index. Tapping a chip used to
+// spend it outright, which made a mis-tap cost a Focus Point and left
+// nowhere to answer "what does this one do again".
+let paFeatOpen = null;
+function paPickActivation(i){
+  paFeatOpen = (paFeatOpen === i) ? null : i;
+  paRender();
+}
 function paUseActivation(i){
   const pc = paPc(); if (!pc) return;
   const a = paActivations(pc)[i]; if (!a) return;
@@ -361,7 +369,7 @@ function paUseActivation(i){
   const n = a.amount || 1;
   const short = pool && pool.current < n;
   if (!short && pool) pool.current = Math.max(0, pool.current - n);
-  if (!short) save();
+  if (!short){ save(); paFeatOpen = null; }
   paRender();
   // After the re-render, or this writes into a box that is about to be
   // replaced — the same order paRollAttack uses.
@@ -418,11 +426,31 @@ function paYouScreen(){
     const unit = pool ? (n === 1 ? String(pool.name).replace(/s$/, '') : pool.name) : '';
     const cost = pool ? `${n} ${unit} · ${pool.current}/${pool.max}` : (a.uses || '');
     const dry = !!(pool && pool.current < n);
-    return `<button class="pa-feat${dry ? ' off' : ''}" data-pa-feat="${i}"${dry ? ' disabled' : ''}>
+    return `<button class="pa-feat${dry ? ' off' : ''}${paFeatOpen === i ? ' on' : ''}" data-pa-feat="${i}">
       <span class="pa-feat-n">${paEsc(a.name)}</span>
       <span class="pa-feat-d">${paEsc(a.action || '')}${cost ? ' · ' + paEsc(cost) : ''}</span>
     </button>`;
   }).join('');
+
+  const featDet = (() => {
+    const a = paActivations(pc)[paFeatOpen];
+    if (!a) return '';
+    const pool = paPoolFor(pc, a);
+    const n = a.amount || 1;
+    const unit = pool ? (n === 1 ? String(pool.name).replace(/s$/, '') : pool.name) : '';
+    const meta = [a.feature && a.feature !== a.name ? a.feature : '', a.action,
+                  pool ? `${n} ${unit} · ${pool.current}/${pool.max}` : (a.uses || '')]
+                 .filter(Boolean).join(' · ');
+    const dry = !!(pool && pool.current < n);
+    return `<div class="pa-featdet">
+      <div class="pa-featdet-h"><b>${paEsc(a.name)}</b><span>${paEsc(meta)}</span>
+        <button class="pa-featdet-x" data-pa-featclose="1" aria-label="Close">✕</button></div>
+      ${a.desc ? `<p>${paEsc(a.desc)}</p>` : '<p class="pa-dim">The sheet doesn\'t describe this one.</p>'}
+      <div class="pa-featdet-f">${dry
+        ? `<span class="pa-dim">No ${paEsc(String(pool.name).toLowerCase())} left</span>`
+        : `<button class="btn primary" data-pa-featuse="${paFeatOpen}">Use</button>`}</div>
+    </div>`;
+  })();
 
   return `
     <div class="pa-card pa-you">
@@ -455,7 +483,7 @@ function paYouScreen(){
       ${down ? paDeathBlock(c) : ''}
       ${res || slots ? `<div class="pa-sec"><h4>Resources</h4>${res}${slots}</div>` : ''}
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
-      ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div></div>` : ''}
+      ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
       <div class="pa-roll" id="pa-roll"></div>
       <button class="pa-sheet-t" data-pa-mate="${paEsc(pc.id)}">
         ${paOpenMates.has(pc.id) ? '▾ Hide full sheet' : '▸ Full sheet'}
@@ -705,7 +733,10 @@ function paOnClick(e){
   const atk = e.target.closest('[data-pa-atk]');
   if (atk){ paRollAttack(+atk.dataset.paAtk); return; }
   const feat = e.target.closest('[data-pa-feat]');
-  if (feat){ paUseActivation(+feat.dataset.paFeat); return; }
+  if (feat){ paPickActivation(+feat.dataset.paFeat); return; }
+  const featUse = e.target.closest('[data-pa-featuse]');
+  if (featUse){ paUseActivation(+featUse.dataset.paFeatuse); return; }
+  if (e.target.closest('[data-pa-featclose]')){ paFeatOpen = null; paRender(); return; }
   if (e.target.closest('[data-pa-death]')){ paRollDeathSave(); return; }
   const mate = e.target.closest('[data-pa-mate]');
   if (mate){

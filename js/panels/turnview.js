@@ -454,6 +454,56 @@ registerPanel('turnview', {
     this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${esc(spent)}.`, true);
     save(); panelDefs.combat?._render?.(); this._render();
   },
+  // Collapse state for the features row. A view preference, so localStorage
+  // directly and not through save() — it is not campaign data and has no
+  // business syncing to everyone else's screen.
+  _actsOpen(){
+    try { return localStorage.getItem('skt-tv-acts-v1') === '1'; } catch(e){ return false; }
+  },
+  _toggleActs(){
+    try { localStorage.setItem('skt-tv-acts-v1', this._actsOpen() ? '0' : '1'); } catch(e){}
+    this._actMenu = null;
+    this._render();
+  },
+  // The chip label, kept short on purpose. The full cost is one click away in
+  // the detail panel and on hover, and the pool's own pips are directly below
+  // the row — repeating "· 5/6" fifteen times was most of the clutter.
+  _actShort(a){
+    const s = String(a.action || '').toLowerCase();
+    const act = s === 'bonus action' ? 'BONUS' : s === 'reaction' ? 'REACT'
+              : s === 'special' ? 'SPEC' : s === 'magic action' ? 'MAGIC'
+              : s === 'action' ? 'ACT' : (a.action || '').toUpperCase();
+    return act + (a.resource ? ' ·' + (a.amount || 1) : '');
+  },
+  _actTip(a){
+    const cost = this._actCostLabel(a);
+    return [a.name, a.feature && a.feature !== a.name ? a.feature : '',
+            a.action, cost, a.uses].filter(Boolean).join(' · ');
+  },
+  // What the feature actually does, straight off the character's sheet. The
+  // chips are deliberately terse, so this is where the answer to "what does
+  // Hand of Harm do again" lives — and it is also where using it happens, so
+  // a mis-tap on a chip costs nothing.
+  _renderActDetail(c, a){
+    const problem = this._actProblem(c, a);
+    const cost = this._actCostLabel(a);
+    const meta = [a.feature && a.feature !== a.name ? a.feature : '',
+                  a.action, cost, a.uses].filter(Boolean).join(' · ');
+    return `<div class="tv-featdet">
+      <div class="tv-featdet-h">
+        <b>${esc(a.name)}</b>
+        <span>${esc(meta)}</span>
+        <button class="tv-featdet-x" data-tv="actclose" aria-label="Close">✕</button>
+      </div>
+      ${a.desc ? `<p>${esc(a.desc)}</p>`
+               : `<p class="dim">The sheet doesn't describe this one.</p>`}
+      <div class="tv-featdet-f">
+        ${problem ? `<span class="dim">${esc(problem)}</span>`
+                  : `<button class="btn primary" data-tv="actuse"
+                       data-id="${esc(c.id)}" data-i="${a.i}">Use</button>`}
+      </div>
+    </div>`;
+  },
   // "1 Focus Point", not "1 Focus Points" — the pool is named in the plural
   // because that is how it is tracked, but a cost of one reads wrong that way.
   _actCostLabel(a){
@@ -879,17 +929,22 @@ registerPanel('turnview', {
     const acts = this._activationsFor(c)
       .filter(a => !(String(a.action).toLowerCase() === 'reaction'
                      && rxNames.has(String(a.name).toLowerCase())));
-    const actHtml = !acts.length ? '' :
-      `<span class="tv-rx-l">Features</span>` + acts.map(a => {
+    // Collapsed by default. Fifteen options is four rows of chips above the
+    // attack list, which pushed the actual turn off the top of the panel.
+    const open = this._actsOpen();
+    const sel = (this._actMenu && this._actMenu.id === c.id)
+      ? acts.find(a => a.i === this._actMenu.i) : null;
+    const actHtml = !acts.length ? '' : `
+      <button class="tv-feats-h" data-tv="actsopen" aria-expanded="${open ? 'true' : 'false'}"
+        >${open ? '▾' : '▸'} Features <span class="tv-feats-n">${acts.length}</span></button>
+      ${open ? `<div class="tv-featlist">${acts.map(a => {
         const problem = this._actProblem(c, a);
-        const cost = this._actCostLabel(a);
-        const tip = [a.feature && a.feature !== a.name ? a.feature : '',
-                     a.uses ? a.uses : '', problem ? '— ' + problem : ''].filter(Boolean).join(' · ');
-        return `<button class="tv-act ${problem ? 'spent' : ''}" data-tv="actuse"
-             data-id="${esc(c.id)}" data-i="${a.i}" title="${esc(tip)}"${problem ? ' disabled' : ''}
-             >${esc(a.name)}<span class="tv-rx-src">${esc(a.action)}${
-          cost ? ' · ' + cost : a.uses ? ' · ' + a.uses : ''}</span></button>`;
-      }).join('');
+        return `<button class="tv-feat ${problem ? 'spent' : ''} ${sel === a ? 'on' : ''}"
+             data-tv="actpick" data-id="${esc(c.id)}" data-i="${a.i}"
+             title="${esc(this._actTip(a))}"
+             >${esc(a.name)}<span class="tv-rx-src">${esc(this._actShort(a))}</span></button>`;
+      }).join('')}</div>` : ''}
+      ${sel ? this._renderActDetail(c, sel) : ''}`;
     return `<div class="tv-actor-head">
         <div class="tv-avatar">${esc(String(c.name || '?').trim().charAt(0).toUpperCase())}</div>
         <div class="tv-actor-id">
@@ -906,7 +961,7 @@ registerPanel('turnview', {
       </div>
       ${conds ? `<div class="tv-conds">${conds}</div>` : ''}
       ${rxHtml ? `<div class="tv-rxlist">${rxHtml}</div>` : ''}
-      ${actHtml ? `<div class="tv-rxlist tv-actlist">${actHtml}</div>` : ''}
+      ${actHtml ? `<div class="tv-feats">${actHtml}</div>` : ''}
       ${res ? `<div class="tv-res">${res}</div>` : ''}`;
   },
 
@@ -2561,7 +2616,18 @@ registerPanel('turnview', {
         this._render();
       }
       else if (act === 'rxuse'){ this._spendReactionFor(el.dataset.id, el.dataset.key); }
-      else if (act === 'actuse'){ this._useActivation(el.dataset.id, el.dataset.i); }
+      else if (act === 'actsopen'){ this._toggleActs(); }
+      else if (act === 'actpick'){
+        const i = +el.dataset.i, id = el.dataset.id;
+        // Clicking a chip shows what it does; the detail panel's Use button
+        // spends it. Spending straight off the chip meant a mis-tap cost a
+        // Focus Point, and left nowhere to put the description.
+        this._actMenu = (this._actMenu && this._actMenu.id === id && this._actMenu.i === i)
+          ? null : { id, i };
+        this._render();
+      }
+      else if (act === 'actclose'){ this._actMenu = null; this._render(); }
+      else if (act === 'actuse'){ this._actMenu = null; this._useActivation(el.dataset.id, el.dataset.i); }
       else if (act === 'rxback'){
         const w = this._order().find(x => x.id === el.dataset.id);
         if (w){ w.reactionUsed = false; this._log.unshift(`<strong>${esc(w.name)}</strong> — reaction handed back`); }

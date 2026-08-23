@@ -1500,7 +1500,10 @@ function sktDeriveActivations(featuresText){
   // hit with a Monk weapon or Unarmed Strike, you can expend 1 Focus Point",
   // and cutting at "Unarmed Strike" put the cost outside the window.
   const names = acts.map(a => a.name.split(': ').pop());
-  const costIn = (from, stopAt) => {
+  // The slice of prose that belongs to one option, used for both its resource
+  // cost and its description. Same window for both, because they are the same
+  // question: which sentences are about this feature and not the next one.
+  const windowAt = (from, stopAt) => {
     if (from < 0) return null;
     let end = text.length;
     const nb = text.indexOf('\n*', from);
@@ -1510,8 +1513,10 @@ function sktDeriveActivations(featuresText){
       const x = text.indexOf(other + '. ', from + 1);
       if (x > from && x < end) end = x;
     });
-    const m = /expend(?:ing)?\s+(\d+)\s+([A-Z][A-Za-z'’]*(?:\s+[A-Z][A-Za-z'’]*)*)/
-                .exec(text.slice(from, end));
+    return text.slice(from, end);
+  };
+  const costOf = slice => {
+    const m = /expend(?:ing)?\s+(\d+)\s+([A-Z][A-Za-z'’]*(?:\s+[A-Z][A-Za-z'’]*)*)/.exec(slice || '');
     if (!m) return null;
     // "expend 1 Focus Point" — the pool is tracked in the plural, and this is
     // the same alias table the party tracker uses, so a 2014 sheet's Ki Points
@@ -1519,15 +1524,58 @@ function sktDeriveActivations(featuresText){
     return { amount: parseInt(m[1], 10) || 1,
              resource: sktCanonResource(/s$/i.test(m[2]) ? m[2] : m[2] + 's') };
   };
+  // Readable prose out of a raw slice: drop the pipe lines (they are the
+  // activation data, already parsed and shown as the chip's own label), drop
+  // the "• PHB-2024 101" source reference, and drop the option's own name
+  // where it opens the sentence — the panel puts it in the heading.
+  const proseOf = (slice, key) => {
+    let t = String(slice || '')
+      .split('\n')
+      .filter(l => !/^\s*\|/.test(l))
+      .join(' ')
+      .replace(/^\s*\*\s*/, '')
+      // Source references only — "• PHB-2024 101", "• WGtE 52" — which is
+      // why the page number is required. Without it this also matched the
+      // bullets D&D Beyond uses inside prose and ate the word after them,
+      // turning "• You can make an Unarmed Strike" into "can make an
+      // Unarmed Strike".
+      .replace(/•\s*[A-Z][A-Za-z]*(?:-\d{4})?\s+\d{1,4}\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (key && t.toLowerCase().indexOf(key.toLowerCase()) === 0){
+      t = t.slice(key.length).replace(/^[\s.:—-]+/, '');
+    }
+    return t;
+  };
+  // Where the sheet DECLARES an option, as opposed to merely mentioning it.
+  // Two forms, and nothing else counts:
+  //
+  //    * Hand of Harm • PHB-2024 104      a feature bullet
+  //    Flurry of Blows. You can expend…   a sub-option heading
+  //
+  // Taking the first mention anywhere instead started Unarmed Strike's
+  // description halfway through Martial Arts' sentence ("as a Bonus Action.
+  // can roll 1d8…"), and gave Redirect Attack a description of "1 Reaction"
+  // because the only place that string appears is its own pipe line.
+  const declPos = n => {
+    if (!n) return -1;
+    const esc = String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let m = new RegExp('^[^\\S\\n]*\\*[^\\S\\n]*' + esc + '\\b', 'm').exec(text);
+    if (m) return m.index;
+    m = new RegExp('(^|[.\\n])[^\\S\\n]*' + esc + '\\.\\s', 'm').exec(text);
+    return m ? m.index + m[1].length : -1;
+  };
   acts.forEach((a, i) => {
     const key = names[i];
     const others = names.filter((o, j) => j !== i && o && o !== key);
-    let hit = costIn(text.indexOf(key), others);
-    // Fall back to the enclosing feature's text. Redirect Attack is named only
-    // in the pipe line, never in the prose that explains what it costs — that
-    // sentence sits under Deflect Attacks, which is where it belongs.
-    if (!hit && a.feature && a.feature !== key) hit = costIn(text.indexOf(a.feature), others);
+    // An option with no declaration of its own belongs to its bullet — that
+    // is where both its cost and its description live.
+    let from = declPos(key), label = key;
+    if (from < 0){ from = declPos(a.feature); label = a.feature; }
+    const slice = windowAt(from, others);
+    const hit = costOf(slice);
     if (hit){ a.amount = hit.amount; a.resource = hit.resource; }
+    a.desc = proseOf(slice, label);
   });
 
   _sktActCache.set(text, acts);

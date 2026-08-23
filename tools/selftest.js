@@ -1533,6 +1533,104 @@
              /1 Focus Point ·/.test(html));
         }
 
+        // ── Descriptions ────────────────────────────────────────────
+        // The chips are terse on purpose, so the description carries the
+        // whole answer to "what does this one do". It comes off the sheet,
+        // which means finding where the sheet DECLARES an option rather
+        // than where it first happens to mention one.
+        {
+          const DESC = [
+            '* Martial Arts • PHB-2024 101 ',
+            'You gain benefits while unarmed. • You can make an Unarmed Strike as a Bonus Action. ',
+            '   | Unarmed Strike: 1 Bonus Action ',
+            '* Monk Focus • PHB-2024 101 ',
+            'Flurry of Blows. You can expend 1 Focus Point to make two Unarmed Strikes. ',
+            '   | Flurry of Blows: 1 Bonus Action ',
+            '* Deflect Attacks • PHB-2024 102 ',
+            'When an attack hits you, you can take a Reaction to reduce the damage. ',
+            '   | Deflect Attack: Redirect Attack: 1 Reaction ',
+          ].join(String.fromCharCode(10));
+          const D = sktDeriveActivations(DESC);
+          const dOf = n => (D.find(x => x.name === n) || {}).desc || '';
+
+          ok('desc: every option gets a description',
+             D.length > 0 && D.every(x => x.desc),
+             JSON.stringify(D.map(x => x.name + ': ' + (x.desc || '(none)').slice(0, 25))));
+          // Unarmed Strike is named in its pipe line and mid-sentence in the
+          // prose, and nowhere as a declaration. Taking the first mention
+          // started its description at "as a Bonus Action. can roll 1d8…".
+          ok('desc: an option named only in a pipe line uses its feature',
+             /^You gain benefits/.test(dOf('Unarmed Strike')), dOf('Unarmed Strike'));
+          // Same for a sub-option whose name appears nowhere else: its
+          // description used to come out as the literal string "1 Reaction".
+          ok('desc: a sub-option inherits its feature description',
+             /^When an attack hits you/.test(dOf('Deflect Attack: Redirect Attack')),
+             dOf('Deflect Attack: Redirect Attack'));
+          ok('desc: a declared sub-option keeps its own',
+             /^You can expend 1 Focus Point/.test(dOf('Flurry of Blows')), dOf('Flurry of Blows'));
+          // The source-reference stripper matched any bullet and ate the word
+          // after it, so "• You can make an Unarmed Strike" lost its "You".
+          ok('desc: the source reference goes and prose bullets stay',
+             !/PHB/.test(dOf('Unarmed Strike')) && /• You can make/.test(dOf('Unarmed Strike')),
+             dOf('Unarmed Strike'));
+          ok('desc: no pipe lines survive into the prose',
+             D.every(x => x.desc.indexOf('|') < 0), JSON.stringify(D.map(x => x.desc)));
+        }
+
+        // Tapping a chip must describe, not spend.
+        {
+          const p0 = JSON.stringify(state.party), k0 = JSON.stringify(state.combatants);
+          const a0 = state.activeCombatantId;
+          const T = panelDefs.turnview;
+          state.party = [{ id:'dprobe', name:'ZZ Desc', cls:'Monk', level:6, hp:9, hpMax:9,
+                           sheet:{ bio:{ features:[
+                             '* Monk Focus • PHB-2024 101 ',
+                             'Flurry of Blows. You can expend 1 Focus Point to strike twice. ',
+                             '   | Flurry of Blows: 1 Bonus Action ',
+                           ].join(String.fromCharCode(10)) } },
+                           resources:[{name:'Focus Points',type:'pool',current:4,max:6}] }];
+          state.combatants = [{ id:'dprobe', name:'ZZ Desc', isPC:true, hp:9, hpMax:9 }];
+          state.activeCombatantId = 'dprobe';
+          const who = state.combatants[0];
+          const act = T._activationsFor(who)[0];
+          const pool = () => state.party[0].resources[0];
+
+          // The chip is wired to actpick and only the detail panel offers
+          // actuse. That split IS the fix — a mis-tap cannot spend a point.
+          try { localStorage.setItem('skt-tv-acts-v1', '1'); } catch(e){}
+          T._actMenu = null;
+          const head = T._renderActorHead(who);
+          ok('desc: a feature chip picks rather than spends',
+             /data-tv="actpick"/.test(head) && head.indexOf('tv-featdet') < 0);
+          ok('desc: no chip is wired straight to Use',
+             (head.match(/data-tv="actuse"/g) || []).length === 0);
+
+          T._actMenu = { id:'dprobe', i:act.i };
+          const opened = T._renderActorHead(who);
+          ok('desc: the picked chip opens a detail panel',
+             opened.indexOf('tv-featdet') >= 0);
+          ok('desc: the detail carries the description',
+             opened.indexOf('expend 1 Focus Point to strike twice') >= 0);
+          ok('desc: the detail is the one place Use appears',
+             (opened.match(/data-tv="actuse"/g) || []).length === 1);
+          ok('desc: the detail names the cost', /1 Focus Point · 4\/6/.test(opened));
+          ok('desc: opening a detail spends nothing', pool().current === 4, String(pool().current));
+
+          // Collapsed by default: fifteen options was four rows of chips
+          // above the attack list, which is what "cluttered" meant.
+          try { localStorage.removeItem('skt-tv-acts-v1'); } catch(e){}
+          T._actMenu = null;
+          const shut = T._renderActorHead(who);
+          ok('desc: the features row is collapsed until asked for',
+             shut.indexOf('tv-featlist') < 0 && shut.indexOf('tv-feats-h') >= 0);
+          ok('desc: the collapsed header still says how many there are',
+             /tv-feats-n">1</.test(shut), shut.slice(shut.indexOf('tv-feats-h'), shut.indexOf('tv-feats-h') + 160));
+
+          T._actMenu = null;
+          state.party = JSON.parse(p0); state.combatants = JSON.parse(k0);
+          state.activeCombatantId = a0;
+        }
+
         // End to end in the Turn View: render, click, spend.
         {
           const p0 = JSON.stringify(state.party), k0 = JSON.stringify(state.combatants);
