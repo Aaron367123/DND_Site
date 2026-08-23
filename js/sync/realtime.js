@@ -1224,6 +1224,42 @@ function _startRealtimeExtras() {
 // Returns true if Firebase is configured and a flush ran (even if there was
 // nothing to flush); false otherwise so the UI can tell the user "no sync
 // configured" instead of pretending it worked.
+// ─── Uploaded map images ──────────────────────────────────────────────────
+//
+// An uploaded map used to live in the panel's in-memory _mapBgImage and
+// nowhere else, with bgMapPath set to null — so the players received "no
+// map" and their screens went blank while the DM looked at the new one.
+//
+// The image cannot ride in skt-battlemap-v1 itself. That key is rewritten on
+// every token drag and fog stroke, and it is the app's busiest sync path;
+// putting a megabyte of picture in it would push that megabyte again on
+// every nudge of a goblin. So it gets its own node, written once and read on
+// demand.
+//
+// One image at a time, by design. set() on the parent replaces the whole
+// node, so the previous upload is removed in the same write rather than
+// accumulating in the database forever. That matches what uploads already
+// do — they have never survived a saved-map snapshot either.
+const _BLOB_BASE = 'skt/mapblob_v1';
+
+// Resolves true on success. Never throws: the caller falls back to the
+// old device-only behaviour, which is worse but still works.
+window.sktMapBlobPut = function(id, dataUrl){
+  if (!_fbDb) return Promise.resolve(false);
+  return _fbDb.ref(_BLOB_BASE).set({ [id]: String(dataUrl) })
+    .then(() => true)
+    .catch(err => { _diag('map blob put', err); return false; });
+};
+
+// Resolves to the data URL, or null when the node is gone — which is a real
+// case, not a failure: a device that reconnects after the DM has uploaded
+// twice is asking for an id that no longer exists.
+window.sktMapBlobGet = function(id){
+  if (!_fbDb) return Promise.resolve(null);
+  return _fbDb.ref(_BLOB_BASE + '/' + id).once('value')
+    .then(snap => snap.val() || null)
+    .catch(err => { _diag('map blob get', err); return null; });
+};
 window.realtimeFlush = function(){
   if (!_fbDb) return false;
   try { _flushDirtyKeys(); } catch(e){ return false; }

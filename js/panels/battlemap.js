@@ -589,6 +589,47 @@ registerPanel('battlemap',{
   //      this still shows the DM their map; the only casualty is _bgLuminance,
   //      which already treats a tainted canvas as "couldn't sample" and falls
   //      back to the default grid colour. A visible map beats a correct grid.
+  // Re-encode an uploaded image small enough to share.
+  //
+  // The file the DM picks can be 20MB, and it has to travel as a base64
+  // string, which is a third bigger again. A battle map is looked at from
+  // across the table at a fraction of its native size, so the resolution is
+  // not doing any work — 2560px on the long edge is still more than a 4K
+  // screen shows at fit-to-view.
+  //
+  // Quality steps down rather than the size stepping down first, because
+  // losing pixels blurs the printed grid lines a map is aligned against
+  // while heavier compression mostly costs smooth gradients nobody is
+  // reading. Only if quality alone cannot get under the cap does it shrink.
+  _MAP_SHARE_MAX_EDGE: 2560,
+  // Comfortably inside the 4,000,000-character ceiling in firebase-rules.json.
+  _MAP_SHARE_CAP: 3600000,
+  _encodeForShare(img){
+    const draw = (w, h) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      return c;
+    };
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const fit = Math.min(1, this._MAP_SHARE_MAX_EDGE / Math.max(w, h));
+    w = Math.max(1, Math.round(w * fit));
+    h = Math.max(1, Math.round(h * fit));
+    for (let pass = 0; pass < 4; pass++){
+      const c = draw(w, h);
+      for (const q of [0.85, 0.7, 0.55, 0.4]){
+        let u = c.toDataURL('image/webp', q);
+        // Safari has only recently supported WebP encoding; without it
+        // toDataURL silently returns a PNG, which for a photo-like map is
+        // several times larger than the original file.
+        if (u.indexOf('data:image/webp') !== 0) u = c.toDataURL('image/jpeg', q);
+        if (u.length <= this._MAP_SHARE_CAP) return u;
+      }
+      w = Math.max(1, Math.round(w * 0.75));
+      h = Math.max(1, Math.round(h * 0.75));
+    }
+    return null;
+  },
   _BG_ATTEMPTS: [
     { cors: true,  evict: false, bust: false },
     { cors: true,  evict: true,  bust: false },
@@ -606,13 +647,40 @@ registerPanel('battlemap',{
   // retries, because picking the same map again doesn't come through here, and
   // picking a different one has a different URL.
   _loadBgFromPath(path, autoFit, fromSync){
+    // An uploaded map is stored in its own Firebase node rather than in a
+    // file anyone can fetch by URL, so it needs resolving before assetUrl,
+    // which would otherwise treat "sktblob:abc" as a relative image path.
+    const sb = String(path || '');
+    if (sb.indexOf('sktblob:') === 0){
+      const seq = ++this._bgLoadSeq;
+      const id = sb.slice(8);
+      if (typeof window.sktMapBlobGet !== 'function'){
+        this._reportBgFailure(sb); return;
+      }
+      window.sktMapBlobGet(id).then(data => {
+        if (seq !== this._bgLoadSeq) return;
+        // Not an error worth a ladder of retries: the DM has uploaded a
+        // different map since, and a fresh bgMapPath is already on its way.
+        if (!data){
+          showToast('That uploaded map is no longer on the server — ask the DM to re-upload');
+          return;
+        }
+        this._bgAttempt(data, autoFit, seq, 0);
+      }, () => { if (seq === this._bgLoadSeq) this._reportBgFailure(sb); });
+      return;
+    }
     const url = assetUrl(path);
     if (fromSync && url && url === this._bgFailedUrl) return;
     const seq = ++this._bgLoadSeq;
     this._bgAttempt(url, autoFit, seq, 0);
   },
   _bgAttempt(url, autoFit, seq, n){
-    const plan = this._BG_ATTEMPTS[n];
+    // A data: URL is the payload, not a reference to one. Evicting it from
+    // the cache is meaningless and appending "?cb=" to it corrupts it, so
+    // the retry ladder collapses to a single plain attempt.
+    const inline = String(url || '').indexOf('data:') === 0;
+    const plan = inline ? { cors: false, evict: false, bust: false }
+                        : this._BG_ATTEMPTS[n];
     const img = new Image();
     img.onload = () => {
       // A newer pick started while this one was in flight — drop it on the
@@ -649,7 +717,7 @@ registerPanel('battlemap',{
     };
     img.onerror = () => {
       if (seq !== this._bgLoadSeq) return;
-      if (n + 1 < this._BG_ATTEMPTS.length){
+      if (!inline && n + 1 < this._BG_ATTEMPTS.length){
         this._bgAttempt(url, autoFit, seq, n + 1);
       } else {
         this._bgFailedUrl = url;
@@ -707,6 +775,46 @@ registerPanel('battlemap',{
     showToast('Could not load map image — ' + why);
   },
 
+  // Put an uploaded map somewhere the other devices can fetch it, then point
+  // bgMapPath at it so the change travels like any other map swap.
+  //
+  // Every failure below degrades to exactly the old behaviour — the map is
+  // already on screen locally by this point — and says so out loud, because
+  // the players not being able to see it is not something to find out
+  // halfway through a session.
+  async _shareUploadedMap(img){
+    // sktMapBlobPut answers false when there is no database handle, so there
+    // is nothing to test separately; asking realtimeLive whether it is
+    // connected would just be a second, drifting answer to one question.
+    if (typeof window.sktMapBlobPut !== 'function'){
+      showToast('Map loaded on this device only — the players will not see it');
+      return;
+    }
+    showToast('Sharing map with the table…');
+    // Yield a frame first. _encodeForShare is synchronous canvas work — two
+    // seconds on a 12 megapixel image — and without this the toast above is
+    // queued behind it, so the DM sees nothing at all until it finishes.
+    await new Promise(r => requestAnimationFrame(() => r()));
+    let data = null;
+    try { data = this._encodeForShare(img); }
+    catch(e){ console.warn('[battlemap] encode failed', e); }
+    if (!data){
+      showToast('Could not shrink that image enough to share — it stays on this device only');
+      return;
+    }
+    const id = 'u' + Date.now().toString(36);
+    const stored = await window.sktMapBlobPut(id, data);
+    if (!stored){
+      showToast('Could not upload the map — it stays on this device only');
+      return;
+    }
+    // Only now the bytes are actually there. Pointing bgMapPath at an id
+    // before the write lands would send every player to fetch a node that
+    // does not exist yet.
+    this._bgMapPath = 'sktblob:' + id;
+    this._saveMap();
+    showToast('Map shared — the players have it now');
+  },
   // Grow/shrink _cols and _rows so the grid covers the map at its current
   // displayed size. Called whenever a map is picked, the scale changes, or
   // the cell size changes. No-op when there's no map.
@@ -3331,7 +3439,7 @@ registerPanel('battlemap',{
         ${(this._bgMapPath || _mapBgImage || (this._tokens||[]).length) ? '<button class="btn" id="mapsel-save">'+ICO('i-save')+' Save current as…</button>' : ''}
         ${this._bgMapPath ? '<button class="btn danger" id="mapsel-clear">Clear current map</button>' : ''}
         <button class="btn" id="mapsel-upload-btn">📷 Upload image…</button>
-        <span class="mapsel-upload-note" title="An uploaded image is held in memory on this device. It is not stored anywhere the other devices can fetch it, so it cannot be shared and it is gone when the panel reloads.">⚠ this device only — not shared with players</span>
+        <span class="mapsel-upload-note" title="The image is shrunk to at most 2560px on its long edge, re-encoded, and stored in the campaign database so the other devices can load it. It replaces any previously uploaded map.">shared with the table · resized to fit</span>
         <input type="file" id="mapsel-upload-input" accept="image/*" style="display:none">
         <button class="btn" id="mapsel-close">Close</button>
       </div>
@@ -3454,8 +3562,8 @@ registerPanel('battlemap',{
           _mapBgImage = img;
           this._bgMapNaturalW = img.naturalWidth;
           this._bgMapNaturalH = img.naturalHeight;
-          // Uploaded images aren't 5etools paths — clear any prior path so
-          // _saveMap() doesn't try to reload a stale one on next mount.
+          // Held here only until the shared copy lands. If it never does,
+          // this is all there is and the map stays on this device.
           this._bgMapPath = null;
           // Bake token rescale + clear stale drawings/fog BEFORE clobbering
           // scale fields. See _resetMapScene comment for the full rationale.
@@ -3471,12 +3579,10 @@ registerPanel('battlemap',{
           this._render();
           this._fitMapToView();
           close();
-          // "this session only" understated it badly. An upload lives in
-          // _mapBgImage and nowhere else: bgMapPath goes to null, so what
-          // the players receive is "no map" and their screens go blank.
-          // Reported as "I upload a map and it doesn't show for others",
-          // which is exactly right and was not knowable from that toast.
-          showToast('Map loaded on this device only — players will not see it, and any map they had is now cleared');
+          // Show it here first, share it second. Encoding and uploading a
+          // few megabytes takes a moment, and the DM should not be looking
+          // at a spinner in the meantime.
+          this._shareUploadedMap(img);
         };
         img.onerror = () => showToast('Could not load image');
         img.src = ev.target.result;

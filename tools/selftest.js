@@ -1996,6 +1996,84 @@
     }
     closePanel('encounter');
 
+    // ── Sharing an uploaded map ───────────────────────────────────────────
+    // An upload used to set bgMapPath to null and keep the picture in memory,
+    // so the players received "no map" and lost the one they had. It now goes
+    // to its own Firebase node, referenced by a sktblob: path.
+    openPanel('battlemap'); await sleep(500);
+    {
+      const bm = panelDefs.battlemap;
+      const P0 = bm._bgMapPath, S0 = localStorage.getItem('skt-battlemap-v1');
+      const putReal = window.sktMapBlobPut, getReal = window.sktMapBlobGet;
+      // The real helpers answer false/null with no database handle, and the
+      // suite refuses to run against a live one — so the sharing path can
+      // only be exercised against a stand-in.
+      const server = {}; let puts = 0;
+      window.sktMapBlobPut = (id, data) => { puts++;
+        Object.keys(server).forEach(k => delete server[k]);
+        server[id] = data; return Promise.resolve(true); };
+      window.sktMapBlobGet = id => Promise.resolve(server[id] || null);
+
+      const c = document.createElement('canvas');
+      c.width = 3200; c.height = 2400;
+      const g = c.getContext('2d');
+      g.fillStyle = '#3b5b3b'; g.fillRect(0, 0, 3200, 2400);
+      g.fillStyle = '#c8b48a'; g.fillRect(400, 300, 2000, 1400);
+      const img = new Image();
+      await new Promise(r => { img.onload = r; img.src = c.toDataURL('image/png'); });
+
+      const enc = bm._encodeForShare(img);
+      ok('map upload: a large image re-encodes', !!enc);
+      // 4,000,000 is the ceiling in firebase-rules.json. Over it, the write
+      // is rejected by the database and the map silently never arrives.
+      ok('map upload: the encoded image fits the rules limit',
+         !!enc && enc.length < 4000000, enc && Math.round(enc.length / 1024) + 'KB');
+      if (enc){
+        const probe = new Image();
+        await new Promise(r => { probe.onload = r; probe.src = enc; });
+        ok('map upload: the long edge is capped',
+           Math.max(probe.naturalWidth, probe.naturalHeight) <= 2560,
+           probe.naturalWidth + 'x' + probe.naturalHeight);
+      }
+
+      await bm._shareUploadedMap(img);
+      await sleep(200);
+      ok('map upload: it is stored once', puts === 1, String(puts));
+      ok('map upload: bgMapPath points at the stored copy',
+         /^sktblob:/.test(bm._bgMapPath || ''), String(bm._bgMapPath));
+      // Which is the whole point: this is the value that syncs.
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}'); } catch(e){}
+      ok('map upload: the path reaches the synced key',
+         saved.bgMapPath === bm._bgMapPath, String(saved.bgMapPath));
+
+      // The receiving device has the path and nothing else.
+      const path = bm._bgMapPath;
+      bm._bgMapNaturalW = 0;
+      bm._loadBgFromPath(path, true, true);
+      await sleep(900);
+      ok('map upload: another device loads it from the path alone',
+         bm._bgMapNaturalW > 0, String(bm._bgMapNaturalW));
+
+      // A second upload replaces the first rather than piling up.
+      await bm._shareUploadedMap(img);
+      await sleep(200);
+      ok('map upload: only one image is kept on the server',
+         Object.keys(server).length === 1, String(Object.keys(server).length));
+
+      // An id that no longer exists must not wedge or blank the panel.
+      const before = bm._bgMapNaturalW;
+      bm._loadBgFromPath('sktblob:gone', true, true);
+      await sleep(300);
+      ok('map upload: a stale reference leaves the current map alone',
+         bm._bgMapNaturalW === before, String(bm._bgMapNaturalW));
+
+      window.sktMapBlobPut = putReal; window.sktMapBlobGet = getReal;
+      bm._bgMapPath = P0;
+      if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+    }
+    closePanel('battlemap');
+
     openPanel('shop'); await sleep(340);
     {
       const before = errs.length;
