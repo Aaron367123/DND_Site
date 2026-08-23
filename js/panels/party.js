@@ -597,7 +597,7 @@ registerPanel('party',{
       ? sktDeriveActivations((c.sheet && c.sheet.bio && c.sheet.bio.features) || '') : [];
     if (acts.length){
       const pool = n => (Array.isArray(c.resources) ? c.resources : []).find(r => r.name === n);
-      sections.push(`<div class="sheet-block feat-section">
+      sections.unshift(`<div class="sheet-block feat-section">
         <h5>⚡ Activatable <span class="feat-lvl-pill">${acts.length}</span></h5>
         <div class="sheet-acts">${acts.map(a => {
           const p = pool(a.resource || a.name);

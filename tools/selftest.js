@@ -1513,6 +1513,26 @@
              !!fp && fp.max === 6, JSON.stringify(monk.resources));
         }
 
+        // The Features tab lists what the character can DO before the full
+        // rules text of every feature the class grants. It was appended last
+        // by mistake, behind all of that, while the comment beside it said
+        // otherwise.
+        {
+          const html = panelDefs.party._tabFeatures({
+            name:'ZZ Feat', cls:'Monk', level:6, subclass:'Mercy',
+            sheet:{ bio:{ features:['* Monk Focus • PHB-2024 101 ',
+              'Flurry of Blows. You can expend 1 Focus Point to strike twice. ',
+              '   | Flurry of Blows: 1 Bonus Action '].join(String.fromCharCode(10)) } },
+            resources:[{name:'Focus Points',type:'pool',current:6,max:6}],
+          });
+          const iAct = html.indexOf('Activatable'), iCls = html.indexOf('Class:');
+          ok('acts: the Features tab lists activatable options', iAct >= 0);
+          ok('acts: they come before the class feature reference',
+             iAct >= 0 && (iCls < 0 || iAct < iCls), 'act '+iAct+' cls '+iCls);
+          ok('acts: the cost is shown in the singular there too',
+             /1 Focus Point ·/.test(html));
+        }
+
         // End to end in the Turn View: render, click, spend.
         {
           const p0 = JSON.stringify(state.party), k0 = JSON.stringify(state.combatants);
