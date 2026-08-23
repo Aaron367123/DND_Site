@@ -2048,6 +2048,43 @@
   // ══════════════════════════════════════════════════════════ player view
   if (MODE === 'player'){
     ok('player: body is in player mode', document.body.classList.contains('player-mode'));
+
+    // Panel lifecycle. This shell never called unmount() at all: leaving the
+    // Map tab wiped the DOM but left the battle map panel believing it was
+    // still on screen — _body pointing at a detached node, its
+    // ResizeObserver still firing, its document mouseup listener still
+    // bound, and another set added on every visit. The stale _body is the
+    // part that misleads other code: _reloadPanel and applyMapState both
+    // read it to decide the panel is visible, so an incoming map change was
+    // applied and painted into nothing.
+    if (typeof paTab !== 'undefined' && typeof paRender === 'function'){
+      const bm = panelDefs.battlemap;
+      const tab0 = paTab;
+      paTab = 'map'; paRender(); await sleep(600);
+      ok('player: the map tab mounts the panel',
+         !!bm._body && document.contains(bm._body));
+      paTab = 'you'; paRender(); await sleep(300);
+      ok('player: leaving the tab unmounts it',
+         !bm._body, 'body still set' + (bm._body && !document.contains(bm._body) ? ' and detached' : ''));
+      ok('player: the resize observer does not outlive the panel',
+         !bm._resizeObserver);
+      ok('player: the document listener does not outlive the panel',
+         !bm._docMouseUp);
+      // Going back and forth must not stack up observers or leave the panel
+      // half-alive.
+      for (let i = 0; i < 3; i++){
+        paTab = 'map'; paRender(); await sleep(200);
+        paTab = 'you'; paRender(); await sleep(200);
+      }
+      ok('player: repeated visits leave nothing behind',
+         !bm._body && !bm._resizeObserver && !bm._docMouseUp);
+      // And it must still work afterwards, or the teardown broke the panel.
+      paTab = 'map'; paRender(); await sleep(600);
+      ok('player: the map still mounts after several teardowns',
+         !!bm._body && document.contains(bm._body)
+      && !!bm._body.querySelector('#map-stage'));
+      paTab = tab0; paRender(); await sleep(200);
+    }
     ok('player: turn bar rendered', !!document.querySelector('.pa-turn'));
 
     const tabs = [...document.querySelectorAll('.pa-tab')];

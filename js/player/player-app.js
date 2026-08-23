@@ -266,6 +266,16 @@ function paRenderScreen(){
     if (paTab === 'map' && !el.querySelector('.pa-draw')) paAddDrawBar(el);
     return;
   }
+  // Tear the outgoing panel down before wiping its DOM. This shell never
+  // called unmount() at all, so leaving the Map tab left the battle map
+  // panel believing it was still on screen: _body pointed at a detached
+  // node, its ResizeObserver kept firing, its document mouseup listener and
+  // its undo key handler stayed bound, and every visit added another set.
+  //
+  // The stale _body is the part that misleads other code — _reloadPanel and
+  // applyMapState both use it to decide the panel is visible, so an incoming
+  // map change was being applied and painted into nothing.
+  paUnmountCurrent(el);
   el.innerHTML = '';
   if (paTab === 'you')   { el.innerHTML = paYouScreen(); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
@@ -278,6 +288,22 @@ function paRenderScreen(){
 // the map carries fog, the background image, rotation, scale and its own live
 // sync, and a second renderer would be a second set of those to keep right.
 // Its editing toolbar is hidden by CSS in this shell — see .pa-mount rules.
+// The inverse of paMountPanel. Reads which panel is mounted off the DOM
+// rather than a variable, so it stays right even if a render is missed.
+function paUnmountCurrent(host){
+  const box = host.querySelector('.pa-mount');
+  if (!box) return;
+  const tab = box.dataset.paMount;
+  const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes'
+           : tab === 'loot' ? 'loot' : null;
+  const def = id && panelDefs[id];
+  if (!def) return;
+  try { if (typeof def.unmount === 'function') def.unmount(); } catch(e){}
+  // unmount() is supposed to clear this; make sure, because everything
+  // downstream treats a set _body as "on screen".
+  def._body = null;
+}
+
 function paMountPanel(host, id){
   const def = panelDefs[id];
   const box = document.createElement('div');
