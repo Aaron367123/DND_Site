@@ -1386,6 +1386,42 @@ function sktMergeResources(list){
   return out;
 }
 
+
+// How many uses of a limited feature the sheet says this character has, as
+// {name: max}. Two forms, both of which appear on one sheet:
+//
+//    | Focus Points: 6 / Short Rest • Special     <- named outright
+//    | 3 / Long Rest • 1 Action                   <- named by the bullet above
+//
+// This exists because a derived table is a guess about a character and the
+// sheet is a fact about them. _deriveResources gave a level 6 druid 2 uses of
+// Wild Shape; the 2024 rules and the sheet both say 3. Rather than carry a
+// table that has to be right for every class in two rule sets, the number the
+// sheet states wins wherever it states one.
+function sktDeclaredPools(featuresText){
+  const text = String(featuresText || '');
+  const out = {};
+  if (!text.trim()) return out;
+  let bullet = '';
+  text.split('\n').forEach(raw => {
+    const line = raw.trim();
+    if (/^\*/.test(line)){ bullet = line.replace(/^\*\s*/, '').split('•')[0].trim(); return; }
+    if (!/^\|/.test(line)) return;
+    const seg = line.replace(/^\|\s*/, '').replace(/[\s•]+$/, '')
+                    .split(/[•:]/).map(s => s.trim()).filter(Boolean);
+    // The uses segment is not always last — "6 / Short Rest • Special" puts
+    // the activation cost after it.
+    const i = seg.findIndex(x => SKT_ACT_USES.test(x));
+    if (i < 0) return;
+    const n = parseInt(SKT_ACT_USES.exec(seg[i])[1], 10);
+    const name = seg.slice(0, i).join(': ') || bullet;
+    // Highest wins: a feature can be listed more than once and the larger
+    // figure is the one that includes the level bumps.
+    if (name && n > 0 && !(out[name] > n)) out[name] = n;
+  });
+  return out;
+}
+
 // ── Activatable features, read off an imported sheet ────────────────────────
 //
 // A D&D Beyond sheet already says everything needed to offer a character's

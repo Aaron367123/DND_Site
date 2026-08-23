@@ -1448,6 +1448,71 @@
         ok('acts: nothing is returned for a sheet with no features text',
            eqJ(sktDeriveActivations(''), []));
 
+        // ── Pool sizes: the sheet outranks the derived table ────────────
+        {
+          const POOLS = [
+            '* Wild Shape • PHB-2024 82 ',
+            '   | 3 / Long Rest • 1 Bonus Action ',
+            "* Monk's Focus • PHB-2024 101 ",
+            '   | Focus Points: 6 / Short Rest • Special ',
+            '* Breath Weapon • PHB-2024 194 ',
+            '   | 3 / Long Rest • 1 Action ',
+          ].join('\n');
+          const dp = sktDeclaredPools(POOLS);
+          ok('pools: a pipe line names its own pool', dp['Focus Points'] === 6, JSON.stringify(dp));
+          // "6 / Short Rest • Special" puts the activation cost after the
+          // uses, so taking the last segment finds the wrong thing.
+          ok('pools: the uses figure is found when it is not last',
+             dp['Focus Points'] === 6 && dp['Wild Shape'] === 3, JSON.stringify(dp));
+          ok('pools: an unnamed pipe line takes the bullet above it',
+             dp['Wild Shape'] === 3, JSON.stringify(dp));
+          ok('pools: nothing is declared by a sheet with no pipe lines',
+             eqJ(sktDeclaredPools('* Evasion • PHB-2024 103 \nYou dodge well. '), {}));
+
+          // Through the importer: a level 6 druid gets 3 uses, not the 2 the
+          // derived table used to hand out, and the pool comes back full.
+          const druid = _fromFields({
+            'CharacterName': 'ZZ Druid', 'CLASS  LEVEL': 'Druid 6',
+            'FeaturesTraits1': POOLS,
+          });
+          const ws = (druid.resources || []).find(r => r.name === 'Wild Shape');
+          ok('pools: the sheet corrects a derived pool', !!ws && ws.max === 3,
+             JSON.stringify(druid.resources));
+          ok('pools: a corrected pool is full, not part-spent',
+             !!ws && ws.current === 3, ws && (ws.current + '/' + ws.max));
+          // Breath Weapon is declared as 3 / Long Rest too, but it is not a
+          // class resource and must not appear on the party card.
+          ok('pools: a declared use count does not invent a new pool',
+             !(druid.resources || []).some(r => r.name === 'Breath Weapon'),
+             JSON.stringify((druid.resources || []).map(r => r.name)));
+          // A case where the two genuinely disagree. Bardic Inspiration is
+          // derived from Charisma, and a sheet whose ability scores did not
+          // extract gives a modifier of 0 and a pool of 1 — while the sheet
+          // itself plainly states 4. Wild Shape above no longer tests this:
+          // the derived table was corrected to the 2024 figure in the same
+          // change, so both sides now say 3 and the check passed with the
+          // correction disabled.
+          const bard = _fromFields({
+            'CharacterName': 'ZZ Bard', 'CLASS  LEVEL': 'Bard 6',
+            'FeaturesTraits1': ['* Bardic Inspiration • PHB-2024 59 ',
+                                 '   | 4 / Short Rest • 1 Bonus Action '].join(String.fromCharCode(10)),
+          });
+          const bi = (bard.resources || []).find(r => r.name === 'Bardic Inspiration');
+          ok('pools: the sheet wins where it disagrees with the table',
+             !!bi && bi.max === 4 && bi.current === 4,
+             JSON.stringify(bard.resources));
+
+          // A pool the sheet says nothing about is left exactly as derived —
+          // otherwise the check above would pass with the whole table gone.
+          const monk = _fromFields({
+            'CharacterName': 'ZZ Monk', 'CLASS  LEVEL': 'Monk 6',
+            'FeaturesTraits1': '* Evasion • PHB-2024 103 \nYou dodge well. ',
+          });
+          const fp = (monk.resources || []).find(r => r.name === 'Focus Points');
+          ok('pools: an undeclared pool keeps its derived size',
+             !!fp && fp.max === 6, JSON.stringify(monk.resources));
+        }
+
         // End to end in the Turn View: render, click, spend.
         {
           const p0 = JSON.stringify(state.party), k0 = JSON.stringify(state.combatants);

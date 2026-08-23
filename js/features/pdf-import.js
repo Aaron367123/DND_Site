@@ -416,8 +416,24 @@ function _fromFields(f){
   // as a plain list with no bullets.
   const ddbFeats = _ddbFeats(bio.features);
   const feats = ddbFeats.length ? ddbFeats : _matchFeats(_featsRegion(bio.features));
+  // The sheet outranks the table. _deriveResources is a guess from class and
+  // level; the sheet is a statement about this character, and it is right
+  // where the two differ — a level 6 druid was being given 2 uses of Wild
+  // Shape against the sheet's and the 2024 rules' 3.
+  const declared = (typeof sktDeclaredPools === 'function')
+    ? sktDeclaredPools(bio.features) : {};
   const resources = _deriveResources(
     classLevels || (cls && level ? [{ cls, level }] : []), abilities);
+  resources.forEach(r => {
+    const n = declared[r.name];
+    // Only ever corrects a pool that was already derived. Turning every
+    // "N / Long Rest" on the sheet into a tracked pool would put a row on the
+    // party card for things nobody asked to track.
+    // Both, not just the max: _deriveResources hands back full pools, so a
+    // corrected Wild Shape must read 3/3 and not 2/3. Merging with whatever
+    // the character already had is sktMergeResources' job, further down.
+    if (n > 0 && n !== r.max){ r.max = n; r.current = n; }
+  });
 
   const sheet = {
     skills, saves, profBonus, passivePerception, classLevels,
@@ -657,7 +673,7 @@ function _deriveResources(pairs, abilities){
     } else if (c === 'cleric'){
       pool('Channel Divinity', band(L, [[2,1],[6,2],[18,3]]));
     } else if (c === 'druid'){
-      if (L >= 2) pool('Wild Shape', 2);
+      pool('Wild Shape', band(L, [[2,2],[6,3],[17,4]]));
     } else if (c === 'fighter'){
       pool('Second Wind', 1);
       if (L >= 2) pool('Action Surge', L >= 17 ? 2 : 1);
