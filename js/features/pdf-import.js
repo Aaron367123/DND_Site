@@ -490,9 +490,51 @@ function _matchSubclass(cls, candidates){
   return null;
 }
 
-// Feat names found in the sheet's free-text Features & Traits box. Nothing
-// else in a character sheet lists them in a structured way.
+// Feat names found in the sheet's free-text Features & Traits box, or in a
+// FEATS section located in the rendered page text.
 const _FEAT_SKIP = /^(ability score improvement)$/i;
+
+// Half the feat names in the 2024 rules are ordinary English words — Alert,
+// Defense, Healer, Lucky, Tough — so a bare word match over sheet prose is
+// mostly noise. Measured against a realistic page: five false positives out of
+// seven hits ("lucky charm", "healer kit", "Tough leather armor", "Alert the
+// guard", "Unarmored Defense"). Two rules, applied only to single-word names
+// because multi-word ones are specific enough on their own:
+//   - it must be Capitalised, which kills the equipment-list noise; and
+//   - it must not be the tail of a longer Capitalised phrase, which kills
+//     "Unarmored Defense" and "Fighting Style: Defense".
+// The second rule is not damage control for the wider haystack — it was wrong
+// before, on the features box alone, and handed every monk and every barbarian
+// a Defense feat they never took.
+function _featOccurs(hay, name){
+  const esc = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(^|[^A-Za-z0-9])(' + esc + ')($|[^A-Za-z0-9])', 'g');
+  const multi = /\s/.test(name);
+  let m;
+  while ((m = re.exec(hay)) !== null){
+    re.lastIndex = m.index + 1;
+    if (multi) return true;
+    const hit = m[2];
+    if (hit[0] !== hit[0].toUpperCase()) continue;
+    const before = hay.slice(Math.max(0, m.index - 40), m.index + m[1].length);
+    if (/[A-Z][a-z]+[\s:]+$/.test(before)) continue;
+    return true;
+  }
+  return false;
+}
+
+// The slice of rendered page text that actually lists feats. Scanning the
+// WHOLE page instead produced five wrong feats out of seven; scanning this
+// produced exactly the two real ones. Ends at the next SHOUTED heading, which
+// is how every sheet template separates one box from the next.
+function _featsRegion(fullText){
+  const m = /\bFEATS?\b[^A-Za-z0-9]*/.exec(String(fullText || ''));
+  if (!m) return '';
+  const rest = String(fullText).slice(m.index + m[0].length);
+  const stop = /\b[A-Z]{3,}\b/.exec(rest);
+  return rest.slice(0, stop ? stop.index : 400);
+}
+
 function _matchFeats(text){
   if (typeof _5eData === 'undefined' || typeof _5eLoaded === 'undefined' || !_5eLoaded) return [];
   const hay = String(text || '');
@@ -501,7 +543,7 @@ function _matchFeats(text){
   _5eData.forEach(d => { if (d.cat === 'feat' && d.name && !_FEAT_SKIP.test(d.name)) names.add(d.name); });
   const out = [];
   [...names].sort((a, b) => b.length - a.length).forEach(n => {
-    if (_wordIn(hay, n) && !out.some(o => _wordIn(o, n))) out.push(n);
+    if (_featOccurs(hay, n) && !out.some(o => _wordIn(o, n))) out.push(n);
   });
   return out.sort();
 }
@@ -666,8 +708,21 @@ async function _fromPositionalText(file){
     if (v != null) abilities[ab.toLowerCase()] = v;
   });
 
+  // The positional path used to return no subclass and no feats AT ALL — not
+  // "looked and didn't find", but never looked. Any sheet that lost its form
+  // fields (printed to PDF, flattened, scanned) therefore imported without
+  // them every single time, silently. The rendered text is the only haystack
+  // available here, and it is the right one: both matchers scan prose.
+  //
+  // Same parenthetical the form-field path reads off Class & Level — "Rogue
+  // (Thief) 6" — offered first because it is a far stronger signal than the
+  // surrounding prose.
+  const subHint  = (String(classLevel || '').match(/\(([^)]+)\)/) || [])[1] || null;
+  const subclass = _matchSubclass(cls, [subHint, fullText]);
+  const feats    = _matchFeats(_featsRegion(fullText));
+
   return {
-    name: name || '', cls, level,
+    name: name || '', cls, level, subclass, feats,
     race: race || '', background: background || '', alignment: alignment || '',
     hp, hpMax, ac, init, speed,
     abilities,
@@ -683,10 +738,18 @@ async function parseDDBeyondPdf(file){
     if (Object.keys(fields).length > 0){
       const result = _fromFields(fields);
       // Per-field positional rescue: if AcroForm gave us most of the sheet
-      // but missed HP or initiative specifically, fall back to scanning the
-      // rendered text for just those fields rather than discarding the whole
-      // form-field result.
-      if (result.cls != null && (result.hp == null || result.init == null)){
+      // but missed HP, initiative, subclass or feats specifically, fall back
+      // to scanning the rendered text for just those rather than discarding
+      // the whole form-field result.
+      //
+      // Subclass and feats are in that list because both are read from ONE
+      // field ("Features and Traits") under four possible names. A template
+      // that calls it anything else leaves that box empty, so both came back
+      // blank on sheets that name them plainly on page 1 — which is exactly
+      // what "the import isn't getting the subclass or the feats" looked like.
+      const needText = result.hp == null || result.init == null
+                    || !result.subclass || !(result.feats || []).length;
+      if (result.cls != null && needText){
         try {
           const items = await pdfTextItems(file);
           if (result.hp == null){
@@ -698,6 +761,15 @@ async function parseDDBeyondPdf(file){
             const v = _numNear(items, 'INITIATIVE', {page:1});
             if (v != null) result.init = v;
           }
+          const fullText = items.map(it => it.str).join(' ');
+          // The subclass matcher is anchored to the class and tries the
+          // longest name first, so the whole page is a safe haystack for it.
+          // The feat matcher is not — see _featsRegion.
+          if (!result.subclass) result.subclass = _matchSubclass(result.cls, [fullText]);
+          // Union, not replace: the features box may have named one feat and
+          // the FEATS box the rest.
+          const more = _matchFeats(_featsRegion(fullText));
+          if (more.length) result.feats = [...new Set([...(result.feats || []), ...more])];
         } catch(e){ /* ignore rescue failure */ }
       }
       return result;

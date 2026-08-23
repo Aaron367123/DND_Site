@@ -3246,14 +3246,43 @@ registerPanel('party',{
   // Pulls in fields from a D&D Beyond character sheet PDF and writes them to
   // an existing or new party slot. The preview modal is fully editable so the
   // user can correct any mis-extracted fields before saving.
+  // Kick off the 5e dataset and wait for it, with a ceiling so a slow or
+  // offline load degrades to "imported without subclass/feats" rather than a
+  // spinner that never ends. Resolves true when the data is actually there.
+  _ensure5eData(timeoutMs){
+    if (typeof _5eLoaded !== 'undefined' && _5eLoaded) return Promise.resolve(true);
+    if (typeof load5eData !== 'function' || typeof on5eLoaded !== 'function'){
+      return Promise.resolve(false);
+    }
+    showToast('Loading rules data…');
+    try { load5eData(); } catch(e){ return Promise.resolve(false); }
+    return new Promise(resolve => {
+      let done = false;
+      const finish = v => { if (!done){ done = true; resolve(v); } };
+      on5eLoaded(() => finish(true));
+      setTimeout(() => finish(typeof _5eLoaded !== 'undefined' && !!_5eLoaded),
+                 Math.max(1000, timeoutMs || 6000));
+    });
+  },
+
   _importPdf(){
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'application/pdf';
     inp.addEventListener('change', async ev => {
       const f = ev.target.files[0]; if (!f) return;
+      // Subclass and feats are matched against the LOADED 5e data, and the
+      // matchers return nothing at all when it is absent — silently, because
+      // "the sheet didn't say" and "I couldn't look it up" produce the same
+      // empty result. This panel never asked for that data, and none of the
+      // panels that do (attacks, bestiary, loot, shop, Turn View) has to have
+      // been opened, so importing from here dropped both fields every time.
+      const ready = await this._ensure5eData(6000);
       showToast('Reading PDF…');
       try {
         const data = await parseDDBeyondPdf(f);
+        // Say so rather than handing back a sheet with two fields quietly
+        // missing. Everything else parsed fine and is still worth importing.
+        if (!ready) data._noRulesData = true;
         this._showPdfPreview(data);
       } catch(err){
         console.error(err);
@@ -3273,6 +3302,8 @@ registerPanel('party',{
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:92vw">
       <h3>Import character sheet</h3>
       <p style="color:var(--text-muted);font-size:var(--fs-sm);margin:0 0 12px">Review the values pulled from the PDF and pick which party slot to apply them to. Anything that didn't extract cleanly can be edited before saving.</p>
+      ${data._noRulesData ? `<p class="pdf-warn">⚠ The rules data didn't load, so <strong>subclass</strong> and <strong>feats</strong> were skipped — they are matched against it, not read off the sheet. Everything else below is fine. Set them in Manage Party → Edit details, or import again once the app has finished loading.</p>` : ''}
+      ${(!data._noRulesData && !data.subclass && data.cls) ? `<p class="pdf-warn subtle">The sheet didn't name a <strong>subclass</strong> this importer could recognise. Set it in Manage Party → Edit details — the Features tab and the Turn View's reactions both depend on it.</p>` : ''}
       <div class="modal-fields">
         <div class="modal-field"><label>Apply to</label><select id="pdf-slot">${slotOptions}</select></div>
         <div class="modal-field"><label>Name</label><input id="pdf-name" type="text" value="${esc(data.name||'')}"></div>
@@ -3283,6 +3314,16 @@ registerPanel('party',{
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div class="modal-field"><label>Race</label><input id="pdf-race" type="text" value="${esc(data.race||'')}"></div>
           <div class="modal-field"><label>Background</label><input id="pdf-bg" type="text" value="${esc(data.background||'')}"></div>
+        </div>
+        <!-- Subclass and feats used to be parsed silently and applied silently,
+             so a miss was invisible AND uncorrectable from here: the only clue
+             was their absence from the Features tab days later. They are the two
+             fields the importer is least able to find, because they are matched
+             against the 5e data rather than read off the sheet — which is
+             exactly why they belong in the review step. -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="modal-field"><label>Subclass</label><input id="pdf-subclass" type="text" value="${esc(data.subclass||'')}" placeholder="Battle Master, Evocation, …"></div>
+          <div class="modal-field"><label>Feats</label><input id="pdf-feats" type="text" value="${esc((data.feats||[]).join(', '))}" placeholder="Sentinel, War Caster, …"></div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
           <div class="modal-field"><label>HP</label><input id="pdf-hp" type="number" value="${data.hp??''}"></div>
@@ -3355,14 +3396,15 @@ registerPanel('party',{
       // Confirmed by applying such an import over a populated character.
       if (data.hitDice) data2.hitDice = data.hitDice;
       if (data.sheet)   data2.sheet   = data.sheet;
-      // Subclass and feats are best-effort reads — the sheet may not say. Only
-      // written when the parse actually found something, for the same reason
-      // the sheet is: a re-import that came up empty must not wipe what the DM
-      // typed in by hand.
-      if (data.subclass) data2.subclass = data.subclass;
-      if (Array.isArray(data.feats) && data.feats.length){
-        data2.feats = [...new Set([...(prior.feats || []), ...data.feats])];
-      }
+      // Subclass and feats are matched against the 5e data, not read off the
+      // sheet, so they miss more often than anything else here — hence the
+      // editable boxes. Still only written when non-blank: clearing the box is
+      // not how you delete a subclass, and a re-import that came up empty must
+      // not wipe what the DM typed by hand.
+      const sub = get('pdf-subclass').trim();
+      if (sub) data2.subclass = sub;
+      const feats = get('pdf-feats').split(',').map(s => s.trim()).filter(Boolean);
+      if (feats.length) data2.feats = [...new Set([...(prior.feats || []), ...feats])];
       // Resource pools are DERIVED from class and level, so re-importing would
       // otherwise refill everything mid-session. Merge by name and keep the
       // current value of any pool that already exists — an import updates the

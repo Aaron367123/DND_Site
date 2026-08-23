@@ -3277,6 +3277,9 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .divvy-row:last-child{border-bottom:none}
 .divvy-amt{font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
 .modal h3{margin:0 0 18px;font-size:var(--fs-xl);font-weight:500;color:var(--accent);display:flex;align-items:center;gap:8px}
+.pdf-warn{margin:0 0 12px;padding:8px 10px;border-radius:var(--r-sm);font-size:var(--fs-sm);
+  background:rgba(212,165,116,.10);border:1px solid rgba(212,165,116,.45);color:var(--text)}
+.pdf-warn.subtle{background:rgba(255,255,255,.04);border-color:var(--border);color:var(--text-muted)}
 .modal-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:20px}
 .modal-field label{display:block;font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .modal-field input{font-size:var(--fs-lg);padding:8px 10px}

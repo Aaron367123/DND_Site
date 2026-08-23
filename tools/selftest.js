@@ -1223,6 +1223,93 @@
            'run via tools/selftest-run.js, which waits for _5eLoaded');
       }
 
+      // PDF import: subclass and feats. Both are matched against _5eData
+      // rather than read off the sheet, which is why they live here and not in
+      // a unit test — and why they failed silently for so long. Two distinct
+      // bugs are pinned below: the positional and form-field paths never
+      // looked past one form field, and the feat matcher accepted any English
+      // word that happened to be a feat name.
+      if (typeof _matchFeats === 'function' && typeof _5eLoaded !== 'undefined' && _5eLoaded){
+        const page = 'CHARACTER NAME Kaelin CLASS & LEVEL Monk 6 BACKGROUND Acolyte '
+          + 'FEATURES & TRAITS Unarmored Defense, Martial Arts, Ki, Slow Fall, '
+          + 'Way of the Open Hand, Open Hand Technique, Evasion. '
+          + 'Fighting Style: Defense. Second Wind. '
+          + 'FEATS Sentinel, War Caster '
+          + 'EQUIPMENT shortsword, healer kit, lucky charm '
+          + 'SPELLS Guidance, Magic Weapon, Alert the guard '
+          + 'Attacks: Quarterstaff. Speed 45. Tough leather armor.';
+
+        // The whole page yields five wrong feats out of seven. The FEATS
+        // section yields the two real ones. If _featsRegion is ever widened
+        // back to the full text, this is the check that says so.
+        ok('pdf: the feats region is just the FEATS box',
+           _featsRegion(page).trim() === 'Sentinel, War Caster',
+           JSON.stringify(_featsRegion(page)));
+        ok('pdf: real feats are found', eqJ(_matchFeats(_featsRegion(page)),
+           ['Sentinel', 'War Caster']), JSON.stringify(_matchFeats(_featsRegion(page))));
+        ok('pdf: lower-case equipment prose is not mistaken for feats',
+           !_matchFeats(page).some(f => f === 'Healer' || f === 'Lucky'),
+           JSON.stringify(_matchFeats(page)));
+        // Why the region scoping is load-bearing and not belt-and-braces: the
+        // word rules cannot reject a capitalised, sentence-initial "Tough" in
+        // "Speed 45. Tough leather armor." Only looking in the right box can.
+        // If someone ever points _matchFeats at the full page again, this is
+        // the check that explains what breaks.
+        ok('pdf: the full page still leaks, which is why the region exists',
+           _matchFeats(page).length > _matchFeats(_featsRegion(page)).length,
+           JSON.stringify(_matchFeats(page)));
+        ok('pdf: "Unarmored Defense" is not the Defense feat',
+           eqJ(_matchFeats('Unarmored Defense, Martial Arts, Evasion.'), []),
+           JSON.stringify(_matchFeats('Unarmored Defense, Martial Arts, Evasion.')));
+
+        // Positive controls. The two guards above suppress matches, so a
+        // matcher that returned nothing at all would pass every check so far.
+        ok('pdf: multi-word feats still match',
+           eqJ(_matchFeats('FEATS Great Weapon Master, War Caster'),
+               ['Great Weapon Master', 'War Caster']));
+        ok('pdf: one-word feats in a plain list still match',
+           eqJ(_matchFeats('FEATS Alert, Tough'), ['Alert', 'Tough']));
+        ok('pdf: no FEATS heading means no region, not the whole page',
+           _featsRegion('CHARACTER NAME Bob RACE Elf BACKGROUND Sage') === '');
+
+        // Subclass reads the whole page safely — it is anchored to the class
+        // and tries the longest name first.
+        ok('pdf: subclass is found in page text', _matchSubclass('monk', [page]) === 'Open Hand',
+           String(_matchSubclass('monk', [page])));
+        ok('pdf: a subclass from the wrong class is not matched',
+           _matchSubclass('wizard', [page]) === null,
+           String(_matchSubclass('wizard', [page])));
+      }
+
+      // The review modal must expose both fields, because the matchers miss
+      // often enough that "silently parsed, silently applied" left the DM with
+      // no way to see it or fix it.
+      {
+        const partyBefore = JSON.stringify(state.party);
+        panelDefs.party._showPdfPreview({ name:'ZZ Selftest', cls:'monk', level:6,
+                                          subclass:'Open Hand', feats:['Sentinel'], abilities:{} });
+        const sub = document.querySelector('#pdf-subclass');
+        const fts = document.querySelector('#pdf-feats');
+        ok('pdf: the review modal has a subclass box', !!sub);
+        ok('pdf: the review modal has a feats box', !!fts);
+        ok('pdf: both are pre-filled from the parse',
+           !!sub && !!fts && sub.value === 'Open Hand' && fts.value === 'Sentinel');
+        if (sub && fts){
+          document.querySelector('#pdf-slot').value = 'new';
+          sub.value = 'Way of Shadow';
+          fts.value = ' Sentinel ,, War Caster ';
+          document.querySelector('#pdf-apply').click();
+          const made = state.party[state.party.length - 1];
+          ok('pdf: a typed subclass reaches the character',
+             !!made && made.subclass === 'Way of Shadow', made && made.subclass);
+          ok('pdf: a typed feat list is split and cleaned',
+             !!made && eqJ(made.feats, ['Sentinel', 'War Caster']),
+             made && JSON.stringify(made.feats));
+        }
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        state.party = JSON.parse(partyBefore);
+      }
+
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
       state.activeCombatantId = A0; save();
       closePanel('turnview'); closePanel('combat');
