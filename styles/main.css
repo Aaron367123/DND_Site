@@ -1199,6 +1199,15 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .mp-ability-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
 .mp-res-list{display:flex;flex-direction:column;gap:6px}
 .mp-res-row{display:flex;align-items:center;gap:6px}
+/* Was style="flex:1" inline on the element, which no media query could beat. */
+.mp-res-name{flex:1;min-width:0}
+@media (max-width: 767px){
+  /* nowrap against fixed 90/60/60 siblings left the NAME input at 39px — too
+     narrow to read "Wild Shape", let alone edit it. Wrap the row so the name
+     gets a line of its own and the pool controls sit under it. */
+  .mp-res-row{flex-wrap:wrap}
+  .mp-res-name{flex:1 0 100%}
+}
 .mp-res-row .mp-input{font-size:var(--fs-md);padding:5px 8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm)}
 /* PARTY CARD v2 */
 .char-card{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 10px 10px 13px;display:flex;flex-direction:column;gap:6px;cursor:grab;transition:border-color .15s,box-shadow .15s;position:relative;--class-color:var(--accent)}
@@ -3257,6 +3266,11 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
    Sits above the dock (9500) and toolbar (9000), below toasts (10001) and the
    spotlight variant (10000), which deliberately floats over the tour. */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9700;display:flex;align-items:center;justify-content:center}
+/* A second backdrop opened over the first — the resources editor over Manage
+   Party — dimmed everything twice: 0.65 over 0.65 is 88% black, which reads as
+   "the screen just went dark" rather than "a dialog opened". The first one
+   already covers the page, so later ones only need to catch clicks. */
+.modal-backdrop ~ .modal-backdrop{background:transparent}
 .modal{background:var(--panel);border:1px solid var(--border-strong,#4a4a4a);border-radius:var(--r-lg);padding:22px 24px;min-width:300px;max-width:420px;width:90%;box-shadow:var(--sh-4)}
 .divvy-list{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-md);padding:6px 8px;background:var(--panel-2)}
 .divvy-row{display:flex;justify-content:space-between;align-items:center;padding:4px 6px;border-bottom:1px dotted var(--border);font-size:var(--fs-md)}

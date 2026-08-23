@@ -1708,6 +1708,37 @@
         ok('mobile: every field in it is on screen', off.length === 0, off.length + ' off');
         const bd2 = ed.closest('.modal-backdrop'); if (bd2) bd2.remove();
       }
+      // The resources editor opens OVER Manage Party, so two backdrops stack.
+      // Each dimmed at 0.65, which composites to 88% black — the dialog was
+      // there, but the screen just looked like it had gone dark. And its name
+      // field was 39px wide, too narrow to read "Wild Shape" let alone edit it.
+      panelDefs.party._openManageParty(); await sleep(500);
+      panelDefs.party._openResourcesEditor(2, () => {});
+      await sleep(600);
+      const bds = [...document.querySelectorAll('.modal-backdrop')];
+      ok('mobile: the resources editor opens over Manage Party', bds.length === 2);
+      const res = bds[bds.length - 1];
+      const rm = res && res.querySelector('.mp-edit-modal');
+      ok('mobile: the resources modal renders', !!rm);
+      if (rm){
+        ok('mobile: it fits the screen', fits(rm),
+           Math.round(R(rm).width) + 'x' + Math.round(R(rm).height));
+        // Occlusion, not just geometry: both modals sit in the same place, so
+        // a box that is "on screen" can still be behind the one below it.
+        const c = R(rm);
+        const hit = document.elementFromPoint(Math.round(c.left + c.width/2),
+                                              Math.round(c.top + c.height/2));
+        ok('mobile: it is actually on top, not behind Manage Party',
+           !!(hit && rm.contains(hit)), hit && String(hit.className));
+        const dimmers = bds.filter(x => getComputedStyle(x).backgroundColor !== 'rgba(0, 0, 0, 0)');
+        ok('mobile: the page is dimmed once, not twice', dimmers.length === 1,
+           dimmers.length + ' backdrops painting');
+        const nm = rm.querySelector('.mp-res-name');
+        ok('mobile: the resource name is readable', !!nm && R(nm).width > 150,
+           nm ? Math.round(R(nm).width) + 'px' : 'no field');
+      }
+      bds.forEach(x => x.remove());
+
       closePanel('party');
     }
 

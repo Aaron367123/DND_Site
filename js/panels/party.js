@@ -2195,7 +2195,7 @@ registerPanel('party',{
     const renderRows = () => (c.resources.length
       ? c.resources.map((r, ri) => `
           <div class="mp-res-row">
-            <input class="mp-input" data-ri="${ri}" data-k="name" value="${esc(r.name||'')}" placeholder="Name" style="flex:1">
+            <input class="mp-input mp-res-name" data-ri="${ri}" data-k="name" value="${esc(r.name||'')}" placeholder="Name">
             <select class="mp-input" data-ri="${ri}" data-k="type" style="width:90px">
               <option value="pool"${r.type==='pool'?' selected':''}>Pool</option>
               <option value="toggle"${r.type==='toggle'?' selected':''}>Toggle</option>
