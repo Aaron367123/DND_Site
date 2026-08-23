@@ -1386,6 +1386,118 @@ function sktMergeResources(list){
   return out;
 }
 
+// ── Activatable features, read off an imported sheet ────────────────────────
+//
+// A D&D Beyond sheet already says everything needed to offer a character's
+// options in combat, in two places that are consistently formatted:
+//
+//   * Monk's Focus • PHB-2024 101
+//     ... Flurry of Blows. You can expend 1 Focus Point to make two Unarmed
+//     Strikes as a Bonus Action. ...
+//        | Flurry of Blows: 1 Bonus Action
+//
+// The pipe line carries the name and the action-economy cost; the prose
+// carries the resource cost. Both are needed: "1 Bonus Action" alone doesn't
+// tell you Flurry spends a Focus Point, and "expend 1 Focus Point" alone
+// doesn't tell you it's a Bonus Action.
+//
+// Derived on read rather than stored at import, so it needs no new field, no
+// migration, and it updates when the DM edits the features text by hand.
+// Results are cached on the text itself, which is the only input.
+
+const SKT_ACT_COST = /^(?:1\s+)?(Action|Bonus Action|Reaction|Magic Action|Free Action|Special|Legendary Action)$/i;
+const SKT_ACT_USES = /^(\d+)\s*\/\s*(Short Rest|Long Rest|Rest|Day|Turn|Round|Encounter)$/i;
+
+const _sktActCache = new Map();
+
+function sktDeriveActivations(featuresText){
+  const text = String(featuresText || '');
+  if (!text.trim()) return [];
+  if (_sktActCache.has(text)) return _sktActCache.get(text);
+
+  const lines = text.split('\n');
+  const out = [];
+  let bullet = '';
+
+  lines.forEach(raw => {
+    const line = raw.trim();
+    if (/^\*/.test(line)){
+      // "* Hand of Harm • PHB-2024 104" — the source reference is not a name.
+      bullet = line.replace(/^\*\s*/, '').split('•')[0].trim();
+      return;
+    }
+    if (!/^\|/.test(line)) return;
+
+    // Peel the cost off the end. Both • and : act as separators, and which one
+    // appears varies within a single sheet.
+    const body = line.replace(/^\|\s*/, '').replace(/[\s•]+$/, '');
+    const seg = body.split(/[•:]/).map(s => s.trim()).filter(Boolean);
+    if (!seg.length) return;
+
+    let action = '', uses = '';
+    if (SKT_ACT_COST.test(seg[seg.length - 1])) action = seg.pop();
+    if (seg.length && SKT_ACT_USES.test(seg[seg.length - 1])) uses = seg.pop();
+
+    // No activation cost at all means this is not something you do — it is a
+    // choice the sheet is recording ("| Warrior of Mercy", "| Bronze Dragon").
+    if (!action) return;
+
+    const name = seg.join(': ') || bullet;
+    if (!name) return;
+
+    out.push({ name, action: action.replace(/^1\s+/, ''), uses, feature: bullet });
+  });
+
+  // A pool is not an action. "| Focus Points: 6 / Short Rest • Special" is the
+  // sheet declaring the resource that the entries below it spend.
+  const pools = new Set(out.filter(a => a.uses && /^special$/i.test(a.action))
+                           .map(a => sktCanonResource(a.name).toLowerCase()));
+  const acts = out.filter(a => !pools.has(sktCanonResource(a.name).toLowerCase()));
+
+  // Now the resource cost, from the prose. Search forward from where the
+  // option is named, stopping at the next bullet or the next sub-option's
+  // heading — otherwise Flurry of Blows reads Patient Defense's sentence and
+  // every monk option costs the same thing by accident.
+  //
+  // A sub-option heading is "<Name>. ", with the period. Stopping at a bare
+  // mention instead was too eager: Stunning Strike's own text says "when you
+  // hit with a Monk weapon or Unarmed Strike, you can expend 1 Focus Point",
+  // and cutting at "Unarmed Strike" put the cost outside the window.
+  const names = acts.map(a => a.name.split(': ').pop());
+  const costIn = (from, stopAt) => {
+    if (from < 0) return null;
+    let end = text.length;
+    const nb = text.indexOf('\n*', from);
+    if (nb > from) end = nb;
+    stopAt.forEach(other => {
+      if (!other) return;
+      const x = text.indexOf(other + '. ', from + 1);
+      if (x > from && x < end) end = x;
+    });
+    const m = /expend(?:ing)?\s+(\d+)\s+([A-Z][A-Za-z'’]*(?:\s+[A-Z][A-Za-z'’]*)*)/
+                .exec(text.slice(from, end));
+    if (!m) return null;
+    // "expend 1 Focus Point" — the pool is tracked in the plural, and this is
+    // the same alias table the party tracker uses, so a 2014 sheet's Ki Points
+    // and a 2024 sheet's Focus Points land on one pool.
+    return { amount: parseInt(m[1], 10) || 1,
+             resource: sktCanonResource(/s$/i.test(m[2]) ? m[2] : m[2] + 's') };
+  };
+  acts.forEach((a, i) => {
+    const key = names[i];
+    const others = names.filter((o, j) => j !== i && o && o !== key);
+    let hit = costIn(text.indexOf(key), others);
+    // Fall back to the enclosing feature's text. Redirect Attack is named only
+    // in the pipe line, never in the prose that explains what it costs — that
+    // sentence sits under Deflect Attacks, which is where it belongs.
+    if (!hit && a.feature && a.feature !== key) hit = costIn(text.indexOf(a.feature), others);
+    if (hit){ a.amount = hit.amount; a.resource = hit.resource; }
+  });
+
+  _sktActCache.set(text, acts);
+  return acts;
+}
+
 function sktNormName(s){
   return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
 }

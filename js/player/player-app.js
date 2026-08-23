@@ -338,6 +338,42 @@ function paRefreshMount(tab){
 }
 
 // ─── You ─────────────────────────────────────────────────────────────────────
+// The character's own activatable features, off their imported sheet. Same
+// derivation the Turn View uses — see sktDeriveActivations in js/core/utils.js.
+//
+// Only the resource is spent here, not the action economy: a player on this
+// screen is often not in an initiative order at all, and marking their bonus
+// action used out of combat would be wrong. The pool lives in state.party, so
+// the DM's Turn View shows the same number a moment later.
+function paActivations(pc){
+  if (!pc || typeof sktDeriveActivations !== 'function') return [];
+  const text = (pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '';
+  try { return sktDeriveActivations(text) || []; } catch(e){ return []; }
+}
+function paPoolFor(pc, a){
+  const name = a.resource || a.name;
+  return (Array.isArray(pc.resources) ? pc.resources : []).find(r => r.name === name) || null;
+}
+function paUseActivation(i){
+  const pc = paPc(); if (!pc) return;
+  const a = paActivations(pc)[i]; if (!a) return;
+  const pool = paPoolFor(pc, a);
+  const n = a.amount || 1;
+  const short = pool && pool.current < n;
+  if (!short && pool) pool.current = Math.max(0, pool.current - n);
+  if (!short) save();
+  paRender();
+  // After the re-render, or this writes into a box that is about to be
+  // replaced — the same order paRollAttack uses.
+  const box = document.getElementById('pa-roll');
+  if (!box) return;
+  box.innerHTML = short
+    ? `<div class="pa-roll-in fumble"><span class="pa-roll-l">${paEsc(a.name)}</span>
+         <span class="pa-roll-d">no ${paEsc(String(pool.name).toLowerCase())} left</span></div>`
+    : `<div class="pa-roll-in"><span class="pa-roll-l">${paEsc(a.name)}</span>
+         <span class="pa-roll-d">${paEsc(a.action || '')}</span>
+         ${pool ? `<span class="pa-roll-hit">${pool.current}<i>/${pool.max} ${paEsc(pool.name)}</i></span>` : ''}</div>`;
+}
 function paYouScreen(){
   const pc = paPc();
   if (!pc) return paPickerScreen();
@@ -374,6 +410,20 @@ function paYouScreen(){
         ${typeof ICO === 'function' ? ICO('i-dice') : '🎲'}
       </button>`).join('');
 
+  const feats = paActivations(pc).map((a, i) => {
+    const pool = paPoolFor(pc, a);
+    const n = a.amount || 1;
+    // "1 Focus Point", not "1 Focus Points" — the pool is named in the plural
+    // because that is how it is tracked, but a cost of one reads wrong.
+    const unit = pool ? (n === 1 ? String(pool.name).replace(/s$/, '') : pool.name) : '';
+    const cost = pool ? `${n} ${unit} · ${pool.current}/${pool.max}` : (a.uses || '');
+    const dry = !!(pool && pool.current < n);
+    return `<button class="pa-feat${dry ? ' off' : ''}" data-pa-feat="${i}"${dry ? ' disabled' : ''}>
+      <span class="pa-feat-n">${paEsc(a.name)}</span>
+      <span class="pa-feat-d">${paEsc(a.action || '')}${cost ? ' · ' + paEsc(cost) : ''}</span>
+    </button>`;
+  }).join('');
+
   return `
     <div class="pa-card pa-you">
       <div class="pa-you-head">
@@ -405,6 +455,7 @@ function paYouScreen(){
       ${down ? paDeathBlock(c) : ''}
       ${res || slots ? `<div class="pa-sec"><h4>Resources</h4>${res}${slots}</div>` : ''}
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
+      ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div></div>` : ''}
       <div class="pa-roll" id="pa-roll"></div>
       <button class="pa-sheet-t" data-pa-mate="${paEsc(pc.id)}">
         ${paOpenMates.has(pc.id) ? '▾ Hide full sheet' : '▸ Full sheet'}
@@ -653,6 +704,8 @@ function paOnClick(e){
   if (hp){ paApplyHp(+hp.dataset.paHp); return; }
   const atk = e.target.closest('[data-pa-atk]');
   if (atk){ paRollAttack(+atk.dataset.paAtk); return; }
+  const feat = e.target.closest('[data-pa-feat]');
+  if (feat){ paUseActivation(+feat.dataset.paFeat); return; }
   if (e.target.closest('[data-pa-death]')){ paRollDeathSave(); return; }
   const mate = e.target.closest('[data-pa-mate]');
   if (mate){

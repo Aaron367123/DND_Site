@@ -3757,6 +3757,18 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-rx.hit { border-color:var(--accent); color:var(--accent); }
 .tv-rx.spent { opacity:.4; text-decoration:line-through; }
 .tv-rx-src { opacity:.6; text-transform:uppercase; letter-spacing:.05em; font-size:8px; }
+/* Activatable features, derived from the character's own imported sheet.
+   Shaped like .tv-rx so the two rows read as one family, but a <button>
+   rather than a <span>: these are clicked, and a reaction chip is not. */
+.tv-act { font-size:var(--fs-2xs); border:1px solid var(--border); border-radius:var(--r-pill);
+  padding:2px 8px; color:var(--text); background:transparent; cursor:pointer;
+  display:inline-flex; align-items:center; gap:5px; font-family:inherit;
+  /* Comfortably tappable on a phone without making the row twice as tall. */
+  min-height:26px; }
+.tv-act:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+.tv-act:disabled { opacity:.4; cursor:default; }
+.tv-act.spent { text-decoration:line-through; }
+.tv-actlist { margin-top:4px; }
 .tv-res { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
 .tv-res-i { display:flex; align-items:center; gap:6px; font-size:var(--fs-2xs); color:var(--text-muted); }
 .tv-pips { display:flex; gap:3px; }
@@ -4239,6 +4251,26 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .pa-atk-n{font-size:var(--fs-lg); font-weight:600}
 .pa-atk-d{flex:1; font-size:var(--fs-sm); color:var(--text-muted)}
 .pa-atk .ico{width:18px; height:18px; flex-shrink:0; color:var(--accent)}
+/* Activatable features on the player's own screen. Two columns rather than
+   the attacks' single column — there are usually a dozen of them and one
+   per row would push everything below off the phone. */
+.pa-feats{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px}
+.pa-feat{display:flex; flex-direction:column; gap:2px; text-align:left;
+  padding:9px 11px; background:var(--panel-2); border:1px solid var(--border);
+  border-radius:var(--r-md); color:inherit; font:inherit; cursor:pointer;
+  /* A comfortable thumb target — this is the phone screen. */
+  min-height:46px; justify-content:center}
+.pa-feat:hover:not(:disabled){border-color:var(--accent)}
+.pa-feat:disabled,.pa-feat.off{opacity:.45; cursor:default}
+.pa-feat-n{font-size:var(--fs-md); font-weight:600; line-height:1.2}
+.pa-feat-d{font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em}
+/* Activatable list on the Party panel Features tab — reference, not buttons:
+   spending happens in the Turn View and on the player's own screen. */
+.sheet-acts{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:4px; padding:4px 8px 8px}
+.sheet-act{display:flex; justify-content:space-between; gap:8px; align-items:baseline;
+  padding:4px 8px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--panel-2)}
+.sheet-act span{font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;
+  letter-spacing:.04em; text-align:right; white-space:nowrap}
 
 .pa-roll:empty{display:none}
 .pa-roll-in{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;

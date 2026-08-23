@@ -587,6 +587,29 @@ registerPanel('party',{
       sections.push(`<div class="sheet-block feat-section"><h5>✦ Subclass</h5><div class="sheet-empty">No 5etools subclass matched "${esc(c.subclass)}" for ${esc(c.cls||'class')}.</div></div>`);
     }
 
+    // What this character can actually activate, read off their own imported
+    // sheet rather than the rules data. Listed first because it is the
+    // shortest answer to "what can they do" — the sections below are the full
+    // rules text for every feature the class grants, which is reference.
+    // Reference only here; the Turn View and the player's own screen are
+    // where these get spent.
+    const acts = (typeof sktDeriveActivations === 'function')
+      ? sktDeriveActivations((c.sheet && c.sheet.bio && c.sheet.bio.features) || '') : [];
+    if (acts.length){
+      const pool = n => (Array.isArray(c.resources) ? c.resources : []).find(r => r.name === n);
+      sections.push(`<div class="sheet-block feat-section">
+        <h5>⚡ Activatable <span class="feat-lvl-pill">${acts.length}</span></h5>
+        <div class="sheet-acts">${acts.map(a => {
+          const p = pool(a.resource || a.name);
+          const n = a.amount || 1;
+          const unit = p ? (n === 1 ? String(p.name).replace(/s$/, '') : p.name) : '';
+          const cost = p ? `${n} ${unit} · ${p.current}/${p.max}` : (a.uses || '');
+          return `<div class="sheet-act"><b>${esc(a.name)}</b>
+            <span>${esc(a.action || '')}${cost ? ' · ' + esc(cost) : ''}</span></div>`;
+        }).join('')}</div>
+      </div>`);
+    }
+
     if (!sections.length){
       return `<div class="sheet-empty">
         Set <strong>Race</strong>, <strong>Class</strong>, and <strong>Subclass</strong> on this character (use 📋 Manage Party → ✏ Edit details) to see their features here.

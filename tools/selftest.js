@@ -1376,6 +1376,130 @@
         }
       }
 
+      // ── Activatable features ──────────────────────────────────────────
+      // Derived from the character's own sheet text, so the format below is
+      // copied from a real D&D Beyond 2024 export rather than invented.
+      if (typeof sktDeriveActivations === 'function'){
+        const FEAT_TEXT = [
+          '* Martial Arts • PHB-2024 101 ',
+          'You can make an Unarmed Strike as a Bonus Action. ',
+          '   | Unarmed Strike: 1 Bonus Action ',
+          "* Monk's Focus • PHB-2024 101 ",
+          'You have 6 Focus Points and regain all expended points after a Short or Long Rest. ',
+          'Flurry of Blows. You can expend 1 Focus Point to make two Unarmed Strikes as a Bonus Action. ',
+          'Patient Defense. You can expend 2 Focus Points to take both the Disengage and Dodge actions. ',
+          '   | Focus Points: 6 / Short Rest • Special ',
+          '   | Flurry of Blows: 1 Bonus Action ',
+          '   | Patient Defense: 1 Bonus Action ',
+          '* Monk Subclass • PHB-2024 103 ',
+          '   | Warrior of Mercy ',
+          '* Slow Fall • PHB-2024 103 ',
+          '   | 1 Reaction ',
+          '* Stunning Strike • PHB-2024 103 ',
+          'Once per turn, when you hit with a Monk weapon or Unarmed Strike, you can expend 1 Focus Point to attempt a stunning strike. ',
+          '   | 1 Action ',
+          '* Breath Weapon • PHB-2024 194 ',
+          '   | 3 / Long Rest • 1 Action ',
+        ].join('\n');
+        const A = sktDeriveActivations(FEAT_TEXT);
+        const byName = n => A.find(x => x.name === n);
+
+        ok('acts: options are found', A.length >= 4, JSON.stringify(A.map(x => x.name)));
+        ok('acts: the action-economy cost is read off the pipe line',
+           (byName('Flurry of Blows') || {}).action === 'Bonus Action',
+           JSON.stringify(byName('Flurry of Blows')));
+        ok('acts: the resource cost is read out of the prose',
+           (byName('Flurry of Blows') || {}).resource === 'Focus Points'
+        && (byName('Flurry of Blows') || {}).amount === 1,
+           JSON.stringify(byName('Flurry of Blows')));
+        // The two sit in one paragraph. Reading forward without stopping at
+        // the next sub-option heading gave every option the first one's cost.
+        ok('acts: a neighbouring option does not lend its cost',
+           (byName('Patient Defense') || {}).amount === 2,
+           JSON.stringify(byName('Patient Defense')));
+        // Its own text says "Unarmed Strike" before it says the cost, which
+        // is what used to truncate the search window.
+        // Slow Fall is free and the bullet directly below it says "expend 1
+        // Focus Point". Nothing in between looks like a sub-option heading, so
+        // the only thing keeping the two apart is stopping at the next bullet.
+        ok('acts: a free option does not read the next bullet cost',
+           !!byName('Slow Fall') && !byName('Slow Fall').resource,
+           JSON.stringify(byName('Slow Fall')));
+        // The one that actually exercises the search window: Unarmed Strike
+        // is free and sits directly above Flurry of Blows. Without a stop at
+        // the next bullet it reads Flurry's sentence and costs a Focus Point
+        // that the rules do not charge.
+        ok('acts: a free option does not inherit the next cost',
+           !!byName('Unarmed Strike') && !byName('Unarmed Strike').resource,
+           JSON.stringify(byName('Unarmed Strike')));
+        ok('acts: a cost after a mention of another feature is still found',
+           (byName('Stunning Strike') || {}).amount === 1,
+           JSON.stringify(byName('Stunning Strike')));
+        ok('acts: an unnamed pipe line takes the enclosing feature\'s name',
+           !!byName('Breath Weapon') && byName('Breath Weapon').uses === '3 / Long Rest',
+           JSON.stringify(byName('Breath Weapon')));
+        // "| Focus Points: 6 / Short Rest • Special" is the pool being
+        // declared, and "| Warrior of Mercy" is a choice being recorded.
+        // Neither is something you do on your turn.
+        ok('acts: the resource pool is not listed as an action', !byName('Focus Points'),
+           JSON.stringify(A.map(x => x.name)));
+        ok('acts: a subclass choice is not listed as an action', !byName('Warrior of Mercy'),
+           JSON.stringify(A.map(x => x.name)));
+        ok('acts: nothing is returned for a sheet with no features text',
+           eqJ(sktDeriveActivations(''), []));
+
+        // End to end in the Turn View: render, click, spend.
+        {
+          const p0 = JSON.stringify(state.party), k0 = JSON.stringify(state.combatants);
+          const a0 = state.activeCombatantId;
+          state.party = [{ id:'actprobe', name:'ZZ Acts', cls:'Monk', level:6, subclass:'Mercy',
+                           hp:30, hpMax:30, ac:14,
+                           sheet:{ bio:{ features:FEAT_TEXT } },
+                           resources:[{ name:'Focus Points', type:'pool', current:6, max:6 }] }];
+          state.combatants = [{ id:'actprobe', name:'ZZ Acts', isPC:true, hp:30, hpMax:30, ac:14 }];
+          state.activeCombatantId = 'actprobe';
+          const T = panelDefs.turnview;
+          const who = state.combatants[0];
+          const acts = T._activationsFor(who);
+          ok('acts/tv: the Turn View sees the same options', acts.length === A.length,
+             acts.length + ' vs ' + A.length);
+
+          const flurry = acts.find(x => x.name === 'Flurry of Blows');
+          T._useActivation('actprobe', flurry.i);
+          const pool = () => state.party[0].resources[0];
+          ok('acts/tv: using one spends exactly its cost', pool().current === 5, String(pool().current));
+          ok('acts/tv: it consumes the bonus action', who.bonusUsed === true);
+          // Patient Defense costs 2, not 1 — a shared constant would hide this.
+          who.bonusUsed = false;
+          T._useActivation('actprobe', acts.find(x => x.name === 'Patient Defense').i);
+          ok('acts/tv: a two-point option spends two', pool().current === 3, String(pool().current));
+
+          who.bonusUsed = true;
+          ok('acts/tv: a second bonus action in one turn is refused',
+             T._actProblem(who, flurry) === 'bonus action already used',
+             String(T._actProblem(who, flurry)));
+          who.bonusUsed = false;
+          pool().current = 0;
+          ok('acts/tv: an empty pool refuses the option',
+             /no focus points left/.test(String(T._actProblem(who, flurry))),
+             String(T._actProblem(who, flurry)));
+          // A free option must survive an empty pool, or the check above would
+          // pass just as well with everything disabled.
+          const free = acts.find(x => !x.resource && !x.pool);
+          ok('acts/tv: a free option is still available with the pool empty',
+             !free || T._actProblem(who, free) === null,
+             free ? free.name + ': ' + T._actProblem(who, free) : 'none to test');
+          // "1 Focus Point", singular.
+          pool().current = 6;
+          ok('acts/tv: a cost of one is labelled in the singular',
+             /^1 Focus Point ·/.test(T._actCostLabel(T._activationsFor(who).find(x => x.name === 'Flurry of Blows'))),
+             T._actCostLabel(T._activationsFor(who).find(x => x.name === 'Flurry of Blows')));
+
+          state.party = JSON.parse(p0); state.combatants = JSON.parse(k0);
+          state.activeCombatantId = a0;
+        }
+      }
+
       // The review modal must expose both fields, because the matchers miss
       // often enough that "silently parsed, silently applied" left the DM with
       // no way to see it or fix it.

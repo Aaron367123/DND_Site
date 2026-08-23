@@ -381,6 +381,87 @@ registerPanel('turnview', {
     if (k.needs) return k.needs;
     return '';
   },
+  // ── Activatable features ────────────────────────────────────────────────
+  //
+  // The reaction table above is hand-built from the rules data and keyed by
+  // subclass. This is the other half, and it comes from the character's own
+  // imported sheet: Flurry of Blows, Hand of Harm, Wild Shape — the things a
+  // player spends a Focus Point or a use on. Deriving them per character means
+  // no table to maintain and it works for a class nobody has written an entry
+  // for yet. sktDeriveActivations lives in js/core/utils.js because the player
+  // view needs the same list.
+  //
+  // Two ways an option is paid for, and a third that is free:
+  //   - "expend 1 Focus Point" in the prose  -> spends that pool
+  //   - "| Wild Shape: 3 / Long Rest"        -> spends a pool of the same name
+  //   - neither                              -> costs only the action economy
+  _activationsFor(c){
+    const p = this._partyOf(c);
+    if (!p || typeof sktDeriveActivations !== 'function') return [];
+    // In a beast's body the druid's own options are not available — the same
+    // reason _attacksFor swaps to the beast's attacks.
+    if (this._wsOf(c)) return [];
+    const text = (p.sheet && p.sheet.bio && p.sheet.bio.features) || '';
+    let acts = [];
+    try { acts = sktDeriveActivations(text) || []; } catch(e){ return []; }
+    return acts.map((a, i) => {
+      const res = a.resource || (this._pool(c, a.name) ? a.name : '');
+      return { ...a, i, res, pool: res ? this._pool(c, res) : null };
+    });
+  },
+  // Which of action / bonus action / reaction this consumes, as the flag the
+  // rest of the panel already tracks. Null for anything else — "Special" is
+  // the sheet saying it does not fit the action economy, not an error.
+  _actFlag(a){
+    const s = String(a && a.action || '').toLowerCase();
+    if (s === 'reaction') return 'reactionUsed';
+    if (s === 'bonus action') return 'bonusUsed';
+    if (s === 'action' || s === 'magic action') return 'actionUsed';
+    return null;
+  },
+  _actProblem(c, a){
+    const flag = this._actFlag(a);
+    if (flag && c[flag]){
+      return flag === 'reactionUsed' ? 'already reacted'
+           : flag === 'bonusUsed'    ? 'bonus action already used'
+           : 'action already used';
+    }
+    // An untracked pool is not a blocker, for the same reason _costProblem
+    // does not treat one as one: refusing something the character really has
+    // because nobody typed the pool in would be worse than allowing it.
+    if (a.pool && a.pool.current < (a.amount || 1)) return 'no ' + a.res.toLowerCase() + ' left';
+    return null;
+  },
+  _useActivation(id, idx){
+    const who = this._order().find(c => c.id === id); if (!who) return;
+    const a = this._activationsFor(who).find(x => x.i === +idx); if (!a) return;
+    const problem = this._actProblem(who, a);
+    if (problem){
+      this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
+      return;
+    }
+    let spent = '';
+    if (a.pool){
+      a.pool.current = Math.max(0, a.pool.current - (a.amount || 1));
+      spent = ` · ${a.res} ${a.pool.current}/${a.pool.max}`;
+      panelDefs.party?._render?.();
+    }
+    const flag = this._actFlag(a);
+    this._snapshot(`${who.name} · ${a.name}`);
+    if (flag) who[flag] = true;
+    const line = `${a.name}${a.action ? ' (' + a.action + ')' : ''}${spent}`;
+    this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(line)}`);
+    this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${esc(spent)}.`, true);
+    save(); panelDefs.combat?._render?.(); this._render();
+  },
+  // "1 Focus Point", not "1 Focus Points" — the pool is named in the plural
+  // because that is how it is tracked, but a cost of one reads wrong that way.
+  _actCostLabel(a){
+    if (!a.res) return '';
+    const n = a.amount || 1;
+    const unit = (n === 1) ? String(a.res).replace(/s$/, '') : a.res;
+    return a.pool ? `${n} ${unit} · ${a.pool.current}/${a.pool.max}` : `${n} ${unit}`;
+  },
   // Spends for real: this writes to state.party, which is the party tracker's
   // own array, then repaints that panel and saves.
   _payCost(c, r){
@@ -791,6 +872,24 @@ registerPanel('turnview', {
         `<span class="tv-rx ${c.reactionUsed ? 'spent' : ''} ${r.when ? 'hit' : ''}"
                title="${esc(r.note || '')}">${esc(r.name)}<span class="tv-rx-src">${esc(r.from)}${r.lvl ? ' L' + r.lvl : ''}${
           r.scope === 'ally' ? ' · ally' : r.scope === 'both' ? ' · either' : ''}</span></span>`).join('');
+    // Anything the reaction row already offers is dropped here. Slow Fall is
+    // in the rules table AND on the sheet, and showing it twice in two rows
+    // that behave differently reads as a bug even though both are right.
+    const rxNames = new Set(rx.map(r => String(r.name).toLowerCase()));
+    const acts = this._activationsFor(c)
+      .filter(a => !(String(a.action).toLowerCase() === 'reaction'
+                     && rxNames.has(String(a.name).toLowerCase())));
+    const actHtml = !acts.length ? '' :
+      `<span class="tv-rx-l">Features</span>` + acts.map(a => {
+        const problem = this._actProblem(c, a);
+        const cost = this._actCostLabel(a);
+        const tip = [a.feature && a.feature !== a.name ? a.feature : '',
+                     a.uses ? a.uses : '', problem ? '— ' + problem : ''].filter(Boolean).join(' · ');
+        return `<button class="tv-act ${problem ? 'spent' : ''}" data-tv="actuse"
+             data-id="${esc(c.id)}" data-i="${a.i}" title="${esc(tip)}"${problem ? ' disabled' : ''}
+             >${esc(a.name)}<span class="tv-rx-src">${esc(a.action)}${
+          cost ? ' · ' + cost : a.uses ? ' · ' + a.uses : ''}</span></button>`;
+      }).join('');
     return `<div class="tv-actor-head">
         <div class="tv-avatar">${esc(String(c.name || '?').trim().charAt(0).toUpperCase())}</div>
         <div class="tv-actor-id">
@@ -807,6 +906,7 @@ registerPanel('turnview', {
       </div>
       ${conds ? `<div class="tv-conds">${conds}</div>` : ''}
       ${rxHtml ? `<div class="tv-rxlist">${rxHtml}</div>` : ''}
+      ${actHtml ? `<div class="tv-rxlist tv-actlist">${actHtml}</div>` : ''}
       ${res ? `<div class="tv-res">${res}</div>` : ''}`;
   },
 
@@ -2461,6 +2561,7 @@ registerPanel('turnview', {
         this._render();
       }
       else if (act === 'rxuse'){ this._spendReactionFor(el.dataset.id, el.dataset.key); }
+      else if (act === 'actuse'){ this._useActivation(el.dataset.id, el.dataset.i); }
       else if (act === 'rxback'){
         const w = this._order().find(x => x.id === el.dataset.id);
         if (w){ w.reactionUsed = false; this._log.unshift(`<strong>${esc(w.name)}</strong> — reaction handed back`); }
