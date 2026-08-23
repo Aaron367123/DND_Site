@@ -469,11 +469,7 @@ registerPanel('turnview', {
   // the detail panel and on hover, and the pool's own pips are directly below
   // the row — repeating "· 5/6" fifteen times was most of the clutter.
   _actShort(a){
-    const s = String(a.action || '').toLowerCase();
-    const act = s === 'bonus action' ? 'BONUS' : s === 'reaction' ? 'REACT'
-              : s === 'special' ? 'SPEC' : s === 'magic action' ? 'MAGIC'
-              : s === 'action' ? 'ACT' : (a.action || '').toUpperCase();
-    return act + (a.resource ? ' ·' + (a.amount || 1) : '');
+    return sktActionShort(a.action) + (a.resource ? ' ·' + (a.amount || 1) : '');
   },
   _actTip(a){
     const cost = this._actCostLabel(a);

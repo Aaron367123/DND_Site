@@ -1422,6 +1422,16 @@ function sktDeclaredPools(featuresText){
   return out;
 }
 
+// "Bonus Action" does not fit a party card, and the Turn View had already
+// grown its own copy of this mapping. One function, so the two rows cannot
+// drift into abbreviating the same thing differently.
+function sktActionShort(action){
+  const s = String(action || '').toLowerCase();
+  return s === 'bonus action' ? 'BONUS' : s === 'reaction'      ? 'REACT'
+       : s === 'action'       ? 'ACT'   : s === 'magic action'  ? 'MAGIC'
+       : s === 'special'      ? 'SPEC'  : s === 'free action'   ? 'FREE'
+       : s === 'legendary action' ? 'LEG' : String(action || '—').toUpperCase();
+}
 // ── Activatable features, read off an imported sheet ────────────────────────
 //
 // A D&D Beyond sheet already says everything needed to offer a character's

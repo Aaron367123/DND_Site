@@ -864,6 +864,60 @@
       ok('the injection sweep actually rendered the character',
          /PlainBob/.test(panelDefs.party._body.innerHTML));
 
+      // Layout invariants for this row. Read the caveat before trusting them:
+      // they PASS, but I could not make them fail. Reverting the CSS that
+      // fixed the reported overlap — flex-wrap on the summary, flex-shrink on
+      // the pill, the abbreviated label — leaves all three green, because the
+      // harness renders the card at 168px and that is evidently wide enough
+      // to avoid the squeeze that broke it in the real workspace.
+      //
+      // So treat these as assertions about invariants that ought to hold, not
+      // as a guard proven to catch the bug they were written for. The checks
+      // that ARE mutation-proven are the markup ones above (details element,
+      // description present) and the shared abbreviation. What actually fixed
+      // the overlap was flex-wrap on .feat-block summary plus margin-left:auto
+      // on .feat-cost, confirmed by eye and by measuring the rendered card.
+      {
+        const P0 = JSON.stringify(state.party);
+        state.party = [{ id:'zzlay', name:'ZZ Layout', cls:'Monk', level:6, subclass:'Mercy',
+                         hp:9, hpMax:9, ac:14,
+                         sheet:{ bio:{ features:[
+                           '* Monk Focus • PHB-2024 101 ',
+                           'Step of the Wind. You can expend 1 Focus Point to Dash and Disengage. ',
+                           '   | Step of the Wind: 1 Bonus Action ',
+                         ].join(String.fromCharCode(10)) } },
+                         resources:[{name:'Focus Points',type:'pool',current:5,max:6}] }];
+        panelDefs.party._render(); await sleep(300);
+        const tab = [...document.querySelectorAll('button,[data-tab]')]
+          .find(b => /^features$/i.test((b.textContent || '').trim()));
+        if (tab){ tab.click(); await sleep(300); }
+        const rows = [...document.querySelectorAll('details.feat-block')].filter(d => {
+          const p = d.querySelector('.feat-lvl');
+          return p && p.classList.contains('act');
+        });
+        ok('acts/layout: the row renders in a real card', rows.length > 0);
+        if (rows.length){
+          // scrollWidth beyond clientWidth means the flex item was squashed
+          // below the width its own text needs — the overlap, measured.
+          const pill = rows[0].querySelector('.feat-lvl');
+          ok('acts/layout: the action pill is not squashed',
+             pill.scrollWidth <= pill.clientWidth + 1,
+             pill.textContent + ': ' + pill.scrollWidth + ' into ' + pill.clientWidth);
+          // Nothing inside the summary may hang outside it.
+          const sum = rows[0].querySelector('summary');
+          const sb = sum.getBoundingClientRect();
+          ok('acts/layout: nothing spills out of the row',
+             [...sum.children].every(el => {
+               const b = el.getBoundingClientRect();
+               return b.right <= sb.right + 1 && b.left >= sb.left - 1;
+             }));
+          // A name broken one word per line is three or four lines tall.
+          ok('acts/layout: the name is not shredded into single words',
+             sb.height <= 70, String(Math.round(sb.height)));
+        }
+        state.party = JSON.parse(P0); panelDefs.party._render(); await sleep(200);
+      }
+
       // ...and escaping must not corrupt the stored value.
       seed(ATTR);
       panelDefs.party._render(); await sleep(300);
@@ -1511,6 +1565,42 @@
           const fp = (monk.resources || []).find(r => r.name === 'Focus Points');
           ok('pools: an undeclared pool keeps its derived size',
              !!fp && fp.max === 6, JSON.stringify(monk.resources));
+        }
+
+        // One abbreviation shared by the Turn View chips and the Party tab
+        // pills. They had separate copies, which is how the same feature
+        // ends up labelled two different ways on two screens.
+        ok('acts: action names abbreviate consistently',
+           sktActionShort('Bonus Action') === 'BONUS'
+        && sktActionShort('Reaction') === 'REACT'
+        && sktActionShort('Action') === 'ACT'
+        && sktActionShort('Special') === 'SPEC'
+        && panelDefs.turnview._actShort({action:'Bonus Action'}) === 'BONUS',
+           sktActionShort('Bonus Action'));
+
+        // The Party tab rows must open. They were flat divs with the text in
+        // a title attribute, so clicking one did nothing while the class
+        // features directly below it opened — and a tooltip is no use at all
+        // on a touch screen.
+        {
+          const html = panelDefs.party._tabFeatures({
+            name:'ZZ Feat', cls:'Monk', level:6, subclass:'Mercy',
+            sheet:{ bio:{ features:[
+              '* Monk Focus • PHB-2024 101 ',
+              'Flurry of Blows. You can expend 1 Focus Point to strike twice. ',
+              '   | Flurry of Blows: 1 Bonus Action ',
+            ].join(String.fromCharCode(10)) } },
+            resources:[{name:'Focus Points',type:'pool',current:6,max:6}],
+          });
+          const at = html.indexOf('feat-lvl act');
+          ok('acts: an activatable row is a details element', at >= 0);
+          ok('acts: it is not a tooltip-only div',
+             at >= 0 && html.lastIndexOf('<details', at) > html.lastIndexOf('<div', at),
+             html.slice(Math.max(0, at - 90), at + 40));
+          ok('acts: its body carries the description',
+             html.indexOf('expend 1 Focus Point to strike twice') >= 0);
+          ok('acts: the row names where the feature came from',
+             /feat-from">from Monk Focus/.test(html));
         }
 
         // The Features tab lists what the character can DO before the full

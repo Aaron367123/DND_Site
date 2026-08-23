@@ -1450,6 +1450,10 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .feat-block summary{
   cursor:pointer;padding:5px 8px;font-size:var(--fs-sm);font-weight:500;color:var(--text);
   display:flex;align-items:center;gap:6px;
+  /* Wrap rather than squash. Without this the pill and the cost compress a
+     long name until it breaks one word per line and they overlap — a party
+     card is only about 180px wide. */
+  flex-wrap:wrap;
   list-style:none;user-select:none;
   transition:background .12s
 }
@@ -1463,7 +1467,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .feat-block .feat-lvl{
   font-size:var(--fs-2xs);font-weight:700;letter-spacing:.06em;
   background:var(--panel-2);color:var(--text-muted);
-  padding:1px 5px;border-radius:var(--r-md);min-width:24px;text-align:center
+  padding:1px 5px;border-radius:var(--r-md);min-width:24px;text-align:center;flex-shrink:0
 }
 .feat-block .feat-lvl.race{background:rgba(140,108,209,.22);color:#b6a3e8}
 .feat-block .feat-body{
@@ -4299,17 +4303,13 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .pa-dim{color:var(--text-muted)}
 /* Activatable list on the Party panel Features tab — reference, not buttons:
    spending happens in the Turn View and on the player's own screen. */
-/* Stacked, not side by side. A party card is narrow, and the meta line
-   ("BONUS ACTION · 1 FOCUS POINT · 5/6") is longer than the name — laying
-   them in a row with the meta set to nowrap left the name a few pixels and
-   broke "Step of the Wind" across four lines. */
-.sheet-acts{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:4px; padding:4px 8px 8px}
-.sheet-act{display:flex; flex-direction:column; gap:1px; align-items:flex-start;
-  padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--panel-2);
-  min-width:0}
-.sheet-act b{line-height:1.25; overflow-wrap:anywhere}
-.sheet-act span{font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;
-  letter-spacing:.04em; line-height:1.3; overflow-wrap:anywhere}
+/* Activatable rows are <details class="feat-block"> like the rest of the
+   tab, so they inherit its layout. Only the extra bits are styled here. */
+.feat-lvl.act{background:rgba(212,165,116,.16); color:var(--accent); letter-spacing:.04em}
+.feat-cost{font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;
+  letter-spacing:.04em; margin-left:6px; white-space:nowrap}
+.feat-from{font-size:var(--fs-2xs); color:var(--text-dim); text-transform:uppercase;
+  letter-spacing:.04em; margin-bottom:4px}
 
 .pa-roll:empty{display:none}
 .pa-roll-in{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;

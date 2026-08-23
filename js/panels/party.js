@@ -597,17 +597,28 @@ registerPanel('party',{
       ? sktDeriveActivations((c.sheet && c.sheet.bio && c.sheet.bio.features) || '') : [];
     if (acts.length){
       const pool = n => (Array.isArray(c.resources) ? c.resources : []).find(r => r.name === n);
+      // <details>, the same as every other row on this tab. They were flat
+      // divs with the description hidden in a title attribute, so clicking
+      // one did nothing while the class features right below it opened —
+      // and a tooltip is no use at all on a touch screen.
       sections.unshift(`<div class="sheet-block feat-section">
         <h5>⚡ Activatable <span class="feat-lvl-pill">${acts.length}</span></h5>
-        <div class="sheet-acts">${acts.map(a => {
+        ${acts.map(a => {
           const p = pool(a.resource || a.name);
           const n = a.amount || 1;
           const unit = p ? (n === 1 ? String(p.name).replace(/s$/, '') : p.name) : '';
           const cost = p ? `${n} ${unit} · ${p.current}/${p.max}` : (a.uses || '');
-          return `<div class="sheet-act" title="${esc([a.feature && a.feature !== a.name ? a.feature : '', a.desc].filter(Boolean).join(' — '))}"><b>${esc(a.name)}</b>
-            <span>${esc(a.action || '')}${cost ? ' · ' + esc(cost) : ''}</span></div>`;
-        }).join('')}</div>
-      </div>`);
+          const from = (a.feature && a.feature !== a.name) ? a.feature : '';
+          return `<details class="feat-block">
+            <summary><span class="feat-lvl act">${esc(sktActionShort(a.action))}</span> ${esc(a.name)}
+              ${cost ? `<span class="feat-cost">${esc(cost)}</span>` : ''}</summary>
+            <div class="feat-body">
+              ${from ? `<div class="feat-from">from ${esc(from)}</div>` : ''}
+              ${a.desc ? `<p>${esc(a.desc)}</p>`
+                       : `<p class="sheet-empty" style="text-align:left;padding:0">The sheet doesn't describe this one.</p>`}
+            </div>
+          </details>`;
+        }).join('')}      </div>`);
     }
 
     if (!sections.length){
