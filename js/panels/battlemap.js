@@ -3331,6 +3331,7 @@ registerPanel('battlemap',{
         ${(this._bgMapPath || _mapBgImage || (this._tokens||[]).length) ? '<button class="btn" id="mapsel-save">'+ICO('i-save')+' Save current as…</button>' : ''}
         ${this._bgMapPath ? '<button class="btn danger" id="mapsel-clear">Clear current map</button>' : ''}
         <button class="btn" id="mapsel-upload-btn">📷 Upload image…</button>
+        <span class="mapsel-upload-note" title="An uploaded image is held in memory on this device. It is not stored anywhere the other devices can fetch it, so it cannot be shared and it is gone when the panel reloads.">⚠ this device only — not shared with players</span>
         <input type="file" id="mapsel-upload-input" accept="image/*" style="display:none">
         <button class="btn" id="mapsel-close">Close</button>
       </div>
@@ -3470,7 +3471,12 @@ registerPanel('battlemap',{
           this._render();
           this._fitMapToView();
           close();
-          showToast('Map loaded — this session only');
+          // "this session only" understated it badly. An upload lives in
+          // _mapBgImage and nowhere else: bgMapPath goes to null, so what
+          // the players receive is "no map" and their screens go blank.
+          // Reported as "I upload a map and it doesn't show for others",
+          // which is exactly right and was not knowable from that toast.
+          showToast('Map loaded on this device only — players will not see it, and any map they had is now cleared');
         };
         img.onerror = () => showToast('Could not load image');
         img.src = ev.target.result;

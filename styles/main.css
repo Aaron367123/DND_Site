@@ -4306,6 +4306,8 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 /* Activatable rows are <details class="feat-block"> like the rest of the
    tab, so they inherit its layout. Only the extra bits are styled here. */
 .feat-lvl.act{background:rgba(212,165,116,.16); color:var(--accent); letter-spacing:.04em}
+.mapsel-upload-note{font-size:var(--fs-2xs); color:var(--warning, #d9a441);
+  letter-spacing:.02em; align-self:center; cursor:help}
 .feat-cost{font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;
   letter-spacing:.04em; margin-left:6px; white-space:nowrap}
 .feat-from{font-size:var(--fs-2xs); color:var(--text-dim); text-transform:uppercase;
