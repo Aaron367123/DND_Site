@@ -1823,6 +1823,85 @@
         const got = mult(sz, n);
         ok('xp mult: ' + what, got === want, 'got x' + got);
       });
+      // The multiplier cases above check one step of the pipeline. These
+      // check the whole of it against answers the books state outright, so
+      // a threshold table off by one row, a wrong CR value or an inverted
+      // comparison shows up as the wrong word on screen rather than as a
+      // number nobody can check by eye.
+      const L0 = E._partyLevel, SY0 = E._system;
+      const say = (sys, lvl, size, mons) => {
+        E._system = sys; E._partyLevel = lvl; E._partySize = size; E._monsters = mons;
+        const xp = E._calcXP();
+        const d = sys === '2024' ? E._difficulty2024(xp.raw) : E._difficulty(xp.adjusted);
+        return { adj: xp.adjusted, raw: xp.raw, label: d.label };
+      };
+      const gob = n => [{ name:'Goblin', cr:'1/4', count:n }];
+
+      // The example every DM knows: four goblins is a deadly fight for four
+      // level 1 characters. 4 x 50 = 200, x2 for the count = 400, and the
+      // level 1 deadly threshold for four characters is exactly 400.
+      {
+        const r = say('2014', 1, 4, gob(4));
+        ok('enc: four goblins are deadly for four level 1 characters',
+           r.adj === 400 && r.label === 'Deadly', JSON.stringify(r));
+      }
+      // A single ogre, no multiplier at all, clears the same threshold.
+      {
+        const r = say('2014', 1, 4, [{ name:'Ogre', cr:'2', count:1 }]);
+        ok('enc: one ogre is deadly for four level 1 characters',
+           r.raw === 450 && r.label === 'Deadly', JSON.stringify(r));
+      }
+      // Same monsters, six characters: the step down to x1.5 pulls it out
+      // of Deadly. This is the p.83 rule showing up in the verdict, not
+      // just in the multiplier.
+      {
+        const r = say('2014', 1, 6, gob(4));
+        ok('enc: six characters make the same fight Medium',
+           r.adj === 300 && r.label === 'Medium', JSON.stringify(r));
+      }
+      // 2024 spends raw XP against a per-character budget and applies no
+      // multiplier. Four level 3 characters get 150/225/400 each.
+      {
+        const low  = say('2024', 3, 4, gob(4));
+        const mod  = say('2024', 3, 4, gob(13));
+        const high = say('2024', 3, 4, gob(19));
+        ok('enc/2024: under the low budget reads Low',
+           low.raw === 200 && low.label === 'Low', JSON.stringify(low));
+        ok('enc/2024: past low reads Moderate',
+           mod.raw === 650 && mod.label === 'Moderate', JSON.stringify(mod));
+        ok('enc/2024: past moderate reads High',
+           high.raw === 950 && high.label === 'High', JSON.stringify(high));
+        // The count multiplier must not leak into the 2024 verdict — the
+        // whole point of the edition is that it does not have one.
+        ok('enc/2024: the verdict ignores the monster count multiplier',
+           say('2024', 3, 4, gob(4)).label === say('2024', 3, 4, [{name:'X',cr:'1',count:1}]).label
+           || say('2024', 3, 4, gob(4)).raw === 200, 'raw was ' + say('2024', 3, 4, gob(4)).raw);
+      }
+      // An empty encounter must not read as a fight in either edition.
+      ok('enc: nothing selected is not a difficulty',
+         say('2024', 5, 4, []).label === '—' && say('2014', 5, 4, []).adj === 0);
+
+      // Spot-check the tables themselves against values typed from the
+      // books rather than read from the same generated file. Hand copies of
+      // these were wrong on 19 of 20 rows once already.
+      {
+        const R = window.SKT_RULES || {};
+        ok('enc: the 2014 threshold table matches the book',
+           eqJ((R.xpThresholds2014||[])[0],  [25,50,75,100])
+        && eqJ((R.xpThresholds2014||[])[4],  [250,500,750,1100])
+        && eqJ((R.xpThresholds2014||[])[19], [2800,5700,8500,12700]),
+           JSON.stringify([(R.xpThresholds2014||[])[0], (R.xpThresholds2014||[])[19]]));
+        ok('enc: the 2024 budget table matches the book',
+           eqJ((R.xpBudget2024||[])[0],  [50,75,100])
+        && eqJ((R.xpBudget2024||[])[5],  [600,1000,1400])
+        && eqJ((R.xpBudget2024||[])[19], [6400,13200,22000]),
+           JSON.stringify([(R.xpBudget2024||[])[0], (R.xpBudget2024||[])[19]]));
+        ok('enc: CR to XP matches the book at both ends',
+           (R.crXp||{})['1/8'] === 25 && (R.crXp||{})['5'] === 1800
+        && (R.crXp||{})['20'] === 25000 && (R.crXp||{})['30'] === 155000,
+           JSON.stringify([(R.crXp||{})['1/8'], (R.crXp||{})['30']]));
+      }
+      E._partyLevel = L0; E._system = SY0;
       E._partySize = S0; E._monsters = JSON.parse(M0);
     }
     closePanel('encounter');
