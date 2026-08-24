@@ -71,6 +71,13 @@ function check(){
       const skt = (JSON.parse(fs.readFileSync(rulesFile, 'utf8')).rules || {}).skt || {};
       const code = fs.readFileSync(path.join(ROOT, 'js', 'sync', 'realtime.js'), 'utf8');
       const bases = [...code.matchAll(/base:\s*'skt\/([A-Za-z0-9_]+)'/g)].map(m => m[1]);
+      // Not every node the app writes is an entity base. The uploaded-map
+      // blob is a plain path declared as a constant, and it fails in exactly
+      // the same way without a rules block of its own: the $wholeKey
+      // catch-all demands a string, the object write is rejected, and the
+      // only symptom is that uploaded maps never reach the players.
+      [...code.matchAll(/_[A-Z_]*BASE\s*=\s*'skt\/([A-Za-z0-9_]+)'/g)]
+        .forEach(m => { if (!bases.includes(m[1])) bases.push(m[1]); });
       bases.forEach(b => {
         if (!(b in skt)) problems.push('firebase-rules.json has no block for skt/' + b
           + ' — the $wholeKey catch-all requires a string, so every write to it is rejected');
