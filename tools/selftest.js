@@ -2110,6 +2110,43 @@
            JSON.stringify(notes([{amt:20,type:'piercing'},{amt:10,type:'fire'}])));
         // And nothing at all when nothing happened to the number, or every
         // ordinary hit picks up noise.
+        // The log line is what a DM scrolls back through when someone asks
+        // why the barbarian only took seven, so it has to carry the whole
+        // derivation: the dice, the reason the total changed, and the number
+        // actually taken.
+        {
+          const strip = h => String(h || '').replace(/<[^>]*>/g, '')
+                               .replace(/\s+/g, ' ').trim();
+          const line = (parts, detail) => {
+            t.hp = 400; state.party[0].hp = 400;
+            T._log.length = 0;
+            T._commit({ attacker:'Thing', target:t, hit:true, dmg:parts.reduce((n,p)=>n+p.amt,0),
+                        type:parts[0].type, parts, detail, label:'Hit', crit:false });
+            return strip(T._log[0] || '');
+          };
+
+          // A mixed hit used to be described by its first type and its grand
+          // total — "19 piercing" for 18 piercing plus 1 fire. The result
+          // line was fixed for exactly this and the log was not.
+          const mixed = line([{amt:18,type:'piercing'},{amt:1,type:'fire'}],
+                             'piercing 6+6+6 · fire 1');
+          ok('dmg log: every damage type is named, not just the first',
+             /18 piercing \+ 1 fire/.test(mixed), mixed);
+          ok('dmg log: the dice are shown', /6\+6\+6/.test(mixed), mixed);
+          // 18 piercing halved is 9, the fire lands whole: 10 taken.
+          ok('dmg log: it states what was actually taken',
+             /10<\/strong> taken|10 taken/.test(mixed), mixed);
+
+          // Nothing resisted: no reason clause, and no "taken" restating a
+          // number the line already gives.
+          const plain = line([{amt:12,type:'fire'}], 'fire 8+4');
+          ok('dmg log: an ordinary hit stays clean',
+             !/taken/.test(plain) && !/resist/.test(plain), plain);
+          // With one type the breakdown does not repeat the word.
+          ok('dmg log: the type is not repeated in the dice',
+             /\[8\+4\]/.test(plain), plain);
+        }
+
         ok('dmg note: an unresisted hit gets no note',
            notes([{amt:20,type:'fire'}]).length === 0,
            JSON.stringify(notes([{amt:20,type:'fire'}])));

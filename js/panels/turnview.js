@@ -2012,7 +2012,26 @@ registerPanel('turnview', {
       ${esc(o.label)} vs ${esc(t.name)}:${vs}${vs ? ' ·' : ''}
       <strong>${dmgText}</strong>${breakdown}${tag}
       <span class="dim">· ${esc(t.name)} ${before} → ${after}</span>${noteTag}`, true);
-    this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${o.dmg}</strong> ${esc(o.type || '')}${o.crit ? ' (crit)' : ''}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''} <span style="opacity:.7">· ${before} → ${after}</span>`);
+    // The whole derivation, in the line that persists.
+    //
+    // The result line above has always shown the dice, but it is replaced by
+    // the next thing that happens; the log is what a DM scrolls back through
+    // when someone asks why the barbarian only took seven. So it carries the
+    // roll, the reason the total changed, and the number actually taken —
+    // which until now had to be worked out from the hit points either side.
+    const applied = before - after;
+    // Only when it differs from what was rolled. On an ordinary hit the two
+    // are the same number and printing it twice is noise.
+    const appliedTxt = (applied !== o.dmg)
+      ? ` → <strong>${applied}</strong> taken` : '';
+    // Same de-duplication as the note: with one damage type the line
+    // already says "17 bludgeoning", so "[bludgeoning 5+8+4]" beside it
+    // repeats the word. With several the type is what separates the rolls.
+    const rollRaw = (o.parts && o.parts.length > 1)
+      ? (o.detail || '')
+      : String(o.detail || '').replace(/^[a-z]+\s+/i, '');
+    const rollTxt = rollRaw ? ` <span style="opacity:.6">[${esc(rollRaw)}]</span>` : '';
+    this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
