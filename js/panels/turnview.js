@@ -103,7 +103,7 @@ registerPanel('turnview', {
       + (state.combatants || []).map(c =>
           [c.id, c.name, c.hp, c.hpMax, c.ac, c.initiative, c.isPC ? 1 : 0,
            c.reactionUsed ? 1 : 0, c.actionUsed ? 1 : 0, c.bonusUsed ? 1 : 0,
-           c.dodging ? 1 : 0, c.legendaryUsed || 0,
+           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0,
            (c.conditions || []).join(',')].join('~')
         ).join('|');
   },
@@ -2223,9 +2223,11 @@ registerPanel('turnview', {
     const pip = (key, label, title) =>
       `<button class="tv-econ ${c[key] ? 'spent' : ''}" data-tv="econ" data-k="${key}"
                title="${title}" aria-pressed="${!!c[key]}">${label}</button>`;
-    // The six a DM actually reaches for. Dodge is the only one of them with a
-    // mechanic this panel can enforce, so it is the only one that does more
-    // than log — the rest are recorded and adjudicated, same rule as the
+    // The six a DM actually reaches for. Two of them the panel can enforce:
+    // Dodge gives attackers disadvantage, and Disengage suppresses the
+    // opportunity attacks this panel already detects. The other four need a
+    // movement budget, a visibility model or a chosen target that nothing
+    // here tracks, so they are recorded and adjudicated — same rule as the
     // reactions with no mechanics.
     const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'];
     return `<div class="tv-econ-bar">
@@ -2233,9 +2235,11 @@ registerPanel('turnview', {
       ${pip('bonusUsed', 'Bonus', 'This turn&rsquo;s bonus action')}
       ${pip('reactionUsed', 'Reaction', 'Refreshes at the start of its own turn')}
       <span class="tv-econ-sep"></span>
-      ${acts.map(a => `<button class="btn tv-econ-act ${a === 'Dodge' && c.dodging ? 'primary' : ''}"
+      ${acts.map(a => `<button class="btn tv-econ-act ${(a === 'Dodge' && c.dodging) || (a === 'Disengage' && c.disengaged) ? 'primary' : ''}"
           data-tv="stdact" data-a="${a}"
-          title="${a === 'Dodge' ? 'Attacks against this creature have disadvantage until the start of its next turn — applied automatically' : 'Take the ' + a + ' action: spends the action and logs it'}"
+          title="${a === 'Dodge' ? 'Attacks against this creature have disadvantage until the start of its next turn — applied automatically'
+                  : a === 'Disengage' ? 'Its movement provokes no opportunity attacks for the rest of this turn — applied automatically'
+                  : 'Take the ' + a + ' action: spends the action and logs it'}"
           >${a}</button>`).join('')}
     </div>`;
   },
@@ -2247,6 +2251,10 @@ registerPanel('turnview', {
       c.dodging = true;
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Dodge</strong> action —
         attacks against them have disadvantage until the start of their next turn.`, true);
+    } else if (name === 'Disengage'){
+      c.disengaged = true;
+      this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Disengage</strong> action —
+        their movement provokes no opportunity attacks for the rest of the turn.`, true);
     } else {
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>${esc(name)}</strong> action.`, true);
     }
@@ -2486,6 +2494,12 @@ registerPanel('turnview', {
     const ft = (t, q) => Math.round(Math.max(Math.abs(t.x - q.x), Math.abs(t.y - q.y)) / cs) * this._ftPerCell();
     const now = this._tokenFor(mover);
     if (!now) return [];
+    // The entire purpose of the Disengage action. The panel has detected
+    // opportunity attacks since it could read token positions, and spent
+    // and logged the action since the economy bar existed, but never
+    // connected the two — so a creature that disengaged was still
+    // attacked for walking away.
+    if (mover.disengaged) return [];
     return this._order().filter(c => {
       if (c.id === mover.id || (c.hp || 0) <= 0 || c.reactionUsed) return false;
       if (this._sideOf(c) === this._sideOf(mover)) return false;

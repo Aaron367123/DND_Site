@@ -1343,14 +1343,31 @@ registerPanel('combat',{
     c.actionUsed = false;
     c.bonusUsed = false;
     c.dodging = false;
+    // Normally already cleared by _endTurnEconomy when this creature's
+    // previous turn ended. Cleared again here so a skipped turn, a
+    // reordered initiative or a restore cannot leave it stuck on.
+    c.disengaged = false;
     // "The creature regains spent legendary actions at the start of its
     // turn." Same moment as the rest of its economy, so the same place.
     if (c.legendaryMax) c.legendaryUsed = 0;
   },
 
+  // Dodge lasts "until the start of your next turn", so it is cleared when
+  // that turn begins. Disengage lasts only "until the end of your turn",
+  // so it has to be cleared as the turn is left — otherwise a creature
+  // that disengaged, then got shoved during somebody else's turn, would
+  // still walk away free.
+  _endTurnEconomy(id){
+    const c = state.combatants.find(x => x.id === id);
+    if (c) c.disengaged = false;
+  },
+
   _nextTurn(){
     if(!state.combatants.length){ showToast('No combatants yet'); return; }
     const id = state.activeCombatantId;
+    // The turn being left ends here, so anything that lasts "until the
+    // end of your turn" ends with it.
+    this._endTurnEconomy(id);
     const cur = id ? state.combatants.findIndex(c => c.id === id) : -1;
     if (cur < 0){
       // Either combat hasn't started, or the active combatant is no longer in

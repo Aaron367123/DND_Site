@@ -2037,6 +2037,99 @@
     // The clock and the weather are campaign state — already in the backup
     // list — but were not synced, so two DM devices disagreed about the
     // date and the players could see neither.
+    // ── Rage resistance ───────────────────────────────────────────────────
+    // Raging gives resistance to bludgeoning, piercing and slashing. This is
+    // arithmetic applied to real hit points, so it is worth pinning: a
+    // regression here is silent and the barbarian just dies sooner.
+    {
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants);
+      const hit = (raging, amount, type) => {
+        state.party = [{ id:'zzbarb', name:'ZZ Barb', cls:'barbarian', level:5,
+                         hp:80, hpMax:80, ac:15, rage: !!raging }];
+        state.combatants = [{ id:'zzbarb', name:'ZZ Barb', isPC:true, hp:80, hpMax:80, ac:15 }];
+        panelDefs.combat._applyHpDelta(0, -amount, type);
+        return 80 - state.combatants[0].hp;
+      };
+      ok('rage: slashing is halved',    hit(true, 20, 'slashing')    === 10, String(hit(true, 20, 'slashing')));
+      ok('rage: piercing is halved',    hit(true, 20, 'piercing')    === 10, String(hit(true, 20, 'piercing')));
+      ok('rage: bludgeoning is halved', hit(true, 20, 'bludgeoning') === 10, String(hit(true, 20, 'bludgeoning')));
+      // Rage covers those three and nothing else. Without this the check
+      // above would pass just as well if everything were being halved.
+      ok('rage: fire is not halved', hit(true, 20, 'fire') === 20, String(hit(true, 20, 'fire')));
+      ok('rage: nothing is halved when not raging',
+         hit(false, 20, 'slashing') === 20, String(hit(false, 20, 'slashing')));
+      // 21 halved is 10, not 11 — resistance rounds down, in the defender’s
+      // favour. The delta here is negative, so the code needs ceil to do it.
+      ok('rage: an odd total rounds the damage down',
+         hit(true, 21, 'slashing') === 10, String(hit(true, 21, 'slashing')));
+      // Untyped damage — the -/+ buttons. Rage is B/P/S only, so there is no
+      // honest way to halve a number with no type attached; the log says so
+      // rather than the arithmetic guessing.
+      ok('rage: untyped damage is not silently halved',
+         hit(true, 20, null) === 20, String(hit(true, 20, null)));
+      state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
+    }
+
+    // ── Disengage ─────────────────────────────────────────────────────────
+    // The panel has detected opportunity attacks for as long as it could read
+    // token positions, and has spent and logged the Disengage action for as
+    // long as the economy bar existed. It never connected the two, so a
+    // creature that disengaged was still attacked for walking away.
+    {
+      const T = panelDefs.turnview;
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants);
+      const A0 = state.activeCombatantId;
+      state.party = [];
+      state.combatants = [
+        { id:'zzmover', name:'ZZ Mover', isPC:true,  hp:20, hpMax:20, ac:14 },
+        { id:'zzogre',  name:'ZZ Ogre',  isPC:false, hp:59, hpMax:59, ac:11 },
+      ];
+      state.activeCombatantId = 'zzmover';
+      save();
+      // The battle map has to be mounted: the reconciler places tokens onto
+      // the panel's live list when it is open, and onto stored map data when
+      // it is not — and by this point in the run there is no stored map to
+      // place onto, so nothing was created and every check answered null.
+      openPanel('battlemap'); await sleep(400);
+      openPanel('turnview'); await sleep(500);
+      // Force the token reconciler. It skips when the roster signature looks
+      // unchanged, which is right in the app and wrong here — this block swaps
+      // the whole roster out between checks, and without tokens _provokedBy
+      // has no geometry to reason about and answers null to everything.
+      if (typeof sktEnsureCombatTokens === 'function') sktEnsureCombatTokens(true);
+      await sleep(200);
+      const cs = T._cs() || 50;
+      // Re-read the tokens each time: _render() rebuilds them, so a reference
+      // captured before an action describes a token that no longer exists.
+      const provokes = () => {
+        const mv = T._tokenFor(state.combatants[0]), og = T._tokenFor(state.combatants[1]);
+        if (!mv || !og) return null;
+        og.x = 0; og.y = 0; mv.x = cs; mv.y = 0;
+        const from = { x: mv.x, y: mv.y };
+        mv.x = cs * 4;
+        state.combatants[1].reactionUsed = false;
+        return T._provokedBy(state.combatants[0], from).length > 0;
+      };
+      const _dx = () => {
+        const mv = T._tokenFor(state.combatants[0]), og = T._tokenFor(state.combatants[1]);
+        return JSON.stringify({ mv: !!mv, og: !!og, cs, ftPerCell: T._ftPerCell && T._ftPerCell(),
+          reach: T._reachOf(state.combatants[1]) });
+      };
+      ok('disengage: walking out of reach provokes normally', provokes() === true, _dx());
+      T._takeStandardAction('Disengage');
+      await sleep(200);
+      ok('disengage: the action is still spent', state.combatants[0].actionUsed === true);
+      ok('disengage: and now it suppresses the opportunity attack',
+         provokes() === false);
+      // It lasts until the end of THAT turn, not until the start of the next
+      // one — a creature shoved during someone else’s turn provokes again.
+      panelDefs.combat._endTurnEconomy("zzmover");
+      ok('disengage: it ends when the turn does', provokes() === true);
+      closePanel('turnview'); closePanel('battlemap');
+      state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
+      state.activeCombatantId = A0; save();
+    }
+
     ok('sync: the in-game clock syncs', SKT_SYNC_KEYS.indexOf('skt-time-v1') >= 0);
     ok('sync: the weather syncs', SKT_SYNC_KEYS.indexOf('skt-weather-v2') >= 0);
 
