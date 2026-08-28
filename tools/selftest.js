@@ -1996,6 +1996,50 @@
     }
     closePanel('encounter');
 
+    // ── Which settings are the campaign’s, and which are this screen’s ────
+    // skt-settings-v1 syncs. It was also carrying display preferences, so
+    // the font scale set on a monitor was applied to every phone at the
+    // table — applyFontScale writes an inline zoom on document.body, which
+    // beats the player shell’s own stylesheet value.
+    {
+      const S0 = localStorage.getItem('skt-settings-v1');
+      const V0 = localStorage.getItem('skt-view-prefs-v1');
+      const st0 = JSON.stringify(state.settings);
+
+      state.settings.fontScale = 1.6;
+      state.settings.uiHide = { ...(state.settings.uiHide || {}), dock: true };
+      state.settings.currencySymbol = 'sp';
+      save();
+      const shared = JSON.parse(localStorage.getItem('skt-settings-v1') || '{}');
+      const mine   = JSON.parse(localStorage.getItem('skt-view-prefs-v1') || '{}');
+      ok('settings: font scale is not in the synced record',
+         !('fontScale' in shared), JSON.stringify(Object.keys(shared).slice(0, 8)));
+      ok('settings: hidden chrome is not either', !('uiHide' in shared));
+      // The positive control: this must not have quietly stopped syncing
+      // everything, which would pass the two checks above just as well.
+      ok('settings: campaign settings still sync', shared.currencySymbol === 'sp');
+      ok('settings: the device keeps its own copy', mine.fontScale === 1.6,
+         JSON.stringify(mine));
+      // A device on an older build still sends the old shape.
+      localStorage.setItem('skt-settings-v1',
+        JSON.stringify({ ...shared, fontScale: 0.6, uiHide: { dock: false } }));
+      loadDomain('settings');
+      ok('settings: an incoming payload cannot resize this screen',
+         state.settings.fontScale === 1.6, String(state.settings.fontScale));
+      ok('settings: the per-device record is never synced',
+         SKT_SYNC_KEYS.indexOf('skt-view-prefs-v1') < 0);
+
+      if (S0 != null) localStorage.setItem('skt-settings-v1', S0);
+      if (V0 != null) localStorage.setItem('skt-view-prefs-v1', V0);
+      state.settings = JSON.parse(st0);
+    }
+
+    // The clock and the weather are campaign state — already in the backup
+    // list — but were not synced, so two DM devices disagreed about the
+    // date and the players could see neither.
+    ok('sync: the in-game clock syncs', SKT_SYNC_KEYS.indexOf('skt-time-v1') >= 0);
+    ok('sync: the weather syncs', SKT_SYNC_KEYS.indexOf('skt-weather-v2') >= 0);
+
     // ── Sharing an uploaded map ───────────────────────────────────────────
     // An upload used to set bgMapPath to null and keep the picture in memory,
     // so the players received "no map" and lost the one they had. It now goes
@@ -2126,6 +2170,43 @@
   // ══════════════════════════════════════════════════════════ player view
   if (MODE === 'player'){
     ok('player: body is in player mode', document.body.classList.contains('player-mode'));
+
+    // Time and Sky. Shared like any other panel, and read-only here: the
+    // controls are hidden by CSS and realtime.js refuses to push either key
+    // from a player device, so a phone cannot rewind the table’s clock.
+    if (typeof paTab !== 'undefined' && typeof paRender === 'function'){
+      const S0 = (state.sharedPanels || []).slice(), tab0 = paTab;
+      state.sharedPanels = []; saveSharedPanels(); paRender(); await sleep(250);
+      const shut = [...document.querySelectorAll('[data-pa-tab]')].map(b => b.dataset.paTab);
+      ok('player: time and sky are hidden until shared',
+         shut.indexOf('time') < 0 && shut.indexOf('sky') < 0, JSON.stringify(shut));
+
+      state.sharedPanels = ['time', 'weather']; saveSharedPanels();
+      paRender(); await sleep(250);
+      const open = [...document.querySelectorAll('[data-pa-tab]')].map(b => b.dataset.paTab);
+      ok('player: sharing them makes the tabs appear',
+         open.indexOf('time') >= 0 && open.indexOf('sky') >= 0, JSON.stringify(open));
+
+      for (const t of ['time', 'sky']){
+        const before = errs.length;
+        paTab = t; paRender(); await sleep(550);
+        const screen = document.getElementById('pa-screen');
+        const text = (screen && screen.textContent || '').replace(/\s+/g, ' ').trim();
+        ok('player: the ' + t + ' tab shows something', text.length > 20, String(text.length));
+        ok('player: the ' + t + ' tab is silent', errs.length === before,
+           errs.slice(before).join(' | '));
+        // Read-only means no control that would CHANGE it is on screen.
+        const live = [...document.querySelectorAll(
+          '.pa-mount .time-buttons, .pa-mount #time-edit-done,'
+          + ' .pa-mount #weather-reroll, .pa-mount #weather-tick-day,'
+          + ' .pa-mount #weather-sync-season, .pa-mount #weather-history-clear')]
+          .filter(el => el.getBoundingClientRect().height > 0);
+        ok('player: the ' + t + ' tab offers no way to change it',
+           live.length === 0, live.map(el => el.id || el.className).join(', '));
+      }
+      state.sharedPanels = S0; saveSharedPanels();
+      paTab = tab0; paRender(); await sleep(200);
+    }
 
     // Panel lifecycle. This shell never called unmount() at all: leaving the
     // Map tab wiped the DOM but left the battle map panel believing it was

@@ -4367,6 +4367,14 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
   flex-direction:column; overflow:hidden}
 .pa-mount .map-toolbar, .pa-mount .map-side, .pa-mount .map-settings,
 .pa-mount .notes-tree-actions, .pa-mount .notes-toolbar{display:none !important}
+/* The clock and the weather are the DM's to set. Players get to look at
+   them, so every control that would change one is hidden — the same way
+   the map's toolbar is. This is presentation only; realtime.js is what
+   actually stops a player device writing either key. */
+.pa-mount .time-buttons, .pa-mount .time-advance-label,
+.pa-mount #time-edit-done, .pa-mount .weather-controls,
+.pa-mount #weather-reroll, .pa-mount #weather-tick-day,
+.pa-mount #weather-sync-season, .pa-mount #weather-history-clear{display:none !important}
 /* Drawing on the map is table conversation, not DM authority — a player
    marking a route or circling the thing they want to look at. Its own small
    bar rather than the DM toolbar unhidden, which also carries rotate, scale,

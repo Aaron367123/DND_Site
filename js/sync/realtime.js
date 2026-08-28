@@ -51,6 +51,13 @@ const SKT_SYNC_KEYS = [
   'skt-books-hidden-v1',   // hidden-books filter — propagates to every tab
                            // so the DM's curated source list affects every
                            // player's search / shop / encounter dropdowns too
+  // The in-game calendar and the sky. Both were already in the backup list —
+  // the code has always treated them as campaign data — but not in this one,
+  // so a DM with a laptop and a tablet had two different dates and two
+  // different weathers, and the players could see neither. Nothing anywhere
+  // explained the omission; it reads as an oversight rather than a decision.
+  'skt-time-v1',       // in-game date and time
+  'skt-weather-v2',    // current conditions + history
   'skt-adventures-hidden-v1', // same idea for hidden adventures (LMoP, SKT,
                               // ToA, …). Adventure IDs match `_source` tags
                               // on items / monsters from those modules.
@@ -100,6 +107,8 @@ const _PANELS_FOR_KEY = {
   // 'skt-notes-v2' deliberately omitted — notes sync via Dropbox/local FS.
   'skt-npcs-v2':      ['npclib'],
   'skt-bestiary-v1':  ['bestiary'],
+  'skt-time-v1':      ['time'],
+  'skt-weather-v2':   ['weather'],
   // skt-shared-panels-v1 has no per-panel render — it's dispatched manually
   // in _applyRemoteKey so the player view can mount/unmount whole panels.
 };
@@ -512,6 +521,12 @@ const _retryCounts = {};
 const _MAX_RETRIES = 4;
 // Returns a promise resolving to an array of per-key booleans (true = the
 // value reached the server). Fire-and-forget callers ignore it.
+// Whole keys only a DM authors. The entity layer expresses this per-node
+// with playerWritable; this is the same rule for the keys that sync whole,
+// and until now no whole key was both DM-authored and mounted in the player
+// view, so there was nothing to express it against.
+const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2']);
+
 function _flushDirtyKeys() {
   if (!_fbDb || _dirtyKeys.size === 0) return Promise.resolve([]);
   const keys = Array.from(_dirtyKeys);
@@ -520,6 +535,12 @@ function _flushDirtyKeys() {
     // Entity keys diff per-node and multi-path update() instead of pushing
     // the whole string.
     if (_ENTITY_KEYS[k]) return _flushEntityKey(k);
+    // A player device holds these because it displays them, not because it
+    // may change them. Without this its copy is pushed back like any other
+    // client, so a phone that was briefly behind would rewind the table
+    // clock. The panels are read-only over there, but a stale local copy
+    // does not need a click to be pushed.
+    if (_DM_ONLY_KEYS.has(k) && _isPlayerMode()) return Promise.resolve(true);
     const val = localStorage.getItem(k);
     // Remember exactly what we pushed so the listener can drop the one echo
     // that comes back to us. (Don't use a `localStorage===fbVal` check for
@@ -628,7 +649,13 @@ const _lastServer = {};   // key -> last value we know the server held
 // base===mine or base===theirs short-circuits first), it is one sub-array of
 // an otherwise well-merging key, and two people retuning health tiers at the
 // same instant is not a thing that happens.
-const _ATOMIC_KEYS = new Set(['skt-prompt-v1', 'skt-shop-v1']);
+// skt-time-v1 is one instant expressed as six numbers. Field-merging it
+// takes the hour from one device and the day from another and produces a
+// moment neither device ever held — and unlike a mixed-up shop, nothing
+// downstream can tell. skt-weather-v2 is the same shape of problem: a rolled
+// result whose fields only describe one sky together.
+const _ATOMIC_KEYS = new Set(['skt-prompt-v1', 'skt-shop-v1',
+                              'skt-time-v1', 'skt-weather-v2']);
 
 function _idOf(o){
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;

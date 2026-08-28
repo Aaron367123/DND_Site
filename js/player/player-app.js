@@ -89,6 +89,15 @@ const PA_TABS = [
   // mounts unrestricted, which is also why it needs no player-mode branches of
   // its own.
   { id:'loot',  label:'Loot',  icon:'i-chest',  needs:'loot'  },
+  // The date and the sky. Both are things the party can simply see, and
+  // both were previously DM-only for no stated reason — the keys were not
+  // even synced, so the DM's own second device disagreed about the date.
+  //
+  // Read-only over here: the controls are hidden by the .pa-mount rules,
+  // and realtime.js refuses to push either key from a player device, so a
+  // phone cannot rewind the clock even if something did reach a handler.
+  { id:'time',  label:'Time',  icon:'i-clock',  needs:'time'  },
+  { id:'sky',   label:'Sky',   icon:'i-cloud',  needs:'weather' },
 ];
 let paTab = 'you';
 
@@ -282,6 +291,8 @@ function paRenderScreen(){
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
   if (paTab === 'notes') { paMountPanel(el, 'notes');     return; }
   if (paTab === 'loot')  { paMountPanel(el, 'loot');      return; }
+  if (paTab === 'time')  { paMountPanel(el, 'time');      return; }
+  if (paTab === 'sky')   { paMountPanel(el, 'weather');   return; }
 }
 
 // The map and the notes are the DM panels, mounted whole. Not rewritten:
@@ -295,7 +306,8 @@ function paUnmountCurrent(host){
   if (!box) return;
   const tab = box.dataset.paMount;
   const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes'
-           : tab === 'loot' ? 'loot' : null;
+           : tab === 'loot' ? 'loot' : tab === 'time' ? 'time'
+           : tab === 'sky' ? 'weather' : null;
   const def = id && panelDefs[id];
   if (!def) return;
   try { if (typeof def.unmount === 'function') def.unmount(); } catch(e){}
@@ -357,7 +369,8 @@ function paDraw(act){
   if (host) paAddDrawBar(host);
 }
 function paRefreshMount(tab){
-  const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes' : null;
+  const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes'
+           : tab === 'time' ? 'time' : tab === 'sky' ? 'weather' : null;
   if (!id) return;
   const def = panelDefs[id];
   try { def && def._render && def._render(); } catch(e){}

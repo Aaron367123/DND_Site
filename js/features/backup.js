@@ -54,6 +54,11 @@ const EXCLUDE = new Set([
   'skt-notes-v2-corrupt-backup',
   // Transient UI noise.
   'skt-search-recent-v1',
+  // The per-device half of state.settings — font scale, hidden chrome, panel
+  // density. Exactly the same argument as the battle-map zoom below: these
+  // describe a screen, not a campaign, and restoring one screen's onto
+  // another is wrong rather than merely redundant.
+  'skt-view-prefs-v1',
   // Per-device battle-map zoom, one key per window role. A zoom fitted to a
   // 27" monitor restored onto a phone is exactly the "wrong, not merely
   // redundant" case above — and per-device zoom exists precisely so screens

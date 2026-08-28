@@ -10,6 +10,24 @@ const PARTY_KEY='skt-party-v1';
 const COMBAT_KEY='skt-combat-v1';
 const SHOP_KEY='skt-shop-v1';
 const SETTINGS_KEY='skt-settings-v1';
+// Per-device half of state.settings. skt-settings-v1 syncs, and it was
+// carrying display preferences as well as campaign ones — so the font
+// scale set on a 27" monitor was applied to every phone at the table.
+// Verified: applyFontScale writes an inline zoom on document.body, which
+// beats the player shell's own stylesheet value, so the DM's preference
+// resized the players’ screens.
+//
+// The test for this list is "does it change what this screen looks like,
+// or what is true in the campaign". Currency, prices, health tiers, hidden
+// sources and the like stay shared; how big the text is does not.
+const VIEW_PREFS_KEY='skt-view-prefs-v1';
+const VIEW_PREF_FIELDS=['fontScale','uiHide','snapWindows','partyCompact',
+  'partyCardWidth','combatCompact','combatHpBar','combatGroupSimilar'];
+function _splitViewPrefs(all){
+  const shared={...all}, mine={};
+  VIEW_PREF_FIELDS.forEach(k=>{ if(k in shared){ mine[k]=shared[k]; delete shared[k]; } });
+  return {shared,mine};
+}
 const LAYOUT_KEY='skt-layout-v1';
 const SHARED_PANELS_KEY='skt-shared-panels-v1';
 // A reaction the DM is holding open, pushed to the players who could answer
@@ -48,7 +66,9 @@ function save(){
     localStorage.setItem(PARTY_KEY,JSON.stringify(state.party));
     localStorage.setItem(COMBAT_KEY,JSON.stringify({combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId}));
     localStorage.setItem(SHOP_KEY,JSON.stringify(state.shop));
-    localStorage.setItem(SETTINGS_KEY,JSON.stringify(state.settings));
+    const _sp=_splitViewPrefs(state.settings);
+    localStorage.setItem(SETTINGS_KEY,JSON.stringify(_sp.shared));
+    localStorage.setItem(VIEW_PREFS_KEY,JSON.stringify(_sp.mine));
     localStorage.setItem(PROMPT_KEY,JSON.stringify(state.prompt||null));
   }catch(e){
     // Don't swallow: a full quota here means party/combat changes are being
@@ -112,7 +132,16 @@ function loadDomain(domain){
       state.prompt=r?JSON.parse(r):null;
     }else if(domain==='settings'){
       const r=localStorage.getItem(SETTINGS_KEY);
-      if(r){const s=JSON.parse(r);if(s&&typeof s==='object')state.settings={...state.settings,...s};}
+      if(r){const s=JSON.parse(r);if(s&&typeof s==='object'){
+        // Drop any view prefs still present in the shared record. Campaigns
+        // saved before the split have them, and an incoming sync from a
+        // device on an older build still sends them.
+        state.settings={...state.settings,..._splitViewPrefs(s).shared};
+      }}
+      // This device has the last word on how it looks.
+      try{const v=localStorage.getItem(VIEW_PREFS_KEY);
+        if(v){const p=JSON.parse(v);if(p&&typeof p==='object')state.settings={...state.settings,...p};}
+      }catch(e){}
     }
   }catch(e){}
 }
