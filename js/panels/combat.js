@@ -1763,6 +1763,13 @@ registerPanel('combat',{
       // absorption) silently swallowed every check when the beast or temp
       // HP ate all of it.
       const damageForConc = remaining < 0 ? -remaining : 0;
+      // The same figure the Turn View means by "taken": after resist,
+      // immunity and vulnerability, before anything absorbs it. Hit points
+      // lost is a different number whenever temporary or beast hit points
+      // are in the way, and reporting that one made a hit fully soaked by
+      // temp HP read as "0 taken · 40 → 40" — as though nothing happened,
+      // when 12 damage was taken and 12 temp HP spent absorbing it.
+      this._lastDamageTaken = damageForConc;
       // Wild Shape: damage hits the BEAST pool first. Once beast HP ≤ 0,
       // form drops and overflow continues to druid HP / temp / death-save
       // territory. Mirrors party.js _applyHpDelta beast routing.

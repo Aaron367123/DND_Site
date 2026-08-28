@@ -2143,6 +2143,54 @@
           ok('dmg log: an ordinary hit stays clean',
              !/taken/.test(plain) && !/resist/.test(plain), plain);
           // With one type the breakdown does not repeat the word.
+          // "Taken" means damage after resist/immune/vulnerable, NOT hit
+          // points lost. They differ whenever temp HP or a beast pool is in
+          // the way, and reporting the wrong one made a hit fully absorbed
+          // by temp HP read as "0 taken · 40 → 40" — as though the attack
+          // had missed. 5e counts soaked damage as damage taken; it is what
+          // triggers a concentration save.
+          {
+            const P1 = JSON.stringify(state.party), K1 = JSON.stringify(state.combatants);
+            const run = (party, parts, detail) => {
+              state.party = [party];
+              state.combatants = [{ id:'zzsoak', name:'ZZ Soak', isPC:true,
+                                    hp:party.hp, hpMax:party.hpMax, ac:12 }];
+              const c = state.combatants[0];
+              T._log.length = 0;
+              T._commit({ attacker:'Thing', target:c, hit:true,
+                          dmg:parts.reduce((n,p)=>n+p.amt,0), type:parts[0].type,
+                          parts, detail, label:'Hit', crit:false });
+              return strip(T._log[0] || '');
+            };
+
+            const soaked = run(
+              { id:'zzsoak', name:'ZZ Soak', cls:'wizard', level:5, hp:40, hpMax:40, ac:12, tempHp:20 },
+              [{amt:12,type:'fire'}], 'fire 8+4');
+            ok('dmg log: damage absorbed by temp HP is not reported as zero',
+               !/0<\/strong> taken|→ 0 taken/.test(soaked), soaked);
+            ok('dmg log: it says what soaked it', /12 soaked by temp HP/.test(soaked), soaked);
+
+            // Resisted AND partly soaked: 20 slashing halves to 10 taken, 5
+            // of which the temp HP eats, so 5 comes off hit points.
+            const both = run(
+              { id:'zzsoak', name:'ZZ Soak', cls:'barbarian', level:5, hp:60, hpMax:60,
+                ac:12, rage:true, tempHp:5 },
+              [{amt:20,type:'slashing'}], 'slashing 9+11');
+            ok('dmg log: resistance and soak are both explained',
+               /rage resist/.test(both) && /10<\/strong> taken|10 taken/.test(both)
+            && /5 soaked by temp HP/.test(both), both);
+
+            // Nothing in the way: neither clause, or every ordinary hit gets
+            // two pieces of arithmetic it does not need.
+            const plain2 = run(
+              { id:'zzsoak', name:'ZZ Soak', cls:'wizard', level:5, hp:60, hpMax:60, ac:12 },
+              [{amt:12,type:'fire'}], 'fire 8+4');
+            ok('dmg log: a plain hit gains neither clause',
+               !/taken/.test(plain2) && !/soaked/.test(plain2), plain2);
+
+            state.party = JSON.parse(P1); state.combatants = JSON.parse(K1);
+          }
+
           ok('dmg log: the type is not repeated in the dice',
              /\[8\+4\]/.test(plain), plain);
         }

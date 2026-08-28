@@ -2019,11 +2019,20 @@ registerPanel('turnview', {
     // when someone asks why the barbarian only took seven. So it carries the
     // roll, the reason the total changed, and the number actually taken —
     // which until now had to be worked out from the hit points either side.
-    const applied = before - after;
+    // Damage taken after resist/immune/vulnerable — NOT hit points lost.
+    // Those differ whenever temp HP or a wild-shape beast pool is in the
+    // way, and 5e is clear that soaked damage is still damage taken (it is
+    // what triggers a concentration save, which is why the tracker already
+    // computed this figure).
+    const taken = this._lastDmgTaken != null ? this._lastDmgTaken : (before - after);
     // Only when it differs from what was rolled. On an ordinary hit the two
     // are the same number and printing it twice is noise.
-    const appliedTxt = (applied !== o.dmg)
-      ? ` → <strong>${applied}</strong> taken` : '';
+    const appliedTxt = (taken !== o.dmg) ? ` → <strong>${taken}</strong> taken` : '';
+    // Whatever stood between the damage and the hit points.
+    const soaked = taken - (before - after);
+    const soakTxt = soaked > 0
+      ? ` <span style="opacity:.85">· ${soaked} soaked by ${this._wsOf(t) ? 'beast HP' : 'temp HP'}</span>`
+      : '';
     // Same de-duplication as the note: with one damage type the line
     // already says "17 bludgeoning", so "[bludgeoning 5+8+4]" beside it
     // repeats the word. With several the type is what separates the rolls.
@@ -2031,7 +2040,7 @@ registerPanel('turnview', {
       ? (o.detail || '')
       : String(o.detail || '').replace(/^[a-z]+\s+/i, '');
     const rollTxt = rollRaw ? ` <span style="opacity:.6">[${esc(rollRaw)}]</span>` : '';
-    this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
+    this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
@@ -2053,13 +2062,16 @@ registerPanel('turnview', {
     this._applying = true;
     try {
       this._lastDmgNotes = [];
+      this._lastDmgTaken = 0;
       parts.forEach(p => {
         const i = this._order().indexOf(target);   // re-find: the list can shift
         if (i < 0 || !p.amt) return;
         C._lastDamageNote = '';
+        C._lastDamageTaken = 0;
         C._applyHpDelta(i, -p.amt, p.type || null);
         // Only the notes that explain a CHANGED number. A plain
         // "(slashing)" says nothing the line does not already say.
+        this._lastDmgTaken += (C._lastDamageTaken || 0);
         const n = String(C._lastDamageNote || '');
         if (/resist|immune|vulnerable|½|×2|rage/i.test(n)){
           // Drop the leading damage type when there is only one part: the
