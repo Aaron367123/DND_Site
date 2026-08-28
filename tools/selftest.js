@@ -2086,6 +2086,33 @@
         // change to one-call-per-type cannot pass by coincidence.
         ok('rage: 30 piercing alone would be 15', hit([{amt:30,type:'piercing'}]) === 15);
         ok('rage: 30 fire alone would be 30',     hit([{amt:30,type:'fire'}]) === 30);
+
+        // Saying WHY the number changed. The tracker has always written
+        // "rage resist, ½" into its own log, but the Turn View is the panel
+        // a DM watches during a fight and it reported "hit for 12" while
+        // taking 6 off, with the explanation in a window they may not have
+        // open.
+        const notes = parts => { t.hp = 400; state.party[0].hp = 400;
+          T._applyDamage(t, parts, false, false);
+          return (T._lastDmgNotes || []).slice(); };
+        ok('dmg note: a resisted hit says why',
+           /rage resist/.test((notes([{amt:20,type:'slashing'}])[0] || '')),
+           JSON.stringify(notes([{amt:20,type:'slashing'}])));
+        // One part: the line already reads "20 slashing", so repeating the
+        // type in the note beside it is a stutter.
+        ok('dmg note: the type is not repeated for a single part',
+           !/slashing/.test((notes([{amt:20,type:'slashing'}])[0] || '')),
+           JSON.stringify(notes([{amt:20,type:'slashing'}])));
+        // Several parts: the type is the only thing telling the resisted
+        // half apart from the one that landed in full.
+        ok('dmg note: the type is kept when there is more than one',
+           /^piercing —/.test((notes([{amt:20,type:'piercing'},{amt:10,type:'fire'}])[0] || '')),
+           JSON.stringify(notes([{amt:20,type:'piercing'},{amt:10,type:'fire'}])));
+        // And nothing at all when nothing happened to the number, or every
+        // ordinary hit picks up noise.
+        ok('dmg note: an unresisted hit gets no note',
+           notes([{amt:20,type:'fire'}]).length === 0,
+           JSON.stringify(notes([{amt:20,type:'fire'}])));
       }
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
     }

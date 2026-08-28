@@ -3773,6 +3773,8 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-feat:disabled { opacity:.4; cursor:default; }
 .tv-feat.spent { text-decoration:line-through; }
 .tv-featlist { display:flex; gap:5px; flex-wrap:wrap; align-items:center; margin-top:4px; }
+/* Why a damage number changed — "bludgeoning — rage resist, ½". */
+.tv-dmg-note{font-size:var(--fs-2xs); color:var(--accent); white-space:nowrap}
 .tv-feats{margin-top:4px}
 .tv-feats-h{background:none; border:0; padding:0; cursor:pointer; font:inherit;
   font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;

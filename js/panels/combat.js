@@ -1851,6 +1851,13 @@ registerPanel('combat',{
         }
       }
       if (!logParts.length) logParts.push('0');
+      // Why this number is what it is — "rage resist, ½", "immune",
+      // "vulnerable, ×2". The tracker has always written it into its own
+      // log, but the Turn View is the panel a DM watches during a fight,
+      // and it was reporting "hit for 12" while taking 6 off with no
+      // explanation anywhere the DM was looking. Published here so the
+      // Turn View can say the same thing rather than deriving it again.
+      this._lastDamageNote = String(typeSuffix || '').trim();
       this._log(c.name + ' took ' + logParts.join(' + ') + ' damage' + typeSuffix);
       // Concentration save prompt — 5e rule: when a concentrating creature
       // takes damage, they roll a Con save vs DC max(10, half the damage).

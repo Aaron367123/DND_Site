@@ -1999,6 +1999,10 @@ registerPanel('turnview', {
     this._applyDamage(t, o.parts || [{ amt: o.dmg, type: o.type }], o.magical, o.crit);
     const after = (this._order().find(x => x.id === t.id) || t).hp;
     const breakdown = o.detail ? ` <span class="dim">[${esc(o.detail)}]</span>` : '';
+    // Set by _applyDamage a moment ago, one entry per damage type that was
+    // resisted, doubled or ignored.
+    const notes = (this._lastDmgNotes || []).join(' · ');
+    const noteTag = notes ? ` <span class="tv-dmg-note">${esc(notes)}</span>` : '';
     // Every type, not just the first: "22 piercing" hid the fire half.
     const dmgText = (o.parts && o.parts.length > 1)
       ? o.parts.filter(p => p.amt).map(p => `${p.amt} ${esc(p.type)}`).join(' + ')
@@ -2007,8 +2011,8 @@ registerPanel('turnview', {
         o.crit ? 'Critical hit' : o.save ? 'Save' : 'Hit'}</span> —
       ${esc(o.label)} vs ${esc(t.name)}:${vs}${vs ? ' ·' : ''}
       <strong>${dmgText}</strong>${breakdown}${tag}
-      <span class="dim">· ${esc(t.name)} ${before} → ${after}</span>`, true);
-    this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${o.dmg}</strong> ${esc(o.type || '')}${o.crit ? ' (crit)' : ''}${usedName ? ' — ' + esc(usedName) : ''} <span style="opacity:.7">· ${before} → ${after}</span>`);
+      <span class="dim">· ${esc(t.name)} ${before} → ${after}</span>${noteTag}`, true);
+    this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${o.dmg}</strong> ${esc(o.type || '')}${o.crit ? ' (crit)' : ''}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
@@ -2029,10 +2033,25 @@ registerPanel('turnview', {
     C._lastAtkCrit = !!crit;
     this._applying = true;
     try {
+      this._lastDmgNotes = [];
       parts.forEach(p => {
         const i = this._order().indexOf(target);   // re-find: the list can shift
         if (i < 0 || !p.amt) return;
+        C._lastDamageNote = '';
         C._applyHpDelta(i, -p.amt, p.type || null);
+        // Only the notes that explain a CHANGED number. A plain
+        // "(slashing)" says nothing the line does not already say.
+        const n = String(C._lastDamageNote || '');
+        if (/resist|immune|vulnerable|½|×2|rage/i.test(n)){
+          // Drop the leading damage type when there is only one part: the
+          // line already says "14 bludgeoning", and "bludgeoning — rage
+          // resist" beside it reads as a stutter. With several parts the
+          // type is the only thing telling the piercing note apart from the
+          // fire one, so it stays.
+          let t = n.replace(/^\(|\)$/g, '');
+          if (parts.length < 2) t = t.replace(/^[a-z]+\s+—\s+/i, '');
+          if (this._lastDmgNotes.indexOf(t) < 0) this._lastDmgNotes.push(t);
+        }
       });
     } finally { C._lastAtkProp = prev; C._lastAtkCrit = prevCrit; this._applying = false; }
     C._render?.();
