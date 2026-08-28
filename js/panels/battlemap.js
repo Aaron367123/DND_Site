@@ -1698,13 +1698,21 @@ registerPanel('battlemap',{
     try{
       this._bc=new BroadcastChannel('skt-battlemap');
       const isPlayer = document.body.classList.contains('player-mode');
-      // Player tabs also subscribe to the cross-device live-stroke channel so
-      // strokes drawn on a remote DM machine show up here in near-real time.
-      // Same-browser tabs already get instant updates via BroadcastChannel
-      // above; this Firebase listener only matters for cross-device players.
-      if (isPlayer && window.realtimeLive){
+      // Every device subscribes to the cross-device live-stroke channel, so a
+      // stroke in progress shows up as it is drawn. Same-browser tabs already
+      // get that from the BroadcastChannel above; this matters across devices.
+      //
+      // This used to be players only, on the reasoning that "only the DM
+      // draws". Players draw now — there is a draw bar in their shell and the
+      // sync layer explicitly permits them the drawings node — so the DM was
+      // the one person at the table who could not see a stroke being made.
+      if (window.realtimeLive){
         try { if (this._unsubLive) this._unsubLive(); } catch(e){}
         this._unsubLive = window.realtimeLive.listen('skt_battlemap_live_v1', val => {
+          // Firebase echoes a write back to whoever made it. Painting a
+          // preview of our own stroke over the real one we are already
+          // drawing is at best redundant and at worst a visible double line.
+          if (this._drawingNow) return;
           if (!val || !val.stroke){ this._clearPreviewStroke(); return; }
           this._applyPreviewStroke(val.stroke);
         });
@@ -2034,11 +2042,18 @@ registerPanel('battlemap',{
   // for same-browser tabs and (b) Firebase via realtimeLive for cross-device
   // players. Throttled by the caller (10 fps in the draw mousemove handler) to
   // keep Firebase write traffic reasonable.
+  // True from the first point of a local stroke until it is committed. Set
+  // here rather than in the draw handler because the handler keeps the
+  // stroke in a closure, and the live listener — which is what needs to know
+  // — has no way to reach it.
+  _drawingNow: false,
   _broadcastStrokeTick(stroke){
+    this._drawingNow = true;
     try { if (this._bc) this._bc.postMessage({ kind:'strokeTick', stroke }); } catch(e){}
     try { if (window.realtimeLive) window.realtimeLive.push('skt_battlemap_live_v1', { stroke, ts: Date.now() }); } catch(e){}
   },
   _broadcastStrokeEnd(){
+    this._drawingNow = false;
     try { if (this._bc) this._bc.postMessage({ kind:'strokeEnd' }); } catch(e){}
     try { if (window.realtimeLive) window.realtimeLive.clear('skt_battlemap_live_v1'); } catch(e){}
   },

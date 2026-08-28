@@ -2202,6 +2202,67 @@
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
     }
 
+    // ── Concurrent drawing ────────────────────────────────────────────────
+    // The battle map keeps every drawing in ONE node holding ONE array, and
+    // both the DM and the players write it. The entity merge kept whichever
+    // side was local and discarded the other wholesale, which is right for a
+    // token — one object, one owner — and wrong for a list several people
+    // append to. Two people drawing at the same moment: whoever pushed last
+    // erased the other one strokes. Reported as "sometimes it does not show
+    // for others".
+    if (typeof window.sktEntitySpec === 'function'){
+      const spec = window.sktEntitySpec('skt-battlemap-v1');
+      ok('draw: the battlemap spec knows how to merge a node',
+         !!spec && typeof spec.mergeNode === 'function');
+      if (spec && spec.mergeNode){
+        const S = (...n) => JSON.stringify(n.map(i => ({ c:'#f00', s:3, p:[i, i] })));
+        const M = (base, mine, theirs) =>
+          JSON.parse(spec.mergeNode('drawings', base, mine, theirs)).map(o => o.p[0]);
+
+        // The bug itself: I drew 2, they drew 3, both from a base of 1.
+        ok('draw: two people drawing at once keep both strokes',
+           eqJ(M(S(1), S(1, 2), S(1, 3)), [1, 2, 3]),
+           JSON.stringify(M(S(1), S(1, 2), S(1, 3))));
+        // A union alone would do that much and also resurrect anything
+        // erased, which is why the merge needs the base: I deleted 2, they
+        // still have it, and it must stay deleted.
+        ok('draw: a stroke one side erased does not come back',
+           eqJ(M(S(1, 2), S(1), S(1, 2)), [1]),
+           JSON.stringify(M(S(1, 2), S(1), S(1, 2))));
+        ok('draw: a stroke both erased stays gone',
+           eqJ(M(S(1, 2), S(1), S(1)), [1]));
+        ok('draw: identical sides merge to themselves',
+           eqJ(M(S(1), S(1), S(1)), [1]));
+        // Only the list-shaped nodes. Everything else must fall through to
+        // the caller, or a token merge silently changes behaviour too.
+        ok('draw: nodes it does not own are left alone',
+           spec.mergeNode('meta', '{}', '{"a":1}', '{"a":2}') === undefined);
+        // Every check above exercises mergeNode directly, and every one of
+        // them stays green if the apply path stops calling it — which is the
+        // bug, not the helper. That has now happened three times in this
+        // suite (the D&D Beyond readers, the condition table, this), so it is
+        // worth guarding rather than remembering.
+        //
+        // _applyEntitySnapshot is module-scope and needs a real Firebase
+        // snapshot to drive, so this reads the source instead. A static check
+        // is weaker than a behavioural one and is here because the
+        // behavioural one is not reachable — not because it is preferable.
+        try {
+          const src = await (await fetch('/js/sync/realtime.js')).text();
+          const applyFn = src.slice(src.indexOf('function _applyEntitySnapshot'),
+                                    src.indexOf('function _patchLocalStorage'));
+          ok('draw: the apply path actually calls mergeNode',
+             /spec\.mergeNode\(/.test(applyFn),
+             'mergeNode is defined but never called when a node changes on both sides');
+        } catch(e){
+          ok('draw: the apply path actually calls mergeNode', false, 'could not read source: ' + e.message);
+        }
+
+        ok('draw: fog strokes merge the same way',
+           eqJ(JSON.parse(spec.mergeNode('fogStrokes', S(1), S(1, 2), S(1, 3))).map(o => o.p[0]), [1, 2, 3]));
+      }
+    }
+
     // ── Conditions ────────────────────────────────────────────────────────
     // Twelve conditions were tracked and displayed as badges while every
     // attack roll ignored all twelve — a prone, restrained or paralysed

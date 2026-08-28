@@ -266,6 +266,33 @@ const _ENTITY_KEYS = {
       }
       if (typeof paRender === 'function') paRender();
     },
+    // Three-way union for the nodes that are append-mostly lists rather than
+    // single objects. Strokes are opaque and carry no ids, so identity is the
+    // stroke itself — two people cannot draw a byte-identical freehand, and
+    // if they somehow did, one of the two is redundant anyway.
+    //
+    // Deletions are honoured, which is why this needs the base and not just
+    // the two sides: a stroke present in the base that one side has dropped
+    // was erased on purpose, and a plain union would resurrect it on the next
+    // sync — the classic undo that will not stay undone.
+    mergeNode(name, base, mine, theirs){
+      if (name !== 'drawings' && name !== 'fogStrokes') return undefined;
+      const arr = v => {
+        try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; }
+        catch(e){ return []; }
+      };
+      const key = o => JSON.stringify(o);
+      const B = new Set(arr(base).map(key));
+      const mineA = arr(mine), theirsA = arr(theirs);
+      const M = new Set(mineA.map(key)), T = new Set(theirsA.map(key));
+      const out = [];
+      // Ours first, in our order: anything we still have that they have not
+      // deleted since the base.
+      mineA.forEach(o => { const q = key(o); if (T.has(q) || !B.has(q)) out.push(o); });
+      // Then theirs that we have never seen, or that we have not deleted.
+      theirsA.forEach(o => { const q = key(o); if (!M.has(q) && !B.has(q)) out.push(o); });
+      return JSON.stringify(out);
+    },
     // The only nodes a PLAYER view may write. Mirrors what the battle map
     // panel accepts from a player over BroadcastChannel, so the two routes
     // can't drift: pencil strokes, and moves of tokens that ALREADY EXIST on
@@ -471,10 +498,22 @@ function _applyEntitySnapshot(k, snapVal){
     try {
       const localNodes = spec.explode(localStorage.getItem(k) || 'null');
       new Set([...Object.keys(localNodes), ...Object.keys(prevCache)]).forEach(n => {
-        if (localNodes[n] !== prevCache[n]){
-          if (localNodes[n] === undefined) delete merged[n];
-          else merged[n] = localNodes[n];
+        const base = prevCache[n], mine = localNodes[n], theirs = serverNodes[n];
+        if (mine === base) return;                 // we did not touch this node
+        // Both sides changed the same node. Taking ours wholesale is right
+        // for a token — one object, one owner, last write wins — and wrong
+        // for a list several people append to at once. The battle map
+        // drawings are one array in one node and both the DM and the players
+        // write it, so two people drawing at the same moment meant whoever
+        // pushed last erased the other one strokes.
+        if (theirs !== base && typeof spec.mergeNode === 'function'){
+          try {
+            const m = spec.mergeNode(n, base, mine, theirs);
+            if (m !== undefined){ merged[n] = m; return; }
+          } catch(e){ _diag('merge node ' + k + '/' + n, e); }
         }
+        if (mine === undefined) delete merged[n];
+        else merged[n] = mine;
       });
     } catch(e){ _diag('entity merge ' + k, e); }
   }
@@ -1287,6 +1326,14 @@ window.sktMapBlobGet = function(id){
     .then(snap => snap.val() || null)
     .catch(err => { _diag('map blob get', err); return null; });
 };
+// Read-only access to an entity spec, for the self test.
+//
+// The merge rules are the least testable and most consequential code in
+// this file — they decide whose work survives when two people change the
+// same thing — and they were reachable only by driving two live clients.
+// A stroke-losing merge shipped for exactly that reason.
+window.sktEntitySpec = function(key){ return _ENTITY_KEYS[key] || null; };
+
 window.realtimeFlush = function(){
   if (!_fbDb) return false;
   try { _flushDirtyKeys(); } catch(e){ return false; }
