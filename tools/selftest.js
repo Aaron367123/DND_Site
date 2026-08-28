@@ -2067,6 +2067,26 @@
       // rather than the arithmetic guessing.
       ok('rage: untyped damage is not silently halved',
          hit(true, 20, null) === 20, String(hit(true, 20, null)));
+      // A young red dragon bites for piercing AND fire in one attack. Rage
+      // resists the piercing and not the fire, so the two have to be resolved
+      // separately. Summing them under one label gives 15 or 30 depending on
+      // which label wins; the right answer is 20.
+      {
+        const T = panelDefs.turnview;
+        state.party = [{ id:'zzbite', name:'ZZ Bite', cls:'barbarian', level:5,
+                         hp:400, hpMax:400, ac:1, rage:true }];
+        state.combatants = [{ id:'zzbite', name:'ZZ Bite', isPC:true, hp:400, hpMax:400, ac:1 }];
+        const t = state.combatants[0];
+        const hit = parts => { t.hp = 400; state.party[0].hp = 400;
+          T._applyDamage(t, parts, false, false); return 400 - t.hp; };
+        ok('rage: a mixed-type attack resists only the part it should',
+           hit([{amt:20,type:'piercing'},{amt:10,type:'fire'}]) === 20,
+           String(hit([{amt:20,type:'piercing'},{amt:10,type:'fire'}])));
+        // The two wrong answers that check rules out, asserted so a future
+        // change to one-call-per-type cannot pass by coincidence.
+        ok('rage: 30 piercing alone would be 15', hit([{amt:30,type:'piercing'}]) === 15);
+        ok('rage: 30 fire alone would be 30',     hit([{amt:30,type:'fire'}]) === 30);
+      }
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
     }
 
