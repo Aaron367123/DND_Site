@@ -2202,6 +2202,142 @@
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
     }
 
+    // ── Conditions ────────────────────────────────────────────────────────
+    // Twelve conditions were tracked and displayed as badges while every
+    // attack roll ignored all twelve — a prone, restrained or paralysed
+    // target was attacked exactly like a healthy one.
+    {
+      const T = panelDefs.turnview;
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants);
+      const A0 = state.activeCombatantId;
+      state.party = [];
+      state.combatants = [
+        { id:'zzatk', name:'ZZ Atk', isPC:false, hp:50, hpMax:50, ac:12, conditions:[] },
+        { id:'zztgt', name:'ZZ Tgt', isPC:false, hp:50, hpMax:50, ac:12, conditions:[] },
+      ];
+      state.activeCombatantId = 'zzatk';
+      save();
+      openPanel('battlemap'); await sleep(400);
+      openPanel('turnview');  await sleep(400);
+      if (typeof sktEnsureCombatTokens === 'function') sktEnsureCombatTokens(true);
+      await sleep(200);
+      const cs = T._cs() || 50;
+      // Conditions plus a distance, since prone and the automatic crit both
+      // depend on how far apart the two are.
+      const mods = (atkC, tgtC, ft) => {
+        state.combatants[0].conditions = atkC;
+        state.combatants[1].conditions = tgtC;
+        const x = T._tokenFor(state.combatants[0]), y = T._tokenFor(state.combatants[1]);
+        if (x && y){ x.x = 0; x.y = 0; y.x = cs * (ft / T._ftPerCell()); y.y = 0; }
+        return T._condMods(state.combatants[0], state.combatants[1]);
+      };
+      ok('cond: both tokens are placed for the distance tests',
+         !!T._tokenFor(state.combatants[0]) && !!T._tokenFor(state.combatants[1]));
+
+      // The attacker’s own conditions.
+      ok('cond: a blinded attacker has disadvantage',
+         mods(['Blinded'], [], 5).dis.length === 1);
+      ok('cond: a poisoned attacker has disadvantage',
+         mods(['Poisoned'], [], 5).dis.length === 1);
+      ok('cond: a prone attacker has disadvantage',
+         mods(['Prone'], [], 5).dis.length === 1);
+      // The target’s.
+      ok('cond: a restrained target is attacked with advantage',
+         mods([], ['Restrained'], 5).adv.length === 1);
+      ok('cond: a stunned target is attacked with advantage',
+         mods([], ['Stunned'], 5).adv.length === 1);
+
+      // Prone is the one that cuts both ways, and the only reason the panel
+      // can tell is that it knows where the tokens are.
+      ok('cond: a prone target in melee gives advantage',
+         mods([], ['Prone'], 5).adv.length === 1 && mods([], ['Prone'], 5).dis.length === 0);
+      ok('cond: a prone target at range gives disadvantage',
+         mods([], ['Prone'], 30).dis.length === 1 && mods([], ['Prone'], 30).adv.length === 0);
+
+      // "A hit against a paralysed creature is a critical hit if the attacker
+      // is within 5 feet" — so the distance decides, not the condition alone.
+      ok('cond: paralysed within 5 ft is an automatic crit',
+         mods([], ['Paralyzed'], 5).autoCrit === true);
+      ok('cond: paralysed at range is advantage but no automatic crit',
+         mods([], ['Paralyzed'], 30).autoCrit === false
+      && mods([], ['Paralyzed'], 30).adv.length === 1);
+
+      // 5e does not stack or net these out: any advantage with any
+      // disadvantage is a straight roll.
+      {
+        const both = mods(['Blinded'], ['Restrained'], 5);
+        ok('cond: advantage and disadvantage are both collected',
+           both.adv.length === 1 && both.dis.length === 1);
+      }
+      // Conditions with no attack-roll effect must not invent one. Without
+      // this the checks above would pass with everything flagged.
+      // The checks above all exercise _condMods on its own, and every one of
+      // them stays green if _rollAttack stops calling it — which is the whole
+      // bug. These drive a real attack instead. The attacker is named Ogre
+      // because _attacksFor resolves the stat block by name.
+      {
+        const strip = h => String(h || '').replace(/<[^>]*>/g, '')
+                             .replace(/\s+/g, ' ').trim();
+        state.combatants[0].name = 'Ogre';
+        state.combatants[1].ac = 1;            // so every swing lands
+        state.combatants[1].hp = 400; state.combatants[1].hpMax = 400;
+        const swing = (atkC, tgtC, ft) => {
+          mods(atkC, tgtC, ft);
+          state.combatants[1].hp = 400;
+          T._armed = 'zztgt';
+          T._rollAttack(0, {});
+          return strip((T._body.querySelector('.tv-result') || {}).textContent || '');
+        };
+
+        const restr = swing([], ['Restrained'], 5);
+        ok('cond/roll: a restrained target actually rolls with advantage',
+           /adv/.test(restr) && /target restrained/.test(restr), restr.slice(0, 110));
+        // Two dice on the line, not one — advantage that is announced but
+        // not rolled would pass a text check alone.
+        ok('cond/roll: two dice were rolled and the higher kept',
+           /\d+\/\d+ → \d+ adv/.test(restr), restr.slice(0, 110));
+
+        const cancel = swing(['Blinded'], ['Restrained'], 5);
+        ok('cond/roll: opposing sources cancel to a straight roll',
+           /straight —/.test(cancel) && !/ adv| dis/.test(cancel.split('·')[1] || ''),
+           cancel.slice(0, 130));
+
+        // Paralysed within 5 ft: every hit is a critical hit, so this is not
+        // a matter of luck over four swings.
+        const near = [];
+        for (let i = 0; i < 4; i++) near.push(swing([], ['Paralyzed'], 5));
+        // A natural 1 misses whatever the AC is — correct, and it means the
+        // assertion is about the swings that LANDED, not all of them.
+        const landed = near.filter(x => !/^Miss/.test(x));
+        ok('cond/roll: enough swings landed to judge', landed.length >= 2, String(landed.length));
+        ok('cond/roll: every hit on a paralysed target in melee crits',
+           landed.every(x => /Critical hit/.test(x)),
+           landed.map(x => x.slice(0, 40)).join(' | '));
+        // Every landed swing crits, but only the ones that would NOT have
+        // crit on their own carry the note — a natural 20 needs no
+        // explanation, and labelling it "automatic" would be wrong.
+        ok('cond/roll: and it says why unless the die said it already',
+           landed.every(x => /automatic crit within 5 ft/.test(x) || /→ 20 adv/.test(x)),
+           landed.map(x => x.slice(0, 60)).join(' | '));
+        // At range it is advantage only. Asserted on the phrase rather than
+        // on the crit count, because a natural 20 will turn up eventually and
+        // would make a count-based check fail at random.
+        const far = [];
+        for (let i = 0; i < 4; i++) far.push(swing([], ['Paralyzed'], 30));
+        ok('cond/roll: no automatic crit at range',
+           far.every(x => !/automatic crit/.test(x)),
+           far.map(x => x.slice(0, 40)).join(' | '));
+      }
+
+      ok('cond: charmed and grappled change nothing',
+         mods(['Charmed'], ['Grappled'], 5).adv.length === 0
+      && mods(['Charmed'], ['Grappled'], 5).dis.length === 0);
+
+      state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
+      state.activeCombatantId = A0;
+      closePanel('turnview'); closePanel('battlemap'); save();
+    }
+
     // ── Disengage ─────────────────────────────────────────────────────────
     // The panel has detected opportunity attacks for as long as it could read
     // token positions, and has spent and logged the Disengage action for as

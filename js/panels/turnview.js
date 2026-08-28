@@ -699,6 +699,63 @@ registerPanel('turnview', {
     const dx = Math.abs(ta.x - tb.x) / cs, dy = Math.abs(ta.y - tb.y) / cs;
     return Math.round(Math.max(dx, dy)) * this._ftPerCell();
   },
+  // Conditions that change an attack roll, and nothing else. The panel has
+  // tracked and displayed twelve of them for a long time while every roll
+  // ignored all twelve: a prone, restrained or paralysed target was attacked
+  // exactly like a healthy one.
+  //
+  // Only the unambiguous ones are here. Charmed, Grappled, Deafened and
+  // Incapacitated have no direct effect on an attack roll, so they are
+  // absent rather than guessed at.
+  _COND_ATTACKER_DIS: ["blinded", "poisoned", "prone", "restrained"],
+  _COND_TARGET_ADV: ["blinded", "paralyzed", "petrified", "restrained",
+                     "stunned", "unconscious"],
+  // "A hit against a paralysed or unconscious creature is a critical hit if
+  // the attacker is within 5 feet." Needs the distance, so it degrades to
+  // nothing when either token is missing rather than guessing a crit.
+  _COND_AUTOCRIT: ["paralyzed", "unconscious"],
+  _hasCond(c, name){
+    return !!(c && Array.isArray(c.conditions)
+      && c.conditions.some(x => String(x).trim().toLowerCase() === name));
+  },
+  // Feet between two combatants, or null when either has no token. Chebyshev,
+  // like every other distance in this panel.
+  _ftBetween(a, b){
+    const ta = this._tokenFor(a), tb = this._tokenFor(b);
+    if (!ta || !tb || ta.x == null || tb.x == null) return null;
+    const cs = this._cs() || 50;
+    return Math.round(Math.max(Math.abs(ta.x - tb.x), Math.abs(ta.y - tb.y)) / cs)
+         * this._ftPerCell();
+  },
+  // What the two creatures’ conditions do to this attack roll.
+  _condMods(attacker, target){
+    const adv = [], dis = [];
+    let autoCrit = false;
+    this._COND_ATTACKER_DIS.forEach(n => {
+      if (this._hasCond(attacker, n)) dis.push(n);
+    });
+    // Frightened is disadvantage only "while the source of your fear is
+    // within line of sight", and nothing here records what frightened them.
+    // Applied, because the thing you are swinging at usually IS the source,
+    // and labelled, because sometimes it is not.
+    if (this._hasCond(attacker, "frightened")) dis.push("frightened (if the source is in sight)");
+    this._COND_TARGET_ADV.forEach(n => {
+      if (this._hasCond(target, n)) adv.push("target " + n);
+    });
+    // Prone cuts both ways: advantage in melee, disadvantage at range.
+    if (this._hasCond(target, "prone")){
+      const ft = this._ftBetween(attacker, target);
+      if (ft == null) adv.push("target prone (assuming melee — no tokens to measure)");
+      else if (ft <= 5) adv.push("target prone, within 5 ft");
+      else dis.push("target prone, " + ft + " ft away");
+    }
+    if (this._COND_AUTOCRIT.some(n => this._hasCond(target, n))){
+      const ft = this._ftBetween(attacker, target);
+      if (ft != null && ft <= 5) autoCrit = true;
+    }
+    return { adv, dis, autoCrit };
+  },
+
   _reachOf(c){
     if (c.isPC) return 5;
     const entry = this._entryOf(c);
@@ -2176,15 +2233,32 @@ registerPanel('turnview', {
     // straight roll — they don't stack or net out. So the toggle and a dodging
     // target are collected as two booleans, not summed.
     const asked = o.mode != null ? o.mode : this._adv;
-    const adv = asked > 0, dis = asked < 0 || !!t.dodging;
+    const cm = this._condMods(c, t);
+    // Every source collected, then reduced once. 5e does not stack or net
+    // them out: any advantage and any disadvantage together is a straight
+    // roll, however many of each there are.
+    const advWhy = cm.adv.slice(), disWhy = cm.dis.slice();
+    if (asked > 0) advWhy.unshift('called');
+    if (asked < 0) disWhy.unshift('called');
+    if (t.dodging) disWhy.push('target dodging');
+    const adv = advWhy.length > 0, dis = disWhy.length > 0;
     const mode = (adv && dis) ? 0 : adv ? 1 : dis ? -1 : 0;
-    let nat = this._d(20), hitNote = '';
-    if (t.dodging) hitNote = adv ? 'dodge, cancelled by advantage' : 'target dodging';
+    let nat = this._d(20);
+    // Say which reasons applied, and say when they cancelled — a DM watching
+    // a straight roll on a prone, restrained target needs to know the panel
+    // saw both and did not simply miss them.
+    const whyTxt = (list) => list.join(', ');
+    let hitNote = '';
+    if (adv && dis){
+      hitNote = 'straight — ' + whyTxt(advWhy) + ' vs ' + whyTxt(disWhy);
+    } else if (adv || dis){
+      hitNote = whyTxt(adv ? advWhy : disWhy);
+    }
     if (mode){
       const n2 = this._d(20);
       const keep = mode > 0 ? Math.max(nat, n2) : Math.min(nat, n2);
       hitNote = `${nat}/${n2} → ${keep} ${mode > 0 ? 'adv' : 'dis'}`
-        + (t.dodging && mode < 0 ? ' (dodging)' : '');
+        + (hitNote ? ` (${hitNote})` : '');
       nat = keep;
     }
     if (a.recharge) this._markRechargeSpent(c, a.name);
@@ -2192,8 +2266,15 @@ registerPanel('turnview', {
     if (!o.queued || (this._queue && this._queue.i === 0)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     const total = nat + bonus;
-    const crit = nat === 20;
-    const hit = crit || (nat !== 1 && total >= (t.ac || 10));
+    // "Any attack that hits a paralysed or unconscious creature is a
+    // critical hit if the attacker is within 5 feet of it." It has to be a
+    // hit first, so this is applied after the comparison and not before.
+    const natCrit = nat === 20;
+    const hit = natCrit || (nat !== 1 && total >= (t.ac || 10));
+    const crit = natCrit || (hit && cm.autoCrit);
+    if (crit && !natCrit){
+      hitNote = (hitNote ? hitNote + ' · ' : '') + 'automatic crit within 5 ft';
+    }
     // Damage is carried as PARTS all the way to the tracker, never flattened.
     let parts = [], detail = '';
     const dbl = d => String(d).replace(/^(\d*)d/, (s, n) => (2 * (parseInt(n || '1'))) + 'd');
