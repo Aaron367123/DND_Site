@@ -2202,6 +2202,77 @@
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
     }
 
+    // ── Rivals ────────────────────────────────────────────────────────────
+    // A character with a full sheet who fights AGAINST the party. Sides used
+    // to be read straight off isPC, which conflated "has a sheet in the party
+    // roster" with "is on the party’s side" and left no way to express one
+    // without the other.
+    {
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants);
+      const A0 = state.activeCombatantId;
+      state.party = [
+        { id:'zzhero',  name:'ZZ Hero',  cls:'fighter', level:5, hp:40, hpMax:40, ac:16, resources:[] },
+        { id:'zzrival', name:'ZZ Rival', cls:'rogue',   level:5, hp:35, hpMax:35, ac:15, resources:[], foe:true },
+      ];
+      state.combatants = [
+        { id:'zzhero',  name:'ZZ Hero',  isPC:true,  hp:40, hpMax:40, ac:16 },
+        { id:'zzrival', name:'ZZ Rival', isPC:true,  hp:35, hpMax:35, ac:15 },
+        { id:'zzogre',  name:'ZZ Ogre',  isPC:false, hp:59, hpMax:59, ac:11 },
+      ];
+      state.activeCombatantId = 'zzhero';
+      save();
+
+      ok('rival: a party member is on the party side',
+         sktSideOf(state.combatants[0]) === 'party');
+      ok('rival: a rival is on the enemy side even though it has a sheet',
+         sktSideOf(state.combatants[1]) === 'foe' && state.combatants[1].isPC === true);
+      ok('rival: a monster is still a foe', sktSideOf(state.combatants[2]) === 'foe');
+      ok('rival: the players’ party excludes it',
+         eqJ(sktPlayerParty().map(p => p.name), ['ZZ Hero']),
+         JSON.stringify(sktPlayerParty().map(p => p.name)));
+
+      // The reason sides exist at all: a rival must provoke from the party
+      // and not from the monsters it is fighting alongside.
+      openPanel('battlemap'); await sleep(400);
+      openPanel('turnview');  await sleep(400);
+      if (typeof sktEnsureCombatTokens === 'function') sktEnsureCombatTokens(true);
+      await sleep(200);
+      const T2 = panelDefs.turnview;
+      const cs2 = T2._cs() || 50;
+      const tk = id => T2._tokenFor(state.combatants.find(c => c.id === id));
+      const th = tk('zzhero'), tr = tk('zzrival'), to = tk('zzogre');
+      ok('rival: tokens are placed for the reach test', !!(th && tr && to));
+      if (th && tr && to){
+        th.x = 0; th.y = 0; to.x = 0; to.y = cs2;   // both adjacent to the rival
+        tr.x = cs2; tr.y = 0;
+        const from = { x: tr.x, y: tr.y };
+        tr.x = cs2 * 5;                             // and it walks away
+        state.combatants.forEach(c => { c.reactionUsed = false; });
+        const who = T2._provokedBy(state.combatants[1], from).map(c => c.name);
+        ok('rival: it provokes from the party', who.indexOf('ZZ Hero') >= 0, JSON.stringify(who));
+        // The half that was broken before: without a side, a sheet-backed
+        // enemy provoked from its own allies.
+        ok('rival: and not from the monster beside it',
+           who.indexOf('ZZ Ogre') < 0, JSON.stringify(who));
+      }
+
+      // It has to read as an enemy on the tracker, or it looks like a party
+      // member in the wrong row.
+      openPanel('combat'); await sleep(300);
+      panelDefs.combat._render(); await sleep(300);
+      {
+        const html = panelDefs.combat._body ? panelDefs.combat._body.innerHTML : '';
+        ok('rival: the combat card badges it', /foe-pill/.test(html));
+        // One badge, on the rival — not on everything with a sheet.
+        ok('rival: only the rival is badged',
+           (html.match(/foe-pill/g) || []).length === 1,
+           String((html.match(/foe-pill/g) || []).length));
+      }
+      closePanel('combat'); closePanel('turnview'); closePanel('battlemap');
+      state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
+      state.activeCombatantId = A0; save();
+    }
+
     // ── Concurrent drawing ────────────────────────────────────────────────
     // The battle map keeps every drawing in ONE node holding ONE array, and
     // both the DM and the players write it. The entity merge kept whichever
@@ -2592,6 +2663,29 @@
   // ══════════════════════════════════════════════════════════ player view
   if (MODE === 'player'){
     ok('player: body is in player mode', document.body.classList.contains('player-mode'));
+
+    // A rival lives in state.party like anyone else, so anything reading
+    // that array directly puts its hit points on every phone at the table.
+    if (typeof paTab !== 'undefined' && typeof paRender === 'function'){
+      const P0 = JSON.stringify(state.party), S0 = (state.sharedPanels || []).slice();
+      const tab0 = paTab;
+      state.party = [
+        { id:'zzhero',  name:'ZZ Hero',  cls:'fighter', hp:40, hpMax:40, ac:16 },
+        { id:'zzrival', name:'ZZ Rival', cls:'rogue',   hp:35, hpMax:35, ac:15, foe:true },
+      ];
+      state.sharedPanels = ['party']; saveSharedPanels();
+      paTab = 'party'; paRender(); await sleep(400);
+      const txt = (document.getElementById('pa-screen') || {}).textContent || '';
+      ok('player: the party tab shows a party member', /ZZ Hero/.test(txt));
+      ok('player: and hides the rival', !/ZZ Rival/.test(txt), txt.slice(0, 80));
+      // A player must not be able to claim the rival as their character.
+      paSetPc(null); paRender(); await sleep(350);
+      const pick = (document.getElementById('pa-screen') || {}).textContent || '';
+      ok('player: the rival is not offered as who you are',
+         /ZZ Hero/.test(pick) && !/ZZ Rival/.test(pick), pick.slice(0, 80));
+      state.party = JSON.parse(P0); state.sharedPanels = S0; saveSharedPanels();
+      paTab = tab0; paRender(); await sleep(200);
+    }
 
     // Time and Sky. Shared like any other panel, and read-only here: the
     // controls are hidden by CSS and realtime.js refuses to push either key

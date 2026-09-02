@@ -662,6 +662,10 @@ registerPanel('combat',{
     // to just the "+", the whole row uses ~14 px instead of the old ~22 px.
     // For PCs, concentration comes from the party slot (single source of
     // truth); for monsters, it lives on the combatant itself.
+    // A rival is sheet-backed like a party member and renders like one, so
+    // without this it reads as a party member who wandered into the wrong
+    // row — the one thing a DM must not misread mid-fight.
+    const isFoePc = isPC && !!partyMatch?.foe;
     const conc = isPC ? (partyMatch?.concentration || '') : (c.concentration || '');
     // Rage / Wild Shape — PC-only, mirrored from the party slot. Chips are
     // visual mirrors; toggling them still happens in the party tracker
@@ -670,6 +674,12 @@ registerPanel('combat',{
     const ragingPc = !!(isPC && partyMatch?.rage);
     const wildshape = isPC && partyMatch?.wildshape && partyMatch.wildshape.name ? partyMatch.wildshape : null;
     const chips = [];
+    // First in the row on purpose. Everything else on this card is a state
+    // that changes during a fight; this one says which side the creature is
+    // on, and it is the fact a DM most needs at a glance.
+    if (isFoePc){
+      chips.push(`<span class="status-pill foe-pill" title="A rival — a character with a full sheet who fights against the party. Provokes opportunity attacks from the party rather than alongside it, and is hidden from the player view. Change it in Manage Party → Edit details.">☠ RIVAL</span>`);
+    }
     if (ragingPc){
       const rLeft = partyMatch && partyMatch.rageRounds;
       chips.push(`<span class="status-pill rage-pill" title="Raging — Advantage on STR checks/saves · Resistance to bludgeoning/piercing/slashing · Can't cast or concentrate${rLeft ? ' · ' + rLeft + ' round' + (rLeft===1?'':'s') + ' left' : ''} · Toggle in the Party tracker">💢 RAGING${rLeft ? ' <span class="rage-rounds">'+rLeft+'</span>' : ''}</span>`);

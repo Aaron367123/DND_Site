@@ -546,7 +546,9 @@ function paDeathBlock(c){
 // First run: pick who you are. Also reachable later via Change, because a
 // shared tablet passed round the table is one device and several players.
 function paPickerScreen(){
-  const list = (state.party || []);
+  // sktPlayerParty, not state.party: a rival is stored in the same array
+  // and would otherwise appear here with its hit points on every phone.
+  const list = sktPlayerParty();
   if (!list.length){
     return `<div class="pa-card">${typeof emptyState === 'function' ? emptyState({
       icon:'i-heart', title:'No party yet',
@@ -649,7 +651,9 @@ function paSheetDetail(p){
 }
 
 function paPartyScreen(){
-  const list = state.party || [];
+  // A rival is not one of the players, so it is not on the list of who you
+  // might be.
+  const list = sktPlayerParty();
   const meId = paMe().pcId;
   if (!list.length) return `<div class="pa-card"><div class="pa-empty">No party yet.</div></div>`;
   return `<div class="pa-card">${list.map(p => {

@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
-<link rel="stylesheet" href="styles/main.css?v=177721df17">
+<link rel="stylesheet" href="styles/main.css?v=39793a262d">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -382,20 +382,20 @@
      bestiaryPortraitPath). Must load before anything renders a portrait. -->
 <script defer src="js/generated/token-index.js?v=e043a461be"></script>
 <!-- 2. Pure utilities (no deps) -->
-<script defer src="js/core/utils.js?v=2adfa184c6"></script>
+<script defer src="js/core/utils.js?v=feef2f3624"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/core/state.js?v=3360b6540c"></script>
 <!-- 4. Window manager (depends on state) -->
 <script defer src="js/core/window-manager.js?v=5ba37f5fde"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=a3c3a8ece2"></script>
+<script defer src="js/panels/combat.js?v=15bf1b9e98"></script>
 <script defer src="js/panels/attacks.js?v=cbee1aeeb4"></script>
 <!-- Turn View reads combat, attacks and battlemap through panelDefs at call
      time, so load order only has to put it among the panels. -->
 <script defer src="js/generated/reactions.js?v=faa668dc18"></script>
 <script defer src="js/generated/rules.js?v=8efb8beae9"></script>
-<script defer src="js/panels/turnview.js?v=e0ba651c34"></script>
-<script defer src="js/panels/party.js?v=bbf4c68ecf"></script>
+<script defer src="js/panels/turnview.js?v=7919030205"></script>
+<script defer src="js/panels/party.js?v=c648f7cb63"></script>
 <script defer src="js/panels/shop.js?v=fadf7d5fe3"></script>
 <script defer src="js/sync/notes-sync.js?v=8c42540638"></script>
 <script defer src="js/sync/dropbox-config.js?v=ccf8533d50"></script>
@@ -425,7 +425,7 @@
 <script defer src="js/ui/zoom-pan.js?v=31a2882b02"></script>
 <script defer src="js/ui/workspaces.js?v=bdaf579267"></script>
 <script defer src="js/features/pdf-import.js?v=06787122c5"></script>
-<script defer src="js/player/player-app.js?v=12fbc158a2"></script>
+<script defer src="js/player/player-app.js?v=7783f4df68"></script>
 <script defer src="js/ui/player-view.js?v=7519877ed8"></script>
 <script defer src="js/sync/realtime.js?v=ca85d83c67"></script>
 <script defer src="js/ui/tutorial.js?v=e47e670b86"></script>

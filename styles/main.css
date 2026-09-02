@@ -4308,6 +4308,14 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 /* Activatable rows are <details class="feat-block"> like the rest of the
    tab, so they inherit its layout. Only the extra bits are styled here. */
 .feat-lvl.act{background:rgba(212,165,116,.16); color:var(--accent); letter-spacing:.04em}
+/* A rival: sheet-backed like a party member, fighting against them. Red
+   rather than the accent, because the whole point is that it must not read
+   as one of the party at a glance. */
+.status-pill.foe-pill{background:rgba(190,70,60,.20); color:#e58a7f;
+  border-color:rgba(190,70,60,.5); font-weight:700; letter-spacing:.04em}
+.mp-side-row{display:flex; align-items:center; gap:8px; margin:6px 0;
+  font-size:var(--fs-sm); cursor:pointer}
+.mp-side-row input{margin:0}
 .mapsel-upload-note{font-size:var(--fs-2xs); color:var(--warning, #d9a441);
   letter-spacing:.02em; align-self:center; cursor:help}
 .feat-cost{font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;

@@ -1432,6 +1432,35 @@ function sktActionShort(action){
        : s === 'special'      ? 'SPEC'  : s === 'free action'   ? 'FREE'
        : s === 'legendary action' ? 'LEG' : String(action || '—').toUpperCase();
 }
+// ── Which side a combatant fights for ───────────────────────────────────────
+//
+// This used to be read straight off isPC, which conflated two unrelated
+// facts: "has a character sheet in the party roster" and "is on the party’s
+// side". A rival adventuring party, a boss built on class levels, an evil
+// duplicate of a player — all of them want the first without the second,
+// and there was no way to say so.
+//
+// isPC keeps its old meaning: this combatant is backed by a record in
+// state.party. The record itself now says whose side it is on.
+function sktPartyRecord(c){
+  if (!c || !c.isPC || typeof state === 'undefined') return null;
+  return (state.party || []).find(p => p.id === c.id) || null;
+}
+function sktIsFoeRecord(p){ return !!(p && p.foe); }
+// 'party' or 'foe'. Monsters are always foes; a sheet-backed character is
+// whichever its record says.
+function sktSideOf(c){
+  if (!c) return 'foe';
+  if (!c.isPC) return 'foe';
+  return sktIsFoeRecord(sktPartyRecord(c)) ? 'foe' : 'party';
+}
+// The characters that belong to the players. Everything player-facing reads
+// this rather than state.party directly, or a rival’s hit points end up on
+// every phone at the table.
+function sktPlayerParty(){
+  if (typeof state === 'undefined') return [];
+  return (state.party || []).filter(p => !sktIsFoeRecord(p));
+}
 // ── Activatable features, read off an imported sheet ────────────────────────
 //
 // A D&D Beyond sheet already says everything needed to offer a character's

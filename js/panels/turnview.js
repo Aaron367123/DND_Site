@@ -772,7 +772,9 @@ registerPanel('turnview', {
     }
     return reach;
   },
-  _sideOf(c){ return c.isPC ? 'party' : 'foe'; },
+  // Was `c.isPC ? party : foe`, which made a sheet-backed enemy provoke
+  // opportunity attacks from its own allies and none from the party.
+  _sideOf(c){ return sktSideOf(c); },
 
   // ─── Who can react to this ────────────────────────────────────────────────
   _gatherReactions(o){

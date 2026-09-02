@@ -2116,6 +2116,7 @@ registerPanel('party',{
         <div class="mp-foot">
           <span class="mp-count">${state.party.length} member${state.party.length===1?'':'s'}</span>
           <button class="btn primary" data-act="mp-add">+ Add Member</button>
+          <button class="btn" data-act="mp-add-foe" title="A character with a full sheet who fights AGAINST the party — a rival adventurer, a boss built on class levels, a duplicate of a player. Same editor and the same PDF import as a party member; the players never see it.">+ Add Rival</button>
         </div>
       </div>`;
       wire();
@@ -2159,12 +2160,19 @@ registerPanel('party',{
           renderModal();
         });
       }));
-      backdrop.querySelector('[data-act="mp-add"]')?.addEventListener('click', () => {
-        state.party.push({id:uid(),name:'New Character',cls:'fighter',icon:'⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,inspiration:false,resources:[]});
+      // One record shape for both, so everything downstream — the sheet, the
+      // PDF import, the Turn View, the activatable features — works on a
+      // rival without knowing it is one.
+      const addMember = (foe) => {
+        state.party.push({id:uid(),name: foe ? 'New Rival' : 'New Character',
+          cls:'fighter',icon: foe ? '☠' : '⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,
+          inspiration:false,resources:[], ...(foe ? {foe:true} : {})});
         save();
         this._render();
         renderModal();
-      });
+      };
+      backdrop.querySelector('[data-act="mp-add"]')?.addEventListener('click', () => addMember(false));
+      backdrop.querySelector('[data-act="mp-add-foe"]')?.addEventListener('click', () => addMember(true));
       backdrop.querySelector('[data-act="mp-close"]')?.addEventListener('click', () => backdrop.remove());
       this._wireMpResize();
     };
@@ -2313,6 +2321,9 @@ registerPanel('party',{
           <div class="mp-edit-section">
             <div class="mp-edit-grid">
               <label>Class<input class="mp-input" data-k="cls" value="${esc(c.cls||'')}" placeholder="Fighter, Wizard, …"></label>
+              <label class="mp-side-row" title="A rival has the same sheet as a party member but fights against them: they provoke opportunity attacks from the party rather than alongside it, they are badged as an enemy in the tracker, and they never appear in the player view.">
+                <input type="checkbox" data-k-foe ${c.foe ? 'checked' : ''}>
+                <span>Rival — fights against the party</span></label>
               <label>Subclass<input class="mp-input" data-k="subclass" value="${esc(c.subclass||'')}" placeholder="Battle Master, Evocation, …"></label>
               <label>Level<input class="mp-input" type="number" data-k="level" value="${c.level==null?'':c.level}"></label>
               <label>Race<input class="mp-input" data-k="race" value="${esc(c.race||'')}" placeholder="Human, High Elf, …"></label>
@@ -2359,6 +2370,15 @@ registerPanel('party',{
       wire();
     };
     const wire = () => {
+      // Its own handler: the generic one below reads .value, and a checkbox
+      // reports "on" there whether it is ticked or not.
+      const foeBox = backdrop.querySelector('[data-k-foe]');
+      if (foeBox) foeBox.addEventListener('change', e => {
+        const next = {...state.party[i]};
+        if (e.target.checked) next.foe = true; else delete next.foe;
+        state.party[i] = next;
+        save(); this._render(); renderModal();
+      });
       backdrop.querySelectorAll('input.mp-input[data-k],select.mp-input[data-k]').forEach(el => el.addEventListener('change', e => {
         const k = e.target.dataset.k;
         let v = e.target.value;
