@@ -118,7 +118,19 @@ function _sktUnstash(id){
   // key the incoming campaign has never written keeps the old value and the
   // two campaigns quietly share a notes tree.
   Object.keys(_sktLiveKeys()).forEach(k => { try { localStorage.removeItem(k); } catch(e){} });
-  if (!data) return false;                     // a new campaign: start empty
+  if (!data){
+    // A campaign with nothing stored is BRAND NEW, and "no key" is not the
+    // same as "empty" — state.js falls back to DEFAULT_PARTY when the party
+    // key is missing, so a new campaign came up holding the app's five demo
+    // characters. Those demo names are the ones the app ships with, so a new
+    // campaign looked like a half-copy of an existing one.
+    //
+    // Written explicitly rather than left absent. Only the domains whose
+    // default is sample content need it; everything else is already empty
+    // when its key is missing.
+    try { localStorage.setItem('skt-party-v1', '[]'); } catch(e){}
+    return false;
+  }
   Object.keys(data).forEach(k => { try { localStorage.setItem(k, data[k]); } catch(e){} });
   return true;
 }

@@ -4329,6 +4329,14 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
   white-space:nowrap; font-weight:600}
 .camp-row-tag{font-size:var(--fs-2xs); color:var(--accent); text-transform:uppercase;
   letter-spacing:.05em; flex-shrink:0}
+/* The name / confirm dialog. Narrow on purpose — it holds one field, and a
+   full-width modal for one input reads as though something is missing. */
+.camp-ask{width:420px; max-width:92vw}
+.camp-ask h3{margin:0 0 8px}
+.camp-ask .modal-field{margin-bottom:18px}
+.camp-ask .modal-field input{width:100%; box-sizing:border-box}
+.camp-ask-help{margin:0 0 14px; font-size:var(--fs-sm); color:var(--text-muted);
+  line-height:1.45}
 .camp-warn{margin:0 0 12px; padding:8px 10px; border-radius:var(--r-sm);
   font-size:var(--fs-sm); background:rgba(212,165,116,.10);
   border:1px solid rgba(212,165,116,.45); color:var(--text)}

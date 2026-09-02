@@ -9,6 +9,53 @@ function _campEsc(s){
     c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
+// A styled replacement for prompt(). The native one is an operating-system
+// dialog dropped into the middle of a themed app — wrong font, wrong
+// colours, wrong position, and on some browsers a "prevent this page from
+// creating more dialogs" checkbox that can disable it for the rest of the
+// session.
+//
+// Resolves to the typed string, or null if cancelled — the same contract
+// prompt() had, so the callers read the same way.
+function sktAskText(opts){
+  const o = opts || {};
+  return new Promise(resolve => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    let done = false;
+    const finish = v => { if (done) return; done = true; backdrop.remove(); resolve(v); };
+    backdrop.innerHTML = `<div class="modal camp-ask" role="dialog" aria-modal="true">
+      <h3>${_campEsc(o.title || "Name")}</h3>
+      ${o.help ? `<p class="camp-ask-help">${_campEsc(o.help)}</p>` : ""}
+      <div class="modal-field">
+        <label for="camp-ask-input">${_campEsc(o.label || "Name")}</label>
+        <input id="camp-ask-input" type="text" autocomplete="off" spellcheck="false"
+               value="${_campEsc(o.value || "")}" placeholder="${_campEsc(o.placeholder || "")}">
+      </div>
+      <div class="modal-actions">
+        <button class="btn" data-ask-cancel>Cancel</button>
+        <button class="btn ${o.danger ? "danger" : "primary"}" data-ask-ok>${_campEsc(o.confirm || "Save")}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    const input = backdrop.querySelector("#camp-ask-input");
+    const ok = () => finish(input.value);
+    backdrop.querySelector("[data-ask-ok]").addEventListener("click", ok);
+    backdrop.querySelector("[data-ask-cancel]").addEventListener("click", () => finish(null));
+    backdrop.addEventListener("mousedown", e => { if (e.target === backdrop) finish(null); });
+    // Enter to accept, Escape to cancel. Keyed on the dialog rather than the
+    // document so it cannot swallow a shortcut belonging to the panel behind.
+    backdrop.addEventListener("keydown", e => {
+      if (e.key === "Enter"){ e.preventDefault(); ok(); }
+      else if (e.key === "Escape"){ e.preventDefault(); finish(null); }
+    });
+    // Focus and select, so typing replaces the old name rather than
+    // appending to it — which is what a rename almost always wants.
+    input.focus();
+    input.select();
+  });
+}
+
 function sktRefreshCampaignChip(){
   const el = document.getElementById('campaign-name');
   if (el) el.textContent = sktActiveCampaignName();
@@ -49,8 +96,15 @@ function sktOpenCampaignManager(){
     </div>`;
 
     backdrop.querySelector('[data-camp-close]').addEventListener('click', close);
-    backdrop.querySelector('[data-camp-new]').addEventListener('click', () => {
-      const name = prompt('Name the new campaign:', 'New Campaign');
+    backdrop.querySelector('[data-camp-new]').addEventListener('click', async () => {
+      const name = await sktAskText({
+        title: 'New campaign',
+        label: 'Campaign name',
+        placeholder: 'Curse of Strahd',
+        confirm: 'Create',
+        help: 'It starts empty — a fresh party, notes, maps and clock — with its own '
+            + 'live sync and its own player link.',
+      });
       if (name == null) return;
       const id = sktCreateCampaign(name.trim() || 'New Campaign');
       // Straight into it — creating one and then having to switch is a step
@@ -60,9 +114,14 @@ function sktOpenCampaignManager(){
     backdrop.querySelectorAll('[data-camp-open]').forEach(b =>
       b.addEventListener('click', () => _switchTo(b.dataset.campOpen)));
     backdrop.querySelectorAll('[data-camp-rename]').forEach(b =>
-      b.addEventListener('click', () => {
+      b.addEventListener('click', async () => {
         const c = sktCampaigns().find(x => x.id === b.dataset.campRename);
-        const name = prompt('Rename campaign:', c ? c.name : '');
+        const name = await sktAskText({
+          title: 'Rename campaign',
+          label: 'Campaign name',
+          value: c ? c.name : '',
+          confirm: 'Rename',
+        });
         if (name == null) return;
         sktRenameCampaign(b.dataset.campRename, name.trim());
         sktRefreshCampaignChip();
@@ -71,20 +130,37 @@ function sktOpenCampaignManager(){
     backdrop.querySelectorAll('[data-camp-link]').forEach(b =>
       b.addEventListener('click', () => {
         const url = sktPlayerLink(b.dataset.campLink);
+        const c = sktCampaigns().find(x => x.id === b.dataset.campLink);
         const done = () => showToast('Player link copied — send it to that group');
-        try {
-          navigator.clipboard.writeText(url).then(done, () => prompt('Copy this link:', url));
-        } catch(e){ prompt('Copy this link:', url); }
+        // Clipboard access is refused often enough to matter: no permission,
+        // an insecure origin, an older browser. Falling back to a box the
+        // link is already selected in beats failing silently.
+        const manual = () => sktAskText({
+          title: 'Player link' + (c ? ' — ' + c.name : ''),
+          label: 'Copy this and send it to that group',
+          value: url,
+          confirm: 'Done',
+          help: 'Anyone who opens it lands in this campaign, whichever one you have open.',
+        });
+        try { navigator.clipboard.writeText(url).then(done, manual); }
+        catch(e){ manual(); }
       }));
     backdrop.querySelectorAll('[data-camp-del]').forEach(b =>
-      b.addEventListener('click', () => {
+      b.addEventListener('click', async () => {
         const c = sktCampaigns().find(x => x.id === b.dataset.campDel);
         if (!c) return;
-        // Typing the name, not an OK button. This deletes a campaign's whole
-        // history from this browser and there is no undo.
-        const typed = prompt('This deletes "' + c.name + '" and everything in it on this '
-          + 'device — party, notes, maps, the lot. It cannot be undone.\n\n'
-          + 'Type the campaign name to confirm:');
+        // Typing the name rather than clicking OK. This erases a campaign’s
+        // whole history from this browser and there is no undo, so the
+        // friction is the point.
+        const typed = await sktAskText({
+          title: 'Delete ' + c.name + '?',
+          label: 'Type the campaign name to confirm',
+          placeholder: c.name,
+          confirm: 'Delete for ever',
+          danger: true,
+          help: 'This removes the party, notes, maps and everything else in '
+              + c.name + ' from this device. It cannot be undone.',
+        });
         if (typed == null) return;
         if (typed.trim() !== c.name){ showToast('Name did not match — nothing deleted'); return; }
         if (sktDeleteCampaign(c.id)) { showToast('Deleted ' + c.name); render(); }

@@ -2212,6 +2212,47 @@
       const PARTY = 'skt-party-v1';
       const keep = localStorage.getItem(PARTY);
 
+      // Naming a campaign used to use the browser's own prompt() — an
+      // operating-system dialog in the middle of a themed app, and one that
+      // some browsers let a user disable for the rest of the session with a
+      // "prevent more dialogs" tick. A native prompt would also hang this
+      // suite outright, so reaching the end of this block is half the check.
+      if (typeof sktOpenCampaignManager === 'function'){
+        const realPrompt = window.prompt;
+        let native = false;
+        window.prompt = () => { native = true; return null; };
+        sktOpenCampaignManager();
+        await sleep(250);
+        const newBtn = document.querySelector('[data-camp-new]');
+        ok('campaign: the manager offers a new-campaign button', !!newBtn);
+        if (newBtn){
+          newBtn.click();
+          await sleep(250);
+          const dlg = document.querySelector('.camp-ask');
+          ok('campaign: naming one uses the app\u2019s own dialog', !!dlg);
+          ok('campaign: and not the browser\u2019s prompt', native === false);
+          if (dlg){
+            const input = dlg.querySelector('#camp-ask-input');
+            // Focused, or you have a dialog you must click before typing.
+            ok('campaign: the field is focused ready to type',
+               document.activeElement === input);
+            // Measured, not asserted from the markup: a field that overflows
+            // its own dialog is the failure this kind of check exists for.
+            const d = dlg.getBoundingClientRect(), i = input.getBoundingClientRect();
+            ok('campaign: the field sits inside the dialog',
+               i.right <= d.right + 1 && i.left >= d.left - 1,
+               Math.round(i.width) + ' in ' + Math.round(d.width));
+            ok('campaign: it has both a cancel and a confirm',
+               dlg.querySelectorAll('.modal-actions .btn').length === 2);
+            dlg.querySelector('[data-ask-cancel]').click();
+            await sleep(150);
+            ok('campaign: cancelling closes it', !document.querySelector('.camp-ask'));
+          }
+        }
+        window.prompt = realPrompt;
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+      }
+
       ok('campaign: an existing browser is adopted rather than emptied',
          sktCampaigns().length >= 1 && !!sktActiveCampaign());
       // The whole point of the Firebase side: the path carries the id, so
@@ -2269,6 +2310,46 @@
 
       // Deleting the campaign you are standing in would leave the live keys
       // with nowhere to belong.
+      // "Does the app still WORK after a switch?" — the checks above prove
+      // the keys move and the sync root changes, which is not the same
+      // question. A switch reloads the page, and the page it reloads into
+      // has no data at all, which nothing else in this suite exercises.
+      {
+        const idC = sktCreateCampaign('ZZ Fresh');
+        sktSwitchCampaign(idC);
+        // "No key" is not "empty": state.js falls back to DEFAULT_PARTY when
+        // the party key is missing, so a new campaign came up holding the
+        // five demo characters the app ships with and looked like a
+        // half-copy of a real one.
+        {
+          let p = null;
+          try { p = JSON.parse(localStorage.getItem('skt-party-v1') || 'null'); } catch(e){}
+          ok('campaign: a new one has an explicitly empty party, not the demo one',
+             Array.isArray(p) && p.length === 0, JSON.stringify(p));
+        }
+        // Now the real question: with nothing stored, does anything still
+        // render? Panels that assume a party or a map exist would throw here
+        // and nowhere else.
+        load();
+        const ids = ['combat', 'party', 'turnview', 'battlemap', 'notes', 'loot',
+                     'encounter', 'shop', 'time', 'weather'];
+        const broke = [];
+        for (const id of ids){
+          const before = errs.length;
+          try { openPanel(id); } catch(e){ errs.push(id + ': ' + e.message); }
+          await sleep(180);
+          const d = panelDefs[id];
+          if (!d || !d._body || !d._body.children.length || errs.length !== before) broke.push(id);
+          try { closePanel(id); } catch(e){}
+        }
+        ok('campaign: every panel still renders on a campaign with no data',
+           broke.length === 0, broke.join(', '));
+
+        sktSwitchCampaign(A0);
+        load();
+        sktDeleteCampaign(idC);
+      }
+
       ok('campaign: deleting the open one is refused',
          sktDeleteCampaign(sktActiveCampaign()) === false);
       ok('campaign: deleting another works', sktDeleteCampaign(idB) === true);

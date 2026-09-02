@@ -34,16 +34,16 @@
  */
 'use strict';
 
-const BUILD = '6e8e4a1987';
+const BUILD = '6771e22128';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=4265421c01',
+  'styles/main.css?v=cdcdcb4378',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=28f4faf7d2',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
-  'js/core/campaign.js?v=ad7dd2d953',
+  'js/core/campaign.js?v=ec03bc2e1f',
   'js/core/utils.js?v=feef2f3624',
   'js/core/state.js?v=3360b6540c',
   'js/core/window-manager.js?v=5ba37f5fde',
@@ -74,7 +74,7 @@ const PRECACHE = [
   'js/content/search.js?v=833e7d7f77',
   'js/features/backup.js?v=3ea025e529',
   'js/ui/settings.js?v=19cb2d3859',
-  'js/ui/campaign-ui.js?v=627842915e',
+  'js/ui/campaign-ui.js?v=b8edee198a',
   'js/ui/context-menu.js?v=5402b4bfbf',
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=bdaf579267',
