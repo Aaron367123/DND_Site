@@ -2202,6 +2202,83 @@
       state.party = JSON.parse(P0); state.combatants = JSON.parse(K0);
     }
 
+    // ── Campaigns ─────────────────────────────────────────────────────────
+    // One browser, several campaigns, each with its own everything. The
+    // failure mode that matters is leakage: a campaign inheriting another’s
+    // party, or a switch pushing one group’s state over another group’s
+    // table. Both are silent and neither is recoverable.
+    if (typeof sktCampaigns === 'function'){
+      const A0 = sktActiveCampaign();
+      const PARTY = 'skt-party-v1';
+      const keep = localStorage.getItem(PARTY);
+
+      ok('campaign: an existing browser is adopted rather than emptied',
+         sktCampaigns().length >= 1 && !!sktActiveCampaign());
+      // The whole point of the Firebase side: the path carries the id, so
+      // two campaigns cannot write to one tree.
+      ok('campaign: the sync root is campaign-scoped',
+         /^skt\/c\//.test(sktFbRoot()), sktFbRoot());
+
+      localStorage.setItem(PARTY, JSON.stringify([{id:'zza', name:'ZZ Alpha'}]));
+      const idB = sktCreateCampaign('ZZ Second');
+      const rootBefore = sktFbRoot();
+      const switched = sktSwitchCampaign(idB);
+      ok('campaign: switching reports success', switched === true);
+      ok('campaign: and redirects the sync root',
+         sktFbRoot() !== rootBefore, sktFbRoot());
+      // A brand new campaign must NOT inherit the last one’s party.
+      {
+        let p = null;
+        try { p = JSON.parse(localStorage.getItem(PARTY) || 'null'); } catch(e){}
+        ok('campaign: a new one starts empty', !p || p.length === 0, JSON.stringify(p));
+      }
+      localStorage.setItem(PARTY, JSON.stringify([{id:'zzb', name:'ZZ Beta'}]));
+
+      sktSwitchCampaign(A0);
+      {
+        let p = null;
+        try { p = JSON.parse(localStorage.getItem(PARTY) || 'null'); } catch(e){}
+        ok('campaign: switching back restores the first one exactly',
+           eqJ((p || []).map(x => x.name), ['ZZ Alpha']), JSON.stringify(p));
+      }
+      sktSwitchCampaign(idB);
+      {
+        let p = null;
+        try { p = JSON.parse(localStorage.getItem(PARTY) || 'null'); } catch(e){}
+        ok('campaign: and the second still holds its own',
+           eqJ((p || []).map(x => x.name), ['ZZ Beta']), JSON.stringify(p));
+      }
+
+      // Per-device things describe the browser, not a campaign, and must
+      // survive a switch rather than being swapped with everything else.
+      const me0 = localStorage.getItem('skt-me-v1');
+      localStorage.setItem('skt-me-v1', 'zztester');
+      sktSwitchCampaign(A0);
+      ok('campaign: per-device keys are not swapped',
+         localStorage.getItem('skt-me-v1') === 'zztester');
+      if (me0 == null) localStorage.removeItem('skt-me-v1');
+      else localStorage.setItem('skt-me-v1', me0);
+
+      // The link is how a group lands in the right campaign, so it has to
+      // carry the id and the player flag.
+      {
+        const link = sktPlayerLink(idB);
+        ok('campaign: the player link names the campaign',
+           link.indexOf('c=' + idB) >= 0 && /player=1/.test(link), link);
+      }
+
+      // Deleting the campaign you are standing in would leave the live keys
+      // with nowhere to belong.
+      ok('campaign: deleting the open one is refused',
+         sktDeleteCampaign(sktActiveCampaign()) === false);
+      ok('campaign: deleting another works', sktDeleteCampaign(idB) === true);
+      ok('campaign: and takes its stored copy with it',
+         localStorage.getItem('skt-campaign-data-' + idB) == null);
+
+      if (keep == null) localStorage.removeItem(PARTY);
+      else localStorage.setItem(PARTY, keep);
+    }
+
     // ── Rivals ────────────────────────────────────────────────────────────
     // A character with a full sheet who fights AGAINST the party. Sides used
     // to be read straight off isPC, which conflated "has a sheet in the party

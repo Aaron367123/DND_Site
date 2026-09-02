@@ -70,7 +70,14 @@ function check(){
     if (fs.existsSync(rulesFile)){
       const skt = (JSON.parse(fs.readFileSync(rulesFile, 'utf8')).rules || {}).skt || {};
       const code = fs.readFileSync(path.join(ROOT, 'js', 'sync', 'realtime.js'), 'utf8');
-      const bases = [...code.matchAll(/base:\s*'skt\/([A-Za-z0-9_]+)'/g)].map(m => m[1]);
+      // Entity bases are relative to the campaign root now, so they read
+      // `base: 'combat_v2'` rather than `base: 'skt/combat_v2'`. This
+      // check silently matched nothing for a moment after that change —
+      // which is exactly the failure it exists to catch, so it now looks
+      // for both shapes and resolves them under skt/c/$cid.
+      const bases = [...code.matchAll(/base:\s*'(?:skt\/)?([A-Za-z0-9_]+)'/g)].map(m => m[1]);
+      [...code.matchAll(/_[A-Z_]*BASE(?:_REL)?\s*=\s*'(?:skt\/)?([A-Za-z0-9_]+)'/g)]
+        .forEach(m => { if (!bases.includes(m[1])) bases.push(m[1]); });
       // Not every node the app writes is an entity base. The uploaded-map
       // blob is a plain path declared as a constant, and it fails in exactly
       // the same way without a rules block of its own: the $wholeKey
@@ -78,10 +85,16 @@ function check(){
       // only symptom is that uploaded maps never reach the players.
       [...code.matchAll(/_[A-Z_]*BASE\s*=\s*'skt\/([A-Za-z0-9_]+)'/g)]
         .forEach(m => { if (!bases.includes(m[1])) bases.push(m[1]); });
+      const perCampaign = (skt.c && skt.c.$cid) || {};
       bases.forEach(b => {
-        if (!(b in skt)) problems.push('firebase-rules.json has no block for skt/' + b
+        if (!(b in perCampaign)) problems.push(
+          'firebase-rules.json has no block for skt/c/$cid/' + b
           + ' — the $wholeKey catch-all requires a string, so every write to it is rejected');
       });
+      // The campaign wildcard itself. Without it the top-level $wholeKey
+      // matches 'c' and demands a string, and nothing syncs at all.
+      if (!skt.c || !skt.c.$cid) problems.push(
+        'firebase-rules.json has no skt/c/$cid block — every campaign write is rejected');
     }
   } catch(e){ problems.push('could not cross-check firebase-rules.json: ' + e.message); }
 

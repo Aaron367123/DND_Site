@@ -77,6 +77,11 @@ function _diag(what, e) {
 
 // Firebase keys cannot contain hyphens or dots — convert to underscores
 function _toFbKey(lsKey) { return lsKey.replace(/[-\.]/g, '_'); }
+// Campaign-scoped. Everything below asks for a path rather than spelling
+// one, so two campaigns can be live at once without touching each other.
+function _root(){ return (typeof sktFbRoot === 'function') ? sktFbRoot() : 'skt'; }
+function _baseOf(spec){ return _root() + '/' + spec.base; }
+function _wholePath(k){ return _root() + '/' + _toFbKey(k); }
 
 let _remoteUpdate = false;        // true while applying remote changes → prevents echo writes
 let _pushTimer    = null;         // debounce handle for outgoing writes
@@ -133,7 +138,7 @@ const _PANELS_FOR_KEY = {
 //     than before.
 const _ENTITY_KEYS = {
   'skt-combat-v1': {
-    base: 'skt/combat_v2',
+    base: 'combat_v2',   // relative to sktFbRoot()
     legacyNode: 'skt/skt_combat_v1',   // step-1 whole-key node, migration fallback
     explode(s){
       const d = JSON.parse(s) || {};
@@ -182,7 +187,7 @@ const _ENTITY_KEYS = {
   // answer, both, was not on offer. Per-character nodes make that collision
   // a merge instead of a question.
   'skt-party-v1': {
-    base: 'skt/party_v2',
+    base: 'party_v2',   // relative to sktFbRoot()
     legacyNode: 'skt/skt_party_v1',   // whole-key node written by older clients
     explode(s){
       const parsed = JSON.parse(s);
@@ -217,7 +222,7 @@ const _ENTITY_KEYS = {
     },
   },
   'skt-battlemap-v1': {
-    base: 'skt/battlemap_v2',
+    base: 'battlemap_v2',   // relative to sktFbRoot()
     legacyNode: 'skt/skt_battlemap_v1',
     explode(s){
       const d = JSON.parse(s) || {};
@@ -309,7 +314,7 @@ const _ENTITY_KEYS = {
     holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.battlemap; return !!(d && d._body && d._drag); },
   },
   'skt-notes-v2': {
-    base: 'skt/notes_v3',
+    base: 'notes_v3',   // relative to sktFbRoot()
     legacyNode: null,  // notes never had a whole-key Firebase node
     explode(s){
       const d = JSON.parse(s) || {};
@@ -413,7 +418,7 @@ function _flushEntityKey(k){
   // data straight back. Drop the whole subtree instead.
   if (local == null || local === ''){
     _entityCache[k] = {};
-    return _fbDb.ref(spec.base).remove()
+    return _fbDb.ref(_baseOf(spec)).remove()
       .then(() => { delete _retryCounts[k]; return true; })
       .catch(err => { console.warn('[realtime] Entity clear failed for ' + k, err); return false; });
   }
@@ -442,7 +447,7 @@ function _flushEntityKey(k){
   Object.keys(nodes).forEach(n => {
     if (prev[n] === nodes[n]) return;
     if (restrict && !restrict(n, prev)) return;
-    updates[spec.base + '/' + n] = nodes[n];
+    updates[_baseOf(spec) + '/' + n] = nodes[n];
     applied[n] = nodes[n];
   });
   Object.keys(prev).forEach(n => {
@@ -450,7 +455,7 @@ function _flushEntityKey(k){
     // A player never deletes. Their absent node means "I don't know about it",
     // not "remove it" — only the DM can actually remove anything.
     if (restrict) return;
-    updates[spec.base + '/' + n] = null;
+    updates[_baseOf(spec) + '/' + n] = null;
     delete applied[n];
   });
   if (!Object.keys(updates).length) return Promise.resolve(true);
@@ -596,7 +601,7 @@ function _flushDirtyKeys() {
     const norm = val != null ? val : '__null__';
     if (!_justWrote[k]) _justWrote[k] = new Map();
     _justWrote[k].set(norm, (_justWrote[k].get(norm) || 0) + 1);
-    return _fbDb.ref('skt/' + _toFbKey(k)).set(val != null ? val : null).then(() => {
+    return _fbDb.ref(_wholePath(k)).set(val != null ? val : null).then(() => {
       // Success — clear retry counter so a future failure starts fresh.
       delete _retryCounts[k];
       _lastServer[k] = val;   // the server now holds this; base for next merge
@@ -1160,7 +1165,7 @@ function _onListenError(label, path, err, reattach){
 }
 
 function _attachKeyListener(k){
-  const path = 'skt/' + _toFbKey(k);
+  const path = _wholePath(k);
   _fbDb.ref(path).off();   // drop any revoked listener before re-adding
   _fbDb.ref(path).on('value', snap => {
       if (!snap.exists()){
@@ -1182,8 +1187,8 @@ function _attachKeyListener(k){
 // is already incremental — we just reassemble locally.
 function _attachEntityListener(k){
     const spec = _ENTITY_KEYS[k];
-    _fbDb.ref(spec.base).off();   // drop any revoked listener before re-adding
-    _fbDb.ref(spec.base).on('value', snap => {
+    _fbDb.ref(_baseOf(spec)).off();   // drop any revoked listener before re-adding
+    _fbDb.ref(_baseOf(spec)).on('value', snap => {
       if (snap.exists()){ _applyEntitySnapshot(k, snap.val()); return; }
       // v2 subtree absent — first client on the new layout. Seed from local
       // if we have data; otherwise fall back to the old whole-key node
@@ -1196,6 +1201,9 @@ function _attachEntityListener(k){
         return;
       }
       if (!spec.legacyNode) return; // no pre-v2 node ever existed for this key
+      // Those nodes are the original tree, from before campaigns existed.
+      // Only the campaign that inherited it should ever read them.
+      if (typeof sktActiveCampaign === 'function' && sktActiveCampaign() !== 'main') return;
       _fbDb.ref(spec.legacyNode).once('value').then(ls => {
         if (!ls.exists()) return;
         let v = ls.val();
@@ -1208,7 +1216,7 @@ function _attachEntityListener(k){
         _pushTimer = setTimeout(_flushDirtyKeys, 100);
         console.log('[SKT] migrated ' + k + ' from legacy whole-key node into v2 subtree');
       }).catch(()=>{});
-    }, err => _onListenError(spec.base, spec.base, err, () => _attachEntityListener(k)));
+    }, err => _onListenError(_baseOf(spec), _baseOf(spec), err, () => _attachEntityListener(k)));
 }
 
 // Everything that only needs to happen once per page, after listeners exist.
@@ -1233,7 +1241,7 @@ function _startRealtimeExtras() {
         }).catch(()=>{});
         return;
       }
-      _fbDb.ref('skt/' + _toFbKey(k)).once('value').then(snap => {
+      _fbDb.ref(_wholePath(k)).once('value').then(snap => {
         if (snap.exists()) _applyRemoteKey(k, snap.val());
       }).catch(()=>{});
     });
@@ -1265,7 +1273,7 @@ function _startRealtimeExtras() {
   const SPLIT = ['skt-party-v1','skt-combat-v1','skt-shop-v1','skt-settings-v1'];
   const _migrated = () => SPLIT.some(k => localStorage.getItem(k) != null);
   if (_migrated()) return;   // nothing to do — and nothing to download
-  _fbDb.ref('skt/' + _toFbKey('skt-workspace-v1')).once('value').then(snap => {
+  _fbDb.ref(_wholePath('skt-workspace-v1')).once('value').then(snap => {
     if (!snap.exists()) return;
     if (_migrated()) return; // a listener beat us to it while in flight
     let val = snap.val();
@@ -1306,13 +1314,15 @@ function _startRealtimeExtras() {
 // node, so the previous upload is removed in the same write rather than
 // accumulating in the database forever. That matches what uploads already
 // do — they have never survived a saved-map snapshot either.
-const _BLOB_BASE = 'skt/mapblob_v1';
+// Per campaign, like everything else: _root() already carries the id.
+const _BLOB_BASE_REL = 'mapblob_v1';
+function _blobBase(){ return _root() + '/' + _BLOB_BASE_REL; }
 
 // Resolves true on success. Never throws: the caller falls back to the
 // old device-only behaviour, which is worse but still works.
 window.sktMapBlobPut = function(id, dataUrl){
   if (!_fbDb) return Promise.resolve(false);
-  return _fbDb.ref(_BLOB_BASE).set({ [id]: String(dataUrl) })
+  return _fbDb.ref(_blobBase()).set({ [id]: String(dataUrl) })
     .then(() => true)
     .catch(err => { _diag('map blob put', err); return false; });
 };
@@ -1322,7 +1332,7 @@ window.sktMapBlobPut = function(id, dataUrl){
 // twice is asking for an id that no longer exists.
 window.sktMapBlobGet = function(id){
   if (!_fbDb) return Promise.resolve(null);
-  return _fbDb.ref(_BLOB_BASE + '/' + id).once('value')
+  return _fbDb.ref(_blobBase() + '/' + id).once('value')
     .then(snap => snap.val() || null)
     .catch(err => { _diag('map blob get', err); return null; });
 };
@@ -1368,19 +1378,24 @@ window.realtimeFlushAndWait = function(timeoutMs){
   return Promise.race([flushed, timer]).then(r => r || flushed);
 };
 
+// Transient channels — a stroke being drawn, a token mid-drag. Campaign
+// scoped like everything else: these used to sit at the database root, so
+// two live campaigns would have shown each other their drawings.
+function _livePath(name){ return _root() + '/live/' + name; }
+
 window.realtimeLive = {
   push(path, value){
     if (!_fbDb) return;
-    try { _fbDb.ref(path).set(value).catch(()=>{}); } catch(e){}
+    try { _fbDb.ref(_livePath(path)).set(value).catch(()=>{}); } catch(e){}
   },
   clear(path){
     if (!_fbDb) return;
-    try { _fbDb.ref(path).remove().catch(()=>{}); } catch(e){}
+    try { _fbDb.ref(_livePath(path)).remove().catch(()=>{}); } catch(e){}
   },
   listen(path, callback){
     if (!_fbDb) return () => {};
     try {
-      const ref = _fbDb.ref(path);
+      const ref = _fbDb.ref(_livePath(path));
       const handler = ref.on('value', snap => {
         try { callback(snap.val()); } catch(e){}
       });

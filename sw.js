@@ -34,15 +34,16 @@
  */
 'use strict';
 
-const BUILD = 'd254b2444a';
+const BUILD = '6e8e4a1987';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=39793a262d',
+  'styles/main.css?v=4265421c01',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=28f4faf7d2',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
+  'js/core/campaign.js?v=ad7dd2d953',
   'js/core/utils.js?v=feef2f3624',
   'js/core/state.js?v=3360b6540c',
   'js/core/window-manager.js?v=5ba37f5fde',
@@ -73,13 +74,14 @@ const PRECACHE = [
   'js/content/search.js?v=833e7d7f77',
   'js/features/backup.js?v=3ea025e529',
   'js/ui/settings.js?v=19cb2d3859',
+  'js/ui/campaign-ui.js?v=627842915e',
   'js/ui/context-menu.js?v=5402b4bfbf',
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=bdaf579267',
   'js/features/pdf-import.js?v=06787122c5',
   'js/player/player-app.js?v=7783f4df68',
   'js/ui/player-view.js?v=7519877ed8',
-  'js/sync/realtime.js?v=ca85d83c67',
+  'js/sync/realtime.js?v=76888da0b9',
   'js/ui/tutorial.js?v=e47e670b86',
   'js/ui/onboarding.js?v=42199a671a',
   'js/app.js?v=f950284ed2',

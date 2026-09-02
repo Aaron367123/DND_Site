@@ -4311,6 +4311,27 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 /* A rival: sheet-backed like a party member, fighting against them. Red
    rather than the accent, because the whole point is that it must not read
    as one of the party at a glance. */
+/* Campaign switcher, in the top bar beside the sync dot. Deliberately
+   quiet: it is a thing you touch between sessions, not during one, and it
+   sits next to controls used constantly. */
+.campaign-chip{display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-pill);
+  color:var(--text-muted); font:inherit; font-size:var(--fs-sm); padding:5px 12px;
+  max-width:200px}
+.campaign-chip:hover{border-color:var(--accent); color:var(--text)}
+.campaign-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.campaign-caret{opacity:.6; font-size:var(--fs-2xs)}
+.camp-row{display:flex; align-items:center; gap:8px; padding:8px 10px;
+  border:1px solid var(--border); border-radius:var(--r-sm); margin-bottom:6px;
+  background:var(--panel-2)}
+.camp-row.on{border-color:var(--accent)}
+.camp-row-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-weight:600}
+.camp-row-tag{font-size:var(--fs-2xs); color:var(--accent); text-transform:uppercase;
+  letter-spacing:.05em; flex-shrink:0}
+.camp-warn{margin:0 0 12px; padding:8px 10px; border-radius:var(--r-sm);
+  font-size:var(--fs-sm); background:rgba(212,165,116,.10);
+  border:1px solid rgba(212,165,116,.45); color:var(--text)}
 .status-pill.foe-pill{background:rgba(190,70,60,.20); color:#e58a7f;
   border-color:rgba(190,70,60,.5); font-weight:700; letter-spacing:.04em}
 .mp-side-row{display:flex; align-items:center; gap:8px; margin:6px 0;
