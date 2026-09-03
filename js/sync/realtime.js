@@ -404,6 +404,20 @@ function _flattenEntitySnap(val){
 // the page until the server actually holds the restored data.
 // Read at call time, never cached: body.player-mode is added by
 // initPlayerView() long after this file parses.
+// Whether this client may SEED an empty campaign — publish its own local
+// copy as the campaign's state because the server has none.
+//
+// Only a DM view. Seeding has been here since the v1 to v2 entity move,
+// where an empty subtree meant "nobody has upgraded yet" and any client
+// filling it was an improvement. Campaigns changed what an empty tree
+// means: after the move to skt/c/<id> it is empty for EVERYONE at once, so
+// the first device to open decides what the campaign is. A phone carrying
+// a week-old copy would make that copy the table's.
+//
+// A player with no server data now waits rather than asserting. The DM
+// opening the workspace once fills it, which is how a session starts.
+function _maySeedEmpty(){ return !_isPlayerMode(); }
+
 function _isPlayerMode(){
   try { return document.body.classList.contains('player-mode'); } catch(e){ return false; }
 }
@@ -1169,9 +1183,10 @@ function _attachKeyListener(k){
   _fbDb.ref(path).off();   // drop any revoked listener before re-adding
   _fbDb.ref(path).on('value', snap => {
       if (!snap.exists()){
-        // No remote value yet for this key — seed it from local if we have one.
+        // No remote value yet for this key — seed it from local if we have
+        // one AND this client may speak for the campaign.
         const local = localStorage.getItem(k);
-        if (local != null){
+        if (local != null && _maySeedEmpty()){
           _dirtyKeys.add(k);
           clearTimeout(_pushTimer);
           _pushTimer = setTimeout(_flushDirtyKeys, 100);
@@ -1194,7 +1209,7 @@ function _attachEntityListener(k){
       // if we have data; otherwise fall back to the old whole-key node
       // (written by pre-step-2 clients) and re-push it in v2 form.
       const local = localStorage.getItem(k);
-      if (local != null){
+      if (local != null && _maySeedEmpty()){
         _dirtyKeys.add(k);
         clearTimeout(_pushTimer);
         _pushTimer = setTimeout(_flushDirtyKeys, 100);

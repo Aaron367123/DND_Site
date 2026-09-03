@@ -2310,6 +2310,28 @@
 
       // Deleting the campaign you are standing in would leave the live keys
       // with nowhere to belong.
+      // Moving to skt/c/<id> left every campaign tree empty at once, and an
+      // empty tree is the signal that makes a client publish its own local
+      // copy as the campaign. That was written when empty meant "nobody has
+      // upgraded", and any client filling it was an improvement; now it
+      // means the first device to open decides what the campaign is.
+      //
+      // Read from the source because the seed path needs a live Firebase
+      // handle and an absent node to reach, neither of which exists here.
+      try {
+        const src = await (await fetch('/js/sync/realtime.js')).text();
+        ok('campaign: a player device cannot seed an empty campaign',
+           /_maySeedEmpty\(\)\s*\{\s*return\s*!_isPlayerMode\(\)/.test(src),
+           'a stale phone opening first would become the campaign');
+        // Both seed paths, whole-key and entity. Guarding one and not the
+        // other would look fixed and leave half the domains exposed.
+        ok('campaign: and the guard is on both seed paths',
+           (src.match(/_maySeedEmpty\(\)/g) || []).length >= 3,
+           String((src.match(/_maySeedEmpty\(\)/g) || []).length));
+      } catch(e){
+        ok('campaign: a player device cannot seed an empty campaign', false, e.message);
+      }
+
       // "Does the app still WORK after a switch?" — the checks above prove
       // the keys move and the sync root changes, which is not the same
       // question. A switch reloads the page, and the page it reloads into
