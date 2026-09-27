@@ -34,7 +34,23 @@ function renderMonsterFull(d, localData) {
   const section=(label,text)=>text?`<div class="detail-section"><strong>${label}.</strong> ${esc(text)}</div>`:'';
   const actions=(label,arr)=>{
     if(!arr||!arr.length)return'';
-    const rows=arr.map(a=>'<em>'+esc(a.name||'')+'</em> '+_renderInline(esc(a.desc||''))).join('<br><br>');
+    // The first paragraph sits on the same line as the name, the way a printed
+    // stat block reads. Everything after it goes through renderEntriesText,
+    // which is what turns a run of bullets into a real list and a single
+    // newline into a line break. This helper used to inline the whole desc
+    // instead, so every newline in it collapsed to a space: a vampire's four
+    // flaws read as one run-on sentence and a lich's ten spell levels as one
+    // line. Spells and conditions never had the problem — they always went
+    // through the block renderer; only traits and actions took this path.
+    const rows=arr.map(a=>{
+      const desc = String(a.desc||'');
+      const i    = desc.search(/\n{2,}/);
+      const head = i < 0 ? desc : desc.slice(0, i);
+      const tail = i < 0 ? ''   : desc.slice(i);
+      return '<em>'+esc(a.name||'')+'</em> '
+           + _renderInline(esc(head)).replace(/\n/g,'<br>')
+           + (tail.trim() ? renderEntriesText(tail) : '');
+    }).join('<br><br>');
     return'<div class="action-block"><strong>'+label+'.</strong><br>'+rows+'</div>';
   };
   // Initiative sits next to AC because that's where the 2024 books put it, and

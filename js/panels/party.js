@@ -452,12 +452,20 @@ registerPanel('party',{
         if (typeof e !== 'object') return '';
         // Bullet list
         if (e.type === 'list' && Array.isArray(e.items)){
-          return '<ul class="feat-list">' + e.items.map(it =>
-            '<li>' + (typeof it === 'string' ? this._renderEntryText(it)
-              : (it && it.entries ? walk(it.entries)
-                : it && it.name ? '<strong>'+esc(it.name)+'.</strong> '+(it.entries?walk(it.entries):'')
-                : '')) + '</li>'
-          ).join('') + '</ul>';
+          // A named item needs BOTH halves. Testing `it.entries` first threw
+          // the name away whenever an item had both, and the name-only branch
+          // then looked for `entries` again — so an item carrying its body in
+          // `entry` (singular) rendered as a bold heading with nothing under
+          // it. Build the label and the body independently.
+          return '<ul class="feat-list">' + e.items.map(it => {
+            if (typeof it === 'string') return '<li>' + this._renderEntryText(it) + '</li>';
+            if (!it || typeof it !== 'object') return '';
+            const label = it.name ? '<strong>' + esc(it.name) + '.</strong> ' : '';
+            const body  = Array.isArray(it.entries) ? walk(it.entries)
+                        : (typeof it.entry === 'string' ? this._renderEntryText(it.entry) : '');
+            if (!label && !body) return '';
+            return '<li>' + label + body + '</li>';
+          }).join('') + '</ul>';
         }
         // Table (Combat Superiority die size, Sneak Attack dice, etc.)
         if (e.type === 'table' && Array.isArray(e.rows)){

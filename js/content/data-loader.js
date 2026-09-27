@@ -124,7 +124,19 @@ function _parseEntries(entries, sep) {
         return (e.name ? '\x01' + e.name + '\n\n' : '') + _parseEntries(e.entries);
       case 'list':
         return (e.items||[])
-          .map(i => '• ' + (typeof i==='string' ? _stripTags(i) : _parseEntries([i], '\n')))
+          .map(i => (typeof i==='string' ? _stripTags(i) : _parseEntries([i], '\n')))
+          // An item whose text the parser couldn't reach still got its bullet,
+          // so the Vampire's four weaknesses and the Beholder's ten eye rays
+          // came out as a column of empty dots.
+          //
+          // This filter is a GUARD, not the fix — the fix is the default branch
+          // below, which now reads a singular `entry`. Removing this line makes
+          // no check fail, because nothing in today's data parses to nothing
+          // any more. It earns its place against the next entry shape 5etools
+          // adds: that failure would show up as a missing line rather than as a
+          // row of empty bullets nobody can explain.
+          .filter(Boolean)
+          .map(t => '• ' + t)
           .join('\n');
       case 'table':
         try {
@@ -142,7 +154,15 @@ function _parseEntries(entries, sep) {
           return '\x07' + JSON.stringify(t) + '\x07';
         } catch (_) { return ''; }
       case 'item':
+      // The same node under two more names. itemSub is how 5etools nests a
+      // named sub-entry inside a list (a vampire's flaws, a beholder's eye
+      // rays); itemSpell does it for spell groups. Both carry their body in
+      // `entry` singular as often as in `entries`.
+      case 'itemSub':
+      case 'itemSpell':
         return '\x04' + (e.name||'') + '\x04 ' + _parseEntries(e.entries || (e.entry ? [e.entry] : []), '\n');
+      case 'spellcasting':
+        return (e.name ? '\x04' + e.name + '\x04 ' : '') + _spellcastingText(e);
       case 'inset':
       case 'insetReadaloud':
         return '\x02' + (e.name ? '\x06' + e.name + '\x06\n' : '') + _parseEntries(e.entries || [], '\n') + '\x02';
@@ -152,10 +172,94 @@ function _parseEntries(entries, sep) {
         return `Spell save DC = 8 + proficiency bonus + ${e.attributes?.[0]||'ability'} modifier`;
       case 'abilityAttackMod':
         return `Spell attack modifier = proficiency bonus + ${e.attributes?.[0]||'ability'} modifier`;
-      default:
-        return _parseEntries(e.entries || []);
+      default: {
+        // Unknown or future type. Reading only `entries` meant a node carrying
+        // its body in `entry` (singular) or `text` vanished whole, and named
+        // wrappers like variantSub lost their heading. Degrade to the text it
+        // does have rather than to nothing.
+        const body = Array.isArray(e.entries) ? _parseEntries(e.entries)
+                   : (typeof e.entry === 'string' ? _stripTags(e.entry)
+                   : (typeof e.text  === 'string' ? _stripTags(e.text) : ''));
+        if (!body) return '';
+        return e.name ? '\x04' + e.name + '\x04 ' + body : body;
+      }
     }
   }).filter(Boolean).join(sep);
+}
+
+// ─── Spellcasting block ─────────────────────────────────────────────────────────
+// A monster's spellcasting is its own structure, not an entries array: a header
+// sentence followed by spell groups keyed by how often each can be cast. 1,125
+// bestiary entries have one and none of them reached the screen — the Lich
+// rendered three traits and one action, with no spells anywhere.
+//
+// Group keys follow 5etools' convention, read off the data rather than assumed:
+// a trailing 'e' means 'each' ('2e' is twice per day each), and a `recharge`
+// key is the low end of a d6 range — the same "(Recharge 5–6)" notation that
+// {@recharge} expands to everywhere else in the app.
+function _ordinal(n){
+  const i = parseInt(n, 10);
+  if (!isFinite(i)) return String(n);
+  const rem100 = i % 100;
+  if (rem100 >= 11 && rem100 <= 13) return i + 'th';
+  return i + (['th','st','nd','rd'][i % 10] || 'th');
+}
+function _spellFreq(kind, key){
+  const each = /e$/.test(key);
+  const n    = key.replace(/e$/, '');
+  const ea   = each ? ' each' : '';
+  switch (kind){
+    case 'daily':     return n + '/day' + ea;
+    case 'legendary': return n + '/day' + ea;
+    case 'rest':      return n + '/short rest' + ea;
+    case 'restLong':  return n + '/long rest' + ea;
+    case 'charges':   return n + ' charge' + (n === '1' ? '' : 's') + ea;
+    case 'recharge':  return 'Recharge ' + n + '–6';
+    default:          return n + ea;
+  }
+}
+function _spellcastingText(sc){
+  if (!sc || typeof sc !== 'object') return '';
+  // `hidden` lists the groups the header sentence already describes in prose,
+  // so printing them again would read as a duplicate.
+  const hidden = new Set(Array.isArray(sc.hidden) ? sc.hidden : []);
+  const out = [];
+  const head = _parseEntries(sc.headerEntries || [], ' ');
+  if (head) out.push(head);
+  const line = (label, spells) => {
+    const txt = (Array.isArray(spells) ? spells : []).map(_stripTags).filter(Boolean).join(', ');
+    if (txt) out.push('\x04' + label + '\x04 ' + txt);
+  };
+  if (!hidden.has('will'))   line('At will', sc.will);
+  if (!hidden.has('ritual')) line('Rituals', sc.ritual);
+  // Slot casting: level '0' is cantrips, and `lower` makes a shared band such
+  // as '1st–3rd level'.
+  if (sc.spells && !hidden.has('spells')){
+    Object.keys(sc.spells).sort((a,b) => Number(a) - Number(b)).forEach(lvl => {
+      const g = sc.spells[lvl] || {};
+      const txt = (g.spells || []).map(_stripTags).filter(Boolean).join(', ');
+      if (!txt) return;
+      let label;
+      if (String(lvl) === '0') label = 'Cantrips (at will)';
+      else {
+        const band = (g.lower != null && String(g.lower) !== String(lvl))
+          ? _ordinal(g.lower) + '–' + _ordinal(lvl)
+          : _ordinal(lvl);
+        label = band + ' level' + (g.slots != null
+          ? ' (' + g.slots + ' slot' + (g.slots === 1 ? '' : 's') + ')' : '');
+      }
+      out.push('\x04' + label + '\x04 ' + txt);
+    });
+  }
+  // Highest frequency first, the order a printed stat block uses.
+  ['daily','rest','restLong','legendary','charges','recharge'].forEach(kind => {
+    const g = sc[kind];
+    if (hidden.has(kind) || !g || typeof g !== 'object') return;
+    Object.keys(g).sort().reverse().forEach(key => line(_spellFreq(kind, key), g[key]));
+  });
+  const foot = _parseEntries(sc.footerEntries || [], ' ');
+  if (foot) out.push(foot);
+  return out.join('\n');
 }
 
 // ─── Conversion helpers ────────────────────────────────────────────────────────
@@ -379,6 +483,14 @@ function _resolveCopy(monster, byKey, depth) {
 
 // ─── Monster converter ──────────────────────────────────────────────────────────
 function _convertMonster(d) {
+  // `displayAs` says which part of the stat block the block belongs in: a
+  // 2024 caster lists it as an action, a 2014 one as a trait (no field).
+  const _sc = (d.spellcasting || [])
+    .map(b => ({ name: _stripTags(b.name || 'Spellcasting'), desc: _spellcastingText(b),
+                 where: b.displayAs || 'trait' }))
+    .filter(b => b.desc);
+  const _scFor = where => _sc.filter(b => b.where === where)
+                             .map(b => ({ name: b.name, desc: b.desc }));
   return {
     name: d.name, index: _toIndex(d.name), _source: d.source,
     reprintedAs: d.reprintedAs,
@@ -410,11 +522,11 @@ function _convertMonster(d) {
     // recharge marker in the action NAME — "Fire Breath {@recharge 5}" — so
     // leaving names raw printed the tag verbatim in the stat block while every
     // other tag around it rendered properly.
-    special_abilities: (d.trait    ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
-    actions:           (d.action   ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
-    bonus_actions:     (d.bonus    ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
-    legendary_actions: (d.legendary||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
-    reactions:         (d.reaction ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
+    special_abilities: (d.trait    ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})).concat(_scFor('trait')),
+    actions:           (d.action   ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})).concat(_scFor('action')),
+    bonus_actions:     (d.bonus    ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})).concat(_scFor('bonus')),
+    legendary_actions: (d.legendary||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})).concat(_scFor('legendary')),
+    reactions:         (d.reaction ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})).concat(_scFor('reaction')),
     mythic_actions:    (d.mythic   ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
   };
 }
@@ -708,7 +820,9 @@ function _normSearchIdx(s) {
 // 20260729b — lair actions / regional effects + spell class lists joined in.
 // 20260801a — action/trait NAMES are now tag-stripped, so a cached index built
 // before this still carries raw "{@recharge 5}" in every recharge ability.
-const DATA_STAMP   = '20260804a';
+// 20260927a — itemSub/itemSpell bodies and monster spellcasting blocks now
+// survive conversion; every index cached before this is missing them.
+const DATA_STAMP   = '20260927a';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
 const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';

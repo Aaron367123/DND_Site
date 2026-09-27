@@ -291,6 +291,8 @@ const CONTENT_PANEL_SHARED = {
         const idAttr = node.id ? ` id="adv-section-${esc(String(node.id))}"` : '';
         return `<section class="adv-section"${idAttr}>${head}${renderChildren(node.entries)}</section>`;
       }
+      case 'itemSub':
+      case 'itemSpell':
       case 'item': {
         // 5etools "item" inside a list → bold name + inline body. The shape
         // varies — 3000+ items in the book corpus use `entry` (singular
@@ -415,8 +417,14 @@ const CONTENT_PANEL_SHARED = {
         // Layout primitives we don't try to recreate visually — drop silently.
         return '';
       default:
-        // Unknown / future type — best effort: render any nested entries.
+        // Unknown / future type — best effort, in the order the shapes occur:
+        // nested entries, then a singular `entry`, then `text`. Reading only
+        // `entries` dropped the whole node when its body was a plain string.
         if (Array.isArray(node.entries)) return renderChildren(node.entries);
+        if (typeof node.entry === 'string' || typeof node.text === 'string'){
+          const nm = node.name ? `<strong>${this._inline(node.name)}.</strong> ` : '';
+          return `<p class="adv-item">${nm}${this._inline(node.entry || node.text)}</p>`;
+        }
         return '';
     }
   },

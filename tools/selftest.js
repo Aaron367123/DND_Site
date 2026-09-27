@@ -1277,6 +1277,156 @@
            'run via tools/selftest-run.js, which waits for _5eLoaded');
       }
 
+      // ── Entry text that never reached the screen ──────────────────────────
+      // 5etools nests a named sub-entry as "itemSub", and puts its body in
+      // "entry" (singular) as often as in "entries". The parser had a case for
+      // "item" only, and its default branch read "entries" alone — so the node
+      // produced nothing while the list around it still emitted its bullet.
+      // The Vampire's four flaws and the Beholder's ten eye rays printed as a
+      // column of empty dots; 34 bestiary entries were affected.
+      if (typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded){
+        const mons = Array.from(_5eData || []).filter(r => r.cat === 'monster' && r._raw);
+        const blocks = r => [].concat(r._raw.special_abilities || [], r._raw.actions || [],
+                                      r._raw.bonus_actions || [], r._raw.reactions || [],
+                                      r._raw.legendary_actions || []);
+        const findBlock = (nm, src, re) => {
+          const m = mons.find(r => r.name === nm && r._source === src);
+          return m ? (blocks(m).find(a => re.test(a.name)) || null) : null;
+        };
+
+        const vamp = findBlock('Vampire', 'MM', /Weakness/i);
+        ok('5e: a vampire lists its flaws instead of empty bullets',
+           !!vamp && /Sunlight Hypersensitivity/.test(vamp.desc) && /radiant/.test(vamp.desc),
+           vamp ? JSON.stringify(vamp.desc.slice(0, 90)) : 'trait not found');
+
+        // The beholder is the worst case — the eye rays ARE the monster, and all
+        // ten of them were blank.
+        const eyes = findBlock('Beholder', 'MM', /Eye Rays/i);
+        const rays = eyes ? (eyes.desc.match(/• /g) || []).length : 0;
+        ok('5e: all ten of a beholder eye rays have text',
+           rays === 10 && /Disintegration Ray/.test(eyes.desc) && /Death Ray/.test(eyes.desc),
+           eyes ? rays + ' bullets' : 'action not found');
+
+        // The invariant behind both: a bullet with nothing after it means the
+        // parser met a shape it could not read. Swept corpus-wide, so a future
+        // entry type needing a case here is caught the day the data adds it.
+        const blank = [];
+        for (const r of mons){
+          for (const a of blocks(r)){
+            if (/•\s*(\n|$)/.test(a.desc || '')) blank.push(r.name + '/' + a.name);
+          }
+        }
+        ok('5e: no stat block in the bestiary has an empty bullet',
+           blank.length === 0, blank.slice(0, 5).join(', '));
+
+        // Spellcasting is its own structure, not an entries array, and nothing
+        // read it — 1,125 monsters lost their spells outright. The MM Lich came
+        // out as three traits and one action.
+        const lich = findBlock('Lich', 'MM', /^Spellcasting/i);
+        ok('5e: a lich brings its prepared spells with it',
+           !!lich && /Power word kill/i.test(lich.desc) && /9th level \(1 slot\)/.test(lich.desc),
+           lich ? JSON.stringify(lich.desc.slice(0, 90)) : 'no Spellcasting block');
+
+        const hag = findBlock('Green Hag', 'MM', /Spellcasting/i);
+        ok('5e: an innate caster lists its at-will spells',
+           !!hag && /At will/.test(hag.desc) && /Vicious mockery/i.test(hag.desc),
+           hag ? JSON.stringify(hag.desc.slice(0, 90)) : 'no Spellcasting block');
+
+        // "displayAs" decides which part of the stat block the spellcasting
+        // belongs to: a 2024 caster files it under Actions, a 2014 one under
+        // Traits. Routing everything into one bucket would still pass every
+        // check above, so both directions are asserted.
+        let scTrait = 0, scAction = 0;
+        for (const r of mons){
+          if ((r._raw.special_abilities || []).some(a => /Spellcasting/i.test(a.name))) scTrait++;
+          if ((r._raw.actions || []).some(a => /Spellcasting/i.test(a.name))) scAction++;
+        }
+        ok('5e: spellcasting is filed as a trait where the block says so', scTrait > 100, String(scTrait));
+        ok('5e: and as an action where it says that instead', scAction > 100, String(scAction));
+      }
+
+      // Having the text is not the same as it being readable. Monster traits
+      // and actions were rendered by a helper that inlined the whole
+      // description, so every newline in it collapsed to a space — the flaws
+      // above would have arrived as one run-on sentence and the lich's spell
+      // levels as one line. Spells and conditions never had the problem; they
+      // always went through the block renderer.
+      if (typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded
+          && typeof buildDetailBody === 'function'){
+        const row = nm => Array.from(_5eData).find(r => r.cat === 'monster' && r.name === nm && r._source === 'MM');
+        const vHtml = row('Vampire') ? buildDetailBody(row('Vampire')) : '';
+        const lHtml = row('Lich')    ? buildDetailBody(row('Lich'))    : '';
+        ok('5e: a bulleted trait renders as a real list, not one paragraph',
+           /<ul class="detail-list"><li><strong class="detail-label">Forbiddance\./.test(vHtml),
+           vHtml ? 'no detail-list after the flaws intro' : 'no Vampire row');
+        ok('5e: a caster spell levels each get their own line',
+           /<br><strong class="detail-label">Cantrips \(at will\)\./.test(lHtml),
+           lHtml ? 'spell levels not broken onto lines' : 'no Lich row');
+        // The parser's private markers must never survive into the HTML.
+        ok('5e: no parser marker leaks into the rendered stat block',
+           !/[-]/.test(vHtml + lHtml));
+      }
+
+      // The adventure/book renderer is a SECOND implementation of the same job,
+      // so fixing one leaves the other broken — which is how the pair got out
+      // of step in the first place.
+      if (typeof CONTENT_PANEL_SHARED !== 'undefined'){
+        const html = CONTENT_PANEL_SHARED._renderNode({
+          type: 'list',
+          items: [{ type: 'itemSub', name: 'Forbiddance', entry: 'No invitation, no entry.' }],
+        });
+        ok('content: a nested sub-entry renders both its name and its body',
+           /Forbiddance/.test(html) && /No invitation, no entry\./.test(html), html.slice(0, 140));
+      }
+
+      // The party sheet is a THIRD one, and its bug was the mirror image: it
+      // tested "entries" first and returned the body with no name, then its
+      // name-only branch looked for "entries" again — so an item carrying a
+      // singular "entry" became a bold heading with nothing under it. Both
+      // halves are asserted, against the same rows the renderer itself picks.
+      if (typeof _5eData !== 'undefined' && _5eLoaded && panelDefs.party){
+        const rowFor = cls => Array.from(_5eData).find(d => d.cat === 'class' && d._raw
+                              && d._raw.classFeatures && d.name.toLowerCase() === cls.toLowerCase());
+        const namedItems = row => {
+          const out = [];
+          const scan = node => {
+            if (Array.isArray(node)) return node.forEach(scan);
+            if (!node || typeof node !== 'object') return;
+            for (const k in node){
+              const v = node[k];
+              if (k === 'items' && Array.isArray(v)){
+                for (const it of v){
+                  if (it && typeof it === 'object' && it.name
+                      && (typeof it.entry === 'string' || Array.isArray(it.entries))) out.push(it.name);
+                }
+              }
+              scan(v);
+            }
+          };
+          for (const ft of ((row._raw || {})._resolvedFeatures || [])) scan(ft.entries);
+          return out;
+        };
+        const clsNames = [...new Set(Array.from(_5eData)
+          .filter(r => r.cat === 'class' && r._raw && r._raw.classFeatures).map(r => r.name))];
+        const lostLabel = [], lostBody = [];
+        let checked = 0;
+        for (const cls of clsNames){
+          const row = rowFor(cls); if (!row) continue;
+          const want = namedItems(row).length;
+          const html = panelDefs.party._tabFeatures({
+            id: 'st_probe', name: 'Probe', cls: cls, class: cls, subclass: '', level: 20,
+            isPC: true, hp: 30, hpMax: 30,
+          });
+          const got  = (html.match(/<li><strong>[^<]+<\/strong>/g) || []).length;
+          const bare = (html.match(/<li><strong>[^<]+<\/strong>\s*<\/li>/g) || []).length;
+          if (bare) lostBody.push(cls);
+          if (want){ checked++; if (got < want) lostLabel.push(cls + ': ' + got + '/' + want); }
+        }
+        ok('party: a class with named sub-items was found to test with', checked > 0, String(checked));
+        ok('party: every named sub-item keeps its label', lostLabel.length === 0, lostLabel.join(', '));
+        ok('party: and none is left as a label with no body', lostBody.length === 0, lostBody.join(', '));
+      }
+
       // PDF import: subclass and feats. Both are matched against _5eData
       // rather than read off the sheet, which is why they live here and not in
       // a unit test — and why they failed silently for so long. Two distinct
