@@ -191,6 +191,10 @@ registerPanel('battlemap',{
   // e.g. "adventure/DIP/004-map-phandalin.webp". Persisted; image is loaded
   // on mount.
   _bgMapPath: null,
+  // An uploaded map that has been shared with the table. The path is a
+  // reference into Firebase ("sktblob:<id>"), not an asset path and not a
+  // filename — anything that treats it as either produces nonsense.
+  _isSharedUpload(p){ return typeof p === 'string' && p.indexOf('sktblob:') === 0; },
   // Whether to draw the grid overlay. Some 5etools maps already have a grid
   // baked into the image — the user can hide ours so the two don't clash.
   _showGrid: true,
@@ -3494,7 +3498,9 @@ registerPanel('battlemap',{
       } else { doDelete(); }
     }));
     backdrop.querySelector('#mapsel-save')?.addEventListener('click', () => {
-      const suggested = this._bgMapPath
+      // A shared upload has no filename to borrow — splitting "sktblob:u1abc"
+      // on "/" just hands the id straight back as the suggested name.
+      const suggested = (this._bgMapPath && !this._isSharedUpload(this._bgMapPath))
         ? (this._bgMapPath.split('/').pop().replace(/\.[^.]+$/, '') + ((this._tokens||[]).length ? ' — saved' : ''))
         : (_mapBgImage ? 'Uploaded map' : 'Map ' + (this._savedMaps.length + 1));
       showModal('Save map', [
@@ -3946,7 +3952,20 @@ registerPanel('battlemap',{
       const scale = this._bgMapScale || 1;
       const dispW = (this._bgMapNaturalW || _mapBgImage.naturalWidth) * scale;
       const dispH = (this._bgMapNaturalH || _mapBgImage.naturalHeight) * scale;
-      const url = this._bgMapPath ? assetUrl(this._bgMapPath) : _mapBgImage.src;
+      // A "sktblob:" path is a HANDLE for an image already fetched out of
+      // Firebase and sitting in _mapBgImage — not something assetUrl can
+      // resolve. Handing it over anyway painted the stage with
+      // <cdn>/sktblob%3Au1abc, a URL that cannot exist, so a shared upload
+      // showed nothing at all.
+      //
+      // The DM was the last to find out: _bgMapPath is still null at the
+      // moment of upload, so their stage kept the in-memory data URL and
+      // looked right. Only the players — and the DM's next reload — got the
+      // dead one. The comment this replaces said uploads "don't have a path",
+      // which stopped being true the day uploads started being shared.
+      const url = (this._bgMapPath && !this._isSharedUpload(this._bgMapPath))
+        ? assetUrl(this._bgMapPath)
+        : _mapBgImage.src;
       stage.style.backgroundImage = `url("${url}")`;
       stage.style.backgroundSize = `${dispW}px ${dispH}px`;
       stage.style.backgroundRepeat = 'no-repeat';
@@ -4332,7 +4351,9 @@ registerPanel('battlemap',{
   // Right-side Settings drawer. Renders only when this._settingsOpen.
   // Wires up in _wire alongside the toolbar buttons.
   _renderSettingsSidebar(){
-    const mapName = this._bgMapPath ? this._bgMapPath.split('/').pop().replace(/\.(webp|jpg|jpeg|png)$/i, '') : 'No map';
+    const mapName = !this._bgMapPath ? 'No map'
+      : this._isSharedUpload(this._bgMapPath) ? 'Uploaded map'
+      : this._bgMapPath.split('/').pop().replace(/\.(webp|jpg|jpeg|png)$/i, '');
     const fogOn = this._fog !== null;
     const paint = this._fogPaintMode;
     // Brush size slider in screenshot is 0–100; map to internal 1–5 cells.

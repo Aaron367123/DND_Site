@@ -1348,7 +1348,23 @@ window.sktMapBlobPut = function(id, dataUrl){
 window.sktMapBlobGet = function(id){
   if (!_fbDb) return Promise.resolve(null);
   return _fbDb.ref(_blobBase() + '/' + id).once('value')
-    .then(snap => snap.val() || null)
+    .then(snap => {
+      const v = snap.val();
+      if (v) return v;
+      // A map uploaded BEFORE campaigns shipped is still at the pre-campaign
+      // path. Every other domain got a legacyNode fallback for that move; the
+      // blobs did not, so the map path travelled into skt/c/main with the rest
+      // of battlemap_v2 while the bytes it points at stayed behind. Only the
+      // campaign that inherited the original tree may look there.
+      //
+      // NOT exercised by the suite: it needs a live database handle and a node
+      // that is absent at one path and present at another. It can only ever
+      // turn a null into a hit, so the worst case is today's behaviour.
+      if (typeof sktActiveCampaign === 'function' && sktActiveCampaign() !== 'main') return null;
+      return _fbDb.ref('skt/' + _BLOB_BASE_REL + '/' + id).once('value')
+        .then(ls => ls.val() || null)
+        .catch(() => null);
+    })
     .catch(err => { _diag('map blob get', err); return null; });
 };
 // Read-only access to an entity spec, for the self test.

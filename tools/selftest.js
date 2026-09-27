@@ -3053,6 +3053,79 @@
       ok('battlemap: add-PC is silent', errs.length === before, errs.slice(before).join(' | '));
       ok('battlemap: no token was lost', (d._tokens || []).length >= n0);
       const fit = await click(d._body, '[data-mact="fit-map"]', 340);
+      // ── A shared upload actually appearing on the map ─────────────────────
+      // Sharing an uploaded map gave it a path for the first time:
+      // "sktblob:<id>", a handle into Firebase. _applyBg had always treated a
+      // path as an asset path, so it painted the stage with
+      // <cdn>/sktblob%3A<id> — a URL that cannot exist — and threw away the
+      // image it had already downloaded. The players saw nothing.
+      //
+      // The DM was the last to know, which is why this survived: _bgMapPath is
+      // still null at the moment of upload, so the DM's own stage kept the
+      // in-memory data URL and looked correct until the next reload.
+      {
+        const d = panelDefs.battlemap;
+        const st = document.createElement('div');
+        const path0 = d._bgMapPath, img0 = _mapBgImage;
+        const DATA = 'data:image/webp;base64,AAAA';
+        _mapBgImage = { naturalWidth: 100, naturalHeight: 100, src: DATA };
+
+        d._bgMapPath = 'sktblob:u1abc';
+        d._applyBg(st, 100, 100);
+        ok('map: a shared upload paints the image, not a cdn path',
+           st.style.backgroundImage.indexOf(DATA) !== -1, st.style.backgroundImage);
+
+        // The other half of the same branch must not regress: a real asset
+        // path still has to go through assetUrl.
+        d._bgMapPath = 'adventure/x.webp';
+        d._applyBg(st, 100, 100);
+        ok('map: a real asset path still resolves through assetUrl',
+           /adventure\/x\.webp/.test(st.style.backgroundImage)
+           && st.style.backgroundImage.indexOf(DATA) === -1, st.style.backgroundImage);
+
+        // "sktblob:u1abc" is not a filename either. Split on "/" it hands the
+        // id back as the map's display name.
+        d._bgMapPath = 'sktblob:u1abc';
+        ok('map: a shared upload is named, not shown as its blob id',
+           d._isSharedUpload(d._bgMapPath) === true
+           && d._isSharedUpload('adventure/x.webp') === false);
+
+        d._bgMapPath = path0; _mapBgImage = img0;
+      }
+
+      // End to end on the PLAYER's side of it: a bgMapPath arrives over sync,
+      // the bytes are fetched out of Firebase, and the result has to reach the
+      // stage. Every link is checked above on its own; this is the one that
+      // proves they are joined up, and it is the link that was broken.
+      {
+        const d = panelDefs.battlemap;
+        const DATA = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+        const realGet = window.sktMapBlobGet;
+        const path0 = d._bgMapPath, img0 = _mapBgImage, seq0 = d._bgLoadSeq;
+        let askedFor = null;
+        window.sktMapBlobGet = id => { askedFor = id; return Promise.resolve(DATA); };
+        try {
+          // Sync sets the path and THEN loads it (see _applyRemoteKey ->
+          // bgMapPath). Loading without setting it left the old map's path in
+          // place, so _applyBg answered about that map instead of this one.
+          d._bgMapPath = 'sktblob:e2etest';
+          d._loadBgFromPath('sktblob:e2etest', false);
+          await sleep(500);
+          ok('map: the player fetches the blob the path names', askedFor === 'e2etest', String(askedFor));
+          ok('map: and the fetched image becomes the map background',
+             !!_mapBgImage && String(_mapBgImage.src).indexOf('data:image/gif') === 0,
+             _mapBgImage ? String(_mapBgImage.src).slice(0, 40) : 'no image');
+          const st = document.createElement('div');
+          d._applyBg(st, 100, 100);
+          ok('map: which is what the stage ends up showing',
+             st.style.backgroundImage.indexOf('data:image/gif') !== -1,
+             st.style.backgroundImage.slice(0, 80));
+        } finally {
+          window.sktMapBlobGet = realGet;
+          d._bgMapPath = path0; _mapBgImage = img0; d._bgLoadSeq = seq0;
+        }
+      }
+
       ok('battlemap: fit control exists', !!fit, '[data-mact="fit-map"] gone');
       ok('battlemap: fit is silent', errs.length === before, errs.slice(before).join(' | '));
     }
