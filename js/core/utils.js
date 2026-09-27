@@ -1333,6 +1333,30 @@ function sktMultiattackCountFor(counts, name){
   return 0;
 }
 
+// The 5e entry parser emits private control characters: \x04 wraps a bold
+// label, \x05 italic, \x06 bold, \x01 starts a section header, \x02 and \x03
+// fence an inset or a quote, \x07 fences an embedded table. search.js renders
+// them to HTML. Every OTHER surface — the Turn View stat block, the party
+// sheet's monster summary — prints the string as plain text, where the markers
+// are invisible junk that also eats the punctuation they stood in for.
+//
+// 90 monsters already leaked this way via `type:'item'` nodes; restoring
+// itemSub text and monster spellcasting would have taken it past a thousand.
+function sktPlainEntries(s){
+  if (s == null) return '';
+  return String(s)
+    // An embedded table has no sensible one-line form — drop it rather than
+    // spill its JSON into a trait line.
+    .replace(/\x07[\s\S]*?\x07/g, '')
+    // A bold label carries its own full stop in the HTML renderer, so put one
+    // back here — unless the label already ends in punctuation ("Mage:").
+    .replace(/\x04([^\x04]+)\x04/g, (_, t) => /[.:!?]$/.test(t.trim()) ? t : t + '.')
+    .replace(/\x01([^\n]*)\n*/g, '$1 ')
+    .replace(/[\x02\x03\x05\x06]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
 function sktMonsterAttacksAreMagical(raw){
   const blocks = [].concat(raw && raw.special_abilities || [], raw && raw.actions || []);
   return blocks.some(b => /attacks?\s+(?:are|count as)\s+magical/i.test(String(b && b.desc || '')));

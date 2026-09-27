@@ -1367,6 +1367,36 @@
            !/[-]/.test(vHtml + lHtml));
       }
 
+      // The parser's markers are private to it and to the one renderer that
+      // understands them. Every other surface prints the string with esc(), so
+      // a marker arrives as an invisible control character AND eats the
+      // punctuation it stood in for. 90 monsters already leaked this way
+      // through "item" nodes; restoring the sub-entry text above would have
+      // taken it past a thousand. Swept over the whole bestiary because the
+      // leak is per-node-type, not per-monster.
+      if (typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded
+          && typeof sktPlainEntries === 'function' && panelDefs.turnview){
+        const tv = panelDefs.turnview;
+        const leaked = [];
+        for (const r of Array.from(_5eData)){
+          if (r.cat !== 'monster' || !r._raw) continue;
+          for (const t of tv._rawList(r._raw, ['special_abilities', 'trait'])){
+            if (/[-]/.test(t.name + ' ' + t.text)){ leaked.push(r.name + '/' + t.name); break; }
+          }
+          if (leaked.length > 4) break;
+        }
+        ok('turnview: no parser marker reaches the stat block text',
+           leaked.length === 0, leaked.join(', '));
+        // The label keeps the full stop the HTML renderer would have given it,
+        // and does not gain a second one when it already ends in punctuation.
+        ok('plain: a bold label keeps its full stop',
+           sktPlainEntries('\x04Forbiddance\x04 No entry.') === 'Forbiddance. No entry.',
+           JSON.stringify(sktPlainEntries('\x04Forbiddance\x04 No entry.')));
+        ok('plain: and does not get a second one',
+           sktPlainEntries('\x04Mage:\x04 A spell.') === 'Mage: A spell.',
+           JSON.stringify(sktPlainEntries('\x04Mage:\x04 A spell.')));
+      }
+
       // The adventure/book renderer is a SECOND implementation of the same job,
       // so fixing one leaves the other broken — which is how the pair got out
       // of step in the first place.

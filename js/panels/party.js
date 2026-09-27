@@ -875,7 +875,9 @@ registerPanel('party',{
       return parts.join(', ');
     })();
     const fmtAction = a => {
-      const desc = String(a.desc || '').replace(/\s+/g, ' ').trim();
+      // sktPlainEntries first: this is a one-line plain-text summary, so the
+      // parser's inline markers have to become ordinary punctuation here.
+      const desc = sktPlainEntries(a.desc).replace(/\s+/g, ' ').trim();
       return a.name + (desc ? ': ' + (desc.length > 220 ? desc.slice(0, 217) + '…' : desc) : '');
     };
     const actions = raw ? (raw.actions || []).map(fmtAction).join('\n') : '';

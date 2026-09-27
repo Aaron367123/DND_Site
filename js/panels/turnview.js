@@ -293,8 +293,11 @@ registerPanel('turnview', {
     for (const n of names){
       const list = raw[n];
       if (Array.isArray(list) && list.length){
-        return list.map(x => ({ name: String(x.name || ''),
-                                text: x.desc != null ? String(x.desc) : this._flatten(x.entries) }));
+        // Through sktPlainEntries: this text is printed with esc(), so the
+        // parser's inline markers would arrive as invisible control characters
+        // and swallow the punctuation they stand for.
+        return list.map(x => ({ name: sktPlainEntries(x.name || ''),
+                                text: sktPlainEntries(x.desc != null ? x.desc : this._flatten(x.entries)) }));
       }
     }
     return [];
