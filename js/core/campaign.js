@@ -60,12 +60,41 @@ function _sktSaveCampaigns(list){
   try { localStorage.setItem(SKT_CAMPAIGNS_KEY, JSON.stringify(list)); } catch(e){}
 }
 
+// The campaign id named by the URL, if it is shaped like one of ours. Shape
+// checked rather than trusted: this value ends up in a database path.
+function _sktLinkedCampaignId(){
+  try {
+    const q = new URLSearchParams(location.search).get('c');
+    if (q && /^[A-Za-z0-9_-]{1,40}$/.test(q)) return q;
+  } catch(e){}
+  return null;
+}
+
+// The name the link carries, so an adopted campaign shows up as something a
+// person recognises rather than an id. Only ever a label.
+function _sktLinkedCampaignName(){
+  try {
+    const n = new URLSearchParams(location.search).get('cn');
+    if (n) return String(n).slice(0, 60);
+  } catch(e){}
+  return null;
+}
+
 // The active campaign id. A ?c= in the URL wins, which is what makes a
 // per-campaign player link work: the link decides, not whatever this browser
 // had open last.
+//
+// The registry check below is a guard against a malformed id reaching a
+// database path, NOT a membership test — the boot step at the bottom of this
+// file has already adopted any campaign the URL names. It used to be a
+// membership test, and that was the bug: a player's phone has never heard of
+// the DM's campaign, so every player link to anything other than "main" was
+// silently ignored and the player synced against skt/c/main while the DM was
+// somewhere else. No map, no tokens, no combat — a table that looked online
+// and shared nothing.
 function sktActiveCampaign(){
   try {
-    const q = new URLSearchParams(location.search).get('c');
+    const q = _sktLinkedCampaignId();
     if (q && sktCampaigns().some(c => c.id === q)) return q;
   } catch(e){}
   try {
@@ -185,8 +214,13 @@ function sktDeleteCampaign(id){
 // theirs, whichever one the DM happens to have open.
 function sktPlayerLink(id){
   const u = new URL(location.href);
+  const cid = id || sktActiveCampaign();
   u.searchParams.set('player', '1');
-  u.searchParams.set('c', id || sktActiveCampaign());
+  u.searchParams.set('c', cid);
+  // So the campaign arrives on the player's device with a name on it. Purely
+  // a label — the id is what decides anything.
+  const c = sktCampaigns().find(x => x.id === cid);
+  if (c && c.name) u.searchParams.set('cn', c.name);
   u.searchParams.delete('nosync');
   return u.toString();
 }
@@ -200,9 +234,60 @@ function sktPlayerLink(id){
   try {
     if (localStorage.getItem(SKT_CAMPAIGNS_KEY)) return;      // already set up
     const hasData = Object.keys(_sktLiveKeys()).length > 0;
-    _sktSaveCampaigns([{ id: SKT_CAMPAIGN_MAIN,
-                         name: hasData ? 'My Campaign' : 'New Campaign',
-                         created: new Date().toISOString() }]);
-    localStorage.setItem(SKT_CAMPAIGN_ACTIVE, SKT_CAMPAIGN_MAIN);
+    // An empty browser that arrived on a player link belongs to THAT campaign,
+    // not to a "main" it will never use. Registering main here instead left
+    // every player device carrying a phantom campaign it could not see.
+    const linked = _sktLinkedCampaignId();
+    const id   = (!hasData && linked) ? linked : SKT_CAMPAIGN_MAIN;
+    const name = (!hasData && linked)
+      ? (_sktLinkedCampaignName() || 'Shared campaign')
+      : (hasData ? 'My Campaign' : 'New Campaign');
+    _sktSaveCampaigns([{ id, name, created: new Date().toISOString() }]);
+    localStorage.setItem(SKT_CAMPAIGN_ACTIVE, id);
   } catch(e){}
+})();
+
+// ── Arriving by link ────────────────────────────────────────────────────────
+// A ?c= that this browser has never seen is the normal case, not an error:
+// it is what every player link looks like on every player's phone. Adopt it.
+//
+// This has to be a BOOT step rather than something sktActiveCampaign() does on
+// the fly, for two reasons. The id decides a Firebase path, so it is read very
+// early and very often and must stay a pure lookup. And the swap below moves
+// localStorage around — campaign.js is loaded before state.js precisely so
+// this lands before anything reads a key.
+//
+// The same swap covers a case that was already broken for a DM with two
+// campaigns: opening a link for campaign B while campaign A is the stored one
+// made the client read A's party out of localStorage while syncing to B's
+// subtree in Firebase. The id agreeing with the keys is the whole point.
+// Returns true when this browser is now pointed at `id`. Takes the id rather
+// than reading the URL so it can be exercised without loading the page at a
+// particular address — the bug this fixes survived precisely because the only
+// way to hit the code was to be a player opening a link.
+function sktAdoptCampaignLink(id, name){
+  if (!id || !/^[A-Za-z0-9_-]{1,40}$/.test(id)) return false;
+  try {
+    if (!sktCampaigns().some(c => c.id === id)){
+      const list = sktCampaigns();
+      list.push({ id, name: String(name || 'Shared campaign').slice(0, 60),
+                  created: new Date().toISOString() });
+      _sktSaveCampaigns(list);
+    }
+    // Read the stored id DIRECTLY. sktActiveCampaign() would answer with the
+    // URL's id — the very thing being adopted — so it would report there is
+    // nothing to move, and the outgoing campaign's keys would be left in place
+    // to merge into the incoming one.
+    let prev = null;
+    try { prev = localStorage.getItem(SKT_CAMPAIGN_ACTIVE); } catch(e){}
+    if (prev === id) return true;
+    if (prev) _sktStash(prev);
+    _sktUnstash(id);
+    localStorage.setItem(SKT_CAMPAIGN_ACTIVE, id);
+    return true;
+  } catch(e){ return false; }
+}
+
+(function _sktHonourCampaignLink(){
+  sktAdoptCampaignLink(_sktLinkedCampaignId(), _sktLinkedCampaignName());
 })();

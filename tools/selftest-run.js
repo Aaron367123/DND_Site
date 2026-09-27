@@ -153,7 +153,15 @@ for (const m of MODES){
 stopServer();
 
 console.log('\n' + '-'.repeat(46));
-console.log(totalFail === 0
+// A mode that CRASHED contributes no failures and no passes, so keying the
+// headline off totalFail alone printed "ALL 135 checks passed across 3
+// mode(s)" for a run where the DM mode died on load and its 477 checks never
+// ran. The exit code was right; the line a human reads was not.
+const broke = failedModes.filter(n => !/:/.test(n));
+console.log(totalFail === 0 && !failedModes.length
   ? 'ALL ' + totalPass + ' checks passed across ' + MODES.length + ' mode(s)'
-  : totalFail + ' FAILED, ' + totalPass + ' passed  (' + failedModes.join(', ') + ')');
+  : totalFail
+    ? totalFail + ' FAILED, ' + totalPass + ' passed  (' + failedModes.join(', ') + ')'
+    : totalPass + ' passed, but ' + broke.length + ' mode(s) never ran  ('
+      + failedModes.join(', ') + ')');
 process.exit(totalFail === 0 && failedModes.length === 0 ? 0 : 1);

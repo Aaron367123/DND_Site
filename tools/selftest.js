@@ -2552,6 +2552,64 @@
         sktDeleteCampaign(idC);
       }
 
+      // ── Arriving by a player link ────────────────────────────────────────
+      // The player link is the ONLY way a second device learns which campaign
+      // it belongs to, and it was being ignored. sktActiveCampaign() honoured
+      // ?c= only when the id was already in this browser's registry — which on
+      // a player's phone it never is. So every link to any campaign other than
+      // "main" silently resolved to main: the player synced against a subtree
+      // the DM was not writing to, and saw no map, no tokens and no combat
+      // while everything looked connected.
+      if (typeof sktAdoptCampaignLink === 'function'){
+        const before   = sktActiveCampaign();
+        const beforeN  = sktCampaigns().length;
+        const LINKED   = 'zzlinked1';
+
+        // A party in the campaign we are about to leave, so the swap can be
+        // checked for having actually moved the keys rather than merged them.
+        localStorage.setItem('skt-party-v1', JSON.stringify([{ id: 'zzp', name: 'Left Behind' }]));
+
+        ok('campaign: a link to an unknown campaign is adopted, not ignored',
+           sktAdoptCampaignLink(LINKED, 'Linked Table') === true);
+        ok('campaign: and it is the one this client syncs to',
+           sktFbRoot() === 'skt/c/' + LINKED, sktFbRoot());
+        ok('campaign: it joins the registry under the name the link carried',
+           (sktCampaigns().find(c => c.id === LINKED) || {}).name === 'Linked Table');
+
+        // The swap has to MOVE the keys. Leaving them would hand the incoming
+        // campaign the outgoing one's party.
+        let landed = null;
+        try { landed = JSON.parse(localStorage.getItem('skt-party-v1') || 'null'); } catch(e){}
+        ok('campaign: the previous campaign party does not follow you in',
+           Array.isArray(landed) && landed.length === 0, JSON.stringify(landed));
+
+        // ...and it is still there when you go back, rather than discarded.
+        sktAdoptCampaignLink(before, 'back');
+        let restored = null;
+        try { restored = JSON.parse(localStorage.getItem('skt-party-v1') || 'null'); } catch(e){}
+        ok('campaign: and it is waiting when you return',
+           Array.isArray(restored) && restored.length === 1 && restored[0].name === 'Left Behind',
+           JSON.stringify(restored));
+
+        // An id decides a database path, so a malformed one must never reach it.
+        const root0 = sktFbRoot();
+        ok('campaign: a malformed link id is refused',
+           sktAdoptCampaignLink('../../evil', 'x') === false
+           && sktAdoptCampaignLink('', 'x') === false
+           && sktFbRoot() === root0, sktFbRoot());
+
+        // Clean up the campaign this check invented.
+        try {
+          const list = sktCampaigns().filter(c => c.id !== LINKED);
+          localStorage.setItem('skt-campaigns-v1', JSON.stringify(list));
+          localStorage.removeItem('skt-campaign-data-' + LINKED);
+        } catch(e){}
+        ok('campaign: the link checks left the registry as they found it',
+           sktCampaigns().length === beforeN && sktActiveCampaign() === before,
+           sktCampaigns().length + ' vs ' + beforeN);
+        load();
+      }
+
       ok('campaign: deleting the open one is refused',
          sktDeleteCampaign(sktActiveCampaign()) === false);
       ok('campaign: deleting another works', sktDeleteCampaign(idB) === true);
