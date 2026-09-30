@@ -20,7 +20,7 @@ let only = null, state = null;
 for (let i = 0; i < args.length; i++){
   if (args[i] === '--mode') only = args[++i];
   else if (args[i] === '--help' || args[i] === '-h'){
-    console.log('usage: node tools/selftest-run.js [BACKUP.json|--live] [--mode dm|player|mobile]');
+    console.log('usage: node tools/selftest-run.js [BACKUP.json|--live] [--mode dm|player|mobile|phone]');
     console.log('  default: tools/fixture.json (frozen bench — build with make-fixture.js)');
     console.log('  --live : .state/live.json (real campaign; bench checks may flag drift)');
     process.exit(0);
@@ -71,6 +71,11 @@ const MODES = [
   { name: 'dm',     extra: ['--ready', "typeof _5eLoaded !== 'undefined' && _5eLoaded"] },
   { name: 'player', extra: ['--player'] },
   { name: 'mobile', extra: ['--preset', 'mobile'] },
+  // The player view ON A PHONE — what players actually use at the table. The
+  // "player" pass is desktop-sized and "mobile" is the DM's screen, so until
+  // this existed nothing tested the phone player layout: a turn bar squeezed
+  // to one word per line shipped without a single check noticing.
+  { name: 'phone',  extra: ['--player', '--preset', 'mobile'] },
 ].filter(m => !only || m.name === only);
 
 // ── Static server ────────────────────────────────────────────────────────────

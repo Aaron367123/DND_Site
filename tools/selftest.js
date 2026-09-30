@@ -3722,6 +3722,59 @@
            css.indexOf('body.player-mode .float-toolbar{display:none !important}') >= 0);
       }
 
+      // ── The phone's More tab ──────────────────────────────────────────────
+      // On a phone the floating toolbar is hidden and everything in it a
+      // player can use moves to a More tab. On a desktop the toolbar is still
+      // there, so a More tab would be a second copy of it. This pass runs at
+      // both sizes (the runner's "phone" mode is the player view on a phone).
+      if (typeof paVisibleTabs === 'function' && typeof paIsPhone === 'function'){
+        const PHONE = paIsPhone();
+        const has = paVisibleTabs().some(t => t.id === 'more');
+        ok(PHONE ? 'phone: a More tab holds what the toolbar did'
+                 : 'player: no More tab while the toolbar is on screen', has === PHONE);
+        if (PHONE){
+          const bar = document.getElementById('float-toolbar');
+          const shown = el => !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+          ok('phone: the floating toolbar is hidden', !shown(bar));
+          _updatePlayerViewportVars && _updatePlayerViewportVars();
+          ok('phone: and the turn bar reserves no room for it',
+             getComputedStyle(document.documentElement).getPropertyValue('--pv-topright').trim() === '0px');
+          const tab0 = paTab;
+          try {
+            paTab = 'more'; paRender(); await sleep(200);
+            const scr = document.getElementById('pa-screen');
+            const rows = [...scr.querySelectorAll('.pa-more-title')].map(e => e.textContent.trim());
+            ok('phone: More has search, settings, sync, campaign and the way back',
+               ['Search', 'Settings', 'Sync', 'Campaign', 'Back to DM view'].every(r => rows.includes(r)),
+               JSON.stringify(rows));
+            // Search is the real search box, brought back as a full-width strip.
+            scr.querySelector('[data-more="search"]').click(); await sleep(200);
+            const inp = document.getElementById('search-input');
+            ok('phone: Search opens the real search box, full width',
+               document.body.classList.contains('pa-searching') && shown(document.getElementById('search-wrap'))
+               && document.getElementById('search-wrap').getBoundingClientRect().width > innerWidth * 0.6);
+            ok('phone: with nothing else from the toolbar beside it',
+               !shown(document.getElementById('campaign-btn')) && shown(document.getElementById('pa-search-close')));
+            inp.value = 'fireball'; inp.dispatchEvent(new Event('input', { bubbles: true })); await sleep(250);
+            ok('phone: and it finds things',
+               shown(document.getElementById('search-popup')) && /Fireball/.test(document.getElementById('search-popup').textContent));
+            document.getElementById('pa-search-close').click(); await sleep(150);
+            ok('phone: Done closes it and hides the toolbar again',
+               !document.body.classList.contains('pa-searching') && !shown(bar));
+            scr.querySelector('[data-more="settings"]').click(); await sleep(150);
+            const drawer = document.getElementById('settings-drawer');
+            ok('phone: Settings opens the settings drawer', drawer.classList.contains('open') && shown(drawer));
+            drawer.classList.remove('open');
+          } catch(e){
+            ok('phone: the More tab checks ran to completion', false, e.message);
+          } finally {
+            document.body.classList.remove('pa-searching');
+            if (typeof closeSearch === 'function') closeSearch();
+            paTab = tab0; paRender();
+          }
+        }
+      }
+
       // ── A player's own notes ──────────────────────────────────────────────
       // Every player keeps notes of their own in the Notes tab — create,
       // rename, edit, delete — which live in the DM's tree under
@@ -4161,9 +4214,22 @@
       const back = document.getElementById('player-view-btn');
       ok('player: a way back to the DM view exists', !!back);
       if (back){
-        const cs = getComputedStyle(back);
-        ok('player: the back control is visible', cs.display !== 'none'
-           && back.getBoundingClientRect().width > 0, 'display ' + cs.display);
+        // On a phone the floating toolbar is hidden and the way back is the
+        // More tab's "Back to DM view" row instead. Same rule — the view must
+        // be escapable — different place. (Not clicked: it navigates away.)
+        const phone = typeof paIsPhone === 'function' && paIsPhone();
+        if (phone){
+          const tab0 = paTab;
+          paTab = 'more'; paRender(); await sleep(150);
+          const row = document.querySelector('#pa-screen [data-more="dm"]');
+          ok('player: the back control is visible', !!row && row.getBoundingClientRect().width > 0,
+             'no Back to DM view row in More');
+          paTab = tab0; paRender();
+        } else {
+          const cs = getComputedStyle(back);
+          ok('player: the back control is visible', cs.display !== 'none'
+             && back.getBoundingClientRect().width > 0, 'display ' + cs.display);
+        }
         ok('player: it is labelled as the way back',
            /back to dm/i.test(back.getAttribute('title') || ''),
            back.getAttribute('title'));

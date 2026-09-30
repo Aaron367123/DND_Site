@@ -2424,7 +2424,36 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
    only; the desktop player view keeps the bar. Same gate as the phone layout. */
 @media (max-width: 768px) and (pointer: coarse){
   body.player-mode .float-toolbar{display:none !important}
+  /* Everything it held now lives in the player app's More tab. Search is the
+     real search box: while searching, the bar comes back as a full-width
+     strip with only the box and Done, and the results fill the screen down
+     to the tab bar (the popup is already pinned to the viewport above). */
+  body.player-mode.pa-searching .float-toolbar{
+    display:flex !important; left:8px; right:8px; width:auto; z-index:9500;
+    align-items:center; gap:8px}
+  body.player-mode.pa-searching .float-toolbar > *:not(#search-wrap):not(#pa-search-close){display:none !important}
+  body.player-mode.pa-searching #search-wrap.open{flex:1; width:auto}
+  body.player-mode.pa-searching .search-bar{padding:10px 14px; font-size:var(--fs-xl)}
+  body.player-mode.pa-searching .search-popup{max-height:none;
+    bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
+  body.player-mode.pa-searching #pa-search-close{display:inline-flex; flex-shrink:0}
+  /* A solid ground behind search mode: the turn bar showed through around the
+     strip. Tapping it is a tap outside the search, which closes it. */
+  body.player-mode.pa-searching::before{content:""; position:fixed; inset:0; z-index:9400; background:var(--bg)}
 }
+/* Search mode's Done button is added by the player app; hidden otherwise. */
+#pa-search-close{display:none}
+/* The More tab: one big row per thing the toolbar used to hold. */
+.pa-more{gap:8px}
+.pa-more-row{display:flex; align-items:center; gap:14px; width:100%; min-height:58px;
+  padding:12px 14px; box-sizing:border-box; background:var(--panel); color:var(--text);
+  border:1px solid var(--border); border-radius:var(--r-md); font:inherit; text-align:left; cursor:pointer}
+.pa-more-row:active{background:var(--panel-2)}
+.pa-more-row .ico{width:22px; height:22px; flex-shrink:0; color:var(--text-muted)}
+.pa-more-static{cursor:default}
+.pa-more-text{display:flex; flex-direction:column; gap:2px; min-width:0}
+.pa-more-title{font-size:var(--fs-xl); font-weight:600}
+.pa-more-sub{font-size:var(--fs-sm); color:var(--text-muted); display:flex; align-items:center; gap:6px}
 .notes-edit-area h1,.notes-edit-area h2,.notes-edit-area h3{color:var(--text);display:block;font-weight:600;letter-spacing:-.01em}
 .notes-edit-area h1{font-size:var(--fs-5xl);margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .notes-edit-area h2{font-size:var(--fs-3xl);margin:22px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--border)}

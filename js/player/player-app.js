@@ -100,7 +100,16 @@ const PA_TABS = [
   // phone cannot rewind the clock even if something did reach a handler.
   { id:'time',  label:'Time',  icon:'i-clock',  needs:'time'  },
   { id:'sky',   label:'Sky',   icon:'i-cloud',  needs:'weather' },
+  // Phones only. The floating toolbar is hidden on a phone (main.css), and
+  // everything in it a player can use lives here instead: search, settings,
+  // sync status, the campaign, and the way back to the DM view.
+  { id:'more',  label:'More',  icon:'i-dots',   always:true, phoneOnly:true },
 ];
+
+// The same gate the phone layout uses in main.css — one definition of
+// "phone", or the tab and the hidden toolbar could disagree.
+const PA_PHONE_Q = '(max-width: 768px) and (pointer: coarse)';
+function paIsPhone(){ try { return matchMedia(PA_PHONE_Q).matches; } catch(e){ return false; } }
 let paTab = 'you';
 
 // What the player view can actually surface, kept next to the tab list so the
@@ -116,7 +125,8 @@ const PA_SHAREABLE = new Set(PA_TABS.filter(t => t.needs).map(t => t.needs).conc
 
 function paVisibleTabs(){
   const sh = paShared();
-  return PA_TABS.filter(t => t.always || sh.has(t.needs));
+  const phone = paIsPhone();
+  return PA_TABS.filter(t => (t.always || sh.has(t.needs)) && (!t.phoneOnly || phone));
 }
 
 function initPlayerApp(){
@@ -139,7 +149,79 @@ function initPlayerApp(){
 
   shell.addEventListener('click', paOnClick);
   shell.addEventListener('change', paOnChange);
+  paInitMore();
   paRender();
+}
+
+// ─── The phone's More tab ────────────────────────────────────────────────────
+// Search is the REAL search box, not a copy: it lives inside the floating
+// toolbar, so while searching the toolbar comes back as a full-width strip
+// holding only the box and a Done button (body.pa-searching, main.css). A
+// second search UI built here would drift from the first the day either
+// changed.
+function paInitMore(){
+  try { matchMedia(PA_PHONE_Q).addEventListener('change', () => paRender()); } catch(e){}
+  const bar = document.getElementById('float-toolbar');
+  if (bar && !document.getElementById('pa-search-close')){
+    const done = document.createElement('button');
+    done.id = 'pa-search-close';
+    done.className = 'btn';
+    done.textContent = 'Done';
+    done.addEventListener('click', () => { if (typeof closeSearch === 'function') closeSearch(); paEndSearch(); });
+    bar.appendChild(done);
+  }
+  // However the search closes — Done, Escape, a tap outside it — leave
+  // search mode with it, or the strip would sit over the screen empty.
+  const wrap = document.getElementById('search-wrap');
+  if (wrap && typeof MutationObserver === 'function'){
+    new MutationObserver(() => { if (!wrap.classList.contains('open')) paEndSearch(); })
+      .observe(wrap, { attributes: true, attributeFilter: ['class'] });
+  }
+  // Keep the Sync row live while it is on screen.
+  const sync = document.getElementById('sync-status');
+  if (sync && typeof MutationObserver === 'function'){
+    new MutationObserver(() => {
+      const row = document.getElementById('pa-more-sync');
+      if (row) row.innerHTML = sync.innerHTML;
+    }).observe(sync, { childList: true, subtree: true, characterData: true, attributes: true });
+  }
+}
+function paStartSearch(){
+  document.body.classList.add('pa-searching');
+  if (typeof openSearch === 'function') openSearch();
+  setTimeout(() => document.getElementById('search-input')?.focus(), 60);
+}
+function paEndSearch(){ document.body.classList.remove('pa-searching'); }
+
+function paMoreScreen(){
+  const camp = (typeof sktActiveCampaignName === 'function') ? sktActiveCampaignName() : '';
+  const sync = document.getElementById('sync-status');
+  const back = document.getElementById('player-view-btn');
+  const ico = id => (typeof ICO === 'function') ? ICO(id) : '';
+  const row = (act, icon, title, sub) =>
+    '<button class="pa-more-row" data-more="' + act + '">' + ico(icon)
+    + '<span class="pa-more-text"><span class="pa-more-title">' + title + '</span>'
+    + (sub ? '<span class="pa-more-sub">' + sub + '</span>' : '') + '</span></button>';
+  return '<div class="pa-card pa-more">'
+    + row('search', 'i-search', 'Search', 'Spells, monsters, items, rules')
+    + row('settings', 'i-gear', 'Settings', 'Text size, theme and display')
+    + '<div class="pa-more-row pa-more-static">' + ico('i-cloud')
+    +   '<span class="pa-more-text"><span class="pa-more-title">Sync</span>'
+    +   '<span class="pa-more-sub" id="pa-more-sync">' + (sync ? sync.innerHTML : '') + '</span></span></div>'
+    + (camp ? row('campaign', 'i-folder', 'Campaign', paEsc(camp)) : '')
+    + (back ? row('dm', 'i-monitor', 'Back to DM view', 'Switches this device to the DM screen') : '')
+    + '</div>';
+}
+function paWireMore(el){
+  el.querySelectorAll('[data-more]').forEach(b => b.addEventListener('click', () => {
+    const act = b.dataset.more;
+    if (act === 'search') paStartSearch();
+    // Opened directly rather than by poking the hidden gear: the gear toggles
+    // on mousedown, and a toggle would close a drawer that is already open.
+    else if (act === 'settings') document.getElementById('settings-drawer')?.classList.add('open');
+    else if (act === 'campaign' && typeof sktOpenCampaignManager === 'function') sktOpenCampaignManager();
+    else if (act === 'dm') document.getElementById('player-view-btn')?.click();
+  }));
 }
 
 // One entry point for every redraw, called by realtime and by local edits.
@@ -289,6 +371,7 @@ function paRenderScreen(){
   paUnmountCurrent(el);
   el.innerHTML = '';
   if (paTab === 'you')   { el.innerHTML = paYouScreen(); return; }
+  if (paTab === 'more')  { el.innerHTML = paMoreScreen(); paWireMore(el); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
   if (paTab === 'notes') { paMountPanel(el, 'notes');     return; }
