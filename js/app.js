@@ -13,6 +13,37 @@ function initPanels(){
   });
 }
 
+// The dock's names. Seventeen outline icons told you nothing until you
+// hovered one and waited for the browser's tooltip. Now a label shows the
+// moment you hover (CSS, from data-label), and the button at the bottom
+// widens the dock to show every name with the groups headed. Remembered per
+// browser — it is a screen-size preference, not campaign data.
+const DOCK_NAMES_KEY = 'skt-dock-names-v1';
+function initDockNames(){
+  // The instant label replaces the native tooltip, which would otherwise
+  // appear a second later on top of it. The long description stays as the
+  // accessible name.
+  document.querySelectorAll('.panel-dock .dock-btn[data-label][title]').forEach(b => {
+    b.setAttribute('aria-label', b.getAttribute('title'));
+    b.removeAttribute('title');
+  });
+  const btn = document.getElementById('dock-expand-btn');
+  const apply = on => {
+    document.body.classList.toggle('dock-expanded', on);
+    if (btn){ btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+              btn.dataset.label = on ? 'Hide names' : 'Show names'; }
+    if (typeof _updateToolbarOcclusion === 'function') _updateToolbarOcclusion();
+  };
+  let on = false;
+  try { on = localStorage.getItem(DOCK_NAMES_KEY) === '1'; } catch(e){}
+  apply(on);
+  if (btn) btn.addEventListener('click', () => {
+    on = !document.body.classList.contains('dock-expanded');
+    try { localStorage.setItem(DOCK_NAMES_KEY, on ? '1' : '0'); } catch(e){}
+    apply(on);
+  });
+}
+
 function init(){
   // Check if this is the player view tab
   if(new URLSearchParams(location.search).get('player')==='1'){
@@ -41,6 +72,7 @@ function init(){
   load();
   initRealtime();
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>btn.addEventListener('click',()=>togglePanel(btn.dataset.panel)));
+  initDockNames();
   // Build the player-view URL robustly. The naive `split('?')[0]+'?player=1'`
   // approach broke whenever the page URL had a `#fragment` (notes / onboarding
   // / scroll-into-view links sometimes add one): the result became

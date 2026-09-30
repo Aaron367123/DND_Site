@@ -1750,6 +1750,38 @@ registerPanel('battlemap',{
   // Font sizes with a minimum are minimums in SCREEN pixels by intent, but the
   // CSS transform silently reinterprets them as stage pixels. Divide the floor
   // by the view scale so "at least 11px" keeps meaning 11px on the display.
+  // Names are drawn at a readable 11 screen px however far out the map is
+  // zoomed, so zoomed out a label is several cells wide and neighbouring
+  // names ran into each other ("Na Creambak"). Each label is capped at the
+  // gap to the nearest token beside it on the same line, ending in "…", and
+  // hovering the token shows the whole name (no room at all: hidden until
+  // hovered). A token with nobody beside it
+  // keeps its full name. Measured against the labels actually drawn, so a
+  // token hidden from this viewer never shortens a visible one.
+  _fitTokenNames(){
+    const b = this._body; if (!b) return;
+    const vs = this._viewScale || 1;
+    const els = [...b.querySelectorAll('.map-token-name')];
+    const byId = new Map((this._tokens || []).map(t => [String(t.id), t]));
+    const drawn = els.map(el => ({ el, t: byId.get(el.dataset.tid) })).filter(d => d.t);
+    drawn.forEach(({ el, t }) => {
+      const h = el.offsetHeight || 16 / vs;
+      let near = Infinity;
+      for (const d of drawn){
+        const o = d.t;
+        if (o === t) continue;
+        if (Math.abs((o.y || 0) - (t.y || 0)) >= h) continue;   // the two label lines don't meet
+        near = Math.min(near, Math.abs((o.x || 0) - (t.x || 0)));
+      }
+      // Too little room for even a few letters: a stub reading '…' says
+      // nothing, so hide the name until the token is hovered — what most
+      // map tools do when zoomed out.
+      const room = isFinite(near) ? near - 6 / vs : Infinity;
+      el.classList.toggle('tight', room < 40 / vs);
+      el.style.maxWidth = isFinite(room) ? room.toFixed(1) + 'px' : '';
+    });
+  },
+
   _counterScaleLabels(vs){
     const b = this._body; if (!b) return;
     const bg = this._bgMapScale || 1;
@@ -1765,6 +1797,7 @@ registerPanel('battlemap',{
       const dim = ((t.size || 1) * this._tokenUnit() - 4) * bg;
       el.style.fontSize = Math.max(14 / vs, dim * 0.6).toFixed(1) + 'px';
     });
+    this._fitTokenNames();
   },
 
   // A device still running the OLD code writes _bgMapScale when it zooms, and
@@ -3269,6 +3302,13 @@ registerPanel('battlemap',{
       const half = cs2/2;
       x = Math.max(half, Math.min(stageW - half, x));
       y = Math.max(half, Math.min(stageH - half, y));
+      // Dropped onto a square someone already holds: take the nearest free
+      // one instead of stacking two tokens where only one can be seen or
+      // grabbed. Every other way of adding tokens already did this.
+      if (this._tokens.some(t => Math.abs((t.x||0) - x) < half && Math.abs((t.y||0) - y) < half)){
+        const spot = this._freeCellNear(x, y);
+        if (spot){ x = spot.x; y = spot.y; }
+      }
 
       const pi  = e.dataTransfer.getData('application/x-skt-party-pi');
       const mid = e.dataTransfer.getData('application/x-skt-bestiary-mid');
@@ -4698,9 +4738,12 @@ registerPanel('battlemap',{
       // Floor divided by _viewScale for the same reason as the glyph floor
       // above — it must stay 11 SCREEN px, not 11 stage px.
       const nameFs = Math.max(11 / (this._viewScale || 1), 10 * tokScale);
-      nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25`;
+      nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis`;
       nameEl.textContent = displayLabel;
       frag.appendChild(nameEl);
+      // _fitTokenNames may have shortened it to fit beside a neighbour.
+      el.addEventListener('mouseenter', () => nameEl.classList.add('full'));
+      el.addEventListener('mouseleave', () => nameEl.classList.remove('full'));
 
       // Right-click on a token opens the options panel (drag/select are left-click only).
       el.addEventListener('contextmenu', e => {
@@ -4917,6 +4960,7 @@ registerPanel('battlemap',{
       frag.appendChild(el);
     });
     stage.appendChild(frag);
+    this._fitTokenNames();
   },
 
   _showPanel(t){

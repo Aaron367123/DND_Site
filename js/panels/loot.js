@@ -650,7 +650,7 @@ registerPanel('loot',{
       <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?ICO('i-check'):'<span class="loot-unpaid">○</span>'}</button>
       <div class="loot-name">
         <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
-        <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="Click to rename" spellcheck="false">
+        <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="${esc(item.name)} — click to rename" spellcheck="false">
         ${assignedName?`<span class="loot-assigned-pill" title="${esc(assignedName)}">→ ${esc(assignedName)}</span>`:''}
       </div>
       <input type="number" class="loot-qty" value="${item.qty||1}" min="1" data-lfield="qty" data-li="${i}" title="Quantity">

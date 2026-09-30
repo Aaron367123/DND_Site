@@ -572,6 +572,7 @@ function showHelpOverlay(){
   if (existing){ existing.remove(); return; }
   const SHORTCUTS = [
     { group: 'Search', items: [
+      ['Ctrl + K',         'Go to anything — panels, commands, rules'],
       ['/',                'Open / focus search'],
       ['↑ ↓',              'Browse results'],
       ['Enter',            'Open selected result'],

@@ -48,7 +48,36 @@ registerPanel('party',{
       };
       body.addEventListener('click', this._bodyClickHandler);
     }
+    this._addCompactToggle(body);
     this._render();
+  },
+  // One click between full cards and the one-row-per-character glance, in
+  // the title bar. It lived only in the ⋯ menu, where nobody found it, and
+  // the full cards show three characters of five in a default-sized panel.
+  // Only in a real window: the player app mounts this panel bare.
+  _addCompactToggle(body){
+    const acts = body.closest('.window')?.querySelector('.window-actions');
+    if (!acts || acts.querySelector('[data-party-compact]')) return;
+    const b = document.createElement('button');
+    b.className = 'btn icon-btn';
+    b.dataset.partyCompact = '1';
+    b.addEventListener('mousedown', e => e.stopPropagation());
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!state.settings) state.settings = {};
+      state.settings.partyCompact = !state.settings.partyCompact;
+      save(); this._render();
+    });
+    acts.insertBefore(b, acts.firstChild);
+  },
+  _syncCompactToggle(){
+    const b = this._body?.closest('.window')?.querySelector('[data-party-compact]');
+    if (!b) return;
+    const on = !!(state.settings && state.settings.partyCompact);
+    b.textContent = on ? '▤' : '▦';
+    b.title = on ? 'Show full character cards' : 'Compact: one row per character';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.classList.toggle('active', on);
   },
   unmount(){
     if (this._body && this._bodyClickHandler){
@@ -121,6 +150,7 @@ registerPanel('party',{
     }
     b.innerHTML = '<div class="'+gridCls+'">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
     this._wire();
+    this._syncCompactToggle();
   },
 
   // HP bar visual: clamp 0–100% normally, but flag a "surplus" state when

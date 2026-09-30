@@ -34,17 +34,17 @@
  */
 'use strict';
 
-const BUILD = 'fe971f8e1e';
+const BUILD = '0b955fd78c';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=1dd946c1ca',
+  'styles/main.css?v=b090521605',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=28f4faf7d2',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=4b5e5d2d75',
+  'js/core/utils.js?v=250efceedf',
   'js/core/state.js?v=3360b6540c',
   'js/core/window-manager.js?v=5ba37f5fde',
   'js/panels/combat.js?v=15bf1b9e98',
@@ -52,20 +52,20 @@ const PRECACHE = [
   'js/generated/reactions.js?v=faa668dc18',
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=9c819aec39',
-  'js/panels/party.js?v=f9787ae413',
+  'js/panels/party.js?v=bd29f83f0c',
   'js/panels/shop.js?v=fadf7d5fe3',
   'js/sync/notes-sync.js?v=8c42540638',
   'js/sync/dropbox-config.js?v=ccf8533d50',
   'js/sync/dropbox-sync.js?v=ab773edfd6',
   'js/panels/notes.js?v=8a8634ee46',
-  'js/panels/battlemap.js?v=0f52e29e6d',
+  'js/panels/battlemap.js?v=6ca93ed4ed',
   'js/panels/npc-library.js?v=1a0f254270',
   'js/panels/bestiary.js?v=bc58b530c6',
   'js/panels/content-panel.js?v=235e0b5a0d',
   'js/panels/adventures.js?v=adbf195007',
   'js/panels/books.js?v=beba2c9cfd',
   'js/panels/npc-generator.js?v=825e415cae',
-  'js/panels/loot.js?v=0f5520abe8',
+  'js/panels/loot.js?v=cd74ce012b',
   'js/panels/encounter.js?v=2f74610fd5',
   'js/panels/soundboard.js?v=6ee51d8589',
   'js/panels/weather.js?v=ab1bd498ab',
@@ -78,13 +78,14 @@ const PRECACHE = [
   'js/ui/context-menu.js?v=5402b4bfbf',
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=bdaf579267',
+  'js/ui/command-palette.js?v=f7301cd886',
   'js/features/pdf-import.js?v=06787122c5',
-  'js/player/player-app.js?v=9046efe99f',
+  'js/player/player-app.js?v=fbcff35e34',
   'js/ui/player-view.js?v=d4b768de97',
   'js/sync/realtime.js?v=d7787684ce',
   'js/ui/tutorial.js?v=e47e670b86',
   'js/ui/onboarding.js?v=42199a671a',
-  'js/app.js?v=f950284ed2',
+  'js/app.js?v=e44c74edc3',
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build

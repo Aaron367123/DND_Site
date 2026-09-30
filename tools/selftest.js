@@ -3640,6 +3640,170 @@
       ok('turnview: interaction is silent', errs.length === before, errs.slice(before).join(' | '));
     }
     closePanel('turnview');
+
+    // ── The dock says what each icon is ───────────────────────────────────
+    {
+      const btns = [...document.querySelectorAll('.panel-dock .dock-btn[data-panel]')];
+      ok('dock: every panel button carries its name',
+         btns.length >= 17 && btns.every(b => b.dataset.label && b.querySelector('.dock-label')),
+         btns.filter(b => !b.dataset.label).map(b => b.dataset.panel).join(','));
+      ok('dock: no native tooltip to double up on the instant label',
+         btns.every(b => !b.hasAttribute('title') && b.getAttribute('aria-label')));
+      ok('dock: grouped under four headings',
+         document.querySelectorAll('.panel-dock .dock-divider[data-group]').length === 4);
+      const dock = document.querySelector('.panel-dock');
+      const exp = document.getElementById('dock-expand-btn');
+      const w0 = dock.getBoundingClientRect().width;
+      const k0 = localStorage.getItem('skt-dock-names-v1');
+      try {
+        exp.click(); await sleep(150);
+        const lab = document.querySelector('.dock-btn[data-panel="loot"] .dock-label');
+        ok('dock: "show names" widens it and shows every name',
+           document.body.classList.contains('dock-expanded') && dock.getBoundingClientRect().width > 150
+           && getComputedStyle(lab).display !== 'none' && lab.getBoundingClientRect().width > 20,
+           Math.round(dock.getBoundingClientRect().width) + 'px');
+        ok('dock: and remembers it', localStorage.getItem('skt-dock-names-v1') === '1');
+        exp.click(); await sleep(150);
+        ok('dock: "hide names" puts it back', !document.body.classList.contains('dock-expanded')
+           && Math.abs(dock.getBoundingClientRect().width - w0) < 2);
+      } finally {
+        document.body.classList.remove('dock-expanded');
+        if (k0 == null) localStorage.removeItem('skt-dock-names-v1'); else localStorage.setItem('skt-dock-names-v1', k0);
+      }
+    }
+
+    // ── Compact combat: two short rows a creature ─────────────────────────
+    openPanel('combat'); await sleep(300);
+    {
+      const c0 = !!state.settings.combatCompact;
+      try {
+        state.settings.combatCompact = true; panelDefs.combat._render(); await sleep(100);
+        const cards = [...document.querySelectorAll('#combat-list .combatant-card')];
+        const plain = cards.filter(c => !c.querySelector('.conditions, .death-saves, .legendary-row'));
+        const hs = plain.map(c => Math.round(c.getBoundingClientRect().height));
+        ok('combat: a compact card is two short rows', hs.length > 0 && hs.every(h => h <= 60), JSON.stringify(hs));
+        const clash = cards.filter(c => c.querySelector('.card-stats').getBoundingClientRect().right
+                                        > c.querySelector('.card-actions').getBoundingClientRect().left + 1);
+        ok('combat: the compact stats never run into ✕', clash.length === 0, clash.length + ' card(s)');
+      } finally { state.settings.combatCompact = c0; panelDefs.combat._render(); }
+    }
+
+    // ── Compact party: a title-bar toggle, and rows that fit ──────────────
+    openPanel('party'); await sleep(300);
+    {
+      const p0 = !!state.settings.partyCompact;
+      const tog = document.querySelector('.window[data-panel="party"] [data-party-compact]');
+      ok('party: compact has a button in the title bar', !!tog);
+      try {
+        if (tog){
+          if (state.settings.partyCompact) { tog.click(); await sleep(100); }
+          tog.click(); await sleep(150);
+          ok('party: the button turns compact on', !!state.settings.partyCompact && tog.getAttribute('aria-pressed') === 'true');
+          const cards = [...panelDefs.party._body.querySelectorAll('.party-grid.compact .char-card')];
+          const wide = cards.filter(c => c.scrollWidth > c.clientWidth + 1);
+          ok('party: no compact row is cut off at the right', cards.length > 0 && wide.length === 0,
+             wide.map(c => c.scrollWidth + '>' + c.clientWidth).join(' '));
+          // And short: rows that wrap to three lines are not a glance. With
+          // AC / Init / Spd at the browser's default input width they did.
+          const hs = cards.map(c => Math.round(c.getBoundingClientRect().height));
+          ok('party: a compact row is at most two short lines', hs.every(h => h <= 72), JSON.stringify(hs));
+          // Each number beside its label. An input left at width:auto is the
+          // browser's ~20-character default, which parked AC's '17' 140px away
+          // from the word AC.
+          const iw = [...panelDefs.party._body.querySelectorAll('.party-grid.compact .char-stat input')].map(i => Math.round(i.getBoundingClientRect().width));
+          ok('party: compact AC / Init / Spd sit beside their labels', iw.length > 0 && iw.every(w => w <= 48), JSON.stringify(iw.slice(0, 3)));
+          const b = panelDefs.party._body;
+          ok('party: nothing scrolls sideways', b.scrollWidth <= b.clientWidth + 1, b.scrollWidth + '>' + b.clientWidth);
+        }
+      } finally { state.settings.partyCompact = p0; panelDefs.party._render(); }
+    }
+
+    // ── Loot: one line per item, whole name visible ───────────────────────
+    openPanel('loot'); await sleep(400);
+    {
+      const rows = [...panelDefs.loot._body.querySelectorAll('.loot-item')];
+      const tall = rows.filter(r => r.getBoundingClientRect().height > 48);
+      ok('loot: every item sits on one line', rows.length > 0 && tall.length === 0,
+         tall.map(r => Math.round(r.getBoundingClientRect().height)).join(','));
+      const cut = rows.map(r => r.querySelector('.loot-name-input')).filter(i => i.scrollWidth > i.clientWidth + 1);
+      ok('loot: item names are not cut off', cut.length === 0, cut.map(i => i.value).join(', '));
+    }
+    closePanel('loot');
+
+    // ── Map: names never run into each other; drops never stack ───────────
+    openPanel('battlemap'); await sleep(900);
+    {
+      const bm = panelDefs.battlemap, b = bm._body;
+      const lab = () => [...b.querySelectorAll('.map-token-name')].filter(e => getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none')
+                          .map(e => e.getBoundingClientRect());
+      const overlaps = rs => { let n = 0; rs.forEach((a, i) => rs.forEach((c, j) => { if (i < j && a.left < c.right - 1 && c.left < a.right - 1 && a.top < c.bottom - 1 && c.top < a.bottom - 1) n++; })); return n; };
+      ok('map: no two token names overlap', overlaps(lab()) === 0, overlaps(lab()) + ' overlap(s) at ' + (bm._viewScale || 1).toFixed(2) + 'x');
+      const tight = b.querySelector('.map-token-name.tight');
+      if (tight){
+        const tok = b.querySelector('.map-token[data-tid="' + tight.dataset.tid + '"]');
+        tok.dispatchEvent(new MouseEvent('mouseenter'));
+        ok('map: a hidden name shows in full on hover', getComputedStyle(tight).visibility === 'visible' && tight.scrollWidth <= tight.clientWidth + 1);
+        tok.dispatchEvent(new MouseEvent('mouseleave'));
+      }
+      const occ = (bm._tokens || [])[0];
+      const onMap = new Set((bm._tokens || []).filter(t => t.isPC).map(t => t.label));
+      const pi = state.party.findIndex(p => !onMap.has(p.name));
+      if (occ && pi >= 0){
+        const r = b.querySelector('.map-token[data-tid="' + occ.id + '"]').getBoundingClientRect();
+        const dt = new DataTransfer(); dt.setData('application/x-skt-party-pi', String(pi));
+        const n0 = bm._tokens.length;
+        b.querySelector('#map-scroll').dispatchEvent(new DragEvent('drop', { bubbles:true, cancelable:true, dataTransfer:dt,
+          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+        await sleep(200);
+        const nt = bm._tokens[bm._tokens.length - 1], half = bm._csScreen() / 2;
+        ok('map: a token dropped on an occupied square moves to a free one',
+           bm._tokens.length === n0 + 1 && (Math.abs(nt.x - occ.x) >= half || Math.abs(nt.y - occ.y) >= half),
+           nt ? [nt.x, nt.y, occ.x, occ.y].map(Math.round).join(',') : 'no token');
+      }
+    }
+    closePanel('battlemap');
+
+    // ── Ctrl+K ────────────────────────────────────────────────────────────
+    {
+      const type = v => { const i = document.getElementById('cp-input'); i.value = v; i.dispatchEvent(new Event('input')); };
+      const key = (k, o) => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key:k, bubbles:true, cancelable:true }, o || {})));
+      const labels = () => [...document.querySelectorAll('#cp-list .cp-item .cp-label')].map(e => e.textContent);
+      try {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key:'k', ctrlKey:true, bubbles:true, cancelable:true }));
+        await sleep(80);
+        ok('palette: Ctrl+K opens it, ready to type',
+           !!document.getElementById('cp-backdrop') && document.activeElement.id === 'cp-input');
+        const heads = [...document.querySelectorAll('#cp-list .cp-group')].map(e => e.textContent);
+        ok('palette: each heading appears once', heads.length === new Set(heads).size, heads.join(','));
+        type('ra'); await sleep(30);
+        ok('palette: matches the start of a word, not the middle',
+           !labels().some(l => /tracker/i.test(l) && !/\bra/i.test(l)), labels().slice(0, 6).join(', '));
+        const ws0 = typeof _wsState !== 'undefined' && _wsState ? _wsState.active : null;
+        key('2'); await sleep(60);
+        ok('palette: typing a digit does not switch workspace', !ws0 || _wsState.active === ws0);
+        type('loot'); await sleep(30);
+        const was = !!(layout.loot && layout.loot.open);
+        key('Enter'); await sleep(400);
+        ok('palette: Enter runs the top match (opens Loot)',
+           !was && !!(layout.loot && layout.loot.open) && !document.getElementById('cp-backdrop'));
+        closePanel('loot');
+        const a0 = state.activeCombatantId;
+        openCommandPalette(); type('next turn'); await sleep(30); key('Enter'); await sleep(300);
+        ok('palette: "Next turn" advances the fight', (state.combatants || []).length < 2 || state.activeCombatantId !== a0);
+        state.activeCombatantId = a0;
+        openCommandPalette(); key('Escape'); await sleep(40);
+        ok('palette: Escape closes it', !document.getElementById('cp-backdrop'));
+        openCommandPalette(); type('goblin'); await sleep(30);
+        // One row per name AND kind: Goblin the monster, the race and the
+        // language are three answers; the same monster in six books is one.
+        const rows = [...document.querySelectorAll('#cp-list .cp-item')].map(e =>
+          e.querySelector('.cp-label').textContent + '|' + ((e.querySelector('.cp-hint') || {}).textContent || '').split(' · ')[0]);
+        const gm = rows.filter(r => r === 'Goblin|monster').length;
+        ok('palette: a rules entry in six books is one row', !_5eLoaded || (gm === 1 && rows.length === new Set(rows).size), JSON.stringify(rows));
+      } catch(e){
+        ok('palette: the checks ran to completion', false, e.message);
+      } finally { document.getElementById('cp-backdrop')?.remove(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ player view
@@ -3720,6 +3884,36 @@
         try { css = await (await fetch('styles/main.css', { cache: 'no-store' })).text(); } catch(e){}
         ok('phone: the player view hides the floating toolbar on a phone',
            css.indexOf('body.player-mode .float-toolbar{display:none !important}') >= 0);
+      }
+
+      // ── A condition says what it does ─────────────────────────────────────
+      {
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        const cc = (state.combatants || []).find(c => c.isPC && (c.conditions || []).length && state.party.some(p => p.id === c.id));
+        try {
+          if (cc){
+            for (let i = 0; i < 50 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(200);
+            paSetPc(cc.id); paTab = 'you'; paRender();
+            const chip = document.querySelector('[data-pa-cond]');
+            ok('player: a condition is a button', !!chip && chip.tagName === 'BUTTON');
+            chip && chip.click(); await sleep(80);
+            const det = document.querySelector('.pa-conddet');
+            ok('player: tapping it shows the rule text',
+               !!det && det.textContent.replace(/\s+/g, ' ').length > 80, det ? det.textContent.slice(0, 80) : 'nothing opened');
+            document.querySelector('[data-pa-condclose]')?.click(); await sleep(50);
+            ok('player: and ✕ closes it', !document.querySelector('.pa-conddet'));
+            const heads = [...document.querySelectorAll('.pa-sec h4')].map(h => h.textContent.trim());
+            const pc = state.party.find(p => p.id === cc.id);
+            if (pc && pc.sheet && pc.sheet.spellSlots && Object.keys(pc.sheet.spellSlots).length)
+              ok('player: spell slots have their own heading', heads.includes('Spell slots'), heads.join(','));
+          }
+        } catch(e){
+          ok('player: the condition checks ran to completion', false, e.message);
+        } finally {
+          paCondOpen = null; paTab = tab0;
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paRender();
+        }
       }
 
       // ── No campaign switcher for players ──────────────────────────────────
@@ -4421,6 +4615,14 @@
          !(b && b.querySelector('.tv-map-expand, [data-tv="expand-map"]')));
     }
     closePanel('turnview');
+
+    // ── The dock's names stay off the bottom bar ─────────────────────────
+    {
+      const exp = document.getElementById('dock-expand-btn');
+      ok('mobile: no "show names" button on the bottom bar', !exp || getComputedStyle(exp).display === 'none');
+      const lab = document.querySelector('.dock-btn[data-panel="combat"] .dock-label');
+      ok('mobile: and no names squeezed into it', !lab || getComputedStyle(lab).display === 'none');
+    }
 
     // ── The top bar fits ─────────────────────────────────────────────────
     // The campaign chip grew the toolbar to 316px of 390: the window's ✕ sat

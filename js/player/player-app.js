@@ -568,7 +568,9 @@ function paYouScreen(){
   const hp = c ? c.hp : pc.hp, hpMax = c ? c.hpMax : pc.hpMax;
   const pct = hpMax ? Math.max(0, (hp / hpMax) * 100) : 0;
   const col = pct <= 0 ? '#5a3a3a' : pct < 35 ? 'var(--danger)' : pct < 75 ? 'var(--warning)' : 'var(--success)';
-  const conds = (c && c.conditions || []).map(x => `<span class="pa-cond">${paEsc(x)}</span>`).join('');
+  const conds = (c && c.conditions || []).map(x =>
+    `<button class="pa-cond${paCondOpen === x ? ' on' : ''}" data-pa-cond="${paEsc(x)}" aria-expanded="${paCondOpen === x}">${paEsc(x)}<span class="pa-cond-i" aria-hidden="true">?</span></button>`).join('');
+  const condDet = (c && (c.conditions || []).includes(paCondOpen)) ? paConditionDetail(paCondOpen) : '';
   const down = !!(c && c.isPC && (c.hp || 0) <= 0 && !c.dead && !c.stable);
 
   const res = (pc.resources || []).map(r => {
@@ -658,9 +660,10 @@ function paYouScreen(){
         </div>
       </div>
 
-      ${conds ? `<div class="pa-conds">${conds}</div>` : ''}
+      ${conds ? `<div class="pa-conds">${conds}</div>${condDet}` : ''}
       ${down ? paDeathBlock(c) : ''}
-      ${res || slots ? `<div class="pa-sec"><h4>Resources</h4>${res}${slots}</div>` : ''}
+      ${res ? `<div class="pa-sec"><h4>Resources</h4>${res}</div>` : ''}
+      ${slots ? `<div class="pa-sec"><h4>Spell slots</h4>${slots}</div>` : ''}
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
       ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
       <div class="pa-roll" id="pa-roll"></div>
@@ -668,6 +671,39 @@ function paYouScreen(){
         ${paOpenMates.has(pc.id) ? '▾ Hide full sheet' : '▸ Full sheet'}
       </button>
       ${paOpenMates.has(pc.id) ? paSheetDetail(pc) : ''}
+    </div>`;
+}
+
+// ─── What a condition does ────────────────────────────────────────────────────
+// "PRONE" on a phone told the player they were prone and nothing else. Tap it
+// and the rule text opens underneath, from the same 5e data the search uses.
+// The DM's own label may carry a level or a note ("Exhaustion 2",
+// "Frightened (dragon)"), so the lookup tries the leading words.
+let paCondOpen = null;
+function paConditionEntry(name){
+  if (typeof _5eData === 'undefined' || !Array.isArray(_5eData)) return null;
+  const words = String(name || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  for (let n = words.length; n > 0; n--){
+    const want = words.slice(0, n).join(' ');
+    const hits = _5eData.filter(d => (d.cat === 'condition' || d.cat === 'disease' || d.cat === 'status')
+                                  && String(d.name).toLowerCase() === want);
+    if (hits.length){
+      // The 2024 rules when both printings are loaded.
+      return hits.find(d => /XPHB|2024/.test(String(d._source || ''))) || hits[0];
+    }
+  }
+  return null;
+}
+function paConditionDetail(name){
+  const d = paConditionEntry(name);
+  const loaded = typeof _5eLoaded !== 'undefined' && _5eLoaded;
+  let body;
+  if (d && typeof renderConditionFull === 'function') body = renderConditionFull(d);
+  else body = '<p class="pa-dim">' + (loaded ? 'No rules entry for this one — ask your DM.' : 'Loading the rules…') + '</p>';
+  return `<div class="pa-conddet">
+      <div class="pa-conddet-h"><b>${paEsc(name)}</b>
+        <button class="pa-featdet-x" data-pa-condclose="1" aria-label="Close">✕</button></div>
+      <div class="pa-conddet-b">${body}</div>
     </div>`;
 }
 
@@ -920,6 +956,9 @@ function paOnClick(e){
   const featUse = e.target.closest('[data-pa-featuse]');
   if (featUse){ paUseActivation(+featUse.dataset.paFeatuse); return; }
   if (e.target.closest('[data-pa-featclose]')){ paFeatOpen = null; paRender(); return; }
+  const cond = e.target.closest('[data-pa-cond]');
+  if (cond){ paCondOpen = paCondOpen === cond.dataset.paCond ? null : cond.dataset.paCond; paRenderScreen(); return; }
+  if (e.target.closest('[data-pa-condclose]')){ paCondOpen = null; paRenderScreen(); return; }
   if (e.target.closest('[data-pa-death]')){ paRollDeathSave(); return; }
   const mate = e.target.closest('[data-pa-mate]');
   if (mate){

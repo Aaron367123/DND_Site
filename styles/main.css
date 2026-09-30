@@ -207,6 +207,32 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
 .float-btn .ico{width:17px;height:17px}
 .window-actions .ico{width:14px;height:14px;stroke-width:2}
 .dock-divider{height:1px;background:var(--border);width:24px;margin:4px 0}
+/* Dock names (app.js, initDockNames). Hidden in the narrow dock and on the
+   phone's bottom bar; the rules that show them are desktop-only below. */
+.dock-label,.dock-group-label{display:none}
+@media not all and (max-width: 768px) and (pointer: coarse){
+  /* Above the windows, so the hover label is not drawn underneath them. */
+  body:not(.player-mode) .panel-dock{position:relative; z-index:9000}
+  .panel-dock .dock-btn[data-label]{position:relative}
+  body:not(.dock-expanded) .panel-dock .dock-btn[data-label]:hover::after{
+    content:attr(data-label); position:absolute; left:calc(100% + 10px); top:50%;
+    transform:translateY(-50%); background:var(--panel-3); color:var(--text);
+    border:1px solid var(--border-strong, #4a4a4a); border-radius:var(--r-sm);
+    padding:4px 9px; font-size:var(--fs-sm); line-height:1.3; white-space:nowrap;
+    pointer-events:none; box-shadow:0 4px 14px rgba(0,0,0,.45)}
+  body.dock-expanded:not(.player-mode){--dock-w:176px}
+  body.dock-expanded .panel-dock{align-items:stretch; padding:8px; overflow-y:auto; overflow-x:hidden}
+  body.dock-expanded .panel-dock .dock-btn[data-label]{width:auto; flex-shrink:0;
+    justify-content:flex-start; gap:10px; padding:0 8px}
+  body.dock-expanded .dock-label{display:inline; font-size:var(--fs-sm); min-width:0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  body.dock-expanded .dock-divider[data-group]{height:auto; width:auto; background:none;
+    margin:10px 0 2px; padding:0 8px}
+  body.dock-expanded .dock-divider[data-group]:first-of-type{margin-top:6px}
+  body.dock-expanded .dock-group-label{display:block; font-size:var(--fs-2xs);
+    text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim)}
+  #dock-expand-btn[aria-pressed="true"]{color:var(--accent)}
+}
 /* Workspace switcher — sits above the panel icons. Its buttons reuse
    .dock-btn but read as labels rather than icons, so the active one is filled
    instead of merely tinted: which workspace you're on has to be obvious at a
@@ -388,6 +414,8 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
      unless told not to. Measured 32px wide before this despite width:44px. */
   body:not(.player-mode) .panel-dock .dock-btn{flex-shrink:0}
   body:not(.player-mode) .panel-dock .spacer{display:none}
+  /* The bottom bar already scrolls sideways; names do not fit it. */
+  #dock-expand-btn{display:none}
   body:not(.player-mode) .dock-divider{
     width:1px; height:24px; margin:0 2px; flex-shrink:0; align-self:center;
   }
@@ -1093,6 +1121,9 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .party-grid.compact .char-card{
   flex-direction:row;align-items:center;
   padding:5px 8px 5px 11px;gap:8px;
+  /* Wraps rather than running off the right edge in a narrow panel: the
+     stats drop to a second line instead of being cut off. */
+  flex-wrap:wrap;row-gap:4px;
   cursor:pointer
 }
 .party-grid.compact .char-class-stripe{top:4px;bottom:4px}
@@ -1137,7 +1168,10 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 }
 .party-grid.compact .char-stat:last-child{border-right:none}
 .party-grid.compact .char-stat .l{font-size:var(--fs-2xs)}
-.party-grid.compact .char-stat input{font-size:var(--fs-sm);width:auto;min-width:24px}
+/* A width, not auto: an input with width:auto takes the browser default of
+   about twenty characters, so each of AC / Init / Spd was ~150px and the
+   "compact" row ran to ~1050px — wider than the panel, with AC cut off. */
+.party-grid.compact .char-stat input{font-size:var(--fs-sm);width:3.2ch;min-width:0}
 
 /* Status badges keep their look but inline to the right of stats. */
 .party-grid.compact .char-status-badges{flex:0 0 auto;margin:0}
@@ -2124,18 +2158,44 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .combat-status-row .buff-pill:not(.empty){background:rgba(107,158,107,.22);border-color:rgba(107,158,107,.55);color:#9bc99b}
 .combat-status-row .buff-pill:not(.empty):hover{background:rgba(107,158,107,.34)}
 
-/* ─── Compact mode — slim padding, hide portrait/log to fit more cards ──── */
-.combatant-list.compact .combatant-card{padding:5px;gap:5px;grid-template-columns:14px 1fr auto}
+/* ─── Compact mode — two short rows per combatant ─────────────────────────
+   It used to be the full card with smaller padding: about 110px each, so a
+   default-sized tracker showed three and a half creatures. Half of the old
+   rules also targeted .hp-dmg-strip, a class the damage row stopped using
+   long ago, so they did nothing. Now:
+       ⋮⋮  Name ····················  ♥ 58  ⛨ 12  ⚡ 14   ×
+           [− 5 +]  ████████████░░░░░░░░░░░░░░░░░░░░░░   ⎘
+   Concentration / reaction / buff controls are the full card's; conditions,
+   legendary actions and death saves still show, full width, when present. */
+.combatant-list.compact{gap:4px; padding:6px}
+.combatant-list.compact .combatant-card{padding:4px 6px 4px 9px; gap:5px; grid-template-columns:12px 1fr auto}
 .combatant-list.compact .card-avatar{display:none}
-.combatant-list.compact .card-hp-bar{height:3px;margin-top:3px}
 .combatant-list.compact .combat-status-row{display:none}
-.combatant-list.compact .conditions{margin-top:3px}
-.combatant-list.compact .card-stats{gap:2px}
-.combatant-list.compact .card-stat{padding:1px 3px}
-.combatant-list.compact .card-stat input{font-size:var(--fs-sm)}
+.combatant-list.compact .card-body{display:grid; grid-template-columns:auto minmax(0,1fr) auto;
+  grid-template-areas:"name name stats" "dmg bar bar"; column-gap:8px; row-gap:3px; align-items:center}
+.combatant-list.compact .card-body > *{grid-column:1 / -1}
+.combatant-list.compact .card-name,
+.combatant-list.compact .card-name-row{grid-area:name; justify-content:flex-start; text-align:left;
+  margin:0; font-size:var(--fs-md); min-width:0}
+.combatant-list.compact .card-name-input{text-align:left; font-size:var(--fs-md); padding:1px 3px}
+.combatant-list.compact .card-name-quick{display:none !important}
+.combatant-list.compact .card-name-row .icon-btn{padding:0 3px}
+.combatant-list.compact .card-stats{grid-area:stats; display:flex; gap:2px; margin:0}
+.combatant-list.compact .card-stat{padding:1px 2px; gap:2px}
+.combatant-list.compact .card-stat input{width:2.6ch; font-size:var(--fs-md)}
+.combatant-list.compact .card-stat[title="HP"] input{width:3.4ch; font-size:var(--fs-md)}
+.combatant-list.compact .hp-temp-badge{padding:0 3px; font-size:var(--fs-2xs)}
 .combatant-list.compact .card-stat .lab{font-size:var(--fs-2xs)}
-.combatant-list.compact .hp-dmg-strip .hp-dmg-amt{height:12px;font-size:var(--fs-2xs)}
-.combatant-list.compact .hp-dmg-strip .hp-dmg-btn{height:13px;font-size:var(--fs-sm)}
+.combatant-list.compact .hp-dmg-bar{grid-area:dmg; grid-template-columns:22px 34px 22px;
+  margin:0; padding:0; border:0}
+.combatant-list.compact .hp-dmg-bar .hp-dmg-btn,
+.combatant-list.compact .hp-dmg-bar .hp-dmg-amt{height:18px}
+.combatant-list.compact .card-hp-bar{grid-area:bar; height:5px; margin:0}
+.combatant-list.compact .conditions,
+.combatant-list.compact .legendary-row,
+.combatant-list.compact .death-saves{margin-top:1px; padding-top:3px}
+.combatant-list.compact .card-actions{gap:2px}
+.combatant-list.compact .card-actions .btn{padding:0 4px; font-size:var(--fs-md); min-width:20px}
 
 /* ─── Group card (collapsed identical monsters) ──────────────────────────── */
 .combatant-card.group{align-items:flex-start}
@@ -2701,6 +2761,8 @@ body.player-mode #campaign-btn{display:none !important}
 .map-token-facing.npc-t::before{border-bottom-color:rgba(194,84,80,0.95)}
 .map-token-name{position:absolute;transform:translateX(-50%);font-size:var(--fs-xs);color:#fff;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.9);pointer-events:none;white-space:nowrap;z-index:2}
 #map-stage.hide-tokens .map-token,
+.map-token-name.tight{visibility:hidden}
+.map-token-name.full{max-width:none !important; z-index:6 !important; visibility:visible}
 #map-stage.hide-tokens .map-token-name{display:none !important}
 #map-stage.hide-names  .map-token-name{display:none !important}
 #map-stage.hide-pcs    .map-token.pc,
@@ -3201,6 +3263,21 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .loot-paid-btn.on{background:rgba(107,158,107,.25);border-color:var(--success);color:#9ad19a}
 .loot-item.paid{opacity:.6}
 .loot-item.paid .loot-name-input{text-decoration:line-through;color:var(--text-dim)}
+/* One line per item. The row wrapped by a few pixels in a default-sized
+   panel, so the × landed on a line of its own (every row twice as tall) and
+   the name box got ~100px ("Silvered longswo"). Tighter controls and a name
+   that takes all the slack keep it on one line; a genuinely narrow panel
+   still wraps, via the container query. */
+.loot-items{container-type:inline-size}
+.loot-item{flex-wrap:nowrap; padding:6px 8px; gap:6px}
+.loot-item .loot-name{flex:1 1 0; flex-wrap:nowrap}
+.loot-item .loot-name-input{flex:1 1 0; text-overflow:ellipsis}
+.loot-item .loot-assigned-pill{flex-shrink:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.loot-item .loot-qty{width:36px}
+.loot-item .loot-val{width:56px}
+.loot-item .loot-assign{width:104px}
+.loot-item > .btn.danger{flex-shrink:0; padding:1px 6px}
+@container (max-width: 380px){ .loot-item{flex-wrap:wrap} .loot-item .loot-name{flex-basis:100%} }
 /* Rarity chip on search results — colors mirror .shop-table rarity badges
    for cross-panel consistency. */
 .loot-rarity-chip{display:inline-block;font-size:var(--fs-2xs);font-weight:600;padding:1px 5px;border-radius:var(--r-pill);margin-left:6px;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border);background:var(--panel-3);color:var(--text-muted);vertical-align:middle}
@@ -4671,3 +4748,33 @@ select.atk-in { cursor:pointer; padding-right:26px;
 .tv-tok.has-icon { overflow:hidden; padding:0; }
 .tv-tok.has-icon img { width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
 .tv-tok.has-icon svg { width:76%; height:76%; display:block; }
+
+/* ─── Command palette (Ctrl+K) — js/ui/command-palette.js ─────────────── */
+.cp-backdrop{align-items:flex-start; padding-top:12vh}
+.cp{width:min(600px, calc(100vw - 32px)); background:var(--panel); border:1px solid var(--border-strong, #4a4a4a);
+  border-radius:var(--r-lg, 12px); box-shadow:0 20px 60px rgba(0,0,0,.55); overflow:hidden; display:flex; flex-direction:column}
+.cp-input{border:0; border-bottom:1px solid var(--border); background:transparent; color:var(--text);
+  font:inherit; font-size:var(--fs-xl); padding:14px 18px; outline:none}
+.cp-list{max-height:min(420px, 60vh); overflow-y:auto; padding:6px}
+.cp-group{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); padding:8px 12px 3px}
+.cp-item{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px;
+  border-radius:var(--r-md); cursor:pointer; color:var(--text)}
+.cp-item.on{background:var(--panel-3); box-shadow:inset 2px 0 0 var(--accent)}
+.cp-label{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.cp-hint{flex-shrink:0; font-size:var(--fs-xs); color:var(--text-muted)}
+.cp-empty{padding:18px; text-align:center; color:var(--text-muted)}
+.cp-foot{display:flex; gap:16px; padding:8px 14px; border-top:1px solid var(--border); font-size:var(--fs-xs); color:var(--text-dim)}
+.cp-foot kbd{margin-right:3px}
+
+/* Player "You" screen: a condition chip opens what it does (player-app.js). */
+button.pa-cond{font:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:6px}
+.pa-cond-i{display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px;
+  border-radius:50%; border:1px solid currentColor; font-size:10px; font-weight:700; opacity:.75}
+button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
+.pa-conddet{margin:8px 0 4px; padding:12px 14px; background:var(--panel-2); border:1px solid var(--border);
+  border-left:3px solid var(--danger); border-radius:var(--r-md)}
+.pa-conddet-h{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;
+  text-transform:capitalize; font-size:var(--fs-lg)}
+.pa-conddet-b{font-size:var(--fs-md); line-height:1.5; color:var(--text)}
+.pa-conddet-b p{margin:0 0 6px}
+.pa-conddet-b ul{margin:4px 0; padding-left:18px}
