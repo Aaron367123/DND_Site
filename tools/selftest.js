@@ -3126,6 +3126,182 @@
         }
       }
 
+      // ── Saved maps keep their uploaded background ─────────────────────────
+      // The blob store used to be ONE slot per campaign — every upload set()
+      // the parent node and replaced whatever was there. So save a map built on
+      // an upload, upload anything else, and the saved map came back as tokens
+      // and fog on an empty background.
+      //
+      // Driven through the REAL picker buttons, not the helpers: four bugs this
+      // session were helpers that worked while nothing called them. Firebase is
+      // replaced with an in-memory fake so the bookkeeping can be observed.
+      {
+        const d = panelDefs.battlemap;
+        const saved0 = JSON.stringify(d._savedMaps || []);
+        const path0 = d._bgMapPath, img0 = _mapBgImage;
+        const real = { put: window.sktMapBlobPut, del: window.sktMapBlobDelete,
+                       refs: window.sktMapBlobRefs, get: window.sktMapBlobGet,
+                       modal: window.showModal, confirm: window.showConfirm,
+                       enc: d._encodeForShare, toast: window.showToast };
+        const blobs = {}, refs = {};
+        let refsBroken = false;
+        const toasts = [];
+        window.sktMapBlobPut    = (id, data) => { blobs[id] = data; return Promise.resolve(true); };
+        window.sktMapBlobDelete = id => { delete blobs[id]; return Promise.resolve(true); };
+        window.sktMapBlobGet    = id => Promise.resolve(blobs[id] || null);
+        window.sktMapBlobRefs   = fn => {
+          if (refsBroken) return Promise.resolve(null);
+          if (typeof fn === 'function') fn(refs);
+          return Promise.resolve(JSON.parse(JSON.stringify(refs)));
+        };
+        window.showToast = m => { toasts.push(String(m)); };
+        window.showConfirm = () => Promise.resolve(true);
+        const DATA = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+        d._encodeForShare = () => DATA;
+
+        // A shared upload on screen, the way _shareUploadedMap leaves it.
+        const share = async (replaced) => {
+          await d._shareUploadedMap({ naturalWidth: 1, naturalHeight: 1 }, replaced);
+          await sleep(60);
+          return d._blobIdOf(d._bgMapPath);
+        };
+        const saveAs = async (name) => {
+          window.showModal = () => Promise.resolve({ name });
+          await d._openMapPicker();
+          await sleep(120);
+          const btn = document.querySelector('#mapsel-save');
+          if (btn) btn.click();
+          await sleep(200);
+          document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+          return !!btn;
+        };
+
+        try {
+          d._savedMaps = [];
+          _mapBgImage = { naturalWidth: 1, naturalHeight: 1, src: DATA };
+
+          // Throwaway uploads still clean up after themselves — otherwise
+          // every upload of every session stays in the database for good.
+          const a = await share(null);
+          const b = await share('sktblob:' + a);
+          ok('map: an unsaved upload is removed when replaced',
+             !(a in blobs) && (b in blobs), JSON.stringify(Object.keys(blobs)));
+
+          // THE FIX: save a map on an upload, then upload something else.
+          const c = await share('sktblob:' + b);
+          const clicked = await saveAs('ZZ Keep Me');
+          ok('map: the save button was there to press', clicked);
+          const entry = (d._savedMaps || []).find(m => m.name === 'ZZ Keep Me');
+          ok('map: saving records which upload the map depends on',
+             !!entry && refs[entry.id] === c, JSON.stringify(refs));
+          const e2 = await share('sktblob:' + c);
+          ok('map: a saved map keeps its upload when another is shared',
+             (c in blobs) && (e2 in blobs), JSON.stringify(Object.keys(blobs)));
+
+          // ...and loading it actually brings the background back.
+          _mapBgImage = null;
+          document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+          await d._openMapPicker();
+          await sleep(120);
+          const load = document.querySelector('[data-savedmap-load="' + (entry && entry.id) + '"]');
+          if (load) load.click();
+          await sleep(500);
+          document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+          ok('map: loading the saved map restores its background',
+             d._bgMapPath === 'sktblob:' + c && !!_mapBgImage
+             && String(_mapBgImage.src).indexOf('data:image/gif') === 0,
+             String(d._bgMapPath));
+
+          // Deleting the saved map releases its upload — once it is no
+          // longer the map on screen.
+          await share(d._bgMapPath);        // move off it first
+          await d._openMapPicker();
+          await sleep(120);
+          const del = document.querySelector('[data-savedmap-del="' + (entry && entry.id) + '"]');
+          if (del) del.click();
+          await sleep(250);
+          document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+          ok('map: deleting a saved map releases its upload',
+             !(c in blobs) && !(entry.id in refs), JSON.stringify({ blobs: Object.keys(blobs), refs }));
+
+          // Another DM device's saved map protects an upload this device knows
+          // nothing about. Saved maps are per device; the refs are not.
+          const f1 = d._blobIdOf(d._bgMapPath);
+          refs['map_other_device'] = f1;
+          await share('sktblob:' + f1);
+          ok('map: another device’s saved map protects its upload',
+             f1 in blobs, JSON.stringify(Object.keys(blobs)));
+          delete refs['map_other_device'];
+
+          // When the refs cannot be read, nothing is deleted. Unknown is not
+          // the same as unwanted.
+          refsBroken = true;
+          const g1 = d._blobIdOf(d._bgMapPath);
+          await share('sktblob:' + g1);
+          ok('map: with the refs unreadable, nothing is deleted',
+             g1 in blobs, JSON.stringify(Object.keys(blobs)));
+          refsBroken = false;
+
+          // A saved map made BEFORE the refs existed — every saved map anyone
+          // has today — is not in them until reconcile runs. In that window
+          // the device's own library is the only thing standing between the
+          // upload and deletion, so it has to count on its own.
+          {
+            const h1 = d._blobIdOf(d._bgMapPath);
+            const keep = JSON.stringify(d._savedMaps);
+            d._savedMaps = [{ id: 'map_pre_refs', name: 'Old', ts: 1,
+                              snapshot: { bgMapPath: 'sktblob:' + h1 } }];
+            delete refs['map_pre_refs'];
+            await share('sktblob:' + h1);
+            ok('map: a saved map not yet in the refs still protects its upload',
+               h1 in blobs, JSON.stringify(Object.keys(blobs)));
+            d._savedMaps = JSON.parse(keep);
+          }
+
+          // Reconcile re-asserts this device's saved maps and never removes
+          // an entry it does not recognise.
+          refs['map_foreign'] = 'zzforeign';
+          d._savedMaps = [{ id: 'map_local', name: 'L', ts: 1, snapshot: { bgMapPath: 'sktblob:zzlocal' } }];
+          d._reconcileSavedRefs();
+          await sleep(30);
+          ok('map: reconcile adds this device’s saved maps to the refs',
+             refs['map_local'] === 'zzlocal', JSON.stringify(refs));
+          ok('map: and leaves other devices’ entries alone',
+             refs['map_foreign'] === 'zzforeign', JSON.stringify(refs));
+
+          // An upload whose share failed has no path. Saving it cannot keep
+          // the background, and the DM is told while they can still fix it.
+          d._savedMaps = [];
+          d._bgMapPath = null;
+          _mapBgImage = { naturalWidth: 1, naturalHeight: 1, src: DATA };
+          toasts.length = 0;
+          await saveAs('ZZ No Art');
+          ok('map: saving an unshared upload warns that the background is lost',
+             toasts.some(t => /never shared/.test(t)), toasts.join(' | '));
+        } finally {
+          window.sktMapBlobPut = real.put; window.sktMapBlobDelete = real.del;
+          window.sktMapBlobRefs = real.refs; window.sktMapBlobGet = real.get;
+          window.showModal = real.modal; window.showConfirm = real.confirm;
+          window.showToast = real.toast; d._encodeForShare = real.enc;
+          d._savedMaps = JSON.parse(saved0); d._saveSavedMaps();
+          d._bgMapPath = path0; _mapBgImage = img0; d._saveMap();
+          document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        }
+      }
+
+      // The write itself cannot run here — it needs a live database — so the
+      // one line that decides whether uploads overwrite each other is read
+      // from source. set() on the PARENT replaces every sibling; that single
+      // call was the whole bug.
+      {
+        let src = '';
+        try { src = await (await fetch('js/sync/realtime.js', { cache: 'no-store' })).text(); } catch(e){}
+        const put = (src.match(/window\.sktMapBlobPut = function[\s\S]*?\n\};/) || [''])[0];
+        ok('map: an upload writes its own node, not over its siblings',
+           /_blobBase\(\) \+ '\/' \+ id\)\.set\(/.test(put) && !/_blobBase\(\)\)\.set\(/.test(put),
+           put.slice(0, 160));
+      }
+
       ok('battlemap: fit control exists', !!fit, '[data-mact="fit-map"] gone');
       ok('battlemap: fit is silent', errs.length === before, errs.slice(before).join(' | '));
     }

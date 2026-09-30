@@ -195,6 +195,69 @@ registerPanel('battlemap',{
   // reference into Firebase ("sktblob:<id>"), not an asset path and not a
   // filename — anything that treats it as either produces nonsense.
   _isSharedUpload(p){ return typeof p === 'string' && p.indexOf('sktblob:') === 0; },
+  _blobIdOf(p){ return this._isSharedUpload(p) ? p.slice(8) : null; },
+
+  // The uploads this device's saved maps point at.
+  _localSavedBlobIds(){
+    const ids = new Set();
+    (this._savedMaps || []).forEach(m => {
+      const id = this._blobIdOf(m && m.snapshot && m.snapshot.bgMapPath);
+      if (id) ids.add(id);
+    });
+    return ids;
+  },
+
+  // Remove an uploaded map from the server if — and only if — nothing still
+  // wants it: not the map on screen, not a saved map on this device, and not
+  // a saved map on any other DM device (the shared refs). Anything uncertain
+  // keeps it. A leaked upload costs storage; a deleted one costs a map.
+  //
+  // The one race left: another DM device saving this exact upload between
+  // the refs read and the delete. For that, the other device must have been
+  // showing it — and it is being retired because this device just replaced
+  // it as the table's map. Accepted rather than locked against.
+  async _retireBlob(path){
+    const id = this._blobIdOf(path);
+    if (!id) return false;
+    if (id === this._blobIdOf(this._bgMapPath)) return false;
+    if (this._localSavedBlobIds().has(id)) return false;
+    if (typeof window.sktMapBlobRefs !== 'function'
+        || typeof window.sktMapBlobDelete !== 'function') return false;
+    const refs = await window.sktMapBlobRefs(null);
+    if (!refs) return false;
+    if (Object.keys(refs).some(k => refs[k] === id)) return false;
+    return window.sktMapBlobDelete(id);
+  },
+
+  // Record the upload a saved map depends on, forget the entries that were
+  // replaced or dropped, then retire any upload nothing wants any more.
+  async _updateSavedRefs(added, removed){
+    if (typeof window.sktMapBlobRefs !== 'function') return;
+    const addId = added ? this._blobIdOf(added.snapshot && added.snapshot.bgMapPath) : null;
+    const gone  = (removed || []).filter(Boolean);
+    if (!addId && !gone.length) return;
+    const refs = await window.sktMapBlobRefs(m => {
+      gone.forEach(g => { delete m[g.id]; });
+      if (addId) m[added.id] = addId;
+    });
+    if (!refs) return;
+    for (const g of gone) await this._retireBlob(g.snapshot && g.snapshot.bgMapPath);
+  },
+
+  // Saved maps made before the refs existed, or restored from a backup, are
+  // not in them — so another device's cleanup could not see them and could
+  // delete their uploads. Re-assert this device's entries. Never REMOVES
+  // anything: an entry this device does not recognise may be another
+  // device's saved map.
+  _reconcileSavedRefs(){
+    if (document.body.classList.contains('player-mode')) return;
+    if (typeof window.sktMapBlobRefs !== 'function') return;
+    const mine = (this._savedMaps || [])
+      .map(m => [m.id, this._blobIdOf(m.snapshot && m.snapshot.bgMapPath)])
+      .filter(p => p[0] && p[1]);
+    if (!mine.length) return;
+    window.sktMapBlobRefs(m => { mine.forEach(([sid, bid]) => { m[sid] = bid; }); });
+  },
   // Whether to draw the grid overlay. Some 5etools maps already have a grid
   // baked into the image — the user can hide ours so the two don't clash.
   _showGrid: true,
@@ -325,6 +388,10 @@ registerPanel('battlemap',{
         if (Array.isArray(d.saved)) this._savedMaps = d.saved;
       }
     } catch(e){}
+    // After sign-in, not now: before it the rules answer permission_denied.
+    if (typeof window.sktRealtimeReady === 'function'){
+      window.sktRealtimeReady().then(() => this._reconcileSavedRefs());
+    }
     // Starred adventure-map paths — separate key; stored as an array but
     // held as a Set in memory for O(1) lookup during render.
     try {
@@ -666,7 +733,11 @@ registerPanel('battlemap',{
         // Not an error worth a ladder of retries: the DM has uploaded a
         // different map since, and a fresh bgMapPath is already on its way.
         if (!data){
-          showToast('That uploaded map is no longer on the server — ask the DM to re-upload');
+          // The DM is the one who can fix it, so the DM is told how rather
+          // than being told to ask themselves.
+          showToast(document.body.classList.contains('player-mode')
+            ? 'That uploaded map is no longer on the server — ask the DM to re-upload'
+            : 'That uploaded map is no longer on the server — re-upload it from Choose map');
           return;
         }
         this._bgAttempt(data, autoFit, seq, 0);
@@ -786,7 +857,7 @@ registerPanel('battlemap',{
   // already on screen locally by this point — and says so out loud, because
   // the players not being able to see it is not something to find out
   // halfway through a session.
-  async _shareUploadedMap(img){
+  async _shareUploadedMap(img, replacedPath){
     // sktMapBlobPut answers false when there is no database handle, so there
     // is nothing to test separately; asking realtimeLive whether it is
     // connected would just be a second, drifting answer to one question.
@@ -818,6 +889,9 @@ registerPanel('battlemap',{
     this._bgMapPath = 'sktblob:' + id;
     this._saveMap();
     showToast('Map shared — the players have it now');
+    // Only a throwaway upload goes: _retireBlob keeps anything a saved map
+    // still points at, on this device or any other.
+    this._retireBlob(replacedPath);
   },
   // Grow/shrink _cols and _rows so the grid covers the map at its current
   // displayed size. Called whenever a map is picked, the scale changes, or
@@ -1478,7 +1552,7 @@ registerPanel('battlemap',{
       _mapBgImage = null;
       this._render();
       if (snap.hadUploadedImage && typeof showToast === 'function'){
-        showToast('Loaded — re-upload the background image (uploads are session-only)');
+        showToast('Loaded — this map\u2019s background was never shared, so re-upload it');
       }
     }
     // Same reasoning as _resetMapScene: a restored snapshot is a different
@@ -3482,6 +3556,7 @@ registerPanel('battlemap',{
       const doDelete = () => {
         this._savedMaps = this._savedMaps.filter(s => s.id !== id);
         this._saveSavedMaps();
+        this._updateSavedRefs(null, [entry]);
         // Remove the row from the DOM in place. If the list is now empty,
         // also remove the section header so the picker doesn't show a stale
         // "Saved maps" with nothing under it.
@@ -3514,27 +3589,37 @@ registerPanel('battlemap',{
         const commit = () => {
           // Replace any existing entry with the same case-insensitive name so
           // re-saving overwrites instead of cluttering the list.
+          const replaced = this._savedMaps.filter(s => (s.name||'').toLowerCase() === lc);
           this._savedMaps = this._savedMaps.filter(s => (s.name||'').toLowerCase() !== lc);
-          this._savedMaps.unshift({
+          const entry = {
             id: 'map_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
             name,
             ts: Date.now(),
             snapshot: this._snapshotMap(),
-          });
+          };
+          this._savedMaps.unshift(entry);
           // Cap library so quota doesn't creep over time. Saved-map snapshots
           // can be 20-50 KB each with lots of tokens/fog; 40 caps the list at
           // about 1-2 MB worst case. Say WHICH ones went: new entries unshift
           // to the front, so this drops the oldest saves, and doing it in
           // silence meant a full library quietly ate them.
-          let dropped = [];
+          let dropped = [], droppedEntries = [];
           if (this._savedMaps.length > 40){
-            dropped = this._savedMaps.slice(40).map(s => s.name || 'untitled');
+            droppedEntries = this._savedMaps.slice(40);
+            dropped = droppedEntries.map(s => s.name || 'untitled');
             this._savedMaps.length = 40;
           }
           this._saveSavedMaps();
+          this._updateSavedRefs(entry, replaced.concat(droppedEntries));
           close();
           if (typeof showToast === 'function'){
+            // An upload whose share failed never reached the server, so there
+            // is nothing for the saved map to point at. Say so now, while the
+            // image is still on screen to re-upload — not on the day the map
+            // is loaded and comes back blank.
+            const noArt = entry.snapshot && entry.snapshot.hadUploadedImage;
             showToast('Saved "' + name + '"'
+              + (noArt ? ' · its background was never shared, so it will not come back — re-upload it and save again to keep it' : '')
               + (dropped.length ? ` · library full, dropped oldest: ${dropped.join(', ')}` : ''));
           }
         };
@@ -3583,6 +3668,9 @@ registerPanel('battlemap',{
           _mapBgImage = img;
           this._bgMapNaturalW = img.naturalWidth;
           this._bgMapNaturalH = img.naturalHeight;
+          // What this upload replaces, so the old one can be retired once the
+          // new one is safely on the server — and not before.
+          const replacedPath = this._bgMapPath;
           // Held here only until the shared copy lands. If it never does,
           // this is all there is and the map stays on this device.
           this._bgMapPath = null;
@@ -3603,7 +3691,7 @@ registerPanel('battlemap',{
           // Show it here first, share it second. Encoding and uploading a
           // few megabytes takes a moment, and the DM should not be looking
           // at a spinner in the meantime.
-          this._shareUploadedMap(img);
+          this._shareUploadedMap(img, replacedPath);
         };
         img.onerror = () => showToast('Could not load image');
         img.src = ev.target.result;

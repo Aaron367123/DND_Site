@@ -1133,9 +1133,18 @@ function initRealtime() {
 }
 
 let _realtimeStarted = false;
+// Resolves once _startRealtime has run — after sign-in, when reads and writes
+// stop being rejected. Anything that needs the database at page load should
+// wait on this rather than on a timer: before it, the rules answer
+// permission_denied. Never resolves when sync is off, which is correct —
+// there is nothing to wait for.
+let _rtReadyResolve;
+const _rtReady = new Promise(res => { _rtReadyResolve = res; });
+window.sktRealtimeReady = function(){ return _rtReady; };
 function _startRealtime() {
   if (_realtimeStarted) return; // auth callback + fallback can both land here
   _realtimeStarted = true;
+  try { _rtReadyResolve(); } catch(e){}
 
   _patchLocalStorage();
 
@@ -1335,11 +1344,54 @@ function _blobBase(){ return _root() + '/' + _BLOB_BASE_REL; }
 
 // Resolves true on success. Never throws: the caller falls back to the
 // old device-only behaviour, which is worse but still works.
+//
+// Writes ONE child. This used to set() the parent — replacing the whole node,
+// so a campaign could hold exactly one uploaded map, ever. That was fine
+// while only the map on screen needed one, and it quietly broke saved maps:
+// save a map built on an upload, upload anything else, and the saved map
+// came back with tokens and fog on an empty background. Cleaning up uploads
+// nobody wants is now the battle map's job, done deliberately (_retireBlob),
+// instead of as a side effect of every upload.
 window.sktMapBlobPut = function(id, dataUrl){
   if (!_fbDb) return Promise.resolve(false);
-  return _fbDb.ref(_blobBase()).set({ [id]: String(dataUrl) })
+  return _fbDb.ref(_blobBase() + '/' + id).set(String(dataUrl))
     .then(() => true)
     .catch(err => { _diag('map blob put', err); return false; });
+};
+
+window.sktMapBlobDelete = function(id){
+  if (!_fbDb || !id) return Promise.resolve(false);
+  return _fbDb.ref(_blobBase() + '/' + id).remove()
+    .then(() => true)
+    .catch(err => { _diag('map blob delete', err); return false; });
+};
+
+// Which uploads the saved maps depend on, shared by every DM device:
+// { <savedMapId>: <blobId> }. Saved maps are local to each device, so no one
+// device can tell from its own library whether an upload is still wanted by
+// another. This is the one place that can.
+//
+// Keyed by saved-map id rather than counted. Setting or removing an entry is
+// idempotent, so a retry or a lost write cannot drift the way a counter
+// would. Stored as a single JSON string so it falls under the existing
+// $wholeKey rule — there is no new rule to publish.
+//
+// Resolves to the map AFTER `fn` has changed it, or null if it could not be
+// read at all. Callers treat null as UNKNOWN and delete nothing: a leaked
+// upload costs some storage, a wrongly deleted one costs somebody's map.
+const _BLOB_REFS_REL = 'mapblob_refs_v1';
+window.sktMapBlobRefs = function(fn){
+  if (!_fbDb || !_realtimeStarted) return Promise.resolve(null);
+  return _fbDb.ref(_root() + '/' + _BLOB_REFS_REL).transaction(cur => {
+    let m = {};
+    try { m = cur ? JSON.parse(cur) : {}; } catch(e){ m = {}; }
+    if (!m || typeof m !== 'object' || Array.isArray(m)) m = {};
+    if (typeof fn === 'function') fn(m);
+    return JSON.stringify(m);
+  }).then(r => {
+    if (!r || !r.committed) return null;
+    try { return JSON.parse(r.snapshot.val() || '{}'); } catch(e){ return null; }
+  }).catch(err => { _diag('map blob refs', err); return null; });
 };
 
 // Resolves to the data URL, or null when the node is gone — which is a real
