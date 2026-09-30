@@ -1469,6 +1469,31 @@
         }
       }
 
+      // The DM reads every player's notes in their own tree, under
+      // "Player notes" / <character>.
+      if (panelDefs.notes){
+        const N = panelDefs.notes, N0 = localStorage.getItem('skt-notes-v2'), view0 = N._view;
+        try {
+          const d = JSON.parse(N0 || '{"items":[]}');
+          d.items.push({ id: 'pn_root', type: 'folder', name: 'Player notes', parent: null, expanded: true });
+          d.items.push({ id: 'pnf_zz', type: 'folder', name: 'ZZ Hero', parent: 'pn_root', owner: 'zz', expanded: true });
+          d.items.push({ id: 'pnn_zzdm', type: 'file', name: 'ZZ Their Note', parent: 'pnf_zz', owner: 'zz', content: 'ZZ written by a player' });
+          d.selectedId = 'pnn_zzdm';
+          localStorage.setItem('skt-notes-v2', JSON.stringify(d));
+          openPanel('notes'); await sleep(250);
+          N._data = null; N.mount(N._body); N._view = 'local'; N._render(); await sleep(120);
+          const rows = [...N._body.querySelectorAll('.notes-tree-row')].map(r => r.textContent.replace(/\s+/g, ' ').trim());
+          const at = n => rows.findIndex(r => r.indexOf(n) >= 0);
+          ok('pnotes/dm: player notes appear under Player notes and the character',
+             at('Player notes') >= 0 && at('Player notes') < at('ZZ Hero') && at('ZZ Hero') < at('ZZ Their Note'),
+             JSON.stringify(rows));
+          ok('pnotes/dm: and the DM can read them', /ZZ written by a player/.test(N._body.textContent));
+        } finally {
+          if (N0 != null) localStorage.setItem('skt-notes-v2', N0);
+          N._data = null; N._view = view0; try { N.mount(N._body); closePanel('notes'); } catch(e){}
+        }
+      }
+
       // ── Rulebook chapters carry their reference content ───────────────────
       // A rulebook's "Classes" chapter is a page of intro prose in the source
       // data; books.js injects every class and subclass after it. When
@@ -3676,15 +3701,150 @@
         if (N._body){ N._data = null; N.mount(N._body); }
         paRender();
       }
-      // The UI hiding the notes is not enough on its own: sync must refuse
-      // them too, or a phone holding a partial copy deletes the DM's notes
-      // through the deletion sweep. That sweep is skipped only for restricted
-      // writers, and notes had no restriction.
-      const spec = typeof window.sktEntitySpec === 'function' ? window.sktEntitySpec('skt-notes-v2') : null;
-      ok('notes/player: sync refuses every note write from a player',
-         !!(spec && typeof spec.playerWritable === 'function'
-            && spec.playerWritable('items/n_open', { 'items/n_open': '1' }) === false
-            && spec.playerWritable('meta', { meta: '1' }) === false));
+      // ── No floating toolbar on a phone, and nothing reserved for it ───────
+      // The phone player view hides the toolbar. The turn bar reserved room for
+      // it by measuring it — and a hidden element measures as a zero box at
+      // left 0, so the reservation became the WHOLE screen width and '5 turns
+      // until you' wrapped one word per line. Checked by hiding the toolbar here
+      // (this pass is desktop-sized, so the phone rule itself can't apply).
+      if (typeof _updatePlayerViewportVars === 'function'){
+        const ft = document.getElementById('float-toolbar');
+        const d0 = ft ? ft.style.display : '';
+        try {
+          if (ft) ft.style.display = 'none';
+          _updatePlayerViewportVars();
+          const rv = getComputedStyle(document.documentElement).getPropertyValue('--pv-topright').trim();
+          ok('phone: a hidden toolbar reserves no room in the turn bar', rv === '0px', rv);
+        } finally { if (ft) ft.style.display = d0; _updatePlayerViewportVars(); }
+        let css = '';
+        try { css = await (await fetch('styles/main.css', { cache: 'no-store' })).text(); } catch(e){}
+        ok('phone: the player view hides the floating toolbar on a phone',
+           css.indexOf('body.player-mode .float-toolbar{display:none !important}') >= 0);
+      }
+
+      // ── A player's own notes ──────────────────────────────────────────────
+      // Every player keeps notes of their own in the Notes tab — create,
+      // rename, edit, delete — which live in the DM's tree under
+      // "Player notes" / <character> so the DM can read them. Sync lets a
+      // player write ONLY notes their character owns.
+      if (typeof paSetPc === 'function' && (state.party || []).length >= 2){
+        const N0 = localStorage.getItem('skt-notes-v2'), S0 = (state.sharedPanels || []).slice(), tab0 = paTab;
+        const me0 = localStorage.getItem('skt-me-v1');
+        const rm = window.showModal, rc = window.showConfirm, rt = window.showToast;
+        let answer = null;
+        window.showModal = () => Promise.resolve(answer);
+        window.showConfirm = () => Promise.resolve(true);
+        window.showToast = () => {};
+        const N = panelDefs.notes;
+        const me = state.party[0], other = state.party[1];
+        const stored = () => (JSON.parse(localStorage.getItem('skt-notes-v2') || '{"items":[]}').items || []);
+        const txt = () => (N._body ? N._body.textContent : '');
+        try {
+          paSetPc(me.id);
+          const d = JSON.parse(localStorage.getItem('skt-notes-v2') || '{"items":[]}');
+          d.items.push({ id: 'pnn_zzother', type: 'file', name: 'ZZ Other Player Note', owner: other.id, parent: 'pnf_' + other.id, content: 'not yours' });
+          const open = d.items.find(i => i.id === 'n_open'); if (open) open.shared = true;
+          localStorage.setItem('skt-notes-v2', JSON.stringify(d));
+          state.sharedPanels = ['party'];                 // the Notes PANEL is not shared
+          ok('pnotes: every player has a Notes tab, shared or not',
+             paVisibleTabs().some(t => t.id === 'notes'));
+          paTab = 'notes'; paRender(); await sleep(350);
+          if (N._body){ N._data = null; N.mount(N._body); await sleep(150); }
+          ok('pnotes: another player’s notes are not shown', !/ZZ Other Player Note/.test(txt()));
+          ok('pnotes: a DM note switched on stays hidden until the Notes panel is shared',
+             !/reached the gate/.test(txt()));
+
+          const add = N._body && N._body.querySelector('[data-player-new]');
+          if (add) add.click();
+          await sleep(150);
+          const ta = N._body && N._body.querySelector('#note-player-text');
+          if (ta){ ta.focus(); ta.value = 'ZZ typed on the phone'; ta.dispatchEvent(new Event('input', { bubbles: true })); }
+          await sleep(550);
+          if (ta) ta.blur();
+          const mine = stored().filter(i => i.owner === me.id && i.type === 'file');
+          ok('pnotes: a player can start a note of their own', mine.length === 1, String(mine.length));
+          ok('pnotes: it saves as they type', !!mine[0] && mine[0].content === 'ZZ typed on the phone');
+          ok('pnotes: it lives in the DM’s tree under the character’s folder',
+             !!mine[0] && mine[0].parent === 'pnf_' + me.id
+             && stored().some(i => i.id === 'pnf_' + me.id && i.parent === 'pn_root'));
+          answer = { name: 'ZZ Renamed' };
+          N._body.querySelector('[data-player-rename]')?.click(); await sleep(150);
+          ok('pnotes: a player can rename their note', stored().some(i => i.owner === me.id && i.name === 'ZZ Renamed'));
+
+          state.sharedPanels = ['party', 'notes'];
+          N._data = null; N.mount(N._body); await sleep(200);
+          const chip = [...N._body.querySelectorAll('[data-player-note]')].find(b => /Session 21/.test(b.textContent));
+          ok('pnotes: once the panel is shared, the DM’s note is listed too', !!chip);
+          if (chip){ chip.click(); await sleep(120); }
+          ok('pnotes: and it is read-only', !!chip && !N._body.querySelector('#note-player-text'));
+
+          const own = [...N._body.querySelectorAll('[data-player-note]')].find(b => /ZZ Renamed/.test(b.textContent));
+          if (own){ own.click(); await sleep(100); }
+          N._body.querySelector('[data-player-delete]')?.click(); await sleep(200);
+          ok('pnotes: a player can delete their own note', !stored().some(i => i.name === 'ZZ Renamed'));
+        } catch(e){
+          // A throw here would abort the whole player pass and discard every
+          // failure already recorded — so it is recorded as one instead.
+          ok('pnotes: the player notes checks ran to completion', false, e.message);
+        } finally {
+          window.showModal = rm; window.showConfirm = rc; window.showToast = rt;
+          if (N0 != null) localStorage.setItem('skt-notes-v2', N0);
+          if (me0 != null) localStorage.setItem('skt-me-v1', me0); else localStorage.removeItem('skt-me-v1');
+          state.sharedPanels = S0; paTab = tab0;
+          if (N._body){ N._data = null; N.mount(N._body); }
+          paRender();
+        }
+      }
+
+      // What sync lets a player write. The UI is not enough on its own: a
+      // phone holding a partial copy would delete the DM's notes through the
+      // deletion sweep, and nothing stops a modified client writing whatever
+      // it likes into its own push.
+      {
+        const spec = typeof window.sktEntitySpec === 'function' ? window.sktEntitySpec('skt-notes-v2') : null;
+        const me0 = localStorage.getItem('skt-me-v1');
+        const me = (state.party[0] || {}).id, other = (state.party[1] || {}).id;
+        try {
+          if (typeof paSetPc === 'function' && me) paSetPc(me);
+          const J = o => JSON.stringify(o);
+          const dm = { 'items/n_open': J({ id: 'n_open', type: 'file' }) };
+          const own = { id: 'pnn_zz', type: 'file', owner: me, parent: 'pnf_' + me };
+          ok('pnotes/sync: a player may write a note of their own',
+             !!spec && spec.playerWritable('items/pnn_zz', {}, J(own)) === true);
+          ok('pnotes/sync: but not one of the DM’s — even by putting their name on it',
+             !!spec && spec.playerWritable('items/n_open', dm, J({ id: 'n_open', type: 'file', content: 'x' })) === false
+                    && spec.playerWritable('items/n_open', dm, J({ id: 'n_open', type: 'file', owner: me })) === false);
+          ok('pnotes/sync: nor another player’s, nor the note order',
+             !!spec && spec.playerWritable('items/pnn_o', { 'items/pnn_o': J({ id: 'pnn_o', owner: other }) }, J({ id: 'pnn_o', owner: me })) === false
+                    && spec.playerWritable('meta', {}, '{}') === false);
+          ok('pnotes/sync: the shared folder can be created once, never overwritten',
+             !!spec && spec.playerWritable('items/pn_root', {}, J({ id: 'pn_root', type: 'folder' })) === true
+                    && spec.playerWritable('items/pn_root', { 'items/pn_root': J({ id: 'pn_root', type: 'folder', name: 'DM renamed' }) }, J({ id: 'pn_root', type: 'folder' })) === false);
+          // Deleting: only your own note, and only one you deleted on purpose.
+          const prevOwn = { 'items/pnn_zzdel': J({ id: 'pnn_zzdel', owner: me }) };
+          const before = !!spec && spec.playerDeletable('items/pnn_zzdel', prevOwn);
+          if (window.sktMarkNoteDeleted) window.sktMarkNoteDeleted('pnn_zzdel');
+          ok('pnotes/sync: a note missing from a phone’s copy is never deleted by it', before === false);
+          // The rules above are only as good as the one place that calls them,
+          // and that place needs a live database, so it is read from source:
+          // the write must hand the rule the NEW value (ownership is judged
+          // on it), and the deletion sweep must ask playerDeletable rather
+          // than refusing every player delete — or allowing them all.
+          {
+            let src = '';
+            try { src = await (await fetch('js/sync/realtime.js', { cache: 'no-store' })).text(); } catch(e){}
+            ok('pnotes/sync: the sync write passes the new value to the rule',
+               src.indexOf('restrict(n, prev, nodes[n])') >= 0);
+            ok('pnotes/sync: the deletion sweep asks the rule before a player deletes',
+               src.indexOf('if (restrict && !(spec.playerDeletable && spec.playerDeletable(n, prev))) return;') >= 0);
+          }
+          ok('pnotes/sync: one the player deleted on purpose is',
+             !!spec && spec.playerDeletable('items/pnn_zzdel', prevOwn) === true
+                    && spec.playerDeletable('items/n_open', dm) === false);
+        } finally {
+          if (me0 != null) localStorage.setItem('skt-me-v1', me0); else localStorage.removeItem('skt-me-v1');
+        }
+      }
     }
 
     // A rival lives in state.party like anyone else, so anything reading

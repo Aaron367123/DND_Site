@@ -463,41 +463,97 @@ registerPanel('notes', {
   },
 
   // ── What a player sees ────────────────────────────────────────────────────
-  // Only notes the DM has switched on with "Show to players", read-only.
+  // One list, two kinds of note:
+  //   • the player's OWN notes — theirs to create, rename, edit and delete;
+  //   • notes the DM switched on with "👁 Players" — read-only.
   //
-  // Before this, a player got the DM's full Dropbox view: every note in the
-  // tree, any of them readable with one click — "DM only" ones included — and
-  // a working editor. Which note is open is deliberately per-device, so there
-  // was never a way to show players just one; sharing is now an explicit flag
-  // on the note, which syncs with it.
+  // Own notes live in the DM's tree under "Player notes" / <character>,
+  // stamped owner = that character's id, so the DM can read every one of
+  // them. Sync lets a player write only notes their character owns (notes
+  // playerWritable in realtime.js); the rest of the DM's notes stay refused.
+  //
+  // Before any of this, a player got the DM's full Dropbox view: every note,
+  // "DM only" ones included, readable with one click, and a working editor
+  // over all of it.
+  _playerPc(){ return (typeof paPc === 'function') ? paPc() : null; },
+  _myNotes(){
+    const pc = this._playerPc();
+    return pc ? (this._data.items || []).filter(i => i.type === 'file' && i.owner === pc.id) : [];
+  },
   _sharedNotes(){
-    return (this._data.items || []).filter(i => i.type === 'file' && i.shared === true);
+    // Two switches, as the DM's toast says: the note's 👁, and the Notes panel
+    // itself. The tab is always there now for the player's own notes, so the
+    // panel switch has to be honoured here rather than by hiding the tab.
+    if (!(state.sharedPanels || []).includes('notes')) return [];
+    const pc = this._playerPc();
+    return (this._data.items || []).filter(i => i.type === 'file' && i.shared === true
+                                             && !(pc && i.owner === pc.id));
+  },
+  // The folders a player's notes sit in, created on first use. Both are
+  // writes the sync rules allow: the shared root once, the character's own
+  // folder because the character owns it.
+  _ensurePlayerFolders(pc){
+    const items = this._data.items;
+    const ROOT = window.SKT_PLAYER_NOTES_ROOT || 'pn_root';
+    if (!items.some(i => i.id === ROOT)){
+      items.push({ id: ROOT, type: 'folder', name: 'Player notes', parent: null, expanded: true });
+    }
+    const fid = 'pnf_' + pc.id;
+    if (!items.some(i => i.id === fid)){
+      items.push({ id: fid, type: 'folder', name: pc.name, parent: ROOT, owner: pc.id, expanded: false });
+    }
+    return fid;
   },
   _renderPlayerView(){
     const b = this._body;
-    const shared = this._sharedNotes();
-    if (!shared.length){
-      b.innerHTML = typeof emptyState === 'function'
-        ? emptyState({ icon:'i-note', title:'Nothing shared yet',
-                       hint:'Notes the DM shows to players will appear here.' })
-        : '<div class="notes-picker-empty">Nothing shared yet.</div>';
+    const pc = this._playerPc();
+    const all = [...this._myNotes().map(n => ({ n, own: true })),
+                 ...this._sharedNotes().map(n => ({ n, own: false }))];
+    if (!all.some(x => x.n.id === this._playerNoteId)) this._playerNoteId = all.length ? all[0].n.id : null;
+    const cur = all.find(x => x.n.id === this._playerNoteId);
+    const empty = (title, hint) => typeof emptyState === 'function'
+      ? emptyState({ icon: 'i-note', title, hint })
+      : '<div class="notes-picker-empty">' + esc(title) + '</div>';
+
+    if (!pc && !all.length){
+      b.innerHTML = empty('No notes yet', 'Pick your character on the You tab to keep your own notes here.');
       return;
     }
-    // The player's pick is theirs alone and never saved — they cannot write
-    // notes, and a remote change remounts the panel, so it lives on the panel.
-    if (!shared.some(n => n.id === this._playerNoteId)) this._playerNoteId = shared[0].id;
-    const file = shared.find(n => n.id === this._playerNoteId);
-    const list = shared.length < 2 ? '' :
-      '<div class="notes-player-list">' + shared.map(n =>
-        `<button class="btn small${n.id === file.id ? ' active' : ''}" data-player-note="${esc(n.id)}">${esc(n.name)}</button>`
-      ).join('') + '</div>';
-    // The chooser goes UNDER the title: on a phone the floating toolbar sits
-    // over the top row of the screen, and it hid every choice but the first.
-    b.innerHTML = `<div class="notes-player">
-        <div class="notes-editor-head"><span class="notes-file-title notes-file-title-ro">${esc(file.name)}</span></div>
-        ${list}
-        <div class="notes-edit-area notes-readonly" id="note-read-area">${this._renderColored(file)}</div>
-      </div>`;
+    const chips = all.map(({ n, own }) =>
+      '<button class="btn small' + (n.id === this._playerNoteId ? ' active' : '') + '" data-player-note="' + esc(n.id) + '"'
+      + (own ? '' : ' title="Shared by the DM — read-only"') + '>' + (own ? '' : '👁 ') + esc(n.name) + '</button>').join('');
+    const add = pc ? '<button class="btn small primary" data-player-new>+ New note</button>' : '';
+    const list = '<div class="notes-player-list">' + chips + add + '</div>';
+
+    let body;
+    if (!cur){
+      body = empty('No notes yet', 'Tap “+ New note” to start one. Your DM can read your notes; other players can’t.');
+    } else if (cur.own){
+      body = '<div class="notes-editor-head">'
+        + '<span class="notes-file-title notes-file-title-ro">' + esc(cur.n.name) + '</span>'
+        + '<button class="btn icon-btn" data-player-rename title="Rename">✎</button>'
+        + '<button class="btn icon-btn" data-player-delete title="Delete this note">🗑</button>'
+        + '</div>'
+        + '<textarea class="notes-player-edit" id="note-player-text" spellcheck="true"'
+        + ' placeholder="Write anything — it saves as you type.">' + esc(cur.n.content || '') + '</textarea>';
+    } else {
+      body = '<div class="notes-editor-head"><span class="notes-file-title notes-file-title-ro">' + esc(cur.n.name) + '</span></div>'
+        + '<div class="notes-edit-area notes-readonly" id="note-read-area">' + this._renderColored(cur.n) + '</div>';
+    }
+    // The list goes UNDER the title on a shared note and above an own note's
+    // editor; either way it is never the top row, which is where a phone's
+    // status area and the turn bar live.
+    b.innerHTML = '<div class="notes-player">' + list + body + '</div>';
+  },
+  // Write the player's text to their note. Refuses anything they don't own —
+  // sync would refuse it anyway, but the local copy should not drift either.
+  _playerCommit(id, text){
+    const pc = this._playerPc();
+    const n = (this._data.items || []).find(i => i.id === id);
+    if (!pc || !n || n.owner !== pc.id || n.content === text) return;
+    n.content = text;
+    n.updated = Date.now();
+    this._save();
   },
   _wirePlayer(){
     const b = this._body; if (!b) return;
@@ -505,7 +561,62 @@ registerPanel('notes', {
       this._playerNoteId = btn.dataset.playerNote;
       this._render();
     }));
+    b.querySelector('[data-player-new]')?.addEventListener('click', () => {
+      const pc = this._playerPc(); if (!pc) return;
+      const parent = this._ensurePlayerFolders(pc);
+      const id = 'pnn_' + (typeof uid === 'function' ? uid() : Date.now().toString(36));
+      this._data.items.push({ id, type: 'file', name: 'Note ' + (this._myNotes().length + 1),
+                              parent, owner: pc.id, content: '', lineAuthors: [] });
+      this._playerNoteId = id;
+      this._save();
+      this._render();
+      b.querySelector('#note-player-text')?.focus();
+    });
+    const ta = b.querySelector('#note-player-text');
+    if (ta){
+      const id = this._playerNoteId;
+      let t = null;
+      // _editing holds off incoming sync while the player is typing (see the
+      // notes spec's holdOff), so a remote change can't replace the text box
+      // under their thumbs. Cleared on blur, which also saves immediately.
+      ta.addEventListener('focus', () => { this._editing = true; });
+      ta.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => this._playerCommit(id, ta.value), 400);
+      });
+      ta.addEventListener('blur', () => {
+        clearTimeout(t);
+        this._playerCommit(id, ta.value);
+        this._editing = false;
+      });
+    }
+    b.querySelector('[data-player-rename]')?.addEventListener('click', () => {
+      const n = this._myNotes().find(x => x.id === this._playerNoteId); if (!n) return;
+      showModal('Rename note', [{ id: 'name', label: 'Name', type: 'text', value: n.name }], 'Save').then(r => {
+        if (!r || !r.name || !r.name.trim()) return;
+        n.name = r.name.trim().slice(0, 80);
+        this._save(); this._render();
+      });
+    });
+    b.querySelector('[data-player-delete]')?.addEventListener('click', () => {
+      const n = this._myNotes().find(x => x.id === this._playerNoteId); if (!n) return;
+      const go = ok => {
+        if (!ok) return;
+        // Recorded BEFORE the save: sync only lets a player delete a note of
+        // their own that they deleted on purpose, never one that is merely
+        // missing from their copy.
+        if (typeof window.sktMarkNoteDeleted === 'function') window.sktMarkNoteDeleted(n.id);
+        this._data.items = this._data.items.filter(i => i.id !== n.id);
+        this._playerNoteId = null;
+        this._save(); this._render();
+      };
+      if (typeof showConfirm === 'function'){
+        showConfirm('Delete “' + n.name + '”? This can’t be undone.',
+                    { title: 'Delete note', confirmLabel: 'Delete', danger: true }).then(go);
+      } else go(window.confirm('Delete “' + n.name + '”?'));
+    });
   },
+
 
   // Dropbox view — identical structure to local view; only the header label
   // differs. The same tree, editor, toolbar, undo stack, settings popover,

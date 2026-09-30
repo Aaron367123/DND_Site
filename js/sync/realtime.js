@@ -316,13 +316,39 @@ const _ENTITY_KEYS = {
   'skt-notes-v2': {
     base: 'notes_v3',   // relative to sktFbRoot()
     legacyNode: null,  // notes never had a whole-key Firebase node
-    // A player writes NOTHING to the DM's notes. Without this a player was a
-    // full writer: whatever their phone's localStorage held was exploded and
+    // A player writes ONLY notes that belong to their own character, and
+    // nothing else of the DM's. Before any restriction a player was a full
+    // writer: whatever their phone's localStorage held was exploded and
     // pushed, and the deletion sweep in _flushEntity removed any note the
-    // phone had not heard of yet — the same hazard the battle map is guarded
-    // against above, except notes were never guarded. A player could also
-    // create, rename and overwrite notes, and the Notes panel let them.
-    playerWritable(){ return false; },
+    // phone had not heard of yet — the hazard the battle map is guarded
+    // against above.
+    //
+    // Ownership is judged on BOTH sides of the write. The new value must be
+    // the player's, and so must the old one: stamping your own name on the
+    // id of one of the DM's notes is refused, because the note already there
+    // is not yours. meta (the order and the author legend) stays DM-only;
+    // assemble() appends notes it does not know the order of, so a player's
+    // new note still appears for the DM.
+    playerWritable(node, prev, next){
+      const me = _myPcId();
+      if (!me || node.indexOf('items/') !== 0) return false;
+      const was = _noteOf(prev[node]), now = _noteOf(next);
+      if (!now) return false;
+      // The shared "Player notes" folder: any player may create it, once. If
+      // it already exists — the DM may have renamed it — it is left alone.
+      if (now.id === PLAYER_NOTES_ROOT) return !was && now.type === 'folder';
+      if (was && was.owner !== me) return false;
+      return now.owner === me;
+    },
+    // Deleting is allowed only for the player's own note AND only one they
+    // deleted in this session (sktMarkNoteDeleted). "Missing from my copy" is
+    // never enough on its own — that is exactly how a stale phone would
+    // delete things.
+    playerDeletable(node, prev){
+      const me = _myPcId();
+      const was = _noteOf(prev[node]);
+      return !!(me && was && was.owner === me && _playerNoteDeletes.has(was.id));
+    },
     explode(s){
       const d = JSON.parse(s) || {};
       const items = Array.isArray(d.items) ? d.items : [];
@@ -365,6 +391,20 @@ const _ENTITY_KEYS = {
   },
 };
 function _fbSafeId(id){ return String(id).replace(/[.#$\/\[\]]/g, '_'); }
+
+// ── Player notes ────────────────────────────────────────────────────────────
+// Each character's notes live in the DM's notes tree, under one shared folder
+// with a folder per character, stamped with owner = that character's id.
+const PLAYER_NOTES_ROOT = 'pn_root';
+function _noteOf(raw){ try { return raw ? JSON.parse(raw) : null; } catch(e){ return null; } }
+// Which character this browser is — the player app's own record of it.
+function _myPcId(){
+  try { return (JSON.parse(localStorage.getItem('skt-me-v1') || 'null') || {}).pcId || null; }
+  catch(e){ return null; }
+}
+const _playerNoteDeletes = new Set();
+window.sktMarkNoteDeleted = function(id){ if (id) _playerNoteDeletes.add(String(id)); };
+window.SKT_PLAYER_NOTES_ROOT = PLAYER_NOTES_ROOT;
 // Node names for one exploded list, guaranteed distinct.
 //
 // Every path that CREATES a record assigns a unique id, but this layer does
@@ -467,15 +507,19 @@ function _flushEntityKey(k){
   const applied = {...prev};
   Object.keys(nodes).forEach(n => {
     if (prev[n] === nodes[n]) return;
-    if (restrict && !restrict(n, prev)) return;
+    // The new value is passed too: whether a player may write a note depends
+    // on whose note it is, which only the content says.
+    if (restrict && !restrict(n, prev, nodes[n])) return;
     updates[_baseOf(spec) + '/' + n] = nodes[n];
     applied[n] = nodes[n];
   });
   Object.keys(prev).forEach(n => {
     if (n in nodes) return;
     // A player never deletes. Their absent node means "I don't know about it",
-    // not "remove it" — only the DM can actually remove anything.
-    if (restrict) return;
+    // not "remove it" — only the DM can actually remove anything. The one
+    // exception is a domain that says otherwise for a specific node: a
+    // player's OWN note, which they deleted on purpose (see notes below).
+    if (restrict && !(spec.playerDeletable && spec.playerDeletable(n, prev))) return;
     updates[_baseOf(spec) + '/' + n] = null;
     delete applied[n];
   });

@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = 'a585fa4a94';
+const BUILD = '9a12d50cc9';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=d35c732c72',
+  'styles/main.css?v=09482afa78',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=28f4faf7d2',
   'js/core/theme.js?v=4589bc6790',
@@ -57,7 +57,7 @@ const PRECACHE = [
   'js/sync/notes-sync.js?v=8c42540638',
   'js/sync/dropbox-config.js?v=ccf8533d50',
   'js/sync/dropbox-sync.js?v=ab773edfd6',
-  'js/panels/notes.js?v=56a9e42584',
+  'js/panels/notes.js?v=8a8634ee46',
   'js/panels/battlemap.js?v=0f52e29e6d',
   'js/panels/npc-library.js?v=1a0f254270',
   'js/panels/bestiary.js?v=bc58b530c6',
@@ -79,9 +79,9 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=bdaf579267',
   'js/features/pdf-import.js?v=06787122c5',
-  'js/player/player-app.js?v=7783f4df68',
-  'js/ui/player-view.js?v=7519877ed8',
-  'js/sync/realtime.js?v=9a19f8ff29',
+  'js/player/player-app.js?v=71f99a429e',
+  'js/ui/player-view.js?v=d4b768de97',
+  'js/sync/realtime.js?v=d7787684ce',
   'js/ui/tutorial.js?v=e47e670b86',
   'js/ui/onboarding.js?v=42199a671a',
   'js/app.js?v=f950284ed2',

@@ -35,12 +35,17 @@ function _updatePlayerViewportVars(){
   // pill and use the full width instead.
   const ft = document.getElementById('float-toolbar');
   const r  = ft ? ft.getBoundingClientRect() : null;
+  // Only a toolbar that is actually DRAWN needs clearing. The phone player
+  // view hides it, and a hidden element measures as a zero box at left 0 —
+  // which made `w - r.left` the entire screen width, so the turn bar reserved
+  // every pixel and wrapped "5 turns until you" one word per line.
+  const drawn = !!(r && r.width > 0 && r.height > 0);
   // Both are measured from the viewport edges, which is what the turn bar is
   // flush against in the player app.
   document.documentElement.style.setProperty('--pv-topright',
-    (r ? Math.max(0, w - r.left) + 8 : 0) + 'px');
+    (drawn ? Math.max(0, w - r.left) + 8 : 0) + 'px');
   document.documentElement.style.setProperty('--pv-topright-h',
-    (r ? Math.max(0, r.bottom) + 4 : 0) + 'px');
+    (drawn ? Math.max(0, r.bottom) + 4 : 0) + 'px');
 }
 
 // Realtime calls these by name after applying a remote change. Both now mean

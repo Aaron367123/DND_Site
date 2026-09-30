@@ -82,7 +82,9 @@ const PA_TABS = [
   { id:'you',   label:'You',   icon:'i-heart',  always:true },
   { id:'map',   label:'Map',   icon:'i-map',    needs:'battlemap' },
   { id:'party', label:'Party', icon:'i-user',   needs:'party' },
-  { id:'notes', label:'Notes', icon:'i-note',   needs:'notes' },
+  // Always there: every player keeps their own notes here. What the DM has
+  // shared appears alongside only when the Notes panel is shared as well.
+  { id:'notes', label:'Notes', icon:'i-note',   always:true },
   // Loot is fully interactive for players, deliberately. The party's haul is
   // the party's business — claiming an item, splitting coin and adding what
   // they picked up is bookkeeping the DM should not have to relay. The panel

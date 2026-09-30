@@ -2408,10 +2408,22 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 .notes-share-btn{white-space:nowrap}
 .notes-share-btn.active{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
 .notes-shared-mark{font-size:.85em;opacity:.75;margin-left:4px}
-/* On a phone the floating toolbar sits over the top ~48px of the screen and
-   covered the right half of the note's title. Same gate as the phone layout. */
+/* A player's own note: a plain text box that fills the tab. Big type, no
+   chrome — this is written on a phone, mid-session, one-thumbed. */
+.notes-player-edit{flex:1;min-height:40vh;width:100%;box-sizing:border-box;resize:none;
+  margin:0;padding:14px 16px;border:none;border-top:1px solid var(--border);
+  background:var(--panel);color:var(--text);font:inherit;font-size:var(--fs-xl);line-height:1.6}
+.notes-player-edit:focus{outline:none;background:var(--panel-2)}
+.notes-player .notes-editor-head{gap:6px}
+/* Which note is open. Without it the chips all looked alike. */
+.notes-player-list .btn.active{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
+/* A player on a PHONE gets no floating toolbar. Everything in it was the
+   DM's or covered by something else: the campaign switcher and "back to DM
+   view" are the DM's, and the whole bar sat over the top ~48px of every tab,
+   covering titles. Search and the text-size setting go with it — on phones
+   only; the desktop player view keeps the bar. Same gate as the phone layout. */
 @media (max-width: 768px) and (pointer: coarse){
-  body.player-mode .notes-player{padding-top:calc(52px + env(safe-area-inset-top, 0px))}
+  body.player-mode .float-toolbar{display:none !important}
 }
 .notes-edit-area h1,.notes-edit-area h2,.notes-edit-area h3{color:var(--text);display:block;font-weight:600;letter-spacing:-.01em}
 .notes-edit-area h1{font-size:var(--fs-5xl);margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
