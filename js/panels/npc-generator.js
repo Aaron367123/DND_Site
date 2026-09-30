@@ -252,6 +252,11 @@ registerPanel('npcgen',{
       const lib = panelDefs.npclib;
       const entry = toLibraryEntry(g);
       if (lib){
+        // Load it first. `lib` always exists — the panel is registered at
+        // startup — but its list is only read from storage when the Library
+        // is opened. Treating "not loaded" as "empty" made the first NPC
+        // saved here in a session replace the entire library.
+        if (typeof lib._ensureLoaded === 'function') lib._ensureLoaded();
         if (!Array.isArray(lib._npcs)) lib._npcs = [];
         lib._npcs.unshift(entry);
         lib._selectedId = entry.id;

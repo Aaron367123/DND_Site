@@ -53,10 +53,15 @@ registerPanel('npclib', {
   // is selected so a fresh click doesn't expose the previous reveal.
   _secretRevealed:false,
 
-  mount(body){
-    this._body = body;
-    if (!this._npcs) {
-      try {
+  // Load the library from storage if it hasn't been yet. mount() uses this,
+  // and so must anything that adds to the library from OUTSIDE the panel:
+  // the NPC generator used to find _npcs still null (the library panel is
+  // registered at startup but loads nothing until it is opened), start a
+  // fresh empty list, add its one NPC, and save that list over the whole
+  // stored library. The library syncs, so every device lost it too.
+  _ensureLoaded(){
+    if (this._npcs) return this._npcs;
+    try {
         const r = localStorage.getItem('skt-npcs-v2');
         if (r) this._npcs = JSON.parse(r);
         else {
@@ -76,7 +81,12 @@ registerPanel('npclib', {
           }
         }
       } catch(e) { this._npcs = JSON.parse(JSON.stringify(DEFAULT_NPCS_V2)); }
-    }
+    return this._npcs;
+  },
+
+  mount(body){
+    this._body = body;
+    this._ensureLoaded();
     if (!this._collapsed){
       // Persist collapse state per-browser. Group-name keys aren't synced;
       // the user's preference for which sections are folded is purely UI.

@@ -1439,6 +1439,36 @@
         }
       }
 
+      // ── NPC generator → library never replaces the library ─────────────────
+      // The Library panel is registered at startup but reads nothing from
+      // storage until it is opened. The generator's Save found its list still
+      // null, started an empty one, added its NPC and saved THAT over the
+      // stored library — so the first NPC saved in a session where the
+      // Library hadn't been opened deleted every other NPC, on every device.
+      if (panelDefs.npcgen && panelDefs.npclib){
+        const L = panelDefs.npclib;
+        const N0 = localStorage.getItem('skt-npcs-v2'), mem0 = L._npcs;
+        const rt = window.showToast; window.showToast = () => {};
+        const names = () => (JSON.parse(localStorage.getItem('skt-npcs-v2') || '[]') || []).map(n => n.name);
+        try {
+          localStorage.setItem('skt-npcs-v2', JSON.stringify([{ id: 'zz_keep', name: 'ZZ Keep Me', role: '', group: 'Townsfolk' }]));
+          L._npcs = null;                       // the Library has not been opened this session
+          try { closePanel('npclib'); } catch(e){}
+          openPanel('npcgen'); await sleep(300);
+          const G = panelDefs.npcgen;
+          G._body.querySelector('#npcgen-roll').click(); await sleep(80);
+          G._body.querySelector('#npcgen-save').click(); await sleep(200);
+          const after = names();
+          ok('npcgen: saving an NPC keeps the rest of the library',
+             after.includes('ZZ Keep Me') && after.length === 2, JSON.stringify(after));
+        } finally {
+          window.showToast = rt;
+          if (N0 != null) localStorage.setItem('skt-npcs-v2', N0); else localStorage.removeItem('skt-npcs-v2');
+          L._npcs = mem0;
+          try { closePanel('npcgen'); closePanel('npclib'); } catch(e){}
+        }
+      }
+
       // ── Rulebook chapters carry their reference content ───────────────────
       // A rulebook's "Classes" chapter is a page of intro prose in the source
       // data; books.js injects every class and subclass after it. When
