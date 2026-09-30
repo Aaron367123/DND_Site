@@ -1398,6 +1398,47 @@
         }
       }
 
+      // ── Encounter builder → combat keeps the stat block it picked ─────────
+      // "Push to Combat Tracker" handed combat {name, hp, ac, dex}, so every
+      // pushed monster lost its resistances, immunities, source, portrait and
+      // legendary actions. Combat's fallback looks the monster up by NAME,
+      // which guesses between the 2014 and 2024 entries — 92 differ — so a
+      // 2024 Archmage picked here took psychic damage it is immune to.
+      // Driven through the builder's own button.
+      if (typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded && panelDefs.encounter){
+        const E = panelDefs.encounter, C = panelDefs.combat;
+        const K0 = JSON.stringify(state.combatants), M0 = JSON.stringify(E._monsters || []);
+        const rt = window.showToast; window.showToast = () => {};
+        const push = async (name, src) => {
+          state.combatants = [];
+          const r = E._searchPool(name.toLowerCase()).find(p => p.name === name && p._source === src);
+          if (!r) return null;
+          E._monsters = [{ name: r.name, cr: r.cr, hp: r.hp, ac: r.ac, dex: r.dex, _source: r._source, count: 1 }];
+          E._render(); await sleep(80);
+          const btn = E._body && E._body.querySelector('#enc-push-combat');
+          if (btn) btn.click();
+          await sleep(120);
+          return state.combatants[0] || null;
+        };
+        try {
+          openPanel('encounter'); await sleep(300);
+          const mage = await push('Archmage', 'XMM');
+          ok('enc→combat: a pushed monster keeps its exact stat block',
+             !!mage && mage._source === 'XMM', mage ? String(mage._source) : 'not pushed');
+          let took = null;
+          if (mage){ const hp0 = state.combatants[0].hp; C._applyHpDelta(0, -10, 'psychic'); took = hp0 - state.combatants[0].hp; }
+          ok('enc→combat: the 2024 Archmage is immune to psychic damage, as its stat block says',
+             took === 0, 'took ' + took);
+          const dragon = await push('Adult Red Dragon', 'MM');
+          ok('enc→combat: a legendary monster arrives with its legendary actions',
+             !!dragon && dragon.legendaryMax === 3, dragon ? String(dragon.legendaryMax) : 'not pushed');
+        } finally {
+          window.showToast = rt;
+          state.combatants = JSON.parse(K0); E._monsters = JSON.parse(M0); save();
+          try { closePanel('encounter'); } catch(e){}
+        }
+      }
+
       // ── Rulebook chapters carry their reference content ───────────────────
       // A rulebook's "Classes" chapter is a page of intro prose in the source
       // data; books.js injects every class and subclass after it. When

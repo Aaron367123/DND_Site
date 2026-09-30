@@ -274,8 +274,24 @@ registerPanel('encounter',{
       const summaryParts = [];
       this._monsters.forEach(m => {
         const n = m.count || 1;
+        // Push the STAT BLOCK the builder picked, not a copy of five fields.
+        // addMonster takes resistances, immunities, the exact source, the
+        // portrait and legendary actions only from what it is handed; this
+        // handed it {name, hp, ac, dex}. Combat then fell back to a lookup by
+        // name, which guesses between the 2014 and 2024 entries: 92 monsters
+        // differ between them, and picking the 2024 Archmage here gave one
+        // that took full psychic damage it is immune to. Dragons also arrived
+        // with no legendary action counter.
+        //
+        // Name AND source, the same rule the Bestiary's drag-to-combat uses.
+        // The five-field object stays as the fallback for encounters saved
+        // without a source, and for the offline MONSTER_LIST.
+        const entry = (typeof _5eLoaded !== 'undefined' && _5eLoaded && Array.isArray(_5eData))
+          ? (_5eData.find(d => d.cat === 'monster' && d.name === m.name && m._source && d._source === m._source)
+             || (m._source ? null : _5eData.find(d => d.cat === 'monster' && d.name === m.name)))
+          : null;
         for (let k=0;k<n;k++){
-          panelDefs.combat.addMonster({name:m.name,hp:m.hp,hpMax:m.hp,ac:m.ac,dex:m.dex||10});
+          panelDefs.combat.addMonster(entry || {name:m.name,hp:m.hp,hpMax:m.hp,ac:m.ac,dex:m.dex||10});
           pushed++;
         }
         summaryParts.push(n>1 ? `${n}× ${m.name}` : m.name);
