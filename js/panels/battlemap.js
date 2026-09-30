@@ -197,6 +197,36 @@ registerPanel('battlemap',{
   _isSharedUpload(p){ return typeof p === 'string' && p.indexOf('sktblob:') === 0; },
   _blobIdOf(p){ return this._isSharedUpload(p) ? p.slice(8) : null; },
 
+  // ONE download per upload per device. Map updates arrive on every token
+  // nudge and fog tick, and until the image has loaded, applyMapState asks for
+  // it again on each one. Measured: a share plus eight token moves during a
+  // two-second phone download fetched the same map NINE times — each one the
+  // full image, around 1.2 MB, against a 10 GB/month free download allowance.
+  //
+  // Requests already in flight are shared, and the last few answers kept.
+  // "Gone" (null) is kept too, since an upload id is never reused. A REJECTED
+  // request is not: that is a network error, and remembering it would hide a
+  // map that is fine.
+  _BLOB_CACHE_MAX: 3,
+  _blobCache: new Map(),
+  _blobInflight: new Map(),
+  _blobRemember(id, v){
+    this._blobCache.delete(id);
+    this._blobCache.set(id, v);
+    while (this._blobCache.size > this._BLOB_CACHE_MAX){
+      this._blobCache.delete(this._blobCache.keys().next().value);
+    }
+  },
+  _fetchBlob(id){
+    if (this._blobCache.has(id)) return Promise.resolve(this._blobCache.get(id));
+    if (this._blobInflight.has(id)) return this._blobInflight.get(id);
+    const p = Promise.resolve().then(() => window.sktMapBlobGet(id))
+      .then(v => { this._blobRemember(id, v || null); return v || null; })
+      .finally(() => { this._blobInflight.delete(id); });
+    this._blobInflight.set(id, p);
+    return p;
+  },
+
   // The uploads this device's saved maps point at.
   _localSavedBlobIds(){
     const ids = new Set();
@@ -226,6 +256,7 @@ registerPanel('battlemap',{
     const refs = await window.sktMapBlobRefs(null);
     if (!refs) return false;
     if (Object.keys(refs).some(k => refs[k] === id)) return false;
+    this._blobCache.delete(id);
     return window.sktMapBlobDelete(id);
   },
 
@@ -723,16 +754,22 @@ registerPanel('battlemap',{
     // which would otherwise treat "sktblob:abc" as a relative image path.
     const sb = String(path || '');
     if (sb.indexOf('sktblob:') === 0){
+      // Already found missing: a sync update is not a reason to look again,
+      // nor to say so again. Every map update used to fetch it once more and
+      // pop the same toast — eleven of each for eleven updates, measured. The
+      // URL branch below has always had this guard; this kind never did.
+      if (fromSync && sb === this._bgFailedUrl) return;
       const seq = ++this._bgLoadSeq;
       const id = sb.slice(8);
       if (typeof window.sktMapBlobGet !== 'function'){
         this._reportBgFailure(sb); return;
       }
-      window.sktMapBlobGet(id).then(data => {
+      this._fetchBlob(id).then(data => {
         if (seq !== this._bgLoadSeq) return;
         // Not an error worth a ladder of retries: the DM has uploaded a
         // different map since, and a fresh bgMapPath is already on its way.
         if (!data){
+          this._bgFailedUrl = sb;
           // The DM is the one who can fix it, so the DM is told how rather
           // than being told to ask themselves.
           showToast(document.body.classList.contains('player-mode')
@@ -886,6 +923,9 @@ registerPanel('battlemap',{
     // Only now the bytes are actually there. Pointing bgMapPath at an id
     // before the write lands would send every player to fetch a node that
     // does not exist yet.
+    // The DM already holds these bytes; downloading them straight back out of
+    // the database the next time the map loads would be a wasted 1–3 MB.
+    this._blobRemember(id, data);
     this._bgMapPath = 'sktblob:' + id;
     this._saveMap();
     showToast('Map shared — the players have it now');

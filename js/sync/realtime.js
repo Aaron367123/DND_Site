@@ -1397,6 +1397,11 @@ window.sktMapBlobRefs = function(fn){
 // Resolves to the data URL, or null when the node is gone — which is a real
 // case, not a failure: a device that reconnects after the DM has uploaded
 // twice is asking for an id that no longer exists.
+//
+// A READ ERROR REJECTS. It used to resolve null too, which was harmless while
+// nothing remembered the answer. The battle map now caches "gone" so it stops
+// asking — and caching a dropped connection as "gone" would hide a map that
+// is perfectly fine until the page is reloaded.
 window.sktMapBlobGet = function(id){
   if (!_fbDb) return Promise.resolve(null);
   return _fbDb.ref(_blobBase() + '/' + id).once('value')
@@ -1414,10 +1419,9 @@ window.sktMapBlobGet = function(id){
       // turn a null into a hit, so the worst case is today's behaviour.
       if (typeof sktActiveCampaign === 'function' && sktActiveCampaign() !== 'main') return null;
       return _fbDb.ref('skt/' + _BLOB_BASE_REL + '/' + id).once('value')
-        .then(ls => ls.val() || null)
-        .catch(() => null);
+        .then(ls => ls.val() || null);
     })
-    .catch(err => { _diag('map blob get', err); return null; });
+    .catch(err => { _diag('map blob get', err); throw err; });
 };
 // Read-only access to an entity spec, for the self test.
 //

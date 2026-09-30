@@ -3289,6 +3289,96 @@
         }
       }
 
+      // ── Download budget: one fetch per upload per device ──────────────────
+      // Map updates arrive on every token nudge and fog tick, and until the
+      // image has loaded applyMapState asks for it again on each one. A share
+      // plus eight token moves during a two-second phone download fetched the
+      // same ~1.2 MB map NINE times. Against a 10 GB/month free allowance
+      // that is the difference between a table that fits and one that doesn't.
+      {
+        const d = panelDefs.battlemap;
+        const real = window.sktMapBlobGet, realToast = window.showToast;
+        const path0 = d._bgMapPath, img0 = _mapBgImage, w0 = d._bgMapNaturalW;
+        const DATA = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+        const base = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+        const reset = () => { d._blobCache.clear(); d._blobInflight.clear(); d._bgFailedUrl = null;
+                              _mapBgImage = null; d._bgMapNaturalW = 0; };
+        const toasts = [];
+        window.showToast = m => toasts.push(String(m));
+        try {
+          // A slow download with the DM moving tokens throughout.
+          reset();
+          let n = 0;
+          window.sktMapBlobGet = () => { n++; return new Promise(r => setTimeout(() => r(DATA), 700)); };
+          d.applyMapState({ ...base, bgMapPath: 'sktblob:uslow' }, { source: 'firebase' });
+          for (let i = 0; i < 6; i++){
+            await sleep(80);
+            d.applyMapState({ ...base, bgMapPath: 'sktblob:uslow' }, { source: 'firebase' });
+          }
+          await sleep(900);
+          ok('map: token moves during a download do not download the map again',
+             n === 1, n + ' downloads');
+          ok('map: and the map still arrives', !!d._bgMapNaturalW);
+
+          // A blob that is gone: found once, said once.
+          reset(); n = 0; toasts.length = 0;
+          window.sktMapBlobGet = () => { n++; return Promise.resolve(null); };
+          d.applyMapState({ ...base, bgMapPath: 'sktblob:ugone' }, { source: 'firebase' });
+          for (let i = 0; i < 8; i++){
+            await sleep(30);
+            d.applyMapState({ ...base, bgMapPath: 'sktblob:ugone' }, { source: 'firebase' });
+          }
+          await sleep(150);
+          const said = toasts.filter(t => /no longer on the server/.test(t)).length;
+          ok('map: a missing upload is looked for once, not on every update',
+             n === 1, n + ' fetches');
+          ok('map: and the player is told once, not on every update', said === 1, said + ' toasts');
+
+          // A network error is NOT remembered as "gone" — otherwise a dropped
+          // connection would hide a map that is fine until the page reloads.
+          reset(); n = 0;
+          window.sktMapBlobGet = () => { n++; return n === 1 ? Promise.reject(new Error('offline')) : Promise.resolve(DATA); };
+          d._loadBgFromPath('sktblob:uflaky', false, false);
+          await sleep(150);
+          d._loadBgFromPath('sktblob:uflaky', false, false);
+          await sleep(300);
+          ok('map: a failed download is retried, not cached as missing',
+             n === 2 && !!d._bgMapNaturalW, n + ' fetches, loaded=' + !!d._bgMapNaturalW);
+
+          // The DM already has the bytes of their own upload.
+          reset(); n = 0;
+          window.sktMapBlobGet = () => { n++; return Promise.resolve(DATA); };
+          const enc0 = d._encodeForShare, put0 = window.sktMapBlobPut, refs0 = window.sktMapBlobRefs;
+          d._encodeForShare = () => DATA;
+          window.sktMapBlobPut = () => Promise.resolve(true);
+          window.sktMapBlobRefs = () => Promise.resolve(null);
+          try {
+            await d._shareUploadedMap({ naturalWidth: 1, naturalHeight: 1 }, null);
+            _mapBgImage = null; d._bgMapNaturalW = 0;
+            d._loadBgFromPath(d._bgMapPath, false, false);
+            await sleep(300);
+          } finally { d._encodeForShare = enc0; window.sktMapBlobPut = put0; window.sktMapBlobRefs = refs0; }
+          ok('map: the DM does not download their own upload back',
+             n === 0 && !!d._bgMapNaturalW, n + ' downloads');
+        } finally {
+          window.sktMapBlobGet = real; window.showToast = realToast;
+          d._blobCache.clear(); d._blobInflight.clear(); d._bgFailedUrl = null;
+          d._bgMapPath = path0; _mapBgImage = img0; d._bgMapNaturalW = w0; d._saveMap();
+        }
+      }
+
+      // That "retried, not cached" check depends on sktMapBlobGet REJECTING on
+      // a read error. It used to resolve null for both, which only stopped
+      // mattering once nothing remembered the answer. Needs a live database to
+      // exercise, so the line is read from source.
+      {
+        let src = '';
+        try { src = await (await fetch('js/sync/realtime.js', { cache: 'no-store' })).text(); } catch(e){}
+        const get = (src.match(/window\.sktMapBlobGet = function[\s\S]*?\n\};/) || [''])[0];
+        ok('map: a blob read error rejects rather than answering "gone"',
+           /_diag\('map blob get', err\); throw err;/.test(get), get.slice(-160));
+      }
+
       // The write itself cannot run here — it needs a live database — so the
       // one line that decides whether uploads overwrite each other is read
       // from source. set() on the PARENT replaces every sibling; that single
