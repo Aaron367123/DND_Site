@@ -207,7 +207,15 @@ registerPanel('notes', {
     //     System Access permission for a stale local-vault handle.
     //  2. Local folder if a vault from a prior session is still connected.
     //  3. Otherwise show the picker.
-    if (window.dropboxSync && window.dropboxSync.isConfigured()){
+    //
+    // A PLAYER gets neither. The Dropbox token ships to every device, so this
+    // branch used to run on players' phones too: they took the full Dropbox
+    // view — the DM's whole note tree, any note readable with one click, a
+    // working editor — and every edit they made was written through to the
+    // DM's Dropbox. A player has no note source; they see what is shared.
+    if (document.body.classList.contains('player-mode')){
+      this._view = 'player';
+    } else if (window.dropboxSync && window.dropboxSync.isConfigured()){
       this._initDropbox();
       this._view = 'dropbox';
     } else if (window.notesSync && window.notesSync.isConnected && window.notesSync.isConnected()){
@@ -436,6 +444,15 @@ registerPanel('notes', {
   _render(){
     const b = this._body; if (!b) return;
     b.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
+    // A player never reaches _wire(): that is the DM's tree, editor, rename,
+    // delete and drag handling, and none of it belongs on a player's screen.
+    if (this._view === 'player'){
+      this._editing = false;
+      this._renderPlayerView();
+      this._applyViewSettings();
+      this._wirePlayer();
+      return;
+    }
     if      (this._view === 'dropbox') this._renderDropboxView();
     else if (this._view === 'local')   this._renderLocalView();
     else                                this._renderPickerView();
@@ -443,6 +460,51 @@ registerPanel('notes', {
     this._applyViewSettings();
     this._observePaneResize();
     this._wire();
+  },
+
+  // ── What a player sees ────────────────────────────────────────────────────
+  // Only notes the DM has switched on with "Show to players", read-only.
+  //
+  // Before this, a player got the DM's full Dropbox view: every note in the
+  // tree, any of them readable with one click — "DM only" ones included — and
+  // a working editor. Which note is open is deliberately per-device, so there
+  // was never a way to show players just one; sharing is now an explicit flag
+  // on the note, which syncs with it.
+  _sharedNotes(){
+    return (this._data.items || []).filter(i => i.type === 'file' && i.shared === true);
+  },
+  _renderPlayerView(){
+    const b = this._body;
+    const shared = this._sharedNotes();
+    if (!shared.length){
+      b.innerHTML = typeof emptyState === 'function'
+        ? emptyState({ icon:'i-note', title:'Nothing shared yet',
+                       hint:'Notes the DM shows to players will appear here.' })
+        : '<div class="notes-picker-empty">Nothing shared yet.</div>';
+      return;
+    }
+    // The player's pick is theirs alone and never saved — they cannot write
+    // notes, and a remote change remounts the panel, so it lives on the panel.
+    if (!shared.some(n => n.id === this._playerNoteId)) this._playerNoteId = shared[0].id;
+    const file = shared.find(n => n.id === this._playerNoteId);
+    const list = shared.length < 2 ? '' :
+      '<div class="notes-player-list">' + shared.map(n =>
+        `<button class="btn small${n.id === file.id ? ' active' : ''}" data-player-note="${esc(n.id)}">${esc(n.name)}</button>`
+      ).join('') + '</div>';
+    // The chooser goes UNDER the title: on a phone the floating toolbar sits
+    // over the top row of the screen, and it hid every choice but the first.
+    b.innerHTML = `<div class="notes-player">
+        <div class="notes-editor-head"><span class="notes-file-title notes-file-title-ro">${esc(file.name)}</span></div>
+        ${list}
+        <div class="notes-edit-area notes-readonly" id="note-read-area">${this._renderColored(file)}</div>
+      </div>`;
+  },
+  _wirePlayer(){
+    const b = this._body; if (!b) return;
+    b.querySelectorAll('[data-player-note]').forEach(btn => btn.addEventListener('click', () => {
+      this._playerNoteId = btn.dataset.playerNote;
+      this._render();
+    }));
   },
 
   // Dropbox view — identical structure to local view; only the header label
@@ -532,17 +594,9 @@ registerPanel('notes', {
   // swaps the view to 'local'. OneNote tile is disabled (coming soon).
   _renderPickerView(){
     const b = this._body;
-    // A player has no note source to pick — Dropbox and the local folder are
-    // the DM's machine, and the tiles do nothing for them. Shared before the
-    // DM has opened anything, this was the largest thing on a player's screen
-    // and it read as a broken file dialog. Say what is actually happening.
-    if (document.body.classList.contains('player-mode')){
-      b.innerHTML = typeof emptyState === 'function'
-        ? emptyState({ icon:'i-note', title:'No note open',
-                       hint:'The DM hasn\'t opened a note yet. Whatever they open here will appear for you.' })
-        : '<div class="notes-picker-empty">The DM hasn\'t opened a note yet.</div>';
-      return;
-    }
+    // Players never get here: mount() gives them the 'player' view. This used
+    // to carry its own player message promising that "whatever the DM opens"
+    // would appear — which was never true, since the open note is per-device.
     const chromiumOnly = window.notesSync && !window.notesSync.isSupported();
     const dropboxConfigured = window.dropboxSync && window.dropboxSync.isConfigured();
     b.innerHTML = `
@@ -617,7 +671,7 @@ registerPanel('notes', {
       } else {
         const sel = it.id === this._data.selectedId ? ' selected' : '';
         return `<div class="notes-tree-row notes-file${sel}" data-id="${it.id}" data-act="select-file" draggable="true" style="padding-left:${8+depth*14+12}px">
-          <span class="notes-tree-name">${esc(it.name)}.md</span>
+          <span class="notes-tree-name">${esc(it.name)}.md${it.shared ? ' <span class="notes-shared-mark" title="Shown to players">👁</span>' : ''}</span>
           <span class="notes-tree-actions">
             <button class="icon-btn" data-act="rename" data-id="${it.id}" title="Rename"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/><line x1="10" y1="4" x2="12" y2="6"/></svg></button>
             <button class="icon-btn danger" data-act="delete" data-id="${it.id}" title="Delete"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h10M6 5V3.5h4V5M5 5l.6 8.2c0 .5.4.8.9.8h3c.5 0 .9-.3.9-.8L11 5"/></svg></button>
@@ -636,7 +690,13 @@ registerPanel('notes', {
           >${trHidden ? '☰' : '⇤'}</button>
         <input class="notes-file-title" type="text" value="${esc(file.name)}" data-act="rename-inline">
         <span class="notes-file-tag">MARKDOWN</span>
-        <span style="flex:1"></span>
+        <button class="btn small notes-share-btn${file.shared ? ' active' : ''}" data-act="notes-share"
+          title="${file.shared
+            ? 'Players can read this note. Click to hide it from them.'
+            : 'Show this note to players, read-only. Nothing else in your notes is visible to them.'}"
+          aria-pressed="${file.shared ? 'true' : 'false'}">👁 Players</button>
+        <!-- No spacer here: the title is already flex:1, and a second flex:1
+             beside it took half the free room and truncated every title. -->
         <button class="btn small" id="note-download" title="Save to desktop">${ICO('i-save')}</button>
         <button class="btn icon-btn" data-act="notes-refresh" title="Sync now (pull latest from disk)">${ICO('i-refresh')}</button>
         <button class="btn icon-btn" data-act="notes-settings" title="Display settings">${ICO('i-gear')}</button>
@@ -1307,6 +1367,20 @@ registerPanel('notes', {
       this._treeHidden = !this._treeHidden;
       try { localStorage.setItem('skt-notes-tree-hidden', this._treeHidden ? '1' : '0'); } catch(e){}
       this._render();
+    });
+    b.querySelector('[data-act="notes-share"]')?.addEventListener('click', () => {
+      const file = this._selected(); if (!file) return;
+      file.shared = !file.shared;
+      this._save();
+      this._renderKeepScroll();
+      if (typeof showToast !== 'function') return;
+      // Two switches decide what a player sees: this note, and the Notes panel
+      // itself. Say so, or a DM flips this one and wonders why nothing shows.
+      const panelShared = (state.sharedPanels || []).includes('notes');
+      showToast(file.shared
+        ? (panelShared ? '"' + file.name + '" is now visible to players'
+                       : '"' + file.name + '" will be visible once you share the Notes panel with players')
+        : '"' + file.name + '" is hidden from players again');
     });
     b.querySelector('[data-act="notes-toggle-toolbar"]')?.addEventListener('click', () => {
       this._toolbarHidden = !this._toolbarHidden;

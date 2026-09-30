@@ -487,8 +487,19 @@ const CONTENT_PANEL_SHARED = {
         <span class="adv-chapter-name">${esc(c.name||'Untitled')}</span>
       </button>`).join('');
 
+    // Books add reference content to rulebook chapters whose own text is only
+    // an introduction — a "Classes" chapter gets every class and subclass, a
+    // "Spells" chapter every spell. Adventures define no injector, so for
+    // them this is empty.
+    //
+    // This call was lost when Adventures and Books were merged onto this
+    // shared renderer: the injector survived in books.js with nothing calling
+    // it, and the PHB's Classes chapter went back to a page of intro prose.
+    // It is the only call that merge dropped.
+    const extraHtml = (ch && typeof this._injectChapterReferenceContent === 'function')
+      ? this._injectChapterReferenceContent(ch, adv) : '';
     const contentHtml = ch
-      ? `<h2 class="adv-content-title">${esc(ch.name||'')}</h2>${this._renderChapterEntries(ch)}`
+      ? `<h2 class="adv-content-title">${esc(ch.name||'')}</h2>${this._renderChapterEntries(ch)}${extraHtml}`
       : '<div class="empty-state" style="padding:30px">Empty chapter.</div>';
 
     b.innerHTML = `

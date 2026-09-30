@@ -316,6 +316,13 @@ const _ENTITY_KEYS = {
   'skt-notes-v2': {
     base: 'notes_v3',   // relative to sktFbRoot()
     legacyNode: null,  // notes never had a whole-key Firebase node
+    // A player writes NOTHING to the DM's notes. Without this a player was a
+    // full writer: whatever their phone's localStorage held was exploded and
+    // pushed, and the deletion sweep in _flushEntity removed any note the
+    // phone had not heard of yet — the same hazard the battle map is guarded
+    // against above, except notes were never guarded. A player could also
+    // create, rename and overwrite notes, and the Notes panel let them.
+    playerWritable(){ return false; },
     explode(s){
       const d = JSON.parse(s) || {};
       const items = Array.isArray(d.items) ? d.items : [];

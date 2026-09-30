@@ -1367,6 +1367,77 @@
            !/[-]/.test(vHtml + lHtml));
       }
 
+      // ── Notes: the DM's "Show to players" switch ──────────────────────────
+      // Which note is open is per-device on purpose, so sharing is a flag on
+      // the note itself — the only thing that can reach a player's phone.
+      if (panelDefs.notes){
+        const N = panelDefs.notes;
+        const N0 = localStorage.getItem('skt-notes-v2'), view0 = N._view;
+        const toasts = [], rt = window.showToast;
+        window.showToast = m => toasts.push(String(m));
+        try {
+          openPanel('notes'); await sleep(300);
+          N._data = null; N.mount(N._body); N._view = 'local'; N._render(); await sleep(100);
+          const btn = () => N._body.querySelector('[data-act="notes-share"]');
+          ok('notes: an open note has a "Show to players" switch', !!btn());
+          const id = N._selected() && N._selected().id;
+          if (btn()) btn().click();
+          await sleep(120);
+          const stored = (JSON.parse(localStorage.getItem('skt-notes-v2') || '{}').items || []).find(i => i.id === id) || {};
+          ok('notes: switching it on marks the note shared, and saves it', stored.shared === true);
+          ok('notes: the switch shows that it is on', btn() && btn().getAttribute('aria-pressed') === 'true');
+          ok('notes: a shared note is marked in the tree',
+             !!N._body.querySelector('.notes-file.selected .notes-shared-mark'));
+          if (btn()) btn().click();
+          await sleep(120);
+          ok('notes: switching it off hides it from players again', N._selected().shared === false);
+        } finally {
+          window.showToast = rt;
+          if (N0 != null) localStorage.setItem('skt-notes-v2', N0);
+          N._data = null; N._view = view0; try { N.mount(N._body); closePanel('notes'); } catch(e){}
+        }
+      }
+
+      // ── Rulebook chapters carry their reference content ───────────────────
+      // A rulebook's "Classes" chapter is a page of intro prose in the source
+      // data; books.js injects every class and subclass after it. When
+      // Adventures and Books were merged onto one shared renderer that call
+      // was dropped — the only one the merge lost — and the PHB's Classes
+      // chapter showed ~4,500 characters instead of ~225,000.
+      //
+      // Driven through the panel's real render, because the injector itself
+      // never stopped working: it was the call site that went missing.
+      if (typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded){
+        const bk = panelDefs.books;
+        let shown = '', ms = null;
+        try {
+          openPanel('books');
+          await sleep(400);
+          if (bk._loadIndex) await bk._loadIndex();
+          // The id exactly as the book list has it ("PHB"). The injector finds
+          // the book by it to learn which source to pull from; a lowercased id
+          // matches nothing, and it quietly injects nothing.
+          const phb = (bk._adventures || []).find(b => /^phb$/i.test(b.id || ''));
+          const id = phb ? phb.id : 'PHB';
+          await bk._loadAdventure(id);
+          const file = bk._advCache[id.toLowerCase()];
+          const idx = ((file && file.data) || []).findIndex(c => /^classes$/i.test(String(c.name || '').trim()));
+          if (idx >= 0){
+            bk._currentAdvId = id;
+            bk._currentChapterIdx = idx;
+            const t0 = performance.now();
+            bk._render();
+            ms = Math.round(performance.now() - t0);
+            const content = bk._body.querySelector('#adv-content');
+            shown = content ? content.textContent : '';
+          }
+        } catch(e){ shown = 'threw: ' + e.message; }
+        ok('books: the PHB Classes chapter lists the classes, not just its intro',
+           /Battle Master/.test(shown) && /Path of the Berserker/.test(shown),
+           shown.length + ' chars' + (ms != null ? ', rendered in ' + ms + ' ms' : ''));
+        try { bk._currentAdvId = null; bk._render(); closePanel('books'); } catch(e){}
+      }
+
       // The parser's markers are private to it and to the one renderer that
       // understands them. Every other surface prints the string with esc(), so
       // a marker arrives as an invisible control character AND eats the
@@ -3420,6 +3491,72 @@
   // ══════════════════════════════════════════════════════════ player view
   if (MODE === 'player'){
     ok('player: body is in player mode', document.body.classList.contains('player-mode'));
+
+    // ── Notes: a player sees only what the DM shares ──────────────────────
+    // With Dropbox configured — which in production is EVERY device, the
+    // token ships to all of them — a player got the DM's whole note tree,
+    // any note readable with one click ("DM only - the traitor" included), a
+    // working editor, and write-through to the DM's Dropbox. This suite never
+    // saw it because ?nosync=1 makes Dropbox report "not configured", so the
+    // player sat on a harmless picker. Dropbox is faked ON here for that
+    // reason, with every write replaced and the network refused.
+    if (typeof paTab !== 'undefined' && typeof paRender === 'function' && panelDefs.notes){
+      const ds = window.dropboxSync;
+      const real = ds ? { cfg: ds.isConfigured, push: ds.pushFile, mv: ds.movePath, del: ds.deletePath } : null;
+      const rf = window.fetch;
+      const N0 = localStorage.getItem('skt-notes-v2'), S0 = (state.sharedPanels || []).slice(), tab0 = paTab;
+      let pushed = 0;
+      window.fetch = function(i, o){ if (/dropbox/i.test(String((i && i.url) || i))) return Promise.reject(new TypeError('blocked by selftest')); return rf.apply(this, arguments); };
+      if (ds){ ds.isConfigured = () => true; ds.pushFile = () => { pushed++; }; ds.movePath = () => { pushed++; }; ds.deletePath = () => { pushed++; }; }
+      const setShared = ids => {
+        const d = JSON.parse(localStorage.getItem('skt-notes-v2') || '{"items":[]}');
+        d.items.forEach(i => { i.shared = ids.includes(i.id); });
+        localStorage.setItem('skt-notes-v2', JSON.stringify(d));
+      };
+      const N = panelDefs.notes;
+      const show = async () => {
+        if (N._body){ N._data = null; N.mount(N._body); } else { paTab = 'notes'; paRender(); }
+        await sleep(350);
+        return N._body ? N._body.textContent : '';
+      };
+      try {
+        state.sharedPanels = ['notes'];
+        setShared([]);
+        paTab = 'notes'; paRender(); await sleep(400);
+        let t = N._body ? N._body.textContent : '';
+        ok('notes/player: a player never gets the DM’s Dropbox view', N._view === 'player', String(N._view));
+        ok('notes/player: with nothing shared, no DM note is visible',
+           !/traitor|innkeeper|reached the gate|contingency/i.test(t), t.replace(/\s+/g, ' ').slice(0, 90));
+        ok('notes/player: and no tree of the DM’s notes', N._body.querySelectorAll('.notes-tree-row').length === 0);
+
+        setShared(['n_open']);
+        t = await show();
+        ok('notes/player: a shared note is shown', /reached the gate/.test(t));
+        ok('notes/player: an unshared DM-only note is not', !/traitor|innkeeper/i.test(t));
+        ok('notes/player: it is read-only',
+           !N._body.querySelector('#note-edit-area, textarea, [contenteditable="true"]'));
+        const line = N._body.querySelector('.nl'); if (line) line.click();
+        await sleep(120);
+        ok('notes/player: clicking the text does not open an editor', !N._body.querySelector('textarea'));
+        ok('notes/player: a player’s phone writes nothing to the DM’s Dropbox', pushed === 0, pushed + ' writes');
+      } finally {
+        window.fetch = rf;
+        if (ds && real){ ds.isConfigured = real.cfg; ds.pushFile = real.push; ds.movePath = real.mv; ds.deletePath = real.del; }
+        if (N0 != null) localStorage.setItem('skt-notes-v2', N0);
+        state.sharedPanels = S0; paTab = tab0;
+        if (N._body){ N._data = null; N.mount(N._body); }
+        paRender();
+      }
+      // The UI hiding the notes is not enough on its own: sync must refuse
+      // them too, or a phone holding a partial copy deletes the DM's notes
+      // through the deletion sweep. That sweep is skipped only for restricted
+      // writers, and notes had no restriction.
+      const spec = typeof window.sktEntitySpec === 'function' ? window.sktEntitySpec('skt-notes-v2') : null;
+      ok('notes/player: sync refuses every note write from a player',
+         !!(spec && typeof spec.playerWritable === 'function'
+            && spec.playerWritable('items/n_open', { 'items/n_open': '1' }) === false
+            && spec.playerWritable('meta', { meta: '1' }) === false));
+    }
 
     // A rival lives in state.party like anyone else, so anything reading
     // that array directly puts its hit points on every phone at the table.
