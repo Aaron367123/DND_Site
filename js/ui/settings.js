@@ -286,7 +286,18 @@ function initSettings(){
       // Spell out the two things that actually surprise people: a restore
       // REMOVES local data the file doesn't contain, and it publishes to
       // every other connected device rather than staying on this one.
-      let msg = 'Replace everything in this browser with:\n\n' + info.lines.join('\n');
+      // Name the campaign being replaced — a restore replaces the OPEN one —
+      // and, when the file is of a different one, say that too.
+      let msg = (info.target ? 'Replace the open campaign, “' + info.target + '”, with:'
+                             : 'Replace everything in this browser with:')
+              + '\n\n' + info.lines.join('\n');
+      if (info.fileCampaign && info.target && info.fileCampaign !== info.target){
+        msg += '\n\n⚠ This backup is of “' + info.fileCampaign + '”, not “' + info.target + '”.';
+      }
+      if (info.adds && info.adds.length){
+        msg += '\n\nAlso adds campaigns this browser doesn\u2019t have: ' + info.adds.join(', ') + '.';
+      }
+      msg += '\n\nYour other campaigns are not touched.';
       if (info.created) msg += '\n\nBacked up ' + new Date(info.created).toLocaleString();
       if (info.legacy){
         msg += '\n\n⚠ Old-format file — it only contains party, combat, shop and'
@@ -369,8 +380,14 @@ function initSettings(){
       }
       const parsed = { keys: rec.snap.keys, created: rec.created, version: rec.snap.version, legacy:false };
       const info = sktBackup.describe(parsed);
-      let msg = 'Roll back to the snapshot from ' + new Date(rec.created).toLocaleString() + '?\n\n'
+      let msg = 'Roll back ' + (info.target ? '“' + info.target + '” ' : '')
+              + 'to the snapshot from ' + new Date(rec.created).toLocaleString() + '?\n\n'
               + info.lines.join('\n');
+      // Snapshots are taken in whichever campaign was open at the time; rolling
+      // one back into a different campaign would overwrite that table.
+      if (info.fileCampaign && info.target && info.fileCampaign !== info.target){
+        msg += '\n\n⚠ This snapshot was taken in “' + info.fileCampaign + '”, not “' + info.target + '”.';
+      }
       if (info.localOnly.length) msg += '\n\n⚠ Will be CLEARED:\n• ' + info.localOnly.join('\n• ');
       msg += '\n\nThis also overwrites the shared campaign for everyone connected.\n'
            + 'Your current state is saved as a new snapshot first.';

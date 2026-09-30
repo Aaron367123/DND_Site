@@ -2681,6 +2681,64 @@
         load();
       }
 
+      // ── A restore replaces the OPEN campaign and nothing else ─────────────
+      // Restore clears every app key the file lacks. A backup from before
+      // campaigns existed therefore deleted the campaign list and the stored
+      // copy of every other campaign — a second table's whole party gone —
+      // and the confirmation never said so, because it lists only keys it
+      // has a friendly name for. The fixture IS such a file.
+      if (window.sktBackup && typeof sktCreateCampaign === 'function'){
+        const ALL = {};
+        for (let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); if (k) ALL[k] = localStorage.getItem(k); }
+        const partyOf = id => { try { return JSON.parse(JSON.parse(localStorage.getItem('skt-campaign-data-' + id) || 'null')['skt-party-v1']); } catch(e){ return null; } };
+        try {
+          const oldFile = await (await fetch('tools/fixture.json', { cache: 'no-store' })).text();
+          const here = sktActiveCampaign();
+          const otherId = sktCreateCampaign('ZZ Restore Other');
+          sktSwitchCampaign(otherId);
+          localStorage.setItem('skt-party-v1', JSON.stringify([{ id: 'zzo', name: 'Other Hero' }]));
+          sktSwitchCampaign(here);
+          localStorage.setItem('skt-npcgen-last-v1', '"zz only here"');
+
+          const p1 = sktBackup.parse(oldFile);
+          const info = sktBackup.describe(p1);
+          ok('restore: the confirmation names the campaign it replaces', !!info.target, String(info.target));
+          await sktBackup.restore(p1, { syncTimeoutMs: 300 });
+          ok('restore: an old backup leaves the other campaigns alone',
+             (partyOf(otherId) || []).some(p => p.name === 'Other Hero')
+             && sktCampaigns().some(c => c.id === otherId),
+             JSON.stringify(sktCampaigns().map(c => c.name)));
+          ok('restore: the open campaign stays open', sktActiveCampaign() === here, sktActiveCampaign());
+          // ...and is still genuinely replaced rather than merged into.
+          ok('restore: the open campaign is replaced, not merged',
+             localStorage.getItem('skt-npcgen-last-v1') == null);
+
+          // A newer file carrying a campaign this browser lacks adds it, and
+          // never overwrites one that is already here.
+          const snap = sktBackup.snapshot();
+          // From the live registry if the snapshot lacks one: a restore that
+          // misbehaves deletes it, and crashing here would abort the whole DM
+          // pass and discard every failure already recorded above.
+          const list = JSON.parse(snap.keys['skt-campaigns-v1'] || JSON.stringify(sktCampaigns()));
+          list.push({ id: 'czzfile', name: 'ZZ From File', created: null });
+          snap.keys['skt-campaigns-v1'] = JSON.stringify(list);
+          snap.keys['skt-campaign-data-czzfile'] = JSON.stringify({ 'skt-party-v1': JSON.stringify([{ id: 'f', name: 'File Hero' }]) });
+          snap.keys['skt-campaign-data-' + otherId] = JSON.stringify({ 'skt-party-v1': JSON.stringify([{ id: 'x', name: 'Stale Copy' }]) });
+          await sktBackup.restore(sktBackup.parse(JSON.stringify(snap)), { syncTimeoutMs: 300 });
+          ok('restore: a campaign only the file has is added',
+             sktCampaigns().some(c => c.id === 'czzfile') && (partyOf('czzfile') || []).some(p => p.name === 'File Hero'));
+          ok('restore: a campaign already here is never overwritten by the file',
+             (partyOf(otherId) || []).some(p => p.name === 'Other Hero'));
+        } catch(e){
+          ok('restore: the restore checks ran to completion', false, e.message);
+        } finally {
+          const now = []; for (let i = 0; i < localStorage.length; i++) now.push(localStorage.key(i));
+          now.forEach(k => { if (k && !(k in ALL)) localStorage.removeItem(k); });
+          Object.keys(ALL).forEach(k => localStorage.setItem(k, ALL[k]));
+          load();
+        }
+      }
+
       ok('campaign: deleting the open one is refused',
          sktDeleteCampaign(sktActiveCampaign()) === false);
       ok('campaign: deleting another works', sktDeleteCampaign(idB) === true);

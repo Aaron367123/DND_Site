@@ -73,6 +73,44 @@ const EXCLUDE = new Set([
   'skt-zoom-v1',
 ]);
 
+// ─── Campaign bookkeeping ─────────────────────────────────────────────────────
+// The campaign list, which campaign is open, and every OTHER campaign's stored
+// copy. A backup carries them — a snapshot of this browser should — but a
+// restore must never delete or replace them.
+//
+// It did both. Restore clears every app key the file lacks, so a backup taken
+// before campaigns existed wiped the campaign list AND the stored copy of
+// every campaign except the open one: a second table's whole party, notes and
+// maps, gone. The confirmation never said so — it lists only keys it has a
+// friendly name for, and these have none, so they fell under "other
+// settings". A newer backup did a milder version: any campaign created after
+// it was taken vanished.
+//
+// The rule now: a restore REPLACES THE CAMPAIGN THAT IS OPEN. Other campaigns
+// are only ever added — one in the file that this browser doesn't have — never
+// removed or overwritten.
+const CAMPAIGN_LIST   = 'skt-campaigns-v1';
+const CAMPAIGN_OPEN   = 'skt-campaign-active-v1';
+const CAMPAIGN_STASH  = 'skt-campaign-data-';
+function _isCampaignKey(k){
+  return k === CAMPAIGN_LIST || k === CAMPAIGN_OPEN || String(k).indexOf(CAMPAIGN_STASH) === 0;
+}
+function _list(raw){
+  try { const a = JSON.parse(raw || 'null'); return Array.isArray(a) ? a : []; } catch(e){ return []; }
+}
+// Campaigns in the file that this browser does not have. The open campaign is
+// never one of them: it is restored from the file's live keys instead.
+function _campaignsToAdd(keys){
+  const here = new Set(_list(localStorage.getItem(CAMPAIGN_LIST)).map(c => c.id));
+  const open = (typeof sktActiveCampaign === 'function') ? sktActiveCampaign() : null;
+  const named = _list(keys[CAMPAIGN_LIST]);
+  return Object.keys(keys)
+    .filter(k => k.indexOf(CAMPAIGN_STASH) === 0)
+    .map(k => k.slice(CAMPAIGN_STASH.length))
+    .filter(id => id && id !== open && !here.has(id))
+    .map(id => named.find(c => c.id === id) || { id, name: 'Restored campaign', created: null });
+}
+
 // Friendly names for the restore preview. Anything unlisted still gets
 // backed up and restored — it just shows under "other".
 const LABELS = {
@@ -209,6 +247,7 @@ function describe(parsed){
   const lines = [];
   const known = [], other = [];
   names.forEach(k => {
+    if (_isCampaignKey(k)) return;     // reported separately, below
     const label = LABELS[k];
     const c = _count(k, keys[k]);
     const txt = (label || k) + (c != null ? ' (' + c + ')' : '');
@@ -224,10 +263,16 @@ function describe(parsed){
   const localOnly = [];
   for (let i = 0; i < localStorage.length; i++){
     const k = localStorage.key(i);
-    if (!k || k.indexOf('skt-') !== 0 || EXCLUDE.has(k)) continue;
+    if (!k || k.indexOf('skt-') !== 0 || EXCLUDE.has(k) || _isCampaignKey(k)) continue;
     if (!(k in keys) && LABELS[k]) localOnly.push(LABELS[k]);
   }
-  return { lines, localOnly: localOnly.sort(), legacy: !!parsed.legacy, created: parsed.created };
+  // Which campaign gets replaced, and which one the file is of. Naming both is
+  // what stops "restore" meaning "overwrite a different table".
+  const open = (typeof sktActiveCampaignName === 'function') ? sktActiveCampaignName() : null;
+  const fileOpenId = (() => { try { return JSON.parse(keys[CAMPAIGN_OPEN] || 'null'); } catch(e){ return keys[CAMPAIGN_OPEN] || null; } })();
+  const fileCampaign = (_list(keys[CAMPAIGN_LIST]).find(c => c.id === fileOpenId) || {}).name || null;
+  return { lines, localOnly: localOnly.sort(), legacy: !!parsed.legacy, created: parsed.created,
+           target: open, fileCampaign, adds: _campaignsToAdd(keys).map(c => c.name) };
 }
 
 // ─── Restore ─────────────────────────────────────────────────────────────────
@@ -258,7 +303,7 @@ async function restore(parsed, opts){
   const stale = [];
   for (let i = 0; i < localStorage.length; i++){
     const k = localStorage.key(i);
-    if (!k || k.indexOf('skt-') !== 0 || EXCLUDE.has(k)) continue;
+    if (!k || k.indexOf('skt-') !== 0 || EXCLUDE.has(k) || _isCampaignKey(k)) continue;
     if (!(k in keys)) stale.push(k);
   }
   // setItem THEN removeItem, in that order, and both are load-bearing:
@@ -274,7 +319,11 @@ async function restore(parsed, opts){
     try { localStorage.setItem(k, ''); localStorage.removeItem(k); } catch(e){}
   });
 
+  // Work out what to add BEFORE writing anything, while the registry still
+  // describes this browser.
+  const adding = _campaignsToAdd(keys);
   names.forEach(k => {
+    if (_isCampaignKey(k)) return;
     try { localStorage.setItem(k, keys[k]); }
     catch(e){
       // Quota is the realistic failure. Report it rather than half-restoring
@@ -284,13 +333,25 @@ async function restore(parsed, opts){
     }
   });
 
+  // Campaigns this browser didn't have: their stored copy, and a place in the
+  // list. Everything already here is left exactly as it was.
+  if (adding.length){
+    const list = _list(localStorage.getItem(CAMPAIGN_LIST));
+    adding.forEach(c => {
+      try { localStorage.setItem(CAMPAIGN_STASH + c.id, keys[CAMPAIGN_STASH + c.id]); list.push(c); }
+      catch(e){ throw new Error('Could not add campaign "' + c.name + '" — ' + (e.message || e)); }
+    });
+    try { localStorage.setItem(CAMPAIGN_LIST, JSON.stringify(list)); } catch(e){}
+  }
+
   // Publish, and confirm it landed. Returns 'published' | 'offline' |
   // 'timeout' so the caller can be specific about what happened.
   let sync = 'offline';
   if (typeof window.realtimeFlushAndWait === 'function'){
     sync = await window.realtimeFlushAndWait(opts.syncTimeoutMs || 8000);
   }
-  return { restored: names.length, cleared: stale.length, sync, undo };
+  return { restored: names.filter(k => !_isCampaignKey(k)).length, cleared: stale.length,
+           addedCampaigns: adding.map(c => c.name), sync, undo };
 }
 
 // ─── Rolling automatic snapshots ─────────────────────────────────────────────
