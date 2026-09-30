@@ -208,7 +208,11 @@ function paMoreScreen(){
     + '<div class="pa-more-row pa-more-static">' + ico('i-cloud')
     +   '<span class="pa-more-text"><span class="pa-more-title">Sync</span>'
     +   '<span class="pa-more-sub" id="pa-more-sync">' + (sync ? sync.innerHTML : '') + '</span></span></div>'
-    + (camp ? row('campaign', 'i-folder', 'Campaign', paEsc(camp)) : '')
+    // Which campaign, shown but not switchable: the link decides it, and a
+    // switcher here would let a player wander into another group's table.
+    + (camp ? '<div class="pa-more-row pa-more-static">' + ico('i-folder')
+      + '<span class="pa-more-text"><span class="pa-more-title">Campaign</span>'
+      + '<span class="pa-more-sub">' + paEsc(camp) + '</span></span></div>' : '')
     + (back ? row('dm', 'i-monitor', 'Back to DM view', 'Switches this device to the DM screen') : '')
     + '</div>';
 }
@@ -219,7 +223,6 @@ function paWireMore(el){
     // Opened directly rather than by poking the hidden gear: the gear toggles
     // on mousedown, and a toggle would close a drawer that is already open.
     else if (act === 'settings') document.getElementById('settings-drawer')?.classList.add('open');
-    else if (act === 'campaign' && typeof sktOpenCampaignManager === 'function') sktOpenCampaignManager();
     else if (act === 'dm') document.getElementById('player-view-btn')?.click();
   }));
 }
@@ -316,7 +319,7 @@ function paRenderTabs(tabs){
 function paRenderTurn(){
   const el = document.getElementById('pa-turn'); if (!el) return;
   const list = state.combatants || [];
-  if (!paShared().has('combat') || !list.length){ el.innerHTML = ''; el.hidden = true; return; }
+  if (!paShared().has('combat') || !list.length){ el.innerHTML = ''; el.hidden = true; paTurnAlert(null, false, null); return; }
   el.hidden = false;
   const meC = paCombatant();
   const activeId = state.activeCombatantId;
@@ -336,6 +339,8 @@ function paRenderTurn(){
     return `<span class="pa-pip${c.id === activeId ? ' cur' : ''}${(c.hp || 0) <= 0 ? ' down' : ''}${isMe ? ' me' : ''}${c.isPC ? ' pc' : ''}">`
       + `<b>${paEsc(c.name)}</b>${hp ? `<i>${paEsc(hp)}</i>` : ''}</span>`;
   }).join('');
+  el.classList.toggle('mine', mine);
+  paTurnAlert(cur, mine, until);
   el.innerHTML = `
     <div class="pa-turn-head">
       <span class="pa-round">Round ${state.combatRound || 1}</span>
@@ -345,6 +350,56 @@ function paRenderTurn(){
       ${until != null && until > 0 ? `<span class="pa-until">${until} turn${until === 1 ? '' : 's'} until you</span>` : ''}
     </div>
     <div class="pa-strip">${pips}</div>`;
+}
+
+// ─── "Your turn" / "you're up next" ──────────────────────────────────────────
+// "Your turn" in the strip is easy to miss on a phone lying face-up on the
+// table. So when the turn ARRIVES — the moment it changes to you, not on every
+// redraw while it stays yours — the phone buzzes and a banner takes the
+// screen. One turn earlier, a smaller heads-up so the player can think
+// before they're asked.
+//
+// Keyed on round + whose turn, so a redraw from an HP change mid-turn never
+// re-fires it. The first render only records the key: a reload during your
+// turn has nothing to announce, and the strip already says so.
+let paTurnKey = null;
+function paTurnAlert(cur, mine, until){
+  // '' for no fight, so a fight STARTING on your turn still announces itself.
+  const key = cur ? (state.combatRound || 1) + ':' + cur.id : '';
+  if (key === paTurnKey) return;
+  const first = paTurnKey === null;
+  paTurnKey = key;
+  if (first || !key){ paHideTurnBanner(); return; }
+  const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch(e){} };
+  if (mine){
+    buzz([220, 90, 220]);
+    paShowTurnBanner();
+  } else {
+    paHideTurnBanner();
+    if (until === 1){
+      buzz(90);
+      if (typeof showToast === 'function') showToast("You're up next");
+    }
+  }
+}
+let paBannerTimer = null;
+function paShowTurnBanner(){
+  paHideTurnBanner();
+  const pc = paPc();
+  const b = document.createElement('button');
+  b.id = 'pa-turn-alert';
+  b.className = 'pa-turn-alert';
+  b.type = 'button';
+  b.innerHTML = '<span class="pa-turn-alert-l">Your turn</span>'
+    + (pc ? '<span class="pa-turn-alert-n">' + paEsc(pc.name) + '</span>' : '')
+    + '<span class="pa-turn-alert-h">Tap to close</span>';
+  b.addEventListener('click', paHideTurnBanner);
+  document.body.appendChild(b);
+  paBannerTimer = setTimeout(paHideTurnBanner, 6000);
+}
+function paHideTurnBanner(){
+  clearTimeout(paBannerTimer);
+  document.getElementById('pa-turn-alert')?.remove();
 }
 
 // ─── Screens ─────────────────────────────────────────────────────────────────

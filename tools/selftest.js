@@ -3722,6 +3722,57 @@
            css.indexOf('body.player-mode .float-toolbar{display:none !important}') >= 0);
       }
 
+      // ── No campaign switcher for players ──────────────────────────────────
+      // campaign-ui.js meant to remove it, but checked body.player-mode before
+      // initPlayerView() had added it, so every player got the switcher.
+      {
+        const chip = document.getElementById('campaign-btn');
+        ok('player: no campaign switcher', !chip || getComputedStyle(chip).display === 'none');
+        ok('player: and none in the settings drawer', !document.getElementById('drawer-campaign'));
+      }
+
+      // ── "Your turn" arrives with a buzz and a banner ──────────────────────
+      // Once, when the turn changes to you — not on every redraw while it
+      // stays yours — and a lighter "up next" one turn earlier.
+      if (typeof paTurnAlert === 'function' && (state.combatants || []).length > 2){
+        const S0 = state.sharedPanels, A0 = state.activeCombatantId, me0 = localStorage.getItem('skt-me-v1');
+        const vib0 = navigator.vibrate, toast0 = window.showToast;
+        const vib = [], toasts = [];
+        try {
+          navigator.vibrate = p => { vib.push(p); return true; };
+          window.showToast = m => { toasts.push(m); };
+          if (!(state.sharedPanels || []).includes('combat')) state.sharedPanels = [...(state.sharedPanels || []), 'combat'];
+          const list = state.combatants;
+          const mine = list.find(c => c.isPC && (state.party || []).some(p => p.id === c.id));
+          paSetPc(mine.id);
+          const zi = list.indexOf(mine), at = k => list[(zi - k + list.length) % list.length].id;
+          state.activeCombatantId = at(2); paRender();
+          state.activeCombatantId = at(1); paRender();
+          ok('player: a heads-up the turn before yours',
+             toasts.includes("You're up next") && vib.length === 1, JSON.stringify({ toasts, vib }));
+          state.activeCombatantId = mine.id; paRender();
+          const ban = document.getElementById('pa-turn-alert');
+          ok('player: your turn buzzes and puts up a banner',
+             !!ban && vib.length === 2 && /Your turn/.test(ban.textContent));
+          ok('player: and lights up the turn strip', document.getElementById('pa-turn').classList.contains('mine'));
+          paRender(); paRender();
+          ok('player: a redraw during your turn does not re-announce it', vib.length === 2, JSON.stringify(vib));
+          ban && ban.click();
+          ok('player: tapping the banner closes it', !document.getElementById('pa-turn-alert'));
+          state.activeCombatantId = at(-1); paRender();
+          ok('player: the strip goes back to normal when your turn ends',
+             !document.getElementById('pa-turn').classList.contains('mine'));
+        } catch(e){
+          ok('player: the turn-alert checks ran to completion', false, e.message);
+        } finally {
+          navigator.vibrate = vib0; window.showToast = toast0;
+          state.sharedPanels = S0; state.activeCombatantId = A0;
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          if (typeof paHideTurnBanner === 'function') paHideTurnBanner();
+          paRender();
+        }
+      }
+
       // ── The phone's More tab ──────────────────────────────────────────────
       // On a phone the floating toolbar is hidden and everything in it a
       // player can use moves to a More tab. On a desktop the toolbar is still
@@ -4370,6 +4421,30 @@
          !(b && b.querySelector('.tv-map-expand, [data-tv="expand-map"]')));
     }
     closePanel('turnview');
+
+    // ── The top bar fits ─────────────────────────────────────────────────
+    // The campaign chip grew the toolbar to 316px of 390: the window's ✕ sat
+    // under it, the toolbar was faded as "occluded" all the time, and the
+    // panel's name had zero width. Campaign moved to the settings drawer.
+    openPanel('party'); await sleep(300);
+    {
+      const rc = e => e.getBoundingClientRect();
+      const tb = rc(document.getElementById('float-toolbar'));
+      const w = document.querySelector('.window[data-panel="party"]');
+      const acts = rc(w.querySelector('.window-actions'));
+      const title = rc(w.querySelector('.window-title span:not(.window-title-icon)'));
+      _updateToolbarOcclusion();
+      ok('mobile: the window controls are clear of the toolbar', acts.right <= tb.left,
+         'controls end ' + Math.round(acts.right) + ', toolbar starts ' + Math.round(tb.left));
+      ok('mobile: so the toolbar is not faded out', !document.body.classList.contains('toolbar-occluded'));
+      ok('mobile: and the panel name is visible', title.width > 60 && title.right <= tb.left,
+         Math.round(title.width) + 'px');
+      const dc = document.getElementById('drawer-campaign');
+      ok('mobile: the campaign switcher is in the settings drawer',
+         !!dc && getComputedStyle(dc).display !== 'none'
+         && document.getElementById('drawer-campaign-name').textContent.trim() === sktActiveCampaignName());
+    }
+    closePanel('party');
   }
 
   restore();

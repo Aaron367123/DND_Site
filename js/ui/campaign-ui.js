@@ -61,6 +61,8 @@ function sktRefreshCampaignChip(){
   if (el) el.textContent = sktActiveCampaignName();
   const btn = document.getElementById('campaign-btn');
   if (btn) btn.title = 'Campaign: ' + sktActiveCampaignName() + ' — click to switch or manage';
+  const dn = document.getElementById('drawer-campaign-name');
+  if (dn) dn.textContent = sktActiveCampaignName();
 }
 
 function sktOpenCampaignManager(){
@@ -196,14 +198,26 @@ function sktOpenCampaignManager(){
   const start = () => {
     // Player devices get their campaign from the link. Offering a switcher
     // there would let a player wander into another group's table.
-    if (document.body.classList.contains('player-mode')) {
-      const btn = document.getElementById('campaign-btn');
-      if (btn) btn.remove();
+    //
+    // Read from the URL, not body.player-mode: this runs as a deferred
+    // script, before init() calls initPlayerView() and adds that class, so
+    // the class check was always false and every player saw the switcher.
+    let player = document.body.classList.contains('player-mode');
+    try { player = player || new URLSearchParams(location.search).get('player') === '1'; } catch(e){}
+    if (player) {
+      document.getElementById('campaign-btn')?.remove();
+      document.getElementById('drawer-campaign')?.remove();
       return;
     }
     sktRefreshCampaignChip();
     const btn = document.getElementById('campaign-btn');
     if (btn) btn.addEventListener('click', sktOpenCampaignManager);
+    // The phone's copy, in the settings drawer. Close the drawer first so the
+    // campaign dialog isn't opened underneath it.
+    document.getElementById('drawer-campaign-btn')?.addEventListener('click', () => {
+      document.getElementById('settings-drawer')?.classList.remove('open');
+      sktOpenCampaignManager();
+    });
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();

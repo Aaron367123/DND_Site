@@ -81,7 +81,7 @@ body.toolbar-occluded .float-toolbar:focus-within{opacity:1}
 .float-btn{background:transparent;border:none;color:var(--text-muted);width:30px;height:30px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:var(--fs-xl);display:flex;align-items:center;justify-content:center;transition:all .12s}
 .float-btn:hover{background:var(--panel-2);color:var(--text)}
 .float-btn:active{transform:scale(.95)}
-.sync-indicator{display:flex;align-items:center;justify-content:center;width:24px;height:30px;color:var(--text-muted)}
+.sync-indicator{display:flex;align-items:center;justify-content:center;gap:5px;min-width:24px;padding:0 4px;box-sizing:border-box;height:30px;color:var(--text-muted)}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim)}
 .sync-dot.live{background:var(--success);animation:sync-pulse 2s ease-in-out infinite}
 .sync-dot.offline{background:var(--danger)}
@@ -430,6 +430,15 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
      dock already switches between them. Dropping it buys back 36px for the
      title and removes a control that did nothing useful. */
   .window-actions .btn[data-wact="min"]{display:none}
+  /* The campaign chip grew the toolbar to 316px of this 390px screen: the
+     window controls ended up underneath it, the toolbar sat permanently
+     faded as "occluded", and the panel's name got zero pixels. Campaign moves
+     to the settings drawer, the tutorial is already there, and the sync
+     indicator keeps its dot (its label is in the title tooltip). */
+  #campaign-btn, #tutorial-btn{display:none !important}
+  #sync-status > span:not(.sync-dot){display:none}
+  /* The id outranks the display:none default, which sits later in this file. */
+  #settings-drawer .drawer-campaign{display:flex}
   /* 44px is right for the bottom dock, oversized for a utility pill that has
      to share a 390px row. 36px matches the window controls beside it. */
   .float-toolbar .float-btn{width:36px; height:36px}
@@ -2443,6 +2452,30 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
 }
 /* Search mode's Done button is added by the player app; hidden otherwise. */
 #pa-search-close{display:none}
+/* Belt and braces: campaign-ui.js removes the chip for players, but a player
+   must never be offered another group's table. */
+body.player-mode #campaign-btn{display:none !important}
+/* The settings drawer's campaign row: phones only (see the phone block). */
+.drawer-campaign{display:none; align-items:center; justify-content:space-between; gap:12px;
+  margin:0 0 14px; padding:10px 12px; background:var(--panel-2);
+  border:1px solid var(--border); border-radius:var(--r-md)}
+.drawer-campaign-text{display:flex; flex-direction:column; gap:2px; min-width:0}
+.drawer-campaign-l{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted)}
+.drawer-campaign-name{font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* Your turn: the strip lights up while it lasts, and a banner announces the
+   moment it arrives (player-app.js, paTurnAlert). */
+.pa-turn.mine{background:rgba(212,165,116,.16); border-bottom-color:var(--accent)}
+.pa-turn-alert{position:fixed; left:50%; top:50%; width:min(420px, calc(100vw - 24px));
+  transform:translate(-50%,-50%); box-sizing:border-box;
+  z-index:9800; display:flex; flex-direction:column; align-items:center; gap:6px;
+  padding:34px 20px; border:2px solid var(--accent); border-radius:14px;
+  background:var(--panel); color:var(--text); font:inherit; cursor:pointer;
+  box-shadow:0 0 0 100vmax rgba(0,0,0,.55), 0 10px 40px rgba(0,0,0,.5);
+  animation:pa-turn-in .28s ease-out}
+.pa-turn-alert-l{font-size:calc(var(--fs-xl) * 2); font-weight:800; color:var(--accent); letter-spacing:-.02em}
+.pa-turn-alert-n{font-size:var(--fs-xl); font-weight:600}
+.pa-turn-alert-h{font-size:var(--fs-sm); color:var(--text-muted); margin-top:6px}
+@keyframes pa-turn-in{from{opacity:0; transform:translate(-50%,-50%) scale(.92)} to{opacity:1; transform:translate(-50%,-50%) scale(1)}}
 /* The More tab: one big row per thing the toolbar used to hold. */
 .pa-more{gap:8px}
 .pa-more-row{display:flex; align-items:center; gap:14px; width:100%; min-height:58px;
