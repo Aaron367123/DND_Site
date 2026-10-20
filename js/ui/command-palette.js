@@ -56,6 +56,9 @@ function _cpCommands(){
     add('Combat', 'Next turn',      combat('_nextTurn'),       'advance end turn');
     add('Combat', 'Previous turn',  combat('_prevTurn'),       'back undo turn');
     add('Combat', 'Roll initiative for monsters', combat('_rollInitiative'), 'npc init d20');
+    if ((state.combatants || []).some(c => c.isPC))
+      add('Combat', 'Ask players for initiative', () => { if (!mounted.has('combat')) ensurePanel('combat'); panelDefs.combat.askInitiative(); },
+          'roll initiative phones players');
     add('Combat', 'Area save…', () => { if (!mounted.has('combat')) ensurePanel('combat'); panelDefs.combat.openAreaSave({}); },
         'fireball breath aoe saving throw several targets');
   }

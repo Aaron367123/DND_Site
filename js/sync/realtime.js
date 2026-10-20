@@ -59,6 +59,10 @@ const SKT_SYNC_KEYS = [
   'skt-time-v1',       // in-game date and time
   'skt-weather-v2',    // current conditions + history
   'skt-handouts-v1',  // pictures and notes the DM sends to the players' phones
+  'skt-initreq-v1',   // "roll initiative": the DM asks, each player answers.
+                      // NOT atomic: answers are one field per character, so
+                      // two phones answering at once merge instead of one
+                      // overwriting the other.
   'skt-adventures-hidden-v1', // same idea for hidden adventures (LMoP, SKT,
                               // ToA, …). Adventure IDs match `_source` tags
                               // on items / monsters from those modules.
@@ -105,6 +109,7 @@ const _PANELS_FOR_KEY = {
   // cards show the "in combat" badge.
   'skt-party-v1':    ['party', 'combat'],
   'skt-handouts-v1': ['handouts'],
+  'skt-initreq-v1':  ['combat'],
   'skt-combat-v1':   ['combat', 'party'],
   'skt-shop-v1':     ['shop'],
   'skt-settings-v1': ['combat', 'party', 'shop'],      // display modes, hp bars, filters
@@ -1166,6 +1171,12 @@ function _applyRemoteKey(key, fbVal) {
     return;
   }
 
+  // An initiative request: the phone pops it up (or takes it down), and the
+  // DM's tracker counts who has answered.
+  if (key === 'skt-initreq-v1'){
+    if (typeof paOnInitRequest === 'function'){ try { paOnInitRequest(); } catch(e){ _diag('init request', e); } }
+    try { panelDefs.combat && panelDefs.combat._onInitAnswers && panelDefs.combat._onInitAnswers(); } catch(e){ _diag('init answers', e); }
+  }
   // A handout reaching a phone pops up there (player-app.js).
   if (key === 'skt-handouts-v1' && typeof paOnHandouts === 'function'){
     try { paOnHandouts(); } catch(e){ _diag('handouts', e); }

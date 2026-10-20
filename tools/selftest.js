@@ -4129,6 +4129,49 @@
       finally { bm._tool = ''; closePanel('battlemap'); }
     }
 
+    // ── Players roll their own initiative ─────────────────────────────────
+    {
+      const r0 = localStorage.getItem('skt-initreq-v1');
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      const C = panelDefs.combat; openPanel('combat'); await sleep(250); C._render();
+      try {
+        const btn = C._body.querySelector('[data-act="ask-init"]');
+        ok('initiative: the tracker has an "ask the players" button', !!btn);
+        btn.click(); await sleep(60);
+        const r = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+        const pcs = state.combatants.filter(c => c.isPC && !c.dead).map(c => c.id);
+        ok('initiative: asking lists every character in the fight', !!r && !r.closed && JSON.stringify(r.pcs) === JSON.stringify(pcs));
+        ok('initiative: the strip shows nobody in yet', /0 of \d+ in/.test((C._body.querySelector('.init-banner') || {}).textContent || ''));
+        const a = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+        a.answers[pcs[0]] = { v: 19, rid: r.id }; a.answers[pcs[1]] = { v: 7, rid: r.id };
+        a.answers[pcs[2]] = { v: 30, rid: 'ir_older' };   // a leftover answer to an earlier request
+        _applyRemoteKey('skt-initreq-v1', JSON.stringify(a)); await sleep(60);
+        ok('initiative: answers fill the tracker and the strip counts them (an old answer does not count)',
+           /2 of \d+ in/.test(C._body.querySelector('.init-banner').textContent)
+           && +state.combatants.find(c => c.id === pcs[0]).initiative === 19 && +state.combatants.find(c => c.id === pcs[1]).initiative === 7);
+        const b2 = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+        pcs.slice(2).forEach((id, i) => b2.answers[id] = { v: 12 + i, rid: r.id });
+        let t = null; const st = window.showToast; window.showToast = (m, o) => { t = { m, action: !!(o && o.action) }; };
+        _applyRemoteKey('skt-initreq-v1', JSON.stringify(b2)); await sleep(60);
+        window.showToast = st;
+        ok('initiative: when everyone is in, the DM is told, with Sort to hand', !!t && /Everyone has rolled/.test(t.m) && t.action);
+        C._body.querySelector('[data-act="init-sort"]').click(); await sleep(60);
+        ok('initiative: Sort orders the fight and closes the request',
+           state.combatants.every((c, i, arr) => i === 0 || +arr[i - 1].initiative >= +c.initiative)
+           && JSON.parse(localStorage.getItem('skt-initreq-v1')).closed === true && !C._body.querySelector('.init-banner'));
+      } catch(e){ ok('initiative: the DM checks ran to completion', false, e.message); }
+      finally {
+        if (r0 == null) localStorage.removeItem('skt-initreq-v1'); else localStorage.setItem('skt-initreq-v1', r0);
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party'); C._render();
+      }
+    }
+
     // ── Handouts ──────────────────────────────────────────────────────────
     {
       const h0 = localStorage.getItem('skt-handouts-v1');
@@ -4399,6 +4442,46 @@
           paRender();
         }
       }
+      // ── "Roll initiative!" on this phone ──────────────────────────────────
+      {
+        const r0 = localStorage.getItem('skt-initreq-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        try {
+          const pc = (state.combatants || []).find(c => c.isPC && state.party.some(p => p.id === c.id));
+          const other = (state.party || []).find(p => !pc || p.id !== pc.id);
+          if (pc && other){
+            paSetPc(pc.id); paTab = 'you'; paRender();
+            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: false })); await sleep(50);
+            const ov = document.getElementById('pa-init');
+            ok('player: asked for initiative, the phone pops it up with the bonus', !!ov && /bonus/.test(ov.textContent));
+            ov.querySelector('[data-pa-init="roll"]').click(); await sleep(15);
+            const v = parseInt(document.getElementById('pa-init-val').value, 10), bonus = paInitBonus(pc.id);
+            ok('player: "Roll for me" rolls d20 plus the bonus', v >= 1 + bonus && v <= 20 + bonus, v + ' / ' + bonus);
+            const val = document.getElementById('pa-init-val'); val.value = '17'; val.dispatchEvent(new Event('input'));
+            ov.querySelector('[data-pa-init="send"]').click(); await sleep(40);
+            const after = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+            ok('player: sending answers the request and sets the combatant',
+               after.answers[pc.id] && after.answers[pc.id].v === 17 && after.answers[pc.id].rid === 'ir_t'
+               && +state.combatants.find(c => c.id === pc.id).initiative === 17 && !document.getElementById('pa-init'));
+            _applyRemoteKey('skt-initreq-v1', JSON.stringify(after) + ' '); await sleep(30);
+            ok('player: and it does not come back once answered', !document.getElementById('pa-init'));
+            paSetPc(other.id);
+            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t2', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: false })); await sleep(30);
+            ok('player: a character not in the fight gets no pop-up', !document.getElementById('pa-init'));
+            paSetPc(pc.id);
+            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t3', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: false })); await sleep(30);
+            const up = !!document.getElementById('pa-init');
+            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t3', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: true })); await sleep(30);
+            ok('player: the DM closing the request takes the pop-up down', up && !document.getElementById('pa-init'));
+          }
+        } catch(e){ ok('player: the initiative checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-init')?.remove();
+          if (r0 == null) localStorage.removeItem('skt-initreq-v1'); else localStorage.setItem('skt-initreq-v1', r0);
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paTab = tab0; paRender();
+        }
+      }
+
       // ── A handout reaching this phone ─────────────────────────────────────
       {
         const h0 = localStorage.getItem('skt-handouts-v1'), s0 = localStorage.getItem('skt-ho-seen-v1');

@@ -4867,3 +4867,21 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .pa-ho-text{font-size:var(--fs-lg); line-height:1.5; white-space:normal}
 .pa-ho-close{margin:0 14px 14px}
 .pa-ho-item-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px}
+
+/* ─── Players roll their own initiative ─────────────────────────────────── */
+.init-banner{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 8px 0; padding:8px 12px;
+  border:1px solid var(--border-strong, #4a4a4a); border-radius:var(--r-md); background:var(--panel-2); font-size:var(--fs-sm)}
+.init-banner.done{border-color:var(--success); background:rgba(107,158,107,.12)}
+.init-banner-text{flex:1 1 180px; min-width:0}
+.init-banner-btns{display:flex; gap:6px; margin-left:auto}
+.pa-init{position:fixed; inset:0; z-index:9860; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; padding:16px}
+.pa-init-card{width:min(420px, 100%); background:var(--panel); border:2px solid var(--accent); border-radius:14px; padding:22px 20px;
+  display:flex; flex-direction:column; gap:14px; box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.pa-init-l{font-size:calc(var(--fs-xl) * 1.7); font-weight:800; color:var(--accent); text-align:center}
+.pa-init-who{text-align:center; color:var(--text-muted); font-size:var(--fs-lg)}
+.pa-init-roll{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.pa-init-roll .btn{padding:14px 8px; font-size:var(--fs-lg)}
+.pa-init-dice{min-height:1.4em; text-align:center; font-size:var(--fs-lg); font-weight:600}
+.pa-init-type{display:flex; flex-direction:column; gap:6px; font-size:var(--fs-sm); color:var(--text-muted)}
+.pa-init-type input{font:inherit; font-size:var(--fs-2xl); padding:10px 12px; text-align:center}
+.pa-init-send{padding:14px; font-size:var(--fs-lg)}

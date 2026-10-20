@@ -154,6 +154,80 @@ function initPlayerApp(){
   paInitMore();
   paRender();
   paOnHandouts();
+  paOnInitRequest();
+}
+
+// ─── "Roll initiative!" ──────────────────────────────────────────────────────
+// The DM asks (combat tracker 📱); a phone whose character is in the fight
+// pops this up until it answers or the DM closes the request. Roll here, roll
+// with advantage, or type the total off real dice. The answer goes into this
+// character's own field of the request AND straight onto its combatant, so
+// the tracker fills in without the DM's window having to relay it.
+// A request older than half an hour is stale and does not pop up.
+const PA_INIT_FRESH = 30 * 60 * 1000;
+function paInitReq(){ try { return JSON.parse(localStorage.getItem('skt-initreq-v1') || 'null'); } catch(e){ return null; } }
+function paInitBonus(pcId){
+  const p = (state.party || []).find(x => x.id === pcId);
+  if (p && typeof p.init === 'number') return p.init;
+  const c = (state.combatants || []).find(x => x.id === pcId);
+  return c && typeof c.initBonus === 'number' ? c.initBonus : 0;
+}
+function paOnInitRequest(){
+  if (!document.body.classList.contains('player-app')) return;
+  const r = paInitReq(), me = paMe().pcId;
+  const open = r && !r.closed && me && Array.isArray(r.pcs) && r.pcs.includes(me)
+    && !(r.answers && r.answers[me] && r.answers[me].rid === r.id)
+    && Date.now() - (r.askedAt || 0) < PA_INIT_FRESH;
+  const cur = document.getElementById('pa-init');
+  if (!open){ if (cur) cur.remove(); return; }
+  if (cur && cur.dataset.rid === r.id) return;          // already up for this request
+  if (cur) cur.remove();
+  const pc = (state.party || []).find(x => x.id === me) || {};
+  const bonus = paInitBonus(me);
+  const sign = n => (n >= 0 ? '+' : '') + n;
+  const ov = document.createElement('div');
+  ov.id = 'pa-init'; ov.className = 'pa-init'; ov.dataset.rid = r.id;
+  ov.innerHTML = '<div class="pa-init-card" role="dialog" aria-modal="true" aria-label="Roll initiative">'
+    + '<div class="pa-init-l">⚔ Roll initiative!</div>'
+    + '<div class="pa-init-who">' + paEsc(pc.name || 'Your character') + ' · bonus <b>' + sign(bonus) + '</b></div>'
+    + '<div class="pa-init-roll">'
+    +   '<button class="btn primary" data-pa-init="roll">🎲 Roll for me</button>'
+    +   '<button class="btn" data-pa-init="adv">🎲🎲 Advantage</button>'
+    + '</div>'
+    + '<div class="pa-init-dice" id="pa-init-dice"></div>'
+    + '<label class="pa-init-type">Or type your total <input id="pa-init-val" type="number" inputmode="numeric" placeholder="e.g. 17"></label>'
+    + '<button class="btn primary pa-init-send" data-pa-init="send" disabled>Send</button>'
+    + '</div>';
+  const val = ov.querySelector('#pa-init-val'), send = ov.querySelector('[data-pa-init="send"]');
+  const dice = ov.querySelector('#pa-init-dice');
+  val.addEventListener('input', () => { send.disabled = val.value === ''; dice.textContent = ''; });
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-pa-init]'); if (!b) return;
+    const act = b.dataset.paInit;
+    if (act === 'roll' || act === 'adv'){
+      const a = sktD(20), c = act === 'adv' ? sktD(20) : null;
+      const d = c == null ? a : Math.max(a, c);
+      val.value = String(d + bonus); send.disabled = false;
+      dice.textContent = (c == null ? 'd20 (' + a + ')' : '2d20 (' + a + ', ' + c + ') keep ' + d) + ' ' + sign(bonus) + ' = ' + (d + bonus);
+    } else if (act === 'send' && val.value !== ''){
+      paAnswerInitiative(parseInt(val.value, 10));
+    }
+  });
+  document.body.appendChild(ov);
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch(e){}
+}
+function paAnswerInitiative(v){
+  const r = paInitReq(), me = paMe().pcId;
+  if (!r || r.closed || !me || isNaN(v)) return false;
+  r.answers = r.answers || {};
+  r.answers[me] = { v, rid: r.id, at: Date.now() };
+  saveJson('skt-initreq-v1', r, 'initiative');
+  const c = (state.combatants || []).find(x => x.id === me && x.isPC);
+  if (c){ c.initiative = v; save(); }
+  document.getElementById('pa-init')?.remove();
+  if (typeof showToast === 'function') showToast('Sent — initiative ' + v);
+  paRender();
+  return true;
 }
 
 // ─── Handouts ────────────────────────────────────────────────────────────────
