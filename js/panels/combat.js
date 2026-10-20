@@ -409,6 +409,7 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="next" title="Advance turn">▶</button>
         <button class="btn icon-btn" data-act="add" title="Add custom combatant">+</button>
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">${ICO('i-paw')}</button>
+        ${inCombat?'<button class="btn icon-btn" data-act="area-save" title="Area save — roll one saving throw for each of several creatures (Fireball, a breath weapon, a trap)">💥</button>':''}
         <button class="btn icon-btn ${compact?'active':''}" data-act="toggle-compact" title="${compact?'Show full cards':'Compact card mode'}">${compact?'▤':'▦'}</button>
         <button class="btn icon-btn ${grouped?'active':''}" data-act="toggle-group" title="${grouped?'Show every monster individually':'Group identical monsters into one card'}">${grouped?'▣':'⊞'}</button>
         ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for every NPC (d20 + their bonus; PCs keep their own rolls)">'+ICO('i-dice')+'</button>':''}
@@ -879,6 +880,7 @@ registerPanel('combat',{
         save(); this._render();
       }
       else if(act==='lair-done'){ this._lairDue = null; this._render(); }
+      else if(act==='area-save'){ this.openAreaSave({}); }
       else if(act==='legendary-pip'){
         const i = parseInt(el.dataset.idx);
         const n = parseInt(el.dataset.n);
@@ -2335,6 +2337,148 @@ registerPanel('combat',{
     }
     this._renderCondSaves();
   },
+
+  // ─── Area saves ─────────────────────────────────────────────────────────────
+  // One saving throw per creature, one damage roll for everyone — "a creature
+  // takes 8d6 fire damage on a failed save, or half as much on a successful
+  // one" is rolled once and shared. Each target rolls with its own bonus
+  // (saveBonus); the DM sees every result before anything is applied, can
+  // flip any of them, and a monster that failed can spend a legendary
+  // resistance from the same table. Damage goes through _applyHpDelta, so
+  // resistances, temp HP, concentration checks and Wild Shape all apply.
+  //
+  // pre: { name, ab, dc, parts:[{dice,type}], half, targets:[ids], exclude,
+  //        onApplied() }
+  openAreaSave(pre){
+    pre = pre || {};
+    document.getElementById('area-save-back')?.remove();
+    const ABS = ['STR','DEX','CON','INT','WIS','CHA'];
+    const TYPES = ['', 'acid','bludgeoning','cold','fire','force','lightning','necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
+    const partsText = (pre.parts || []).map(p => p.dice + (p.type ? ' ' + p.type : '')).join(' + ');
+    const want = new Set(pre.targets || []);
+    const back = document.createElement('div');
+    back.className = 'modal-backdrop'; back.id = 'area-save-back';
+    back.innerHTML = `<div class="modal area-save" role="dialog" aria-modal="true" aria-label="Area save">
+      <h3>💥 Area save${pre.name ? ' — ' + esc(pre.name) : ''}</h3>
+      <div class="as-row">
+        <label>Save <select id="as-ab">${ABS.map(a => `<option${String(pre.ab || 'DEX').slice(0,3).toUpperCase() === a ? ' selected' : ''}>${a}</option>`).join('')}</select></label>
+        <label>DC <input id="as-dc" type="number" min="1" value="${pre.dc || 15}"></label>
+        <label class="as-grow">Damage <input id="as-dmg" type="text" placeholder="8d6 fire  (or 4d6 fire + 4d6 radiant)" value="${esc(partsText)}"></label>
+        <label>On a success <select id="as-half"><option value="half"${pre.half === false ? '' : ' selected'}>half damage</option><option value="none"${pre.half === false ? ' selected' : ''}>no damage</option></select></label>
+      </div>
+      <div class="as-quick">
+        <button class="btn small" data-as="all-npc">All monsters</button>
+        <button class="btn small" data-as="all-pc">All characters</button>
+        <button class="btn small" data-as="none">None</button>
+      </div>
+      <div class="as-targets" id="as-targets"></div>
+      <div class="as-result" id="as-result"></div>
+      <div class="modal-actions">
+        <button class="btn" data-as="cancel">Cancel</button>
+        <button class="btn" data-as="roll">🎲 Roll saves</button>
+        <button class="btn primary" data-as="apply" disabled>Apply damage</button>
+      </div>
+    </div>`;
+    document.body.appendChild(back);
+    const $ = sel => back.querySelector(sel);
+    const alive = () => state.combatants.filter(c => !c.dead && (c.hp || 0) > 0 && c.id !== pre.exclude);
+    const paintTargets = () => {
+      $('#as-targets').innerHTML = alive().map(c =>
+        `<label class="as-t"><input type="checkbox" value="${esc(c.id)}"${want.has(c.id) ? ' checked' : ''}>
+           <span class="as-tn">${esc(c.name)}</span><span class="as-tb">${this._fmtBonus(this.saveBonus(c, $('#as-ab').value))}</span></label>`).join('')
+        || '<div class="as-empty">No one standing to roll for.</div>';
+    };
+    paintTargets();
+    $('#as-ab').addEventListener('change', () => { picked().forEach(id => want.add(id)); paintTargets(); });
+    const picked = () => [...back.querySelectorAll('#as-targets input:checked')].map(i => i.value);
+    let rolled = null;   // { dmg:[{amt,type,detail}], rows:[{id, total, detail, passed, lr}] }
+    const parseParts = txt => String(txt || '').split(/[+,]/).map(x => x.trim()).filter(Boolean).map(x => {
+      const m = /^(\d*d\d+(?:\s*[+-]\s*\d+)?|\d+)\s*([a-z]*)/i.exec(x);
+      return m ? { dice: m[1].replace(/\s+/g, ''), type: TYPES.includes((m[2] || '').toLowerCase()) ? m[2].toLowerCase() : '' } : null;
+    }).filter(Boolean);
+    const paintResult = () => {
+      if (!rolled){ $('#as-result').innerHTML = ''; $('[data-as="apply"]').disabled = true; return; }
+      const halfMode = $('#as-half').value;
+      const dmgLine = rolled.dmg.map(d => `<b>${d.amt}</b> ${esc(d.type || 'damage')} <span class="dim">(${esc(d.detail)})</span>`).join(' + ');
+      $('#as-result').innerHTML = `<div class="as-dmg">Damage: ${dmgLine || '<span class="dim">none</span>'} <button class="btn small" data-as="reroll-dmg">Reroll</button></div>
+        <table class="as-table"><tbody>${rolled.rows.map((r, k) => {
+          const c = state.combatants.find(x => x.id === r.id); if (!c) return '';
+          const total = rolled.dmg.reduce((s, d) => s + d.amt, 0);
+          const takes = r.passed ? (halfMode === 'half' ? Math.floor(total / 2) : 0) : total;
+          const lrLeft = (c.lrMax || 0) - (c.lrUsed || 0);
+          return `<tr class="${r.passed ? 'ok' : 'bad'}"><td>${esc(c.name)}</td>
+            <td class="dim">${esc(r.detail)}</td><td><b>${r.total}</b></td>
+            <td><button class="btn small as-flip" data-as="flip" data-k="${k}" title="Change this result">${r.passed ? '✓ saved' : '✗ failed'}</button>
+              ${(!r.passed && lrLeft > 0) ? `<button class="btn small" data-as="lr" data-k="${k}" title="Spend a legendary resistance to succeed instead (${lrLeft} left)">⛨ Resist</button>` : ''}
+              ${r.lr ? '<span class="dim">⛨ used</span>' : ''}</td>
+            <td>takes <b>${takes}</b></td></tr>`;
+        }).join('')}</tbody></table>
+        <div class="as-note">Amounts are before resistances, immunities and temp HP — those apply when you press Apply.</div>`;
+      $('[data-as="apply"]').disabled = !rolled.rows.length;
+    };
+    const rollDamage = () => parseParts($('#as-dmg').value).map(p => {
+      const r = sktRollDice(p.dice); return { amt: r.total, type: p.type, detail: p.dice + ': ' + r.detail };
+    });
+    const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    back.addEventListener('mousedown', e => { if (e.target === back && !rolled) close(); });
+    back.addEventListener('click', e => {
+      const b = e.target.closest('[data-as]'); if (!b) return;
+      const act = b.dataset.as;
+      if (act === 'cancel') return close();
+      if (act === 'all-npc' || act === 'all-pc' || act === 'none'){
+        back.querySelectorAll('#as-targets input').forEach(i => {
+          const c = state.combatants.find(x => x.id === i.value);
+          i.checked = act === 'none' ? false : (act === 'all-pc' ? !!(c && c.isPC) : !!(c && !c.isPC));
+        });
+        return;
+      }
+      if (act === 'roll'){
+        const ab = $('#as-ab').value, dc = parseInt($('#as-dc').value, 10) || 10;
+        rolled = { dmg: rollDamage(), rows: picked().map(id => {
+          const c = state.combatants.find(x => x.id === id);
+          const bonus = this.saveBonus(c, ab);
+          const r = sktRollDice('1d20' + (bonus >= 0 ? '+' : '') + bonus);
+          return { id, total: r.total, detail: r.detail, passed: r.total >= dc, lr: false };
+        }) };
+        paintResult();
+        return;
+      }
+      if (act === 'reroll-dmg' && rolled){ rolled.dmg = rollDamage(); paintResult(); return; }
+      if (act === 'flip' && rolled){ const r = rolled.rows[+b.dataset.k]; r.passed = !r.passed; if (!r.passed) r.lr = false; paintResult(); return; }
+      if (act === 'lr' && rolled){ const r = rolled.rows[+b.dataset.k]; r.passed = true; r.lr = true; paintResult(); return; }
+      if (act === 'apply' && rolled){
+        const halfMode = $('#as-half').value;
+        const ab = $('#as-ab').value, dc = parseInt($('#as-dc').value, 10) || 10;
+        const label = (pre.name ? pre.name + ': ' : '') + ab + ' DC ' + dc;
+        let partyTouched = false;
+        rolled.rows.forEach(r => {
+          const i = state.combatants.findIndex(x => x.id === r.id); if (i < 0) return;
+          const c = state.combatants[i];
+          if (r.lr){
+            state.combatants[i] = { ...c, lrUsed: Math.min(c.lrMax || 0, (c.lrUsed || 0) + 1) };
+            this._log(c.name + ' uses Legendary Resistance');
+          }
+          rolled.dmg.forEach(d => {
+            const amt = r.passed ? (halfMode === 'half' ? Math.floor(d.amt / 2) : 0) : d.amt;
+            if (amt > 0) this._applyHpDelta(i, -amt, d.type || null);
+          });
+          this._log(`${label} — ${c.name} ${r.total} ${r.passed ? 'saved' : 'failed'}`);
+          if (c.isPC) partyTouched = true;
+        });
+        save(); this._render();
+        if (partyTouched) panelDefs.party?._render?.();
+        try { pre.onApplied && pre.onApplied(rolled); } catch(err){ console.warn('[area save]', err); }
+        const saved = rolled.rows.filter(r => r.passed).length;
+        if (typeof showToast === 'function') showToast(`💥 ${label}: ${rolled.rows.length - saved} failed, ${saved} saved`);
+        close();
+      }
+    });
+    $('#as-half').addEventListener('change', paintResult);
+    return back;
+  },
+  _fmtBonus(n){ return (n >= 0 ? '+' : '') + n; },
 
   _renderDeathSaves(i, c){
     const ds = c.deathSaves || {success:0, fail:0};

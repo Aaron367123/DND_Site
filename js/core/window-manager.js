@@ -37,6 +37,7 @@ const PANEL_ICON = {
   notes:'i-note', battlemap:'i-map', npclib:'i-user', bestiary:'i-paw',
   adventures:'i-book-open', books:'i-books', npcgen:'i-dice', loot:'i-chest',
   encounter:'i-bolt', soundboard:'i-speaker', weather:'i-cloud', time:'i-clock',
+  handouts:'i-scroll',
 };
 // Icon markup for a panel: sprite when we have one, the panel's own emoji when
 // we don't. Both callers go through here so they can't drift apart.

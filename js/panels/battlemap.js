@@ -134,7 +134,7 @@ registerPanel('battlemap',{
         if (!this._drawings.length) return;
         showConfirm('Erase every pencil annotation on this map?', {title:'Clear drawings', confirmLabel:'Clear', danger:true}).then(ok=>{
           if (!ok) return;
-          this._drawings = [];
+          this._drawings = this._drawings.filter(s => s && s.k === 'tpl');   // areas have their own clear
           this._saveMap();
           this._render();
         });
@@ -1329,6 +1329,7 @@ registerPanel('battlemap',{
       for (let i = 2; i < s.p.length; i += 2) ctx.lineTo(s.p[i], s.p[i+1]);
       ctx.stroke();
     });
+    this._renderAreas();
   },
   _drawStrokeIncremental(canvas, stroke){
     const ctx = canvas.getContext('2d');
@@ -1655,6 +1656,7 @@ registerPanel('battlemap',{
     }
     // Drawings live in stage pixels too — scale them in lockstep.
     (this._drawings||[]).forEach(s => {
+      if (s && s.k === 'tpl'){ s.x *= ratio; s.y *= ratio; return; }   // areas: origin only; size is in feet
       if (!s.p) return;
       for (let i = 0; i < s.p.length; i++) s.p[i] *= ratio;
     });
@@ -1780,6 +1782,150 @@ registerPanel('battlemap',{
       el.classList.toggle('tight', room < 40 / vs);
       el.style.maxWidth = isFinite(room) ? room.toFixed(1) + 'px' : '';
     });
+  },
+
+  // ─── Areas of effect ────────────────────────────────────────────────────────
+  // Sphere / cone / line / cube templates. Stored IN the drawings list, as
+  // {k:'tpl', id, shape, x, y, ang, ft, c}: that node already syncs to every
+  // screen, players may write it (they cast Fireball too), and the list merge
+  // keeps two people's additions — a node of their own would need a database
+  // rules change. Every stroke reader skips entries without points, so the
+  // pencil, eraser and Turn View thumbnail never see them.
+  //
+  // Geometry follows the PHB: a cone is as wide as it is long at its far end
+  // (half-angle atan ½), a line is 5 ft wide, a cube's point of origin is the
+  // middle of one face. Sizes are FEET, converted with the map's own
+  // ft-per-cell and cell spacing, so a 20 ft sphere is 4 squares on any map.
+  _tplShape: 'circle', _tplSize: 20, _tplColor: '#ff7a3d',
+  _ppf(){ return (this._tokenUnitScreen() || this._csScreen() || 50) / (this._ftPerCell || 5); },
+  _areas(){ return (this._drawings || []).filter(s => s && s.k === 'tpl'); },
+  _areaControlsHtml(){
+    const opt = (v, l) => '<option value="' + v + '"' + (this._tplShape === v ? ' selected' : '') + '>' + l + '</option>';
+    return '<select id="tpl-shape" title="Shape" style="width:78px;font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
+        + opt('circle', 'Sphere') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + '</select>'
+      + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere, length for a cone or line, side for a cube)">'
+      + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
+      + '<input type="color" id="tpl-color" value="' + this._tplColor + '" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Colour">'
+      + (this._areas().length ? '<button class="btn" data-mact="clear-areas" style="flex-shrink:0" title="Remove every area from the map">Clear areas</button>' : '');
+  },
+  // Outline in stage px: {circle:{x,y,r}} or {poly:[[x,y]…]}.
+  _areaGeom(t){
+    const L = (+t.ft || 0) * this._ppf();
+    if (t.shape === 'circle') return { circle: { x: t.x, y: t.y, r: L } };
+    const a = +t.ang || 0, cos = Math.cos(a), sin = Math.sin(a);
+    if (t.shape === 'cone'){
+      const h = Math.atan(0.5);
+      return { poly: [[t.x, t.y],
+        [t.x + L * Math.cos(a - h) / Math.cos(h), t.y + L * Math.sin(a - h) / Math.cos(h)],
+        [t.x + L * Math.cos(a + h) / Math.cos(h), t.y + L * Math.sin(a + h) / Math.cos(h)]] };
+    }
+    const w = (t.shape === 'cube' ? L : 5 * this._ppf()) / 2;   // half width
+    const px = -sin * w, py = cos * w;                        // perpendicular
+    return { poly: [[t.x + px, t.y + py], [t.x - px, t.y - py],
+                    [t.x - px + cos * L, t.y - py + sin * L], [t.x + px + cos * L, t.y + py + sin * L]] };
+  },
+  _inArea(t, x, y){
+    const g = this._areaGeom(t);
+    if (g.circle) return Math.hypot(x - g.circle.x, y - g.circle.y) <= g.circle.r;
+    let inside = false;
+    for (let i = 0, j = g.poly.length - 1; i < g.poly.length; j = i++){
+      const [xi, yi] = g.poly[i], [xj, yj] = g.poly[j];
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  },
+  _areaSvg(t, extra){
+    const g = this._areaGeom(t), c = t.c || '#ff7a3d';
+    const style = 'fill="' + c + '" fill-opacity=".22" stroke="' + c + '" stroke-width="' + Math.max(1.5, 2 / (this._screenScale ? (this._screenScale() || 1) : 1)) + '" ' + (extra || '');
+    return g.circle
+      ? '<circle cx="' + g.circle.x + '" cy="' + g.circle.y + '" r="' + g.circle.r + '" ' + style + '/>'
+      : '<polygon points="' + g.poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '" ' + style + '/>';
+  },
+  _renderAreas(preview){
+    const b = this._body; if (!b) return;
+    const stage = b.querySelector('#map-stage'); if (!stage) return;
+    let svg = stage.querySelector('#tpl-layer');
+    if (!svg){
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.id = 'tpl-layer';
+      svg.style.cssText = 'position:absolute;top:0;left:0;z-index:1;pointer-events:none;overflow:visible';
+      stage.appendChild(svg);
+    }
+    const cs = this._csScreen();
+    svg.setAttribute('width', this._cols * cs); svg.setAttribute('height', this._rows * cs);
+    svg.innerHTML = this._areas().map(t => this._areaSvg(t, 'data-tpl="' + t.id + '"')).join('')
+      + (preview ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '');
+    this._markTokensInAreas(preview);
+  },
+  _tokensInArea(t){
+    return (this._tokens || []).filter(tok => tok && tok.x != null && this._inArea(t, tok.x, tok.y));
+  },
+  _markTokensInAreas(preview){
+    const b = this._body; if (!b) return;
+    const areas = this._areas().concat(preview ? [preview] : []);
+    b.querySelectorAll('.map-token').forEach(el => {
+      const tok = (this._tokens || []).find(t => String(t.id) === el.dataset.tid);
+      el.classList.toggle('in-area', !!tok && areas.some(a => this._inArea(a, tok.x, tok.y)));
+    });
+  },
+  // Press: on an existing area, offer its menu; elsewhere, start a new one.
+  // A sphere drops where you press; the others aim along the drag.
+  _areaPointerDown(x, y, cx, cy, touch){
+    const hit = this._areas().slice().reverse().find(t => this._inArea(t, x, y));
+    const shape = (this._body.querySelector('#tpl-shape') || {}).value || this._tplShape;
+    const ft = Math.max(5, parseInt((this._body.querySelector('#tpl-size') || {}).value, 10) || this._tplSize);
+    const col = (this._body.querySelector('#tpl-color') || {}).value || this._tplColor;
+    this._tplShape = shape; this._tplSize = ft; this._tplColor = col;
+    const draft = { k: 'tpl', id: 'tpl_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), shape, x, y, ang: 0, ft, c: col };
+    const stage = this._body.querySelector('#map-stage');
+    let moved = false;
+    const at = (ex, ey) => this._stagePoint(ex, ey, stage);
+    const move = ev => {
+      const p = ev.touches ? ev.touches[0] : ev;
+      const q = at(p.clientX, p.clientY);
+      if (Math.hypot(p.clientX - cx, p.clientY - cy) > 6) moved = true;
+      if (shape !== 'circle') draft.ang = Math.atan2(q.y - y, q.x - x);
+      else { draft.x = q.x; draft.y = q.y; }
+      if (ev.cancelable) ev.preventDefault();
+      this._renderAreas(draft);
+    };
+    const up = ev => {
+      document.removeEventListener(touch ? 'touchmove' : 'mousemove', move);
+      document.removeEventListener(touch ? 'touchend' : 'mouseup', up);
+      if (touch) document.removeEventListener('touchcancel', up);
+      if (hit && !moved){ this._renderAreas(); this._areaMenu(hit, cx, cy); return; }
+      this._drawings.push(draft);
+      this._saveMap();
+      this._renderAreas();
+    };
+    document.addEventListener(touch ? 'touchmove' : 'mousemove', move, { passive: false });
+    document.addEventListener(touch ? 'touchend' : 'mouseup', up);
+    if (touch) document.addEventListener('touchcancel', up);
+    this._renderAreas(draft);
+  },
+  _areaMenu(t, cx, cy){
+    const inside = this._tokensInArea(t);
+    const isPlayer = document.body.classList.contains('player-mode');
+    const items = [];
+    if (!isPlayer && panelDefs.combat && typeof panelDefs.combat.openAreaSave === 'function'){
+      // Map tokens to fighters: linked by cid, or by name like the rest of the map.
+      const ids = inside.map(tok => {
+        const c = (state.combatants || []).find(c => (tok.cid != null && c.id === tok.cid)
+          || (typeof sktNormName === 'function' && sktNormName(c.name) === sktNormName(tok.label)));
+        return c ? c.id : null;
+      }).filter(Boolean);
+      items.push({ label: '💥 Roll saves for the ' + ids.length + ' creature' + (ids.length === 1 ? '' : 's') + ' inside', disabled: !ids.length,
+        onClick: () => panelDefs.combat.openAreaSave({ targets: ids, name: t.ft + ' ft ' + ({circle:'sphere'}[t.shape] || t.shape) }) });
+    }
+    items.push({ label: '✕ Remove this area', onClick: () => {
+      this._drawings = this._drawings.filter(s => s !== t && !(s && s.k === 'tpl' && s.id === t.id));
+      this._saveMap(); this._renderAreas();
+    }});
+    items.push({ label: '✕ Remove all areas', onClick: () => {
+      this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl'));
+      this._saveMap(); this._render();
+    }});
+    if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
   },
 
   _counterScaleLabels(vs){
@@ -2362,6 +2508,8 @@ registerPanel('battlemap',{
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
+      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map">◎<span class="bt-l">Area</span></button>'
+      +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
       +(_mapBgImage?'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>':'')
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Zoom">':'')
@@ -2388,6 +2536,8 @@ registerPanel('battlemap',{
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
+      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map">◎<span class="bt-l">Area</span></button>'
+      +(this._tool==='area' ? this._areaControlsHtml() : '')
       +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
       +'<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'
       +'<input type="number" id="map-size" min="8" max="400" step="1" value="'+cs+'" style="width:54px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Cell size in pixels (try 30, 50, 64, 80, 100, 120…)">'
@@ -2555,7 +2705,7 @@ registerPanel('battlemap',{
     this._sizeLayer(drawCanvas, W, H);
     // Draw canvas needs to receive clicks for the pencil AND for the eraser
     // (to remove strokes). Other tools/no-tool let clicks pass through.
-    drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase') ? 'auto' : 'none';
+    drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase' || this._tool === 'area') ? 'auto' : 'none';
     this._drawAllStrokes();
     this._renderTokens();
     // Size the zoom wrappers to match the stage we just built. Must happen
@@ -2604,6 +2754,11 @@ registerPanel('battlemap',{
         this._render();
       }
       else if(act==='sync-combat') this._syncParty();
+      else if(act==='clear-areas'){
+        if (!this._drawings.some(s => s && s.k === 'tpl')) return;
+        this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl'));
+        this._saveMap(); this._render();
+      }
       else if(act==='toggle-settings'){
         this._settingsOpen = !this._settingsOpen;
         this._render();
@@ -2642,7 +2797,7 @@ registerPanel('battlemap',{
         if (!this._drawings.length) return;
         showConfirm('Erase every pencil annotation on this map?', {title:'Clear drawings', confirmLabel:'Clear', danger:true}).then(ok=>{
           if(!ok) return;
-          this._drawings = [];
+          this._drawings = this._drawings.filter(s => s && s.k === 'tpl');   // areas have their own clear
           this._saveMap();
           this._render();
         });
@@ -2769,6 +2924,11 @@ registerPanel('battlemap',{
         return;
       }
 
+      if (this._tool === 'area'){
+        e.preventDefault(); e.stopPropagation();
+        this._areaPointerDown(x, y, e.clientX, e.clientY, false);
+        return;
+      }
       if (this._tool !== 'draw') return;
       e.preventDefault(); e.stopPropagation();
       _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
@@ -2845,6 +3005,11 @@ registerPanel('battlemap',{
         return;
       }
 
+      if (this._tool === 'area'){
+        e.preventDefault(); e.stopPropagation();
+        this._areaPointerDown(x, y, touch.clientX, touch.clientY, true);
+        return;
+      }
       if (this._tool !== 'draw') return;
       e.preventDefault(); e.stopPropagation();
       _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
@@ -4982,6 +5147,7 @@ registerPanel('battlemap',{
     });
     stage.appendChild(frag);
     this._fitTokenNames();
+    this._markTokensInAreas();
   },
 
   _showPanel(t){

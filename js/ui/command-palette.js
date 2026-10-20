@@ -56,6 +56,8 @@ function _cpCommands(){
     add('Combat', 'Next turn',      combat('_nextTurn'),       'advance end turn');
     add('Combat', 'Previous turn',  combat('_prevTurn'),       'back undo turn');
     add('Combat', 'Roll initiative for monsters', combat('_rollInitiative'), 'npc init d20');
+    add('Combat', 'Area save…', () => { if (!mounted.has('combat')) ensurePanel('combat'); panelDefs.combat.openAreaSave({}); },
+        'fireball breath aoe saving throw several targets');
   }
 
   // Party.

@@ -4027,6 +4027,131 @@
         loadDomain('combat'); loadDomain('party'); C._render();
       }
     }
+    // ── Area saves: several creatures, one damage roll ────────────────────
+    {
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      const C = panelDefs.combat; openPanel('combat'); await sleep(250);
+      try {
+        // Monsters: no temp HP or Wild Shape pool to soak the damage, so what
+        // they lose is exactly what was applied.
+        const alive = state.combatants.filter(c => !c.isPC && !c.dead && (c.hp || 0) > 0);
+        ok('area save: two monsters to test with', alive.length >= 2);
+        const hp0 = {}; state.combatants.forEach(c => hp0[c.id] = c.hp);
+        C.openAreaSave({ name: 'Test blast', ab: 'DEX', dc: 99, parts: [{ dice: '4d6', type: '' }], half: true, targets: alive.map(c => c.id) });
+        const g = document.getElementById('area-save-back');
+        ok('area save: the dialog opens with the given targets ticked', !!g && g.querySelectorAll('#as-targets input:checked').length === alive.length);
+        g.querySelector('[data-as="roll"]').click(); await sleep(30);
+        ok('area save: each target rolls its own save', g.querySelectorAll('.as-table tr').length === alive.length);
+        const dmg = +g.querySelector('.as-dmg b').textContent;
+        ok('area save: the damage is rolled once, for everyone', dmg >= 4 && dmg <= 24);
+        g.querySelector('[data-as="flip"][data-k="0"]').click(); await sleep(20);
+        g.querySelector('[data-as="apply"]').click(); await sleep(120);
+        const first = alive[0], rest = alive.slice(1);
+        const now = id => (state.combatants.find(c => c.id === id) || {}).hp;
+        const lost = id => hp0[id] - now(id);
+        ok('area save: a failed save takes the full roll', rest.every(c => lost(c.id) === dmg || now(c.id) === 0),
+           JSON.stringify(rest.map(c => lost(c.id))) + ' vs ' + dmg);
+        ok('area save: a flipped success takes half', lost(first.id) === Math.floor(dmg / 2) || now(first.id) === 0,
+           lost(first.id) + ' vs ' + Math.floor(dmg / 2));
+        ok('area save: and the dialog closes', !document.getElementById('area-save-back'));
+        const m = _5eLoaded && _5eData.find(d => d.cat === 'monster' && d.name === 'Adult Red Dragon');
+        if (m){
+          C.addMonster(m); await sleep(50);
+          const dr = state.combatants.find(c => c.baseName === 'Adult Red Dragon');
+          state.activeCombatantId = dr.id; save();
+          openPanel('turnview'); await sleep(500);
+          const T = panelDefs.turnview; T._render(); await sleep(150);
+          const ab = T._body.querySelector('[data-tv="area"]');
+          ok('area save: the Turn View offers it on a breath weapon', !!ab);
+          ab && ab.click(); await sleep(60);
+          const d2 = document.getElementById('area-save-back');
+          ok('area save: prefilled from the action, the attacker left out',
+             !!d2 && d2.querySelector('#as-dc').value === '21' && /18d6 fire/.test(d2.querySelector('#as-dmg').value)
+             && !d2.querySelector('#as-targets input[value="' + dr.id + '"]'));
+          d2 && d2.remove();
+          closePanel('turnview');
+        }
+      } catch(e){ ok('area save: the checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('area-save-back')?.remove();
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party'); C._render();
+      }
+    }
+
+    // ── Areas of effect on the map ────────────────────────────────────────
+    {
+      _remoteUpdate = true;
+      try { if (snapshot['skt-battlemap-v1'] != null) localStorage.setItem('skt-battlemap-v1', snapshot['skt-battlemap-v1']); }
+      finally { _remoteUpdate = false; }
+      closePanel('battlemap'); openPanel('battlemap'); await sleep(900);
+      const bm = panelDefs.battlemap, b = bm._body;
+      try {
+        bm._tool = 'area'; bm._render(); await sleep(80);
+        ok('areas: the tool shows shape, size and colour', !!b.querySelector('#tpl-shape') && !!b.querySelector('#tpl-size') && !!b.querySelector('#tpl-color'));
+        const tok = bm._tokens.find(t => t.x != null);
+        b.querySelector('#tpl-shape').value = 'circle'; b.querySelector('#tpl-size').value = '10';
+        const r = b.querySelector('.map-token[data-tid="' + tok.id + '"]').getBoundingClientRect();
+        const dc = b.querySelector('#draw-canvas');
+        dc.dispatchEvent(new MouseEvent('mousedown', { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true, button: 0 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true }));
+        await sleep(80);
+        const a = bm._areas()[0];
+        ok('areas: a click drops a sphere, saved with the map', !!a && a.shape === 'circle' && a.ft === 10
+           && JSON.parse(localStorage.getItem('skt-battlemap-v1')).drawings.some(d => d.k === 'tpl'));
+        ok('areas: 10 ft is two squares of radius', !!a && Math.abs(bm._areaGeom(a).circle.r - 10 * bm._tokenUnitScreen() / (bm._ftPerCell || 5)) < 1);
+        ok('areas: the creature under it lights up', !!b.querySelector('.map-token.in-area[data-tid="' + tok.id + '"]'));
+        b.querySelector('#tpl-shape').value = 'cone'; b.querySelector('#tpl-size').value = '30';
+        dc.dispatchEvent(new MouseEvent('mousedown', { clientX: r.left, clientY: r.top, bubbles: true, button: 0 }));
+        document.dispatchEvent(new MouseEvent('mousemove', { clientX: r.left, clientY: r.top + 150, bubbles: true }));
+        document.dispatchEvent(new MouseEvent('mouseup', { clientX: r.left, clientY: r.top + 150, bubbles: true }));
+        await sleep(60);
+        const cone = bm._areas()[1];
+        ok('areas: a cone aims along the drag', !!cone && cone.shape === 'cone' && Math.abs(cone.ang - Math.PI / 2) < 0.2, cone && cone.ang.toFixed(2));
+        ok('areas: the eraser leaves areas alone', !bm._eraseStrokeAt(Math.round(tok.x), Math.round(tok.y)) && bm._areas().length === 2);
+        bm._drawings.push({ c: '#f00', s: 4, p: [1, 1, 30, 30] });
+        const sc = window.showConfirm; window.showConfirm = () => Promise.resolve(true);
+        const clearItem = (bm.menuItems ? bm.menuItems() : []).find(i => /Clear all drawings/.test(i.label || ''));
+        if (clearItem){ clearItem.run(); await sleep(60); }
+        window.showConfirm = sc;
+        ok('areas: "Clear all drawings" keeps the areas', !!clearItem && bm._areas().length === 2 && !bm._drawings.some(d => d.p));
+        let items = null; const sm = window.showContextMenu; window.showContextMenu = (x, y, it) => { items = it; };
+        bm._areaMenu(bm._areas()[0], 10, 10); window.showContextMenu = sm;
+        ok('areas: an area offers to roll saves for those inside', !!items && /Roll saves for the \d+ creature/.test(items[0].label));
+        b.querySelector('[data-mact="clear-areas"]').click(); await sleep(60);
+        ok('areas: "Clear areas" removes them all', bm._areas().length === 0);
+      } catch(e){ ok('areas: the checks ran to completion', false, e.message); }
+      finally { bm._tool = ''; closePanel('battlemap'); }
+    }
+
+    // ── Handouts ──────────────────────────────────────────────────────────
+    {
+      const h0 = localStorage.getItem('skt-handouts-v1');
+      try {
+        openPanel('handouts'); await sleep(250);
+        const H = panelDefs.handouts;
+        ok('handouts: the panel is in the dock and opens', !!document.querySelector('.dock-btn[data-panel="handouts"]') && !!H._body);
+        const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30;
+        const img = cv.toDataURL('image/jpeg', 0.7);
+        const id = H.send({ title: 'Test letter', text: 'line one\nline two', img, to: 'all' });
+        const d = JSON.parse(localStorage.getItem('skt-handouts-v1') || '{}');
+        ok('handouts: sending stores it for the phones', !!id && d.list && d.list[0].id === id && d.list[0].img === img && d.list[0].to === 'all');
+        ok('handouts: and lists it', !!H._body.querySelector('.ho-item[data-id="' + id + '"]'));
+        ok('handouts: sending to no one is refused', H.send({ title: 'x', to: [] }) === false);
+        const t0 = d.list[0].shownAt; await sleep(15); H.showAgain(id);
+        ok('handouts: "Show again" re-announces it', JSON.parse(localStorage.getItem('skt-handouts-v1')).list[0].shownAt > t0);
+      } catch(e){ ok('handouts: the checks ran to completion', false, e.message); }
+      finally {
+        if (h0 == null) localStorage.removeItem('skt-handouts-v1'); else localStorage.setItem('skt-handouts-v1', h0);
+        closePanel('handouts');
+      }
+    }
+
     // ── A lowered maximum HP (Life Drain, Harm…) ─────────────────────────
     {
       // Earlier checks end the fight; start from the original data.
@@ -4274,6 +4399,41 @@
           paRender();
         }
       }
+      // ── A handout reaching this phone ─────────────────────────────────────
+      {
+        const h0 = localStorage.getItem('skt-handouts-v1'), s0 = localStorage.getItem('skt-ho-seen-v1');
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        try {
+          const pc = (state.party || [])[0], other = (state.party || [])[1];
+          if (pc && other){
+            paSetPc(pc.id); paTab = 'you'; paRender();
+            localStorage.removeItem('skt-ho-seen-v1');
+            const now = Date.now();
+            const payload = JSON.stringify({ list: [
+              { id: 'ho_t1', title: 'For everyone', text: 'a\nb', img: null, to: 'all', ts: now, shownAt: now },
+              { id: 'ho_t2', title: 'Not yours', text: 'secret', img: null, to: [other.id], ts: now, shownAt: now - 5 },
+              { id: 'ho_t3', title: 'Last week', text: 'old', img: null, to: 'all', ts: now - 864e5, shownAt: now - 864e5 } ] });
+            _applyRemoteKey('skt-handouts-v1', payload); await sleep(60);
+            const pop = document.getElementById('pa-handout');
+            ok('player: a new handout pops up', !!pop && /For everyone/.test(pop.textContent) && /<br>/.test(pop.innerHTML));
+            ok('player: a Handouts tab appears', paVisibleTabs().some(t => t.id === 'handouts'));
+            pop && pop.querySelector('.pa-ho-close').click(); await sleep(20);
+            _applyRemoteKey('skt-handouts-v1', payload + ' '); await sleep(40);
+            ok('player: and does not pop up again once closed', !document.getElementById('pa-handout'));
+            paTab = 'handouts'; paRender();
+            const titles = [...document.querySelectorAll('.pa-ho-item b')].map(b => b.textContent);
+            ok('player: the tab lists theirs, not anyone else', titles.includes('For everyone') && titles.includes('Last week') && !titles.includes('Not yours'));
+          }
+        } catch(e){ ok('player: the handout checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-handout')?.remove();
+          if (h0 == null) localStorage.removeItem('skt-handouts-v1'); else localStorage.setItem('skt-handouts-v1', h0);
+          if (s0 == null) localStorage.removeItem('skt-ho-seen-v1'); else localStorage.setItem('skt-ho-seen-v1', s0);
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paTab = tab0; paRender();
+        }
+      }
+
       // ── A condition says what it does ─────────────────────────────────────
       {
         const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;

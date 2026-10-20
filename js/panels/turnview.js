@@ -1176,7 +1176,8 @@ registerPanel('turnview', {
         // instead of one, and no d20.
         ctl = `${rech}<span class="tv-save">DC ${a.save.dc} ${esc(String(a.save.ability).slice(0,3).toUpperCase())}</span>
           <button class="btn" data-tv="save" data-ai="${i}" data-half="0" title="Target failed the save — full damage">Failed</button>
-          ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>` : ''}`;
+          ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>` : ''}
+          <button class="btn" data-tv="area" data-ai="${i}" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>`;
       } else if (a.pc ? !!a.dmgText : (a.parts || []).length){
         ctl = `${rech}<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`;
       } else {
@@ -2541,6 +2542,25 @@ registerPanel('turnview', {
     });
   },
 
+  // The same action against several creatures at once — see combat.openAreaSave.
+  // Preselects the target you have armed; recharge and the action are spent
+  // only once the damage is actually applied.
+  _areaSave(ai){
+    const c = this._active(); if (!c) return;
+    const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
+    const C = panelDefs.combat; if (!C || typeof C.openAreaSave !== 'function') return;
+    C.openAreaSave({
+      name: c.name + ' · ' + a.name, ab: a.save.ability, dc: a.save.dc,
+      parts: (a.parts || []).map(p => ({ dice: p.dice, type: p.type })),
+      half: !!a.save.half, exclude: c.id, targets: this._armed ? [this._armed] : [],
+      onApplied: () => {
+        if (a.recharge) this._markRechargeSpent(c, a.name);
+        this._spend(c, 'actionUsed');
+        this._render();
+      },
+    });
+  },
+
   _manualAttack(){
     const b = this._body;
     const t = this._order().find(x => x.id === this._armed);
@@ -2817,6 +2837,7 @@ registerPanel('turnview', {
         }
       }
       else if (act === 'save'){ this._rollSave(+el.dataset.ai, el.dataset.half === '1'); }
+      else if (act === 'area'){ this._areaSave(+el.dataset.ai); }
       else if (act === 'multi'){ this._startMulti(); }
       else if (act === 'legend'){ this._useLegendary(el.dataset.id, +el.dataset.ai); }
       else if (act === 'qmiss'){ if (this._queue){ this._queue.misses++; this._advanceQueue(); } }

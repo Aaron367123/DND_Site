@@ -103,6 +103,8 @@ const PA_TABS = [
   // Phones only. The floating toolbar is hidden on a phone (main.css), and
   // everything in it a player can use lives here instead: search, settings,
   // sync status, the campaign, and the way back to the DM view.
+  // Shown once the DM has sent this player something.
+  { id:'handouts', label:'Handouts', icon:'i-scroll', when: () => paMyHandouts().length > 0 },
   { id:'more',  label:'More',  icon:'i-dots',   always:true, phoneOnly:true },
 ];
 
@@ -126,7 +128,7 @@ const PA_SHAREABLE = new Set(PA_TABS.filter(t => t.needs).map(t => t.needs).conc
 function paVisibleTabs(){
   const sh = paShared();
   const phone = paIsPhone();
-  return PA_TABS.filter(t => (t.always || sh.has(t.needs)) && (!t.phoneOnly || phone));
+  return PA_TABS.filter(t => (t.always || sh.has(t.needs) || (t.when && t.when())) && (!t.phoneOnly || phone));
 }
 
 function initPlayerApp(){
@@ -151,6 +153,63 @@ function initPlayerApp(){
   shell.addEventListener('change', paOnChange);
   paInitMore();
   paRender();
+  paOnHandouts();
+}
+
+// ─── Handouts ────────────────────────────────────────────────────────────────
+// What the DM sent (js/panels/handouts.js), filtered to this phone: everyone's,
+// plus any addressed to this phone's character. A handout pops up full screen
+// when it arrives or is shown again — once per showing, remembered on this
+// device — and stays in the Handouts tab. One that was shown long before this
+// phone joined waits in the tab rather than popping up out of nowhere.
+const PA_HO_SEEN = 'skt-ho-seen-v1';
+const PA_HO_FRESH = 15 * 60 * 1000;
+function paMyHandouts(){
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem('skt-handouts-v1') || 'null'); } catch(e){}
+  const me = paMe().pcId;
+  return (d && Array.isArray(d.list) ? d.list : [])
+    .filter(h => h && (h.to === 'all' || (Array.isArray(h.to) && me && h.to.includes(me))));
+}
+function paHoSeen(){ try { return JSON.parse(localStorage.getItem(PA_HO_SEEN) || '{}') || {}; } catch(e){ return {}; } }
+function paOnHandouts(){
+  if (!document.body.classList.contains('player-app')) return;
+  const seen = paHoSeen();
+  const fresh = paMyHandouts().filter(h => (h.shownAt || 0) > (seen[h.id] || 0) && Date.now() - (h.shownAt || 0) < PA_HO_FRESH);
+  paRender();
+  if (fresh.length) paShowHandout(fresh[0].id, true);
+}
+function paHandoutBody(h){
+  return (h.img ? '<img class="pa-ho-img" src="' + h.img + '" alt="">' : '')
+    + (h.text ? '<div class="pa-ho-text">' + paEsc(h.text).replace(/\n/g, '<br>') + '</div>' : '');
+}
+function paShowHandout(id, arriving){
+  const h = paMyHandouts().find(x => x.id === id); if (!h) return;
+  document.getElementById('pa-handout')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'pa-handout'; ov.className = 'pa-handout';
+  ov.innerHTML = '<div class="pa-ho-card" role="dialog" aria-modal="true" aria-label="Handout">'
+    + '<div class="pa-ho-head">' + (arriving ? '<span class="pa-ho-new">New handout</span>' : '')
+    + '<b>' + paEsc(h.title || 'Handout') + '</b></div>'
+    + '<div class="pa-ho-body">' + paHandoutBody(h) + '</div>'
+    + '<button class="btn primary pa-ho-close">Close</button></div>';
+  const close = () => {
+    const seen = paHoSeen(); seen[h.id] = h.shownAt || Date.now();
+    try { localStorage.setItem(PA_HO_SEEN, JSON.stringify(seen)); } catch(e){}
+    ov.remove();
+  };
+  ov.querySelector('.pa-ho-close').addEventListener('click', close);
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  document.body.appendChild(ov);
+  if (arriving){ try { navigator.vibrate && navigator.vibrate(120); } catch(e){} }
+}
+function paHandoutsScreen(){
+  const list = paMyHandouts();
+  if (!list.length) return '<div class="pa-card"><p class="pa-dim">Nothing from the DM yet.</p></div>';
+  return list.map(h => '<div class="pa-card pa-ho-item">'
+    + '<div class="pa-ho-item-head"><b>' + paEsc(h.title || 'Handout') + '</b>'
+    + '<button class="btn small" data-pa-ho="' + paEsc(h.id) + '">Open</button></div>'
+    + paHandoutBody(h) + '</div>').join('');
 }
 
 // ─── The phone's More tab ────────────────────────────────────────────────────
@@ -427,6 +486,7 @@ function paRenderScreen(){
   el.innerHTML = '';
   if (paTab === 'you')   { el.innerHTML = paYouScreen(); return; }
   if (paTab === 'more')  { el.innerHTML = paMoreScreen(); paWireMore(el); return; }
+  if (paTab === 'handouts'){ el.innerHTML = paHandoutsScreen(); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
   if (paTab === 'notes') { paMountPanel(el, 'notes');     return; }
@@ -960,6 +1020,8 @@ function paRollDeathSave(){
 }
 
 function paOnClick(e){
+  const ho = e.target.closest('[data-pa-ho]');
+  if (ho){ paShowHandout(ho.dataset.paHo, false); return; }
   const tab = e.target.closest('[data-pa-tab]');
   if (tab){ paTab = tab.dataset.paTab; paRender(); return; }
   const pick = e.target.closest('[data-pa-pick]');

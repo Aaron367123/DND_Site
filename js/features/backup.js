@@ -136,6 +136,7 @@ const LABELS = {
   'skt-adventures-hidden-v1': 'Hidden adventures',
   'skt-layout-v1':            'Panel layout',
   'skt-shared-panels-v1':     'Shared panels',
+  'skt-handouts-v1':          'Handouts',
 };
 
 // Count the interesting things inside a key's JSON so the preview can say

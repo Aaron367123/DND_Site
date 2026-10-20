@@ -4813,3 +4813,57 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .cond-save{background:var(--panel); border:1px solid var(--accent); border-radius:var(--r-md); padding:10px 12px;
   box-shadow:0 8px 28px rgba(0,0,0,.45); font-size:var(--fs-sm)}
 .cond-save-btns{display:flex; gap:6px; margin-top:8px}
+
+/* ─── Area save dialog (combat.openAreaSave) ─────────────────────────── */
+.area-save{width:min(680px, calc(100vw - 24px)); max-height:90vh; overflow:auto}
+.as-row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:10px}
+.as-row label{display:flex; flex-direction:column; gap:3px; font-size:var(--fs-xs); color:var(--text-muted)}
+.as-row input, .as-row select{font:inherit; font-size:var(--fs-md)}
+.as-row #as-dc{width:64px}
+.as-grow{flex:1 1 220px}
+.as-quick{display:flex; gap:6px; margin-bottom:8px}
+.as-targets{display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:4px; margin-bottom:10px}
+.as-t{display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--panel-2); cursor:pointer}
+.as-tn{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.as-tb{font-size:var(--fs-xs); color:var(--text-muted)}
+.as-dmg{margin-bottom:8px}
+.as-table{width:100%; border-collapse:collapse; font-size:var(--fs-sm)}
+.as-table td{padding:4px 6px; border-top:1px solid var(--border)}
+.as-table tr.ok td:first-child{border-left:3px solid var(--success)}
+.as-table tr.bad td:first-child{border-left:3px solid var(--danger)}
+.as-empty{color:var(--text-muted)}
+.as-note{font-size:var(--fs-xs); color:var(--text-dim); margin-top:6px}
+
+/* Areas of effect: a creature whose centre is inside lights up. */
+#map-stage .map-token.in-area{box-shadow:0 0 0 3px #ff7a3d, 0 0 14px 3px rgba(255,122,61,.75) !important}
+
+/* ─── Handouts (js/panels/handouts.js, player-app.js) ───────────────────── */
+.ho{display:flex; flex-direction:column; gap:12px; padding:10px; height:100%; box-sizing:border-box; overflow:auto}
+.ho-new{display:flex; flex-direction:column; gap:8px; padding:10px; background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md)}
+.ho-title, .ho-text{font:inherit; width:100%; box-sizing:border-box}
+.ho-img-row{display:flex; align-items:center; gap:8px}
+.ho-thumb{max-height:72px; max-width:120px; border-radius:var(--r-sm); border:1px solid var(--border)}
+.ho-to{display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:var(--fs-sm)}
+.ho-to-l{color:var(--text-muted)}
+.ho-to label{display:inline-flex; flex-direction:row; align-items:center; gap:5px; margin:0}
+.ho-to input{width:auto; margin:0}
+.ho-pcs{display:flex; flex-wrap:wrap; gap:8px}
+.ho-list{display:flex; flex-direction:column; gap:6px}
+.ho-item{display:flex; align-items:center; gap:10px; padding:6px 8px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--panel-2)}
+.ho-item-img{width:56px; height:42px; object-fit:cover; border-radius:var(--r-sm); flex-shrink:0}
+.ho-noimg{display:flex; align-items:center; justify-content:center; background:var(--panel-3); font-size:20px}
+.ho-item-body{flex:1; min-width:0}
+.ho-item-title{font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ho-item-meta{font-size:var(--fs-xs); color:var(--text-muted)}
+.ho-item-btns{display:flex; gap:4px; flex-shrink:0}
+.ho-budget{font-size:var(--fs-xs); color:var(--text-dim)}
+.pa-handout{position:fixed; inset:0; z-index:9850; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; padding:16px}
+.pa-ho-card{background:var(--panel); border:1px solid var(--accent); border-radius:14px; width:min(640px, 100%); max-height:100%;
+  display:flex; flex-direction:column; overflow:hidden; box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.pa-ho-head{padding:12px 14px; font-size:var(--fs-xl); display:flex; flex-direction:column; gap:2px}
+.pa-ho-new{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; color:var(--accent)}
+.pa-ho-body{overflow:auto; padding:0 14px 12px}
+.pa-ho-img{display:block; max-width:100%; margin:0 auto 10px; border-radius:var(--r-md)}
+.pa-ho-text{font-size:var(--fs-lg); line-height:1.5; white-space:normal}
+.pa-ho-close{margin:0 14px 14px}
+.pa-ho-item-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px}

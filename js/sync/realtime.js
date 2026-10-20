@@ -58,6 +58,7 @@ const SKT_SYNC_KEYS = [
   // explained the omission; it reads as an oversight rather than a decision.
   'skt-time-v1',       // in-game date and time
   'skt-weather-v2',    // current conditions + history
+  'skt-handouts-v1',  // pictures and notes the DM sends to the players' phones
   'skt-adventures-hidden-v1', // same idea for hidden adventures (LMoP, SKT,
                               // ToA, …). Adventure IDs match `_source` tags
                               // on items / monsters from those modules.
@@ -103,6 +104,7 @@ const _PANELS_FOR_KEY = {
   // party and combat cross-refresh: combat cards mirror PC hp/ac, and party
   // cards show the "in combat" badge.
   'skt-party-v1':    ['party', 'combat'],
+  'skt-handouts-v1': ['handouts'],
   'skt-combat-v1':   ['combat', 'party'],
   'skt-shop-v1':     ['shop'],
   'skt-settings-v1': ['combat', 'party', 'shop'],      // display modes, hp bars, filters
@@ -702,7 +704,7 @@ const _MAX_RETRIES = 4;
 // with playerWritable; this is the same rule for the keys that sync whole,
 // and until now no whole key was both DM-authored and mounted in the player
 // view, so there was nothing to express it against.
-const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2']);
+const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2', 'skt-handouts-v1']);
 
 function _flushDirtyKeys() {
   if (!_fbDb || _dirtyKeys.size === 0) return Promise.resolve([]);
@@ -1162,6 +1164,11 @@ function _applyRemoteKey(key, fbVal) {
       }
     } catch(e){ _diag('apply hidden adventures', e); }
     return;
+  }
+
+  // A handout reaching a phone pops up there (player-app.js).
+  if (key === 'skt-handouts-v1' && typeof paOnHandouts === 'function'){
+    try { paOnHandouts(); } catch(e){ _diag('handouts', e); }
   }
 
   const panels = _PANELS_FOR_KEY[key] || [];
