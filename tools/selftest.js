@@ -3804,6 +3804,133 @@
         ok('palette: the checks ran to completion', false, e.message);
       } finally { document.getElementById('cp-backdrop')?.remove(); }
     }
+
+    // ── Sync: nothing gets trapped on one screen ──────────────────────────
+    // Run against a stand-in for Firebase that records what would be sent,
+    // so the real flush / apply / merge code is exercised end to end without
+    // a network. Everything it touches is put back in the finally.
+    {
+      const K = 'skt-battlemap-v1', spec = _ENTITY_KEYS[K];
+      const pushes = [], reads = [], removed = [], handlers = {};
+      const mkRef = path => ({
+        update(u){ pushes.push(u); return Promise.resolve(); },
+        set(){ return Promise.resolve(); },
+        remove(){ removed.push(path); return Promise.resolve(); },
+        once(){ reads.push(path); return Promise.resolve({ exists: () => false, val: () => null }); },
+        on(ev, cb){ handlers[path] = cb; return cb; },
+        off(){},
+        onDisconnect(){ return { remove(){ return Promise.resolve(); } }; },
+      });
+      const toTree = str => { const n = spec.explode(str), t = {};
+        Object.keys(n).forEach(p => { const [a, c] = p.split('/'); if (c){ (t[a] = t[a] || {})[c] = n[p]; } else t[a] = n[p]; }); return t; };
+      const origSet = Storage.prototype.setItem;
+      const cache0 = JSON.stringify(_entityCache);
+      try {
+        _fbDb = { ref: mkRef, goOffline(){}, goOnline(){} };
+        _patchLocalStorage();
+        closePanel('battlemap'); openPanel('battlemap'); await sleep(900);
+        const bm = panelDefs.battlemap, b = bm._body;
+        _entityCache[K] = spec.explode(localStorage.getItem(K));
+
+        // A stroke in progress when another device's update lands.
+        bm._tool = 'draw';
+        const dc = b.querySelector('#draw-canvas'); dc.style.pointerEvents = 'auto';
+        const r = dc.getBoundingClientRect();
+        const at = (x, y) => ({ clientX: r.left + r.width * x, clientY: r.top + r.height * y, bubbles: true, button: 0 });
+        dc.dispatchEvent(new MouseEvent('mousedown', at(.3, .3)));
+        for (let i = 1; i <= 6; i++){ document.dispatchEvent(new MouseEvent('mousemove', at(.3 + i * .03, .3 + i * .02))); await sleep(15); }
+        const srv = JSON.parse(localStorage.getItem(K));
+        const tok = srv.tokens[0], tx0 = tok.x; tok.x = tx0 + 50;
+        const theirs = { c: '#00ff00', s: 4, p: [10, 10, 40, 40] };
+        srv.drawings = [...(srv.drawings || []), theirs];
+        _applyEntitySnapshot(K, toTree(JSON.stringify(srv)));
+        ok('sync: an update mid-stroke waits instead of replacing the stroke', K in _heldSnaps);
+        document.dispatchEvent(new MouseEvent('mouseup', at(.5, .5)));
+        await sleep(150);
+        const after = JSON.parse(localStorage.getItem(K));
+        ok('sync: after the stroke, both strokes and their token move are on screen',
+           after.drawings.some(d => d.c === '#00ff00') && after.drawings.some(d => d.c !== '#00ff00' && d.p && d.p.length >= 10)
+           && after.tokens.find(t => t.id === tok.id).x === tx0 + 50, JSON.stringify(after.drawings.map(d => d.c)));
+        await sleep(450);
+        const dk = u => Object.keys(u).find(p => /drawings$/.test(p));
+        const sent = (pushes.filter(dk).map(u => JSON.parse(u[dk(u)])).pop()) || [];
+        ok('sync: and both are sent on, neither erasing the other',
+           sent.some(d => d.c === '#00ff00') && sent.some(d => d.c !== '#00ff00' && d.p && d.p.length >= 10), sent.length + ' sent');
+
+        // Erasing is a gesture too: an update mid-erase would bring back what
+        // was just rubbed out.
+        bm._tool = 'erase';
+        dc.dispatchEvent(new MouseEvent('mousedown', at(.7, .7)));
+        ok('sync: updates wait while erasing', spec.holdOff() === true);
+        document.dispatchEvent(new MouseEvent('mouseup', at(.7, .7)));
+        ok('sync: and flow again once the eraser lifts', spec.holdOff() === false);
+        bm._tool = null;
+
+        // A second window of this browser already stored the new value.
+        {
+          const CK = 'skt-combat-v1', cs = _ENTITY_KEYS[CK];
+          _entityCache[CK] = cs.explode(localStorage.getItem(CK));
+          const d = JSON.parse(localStorage.getItem(CK));
+          const c = d.combatants.find(x => x.isPC);
+          if (c){
+            const want = (c.hp || 0) - 7; c.hp = want;
+            const v = JSON.stringify(d);
+            _remoteUpdate = true; try { localStorage.setItem(CK, v); } finally { _remoteUpdate = false; }
+            const t = {}; const n = cs.explode(v);
+            Object.keys(n).forEach(p => { const [a, x] = p.split('/'); if (x){ (t[a] = t[a] || {})[x] = n[p]; } else t[a] = n[p]; });
+            _applyEntitySnapshot(CK, t);
+            const now = (state.combatants.find(x => x.id === c.id) || {}).hp;
+            ok('sync: a second window on this computer redraws what the first one changed', now === want, now + ' shown, ' + want + ' stored');
+          }
+        }
+
+        // Coming back to the tab re-reads the campaign's data, not the root.
+        _startRealtimeExtras();
+        reads.length = 0;
+        window.dispatchEvent(new Event('focus')); await sleep(50);
+        const eb = _baseOf(spec);
+        ok('sync: returning to the tab re-reads the map from this campaign',
+           reads.includes(eb), JSON.stringify(reads.filter(p => /battlemap/.test(p))));
+
+        // Live strokes and drags whose sender vanished.
+        const liveP = Object.keys(handlers).find(p => /skt_battlemap_live_v1$/.test(p));
+        const tokP  = Object.keys(handlers).find(p => /skt_battlemap_tokmove_v1$/.test(p));
+        ok('sync: the map listens on the live channels', !!liveP && !!tokP);
+        if (liveP && tokP){
+          let painted = 0, cleared = 0;
+          const ap = bm._applyPreviewStroke, cp = bm._clearPreviewStroke;
+          bm._applyPreviewStroke = function(x){ painted++; return ap.call(this, x); };
+          bm._clearPreviewStroke = function(){ cleared++; return cp.call(this); };
+          handlers[liveP]({ val: () => ({ stroke: { c: '#f00', s: 4, p: [1, 1, 9, 9] }, ts: realtimeLive.serverNow() - 60000 }) });
+          ok('sync: a stroke left behind by a vanished drawer is not painted', painted === 0 && cleared === 1);
+          ok('sync: and is removed for everyone', removed.some(p => /skt_battlemap_live_v1$/.test(p)));
+          let rer = 0; const rt = bm._renderTokens;
+          bm._renderTokens = function(){ rer++; return rt.call(this); };
+          const t0 = bm._tokens[0];
+          handlers[tokP]({ val: () => ({ id: t0.id, x: t0.x + 80, y: t0.y, ts: realtimeLive.serverNow() }) });
+          handlers[tokP]({ val: () => null });
+          ok('sync: a normal drag end does not snap the token back early', rer === 0);
+          handlers[liveP]({ val: () => ({ stroke: { c: '#f00', s: 4, p: [1, 1, 9, 9] }, ts: realtimeLive.serverNow() }) });
+          handlers[tokP]({ val: () => ({ id: t0.id, x: t0.x + 80, y: t0.y, ts: realtimeLive.serverNow() }) });
+          const c0 = cleared;
+          await sleep(realtimeLive.LIVE_STALE_MS + 400);
+          const el = b.querySelector('.map-token[data-tid="' + t0.id + '"]');
+          ok('sync: a live stroke that goes silent is cleared', cleared > c0);
+          ok('sync: a token left mid-drag goes back to where it really is',
+             rer > 0 && Math.round(parseFloat(el.style.left)) === Math.round(t0.x));
+          bm._applyPreviewStroke = ap; bm._clearPreviewStroke = cp; bm._renderTokens = rt;
+        }
+      } catch(e){
+        ok('sync: the checks ran to completion', false, e.message);
+      } finally {
+        Storage.prototype.setItem = origSet;
+        _fbDb = null; _dirtyKeys.clear(); clearTimeout(_pushTimer);
+        Object.keys(_heldSnaps).forEach(k => delete _heldSnaps[k]);
+        Object.keys(_entityCache).forEach(k => delete _entityCache[k]);
+        Object.assign(_entityCache, JSON.parse(cache0));
+        closePanel('battlemap');
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ player view

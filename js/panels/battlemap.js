@@ -1859,7 +1859,7 @@ registerPanel('battlemap',{
       // the one person at the table who could not see a stroke being made.
       if (window.realtimeLive){
         try { if (this._unsubLive) this._unsubLive(); } catch(e){}
-        this._unsubLive = window.realtimeLive.listen('skt_battlemap_live_v1', val => {
+        this._unsubLive = window.realtimeLive.listen('skt_battlemap_live_v1', (val) => {
           // Firebase echoes a write back to whoever made it. Painting a
           // preview of our own stroke over the real one we are already
           // drawing is at best redundant and at worst a visible double line.
@@ -1876,7 +1876,11 @@ registerPanel('battlemap',{
       // by _applyLiveToken's own _drag guard.
       if (window.realtimeLive){
         try { if (this._unsubTok) this._unsubTok(); } catch(e){}
-        this._unsubTok = window.realtimeLive.listen(this._LIVE_TOKEN_PATH, val => {
+        this._unsubTok = window.realtimeLive.listen(this._LIVE_TOKEN_PATH, (val, meta) => {
+          // A dragger that vanished mid-drag left the token wherever the last
+          // tick put it. Redraw from saved state. Not on a NORMAL end: the
+          // real position is still ~300ms away and the token would jump back.
+          if (!val && meta && meta.stale){ if (!this._drag && this._body) this._renderTokens(); return; }
           if (!val || val.id == null) return;
           this._applyLiveToken(val.id, val.x, val.y);
         });
@@ -1983,6 +1987,13 @@ registerPanel('battlemap',{
   //
   // `src` is a plain object using the same field names the stored map JSON and
   // the broadcast payload both already use, so either can be passed unchanged.
+  // True while this device is in the middle of changing the map: dragging a
+  // token, drawing a stroke, erasing, or painting fog. Applying a remote snapshot then
+  // replaces the very array or set the gesture is writing into, and the
+  // gesture is lost when it ends. The sync layer holds incoming snapshots
+  // while this is true and applies them the moment it is not.
+  _gestureBusy(){ return !!(this._drag || this._drawingNow || this._isPainting || this._erasingNow); },
+
   applyMapState(src, opts){
     if (!src || !this._body) return;
     opts = opts || {};
@@ -1991,8 +2002,10 @@ registerPanel('battlemap',{
     // would be silently discarded on mouseup. The map is last-write-wins and
     // the drag-end _saveMap() makes this device canonical moments later. This
     // guard existed only on the Firebase route; BroadcastChannel could still
-    // yank the map out from under a drag.
-    if (this._drag) return;
+    // yank the map out from under a drag. A stroke or a fog brush has the same
+    // problem (the in-progress stroke lives in the array being replaced), so
+    // the guard covers every gesture. Firebase's held snapshot reconciles.
+    if (this._gestureBusy()) return;
 
     const prevPath = this._bgMapPath || null;
     const nextPath = src.bgMapPath !== undefined ? (src.bgMapPath || null) : prevPath;
@@ -2735,6 +2748,7 @@ registerPanel('battlemap',{
         // Erase any stroke under the click. If nothing is hit, fall through
         // (return) — token erasing is handled by token mousedown handlers.
         let removed = this._eraseStrokeAt(x, y);
+        this._erasingNow = true;   // a gesture: see _gestureBusy
         // Drag-to-erase: keep removing strokes the cursor passes over.
         const onMove = ev => {
           const mp = this._stagePoint(ev.clientX, ev.clientY, drawCanvas);
@@ -2743,6 +2757,7 @@ registerPanel('battlemap',{
         const onUp = () => {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
+          this._erasingNow = false;
           if (removed) this._saveMap();
         };
         document.addEventListener('mousemove', onMove);
@@ -2805,6 +2820,7 @@ registerPanel('battlemap',{
       if (this._tool === 'erase'){
         e.preventDefault(); e.stopPropagation();
         let removed = this._eraseStrokeAt(x, y);
+        this._erasingNow = true;   // a gesture: see _gestureBusy
         const onMove = ev => {
           if (ev.touches.length !== 1) return;
           ev.preventDefault();
@@ -2816,6 +2832,7 @@ registerPanel('battlemap',{
           document.removeEventListener('touchmove', onMove);
           document.removeEventListener('touchend', onEnd);
           document.removeEventListener('touchcancel', onEnd);
+          this._erasingNow = false;
           if (removed) this._saveMap();
         };
         document.addEventListener('touchmove', onMove, { passive:false });

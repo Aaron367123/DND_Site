@@ -309,9 +309,12 @@ const _ENTITY_KEYS = {
       if (node.indexOf('tokens/') === 0) return (node in prev);
       return false;
     },
-    // Don't stomp an in-flight token drag — the drag-end save re-pushes
-    // local state (LWW) and reconciles.
-    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.battlemap; return !!(d && d._body && d._drag); },
+    // Don't apply under a gesture: a token drag, a pencil stroke or a fog
+    // brush. Only the drag was covered, so an update landing mid-stroke
+    // replaced the drawings array the stroke was being appended to — the
+    // stroke stayed on the drawer's screen and was never saved or sent.
+    holdOff(){ const d = (typeof panelDefs !== 'undefined') && panelDefs.battlemap;
+      return !!(d && d._body && (typeof d._gestureBusy === 'function' ? d._gestureBusy() : d._drag)); },
   },
   'skt-notes-v2': {
     base: 'notes_v3',   // relative to sktFbRoot()
@@ -431,6 +434,20 @@ function _entityNodeIds(list, idOf){
 // diffs against it (only changed nodes go out); receive compares against it
 // (identical snapshot = our own echo / no-op → skip).
 const _entityCache = {};
+// Snapshots that arrived mid-gesture, newest per key (see _applyEntitySnapshot).
+const _heldSnaps = {};
+let _holdTimer = null;
+function _retryHeldSnaps(){
+  _holdTimer = null;
+  Object.keys(_heldSnaps).forEach(k => {
+    const spec = _ENTITY_KEYS[k];
+    if (spec && spec.holdOff && spec.holdOff()) return;   // still mid-gesture
+    const v = _heldSnaps[k];
+    delete _heldSnaps[k];
+    try { _applyEntitySnapshot(k, v); } catch(e){ _diag('apply held ' + k, e); }
+  });
+  if (Object.keys(_heldSnaps).length) _holdTimer = setTimeout(_retryHeldSnaps, 50);
+}
 function _flattenEntitySnap(val){
   const out = {};
   if (!val || typeof val !== 'object') return out;
@@ -556,10 +573,22 @@ function _applyEntitySnapshot(k, snapVal){
   if (sNames.length === Object.keys(prevCache).length && sNames.every(n => serverNodes[n] === prevCache[n])){
     return; // echo of our own push, or no-op
   }
-  // Per-key hold-off: skip applying while the user is mid-interaction
-  // (battlemap token drag, notes editing) — the next event or the focus
-  // refresh reconciles once they're done.
-  if (spec.holdOff && spec.holdOff()) return;
+  // Per-key hold-off: don't apply while the user is mid-gesture (dragging a
+  // token, drawing, painting fog) — replacing the map under a gesture loses
+  // it. The snapshot used to be DROPPED here on the promise that "the next
+  // event or the focus refresh reconciles", and neither was reliable: nothing
+  // may change again for minutes, and the focus refresh read the wrong path
+  // for every entity key. Whatever the other device did stayed missing on
+  // this screen. Now the newest held snapshot is applied the moment the
+  // gesture ends — within 50ms, so before this device's own 300ms push, which
+  // means the push carries the merged result instead of overwriting theirs.
+  if (spec.holdOff && spec.holdOff()){
+    _heldSnaps[k] = snapVal;
+    if (!_holdTimer) _holdTimer = setTimeout(_retryHeldSnaps, 50);
+    return;
+  }
+  // A newer snapshot supersedes any held one.
+  delete _heldSnaps[k];
   // Entity-level merge: keep OUR locally-pending entity changes (dirty key,
   // not yet flushed), take the server's version of everything else. This is
   // the step-2 payoff — a peer's goblin damage and our token move both land.
@@ -592,7 +621,18 @@ function _applyEntitySnapshot(k, snapVal){
   // A throw here silently discards the ENTIRE remote update for this key —
   // the most consequential swallow in the file, and previously invisible.
   try { assembled = spec.assemble(merged); } catch(e){ _diag('assemble ' + k, e); return; }
-  if (assembled === localStorage.getItem(k)) return; // nothing visible changed
+  if (assembled === localStorage.getItem(k)){
+    // Nothing to WRITE — but that does not mean nothing to DRAW. Two windows
+    // of one browser share localStorage: when the DM window changes HP, the
+    // player window on the TV finds the new value already stored by the time
+    // Firebase delivers it. Returning here left that window showing the old
+    // HP, the old token position, the old turn — measured: HP 61 -> 54 in the
+    // other window, still 61 here, with postApply never run. The server
+    // differed from what this window had last seen (the echo check above
+    // passed), so this window has not drawn it yet. Draw it.
+    spec.postApply();
+    return;
+  }
   _remoteUpdate = true;
   try { localStorage.setItem(k, assembled); } finally { _remoteUpdate = false; }
   spec.postApply();
@@ -1301,7 +1341,11 @@ function _startRealtimeExtras() {
   // re-push needed here.
   _fbDb.ref('.info/connected').on('value', snap => {
     _setSyncStatus(snap.val() ? 'live' : 'offline');
+    // onDisconnect handlers are spent once they fire; re-arm after reconnect.
+    if (!snap.val()) _liveArmed.clear();
   });
+  // Server clock, so live ticks from different devices compare fairly.
+  _fbDb.ref('.info/serverTimeOffset').on('value', snap => { _serverOffset = +snap.val() || 0; });
 
   // Safety net: if the tab regains focus, re-pull every sync key once. This
   // covers cases where the long-running on('value') listener missed events
@@ -1311,7 +1355,11 @@ function _startRealtimeExtras() {
     if (!_fbDb) return;
     SKT_SYNC_KEYS.forEach(k => {
       if (_ENTITY_KEYS[k]){
-        _fbDb.ref(_ENTITY_KEYS[k].base).once('value').then(snap => {
+        // _baseOf, not .base: .base is RELATIVE ('battlemap_v2'), so this read
+        // the database root instead of skt/c/<campaign>/battlemap_v2 and found
+        // nothing. The safety net never ran for the map, combat, party or
+        // notes — the four that change most during play.
+        _fbDb.ref(_baseOf(_ENTITY_KEYS[k])).once('value').then(snap => {
           if (snap.exists()) _applyEntitySnapshot(k, snap.val());
         }).catch(()=>{});
         return;
@@ -1321,10 +1369,22 @@ function _startRealtimeExtras() {
       }).catch(()=>{});
     });
   };
+  // A phone that slept can come back with a connection that only LOOKS open:
+  // the socket died with the radio, nothing has noticed yet, and every change
+  // made in the meantime sits in Firebase's outgoing queue until a keepalive
+  // times out. Back after more than a few seconds away, drop the connection
+  // and open a fresh one; queued writes survive goOffline and go out on
+  // reconnect, and every listener re-syncs.
+  let _hiddenAt = 0;
+  const _reconnect = () => { try { _fbDb.goOffline(); _fbDb.goOnline(); } catch(e){ _diag('reconnect', e); } };
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') _refreshAll();
+    if (document.visibilityState === 'hidden'){ _hiddenAt = Date.now(); return; }
+    if (_hiddenAt && Date.now() - _hiddenAt > 15000) _reconnect();
+    _hiddenAt = 0;
+    _refreshAll();
   });
   window.addEventListener('focus', _refreshAll);
+  window.addEventListener('online', () => { _reconnect(); _refreshAll(); });
 
   // Legacy-blob migration, Firebase side. load() migrates a LOCAL
   // 'skt-workspace-v1' blob into the split keys, but a client with a fresh
@@ -1521,23 +1581,63 @@ window.realtimeFlushAndWait = function(timeoutMs){
 // two live campaigns would have shown each other their drawings.
 function _livePath(name){ return _root() + '/live/' + name; }
 
+// A live node is cleared by its sender when the gesture ends. A sender that
+// vanishes mid-gesture (phone locks, tab closes, Wi-Fi drops) never sends the
+// clear, and the node used to stay forever: every screen — and every reload —
+// painted that half stroke or that mid-drag token position, and the eraser
+// could not touch it because it was never a real drawing. Three defences:
+//   • the server removes the node itself when the sender disconnects;
+//   • a value older than LIVE_STALE_MS is ignored, and cleared, on arrival;
+//   • a receiver that hears nothing new for LIVE_STALE_MS treats it as ended.
+const LIVE_STALE_MS = 8000;
+let _serverOffset = 0;
+const _liveArmed = new Set();
+function _serverNow(){ return Date.now() + _serverOffset; }
+function _liveAge(val){ return (val && typeof val.ts === 'number') ? _serverNow() - val.ts : 0; }
+
 window.realtimeLive = {
+  LIVE_STALE_MS,
+  serverNow: _serverNow,
+  isStale(val){ return _liveAge(val) > LIVE_STALE_MS; },
   push(path, value){
     if (!_fbDb) return;
-    try { _fbDb.ref(_livePath(path)).set(value).catch(()=>{}); } catch(e){}
+    try {
+      const ref = _fbDb.ref(_livePath(path));
+      if (value && typeof value === 'object') value = { ...value, ts: _serverNow() };
+      if (!_liveArmed.has(path)){
+        _liveArmed.add(path);
+        try { ref.onDisconnect().remove().catch(() => _liveArmed.delete(path)); } catch(e){ _liveArmed.delete(path); }
+      }
+      ref.set(value).catch(()=>{});
+    } catch(e){}
   },
   clear(path){
     if (!_fbDb) return;
     try { _fbDb.ref(_livePath(path)).remove().catch(()=>{}); } catch(e){}
   },
+  // callback(val, meta): val null means "nothing in progress". meta.stale is
+  // true when that null stands for a gesture whose sender went silent, rather
+  // than one that ended normally — a receiver may need to undo what the last
+  // tick drew (a token left mid-drag), which it must NOT do on a normal end,
+  // when the real position is still a moment away.
   listen(path, callback){
     if (!_fbDb) return () => {};
     try {
       const ref = _fbDb.ref(_livePath(path));
+      let quiet = null;
+      const fire = (v, meta) => { try { callback(v, meta || {}); } catch(e){} };
       const handler = ref.on('value', snap => {
-        try { callback(snap.val()); } catch(e){}
+        clearTimeout(quiet); quiet = null;
+        const v = snap.val();
+        if (v && _liveAge(v) > LIVE_STALE_MS){
+          fire(null, { stale: true });
+          try { ref.remove().catch(()=>{}); } catch(e){}   // housekeeping
+          return;
+        }
+        fire(v);
+        if (v) quiet = setTimeout(() => { quiet = null; fire(null, { stale: true }); }, LIVE_STALE_MS);
       });
-      return () => { try { ref.off('value', handler); } catch(e){} };
+      return () => { clearTimeout(quiet); try { ref.off('value', handler); } catch(e){} };
     } catch(e){ return () => {}; }
   },
 };
