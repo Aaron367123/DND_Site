@@ -3959,6 +3959,102 @@
         closePanel('battlemap');
       }
     }
+
+    // ── Two people changing the same character at once ───────────────────
+    // Each character, creature and token is one record. Both sides of a
+    // collision used to resolve to one side's whole record, so the DM's
+    // damage or the player's heal was lost. Now merged field by field, with
+    // HP and temp HP combined as changes — at write time in a transaction,
+    // and when an update lands inside our own unsent window.
+    {
+      const cache0 = JSON.stringify(_entityCache);
+      const origSet0 = Storage.prototype.setItem;
+      try {
+        const KC='skt-combat-v1', KP='skt-party-v1', KM='skt-battlemap-v1';
+        const KEYS=[KC,KP,KM];
+        const nest=f=>{const t={};Object.keys(f).forEach(p=>{const [a,b]=p.split('/');if(b){(t[a]=t[a]||{})[b]=f[p];}else t[a]=f[p];});return t;};
+        
+        _patchLocalStorage();
+        const START={}; KEYS.forEach(k=>START[k]=snapshot[k]);   // the original data, not whatever earlier checks left
+        
+        let server, deliver;
+        function reset(){
+          _remoteUpdate=true; try{ KEYS.forEach(k=>localStorage.setItem(k, START[k])); } finally{ _remoteUpdate=false; }
+          KEYS.forEach(k=>{ try{ loadDomain(k==='skt-combat-v1'?'combat':k==='skt-party-v1'?'party':'x'); }catch(e){} });
+          server={}; KEYS.forEach(k=>{ server[k]=Object.assign({}, _ENTITY_KEYS[k].explode(START[k])); _entityCache[k]=_ENTITY_KEYS[k].explode(START[k]); });
+          _dirtyKeys.clear(); deliver=true;
+          const bm=panelDefs.battlemap; if (bm && bm._body) bm.applyMapState(JSON.parse(START[KM]),{source:'test'});
+        }
+        const keyOf=path=>KEYS.find(k=>path.indexOf(_baseOf(_ENTITY_KEYS[k])+'/')===0);
+        const emit=k=>{ if(deliver) _applyEntitySnapshot(k, nest(server[k])); };
+        _fbDb={ goOffline(){}, goOnline(){}, ref(path){ return {
+          update(u){ const ks=new Set(); Object.keys(u).forEach(p=>{ const k=keyOf(p); const n=p.slice(_baseOf(_ENTITY_KEYS[k]).length+1); ks.add(k);
+              if(u[p]==null) delete server[k][n]; else server[k][n]=u[p]; }); setTimeout(()=>ks.forEach(emit),0); return Promise.resolve(); },
+          transaction(fn){ const k=keyOf(path); const n=path.slice(_baseOf(_ENTITY_KEYS[k]).length+1);
+              const v=fn(server[k][n]==null?null:server[k][n]);
+              if(v===undefined) return Promise.resolve({committed:false});
+              server[k][n]=v; setTimeout(()=>emit(k),0); return Promise.resolve({committed:true}); },
+          set(){return Promise.resolve();}, remove(){return Promise.resolve();},
+          once(){return Promise.resolve({exists:()=>false,val:()=>null});}, on(e,cb){return cb;}, off(){},
+          onDisconnect(){return{remove(){return Promise.resolve();}};} }; } };
+        
+        // The phone: heal Zoey by `n`, the way its own _applyHpDelta would — both records.
+        const zid='zoey';
+        const phoneHeal=(n, opts)=>{
+          const c=JSON.parse(server[KC]['items/'+zid]); c.hp=Math.min(c.hpMax||999, c.hp+n); server[KC]['items/'+zid]=JSON.stringify(c);
+          const p=JSON.parse(server[KP]['items/'+zid]); p.hp=Math.min(p.hpMax||999, p.hp+n); server[KP]['items/'+zid]=JSON.stringify(p);
+          if (!(opts&&opts.silent)){ emit(KC); emit(KP); }
+        };
+        const srvHp=k=>JSON.parse(server[k]['items/'+zid]).hp;
+        const locHp=()=>({combat:(state.combatants.find(c=>c.id===zid)||{}).hp, party:(state.party.find(p=>p.id===zid)||{}).hp});
+        const dmHit=n=>{ const C=panelDefs.combat; const i=state.combatants.findIndex(c=>c.id===zid); C._applyHpDelta(i,-n,null); save(); };
+        
+        
+        openPanel('combat'); openPanel('battlemap'); await sleep(900);
+        reset(); const hp0 = srvHp(KC);
+        dmHit(10); phoneHeal(5, { silent: true }); await sleep(500);
+        ok('merge: DM damage and a player heal at once both count (heal reached the server first)',
+           srvHp(KC) === hp0 - 5 && srvHp(KP) === hp0 - 5 && locHp().combat === hp0 - 5, JSON.stringify({ hp0, combat: srvHp(KC), party: srvHp(KP) }));
+        reset(); dmHit(10); phoneHeal(5); await sleep(500);
+        ok('merge: and when the heal arrives while the DM is still saving',
+           srvHp(KC) === hp0 - 5 && locHp().party === hp0 - 5, JSON.stringify({ combat: srvHp(KC), screen: locHp() }));
+        reset();
+        { const i = state.combatants.findIndex(c => c.id === zid);
+          state.combatants[i].conditions = [...(state.combatants[i].conditions || []), 'poisoned']; save(); }
+        phoneHeal(5, { silent: true }); await sleep(500);
+        { const cz = JSON.parse(server[KC]['items/' + zid]);
+          ok('merge: a condition and a heal made at once both stick', (cz.conditions || []).includes('poisoned') && cz.hp === hp0 + 5); }
+        reset();
+        { const C = panelDefs.combat; const i = state.combatants.findIndex(c => c.id === zid); C._applyHpDelta(i, +15, null); save(); }   // each heal fits under max; together they do not
+        phoneHeal(20, { silent: true }); await sleep(500);
+        { const cz = JSON.parse(server[KC]['items/' + zid]);
+          ok('merge: two heals at once never overfill max HP', cz.hp === cz.hpMax, cz.hp + '/' + cz.hpMax); }
+        reset();
+        const T0 = JSON.parse(START[KM]).tokens.find(t => t.id === 'tk_zoey');
+        { const bm = panelDefs.battlemap; const t = bm._tokens.find(x => x.id === 'tk_zoey'); t.size = 2; bm._saveMap();
+          const sv = JSON.parse(server[KM]['tokens/tk_zoey']); sv.x += 100; server[KM]['tokens/tk_zoey'] = JSON.stringify(sv); }
+        await sleep(500);
+        { const t = JSON.parse(server[KM]['tokens/tk_zoey']);
+          ok('merge: a token resized and moved at once keeps both', t.size === 2 && t.x === T0.x + 100); }
+        reset();
+        { const bm = panelDefs.battlemap; const t = bm._tokens.find(x => x.id === 'tk_zoey'); t.y += 40; bm._saveMap();   // DM: straight down
+          const sv = JSON.parse(server[KM]['tokens/tk_zoey']); sv.x += 100; server[KM]['tokens/tk_zoey'] = JSON.stringify(sv); }
+        await sleep(500);
+        { const t = JSON.parse(server[KM]['tokens/tk_zoey']);
+          ok('merge: a token two people moved lands at one of their positions, not a mix', t.x === T0.x && t.y === T0.y + 40, t.x + ',' + t.y); }   // the player went sideways; one move wins whole
+        reset(); dmHit(3); delete server[KC]['items/' + zid]; await sleep(500);
+        ok('merge: a late edit does not bring back a creature someone removed', !(('items/' + zid) in server[KC]));
+        reset(); deliver = false;
+      } catch(e){
+        ok('merge: the checks ran to completion', false, e.message);
+      } finally {
+        Storage.prototype.setItem = origSet0;
+        _fbDb = null; _dirtyKeys.clear(); clearTimeout(_pushTimer);
+        Object.keys(_entityCache).forEach(k => delete _entityCache[k]);
+        Object.assign(_entityCache, JSON.parse(cache0));
+        closePanel('battlemap');
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ player view

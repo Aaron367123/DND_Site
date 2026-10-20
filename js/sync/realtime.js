@@ -169,6 +169,7 @@ const _ENTITY_KEYS = {
       Object.keys(items).forEach(id => { if (!used.has(id)) combatants.push(items[id]); });
       return JSON.stringify({ combatants, combatRound: meta.combatRound || 0, activeCombatantId: meta.activeCombatantId ?? null });
     },
+    recordOpts(n){ return n.indexOf('items/') === 0 ? _REC_HP : null; },
     // The player view's turn bar is not a panel, so _reloadPanel can't reach
     // it — and it is the one surface a player watches between their turns.
     postApply(){
@@ -216,6 +217,7 @@ const _ENTITY_KEYS = {
       Object.keys(items).forEach(id => { if (!used.has(id)) out.push(items[id]); });
       return JSON.stringify(out);
     },
+    recordOpts(n){ return n.indexOf('items/') === 0 ? _REC_HP : null; },
     postApply(){
       loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
       if (typeof paRender === 'function') paRender();
@@ -224,6 +226,7 @@ const _ENTITY_KEYS = {
   'skt-battlemap-v1': {
     base: 'battlemap_v2',   // relative to sktFbRoot()
     legacyNode: 'skt/skt_battlemap_v1',
+    recordOpts(n){ return n.indexOf('tokens/') === 0 ? _REC_TOKEN : null; },
     explode(s){
       const d = JSON.parse(s) || {};
       const nodes = {};
@@ -522,12 +525,19 @@ function _flushEntityKey(k){
   // legitimate change to it look unchanged and silently skip it. With no
   // filter this is byte-identical to `nodes`.
   const applied = {...prev};
+  // Records that already exist on the server go out as transactions rather
+  // than plain writes, so the merge runs against what the server holds at
+  // that instant (see _mergeRecordStr). New nodes, deletions and everything
+  // else stay in the one multi-path update.
+  const txs = [];
   Object.keys(nodes).forEach(n => {
     if (prev[n] === nodes[n]) return;
     // The new value is passed too: whether a player may write a note depends
     // on whose note it is, which only the content says.
     if (restrict && !restrict(n, prev, nodes[n])) return;
-    updates[_baseOf(spec) + '/' + n] = nodes[n];
+    const ro = (prev[n] != null && spec.recordOpts) ? spec.recordOpts(n) : null;
+    if (ro) txs.push({ n, base: prev[n], mine: nodes[n], ro });
+    else updates[_baseOf(spec) + '/' + n] = nodes[n];
     applied[n] = nodes[n];
   });
   Object.keys(prev).forEach(n => {
@@ -540,11 +550,22 @@ function _flushEntityKey(k){
     updates[_baseOf(spec) + '/' + n] = null;
     delete applied[n];
   });
-  if (!Object.keys(updates).length) return Promise.resolve(true);
+  if (!Object.keys(updates).length && !txs.length) return Promise.resolve(true);
   // Optimistic cache update — the echo snapshot must match the cache so it
   // gets recognized and skipped. Rolled back on failure so a retry re-diffs.
+  // A transaction that had to merge lands as a value different from this,
+  // and the listener applies it like any other update.
   _entityCache[k] = applied;
-  return _fbDb.ref().update(updates).then(() => {
+  const jobs = [];
+  if (Object.keys(updates).length) jobs.push(_fbDb.ref().update(updates));
+  txs.forEach(t => jobs.push(_fbDb.ref(_baseOf(spec) + '/' + t.n).transaction(cur => {
+    // Gone from the server: someone removed it. Don't bring it back.
+    if (cur == null) return undefined;
+    if (typeof cur !== 'string') cur = JSON.stringify(cur);
+    if (cur === t.base || cur === t.mine) return t.mine;
+    return _mergeRecordStr(t.base, t.mine, cur, t.ro);
+  })));
+  return Promise.all(jobs).then(() => {
     delete _retryCounts[k];
     return true;
   }).catch(err => {
@@ -610,6 +631,13 @@ function _applyEntitySnapshot(k, snapVal){
             const m = spec.mergeNode(n, base, mine, theirs);
             if (m !== undefined){ merged[n] = m; return; }
           } catch(e){ _diag('merge node ' + k + '/' + n, e); }
+        }
+        // A record (one character, one creature, one token) both sides
+        // changed: field by field, counters combined. See _mergeRecordStr.
+        const ro = spec.recordOpts ? spec.recordOpts(n) : null;
+        if (ro && theirs !== base && base !== undefined && mine !== undefined && theirs !== undefined){
+          merged[n] = _mergeRecordStr(base, mine, theirs, ro);
+          return;
         }
         if (mine === undefined) delete merged[n];
         else merged[n] = mine;
@@ -842,7 +870,9 @@ const _eq = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.string
 // offline). There we cannot tell what either side changed, and defaulting to
 // theirs would throw the local work away — so mine wins. That is a one-shot:
 // applying the update records a base, so the next exchange resolves normally.
-function _merge3(base, mine, theirs, baseKnown){
+// `opts` carries the RECORD rules (see _mergeRecordStr) down the recursion;
+// whole-key merges pass nothing and behave exactly as before.
+function _merge3(base, mine, theirs, baseKnown, opts){
   if (_eq(mine, theirs)) return theirs;
   if (baseKnown){
     if (_eq(base, mine))   return theirs;   // we didn't touch it
@@ -854,13 +884,40 @@ function _merge3(base, mine, theirs, baseKnown){
     const b = _isPlainObj(base) ? base : {};
     const out = {};
     const keys = new Set([...Object.keys(b), ...Object.keys(mine), ...Object.keys(theirs)]);
+    // Fields that only mean something together (a token's x and y): whoever
+    // changed the group supplies all of it, so a creature is never put at
+    // one person's x and another's y.
+    const grouped = new Set();
+    ((opts && opts.groups) || []).forEach(g => {
+      if (!g.some(k => keys.has(k))) return;
+      const chM = g.some(k => !_eq(b[k], mine[k])), chT = g.some(k => !_eq(b[k], theirs[k]));
+      const from = (chM && chT) ? (opts.tie === 'mine' ? mine : theirs) : chM ? mine : theirs;
+      g.forEach(k => { grouped.add(k); if (k in from) out[k] = from[k]; });
+    });
     keys.forEach(k => {
+      if (grouped.has(k)) return;
       const inB = k in b, inM = k in mine, inT = k in theirs;
       if (inB && !inM) return;             // I deleted the field
       if (inB && !inT) return;             // they deleted it
       if (!inM) { out[k] = theirs[k]; return; }
       if (!inT) { out[k] = mine[k];   return; }
-      out[k] = _merge3(b[k], mine[k], theirs[k], baseKnown);
+      // A counter both sides moved (HP, temp HP): apply BOTH changes. Writing
+      // either side's final number throws the other side's change away — 30
+      // HP, the DM hits for 10 while the player heals 5, and the result was
+      // 20 or 35 depending on whose write landed last. It is 25.
+      if (opts && opts.delta && opts.delta.has(k) && inB
+          && typeof b[k] === 'number' && typeof mine[k] === 'number' && typeof theirs[k] === 'number'
+          && !_eq(b[k], mine[k]) && !_eq(b[k], theirs[k])){
+        let v = theirs[k] + (mine[k] - b[k]);
+        // Never below zero, and never above max HP unless a side was already
+        // over it (Aid, Heroes' Feast) — two heals must not overfill.
+        if (k === 'hp' && typeof mine.hpMax === 'number'){
+          v = Math.min(v, Math.max(mine.hpMax, mine[k], theirs[k]));
+        }
+        out[k] = Math.max(0, v);
+        return;
+      }
+      out[k] = _merge3(b[k], mine[k], theirs[k], baseKnown, opts);
     });
     return out;
   }
@@ -879,7 +936,7 @@ function _merge3(base, mine, theirs, baseKnown){
       seen.add(id);
       const inB = id in bAt, inM = id in mAt;
       if (inB && !inM) return;             // I deleted this record
-      out.push(inM ? _merge3(bAt[id], mAt[id], tAt[id], baseKnown) : tAt[id]);
+      out.push(inM ? _merge3(bAt[id], mAt[id], tAt[id], baseKnown, opts) : tAt[id]);
     });
     mIds.forEach(id => {
       if (seen.has(id)) return;
@@ -902,8 +959,38 @@ function _merge3(base, mine, theirs, baseKnown){
   }
 
   // Shapes disagree, an array with no stable identity, or two scalars that
-  // both moved. Deterministic tiebreak — see baseKnown above.
+  // both moved. Deterministic tiebreak — see baseKnown above. A record merge
+  // asks for MINE: it runs either at write time (mine is the later write) or
+  // inside our own unsent window (mine is the newer action), and the entity
+  // layer converges without the tiebreak's help — see _mergeRecordStr.
+  if (opts && opts.tie === 'mine') return mine;
   return baseKnown ? theirs : mine;
+}
+
+// ── Record merge (combatants, characters, tokens) ────────────────────────────
+// Each of these syncs as ONE node holding the whole record, and both sides of
+// a collision used to resolve to one side's whole record: the DM damages Zoey
+// while her player marks a condition, and one of the two was gone. Merged
+// field by field instead, with counters combined as changes.
+//
+// Used in two places: when a remote update lands inside our unsent window
+// (_applyEntitySnapshot), and at WRITE time inside a Firebase transaction
+// (_flushEntityKey), against whatever the server holds at that instant — the
+// case the first cannot see, when the other device's write reached the server
+// after our last snapshot but before ours.
+//
+// No convergence loop: the transaction writes the merged value itself, and a
+// receive-side merge leaves the key dirty so the result is pushed and the
+// other device takes it as a plain update.
+const _REC_HP = { delta: new Set(['hp', 'tempHp']), tie: 'mine' };
+const _REC_TOKEN = { groups: [['x', 'y']], tie: 'mine' };
+function _mergeRecordStr(baseStr, mineStr, theirsStr, opts){
+  let base, mine, theirs;
+  try { base = JSON.parse(baseStr); mine = JSON.parse(mineStr); theirs = JSON.parse(theirsStr); }
+  catch(e){ return mineStr; }
+  if (!_isPlainObj(base) || !_isPlainObj(mine) || !_isPlainObj(theirs)) return mineStr;
+  try { return JSON.stringify(_merge3(base, mine, theirs, true, opts)); }
+  catch(e){ _diag('record merge', e); return mineStr; }
 }
 
 // String wrapper. Any parse failure falls back to the remote value: the server
