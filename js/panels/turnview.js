@@ -3070,7 +3070,18 @@ registerPanel('turnview', {
       const tok = d.tok;
       // Write through to the battle map — this IS its token, so the panel and
       // the map can't disagree about where anyone is standing.
-      if (B && B._body){ B._renderTokens?.(); B._saveMap?.(); }
+      //
+      // By id, into the map's CURRENT array. `tok` is the object we grabbed at
+      // pointerdown, and an update from another device mid-drag replaces the
+      // map's whole token array — so the move was written onto an orphaned
+      // copy and the save that followed sent the creature's OLD position.
+      // Measured: a player's move landing while the DM dragged the ogre here
+      // lost the DM's move outright.
+      if (B && B._body){
+        const live = (B._tokens || []).find(x => x && x.id === tok.id);
+        if (live && live !== tok){ live.x = tok.x; live.y = tok.y; }
+        B._renderTokens?.(); B._saveMap?.();
+      }
       else {
         // Panel closed: edit the stored JSON, the same way the auto-token
         // reconciler does. setItem is enough to sync — realtime.js patches

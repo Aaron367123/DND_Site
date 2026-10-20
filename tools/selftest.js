@@ -3866,6 +3866,34 @@
         ok('sync: and flow again once the eraser lifts', spec.holdOff() === false);
         bm._tool = null;
 
+        // A monster dragged in the Turn View while another device's move lands.
+        // The update used to replace the map's token array mid-drag, the move
+        // went onto an orphaned copy, and the DM's move was lost.
+        try {
+          openPanel('turnview'); await sleep(600);
+          const T = panelDefs.turnview; T._render(); await sleep(200);
+          const mon = bm._tokens.find(t => !t.isPC && t.label && T._body.querySelector('.tv-tok[data-tvlabel="' + t.label + '"]'));
+          const pc  = bm._tokens.find(t => t.isPC);
+          if (mon && pc){
+            _entityCache[K] = spec.explode(localStorage.getItem(K));
+            const mx0 = mon.x, px1 = pc.x + 70;
+            const el = T._body.querySelector('.tv-tok[data-tvlabel="' + mon.label + '"]');
+            const rr = el.getBoundingClientRect(), cx = rr.left + rr.width / 2, cy = rr.top + rr.height / 2;
+            const pe = (ty, x, y) => new PointerEvent(ty, { clientX: x, clientY: y, bubbles: true, pointerId: 9, button: 0, isPrimary: true });
+            el.dispatchEvent(pe('pointerdown', cx, cy));
+            for (let i = 1; i <= 6; i++){
+              T._body.dispatchEvent(pe('pointermove', cx + i * 8, cy)); await sleep(20);
+              if (i === 3){ const sv = JSON.parse(localStorage.getItem(K)); sv.tokens.find(t => t.id === pc.id).x = px1;
+                            _applyEntitySnapshot(K, toTree(JSON.stringify(sv))); }
+            }
+            T._body.dispatchEvent(pe('pointerup', cx + 48, cy)); await sleep(200);
+            const fin = JSON.parse(localStorage.getItem(K)).tokens;
+            ok('sync: a monster moved in the Turn View keeps its move when another update lands mid-drag',
+               fin.find(t => t.id === mon.id).x !== mx0, Math.round(fin.find(t => t.id === mon.id).x) + ' vs ' + Math.round(mx0));
+            ok('sync: and the other device move is kept too', fin.find(t => t.id === pc.id).x === px1);
+          }
+        } finally { closePanel('turnview'); }
+
         // A second window of this browser already stored the new value.
         {
           const CK = 'skt-combat-v1', cs = _ENTITY_KEYS[CK];

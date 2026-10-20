@@ -1992,7 +1992,11 @@ registerPanel('battlemap',{
   // replaces the very array or set the gesture is writing into, and the
   // gesture is lost when it ends. The sync layer holds incoming snapshots
   // while this is true and applies them the moment it is not.
-  _gestureBusy(){ return !!(this._drag || this._drawingNow || this._isPainting || this._erasingNow); },
+  // The Turn View's token drag counts: it moves this panel's tokens too.
+  _gestureBusy(){
+    const tv = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+    return !!(this._drag || this._drawingNow || this._isPainting || this._erasingNow || (tv && tv._body && tv._drag));
+  },
 
   applyMapState(src, opts){
     if (!src || !this._body) return;
