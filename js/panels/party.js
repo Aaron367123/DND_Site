@@ -158,11 +158,15 @@ registerPanel('party',{
   // etc.) so the player sees they're over-cap. Surplus uses a cool-blue fill
   // so it's visually distinct from the green/yellow/red ladder of normal HP.
   _hpBarStyle(c){
-    if (!(c.hpMax > 0)) return { pct:0, color:'var(--danger)', surplus:false };
-    if (c.hp > c.hpMax) return { pct:100, color:'#4a8ec9', surplus:true };
-    const pct = Math.max(0, Math.min(100, (c.hp / c.hpMax) * 100));
-    const color = pct > 50 ? 'var(--success)' : pct > 25 ? 'var(--warning)' : 'var(--danger)';
-    return { pct, color, surplus:false };
+    const lostPct = (typeof sktHpBarParts === 'function') ? sktHpBarParts(c).lostPct : 0;
+    if (!(c.hpMax > 0)) return { pct:0, color:'var(--danger)', surplus:false, lostPct };
+    if (c.hp > c.hpMax) return { pct:100, color:'#4a8ec9', surplus:true, lostPct:0 };
+    // Colour from the maximum IN FORCE (full health under a drain is green);
+    // width from the normal one, so the lost part shows beside it.
+    const tier = Math.max(0, Math.min(100, (c.hp / c.hpMax) * 100));
+    const pct = lostPct ? sktHpBarParts(c).pct : tier;
+    const color = tier > 50 ? 'var(--success)' : tier > 25 ? 'var(--warning)' : 'var(--danger)';
+    return { pct, color, surplus:false, lostPct };
   },
 
   _card(c,i){
@@ -273,6 +277,9 @@ registerPanel('party',{
             +'<input class="char-hp-current" type="number" value="'+c.hp+'" data-field="hp" data-idx="'+i+'" title="Current HP">'
             +'<span class="char-hp-big-sep">/</span>'
             +'<input class="char-hp-max" type="number" value="'+c.hpMax+'" data-field="hpMax" data-idx="'+i+'" title="Max HP">'
+            +((typeof sktMaxHpLoss === 'function' && sktMaxHpLoss(c))
+              ? '<button class="char-hpmax-loss" data-act="hpmax-restore" data-idx="'+i+'" title="'+esc(sktMaxHpTitle(c))+' Click to restore now.">▼'+sktMaxHpLoss(c)+'</button>'
+              : '')
           +'</div>'
           +'<div class="char-hp-side">'
             +'<label class="char-hp-temp-row" title="Temporary HP (absorbs damage first)">'
@@ -312,6 +319,7 @@ registerPanel('party',{
         +'</div>'
         +'<div class="hp-bar-wrap'+(hp.surplus?' hp-surplus':'')+(downed?' downed':'')+'">'
           +'<div class="hp-bar-fill" style="width:'+hpPct+'%;background:'+hpColor+'"></div>'
+          +(hp.lostPct ? '<div class="hp-bar-lost" style="width:'+hp.lostPct+'%" title="'+esc(sktMaxHpTitle(c))+'"></div>' : '')
           +(c.tempHp>0 ? '<div class="hp-bar-temp" title="Temp HP: '+c.tempHp+'"></div>' : '')
         +'</div>'
         // Downed banner — shows below the HP bar when at ≤0 HP. Death saves
@@ -1498,6 +1506,42 @@ registerPanel('party',{
   // A character flagged DEAD is skipped entirely — a night's sleep doesn't
   // raise them, so their HP, flag and pips are all left alone for the DM to
   // resolve deliberately.
+  // ─── Lowered maximum HP ─────────────────────────────────────────────────
+  _reduceMaxHp(idx, amount, note){
+    const c = state.party[idx]; if (!c) return false;
+    const n = Math.max(0, Math.floor(+amount || 0)); if (!n) return false;
+    state.party[idx] = sktReduceMaxHp(c, n, note);
+    syncPartyToCombat(idx);
+    save(); this._render();
+    const p = state.party[idx];
+    if (typeof showToast === 'function'){
+      showToast(p.hpMax <= 0
+        ? p.name + '\u2019s max HP is 0 — by the rules, that kills them'
+        : p.name + ': max HP ' + p.hpMax + ' (normally ' + p.hpMaxNormal + ') until a long rest');
+    }
+    return true;
+  },
+  _restoreMaxHp(idx){
+    const c = state.party[idx]; if (!c || typeof c.hpMaxNormal !== 'number') return false;
+    state.party[idx] = sktRestoreMaxHp(c);
+    syncPartyToCombat(idx);
+    save(); this._render();
+    if (typeof showToast === 'function') showToast(c.name + ': max HP back to ' + state.party[idx].hpMax);
+    return true;
+  },
+  _promptReduceMaxHp(idx){
+    const c = state.party[idx]; if (!c) return;
+    const cid = c.id;
+    showModal('Reduce max HP — ' + c.name, [
+      {id:'amt',  label:'Reduce the maximum by', type:'number', value:''},
+      {id:'note', label:'Cause (optional, e.g. Life Drain)', type:'text', value: c.hpMaxNote || ''},
+    ], 'Reduce').then(r => {
+      if (!r) return;
+      const i = state.party.findIndex(p => p.id === cid);   // the list may have moved
+      if (i >= 0) this._reduceMaxHp(i, r.amt, String(r.note || '').trim());
+    });
+  },
+
   _longRestAll(){
     if (!state.party.length){ showToast('No party to rest'); return; }
     if (typeof showConfirm !== 'function'){
@@ -1526,7 +1570,8 @@ registerPanel('party',{
       ? _findCombatantForPartyMember(p)
       : state.combatants.findIndex(c => c.id === p.id);
     if (ci >= 0){
-      state.combatants[ci] = {...state.combatants[ci], hp:p.hp, hpMax:p.hpMax, ac:p.ac};
+      state.combatants[ci] = {...state.combatants[ci], hp:p.hp, hpMax:p.hpMax, ac:p.ac,
+                              hpMaxNormal:p.hpMaxNormal, hpMaxNote:p.hpMaxNote};
     }
   },
 
@@ -1565,6 +1610,8 @@ registerPanel('party',{
       // gives you. A character who drops, stabilises and then sleeps eight
       // hours is not left on 1 HP; that was this function's own house rule
       // contradicting its own prompt.
+      // A lowered maximum lasts "until the target finishes a long rest".
+      if (typeof c.hpMaxNormal === 'number'){ c.hpMax = c.hpMaxNormal; delete c.hpMaxNormal; delete c.hpMaxNote; }
       c.hp = c.hpMax || c.hp;
       c.tempHp = 0;
       // Hit dice: half of TOTAL back, minimum 1. Rounded DOWN — the PHB's
@@ -2556,6 +2603,14 @@ registerPanel('party',{
     const hadTemp   = !!card.querySelector('.hp-bar-temp');
     const hasTemp   = (p.tempHp||0) > 0;
     if (wasDowned !== isDowned || hadTemp !== hasTemp) return false;
+    // A lowered maximum adds a marker and a bar segment: structural.
+    const hadLoss = !!card.querySelector('.char-hpmax-loss');
+    const loss = (typeof sktMaxHpLoss === 'function') ? sktMaxHpLoss(p) : 0;
+    if (hadLoss !== !!loss) return false;
+    if (loss){
+      const mk = card.querySelector('.char-hpmax-loss'); if (mk) mk.textContent = '▼' + loss;
+      const lb = card.querySelector('.hp-bar-lost'); if (lb) lb.style.width = this._hpBarStyle(p).lostPct + '%';
+    }
     const hp = this._hpBarStyle(p);
     const wrap = card.querySelector('.hp-bar-wrap');
     const bar  = card.querySelector('.hp-bar-fill');
@@ -2664,6 +2719,11 @@ registerPanel('party',{
         // shouldn't display a negative buffer.
         if (f === 'tempHp' && v < 0) v = 0;
         state.party[i]={...state.party[i],[f]:v};
+        // Typing a max at or above the normal one (a level-up mid-drain, or a
+        // fix) means the maximum IS that now — the reduction is over.
+        if (f === 'hpMax' && typeof state.party[i].hpMaxNormal === 'number' && v >= state.party[i].hpMaxNormal){
+          const p2 = {...state.party[i]}; delete p2.hpMaxNormal; delete p2.hpMaxNote; state.party[i] = p2;
+        }
         // Mirror to the combat slot BEFORE saving so localStorage (and the
         // resulting Firebase push) captures both halves in one write. If the
         // sync happened after save(), the persisted value would be stale and
@@ -2819,6 +2879,7 @@ registerPanel('party',{
       // remote peer or local drag-reorder shuffles state.party between
       // open + click, the captured index `i` would point at the wrong PC
       // (or none). Looking up by id at click time keeps the menu correct.
+      else if(act==='hpmax-restore'){ this._restoreMaxHp(i); }
       else if(act==='actions-menu'){
         const c = state.party[i]; if (!c) return;
         const cid = c.id;
@@ -2917,6 +2978,17 @@ registerPanel('party',{
               const r = resolve(); if (!r) return;
               r.c.wildshape ? this._endWildShape(r.idx) : this._editWildShape(r.idx);
             },
+          });
+        }
+        // Lowered maximum HP (Life Drain, Harm…), until a long rest.
+        items.push({
+          label: '🩸 Reduce max HP…',
+          onClick: () => { const r = resolve(); if (r) this._promptReduceMaxHp(r.idx); },
+        });
+        if (typeof sktMaxHpLoss === 'function' && sktMaxHpLoss(c)){
+          items.push({
+            label: '↺ Restore max HP (normally ' + c.hpMaxNormal + ')',
+            onClick: () => { const r = resolve(); if (r) this._restoreMaxHp(r.idx); },
           });
         }
         // Hit die spend

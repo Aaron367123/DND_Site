@@ -3960,6 +3960,54 @@
       }
     }
 
+    // ── A lowered maximum HP (Life Drain, Harm…) ─────────────────────────
+    {
+      // Earlier checks end the fight; start from the original data.
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      openPanel('party'); openPanel('combat'); await sleep(400);
+      panelDefs.party._render(); panelDefs.combat._render();
+      const P = panelDefs.party;
+      const i = state.party.findIndex(p => state.combatants.some(c => c.id === p.id));
+      ok('max HP: a party member in the fight to test with', i >= 0);
+      const z0 = i >= 0 ? JSON.parse(JSON.stringify(state.party[i])) : null;
+      try {
+        if (z0){
+          state.party[i] = {...state.party[i], hp: z0.hpMax}; syncPartyToCombat(i); save(); P._render();
+          P._reduceMaxHp(i, 8, 'Life Drain'); await sleep(150);
+          const z = state.party[i], c = state.combatants.find(x => x.id === z.id);
+          ok('max HP: reducing it lowers the max and pulls current HP down to it',
+             z.hpMax === z0.hpMax - 8 && z.hpMaxNormal === z0.hpMax && z.hp === z.hpMax, JSON.stringify([z.hp, z.hpMax, z.hpMaxNormal]));
+          ok('max HP: the combat card carries the same maximum', !!c && c.hpMax === z.hpMax && c.hpMaxNormal === z.hpMaxNormal);
+          const card = P._body.querySelector('[data-cidx="' + i + '"]');
+          ok('max HP: the party card shows the loss and a striped bar end',
+             !!card.querySelector('.char-hpmax-loss') && card.querySelector('.char-hpmax-loss').textContent === '▼8' && !!card.querySelector('.hp-bar-lost'));
+          ok('max HP: so does the combat card', !!panelDefs.combat._body.querySelector('.hp-maxloss-badge') && !!panelDefs.combat._body.querySelector('.card-hp-bar-lost'));
+          const hpCell = panelDefs.combat._body.querySelector('.combatant-card[data-idx="' + state.combatants.indexOf(c) + '"] input[data-cf="hp"]');
+          ok('max HP: without squeezing the HP number off the combat card', !!hpCell && hpCell.getBoundingClientRect().width >= 18,
+             hpCell ? Math.round(hpCell.getBoundingClientRect().width) + 'px' : 'no field');
+          panelDefs.combat._applyHpDelta(state.combatants.indexOf(c), +20, null); save();
+          ok('max HP: healing stops at the lowered max', state.party[i].hp === state.party[i].hpMax);
+          ok('max HP: the menu offers to restore it', /Restore max HP/.test(JSON.stringify((() => { let items = []; const sc = window.showContextMenu;
+             window.showContextMenu = (x, y, it) => { items = it; }; try { P._body.querySelector('[data-act="actions-menu"][data-idx="' + i + '"]').click(); } finally { window.showContextMenu = sc; }
+             return items.map(t => t.label); })())));
+          P._longRestOne(state.party[i], i); save(); P._render(); await sleep(80);
+          ok('max HP: a long rest puts it back', state.party[i].hpMax === z0.hpMax && state.party[i].hpMaxNormal === undefined
+             && (state.combatants.find(x => x.id === z0.id) || {}).hpMaxNormal === undefined);
+          P._reduceMaxHp(i, 5); await sleep(40);
+          const inp = P._body.querySelector('input[data-field="hpMax"][data-idx="' + i + '"]');
+          inp.value = String(z0.hpMax + 2); inp.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+          ok('max HP: typing a max at or above the normal one ends the reduction',
+             state.party[i].hpMax === z0.hpMax + 2 && state.party[i].hpMaxNormal === undefined);
+        }
+      } catch(e){
+        ok('max HP: the checks ran to completion', false, e.message);
+      } finally {
+        if (z0){ state.party[i] = z0; syncPartyToCombat(i); save(); P._render(); }
+      }
+    }
     // ── Two people changing the same character at once ───────────────────
     // Each character, creature and token is one record. Both sides of a
     // collision used to resolve to one side's whole record, so the DM's
@@ -4137,6 +4185,28 @@
            css.indexOf('body.player-mode .float-toolbar{display:none !important}') >= 0);
       }
 
+      // ── A lowered maximum HP, on the player's own screen ──────────────────
+      {
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        const pi = (state.party || []).findIndex(p => p.hpMax > 10);
+        const p0 = pi >= 0 ? JSON.parse(JSON.stringify(state.party[pi])) : null;
+        try {
+          if (p0){
+            state.party[pi] = sktReduceMaxHp(state.party[pi], 6, 'Life Drain');
+            if (typeof syncPartyToCombat === 'function') syncPartyToCombat(pi);
+            paSetPc(p0.id); paTab = 'you'; paRender();
+            const line = document.querySelector('.pa-hp-loss');
+            ok('player: a lowered max HP is explained on the You screen',
+               !!line && /lowered by 6/.test(line.textContent) && /long rest/.test(line.textContent) && /Life Drain/.test(line.textContent));
+            ok('player: and the bar shows the part that was taken', !!document.querySelector('.pa-hp-bar .pa-hp-lost'));
+          }
+        } catch(e){ ok('player: the max HP checks ran to completion', false, e.message); }
+        finally {
+          if (p0){ state.party[pi] = p0; if (typeof syncPartyToCombat === 'function') syncPartyToCombat(pi); }
+          paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paRender();
+        }
+      }
       // ── A condition says what it does ─────────────────────────────────────
       {
         const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;

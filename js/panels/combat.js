@@ -553,9 +553,13 @@ registerPanel('combat',{
     if (isDead) return false;                           // death-save pips are structural
     const pct = this._hpPct(c);
     const col = this._hpColor(pct);
+    const geo = this._hpBar(c);
+    // A lowered maximum appearing or going away changes the markup.
+    if (!!card.querySelector('.card-hp-bar-lost') !== !!geo.lost) return false;
     const bar = card.querySelector('.card-hp-bar');
     if (bar){
-      bar.style.setProperty('--hp-pct', pct + '%');
+      bar.style.setProperty('--hp-pct', geo.pct + '%');
+      bar.style.setProperty('--hp-lost', geo.lost + '%');
       bar.style.setProperty('--hp-color', col);
       bar.title = c.hp + '/' + (c.hpMax || c.hp) + ' HP';
     }
@@ -575,6 +579,13 @@ registerPanel('combat',{
   _hpPct(c){
     const max = c.hpMax || c.hp || 1;
     return Math.max(0, Math.min(100, Math.round((c.hp / max) * 100)));
+  },
+  // Width against the NORMAL maximum while it is lowered (see sktHpBarParts);
+  // the colour still comes from _hpPct, the maximum in force.
+  _hpBar(c){
+    const parts = (typeof sktHpBarParts === 'function') ? sktHpBarParts(c) : null;
+    if (!parts || !parts.loss) return { pct: this._hpPct(c), lost: 0 };
+    return { pct: Math.round(parts.pct), lost: Math.round(parts.lostPct * 10) / 10 };
   },
   // HP-bar color ramp: green (75+) → yellow (35-75) → red (under 35).
   // Tokens, not literals: these feed inline style="background:..." so a
@@ -652,9 +663,15 @@ registerPanel('combat',{
     // hide/conceal modes to avoid leaking remaining HP visually.
     const hpPct = this._hpPct(c);
     const hpColor = this._hpColor(hpPct);
+    const geo = this._hpBar(c);
+    const lossTitle = (typeof sktMaxHpTitle === 'function') ? sktMaxHpTitle(c) : '';
     const hpBar = (mode !== 'show')
       ? ''
-      : `<div class="card-hp-bar" style="--hp-pct:${hpPct}%;--hp-color:${hpColor}" title="${c.hp}/${c.hpMax||c.hp} HP"><span class="card-hp-bar-fill"></span></div>`;
+      : `<div class="card-hp-bar" style="--hp-pct:${geo.pct}%;--hp-color:${hpColor};--hp-lost:${geo.lost}%" title="${c.hp}/${c.hpMax||c.hp} HP${lossTitle ? ' — ' + esc(lossTitle) : ''}"><span class="card-hp-bar-fill"></span>${geo.lost ? '<span class="card-hp-bar-lost"></span>' : ''}</div>`;
+    // A lowered maximum, flagged beside the HP — hidden from players like the
+    // HP itself when monster stats are concealed.
+    const maxLossBadge = (mode === 'show' && geo.lost)
+      ? `<span class="hp-maxloss-badge" title="${esc(lossTitle)}">▼${sktMaxHpLoss(c)}</span>` : '';
 
     // Status row — only renders chips for items that ARE active. A single
     // "+ ⋯" trailing button opens the status menu (set concentration / mark
@@ -746,7 +763,7 @@ registerPanel('combat',{
               ${active?'<span class="turn-marker">◀</span>':''}
             </div>`}
         <div class="card-stats">
-          <div class="card-stat" title="HP"><span class="lab">${ICO('i-heart')}</span>${hpField}</div>
+          <div class="card-stat" title="HP"><span class="lab">${ICO('i-heart')}</span>${hpField}${maxLossBadge}</div>
           <div class="card-stat" title="AC"><span class="lab">${ICO('i-shield')}</span>${acField}</div>
           <div class="card-stat" title="Initiative"><span class="lab">${ICO('i-bolt')}</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
         </div>

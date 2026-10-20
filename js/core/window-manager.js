@@ -523,7 +523,9 @@ function syncPartyToCombat(partyIdx){
     // name, the two slowly drift apart).
     const prev = state.combatants[ci];
     const nameChanged = prev.name !== p.name;
-    state.combatants[ci]={...prev,hp:p.hp,hpMax:p.hpMax,ac:p.ac,name:p.name};
+    // hpMaxNormal / hpMaxNote travel with hpMax: a lowered maximum must read
+    // the same on both cards. Undefined (not reduced) drops out of the JSON.
+    state.combatants[ci]={...prev,hp:p.hp,hpMax:p.hpMax,ac:p.ac,name:p.name,hpMaxNormal:p.hpMaxNormal,hpMaxNote:p.hpMaxNote};
     // Try a surgical repaint first. A full combat _render() re-serializes
     // every combatant card, and this fires on every HP tick — one click used
     // to rebuild BOTH panels end to end. A rename still needs the full path
@@ -538,7 +540,7 @@ function syncCombatToParty(combatantId){
   if(!c||!c.isPC)return;
   const pi=_findPartyMemberForCombatant(c);
   if(pi>=0){
-    state.party[pi]={...state.party[pi],hp:c.hp,hpMax:c.hpMax,ac:c.ac};
+    state.party[pi]={...state.party[pi],hp:c.hp,hpMax:c.hpMax,ac:c.ac,hpMaxNormal:c.hpMaxNormal,hpMaxNote:c.hpMaxNote};
     // Surgical first — see the matching comment in syncPartyToCombat.
     if (!panelDefs.party?._patchHp?.(pi)) panelDefs.party?._render?.();
   }

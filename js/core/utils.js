@@ -1708,3 +1708,46 @@ function sktRollDice(expr){
     detail: rolls.join('+') + (mod ? (mod > 0 ? '+' + mod : String(mod)) : ''),
   };
 }
+
+// ─── Reduced maximum HP ──────────────────────────────────────────────────────
+// Some effects lower a creature's hit point MAXIMUM until it finishes a long
+// rest — a wraith's Life Drain, Harm, a mummy's rot. `hpMax` holds the
+// maximum IN FORCE, so every existing heal cap, HP bar, mirror and sync merge
+// already respects it without being touched. `hpMaxNormal` remembers the
+// real one while it is lowered (absent = not reduced), and `hpMaxNote` the
+// cause, if the DM gave one. A long rest puts it back.
+function sktMaxHpLoss(r){
+  return (r && typeof r.hpMaxNormal === 'number') ? Math.max(0, r.hpMaxNormal - (r.hpMax || 0)) : 0;
+}
+// Returns a NEW record (the panels replace records rather than mutate them).
+function sktReduceMaxHp(r, n, note){
+  n = Math.max(0, Math.floor(+n || 0));
+  if (!r || !n) return r;
+  const normal = typeof r.hpMaxNormal === 'number' ? r.hpMaxNormal : (r.hpMax || 0);
+  const max = Math.max(0, (r.hpMax || 0) - n);
+  // Current HP only comes down if it is above the new maximum: the drain's
+  // damage is its own thing, applied separately.
+  const out = { ...r, hpMax: max, hpMaxNormal: normal, hp: Math.min(r.hp || 0, max) };
+  if (note) out.hpMaxNote = String(note).slice(0, 60);
+  return out;
+}
+function sktRestoreMaxHp(r){
+  if (!r || typeof r.hpMaxNormal !== 'number') return r;
+  const out = { ...r, hpMax: r.hpMaxNormal };
+  delete out.hpMaxNormal; delete out.hpMaxNote;
+  return out;
+}
+// Bars are measured against the NORMAL maximum while it is lowered, so the
+// part the reduction took away shows as its own striped segment at the end.
+function sktHpBarParts(r){
+  const loss = sktMaxHpLoss(r);
+  const full = ((r && r.hpMax) || 0) + loss || 1;
+  return { pct: Math.max(0, Math.min(100, ((r && r.hp) || 0) / full * 100)),
+           lostPct: loss ? Math.min(100, loss / full * 100) : 0, loss };
+}
+function sktMaxHpTitle(r){
+  const loss = sktMaxHpLoss(r);
+  if (!loss) return '';
+  return 'Max HP reduced by ' + loss + ' (normally ' + r.hpMaxNormal + ')'
+    + (r.hpMaxNote ? ' — ' + r.hpMaxNote : '') + '. Restored on a long rest.';
+}

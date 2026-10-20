@@ -4778,3 +4778,23 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .pa-conddet-b{font-size:var(--fs-md); line-height:1.5; color:var(--text)}
 .pa-conddet-b p{margin:0 0 6px}
 .pa-conddet-b ul{margin:4px 0; padding-left:18px}
+
+/* ─── Lowered maximum HP (sktReduceMaxHp) ─────────────────────────────────
+   The part of the bar a reduction took away: a striped segment at the end,
+   so "full under a drain" and "full" never look alike. */
+.hp-bar-lost, .card-hp-bar-lost, .pa-hp-lost{
+  position:absolute; top:0; right:0; bottom:0; display:block;
+  background:repeating-linear-gradient(135deg, rgba(194,84,80,.55) 0 4px, rgba(194,84,80,.15) 4px 8px)}
+.card-hp-bar-lost{width:var(--hp-lost, 0%)}
+.pa-hp-bar{position:relative}
+.char-hpmax-loss, .hp-maxloss-badge{
+  flex-shrink:0; align-self:center; margin-left:4px; padding:1px 6px; border-radius:var(--r-pill);
+  border:1px solid rgba(194,84,80,.55); background:rgba(194,84,80,.15); color:var(--danger);
+  font:inherit; font-size:var(--fs-2xs); font-weight:700; line-height:1.4; cursor:pointer; white-space:nowrap}
+.hp-maxloss-badge{cursor:help}
+/* On the combat card the HP stat is a third of a narrow card: a marker in the
+   row squeezed the number out. Pinned above it as a tag instead. */
+.card-stat[title="HP"]{position:relative}
+.card-stat .hp-maxloss-badge{position:absolute; top:-8px; right:-4px; margin:0; padding:0 4px; font-size:9px; line-height:1.35; z-index:1}
+.char-hpmax-loss:hover{background:rgba(194,84,80,.28)}
+.pa-hp-loss{margin-top:6px; font-size:var(--fs-sm); color:var(--danger)}

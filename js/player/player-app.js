@@ -652,7 +652,8 @@ function paYouScreen(){
           <span class="pa-stat">AC <b>${pc.ac ?? '–'}</b></span>
           <span class="pa-stat">Speed <b>${pc.spd ?? '–'}</b></span>
         </div>
-        <div class="pa-hp-bar"><i style="width:${pct}%;background:${col}"></i></div>
+        <div class="pa-hp-bar"><i style="width:${paBarW(c || pc, pct)}%;background:${col}"></i>${paLostSeg(c || pc)}</div>
+        ${paMaxLossLine(pc)}
         <div class="pa-hp-ctl">
           <button class="btn" data-pa-hp="-1">− Damage</button>
           <input class="pa-in" id="pa-hp-amt" type="number" value="5" aria-label="Amount">
@@ -705,6 +706,23 @@ function paConditionDetail(name){
         <button class="pa-featdet-x" data-pa-condclose="1" aria-label="Close">✕</button></div>
       <div class="pa-conddet-b">${body}</div>
     </div>`;
+}
+
+// A lowered maximum: the bar is measured against the NORMAL maximum and the
+// part taken away shows as a striped end; the You screen says it in words.
+function paBarW(rec, pct){
+  const g = (typeof sktHpBarParts === 'function') ? sktHpBarParts(rec || {}) : null;
+  return (g && g.loss) ? g.pct : pct;
+}
+function paLostSeg(rec){
+  const g = (typeof sktHpBarParts === 'function') ? sktHpBarParts(rec || {}) : null;
+  return (g && g.loss) ? '<b class="pa-hp-lost" style="width:' + g.lostPct + '%"></b>' : '';
+}
+function paMaxLossLine(pc){
+  const loss = (typeof sktMaxHpLoss === 'function') ? sktMaxHpLoss(pc) : 0;
+  if (!loss) return '';
+  return '<div class="pa-hp-loss">Max HP lowered by ' + loss + ' until a long rest (normally ' + pc.hpMaxNormal + ')'
+    + (pc.hpMaxNote ? ' — ' + paEsc(pc.hpMaxNote) : '') + '</div>';
 }
 
 function paDeathBlock(c){
@@ -848,7 +866,7 @@ function paPartyScreen(){
           <span class="pa-mate-hp">${hp}/${hpMax}</span>
           <span class="pa-mate-ac">AC ${p.ac ?? '–'}</span>
         </span>
-        <span class="pa-hp-bar sm"><i style="width:${pct}%;background:${col}"></i></span>
+        <span class="pa-hp-bar sm"><i style="width:${paBarW(c || p, pct)}%;background:${col}"></i>${paLostSeg(c || p)}</span>
         ${sub ? `<span class="pa-mate-sub">${paEsc(sub)}</span>` : ''}
       </button>
       ${conds ? `<div class="pa-conds sm">${conds}</div>` : ''}
