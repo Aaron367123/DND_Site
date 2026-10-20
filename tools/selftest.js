@@ -3960,6 +3960,73 @@
       }
     }
 
+    // ── Legendary resistance, lair actions, timed conditions, end-of-turn saves
+    {
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      const C = panelDefs.combat;
+      openPanel('combat'); await sleep(300);
+      try {
+        const m = _5eLoaded && _5eData.find(d => d.cat === 'monster' && d.name === 'Adult Red Dragon');
+        ok('combat: a dragon to test with', !!m);
+        if (m){
+          C.addMonster(m); await sleep(80);
+          const did = state.combatants.find(c => c.baseName === 'Adult Red Dragon').id;
+          const D = () => state.combatants.find(c => c.id === did);
+          ok('combat: legendary resistance is read off the stat block (3/day)', D().lrMax === 3 && D().lrUsed === 0);
+          ok('combat: a creature with lair actions is marked as having them, switched off', D().lairCapable === true && !D().lair);
+          ok('combat: a monster save comes from its stat block', C.saveBonus(D(), 'wis') === 7 && C.saveBonus(D(), 'dex') === 6,
+             C.saveBonus(D(), 'wis') + '/' + C.saveBonus(D(), 'dex'));
+          C._render(); await sleep(40);
+          ok('combat: resistance shows as pips', C._body.querySelectorAll('[data-act="lr-pip"]').length === 3);
+          C._body.querySelector('[data-act="lr-pip"]').click(); await sleep(40);
+          ok('combat: and a click spends one', D().lrUsed === 1);
+          D().lair = true;
+          state.combatants.forEach((c, i) => { c.initiative = [22, 21, 18, 15, 12, 10, 8, 5, 3][i] ?? 1; });
+          state.activeCombatantId = state.combatants[0].id; state.combatRound = 1; C._lairDue = null; save();
+          C._nextTurn();
+          ok('combat: no lair action while initiative is still above 20', !C._lairDue);
+          C._nextTurn();
+          ok('combat: the lair acts as the order passes initiative 20', !!C._lairDue && C._lairDue.names.includes(D().name)
+             && !!C._body.querySelector('.lair-banner'));
+          const pc = state.combatants.find(c => c.isPC);
+          C._setCondTimer(state.combatants.indexOf(pc), 'Stunned', { kind: 'end-next' }); save();
+          let g = 0; while (state.activeCombatantId !== pc.id && g++ < 20) C._nextTurn();
+          ok('combat: until the end of its next turn — still on during that turn',
+             (state.combatants.find(c => c.id === pc.id).conditions || []).includes('Stunned'));
+          C._nextTurn();
+          ok('combat: and gone once that turn ends', !(state.combatants.find(c => c.id === pc.id).conditions || []).includes('Stunned'));
+          C._setCondTimer(state.combatants.findIndex(c => c.id === did), 'Paralyzed', { save: { ab: 'wis', dc: 15 } }); save();
+          g = 0; while (state.activeCombatantId !== did && g++ < 20) C._nextTurn();
+          C._nextTurn(); await sleep(40);
+          const card = document.querySelector('#cond-save-stack .cond-save');
+          ok('combat: a repeat save is asked for at the end of its turn, with its bonus',
+             !!card && /WIS save DC 15/.test(card.textContent) && card.textContent.indexOf("(+7)") >= 0);
+          card && card.querySelector('[data-csp="pass"]').click(); await sleep(40);
+          ok('combat: saving ends the condition', !(D().conditions || []).includes('Paralyzed') && !document.querySelector('#cond-save-stack .cond-save'));
+          C._setCondTimer(state.combatants.findIndex(c => c.id === did), 'Frightened', { kind: 'rounds', left: 2 }); save();
+          const turn = () => { let k = 0; while (state.activeCombatantId !== did && k++ < 20) C._nextTurn(); C._nextTurn(); };
+          turn(); const after1 = (D().conditions || []).includes('Frightened');
+          turn(); const after2 = (D().conditions || []).includes('Frightened');
+          ok('combat: a 2-round condition lasts two of its turns', after1 && !after2);
+          C._reduceMaxHpAt(state.combatants.findIndex(c => c.id === did), 20, 'Harm'); await sleep(40);
+          ok('combat: a monster max HP can be reduced from its card', D().hpMax === D().hpMaxNormal - 20 && !!C._body.querySelector('.hp-maxloss-badge'));
+          C._setCondTimer(state.combatants.findIndex(c => c.id === did), 'Prone', { kind: 'end-next' });
+          C._toggleCondAtIdx(state.combatants.findIndex(c => c.id === did), 'Prone');
+          C._toggleCondAtIdx(state.combatants.findIndex(c => c.id === did), 'Prone');
+          ok('combat: a condition toggled back on starts without its old timer', !(D().condTimers && D().condTimers.Prone));
+        }
+      } catch(e){ ok('combat: the new-feature checks ran to completion', false, e.message); }
+      finally {
+        C._condSaves = []; C._renderCondSaves && C._renderCondSaves(); C._lairDue = null;
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party'); C._render();
+      }
+    }
     // ── A lowered maximum HP (Life Drain, Harm…) ─────────────────────────
     {
       // Earlier checks end the fight; start from the original data.

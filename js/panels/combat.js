@@ -428,6 +428,8 @@ registerPanel('combat',{
         return '';
       })()}
 
+      ${(inCombat && this._lairDue) ? `<div class="lair-banner" role="status">🏰 <b>Lair action</b> — initiative 20: ${this._lairDue.names.map(esc).join(', ')}
+          <button class="btn small" data-act="lair-done">Done</button></div>` : ''}
       ${inCombat
         ? `<div class="combatant-list${compact?' compact':''}${grouped?' grouped':''}${(state.settings&&state.settings.combatHpBar===false)?' no-hp-bar':''}" id="combat-list">`+this._renderCombatants()+'</div>'
         : emptyState({ icon:'i-combat', title:'No one in the fight yet',
@@ -770,8 +772,11 @@ registerPanel('combat',{
         ${dmgStripRow}
         ${hpBar}
         ${statusRow}
-        ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>`<span class="condition-tag" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}">${esc(cd)} ×</span>`).join('')}</div>`:''}
+        ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>{ const tl = this._condTimerText(c, cd);
+          return `<span class="condition-tag${tl ? ' timed' : ''}" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}" title="${tl ? esc(tl) + ' — ' : ''}click to remove">${esc(cd)}${tl ? ' <i class="cond-timer">⏱' + esc(this._condTimerShort(c, cd)) + '</i>' : ''} ×</span>`; }).join('')}</div>`:''}
         ${(!isPC && (c.legendaryMax || c.legendaryMax === 0)) ? this._renderLegendary(i, c) : ''}
+        ${(!isPC && c.lrMax) ? this._renderLegendaryResist(i, c) : ''}
+        ${(!isPC && c.lair) ? '<div class="lair-row" title="Fighting in its lair: a lair action on initiative 20 each round (losing ties)">🏰 In its lair</div>' : ''}
         ${(isPC && (c.hp||0) <= 0 && !c.dead && !c.stable) ? this._renderDeathSaves(i, c) : ''}
         ${(isPC && c.dead)   ? '<div class="death-saves dead-banner" title="The PC is dead. Heal them above 0 HP (revivify, etc.) to bring them back.">'+ICO('i-skull')+' Dead</div>' : ''}
         ${(isPC && c.stable && (c.hp||0) <= 0) ? '<div class="death-saves stable-banner" title="Stable at 0 HP — no more death saves unless they take damage (which will start fresh saves with one failure, per RAW).">⚕ Stable</div>' : ''}
@@ -865,6 +870,15 @@ registerPanel('combat',{
           save(); this._render();
         }
       }
+      else if(act==='lr-pip'){
+        const i = parseInt(el.dataset.idx), n = parseInt(el.dataset.n);
+        const c = state.combatants[i]; if (!c || !c.lrMax) return;
+        const used = c.lrUsed || 0;
+        c.lrUsed = n < used ? n : (n + 1);
+        if (c.lrUsed > used) this._log(`${c.name} uses Legendary Resistance (${c.lrMax - c.lrUsed} left)`);
+        save(); this._render();
+      }
+      else if(act==='lair-done'){ this._lairDue = null; this._render(); }
       else if(act==='legendary-pip'){
         const i = parseInt(el.dataset.idx);
         const n = parseInt(el.dataset.n);
@@ -975,6 +989,51 @@ registerPanel('combat',{
             items.push({ label:'─────', disabled:true });
           }
         }
+        // Legendary resistance (N/day) and lair actions — monsters.
+        if (!c.isPC){
+          if (c.lrMax == null){
+            items.push({ label:'➕ Legendary resistance (3/day)', onClick:()=>{
+              const i = resolve(); if (i < 0) return;
+              state.combatants[i] = {...state.combatants[i], lrMax:3, lrUsed:0};
+              save(); this._render();
+            }});
+          } else {
+            items.push({ label:'⛨ Legendary resistance ─────', disabled:true });
+            for (let n = 0; n <= 5; n++){
+              items.push({ label:'   ' + n + ' / day', checked: c.lrMax === n, onClick:()=>{
+                const i = resolve(); if (i < 0) return;
+                const cur = state.combatants[i];
+                state.combatants[i] = {...cur, lrMax:n, lrUsed:Math.min(cur.lrUsed||0, n)};
+                save(); this._render();
+              }});
+            }
+            items.push({ label:'↺ Refresh legendary resistance', onClick:()=>{
+              const i = resolve(); if (i < 0) return;
+              state.combatants[i] = {...state.combatants[i], lrUsed:0}; save(); this._render();
+            }});
+            items.push({ label:'✕ Remove legendary resistance', onClick:()=>{
+              const i = resolve(); if (i < 0) return;
+              const n = {...state.combatants[i]}; delete n.lrMax; delete n.lrUsed;
+              state.combatants[i] = n; save(); this._render();
+            }});
+          }
+          items.push({ label:(c.lair ? '☑' : '☐') + ' In its lair — lair action on initiative 20', onClick:()=>{
+            const i = resolve(); if (i < 0) return;
+            state.combatants[i] = {...state.combatants[i], lair: !state.combatants[i].lair};
+            save(); this._render();
+          }});
+          items.push({ label:'─────', disabled:true });
+        }
+        // Lowered maximum HP (Life Drain, Harm…). PCs go through the party
+        // sheet so both records agree.
+        items.push({ label:'🩸 Reduce max HP…', onClick:()=>{ const i = resolve(); if (i >= 0) this._promptReduceMaxHp(i); }});
+        if (typeof sktMaxHpLoss === 'function' && sktMaxHpLoss(c)){
+          items.push({ label:'↺ Restore max HP (normally ' + c.hpMaxNormal + ')', onClick:()=>{
+            const i = resolve(); if (i >= 0) this._restoreMaxHpAt(i);
+          }});
+        }
+        items.push({ label:'⏱ Condition with a duration…', onClick:()=>{ const i = resolve(); if (i >= 0) this._promptTimedCondition(i); }});
+        items.push({ label:'─────', disabled:true });
         SEARCH_DATA
           .filter(d=>d.cat==='condition')
           .forEach(d => items.push({label:d.name, checked:have.has(d.name), onClick:()=>{
@@ -1265,6 +1324,7 @@ registerPanel('combat',{
   // round, and that path used to skip all of it.
   _startRound(round){
     state.combatRound = round;
+    this._lairDue = null;
     showToast(`Round ${round}`);
     this._log('— Round ' + round + ' —');
     // Legendary actions do NOT refresh here — see _refreshTurnEconomy, same
@@ -1377,6 +1437,7 @@ registerPanel('combat',{
     // "The creature regains spent legendary actions at the start of its
     // turn." Same moment as the rest of its economy, so the same place.
     if (c.legendaryMax) c.legendaryUsed = 0;
+    this._tickCondTimers(c, 'start');
   },
 
   // Dodge lasts "until the start of your next turn", so it is cleared when
@@ -1387,6 +1448,7 @@ registerPanel('combat',{
   _endTurnEconomy(id){
     const c = state.combatants.find(x => x.id === id);
     if (c) c.disengaged = false;
+    if (c) this._tickCondTimers(c, 'end');
   },
 
   _nextTurn(){
@@ -1406,12 +1468,18 @@ registerPanel('combat',{
       state.combatRound = Math.max(1, state.combatRound || 0);
       this._refreshTurnEconomy(state.activeCombatantId);
     } else {
-      let ni = cur + 1;
+      const prevInit = +state.combatants[cur].initiative || 0;
+      let ni = cur + 1, wrapped = false;
       if (ni >= state.combatants.length){
-        ni = 0;
+        ni = 0; wrapped = true;
         this._startRound((state.combatRound || 1) + 1);
       }
       state.activeCombatantId = state.combatants[ni].id;
+      // Initiative count 20 falls between the last creature at 20 or above
+      // and the first below it — or at the very top of a round in which
+      // nobody rolled 20.
+      const nextInit = +state.combatants[ni].initiative || 0;
+      if ((wrapped || prevInit >= 20) && nextInit < 20) this._lairCheck();
       this._refreshTurnEconomy(state.activeCombatantId);
     }
     save();this._render();
@@ -1993,7 +2061,7 @@ registerPanel('combat',{
 
   _removeCond(i,cond){
     const c = state.combatants[i];
-    state.combatants[i] = {...c, conditions:(c.conditions||[]).filter(x => x !== cond)};
+    state.combatants[i] = {...c, conditions:(c.conditions||[]).filter(x => x !== cond), condTimers: this._withoutTimer(c, cond)};
     save(); this._render();
     // Party panel renders condition chips by cross-referencing combatants by
     // id, but it doesn't subscribe to combat changes — without this nudge,
@@ -2020,6 +2088,252 @@ registerPanel('combat',{
       ${pips}
       <span class="legendary-count">${max-used}/${max}</span>
     </div>`;
+  },
+
+  _renderLegendaryResist(i, c){
+    const max = c.lrMax || 0; if (!max) return '';
+    const used = Math.min(c.lrUsed || 0, max);
+    let pips = '';
+    for (let n = 0; n < max; n++){
+      const spent = n < used;
+      pips += `<span class="legendary-pip lr ${spent?'spent':'available'}" data-act="lr-pip" data-idx="${i}" data-n="${n}" title="${spent?'Refund':'Spend'} legendary resistance ${n+1}"></span>`;
+    }
+    return `<div class="legendary-row lr-row" title="Legendary resistance — choose to succeed on a failed save. Per day; refresh from the right-click menu.">
+      <span class="legendary-label">⛨ Resist</span>${pips}<span class="legendary-count">${max-used}/${max}</span></div>`;
+  },
+
+  // The lair acts on initiative 20. Kept on the panel, not in synced state:
+  // it is a reminder for whoever is running the turn order.
+  _lairCheck(){
+    const who = state.combatants.filter(c => c.lair && !c.dead && (c.hp || 0) > 0);
+    if (!who.length) return;
+    this._lairDue = { round: state.combatRound || 1, names: who.map(c => c.name) };
+    this._log('🏰 Lair action (initiative 20): ' + this._lairDue.names.join(', '));
+    if (typeof showToast === 'function') showToast('🏰 Lair action — initiative 20: ' + this._lairDue.names.join(', '));
+  },
+
+  // ─── Saving throw bonus, for anyone in the fight ───────────────────────────
+  // PCs from their sheet (or ability score), monsters from the stat block's
+  // proficient saves (or ability score). Public: the Turn View's area saves
+  // and the condition save prompts both use it.
+  saveBonus(c, ab){
+    ab = String(ab || '').slice(0, 3).toLowerCase();
+    const mod = sc => (typeof sc === 'number') ? Math.floor((sc - 10) / 2) : null;
+    if (!c) return 0;
+    if (c.isPC){
+      const p = state.party.find(x => x.id === c.id);
+      if (!p) return 0;
+      let v = p.sheet && p.sheet.saves ? p.sheet.saves[ab] : null;
+      if (typeof v === 'string') v = parseInt(v, 10);
+      if (typeof v === 'number' && !isNaN(v)) return v;
+      const m = mod(p.abilities && p.abilities[ab]);
+      return m == null ? 0 : m;
+    }
+    const e = this.statBlockFor(c);
+    const raw = e && (e._raw || e);
+    if (raw){
+      const FULL = {str:'STR',dex:'DEX',con:'CON',int:'INT',wis:'WIS',cha:'CHA'}[ab];
+      const prof = (raw.proficiencies || []).find(p => p && p.proficiency && p.proficiency.name === 'Saving Throw: ' + FULL);
+      if (prof) return +prof.value || 0;
+      const NAMES = {str:'strength',dex:'dexterity',con:'constitution',int:'intelligence',wis:'wisdom',cha:'charisma'};
+      const m = mod(raw[NAMES[ab]]);
+      if (m != null) return m;
+    }
+    return 0;
+  },
+
+  // ─── Lowered maximum HP, from the combat card ───────────────────────────────
+  _promptReduceMaxHp(i){
+    const c = state.combatants[i]; if (!c) return;
+    const cid = c.id;
+    showModal('Reduce max HP — ' + c.name, [
+      {id:'amt',  label:'Reduce the maximum by', type:'number', value:''},
+      {id:'note', label:'Cause (optional, e.g. Life Drain)', type:'text', value: c.hpMaxNote || ''},
+    ], 'Reduce').then(r => {
+      if (!r) return;
+      const idx = state.combatants.findIndex(x => x.id === cid);
+      if (idx >= 0) this._reduceMaxHpAt(idx, r.amt, String(r.note || '').trim());
+    });
+  },
+  _reduceMaxHpAt(i, amount, note){
+    const c = state.combatants[i]; if (!c) return false;
+    const n = Math.max(0, Math.floor(+amount || 0)); if (!n) return false;
+    const pi = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
+    if (pi >= 0 && panelDefs.party && typeof panelDefs.party._reduceMaxHp === 'function'){
+      panelDefs.party._reduceMaxHp(pi, n, note);
+      this._render();
+      return true;
+    }
+    state.combatants[i] = sktReduceMaxHp(c, n, note);
+    save(); this._render();
+    const m = state.combatants[i];
+    if (typeof showToast === 'function') showToast(m.hpMax <= 0
+      ? m.name + '\u2019s max HP is 0 — by the rules, that kills it'
+      : m.name + ': max HP ' + m.hpMax + ' (normally ' + m.hpMaxNormal + ')');
+    return true;
+  },
+  _restoreMaxHpAt(i){
+    const c = state.combatants[i]; if (!c || typeof c.hpMaxNormal !== 'number') return false;
+    const pi = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
+    if (pi >= 0 && panelDefs.party && typeof panelDefs.party._restoreMaxHp === 'function'){
+      panelDefs.party._restoreMaxHp(pi); this._render(); return true;
+    }
+    state.combatants[i] = sktRestoreMaxHp(c);
+    save(); this._render();
+    return true;
+  },
+
+  // ─── Conditions with a duration ─────────────────────────────────────────────
+  // Conditions stay plain names in c.conditions — every surface that shows
+  // them keeps working — and a duration rides beside them in c.condTimers:
+  //   { kind:'end-next'|'start-next'|'rounds', left, setRound, setActive,
+  //     save:{ab, dc} }
+  // "Its next turn" means the affected creature's. A timer set during that
+  // creature's own turn does not count the turn it was set in.
+  _withoutTimer(c, cond){
+    const t = Object.assign({}, c && c.condTimers);
+    delete t[cond];
+    return Object.keys(t).length ? t : undefined;
+  },
+  _condTimerText(c, cond){
+    const t = c && c.condTimers && c.condTimers[cond]; if (!t) return '';
+    const d = t.kind === 'end-next' ? 'until the end of its next turn'
+            : t.kind === 'start-next' ? 'until the start of its next turn'
+            : t.kind === 'rounds' ? (t.left + ' more round' + (t.left === 1 ? '' : 's') + ' (ends at the end of its turn)')
+            : '';
+    const sv = t.save ? (d ? '; ' : '') + String(t.save.ab).toUpperCase() + ' save DC ' + t.save.dc + ' at the end of each of its turns' : '';
+    return (d + sv) || '';
+  },
+  _condTimerShort(c, cond){
+    const t = c && c.condTimers && c.condTimers[cond]; if (!t) return '';
+    const d = t.kind === 'rounds' ? String(t.left) : t.kind === 'end-next' ? 'end' : t.kind === 'start-next' ? 'start' : '';
+    return d + (t.save ? (d ? ' · ' : '') + String(t.save.ab).toUpperCase() + ' ' + t.save.dc : '');
+  },
+  _setCondTimer(i, cond, timer){
+    const c = state.combatants[i]; if (!c) return;
+    const conds = (c.conditions || []).includes(cond) ? c.conditions : [...(c.conditions || []), cond];
+    const timers = Object.assign({}, c.condTimers);
+    if (timer) timers[cond] = { ...timer, setRound: state.combatRound || 0, setActive: state.activeCombatantId || null };
+    else delete timers[cond];
+    state.combatants[i] = { ...c, conditions: conds, condTimers: Object.keys(timers).length ? timers : undefined };
+  },
+  _promptTimedCondition(i){
+    const c = state.combatants[i]; if (!c) return;
+    const cid = c.id;
+    const names = (typeof SEARCH_DATA !== 'undefined' ? SEARCH_DATA : []).filter(d => d.cat === 'condition').map(d => d.name);
+    const uniq = [...new Set(names)];
+    showModal('Condition with a duration — ' + c.name, [
+      {id:'cond', label:'Condition', type:'select', options: uniq.length ? uniq : ['Stunned'], value: uniq[0]},
+      {id:'dur',  label:'Lasts', type:'select', value:'end-next', options:[
+        {value:'end-next',   label:'Until the end of its next turn'},
+        {value:'start-next', label:'Until the start of its next turn'},
+        {value:'rounds',     label:'A number of rounds'},
+        {value:'none',       label:'Until removed (or saved against)'}]},
+      {id:'rounds', label:'Rounds (if a number of rounds)', type:'number', value:'10'},
+      {id:'ab', label:'Repeat save at the end of each of its turns', type:'select', value:'', options:[
+        {value:'', label:'No save'}, 'STR','DEX','CON','INT','WIS','CHA']},
+      {id:'dc', label:'Save DC', type:'number', value:''},
+    ], 'Apply').then(r => {
+      if (!r || !r.cond) return;
+      const idx = state.combatants.findIndex(x => x.id === cid); if (idx < 0) return;
+      const timer = {};
+      if (r.dur === 'end-next' || r.dur === 'start-next') timer.kind = r.dur;
+      else if (r.dur === 'rounds') { timer.kind = 'rounds'; timer.left = Math.max(1, parseInt(r.rounds, 10) || 1); }
+      if (r.ab && parseInt(r.dc, 10) > 0) timer.save = { ab: String(r.ab).toLowerCase(), dc: parseInt(r.dc, 10) };
+      this._setCondTimer(idx, r.cond, Object.keys(timer).length ? timer : null);
+      save(); this._render();
+      if (c.isPC) panelDefs.party?._render?.();
+      const t = this._condTimerText(state.combatants[idx], r.cond);
+      if (typeof showToast === 'function') showToast(r.cond + ' → ' + c.name + (t ? ' (' + t + ')' : ''));
+    });
+  },
+  // phase 'end': the creature's turn just ended; 'start': its turn begins.
+  _tickCondTimers(c, phase){
+    if (!c || !c.condTimers) return;
+    const ownTurnJustSet = t => t.setActive === c.id && t.setRound === (state.combatRound || 0);
+    const timers = Object.assign({}, c.condTimers);
+    const ended = [];
+    Object.keys(timers).forEach(cond => {
+      const t = { ...timers[cond] };
+      if (!(c.conditions || []).includes(cond)){ delete timers[cond]; return; }   // removed by hand
+      if (phase === 'start' && t.kind === 'start-next' && !ownTurnJustSet(t)){ ended.push(cond); delete timers[cond]; return; }
+      if (phase !== 'end') return;
+      const skip = ownTurnJustSet(t);
+      if (t.save && !skip) this._queueCondSave(c, cond, t.save);
+      if (t.kind === 'end-next' && !skip){ ended.push(cond); delete timers[cond]; return; }
+      if (t.kind === 'rounds' && !skip){
+        t.left = (t.left || 1) - 1;
+        if (t.left <= 0){ ended.push(cond); delete timers[cond]; return; }
+      }
+      timers[cond] = t;
+    });
+    c.condTimers = Object.keys(timers).length ? timers : undefined;
+    if (ended.length){
+      c.conditions = (c.conditions || []).filter(x => !ended.includes(x));
+      // A condition that ended does not still need its save.
+      this._condSaves = (this._condSaves || []).filter(p => !(p.cid === c.id && ended.includes(p.cond)));
+      ended.forEach(cond => this._log(c.name + ' — ' + cond + ' ends'));
+      if (typeof showToast === 'function') showToast(c.name + ': ' + ended.join(', ') + ' ended');
+      if (c.isPC) setTimeout(() => panelDefs.party?._render?.(), 0);
+    }
+  },
+
+  // ─── End-of-turn saves (Hold Person and friends) ────────────────────────────
+  // A small card that stays up until answered, over whatever panel is open —
+  // the Turn View is where a DM usually is when a turn ends.
+  _queueCondSave(c, cond, sv){
+    this._condSaves = (this._condSaves || []).filter(p => !(p.cid === c.id && p.cond === cond));
+    this._condSaves.push({ k: (typeof uid === 'function' ? uid() : String(Date.now())), cid: c.id, cond, ab: sv.ab, dc: sv.dc });
+    setTimeout(() => this._renderCondSaves(), 0);
+  },
+  _renderCondSaves(){
+    if (document.body.classList.contains('player-mode')) return;
+    let host = document.getElementById('cond-save-stack');
+    if (!host){
+      host = document.createElement('div');
+      host.id = 'cond-save-stack'; host.className = 'cond-save-stack';
+      host.addEventListener('click', e => {
+        const b = e.target.closest('[data-csp]'); if (!b) return;
+        this._answerCondSave(b.closest('[data-k]').dataset.k, b.dataset.csp);
+      });
+      document.body.appendChild(host);
+    }
+    const live = (this._condSaves || []).filter(p => state.combatants.some(c => c.id === p.cid && (c.conditions || []).includes(p.cond)));
+    this._condSaves = live;
+    host.innerHTML = live.map(p => {
+      const c = state.combatants.find(x => x.id === p.cid);
+      const bonus = this.saveBonus(c, p.ab);
+      return `<div class="cond-save" data-k="${esc(p.k)}" role="alertdialog" aria-label="Saving throw">
+        <div class="cond-save-what">⟳ <b>${esc(c.name)}</b> — end of turn: ${esc(String(p.ab).toUpperCase())} save DC ${p.dc} to end <b>${esc(p.cond)}</b></div>
+        <div class="cond-save-btns">
+          <button class="btn small primary" data-csp="roll">🎲 Roll (${bonus >= 0 ? '+' : ''}${bonus})</button>
+          <button class="btn small" data-csp="pass">Saved</button>
+          <button class="btn small" data-csp="fail">Failed</button>
+        </div></div>`;
+    }).join('');
+    host.hidden = !live.length;
+  },
+  _answerCondSave(k, how){
+    const p = (this._condSaves || []).find(x => x.k === k); if (!p) return;
+    const i = state.combatants.findIndex(c => c.id === p.cid);
+    const c = state.combatants[i];
+    let passed = how === 'pass';
+    if (how === 'roll' && c){
+      const bonus = this.saveBonus(c, p.ab);
+      const r = sktRollDice('1d20' + (bonus >= 0 ? '+' : '') + bonus);
+      passed = r.total >= p.dc;
+      this._log(`${c.name} ${String(p.ab).toUpperCase()} save vs ${p.cond}: ${r.total} (${r.detail}) — ${passed ? 'saved' : 'failed'}`);
+      if (typeof showToast === 'function') showToast(`${c.name}: ${String(p.ab).toUpperCase()} ${r.total} vs DC ${p.dc} — ${passed ? 'saved, ' + p.cond + ' ends' : 'failed'}`);
+    } else if (c){
+      this._log(`${c.name} — ${p.cond}: save ${passed ? 'passed' : 'failed'}`);
+    }
+    this._condSaves = this._condSaves.filter(x => x.k !== k);
+    if (passed && c){
+      state.combatants[i] = { ...c, conditions: (c.conditions || []).filter(x => x !== p.cond), condTimers: this._withoutTimer(c, p.cond) };
+      save(); this._render();
+      if (c.isPC) panelDefs.party?._render?.();
+    }
+    this._renderCondSaves();
   },
 
   _renderDeathSaves(i, c){
@@ -2108,7 +2422,9 @@ registerPanel('combat',{
     const conds=c.conditions||[];
     const has=conds.includes(cond);
     const next=has?conds.filter(x=>x!==cond):[...conds,cond];
-    state.combatants[i]={...c,conditions:next};
+    // Toggled either way it starts plain: a timer from an earlier application
+    // must not come back with it.
+    state.combatants[i]={...c,conditions:next,condTimers:this._withoutTimer(c, cond)};
     save();this._render();
     // Mirror to the party panel so PC condition chips stay in sync without
     // waiting for the next party-panel render. Safe when party is closed —
@@ -2317,6 +2633,14 @@ registerPanel('combat',{
     const legendaryFields = hasLegendary
       ? { legendaryMax: 3, legendaryUsed: 0 }
       : {};
+    // "Legendary Resistance (3/Day)" — also "(3/Day, or 4/Day in Lair)".
+    const lrTrait = (m && m._raw && Array.isArray(m._raw.special_abilities) ? m._raw.special_abilities : [])
+      .map(t => String(t && t.name || '')).find(n => /legendary resistance/i.test(n));
+    const lrN = lrTrait ? (parseInt((/(\d+)\s*\/\s*day/i.exec(lrTrait) || [])[1], 10) || 3) : 0;
+    if (lrN){ legendaryFields.lrMax = lrN; legendaryFields.lrUsed = 0; }
+    // Lair actions exist for this creature; whether the fight is IN the lair
+    // is the DM's call, so the switch starts off (right-click to turn on).
+    if (m && m._raw && Array.isArray(m._raw.lair_actions) && m._raw.lair_actions.length) legendaryFields.lairCapable = true;
     state.combatants.push({
       id: uid(),
       name: displayName,
@@ -2329,6 +2653,7 @@ registerPanel('combat',{
       initBonus: initMod,
       initiative: initMod, // pre-fill with dex modifier; user can bump it before/during combat
       conditions: [],
+      ...legendaryFields,
       portrait,
       // Remember exactly WHICH stat block this came from. Everything that
       // needs to look the monster up again — resistances, the stat-block

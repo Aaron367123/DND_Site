@@ -4798,3 +4798,18 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .card-stat .hp-maxloss-badge{position:absolute; top:-8px; right:-4px; margin:0; padding:0 4px; font-size:9px; line-height:1.35; z-index:1}
 .char-hpmax-loss:hover{background:rgba(194,84,80,.28)}
 .pa-hp-loss{margin-top:6px; font-size:var(--fs-sm); color:var(--danger)}
+
+/* ─── Combat: legendary resistance, lair, timed conditions, end-of-turn saves */
+.lr-row .legendary-label{color:#9ad1ff}
+.legendary-pip.lr.available{background:#4a8ec9; border-color:#4a8ec9}
+.lair-row{font-size:var(--fs-xs); color:var(--accent); margin-top:3px}
+.lair-banner{display:flex; align-items:center; gap:10px; margin:6px 8px 0; padding:8px 12px;
+  border:1px solid var(--accent); border-radius:var(--r-md); background:rgba(212,165,116,.12); font-size:var(--fs-sm)}
+.lair-banner .btn{margin-left:auto}
+.condition-tag.timed{border-style:dashed}
+.cond-timer{font-style:normal; opacity:.8; margin-left:2px}
+.cond-save-stack{position:fixed; right:16px; bottom:72px; z-index:9600; display:flex; flex-direction:column; gap:8px; max-width:min(380px, calc(100vw - 32px))}
+.cond-save-stack[hidden]{display:none}
+.cond-save{background:var(--panel); border:1px solid var(--accent); border-radius:var(--r-md); padding:10px 12px;
+  box-shadow:0 8px 28px rgba(0,0,0,.45); font-size:var(--fs-sm)}
+.cond-save-btns{display:flex; gap:6px; margin-top:8px}
