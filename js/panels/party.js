@@ -1670,46 +1670,52 @@ registerPanel('party',{
   },
   _applyShortRest(){
     let pactRestored = 0;
-    state.party.forEach((c, i) => {
-      c.concentration = null;
-      // A rage lasts 1 minute; an hour's rest is well past that. Only the LONG
-      // rest cleared it — and the long rest's own comment claims "rage and
-      // wild shape end at any rest", which was true of one of the two rests.
-      c.rage = false; c.rageRounds = null;
-      if (c.wildshape) c.wildshape = null;
-      if (Array.isArray(c.resources)){
-        c.resources = c.resources.map(r => {
-          if (/short\s*rest/i.test(r.name || '')) return {...r, current: r.max || r.current};
-          return r;
-        });
-      }
-      // Warlock Pact Magic is the one kind of spell slot that comes back on a
-      // SHORT rest, and nothing restored it — a warlock had to refund every
-      // pip by hand after each fight, or quietly play down a slot.
-      //
-      // Restricted to a PURE warlock on purpose. There is no marker in the
-      // sheet distinguishing a pact slot from an ordinary one, so on a
-      // "Warlock/Sorcerer" the same map holds both and refilling all of them
-      // would hand back the sorcerer's slots too. A multiclass warlock still
-      // refunds pips by hand, which is what happens today.
-      const cls = String(c.cls || '').trim().toLowerCase();
-      if (cls === 'warlock' && c.sheet && c.sheet.spellSlots){
-        const slots = {};
-        let changed = false;
-        Object.keys(c.sheet.spellSlots).forEach(k => {
-          const s = c.sheet.spellSlots[k];
-          if ((s.expended || 0) > 0) changed = true;
-          slots[k] = {...s, expended: 0};
-        });
-        if (changed){ c.sheet = {...c.sheet, spellSlots: slots}; pactRestored++; }
-      }
-      this._mirrorPartyToCombatSilent(i);
-    });
+    state.party.forEach((c, i) => { if (this._shortRestOne(c, i)) pactRestored++; });
     save();
     this._render();
     panelDefs.combat?._render?.();
     showToast('💤 Short rest — concentration dropped, short-rest resources refreshed'
       + (pactRestored ? ' · Pact Magic slots restored' : ''));
+  },
+  // One character's short rest (everything but the hit dice, which are spent
+  // one at a time). Shared with the player's phone. Returns whether Pact
+  // Magic slots came back. Does not save — the caller does, once.
+  _shortRestOne(c, i){
+    let pactRestored = false;
+    c.concentration = null;
+    // A rage lasts 1 minute; an hour's rest is well past that. Only the LONG
+    // rest cleared it — and the long rest's own comment claims "rage and
+    // wild shape end at any rest", which was true of one of the two rests.
+    c.rage = false; c.rageRounds = null;
+    if (c.wildshape) c.wildshape = null;
+    if (Array.isArray(c.resources)){
+      c.resources = c.resources.map(r => {
+        if (/short\s*rest/i.test(r.name || '')) return {...r, current: r.max || r.current};
+        return r;
+      });
+    }
+    // Warlock Pact Magic is the one kind of spell slot that comes back on a
+    // SHORT rest, and nothing restored it — a warlock had to refund every
+    // pip by hand after each fight, or quietly play down a slot.
+    //
+    // Restricted to a PURE warlock on purpose. There is no marker in the
+    // sheet distinguishing a pact slot from an ordinary one, so on a
+    // "Warlock/Sorcerer" the same map holds both and refilling all of them
+    // would hand back the sorcerer's slots too. A multiclass warlock still
+    // refunds pips by hand, which is what happens today.
+    const cls = String(c.cls || '').trim().toLowerCase();
+    if (cls === 'warlock' && c.sheet && c.sheet.spellSlots){
+      const slots = {};
+      let changed = false;
+      Object.keys(c.sheet.spellSlots).forEach(k => {
+        const s = c.sheet.spellSlots[k];
+        if ((s.expended || 0) > 0) changed = true;
+        slots[k] = {...s, expended: 0};
+      });
+      if (changed){ c.sheet = {...c.sheet, spellSlots: slots}; pactRestored = true; }
+    }
+    this._mirrorPartyToCombatSilent(i);
+    return pactRestored;
   },
 
   // Render the "Last roll" strip + optional history (last 4 prior rolls).
@@ -2541,29 +2547,40 @@ registerPanel('party',{
     showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? You'll roll ${c.hitDice.dieType||'d8'} + ${conMod>=0?'+':''}${conMod} (CON) and heal that much.`,
       {title:'Spend hit die', confirmLabel:'Roll & Heal'}).then(ok => {
         if (!ok) return;
-        const roll = sktD(sides);
-        // Minimum 1, where the PHB says minimum 0. A deliberate table ruling,
-        // confirmed and kept — spending a die and healing nothing is a bad
-        // beat nobody enjoys. It can only differ for a character with a
-        // NEGATIVE Con modifier (roll + mod <= 0), so at CON 8 on a natural 1
-        // and not otherwise; every current party member is at +2 or better,
-        // where it can never fire at all.
-        // Recorded rather than left as a bare "house rule" note so the next
-        // pass over the rest rules does not raise it again.
-        const heal = Math.max(1, roll + conMod);
-        c.hitDice.current -= 1;
-        // Same cap expression as the heal path in _applyHpDelta. This used
-        // c.hpMax directly, so a character with no hpMax recorded got
-        // Math.min(undefined, n) === NaN — their HP became NaN and the die was
-        // spent anyway. Math.max(0, …) additionally heals up from a negative
-        // rather than from it, for anyone saved before HP was floored at 0.
-        const cap = c.hpMax || c.hp || 0;
-        c.hp = Math.min(cap, Math.max(0, c.hp || 0) + heal);
-        save();
-        syncPartyToCombat(i);
+        const r = this._rollHitDie(i);
+        if (!r) return;
         this._render();
-        showToast(`Rolled ${roll}+${conMod>=0?'+':''}${conMod} = ${heal} HP`);
+        showToast(`Rolled ${r.roll}+${r.conMod>=0?'+':''}${r.conMod} = ${r.heal} HP`);
       });
+  },
+  // The roll itself, without the confirm or the repaint — the player's phone
+  // spends hit dice through here too, so the two cannot heal differently.
+  // Returns { roll, conMod, heal, sides } or null when there is none to spend.
+  _rollHitDie(i){
+    const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return null;
+    const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
+    const sides = parseInt(String(c.hitDice.dieType||'d8').replace('d','')) || 8;
+    const roll = sktD(sides);
+    // Minimum 1, where the PHB says minimum 0. A deliberate table ruling,
+    // confirmed and kept — spending a die and healing nothing is a bad
+    // beat nobody enjoys. It can only differ for a character with a
+    // NEGATIVE Con modifier (roll + mod <= 0), so at CON 8 on a natural 1
+    // and not otherwise; every current party member is at +2 or better,
+    // where it can never fire at all.
+    // Recorded rather than left as a bare "house rule" note so the next
+    // pass over the rest rules does not raise it again.
+    const heal = Math.max(1, roll + conMod);
+    c.hitDice.current -= 1;
+    // Same cap expression as the heal path in _applyHpDelta. This used
+    // c.hpMax directly, so a character with no hpMax recorded got
+    // Math.min(undefined, n) === NaN — their HP became NaN and the die was
+    // spent anyway. Math.max(0, …) additionally heals up from a negative
+    // rather than from it, for anyone saved before HP was floored at 0.
+    const cap = c.hpMax || c.hp || 0;
+    c.hp = Math.min(cap, Math.max(0, c.hp || 0) + heal);
+    save();
+    syncPartyToCombat(i);
+    return { roll, conMod, heal, sides };
   },
 
   // Render the hit-dice pip row when the character has imported hit dice.

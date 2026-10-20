@@ -4172,6 +4172,32 @@
       }
     }
 
+    // ── Party rests, after the hit-die / short-rest split ─────────────────
+    {
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      const P = panelDefs.party; openPanel('party'); await sleep(200);
+      try {
+        const i = state.party.findIndex(p => p.hpMax > 10);
+        state.party[i] = { ...state.party[i], hp: 5, hitDice: { current: 2, max: 4, dieType: 'd8' }, concentration: 'Bless',
+          resources: [...(state.party[i].resources || []), { name: 'Test (short rest)', current: 0, max: 2 }] };
+        const r = P._rollHitDie(i);
+        ok('party: a hit die heals and is spent', !!r && state.party[i].hitDice.current === 1 && state.party[i].hp === 5 + r.heal);
+        P._applyShortRest(); await sleep(30);
+        const tr = state.party[i].resources.find(x => x.name === 'Test (short rest)');
+        ok('party: the party short rest still refreshes short-rest resources and drops concentration',
+           tr && tr.current === 2 && !state.party[i].concentration);
+      } catch(e){ ok('party: the rest checks ran to completion', false, e.message); }
+      finally {
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party'); P._render();
+      }
+    }
+
     // ── Handouts ──────────────────────────────────────────────────────────
     {
       const h0 = localStorage.getItem('skt-handouts-v1');
@@ -4442,6 +4468,59 @@
           paRender();
         }
       }
+      // ── The player's own bookkeeping ──────────────────────────────────────
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        try {
+          const i = state.party.findIndex(p => p.sheet && p.sheet.spellSlots && Object.keys(p.sheet.spellSlots).length && (p.resources || []).length);
+          if (i >= 0){
+            state.party[i] = { ...state.party[i], exhaustion: 2, hp: Math.max(1, (state.party[i].hpMax || 20) - 15), concentration: null,
+              hitDice: { current: 3, max: 6, dieType: 'd8' } };
+            save();
+            paSetPc(state.party[i].id); paTab = 'you'; paRender();
+            const P = () => state.party[i];
+            const r0 = P().resources[0].current;
+            const lit = document.querySelector('[data-pa-res="0"]:not(.off)');
+            ok('player: a resource pip is a button', !!lit);
+            lit && lit.click(); await sleep(15);
+            ok('player: tapping a lit pip spends one, and only one', P().resources[0].current === r0 - 1);
+            document.querySelector('[data-pa-res="0"].off').click(); await sleep(15);
+            ok('player: tapping an empty pip gives one back', P().resources[0].current === r0);
+            const lvl = Object.keys(P().sheet.spellSlots).find(k => (P().sheet.spellSlots[k].total || 0) > (P().sheet.spellSlots[k].expended || 0));
+            const e0 = P().sheet.spellSlots[lvl].expended || 0;
+            document.querySelector('[data-pa-slot="' + lvl + '"]:not(.off)').click(); await sleep(15);
+            ok('player: tapping a spell slot spends it', (P().sheet.spellSlots[lvl].expended || 0) === e0 + 1);
+            document.querySelector('[data-pa-slot="' + lvl + '"].off').click(); await sleep(15);
+            ok('player: and tapping it again gets it back', (P().sheet.spellSlots[lvl].expended || 0) === e0);
+            document.querySelector('[data-pa-rest="open"]').click(); await sleep(20);
+            const hp0 = P().hp;
+            document.querySelector('#pa-rest [data-rest="spend"]').click(); await sleep(20);
+            ok('player: a short rest spends a hit die and heals', P().hitDice.current === 2 && P().hp > hp0);
+            state.party[i] = { ...P(), concentration: 'Bless', resources: [...P().resources, { name: 'Probe (short rest)', current: 0, max: 1 }] };
+            document.querySelector('#pa-rest [data-rest="finish"]').click(); await sleep(20);
+            const pr = P().resources.find(x => x.name === 'Probe (short rest)');
+            ok('player: finishing it refreshes short-rest resources and ends concentration', !!pr && pr.current === 1 && !P().concentration && !document.getElementById('pa-rest'));
+            paRender();
+            ok('player: a caster can set concentration', !!document.querySelector('[data-pa-conc="set"]'));
+            paSetConcentration('Hex'); await sleep(15);
+            ok('player: concentration shows and is on the character', P().concentration === 'Hex' && /Hex/.test((document.querySelector('.pa-conc') || {}).textContent || ''));
+            document.querySelector('[data-pa-conc="drop"]').click(); await sleep(15);
+            ok('player: and can be dropped', !P().concentration);
+            paRender();
+            const ex = document.querySelector('[data-pa-cond="Exhaustion"]');
+            ok('player: exhaustion shows with its level', !!ex && /Exhaustion 2/.test(ex.textContent));
+            ex && ex.click(); await sleep(20);
+            ok('player: and tapping it explains it', /Level 2 of 6/.test((document.querySelector('.pa-conddet') || {}).textContent || ''));
+          }
+        } catch(e){ ok('player: the bookkeeping checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-rest')?.remove(); paCondOpen = null;
+          if (p0 != null) localStorage.setItem('skt-party-v1', p0); loadDomain('party');
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paTab = tab0; paRender();
+        }
+      }
+
       // ── "Roll initiative!" on this phone ──────────────────────────────────
       {
         const r0 = localStorage.getItem('skt-initreq-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;

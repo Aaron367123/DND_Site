@@ -702,15 +702,23 @@ function paYouScreen(){
   const hp = c ? c.hp : pc.hp, hpMax = c ? c.hpMax : pc.hpMax;
   const pct = hpMax ? Math.max(0, (hp / hpMax) * 100) : 0;
   const col = pct <= 0 ? '#5a3a3a' : pct < 35 ? 'var(--danger)' : pct < 75 ? 'var(--warning)' : 'var(--success)';
-  const conds = (c && c.conditions || []).map(x =>
-    `<button class="pa-cond${paCondOpen === x ? ' on' : ''}" data-pa-cond="${paEsc(x)}" aria-expanded="${paCondOpen === x}">${paEsc(x)}<span class="pa-cond-i" aria-hidden="true">?</span></button>`).join('');
-  const condDet = (c && (c.conditions || []).includes(paCondOpen)) ? paConditionDetail(paCondOpen) : '';
+  // Exhaustion is a LEVEL on the character sheet (0–6), not a tag, so it
+  // never showed here unless someone also added it as a condition. Shown
+  // first, with its level; tapping it opens the rule like any condition.
+  const exh = Math.max(0, Math.min(6, +pc.exhaustion || 0));
+  const condNames = (c && c.conditions || []).filter(x => !(exh && /^exhaustion\b/i.test(x)));
+  const chip = (x, label) => `<button class="pa-cond${paCondOpen === x ? ' on' : ''}" data-pa-cond="${paEsc(x)}" aria-expanded="${paCondOpen === x}">${paEsc(label || x)}<span class="pa-cond-i" aria-hidden="true">?</span></button>`;
+  const conds = (exh ? chip('Exhaustion', 'Exhaustion ' + exh) : '') + condNames.map(x => chip(x)).join('');
+  const condDet = condNames.includes(paCondOpen) ? paConditionDetail(paCondOpen)
+                : (paCondOpen === 'Exhaustion' && exh) ? paConditionDetail('Exhaustion', 'Level ' + exh + ' of 6') : '';
   const down = !!(c && c.isPC && (c.hp || 0) <= 0 && !c.dead && !c.stable);
 
-  const res = (pc.resources || []).map(r => {
+  // Tap a lit pip to spend one, an empty one to get one back — one at a
+  // time, so a fat-fingered tap on a phone never spends three.
+  const res = (pc.resources || []).map((r, ri) => {
     const max = Math.max(0, Math.min(24, r.max || 0));
     let pips = '';
-    for (let i = 0; i < max; i++) pips += `<span class="pa-res-pip ${i < r.current ? '' : 'off'}"></span>`;
+    for (let i = 0; i < max; i++) pips += `<button class="pa-res-pip ${i < r.current ? '' : 'off'}" data-pa-res="${ri}" aria-label="${i < r.current ? 'Use one ' + paEsc(r.name) : 'Get one ' + paEsc(r.name) + ' back'}"></button>`;
     return `<div class="pa-res"><span class="pa-res-n">${paEsc(r.name)}</span>
       <span class="pa-res-pips">${pips}</span>
       <span class="pa-res-c">${r.current}/${r.max}</span></div>`;
@@ -720,7 +728,7 @@ function paYouScreen(){
     .map(n => parseInt(n)).filter(n => n >= 1).sort((a, b) => a - b).map(l => {
       const s = pc.sheet.spellSlots[l], total = s.total || 0, left = total - (s.expended || 0);
       let pips = '';
-      for (let i = 0; i < total; i++) pips += `<span class="pa-res-pip ${i < left ? '' : 'off'}"></span>`;
+      for (let i = 0; i < total; i++) pips += `<button class="pa-res-pip ${i < left ? '' : 'off'}" data-pa-slot="${l}" aria-label="${i < left ? 'Use a level ' + l + ' slot' : 'Get a level ' + l + ' slot back'}"></button>`;
       return `<div class="pa-res"><span class="pa-res-n">Level ${l}</span>
         <span class="pa-res-pips">${pips}</span><span class="pa-res-c">${left}/${total}</span></div>`;
     }).join('') : '';
@@ -796,9 +804,12 @@ function paYouScreen(){
       </div>
 
       ${conds ? `<div class="pa-conds">${conds}</div>${condDet}` : ''}
+      ${paConcRow(pc)}
       ${down ? paDeathBlock(c) : ''}
       ${res ? `<div class="pa-sec"><h4>Resources</h4>${res}</div>` : ''}
       ${slots ? `<div class="pa-sec"><h4>Spell slots</h4>${slots}</div>` : ''}
+      ${pc.hitDice && pc.hitDice.max ? `<div class="pa-sec pa-rest-row"><span>Hit dice <b>${Math.max(0, pc.hitDice.current ?? pc.hitDice.max)}/${pc.hitDice.max}</b> ${paEsc(pc.hitDice.dieType || 'd8')}</span>
+        <button class="btn" data-pa-rest="open">💤 Short rest</button></div>` : ''}
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
       ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
       <div class="pa-roll" id="pa-roll"></div>
@@ -829,14 +840,14 @@ function paConditionEntry(name){
   }
   return null;
 }
-function paConditionDetail(name){
+function paConditionDetail(name, extra){
   const d = paConditionEntry(name);
   const loaded = typeof _5eLoaded !== 'undefined' && _5eLoaded;
   let body;
   if (d && typeof renderConditionFull === 'function') body = renderConditionFull(d);
   else body = '<p class="pa-dim">' + (loaded ? 'No rules entry for this one — ask your DM.' : 'Loading the rules…') + '</p>';
   return `<div class="pa-conddet">
-      <div class="pa-conddet-h"><b>${paEsc(name)}</b>
+      <div class="pa-conddet-h"><b>${paEsc(name)}${extra ? ' <span class="pa-conddet-x">' + paEsc(extra) + '</span>' : ''}</b>
         <button class="pa-featdet-x" data-pa-condclose="1" aria-label="Close">✕</button></div>
       <div class="pa-conddet-b">${body}</div>
     </div>`;
@@ -857,6 +868,106 @@ function paMaxLossLine(pc){
   if (!loss) return '';
   return '<div class="pa-hp-loss">Max HP lowered by ' + loss + ' until a long rest (normally ' + pc.hpMaxNormal + ')'
     + (pc.hpMaxNote ? ' — ' + paEsc(pc.hpMaxNote) : '') + '</div>';
+}
+
+// ─── The player's own bookkeeping ─────────────────────────────────────────────
+// Spending a slot, a Ki point or a hit die, and saying what you concentrate
+// on, used to mean asking the DM to tap it on their screen. These write the
+// character's own party record — the sync merges it field by field, so a
+// player marking a slot and the DM changing HP at the same moment both land.
+function paMyIdx(){ const id = paMe().pcId; return id ? (state.party || []).findIndex(p => p.id === id) : -1; }
+function paTick(){ try { navigator.vibrate && navigator.vibrate(12); } catch(e){} }
+function paTapResource(ri, refund){
+  const i = paMyIdx(); if (i < 0) return;
+  const pc = state.party[i], list = (pc.resources || []).slice(), r = list[ri]; if (!r) return;
+  const max = Math.max(0, r.max || 0);
+  const cur = Math.max(0, Math.min(max, (r.current || 0) + (refund ? 1 : -1)));
+  if (cur === r.current) return;
+  list[ri] = { ...r, current: cur };
+  state.party[i] = { ...pc, resources: list };
+  save(); paTick(); paRenderScreen();
+}
+function paTapSlot(level, refund){
+  const i = paMyIdx(); if (i < 0) return;
+  const pc = state.party[i];
+  const slots = (pc.sheet && pc.sheet.spellSlots) || {}, s = slots[level]; if (!s) return;
+  const total = s.total || 0;
+  const exp = Math.max(0, Math.min(total, (s.expended || 0) + (refund ? -1 : 1)));
+  if (exp === (s.expended || 0)) return;
+  state.party[i] = { ...pc, sheet: { ...pc.sheet, spellSlots: { ...slots, [level]: { ...s, expended: exp } } } };
+  save(); paTick(); paRenderScreen();
+}
+// Concentration lives on the party record — the combat card reads it there,
+// so setting it here shows on the DM's tracker too.
+function paConcRow(pc){
+  if (pc.concentration){
+    return '<div class="pa-conc">🌀 Concentrating on <b>' + paEsc(pc.concentration) + '</b>'
+      + '<button class="btn small" data-pa-conc="drop">Drop</button></div>';
+  }
+  const caster = !!(pc.sheet && ((pc.sheet.spellSlots && Object.keys(pc.sheet.spellSlots).length) || (Array.isArray(pc.sheet.spells) && pc.sheet.spells.length)));
+  return caster ? '<button class="pa-conc-set" data-pa-conc="set">🌀 Concentrate on a spell…</button>' : '';
+}
+function paSetConcentration(name){
+  const i = paMyIdx(); if (i < 0) return;
+  const pc = state.party[i], was = pc.concentration;
+  state.party[i] = { ...pc, concentration: name || null };
+  save(); paRenderScreen();
+  try { panelDefs.combat && panelDefs.combat._render && panelDefs.combat._render(); } catch(e){}
+  if (typeof showToast === 'function'){
+    if (!name && was) showToast('🌀 ' + was + ' ends');
+    else if (name) showToast('🌀 Concentrating on ' + name + (was && was !== name ? ' — ' + was + ' ends' : ''));
+  }
+}
+function paPromptConcentration(){
+  if (typeof showModal !== 'function') return;
+  showModal('🌀 Concentrate on…', [
+    { id: 'spell', label: 'Spell', type: 'text', value: '', placeholder: 'Bless, Hex, Hold Person…' },
+  ], 'Concentrate').then(r => {
+    const n = r && String(r.spell || '').trim();
+    if (n) paSetConcentration(n);
+  });
+}
+// Short rest: spend hit dice one at a time (the party sheet's own roll, so
+// the house ruling on minimum healing is the same everywhere), then finish
+// the rest — short-rest resources and Pact Magic come back, concentration
+// and rage end, exactly as the DM's party short rest does.
+function paOpenShortRest(){
+  const i = paMyIdx(); if (i < 0) return;
+  document.getElementById('pa-rest')?.remove();
+  const P = panelDefs.party;
+  const ov = document.createElement('div');
+  ov.id = 'pa-rest'; ov.className = 'pa-handout';
+  const log = [];
+  const paint = () => {
+    const pc = state.party[paMyIdx()]; if (!pc) return ov.remove();
+    const hd = pc.hitDice || { current: 0, max: 0 };
+    const con = (pc.abilities && typeof pc.abilities.con === 'number') ? Math.floor((pc.abilities.con - 10) / 2) : 0;
+    ov.innerHTML = '<div class="pa-ho-card pa-rest-card" role="dialog" aria-modal="true" aria-label="Short rest">'
+      + '<div class="pa-ho-head"><b>💤 Short rest</b></div>'
+      + '<div class="pa-ho-body">'
+      +   '<div class="pa-rest-hp">HP <b>' + pc.hp + '</b> / ' + pc.hpMax + ' · Hit dice <b>' + (hd.current || 0) + '/' + hd.max + '</b> ' + paEsc(hd.dieType || 'd8')
+      +   ' · CON ' + (con >= 0 ? '+' : '') + con + '</div>'
+      +   '<button class="btn primary pa-rest-spend" data-rest="spend"' + ((hd.current || 0) > 0 && pc.hp < pc.hpMax ? '' : ' disabled') + '>🎲 Spend a hit die</button>'
+      +   (log.length ? '<div class="pa-rest-log">' + log.map(l => '<div>' + l + '</div>').join('') + '</div>' : '')
+      + '</div>'
+      + '<div class="pa-rest-btns"><button class="btn" data-rest="cancel">Not now</button>'
+      + '<button class="btn primary" data-rest="finish">Finish the short rest</button></div></div>';
+  };
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-rest]'); if (!b) return;
+    const idx = paMyIdx(); if (idx < 0) return ov.remove();
+    if (b.dataset.rest === 'spend' && P && typeof P._rollHitDie === 'function'){
+      const r = P._rollHitDie(idx);
+      if (r) log.push(paEsc('d' + r.sides + ' (' + r.roll + ') ' + (r.conMod >= 0 ? '+' : '') + r.conMod + ' = ' + r.heal + ' HP'));
+      paTick(); paint(); paRenderScreen();
+    } else if (b.dataset.rest === 'finish'){
+      if (P && typeof P._shortRestOne === 'function'){ P._shortRestOne(state.party[idx], idx); save(); }
+      ov.remove(); paRenderScreen();
+      if (typeof showToast === 'function') showToast('💤 Short rest done');
+    } else if (b.dataset.rest === 'cancel') ov.remove();
+  });
+  paint();
+  document.body.appendChild(ov);
 }
 
 function paDeathBlock(c){
@@ -1110,6 +1221,13 @@ function paOnClick(e){
   const featUse = e.target.closest('[data-pa-featuse]');
   if (featUse){ paUseActivation(+featUse.dataset.paFeatuse); return; }
   if (e.target.closest('[data-pa-featclose]')){ paFeatOpen = null; paRender(); return; }
+  const rp = e.target.closest('[data-pa-res]');
+  if (rp){ paTapResource(+rp.dataset.paRes, rp.classList.contains('off')); return; }
+  const sp = e.target.closest('[data-pa-slot]');
+  if (sp){ paTapSlot(sp.dataset.paSlot, sp.classList.contains('off')); return; }
+  const cc = e.target.closest('[data-pa-conc]');
+  if (cc){ cc.dataset.paConc === 'drop' ? paSetConcentration(null) : paPromptConcentration(); return; }
+  if (e.target.closest('[data-pa-rest]')){ paOpenShortRest(); return; }
   const cond = e.target.closest('[data-pa-cond]');
   if (cond){ paCondOpen = paCondOpen === cond.dataset.paCond ? null : cond.dataset.paCond; paRenderScreen(); return; }
   if (e.target.closest('[data-pa-condclose]')){ paCondOpen = null; paRenderScreen(); return; }

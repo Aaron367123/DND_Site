@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '0c0f84f1d1';
+const BUILD = '4ba1e0f12c';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=e8198832a4',
+  'styles/main.css?v=92017870a2',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=58d1b9e0c5',
   'js/core/theme.js?v=4589bc6790',
@@ -52,7 +52,7 @@ const PRECACHE = [
   'js/generated/reactions.js?v=faa668dc18',
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=7de67d9c81',
-  'js/panels/party.js?v=8a06b01332',
+  'js/panels/party.js?v=8d48c8e845',
   'js/panels/shop.js?v=fadf7d5fe3',
   'js/sync/notes-sync.js?v=8c42540638',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -81,7 +81,7 @@ const PRECACHE = [
   'js/ui/workspaces.js?v=bdaf579267',
   'js/ui/command-palette.js?v=05faaa505c',
   'js/features/pdf-import.js?v=06787122c5',
-  'js/player/player-app.js?v=277e209f82',
+  'js/player/player-app.js?v=898e0562fb',
   'js/ui/player-view.js?v=d4b768de97',
   'js/sync/realtime.js?v=360646e995',
   'js/ui/tutorial.js?v=e47e670b86',

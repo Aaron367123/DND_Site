@@ -4885,3 +4885,21 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .pa-init-type{display:flex; flex-direction:column; gap:6px; font-size:var(--fs-sm); color:var(--text-muted)}
 .pa-init-type input{font:inherit; font-size:var(--fs-2xl); padding:10px 12px; text-align:center}
 .pa-init-send{padding:14px; font-size:var(--fs-lg)}
+
+/* ─── Player's own bookkeeping (player-app.js) ───────────────────────────── */
+button.pa-res-pip{border:0; padding:0; cursor:pointer; font:inherit}
+/* A bigger target than it looks: pips are small, fingers are not. */
+button.pa-res-pip{position:relative}
+button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
+.pa-conc{display:flex; align-items:center; gap:8px; margin:8px 0; padding:8px 12px; border:1px solid rgba(90,140,220,.55);
+  border-radius:var(--r-md); background:rgba(90,140,220,.12); font-size:var(--fs-md)}
+.pa-conc .btn{margin-left:auto}
+.pa-conc-set{display:block; margin:8px 0; padding:8px 12px; width:100%; text-align:left; font:inherit; font-size:var(--fs-md);
+  color:var(--text-muted); background:transparent; border:1px dashed var(--border); border-radius:var(--r-md); cursor:pointer}
+.pa-rest-row{display:flex; align-items:center; justify-content:space-between; gap:10px}
+.pa-rest-hp{margin-bottom:12px; font-size:var(--fs-lg)}
+.pa-rest-spend{width:100%; padding:14px; font-size:var(--fs-lg)}
+.pa-rest-log{margin-top:10px; font-size:var(--fs-md); color:var(--text-muted)}
+.pa-rest-btns{display:flex; gap:8px; padding:0 14px 14px}
+.pa-rest-btns .btn{flex:1; padding:12px}
+.pa-conddet-x{font-weight:400; font-size:var(--fs-sm); color:var(--text-muted); margin-left:6px; text-transform:none}
