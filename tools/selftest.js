@@ -4336,6 +4336,200 @@
       finally { _fbDb = db0; sktPresenceSeed({}); }
     }
 
+    // -- The fight, from the token ----------------------------------------
+    {
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      closePanel('battlemap'); openPanel('battlemap'); await sleep(900);
+      const bm = panelDefs.battlemap, C = panelDefs.combat;
+      const mode0 = state.settings.monsterStatsMode;
+      try {
+        const tok = bm._tokens.find(t => bm._combatantFor(t) && !bm._combatantFor(t).isPC);
+        ok('token: a token knows which fighter it stands for', !!tok);
+        const mon = bm._combatantFor(tok), id = mon.id;
+        const at = () => state.combatants.findIndex(c => c.id === id);
+        const el = () => document.querySelector('.map-token[data-tid="' + tok.id + '"]');
+        const setHp = n => { const i = at(); state.combatants[i] = { ...state.combatants[i], hp: n }; save(); };
+
+        // Hurt things look hurt.
+        setHp(mon.hpMax); await sleep(80);
+        ok('token: a healthy creature wears no ring', !/wound-/.test((el() || {}).className || ''));
+        setHp(Math.ceil(mon.hpMax * 0.4)); await sleep(80);
+        ok('token: at half it gets a ring', /wound-half/.test((el() || {}).className || ''), (el() || {}).className);
+        setHp(Math.max(1, Math.ceil(mon.hpMax * 0.1))); await sleep(80);
+        ok('token: near the end the ring changes', /wound-low/.test((el() || {}).className || ''), (el() || {}).className);
+        ok('token: and the DM reads the real numbers off it',
+           /\d+\/\d+ HP/.test((el() || {}).title || ''), (el() || {}).title);
+
+        // Damage and conditions where the creature is.
+        bm._selected = tok.id; bm._showPanel(tok); await sleep(60);
+        const box = bm._body.querySelector('#tp-hp');
+        ok('token: its panel offers hit points', !!box && box.style.display === 'block'
+           && /\d+\/\d+ HP/.test((bm._body.querySelector('#tp-hp-line') || {}).textContent || ''));
+        const hp0 = state.combatants[at()].hp;
+        bm._body.querySelector('#tp-amt').value = '3';
+        bm._body.querySelector('#tp-dmg').click(); await sleep(80);
+        ok('token: damage from the token lands on the card', state.combatants[at()].hp === hp0 - 3);
+        ok('token: and can be taken back', /took 3 damage/.test(sktUndoLabel() || ''), sktUndoLabel());
+        sktUndo(); await sleep(60);
+        ok('token: undone, the hit points are back', state.combatants[at()].hp === hp0);
+        bm._body.querySelector('#tp-heal').click(); await sleep(80);
+        ok('token: healing works the same way', state.combatants[at()].hp === Math.min(mon.hpMax, hp0 + 3));
+        let condItems = null; const sm = window.showContextMenu;
+        window.showContextMenu = (x, y, it) => { condItems = it; };
+        bm._body.querySelector('#tp-cond').click(); await sleep(40);
+        window.showContextMenu = sm;
+        const prone = (condItems || []).find(i => i.label === 'Prone');
+        ok('token: conditions are offered from the same panel', !!prone, (condItems || []).length);
+        prone && prone.onClick(); await sleep(60);
+        ok('token: and one applied shows on the card',
+           (state.combatants[at()].conditions || []).includes('Prone'));
+        sktUndo(); await sleep(60);
+        ok('token: that is undoable too', !(state.combatants[at()].conditions || []).includes('Prone'));
+
+        // Hidden from the players.
+        bm._body.querySelector('#tp-hide').click(); await sleep(80);
+        ok('token: it can be hidden from the players', tok.hidden === true
+           && /tok-hidden/.test((el() || {}).className || ''));
+        ok('token: and the button then offers to reveal it',
+           /Reveal/.test(bm._body.querySelector('#tp-hide').textContent));
+        ok('token: the DM still sees it', !!el());
+        ok('token: hiding is saved with the map',
+           (JSON.parse(localStorage.getItem('skt-battlemap-v1')).tokens.find(t => t.id === tok.id) || {}).hidden === true);
+        bm._body.querySelector('#tp-hide').click(); await sleep(80);
+        ok('token: and revealing puts it back', !tok.hidden);
+      } catch(e){ ok('token: the checks ran to completion', false, e.message); }
+      finally {
+        state.settings.monsterStatsMode = mode0;
+        bm._selected = null; bm._closePanel && bm._closePanel();
+        closePanel('battlemap');
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party'); panelDefs.combat._render();
+      }
+    }
+
+    // -- A word to one player ---------------------------------------------
+    {
+      const ho0 = localStorage.getItem('skt-handouts-v1');
+      try {
+        const pc = state.party.find(p => !p.foe), other = state.party.find(p => !p.foe && p.id !== pc.id);
+        localStorage.setItem('skt-handouts-v1', JSON.stringify({ list: [] }));
+        ok('whisper: it sends', sktSendWhisper(pc.id, 'The innkeeper is lying.') === true);
+        const h = sktHandouts().list[0];
+        ok('whisper: addressed to that character alone',
+           !!h && Array.isArray(h.to) && h.to.length === 1 && h.to[0] === pc.id, JSON.stringify(h && h.to));
+        ok('whisper: it carries the line, and nothing to download',
+           h.text === 'The innkeeper is lying.' && h.img === null && h.whisper === true);
+        ok('whisper: it is stamped so the phone pops it up', typeof h.shownAt === 'number' && h.shownAt > 0);
+        ok('whisper: an empty one is not sent', sktSendWhisper(pc.id, '   ') === false);
+        // Chatter is capped; a picture handout is never dropped for it.
+        const keep = { id: 'keepme', title: 'Map', text: '', img: null, to: 'all', ts: 1, shownAt: 1 };
+        const d = sktHandouts(); d.list.push(keep);
+        localStorage.setItem('skt-handouts-v1', JSON.stringify(d));
+        for (let i = 0; i < 25; i++) sktSendWhisper(pc.id, 'line ' + i);
+        const after = sktHandouts().list;
+        ok('whisper: old whispers are trimmed', after.filter(x => x.whisper).length === 20, after.filter(x => x.whisper).length);
+        ok('whisper: and the handouts are left alone', after.some(x => x.id === 'keepme'));
+        if (other){
+          ok('whisper: each one goes to one phone',
+             sktHandouts().list.filter(x => x.whisper && x.to.includes(other.id)).length === 0);
+        }
+        const cmd = _cpCommands().find(c => c.group === 'Players' && c.label === 'Whisper to ' + pc.name);
+        ok('whisper: Ctrl+K can send one by name', !!cmd);
+      } catch(e){ ok('whisper: the checks ran to completion', false, e.message); }
+      finally {
+        _remoteUpdate = true;
+        try { if (ho0 == null) localStorage.removeItem('skt-handouts-v1'); else localStorage.setItem('skt-handouts-v1', ho0); }
+        finally { _remoteUpdate = false; }
+      }
+    }
+
+    // -- Players roll their own saving throws ------------------------------
+    {
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      const C = panelDefs.combat; openPanel('combat'); await sleep(250); C._render();
+      const req0 = localStorage.getItem('skt-savereq-v1');
+      try {
+        const pcs = state.combatants.filter(c => c.isPC && !c.dead).slice(0, 2).map(c => c.id);
+        ok('saves: two characters to ask', pcs.length === 2);
+        C.openAreaSave({ name: 'Fireball', ab: 'DEX', dc: 15, parts: [{ dice: '8d6', type: 'fire' }], targets: pcs });
+        await sleep(120);
+        const back = document.getElementById('area-save-back');
+        ok('saves: the area dialog offers to ask the players', !!back.querySelector('[data-as="ask"]'));
+        ok('saves: with a switch for telling them the DC', !!back.querySelector('#as-showdc'));
+        back.querySelector('#as-showdc').checked = true;
+        back.querySelector('[data-as="ask"]').click(); await sleep(100);
+        const req = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+        ok('saves: the ask names the ability, the DC and what it is for',
+           !!req && req.ab === 'DEX' && req.dc === 15 && req.showDc === true && req.name === 'Fireball'
+           && req.pcs.length === 2 && !req.closed, JSON.stringify(req && { ab: req.ab, dc: req.dc, n: req.pcs.length }));
+        ok('saves: their rows wait for them', back.querySelectorAll('.as-table tr.waiting').length === 2);
+        ok('saves: and nothing can be applied while they do',
+           back.querySelector('[data-as="apply"]').disabled === true);
+        // One answers well, one badly.
+        req.answers = { [pcs[0]]: { v: 23, rid: req.id, at: Date.now() } };
+        saveJson('skt-savereq-v1', req, 'save request');
+        C._onSaveAnswers(); await sleep(60);
+        ok('saves: an answer fills in that row',
+           back.querySelectorAll('.as-table tr.waiting').length === 1
+           && back.querySelectorAll('.as-table tr.ok').length === 1);
+        ok('saves: an answer from an older ask is ignored', (() => {
+          const stale = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+          stale.answers[pcs[1]] = { v: 25, rid: 'sr_somethingelse', at: Date.now() };
+          saveJson('skt-savereq-v1', stale, 'save request');
+          C._onSaveAnswers();
+          return back.querySelectorAll('.as-table tr.waiting').length === 1;
+        })());
+        const r2 = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+        r2.answers[pcs[1]] = { v: 4, rid: r2.id, at: Date.now() };
+        saveJson('skt-savereq-v1', r2, 'save request');
+        C._onSaveAnswers(); await sleep(60);
+        ok('saves: once everyone is in, the damage can be applied',
+           back.querySelectorAll('.as-table tr.waiting').length === 0
+           && back.querySelector('[data-as="apply"]').disabled === false);
+        ok('saves: the table shows it was their own roll',
+           /their roll/.test(back.querySelector('.as-table').textContent));
+        const hpBefore = pcs.map(id => (state.combatants.find(c => c.id === id) || {}).hp);
+        back.querySelector('[data-as="apply"]').click(); await sleep(150);
+        const took = pcs.map((id, k) => hpBefore[k] - (state.combatants.find(c => c.id === id) || {}).hp);
+        ok('saves: the one who saved takes less than the one who did not',
+           took[0] < took[1] && took[1] > 0, JSON.stringify(took));
+        ok('saves: and the pop-up is taken off the phones',
+           (JSON.parse(localStorage.getItem('skt-savereq-v1')) || {}).closed === true);
+
+        // Nobody waits forever: the DM can roll a straggler's save instead.
+        C.openAreaSave({ name: 'Breath', ab: 'DEX', dc: 12, parts: [{ dice: '2d6', type: 'fire' }], targets: pcs });
+        await sleep(100);
+        const b2 = document.getElementById('area-save-back');
+        b2.querySelector('[data-as="ask"]').click(); await sleep(80);
+        ok('saves: a waiting row can be rolled by the DM instead',
+           !!b2.querySelector('[data-as="rollfor"]'));
+        b2.querySelector('[data-as="rollfor"]').click(); await sleep(60);
+        ok('saves: which fills it in', b2.querySelectorAll('.as-table tr.waiting').length === 1);
+        b2.querySelector('[data-as="cancel"]').click(); await sleep(60);
+        ok('saves: closing the dialog closes the ask',
+           (JSON.parse(localStorage.getItem('skt-savereq-v1')) || {}).closed === true);
+        ok('saves: asking with no characters picked does nothing', C.askSaves({ ab: 'WIS', dc: 10, pcs: [] }) === null);
+      } catch(e){ ok('saves: the checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('area-save-back')?.remove();
+        C._areaSaveOnAnswers = null;
+        _remoteUpdate = true;
+        try {
+          if (req0 == null) localStorage.removeItem('skt-savereq-v1'); else localStorage.setItem('skt-savereq-v1', req0);
+          ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); });
+        } finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party'); C._render();
+      }
+    }
+
     // ── Areas of effect on the map ────────────────────────────────────────
     {
       _remoteUpdate = true;
@@ -4894,6 +5088,146 @@
             loadDomain('party');
           }
           paTab = tab0; paRender();
+        }
+      }
+
+      // -- "Make a DEX save" on this phone ----------------------------------
+      {
+        const req0 = localStorage.getItem('skt-savereq-v1');
+        try {
+          const me = paMe().pcId || (state.party[0] || {}).id;
+          if (!paMe().pcId) paSetPc(me);
+          const ask = (o) => {
+            localStorage.setItem('skt-savereq-v1', JSON.stringify(Object.assign({
+              id: 'sr_t' + Math.random().toString(36).slice(2, 7), askedAt: Date.now(),
+              ab: 'DEX', dc: 15, showDc: true, name: 'Fireball', pcs: [me], answers: {}, closed: false,
+            }, o || {})));
+            paOnSaveRequest();
+          };
+          ask(); await sleep(80);
+          const card = () => document.getElementById('pa-save');
+          ok('player: a save the DM called for pops up', !!card());
+          ok('player: it names the ability and this character’s bonus',
+             /Dexterity saving throw/.test(card().textContent)
+             && /bonus/.test(card().textContent), card().textContent.slice(0, 60));
+          ok('player: and the number to beat, when the DM says so',
+             /beat/.test(card().textContent) && /15/.test(card().textContent));
+          card().querySelector('[data-pa-save="roll"]').click(); await sleep(50);
+          const line = card().querySelector('#pa-save-dice').textContent;
+          ok('player: rolling shows the dice and whether it made it',
+             /d20 \(\d+\)/.test(line) && /(made it|missed it)/.test(line), line);
+          const typed = parseInt(card().querySelector('#pa-save-val').value, 10);
+          card().querySelector('[data-pa-save="send"]').click(); await sleep(80);
+          const r = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+          ok('player: sending files the total under this character',
+             r.answers[me] && r.answers[me].v === typed && r.answers[me].rid === r.id);
+          ok('player: and the pop-up goes away', !document.getElementById('pa-save'));
+          // A table that keeps the DC to itself.
+          ask({ showDc: false }); await sleep(80);
+          ok('player: with the DC kept back, it just asks for the roll',
+             !!card() && !/beat/.test(card().textContent));
+          card().querySelector('[data-pa-save="dis"]').click(); await sleep(50);
+          ok('player: disadvantage keeps the lower of two',
+             /2d20 \((\d+), (\d+)\) keep/.test(card().querySelector('#pa-save-dice').textContent),
+             card().querySelector('#pa-save-dice').textContent);
+          ok('player: and says nothing about making it',
+             !/(made it|missed it)/.test(card().querySelector('#pa-save-dice').textContent));
+          // Somebody else's save is none of this phone's business.
+          ask({ pcs: ['not-this-character'] }); await sleep(80);
+          ok('player: a save asked of another character does not pop up here', !card());
+          // Neither is one the DM has already closed.
+          ask({ closed: true }); await sleep(60);
+          ok('player: nor one the DM has closed', !card());
+        } catch(e){ ok('player: the saving-throw checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-save')?.remove();
+          _remoteUpdate = true;
+          try { if (req0 == null) localStorage.removeItem('skt-savereq-v1'); else localStorage.setItem('skt-savereq-v1', req0); }
+          finally { _remoteUpdate = false; }
+        }
+      }
+
+      // -- A word meant for this phone --------------------------------------
+      {
+        const ho0 = localStorage.getItem('skt-handouts-v1');
+        try {
+          const me = paMe().pcId;
+          const mk = to => ({ list: [{ id: 'w_t', title: 'A word from the DM', text: 'The innkeeper is lying.',
+                                       img: null, to, ts: Date.now(), shownAt: Date.now(), whisper: true }] });
+          localStorage.setItem('skt-handouts-v1', JSON.stringify(mk(['someone-else'])));
+          paOnHandouts(); await sleep(80);
+          ok('player: a whisper for someone else never shows here',
+             !document.getElementById('pa-handout') && paMyHandouts().length === 0);
+          localStorage.setItem('skt-handouts-v1', JSON.stringify(mk([me])));
+          paOnHandouts(); await sleep(120);
+          const ov = document.getElementById('pa-handout');
+          ok('player: one meant for this character pops up',
+             !!ov && /The innkeeper is lying/.test(ov.textContent));
+          ok('player: and says it is for them alone', !!ov && /For you alone/.test(ov.textContent));
+          ov.querySelector('.pa-ho-close').click(); await sleep(60);
+          ok('player: closing it leaves it in their handouts', !document.getElementById('pa-handout')
+             && paMyHandouts().length === 1);
+        } catch(e){ ok('player: the whisper checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-handout')?.remove();
+          _remoteUpdate = true;
+          try { if (ho0 == null) localStorage.removeItem('skt-handouts-v1'); else localStorage.setItem('skt-handouts-v1', ho0); }
+          finally { _remoteUpdate = false; }
+          paRender();
+        }
+      }
+
+      // -- What a player's map does and does not show -----------------------
+      {
+        const tab0 = paTab, mode0 = state.settings.monsterStatsMode;
+        const bm = panelDefs.battlemap;
+        let tok = null;
+        try {
+          paTab = 'map'; paRender(); await sleep(800);
+          if (bm._body){
+            tok = bm._tokens.find(t => t.isPC && bm._combatantFor(t));
+            const el = () => document.querySelector('.map-token[data-tid="' + (tok || {}).id + '"]');
+            ok('player: a character token is on the map', !!tok && !!el());
+            const c = bm._combatantFor(tok), i = state.combatants.findIndex(x => x.id === c.id);
+            const hp0 = c.hp;
+            state.combatants[i] = { ...c, hp: Math.ceil((c.hpMax || 20) * 0.3) };
+            save(); await sleep(150);
+            ok('player: a hurt character wears the ring here too',
+               /wound-/.test((el() || {}).className || ''), (el() || {}).className);
+            tok.hidden = true; bm._renderTokens(); await sleep(80);
+            ok('player: a hidden token is not on their screen at all', !el()
+               && !document.querySelector('.map-token-name[data-tid="' + tok.id + '"]'));
+            tok.hidden = false; bm._renderTokens(); await sleep(60);
+            ok('player: revealed, it is back', !!el());
+            state.combatants[i] = { ...state.combatants[i], hp: hp0 }; save();
+            // A monster's ring is the health tier in another form, so it
+            // follows the same setting.
+            const mt = bm._tokens.find(t => !t.isPC && bm._combatantFor(t));
+            if (mt){
+              const m = bm._combatantFor(mt), j = state.combatants.findIndex(x => x.id === m.id);
+              const mhp = m.hp;
+              state.combatants[j] = { ...m, hp: Math.ceil((m.hpMax || 20) * 0.4) };
+              save(); await sleep(60);
+              state.settings.monsterStatsMode = 'show';
+              ok('player: a hurt monster wears one', !!bm._woundOf(mt), bm._woundOf(mt));
+              state.settings.monsterStatsMode = 'conceal';
+              ok('player: concealed stats still allow the ring — it is a tier, not a number',
+                 !!bm._woundOf(mt) && !/\d+\/\d+/.test(bm._tokenTitle(mt)), bm._tokenTitle(mt));
+              state.settings.monsterStatsMode = 'hide';
+              ok('player: hidden stats take the ring away too',
+                 bm._woundOf(mt) === '' && bm._tokenTitle(mt) === m.name, bm._tokenTitle(mt));
+              state.combatants[j] = { ...state.combatants[j], hp: mhp };
+            }
+          }
+        } catch(e){ ok('player: the map visibility checks ran to completion', false, e.message); }
+        finally {
+          if (tok) tok.hidden = false;
+          state.settings.monsterStatsMode = mode0;
+          _remoteUpdate = true;
+          try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+          finally { _remoteUpdate = false; }
+          loadDomain('combat'); loadDomain('party');
+          paTab = tab0; paRender(); await sleep(100);
         }
       }
 

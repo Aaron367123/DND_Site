@@ -49,6 +49,42 @@ function sktHandoutImage(file){
   });
 }
 
+// ── A word to one player ────────────────────────────────────────────────────
+// "You notice the innkeeper's hands are shaking." One line, one phone, and
+// no new plumbing: a whisper is a text handout addressed to a single
+// character, so it syncs, pops up and lands in that player's handouts list
+// through the code that already does all three. The flag only changes how
+// the DM's own list labels it.
+//
+// Capped, unlike handouts: a picture is sent once an evening, whereas
+// whispers are chatter, and the key has a size budget to keep.
+const HO_WHISPER_KEEP = 20;
+
+function sktSendWhisper(pcId, text){
+  const pc = (state.party || []).find(p => p.id === pcId);
+  const t = String(text || '').trim();
+  if (!pc || !t) return false;
+  const d = sktHandouts();
+  d.list.unshift({ id: 'w_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
+                   title: 'A word from the DM', text: t, img: null,
+                   to: [pcId], ts: Date.now(), shownAt: Date.now(), whisper: true });
+  let seen = 0;
+  d.list = d.list.filter(h => !h.whisper || ++seen <= HO_WHISPER_KEEP);
+  saveJson(HO_KEY, d, 'handouts');
+  if (typeof showToast === 'function') showToast('\ud83d\udcac Sent to ' + pc.name);
+  if (typeof panelDefs !== 'undefined' && panelDefs.handouts && panelDefs.handouts._body) panelDefs.handouts._render();
+  return true;
+}
+
+function sktWhisperTo(pcId){
+  const pc = (state.party || []).find(p => p.id === pcId);
+  if (!pc || typeof showModal !== 'function') return;
+  showModal('\ud83d\udcac A word to ' + pc.name, [
+    { id: 'text', label: 'Only ' + pc.name + ' sees this', type: 'text', value: '',
+      placeholder: 'The innkeeper\u2019s hands are shaking.' },
+  ], 'Send').then(r => { if (r) sktSendWhisper(pcId, r.text); });
+}
+
 registerPanel('handouts', {
   title: 'Handouts', icon: '📜',
   _draft: null,

@@ -2810,6 +2810,14 @@ body.player-mode #campaign-btn{display:none !important}
 .map-token.pc{background:linear-gradient(135deg,#4a3d2a,#6b5439)}
 .map-token.npc-t{background:linear-gradient(135deg,#3d2a2a,#6b3939)}
 .map-token.dead{opacity:.4;filter:grayscale(1)}
+/* Hurt things look hurt. Outline, not box-shadow: the "inside an area of
+   effect" highlight owns box-shadow and would hide this. */
+.map-token.wound-half{outline:3px solid var(--warning);outline-offset:1px}
+.map-token.wound-low{outline:3px solid var(--danger);outline-offset:1px;animation:tok-wound 1.6s ease-in-out infinite}
+@keyframes tok-wound{0%,100%{outline-color:var(--danger)}50%{outline-color:rgba(255,120,120,.45)}}
+/* Placed but not revealed — only ever drawn on the DM's screen. */
+.map-token.tok-hidden{opacity:.55;border-style:dashed}
+.map-token.tok-hidden::after{content:'👁';position:absolute;top:-8px;right:-8px;font-size:11px;line-height:1;filter:grayscale(1);opacity:.9;pointer-events:none}
 .map-token-label{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:var(--fs-2xs);white-space:nowrap;color:var(--text);background:rgba(0,0,0,.6);padding:1px 4px;border-radius:var(--r-sm);pointer-events:none}
 .token-panel{position:absolute;right:8px;top:8px;width:160px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r-md);padding:10px;font-size:var(--fs-sm);z-index:10;display:none}
 .token-panel.open{display:block}
@@ -4849,6 +4857,12 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .as-table td{padding:4px 6px; border-top:1px solid var(--border)}
 .as-table tr.ok td:first-child{border-left:3px solid var(--success)}
 .as-table tr.bad td:first-child{border-left:3px solid var(--danger)}
+.as-table tr.waiting td:first-child{border-left:3px solid var(--warning)}
+.as-table tr.waiting{opacity:.85}
+.as-showdc{display:flex;align-items:center;gap:5px;font-size:var(--fs-xs);color:var(--text-muted);margin:6px 0 8px}
+.area-save .modal-actions{flex-wrap:wrap}
+.area-save .modal-actions .btn{padding:7px 14px}
+.as-showdc input{margin:0}
 .as-empty{color:var(--text-muted)}
 .as-note{font-size:var(--fs-xs); color:var(--text-dim); margin-top:6px}
 
@@ -4899,6 +4913,10 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .pa-init-who{text-align:center; color:var(--text-muted); font-size:var(--fs-lg)}
 .pa-init-roll{display:grid; grid-template-columns:1fr 1fr; gap:8px}
 .pa-init-roll .btn{padding:14px 8px; font-size:var(--fs-lg)}
+/* The save pop-up adds disadvantage, so three across instead of two. */
+#pa-save .pa-init-roll{grid-template-columns:1.3fr 1fr 1fr}
+#pa-save .pa-init-roll .btn{padding:14px 4px; font-size:var(--fs-md)}
+.pa-save-src{display:block; font-size:var(--fs-sm); color:var(--text-dim)}
 .pa-init-dice{min-height:1.4em; text-align:center; font-size:var(--fs-lg); font-weight:600}
 .pa-init-type{display:flex; flex-direction:column; gap:6px; font-size:var(--fs-sm); color:var(--text-muted)}
 .pa-init-type input{font:inherit; font-size:var(--fs-2xl); padding:10px 12px; text-align:center}

@@ -155,6 +155,7 @@ function initPlayerApp(){
   paRender();
   paOnHandouts();
   paOnInitRequest();
+  paOnSaveRequest();
 }
 
 // ─── "Roll initiative!" ──────────────────────────────────────────────────────
@@ -172,6 +173,94 @@ function paInitBonus(pcId){
   const c = (state.combatants || []).find(x => x.id === pcId);
   return c && typeof c.initBonus === 'number' ? c.initBonus : 0;
 }
+// ─── "Make a DEX save" ───────────────────────────────────────────────────────
+// The same pop-up as initiative, for the other roll the whole table makes at
+// once. The DC is shown only if the DM ticked it — some tables play with the
+// number on the table, some don't — and when it is shown the phone says
+// straight away whether the roll made it.
+const PA_SAVE_FRESH = 10 * 60 * 1000;
+const PA_ABS = { STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution',
+                 INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' };
+function paSaveReq(){ try { return JSON.parse(localStorage.getItem('skt-savereq-v1') || 'null'); } catch(e){ return null; } }
+// The character's own bonus for that save, from the same place the DM's
+// tracker reads it, so the two never disagree.
+function paSaveBonus(pcId, ab){
+  const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
+  if (C && typeof C.saveBonus === 'function'){
+    try { return C.saveBonus({ isPC: true, id: pcId }, ab) || 0; } catch(e){}
+  }
+  const pc = (state.party || []).find(p => p.id === pcId) || {};
+  const k = String(ab || '').slice(0, 3).toLowerCase();
+  let v = pc.sheet && pc.sheet.saves ? pc.sheet.saves[k] : null;
+  if (typeof v === 'string') v = parseInt(v, 10);
+  if (typeof v === 'number' && !isNaN(v)) return v;
+  const sc = pc.abilities && pc.abilities[k];
+  return typeof sc === 'number' ? Math.floor((sc - 10) / 2) : 0;
+}
+function paOnSaveRequest(){
+  if (!document.body.classList.contains('player-app')) return;
+  const r = paSaveReq(), me = paMe().pcId;
+  const open = r && !r.closed && me && Array.isArray(r.pcs) && r.pcs.includes(me)
+    && !(r.answers && r.answers[me] && r.answers[me].rid === r.id)
+    && Date.now() - (r.askedAt || 0) < PA_SAVE_FRESH;
+  const cur = document.getElementById('pa-save');
+  if (!open){ if (cur) cur.remove(); return; }
+  if (cur && cur.dataset.rid === r.id) return;          // already up for this one
+  if (cur) cur.remove();
+  const pc = (state.party || []).find(x => x.id === me) || {};
+  const bonus = paSaveBonus(me, r.ab);
+  const sign = n => (n >= 0 ? '+' : '') + n;
+  const full = PA_ABS[r.ab] || r.ab;
+  const ov = document.createElement('div');
+  ov.id = 'pa-save'; ov.className = 'pa-init'; ov.dataset.rid = r.id;
+  ov.innerHTML = '<div class="pa-init-card" role="dialog" aria-modal="true" aria-label="Saving throw">'
+    + '<div class="pa-init-l">\ud83d\udee1 ' + paEsc(full) + ' saving throw!</div>'
+    + '<div class="pa-init-who">' + paEsc(pc.name || 'Your character') + ' \u00b7 bonus <b>' + sign(bonus) + '</b>'
+    +   (r.showDc ? ' \u00b7 beat <b>' + r.dc + '</b>' : '')
+    +   (r.name ? '<span class="pa-save-src">' + paEsc(r.name) + '</span>' : '') + '</div>'
+    + '<div class="pa-init-roll">'
+    +   '<button class="btn primary" data-pa-save="roll">\ud83c\udfb2 Roll for me</button>'
+    +   '<button class="btn" data-pa-save="adv" title="Advantage">\ud83c\udfb2\ud83c\udfb2 Adv</button>'
+    +   '<button class="btn" data-pa-save="dis" title="Disadvantage">\ud83c\udfb2\ud83c\udfb2 Dis</button>'
+    + '</div>'
+    + '<div class="pa-init-dice" id="pa-save-dice"></div>'
+    + '<label class="pa-init-type">Or type your total <input id="pa-save-val" type="number" inputmode="numeric" placeholder="e.g. 17"></label>'
+    + '<button class="btn primary pa-init-send" data-pa-save="send" disabled>Send</button>'
+    + '</div>';
+  const val = ov.querySelector('#pa-save-val'), send = ov.querySelector('[data-pa-save="send"]');
+  const dice = ov.querySelector('#pa-save-dice');
+  const verdict = total => r.showDc ? (total >= r.dc ? ' \u2014 made it' : ' \u2014 missed it') : '';
+  val.addEventListener('input', () => { send.disabled = val.value === ''; dice.textContent = ''; });
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-pa-save]'); if (!b) return;
+    const act = b.dataset.paSave;
+    if (act === 'roll' || act === 'adv' || act === 'dis'){
+      const a = sktD(20), c = act === 'roll' ? null : sktD(20);
+      const d = c == null ? a : (act === 'adv' ? Math.max(a, c) : Math.min(a, c));
+      const total = d + bonus;
+      val.value = String(total); send.disabled = false;
+      dice.textContent = (c == null ? 'd20 (' + a + ')' : '2d20 (' + a + ', ' + c + ') keep ' + d)
+        + ' ' + sign(bonus) + ' = ' + total + verdict(total);
+    } else if (act === 'send' && val.value !== ''){
+      paAnswerSave(parseInt(val.value, 10));
+    }
+  });
+  document.body.appendChild(ov);
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch(e){}
+}
+function paAnswerSave(v){
+  const r = paSaveReq(), me = paMe().pcId;
+  if (!r || r.closed || !me || isNaN(v)) return false;
+  r.answers = r.answers || {};
+  r.answers[me] = { v, rid: r.id, at: Date.now() };
+  saveJson('skt-savereq-v1', r, 'saving throw');
+  document.getElementById('pa-save')?.remove();
+  if (typeof showToast === 'function'){
+    showToast('Sent \u2014 ' + v + (r.showDc ? ' vs DC ' + r.dc + (v >= r.dc ? ': saved' : ': failed') : ''));
+  }
+  return true;
+}
+
 function paOnInitRequest(){
   if (!document.body.classList.contains('player-app')) return;
   const r = paInitReq(), me = paMe().pcId;
@@ -263,7 +352,7 @@ function paShowHandout(id, arriving){
   const ov = document.createElement('div');
   ov.id = 'pa-handout'; ov.className = 'pa-handout';
   ov.innerHTML = '<div class="pa-ho-card" role="dialog" aria-modal="true" aria-label="Handout">'
-    + '<div class="pa-ho-head">' + (arriving ? '<span class="pa-ho-new">New handout</span>' : '')
+    + '<div class="pa-ho-head">' + (arriving ? '<span class="pa-ho-new">' + (h.whisper ? 'For you alone' : 'New handout') + '</span>' : '')
     + '<b>' + paEsc(h.title || 'Handout') + '</b></div>'
     + '<div class="pa-ho-body">' + paHandoutBody(h) + '</div>'
     + '<button class="btn primary pa-ho-close">Close</button></div>';

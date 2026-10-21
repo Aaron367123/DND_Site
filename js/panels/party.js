@@ -2919,6 +2919,11 @@ registerPanel('party',{
         const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
         const isBarb  = /\bbarbarian\b/.test(cls);
         const isDruid = /\bdruid\b/.test(cls);
+        // A line to this player's phone and nobody else's.
+        if (typeof sktWhisperTo === 'function' && !c.foe){
+          items.push({ label: '\ud83d\udcac Whisper to ' + c.name + '\u2026',
+                       onClick: () => { const r = resolve(); if (r) sktWhisperTo(r.c.id); } });
+        }
         // Quick d20 roll — pops a sub-menu of initiative/saves/skill/death save.
         items.push({
           label: '🎲 Roll d20…',

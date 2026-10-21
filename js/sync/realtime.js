@@ -59,6 +59,9 @@ const SKT_SYNC_KEYS = [
   'skt-time-v1',       // in-game date and time
   'skt-weather-v2',    // current conditions + history
   'skt-handouts-v1',  // pictures and notes the DM sends to the players' phones
+  'skt-savereq-v1',   // "make a DEX save": the same shape as the initiative
+                      // request, with the ability, the DC and whether the
+                      // players are told what it is.
   'skt-initreq-v1',   // "roll initiative": the DM asks, each player answers.
                       // NOT atomic: answers are one field per character, so
                       // two phones answering at once merge instead of one
@@ -110,6 +113,7 @@ const _PANELS_FOR_KEY = {
   'skt-party-v1':    ['party', 'combat'],
   'skt-handouts-v1': ['handouts'],
   'skt-initreq-v1':  ['combat'],
+  'skt-savereq-v1':  ['combat'],
   'skt-combat-v1':   ['combat', 'party'],
   'skt-shop-v1':     ['shop'],
   'skt-settings-v1': ['combat', 'party', 'shop'],      // display modes, hp bars, filters
@@ -1176,6 +1180,11 @@ function _applyRemoteKey(key, fbVal) {
   if (key === 'skt-initreq-v1'){
     if (typeof paOnInitRequest === 'function'){ try { paOnInitRequest(); } catch(e){ _diag('init request', e); } }
     try { panelDefs.combat && panelDefs.combat._onInitAnswers && panelDefs.combat._onInitAnswers(); } catch(e){ _diag('init answers', e); }
+  }
+  // A saving throw the DM has called for: same two sides as initiative.
+  if (key === 'skt-savereq-v1'){
+    if (typeof paOnSaveRequest === 'function'){ try { paOnSaveRequest(); } catch(e){ _diag('save request', e); } }
+    try { panelDefs.combat && panelDefs.combat._onSaveAnswers && panelDefs.combat._onSaveAnswers(); } catch(e){ _diag('save answers', e); }
   }
   // A handout reaching a phone pops up there (player-app.js).
   if (key === 'skt-handouts-v1' && typeof paOnHandouts === 'function'){

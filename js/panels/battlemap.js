@@ -538,6 +538,20 @@ registerPanel('battlemap',{
   // that posted, and both panels live in the same tab. Same shape as the
   // _syncFromCombat dispatch in save() — panels opt in by defining the hook,
   // so nothing here needs a list of who is listening.
+  // Hit points live in the tracker, the rings live here, and save() is the
+  // one place every change to a combatant passes through. Signature-guarded
+  // so the common save (nothing the map draws changed) costs one string
+  // compare rather than a full token re-render.
+  _syncFromCombat(){
+    if (!this._body || this._drag) return;
+    const sig = (state.combatants || [])
+      .map(c => c.id + ':' + (c.hp || 0) + ':' + (c.hpMax || 0) + ':' + (c.dead ? 1 : 0)).join('|');
+    if (sig === this._woundSig) return;
+    this._woundSig = sig;
+    this._renderTokens();
+  },
+  _woundSig: null,
+
   _notifyMapChanged(){
     if (typeof panelDefs === 'undefined') return;
     for (const id in panelDefs){
@@ -1409,6 +1423,52 @@ registerPanel('battlemap',{
   // first name so "Zindle \"Deathwhistle\" Farrago" reads as just "Zindle"
   // on the map. The full label stays on t.label for party↔token matching
   // and the rename input in the token options panel.
+  // The fighter this token stands for: linked by id when the tracker placed
+  // it, by name otherwise — the same two-step the areas menu uses, because a
+  // token dropped by hand and a combatant typed in by hand only ever agree
+  // on the name.
+  _combatantFor(t){
+    if (!t || typeof state === 'undefined' || !Array.isArray(state.combatants)) return null;
+    if (t.cid != null){
+      const byId = state.combatants.find(c => c.id === t.cid);
+      if (byId) return byId;
+    }
+    if (typeof sktNormName !== 'function') return null;
+    const n = sktNormName(t.label || '');
+    return n ? state.combatants.find(c => sktNormName(c.name) === n) || null : null;
+  },
+  // Hurt things look hurt: a ring at half HP and a brighter one near the end.
+  // Two bands, not six — the point is to read the state of a fight off the
+  // board in one glance, and the tracker is where exact numbers live.
+  //
+  // Players see it for monsters unless the DM has monster stats on "hide",
+  // which is the same setting that decides whether they see a tier at all.
+  _woundOf(t){
+    const c = this._combatantFor(t);
+    if (!c || c.dead) return '';
+    const max = +c.hpMax || 0, hp = +c.hp || 0;
+    if (max <= 0 || hp <= 0) return '';
+    if (!c.isPC && document.body.classList.contains('player-mode')){
+      const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
+      if (C && typeof C._statsMode === 'function' && C._statsMode() === 'hide') return '';
+    }
+    const pct = (hp / max) * 100;
+    return pct <= 25 ? 'wound-low' : pct <= 50 ? 'wound-half' : '';
+  },
+  _tokenTitle(t){
+    const c = this._combatantFor(t);
+    if (!c) return t.label || '';
+    const player = document.body.classList.contains('player-mode');
+    const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
+    const tier = (C && typeof C._hpTier === 'function') ? C._hpTier(c) : '';
+    const mode = (C && typeof C._statsMode === 'function') ? C._statsMode() : 'show';
+    // "Hide" means hide: the tracker shows players a "?" in that mode, and a
+    // tooltip quietly naming the tier would undo it.
+    if (player && !c.isPC && mode === 'hide') return c.name;
+    const showNumbers = c.isPC || !player || mode === 'show';
+    return c.name + (showNumbers ? ' — ' + (c.hp || 0) + '/' + (c.hpMax || 0) + ' HP' : (tier ? ' — ' + tier : ''));
+  },
+
   _tokenDisplayLabel(t){
     if (!t || t.label == null) return '';
     if (!t.isPC) return t.label;
@@ -2704,7 +2764,20 @@ registerPanel('battlemap',{
         +'<button class="btn icon-btn" id="tp-rot-right" title="Rotate +45°" style="padding:1px 6px;font-size:var(--fs-sm)">↻</button>'
         +'<span id="tp-rot-val" style="font-size:var(--fs-xs);color:var(--text-muted);min-width:30px;text-align:right">0°</span>'
       +'</div>'
-      +'<div style="display:flex;gap:4px">'
+      // Damage, healing and conditions where the creature IS, instead of
+      // hunting for its card in the tracker. Shown only for a token that
+      // stands for someone in the fight; _showPanel fills it in.
+      +'<div id="tp-hp" style="display:none;border-top:1px solid var(--border);margin:6px 0 0;padding-top:6px">'
+        +'<div id="tp-hp-line" style="font-size:var(--fs-sm);margin-bottom:4px"></div>'
+        +'<div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">'
+          +'<button class="btn small" id="tp-dmg" style="flex:1" title="Damage">−</button>'
+          +'<input type="number" id="tp-amt" value="5" min="0" max="999" style="width:48px;font-size:var(--fs-sm);padding:2px 4px;text-align:center">'
+          +'<button class="btn small" id="tp-heal" style="flex:1" title="Heal">+</button>'
+        +'</div>'
+        +'<button class="btn small" id="tp-cond" style="width:100%">⚑ Conditions…</button>'
+      +'</div>'
+      +'<button class="btn small" id="tp-hide" style="width:100%;margin-top:6px"></button>'
+      +'<div style="display:flex;gap:4px;margin-top:6px">'
         +'<button class="btn small" id="tp-kill" style="flex:1">☠</button>'
         +'<button class="btn small danger" id="tp-del" style="flex:1">Del</button>'
       +'</div>'
@@ -4896,6 +4969,10 @@ registerPanel('battlemap',{
       // _isFogged: it accounts for free-brush strokes and the Align offset,
       // which the inline cell lookup here did not.
       if (isPlayer && !t.isPC && this._isFogged(t.x, t.y)) return;
+      // Put on the board but not revealed yet: the ambush in the rafters,
+      // the invisible stalker. The DM sees it ghosted; a player's screen is
+      // never told it exists.
+      if (isPlayer && t.hidden) return;
       const px=t.x;
       const py=t.y;
       // Visual diameter scales with the bg image so tokens stay proportional
@@ -4907,8 +4984,10 @@ registerPanel('battlemap',{
       // PCs only show their first name on the map ("Zindle" instead of the
       // full "Zindle \"Deathwhistle\" Farrago"). NPCs keep their full label.
       const displayLabel = this._tokenDisplayLabel(t);
-      el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}`;
+      el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}`
+        + (t.hidden ? ' tok-hidden' : '') + (this._woundOf(t) ? ' ' + this._woundOf(t) : '');
       el.dataset.tid=t.id;
+      el.title = this._tokenTitle(t) + (t.hidden ? ' · hidden from players' : '');
       // Two font-size regimes:
       //  - When the token shows a single-character/emoji icon (🎵 ⚔ 🐲),
       //    we want it to FILL the circle — scale font-size to roughly 60%
@@ -5255,6 +5334,72 @@ registerPanel('battlemap',{
     rewire('#tp-rot','input',e=>applyRot(parseInt(e.target.value)||0));
     rewire('#tp-rot-left','click',()=>applyRot((t.rotation || 0) - 45));
     rewire('#tp-rot-right','click',()=>applyRot((t.rotation || 0) + 45));
+    // Hidden from the players' screens. Their map is simply not told the
+    // token is there, so this is a reveal switch as much as a hide one.
+    // Re-queried each time: rewire() swaps the button for a fresh clone, so
+    // a reference taken now points at a node that is no longer on screen.
+    const paintHide = () => {
+      const el = b.querySelector('#tp-hide');
+      if (el) el.textContent = t.hidden ? '\u{1F441} Reveal to players' : '\u{1F441} Hide from players';
+    };
+    paintHide();
+    rewire('#tp-hide','click',()=>{
+      t.hidden = !t.hidden;
+      this._saveMap(); this._renderTokens(); paintHide();
+      if (typeof showToast === 'function') showToast(t.hidden ? t.label + ' is hidden from the players' : t.label + ' is on the players\u2019 map');
+    });
+
+    // The fight, from the token. Everything goes through the tracker's own
+    // _applyHpDelta, so resistances, temp HP, concentration checks and the
+    // round log all behave exactly as they do on the card.
+    const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
+    const hpBox = b.querySelector('#tp-hp');
+    const idxOf = () => {
+      const c = this._combatantFor(t);
+      return c ? state.combatants.findIndex(x => x.id === c.id) : -1;
+    };
+    const paintHp = () => {
+      if (!hpBox) return;
+      const i = idxOf();
+      if (i < 0 || !C){ hpBox.style.display = 'none'; return; }
+      const c = state.combatants[i];
+      hpBox.style.display = 'block';
+      const line = b.querySelector('#tp-hp-line');
+      if (line) line.textContent = c.name + ' \u00b7 ' + (c.hp || 0) + '/' + (c.hpMax || 0) + ' HP'
+        + ((c.conditions || []).length ? ' \u00b7 ' + c.conditions.join(', ') : '');
+    };
+    paintHp();
+    const hit = sign => {
+      const i = idxOf(); if (i < 0 || !C) return;
+      const amt = Math.max(0, parseInt((b.querySelector('#tp-amt') || {}).value, 10) || 0);
+      if (!amt) return;
+      const c = state.combatants[i];
+      const label = c.name + (sign < 0 ? ' took ' + amt + ' damage' : ' healed ' + amt);
+      const go = () => { C._applyHpDelta(i, sign * amt); };
+      if (typeof sktUndoable === 'function') sktUndoable(label, go); else go();
+      paintHp(); this._renderTokens();
+    };
+    rewire('#tp-dmg','click',()=>hit(-1));
+    rewire('#tp-heal','click',()=>hit(+1));
+    rewire('#tp-cond','click',e=>{
+      const i = idxOf(); if (i < 0 || !C || typeof showContextMenu !== 'function') return;
+      const c = state.combatants[i];
+      const have = new Set(c.conditions || []);
+      const items = (typeof SEARCH_DATA !== 'undefined' ? SEARCH_DATA : [])
+        .filter(d => d.cat === 'condition')
+        .map(d => ({ label: d.name, checked: have.has(d.name), onClick: () => {
+          const k = idxOf(); if (k < 0) return;
+          const nm = state.combatants[k].name;
+          const act = () => C._toggleCondAtIdx(k, d.name);
+          if (typeof sktUndoable === 'function') sktUndoable(nm + ' \u2014 ' + d.name + (have.has(d.name) ? ' removed' : ' added'), act);
+          else act();
+          paintHp(); this._renderTokens();
+        }}));
+      if (!items.length) items.push({ label: 'The rules are still loading\u2026', disabled: true });
+      const r = e.currentTarget.getBoundingClientRect();
+      showContextMenu(r.left, r.bottom + 4, items);
+    });
+
     rewire('#tp-kill','click',()=>{t.dead=!t.dead;this._saveMap();this._renderTokens();});
     rewire('#tp-del','click',()=>{
       const i=this._tokens.findIndex(x=>x.id===t.id);

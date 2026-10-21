@@ -2426,6 +2426,52 @@ registerPanel('combat',{
     this._render();
   },
 
+  // ─── Players roll their own saving throws ───────────────────────────────────
+  // 'skt-savereq-v1' = { id, askedAt, ab, dc, showDc, name, pcs:[ids],
+  //                      answers:{ pcId:{v, rid, at} }, closed }
+  // Same shape as the initiative request and for the same reason: one field
+  // per character, so two phones answering at the same moment merge instead
+  // of one overwriting the other.
+  //
+  // showDc is the DM's call. Telling the table "DC 15" turns a save into a
+  // number everyone can check, which some tables want and some consider the
+  // DM's business; the dialog remembers whichever way this one plays it.
+  _saveReq(){ try { return JSON.parse(localStorage.getItem('skt-savereq-v1') || 'null'); } catch(e){ return null; } },
+  askSaves(o){
+    o = o || {};
+    const pcs = (o.pcs || []).filter(Boolean);
+    if (!pcs.length){ if (typeof showToast === 'function') showToast('No characters among the targets'); return null; }
+    const req = {
+      id: 'sr_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
+      askedAt: Date.now(),
+      ab: String(o.ab || 'DEX').slice(0, 3).toUpperCase(),
+      dc: Math.max(1, parseInt(o.dc, 10) || 10),
+      showDc: o.showDc !== false,
+      name: o.name || '',
+      pcs, answers: {}, closed: false,
+    };
+    saveJson('skt-savereq-v1', req, 'save request');
+    if (typeof showToast === 'function'){
+      showToast('📱 Asked ' + pcs.length + ' player' + (pcs.length === 1 ? '' : 's') + ' for a ' + req.ab + ' save'
+                + (req.showDc ? ' (DC ' + req.dc + ' shown)' : ''));
+    }
+    return req;
+  },
+  _closeSaveRequest(){
+    const r = this._saveReq(); if (!r || r.closed) return;
+    r.closed = true;
+    saveJson('skt-savereq-v1', r, 'save request');
+  },
+  // An answer landed. The open area-save dialog, if there is one, fills in
+  // the row; nothing else needs to happen — the DM is looking at the table.
+  _onSaveAnswers(){
+    if (document.body.classList.contains('player-mode')) return;
+    const r = this._saveReq(); if (!r || r.closed) return;
+    if (typeof this._areaSaveOnAnswers === 'function'){
+      try { this._areaSaveOnAnswers(r); } catch(e){ console.warn('[save answers]', e); }
+    }
+  },
+
   // ─── Area saves ─────────────────────────────────────────────────────────────
   // One saving throw per creature, one damage roll for everyone — "a creature
   // takes 8d6 fire damage on a failed save, or half as much on a successful
@@ -2443,6 +2489,7 @@ registerPanel('combat',{
     const ABS = ['STR','DEX','CON','INT','WIS','CHA'];
     const TYPES = ['', 'acid','bludgeoning','cold','fire','force','lightning','necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
     const partsText = (pre.parts || []).map(p => p.dice + (p.type ? ' ' + p.type : '')).join(' + ');
+    const askShowDc = (state.settings || {}).saveShowDc !== false;
     const want = new Set(pre.targets || []);
     const back = document.createElement('div');
     back.className = 'modal-backdrop'; back.id = 'area-save-back';
@@ -2461,8 +2508,10 @@ registerPanel('combat',{
       </div>
       <div class="as-targets" id="as-targets"></div>
       <div class="as-result" id="as-result"></div>
+      <label class="as-showdc" title="The pop-up on each phone either names the DC or just asks for the save"><input type="checkbox" id="as-showdc"${askShowDc ? ' checked' : ''}> When you ask the players, tell them the DC</label>
       <div class="modal-actions">
         <button class="btn" data-as="cancel">Cancel</button>
+        <button class="btn" data-as="ask">📱 Ask the players</button>
         <button class="btn" data-as="roll">🎲 Roll saves</button>
         <button class="btn primary" data-as="apply" disabled>Apply damage</button>
       </div>
@@ -2494,6 +2543,13 @@ registerPanel('combat',{
           const total = rolled.dmg.reduce((s, d) => s + d.amt, 0);
           const takes = r.passed ? (halfMode === 'half' ? Math.floor(total / 2) : 0) : total;
           const lrLeft = (c.lrMax || 0) - (c.lrUsed || 0);
+          // Still on someone's phone. Nothing is applied until every row has
+          // a number, but the DM can always roll it themselves instead of
+          // waiting for the player who went to the kitchen.
+          if (r.waiting) return `<tr class="waiting"><td>${esc(c.name)}</td>
+            <td class="dim" colspan="2">📱 waiting for them to roll…</td>
+            <td><button class="btn small" data-as="rollfor" data-k="${k}" title="Roll this one yourself instead">🎲 Roll it</button></td>
+            <td></td></tr>`;
           return `<tr class="${r.passed ? 'ok' : 'bad'}"><td>${esc(c.name)}</td>
             <td class="dim">${esc(r.detail)}</td><td><b>${r.total}</b></td>
             <td><button class="btn small as-flip" data-as="flip" data-k="${k}" title="Change this result">${r.passed ? '✓ saved' : '✗ failed'}</button>
@@ -2502,12 +2558,26 @@ registerPanel('combat',{
             <td>takes <b>${takes}</b></td></tr>`;
         }).join('')}</tbody></table>
         <div class="as-note">Amounts are before resistances, immunities and temp HP — those apply when you press Apply.</div>`;
-      $('[data-as="apply"]').disabled = !rolled.rows.length;
+      $('[data-as="apply"]').disabled = !rolled.rows.length || rolled.rows.some(r => r.waiting);
     };
     const rollDamage = () => parseParts($('#as-dmg').value).map(p => {
       const r = sktRollDice(p.dice); return { amt: r.total, type: p.type, detail: p.dice + ': ' + r.detail };
     });
-    const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+    const dcNow = () => parseInt($('#as-dc').value, 10) || 10;
+    const rollRow = (id, ab, dc) => {
+      const c = state.combatants.find(x => x.id === id);
+      const bonus = this.saveBonus(c, ab);
+      const r = sktRollDice('1d20' + (bonus >= 0 ? '+' : '') + bonus);
+      return { id, total: r.total, detail: r.detail, passed: r.total >= dc, lr: false };
+    };
+    const close = () => {
+      back.remove();
+      document.removeEventListener('keydown', onKey);
+      // Take the pop-up off the phones with the dialog it belonged to, so
+      // nobody is left staring at a save for a fireball that already went off.
+      this._areaSaveOnAnswers = null;
+      this._closeSaveRequest();
+    };
     const onKey = e => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     back.addEventListener('mousedown', e => { if (e.target === back && !rolled) close(); });
@@ -2523,13 +2593,47 @@ registerPanel('combat',{
         return;
       }
       if (act === 'roll'){
-        const ab = $('#as-ab').value, dc = parseInt($('#as-dc').value, 10) || 10;
-        rolled = { dmg: rollDamage(), rows: picked().map(id => {
-          const c = state.combatants.find(x => x.id === id);
-          const bonus = this.saveBonus(c, ab);
-          const r = sktRollDice('1d20' + (bonus >= 0 ? '+' : '') + bonus);
-          return { id, total: r.total, detail: r.detail, passed: r.total >= dc, lr: false };
-        }) };
+        const ab = $('#as-ab').value, dc = dcNow();
+        rolled = { dmg: rollDamage(), rows: picked().map(id => rollRow(id, ab, dc)) };
+        paintResult();
+        return;
+      }
+      // Ask the characters to roll their own, and roll the monsters here.
+      // Their answers come back through 'skt-savereq-v1' and drop into the
+      // rows they are waiting on, so the damage below is applied against
+      // the numbers the players rolled themselves.
+      if (act === 'ask'){
+        const ab = $('#as-ab').value, dc = dcNow();
+        const ids = picked();
+        const pcs = ids.filter(id => (state.combatants.find(x => x.id === id) || {}).isPC);
+        const showDc = !!$('#as-showdc').checked;
+        state.settings.saveShowDc = showDc; save();
+        const req = this.askSaves({ ab, dc, showDc, name: pre.name, pcs });
+        if (!req) return;
+        rolled = { dmg: (rolled && rolled.dmg) || rollDamage(),
+                   rows: ids.map(id => pcs.includes(id) ? { id, waiting: true } : rollRow(id, ab, dc)) };
+        this._areaSaveOnAnswers = r => {
+          if (!rolled || !r || r.id !== req.id) return;
+          let got = false;
+          rolled.rows.forEach(row => {
+            if (!row.waiting) return;
+            const a2 = (r.answers || {})[row.id];
+            if (!a2 || a2.rid !== r.id) return;
+            row.waiting = false;
+            row.total = +a2.v;
+            row.detail = 'their roll';
+            row.passed = row.total >= dcNow();
+            row.lr = false;
+            got = true;
+          });
+          if (got) paintResult();
+        };
+        paintResult();
+        return;
+      }
+      if (act === 'rollfor' && rolled){
+        const row = rolled.rows[+b.dataset.k]; if (!row) return;
+        rolled.rows[+b.dataset.k] = rollRow(row.id, $('#as-ab').value, dcNow());
         paintResult();
         return;
       }

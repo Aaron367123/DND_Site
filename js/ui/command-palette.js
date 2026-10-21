@@ -74,6 +74,13 @@ function _cpCommands(){
     add('Party', 'Short rest (whole party)', party('_shortRestAll'), 'rest hit dice');
   }
 
+  // A word to one player's phone, by name.
+  if (typeof sktWhisperTo === 'function'){
+    (state.party || []).filter(p => p && p.id && !p.foe).forEach(p => {
+      add('Players', 'Whisper to ' + p.name, () => sktWhisperTo(p.id), 'message tell privately phone aside');
+    });
+  }
+
   // Workspace and app.
   if (typeof window.smartArrange === 'function')
     add('Windows', 'Arrange windows', () => window.smartArrange(), 'tile tidy layout', 'Ctrl Shift A');
