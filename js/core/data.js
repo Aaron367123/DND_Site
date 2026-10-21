@@ -67,13 +67,45 @@ const DEFAULT_LAYOUT = {
   loot:       {x:200, y:100, w:480, h:480, open:false, minimized:false, z:8},
   encounter:   {x:150, y:80,  w:700, h:520, open:false, minimized:false, z:8},
   soundboard:  {x:200, y:100, w:580, h:500, open:false, minimized:false, z:9},
-  weather:     {x:240, y:120, w:300, h:520, open:false, minimized:false, z:10},
-  time:        {x:560, y:120, w:300, h:520, open:false, minimized:false, z:11},
+  // The date, the clock and the sky in one window (js/panels/world.js):
+  // side by side when it is wide enough, one above the other when not.
+  world:       {x:240, y:120, w:640, h:560, open:false, minimized:false, z:10},
   bestiary:    {x:140, y:90,  w:520, h:620, open:false, minimized:false, z:12},
-  adventures:  {x:160, y:100, w:880, h:660, open:false, minimized:false, z:13},
-  books:       {x:180, y:120, w:880, h:660, open:false, minimized:false, z:14},
+  // Books and Adventures, as two tabs of one reader (js/panels/library.js).
+  library:     {x:160, y:100, w:880, h:660, open:false, minimized:false, z:13},
   handouts:    {x:220, y:90,  w:520, h:600, open:false, minimized:false, z:15},
 };
+
+// Panels that now live inside another window. Each still exists — Books,
+// Adventures, Time and Weather mount as parts of their host, and the Attack
+// Runner's stat-block parser is what Turn View rolls from — but none has a
+// window of its own any more. Opening one opens its host (on its tab), and a
+// saved layout or workspace that had one open opens the host instead.
+const SKT_PANEL_HOST = {
+  attacks:    'turnview',
+  books:      'library',
+  adventures: 'library',
+  time:       'world',
+  weather:    'world',
+};
+function sktPanelHost(id){ return SKT_PANEL_HOST[id] || id; }
+// A stored layout (skt-layout-v1, or a workspace's snapshot) written before
+// the merge: move whatever was open onto its host, keeping where the old
+// window sat, and drop the old entries. Returns the same object.
+function sktMigrateLayout(l){
+  if (!l || typeof l !== 'object') return l;
+  Object.keys(SKT_PANEL_HOST).forEach(old => {
+    const o = l[old]; if (!o) return;
+    const host = SKT_PANEL_HOST[old];
+    const h = l[host] || (DEFAULT_LAYOUT[host] ? { ...DEFAULT_LAYOUT[host] } : null);
+    if (h && o.open && !h.open){
+      l[host] = { ...h, x: o.x, y: o.y, open: true, minimized: !!o.minimized, z: o.z || h.z };
+      if (host === 'library') l[host].tab = old;
+    } else if (h && !l[host]) l[host] = h;
+    delete l[old];
+  });
+  return l;
+}
 
 const DEFAULT_SETTINGS = {currencySymbol:'gp',currencyFormat:'short',priceJitter:20,rounding:'none',reprintPolicy:'all',snapWindows:true,fontScale:1,uiHide:{dock:false,playerView:false,syncStatus:false,tutorialBtn:false,zoomControls:false,windowFocus:false},shopFilters:{rarity:{Common:true,Uncommon:true,Rare:true,VeryRare:true,Legendary:true},categories:{weapons:true,ammo:true,armor:true,tools:true,potions:true,wondrous:true,rodsWands:true,rings:true,scrolls:true,foci:true,treasure:true,foodDrink:true,other:true},includeMagic:true,includeMundane:true,excludeFirearms:false,maxPrice:0,hideAttunement:false,hideCursed:false,hideSentient:false,hideArtifacts:false,excludeConsumables:false,techLevel:'any',maxScrollLevel:10,blocklist:'',rarityBias:0},shopAssortmentCounts:{Sparse:8,Standard:18,Abundant:32},hiddenSourceScope:{shop:true,search:true,bestiary:true,encounter:true,loot:true,wildshape:true},healthTiers:[{threshold:100,label:'Healthy'},{threshold:76,label:'Scratched'},{threshold:50,label:'Bloodied'},{threshold:25,label:'Wounded'},{threshold:1,label:'Near Death'},{threshold:0,label:'Defeated'}],combatNameOptions:['spear','hands','rock','small'],hideMonsterStats:false,autoRollInit:false,inspirationReasons:['Critical hit','Critical miss','Roleplay moment','Helped a teammate','Clever idea','Heroic sacrifice'],partyCompact:false,partyCardWidth:null,lootEncumbrance:false,monsterStatsMode:'show',combatHpBar:true,combatCompact:false,combatGroupSimilar:false};
 

@@ -51,7 +51,7 @@ function paCombatant(){
   return pc ? (state.combatants || []).find(c => c.isPC && c.id === pc.id) || null : null;
 }
 
-const paShared = () => new Set(state.sharedPanels || []);
+const paShared = () => new Set(typeof sktCanonShared === 'function' ? sktCanonShared(state.sharedPanels) : (state.sharedPanels || []));
 const paEsc = s => (typeof esc === 'function' ? esc(s) : String(s == null ? '' : s));
 
 // Monster numbers follow the DM's own show / conceal / hide setting, read
@@ -98,8 +98,10 @@ const PA_TABS = [
   // Read-only over here: the controls are hidden by the .pa-mount rules,
   // and realtime.js refuses to push either key from a player device, so a
   // phone cannot rewind the clock even if something did reach a handler.
-  { id:'time',  label:'Time',  icon:'i-clock',  needs:'time'  },
-  { id:'sky',   label:'Sky',   icon:'i-cloud',  needs:'weather' },
+  // One tab, the World window as the DM has it: the date and the clock with
+  // the weather beside them. They were two tabs, Time and Sky, each a
+  // single small card.
+  { id:'world', label:'World', icon:'i-cloud',  needs:'world' },
   // Phones only. The floating toolbar is hidden on a phone (main.css), and
   // everything in it a player can use lives here instead: search, settings,
   // sync status, the campaign, and the way back to the DM view.
@@ -637,8 +639,7 @@ function paRenderScreen(){
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
   if (paTab === 'notes') { paMountPanel(el, 'notes');     return; }
   if (paTab === 'loot')  { paMountPanel(el, 'loot');      return; }
-  if (paTab === 'time')  { paMountPanel(el, 'time');      return; }
-  if (paTab === 'sky')   { paMountPanel(el, 'weather');   return; }
+  if (paTab === 'world') { paMountPanel(el, 'world');     return; }
 }
 
 // The map and the notes are the DM panels, mounted whole. Not rewritten:
@@ -652,8 +653,7 @@ function paUnmountCurrent(host){
   if (!box) return;
   const tab = box.dataset.paMount;
   const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes'
-           : tab === 'loot' ? 'loot' : tab === 'time' ? 'time'
-           : tab === 'sky' ? 'weather' : null;
+           : tab === 'loot' ? 'loot' : tab === 'world' ? 'world' : null;
   const def = id && panelDefs[id];
   if (!def) return;
   try { if (typeof def.unmount === 'function') def.unmount(); } catch(e){}
@@ -716,7 +716,7 @@ function paDraw(act){
 }
 function paRefreshMount(tab){
   const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes'
-           : tab === 'time' ? 'time' : tab === 'sky' ? 'weather' : null;
+           : tab === 'world' ? 'world' : null;
   if (!id) return;
   const def = panelDefs[id];
   try { def && def._render && def._render(); } catch(e){}

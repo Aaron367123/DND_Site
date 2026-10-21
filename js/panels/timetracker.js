@@ -115,7 +115,16 @@ registerPanel('time', {
   },
   unmount(){ this._body = null; },
 
-  _save(){ saveJson('skt-time-v1', this._data, 'time tracker'); },
+  _save(){
+    saveJson('skt-time-v1', this._data, 'time tracker');
+    // Beside the weather in the World window, which used to roll the new
+    // day's weather only when its own window was opened. Now both are on
+    // screen together, so turning the day over rolls it there and then.
+    const W = panelDefs.weather;
+    if (W && W._body && W._data && typeof W._maybeAutoTick === 'function'){
+      try { W._maybeAutoTick(); W._render(); } catch(e){}
+    }
+  },
 
   _advance(deltaHours){
     this._data = _timeAdvance(this._data, deltaHours);

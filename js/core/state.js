@@ -272,10 +272,17 @@ function load(){
       loadDomain('party');loadDomain('combat');loadDomain('shop');loadDomain('settings');loadDomain('prompt');
     }
     const lr=localStorage.getItem(LAYOUT_KEY);
-    if(lr)layout={...layout,...JSON.parse(lr)};
+    if(lr)layout=sktMigrateLayout({...layout,...JSON.parse(lr)});
     const sr=localStorage.getItem(SHARED_PANELS_KEY);
-    if(sr){const arr=JSON.parse(sr);if(Array.isArray(arr))state.sharedPanels=arr;}
+    if(sr){const arr=JSON.parse(sr);if(Array.isArray(arr))state.sharedPanels=sktCanonShared(arr);}
   }catch(e){}
+}
+// Time and Weather were shared separately; the player view now has one World
+// tab for both, so sharing either of the old ones shares World.
+function sktCanonShared(arr){
+  const out = [];
+  (arr || []).forEach(id => { const h = id === 'time' || id === 'weather' ? 'world' : id; if (!out.includes(h)) out.push(h); });
+  return out;
 }
 function saveSharedPanels(){try{localStorage.setItem(SHARED_PANELS_KEY,JSON.stringify(state.sharedPanels||[]))}catch(e){}}
 function togglePanelShare(id){

@@ -56,9 +56,11 @@
   const MOBILE = window.innerWidth < 768;
   const MODE   = PLAYER ? 'player' : (MOBILE ? 'mobile' : 'dm');
 
-  const PANELS = ['adventures','attacks','battlemap','bestiary','books','combat',
-    'encounter','loot','notes','npcgen','npclib','party','shop','soundboard',
-    'time','turnview','weather'];
+  // books/adventures/time/weather still mount, inside Library and World; the
+  // window manager routes them there, so each is checked both ways.
+  const PANELS = ['adventures','battlemap','bestiary','books','combat',
+    'encounter','library','loot','notes','npcgen','npclib','party','shop','soundboard',
+    'time','turnview','weather','world'];
 
   // Click a real control. A selector that no longer matches is itself a
   // regression - the button was renamed or dropped - so callers assert on the
@@ -790,7 +792,7 @@
         state.party = [Object.assign({}, rec)];
         state.combatants = [Object.assign({}, rec, { isPC:true, initiative:10 })];
         state.activeCombatantId = 'st_x'; save();
-        for (const id of ['party','combat','turnview','attacks']){
+        for (const id of ['party','combat','turnview']){
           try { closePanel(id); } catch(e){}
           try { openPanel(id); } catch(e){ spoiled.push(label + '/' + id + ' threw'); continue; }
           await sleep(230);
@@ -803,7 +805,7 @@
         }
       }
       ok('no panel prints NaN or undefined for a partial record (' +
-         (Object.keys(SHAPES).length * 4) + ' combinations)',
+         (Object.keys(SHAPES).length * 3) + ' combinations)',
          spoiled.length === 0, spoiled.slice(0, 5).join('; '));
 
       // The fallback must use ?? and not ||, or a character on exactly 0 hp
@@ -829,7 +831,7 @@
       const A0 = state.activeCombatantId;
       const TEXT = '<i class="sktxss">x</i>';        // becomes an element if unescaped
       const ATTR = '" data-sktpwn="1';               // breaks out of an attribute
-      const PANELS7 = ['party','combat','turnview','attacks','battlemap','loot','npclib'];
+      const PANELS7 = ['party','combat','turnview','battlemap','loot','npclib'];
       const seed = nm => {
         state.party = [{ id:'st_x', name:nm, cls:'fighter', hp:10, hpMax:10, ac:12, conditions:[nm] }];
         state.combatants = [{ id:'st_x', name:nm, isPC:true, hp:10, hpMax:10, ac:12,
@@ -3641,11 +3643,117 @@
     }
     closePanel('turnview');
 
+    // ── Merged windows: Turn View acts for anyone; Library; World ─────────
+    {
+      const before = errs.length;
+      const L0 = JSON.stringify(layout);
+      try {
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party');
+        // Turn View: act as someone off their turn.
+        const TV = panelDefs.turnview; openPanel('turnview'); await sleep(450);
+        const turn = state.activeCombatantId;
+        const other = state.combatants.find(c => c.id !== turn && !c.isPC) || state.combatants.find(c => c.id !== turn);
+        const sel = TV._body.querySelector('[data-tvactas]');
+        ok('turnview: an "Act as…" picker for someone off their turn', !!sel && !!sel.querySelector('option[value="' + other.id + '"]'));
+        sel.value = other.id; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+        ok('turnview: acting as them shows their actions, and the turn stays put',
+           TV._active().id === other.id && state.activeCombatantId === turn
+           && /Acting as/.test(TV._body.querySelector('.tv-turnline').textContent)
+           && TV._body.querySelector('.tv-headwrap').textContent.includes(other.name));
+        TV._body.querySelector('[data-tv="actas-end"]').click(); await sleep(80);
+        ok('turnview: Back returns to whoever’s turn it is', TV._active().id === turn && !TV._actAs);
+        TV.actAs(other.id); await sleep(30);
+        const order = state.combatants, i = order.findIndex(c => c.id === turn);
+        state.activeCombatantId = order[(i + 1) % order.length].id; save(); await sleep(120);
+        ok('turnview: the turn moving on stops acting for them', !TV._actAs);
+        state.activeCombatantId = turn; save();
+        closePanel('turnview');
+        ok('dock: the Attack Runner, Books, Adventures, Time and Weather buttons are gone; Library and World are there',
+           ['attacks', 'books', 'adventures', 'time', 'weather'].every(id => !document.querySelector('.dock-btn[data-panel="' + id + '"]'))
+           && !!document.querySelector('.dock-btn[data-panel="library"]') && !!document.querySelector('.dock-btn[data-panel="world"]'));
+        openPanel('attacks'); await sleep(200);
+        ok('opening the old Attack Runner opens Turn View', !!layout.turnview.open && !document.querySelector('.window[data-panel="attacks"]'));
+        closePanel('turnview');
+
+        // Library.
+        openPanel('library'); await sleep(250);
+        const lib = document.querySelector('.window[data-panel="library"]');
+        ok('library: one window with Books and Adventures tabs',
+           !!lib && lib.querySelectorAll('[data-lib-tab]').length === 2);
+        lib.querySelector('[data-lib-tab="adventures"]').click(); await sleep(250);
+        ok('library: the Adventures tab mounts Adventures and lets Books go',
+           !!panelDefs.adventures._body && lib.contains(panelDefs.adventures._body) && !panelDefs.books._body
+           && layout.library.tab === 'adventures');
+        openPanel('books'); await sleep(250);
+        ok('library: opening Books goes to its tab, in the same window',
+           document.querySelectorAll('.window[data-panel="library"]').length === 1 && !document.querySelector('.window[data-panel="books"]')
+           && !!panelDefs.books._body && lib.contains(panelDefs.books._body) && !panelDefs.adventures._body
+           && lib.querySelector('[data-lib-tab="books"]').classList.contains('on'));
+        closePanel('library'); await sleep(60);
+        ok('library: closing it unmounts the open tab', !panelDefs.books._body && !document.querySelector('.window[data-panel="library"]'));
+
+        // World.
+        const T0 = localStorage.getItem('skt-time-v1'), W0 = localStorage.getItem('skt-weather-v2');
+        try {
+          openPanel('time'); await sleep(300);
+          const w = document.querySelector('.window[data-panel="world"]');
+          ok('world: opening Time opens World, with the time and the weather in it',
+             !!w && w.contains(panelDefs.time._body) && w.contains(panelDefs.weather._body));
+          const W = panelDefs.weather;
+          W._maybeAutoTick();
+          const before = JSON.stringify(W._data.lastRollDate);
+          panelDefs.time._advance(24); await sleep(80);
+          ok('world: turning the day over rolls the new day’s weather', JSON.stringify(W._data.lastRollDate) !== before, before);
+          closePanel('world');
+        } finally {
+          _remoteUpdate = true;
+          try {
+            if (T0 == null) localStorage.removeItem('skt-time-v1'); else localStorage.setItem('skt-time-v1', T0);
+            if (W0 == null) localStorage.removeItem('skt-weather-v2'); else localStorage.setItem('skt-weather-v2', W0);
+          } finally { _remoteUpdate = false; }
+          panelDefs.time._data = null; panelDefs.weather._data = null;
+        }
+
+        // Saved layouts and workspaces from before the merge.
+        const m = sktMigrateLayout({
+          books:   { x: 11, y: 22, w: 500, h: 400, open: false, z: 3 },
+          adventures: { x: 33, y: 44, w: 500, h: 400, open: true, minimized: false, z: 9 },
+          time:    { x: 55, y: 66, w: 300, h: 500, open: true, z: 4 },
+          weather: { x: 77, y: 88, w: 300, h: 500, open: true, z: 5 },
+          attacks: { x: 99, y: 10, w: 400, h: 400, open: true, z: 6 },
+        });
+        ok('layout: windows that were open open their new home, where the old one sat',
+           m.library && m.library.open && m.library.x === 33 && m.library.tab === 'adventures'
+           && m.world && m.world.open && m.world.x === 55 && m.turnview && m.turnview.open && m.turnview.x === 99
+           && ['books', 'adventures', 'time', 'weather', 'attacks'].every(k => !(k in m)), JSON.stringify(m));
+        {
+          const raw0 = localStorage.getItem(WS_KEY);
+          try {
+            localStorage.setItem(WS_KEY, JSON.stringify({ active: 'ws_a', list: [{ id: 'ws_a', name: 'Prep',
+              panels: { books: { x: 1, y: 2, w: 500, h: 400, open: true, z: 2 } } }] }));
+            const d = _wsLoad();
+            ok('workspaces: a saved workspace with Books open opens the Library',
+               !!d && d.list[0].panels.library && d.list[0].panels.library.open && !d.list[0].panels.books);
+          } finally { if (raw0 == null) localStorage.removeItem(WS_KEY); else localStorage.setItem(WS_KEY, raw0); }
+        }
+        ok('sharing: the old Time and Weather share the World tab',
+           JSON.stringify(sktCanonShared(['notes', 'time', 'weather', 'world'])) === '["notes","world"]');
+      } catch(e){ ok('merged windows: the checks ran to completion', false, e.message); }
+      finally {
+        ['turnview', 'library', 'world'].forEach(id => { try { closePanel(id); } catch(e){} });
+        Object.keys(layout).forEach(k => delete layout[k]); Object.assign(layout, JSON.parse(L0)); saveLayout();
+      }
+      ok('merged windows: silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
     // ── The dock says what each icon is ───────────────────────────────────
     {
       const btns = [...document.querySelectorAll('.panel-dock .dock-btn[data-panel]')];
       ok('dock: every panel button carries its name',
-         btns.length >= 17 && btns.every(b => b.dataset.label && b.querySelector('.dock-label')),
+         btns.length >= 14 && btns.every(b => b.dataset.label && b.querySelector('.dock-label')),
          btns.filter(b => !b.dataset.label).map(b => b.dataset.panel).join(','));
       ok('dock: no native tooltip to double up on the instant label',
          btns.every(b => !b.hasAttribute('title') && b.getAttribute('aria-label')));
@@ -6122,28 +6230,31 @@
       paTab = tab0; paRender(); await sleep(200);
     }
 
-    // Time and Sky. Shared like any other panel, and read-only here: the
-    // controls are hidden by CSS and realtime.js refuses to push either key
-    // from a player device, so a phone cannot rewind the table’s clock.
+    // World: the time and the weather, one tab. Shared like any other panel,
+    // and read-only here: the controls are hidden by CSS and realtime.js
+    // refuses to push either key from a player device, so a phone cannot
+    // rewind the table’s clock.
     if (typeof paTab !== 'undefined' && typeof paRender === 'function'){
       const S0 = (state.sharedPanels || []).slice(), tab0 = paTab;
       state.sharedPanels = []; saveSharedPanels(); paRender(); await sleep(250);
       const shut = [...document.querySelectorAll('[data-pa-tab]')].map(b => b.dataset.paTab);
-      ok('player: time and sky are hidden until shared',
-         shut.indexOf('time') < 0 && shut.indexOf('sky') < 0, JSON.stringify(shut));
+      ok('player: the world tab is hidden until shared', shut.indexOf('world') < 0, JSON.stringify(shut));
 
+      // A DM still sharing the old Time panel gets the World tab, once.
       state.sharedPanels = ['time', 'weather']; saveSharedPanels();
       paRender(); await sleep(250);
       const open = [...document.querySelectorAll('[data-pa-tab]')].map(b => b.dataset.paTab);
-      ok('player: sharing them makes the tabs appear',
-         open.indexOf('time') >= 0 && open.indexOf('sky') >= 0, JSON.stringify(open));
+      ok('player: sharing the old Time or Weather shows one World tab',
+         open.filter(t => t === 'world').length === 1 && open.indexOf('time') < 0 && open.indexOf('sky') < 0, JSON.stringify(open));
 
-      for (const t of ['time', 'sky']){
+      for (const t of ['world']){
         const before = errs.length;
         paTab = t; paRender(); await sleep(550);
         const screen = document.getElementById('pa-screen');
         const text = (screen && screen.textContent || '').replace(/\s+/g, ' ').trim();
         ok('player: the ' + t + ' tab shows something', text.length > 20, String(text.length));
+        ok('player: the world tab has the date and the weather',
+           !!document.querySelector('.pa-mount [data-world-part="time"] *') && !!document.querySelector('.pa-mount [data-world-part="weather"] *'));
         ok('player: the ' + t + ' tab is silent', errs.length === before,
            errs.slice(before).join(' | '));
         // Read-only means no control that would CHANGE it is on screen.

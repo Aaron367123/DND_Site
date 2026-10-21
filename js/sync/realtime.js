@@ -1132,7 +1132,7 @@ function _applyRemoteKey(key, fbVal) {
   // Shared-panels list is its own little world — apply it to the player tab
   // by mounting/unmounting panels, and refresh the DM tab's share toggles.
   if (key === 'skt-shared-panels-v1'){
-    try { state.sharedPanels = JSON.parse(fbVal) || []; } catch(_){ state.sharedPanels = []; }
+    try { state.sharedPanels = sktCanonShared(JSON.parse(fbVal) || []); } catch(_){ state.sharedPanels = []; }
     if (typeof _applySharedPanelsToPlayerView === 'function' && document.body.classList.contains('player-mode')){
       _applySharedPanelsToPlayerView();
     }

@@ -91,7 +91,7 @@ function initPlayerView(){
                  : e.key.includes('settings') ? 'settings' : null;
     if (domain && typeof loadDomain === 'function') loadDomain(domain);
     if (e.key.includes('shared-panels')){
-      try { const a = JSON.parse(e.newValue || '[]'); if (Array.isArray(a)) state.sharedPanels = a; } catch(err){}
+      try { const a = JSON.parse(e.newValue || '[]'); if (Array.isArray(a)) state.sharedPanels = sktCanonShared(a); } catch(err){}
     }
     if (typeof paRender === 'function') paRender();
   });

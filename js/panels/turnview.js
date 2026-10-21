@@ -33,6 +33,12 @@ registerPanel('turnview', {
   _queue: null,       // an in-flight multiattack: one entry per swing
   _pending: null,     // {kind:'hit'|'move', …} — an outcome awaiting a decision
   _armed: null,       // combatant id the next roll will hit
+  // Someone acting off their turn — a readied attack, a legendary action, a
+  // monster the DM wants to swing before getting to it. The turn does not
+  // move (that is what clicking a pip is for); only who this panel rolls for.
+  // This is what the separate Attack Runner panel was for, and the one thing
+  // it did that this panel didn't. Dropped as soon as the turn moves on.
+  _actAs: null,
   _editInit: false,
   _mapBig: false,
   // Manual zoom over the automatic framing. 1 = fit the fight. Deliberately
@@ -131,14 +137,31 @@ registerPanel('turnview', {
     // A new turn re-frames on a new creature, so a pan left over from the last
     // one is just an offset nobody asked for. Zoom is kept — that reads as a
     // preference for how close you like to sit.
-    if (state.activeCombatantId !== this._panTurn){ this._panX = 0; this._panY = 0; }
+    if (state.activeCombatantId !== this._panTurn){ this._panX = 0; this._panY = 0; this._actAs = null; }
     this._panTurn = state.activeCombatantId;
+    this._render();
+  },
+
+  // Roll for someone off their turn, or (null) go back to whoever's turn it is.
+  actAs(id){
+    const c = id && this._order().find(x => x.id === id);
+    const turn = this._turnOf();
+    this._actAs = (c && (!turn || c.id !== turn.id)) ? c.id : null;
+    if (this._armed && this._armed === this._actAs) this._armed = null;
+    this._queue = null; this._pending = null;
     this._render();
   },
 
   // ─── Reading the tracker ──────────────────────────────────────────────────
   _order(){ return state.combatants || []; },
   _active(){
+    const o = this._order();
+    const as = this._actAs && o.find(c => c.id === this._actAs);
+    if (as) return as;
+    return o.find(c => c.id === state.activeCombatantId) || o[0] || null;
+  },
+  // Whose turn it actually is, whoever this panel is acting for.
+  _turnOf(){
     const o = this._order();
     return o.find(c => c.id === state.activeCombatantId) || o[0] || null;
   },
@@ -838,7 +861,7 @@ registerPanel('turnview', {
       return;
     }
     const c = this._active();
-    this._rollRecharges(c);
+    this._rollRecharges(this._turnOf());   // at the start of THEIR turn, not when acted for
 
     // The SKELETON, written once. Everything inside it is filled by _paint,
     // which only touches a region whose markup actually changed.
@@ -930,8 +953,19 @@ registerPanel('turnview', {
     return this._editInit
       ? `<button class="btn" data-tv="rollinit" title="Roll initiative for the monsters — players call their own out loud">Roll NPCs</button>
          <button class="btn primary" data-tv="initdone">Done</button>`
-      : `<span class="tv-round">Round ${state.combatRound || 1}</span>
+      : `<span class="tv-round">Round ${state.combatRound || 1}</span>${this._renderActAs()}
          <button class="btn" data-tv="initedit" title="Set initiative, add or remove combatants">Initiative</button>`;
+  },
+  _renderActAs(){
+    const turn = this._turnOf();
+    const as = this._actAs && this._order().find(c => c.id === this._actAs);
+    if (as) return `<button class="btn tv-actas-back" data-tv="actas-end"
+        title="Stop acting for ${esc(as.name)}">↩ Back to ${esc(turn ? turn.name : 'the turn')}</button>`;
+    const others = this._order().filter(c => !turn || c.id !== turn.id);
+    if (!others.length) return '';
+    return `<select class="tv-in tv-actas" data-tvactas aria-label="Act as someone off their turn"
+        title="Roll for someone off their turn (a readied attack, a legendary action) without moving the turn">
+        <option value="">Act as…</option>${others.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>`;
   },
   _renderAddRow(){
     return `<div class="tv-init-add">
@@ -1309,7 +1343,7 @@ registerPanel('turnview', {
   // The pool is the tracker's own legendaryUsed/legendaryMax, so spending here
   // empties the same pips the Combat Tracker draws.
   _legendaryRows(){
-    const cur = this._active();
+    const cur = this._turnOf();
     return this._order()
       .filter(c => c.legendaryMax && (c.hp || 0) > 0 && c.id !== (cur && cur.id))
       .map(c => ({
@@ -1524,6 +1558,9 @@ registerPanel('turnview', {
     const o = this._order();
     const i = o.findIndex(x => x.id === (c && c.id));
     const n = o[(i + 1) % o.length];
+    const turn = this._turnOf();
+    if (c && turn && c.id !== turn.id)
+      return `Acting as <b>${esc(c.name)}</b>, off-turn · it is <b>${esc(turn.name)}</b>'s turn`;
     return `<b>${esc(c ? c.name : '—')}</b>'s turn · next up <b>${esc(n ? n.name : '—')}</b>`;
   },
   _renderLog(){
@@ -2784,6 +2821,7 @@ registerPanel('turnview', {
       // Checked before 'arm': the pip lives INSIDE the target button, and
       // closest('[data-tv]') finds the innermost, so this wins the click and
       // opening the menu does not also re-target the attack.
+      else if (act === 'actas-end'){ this.actAs(null); }
       else if (act === 'rx'){
         this._rxMenu = (this._rxMenu === el.dataset.id) ? null : el.dataset.id;
         this._render();
@@ -2865,6 +2903,8 @@ registerPanel('turnview', {
     b.addEventListener('change', e => {
       const f = e.target.closest('[data-tvinit]');
       if (f) this._setInit(f.dataset.tvinit, parseInt(f.value, 10));
+      const as = e.target.closest('[data-tvactas]');
+      if (as && as.value) this.actAs(as.value);
     });
     b.addEventListener('keydown', e => {
       if (e.key === 'Enter' && e.target.closest('.tv-init-add')){ e.preventDefault(); this._addCombatant(); }

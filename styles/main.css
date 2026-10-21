@@ -5092,3 +5092,19 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .rr-who{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0;font-size:var(--fs-sm)}
 .rr-who b{width:100%;font-size:var(--fs-xs);color:var(--text-muted)}
 @media (max-width: 760px){ .rr-card{left:12px;right:12px;width:auto;bottom:12px} }
+/* Turn View: acting for someone off their turn */
+.tv-actas{max-width:130px;font-size:var(--fs-xs);padding:3px 4px}
+.tv-actas-back{border-color:var(--accent);color:var(--accent)}
+/* Library: Books and Adventures as tabs of one window (js/panels/library.js) */
+.window-body.lib-host, .pa-mount.lib-host{display:flex;flex-direction:column;overflow:hidden}
+.lib-tabs{display:flex;gap:2px;padding:6px 8px 0;border-bottom:1px solid var(--border);flex:0 0 auto}
+.lib-tab{display:flex;align-items:center;gap:6px;background:none;border:1px solid transparent;border-bottom:none;
+  color:var(--text-muted);padding:6px 12px;border-radius:var(--r-sm) var(--r-sm) 0 0;cursor:pointer;font:inherit;font-size:var(--fs-sm)}
+.lib-tab .ico{width:15px;height:15px}
+.lib-tab:hover{color:var(--text)}
+.lib-tab.on{color:var(--text);background:var(--panel-2);border-color:var(--border);margin-bottom:-1px}
+.lib-pane{flex:1;min-height:0;overflow:auto;position:relative}
+/* World: the time and the weather side by side, stacked when narrow (js/panels/world.js) */
+.window-body.world-host{overflow:hidden}
+.world-root{display:flex;flex-wrap:wrap;align-content:flex-start;height:100%;overflow-y:auto}
+.world-part{flex:1 1 280px;min-width:0;height:auto !important;overflow:visible !important}

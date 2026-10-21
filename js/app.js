@@ -7,7 +7,7 @@
 //   with Ctrl+Shift+R, or clear site cache in browser settings).
 console.log('[app] build 20260524e loaded');
 function initPanels(){
-  ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary','adventures','books'].forEach(id=>{
+  ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','world','bestiary','library'].forEach(id=>{
     const def=panelDefs[id];const b=document.getElementById('panel-body-'+id);
     if(b&&def)def.mount(b);
   });
@@ -181,7 +181,7 @@ function init(){
     showConfirm('Reset window layout to defaults?', {title:'Reset layout', confirmLabel:'Reset'}).then(ok=>{
       if(!ok) return;
       layout=JSON.parse(JSON.stringify(DEFAULT_LAYOUT));saveLayout();
-      ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','weather','time','bestiary','adventures','books'].forEach(id=>{
+      Array.from(mounted).forEach(id=>{
         const el=document.querySelector('.window[data-panel="'+id+'"]');
         if(el){if(panelDefs[id]?.unmount)panelDefs[id].unmount();el.remove();mounted.delete(id);}
       });

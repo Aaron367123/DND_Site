@@ -121,7 +121,7 @@ function _sktRevertKey(key, target, other){
 
 function _sktUndoRedraw(){
   if (typeof panelDefs !== 'undefined'){
-    ['combat', 'party', 'attacks', 'turnview'].forEach(id => {
+    ['combat', 'party', 'turnview'].forEach(id => {
       const d = panelDefs[id];
       if (d && d._body && typeof d._render === 'function'){ try { d._render(); } catch(e){} }
     });

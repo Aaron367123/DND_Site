@@ -11,8 +11,7 @@ const CTX_PANEL_GROUPS = [
     { id: 'bestiary', name: 'Bestiary' },
   ]},
   { label: 'References', items: [
-    { id: 'adventures', name: 'Adventures' },
-    { id: 'books',      name: 'Books' },
+    { id: 'library',    name: 'Library (books & adventures)' },
   ]},
   { label: 'NPC Management', items: [
     { id: 'npcgen', name: 'NPC Generator' },
@@ -23,8 +22,7 @@ const CTX_PANEL_GROUPS = [
     { id: 'shop',      name: 'Shop Generator' },
     { id: 'loot',      name: 'Loot Tracker' },
     { id: 'encounter', name: 'Encounter Builder' },
-    { id: 'weather',   name: 'Weather Tool' },
-    { id: 'time',      name: 'Time Tracker' },
+    { id: 'world',     name: 'World (time & weather)' },
   ]},
   { label: 'Audio Visual', items: [
     { id: 'battlemap',  name: 'Battle Map' },

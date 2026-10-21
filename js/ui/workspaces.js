@@ -38,7 +38,10 @@ function _wsLoad(){
     const raw = localStorage.getItem(WS_KEY);
     if (raw){
       const d = JSON.parse(raw);
-      if (d && Array.isArray(d.list) && d.list.length) return d;
+      if (d && Array.isArray(d.list) && d.list.length){
+        d.list.forEach(w => { if (w && w.panels) sktMigrateLayout(w.panels); });
+        return d;
+      }
     }
   } catch(e){}
   return null;

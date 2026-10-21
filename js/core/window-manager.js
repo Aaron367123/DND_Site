@@ -33,10 +33,10 @@ function _nextZ(){
 // entry with no sprite (or a floating window created ad hoc) renders that
 // instead of a blank.
 const PANEL_ICON = {
-  combat:'i-combat', attacks:'i-target', turnview:'i-turn', party:'i-heart', shop:'i-coins',
+  combat:'i-combat', turnview:'i-turn', party:'i-heart', shop:'i-coins',
   notes:'i-note', battlemap:'i-map', npclib:'i-user', bestiary:'i-paw',
-  adventures:'i-book-open', books:'i-books', npcgen:'i-dice', loot:'i-chest',
-  encounter:'i-bolt', soundboard:'i-speaker', weather:'i-cloud', time:'i-clock',
+  library:'i-books', npcgen:'i-dice', loot:'i-chest',
+  encounter:'i-bolt', soundboard:'i-speaker', world:'i-cloud',
   handouts:'i-scroll',
 };
 // Icon markup for a panel: sprite when we have one, the panel's own emoji when
@@ -139,7 +139,17 @@ function _wmPlaceWindow(id){
   l.y = Math.max(0, Math.min(best[1], Math.max(0, maxH - l.h)));
 }
 
+// A panel that lives inside another window (SKT_PANEL_HOST in data.js):
+// opening it opens the host, showing that part. Everything that used to say
+// openPanel('books') or closePanel('time') keeps working.
+function _wmHosted(id){
+  const host = (typeof sktPanelHost === 'function') ? sktPanelHost(id) : id;
+  if (host === id) return null;
+  if (panelDefs[host] && typeof panelDefs[host].select === 'function') panelDefs[host].select(id);
+  return host;
+}
 function openPanel(id){
+  const h = _wmHosted(id); if (h) return openPanel(h);
   const wasOpen = layout[id] && layout[id].open;
   layout[id]={...layout[id],open:true,minimized:false,z:_nextZ()};
   // Only on an actual open — re-focusing an already-open panel must not move it.
@@ -147,6 +157,7 @@ function openPanel(id){
   saveLayout();ensurePanel(id);updateDock();
 }
 function closePanel(id){
+  { const host = (typeof sktPanelHost === 'function') ? sktPanelHost(id) : id; if (host !== id) return closePanel(host); }
   layout[id]={...layout[id],open:false};
   saveLayout();
   // Drop any in-progress drag/resize for this window so a mid-drag close
@@ -166,6 +177,7 @@ function _isMobileLayout(){
   catch(e){ return false; }
 }
 function togglePanel(id){
+  { const h = _wmHosted(id); if (h) id = h; }
   // On the mobile layout the dock is a SWITCHER, not a toggle. Panels are
   // fullscreen and stacked, so tapping one that's already open — but behind
   // another — has to bring it forward; closing it instead would look like the
@@ -178,6 +190,7 @@ function togglePanel(id){
   if(layout[id]?.open&&!layout[id]?.minimized)closePanel(id);else openPanel(id);
 }
 function focusPanel(id){
+  { const host = (typeof sktPanelHost === 'function') ? sktPanelHost(id) : id; if (host !== id) id = host; }
   layout[id]={...layout[id],z:_nextZ()};saveLayout();
   document.querySelectorAll('.window').forEach(w=>w.classList.remove('focused'));
   const el=document.querySelector(`.window[data-panel="${id}"]`);
@@ -224,6 +237,7 @@ function _updateToolbarOcclusion(){
 window._updateToolbarOcclusion = _updateToolbarOcclusion;
 
 function ensurePanel(id){
+  { const h = _wmHosted(id); if (h) id = h; }
   if(mounted.has(id)){
     const el=document.querySelector(`.window[data-panel="${id}"]`);
     if(el){const l=layout[id];el.style.left=l.x+'px';el.style.top=l.y+'px';el.style.width=l.w+'px';el.style.height=l.h+'px';el.style.zIndex=l.z;el.classList.toggle('minimized',!!l.minimized);}
