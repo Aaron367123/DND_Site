@@ -4505,14 +4505,21 @@
            (JSON.parse(localStorage.getItem('skt-savereq-v1')) || {}).closed === true);
 
         // Nobody waits forever: the DM can roll a straggler's save instead.
+        // The fireball above can drop a character to 0 depending on the
+        // dice, and the dialog only lists those still standing — so put the
+        // fight back first, or this half of the test depends on a roll.
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-combat-v1', snapshot['skt-combat-v1']); } finally { _remoteUpdate = false; }
+        loadDomain('combat');
         C.openAreaSave({ name: 'Breath', ab: 'DEX', dc: 12, parts: [{ dice: '2d6', type: 'fire' }], targets: pcs });
         await sleep(100);
         const b2 = document.getElementById('area-save-back');
         b2.querySelector('[data-as="ask"]').click(); await sleep(80);
+        const waiting0 = b2.querySelectorAll('.as-table tr.waiting').length;
         ok('saves: a waiting row can be rolled by the DM instead',
-           !!b2.querySelector('[data-as="rollfor"]'));
+           waiting0 === 2 && !!b2.querySelector('[data-as="rollfor"]'), waiting0);
         b2.querySelector('[data-as="rollfor"]').click(); await sleep(60);
-        ok('saves: which fills it in', b2.querySelectorAll('.as-table tr.waiting').length === 1);
+        ok('saves: which fills it in', b2.querySelectorAll('.as-table tr.waiting').length === waiting0 - 1);
         b2.querySelector('[data-as="cancel"]').click(); await sleep(60);
         ok('saves: closing the dialog closes the ask',
            (JSON.parse(localStorage.getItem('skt-savereq-v1')) || {}).closed === true);
