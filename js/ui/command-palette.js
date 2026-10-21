@@ -75,7 +75,8 @@ function _cpCommands(){
   }
 
   if (typeof openCharBuilder === 'function'){
-    add('Party', 'Build a new character', () => openCharBuilder({}), 'character creator create make new pc builder');
+    add('Party', 'Add a character…', () => { if (!mounted.has('party')) ensurePanel('party'); panelDefs.party._addCharacter(); },
+        'character creator create make new pc builder build import pdf blank');
     (state.party || []).forEach((p, i) => {
       if (p && p.build && (p.build.level || 1) < 20)
         add('Party', 'Level up ' + p.name, () => openCharBuilder({ idx: i, levelup: true }), 'level up advance');

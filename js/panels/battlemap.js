@@ -591,12 +591,36 @@ registerPanel('battlemap',{
     const cur = this._undoSnapshot();
     if (this._undoRestoring){ this._lastCommitted = cur; return; }
     if (this._lastCommitted != null && this._lastCommitted !== cur){
-      this._undoStack.push(this._lastCommitted);
-      if (this._undoStack.length > this._UNDO_MAX) this._undoStack.shift();
-      this._redoStack.length = 0;   // a new action invalidates the redo branch
+      const prev = this._lastCommitted, epoch = this._undoEpoch;
+      if (typeof sktUndoRecordCustom === 'function'){
+        // Into the app's one history, quietly: a toast on every pencil
+        // stroke would be noise. It is stale once another device has
+        // changed the map (the epoch moves), and refuses rather than
+        // reverting their work — the rule the map's own stack kept.
+        sktUndoRecordCustom('Map change', () => this._restoreSnapshot(prev), () => this._restoreSnapshot(cur),
+                            { quiet: true, valid: () => epoch === this._undoEpoch });
+      } else {
+        this._undoStack.push(prev);
+        if (this._undoStack.length > this._UNDO_MAX) this._undoStack.shift();
+        this._redoStack.length = 0;
+      }
       this._updateUndoButtons();
     }
     this._lastCommitted = cur;
+  },
+  _undoEpoch: 0,
+  // Put the map back to a snapshot and send it to the other devices. Works
+  // with the window closed too: the state lives on the panel either way.
+  _restoreSnapshot(s){
+    this._undoRestoring = true;
+    try {
+      if (!this._applyUndoSnapshot(s)) return;
+      this._saveMap();
+    } finally { this._undoRestoring = false; }
+    this._closePanel?.();
+    this._lastTokenHash = null;
+    if (this._body) this._repaintLayers({ drawings: true, tokens: this._tokens });
+    this._updateUndoButtons();
   },
 
   _applyUndoSnapshot(s){
@@ -642,13 +666,15 @@ registerPanel('battlemap',{
     this._repaintLayers({ drawings: true, tokens: this._tokens });
     this._updateUndoButtons();
   },
-  _undo(){ this._undoRedo(true); },
-  _redo(){ this._undoRedo(false); },
+  // The toolbar's buttons are the app's undo now, the same as Ctrl+Z.
+  _undo(){ if (typeof sktUndo === 'function') sktUndo(); else this._undoRedo(true); },
+  _redo(){ if (typeof sktRedo === 'function') sktRedo(); else this._undoRedo(false); },
 
   // A remote change means the stack now describes a history that no longer
   // matches shared state — undoing across it would silently revert someone
   // else's work. Drop it and re-baseline instead.
   _resetUndoBaseline(){
+    this._undoEpoch++;                 // map entries in the shared history go stale
     this._undoStack.length = 0;
     this._redoStack.length = 0;
     this._lastCommitted = this._undoSnapshot();
@@ -658,8 +684,11 @@ registerPanel('battlemap',{
   _updateUndoButtons(){
     const b = this._body; if (!b) return;
     const u = b.querySelector('[data-mact="undo"]'), r = b.querySelector('[data-mact="redo"]');
-    if (u){ u.disabled = !this._undoStack.length; u.style.opacity = this._undoStack.length ? '' : '.4'; }
-    if (r){ r.disabled = !this._redoStack.length; r.style.opacity = this._redoStack.length ? '' : '.4'; }
+    // Named after what they would undo, which may not be on the map at all.
+    const ul = typeof sktUndoLabel === 'function' ? sktUndoLabel() : null;
+    const rl = typeof sktRedoLabel === 'function' ? sktRedoLabel() : null;
+    if (u){ u.disabled = !ul; u.style.opacity = ul ? '' : '.4'; u.title = ul ? 'Undo: ' + ul + ' (Ctrl+Z)' : 'Nothing to undo'; }
+    if (r){ r.disabled = !rl; r.style.opacity = rl ? '' : '.4'; r.title = rl ? 'Redo: ' + rl + ' (Ctrl+Shift+Z)' : 'Nothing to redo'; }
   },
 
   // Ctrl+Z / Ctrl+Shift+Z, scoped to the battle map window. Two guards matter:
@@ -667,6 +696,8 @@ registerPanel('battlemap',{
   // have text inputs — so bail on any editable target, and require this
   // window to be the focused one (window-manager sets .focused on mousedown).
   _startUndoKeys(){
+    // Ctrl+Z is the app's (js/core/undo.js) since there is one history.
+    if (typeof sktUndo === 'function') return;
     this._stopUndoKeys();
     this._undoKeyHandler = (e) => {
       if (!(e.ctrlKey || e.metaKey) || (e.key !== 'z' && e.key !== 'Z')) return;

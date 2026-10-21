@@ -443,6 +443,13 @@ registerPanel('turnview', {
       this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
       return;
     }
+    // The combatant may carry a different id from its party record (added to
+    // the fight by hand), so give from the party member it stands for.
+    const bardRec = (a.name === 'Bardic Inspiration' && who.isPC) ? this._partyOf(who) : null;
+    if (bardRec && typeof sktAskBardic === 'function'){
+      sktAskBardic({ from: bardRec.id, after: () => this._render() });
+      return;
+    }
     let spent = '';
     if (a.pool){
       a.pool.current = Math.max(0, a.pool.current - (a.amount || 1));

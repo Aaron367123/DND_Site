@@ -4176,9 +4176,10 @@
         ctrlZ();
         await sleep(60);
         fake.remove();
-        ok('undo: Ctrl+Z over the battle map is left to the map',
-           hpOf(id) === hp0 - 4 && sktUndoDepth() === depth + 1);
-        sktUndo(); await sleep(40);
+        // One history: Ctrl+Z with the battle map focused undoes the last
+        // thing done, wherever it was — here, damage in the tracker.
+        ok('undo: Ctrl+Z over the battle map still undoes the last thing done',
+           hpOf(id) === hp0 && sktUndoDepth() === depth, JSON.stringify({ hp: hpOf(id), depth: sktUndoDepth(), was: depth }));
 
         // A long rest is the biggest irreversible click in the app.
         const P = panelDefs.party; openPanel('party'); await sleep(250);
@@ -4769,6 +4770,121 @@
           loadDomain('party'); closePanel('party');
         }
       } catch(e){ ok('features: the checks ran to completion', false, e.message); }
+    }
+
+    // -- One undo history, the map included --------------------------------
+    {
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      closePanel('battlemap'); openPanel('battlemap'); await sleep(900);
+      const bm = panelDefs.battlemap;
+      try {
+        const tok = bm._tokens.find(t => t.x != null);
+        const x0 = tok.x;
+        // A token move, then damage in the tracker: two entries, one history.
+        tok.x = x0 + 50; bm._saveMap(); await sleep(30);
+        const i = state.combatants.findIndex(c => !c.isPC);
+        const hp0 = state.combatants[i].hp;
+        sktUndoable('probe damage', () => { panelDefs.combat._applyHpDelta(i, -3); });
+        await sleep(30);
+        ok('undo: the map’s toolbar names what it would undo, even from elsewhere',
+           /probe damage/.test((bm._body.querySelector('[data-mact="undo"]') || {}).title || ''),
+           (bm._body.querySelector('[data-mact="undo"]') || {}).title);
+        bm._body.querySelector('[data-mact="undo"]').click(); await sleep(40);
+        ok('undo: the map’s Undo button undoes the last thing done (the damage)', state.combatants[i].hp === hp0);
+        bm._body.querySelector('[data-mact="undo"]').click(); await sleep(60);
+        const now = bm._tokens.find(t => t.id === tok.id);
+        ok('undo: and the next press undoes the map move before it', !!now && Math.abs(now.x - x0) < 0.5, now && now.x);
+        sktRedo(); await sleep(60);
+        ok('undo: redo puts the move back', Math.abs(bm._tokens.find(t => t.id === tok.id).x - (x0 + 50)) < 0.5);
+        // Someone else changes the map: an older map entry must not revert it.
+        const t2 = bm._tokens.find(t => t.id === tok.id);
+        t2.y = (t2.y || 0) + 40; bm._saveMap(); await sleep(30);
+        bm._resetUndoBaseline();      // what a remote map update does
+        const before = JSON.stringify(bm._tokens.map(t => [t.x, t.y]));
+        const refused = sktUndo();
+        ok('undo: a map change made stale by another device is refused, not reverted',
+           refused === false && JSON.stringify(bm._tokens.map(t => [t.x, t.y])) === before);
+      } catch(e){ ok('undo: the map checks ran to completion', false, e.message); }
+      finally {
+        closePanel('battlemap');
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party');
+      }
+    }
+
+    // -- Bardic Inspiration, end to end -------------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const P = panelDefs.party; openPanel('party'); await sleep(200);
+        const bard = state.party.find(p => sktBardicPool(p));
+        const other = state.party.find(p => p !== bard && !p.foe);
+        ok('bardic: the fixture has a bard with uses to give', !!bard && !!other);
+        const bi = state.party.indexOf(bard), oi = state.party.indexOf(other);
+        state.party[bi] = { ...bard, resources: bard.resources.map(r => r.name === 'Bardic Inspiration' ? { ...r, current: 2, max: 3 } : r) };
+        state.party[oi] = { ...other, bardicInspiration: false };
+        save(); P._render(); await sleep(60);
+        const give = P._body.querySelector('[data-act="bardic-give"][data-idx="' + oi + '"]');
+        ok('bardic: a party card offers to give one when there is a bard', !!give && !give.disabled);
+        ok('bardic: but not on the bard’s own card', !P._body.querySelector('[data-act="bardic-give"][data-idx="' + bi + '"]'));
+        give.click(); await sleep(80);
+        const b2 = state.party.find(p => p.id === bard.id), o2 = state.party.find(p => p.id === other.id);
+        ok('bardic: giving it spends one of the bard’s uses', sktBardicPool(b2).current === 1, sktBardicPool(b2).current);
+        ok('bardic: and the recipient holds the bard’s die', typeof o2.bardicInspiration === 'string' && /^d\d+$/.test(o2.bardicInspiration)
+           && o2.bardicFrom === bard.name, JSON.stringify({ d: o2.bardicInspiration, from: o2.bardicFrom }));
+        P._render(); await sleep(40);
+        P._body.querySelector('.status-badge.bardic[data-idx="' + oi + '"]').click(); await sleep(40);
+        ok('bardic: tapping the badge when it is used clears it', !state.party[oi].bardicInspiration);
+        state.party[bi] = { ...state.party[bi], resources: state.party[bi].resources.map(r => r.name === 'Bardic Inspiration' ? { ...r, current: 0 } : r) };
+        save(); P._render(); await sleep(40);
+        const dry = P._body.querySelector('[data-act="bardic-give"][data-idx="' + oi + '"]');
+        ok('bardic: with no uses left the button says so', !!dry && dry.disabled);
+        ok('bardic: and a grant is refused', /no Bardic Inspiration left/.test(sktGrantBardic(bard.id, other.id)));
+        // No bard in the party at all: no button anywhere.
+        state.party.forEach((p, k) => { if (sktBardicPool(p)) state.party[k] = { ...p, resources: p.resources.filter(r => r.name !== 'Bardic Inspiration') }; });
+        save(); P._render(); await sleep(40);
+        ok('bardic: without a bard, no card offers it', !P._body.querySelector('[data-act="bardic-give"]'));
+      } catch(e){ ok('bardic: the checks ran to completion', false, e.message); }
+      finally {
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party._render();
+      }
+    }
+
+    // -- One way in to adding a character -----------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const P = panelDefs.party;
+        const items = P.menuItems().map(i => i.label);
+        ok('add: the party menu has one "Add a character" entry',
+           items.some(l => /Add a character/.test(l)) && !items.some(l => /Build a new character|Import PDF/.test(l)), items.join(' | '));
+        P._addCharacter(); await sleep(40);
+        const opts = [...document.querySelectorAll('#add-char-back [data-add]')].map(b => b.dataset.add);
+        ok('add: it offers build, import and blank', ['build', 'pdf', 'blank'].every(k => opts.includes(k)), opts.join(','));
+        const n0 = state.party.length;
+        document.querySelector('#add-char-back [data-add="blank"]').click(); await sleep(60);
+        ok('add: blank adds a card', state.party.length === n0 + 1 && !document.getElementById('add-char-back'));
+        P._addCharacter({ foe: true }); await sleep(40);
+        ok('add: a rival is never built with the player builder',
+           !document.querySelector('#add-char-back [data-add="build"]') && !!document.querySelector('#add-char-back [data-add="pdf"]'));
+        document.querySelector('#add-char-back [data-add="cancel"]').click();
+        P._render(); await sleep(40);
+        ok('add: the per-card rest button says it is a long rest', /Long rest/.test((P._body.querySelector('[data-act="hd-rest"]') || {}).textContent || ''));
+      } catch(e){ ok('add: the checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('add-char-back')?.remove();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party._render(); closePanel('party');
+      }
     }
 
     // ── Areas of effect on the map ────────────────────────────────────────

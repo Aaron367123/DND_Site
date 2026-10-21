@@ -180,7 +180,14 @@ function _sktUndoRecord(label, keys, before, opts){
   return true;
 }
 
+// The battle map's toolbar buttons name what they would undo; keep them
+// current whatever just changed.
+function _sktUndoChanged(){
+  try { const m = (typeof panelDefs !== 'undefined') && panelDefs.battlemap; if (m && m._body) m._updateUndoButtons(); } catch(e){}
+}
+
 function _sktUndoToast(msg, actionLabel, run){
+  _sktUndoChanged();
   if (typeof showToast !== 'function') return;
   showToast(msg, { action: { label: actionLabel, run } });
 }
@@ -194,6 +201,12 @@ function _sktUndoToast(msg, actionLabel, run){
 function sktUndo(){
   const e = _sktUndoStack.pop();
   if (!e){ if (typeof showToast === 'function') showToast('Nothing to undo'); return false; }
+  if (e.custom){
+    if (!_sktCustomGo(e, true)) return false;      // stale: dropped, not moved to redo
+    _sktRedoStack.push(e);
+    _sktUndoToast('Undone — ' + e.label, 'Redo', sktRedo);
+    return true;
+  }
   _sktRedoStack.push(e);
   _sktUndoGoto(e, e.before, e.after);
   _sktUndoToast('Undone — ' + e.label, 'Redo', sktRedo);
@@ -203,6 +216,12 @@ function sktUndo(){
 function sktRedo(){
   const e = _sktRedoStack.pop();
   if (!e){ if (typeof showToast === 'function') showToast('Nothing to redo'); return false; }
+  if (e.custom){
+    if (!_sktCustomGo(e, false)) return false;
+    _sktUndoStack.push(e);
+    _sktUndoToast('Redone — ' + e.label, 'Undo', sktUndo);
+    return true;
+  }
   _sktUndoStack.push(e);
   while (_sktUndoStack.length > SKT_UNDO_MAX) _sktUndoStack.shift();
   _sktUndoGoto(e, e.after, e.before);
@@ -210,13 +229,34 @@ function sktRedo(){
   return true;
 }
 
+// An entry that knows its own way back and forward, for state that isn't
+// one of the synced keys above — the battle map's tokens, fog and strokes,
+// which live on the panel. `valid()` lets the owner refuse an undo that
+// would now revert someone else's work (the map, after a remote change).
+function sktUndoRecordCustom(label, undoFn, redoFn, opts){
+  opts = opts || {};
+  _sktUndoStack.push({ label, custom: { undo: undoFn, redo: redoFn, valid: opts.valid || null } });
+  while (_sktUndoStack.length > SKT_UNDO_MAX) _sktUndoStack.shift();
+  _sktRedoStack.length = 0;
+  if (!opts.quiet) _sktUndoToast(label, 'Undo', sktUndo);
+}
+function _sktCustomGo(e, back){
+  if (e.custom.valid && !e.custom.valid()){
+    if (typeof showToast === 'function') showToast('Can\u2019t undo \u201c' + e.label + '\u201d \u2014 it has changed on another device since');
+    return false;
+  }
+  try { (back ? e.custom.undo : e.custom.redo)(); } catch(err){ console.warn('[undo]', err); return false; }
+  return true;
+}
+
 function sktUndoLabel(){ const e = _sktUndoStack[_sktUndoStack.length - 1]; return e ? e.label : null; }
 function sktRedoLabel(){ const e = _sktRedoStack[_sktRedoStack.length - 1]; return e ? e.label : null; }
 function sktUndoDepth(){ return _sktUndoStack.length; }
 
-// Ctrl+Z / Ctrl+Shift+Z anywhere — except inside a field, and except when
-// the battle map window has focus, where Ctrl+Z is already the map's own
-// undo and the two would both fire on one press.
+// Ctrl+Z / Ctrl+Shift+Z anywhere except inside a field. One history for the
+// whole app, the battle map included: there used to be two, and Ctrl+Z in
+// the map window undid the last map change even when the last thing done
+// there was damage from a token's panel, which lived in the other one.
 function initUndoKeys(){
   document.addEventListener('keydown', e => {
     if (!(e.ctrlKey || e.metaKey)) return;
@@ -224,8 +264,6 @@ function initUndoKeys(){
     if (k !== 'z' && k !== 'y') return;
     const t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return;
-    const focused = document.querySelector('.window.focused');
-    if (focused && focused.dataset.panel === 'battlemap') return;
     e.preventDefault();
     if (k === 'y' || e.shiftKey) sktRedo(); else sktUndo();
   });

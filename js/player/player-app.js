@@ -778,6 +778,11 @@ function paPickActivation(i){
 function paUseActivation(i){
   const pc = paPc(); if (!pc) return;
   const a = paActivations(pc)[i]; if (!a) return;
+  // Bardic Inspiration goes to someone: ask who, and the grant spends the use.
+  if (a.name === 'Bardic Inspiration' && typeof sktAskBardic === 'function'){
+    sktAskBardic({ from: pc.id, after: () => { paFeatOpen = null; paRender(); } });
+    return;
+  }
   const pool = paPoolFor(pc, a);
   const n = a.amount || 1;
   const short = pool && pool.current < n;

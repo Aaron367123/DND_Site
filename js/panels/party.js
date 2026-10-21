@@ -88,11 +88,51 @@ registerPanel('party',{
   },
   // Items added to the window's ⋯ menu. Evaluated each time the menu opens
   // so labels/visibility can react to current party state.
+  // One way in to a new party member, three ways to make one. They were
+  // three separate menu entries in two places: Build here, Import PDF here,
+  // and a blank "+ Add Member" inside Manage Party.
+  //   opts.foe — a rival (Manage Party's "+ Add Rival"): blank or a PDF only,
+  //              the builder makes player characters.
+  _addCharacter(opts){
+    opts = opts || {};
+    document.getElementById('add-char-back')?.remove();
+    const back = document.createElement('div');
+    back.className = 'modal-backdrop'; back.id = 'add-char-back';
+    const opt = (k, icon, title, sub) => '<button class="add-char-opt" data-add="' + k + '"><span class="add-char-i">' + icon + '</span>'
+      + '<span><b>' + title + '</b><span>' + sub + '</span></span></button>';
+    back.innerHTML = '<div class="modal add-char" role="dialog" aria-modal="true" aria-label="Add a character">'
+      + '<h3>' + (opts.foe ? 'Add a rival' : 'Add a character') + '</h3>'
+      + (opts.foe ? '' : opt('build', '🧙', 'Build one', 'Step by step, 2014 or 2024 rules — the sheet fills itself in'))
+      + opt('pdf', '📄', 'Import a D&D Beyond PDF', 'Read a character sheet exported from D&D Beyond')
+      + opt('blank', '✎', 'Start blank', 'An empty card to fill in by hand')
+      + '<div class="modal-actions"><button class="btn" data-add="cancel">Cancel</button></div></div>';
+    document.body.appendChild(back);
+    const close = () => back.remove();
+    back.addEventListener('mousedown', e => { if (e.target === back) close(); });
+    back.addEventListener('click', e => {
+      const b = e.target.closest('[data-add]'); if (!b) return;
+      const k = b.dataset.add; close();
+      if (k === 'build' && typeof openCharBuilder === 'function') openCharBuilder({});
+      else if (k === 'pdf') this._importPdf();
+      else if (k === 'blank'){ this._addBlank(!!opts.foe); if (opts.fromManage) this._openManageParty(); }
+      else if (k === 'cancel' && opts.fromManage) this._openManageParty();
+    });
+  },
+  // One record shape for party members and rivals, so everything downstream
+  // — the sheet, the PDF import, the Turn View, the activatable features —
+  // works on a rival without knowing it is one.
+  _addBlank(foe){
+    state.party.push({ id: uid(), name: foe ? 'New Rival' : 'New Character',
+      cls: 'fighter', icon: foe ? '☠' : '⚔', hp: 30, hpMax: 30, ac: 14, init: 0, spd: 30, pp: 10,
+      inspiration: false, resources: [], ...(foe ? { foe: true } : {}) });
+    save(); this._render();
+    if (typeof showToast === 'function') showToast((foe ? 'Rival' : 'Character') + ' added — open Manage Party to fill it in');
+  },
+
   menuItems(){
     const items = [
+      { label:'➕ Add a character…', run: () => this._addCharacter() },
       { label:'📋 Manage Party', run: () => this._openManageParty() },
-      { label:'🧙 Build a new character', run: () => openCharBuilder({}) },
-      { label:'📄 Import PDF',   run: () => this._importPdf() },
     ];
     if (state.party.length){
       items.push({ label:'📊 Party Skills', run: () => this._openPartySkills() });
@@ -386,8 +426,13 @@ registerPanel('party',{
           if (!c.inspiration){
             parts.push(`<button class="insp-give-btn" data-act="insp" data-idx="${i}" title="Grant Heroic Inspiration · right-click for award reasons">${ICO('i-sparkle')} Grant</button>`);
           }
-          if (!c.bardicInspiration){
-            parts.push(`<button class="insp-give-btn bardic" data-act="bardic-insp" data-idx="${i}" title="Grant Bardic Inspiration${bd?' ('+bd+')':' (set by the bard granting it)'}">🎵 Bardic${bd?' '+bd:''}</button>`);
+          // Only when some OTHER member of the party is a bard with the pool:
+          // a fighter's card offering Bardic Inspiration in a party without a
+          // bard was a button that meant nothing.
+          const bards = (typeof sktBards === 'function') ? sktBards().filter(b => b.id !== c.id) : [];
+          if (!c.bardicInspiration && bards.length){
+            const left = bards.reduce((n, b) => n + ((sktBardicPool(b) || {}).current || 0), 0);
+            parts.push(`<button class="insp-give-btn bardic" data-act="bardic-give" data-idx="${i}" title="${left ? 'Give Bardic Inspiration from ' + esc(bards.map(b => b.name).join(' or ')) : 'No Bardic Inspiration left'}"${left ? '' : ' disabled'}>🎵 Bardic</button>`);
           }
           return parts.length ? `<div class="insp-give-row">${parts.join('')}</div>` : '';
         })()
@@ -1193,8 +1238,10 @@ registerPanel('party',{
       badges.push(`<span class="status-badge insp" data-act="insp" data-idx="${i}" title="Heroic Inspiration — click to spend">✨ Inspiration</span>`);
     }
     if (c.bardicInspiration){
-      const bd = this._bardicDie(c);
-      badges.push(`<span class="status-badge bardic" data-act="bardic-insp" data-idx="${i}" title="Bardic Inspiration${bd?' '+bd:''} — click to spend">🎵 Bardic${bd?' '+bd:''}</span>`);
+      // The die is the BARD's, carried on the grant; the recipient's own
+      // class has nothing to do with it.
+      const bd = typeof c.bardicInspiration === 'string' ? c.bardicInspiration : this._bardicDie(c);
+      badges.push(`<span class="status-badge bardic" data-act="bardic-insp" data-idx="${i}" title="Bardic Inspiration${bd?' '+bd:''}${c.bardicFrom ? ' from ' + esc(c.bardicFrom) : ''} — click when it is used">🎵 Bardic${bd?' '+bd:''}</span>`);
     }
     if (!badges.length) return '';
     return `<div class="char-status-badges">${badges.join('')}</div>`;
@@ -2232,7 +2279,7 @@ registerPanel('party',{
         </div>
         <div class="mp-foot">
           <span class="mp-count">${state.party.length} member${state.party.length===1?'':'s'}</span>
-          <button class="btn primary" data-act="mp-add">+ Add Member</button>
+          <button class="btn primary" data-act="mp-add">+ Add a character…</button>
           <button class="btn" data-act="mp-add-foe" title="A character with a full sheet who fights AGAINST the party — a rival adventurer, a boss built on class levels, a duplicate of a player. Same editor and the same PDF import as a party member; the players never see it.">+ Add Rival</button>
         </div>
       </div>`;
@@ -2279,19 +2326,11 @@ registerPanel('party',{
           });
         });
       }));
-      // One record shape for both, so everything downstream — the sheet, the
-      // PDF import, the Turn View, the activatable features — works on a
-      // rival without knowing it is one.
-      const addMember = (foe) => {
-        state.party.push({id:uid(),name: foe ? 'New Rival' : 'New Character',
-          cls:'fighter',icon: foe ? '☠' : '⚔',hp:30,hpMax:30,ac:14,init:0,spd:30,pp:10,
-          inspiration:false,resources:[], ...(foe ? {foe:true} : {})});
-        save();
-        this._render();
-        renderModal();
-      };
-      backdrop.querySelector('[data-act="mp-add"]')?.addEventListener('click', () => addMember(false));
-      backdrop.querySelector('[data-act="mp-add-foe"]')?.addEventListener('click', () => addMember(true));
+      // The same chooser as the window menu, so a member can be built or
+      // imported from here as well as added blank. A blank one brings you
+      // back here, where its row is to be filled in.
+      backdrop.querySelector('[data-act="mp-add"]')?.addEventListener('click', () => { backdrop.remove(); this._addCharacter({ fromManage: true }); });
+      backdrop.querySelector('[data-act="mp-add-foe"]')?.addEventListener('click', () => { backdrop.remove(); this._addCharacter({ foe: true, fromManage: true }); });
       backdrop.querySelector('[data-act="mp-close"]')?.addEventListener('click', () => backdrop.remove());
       this._wireMpResize();
     };
@@ -2624,7 +2663,7 @@ registerPanel('party',{
       <span class="hd-label">🎲 ${esc(hd.dieType||'d8')}</span>
       <span class="hd-pips">${pips}</span>
       <span class="hd-count">${cur}/${hd.max}</span>
-      <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest — restore hit dice">🛌 Rest</button>
+      <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest for this character: HP, slots, resources, half the hit dice">🛌 Long rest</button>
     </div>`;
   },
 
@@ -2866,7 +2905,13 @@ registerPanel('party',{
   _onAction(el, e){
       const act=el.dataset.act, i=+el.dataset.idx;
       if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
-      else if(act==='bardic-insp'){state.party[i]={...state.party[i],bardicInspiration:!state.party[i].bardicInspiration};save();this._render();}
+      // The recipient uses their die: clear it.
+      else if(act==='bardic-insp'){
+        if (state.party[i].bardicInspiration){ state.party[i]={...state.party[i],bardicInspiration:false,bardicFrom:null}; save(); this._render(); }
+        else if (typeof sktAskBardic === 'function') sktAskBardic({ to: state.party[i].id });
+      }
+      // Give one: a use comes off the bard's pool.
+      else if(act==='bardic-give'){ if (typeof sktAskBardic === 'function') sktAskBardic({ to: state.party[i].id }); }
       // Concentration set/drop — set prompts for the spell name; drop clears.
       else if(act==='conc-set'){
         const cur = state.party[i].concentration || '';

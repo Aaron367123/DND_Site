@@ -1528,6 +1528,75 @@ const _sktActCache = new Map();
 // has them read back out of its sheet's features text. Every screen that
 // lists or spends actions asks here, so the two kinds behave the same in the
 // party sheet, the Turn View and on the phone.
+// ── Bardic Inspiration, end to end ──────────────────────────────────────────
+// There were two that never met: the bard's pool of uses, and a "Bardic"
+// toggle on every party card. Granting from a card didn't spend a use, and
+// spending a use gave nobody a die. Now a grant is one thing — a use comes
+// off the bard's pool and the recipient holds that bard's die — from the
+// party card, the bard's own phone, or the Turn View.
+function sktBardicPool(pc){
+  return (pc && Array.isArray(pc.resources)) ? pc.resources.find(r => r.name === 'Bardic Inspiration') || null : null;
+}
+function sktBards(){ return (state.party || []).filter(p => p && sktBardicPool(p)); }
+function sktBardicDie(bard){
+  const p = sktBardicPool(bard);
+  if (p && p.die) return String(p.die).replace(/^1d/, 'd');
+  const lvl = parseInt((bard && bard.level) || 0, 10);
+  return lvl >= 15 ? 'd12' : lvl >= 10 ? 'd10' : lvl >= 5 ? 'd8' : 'd6';
+}
+// Spend one of the bard's uses on the target. '' on success, else why not.
+function sktGrantBardic(bardId, targetId){
+  const bi = state.party.findIndex(p => p.id === bardId), ti = state.party.findIndex(p => p.id === targetId);
+  if (bi < 0 || ti < 0) return 'Character not found';
+  if (bi === ti) return 'A bard can\u2019t inspire themself';
+  const bard = state.party[bi], tgt = state.party[ti], pool = sktBardicPool(bard);
+  if (!pool || pool.current <= 0) return bard.name + ' has no Bardic Inspiration left';
+  if (tgt.bardicInspiration) return tgt.name + ' already has a Bardic Inspiration die';
+  const die = sktBardicDie(bard);
+  const go = () => {
+    state.party[bi] = { ...bard, resources: bard.resources.map(r => r === pool ? { ...r, current: r.current - 1 } : r) };
+    state.party[ti] = { ...state.party[ti], bardicInspiration: die, bardicFrom: bard.name };
+    save();
+  };
+  if (typeof sktUndoable === 'function') sktUndoable(bard.name + ' inspires ' + tgt.name + ' (' + die + ')', go, { quiet: true }); else go();
+  return '';
+}
+// Ask who should get it, then grant. `from` is the bard; `to` is optional
+// (a party card already knows the recipient, and then it asks which bard).
+function sktAskBardic(opts){
+  opts = opts || {};
+  const say = m => { if (typeof showToast === 'function') showToast(m); };
+  const done = (bardId, targetId) => {
+    const why = sktGrantBardic(bardId, targetId);
+    if (why) say(why);
+    else {
+      const b = state.party.find(p => p.id === bardId), t = state.party.find(p => p.id === targetId);
+      if (typeof showToast === 'function') showToast('🎵 ' + b.name + ' inspires ' + t.name + ' — ' + t.bardicInspiration,
+        typeof sktUndo === 'function' ? { action: { label: 'Undo', run: sktUndo } } : undefined);
+    }
+    try { panelDefs.party && panelDefs.party._render && panelDefs.party._render(); } catch(e){}
+    if (typeof opts.after === 'function') opts.after();
+  };
+  if (opts.from){
+    const others = (state.party || []).filter(p => p.id !== opts.from && !p.foe && !p.bardicInspiration);
+    if (!others.length){ say('Everyone already has a Bardic Inspiration die'); return; }
+    if (typeof showModal !== 'function') return done(opts.from, others[0].id);
+    showModal('🎵 Bardic Inspiration', [{ id: 'to', label: 'Who gets it?', type: 'select',
+      options: others.map(p => ({ value: p.id, label: p.name })) }], 'Inspire').then(r => { if (r && r.to) done(opts.from, r.to); });
+    return;
+  }
+  if (opts.to){
+    const bards = sktBards().filter(b => b.id !== opts.to);
+    const ready = bards.filter(b => (sktBardicPool(b).current || 0) > 0);
+    if (!bards.length){ say('No one in the party has Bardic Inspiration to give'); return; }
+    if (!ready.length){ say(bards.map(b => b.name).join(' and ') + ' ' + (bards.length === 1 ? 'has' : 'have') + ' no Bardic Inspiration left'); return; }
+    if (ready.length === 1 || typeof showModal !== 'function') return done(ready[0].id, opts.to);
+    showModal('🎵 Bardic Inspiration', [{ id: 'from', label: 'From which bard?', type: 'select',
+      options: ready.map(b => ({ value: b.id, label: b.name + ' (' + sktBardicPool(b).current + ' left)' })) }], 'Inspire')
+      .then(r => { if (r && r.from) done(r.from, opts.to); });
+  }
+}
+
 function sktActivationsOf(pc){
   if (!pc) return [];
   if (pc.build && pc.sheet && Array.isArray(pc.sheet.activations)) return pc.sheet.activations;

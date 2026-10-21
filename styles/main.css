@@ -5060,3 +5060,11 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
   .cb-foot .btn{padding:10px 14px}
 }
 .feat-note{font-size:var(--fs-sm);color:var(--text-muted);padding:4px 0;border-top:1px solid var(--border)}
+
+/* One way in to adding a party member (party.js _addCharacter) */
+.add-char{width:420px;max-width:92vw}
+.add-char-opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;margin:6px 0;cursor:pointer;color:var(--text);font-family:inherit}
+.add-char-opt:hover{border-color:var(--accent)}
+.add-char-opt b{display:block;font-size:var(--fs-md)}
+.add-char-opt span span{display:block;font-size:var(--fs-xs);color:var(--text-dim);margin-top:2px}
+.add-char-i{font-size:24px;width:32px;text-align:center}
