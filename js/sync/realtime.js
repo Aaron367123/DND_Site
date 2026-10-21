@@ -1239,6 +1239,9 @@ function _setSyncStatus(state) {
     el.innerHTML = '<span class="sync-dot"></span><span>Connecting…</span>';
     el.title = '';
   }
+  // The chip is rewritten whole on every connection change, so the device
+  // count has to be put back each time.
+  if (typeof sktPresenceDecorate === 'function') sktPresenceDecorate(el);
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
@@ -1451,6 +1454,11 @@ function _startRealtimeExtras() {
   });
   // Server clock, so live ticks from different devices compare fairly.
   _fbDb.ref('.info/serverTimeOffset').on('value', snap => { _serverOffset = +snap.val() || 0; });
+  // Presence attaches HERE, not when the page boots: a listener added before
+  // anonymous sign-in completes is rejected with permission_denied, and
+  // Firebase never retries a revoked listener — the same trap the key
+  // listeners above are started from onAuthStateChanged to avoid.
+  if (typeof sktPresenceOnline === 'function') sktPresenceOnline();
 
   // Safety net: if the tab regains focus, re-pull every sync key once. This
   // covers cases where the long-running on('value') listener missed events
@@ -1489,6 +1497,10 @@ function _startRealtimeExtras() {
     _refreshAll();
   });
   window.addEventListener('focus', _refreshAll);
+  // Pull everything again on demand. The presence strip offers this as
+  // "Resync" on a device that has drifted, and the device itself runs it
+  // when another device asks — a reload with nothing lost.
+  window.realtimeRefreshAll = _refreshAll;
   window.addEventListener('online', () => { _reconnect(); _refreshAll(); });
 
   // Legacy-blob migration, Firebase side. load() migrates a LOCAL
@@ -1725,6 +1737,31 @@ window.realtimeLive = {
   // than one that ended normally — a receiver may need to undo what the last
   // tick drew (a token left mid-drag), which it must NOT do on a normal end,
   // when the real position is still a moment away.
+  // Every live channel whose name starts with `prefix`, as one map, with
+  // none of listen()'s single-value staleness logic.
+  //
+  // A key range rather than a sub-folder: the published database rules
+  // validate live/$chan directly, so presence entries have to BE channels
+  // ("presence_<device>") rather than children of one. Listening to the
+  // whole live node instead would have delivered every tick of every token
+  // drag to every device, which is the opposite of the point.
+  //
+  // Returns null when there is no database to watch yet, so the caller can
+  // tell "attached" from "nothing happened" and try again after sign-in.
+  watchPrefix(prefix, callback){
+    if (!_fbDb) return null;
+    try {
+      const q = _fbDb.ref(_root() + '/live').orderByKey()
+        .startAt(prefix).endAt(prefix + '');
+      const handler = q.on('value', snap => {
+        const out = {};
+        const all = snap.val() || {};
+        Object.keys(all).forEach(k => { if (k.indexOf(prefix) === 0) out[k.slice(prefix.length)] = all[k]; });
+        try { callback(out); } catch(e){}
+      });
+      return () => { try { q.off('value', handler); } catch(e){} };
+    } catch(e){ return null; }
+  },
   listen(path, callback){
     if (!_fbDb) return () => {};
     try {

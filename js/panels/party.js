@@ -1576,11 +1576,14 @@ registerPanel('party',{
   },
 
   _applyLongRest(){
-    state.party.forEach((c, i) => this._longRestOne(c, i));
-    save();
-    this._render();
-    panelDefs.combat?._render?.();
-    showToast('🛌 Long rest — party fully recovered');
+    // A rest taken one fight early used to be unrecoverable: every slot,
+    // hit die and point of exhaustion in the party, gone in one click.
+    sktUndoable('🛌 Long rest — party fully recovered', () => {
+      state.party.forEach((c, i) => this._longRestOne(c, i));
+      save();
+      this._render();
+      panelDefs.combat?._render?.();
+    });
   },
 
   // One character's long rest. Split out because there were TWO of these: the
@@ -1670,12 +1673,15 @@ registerPanel('party',{
   },
   _applyShortRest(){
     let pactRestored = 0;
-    state.party.forEach((c, i) => { if (this._shortRestOne(c, i)) pactRestored++; });
-    save();
-    this._render();
-    panelDefs.combat?._render?.();
+    sktUndoable('💤 Short rest', () => {
+      state.party.forEach((c, i) => { if (this._shortRestOne(c, i)) pactRestored++; });
+      save();
+      this._render();
+      panelDefs.combat?._render?.();
+    }, { quiet: true });
     showToast('💤 Short rest — concentration dropped, short-rest resources refreshed'
-      + (pactRestored ? ' · Pact Magic slots restored' : ''));
+      + (pactRestored ? ' · Pact Magic slots restored' : ''),
+      { action: { label: 'Undo', run: sktUndo } });
   },
   // One character's short rest (everything but the hit dice, which are spent
   // one at a time). Shared with the player's phone. Returns whether Pact
@@ -2247,10 +2253,12 @@ registerPanel('party',{
         const c = state.party[i]; if (!c) return;
         showConfirm(`Remove ${c.name}?`, {title:'Remove character', confirmLabel:'Remove'}).then(ok => {
           if (!ok) return;
-          state.party.splice(i,1);
-          save();
-          this._render();
-          renderModal();
+          sktUndoable('Removed ' + c.name, () => {
+            state.party.splice(i,1);
+            save();
+            this._render();
+            renderModal();
+          });
         });
       }));
       // One record shape for both, so everything downstream — the sheet, the
@@ -3100,8 +3108,12 @@ registerPanel('party',{
         const cid = state.party[i]?.id;
         if (cid) this._lastDmgAmount[cid] = amt;
         const type = typeSel ? typeSel.value : '';
-        if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
-        else                     this._applyHpDelta(i, +amt);
+        const who = state.party[i]?.name || 'Character';
+        const label = act === 'hp-damage' ? `${who} took ${amt} damage` : `${who} healed ${amt}`;
+        sktUndoable(label, () => {
+          if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
+          else                     this._applyHpDelta(i, +amt);
+        });
       }
       // Spell-slot pip — toggle expended state on sheet.spellSlots[lvl]. Click
       // an available pip to spend, click a spent pip to refund.
@@ -3236,10 +3248,11 @@ registerPanel('party',{
         // The same rules the party-wide rest uses. This used to be its own
         // half-implementation: all hit dice back instead of half, and nothing
         // else restored at all.
-        this._longRestOne(c, idx);
-        save(); this._render();
-        panelDefs.combat?._render?.();
-        showToast(c.name + ' took a long rest');
+        sktUndoable(c.name + ' took a long rest', () => {
+          this._longRestOne(c, idx);
+          save(); this._render();
+          panelDefs.combat?._render?.();
+        });
       }
       else if(act==='icon-btn'){
         this._pickerOpen=this._pickerOpen===i?null:i;

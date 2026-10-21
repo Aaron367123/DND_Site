@@ -3800,6 +3800,20 @@
           e.querySelector('.cp-label').textContent + '|' + ((e.querySelector('.cp-hint') || {}).textContent || '').split(' · ')[0]);
         const gm = rows.filter(r => r === 'Goblin|monster').length;
         ok('palette: a rules entry in six books is one row', !_5eLoaded || (gm === 1 && rows.length === new Set(rows).size), JSON.stringify(rows));
+        // Torn down from outside, the way a wholesale overlay cleanup does
+        // it. The palette's key listener is on document in the CAPTURE
+        // phase and stops propagation on everything, so leaving it behind
+        // kills every keyboard shortcut in the app for the rest of the
+        // session — which is exactly what it did to Ctrl+Z.
+        openCommandPalette(); await sleep(40);
+        document.getElementById('cp-backdrop').remove();
+        let heard = 0; const ear = () => { heard++; };
+        document.addEventListener('keydown', ear);
+        // A key nothing acts on, so the probe can't change the campaign.
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', bubbles: true, cancelable: true }));
+        await sleep(20);
+        document.removeEventListener('keydown', ear);
+        ok('palette: ripped out from under, it stops eating the keyboard', heard === 1, heard);
       } catch(e){
         ok('palette: the checks ran to completion', false, e.message);
       } finally { document.getElementById('cp-backdrop')?.remove(); }
@@ -4084,6 +4098,244 @@
       }
     }
 
+    // -- Undo, away from the map ------------------------------------------
+    {
+      _remoteUpdate = true;
+      try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+      finally { _remoteUpdate = false; }
+      loadDomain('combat'); loadDomain('party');
+      const C = panelDefs.combat; openPanel('combat'); await sleep(250); C._render();
+      try {
+        const i = state.combatants.findIndex(c => !c.isPC && (c.hp || 0) > 12);
+        const id = state.combatants[i].id, hp0 = state.combatants[i].hp;
+        const hpOf = cid => (state.combatants.find(c => c.id === cid) || {}).hp;
+        const btn = () => C._body.querySelector('[data-act="hp-damage"][data-idx="' + i + '"]');
+        const inp = () => C._body.querySelector('.hp-dmg-amt[data-idx="' + i + '"]');
+        ok('undo: the damage strip is where the test thinks it is', !!btn() && !!inp());
+        inp().value = '7'; btn().click(); await sleep(60);
+        ok('undo: damage lands first', hpOf(id) === hp0 - 7);
+        const newest = () => [...document.querySelectorAll('.toast-item .toast-action')].pop();
+        const act = newest();
+        ok('undo: and the toast offers to take it back', !!act && act.textContent === 'Undo');
+        sktUndo(); await sleep(60);
+        ok('undo: the creature gets its hit points back', hpOf(id) === hp0, hpOf(id));
+        sktRedo(); await sleep(60);
+        ok('undo: redo puts the damage back', hpOf(id) === hp0 - 7);
+        sktUndo(); await sleep(60);
+
+        // The surgical part. Another device changes a DIFFERENT creature
+        // while this undo is pending; undoing must not drag that back too.
+        inp().value = '5'; btn().click(); await sleep(60);
+        const j = state.combatants.findIndex((c, n) => n !== i && !c.isPC);
+        const oid = state.combatants[j].id;
+        const blob = JSON.parse(localStorage.getItem('skt-combat-v1'));
+        blob.combatants.find(c => c.id === oid).hp = 3;
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-combat-v1', JSON.stringify(blob)); } finally { _remoteUpdate = false; }
+        loadDomain('combat'); C._render(); await sleep(30);
+        sktUndo(); await sleep(60);
+        ok('undo: it puts back only what this action changed',
+           hpOf(id) === hp0 && hpOf(oid) === 3, JSON.stringify({ mine: hpOf(id), theirs: hpOf(oid) }));
+
+        // A removal, which has to put the creature back where it was.
+        const name = state.combatants[i].name, n0 = state.combatants.length;
+        C._body.querySelector('[data-act="remove"][data-idx="' + i + '"]').click(); await sleep(60);
+        ok('undo: removing a combatant takes it off the list', state.combatants.length === n0 - 1);
+        // Again with someone else moving at the same time, so the undo has
+        // to put one creature back INTO the list the others left behind
+        // rather than restoring the whole list wholesale.
+        const blob2 = JSON.parse(localStorage.getItem('skt-combat-v1'));
+        blob2.combatants.find(c => c.id === oid).hp = 7;
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-combat-v1', JSON.stringify(blob2)); } finally { _remoteUpdate = false; }
+        loadDomain('combat'); C._render(); await sleep(30);
+        const theirsBefore = hpOf(oid);
+        const curNow = (JSON.parse(localStorage.getItem('skt-combat-v1')).combatants.find(c => c.id === oid) || {}).hp;
+        sktUndo(); await sleep(60);
+        ok('undo: and it comes back in its old place',
+           state.combatants.length === n0 && state.combatants[i] && state.combatants[i].name === name,
+           JSON.stringify({ n: state.combatants.length, want: n0, at: (state.combatants[i] || {}).name, name }));
+        ok('undo: without undoing what the others did meanwhile', hpOf(oid) === 7,
+           JSON.stringify({ now: hpOf(oid), beforeUndo: theirsBefore, inStorage: curNow }));
+
+        // Ctrl+Z, and the map keeping its own.
+        inp().value = '4'; btn().click(); await sleep(60);
+        // Dispatched on body, where a real key press lands, and where the
+        // palette's own Ctrl+K check dispatches from.
+        const ctrlZ = o => document.body.dispatchEvent(new KeyboardEvent('keydown',
+          Object.assign({ key: 'z', ctrlKey: true, bubbles: true, cancelable: true }, o || {})));
+        ctrlZ();
+        await sleep(60);
+        ok('undo: Ctrl+Z does it from the keyboard', hpOf(id) === hp0,
+           JSON.stringify({ hp: hpOf(id), want: hp0, depth: sktUndoDepth() }));
+        const depth = sktUndoDepth();
+        inp().value = '4'; btn().click(); await sleep(60);
+        const fake = document.createElement('div');
+        fake.className = 'window focused'; fake.dataset.panel = 'battlemap';
+        document.body.appendChild(fake);
+        ctrlZ();
+        await sleep(60);
+        fake.remove();
+        ok('undo: Ctrl+Z over the battle map is left to the map',
+           hpOf(id) === hp0 - 4 && sktUndoDepth() === depth + 1);
+        sktUndo(); await sleep(40);
+
+        // A long rest is the biggest irreversible click in the app.
+        const P = panelDefs.party; openPanel('party'); await sleep(250);
+        const pid = (state.party.find(p => p.hpMax > 10) || state.party[0]).id;
+        const pcOf = () => state.party.find(p => p.id === pid) || {};
+        const pi = state.party.findIndex(p => p.id === pid);
+        state.party[pi] = { ...state.party[pi], hp: 3, exhaustion: 2 };
+        // Through the mirror, not around it: a party record whose combat
+        // card still says full HP is a state the app never produces, and
+        // reconcilePcHp would pull the old number straight back.
+        if (typeof syncPartyToCombat === 'function') syncPartyToCombat(pi);
+        save(); await sleep(30);
+        P._applyLongRest(); await sleep(60);
+        ok('undo: a long rest heals the party', pcOf().hp === pcOf().hpMax && pcOf().exhaustion === 1,
+           JSON.stringify({ hp: pcOf().hp, max: pcOf().hpMax, ex: pcOf().exhaustion }));
+        sktUndo(); await sleep(60);
+        ok('undo: and it can be taken back', pcOf().hp === 3 && pcOf().exhaustion === 2,
+           JSON.stringify({ hp: pcOf().hp, ex: pcOf().exhaustion }));
+      } catch(e){ ok('undo: the checks ran to completion', false, e.message); }
+      finally {
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party');
+        panelDefs.combat._render(); panelDefs.party._render?.();
+        closePanel('party');
+      }
+    }
+
+    // -- Who is connected --------------------------------------------------
+    {
+      const live0 = window.realtimeLive, refresh0 = window.realtimeRefreshAll;
+      try {
+        save();   // so the signature is of the same state the panels hold
+        const sig = sktPresenceSignature();
+        ok('presence: a signature covers combat, party and map', !!sig && !!sig.c && !!sig.p && !!sig.m);
+        const c0 = sig.c;
+        const i = state.combatants.findIndex(c => !c.isPC);
+        state.combatants[i] = { ...state.combatants[i], hp: (state.combatants[i].hp || 10) - 1 };
+        save();
+        ok('presence: it changes when a creature does', sktPresenceSignature().c !== c0);
+        ok('presence: and not every part at once', sktPresenceSignature().p === sig.p);
+
+        const me = sktDeviceId();
+        ok('presence: this device is in the list', sktPresenceRows().some(r => r.mine && r.id === me));
+        const mine = sktPresenceSignature();
+        const now = Date.now();
+        sktPresenceSeed({ zz: { ts: now, who: 'Zoey', kind: 'phone', sig: mine } });
+        let rows = sktPresenceRows();
+        ok('presence: a second device shows up', rows.length === 2 && rows[1].who === 'Zoey' && rows[1].state === 'ok');
+        ok('presence: the chip counts them', (document.querySelector('#sync-status .sync-count') || {}).textContent === '2');
+        ok('presence: the list says who, and how they are doing',
+           /Zoey/.test(sktPresenceListHtml()) && /in sync/.test(sktPresenceListHtml()));
+
+        // A device whose map has been wrong for twenty of its own seconds.
+        const behind = { c: mine.c, p: mine.p, m: 'nope' };
+        sktPresenceSeed({ zz: { ts: now - 20000, who: 'Zoey', kind: 'phone', sig: behind } });
+        ok('presence: a fresh disagreement is just sync catching up', sktPresenceRows()[1].state === 'ok');
+        sktPresenceSeed({ zz: { ts: now, who: 'Zoey', kind: 'phone', sig: behind } }, true);
+        rows = sktPresenceRows();
+        ok('presence: one that persists is called out, and says which part',
+           rows[1].state === 'behind' && rows[1].diff.join() === 'map', JSON.stringify(rows[1]));
+        ok('presence: and the chip warns', !!document.querySelector('#sync-status .sync-count.warn'));
+        ok('presence: the row offers to resync that device', /data-pres-resync="zz"/.test(sktPresenceListHtml()));
+
+        // Quiet, then gone.
+        sktPresenceSeed({ zz: { ts: now - 60000, who: 'Zoey', kind: 'phone', sig: mine } });
+        ok('presence: a device that stops sending goes quiet', sktPresenceRows()[1].state === 'quiet');
+        sktPresenceSeed({ zz: { ts: now - 300000, who: 'Zoey', kind: 'phone', sig: mine } });
+        ok('presence: and is dropped once it is long gone', sktPresenceRows().length === 1);
+
+        // Resync, both directions.
+        const sent = [];
+        window.realtimeLive = { push: (path, val) => sent.push([path, val]), serverNow: () => Date.now() };
+        sktPresenceResync('zz');
+        ok('presence: Resync asks that device, down the live channel',
+           sent.length === 1 && sent[0][0] === 'resync' && sent[0][1].who === 'zz');
+        let refreshed = 0;
+        window.realtimeRefreshAll = () => { refreshed++; };
+        sktPresenceResync(sktDeviceId());
+        ok('presence: resyncing this device re-reads everything', refreshed === 1);
+
+        // The popover.
+        sktPresenceSeed({ zz: { ts: Date.now(), who: 'Zoey', kind: 'phone', sig: sktPresenceSignature() } });
+        document.getElementById('sync-status').click(); await sleep(60);
+        ok('presence: the sync chip opens the list', !!document.getElementById('presence-pop')
+           && /Zoey/.test(document.getElementById('presence-pop').textContent));
+        document.getElementById('sync-status').click(); await sleep(40);
+        ok('presence: and closes it again', !document.getElementById('presence-pop'));
+      } catch(e){ ok('presence: the checks ran to completion', false, e.message); }
+      finally {
+        window.realtimeLive = live0; window.realtimeRefreshAll = refresh0;
+        sktPresenceSeed({}); sktPresenceClose();
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party'); panelDefs.combat._render();
+      }
+    }
+
+    // -- Presence on the wire ---------------------------------------------
+    // The seeded checks above cover the reading of the room; this covers
+    // what actually goes down the socket, against a stand-in for Firebase.
+    // Worth its own block because the shape is load-bearing: presence has to
+    // live in live/presence_<device> rather than live/presence/<device>,
+    // since the published database rules validate live/$chan directly, and
+    // it has to be read as a KEY RANGE so a device isn't handed every tick
+    // of every token drag.
+    {
+      const db0 = _fbDb;
+      let range = null, rangeCb = null;
+      const sets = [], listens = {};
+      const q = { on(ev, f){ rangeCb = f; return f; }, off(){} };
+      const mkRef = path => ({
+        orderByKey(){ return { startAt(a){ return { endAt(b){ range = [path, a, b]; return q; } }; } }; },
+        set(v){ sets.push([path, v]); return Promise.resolve(); },
+        remove(){ return Promise.resolve(); },
+        once(){ return Promise.resolve({ exists: () => false, val: () => null }); },
+        on(ev, f){ listens[path] = f; return f; },
+        off(){},
+        onDisconnect(){ return { remove(){ return Promise.resolve(); } }; },
+      });
+      try {
+        _fbDb = { ref: mkRef };
+        const attached = sktPresenceOnline();
+        ok('presence: it attaches once there is a database to attach to', attached === true);
+        ok('presence: it reads the presence channels as one key range',
+           !!range && /\/live$/.test(range[0]) && range[1] === 'presence_' && range[2].indexOf('presence_') === 0,
+           JSON.stringify(range));
+        const beat = sets.filter(x => /\/live\/presence_/.test(x[0])).pop();
+        ok('presence: the heartbeat is a live channel of its own, with a timestamp',
+           !!beat && beat[0].indexOf('/live/presence_' + sktDeviceId()) > 0
+           && typeof beat[1].ts === 'number' && !!beat[1].sig && !!beat[1].who,
+           beat && beat[0]);
+        // A device arriving down the wire, keyed by the full channel name.
+        rangeCb({ val: () => ({ ['presence_qq']: { ts: Date.now(), who: 'Pell', kind: 'phone', sig: sktPresenceSignature() } }) });
+        await sleep(20);
+        ok('presence: an incoming channel becomes a row, prefix stripped',
+           sktPresenceRows().some(r => r.id === 'qq' && r.who === 'Pell'),
+           JSON.stringify(sktPresenceRows().map(r => r.id)));
+        // And a resync command aimed at this device.
+        let refreshed = 0;
+        const refresh0 = window.realtimeRefreshAll;
+        window.realtimeRefreshAll = () => { refreshed++; };
+        const resyncPath = Object.keys(listens).find(k => /\/live\/resync$/.test(k));
+        ok('presence: it listens for a resync aimed at it', !!resyncPath);
+        listens[resyncPath]({ val: () => ({ who: 'somebody else', ts: Date.now() }) });
+        await sleep(20);
+        ok('presence: one aimed at another device is ignored', refreshed === 0);
+        listens[resyncPath]({ val: () => ({ who: sktDeviceId(), ts: Date.now() }) });
+        await sleep(20);
+        ok('presence: one aimed at this device re-reads everything', refreshed === 1);
+        window.realtimeRefreshAll = refresh0;
+      } catch(e){ ok('presence: the wire checks ran to completion', false, e.message); }
+      finally { _fbDb = db0; sktPresenceSeed({}); }
+    }
+
     // ── Areas of effect on the map ────────────────────────────────────────
     {
       _remoteUpdate = true;
@@ -4106,13 +4358,85 @@
            && JSON.parse(localStorage.getItem('skt-battlemap-v1')).drawings.some(d => d.k === 'tpl'));
         ok('areas: 10 ft is two squares of radius', !!a && Math.abs(bm._areaGeom(a).circle.r - 10 * bm._tokenUnitScreen() / (bm._ftPerCell || 5)) < 1);
         ok('areas: the creature under it lights up', !!b.querySelector('.map-token.in-area[data-tid="' + tok.id + '"]'));
+        // Dragging an area MOVES it. It used to drop a second one on top of
+        // the first, which is not a thing anyone wants — a template is
+        // something you shuffle around the board looking for the angle.
+        const vs = bm._screenScale() || 1;
+        const sphere = bm._areas()[0];
+        const was = { x: sphere.x, y: sphere.y };
+        const cx0 = r.left + r.width / 2, cy0 = r.top + r.height / 2;
+        const drag = (x0, y0, x1, y1) => {
+          dc.dispatchEvent(new MouseEvent('mousedown', { clientX: x0, clientY: y0, bubbles: true, button: 0 }));
+          document.dispatchEvent(new MouseEvent('mousemove', { clientX: x1, clientY: y1, bubbles: true }));
+          document.dispatchEvent(new MouseEvent('mouseup',   { clientX: x1, clientY: y1, bubbles: true }));
+        };
+        drag(cx0, cy0, cx0 + 60, cy0);
+        await sleep(60);
+        ok('areas: dragging one moves it instead of dropping a second',
+           bm._areas().length === 1 && Math.abs(bm._areas()[0].x - (was.x + 60 / vs)) < 2
+           && Math.abs(bm._areas()[0].y - was.y) < 2,
+           JSON.stringify({ n: bm._areas().length, dx: +(bm._areas()[0].x - was.x).toFixed(1), want: +(60 / vs).toFixed(1) }));
+        ok('areas: a move is saved with the map',
+           (JSON.parse(localStorage.getItem('skt-battlemap-v1')).drawings.find(d => d.k === 'tpl') || {}).x === bm._areas()[0].x);
+        bm._areas()[0].x = was.x; bm._areas()[0].y = was.y; bm._renderAreas();
+        // Stage coordinates back to screen ones, so the test can aim at a
+        // point it computed in map space. Asserted against the real inverse
+        // rather than assumed: if the stage ever learns to rotate, this
+        // fails loudly instead of quietly aiming at the wrong pixel.
+        const toClient = (sx, sy) => {
+          const st = b.querySelector('#map-stage').getBoundingClientRect();
+          const cs = bm._csScreen();
+          return { x: st.left + st.width / 2 + (sx - bm._cols * cs / 2) * vs,
+                   y: st.top + st.height / 2 + (sy - bm._rows * cs / 2) * vs };
+        };
+        const rt = (() => { const c = toClient(was.x, was.y); return bm._stagePoint(c.x, c.y, dc); })();
+        ok('areas: the test can aim at a point in map space', Math.hypot(rt.x - was.x, rt.y - was.y) < 1.5);
+        // A second area still goes down on empty ground.
+        const away = toClient(was.x, was.y + bm._areaGeom(sphere).circle.r * 2 + 40);
         b.querySelector('#tpl-shape').value = 'cone'; b.querySelector('#tpl-size').value = '30';
-        dc.dispatchEvent(new MouseEvent('mousedown', { clientX: r.left, clientY: r.top, bubbles: true, button: 0 }));
-        document.dispatchEvent(new MouseEvent('mousemove', { clientX: r.left, clientY: r.top + 150, bubbles: true }));
-        document.dispatchEvent(new MouseEvent('mouseup', { clientX: r.left, clientY: r.top + 150, bubbles: true }));
+        drag(away.x, away.y, away.x, away.y + 150);
         await sleep(60);
         const cone = bm._areas()[1];
         ok('areas: a cone aims along the drag', !!cone && cone.shape === 'cone' && Math.abs(cone.ang - Math.PI / 2) < 0.2, cone && cone.ang.toFixed(2));
+        // …and can be turned afterwards by its handle, without moving.
+        const coneWas = { x: cone.x, y: cone.y };
+        const h = bm._areaHandle(cone);
+        ok('areas: a cone has a turn handle at its far end', !!h && !!b.querySelector('[data-tplrot="' + cone.id + '"]'));
+        const hc = toClient(h.x, h.y), tgt = toClient(cone.x - 120, cone.y);
+        drag(hc.x, hc.y, tgt.x, tgt.y);
+        await sleep(60);
+        ok('areas: dragging the handle turns it where it stands',
+           Math.abs(Math.abs(cone.ang) - Math.PI) < 0.25 && cone.x === coneWas.x && cone.y === coneWas.y,
+           cone.ang.toFixed(2));
+        ok('areas: a sphere has no handle to turn', !bm._areaHandle(bm._areas()[0]));
+        // The sizes themselves, against the PHB: a sphere's number is its
+        // radius, a cone is as wide at its far end as it is long, a line is
+        // 5 ft wide however long it is, and a cube's number is its side.
+        const cell = bm._tokenUnitScreen(), ftc = bm._ftPerCell || 5;
+        const px = ft => ft * cell / ftc;
+        ok('areas: a 10 ft sphere is 10 ft of radius, not of width',
+           Math.abs(bm._areaGeom(bm._areas()[0]).circle.r - px(10)) < 1);
+        const coneG = bm._areaGeom(cone);
+        const far = Math.hypot(coneG.poly[1][0] - coneG.poly[2][0], coneG.poly[1][1] - coneG.poly[2][1]);
+        const len = Math.hypot((coneG.poly[1][0] + coneG.poly[2][0]) / 2 - cone.x,
+                               (coneG.poly[1][1] + coneG.poly[2][1]) / 2 - cone.y);
+        ok('areas: a 30 ft cone is 30 ft long', Math.abs(len - px(30)) < 1.5, len.toFixed(1) + ' vs ' + px(30).toFixed(1));
+        ok('areas: and 30 ft wide at the far end', Math.abs(far - px(30)) < 1.5, far.toFixed(1) + ' vs ' + px(30).toFixed(1));
+        const line = { k: 'tpl', id: 'probe1', shape: 'line', x: 100, y: 100, ang: 0, ft: 60, c: '#f00' };
+        const lg = bm._areaGeom(line);
+        ok('areas: a line is 5 ft wide whatever its length',
+           Math.abs(Math.hypot(lg.poly[0][0] - lg.poly[1][0], lg.poly[0][1] - lg.poly[1][1]) - px(5)) < 1);
+        ok('areas: and as long as it says', Math.abs(lg.poly[2][0] - lg.poly[1][0] - px(60)) < 1);
+        const cube = { k: 'tpl', id: 'probe2', shape: 'cube', x: 100, y: 100, ang: 0, ft: 15, c: '#f00' };
+        const cg = bm._areaGeom(cube);
+        ok('areas: a 15 ft cube is 15 ft on every side',
+           Math.abs(Math.hypot(cg.poly[0][0] - cg.poly[1][0], cg.poly[0][1] - cg.poly[1][1]) - px(15)) < 1
+           && Math.abs(cg.poly[2][0] - cg.poly[1][0] - px(15)) < 1);
+        ok('areas: with its origin in the middle of one face',
+           Math.abs((cg.poly[0][1] + cg.poly[1][1]) / 2 - cube.y) < 0.5);
+        bm._tool = ''; bm._render(); await sleep(60);
+        ok('areas: the handles go away with the tool', !b.querySelector('[data-tplrot]'));
+        bm._tool = 'area'; bm._render(); await sleep(60);
         ok('areas: the eraser leaves areas alone', !bm._eraseStrokeAt(Math.round(tok.x), Math.round(tok.y)) && bm._areas().length === 2);
         bm._drawings.push({ c: '#f00', s: 4, p: [1, 1, 30, 30] });
         const sc = window.showConfirm; window.showConfirm = () => Promise.resolve(true);
@@ -4517,6 +4841,58 @@
           document.getElementById('pa-rest')?.remove(); paCondOpen = null;
           if (p0 != null) localStorage.setItem('skt-party-v1', p0); loadDomain('party');
           if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paTab = tab0; paRender();
+        }
+      }
+
+      // -- Who is connected, from a phone -----------------------------------
+      if (paIsPhone()) {
+        const tab0 = paTab;
+        try {
+          sktPresenceSeed({ zz: { ts: Date.now(), who: 'DM', kind: 'laptop', sig: sktPresenceSignature() } });
+          paTab = 'more'; paRender(); await sleep(150);
+          const row = document.querySelector('[data-more="devices"]');
+          ok('player: More says who else is connected', !!row && /2 devices/.test(row.textContent), row && row.textContent.trim());
+          row.click(); await sleep(80);
+          const ov = document.getElementById('pa-devices');
+          ok('player: and opens the same list the DM sees',
+             !!ov && /DM/.test(ov.textContent) && ov.querySelectorAll('.pres-row').length === 2);
+          ov.querySelector('[data-dev="close"]').click(); await sleep(40);
+          ok('player: closing it puts it away', !document.getElementById('pa-devices'));
+        } catch(e){ ok('player: the who-is-connected checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-devices')?.remove();
+          sktPresenceSeed({}); paTab = tab0; paRender();
+        }
+      }
+
+      // -- Undo on a phone ---------------------------------------------------
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab;
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          const mi = paMyIdx();
+          if (mi >= 0){
+            state.party[mi] = { ...state.party[mi], hp: Math.max(10, Math.round((state.party[mi].hpMax || 20) / 2)) };
+            save();
+            paTab = 'you'; paRender(); await sleep(120);
+            const hp = () => { const c = paCombatant(); return c ? c.hp : paPc().hp; };
+            const before = hp();
+            document.getElementById('pa-hp-amt').value = '6';
+            document.querySelector('[data-pa-hp="-1"]').click(); await sleep(80);
+            ok('player: damage on a phone lands', hp() === before - 6, JSON.stringify({ before, now: hp() }));
+            const act = [...document.querySelectorAll('.toast-item .toast-action')].pop();
+            ok('player: with an Undo on the toast', !!act && act.textContent === 'Undo');
+            act.click(); await sleep(80);
+            ok('player: which puts the hit points back', hp() === before, hp());
+          }
+        } catch(e){ ok('player: the phone undo checks ran to completion', false, e.message); }
+        finally {
+          if (p0 != null){
+            _remoteUpdate = true;
+            try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+            loadDomain('party');
+          }
           paTab = tab0; paRender();
         }
       }

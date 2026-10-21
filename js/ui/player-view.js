@@ -67,6 +67,8 @@ function initPlayerView(){
     try { initSearch(); } catch(e){ console.warn('initSearch failed in player view', e); }
   }
   initPlayerApp();
+  if (typeof initUndoKeys === 'function') initUndoKeys();
+  if (typeof initPresence === 'function') initPresence();
   // The bestiary/spell data the search needs, and the class data the
   // character screen reads for subclass features.
   if (typeof load5eData === 'function') load5eData();

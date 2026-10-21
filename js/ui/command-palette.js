@@ -81,6 +81,12 @@ function _cpCommands(){
   if (expand) add('Windows', document.body.classList.contains('dock-expanded') ? 'Hide panel names' : 'Show panel names',
                   () => expand.click(), 'sidebar dock labels');
   add('App', 'Settings', () => document.getElementById('settings-drawer')?.classList.add('open'), 'preferences options theme font');
+  if (typeof sktPresenceToggle === 'function')
+    add('App', 'Who is connected', () => sktPresenceToggle(), 'devices players phones sync presence at the table');
+  if (typeof sktUndoLabel === 'function' && sktUndoLabel())
+    add('App', 'Undo ' + sktUndoLabel(), () => sktUndo(), 'undo mistake revert', 'Ctrl Z');
+  if (typeof sktRedoLabel === 'function' && sktRedoLabel())
+    add('App', 'Redo ' + sktRedoLabel(), () => sktRedo(), 'redo again', 'Ctrl Shift Z');
   if (typeof sktOpenCampaignManager === 'function')
     add('App', 'Switch campaign', () => sktOpenCampaignManager(), 'campaigns manage');
   const pv = document.getElementById('player-view-btn');
@@ -197,6 +203,13 @@ function openCommandPalette(){
   // Capture phase, so the workspace's own keys (1–9, /, ?) never see what is
   // typed here.
   const onKey = e => {
+    // If the backdrop went away without close() being called — anything that
+    // tears down overlays wholesale can do that — this listener is still on
+    // document, in the capture phase, calling stopPropagation on every key
+    // in the app. Every shortcut (Ctrl+Z, Ctrl+K, 1-9, /, ?) dies silently
+    // and nothing points at the palette. Let it off at the first key, before
+    // the stop, so the key it noticed on still works.
+    if (!back.isConnected){ document.removeEventListener('keydown', onKey, true); return; }
     if (e.key === 'Escape' || ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K'))){
       e.preventDefault(); e.stopPropagation(); close(); return;
     }

@@ -578,6 +578,11 @@ function showHelpOverlay(){
       ['Enter',            'Open selected result'],
       ['Escape',           'Close detail / search'],
     ]},
+    { group: 'Undo', items: [
+      ['Ctrl + Z',         'Undo the last change to the tracker or the party'],
+      ['Ctrl + Shift + Z', 'Redo it'],
+      ['Ctrl + Z on the map', 'Undo the last thing drawn or moved there'],
+    ]},
     { group: 'Workspace zoom', items: [
       ['Ctrl + Wheel',     'Zoom centered on cursor'],
       ['Ctrl + + / − / 0', 'Zoom in / out / reset'],

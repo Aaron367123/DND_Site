@@ -73,6 +73,8 @@ function init(){
   initRealtime();
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>btn.addEventListener('click',()=>togglePanel(btn.dataset.panel)));
   initDockNames();
+  initUndoKeys();
+  if (typeof initPresence === 'function') initPresence();
   // Build the player-view URL robustly. The naive `split('?')[0]+'?player=1'`
   // approach broke whenever the page URL had a `#fragment` (notes / onboarding
   // / scroll-into-view links sometimes add one): the result became

@@ -341,6 +341,15 @@ function paMoreScreen(){
     + '<div class="pa-more-row pa-more-static">' + ico('i-cloud')
     +   '<span class="pa-more-text"><span class="pa-more-title">Sync</span>'
     +   '<span class="pa-more-sub" id="pa-more-sync">' + (sync ? sync.innerHTML : '') + '</span></span></div>'
+    // Who else is here, and whether their screen agrees with this one. A
+    // player seeing "DM · quiet" knows the table has a problem before anyone
+    // says "wait, did my move go through?"
+    + '<button class="pa-more-row" data-more="devices">' + ico('i-monitor')
+    +   '<span class="pa-more-text"><span class="pa-more-title">Who&#8217;s connected</span>'
+    +   '<span class="pa-more-sub" id="pa-more-devices">'
+    +     (typeof sktPresenceRows === 'function' ? (() => { const r = sktPresenceRows();
+            return r.length + (r.length === 1 ? ' device' : ' devices') + (sktPresenceTrouble() ? ' · one is behind' : ''); })() : 'Checking…')
+    +   '</span></span></button>'
     // Which campaign, shown but not switchable: the link decides it, and a
     // switcher here would let a player wander into another group's table.
     + (camp ? '<div class="pa-more-row pa-more-static">' + ico('i-folder')
@@ -357,6 +366,7 @@ function paWireMore(el){
     // on mousedown, and a toggle would close a drawer that is already open.
     else if (act === 'settings') document.getElementById('settings-drawer')?.classList.add('open');
     else if (act === 'dm') document.getElementById('player-view-btn')?.click();
+    else if (act === 'devices' && typeof paShowDevices === 'function') paShowDevices();
   }));
 }
 
@@ -931,6 +941,29 @@ function paPromptConcentration(){
 // the house ruling on minimum healing is the same everywhere), then finish
 // the rest — short-rest resources and Pact Magic come back, concentration
 // and rage end, exactly as the DM's party short rest does.
+// Who else is at the table, from a phone. Same list the DM sees, same
+// Resync button — if the DM's laptop is the one that drifted, the player
+// holding the phone can fix it without anyone getting up.
+function paShowDevices(){
+  document.getElementById('pa-devices')?.remove();
+  if (typeof sktPresenceListHtml !== 'function') return;
+  const ov = document.createElement('div');
+  ov.id = 'pa-devices'; ov.className = 'pa-handout';
+  const paint = () => {
+    ov.innerHTML = '<div class="pa-ho-card" role="dialog" aria-modal="true" aria-label="Who is connected">'
+      + '<div class="pa-ho-head"><b>Who&#8217;s connected</b></div>'
+      + '<div class="pa-ho-body">' + sktPresenceListHtml() + '</div>'
+      + '<div class="pa-rest-btns"><button class="btn" data-dev="close">Close</button></div></div>';
+  };
+  const t = setInterval(paint, 4000);
+  ov.addEventListener('click', e => {
+    if (e.target.closest('[data-dev="close"]') || e.target === ov){ clearInterval(t); ov.remove(); }
+    else if (e.target.closest('[data-pres-resync]')) setTimeout(paint, 50);
+  });
+  paint();
+  document.body.appendChild(ov);
+}
+
 function paOpenShortRest(){
   const i = paMyIdx(); if (i < 0) return;
   document.getElementById('pa-rest')?.remove();
@@ -1129,6 +1162,16 @@ function paApplyHp(sign){
   const pc = paPc(); if (!pc) return;
   const el = document.getElementById('pa-hp-amt');
   const n = Math.abs(parseInt(el && el.value, 10) || 0); if (!n) return;
+  // A phone is the easiest place to hit the wrong button, so the same undo
+  // the DM gets is on the toast here too.
+  if (typeof sktUndoable === 'function'){
+    const label = (sign < 0 ? 'Took ' : 'Healed ') + n;
+    return sktUndoable(label, () => _paApplyHp(sign, n));
+  }
+  return _paApplyHp(sign, n);
+}
+function _paApplyHp(sign, n){
+  const pc = paPc(); if (!pc) return;
   const c = paCombatant();
   const C = panelDefs.combat;
   if (c && C && typeof C._applyHpDelta === 'function'){

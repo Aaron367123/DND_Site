@@ -1824,6 +1824,18 @@ registerPanel('battlemap',{
     return { poly: [[t.x + px, t.y + py], [t.x - px, t.y - py],
                     [t.x - px + cos * L, t.y - py + sin * L], [t.x + px + cos * L, t.y + py + sin * L]] };
   },
+  // The far end of a directional area, where its turn handle sits. A sphere
+  // has no direction, so it has no handle — you move it and that is all.
+  _areaHandle(t){
+    if (!t || t.shape === 'circle') return null;
+    const L = (+t.ft || 0) * this._ppf(), a = +t.ang || 0;
+    return { x: t.x + Math.cos(a) * L, y: t.y + Math.sin(a) * L };
+  },
+  _nearHandle(t, x, y){
+    const h = this._areaHandle(t); if (!h) return false;
+    const r = Math.max(11, 15 / (this._screenScale ? (this._screenScale() || 1) : 1));
+    return Math.hypot(x - h.x, y - h.y) <= r;
+  },
   _inArea(t, x, y){
     const g = this._areaGeom(t);
     if (g.circle) return Math.hypot(x - g.circle.x, y - g.circle.y) <= g.circle.r;
@@ -1853,7 +1865,17 @@ registerPanel('battlemap',{
     }
     const cs = this._csScreen();
     svg.setAttribute('width', this._cols * cs); svg.setAttribute('height', this._rows * cs);
+    // Handles only while the Area tool is up: the rest of the time an area
+    // is scenery, and a row of dots over the battlefield is noise.
+    const vs = this._screenScale ? (this._screenScale() || 1) : 1;
+    const handles = this._tool === 'area' ? this._areas().map(t => {
+      const h = this._areaHandle(t); if (!h) return '';
+      return '<circle cx="' + h.x.toFixed(1) + '" cy="' + h.y.toFixed(1) + '" r="' + (7 / vs).toFixed(1) + '"'
+        + ' fill="' + (t.c || '#ff7a3d') + '" fill-opacity=".9" stroke="#fff" stroke-width="' + (1.5 / vs).toFixed(2) + '"'
+        + ' data-tplrot="' + t.id + '"><title>Drag to turn it</title></circle>';
+    }).join('') : '';
     svg.innerHTML = this._areas().map(t => this._areaSvg(t, 'data-tpl="' + t.id + '"')).join('')
+      + handles
       + (preview ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '');
     this._markTokensInAreas(preview);
   },
@@ -1868,32 +1890,58 @@ registerPanel('battlemap',{
       el.classList.toggle('in-area', !!tok && areas.some(a => this._inArea(a, tok.x, tok.y)));
     });
   },
-  // Press: on an existing area, offer its menu; elsewhere, start a new one.
-  // A sphere drops where you press; the others aim along the drag.
+  // Press on an area and drag: the area MOVES. Press its handle and drag:
+  // it turns. Press empty ground: a new one is placed, a sphere where you
+  // press and the others aimed along the drag. A press that doesn't move
+  // opens the area's menu.
+  //
+  // Dragging used to drop a SECOND area on top of the first, which is not
+  // something anyone wants — a template is a thing you shuffle around the
+  // board looking for the best angle, so shuffling it is the common case and
+  // adding another is the rare one.
   _areaPointerDown(x, y, cx, cy, touch){
-    const hit = this._areas().slice().reverse().find(t => this._inArea(t, x, y));
+    const stack = this._areas().slice().reverse();
+    const turning = stack.find(t => this._nearHandle(t, x, y));
+    const hit = turning || stack.find(t => this._inArea(t, x, y));
     const shape = (this._body.querySelector('#tpl-shape') || {}).value || this._tplShape;
     const ft = Math.max(5, parseInt((this._body.querySelector('#tpl-size') || {}).value, 10) || this._tplSize);
     const col = (this._body.querySelector('#tpl-color') || {}).value || this._tplColor;
     this._tplShape = shape; this._tplSize = ft; this._tplColor = col;
     const draft = { k: 'tpl', id: 'tpl_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), shape, x, y, ang: 0, ft, c: col };
     const stage = this._body.querySelector('#map-stage');
+    // Where the pressed area sat when the press landed, so a move follows the
+    // finger instead of jumping the shape's origin under it.
+    const was = hit ? { x: hit.x, y: hit.y, ang: hit.ang || 0 } : null;
     let moved = false;
+    this._areaDragging = true;
     const at = (ex, ey) => this._stagePoint(ex, ey, stage);
     const move = ev => {
       const p = ev.touches ? ev.touches[0] : ev;
       const q = at(p.clientX, p.clientY);
       if (Math.hypot(p.clientX - cx, p.clientY - cy) > 6) moved = true;
+      if (ev.cancelable) ev.preventDefault();
+      if (hit && moved){
+        if (turning) hit.ang = Math.atan2(q.y - hit.y, q.x - hit.x);
+        else { hit.x = was.x + (q.x - x); hit.y = was.y + (q.y - y); }
+        this._renderAreas();
+        return;
+      }
+      if (hit) return;
       if (shape !== 'circle') draft.ang = Math.atan2(q.y - y, q.x - x);
       else { draft.x = q.x; draft.y = q.y; }
-      if (ev.cancelable) ev.preventDefault();
       this._renderAreas(draft);
     };
     const up = ev => {
       document.removeEventListener(touch ? 'touchmove' : 'mousemove', move);
       document.removeEventListener(touch ? 'touchend' : 'mouseup', up);
       if (touch) document.removeEventListener('touchcancel', up);
-      if (hit && !moved){ this._renderAreas(); this._areaMenu(hit, cx, cy); return; }
+      this._areaDragging = false;
+      if (hit){
+        if (!moved){ this._renderAreas(); this._areaMenu(hit, cx, cy); return; }
+        this._saveMap();
+        this._renderAreas();
+        return;
+      }
       this._drawings.push(draft);
       this._saveMap();
       this._renderAreas();
@@ -1901,7 +1949,7 @@ registerPanel('battlemap',{
     document.addEventListener(touch ? 'touchmove' : 'mousemove', move, { passive: false });
     document.addEventListener(touch ? 'touchend' : 'mouseup', up);
     if (touch) document.addEventListener('touchcancel', up);
-    this._renderAreas(draft);
+    if (!hit) this._renderAreas(draft);
   },
   _areaMenu(t, cx, cy){
     const inside = this._tokensInArea(t);
@@ -2141,7 +2189,7 @@ registerPanel('battlemap',{
   // The Turn View's token drag counts: it moves this panel's tokens too.
   _gestureBusy(){
     const tv = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
-    return !!(this._drag || this._drawingNow || this._isPainting || this._erasingNow || (tv && tv._body && tv._drag));
+    return !!(this._drag || this._drawingNow || this._isPainting || this._erasingNow || this._areaDragging || (tv && tv._body && tv._drag));
   },
 
   applyMapState(src, opts){
@@ -2508,7 +2556,7 @@ registerPanel('battlemap',{
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
-      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
       +(_mapBgImage?'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>':'')
@@ -2536,7 +2584,7 @@ registerPanel('battlemap',{
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
-      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
       +'<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'

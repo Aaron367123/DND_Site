@@ -829,11 +829,15 @@ registerPanel('combat',{
       else if(act==='end'){
         const proceed = ok => {
           if (!ok) return;
-          state.combatants = [];
-          state.combatRound = 0;
-          state.activeCombatantId = null;
-          save(); this._render();
-          if (typeof showToast === 'function') showToast('Combat ended');
+          // The map comes along: ending combat sweeps the tracker's tokens
+          // off the board, and an undo that brought the combatants back but
+          // left the board empty would be worse than no undo at all.
+          sktUndoable('Combat ended', () => {
+            state.combatants = [];
+            state.combatRound = 0;
+            state.activeCombatantId = null;
+            save(); this._render();
+          }, { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
         };
         if (typeof showConfirm === 'function'){
           showConfirm('End combat? All combatants will be removed, along with the tokens the tracker placed for them. Tokens you placed yourself stay.',
@@ -845,9 +849,18 @@ registerPanel('combat',{
       }
       else if(act==='add')            this._addPrompt();
       else if(act==='add-monster')    this._openMonsterPicker();
-      else if(act==='remove')         this._remove(parseInt(el.dataset.idx));
+      else if(act==='remove'){
+        const i = parseInt(el.dataset.idx);
+        const who = state.combatants[i]?.name || 'Combatant';
+        sktUndoable('Removed ' + who, () => this._remove(i),
+                    { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
+      }
       else if(act==='duplicate')      this._duplicate(parseInt(el.dataset.idx));
-      else if(act==='rmcond')         this._removeCond(parseInt(el.dataset.idx),el.dataset.cond);
+      else if(act==='rmcond'){
+        const i = parseInt(el.dataset.idx), cond = el.dataset.cond;
+        const who = state.combatants[i]?.name || 'Combatant';
+        sktUndoable(who + ' — ' + cond + ' removed', () => this._removeCond(i, cond));
+      }
       else if(act==='upload-portrait')this._uploadPortrait(parseInt(el.dataset.idx));
       else if(act==='toggle-log'){
         // Toggle when clicking the header — but not when clicking one of
@@ -911,8 +924,12 @@ registerPanel('combat',{
         this._lastDmgAmount = amt;
         // No damage type — the strip's type select is gone, so manual damage
         // lands raw. The Attack Runner still passes a type on its own path.
-        if (act === 'hp-damage') this._applyHpDelta(i, -amt);
-        else                     this._applyHpDelta(i, +amt);
+        // Wrapped so a number typed into the wrong card is one click to
+        // put back, with the creature's name in the toast so you can see
+        // which card it went into.
+        const who = state.combatants[i]?.name || 'Combatant';
+        const label = act === 'hp-damage' ? `${who} took ${amt} damage` : `${who} healed ${amt}`;
+        sktUndoable(label, () => this._applyHpDelta(i, act === 'hp-damage' ? -amt : +amt));
       }
       else if(act==='death-save'){
         const i = parseInt(el.dataset.idx);
