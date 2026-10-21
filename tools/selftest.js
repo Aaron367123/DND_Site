@@ -4908,8 +4908,8 @@
         saveJson('skt-rollreq-v1', r, 'roll request'); sktOnRollAnswers(); await sleep(40);
         const card = document.getElementById('rr-card');
         ok('ask: answers show with whether they beat the DC',
-           card.querySelectorAll('.rr-row.ok').length === 1 && /18/.test(card.querySelector('.rr-row.ok').textContent)
-           && card.querySelectorAll('.rr-row.bad').length === 1 && /9/.test(card.querySelector('.rr-row.bad').textContent));
+           card.querySelectorAll('.rr-row.ok').length === 1 && /^18 /.test(card.querySelector('.rr-row.ok b').textContent)
+           && card.querySelectorAll('.rr-row.bad').length === 1 && /^9 /.test(card.querySelector('.rr-row.bad b').textContent));
         card.querySelector('[data-rr="close"]').click(); await sleep(30);
         ok('ask: closing it ends the request and takes the card away', sktRollReq().closed === true && !document.getElementById('rr-card'));
         // The party short rest, on the same system.
