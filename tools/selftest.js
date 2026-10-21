@@ -3802,7 +3802,7 @@
         w.querySelector('.npclib-card').click(); await sleep(150);
         ok('npc: picking an NPC from the list leaves the generator', L._gen === false && !G._body);
         const ml = sktMigrateLayout({ npcgen: { x: 3, y: 4, w: 480, h: 540, open: true, z: 2 } });
-        ok('layout: a saved layout with the generator open opens the Library', ml.npclib && ml.npclib.open && !('npcgen' in ml));
+        ok('layout: a saved layout with the generator open opens the Library, generating', ml.npclib && ml.npclib.open && ml.npclib.gen === true && !('npcgen' in ml));
       } catch(e){ ok('npc: the checks ran to completion', false, e.message); }
       finally {
         window.showToast = rt;
@@ -3853,7 +3853,9 @@
         cr.value = ''; cr.dispatchEvent(new Event('change')); await sleep(60);
         const all = +count();
         mp.querySelector('[data-mp="close"]').click(); await sleep(30);
-        window.SKT_IS_SOURCE_HIDDEN = (scope, src) => scope === 'encounter' && src === 'MM';
+        // On top of whatever is already hidden, so a campaign's own hidden
+        // books stay hidden and the count can only go down.
+        window.SKT_IS_SOURCE_HIDDEN = (scope, src) => (scope === 'encounter' && src === 'MM') || (!!hid0 && hid0(scope, src));
         C._openMonsterPicker(); await sleep(80); await type('goblin');
         const fewer = +count();
         ok('picker: books hidden in the Books panel stay hidden when adding to a fight', fewer < all && !rowFor('Goblin', 'MM'), all + ' → ' + fewer);
@@ -5086,6 +5088,7 @@
         const bard = state.party.find(p => sktBardicPool(p));
         const other = state.party.find(p => p !== bard && !p.foe);
         ok('bardic: the fixture has a bard with uses to give', !!bard && !!other);
+        if (!bard || !other) throw new Error('no bard on this bench — the rest of the checks need one');
         const bi = state.party.indexOf(bard), oi = state.party.indexOf(other);
         state.party[bi] = { ...bard, resources: bard.resources.map(r => r.name === 'Bardic Inspiration' ? { ...r, current: 2, max: 3 } : r) };
         state.party[oi] = { ...other, bardicInspiration: false };
@@ -5145,6 +5148,35 @@
         _remoteUpdate = true;
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
         loadDomain('party'); panelDefs.party._render(); closePanel('party');
+      }
+    }
+
+    // -- A player window on this laptop changes the party --------------------
+    // Two tabs of one browser share localStorage; the other tab's write
+    // arrives as a `storage` event. This window used to ignore it for the
+    // party and the fight, so its next save wrote its stale copy back over
+    // the player's change — hit dice spent on a short rest, gone.
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const party = JSON.parse(p0);
+        const i = party.findIndex(p => p && !p.foe);
+        // Hit dice: HP would be put back from the combat card, which a real
+        // player write updates alongside.
+        party[i] = { ...party[i], hitDice: { ...(party[i].hitDice || { max: 5, dieType: 'd8' }), current: 1 } };
+        const v = JSON.stringify(party);
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-party-v1', v); } finally { _remoteUpdate = false; }
+        window.dispatchEvent(new StorageEvent('storage', { key: 'skt-party-v1', newValue: v }));
+        await sleep(40);
+        ok('relay: a party change from a player window on this laptop reaches this window', state.party[i].hitDice.current === 1, JSON.stringify(state.party[i].hitDice));
+        save();
+        ok('relay: and this window’s next save keeps it', JSON.parse(localStorage.getItem('skt-party-v1'))[i].hitDice.current === 1);
+      } catch(e){ ok('relay: the checks ran to completion', false, e.message); }
+      finally {
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
       }
     }
 

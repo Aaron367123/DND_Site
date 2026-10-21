@@ -102,6 +102,7 @@ function sktMigrateLayout(l){
       l[host] = { ...h, x: o.x, y: o.y, open: true, minimized: !!o.minimized, z: o.z || h.z };
       if (host === 'library') l[host].tab = old;
       if (old === 'handouts') l[host].sent = true;
+      if (old === 'npcgen') l[host].gen = true;
     } else if (h && !l[host]) l[host] = h;
     delete l[old];
   });

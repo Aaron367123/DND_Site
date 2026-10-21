@@ -580,8 +580,7 @@ function showHelpOverlay(){
   if (existing){ existing.remove(); return; }
   const SHORTCUTS = [
     { group: 'Search', items: [
-      ['Ctrl + K',         'Go to anything — panels, commands, rules'],
-      ['/',                'Open / focus search'],
+      ['Ctrl + K  or  /',  'Search — panels, commands, rules ("See all" for the full search)'],
       ['↑ ↓',              'Browse results'],
       ['Enter',            'Open selected result'],
       ['Escape',           'Close detail / search'],
@@ -589,7 +588,7 @@ function showHelpOverlay(){
     { group: 'Undo', items: [
       ['Ctrl + Z',         'Undo the last change to the tracker or the party'],
       ['Ctrl + Shift + Z', 'Redo it'],
-      ['Ctrl + Z on the map', 'Undo the last thing drawn or moved there'],
+      ['Ctrl + Z on the map', 'Undo the last thing drawn or moved there — the same history'],
     ]},
     { group: 'Workspace zoom', items: [
       ['Ctrl + Wheel',     'Zoom centered on cursor'],

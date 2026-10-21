@@ -34,17 +34,17 @@
  */
 'use strict';
 
-const BUILD = 'a19168b4a8';
+const BUILD = '210c0e87bb';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=50a4b30696',
   'js/core/errors.js?v=67c70f2e1d',
-  'js/core/data.js?v=19aec68f7f',
+  'js/core/data.js?v=1bc0ac49c0',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=86e357f17a',
+  'js/core/utils.js?v=c0d58da4bf',
   'js/core/state.js?v=f4037b7f2e',
   'js/core/undo.js?v=002504c5f3',
   'js/features/roll-requests.js?v=bceb453f6d',
@@ -63,7 +63,7 @@ const PRECACHE = [
   'js/panels/notes.js?v=44f7738cbc',
   'js/panels/handouts.js?v=8cf9b0e9d8',
   'js/panels/battlemap.js?v=32e7b0ba78',
-  'js/panels/npc-library.js?v=86b7e3715c',
+  'js/panels/npc-library.js?v=95ecdf2024',
   'js/panels/bestiary.js?v=8b3658dc0a',
   'js/panels/content-panel.js?v=235e0b5a0d',
   'js/panels/adventures.js?v=adbf195007',
@@ -93,9 +93,9 @@ const PRECACHE = [
   'js/ui/player-view.js?v=3c47cb84bd',
   'js/sync/realtime.js?v=21765cba50',
   'js/sync/presence.js?v=3c6820c9d8',
-  'js/ui/tutorial.js?v=e47e670b86',
+  'js/ui/tutorial.js?v=1f849f4f9a',
   'js/ui/onboarding.js?v=42199a671a',
-  'js/app.js?v=dae76711ea',
+  'js/app.js?v=77f875f973',
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build

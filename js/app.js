@@ -84,6 +84,25 @@ function init(){
       if (e.key === 'skt-rollreq-v1' && typeof sktOnRollAnswers === 'function') sktOnRollAnswers();
     } catch(err){ console.warn('[workspace] relay', e.key, err); }
   });
+  // And what a player window changes there — hit dice spent on its short
+  // rest, an initiative typed in, loot claimed. Without this, this window
+  // kept its own copy of the party, and its next save (pressing "Finish the
+  // rest", say) wrote that copy back over the player's change. Only the
+  // in-memory copy is refreshed; localStorage already holds the value, and
+  // the sync layer's bookkeeping is left to Firebase, which carries the same
+  // change between devices.
+  window.addEventListener('storage', e => {
+    if (!e.key || e.newValue == null) return;
+    try {
+      if (e.key === 'skt-party-v1' || e.key === 'skt-combat-v1'){
+        loadDomain(e.key === 'skt-party-v1' ? 'party' : 'combat');
+        ['party', 'combat'].forEach(id => panelDefs[id]?._body && panelDefs[id]._render?.());
+        for (const id in panelDefs){ const d = panelDefs[id]; if (d && typeof d._syncFromCombat === 'function'){ try { d._syncFromCombat(); } catch(err){} } }
+      } else if (e.key === 'skt-loot-v1' && panelDefs.loot?._body){
+        panelDefs.loot._loot = null; panelDefs.loot.mount(panelDefs.loot._body);
+      }
+    } catch(err){ console.warn('[workspace] relay', e.key, err); }
+  });
   // Build the player-view URL robustly. The naive `split('?')[0]+'?player=1'`
   // approach broke whenever the page URL had a `#fragment` (notes / onboarding
   // / scroll-into-view links sometimes add one): the result became

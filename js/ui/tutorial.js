@@ -24,12 +24,14 @@ const TUTORIAL_PAGES = [
     `,
   },
   {
-    title: 'Search bar',
+    title: 'Search',
     icon: '🔎',
     target: '#float-search-btn, #search-input',
     body: `
-      <p>Press <kbd>/</kbd> any time to focus the search bar (top-left).
-      It searches the full 5etools dataset:</p>
+      <p>Press <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>K</kbd> (or the 🔎 button) for one box that finds
+      everything: a panel, a command (next turn, long rest, ask the players to roll…), or a monster,
+      spell or item. Its rules results end with <strong>See all</strong>, which opens the full
+      search with what you typed. The full search covers the whole 5etools dataset:</p>
       <ul>
         <li><strong>Monsters</strong>, <strong>spells</strong>, <strong>magic items</strong>, <strong>conditions</strong></li>
         <li><strong>Base items</strong> — every weapon, armor, tool, and adventuring-gear entry, with proper damage / AC / weight / cost in the stat block.</li>
@@ -41,7 +43,7 @@ const TUTORIAL_PAGES = [
       <p><strong>Tabbed magic variants:</strong> open a base weapon or armor (e.g. Longsword) and the detail
       shows a tab strip — <strong>Base / +1 / +2 / +3</strong> — so you can flip between every enhancement
       bonus version in one entry. Searching "+1 longsword" still finds the base.</p>
-      <p>Closing the search clears it — pressing <kbd>/</kbd> again starts fresh.</p>
+      <p>Closing the search clears it, so the next search starts fresh.</p>
     `,
   },
   {
@@ -130,9 +132,10 @@ const TUTORIAL_PAGES = [
       <p><strong>NPC Library</strong> stores recurring characters with name, role, group,
       attitude (Ally / Friendly / Neutral / Hostile / Imprisoned / Unknown), HP/AC, tags,
       description, and notes. Drag an NPC to combat at any time.</p>
-      <p><strong>NPC Generator</strong> rolls a fresh NPC: race, gender, role, age, attitude,
-      two quirks, motivation, and a hidden secret. Re-roll any field individually, then
-      <strong>save to Library</strong> or push directly to combat.</p>
+      <p><strong>🎲 in the Library's toolbar</strong> generates a fresh NPC in the right-hand pane: race,
+      gender, role, age, attitude, two quirks, motivation, and a hidden secret. Lock the fields you like
+      and re-roll the rest, then <strong>Keep</strong> to file it in the Library — or <strong>+5</strong>
+      for a crowd.</p>
     `,
   },
   {
@@ -166,7 +169,8 @@ const TUTORIAL_PAGES = [
     panel: 'encounter',
     body: `
       <p>Plan a balanced fight before pushing it to combat. Set your party level and size,
-      then add monsters with counts. The panel calculates:</p>
+      then <strong>＋ Add monsters…</strong> — the same picker the Combat Tracker and Bestiary use, with
+      CR and type filters and a "how many". The panel calculates:</p>
       <ul>
         <li><strong>Raw &amp; adjusted XP</strong> (with the multiple-monster multiplier).</li>
         <li><strong>Difficulty</strong> — Trivial / Easy / Medium / Hard / Deadly, color-coded.</li>
@@ -188,6 +192,9 @@ const TUTORIAL_PAGES = [
       <p>Drag the divider to resize the file tree. Connect an Obsidian-style
       <strong>vault folder</strong> via the pill in the tree header for two-way sync with
       a folder of <code>.md</code> files on disk.</p>
+      <p><strong>📜 Send…</strong> on any note sends it to the players' phones — everyone, some, or one —
+      and <strong>📜 Sent to players</strong> in the tree header lists what you've sent (pictures too),
+      with Show again. Players find it in their Notes, under <em>From the DM</em>.</p>
     `,
   },
   {
@@ -217,13 +224,13 @@ const TUTORIAL_PAGES = [
     `,
   },
   {
-    title: 'World tools — Weather ☁ · Time ⏱ · Shop $',
+    title: 'World ☁ · Library 📚 · Shop $',
     icon: '🌍',
     body: `
-      <p><strong>Weather Tool</strong> — pick a biome and season, roll a physically-plausible
-      forecast (temperature, wind, humidity, cloud cover, precipitation).</p>
-      <p><strong>Time Tracker</strong> — Forgotten Realms calendar with a 24-hour ring dial.
-      Advance by hour, day, week, month, or year.</p>
+      <p><strong>World</strong> — the date and time (Forgotten Realms calendar, 24-hour ring dial) beside the
+      weather (biome and season, a physically-plausible forecast). Turning the day over rolls the new
+      day's weather. Share it and players get a World tab.</p>
+      <p><strong>Library</strong> — the books and the adventures, as two tabs of one reader.</p>
       <p><strong>Shop Generator</strong> — pick shop type, price band, town economy, and
       assortment level. Generates a shopkeeper, personality, aesthetic, and an inventory
       table priced by your settings (currency symbol &amp; jitter live in <strong>⚙ Settings</strong>).</p>

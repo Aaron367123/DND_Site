@@ -104,6 +104,8 @@ registerPanel('npclib', {
 
   mount(body){
     this._body = body;
+    // A layout saved with the generator's own window open (data.js migration).
+    if (typeof layout !== 'undefined' && layout.npclib && layout.npclib.gen){ this._gen = true; delete layout.npclib.gen; }
     this._ensureLoaded();
     if (!this._collapsed){
       // Persist collapse state per-browser. Group-name keys aren't synced;
