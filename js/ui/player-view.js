@@ -95,4 +95,17 @@ function initPlayerView(){
     }
     if (typeof paRender === 'function') paRender();
   });
+  // The pop-ups ride the same link. Without this a player window on the
+  // DM's own laptop showed the map and the fight but never "Roll
+  // initiative!", a saving throw or a handout — those only ever arrived
+  // through Firebase, so with no connection (or ?nosync) they never came.
+  // Each handler is idempotent, so getting the same change from Firebase
+  // as well costs nothing.
+  window.addEventListener('storage', e => {
+    try {
+      if (e.key === 'skt-savereq-v1' && typeof paOnSaveRequest === 'function') paOnSaveRequest();
+      else if (e.key === 'skt-initreq-v1' && typeof paOnInitRequest === 'function') paOnInitRequest();
+      else if (e.key === 'skt-handouts-v1' && typeof paOnHandouts === 'function') paOnHandouts();
+    } catch(err){ console.warn('[player view] relay', e.key, err); }
+  });
 }

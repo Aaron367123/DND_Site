@@ -4524,6 +4524,22 @@
         ok('saves: closing the dialog closes the ask',
            (JSON.parse(localStorage.getItem('skt-savereq-v1')) || {}).closed === true);
         ok('saves: asking with no characters picked does nothing', C.askSaves({ ab: 'WIS', dc: 10, pcs: [] }) === null);
+        // An answer from a player window in this same browser arrives as a
+        // `storage` event, not through the sync layer.
+        C.openAreaSave({ name: 'Relay', ab: 'DEX', dc: 10, parts: [], targets: pcs.slice(0, 1) });
+        await sleep(80);
+        const b3 = document.getElementById('area-save-back');
+        b3.querySelector('[data-as="ask"]').click(); await sleep(60);
+        const r3 = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+        r3.answers = { [pcs[0]]: { v: 19, rid: r3.id, at: Date.now() } };
+        const v3 = JSON.stringify(r3);
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-savereq-v1', v3); } finally { _remoteUpdate = false; }
+        window.dispatchEvent(new StorageEvent('storage', { key: 'skt-savereq-v1', newValue: v3 }));
+        await sleep(60);
+        ok('saves: an answer from a player tab on this laptop fills the row',
+           b3.querySelectorAll('.as-table tr.waiting').length === 0 && /their roll/.test(b3.querySelector('.as-table').textContent));
+        b3.querySelector('[data-as="cancel"]').click(); await sleep(40);
       } catch(e){ ok('saves: the checks ran to completion', false, e.message); }
       finally {
         document.getElementById('area-save-back')?.remove();
@@ -5235,6 +5251,44 @@
           finally { _remoteUpdate = false; }
           loadDomain('combat'); loadDomain('party');
           paTab = tab0; paRender(); await sleep(100);
+        }
+      }
+
+      // -- A player window on the DM's own laptop ---------------------------
+      // No Firebase between two tabs of one browser: what links them is the
+      // `storage` event. The map and the fight always rode it; the pop-ups
+      // did not, so a player window beside the DM's never saw a save, an
+      // initiative call or a handout unless the internet carried it round.
+      {
+        const req0 = localStorage.getItem('skt-savereq-v1'), ho0 = localStorage.getItem('skt-handouts-v1');
+        try {
+          const me = paMe().pcId || (state.party[0] || {}).id;
+          if (!paMe().pcId) paSetPc(me);
+          document.getElementById('pa-save')?.remove();
+          const v = JSON.stringify({ id: 'sr_relay', askedAt: Date.now(), ab: 'WIS', dc: 13, showDc: true,
+                                     name: '', pcs: [me], answers: {}, closed: false });
+          localStorage.setItem('skt-savereq-v1', v);
+          window.dispatchEvent(new StorageEvent('storage', { key: 'skt-savereq-v1', newValue: v }));
+          await sleep(60);
+          ok('player: a save asked from another tab pops up here', !!document.getElementById('pa-save'));
+          document.getElementById('pa-save')?.remove();
+          const h = JSON.stringify({ list: [{ id: 'w_relay', title: 'A word from the DM', text: 'Psst.', img: null,
+                                              to: [me], ts: Date.now(), shownAt: Date.now(), whisper: true }] });
+          localStorage.setItem('skt-handouts-v1', h);
+          window.dispatchEvent(new StorageEvent('storage', { key: 'skt-handouts-v1', newValue: h }));
+          await sleep(80);
+          ok('player: so does a whisper', !!document.getElementById('pa-handout')
+             && /Psst/.test(document.getElementById('pa-handout').textContent));
+        } catch(e){ ok('player: the same-laptop relay checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-save')?.remove();
+          document.getElementById('pa-handout')?.remove();
+          _remoteUpdate = true;
+          try {
+            if (req0 == null) localStorage.removeItem('skt-savereq-v1'); else localStorage.setItem('skt-savereq-v1', req0);
+            if (ho0 == null) localStorage.removeItem('skt-handouts-v1'); else localStorage.setItem('skt-handouts-v1', ho0);
+          } finally { _remoteUpdate = false; }
+          paRender();
         }
       }
 

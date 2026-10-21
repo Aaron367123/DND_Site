@@ -75,6 +75,16 @@ function init(){
   initDockNames();
   initUndoKeys();
   if (typeof initPresence === 'function') initPresence();
+  // Answers from a player window on this same machine. Firebase carries
+  // them between devices; this carries them between tabs when there is no
+  // Firebase to do it. Both handlers ignore an answer they have seen.
+  window.addEventListener('storage', e => {
+    const C = panelDefs.combat; if (!C) return;
+    try {
+      if (e.key === 'skt-savereq-v1' && C._onSaveAnswers) C._onSaveAnswers();
+      else if (e.key === 'skt-initreq-v1' && C._onInitAnswers) C._onInitAnswers();
+    } catch(err){ console.warn('[workspace] relay', e.key, err); }
+  });
   // Build the player-view URL robustly. The naive `split('?')[0]+'?player=1'`
   // approach broke whenever the page URL had a `#fragment` (notes / onboarding
   // / scroll-into-view links sometimes add one): the result became
