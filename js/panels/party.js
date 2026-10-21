@@ -91,6 +91,7 @@ registerPanel('party',{
   menuItems(){
     const items = [
       { label:'📋 Manage Party', run: () => this._openManageParty() },
+      { label:'🧙 Build a new character', run: () => openCharBuilder({}) },
       { label:'📄 Import PDF',   run: () => this._importPdf() },
     ];
     if (state.party.length){
@@ -2919,6 +2920,12 @@ registerPanel('party',{
         const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
         const isBarb  = /\bbarbarian\b/.test(cls);
         const isDruid = /\bdruid\b/.test(cls);
+        // Built in the character builder: level up, or change a choice.
+        if (c.build && typeof openCharBuilder === 'function'){
+          if ((c.build.level || 1) < 20)
+            items.push({ label: '⬆ Level up to ' + ((c.build.level || 1) + 1), onClick: () => { const r = resolve(); if (r) openCharBuilder({ idx: r.idx, levelup: true }); } });
+          items.push({ label: '✎ Edit in the character builder', onClick: () => { const r = resolve(); if (r) openCharBuilder({ idx: r.idx }); } });
+        }
         // A line to this player's phone and nobody else's.
         if (typeof sktWhisperTo === 'function' && !c.foe){
           items.push({ label: '\ud83d\udcac Whisper to ' + c.name + '\u2026',

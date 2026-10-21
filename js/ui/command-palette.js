@@ -74,6 +74,14 @@ function _cpCommands(){
     add('Party', 'Short rest (whole party)', party('_shortRestAll'), 'rest hit dice');
   }
 
+  if (typeof openCharBuilder === 'function'){
+    add('Party', 'Build a new character', () => openCharBuilder({}), 'character creator create make new pc builder');
+    (state.party || []).forEach((p, i) => {
+      if (p && p.build && (p.build.level || 1) < 20)
+        add('Party', 'Level up ' + p.name, () => openCharBuilder({ idx: i, levelup: true }), 'level up advance');
+    });
+  }
+
   // A word to one player's phone, by name.
   if (typeof sktWhisperTo === 'function'){
     (state.party || []).filter(p => p && p.id && !p.foe).forEach(p => {

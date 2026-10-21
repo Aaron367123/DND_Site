@@ -758,6 +758,9 @@ function paRefreshMount(tab){
 // action used out of combat would be wrong. The pool lives in state.party, so
 // the DM's Turn View shows the same number a moment later.
 function paActivations(pc){
+  // A character from the builder carries its actions already worked out,
+  // with the pool each one spends; no need to read them back out of text.
+  if (pc && pc.sheet && Array.isArray(pc.sheet.activations) && pc.build) return pc.sheet.activations;
   if (!pc || typeof sktDeriveActivations !== 'function') return [];
   const text = (pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '';
   try { return sktDeriveActivations(text) || []; } catch(e){ return []; }
@@ -912,6 +915,8 @@ function paYouScreen(){
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
       ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
       <div class="pa-roll" id="pa-roll"></div>
+      ${pc.build && (pc.build.level || 1) < 20 && typeof openCharBuilder === 'function'
+        ? '<button class="btn pa-levelup" data-pa-build="levelup">⬆ Level up to ' + ((pc.build.level || 1) + 1) + '</button>' : ''}
       <button class="pa-sheet-t" data-pa-mate="${paEsc(pc.id)}">
         ${paOpenMates.has(pc.id) ? '▾ Hide full sheet' : '▸ Full sheet'}
       </button>
@@ -1110,10 +1115,14 @@ function paPickerScreen(){
   // sktPlayerParty, not state.party: a rival is stored in the same array
   // and would otherwise appear here with its hit points on every phone.
   const list = sktPlayerParty();
+  // A player can make their own character here; it joins the party like
+  // any other and this phone becomes that character.
+  const build = typeof openCharBuilder === 'function'
+    ? '<button class="btn primary pa-build" data-pa-build="new">🧙 Build a new character</button>' : '';
   if (!list.length){
     return `<div class="pa-card">${typeof emptyState === 'function' ? emptyState({
       icon:'i-heart', title:'No party yet',
-      hint:'Once the DM has added characters, pick yours here.' }) : 'No party yet.'}</div>`;
+      hint:'Once the DM has added characters, pick yours here — or build one.' }) : 'No party yet.'}${build}</div>`;
   }
   return `<div class="pa-card">
     <h3 class="pa-pick-h">Which one are you?</h3>
@@ -1125,6 +1134,7 @@ function paPickerScreen(){
         <span class="pa-pick-n">${paEsc(p.name)}</span>
         <span class="pa-pick-s">${paEsc([p.cls, p.level ? 'lvl ' + p.level : ''].filter(Boolean).join(' · '))}</span>
       </button>`).join('')}</div>
+    ${build}
   </div>`;
 }
 
@@ -1344,6 +1354,16 @@ function paOnClick(e){
   const pick = e.target.closest('[data-pa-pick]');
   if (pick){ paSetPc(pick.dataset.paPick); paRender(); return; }
   if (e.target.closest('[data-pa-swap]')){ paSetPc(null); paRender(); return; }
+  const bld = e.target.closest('[data-pa-build]');
+  if (bld && typeof openCharBuilder === 'function'){
+    if (bld.dataset.paBuild === 'new'){
+      openCharBuilder({ onDone: rec => { if (rec && rec.id){ paSetPc(rec.id); paTab = 'you'; paRender(); } } });
+    } else {
+      const i = paMyIdx();
+      if (i >= 0) openCharBuilder({ idx: i, levelup: true, onDone: () => paRender() });
+    }
+    return;
+  }
   const hp = e.target.closest('[data-pa-hp]');
   if (hp){ paApplyHp(+hp.dataset.paHp); return; }
   const atk = e.target.closest('[data-pa-atk]');

@@ -4581,6 +4581,134 @@
       finally { document.getElementById('toast-host')?.remove(); }
     }
 
+    // -- The character builder: the rules, both editions --------------------
+    // Hand-worked characters, so a wrong number is a wrong rule rather than a
+    // changed expectation.
+    {
+      try {
+        const R24 = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        ok('builder: both editions load twelve classes', R24.classes.length === 12 && R14.classes.length === 12);
+        // 2024 Human Fighter 1, Soldier, chain mail, Defense.
+        const f = Object.assign(sktBlankBuild('2024'), { name: 'T1', species: 'Human', cls: 'Fighter', level: 1, background: 'Soldier',
+          abilities: { method: 'manual', base: { str: 15, dex: 14, con: 13, int: 8, wis: 12, cha: 10 } },
+          bgAsi: { str: 2, con: 1 }, skills: ['athletics', 'perception'], equipment: { cls: 'A', bg: 'A' },
+          optional: { 'Fighting Style': ['Defense'] }, masteries: ['greatsword'] });
+        const F = sktComputeCharacter(f, R24);
+        ok('builder 2024: STR 17 from the background', F.abilities.str === 17, F.abilities);
+        ok('builder 2024: HP 10 + CON 2 = 12', F.hpMax === 12, F.hpMax);
+        ok('builder 2024: AC chain mail 16 + Defense = 17', F.ac === 17, F.ac);
+        const gs = F.sheet.attacks.find(a => a.name === 'Greatsword');
+        ok('builder 2024: greatsword +5, 2d6+3, with its mastery', !!gs && gs.atkBonus === '+5' && gs.damage === '2d6+3 slashing' && gs.mastery === 'Graze', gs);
+        ok('builder 2024: Second Wind twice, spendable from a phone',
+           (F.resources.find(r => r.name === 'Second Wind') || {}).max === 2 && F.sheet.activations.some(a => a.resource === 'Second Wind'));
+        ok('builder 2024: the background’s origin feat', F.feats.includes('Savage Attacker'), F.feats);
+        // 2014 Hill Dwarf Barbarian 5.
+        const bb = Object.assign(sktBlankBuild('2014'), { name: 'T2', species: 'Dwarf', subspecies: 'Hill', cls: 'Barbarian', subclass: 'Berserker', level: 5,
+          background: 'Outlander', abilities: { method: 'manual', base: { str: 15, dex: 14, con: 13, int: 8, wis: 12, cha: 10 } },
+          skills: ['athletics', 'intimidation'], asi: { 4: { type: 'asi', inc: { str: 2 } } } });
+        const B = sktComputeCharacter(bb, R14);
+        ok('builder 2014: HP d12 with the hill dwarf’s extra point a level = 55', B.hpMax === 55, B.hpMax);
+        ok('builder 2014: Unarmored Defense 10 + DEX + CON = 14', B.ac === 14, B.ac);
+        ok('builder 2014: dwarf 25 ft + Fast Movement = 35', B.spd === 35, B.spd);
+        ok('builder 2014: three rages, two attacks', (B.resources.find(r => r.name === 'Rage') || {}).max === 3 && B.sheet.attacksPerAction === 2);
+        // 2014 High Elf Wizard 5.
+        const w = Object.assign(sktBlankBuild('2014'), { name: 'T3', species: 'Elf', subspecies: 'High', cls: 'Wizard', subclass: 'Evocation', level: 5,
+          background: 'Sage', abilities: { method: 'manual', base: { str: 8, dex: 13, con: 14, int: 15, wis: 12, cha: 10 } },
+          skills: ['arcana', 'investigation'], asi: { 4: { type: 'asi', inc: { int: 2 } } }, cantrips: ['Fire Bolt'] });
+        const W = sktComputeCharacter(w, R14);
+        ok('builder 2014: wizard 5 slots 4/3/2, DC 15', W.sheet.spellSlots[3] && W.sheet.spellSlots[3].total === 2 && W.sheet.spellSaveDc === 15, W.sheet.spellSlots);
+        ok('builder 2014: Fire Bolt is 2d10 at level 5', (W.sheet.attacks.find(a => a.name === 'Fire Bolt') || {}).damage === '2d10 fire');
+        // 2024 Warlock 5: pact magic, Eldritch Blast beams.
+        const k = Object.assign(sktBlankBuild('2024'), { name: 'T4', species: 'Tiefling', cls: 'Warlock', subclass: 'Fiend', level: 5, background: 'Charlatan',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 13, int: 10, wis: 12, cha: 15 } }, bgAsi: { cha: 2, dex: 1 },
+          asi: { 4: { type: 'asi', inc: { cha: 1, con: 1 } } }, cantrips: ['Eldritch Blast'], optional: { 'Eldritch Invocations': ['Agonizing Blast'] } });
+        const K = sktComputeCharacter(k, R24);
+        ok('builder 2024: two pact slots at 3rd level', K.sheet.spellSlots[3] && K.sheet.spellSlots[3].total === 2 && !K.sheet.spellSlots[1]);
+        ok('builder 2024: Eldritch Blast is two beams of 1d10+4', /^1d10\+4 force .2 beams$/.test((K.sheet.attacks.find(a => a.name === 'Eldritch Blast') || {}).damage || ''));
+        // Weapon proficiency written as an item tag with a plural display.
+        const bd = Object.assign(sktBlankBuild('2014'), { name: 'T5', species: 'Half-Elf', cls: 'Bard', level: 1, background: 'Entertainer',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 13, int: 12, wis: 10, cha: 15 } }, speciesAsi: { dex: 1, con: 1 },
+          equipment: { clsBlocks: ['a'] } });
+        ok('builder 2014: a bard is proficient with the rapier it starts with', (sktComputeCharacter(bd, R14).sheet.attacks.find(a => a.name === 'Rapier') || {}).atkBonus === '+4');
+        // Levelling a pool that grows: a full one stays full, a spent amount
+        // stays spent. Lay on Hands is 15 at paladin 3 and 20 at 4.
+        const pal = Object.assign(sktBlankBuild('2024'), { name: 'T6', species: 'Human', cls: 'Paladin', subclass: 'Devotion', level: 4, background: 'Soldier' });
+        const loh = prior => (sktComputeCharacter(pal, R24, { resources: [{ name: 'Lay on Hands', type: 'pool', current: prior, max: 15 }] })
+          .resources.find(r => r.name === 'Lay on Hands') || {});
+        ok('builder: a full pool that grows on level up stays full', loh(15).current === 20 && loh(15).max === 20, loh(15));
+        ok('builder: a part-spent pool keeps what was spent', loh(10).current === 15, loh(10));
+        // The 2024 fighter's own Battle Master, not the 2014 one also listed for it.
+        // Both printings have a "Combat Superiority", so check the printing.
+        const bm = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', subclass: 'Battle Master', level: 3 });
+        const bmSub = sktRulesSubclass(sktRulesClass(R24, 'Fighter'), 'Battle Master');
+        ok('builder 2024: the edition’s own printing of a subclass', !!bmSub && bmSub.source === 'XPHB', bmSub && bmSub.source);
+        ok('builder 2024: with its features', sktBuildFeatures(bm, R24).some(x => x.from === 'subclass' && x.name === 'Combat Superiority'));
+      } catch(e){ ok('builder: the rules checks ran to completion', false, e.message); }
+    }
+
+    // -- The character builder: making and levelling a character -----------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        await openCharBuilder({}); await sleep(150);
+        const root = () => document.getElementById('cb-root');
+        const q = s => root().querySelector(s);
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        ok('builder: it opens on Basics, with nothing chosen', !!root() && CB.step === 'basics' && sktBuildTodo(CB.build, CB.R).length >= 3);
+        const nm = q('[data-cb-in="name"]'); nm.value = 'Testa'; nm.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('builder: the sheet beside it follows as you type', /Testa/.test(q('.cb-side').textContent));
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Fighter"]'); await sleep(30);
+        click('[data-cb-step="species"]'); await sleep(30); click('[data-cb-species="Dwarf"]'); await sleep(30);
+        click('[data-cb-step="background"]'); await sleep(30); click('[data-cb-bg="Soldier"]'); await sleep(30);
+        set('[data-cb-bg2]', 'str'); await sleep(20); set('[data-cb-bg1]', 'con'); await sleep(20);
+        click('[data-cb-step="skills"]'); await sleep(30);
+        tick('[data-cb-skill="perception"]'); await sleep(20); tick('[data-cb-skill="survival"]'); await sleep(20);
+        click('[data-cb-step="levels"]'); await sleep(30);
+        tick('[data-cb-opt-fighting-style="Defense"]'); await sleep(20);
+        ['greatsword', 'flail', 'javelin'].forEach(n => tick('[data-cb-mastery="' + n + '"]'));
+        await sleep(30);
+        ok('builder: the choices are all made', sktBuildTodo(CB.build, CB.R).filter(t => !t.soft).length === 0,
+           JSON.stringify(sktBuildTodo(CB.build, CB.R)));
+        click('[data-cb-step="review"]'); await sleep(30);
+        const n0 = state.party.length;
+        click('[data-cb="save"]'); await sleep(200);
+        const made = state.party.find(p => p.name === 'Testa');
+        ok('builder: Create adds the character to the party', !root() && state.party.length === n0 + 1 && !!made);
+        ok('builder: with the sheet the rest of the app reads',
+           !!made && made.cls === 'fighter' && made.hpMax === 13 && made.ac === 17 && made.hitDice.dieType === 'd10'
+           && made.build && made.rules === '2024', made && JSON.stringify({ hp: made.hpMax, ac: made.ac }));
+        ok('builder: and Undo takes it away again', /Created Testa/.test(sktUndoLabel() || ''));
+        // Level up, with damage taken and a pool partly spent.
+        const i = state.party.findIndex(p => p.name === 'Testa');
+        state.party[i] = { ...state.party[i], hp: 6,
+          resources: state.party[i].resources.map(r => r.name === 'Second Wind' ? { ...r, current: 1 } : r) };
+        save();
+        await openCharBuilder({ idx: i, levelup: true }); await sleep(100);
+        ok('builder: level up opens on what is new', CB.step === 'levels' && CB.build.level === 2 && /New at level 2/.test(q('.cb-main').textContent));
+        click('[data-cb-step="review"]'); await sleep(30); click('[data-cb="save"]'); await sleep(200);
+        const up = state.party[i];
+        ok('builder: levelling up keeps the damage taken', up.level === 2 && up.hp === up.hpMax - 7, JSON.stringify({ hp: up.hp, max: up.hpMax }));
+        ok('builder: and what was spent stays spent', (up.resources.find(r => r.name === 'Second Wind') || {}).current === 1);
+        ok('builder: the same character, not a new one', up.id === made.id && state.party.length === n0 + 1);
+        // The 2014 rules from the same builder.
+        await openCharBuilder({}); await sleep(100);
+        click('[data-cb-ed="2014"]'); await sleep(800);
+        ok('builder: switching to the 2014 rules loads them', CB.build.edition === '2014' && CB.R && CB.R.edition === '2014');
+        click('[data-cb-step="species"]'); await sleep(30); click('[data-cb-species="Half-Elf"]'); await sleep(30);
+        ok('builder 2014: a half-elf is offered two +1s and two skills',
+           root().querySelectorAll('[data-cb-spasi]').length === 5 && root().querySelectorAll('[data-cb-spskill]').length === 18);
+        cbClose();
+      } catch(e){ ok('builder: the UI checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // ── Areas of effect on the map ────────────────────────────────────────
     {
       _remoteUpdate = true;
@@ -5332,6 +5460,43 @@
              Math.round(a.bottom) + ' vs ' + Math.round(b.top));
         } catch(e){ ok('phone: the update prompt check ran to completion', false, e.message); }
         finally { document.getElementById('toast-host')?.remove(); }
+      }
+
+      // -- A player builds their own character -------------------------------
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1');
+        try {
+          localStorage.removeItem('skt-me-v1'); paRender(); await sleep(80);
+          const btn = document.querySelector('[data-pa-build="new"]');
+          ok('player: the character picker offers to build one', !!btn);
+          btn.click(); await sleep(400);
+          ok('player: the builder opens over the phone', !!document.getElementById('cb-root'));
+          // Fill it in directly — the DM-side checks drive every control.
+          Object.assign(CB.build, { name: 'Phoned', species: 'Human', cls: 'Rogue', background: 'Criminal',
+            skills: ['acrobatics', 'perception', 'insight', 'investigation'], speciesSkills: ['athletics'],
+            expertise: ['stealth', 'perception'], masteries: ['dagger', 'shortbow'], originFeat: 'Alert' });
+          CB.step = 'review'; cbRender(); await sleep(60);
+          document.querySelector('#cb-root [data-cb="save"]').click(); await sleep(300);
+          // Unfinished choices ask first; confirm the dialog if it appeared.
+          const okBtn = [...document.querySelectorAll('.modal-backdrop button')].find(b => /Save anyway/.test(b.textContent));
+          if (okBtn){ okBtn.click(); await sleep(300); }
+          const pc = state.party.find(p => p.name === 'Phoned');
+          ok('player: creating it adds it to the party', !!pc);
+          ok('player: and this phone becomes that character', !!pc && paMe().pcId === pc.id && paTab === 'you');
+          ok('player: with a Level up button on its own sheet', !!document.querySelector('[data-pa-build="levelup"]'));
+          ok('player: its actions come from the builder, not from parsed text',
+             Array.isArray(pc.sheet.activations) && paActivations(pc) === pc.sheet.activations);
+        } catch(e){ ok('player: the build-your-own checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('cb-root')?.remove(); if (typeof CB !== 'undefined') CB = null;
+          document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+          _remoteUpdate = true;
+          try {
+            if (p0 != null) localStorage.setItem('skt-party-v1', p0);
+            if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          } finally { _remoteUpdate = false; }
+          loadDomain('party'); paRender();
+        }
       }
 
       // ── "Roll initiative!" on this phone ──────────────────────────────────
