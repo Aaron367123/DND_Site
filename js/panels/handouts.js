@@ -85,6 +85,45 @@ function sktWhisperTo(pcId){
   ], 'Send').then(r => { if (r) sktSendWhisper(pcId, r.text); });
 }
 
+// "Send to players…" — the one way to send anything to the phones: a note
+// from Notes, or a picture or note written in "Sent to players". Everyone,
+// some of them, or one. Resolves to the handout's id, or null.
+function sktSendToPlayers(draft){
+  const pcs = (state.party || []).filter(p => !p.foe);
+  document.getElementById('ho-send-back')?.remove();
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop'; back.id = 'ho-send-back';
+  back.innerHTML = '<div class="modal ho-send" role="dialog" aria-modal="true" aria-label="Send to players">'
+    + '<h3>📜 Send to players</h3>'
+    + '<div class="ho-send-what"><b>' + esc(draft.title || 'Untitled') + '</b>'
+    +   (draft.img ? '<img class="ho-thumb" src="' + draft.img + '" alt="">' : '')
+    +   (draft.text ? '<div class="ho-send-text">' + esc(String(draft.text).slice(0, 240)) + (String(draft.text).length > 240 ? '…' : '') + '</div>' : '')
+    + '</div>'
+    + '<div class="ho-send-to">'
+    +   '<label class="ho-send-all"><input type="checkbox" id="ho-send-all" checked> Everyone</label>'
+    +   pcs.map(p => '<label class="ho-pc"><input type="checkbox" class="ho-send-pc" value="' + esc(p.id) + '" checked> ' + esc(p.name) + '</label>').join('')
+    + '</div>'
+    + '<div class="modal-actions"><button class="btn" data-ho-send="cancel">Cancel</button>'
+    + '<button class="btn primary" data-ho-send="go">📜 Send</button></div></div>';
+  document.body.appendChild(back);
+  const all = back.querySelector('#ho-send-all');
+  const boxes = () => [...back.querySelectorAll('.ho-send-pc')];
+  all.addEventListener('change', () => boxes().forEach(b => { b.checked = all.checked; }));
+  boxes().forEach(b => b.addEventListener('change', () => { all.checked = boxes().every(x => x.checked); }));
+  return new Promise(resolve => {
+    const done = v => { back.remove(); resolve(v); };
+    back.addEventListener('click', e => {
+      if (e.target === back) return done(null);
+      const btn = e.target.closest('[data-ho-send]'); if (!btn) return;
+      if (btn.dataset.hoSend === 'cancel') return done(null);
+      const picked = boxes().filter(b => b.checked).map(b => b.value);
+      if (!picked.length){ if (typeof showToast === 'function') showToast('Pick who should get it'); return; }
+      const to = (all.checked || picked.length === pcs.length) ? 'all' : picked;
+      done(panelDefs.handouts.send(Object.assign({}, draft, { to })) || null);
+    });
+  });
+}
+
 registerPanel('handouts', {
   title: 'Handouts', icon: '📜',
   _draft: null,
@@ -111,8 +150,6 @@ registerPanel('handouts', {
     const b = this._body; if (!b) return;
     const d = this._draft, data = sktHandouts();
     const used = JSON.stringify(data).length;
-    const pcs = (state.party || []).filter(p => !p.foe);
-    const toAll = d.to === 'all';
     b.innerHTML = `<div class="ho">
       <div class="ho-new">
         <input class="ho-title" id="ho-title" type="text" placeholder="Title (e.g. A letter sealed with black wax)" value="${esc(d.title)}">
@@ -122,13 +159,7 @@ registerPanel('handouts', {
                   : `<button class="btn small" data-ho="img-pick">${ICO('i-map')} Add a picture</button>`}
           <input type="file" id="ho-file" accept="image/*" hidden>
         </div>
-        <div class="ho-to">
-          <span class="ho-to-l">Send to</span>
-          <label><input type="radio" name="ho-to" value="all"${toAll ? ' checked' : ''}> Everyone</label>
-          <label><input type="radio" name="ho-to" value="some"${toAll ? '' : ' checked'}> Only…</label>
-          ${toAll ? '' : `<span class="ho-pcs">${pcs.map(p => `<label class="ho-pc"><input type="checkbox" value="${esc(p.id)}"${(d.to || []).includes(p.id) ? ' checked' : ''}> ${esc(p.name)}</label>`).join('')}</span>`}
-        </div>
-        <button class="btn primary" data-ho="send"${(d.title || d.text || d.img) ? '' : ' disabled'}>📜 Send to phones</button>
+        <button class="btn primary" data-ho="send"${(d.title || d.text || d.img) ? '' : ' disabled'}>📜 Send to players…</button>
       </div>
       <div class="ho-list">
         ${data.list.length ? data.list.map(h => `<div class="ho-item" data-id="${esc(h.id)}">
@@ -159,13 +190,6 @@ registerPanel('handouts', {
     };
     b.querySelector('#ho-title').addEventListener('input', sync);
     b.querySelector('#ho-text').addEventListener('input', sync);
-    b.querySelectorAll('input[name="ho-to"]').forEach(r => r.addEventListener('change', () => {
-      this._draft.to = r.value === 'all' ? 'all' : [];
-      this._render();
-    }));
-    b.querySelectorAll('.ho-pc input').forEach(cb => cb.addEventListener('change', () => {
-      this._draft.to = [...b.querySelectorAll('.ho-pc input:checked')].map(i => i.value);
-    }));
     const file = b.querySelector('#ho-file');
     file.addEventListener('change', () => {
       const f = file.files && file.files[0]; if (!f) return;
@@ -177,7 +201,7 @@ registerPanel('handouts', {
       const act = btn.dataset.ho;
       if (act === 'img-pick') this._body.querySelector('#ho-file').click();
       else if (act === 'img-remove'){ this._draft.img = null; this._render(); }
-      else if (act === 'send') this.send(this._draft);
+      else if (act === 'send') sktSendToPlayers({ title: this._draft.title, text: this._draft.text, img: this._draft.img });
       else if (act === 'again') this.showAgain(btn.closest('[data-id]').dataset.id);
       else if (act === 'del'){
         const id = btn.closest('[data-id]').dataset.id;

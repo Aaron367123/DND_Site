@@ -1462,10 +1462,18 @@ function initSearch(){
   // stay stuck at `true` after this click, and the next click outside the
   // search would (silently) skip the close and only reset the flag. The user
   // would then have to click off twice to actually close the search.
+  // The DM's screen has one search box: Ctrl+K (command-palette.js), which
+  // finds panels, commands and rules entries together and ends its rules
+  // results with "See all", which opens this one with the query in it. The
+  // 🔍 and / used to open this box instead, so there were two to choose
+  // between for the same "find the goblin". Players keep this one — they
+  // have no palette.
+  const toPalette = () => !document.body.classList.contains('player-mode') && typeof openCommandPalette === 'function';
   document.getElementById('float-search-btn')?.addEventListener('mousedown', e => {
     _insideSearch = true;
     const wrap = document.getElementById('search-wrap');
     if (wrap?.classList.contains('open')) closeSearch();
+    else if (toPalette()){ e.preventDefault(); openCommandPalette(); }
     else { openSearch(); setTimeout(()=>inp.focus(), 50); }
   });
   document.addEventListener('mousedown', () => { if(!_insideSearch)closeSearch(); _insideSearch=false; });
@@ -1483,6 +1491,16 @@ function initSearch(){
     if(ae&&(ae.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(ae.tagName))) return;
     // A modal is a focus trap; opening search underneath one strands it.
     if(document.querySelector('.modal-backdrop')) return;
-    e.preventDefault(); openSearch(); setTimeout(()=>inp.focus(), 50);
+    e.preventDefault();
+    if (toPalette()){ openCommandPalette(); return; }
+    openSearch(); setTimeout(()=>inp.focus(), 50);
   });
+}
+// "See all" from the palette: the full browse, already searching for q.
+function sktOpenFullSearch(q){
+  const inp = document.getElementById('search-input'); if (!inp) return;
+  openSearch();
+  inp.value = q || '';
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  setTimeout(() => inp.focus(), 50);
 }

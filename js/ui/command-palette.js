@@ -6,9 +6,10 @@
 // windows…), or jump to a monster / spell / item. Type a few letters, press
 // Enter.
 //
-// It does not replace the / search. That one browses the rules with tabs and
-// a detail pane; this one is for DOING things, and only lists rules entries
-// as a shortcut to their pop-out. The rules matches reuse the search pool
+// It is the DM's one search box: / and the toolbar's 🔍 open it too. Rules
+// entries show here as a shortcut to their pop-out, and the last row, "See
+// all", opens the full browse search (tabs, every printing, the detail
+// pane) with what was typed. The rules matches reuse the search pool
 // (getSearchPool / _getVisiblePool), so hidden sources stay hidden here too.
 //
 // DM view only: players have no panels, workspaces or combat controls.
@@ -91,6 +92,8 @@ function _cpCommands(){
       add('Players', 'Whisper to ' + p.name, () => sktWhisperTo(p.id), 'message tell privately phone aside');
     });
   }
+  // Handouts live in Notes now; this is the way to them by name.
+  add('Players', 'Sent to players (handouts)', () => openPanel('handouts'), 'handout letter picture send phones notes');
 
   // Workspace and app.
   if (typeof window.smartArrange === 'function')
@@ -184,9 +187,9 @@ function openCommandPalette(){
   back.id = 'cp-backdrop';
   back.innerHTML = `<div class="cp" role="dialog" aria-modal="true" aria-label="Go to anything">
       <input class="cp-input" id="cp-input" type="text" autocomplete="off" spellcheck="false"
-             placeholder="Open a panel, run a command, or find a monster, spell or item…">
+             placeholder="Search — a panel, a command, a monster, spell or item…">
       <div class="cp-list" id="cp-list" role="listbox"></div>
-      <div class="cp-foot"><span><kbd>↑</kbd><kbd>↓</kbd> choose</span><span><kbd>Enter</kbd> go</span><span><kbd>Esc</kbd> close</span></div>
+      <div class="cp-foot"><span><kbd>↑</kbd><kbd>↓</kbd> choose</span><span><kbd>Enter</kbd> go</span><span><kbd>Esc</kbd> close</span><span><kbd>/</kbd> or <kbd>Ctrl</kbd><kbd>K</kbd></span></div>
     </div>`;
   document.body.appendChild(back);
   const inp = back.querySelector('#cp-input');
@@ -202,6 +205,9 @@ function openCommandPalette(){
   const paint = () => {
     const q = inp.value;
     items = _cpMatch(commands, q).concat(_cpContent(q));
+    if (_cpNorm(q).length >= 2 && typeof sktOpenFullSearch === 'function')
+      items.push({ group: 'Rules', label: 'See all results for “' + q.trim() + '”', hint: 'browse by type, every printing',
+                   run: () => sktOpenFullSearch(q.trim()), seeAll: true });
     if (sel >= items.length) sel = Math.max(0, items.length - 1);
     if (!items.length){
       listEl.innerHTML = '<div class="cp-empty">Nothing matches "' + esc(q) + '"</div>';

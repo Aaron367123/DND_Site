@@ -151,9 +151,15 @@ registerPanel('notes', {
   // tree back lives in the editor header, so hiding it with nothing selected
   // would leave an empty panel and no way out of it.
   _treeHidden: (function(){ try { return localStorage.getItem('skt-notes-tree-hidden') === '1'; } catch(e){ return false; } })(),
+  // Showing what has been sent to the players' phones (the handouts) instead
+  // of the notes. Handouts used to be a window of their own beside this one;
+  // a letter the party finds is usually a note the DM already wrote, so it
+  // lives here now — "📜 Send…" on any note, and this view for the rest.
+  _sent: false,
 
   mount(body){
     this._body = body;
+    if (typeof layout !== 'undefined' && layout.notes && layout.notes.sent){ this._sent = true; delete layout.notes.sent; }
     if (!this._data) this._data = _notesHydrate();
     // Commit + flush on tab hide/close so an edit typed in the last 800 ms
     // isn't lost when the page goes away (unmount() won't fire on tab close).
@@ -310,6 +316,8 @@ registerPanel('notes', {
     this._onDividerMove = null;
     this._onDividerUp = null;
     this._dividerDrag = null;
+    const H = panelDefs.handouts;
+    if (H && H._body){ try { H.unmount(); } catch(e){} }
     this._body = null;
   },
 
@@ -444,6 +452,7 @@ registerPanel('notes', {
   _render(){
     const b = this._body; if (!b) return;
     b.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
+    if (this._sent && this._view !== 'player'){ this._renderSentView(); return; }
     // A player never reaches _wire(): that is the DM's tree, editor, rename,
     // delete and drag handling, and none of it belongs on a player's screen.
     if (this._view === 'player'){
@@ -460,6 +469,36 @@ registerPanel('notes', {
     this._applyViewSettings();
     this._observePaneResize();
     this._wire();
+  },
+
+  // ── Sent to players ───────────────────────────────────────────────────────
+  // The handouts panel, mounted whole: composing a picture or a note from
+  // scratch, Show again, Delete. openPanel('handouts') lands here.
+  select(id){
+    if (id === 'handouts'){ this._sent = true; if (this._body) this._render(); }
+  },
+  showSent(on){
+    this._sent = !!on;
+    const H = panelDefs.handouts;
+    if (!on && H && H._body){ try { H.unmount(); } catch(e){} }
+    this._render();
+  },
+  _renderSentView(){
+    const b = this._body;
+    const H = panelDefs.handouts;
+    if (H && H._body){ try { H.unmount(); } catch(e){} }
+    b.innerHTML = '<div class="notes-sent">'
+      + '<div class="notes-editor-head notes-sent-head">'
+      +   '<button class="btn small" data-notes-sent="back" title="Back to your notes">← Notes</button>'
+      +   '<span class="notes-file-title notes-file-title-ro">📜 Sent to players</span>'
+      + '</div><div class="notes-sent-body"></div></div>';
+    b.querySelector('[data-notes-sent="back"]').addEventListener('click', () => this.showSent(false));
+    if (H) H.mount(b.querySelector('.notes-sent-body'));
+  },
+  _sendNote(file){
+    if (!file || typeof sktSendToPlayers !== 'function') return null;
+    this._commitEditing();
+    return sktSendToPlayers({ title: file.name, text: file.content || '' });
   },
 
   // ── What a player sees ────────────────────────────────────────────────────
@@ -509,13 +548,18 @@ registerPanel('notes', {
     const pc = this._playerPc();
     const all = [...this._myNotes().map(n => ({ n, own: true })),
                  ...this._sharedNotes().map(n => ({ n, own: false }))];
-    if (!all.some(x => x.n.id === this._playerNoteId)) this._playerNoteId = all.length ? all[0].n.id : null;
-    const cur = all.find(x => x.n.id === this._playerNoteId);
+    // What the DM sent to this phone — handouts and whispers. They had a tab
+    // of their own; they are notes from the DM, so they sit with the notes.
+    const hos = (typeof paMyHandouts === 'function' ? paMyHandouts() : [])
+      .map(h => ({ n: { id: 'ho:' + h.id, name: h.title || 'Handout' }, ho: h }));
+    const every = all.concat(hos);
+    if (!every.some(x => x.n.id === this._playerNoteId)) this._playerNoteId = every.length ? every[0].n.id : null;
+    const cur = every.find(x => x.n.id === this._playerNoteId);
     const empty = (title, hint) => typeof emptyState === 'function'
       ? emptyState({ icon: 'i-note', title, hint })
       : '<div class="notes-picker-empty">' + esc(title) + '</div>';
 
-    if (!pc && !all.length){
+    if (!pc && !every.length){
       b.innerHTML = empty('No notes yet', 'Pick your character on the You tab to keep your own notes here.');
       return;
     }
@@ -523,10 +567,17 @@ registerPanel('notes', {
       '<button class="btn small' + (n.id === this._playerNoteId ? ' active' : '') + '" data-player-note="' + esc(n.id) + '"'
       + (own ? '' : ' title="Shared by the DM — read-only"') + '>' + (own ? '' : '👁 ') + esc(n.name) + '</button>').join('');
     const add = pc ? '<button class="btn small primary" data-player-new>+ New note</button>' : '';
-    const list = '<div class="notes-player-list">' + chips + add + '</div>';
+    const fromDm = hos.length ? '<span class="notes-player-group">From the DM</span>' + hos.map(({ n, ho }) =>
+      '<button class="btn small' + (n.id === this._playerNoteId ? ' active' : '') + '" data-player-note="' + esc(n.id) + '">'
+      + (ho.whisper ? '🤫 ' : '📜 ') + esc(n.name) + '</button>').join('') : '';
+    const list = '<div class="notes-player-list">' + chips + add + fromDm + '</div>';
 
     let body;
-    if (!cur){
+    if (cur && cur.ho){
+      body = '<div class="notes-editor-head"><span class="notes-file-title notes-file-title-ro">' + esc(cur.n.name) + '</span>'
+        + '<button class="btn small" data-pa-ho="' + esc(cur.ho.id) + '">Show it big</button></div>'
+        + '<div class="notes-ho">' + (typeof paHandoutBody === 'function' ? paHandoutBody(cur.ho) : esc(cur.ho.text || '')) + '</div>';
+    } else if (!cur){
       body = empty('No notes yet', 'Tap “+ New note” to start one. Your DM can read your notes; other players can’t.');
     } else if (cur.own){
       body = '<div class="notes-editor-head">'
@@ -634,6 +685,7 @@ registerPanel('notes', {
             <span style="flex:1"></span>
             <button class="btn icon-btn" data-act="add-folder" title="New folder">${ICO('i-folder')}<span class="tb-plus">+</span></button>
             <button class="btn icon-btn" data-act="add-file" title="New file">${ICO('i-note')}<span class="tb-plus">+</span></button>
+            <button class="btn icon-btn" data-act="notes-sent" title="Sent to players — the handouts on their phones">📜</button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
           <div class="notes-tree-body">${this._renderTree(tree, null, 0)}</div>
@@ -726,6 +778,7 @@ registerPanel('notes', {
               ${chromiumOnly?'<span class="tile-coming">Chromium only</span>':''}
             </button>
           </div>
+          <button class="btn notes-picker-sent" data-act="notes-sent" title="The handouts on the players' phones">📜 Sent to players</button>
         </aside>
         <div class="notes-picker-empty">Select a note source on the left to begin.</div>
       </div>`;
@@ -751,6 +804,7 @@ registerPanel('notes', {
             <span style="flex:1"></span>
             <button class="btn icon-btn" data-act="add-folder" title="New folder">${ICO('i-folder')}<span class="tb-plus">+</span></button>
             <button class="btn icon-btn" data-act="add-file" title="New file">${ICO('i-note')}<span class="tb-plus">+</span></button>
+            <button class="btn icon-btn" data-act="notes-sent" title="Sent to players — the handouts on their phones">📜</button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
           ${conflictBanner}
@@ -801,6 +855,7 @@ registerPanel('notes', {
           >${trHidden ? '☰' : '⇤'}</button>
         <input class="notes-file-title" type="text" value="${esc(file.name)}" data-act="rename-inline">
         <span class="notes-file-tag">MARKDOWN</span>
+        <button class="btn small" data-act="notes-send" title="Send this note to the players' phones — everyone, some of them, or one">📜 Send…</button>
         <button class="btn small notes-share-btn${file.shared ? ' active' : ''}" data-act="notes-share"
           title="${file.shared
             ? 'Players can read this note. Click to hide it from them.'
@@ -1232,6 +1287,8 @@ registerPanel('notes', {
     // Top-level add buttons
     b.querySelector('[data-act="add-folder"]')?.addEventListener('click', e => { e.stopPropagation(); this._addFolder(null); });
     b.querySelector('[data-act="add-file"]')  ?.addEventListener('click', e => { e.stopPropagation(); this._addFile(null); });
+    b.querySelector('[data-act="notes-sent"]')?.addEventListener('click', e => { e.stopPropagation(); this.showSent(true); });
+    b.querySelector('[data-act="notes-send"]')?.addEventListener('click', e => { e.stopPropagation(); this._sendNote(this._selected()); });
 
     // Conflict banner — opens the per-file resolve modal for the first
     // pending conflict. After resolution, fresh conflicts (if any remain)

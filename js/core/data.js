@@ -73,7 +73,6 @@ const DEFAULT_LAYOUT = {
   bestiary:    {x:140, y:90,  w:520, h:620, open:false, minimized:false, z:12},
   // Books and Adventures, as two tabs of one reader (js/panels/library.js).
   library:     {x:160, y:100, w:880, h:660, open:false, minimized:false, z:13},
-  handouts:    {x:220, y:90,  w:520, h:600, open:false, minimized:false, z:15},
 };
 
 // Panels that now live inside another window. Each still exists — Books,
@@ -87,6 +86,7 @@ const SKT_PANEL_HOST = {
   adventures: 'library',
   time:       'world',
   weather:    'world',
+  handouts:   'notes',
 };
 function sktPanelHost(id){ return SKT_PANEL_HOST[id] || id; }
 // A stored layout (skt-layout-v1, or a workspace's snapshot) written before
@@ -101,6 +101,7 @@ function sktMigrateLayout(l){
     if (h && o.open && !h.open){
       l[host] = { ...h, x: o.x, y: o.y, open: true, minimized: !!o.minimized, z: o.z || h.z };
       if (host === 'library') l[host].tab = old;
+      if (old === 'handouts') l[host].sent = true;
     } else if (h && !l[host]) l[host] = h;
     delete l[old];
   });

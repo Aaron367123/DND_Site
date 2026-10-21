@@ -3749,6 +3749,31 @@
       ok('merged windows: silent', errs.length === before, errs.slice(before).join(' | '));
     }
 
+    // ── One search box: / and 🔍 open Ctrl+K; "See all" opens the full search
+    {
+      try {
+        document.activeElement && document.activeElement.blur && document.activeElement.blur();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true }));
+        await sleep(60);
+        ok('search: / opens the Ctrl+K box', !!document.getElementById('cp-backdrop')
+           && !document.getElementById('search-wrap').classList.contains('open'));
+        const inp = document.getElementById('cp-input');
+        inp.value = 'goblin'; inp.dispatchEvent(new Event('input', { bubbles: true })); await sleep(60);
+        const rows = [...document.querySelectorAll('#cp-list .cp-item')];
+        const last = rows[rows.length - 1];
+        ok('search: its results end with "See all"', !!last && /See all results for .goblin./.test(last.textContent));
+        last.click(); await sleep(150);
+        ok('search: "See all" opens the full search with the query in it',
+           !document.getElementById('cp-backdrop') && document.getElementById('search-wrap').classList.contains('open')
+           && document.getElementById('search-input').value === 'goblin');
+        closeSearch();
+        document.getElementById('float-search-btn').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        await sleep(60);
+        ok('search: the toolbar 🔍 opens the same box', !!document.getElementById('cp-backdrop'));
+      } catch(e){ ok('search: the checks ran to completion', false, e.message); }
+      finally { document.getElementById('cp-backdrop')?.remove(); try { closeSearch(); } catch(e){} }
+    }
+
     // ── The dock says what each icon is ───────────────────────────────────
     {
       const btns = [...document.querySelectorAll('.panel-dock .dock-btn[data-panel]')];
@@ -5245,7 +5270,10 @@
       try {
         openPanel('handouts'); await sleep(250);
         const H = panelDefs.handouts;
-        ok('handouts: the panel is in the dock and opens', !!document.querySelector('.dock-btn[data-panel="handouts"]') && !!H._body);
+        const nw = document.querySelector('.window[data-panel="notes"]');
+        ok('handouts: they open inside Notes, as "Sent to players", with no window of their own',
+           !document.querySelector('.dock-btn[data-panel="handouts"]') && !document.querySelector('.window[data-panel="handouts"]')
+           && !!nw && !!H._body && nw.contains(H._body) && /Sent to players/.test(nw.textContent));
         const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30;
         const img = cv.toDataURL('image/jpeg', 0.7);
         const id = H.send({ title: 'Test letter', text: 'line one\nline two', img, to: 'all' });
@@ -5255,6 +5283,31 @@
         ok('handouts: sending to no one is refused', H.send({ title: 'x', to: [] }) === false);
         const t0 = d.list[0].shownAt; await sleep(15); H.showAgain(id);
         ok('handouts: "Show again" re-announces it', JSON.parse(localStorage.getItem('skt-handouts-v1')).list[0].shownAt > t0);
+        // One "Send to players…": everyone, some, or one.
+        const pcs = state.party.filter(p => !p.foe);
+        ok('notes: every note has "📜 Send…"', /data-act="notes-send"/.test(panelDefs.notes._renderEditor({ name: 'x', content: '' })));
+        const sent = panelDefs.notes._sendNote({ name: 'The innkeeper’s letter', content: 'Meet me at dawn.' }); await sleep(40);
+        const dlg = document.getElementById('ho-send-back');
+        ok('send: a note opens "Send to players", everyone ticked', !!dlg && /innkeeper/.test(dlg.textContent)
+           && dlg.querySelector('#ho-send-all').checked && dlg.querySelectorAll('.ho-send-pc:checked').length === pcs.length);
+        const all = dlg.querySelector('#ho-send-all'); all.checked = false; all.dispatchEvent(new Event('change'));
+        const one = dlg.querySelector('.ho-send-pc[value="' + pcs[1].id + '"]'); one.checked = true; one.dispatchEvent(new Event('change'));
+        dlg.querySelector('[data-ho-send="go"]').click();
+        const sid = await sent;
+        const top = JSON.parse(localStorage.getItem('skt-handouts-v1')).list[0];
+        ok('send: to one player, with the note’s text', !!sid && top.id === sid && JSON.stringify(top.to) === JSON.stringify([pcs[1].id])
+           && top.text === 'Meet me at dawn.' && /innkeeper/.test(top.title));
+        H._body.querySelector('[data-ho="send"]') && (H._draft.title = 'Map', H._render());
+        H._body.querySelector('[data-ho="send"]').click(); await sleep(30);
+        ok('send: the composer uses the same dialog', !!document.getElementById('ho-send-back'));
+        document.querySelector('#ho-send-back [data-ho-send="cancel"]').click(); await sleep(20);
+        ok('send: Cancel sends nothing', !document.getElementById('ho-send-back')
+           && JSON.parse(localStorage.getItem('skt-handouts-v1')).list[0].id === sid);
+        const ml = sktMigrateLayout({ handouts: { x: 7, y: 8, w: 500, h: 600, open: true, z: 4 } });
+        ok('layout: a saved layout with Handouts open opens Notes on "Sent to players"',
+           ml.notes && ml.notes.open && ml.notes.sent === true && ml.notes.x === 7 && !('handouts' in ml), JSON.stringify(ml));
+        panelDefs.notes.showSent(false); await sleep(60);
+        ok('notes: "← Notes" goes back and lets the handouts go', !H._body && !panelDefs.notes._sent);
       } catch(e){ ok('handouts: the checks ran to completion', false, e.message); }
       finally {
         if (h0 == null) localStorage.removeItem('skt-handouts-v1'); else localStorage.setItem('skt-handouts-v1', h0);
@@ -5930,13 +5983,19 @@
             _applyRemoteKey('skt-handouts-v1', payload); await sleep(60);
             const pop = document.getElementById('pa-handout');
             ok('player: a new handout pops up', !!pop && /For everyone/.test(pop.textContent) && /<br>/.test(pop.innerHTML));
-            ok('player: a Handouts tab appears', paVisibleTabs().some(t => t.id === 'handouts'));
+            ok('player: no Handouts tab — it is in Notes now', !paVisibleTabs().some(t => t.id === 'handouts'));
             pop && pop.querySelector('.pa-ho-close').click(); await sleep(20);
             _applyRemoteKey('skt-handouts-v1', payload + ' '); await sleep(40);
             ok('player: and does not pop up again once closed', !document.getElementById('pa-handout'));
-            paTab = 'handouts'; paRender();
-            const titles = [...document.querySelectorAll('.pa-ho-item b')].map(b => b.textContent);
-            ok('player: the tab lists theirs, not anyone else', titles.includes('For everyone') && titles.includes('Last week') && !titles.includes('Not yours'));
+            paTab = 'notes'; paRender(); await sleep(300);
+            const chips = [...document.querySelectorAll('[data-player-note^="ho:"]')].map(b => b.textContent);
+            ok('player: Notes lists theirs under "From the DM", not anyone else’s',
+               /From the DM/.test(document.getElementById('pa-screen').textContent)
+               && chips.some(t => /For everyone/.test(t)) && chips.some(t => /Last week/.test(t)) && !chips.some(t => /Not yours/.test(t)), JSON.stringify(chips));
+            document.querySelector('[data-player-note="ho:ho_t1"]').click(); await sleep(60);
+            ok('player: opening one shows it', /a\s*b/.test((document.querySelector('.notes-ho') || {}).textContent || ''));
+            document.querySelector('.notes-ho') && document.querySelector('[data-pa-ho="ho_t1"]').click(); await sleep(30);
+            ok('player: "Show it big" pops it up again', !!document.getElementById('pa-handout'));
           }
         } catch(e){ ok('player: the handout checks ran to completion', false, e.message); }
         finally {

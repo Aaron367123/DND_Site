@@ -5108,3 +5108,17 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .window-body.world-host{overflow:hidden}
 .world-root{display:flex;flex-wrap:wrap;align-content:flex-start;height:100%;overflow-y:auto}
 .world-part{flex:1 1 280px;min-width:0;height:auto !important;overflow:visible !important}
+/* Notes: "Sent to players" (the handouts) and the player's "From the DM" */
+.notes-sent{display:flex;flex-direction:column;height:100%;min-height:0}
+.notes-sent-body{flex:1;min-height:0;overflow:auto;position:relative}
+.notes-picker-sent{margin:12px;align-self:stretch}
+.notes-player-group{width:100%;font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-top:6px}
+.notes-ho{padding:12px;overflow:auto;flex:1;min-height:0}
+.notes-ho .pa-ho-img{max-width:100%;border-radius:var(--r-sm)}
+/* "Send to players…" */
+.ho-send{width:420px;max-width:94vw}
+.ho-send-what{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;margin:6px 0 10px}
+.ho-send-what .ho-thumb{display:block;max-height:90px;margin-top:6px}
+.ho-send-text{color:var(--text-muted);font-size:var(--fs-xs);white-space:pre-wrap;margin-top:4px;max-height:90px;overflow:hidden}
+.ho-send-to{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:6px}
+.ho-send-all{width:100%;font-weight:600}
