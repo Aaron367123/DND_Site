@@ -1463,7 +1463,8 @@
           const after = names();
           ok('npcgen: saving an NPC keeps the rest of the library',
              after.includes('ZZ Keep Me') && after.length === 2, JSON.stringify(after));
-        } finally {
+        } catch(e){ ok('npcgen: the save check ran to completion', false, e.message); }
+        finally {
           window.showToast = rt;
           if (N0 != null) localStorage.setItem('skt-npcs-v2', N0); else localStorage.removeItem('skt-npcs-v2');
           L._npcs = mem0;
@@ -3774,11 +3775,138 @@
       finally { document.getElementById('cp-backdrop')?.remove(); try { closeSearch(); } catch(e){} }
     }
 
+    // ── The NPC generator lives in the NPC Library ────────────────────────
+    {
+      const before = errs.length;
+      const n0 = localStorage.getItem('skt-npcs-v2');
+      const rt = window.showToast; window.showToast = () => {};
+      try {
+        const L = panelDefs.npclib, G = panelDefs.npcgen;
+        ok('npc: no NPC Generator button in the dock', !document.querySelector('.dock-btn[data-panel="npcgen"]'));
+        openPanel('npcgen'); await sleep(300);
+        const w = document.querySelector('.window[data-panel="npclib"]');
+        ok('npc: opening the generator opens the Library, generating in its right-hand pane',
+           !!w && !document.querySelector('.window[data-panel="npcgen"]') && L._gen === true
+           && !!G._body && w.querySelector('.npclib-right').contains(G._body));
+        const count0 = L._npcs.length;
+        G._body.querySelector('#npcgen-bulk').click(); await sleep(150);
+        ok('npc: +5 drops five into the list and keeps generating', L._npcs.length === count0 + 5 && L._gen === true && !!G._body);
+        G._body.querySelector('#npcgen-roll').click(); await sleep(60);
+        const name = G._npc.name;
+        G._body.querySelector('#npcgen-save').click(); await sleep(200);
+        const sel = L._selected();
+        ok('npc: Keep files it and opens it in the editor', L._npcs.length === count0 + 6 && !!sel && sel.name === name
+           && L._gen === false && !G._body && !!w.querySelector('.npclib-detail'));
+        w.querySelector('#npclib-gen').click(); await sleep(150);
+        ok('npc: 🎲 in the toolbar starts generating again', L._gen === true && !!G._body);
+        w.querySelector('.npclib-card').click(); await sleep(150);
+        ok('npc: picking an NPC from the list leaves the generator', L._gen === false && !G._body);
+        const ml = sktMigrateLayout({ npcgen: { x: 3, y: 4, w: 480, h: 540, open: true, z: 2 } });
+        ok('layout: a saved layout with the generator open opens the Library', ml.npclib && ml.npclib.open && !('npcgen' in ml));
+      } catch(e){ ok('npc: the checks ran to completion', false, e.message); }
+      finally {
+        window.showToast = rt;
+        try { closePanel('npclib'); } catch(e){}
+        _remoteUpdate = true;
+        try { if (n0 == null) localStorage.removeItem('skt-npcs-v2'); else localStorage.setItem('skt-npcs-v2', n0); }
+        finally { _remoteUpdate = false; }
+        panelDefs.npclib._npcs = null; panelDefs.npclib._gen = false;
+      }
+      ok('npc: silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
+    // ── One monster picker: combat, bestiary, encounter builder ───────────
+    if (typeof _5eLoaded !== 'undefined' && _5eLoaded){
+      const before = errs.length;
+      const K0 = JSON.stringify(state.combatants), B0 = localStorage.getItem('skt-bestiary-v1');
+      const E = panelDefs.encounter, M0 = JSON.stringify(E._monsters || []), EN0 = localStorage.getItem('skt-enc-v1');
+      const rt = window.showToast; window.showToast = () => {};
+      const hid0 = window.SKT_IS_SOURCE_HIDDEN;
+      const rowFor = (name, src) => [...document.querySelectorAll('#mp-list .mp-row')].find(r =>
+        r.querySelector('.mp-row-name').firstChild.textContent.trim() === name
+        && (!src || (r.querySelector('.detail-source-badge') || {}).textContent === (typeof _formatSource === 'function' ? _formatSource(src) : src)));
+      const type = async (q) => { const i = document.getElementById('mp-q'); i.value = q; i.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200); };
+      try {
+        // Combat.
+        openPanel('combat'); await sleep(200);
+        const C = panelDefs.combat;
+        const n0 = state.combatants.length;
+        C._openMonsterPicker(); await sleep(80);
+        const mp = document.getElementById('mp-back');
+        ok('picker: the Combat Tracker opens the shared picker', !!mp && /Add to combat/.test(mp.textContent) && !!mp.querySelector('#mp-n'));
+        await type('goblin');
+        const cr = mp.querySelector('#mp-cr'); cr.value = '1/4'; cr.dispatchEvent(new Event('change')); await sleep(60);
+        const crs = [...mp.querySelectorAll('.mp-row-cr')].map(e => e.textContent);
+        ok('picker: the CR filter narrows the list', crs.length > 0 && crs.every(t => t === 'CR 1/4'), crs.slice(0, 4).join(','));
+        const row = rowFor('Goblin', 'MM') || rowFor('Goblin');
+        row.click(); await sleep(40);
+        ok('picker: choosing one shows it beside the list', /Goblin/.test(mp.querySelector('#mp-preview').textContent)
+           && /AC/.test(mp.querySelector('#mp-preview').textContent));
+        mp.querySelector('#mp-n').value = '3';
+        mp.querySelector('[data-mp="add"]').click(); await sleep(150);
+        const added = state.combatants.slice(n0);
+        ok('picker: "how many" adds that many to the fight, and it stays open for the next',
+           added.length === 3 && added.every(c => /^Goblin/.test(c.name)) && !!document.getElementById('mp-back')
+           && /Added 3 × Goblin/.test(document.getElementById('mp-status').textContent), added.map(c => c.name).join(','));
+        // Hidden books, by the caller's scope.
+        const count = () => (document.getElementById('mp-count').textContent.match(/(\d+) match/) || [])[1];
+        cr.value = ''; cr.dispatchEvent(new Event('change')); await sleep(60);
+        const all = +count();
+        mp.querySelector('[data-mp="close"]').click(); await sleep(30);
+        window.SKT_IS_SOURCE_HIDDEN = (scope, src) => scope === 'encounter' && src === 'MM';
+        C._openMonsterPicker(); await sleep(80); await type('goblin');
+        const fewer = +count();
+        ok('picker: books hidden in the Books panel stay hidden when adding to a fight', fewer < all && !rowFor('Goblin', 'MM'), all + ' → ' + fewer);
+        document.querySelector('#mp-back [data-mp="close"]').click(); await sleep(30);
+        window.SKT_IS_SOURCE_HIDDEN = hid0;
+        ok('picker: Done closes it', !document.getElementById('mp-back'));
+
+        // Bestiary.
+        openPanel('bestiary'); await sleep(250);
+        const B = panelDefs.bestiary;
+        const b0 = B._data.monsters.length;
+        B._openMonsterPicker(); await sleep(80);
+        ok('picker: the Bestiary opens the same picker', !!document.getElementById('mp-back') && /Add to bestiary/.test(document.getElementById('mp-back').textContent));
+        await type('owlbear'); (rowFor('Owlbear', 'MM') || rowFor('Owlbear')).click();
+        document.querySelector('#mp-back [data-mp="add"]').click(); await sleep(100);
+        const nb = B._data.monsters[B._data.monsters.length - 1];
+        ok('picker: and adds to the bestiary', B._data.monsters.length === b0 + 1 && nb.name === 'Owlbear' && !!nb.slug);
+        document.querySelector('#mp-back [data-mp="close"]').click(); await sleep(30);
+        closePanel('bestiary');
+
+        // Encounter builder.
+        openPanel('encounter'); await sleep(250); E._monsters = []; E._render();
+        E._body.querySelector('#enc-add').click(); await sleep(80);
+        ok('picker: the Encounter Builder opens the same picker', /Add to encounter/.test((document.getElementById('mp-back') || {}).textContent || ''));
+        await type('goblin'); (rowFor('Goblin', 'MM') || rowFor('Goblin')).click();
+        document.querySelector('#mp-n').value = '2'; document.querySelector('#mp-back [data-mp="add"]').click(); await sleep(80);
+        document.querySelector('#mp-n').value = '1'; document.querySelector('#mp-back [data-mp="add"]').click(); await sleep(80);
+        ok('picker: adding the same monster again adds to its row', E._monsters.length === 1 && E._monsters[0].count === 3, JSON.stringify(E._monsters));
+        document.querySelector('#mp-back [data-mp="close"]').click(); await sleep(30);
+        const names = E._searchPool('goblin').map(m => m.name + '|' + m._source);
+        const shared = sktMonsterPool('encounter').filter(d => sktMonsterMatches(d, 'goblin')).slice(0, 30).map(d => d.name + '|' + d._source);
+        ok('picker: one search rule everywhere', JSON.stringify(names) === JSON.stringify(shared) && names.length > 3);
+      } catch(e){ ok('picker: the checks ran to completion', false, e.message); }
+      finally {
+        window.SKT_IS_SOURCE_HIDDEN = hid0; window.showToast = rt;
+        document.getElementById('mp-back')?.remove();
+        state.combatants = JSON.parse(K0); E._monsters = JSON.parse(M0); save();
+        _remoteUpdate = true;
+        try {
+          if (B0 == null) localStorage.removeItem('skt-bestiary-v1'); else localStorage.setItem('skt-bestiary-v1', B0);
+          if (EN0 == null) localStorage.removeItem('skt-enc-v1'); else localStorage.setItem('skt-enc-v1', EN0);
+        } finally { _remoteUpdate = false; }
+        panelDefs.bestiary._data = null;
+        ['encounter', 'bestiary', 'combat'].forEach(id => { try { closePanel(id); } catch(e){} });
+      }
+      ok('picker: silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
     // ── The dock says what each icon is ───────────────────────────────────
     {
       const btns = [...document.querySelectorAll('.panel-dock .dock-btn[data-panel]')];
       ok('dock: every panel button carries its name',
-         btns.length >= 14 && btns.every(b => b.dataset.label && b.querySelector('.dock-label')),
+         btns.length >= 12 && btns.every(b => b.dataset.label && b.querySelector('.dock-label')),
          btns.filter(b => !b.dataset.label).map(b => b.dataset.panel).join(','));
       ok('dock: no native tooltip to double up on the instant label',
          btns.every(b => !b.hasAttribute('title') && b.getAttribute('aria-label')));

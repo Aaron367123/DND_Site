@@ -1,6 +1,8 @@
 // ============================================================
-// NPC GENERATOR PANEL
+// NPC GENERATOR — the 🎲 pane of the NPC Library
 // ============================================================
+// No window of its own: npc-library.js mounts it in its right-hand pane, and
+// SKT_PANEL_HOST (data.js) sends openPanel('npcgen') there.
 const NPC_GEN_DATA = {
   races:['Human','Elf','Half-Elf','Dwarf','Halfling','Gnome','Tiefling','Dragonborn','Half-Orc','Goliath','Tabaxi','Firbolg','Aasimar'],
   genders:['Male','Female','Non-binary'],
@@ -108,7 +110,7 @@ registerPanel('npcgen',{
     html+='<div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
       +'<button class="btn primary" id="npcgen-roll" style="flex:1;min-width:140px" title="'+(anyLocked?'Re-roll only unlocked fields':'Re-roll every field')+'">'+ICO('i-dice')+' '+(anyLocked?'Reroll unlocked':'Generate NPC')+'</button>'
       +'<button class="btn" id="npcgen-bulk" style="flex-shrink:0" title="Generate 5 NPCs straight into the NPC Library">+5 to Library</button>'
-      +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Save to NPC Library and open the entry">'+ICO('i-save')+' Save</button>'
+      +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Keep this NPC in the library and open it">'+ICO('i-save')+' Keep</button>'
       +'<button class="btn" id="npcgen-combat" style="flex-shrink:0" title="Add to combat">⚔ Combat</button>'
     +'</div>';
 
@@ -248,7 +250,7 @@ registerPanel('npcgen',{
     // Push one entry into the library, persisting under v2 (the library's
     // current schema). Mounts the panel if it's not already open so the user
     // sees the new entry immediately, and selects it for editing.
-    const saveOneToLibrary = (g) => {
+    const saveOneToLibrary = (g, open) => {
       const lib = panelDefs.npclib;
       const entry = toLibraryEntry(g);
       if (lib){
@@ -259,7 +261,7 @@ registerPanel('npcgen',{
         if (typeof lib._ensureLoaded === 'function') lib._ensureLoaded();
         if (!Array.isArray(lib._npcs)) lib._npcs = [];
         lib._npcs.unshift(entry);
-        lib._selectedId = entry.id;
+        if (open){ lib._selectedId = entry.id; lib._gen = false; }
         // Re-hide the secret: the generated NPC carries one, and the library's
         // reveal flag is panel-global — leaving it true would expose the new
         // entry's secret on render without an explicit Reveal click.
@@ -283,10 +285,10 @@ registerPanel('npcgen',{
 
     b.querySelector('#npcgen-save').addEventListener('click',()=>{
       if(!n)return;
-      const entry = saveOneToLibrary(n);
-      // Open the NPC Library panel so the user lands in the editor.
-      if (typeof openPanel === 'function' && !layout.npclib?.open) openPanel('npclib');
-      if (typeof showToast === 'function') showToast(entry.name + ' saved · opened Library');
+      // Kept: filed in the library and opened there, in place of this pane.
+      const entry = saveOneToLibrary(n, true);
+      this._npc = null;
+      if (typeof showToast === 'function') showToast(entry.name + ' kept in the library');
     });
 
     // Bulk generate — respects filters; ignores locks so each NPC is fully
@@ -296,8 +298,7 @@ registerPanel('npcgen',{
       for (let k = 0; k < N; k++){
         saveOneToLibrary(genNPC(this._filters));
       }
-      if (typeof openPanel === 'function' && !layout.npclib?.open) openPanel('npclib');
-      if (typeof showToast === 'function') showToast('Added ' + N + ' NPCs to Library');
+      if (typeof showToast === 'function') showToast('Added ' + N + ' NPCs to the library');
     });
 
     b.querySelector('#npcgen-combat').addEventListener('click',()=>{

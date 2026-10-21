@@ -52,6 +52,24 @@ registerPanel('npclib', {
   // click 👁 Reveal to see it. Reset to hidden whenever a different NPC
   // is selected so a fresh click doesn't expose the previous reveal.
   _secretRevealed:false,
+  // Showing the generator in the right-hand pane instead of an NPC. It was a
+  // window of its own whose every NPC was headed here anyway — Save filed it
+  // in this library and opened it — so it lives here now: 🎲 in the toolbar,
+  // Keep files the NPC and opens it in the editor, +5 drops a crowd straight
+  // into the list. The generator is the panel it always was (npcgen),
+  // mounted into the pane; openPanel('npcgen') lands here.
+  _gen:false,
+  select(id){
+    if (id === 'npcgen'){ this._gen = true; if (this._body) this._render(); }
+  },
+  generate(on){
+    this._gen = on !== false;
+    this._render();
+  },
+  _unmountGen(){
+    const G = panelDefs.npcgen;
+    if (G && G._body){ try { G.unmount(); } catch(e){} }
+  },
 
   // Load the library from storage if it hasn't been yet. mount() uses this,
   // and so must anything that adds to the library from OUTSIDE the panel:
@@ -139,6 +157,7 @@ registerPanel('npclib', {
     document.removeEventListener('mousemove', this._onDividerMove);
     document.removeEventListener('mouseup', this._onDividerUp);
     this._dividerDrag = null;
+    this._unmountGen();
     this._body = null;
   },
 
@@ -466,6 +485,7 @@ registerPanel('npclib', {
 
   _render(){
     const b = this._body; if (!b) return;
+    this._unmountGen();
     const groups = _npcGroups(this._npcs);
     const sel = this._selected();
     const q = this._searchQ.toLowerCase();
@@ -485,6 +505,7 @@ registerPanel('npclib', {
         <div class="npclib-toolbar">
           <input type="search" id="npclib-search" placeholder="Search NPCs..." value="${esc(this._searchQ)}">
           <button class="icon-btn npclib-tool-btn ${this._bulkMode?'active':''}" id="npclib-bulk-toggle" title="${this._bulkMode?'Exit bulk-select mode':'Bulk-select mode (checkboxes + bulk actions)'}">${this._bulkMode?'✓':'☐'}</button>
+          <button class="icon-btn npclib-tool-btn ${this._gen?'active':''}" id="npclib-gen" title="${this._gen?'Back to the selected NPC':'Generate an NPC — race, role, quirks, a secret'}">🎲</button>
           <button class="icon-btn npclib-tool-btn" id="npclib-add" title="New NPC">+</button>
         </div>
         <div class="npclib-groups" id="npclib-groups">
@@ -494,11 +515,14 @@ registerPanel('npclib', {
       </div>
       <div class="npclib-divider" id="npclib-divider" title="Drag to resize"></div>
       <div class="npclib-right">
-        ${sel ? this._renderDetail(sel) : '<div class="empty-state" style="padding:30px">Select an NPC, or click + to add one.</div>'}
+        ${this._gen ? '<div class="npclib-gen"></div>'
+          : sel ? this._renderDetail(sel) : '<div class="empty-state" style="padding:30px">Select an NPC, click + to add one, or 🎲 to generate one.</div>'}
       </div>
     </div>`;
     this._wire();
     this._wireDivider();
+    const genHost = b.querySelector('.npclib-gen');
+    if (genHost && panelDefs.npcgen) panelDefs.npcgen.mount(genHost);
     // Restore the resized heights only if the SAME NPC is still showing.
     if (this._fieldH && this._fieldH.id === this._selectedId){
       const da = b.querySelector('.npclib-desc'), sa = b.querySelector('.npclib-secret');
@@ -631,7 +655,8 @@ registerPanel('npclib', {
     });
 
     // Add NPC
-    b.querySelector('#npclib-add').addEventListener('click', () => this._newNpc());
+    b.querySelector('#npclib-add').addEventListener('click', () => { this._gen = false; this._newNpc(); });
+    b.querySelector('#npclib-gen').addEventListener('click', () => this.generate(!this._gen));
 
     // Bulk-mode toggle — flips per-card checkboxes on/off and reveals the
     // bulk action bar. Exiting clears any current selection.
@@ -787,6 +812,7 @@ registerPanel('npclib', {
       // NPC's reveal state to this one (player might be looking at the screen).
       if (this._selectedId !== c.dataset.id) this._secretRevealed = false;
       this._selectedId = c.dataset.id;
+      this._gen = false;
       this._render();
     }));
   },

@@ -7,7 +7,7 @@
 //   with Ctrl+Shift+R, or clear site cache in browser settings).
 console.log('[app] build 20260524e loaded');
 function initPanels(){
-  ['combat','party','shop','notes','battlemap','npclib','npcgen','loot','encounter','soundboard','world','bestiary','library'].forEach(id=>{
+  ['combat','party','shop','notes','battlemap','npclib','loot','encounter','soundboard','world','bestiary','library'].forEach(id=>{
     const def=panelDefs[id];const b=document.getElementById('panel-body-'+id);
     if(b&&def)def.mount(b);
   });

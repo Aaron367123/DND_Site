@@ -1215,75 +1215,17 @@ registerPanel('combat',{
     });
   },
 
-  // Open a monster picker that searches the loaded 5e bestiary. Shares the
-  // same picker UI flow as the Bestiary panel but adds the chosen monster
-  // straight into combat.
+  // The shared monster picker (js/features/monster-picker.js), adding
+  // straight into the fight — as many as asked, each with its own number.
   _openMonsterPicker(){
-    if (typeof _5eData === 'undefined' || !_5eLoaded){
-      showToast('5e data still loading — try again in a moment');
-      return;
-    }
-    const all = _5eData.filter(d=>d.cat==='monster').sort((a,b)=>a.name.localeCompare(b.name));
-    const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
-    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:90vw">
-      <h3>Add Monster to Combat</h3>
-      <input type="search" id="cmb-pick-search" placeholder="Search 5e monsters…" autocomplete="off"
-        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:var(--fs-md);margin-bottom:10px">
-      <div id="cmb-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
-      <div id="cmb-pick-count" style="font-size:var(--fs-sm);color:var(--text-muted);padding:6px 2px 0"></div>
-      <div class="modal-actions"><button class="btn" id="cmb-pick-close">Close</button></div>
-    </div>`;
-    document.body.appendChild(backdrop);
-    const list = backdrop.querySelector('#cmb-pick-list');
-    const countEl = backdrop.querySelector('#cmb-pick-count');
-    const LIMIT = 200;
-    // Rows are looked up by their position in THIS pool, not by slug. 685 of
-    // the 4454 monster slugs are shared across sources (tressym appears in
-    // both BGDIA and SKT, space-hamster in BAM and WDMM, …), so `find` by slug
-    // returned whichever came first and clicking the second row added the
-    // other book's stat block. The source badge already tells them apart on
-    // screen; only the lookup was ambiguous.
-    let pool = [];
-    const renderList = q=>{
-      const qn=(q||'').toLowerCase().trim();
-      const matches = qn ? all.filter(d=>d.name.toLowerCase().includes(qn)||(d.meta||'').toLowerCase().includes(qn)||(d._source||'').toLowerCase().includes(qn)||(_formatSource(d._source)||'').toLowerCase().includes(qn)) : all;
-      pool = matches.slice(0, LIMIT);
-      list.innerHTML = pool.map((d, k)=>`<div class="bestiary-pick-row" data-i="${k}">
-        <div class="bestiary-pick-left">
-          <span class="bestiary-pick-name">${esc(d.name)}</span>
-          ${d._source ? `<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>` : ''}
-        </div>
-        <span class="bestiary-pick-meta">${esc(d.meta||'')}</span>
-      </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">No matches</div>';
-      // Say when the list is cut off. It always was — with no query this shows
-      // 200 of 4454, and "dragon" alone matches 294 — but nothing on screen
-      // admitted it, so an absent monster looked like a missing monster.
-      countEl.textContent = matches.length > LIMIT
-        ? `Showing first ${LIMIT} of ${matches.length} matches — keep typing to narrow it down`
-        : `${matches.length} match${matches.length === 1 ? '' : 'es'}`;
-    };
-    renderList('');
-    // Escape on document, not the backdrop — a plain div isn't focusable, so
-    // backdrop keydown only fired while focus sat inside the modal. close()
-    // removes the handler so repeated opens don't stack listeners.
-    const onKey = e=>{ if (e.key==='Escape') close(); };
-    const close = ()=>{ document.removeEventListener('keydown', onKey); backdrop.remove(); };
-    document.addEventListener('keydown', onKey);
-    let searchTimer = null;
-    backdrop.querySelector('#cmb-pick-search').addEventListener('input', e=>{
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(()=>renderList(e.target.value), 150);
+    if (typeof sktPickMonster !== 'function') return;
+    sktPickMonster({
+      title: 'Add monsters to the fight', action: 'Add to combat', scope: 'encounter', count: true,
+      onPick: (d, n) => {
+        for (let k = 0; k < n; k++) this.addMonster(d);
+        return 'Added ' + (n > 1 ? n + ' × ' : '') + d.name + ' to the fight';
+      },
     });
-    backdrop.querySelector('#cmb-pick-close').addEventListener('click', close);
-    backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
-    list.addEventListener('click', e=>{
-      const row = e.target.closest('.bestiary-pick-row'); if (!row) return;
-      const d = pool[parseInt(row.dataset.i)]; if (!d) return;
-      this.addMonster(d);
-      close();
-    });
-    setTimeout(()=>backdrop.querySelector('#cmb-pick-search').focus(), 30);
   },
 
   _remove(i){this._removeCombatantAt(i);save();this._render();},

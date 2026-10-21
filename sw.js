@@ -34,12 +34,12 @@
  */
 'use strict';
 
-const BUILD = '87dcd79081';
+const BUILD = 'a19168b4a8';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=b746d1e643',
+  'styles/main.css?v=50a4b30696',
   'js/core/errors.js?v=67c70f2e1d',
-  'js/core/data.js?v=6cf6e1829d',
+  'js/core/data.js?v=19aec68f7f',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
@@ -48,8 +48,9 @@ const PRECACHE = [
   'js/core/state.js?v=f4037b7f2e',
   'js/core/undo.js?v=002504c5f3',
   'js/features/roll-requests.js?v=bceb453f6d',
-  'js/core/window-manager.js?v=4ed8d322a7',
-  'js/panels/combat.js?v=fda2478786',
+  'js/features/monster-picker.js?v=7030540ec7',
+  'js/core/window-manager.js?v=8671eac73a',
+  'js/panels/combat.js?v=9d2fc26c04',
   'js/panels/attacks.js?v=cbee1aeeb4',
   'js/generated/reactions.js?v=faa668dc18',
   'js/generated/rules.js?v=8efb8beae9',
@@ -62,15 +63,15 @@ const PRECACHE = [
   'js/panels/notes.js?v=44f7738cbc',
   'js/panels/handouts.js?v=8cf9b0e9d8',
   'js/panels/battlemap.js?v=32e7b0ba78',
-  'js/panels/npc-library.js?v=1a0f254270',
-  'js/panels/bestiary.js?v=bc58b530c6',
+  'js/panels/npc-library.js?v=86b7e3715c',
+  'js/panels/bestiary.js?v=8b3658dc0a',
   'js/panels/content-panel.js?v=235e0b5a0d',
   'js/panels/adventures.js?v=adbf195007',
   'js/panels/books.js?v=beba2c9cfd',
   'js/panels/library.js?v=d41e1e85e4',
-  'js/panels/npc-generator.js?v=825e415cae',
+  'js/panels/npc-generator.js?v=423e1d0e4f',
   'js/panels/loot.js?v=cd74ce012b',
-  'js/panels/encounter.js?v=2f74610fd5',
+  'js/panels/encounter.js?v=45cc488342',
   'js/panels/soundboard.js?v=6ee51d8589',
   'js/panels/weather.js?v=ab1bd498ab',
   'js/panels/timetracker.js?v=225806d433',
@@ -80,7 +81,7 @@ const PRECACHE = [
   'js/features/backup.js?v=d1b9766012',
   'js/ui/settings.js?v=4b37f688c6',
   'js/ui/campaign-ui.js?v=87872361dd',
-  'js/ui/context-menu.js?v=5304face65',
+  'js/ui/context-menu.js?v=12b9a2aa5d',
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=59c130cd5f',
   'js/ui/command-palette.js?v=e2b9bff55e',
@@ -94,7 +95,7 @@ const PRECACHE = [
   'js/sync/presence.js?v=3c6820c9d8',
   'js/ui/tutorial.js?v=e47e670b86',
   'js/ui/onboarding.js?v=42199a671a',
-  'js/app.js?v=8dc469a0fe',
+  'js/app.js?v=dae76711ea',
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build

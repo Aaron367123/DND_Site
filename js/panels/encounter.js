@@ -14,22 +14,9 @@ const CR_XP = _R.crXp || {};
 // The 2024 system drops the encounter multiplier entirely — you just spend the
 // summed budget on monsters (raw XP), which reads far closer to actual play.
 const XP_BUDGET_2024 = _R.xpBudget2024 || [];
-// Sample monster list for encounter search
-const MONSTER_LIST=[
-  {name:'Goblin',cr:'1/4',hp:7,ac:15},{name:'Orc',cr:'1/2',hp:15,ac:13},{name:'Hobgoblin',cr:'1/2',hp:11,ac:18},
-  {name:'Bugbear',cr:'1',hp:27,ac:16},{name:'Ogre',cr:'2',hp:59,ac:11},{name:'Bandit Captain',cr:'2',hp:65,ac:15},
-  {name:'Owlbear',cr:'3',hp:59,ac:13},{name:'Werewolf',cr:'3',hp:84,ac:11},{name:'Troll',cr:'5',hp:84,ac:15},
-  {name:'Hill Giant',cr:'5',hp:105,ac:13},{name:'Young Red Dragon',cr:'10',hp:178,ac:18},{name:'Stone Giant',cr:'7',hp:126,ac:17},
-  {name:'Frost Giant',cr:'8',hp:138,ac:15},{name:'Fire Giant',cr:'9',hp:162,ac:18},{name:'Cloud Giant',cr:'9',hp:200,ac:14},
-  {name:'Storm Giant',cr:'13',hp:230,ac:16},{name:'Adult Red Dragon',cr:'17',hp:256,ac:19},{name:'Iymrith',cr:'22',hp:481,ac:22},
-  {name:'Gnoll',cr:'1/2',hp:22,ac:15},{name:'Skeleton',cr:'1/4',hp:13,ac:13},{name:'Zombie',cr:'1/4',hp:22,ac:8},
-  {name:'Wolf',cr:'1/4',hp:11,ac:13},{name:'Dire Wolf',cr:'1',hp:37,ac:14},{name:'Mammoth',cr:'6',hp:126,ac:13},
-  {name:'Kraken',cr:'23',hp:472,ac:18},{name:'Wyvern',cr:'6',hp:110,ac:13},{name:'Griffon',cr:'2',hp:59,ac:12},
-  {name:'Harpy',cr:'1',hp:38,ac:11},{name:'Banshee',cr:'4',hp:58,ac:12},{name:'Vampire Spawn',cr:'5',hp:82,ac:15},
-];
 registerPanel('encounter',{
   title:'Encounter Builder',icon:'⚡',
-  _monsters:[],_partyLevel:6,_partySize:5,_searchQ:'',_searchOpen:false,
+  _monsters:[],_partyLevel:6,_partySize:5,
   _system:'2024', // encounter-building system: '2024' (budget, no multiplier) or '2014'
   // Library of saved encounters — each is {id, name, monsters, ts}. Lets
   // the DM stage two or three fights for a session and switch between them.
@@ -41,7 +28,6 @@ registerPanel('encounter',{
     this._render();
   },
   unmount(){
-    if (this._encDocDown){ document.removeEventListener('mousedown', this._encDocDown); this._encDocDown = null; }
     this._body=null;
   },
   _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system}, 'encounters');},
@@ -100,45 +86,28 @@ registerPanel('encounter',{
     if(adjXP<partyThresh[3])return{label:'Hard',cls:'hard'};
     return{label:'Deadly',cls:'deadly'};
   },
-  // Pull monster pool: prefer the loaded 5etools bestiary, fall back to the
-  // built-in static list while data is still loading.
+  // The shared search (monster-picker.js), shaped as this panel's rows.
   _searchPool(q){
-    if (typeof _5eLoaded !== 'undefined' && _5eLoaded && Array.isArray(_5eData)) {
-      const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-      // Honor the user's hidden-sources filter when the encounter scope is
-      // on (toggleable per consumer in the Books panel).
-      return _5eData
-        .filter(d => d.cat==='monster')
-        .filter(d => !(typeof window.SKT_IS_SOURCE_HIDDEN === 'function' && window.SKT_IS_SOURCE_HIDDEN('encounter', d._source)))
-        .filter(d => tokens.every(t => (d.name+' '+(d.meta||'')).toLowerCase().includes(t)))
-        .slice(0, 30)
-        .map(d => ({ name:d.name, cr:d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d._raw?.dexterity||10, _img:d._img, _source:d._source }));
-    }
-    return MONSTER_LIST.filter(m => m.name.toLowerCase().includes(q.toLowerCase())).slice(0, 12);
+    if (typeof sktMonsterPool !== 'function') return [];
+    return sktMonsterPool('encounter').filter(d => sktMonsterMatches(d, q)).slice(0, 30)
+      .map(d => ({ name:d.name, cr:d._cr ?? d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d.dex||d._raw?.dexterity||10, _img:d._img, _source:d._source }));
   },
-  _renderSearchDropdown(){
-    const b=this._body; if(!b) return;
-    const drop = b.querySelector('#enc-search-results'); if(!drop) return;
-    const results = this._searchQ ? this._searchPool(this._searchQ) : [];
-    const open = this._searchOpen && results.length;
-    drop.classList.toggle('open', !!open);
-    drop.innerHTML = results.map(m => {
-      const srcDisplay = m._source ? (typeof _formatSource==='function' ? _formatSource(m._source) : m._source) : '';
-      const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
-      return `<div class="enc-search-result" data-mname="${esc(m.name)}" data-mcr="${esc(String(m.cr))}" data-mhp="${m.hp}" data-mac="${m.ac}" data-mdex="${m.dex||10}" data-msrc="${esc(m._source||'')}">
-        <span class="enc-result-name">${esc(m.name)}${srcBadge}</span>
-        <span class="enc-cr-badge">CR ${esc(String(m.cr))} · ${CR_XP[m.cr]||'?'} XP</span>
-      </div>`;
-    }).join('');
-    drop.querySelectorAll('.enc-search-result').forEach(el => el.addEventListener('click', () => {
-      const name = el.dataset.mname, cr = el.dataset.mcr, hp = +el.dataset.mhp, ac = +el.dataset.mac, dex = +el.dataset.mdex, _source = el.dataset.msrc || null;
-      // Match by name+source so a 2014 and 2024 entry of the same monster are treated as different rows.
-      const existing = this._monsters.find(m => m.name === name && (m._source||null) === _source);
-      if (existing) existing.count = (existing.count||1) + 1;
-      else this._monsters.push({ name, cr, hp, ac, dex, _source, count: 1 });
-      this._searchQ = ''; this._searchOpen = false; this._save();
-      this._render();
-    }));
+  // Monsters come from the shared picker. Same name AND book adds to the row
+  // already there; a 2014 and a 2024 entry of one monster stay two rows.
+  _openPicker(){
+    if (typeof sktPickMonster !== 'function') return;
+    sktPickMonster({
+      title: 'Add monsters to the encounter', action: 'Add to encounter', scope: 'encounter', count: true,
+      onPick: (d, n) => {
+        const _source = d._source || null;
+        const existing = this._monsters.find(m => m.name === d.name && (m._source || null) === _source);
+        if (existing) existing.count = (existing.count || 1) + n;
+        else this._monsters.push({ name: d.name, cr: d._cr ?? d._raw?.challenge_rating ?? '?', hp: d.hp || 10, ac: d.ac || 10,
+                                   dex: d.dex || 10, _source, count: n });
+        this._save(); this._render();
+        return 'Added ' + (n > 1 ? n + ' × ' : '') + d.name + ' to the encounter';
+      },
+    });
   },
 
   _render(){
@@ -160,7 +129,7 @@ registerPanel('encounter',{
         <div class="enc-section" style="flex:1;overflow-y:auto">
           <h3>Monsters</h3>
           <div class="enc-monsters-list" id="enc-monster-list">
-            ${!this._monsters.length?'<div style="font-size:var(--fs-sm);color:var(--text-dim)">Search and add monsters below.</div>':
+            ${!this._monsters.length?'<div style="font-size:var(--fs-sm);color:var(--text-dim)">Add monsters below.</div>':
               this._monsters.map((m,i)=>{
                 const srcDisplay = m._source ? (typeof _formatSource==='function' ? _formatSource(m._source) : m._source) : '';
                 const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
@@ -172,10 +141,7 @@ registerPanel('encounter',{
                 </div>`;
               }).join('')}
           </div>
-          <div class="enc-add-input">
-            <input type="text" id="enc-search" placeholder="Search monster..." style="font-size:var(--fs-sm)">
-          </div>
-          <div class="enc-search-results" id="enc-search-results"></div>
+          <button class="btn enc-add-btn" id="enc-add" title="Search monsters by name, CR, type or book">＋ Add monsters…</button>
         </div>
       </div>
       <div class="enc-right">
@@ -224,46 +190,7 @@ registerPanel('encounter',{
     // Monster list
     b.querySelectorAll('[data-eact="del"]').forEach(btn=>btn.addEventListener('click',()=>{this._monsters.splice(+btn.dataset.ei,1);this._save();this._render();}));
     b.querySelectorAll('#enc-monster-list input[type="number"]').forEach(inp=>inp.addEventListener('change',e=>{this._monsters[+e.target.dataset.ei].count=parseInt(e.target.value)||1;this._save();this._render();}));
-    // Search — only update the dropdown on input/focus so the input keeps focus.
-    const searchInp=b.querySelector('#enc-search');
-    searchInp.value=this._searchQ;
-    searchInp.addEventListener('input',e=>{
-      this._searchQ=e.target.value;
-      this._searchOpen=true;
-      // Debounced — the dropdown filters the full monster list, so rebuilding
-      // it on every keystroke makes fast typing feel laggy.
-      clearTimeout(this._searchTimer);
-      this._searchTimer=setTimeout(()=>this._renderSearchDropdown(), 150);
-    });
-    searchInp.addEventListener('focus',()=>{
-      this._searchOpen=true;
-      this._renderSearchDropdown();
-    });
-    // Blur close — short delay so a result click registers before we hide the
-    // dropdown. Pointer-events on the dropdown also stay live during that
-    // window so fast clicks aren't lost.
-    searchInp.addEventListener('blur',()=>{
-      setTimeout(()=>{
-        if (document.activeElement === searchInp) return;
-        this._searchOpen=false;
-        const drop=b.querySelector('#enc-search-results');
-        if (drop) drop.classList.remove('open');
-      }, 180);
-    });
-    // Click anywhere outside the search row also closes the dropdown.
-    const onDocDown = (ev)=>{
-      if (!this._searchOpen) return;
-      if (ev.target === searchInp) return;
-      if (ev.target.closest && ev.target.closest('#enc-search-results')) return;
-      this._searchOpen=false;
-      const drop=b.querySelector('#enc-search-results');
-      if (drop) drop.classList.remove('open');
-    };
-    if (this._encDocDown) document.removeEventListener('mousedown', this._encDocDown);
-    this._encDocDown = onDocDown;
-    document.addEventListener('mousedown', onDocDown);
-    // Initial dropdown render (handles the case where _render was triggered with a query)
-    this._renderSearchDropdown();
+    b.querySelector('#enc-add').addEventListener('click', () => this._openPicker());
     // Push to combat — flash the button to confirm the action, open the
     // combat panel if it's not already up, and use a richer toast that names
     // a few of the monsters added (instead of just a count).
@@ -285,7 +212,7 @@ registerPanel('encounter',{
         //
         // Name AND source, the same rule the Bestiary's drag-to-combat uses.
         // The five-field object stays as the fallback for encounters saved
-        // without a source, and for the offline MONSTER_LIST.
+        // without a source, or before the monster data has loaded.
         const entry = (typeof _5eLoaded !== 'undefined' && _5eLoaded && Array.isArray(_5eData))
           ? (_5eData.find(d => d.cat === 'monster' && d.name === m.name && m._source && d._source === m._source)
              || (m._source ? null : _5eData.find(d => d.cat === 'monster' && d.name === m.name)))

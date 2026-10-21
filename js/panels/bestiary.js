@@ -558,98 +558,33 @@ registerPanel('bestiary', {
     win.body.style.overflowY = 'auto';
   },
 
+  // The shared monster picker, with this panel's folder choice beside it.
   _openMonsterPicker(){
-    if (typeof _5eData === 'undefined' || !_5eLoaded){
-      showToast?.('5e data still loading — try again in a moment');
-      return;
-    }
-    // Honor the user's hidden-books filter — monsters from hidden sources
-    // are excluded when the bestiary scope is on (toggleable per consumer).
-    const all = _5eData.filter(d => {
-      if (d.cat !== 'monster') return false;
-      if (typeof window.SKT_IS_SOURCE_HIDDEN === 'function' && window.SKT_IS_SOURCE_HIDDEN('bestiary', d._source)) return false;
-      return true;
-    }).sort((a,b)=>a.name.localeCompare(b.name));
-
-    const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
-    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:90vw">
-      <h3>Add Monster</h3>
-      <input type="search" id="best-pick-search" placeholder="Search 5e monsters…" autocomplete="off"
-        style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:var(--fs-md);margin-bottom:10px">
-      ${this._data.folders.length ? `<div class="modal-field" style="margin-bottom:10px">
-        <label>Folder</label>
-        <select id="best-pick-folder">
-          <option value="">Unfiled</option>
-          ${this._data.folders.map(f=>`<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('')}
-        </select>
-      </div>` : ''}
-      <div id="best-pick-list" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:5px;background:var(--panel-2)"></div>
-      <div id="best-pick-count" style="font-size:var(--fs-sm);color:var(--text-muted);padding:6px 2px 0"></div>
-      <div class="modal-actions"><button class="btn" id="best-pick-close">Close</button></div>
-    </div>`;
-    document.body.appendChild(backdrop);
-
-    const list = backdrop.querySelector('#best-pick-list');
-    const countEl = backdrop.querySelector('#best-pick-count');
-    const folderSel = backdrop.querySelector('#best-pick-folder');
-    // Index into the pool that rendered the row, and state the cut-off. This
-    // modal was a copy of the combat picker and carried both of its bugs:
-    // looking rows up by slug reached the wrong source for the 273 colliding
-    // pairs, and the 200-row cap (200 of 4454 unfiltered) was silent, so a
-    // monster past the end looked like one the dataset didn't have.
-    const LIMIT = 200;
-    let pool = [];
-    const renderList = (q)=>{
-      const qn = (q||'').toLowerCase().trim();
-      const matches = qn
-        ? all.filter(d => d.name.toLowerCase().includes(qn) || (d.meta||'').toLowerCase().includes(qn) || (d._source||'').toLowerCase().includes(qn) || (_formatSource(d._source)||'').toLowerCase().includes(qn))
-        : all;
-      pool = matches.slice(0, LIMIT);
-      list.innerHTML = pool.map((d, k) => `<div class="bestiary-pick-row" data-i="${k}">
-        <div class="bestiary-pick-left">
-          <span class="bestiary-pick-name">${esc(d.name)}</span>
-          ${d._source ? `<span class="detail-source-badge">${esc(_formatSource(d._source))}</span>` : ''}
-        </div>
-        <span class="bestiary-pick-meta">${esc(d.meta||'')}</span>
-      </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:var(--fs-md)">No matches</div>';
-      if (countEl) countEl.textContent = matches.length > LIMIT
-        ? `Showing first ${LIMIT} of ${matches.length} matches — keep typing to narrow it down`
-        : `${matches.length} match${matches.length === 1 ? '' : 'es'}`;
-    };
-    renderList('');
-
-    // Escape on document, not the backdrop — same reasoning as the template
-    // modal above (a plain div isn't focusable). close() removes the handler.
-    const onKey = e => { if (e.key==='Escape') close(); };
-    const close = ()=>{ document.removeEventListener('keydown', onKey); backdrop.remove(); };
-    document.addEventListener('keydown', onKey);
-    let searchTimer = null;
-    backdrop.querySelector('#best-pick-search').addEventListener('input', e=>{
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(()=>renderList(e.target.value), 150);
+    if (typeof sktPickMonster !== 'function') return;
+    const folders = this._data.folders || [];
+    sktPickMonster({
+      title: 'Add to your bestiary', action: 'Add to bestiary', scope: 'bestiary',
+      extra: folders.length ? {
+        html: '<label class="mp-folder">Folder <select id="best-pick-folder"><option value="">Unfiled</option>'
+          + folders.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + '</option>').join('') + '</select></label>',
+        read: root => (root.querySelector('#best-pick-folder') || {}).value || null,
+      } : null,
+      onPick: (d, n, folderId) => {
+        this._data.monsters.push({
+          id: uid(),
+          folderId: folderId || null,
+          slug: d._slug,
+          name: d.name,
+          source: d._source || '',
+          hp: d.hp,
+          ac: d.ac,
+          cr: d._raw?.challenge_rating ?? d._cr ?? '?',
+          img: d._img || null,
+        });
+        this._save();
+        this._render();
+        return 'Added ' + d.name + ' to your bestiary';
+      },
     });
-    backdrop.querySelector('#best-pick-close').addEventListener('click', close);
-    backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
-    list.addEventListener('click', e=>{
-      const row = e.target.closest('.bestiary-pick-row'); if (!row) return;
-      const d = pool[parseInt(row.dataset.i)]; if (!d) return;
-      const folderId = folderSel ? (folderSel.value || null) : null;
-      this._data.monsters.push({
-        id: uid(),
-        folderId,
-        slug: d._slug,
-        name: d.name,
-        source: d._source || '',
-        hp: d.hp,
-        ac: d.ac,
-        cr: d._raw?.challenge_rating ?? '?',
-        img: d._img || null,
-      });
-      this._save();
-      close();
-      this._render();
-    });
-    setTimeout(()=>backdrop.querySelector('#best-pick-search').focus(), 30);
   },
 });

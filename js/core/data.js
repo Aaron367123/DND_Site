@@ -63,7 +63,6 @@ const DEFAULT_LAYOUT = {
   notes:      {x:400, y:60,  w:820, h:640, open:false, minimized:false, z:4},
   battlemap:  {x:60,  y:60,  w:680, h:500, open:false, minimized:false, z:5},
   npclib:     {x:100, y:80,  w:760, h:660, open:false, minimized:false, z:6},
-  npcgen:     {x:160, y:100, w:480, h:540, open:false, minimized:false, z:7},
   loot:       {x:200, y:100, w:480, h:480, open:false, minimized:false, z:8},
   encounter:   {x:150, y:80,  w:700, h:520, open:false, minimized:false, z:8},
   soundboard:  {x:200, y:100, w:580, h:500, open:false, minimized:false, z:9},
@@ -87,6 +86,7 @@ const SKT_PANEL_HOST = {
   time:       'world',
   weather:    'world',
   handouts:   'notes',
+  npcgen:     'npclib',
 };
 function sktPanelHost(id){ return SKT_PANEL_HOST[id] || id; }
 // A stored layout (skt-layout-v1, or a workspace's snapshot) written before

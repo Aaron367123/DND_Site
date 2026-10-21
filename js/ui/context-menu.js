@@ -14,7 +14,6 @@ const CTX_PANEL_GROUPS = [
     { id: 'library',    name: 'Library (books & adventures)' },
   ]},
   { label: 'NPC Management', items: [
-    { id: 'npcgen', name: 'NPC Generator' },
     { id: 'npclib', name: 'NPC Library' },
   ]},
   { label: 'Utilities', items: [

@@ -35,7 +35,7 @@ function _nextZ(){
 const PANEL_ICON = {
   combat:'i-combat', turnview:'i-turn', party:'i-heart', shop:'i-coins',
   notes:'i-note', battlemap:'i-map', npclib:'i-user', bestiary:'i-paw',
-  library:'i-books', npcgen:'i-dice', loot:'i-chest',
+  library:'i-books', loot:'i-chest',
   encounter:'i-bolt', soundboard:'i-speaker', world:'i-cloud',
 };
 // Icon markup for a panel: sprite when we have one, the panel's own emoji when
