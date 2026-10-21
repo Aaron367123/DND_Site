@@ -4456,7 +4456,7 @@
       finally { _remoteUpdate = false; }
       loadDomain('combat'); loadDomain('party');
       const C = panelDefs.combat; openPanel('combat'); await sleep(250); C._render();
-      const req0 = localStorage.getItem('skt-savereq-v1');
+      const req0 = localStorage.getItem('skt-rollreq-v1');
       try {
         const pcs = state.combatants.filter(c => c.isPC && !c.dead).slice(0, 2).map(c => c.id);
         ok('saves: two characters to ask', pcs.length === 2);
@@ -4467,7 +4467,7 @@
         ok('saves: with a switch for telling them the DC', !!back.querySelector('#as-showdc'));
         back.querySelector('#as-showdc').checked = true;
         back.querySelector('[data-as="ask"]').click(); await sleep(100);
-        const req = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+        const req = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
         ok('saves: the ask names the ability, the DC and what it is for',
            !!req && req.ab === 'DEX' && req.dc === 15 && req.showDc === true && req.name === 'Fireball'
            && req.pcs.length === 2 && !req.closed, JSON.stringify(req && { ab: req.ab, dc: req.dc, n: req.pcs.length }));
@@ -4476,22 +4476,22 @@
            back.querySelector('[data-as="apply"]').disabled === true);
         // One answers well, one badly.
         req.answers = { [pcs[0]]: { v: 23, rid: req.id, at: Date.now() } };
-        saveJson('skt-savereq-v1', req, 'save request');
-        C._onSaveAnswers(); await sleep(60);
+        saveJson('skt-rollreq-v1', req, 'save request');
+        sktOnRollAnswers(); await sleep(60);
         ok('saves: an answer fills in that row',
            back.querySelectorAll('.as-table tr.waiting').length === 1
            && back.querySelectorAll('.as-table tr.ok').length === 1);
         ok('saves: an answer from an older ask is ignored', (() => {
-          const stale = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+          const stale = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
           stale.answers[pcs[1]] = { v: 25, rid: 'sr_somethingelse', at: Date.now() };
-          saveJson('skt-savereq-v1', stale, 'save request');
-          C._onSaveAnswers();
+          saveJson('skt-rollreq-v1', stale, 'save request');
+          sktOnRollAnswers();
           return back.querySelectorAll('.as-table tr.waiting').length === 1;
         })());
-        const r2 = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+        const r2 = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
         r2.answers[pcs[1]] = { v: 4, rid: r2.id, at: Date.now() };
-        saveJson('skt-savereq-v1', r2, 'save request');
-        C._onSaveAnswers(); await sleep(60);
+        saveJson('skt-rollreq-v1', r2, 'save request');
+        sktOnRollAnswers(); await sleep(60);
         ok('saves: once everyone is in, the damage can be applied',
            back.querySelectorAll('.as-table tr.waiting').length === 0
            && back.querySelector('[data-as="apply"]').disabled === false);
@@ -4503,7 +4503,7 @@
         ok('saves: the one who saved takes less than the one who did not',
            took[0] < took[1] && took[1] > 0, JSON.stringify(took));
         ok('saves: and the pop-up is taken off the phones',
-           (JSON.parse(localStorage.getItem('skt-savereq-v1')) || {}).closed === true);
+           (JSON.parse(localStorage.getItem('skt-rollreq-v1')) || {}).closed === true);
 
         // Nobody waits forever: the DM can roll a straggler's save instead.
         // The fireball above can drop a character to 0 depending on the
@@ -4523,7 +4523,7 @@
         ok('saves: which fills it in', b2.querySelectorAll('.as-table tr.waiting').length === waiting0 - 1);
         b2.querySelector('[data-as="cancel"]').click(); await sleep(60);
         ok('saves: closing the dialog closes the ask',
-           (JSON.parse(localStorage.getItem('skt-savereq-v1')) || {}).closed === true);
+           (JSON.parse(localStorage.getItem('skt-rollreq-v1')) || {}).closed === true);
         ok('saves: asking with no characters picked does nothing', C.askSaves({ ab: 'WIS', dc: 10, pcs: [] }) === null);
         // An answer from a player window in this same browser arrives as a
         // `storage` event, not through the sync layer.
@@ -4531,12 +4531,12 @@
         await sleep(80);
         const b3 = document.getElementById('area-save-back');
         b3.querySelector('[data-as="ask"]').click(); await sleep(60);
-        const r3 = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+        const r3 = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
         r3.answers = { [pcs[0]]: { v: 19, rid: r3.id, at: Date.now() } };
         const v3 = JSON.stringify(r3);
         _remoteUpdate = true;
-        try { localStorage.setItem('skt-savereq-v1', v3); } finally { _remoteUpdate = false; }
-        window.dispatchEvent(new StorageEvent('storage', { key: 'skt-savereq-v1', newValue: v3 }));
+        try { localStorage.setItem('skt-rollreq-v1', v3); } finally { _remoteUpdate = false; }
+        window.dispatchEvent(new StorageEvent('storage', { key: 'skt-rollreq-v1', newValue: v3 }));
         await sleep(60);
         ok('saves: an answer from a player tab on this laptop fills the row',
            b3.querySelectorAll('.as-table tr.waiting').length === 0 && /their roll/.test(b3.querySelector('.as-table').textContent));
@@ -4547,7 +4547,7 @@
         C._areaSaveOnAnswers = null;
         _remoteUpdate = true;
         try {
-          if (req0 == null) localStorage.removeItem('skt-savereq-v1'); else localStorage.setItem('skt-savereq-v1', req0);
+          if (req0 == null) localStorage.removeItem('skt-rollreq-v1'); else localStorage.setItem('skt-rollreq-v1', req0);
           ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); });
         } finally { _remoteUpdate = false; }
         loadDomain('combat'); loadDomain('party'); C._render();
@@ -4887,6 +4887,62 @@
       }
     }
 
+    // -- "Ask the players to roll…": checks, and the party short rest -------
+    {
+      const r0 = localStorage.getItem('skt-rollreq-v1'), p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const party = state.party.filter(p => !p.foe);
+        sktOpenAskRoll({ kind: 'check' }); await sleep(60);
+        const dlg = document.getElementById('rr-ask-back');
+        ok('ask: one dialog asks for initiative, a save or a check',
+           ['init', 'save', 'check'].every(k => !!dlg.querySelector('[data-rk="' + k + '"]')));
+        const sk = dlg.querySelector('#rr-skill'); sk.value = 'perception'; sk.dispatchEvent(new Event('change', { bubbles: true }));
+        ok('ask: picking a skill picks its ability', dlg.querySelector('#rr-ab').value === 'WIS');
+        dlg.querySelector('#rr-dc').value = '14';
+        dlg.querySelector('[data-rr-go="ask"]').click(); await sleep(60);
+        const r = sktRollReq();
+        ok('ask: a Perception check goes to every member of the party',
+           !!r && r.kind === 'check' && r.skill === 'perception' && r.ab === 'WIS' && r.dc === 14 && r.pcs.length === party.length);
+        ok('ask: the results card waits for them', /Perception check/.test((document.getElementById('rr-card') || {}).textContent || ''));
+        r.answers[r.pcs[0]] = { v: 18, rid: r.id }; r.answers[r.pcs[1]] = { v: 9, rid: r.id };
+        saveJson('skt-rollreq-v1', r, 'roll request'); sktOnRollAnswers(); await sleep(40);
+        const card = document.getElementById('rr-card');
+        ok('ask: answers show with whether they beat the DC',
+           card.querySelectorAll('.rr-row.ok').length === 1 && /18/.test(card.querySelector('.rr-row.ok').textContent)
+           && card.querySelectorAll('.rr-row.bad').length === 1 && /9/.test(card.querySelector('.rr-row.bad').textContent));
+        card.querySelector('[data-rr="close"]').click(); await sleep(30);
+        ok('ask: closing it ends the request and takes the card away', sktRollReq().closed === true && !document.getElementById('rr-card'));
+        // The party short rest, on the same system.
+        const P = panelDefs.party; openPanel('party'); await sleep(150);
+        const a = state.party.findIndex(p => !p.foe && Array.isArray(p.resources));
+        const b = state.party.findIndex((p, k) => k !== a && !p.foe);
+        state.party[a] = { ...state.party[a], concentration: 'Bless' };
+        state.party[b] = { ...state.party[b], concentration: 'Hex' };
+        save();
+        P._shortRestAll(); await sleep(50);
+        const rr = sktRollReq();
+        ok('rest: a party short rest asks every phone', rr.kind === 'rest' && rr.pcs.length === party.length);
+        ok('rest: the card offers to finish it', !!document.querySelector('#rr-card [data-rr="finish"]'));
+        // One player finished on their phone (which rested them there).
+        P._shortRestOne(state.party[a], a); save();
+        rr.answers[state.party[a].id] = { done: true, rid: rr.id };
+        saveJson('skt-rollreq-v1', rr, 'roll request'); sktOnRollAnswers(); await sleep(30);
+        ok('rest: a player who finished shows as done', /done/.test(document.getElementById('rr-card').textContent));
+        document.querySelector('#rr-card [data-rr="finish"]').click(); await sleep(60);
+        ok('rest: Finish rests everyone who hadn\u2019t, and closes it',
+           !state.party[b].concentration && sktRollReq().closed === true && !document.getElementById('rr-card'));
+      } catch(e){ ok('ask: the checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('rr-ask-back')?.remove(); document.getElementById('rr-card')?.remove();
+        _remoteUpdate = true;
+        try {
+          if (r0 == null) localStorage.removeItem('skt-rollreq-v1'); else localStorage.setItem('skt-rollreq-v1', r0);
+          if (p0 != null) localStorage.setItem('skt-party-v1', p0);
+        } finally { _remoteUpdate = false; }
+        loadDomain('party'); closePanel('party');
+      }
+    }
+
     // ── Areas of effect on the map ────────────────────────────────────────
     {
       _remoteUpdate = true;
@@ -5006,7 +5062,7 @@
 
     // ── Players roll their own initiative ─────────────────────────────────
     {
-      const r0 = localStorage.getItem('skt-initreq-v1');
+      const r0 = localStorage.getItem('skt-rollreq-v1');
       _remoteUpdate = true;
       try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
       finally { _remoteUpdate = false; }
@@ -5016,30 +5072,32 @@
         const btn = C._body.querySelector('[data-act="ask-init"]');
         ok('initiative: the tracker has an "ask the players" button', !!btn);
         btn.click(); await sleep(60);
-        const r = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+        ok('initiative: it opens "Ask the players to roll", set to initiative', !!document.querySelector('#rr-ask-back [data-rk="init"].on'));
+        document.querySelector('#rr-ask-back [data-rr-go="ask"]').click(); await sleep(60);
+        const r = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
         const pcs = state.combatants.filter(c => c.isPC && !c.dead).map(c => c.id);
-        ok('initiative: asking lists every character in the fight', !!r && !r.closed && JSON.stringify(r.pcs) === JSON.stringify(pcs));
-        ok('initiative: the strip shows nobody in yet', /0 of \d+ in/.test((C._body.querySelector('.init-banner') || {}).textContent || ''));
-        const a = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+        ok('initiative: asking lists every character in the fight', !!r && !r.closed && r.kind === 'init' && JSON.stringify(r.pcs) === JSON.stringify(pcs));
+        ok('initiative: the results card shows nobody in yet', /0 of \d+/.test((document.querySelector('#rr-card') || {}).textContent || ''));
+        const a = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
         a.answers[pcs[0]] = { v: 19, rid: r.id }; a.answers[pcs[1]] = { v: 7, rid: r.id };
         a.answers[pcs[2]] = { v: 30, rid: 'ir_older' };   // a leftover answer to an earlier request
-        _applyRemoteKey('skt-initreq-v1', JSON.stringify(a)); await sleep(60);
-        ok('initiative: answers fill the tracker and the strip counts them (an old answer does not count)',
-           /2 of \d+ in/.test(C._body.querySelector('.init-banner').textContent)
+        _applyRemoteKey('skt-rollreq-v1', JSON.stringify(a)); await sleep(60);
+        ok('initiative: answers fill the tracker and the card counts them (an old answer does not count)',
+           /2 of \d+/.test(document.querySelector('#rr-card').textContent)
            && +state.combatants.find(c => c.id === pcs[0]).initiative === 19 && +state.combatants.find(c => c.id === pcs[1]).initiative === 7);
-        const b2 = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+        const b2 = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
         pcs.slice(2).forEach((id, i) => b2.answers[id] = { v: 12 + i, rid: r.id });
         let t = null; const st = window.showToast; window.showToast = (m, o) => { t = { m, action: !!(o && o.action) }; };
-        _applyRemoteKey('skt-initreq-v1', JSON.stringify(b2)); await sleep(60);
+        _applyRemoteKey('skt-rollreq-v1', JSON.stringify(b2)); await sleep(60);
         window.showToast = st;
         ok('initiative: when everyone is in, the DM is told, with Sort to hand', !!t && /Everyone has rolled/.test(t.m) && t.action);
-        C._body.querySelector('[data-act="init-sort"]').click(); await sleep(60);
+        document.querySelector('#rr-card [data-rr="sort"]').click(); await sleep(60);
         ok('initiative: Sort orders the fight and closes the request',
            state.combatants.every((c, i, arr) => i === 0 || +arr[i - 1].initiative >= +c.initiative)
-           && JSON.parse(localStorage.getItem('skt-initreq-v1')).closed === true && !C._body.querySelector('.init-banner'));
+           && JSON.parse(localStorage.getItem('skt-rollreq-v1')).closed === true && !document.querySelector('#rr-card'));
       } catch(e){ ok('initiative: the DM checks ran to completion', false, e.message); }
       finally {
-        if (r0 == null) localStorage.removeItem('skt-initreq-v1'); else localStorage.setItem('skt-initreq-v1', r0);
+        if (r0 == null) localStorage.removeItem('skt-rollreq-v1'); else localStorage.setItem('skt-rollreq-v1', r0);
         _remoteUpdate = true;
         try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
         finally { _remoteUpdate = false; }
@@ -5450,45 +5508,45 @@
 
       // -- "Make a DEX save" on this phone ----------------------------------
       {
-        const req0 = localStorage.getItem('skt-savereq-v1');
+        const req0 = localStorage.getItem('skt-rollreq-v1');
         try {
           const me = paMe().pcId || (state.party[0] || {}).id;
           if (!paMe().pcId) paSetPc(me);
           const ask = (o) => {
-            localStorage.setItem('skt-savereq-v1', JSON.stringify(Object.assign({
+            localStorage.setItem('skt-rollreq-v1', JSON.stringify(Object.assign({
               id: 'sr_t' + Math.random().toString(36).slice(2, 7), askedAt: Date.now(),
-              ab: 'DEX', dc: 15, showDc: true, name: 'Fireball', pcs: [me], answers: {}, closed: false,
+              kind: 'save', ab: 'DEX', dc: 15, showDc: true, name: 'Fireball', pcs: [me], answers: {}, closed: false,
             }, o || {})));
             paOnSaveRequest();
           };
           ask(); await sleep(80);
-          const card = () => document.getElementById('pa-save');
+          const card = () => document.getElementById('pa-roll-req');
           ok('player: a save the DM called for pops up', !!card());
           ok('player: it names the ability and this character’s bonus',
              /Dexterity saving throw/.test(card().textContent)
              && /bonus/.test(card().textContent), card().textContent.slice(0, 60));
           ok('player: and the number to beat, when the DM says so',
              /beat/.test(card().textContent) && /15/.test(card().textContent));
-          card().querySelector('[data-pa-save="roll"]').click(); await sleep(50);
-          const line = card().querySelector('#pa-save-dice').textContent;
+          card().querySelector('[data-pa-rr="roll"]').click(); await sleep(50);
+          const line = card().querySelector('#pa-rr-dice').textContent;
           ok('player: rolling shows the dice and whether it made it',
              /d20 \(\d+\)/.test(line) && /(made it|missed it)/.test(line), line);
-          const typed = parseInt(card().querySelector('#pa-save-val').value, 10);
-          card().querySelector('[data-pa-save="send"]').click(); await sleep(80);
-          const r = JSON.parse(localStorage.getItem('skt-savereq-v1'));
+          const typed = parseInt(card().querySelector('#pa-rr-val').value, 10);
+          card().querySelector('[data-pa-rr="send"]').click(); await sleep(80);
+          const r = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
           ok('player: sending files the total under this character',
              r.answers[me] && r.answers[me].v === typed && r.answers[me].rid === r.id);
-          ok('player: and the pop-up goes away', !document.getElementById('pa-save'));
+          ok('player: and the pop-up goes away', !document.getElementById('pa-roll-req'));
           // A table that keeps the DC to itself.
           ask({ showDc: false }); await sleep(80);
           ok('player: with the DC kept back, it just asks for the roll',
              !!card() && !/beat/.test(card().textContent));
-          card().querySelector('[data-pa-save="dis"]').click(); await sleep(50);
+          card().querySelector('[data-pa-rr="dis"]').click(); await sleep(50);
           ok('player: disadvantage keeps the lower of two',
-             /2d20 \((\d+), (\d+)\) keep/.test(card().querySelector('#pa-save-dice').textContent),
-             card().querySelector('#pa-save-dice').textContent);
+             /2d20 \((\d+), (\d+)\) keep/.test(card().querySelector('#pa-rr-dice').textContent),
+             card().querySelector('#pa-rr-dice').textContent);
           ok('player: and says nothing about making it',
-             !/(made it|missed it)/.test(card().querySelector('#pa-save-dice').textContent));
+             !/(made it|missed it)/.test(card().querySelector('#pa-rr-dice').textContent));
           // Somebody else's save is none of this phone's business.
           ask({ pcs: ['not-this-character'] }); await sleep(80);
           ok('player: a save asked of another character does not pop up here', !card());
@@ -5497,9 +5555,9 @@
           ok('player: nor one the DM has closed', !card());
         } catch(e){ ok('player: the saving-throw checks ran to completion', false, e.message); }
         finally {
-          document.getElementById('pa-save')?.remove();
+          document.getElementById('pa-roll-req')?.remove();
           _remoteUpdate = true;
-          try { if (req0 == null) localStorage.removeItem('skt-savereq-v1'); else localStorage.setItem('skt-savereq-v1', req0); }
+          try { if (req0 == null) localStorage.removeItem('skt-rollreq-v1'); else localStorage.setItem('skt-rollreq-v1', req0); }
           finally { _remoteUpdate = false; }
         }
       }
@@ -5594,18 +5652,18 @@
       // did not, so a player window beside the DM's never saw a save, an
       // initiative call or a handout unless the internet carried it round.
       {
-        const req0 = localStorage.getItem('skt-savereq-v1'), ho0 = localStorage.getItem('skt-handouts-v1');
+        const req0 = localStorage.getItem('skt-rollreq-v1'), ho0 = localStorage.getItem('skt-handouts-v1');
         try {
           const me = paMe().pcId || (state.party[0] || {}).id;
           if (!paMe().pcId) paSetPc(me);
-          document.getElementById('pa-save')?.remove();
-          const v = JSON.stringify({ id: 'sr_relay', askedAt: Date.now(), ab: 'WIS', dc: 13, showDc: true,
+          document.getElementById('pa-roll-req')?.remove();
+          const v = JSON.stringify({ id: 'sr_relay', askedAt: Date.now(), kind: 'save', ab: 'WIS', dc: 13, showDc: true,
                                      name: '', pcs: [me], answers: {}, closed: false });
-          localStorage.setItem('skt-savereq-v1', v);
-          window.dispatchEvent(new StorageEvent('storage', { key: 'skt-savereq-v1', newValue: v }));
+          localStorage.setItem('skt-rollreq-v1', v);
+          window.dispatchEvent(new StorageEvent('storage', { key: 'skt-rollreq-v1', newValue: v }));
           await sleep(60);
-          ok('player: a save asked from another tab pops up here', !!document.getElementById('pa-save'));
-          document.getElementById('pa-save')?.remove();
+          ok('player: a save asked from another tab pops up here', !!document.getElementById('pa-roll-req'));
+          document.getElementById('pa-roll-req')?.remove();
           const h = JSON.stringify({ list: [{ id: 'w_relay', title: 'A word from the DM', text: 'Psst.', img: null,
                                               to: [me], ts: Date.now(), shownAt: Date.now(), whisper: true }] });
           localStorage.setItem('skt-handouts-v1', h);
@@ -5615,11 +5673,11 @@
              && /Psst/.test(document.getElementById('pa-handout').textContent));
         } catch(e){ ok('player: the same-laptop relay checks ran to completion', false, e.message); }
         finally {
-          document.getElementById('pa-save')?.remove();
+          document.getElementById('pa-roll-req')?.remove();
           document.getElementById('pa-handout')?.remove();
           _remoteUpdate = true;
           try {
-            if (req0 == null) localStorage.removeItem('skt-savereq-v1'); else localStorage.setItem('skt-savereq-v1', req0);
+            if (req0 == null) localStorage.removeItem('skt-rollreq-v1'); else localStorage.setItem('skt-rollreq-v1', req0);
             if (ho0 == null) localStorage.removeItem('skt-handouts-v1'); else localStorage.setItem('skt-handouts-v1', ho0);
           } finally { _remoteUpdate = false; }
           paRender();
@@ -5677,41 +5735,71 @@
         }
       }
 
+      // -- A check and a short rest, from the DM, on this phone ----------------
+      {
+        const r0 = localStorage.getItem('skt-rollreq-v1');
+        try {
+          const me = paMe().pcId || (state.party[0] || {}).id;
+          if (!paMe().pcId) paSetPc(me);
+          const ask = o => { localStorage.setItem('skt-rollreq-v1', JSON.stringify(Object.assign({ id: 'rr_' + Math.random().toString(36).slice(2, 7),
+            askedAt: Date.now(), pcs: [me], answers: {}, closed: false }, o))); paOnRollRequest(); };
+          ask({ kind: 'check', ab: 'WIS', skill: 'perception', dc: 12, showDc: false }); await sleep(60);
+          const ov = document.getElementById('pa-roll-req');
+          ok('player: a Perception check pops up by name', !!ov && /Perception check/.test(ov.textContent), ov && ov.textContent.slice(0, 60));
+          const pc = state.party.find(p => p.id === me);
+          const want = pc.sheet && pc.sheet.skills && typeof pc.sheet.skills.perception === 'number' ? pc.sheet.skills.perception : null;
+          ok('player: with the character\u2019s own Perception bonus', want == null || new RegExp('bonus ' + (want >= 0 ? '\\+' : '') + want).test(ov.textContent));
+          ov.remove();
+          ask({ kind: 'rest' }); await sleep(80);
+          const rest = document.getElementById('pa-rest');
+          ok('player: a short rest from the DM opens the hit-dice screen', !!rest && !document.getElementById('pa-roll-req'));
+          if (rest) rest.querySelector('[data-rest="finish"]').click(); await sleep(60);
+          const r = sktRollReq();
+          ok('player: finishing it tells the DM this character is done', !!r.answers[me] && r.answers[me].done === true && r.answers[me].rid === r.id);
+        } catch(e){ ok('player: the check and rest checks ran to completion', false, e.message); }
+        finally {
+          document.getElementById('pa-roll-req')?.remove(); document.getElementById('pa-rest')?.remove();
+          _remoteUpdate = true;
+          try { if (r0 == null) localStorage.removeItem('skt-rollreq-v1'); else localStorage.setItem('skt-rollreq-v1', r0); }
+          finally { _remoteUpdate = false; }
+        }
+      }
+
       // ── "Roll initiative!" on this phone ──────────────────────────────────
       {
-        const r0 = localStorage.getItem('skt-initreq-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        const r0 = localStorage.getItem('skt-rollreq-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
         try {
           const pc = (state.combatants || []).find(c => c.isPC && state.party.some(p => p.id === c.id));
           const other = (state.party || []).find(p => !pc || p.id !== pc.id);
           if (pc && other){
             paSetPc(pc.id); paTab = 'you'; paRender();
-            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: false })); await sleep(50);
-            const ov = document.getElementById('pa-init');
+            _applyRemoteKey('skt-rollreq-v1', JSON.stringify({ id: 'ir_t', askedAt: Date.now(), kind: 'init', pcs: [pc.id], answers: {}, closed: false })); await sleep(50);
+            const ov = document.getElementById('pa-roll-req');
             ok('player: asked for initiative, the phone pops it up with the bonus', !!ov && /bonus/.test(ov.textContent));
-            ov.querySelector('[data-pa-init="roll"]').click(); await sleep(15);
-            const v = parseInt(document.getElementById('pa-init-val').value, 10), bonus = paInitBonus(pc.id);
+            ov.querySelector('[data-pa-rr="roll"]').click(); await sleep(15);
+            const v = parseInt(document.getElementById('pa-rr-val').value, 10), bonus = paInitBonus(pc.id);
             ok('player: "Roll for me" rolls d20 plus the bonus', v >= 1 + bonus && v <= 20 + bonus, v + ' / ' + bonus);
-            const val = document.getElementById('pa-init-val'); val.value = '17'; val.dispatchEvent(new Event('input'));
-            ov.querySelector('[data-pa-init="send"]').click(); await sleep(40);
-            const after = JSON.parse(localStorage.getItem('skt-initreq-v1'));
+            const val = document.getElementById('pa-rr-val'); val.value = '17'; val.dispatchEvent(new Event('input'));
+            ov.querySelector('[data-pa-rr="send"]').click(); await sleep(40);
+            const after = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
             ok('player: sending answers the request and sets the combatant',
                after.answers[pc.id] && after.answers[pc.id].v === 17 && after.answers[pc.id].rid === 'ir_t'
-               && +state.combatants.find(c => c.id === pc.id).initiative === 17 && !document.getElementById('pa-init'));
-            _applyRemoteKey('skt-initreq-v1', JSON.stringify(after) + ' '); await sleep(30);
-            ok('player: and it does not come back once answered', !document.getElementById('pa-init'));
+               && +state.combatants.find(c => c.id === pc.id).initiative === 17 && !document.getElementById('pa-roll-req'));
+            _applyRemoteKey('skt-rollreq-v1', JSON.stringify(after) + ' '); await sleep(30);
+            ok('player: and it does not come back once answered', !document.getElementById('pa-roll-req'));
             paSetPc(other.id);
-            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t2', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: false })); await sleep(30);
-            ok('player: a character not in the fight gets no pop-up', !document.getElementById('pa-init'));
+            _applyRemoteKey('skt-rollreq-v1', JSON.stringify({ id: 'ir_t2', askedAt: Date.now(), kind: 'init', pcs: [pc.id], answers: {}, closed: false })); await sleep(30);
+            ok('player: a character not in the fight gets no pop-up', !document.getElementById('pa-roll-req'));
             paSetPc(pc.id);
-            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t3', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: false })); await sleep(30);
-            const up = !!document.getElementById('pa-init');
-            _applyRemoteKey('skt-initreq-v1', JSON.stringify({ id: 'ir_t3', askedAt: Date.now(), pcs: [pc.id], answers: {}, closed: true })); await sleep(30);
-            ok('player: the DM closing the request takes the pop-up down', up && !document.getElementById('pa-init'));
+            _applyRemoteKey('skt-rollreq-v1', JSON.stringify({ id: 'ir_t3', askedAt: Date.now(), kind: 'init', pcs: [pc.id], answers: {}, closed: false })); await sleep(30);
+            const up = !!document.getElementById('pa-roll-req');
+            _applyRemoteKey('skt-rollreq-v1', JSON.stringify({ id: 'ir_t3', askedAt: Date.now(), kind: 'init', pcs: [pc.id], answers: {}, closed: true })); await sleep(30);
+            ok('player: the DM closing the request takes the pop-up down', up && !document.getElementById('pa-roll-req'));
           }
         } catch(e){ ok('player: the initiative checks ran to completion', false, e.message); }
         finally {
-          document.getElementById('pa-init')?.remove();
-          if (r0 == null) localStorage.removeItem('skt-initreq-v1'); else localStorage.setItem('skt-initreq-v1', r0);
+          document.getElementById('pa-roll-req')?.remove();
+          if (r0 == null) localStorage.removeItem('skt-rollreq-v1'); else localStorage.setItem('skt-rollreq-v1', r0);
           if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
           paTab = tab0; paRender();
         }

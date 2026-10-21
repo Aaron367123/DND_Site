@@ -70,6 +70,8 @@ function _cpCommands(){
       const P = panelDefs.party;
       if (P && typeof P[fn] === 'function') P[fn]();
     };
+    if (typeof sktOpenAskRoll === 'function')
+      add('Party', 'Ask the players to roll…', () => sktOpenAskRoll({}), 'check save skill perception stealth group roll phones initiative');
     add('Party', 'Long rest (whole party)',  party('_longRestAll'),  'rest sleep recover');
     add('Party', 'Short rest (whole party)', party('_shortRestAll'), 'rest hit dice');
   }

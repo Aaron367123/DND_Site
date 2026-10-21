@@ -103,8 +103,7 @@ function initPlayerView(){
   // as well costs nothing.
   window.addEventListener('storage', e => {
     try {
-      if (e.key === 'skt-savereq-v1' && typeof paOnSaveRequest === 'function') paOnSaveRequest();
-      else if (e.key === 'skt-initreq-v1' && typeof paOnInitRequest === 'function') paOnInitRequest();
+      if (e.key === 'skt-rollreq-v1' && typeof paOnRollRequest === 'function') paOnRollRequest();
       else if (e.key === 'skt-handouts-v1' && typeof paOnHandouts === 'function') paOnHandouts();
     } catch(err){ console.warn('[player view] relay', e.key, err); }
   });

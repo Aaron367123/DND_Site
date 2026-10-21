@@ -154,35 +154,27 @@ function initPlayerApp(){
   paInitMore();
   paRender();
   paOnHandouts();
-  paOnInitRequest();
-  paOnSaveRequest();
+  paOnRollRequest();
 }
 
-// ─── "Roll initiative!" ──────────────────────────────────────────────────────
-// The DM asks (combat tracker 📱); a phone whose character is in the fight
-// pops this up until it answers or the DM closes the request. Roll here, roll
-// with advantage, or type the total off real dice. The answer goes into this
-// character's own field of the request AND straight onto its combatant, so
-// the tracker fills in without the DM's window having to relay it.
-// A request older than half an hour is stale and does not pop up.
-const PA_INIT_FRESH = 30 * 60 * 1000;
-function paInitReq(){ try { return JSON.parse(localStorage.getItem('skt-initreq-v1') || 'null'); } catch(e){ return null; } }
+// ─── "Everyone, roll…" ───────────────────────────────────────────────────────
+// One pop-up for whatever the DM asks the table to roll at once
+// (js/features/roll-requests.js): initiative, a saving throw, an ability or
+// skill check — and for a short rest, the hit-dice screen. Roll here, with
+// advantage or disadvantage, or type the total off real dice. The DC shows
+// only if the DM ticked it, and then the phone says at once whether the roll
+// made it. Initiative also goes straight onto this character's combatant, so
+// the tracker fills in without the DM's window relaying it.
+const PA_ABS = { STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution',
+                 INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' };
+function paRollReq(){ return typeof sktRollReq === 'function' ? sktRollReq() : null; }
 function paInitBonus(pcId){
   const p = (state.party || []).find(x => x.id === pcId);
   if (p && typeof p.init === 'number') return p.init;
   const c = (state.combatants || []).find(x => x.id === pcId);
   return c && typeof c.initBonus === 'number' ? c.initBonus : 0;
 }
-// ─── "Make a DEX save" ───────────────────────────────────────────────────────
-// The same pop-up as initiative, for the other roll the whole table makes at
-// once. The DC is shown only if the DM ticked it — some tables play with the
-// number on the table, some don't — and when it is shown the phone says
-// straight away whether the roll made it.
-const PA_SAVE_FRESH = 10 * 60 * 1000;
-const PA_ABS = { STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution',
-                 INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' };
-function paSaveReq(){ try { return JSON.parse(localStorage.getItem('skt-savereq-v1') || 'null'); } catch(e){ return null; } }
-// The character's own bonus for that save, from the same place the DM's
+// The character's own bonus for a save, from the same place the DM's
 // tracker reads it, so the two never disagree.
 function paSaveBonus(pcId, ab){
   const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
@@ -197,43 +189,73 @@ function paSaveBonus(pcId, ab){
   const sc = pc.abilities && pc.abilities[k];
   return typeof sc === 'number' ? Math.floor((sc - 10) / 2) : 0;
 }
-function paOnSaveRequest(){
-  if (!document.body.classList.contains('player-app')) return;
-  const r = paSaveReq(), me = paMe().pcId;
-  const open = r && !r.closed && me && Array.isArray(r.pcs) && r.pcs.includes(me)
+// A check: the skill's modifier off the sheet, or the bare ability modifier.
+function paCheckBonus(pcId, ab, skill){
+  const pc = (state.party || []).find(p => p.id === pcId) || {};
+  const sk = pc.sheet && pc.sheet.skills;
+  if (skill && sk && typeof sk[skill] === 'number') return sk[skill];
+  const k = String(ab || '').slice(0, 3).toLowerCase();
+  const sc = pc.abilities && pc.abilities[k];
+  return typeof sc === 'number' ? Math.floor((sc - 10) / 2) : 0;
+}
+function paRollBonus(r, me){
+  if (r.kind === 'init') return paInitBonus(me);
+  if (r.kind === 'save') return paSaveBonus(me, r.ab);
+  return paCheckBonus(me, r.ab, r.skill);
+}
+function paRollAsked(r, me){
+  return !!(r && !r.closed && me && Array.isArray(r.pcs) && r.pcs.includes(me)
     && !(r.answers && r.answers[me] && r.answers[me].rid === r.id)
-    && Date.now() - (r.askedAt || 0) < PA_SAVE_FRESH;
-  const cur = document.getElementById('pa-save');
-  if (!open){ if (cur) cur.remove(); return; }
+    && Date.now() - (r.askedAt || 0) < (typeof SKT_RR_FRESH !== 'undefined' ? SKT_RR_FRESH : 1200000));
+}
+function paOnRollRequest(){
+  if (!document.body.classList.contains('player-app')) return;
+  const r = paRollReq(), me = paMe().pcId;
+  const cur = document.getElementById('pa-roll-req');
+  if (!paRollAsked(r, me)){
+    if (cur) cur.remove();
+    // A rest the DM finished (or called off) closes the hit-dice screen too.
+    const rest = document.getElementById('pa-rest');
+    if (rest && rest.dataset.rid && (!r || r.id !== rest.dataset.rid || r.closed)) rest.remove();
+    return;
+  }
+  // A short rest is the hit-dice screen, not a roll.
+  if (r.kind === 'rest'){
+    const rest = document.getElementById('pa-rest');
+    if (!rest || rest.dataset.rid !== r.id) paOpenShortRest(r);
+    return;
+  }
   if (cur && cur.dataset.rid === r.id) return;          // already up for this one
   if (cur) cur.remove();
   const pc = (state.party || []).find(x => x.id === me) || {};
-  const bonus = paSaveBonus(me, r.ab);
+  const bonus = paRollBonus(r, me);
   const sign = n => (n >= 0 ? '+' : '') + n;
-  const full = PA_ABS[r.ab] || r.ab;
+  const title = r.kind === 'init' ? '⚔ Roll initiative!'
+    : r.kind === 'save' ? '🛡 ' + (PA_ABS[r.ab] || r.ab) + ' saving throw!'
+    : '🎲 ' + (typeof sktRollTitle === 'function' ? sktRollTitle(r) : 'Check') + '!';
   const ov = document.createElement('div');
-  ov.id = 'pa-save'; ov.className = 'pa-init'; ov.dataset.rid = r.id;
-  ov.innerHTML = '<div class="pa-init-card" role="dialog" aria-modal="true" aria-label="Saving throw">'
-    + '<div class="pa-init-l">\ud83d\udee1 ' + paEsc(full) + ' saving throw!</div>'
-    + '<div class="pa-init-who">' + paEsc(pc.name || 'Your character') + ' \u00b7 bonus <b>' + sign(bonus) + '</b>'
-    +   (r.showDc ? ' \u00b7 beat <b>' + r.dc + '</b>' : '')
+  ov.id = 'pa-roll-req'; ov.className = 'pa-init'; ov.dataset.rid = r.id; ov.dataset.kind = r.kind;
+  ov.innerHTML = '<div class="pa-init-card" role="dialog" aria-modal="true" aria-label="' + paEsc(title) + '">'
+    + '<div class="pa-init-l">' + paEsc(title) + '</div>'
+    + '<div class="pa-init-who">' + paEsc(pc.name || 'Your character') + ' · bonus <b>' + sign(bonus) + '</b>'
+    +   (r.showDc && r.dc ? ' · beat <b>' + r.dc + '</b>' : '')
     +   (r.name ? '<span class="pa-save-src">' + paEsc(r.name) + '</span>' : '') + '</div>'
     + '<div class="pa-init-roll">'
-    +   '<button class="btn primary" data-pa-save="roll">\ud83c\udfb2 Roll for me</button>'
-    +   '<button class="btn" data-pa-save="adv" title="Advantage">\ud83c\udfb2\ud83c\udfb2 Adv</button>'
-    +   '<button class="btn" data-pa-save="dis" title="Disadvantage">\ud83c\udfb2\ud83c\udfb2 Dis</button>'
+    +   '<button class="btn primary" data-pa-rr="roll">🎲 Roll for me</button>'
+    +   '<button class="btn" data-pa-rr="adv" title="Advantage">🎲🎲 Adv</button>'
+    +   '<button class="btn" data-pa-rr="dis" title="Disadvantage">🎲🎲 Dis</button>'
     + '</div>'
-    + '<div class="pa-init-dice" id="pa-save-dice"></div>'
-    + '<label class="pa-init-type">Or type your total <input id="pa-save-val" type="number" inputmode="numeric" placeholder="e.g. 17"></label>'
-    + '<button class="btn primary pa-init-send" data-pa-save="send" disabled>Send</button>'
+    + '<div class="pa-init-dice" id="pa-rr-dice"></div>'
+    + '<label class="pa-init-type">Or type your total <input id="pa-rr-val" type="number" inputmode="numeric" placeholder="e.g. 17"></label>'
+    + '<button class="btn primary pa-init-send" data-pa-rr="send" disabled>Send</button>'
     + '</div>';
-  const val = ov.querySelector('#pa-save-val'), send = ov.querySelector('[data-pa-save="send"]');
-  const dice = ov.querySelector('#pa-save-dice');
-  const verdict = total => r.showDc ? (total >= r.dc ? ' \u2014 made it' : ' \u2014 missed it') : '';
+  const val = ov.querySelector('#pa-rr-val'), send = ov.querySelector('[data-pa-rr="send"]');
+  const dice = ov.querySelector('#pa-rr-dice');
+  const verdict = total => (r.showDc && r.dc) ? (total >= r.dc ? ' — made it' : ' — missed it') : '';
   val.addEventListener('input', () => { send.disabled = val.value === ''; dice.textContent = ''; });
   ov.addEventListener('click', e => {
-    const b = e.target.closest('[data-pa-save]'); if (!b) return;
-    const act = b.dataset.paSave;
+    const b = e.target.closest('[data-pa-rr]'); if (!b) return;
+    const act = b.dataset.paRr;
     if (act === 'roll' || act === 'adv' || act === 'dis'){
       const a = sktD(20), c = act === 'roll' ? null : sktD(20);
       const d = c == null ? a : (act === 'adv' ? Math.max(a, c) : Math.min(a, c));
@@ -242,82 +264,33 @@ function paOnSaveRequest(){
       dice.textContent = (c == null ? 'd20 (' + a + ')' : '2d20 (' + a + ', ' + c + ') keep ' + d)
         + ' ' + sign(bonus) + ' = ' + total + verdict(total);
     } else if (act === 'send' && val.value !== ''){
-      paAnswerSave(parseInt(val.value, 10));
+      paAnswerRoll(parseInt(val.value, 10));
     }
   });
   document.body.appendChild(ov);
   try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch(e){}
 }
-function paAnswerSave(v){
-  const r = paSaveReq(), me = paMe().pcId;
-  if (!r || r.closed || !me || isNaN(v)) return false;
+// This character's answer: a number, or for a rest, done.
+function paAnswerRoll(v, done){
+  const r = paRollReq(), me = paMe().pcId;
+  if (!r || r.closed || !me || (!done && isNaN(v))) return false;
   r.answers = r.answers || {};
-  r.answers[me] = { v, rid: r.id, at: Date.now() };
-  saveJson('skt-savereq-v1', r, 'saving throw');
-  document.getElementById('pa-save')?.remove();
-  if (typeof showToast === 'function'){
-    showToast('Sent \u2014 ' + v + (r.showDc ? ' vs DC ' + r.dc + (v >= r.dc ? ': saved' : ': failed') : ''));
+  r.answers[me] = done ? { done: true, rid: r.id, at: Date.now() } : { v, rid: r.id, at: Date.now() };
+  saveJson(typeof SKT_RR_KEY !== 'undefined' ? SKT_RR_KEY : 'skt-rollreq-v1', r, 'roll request');
+  if (r.kind === 'init'){
+    const c = (state.combatants || []).find(x => x.id === me && x.isPC);
+    if (c){ c.initiative = v; save(); }
   }
-  return true;
-}
-
-function paOnInitRequest(){
-  if (!document.body.classList.contains('player-app')) return;
-  const r = paInitReq(), me = paMe().pcId;
-  const open = r && !r.closed && me && Array.isArray(r.pcs) && r.pcs.includes(me)
-    && !(r.answers && r.answers[me] && r.answers[me].rid === r.id)
-    && Date.now() - (r.askedAt || 0) < PA_INIT_FRESH;
-  const cur = document.getElementById('pa-init');
-  if (!open){ if (cur) cur.remove(); return; }
-  if (cur && cur.dataset.rid === r.id) return;          // already up for this request
-  if (cur) cur.remove();
-  const pc = (state.party || []).find(x => x.id === me) || {};
-  const bonus = paInitBonus(me);
-  const sign = n => (n >= 0 ? '+' : '') + n;
-  const ov = document.createElement('div');
-  ov.id = 'pa-init'; ov.className = 'pa-init'; ov.dataset.rid = r.id;
-  ov.innerHTML = '<div class="pa-init-card" role="dialog" aria-modal="true" aria-label="Roll initiative">'
-    + '<div class="pa-init-l">⚔ Roll initiative!</div>'
-    + '<div class="pa-init-who">' + paEsc(pc.name || 'Your character') + ' · bonus <b>' + sign(bonus) + '</b></div>'
-    + '<div class="pa-init-roll">'
-    +   '<button class="btn primary" data-pa-init="roll">🎲 Roll for me</button>'
-    +   '<button class="btn" data-pa-init="adv">🎲🎲 Advantage</button>'
-    + '</div>'
-    + '<div class="pa-init-dice" id="pa-init-dice"></div>'
-    + '<label class="pa-init-type">Or type your total <input id="pa-init-val" type="number" inputmode="numeric" placeholder="e.g. 17"></label>'
-    + '<button class="btn primary pa-init-send" data-pa-init="send" disabled>Send</button>'
-    + '</div>';
-  const val = ov.querySelector('#pa-init-val'), send = ov.querySelector('[data-pa-init="send"]');
-  const dice = ov.querySelector('#pa-init-dice');
-  val.addEventListener('input', () => { send.disabled = val.value === ''; dice.textContent = ''; });
-  ov.addEventListener('click', e => {
-    const b = e.target.closest('[data-pa-init]'); if (!b) return;
-    const act = b.dataset.paInit;
-    if (act === 'roll' || act === 'adv'){
-      const a = sktD(20), c = act === 'adv' ? sktD(20) : null;
-      const d = c == null ? a : Math.max(a, c);
-      val.value = String(d + bonus); send.disabled = false;
-      dice.textContent = (c == null ? 'd20 (' + a + ')' : '2d20 (' + a + ', ' + c + ') keep ' + d) + ' ' + sign(bonus) + ' = ' + (d + bonus);
-    } else if (act === 'send' && val.value !== ''){
-      paAnswerInitiative(parseInt(val.value, 10));
-    }
-  });
-  document.body.appendChild(ov);
-  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch(e){}
-}
-function paAnswerInitiative(v){
-  const r = paInitReq(), me = paMe().pcId;
-  if (!r || r.closed || !me || isNaN(v)) return false;
-  r.answers = r.answers || {};
-  r.answers[me] = { v, rid: r.id, at: Date.now() };
-  saveJson('skt-initreq-v1', r, 'initiative');
-  const c = (state.combatants || []).find(x => x.id === me && x.isPC);
-  if (c){ c.initiative = v; save(); }
-  document.getElementById('pa-init')?.remove();
-  if (typeof showToast === 'function') showToast('Sent — initiative ' + v);
+  document.getElementById('pa-roll-req')?.remove();
+  if (typeof showToast === 'function' && !done){
+    showToast(r.kind === 'init' ? 'Sent — initiative ' + v
+      : 'Sent — ' + v + (r.showDc && r.dc ? ' vs DC ' + r.dc + (v >= r.dc ? ': made it' : ': missed it') : ''));
+  }
   paRender();
   return true;
 }
+// The names other code and older pages call.
+const paOnInitRequest = paOnRollRequest, paOnSaveRequest = paOnRollRequest;
 
 // ─── Handouts ────────────────────────────────────────────────────────────────
 // What the DM sent (js/panels/handouts.js), filtered to this phone: everyone's,
@@ -1061,12 +1034,15 @@ function paShowDevices(){
   document.body.appendChild(ov);
 }
 
-function paOpenShortRest(){
+function paOpenShortRest(req){
   const i = paMyIdx(); if (i < 0) return;
   document.getElementById('pa-rest')?.remove();
   const P = panelDefs.party;
   const ov = document.createElement('div');
   ov.id = 'pa-rest'; ov.className = 'pa-handout';
+  // Opened by the DM's party short rest: finishing it tells the DM this
+  // character is done, and the DM finishing the rest closes this screen.
+  if (req && req.id) ov.dataset.rid = req.id;
   const log = [];
   const paint = () => {
     const pc = state.party[paMyIdx()]; if (!pc) return ov.remove();
@@ -1092,6 +1068,7 @@ function paOpenShortRest(){
       paTick(); paint(); paRenderScreen();
     } else if (b.dataset.rest === 'finish'){
       if (P && typeof P._shortRestOne === 'function'){ P._shortRestOne(state.party[idx], idx); save(); }
+      if (ov.dataset.rid) paAnswerRoll(0, true);
       ov.remove(); paRenderScreen();
       if (typeof showToast === 'function') showToast('💤 Short rest done');
     } else if (b.dataset.rest === 'cancel') ov.remove();

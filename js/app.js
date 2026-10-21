@@ -81,8 +81,7 @@ function init(){
   window.addEventListener('storage', e => {
     const C = panelDefs.combat; if (!C) return;
     try {
-      if (e.key === 'skt-savereq-v1' && C._onSaveAnswers) C._onSaveAnswers();
-      else if (e.key === 'skt-initreq-v1' && C._onInitAnswers) C._onInitAnswers();
+      if (e.key === 'skt-rollreq-v1' && typeof sktOnRollAnswers === 'function') sktOnRollAnswers();
     } catch(err){ console.warn('[workspace] relay', e.key, err); }
   });
   // Build the player-view URL robustly. The naive `split('?')[0]+'?player=1'`

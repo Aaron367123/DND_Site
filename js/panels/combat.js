@@ -409,7 +409,7 @@ registerPanel('combat',{
         <button class="btn icon-btn" data-act="next" title="Advance turn">▶</button>
         <button class="btn icon-btn" data-act="add" title="Add custom combatant">+</button>
         <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">${ICO('i-paw')}</button>
-        ${(inCombat && state.combatants.some(c => c.isPC))?'<button class="btn icon-btn" data-act="ask-init" title="Ask the players to roll initiative on their phones">📱</button>':''}
+        ${state.party.some(p => !p.foe)?'<button class="btn icon-btn" data-act="ask-init" title="Ask the players to roll — initiative, a save or a check — on their phones">📱</button>':''}
         ${inCombat?'<button class="btn icon-btn" data-act="area-save" title="Area save — roll one saving throw for each of several creatures (Fireball, a breath weapon, a trap)">💥</button>':''}
         <button class="btn icon-btn ${compact?'active':''}" data-act="toggle-compact" title="${compact?'Show full cards':'Compact card mode'}">${compact?'▤':'▦'}</button>
         <button class="btn icon-btn ${grouped?'active':''}" data-act="toggle-group" title="${grouped?'Show every monster individually':'Group identical monsters into one card'}">${grouped?'▣':'⊞'}</button>
@@ -430,7 +430,6 @@ registerPanel('combat',{
         return '';
       })()}
 
-      ${inCombat ? this._renderInitBanner() : ''}
       ${(inCombat && this._lairDue) ? `<div class="lair-banner" role="status">🏰 <b>Lair action</b> — initiative 20: ${this._lairDue.names.map(esc).join(', ')}
           <button class="btn small" data-act="lair-done">Done</button></div>` : ''}
       ${inCombat
@@ -896,12 +895,7 @@ registerPanel('combat',{
       }
       else if(act==='lair-done'){ this._lairDue = null; this._render(); }
       else if(act==='area-save'){ this.openAreaSave({}); }
-      else if(act==='ask-init'){ this.askInitiative(); }
-      else if(act==='init-sort'){
-        this._sortByInitiative();
-        const st = this._initStatus(); if (st && !st.waiting.length) this._closeInitRequest();
-      }
-      else if(act==='init-close'){ this._closeInitRequest(); }
+      else if(act==='ask-init'){ if (typeof sktOpenAskRoll === 'function') sktOpenAskRoll(state.combatants.some(c => c.isPC) ? { kind: 'init' } : {}); }
       else if(act==='legendary-pip'){
         const i = parseInt(el.dataset.idx);
         const n = parseInt(el.dataset.n);
@@ -2363,113 +2357,25 @@ registerPanel('combat',{
     this._renderCondSaves();
   },
 
-  // ─── Players roll their own initiative ──────────────────────────────────────
-  // 'skt-initreq-v1' = { id, askedAt, pcs:[ids], answers:{ pcId:{v, rid, at} }, closed }
-  // The DM asks; every phone whose character is in the fight pops up a
-  // "Roll initiative!" card (player-app.js) and answers into its own field —
-  // and writes its combatant's initiative itself, so the tracker fills in even
-  // if this window is busy. Answers carry the request id, so a late answer to
-  // an older request is never counted against a new one.
-  _initReq(){ try { return JSON.parse(localStorage.getItem('skt-initreq-v1') || 'null'); } catch(e){ return null; } },
+  // ─── Players roll on their phones ──────────────────────────────────────────
+  // Initiative and saving throws go through the one request system in
+  // js/features/roll-requests.js (with ability checks and short rests). These
+  // stay as the tracker's own names for the two it starts itself.
   askInitiative(){
     const pcs = state.combatants.filter(c => c.isPC && !c.dead).map(c => c.id);
-    if (!pcs.length){ if (typeof showToast === 'function') showToast('No characters in the fight to ask'); return false; }
-    const req = { id: 'ir_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), askedAt: Date.now(), pcs, answers: {}, closed: false };
-    saveJson('skt-initreq-v1', req, 'initiative request');
-    this._initAllToasted = null; this._initApplied = {};
+    const r = (typeof sktAskRoll === 'function') ? sktAskRoll({ kind: 'init', pcs }) : null;
     this._render();
-    if (typeof showToast === 'function') showToast('📱 Asked ' + pcs.length + ' player' + (pcs.length === 1 ? '' : 's') + ' to roll initiative');
-    return req.id;
+    return r ? r.id : false;
   },
-  _initStatus(){
-    const r = this._initReq(); if (!r || r.closed || !Array.isArray(r.pcs)) return null;
-    const ans = r.answers || {};
-    const inIds = r.pcs.filter(id => ans[id] && ans[id].rid === r.id);
-    return { r, inIds, waiting: r.pcs.filter(id => !inIds.includes(id)) };
-  },
-  _renderInitBanner(){
-    const st = this._initStatus(); if (!st) return '';
-    const names = ids => ids.map(id => (state.combatants.find(c => c.id === id) || {}).name).filter(Boolean);
-    const all = !st.waiting.length;
-    return `<div class="init-banner${all ? ' done' : ''}" role="status"><span class="init-banner-text">📱 <b>Initiative</b>: ${st.inIds.length} of ${st.r.pcs.length} in
-      ${all ? '— everyone has rolled' : '— waiting for ' + esc(names(st.waiting).join(', '))}</span>
-      <span class="init-banner-btns"><button class="btn small${all ? ' primary' : ''}" data-act="init-sort">Sort by initiative</button>
-      <button class="btn small" data-act="init-close" title="Stop waiting — phones that have not answered drop the pop-up">Close</button></span></div>`;
-  },
-  _closeInitRequest(){
-    const r = this._initReq(); if (!r || r.closed) return;
-    r.closed = true;
-    saveJson('skt-initreq-v1', r, 'initiative request');
-    this._render();
-  },
-  // Answers arriving on the DM's side. Each one is written to its combatant
-  // once (the phone normally already has), so a DM correcting a number by
-  // hand afterwards is not overwritten by the next update to the request.
-  _onInitAnswers(){
-    if (document.body.classList.contains('player-mode')) return;
-    const st = this._initStatus(); if (!st) return;
-    this._initApplied = this._initApplied || {};
-    let changed = false;
-    st.inIds.forEach(id => {
-      const a = st.r.answers[id], k = id + '|' + st.r.id;
-      if (this._initApplied[k]) return;
-      this._initApplied[k] = true;
-      const c = state.combatants.find(x => x.id === id);
-      if (c && +c.initiative !== +a.v){ c.initiative = +a.v; changed = true; }
-      this._log(`${c ? c.name : 'A player'} rolled initiative: ${a.v}`);
-    });
-    if (changed) save();
-    if (!st.waiting.length && this._initAllToasted !== st.r.id){
-      this._initAllToasted = st.r.id;
-      if (typeof showToast === 'function') showToast('📱 Everyone has rolled initiative', { action: { label: 'Sort', run: () => { this._sortByInitiative(); this._closeInitRequest(); } } });
-    }
-    this._render();
-  },
-
-  // ─── Players roll their own saving throws ───────────────────────────────────
-  // 'skt-savereq-v1' = { id, askedAt, ab, dc, showDc, name, pcs:[ids],
-  //                      answers:{ pcId:{v, rid, at} }, closed }
-  // Same shape as the initiative request and for the same reason: one field
-  // per character, so two phones answering at the same moment merge instead
-  // of one overwriting the other.
-  //
-  // showDc is the DM's call. Telling the table "DC 15" turns a save into a
-  // number everyone can check, which some tables want and some consider the
-  // DM's business; the dialog remembers whichever way this one plays it.
-  _saveReq(){ try { return JSON.parse(localStorage.getItem('skt-savereq-v1') || 'null'); } catch(e){ return null; } },
+  // From the area-save dialog, which shows the answers in its own rows.
   askSaves(o){
     o = o || {};
-    const pcs = (o.pcs || []).filter(Boolean);
-    if (!pcs.length){ if (typeof showToast === 'function') showToast('No characters among the targets'); return null; }
-    const req = {
-      id: 'sr_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
-      askedAt: Date.now(),
-      ab: String(o.ab || 'DEX').slice(0, 3).toUpperCase(),
-      dc: Math.max(1, parseInt(o.dc, 10) || 10),
-      showDc: o.showDc !== false,
-      name: o.name || '',
-      pcs, answers: {}, closed: false,
-    };
-    saveJson('skt-savereq-v1', req, 'save request');
-    if (typeof showToast === 'function'){
-      showToast('📱 Asked ' + pcs.length + ' player' + (pcs.length === 1 ? '' : 's') + ' for a ' + req.ab + ' save'
-                + (req.showDc ? ' (DC ' + req.dc + ' shown)' : ''));
-    }
-    return req;
+    return (typeof sktAskRoll === 'function')
+      ? sktAskRoll({ kind: 'save', ab: o.ab, dc: o.dc, showDc: o.showDc, name: o.name, pcs: o.pcs, via: 'area' }) : null;
   },
   _closeSaveRequest(){
-    const r = this._saveReq(); if (!r || r.closed) return;
-    r.closed = true;
-    saveJson('skt-savereq-v1', r, 'save request');
-  },
-  // An answer landed. The open area-save dialog, if there is one, fills in
-  // the row; nothing else needs to happen — the DM is looking at the table.
-  _onSaveAnswers(){
-    if (document.body.classList.contains('player-mode')) return;
-    const r = this._saveReq(); if (!r || r.closed) return;
-    if (typeof this._areaSaveOnAnswers === 'function'){
-      try { this._areaSaveOnAnswers(r); } catch(e){ console.warn('[save answers]', e); }
-    }
+    const r = (typeof sktRollOpen === 'function') ? sktRollOpen() : null;
+    if (r && r.kind === 'save' && r.via === 'area') sktCloseRoll();
   },
 
   // ─── Area saves ─────────────────────────────────────────────────────────────
@@ -2599,7 +2505,7 @@ registerPanel('combat',{
         return;
       }
       // Ask the characters to roll their own, and roll the monsters here.
-      // Their answers come back through 'skt-savereq-v1' and drop into the
+      // Their answers come back through 'skt-rollreq-v1' and drop into the
       // rows they are waiting on, so the damage below is applied against
       // the numbers the players rolled themselves.
       if (act === 'ask'){

@@ -133,6 +133,7 @@ registerPanel('party',{
     const items = [
       { label:'➕ Add a character…', run: () => this._addCharacter() },
       { label:'📋 Manage Party', run: () => this._openManageParty() },
+      { label:'📱 Ask the players to roll…', run: () => { if (typeof sktOpenAskRoll === 'function') sktOpenAskRoll({}); } },
     ];
     if (state.party.length){
       items.push({ label:'📊 Party Skills', run: () => this._openPartySkills() });
@@ -141,7 +142,7 @@ registerPanel('party',{
       // destructive-ish action (overwrites HP / slots / hit dice / etc.) so
       // it gets a confirm; short rest is a softer touch.
       items.push({ label:'🛌 Long rest (party)',  run: () => this._longRestAll() });
-      items.push({ label:'💤 Short rest (party)', run: () => this._shortRestAll() });
+      items.push({ label:'💤 Short rest (party) — players spend hit dice', run: () => this._shortRestAll() });
       // Compact "party glance" mode — one-row-per-character layout. Stored
       // as a setting so it persists across reloads & syncs.
       const compact = !!(state.settings && state.settings.partyCompact);
@@ -1718,16 +1719,32 @@ registerPanel('party',{
   //   • Clear concentration (a 1-hour break drops it)
   //   • Restore any resources flagged with name containing "short rest"
   // Hit dice spending stays per-PC via the existing per-die-pip click.
+  // A party short rest is one flow with the player's own: each phone opens
+  // its hit-dice screen (the roll-request system, kind 'rest'), the card on
+  // this screen shows who has finished, and "Finish the rest" gives the rest
+  // to everyone who hasn't — without dice, which anyone without a phone can
+  // still spend from their card's pips first. There used to be a party rest
+  // that couldn't spend hit dice at all and a phone rest that could.
   _shortRestAll(){
-    if (!state.party.length){ showToast('No party to rest'); return; }
-    if (typeof showConfirm !== 'function'){
-      this._applyShortRest();
-      return;
-    }
-    showConfirm('Short rest the whole party? Concentration drops; resources whose name contains "short rest" refresh. Players can spend hit dice per-PC after.',
-      {title:'Short rest', confirmLabel:'Rest', danger:false}).then(ok => {
-        if (ok) this._applyShortRest();
-      });
+    const pcs = state.party.filter(p => !p.foe).map(p => p.id);
+    if (!pcs.length){ showToast('No party to rest'); return; }
+    if (typeof sktAskRoll !== 'function'){ this._applyShortRest(); return; }
+    const r = sktAskRoll({ kind: 'rest', pcs });
+    if (r && typeof showToast === 'function') showToast('💤 Short rest started — players spend hit dice on their phones; press Finish the rest when everyone is done');
+  },
+  // "Finish the rest" on the card: everyone who didn't finish on their phone.
+  _finishShortRest(r){
+    const done = new Set(Object.keys((r && r.answers) || {}).filter(id => r.answers[id].rid === r.id));
+    const left = state.party.map((p, i) => ({ p, i })).filter(x => (r.pcs || []).includes(x.p.id) && !done.has(x.p.id));
+    let pact = 0;
+    const go = () => {
+      left.forEach(x => { if (this._shortRestOne(x.p, x.i)) pact++; });
+      save(); this._render(); panelDefs.combat?._render?.();
+    };
+    if (typeof sktUndoable === 'function') sktUndoable('💤 Short rest', go, { quiet: true }); else go();
+    if (typeof sktCloseRoll === 'function') sktCloseRoll();
+    showToast('💤 Short rest done' + (left.length ? ' — finished for ' + left.map(x => x.p.name).join(', ') : '')
+      + (pact ? ' · Pact Magic restored' : ''), typeof sktUndo === 'function' ? { action: { label: 'Undo', run: sktUndo } } : undefined);
   },
   _applyShortRest(){
     let pactRestored = 0;

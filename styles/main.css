@@ -4919,8 +4919,8 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .pa-init-roll{display:grid; grid-template-columns:1fr 1fr; gap:8px}
 .pa-init-roll .btn{padding:14px 8px; font-size:var(--fs-lg)}
 /* The save pop-up adds disadvantage, so three across instead of two. */
-#pa-save .pa-init-roll{grid-template-columns:1.3fr 1fr 1fr}
-#pa-save .pa-init-roll .btn{padding:14px 4px; font-size:var(--fs-md)}
+#pa-roll-req .pa-init-roll{grid-template-columns:1.3fr 1fr 1fr}
+#pa-roll-req .pa-init-roll .btn{padding:14px 4px; font-size:var(--fs-md)}
 .pa-save-src{display:block; font-size:var(--fs-sm); color:var(--text-dim)}
 .pa-init-dice{min-height:1.4em; text-align:center; font-size:var(--fs-lg); font-weight:600}
 .pa-init-type{display:flex; flex-direction:column; gap:6px; font-size:var(--fs-sm); color:var(--text-muted)}
@@ -5068,3 +5068,27 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .add-char-opt b{display:block;font-size:var(--fs-md)}
 .add-char-opt span span{display:block;font-size:var(--fs-xs);color:var(--text-dim);margin-top:2px}
 .add-char-i{font-size:24px;width:32px;text-align:center}
+/* Roll requests (js/features/roll-requests.js): the results card and the ask dialog */
+.rr-card{position:fixed;right:16px;bottom:64px;z-index:9550;width:280px;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--accent);border-radius:var(--r-md,6px);box-shadow:0 8px 24px rgba(0,0,0,.5);padding:10px;font-size:var(--fs-sm)}
+.rr-card.done{border-color:var(--success)}
+.rr-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rr-head b{flex:1;min-width:0}
+.rr-dc{font-size:var(--fs-2xs);color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:0 6px}
+.rr-count{font-size:var(--fs-xs);color:var(--text-muted)}
+.rr-x{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px}
+.rr-row{display:flex;justify-content:space-between;padding:3px 0;border-top:1px solid var(--border)}
+.rr-row i{color:var(--text-dim);font-style:normal}
+.rr-row.ok b{color:var(--success)}
+.rr-row.bad b{color:var(--danger)}
+.rr-acts{display:flex;justify-content:flex-end;margin-top:8px}
+.rr-ask{width:440px;max-width:94vw}
+.rr-kinds{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 10px}
+.rr-kinds button{flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text-muted);padding:8px;border-radius:var(--r-sm);cursor:pointer;font-family:inherit}
+.rr-kinds button.on{border-color:var(--accent);color:var(--text);background:rgba(212,160,90,.1)}
+.rr-kinds button:disabled{opacity:.4;cursor:default}
+.rr-row2{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.rr-row2 label{display:flex;flex-direction:column;gap:3px;font-size:var(--fs-xs);color:var(--text-muted)}
+.rr-row2 input{width:70px}
+.rr-who{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0;font-size:var(--fs-sm)}
+.rr-who b{width:100%;font-size:var(--fs-xs);color:var(--text-muted)}
+@media (max-width: 760px){ .rr-card{left:12px;right:12px;width:auto;bottom:12px} }
