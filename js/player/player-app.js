@@ -758,9 +758,7 @@ function paRefreshMount(tab){
 // action used out of combat would be wrong. The pool lives in state.party, so
 // the DM's Turn View shows the same number a moment later.
 function paActivations(pc){
-  // A character from the builder carries its actions already worked out,
-  // with the pool each one spends; no need to read them back out of text.
-  if (pc && pc.sheet && Array.isArray(pc.sheet.activations) && pc.build) return pc.sheet.activations;
+  if (pc && typeof sktActivationsOf === 'function'){ try { return sktActivationsOf(pc) || []; } catch(e){ return []; } }
   if (!pc || typeof sktDeriveActivations !== 'function') return [];
   const text = (pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '';
   try { return sktDeriveActivations(text) || []; } catch(e){ return []; }

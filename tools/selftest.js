@@ -4709,6 +4709,68 @@
       }
     }
 
+    // -- Class features: represented, not just text ------------------------
+    {
+      try {
+        // Every base class feature, every class, levels 1-20, both books:
+        // an effect, a choice the builder asks, or a header. Fails the day a
+        // data update adds a feature nothing represents.
+        for (const ed of ['2014', '2024']){
+          const R = await sktRulesLoad(ed);
+          const missing = [];
+          R.classes.forEach(cls => {
+            const b = Object.assign(sktBlankBuild(ed), { cls: cls.name, level: 20, subclass: (cls.subclasses.find(x => x.core) || {}).shortName || '' });
+            sktBuildFeatures(b, R).filter(f => f.from === 'class' && !f.info && !f.mech).forEach(f => missing.push(cls.key + ':' + f.name));
+          });
+          ok('features ' + ed + ': every base class feature is represented', missing.length === 0, missing.slice(0, 8).join(', '));
+        }
+        const R24 = await sktRulesLoad('2024');
+        // A choice the builder asks, and what each answer does.
+        const cl = Object.assign(sktBlankBuild('2024'), { name: 'Cc', species: 'Human', cls: 'Cleric', subclass: 'Life', level: 1, background: 'Acolyte',
+          abilities: { method: 'manual', base: { str: 10, dex: 12, con: 14, int: 13, wis: 15, cha: 8 } }, bgAsi: { wis: 2, int: 1 } });
+        ok('features: Divine Order is asked, and required', sktBuildChoices(cl, R24).some(c => c.feature === 'Divine Order')
+           && sktBuildTodo(cl, R24).some(t => /Divine Order/.test(t.what)));
+        cl.featureChoices = { 'Divine Order': 'Thaumaturge' };
+        const th = sktComputeCharacter(cl, R24);
+        ok('features: Thaumaturge adds a cantrip and Wisdom to Arcana',
+           sktBuildSpellcasting(cl, R24, th.abilities).cantrips === 4 && th.sheet.skills.arcana === 2 + 3, th.sheet.skills.arcana);
+        cl.featureChoices = { 'Divine Order': 'Protector' };
+        ok('features: Protector grants heavy armor and martial weapons',
+           sktComputeCharacter(cl, R24).sheet.proficiencies.armor.includes('heavy') && sktComputeCharacter(cl, R24).sheet.proficiencies.weapons.includes('martial'));
+        // Things you do become actions, with the pool they spend.
+        const mk = Object.assign(sktBlankBuild('2024'), { name: 'Mm', cls: 'Monk', level: 5, species: 'Human', background: 'Hermit' });
+        const M = sktComputeCharacter(mk, R24);
+        ok('features: a monk’s Focus options spend Focus Points',
+           ['Flurry of Blows', 'Patient Defense', 'Step of the Wind', 'Stunning Strike'].every(n => M.sheet.activations.some(a => a.name === n && a.resource === 'Focus Points')));
+        ok('features: the Turn View and the phone read the same list', sktActivationsOf(M) === M.sheet.activations);
+        // Short rests read each pool's own recharge.
+        const ft = Object.assign(sktBlankBuild('2024'), { name: 'Rester', cls: 'Fighter', level: 2, species: 'Human', background: 'Soldier' });
+        const pal = Object.assign(sktBlankBuild('2024'), { name: 'Rester2', cls: 'Paladin', subclass: 'Devotion', level: 3, species: 'Human', background: 'Soldier' });
+        const p0 = localStorage.getItem('skt-party-v1');
+        try {
+          const F = sktComputeCharacter(ft, R24), P = sktComputeCharacter(pal, R24);
+          const spend = (rec, name, cur) => rec.resources.map(r => r.name === name ? { ...r, current: cur } : r);
+          F.resources = spend(F, 'Action Surge', 0); F.resources = F.resources.map(r => r.name === 'Second Wind' ? { ...r, current: 0 } : r);
+          P.resources = spend(P, 'Channel Divinity', 0); P.resources = P.resources.map(r => r.name === 'Lay on Hands' ? { ...r, current: 3 } : r);
+          F.id = 'rest_f'; P.id = 'rest_p';
+          state.party.push(F, P); save();
+          const PP = panelDefs.party; openPanel('party'); await sleep(150);
+          PP._shortRestOne(state.party[state.party.length - 2], state.party.length - 2);
+          PP._shortRestOne(state.party[state.party.length - 1], state.party.length - 1);
+          const f2 = state.party[state.party.length - 2], q2 = state.party[state.party.length - 1];
+          const cur = (rec, n) => (rec.resources.find(r => r.name === n) || {}).current;
+          ok('rests: a short rest refills a short-rest pool (Action Surge)', cur(f2, 'Action Surge') === 1, cur(f2, 'Action Surge'));
+          ok('rests: and gives back one use of a 2024 Second Wind', cur(f2, 'Second Wind') === 1, cur(f2, 'Second Wind'));
+          ok('rests: and of a 2024 Channel Divinity', cur(q2, 'Channel Divinity') === 1, cur(q2, 'Channel Divinity'));
+          ok('rests: but not a long-rest pool (Lay on Hands)', cur(q2, 'Lay on Hands') === 3, cur(q2, 'Lay on Hands'));
+        } finally {
+          _remoteUpdate = true;
+          try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+          loadDomain('party'); closePanel('party');
+        }
+      } catch(e){ ok('features: the checks ran to completion', false, e.message); }
+    }
+
     // ── Areas of effect on the map ────────────────────────────────────────
     {
       _remoteUpdate = true;

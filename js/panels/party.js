@@ -640,8 +640,18 @@ registerPanel('party',{
     // rules text for every feature the class grants, which is reference.
     // Reference only here; the Turn View and the player's own screen are
     // where these get spent.
-    const acts = (typeof sktDeriveActivations === 'function')
-      ? sktDeriveActivations((c.sheet && c.sheet.bio && c.sheet.bio.features) || '') : [];
+    const acts = (typeof sktActivationsOf === 'function') ? sktActivationsOf(c) : [];
+    // Rules that are always in effect — advantage on Dexterity saves,
+    // Evasion, an immunity — for a character from the builder, which knows
+    // which of its features are passive. Shown above the reference text so
+    // they are read, not scrolled past.
+    const notes = (c.build && c.sheet && Array.isArray(c.sheet.notes)) ? c.sheet.notes : [];
+    if (notes.length){
+      sections.unshift(`<div class="sheet-block feat-section">
+        <h5>📌 Always in effect <span class="feat-lvl-pill">${notes.length}</span></h5>
+        ${notes.map(n => `<div class="feat-note">${esc(n)}</div>`).join('')}
+      </div>`);
+    }
     if (acts.length){
       const pool = n => (Array.isArray(c.resources) ? c.resources : []).find(r => r.name === n);
       // <details>, the same as every other row on this tab. They were flat
@@ -1695,9 +1705,16 @@ registerPanel('party',{
     // wild shape end at any rest", which was true of one of the two rests.
     c.rage = false; c.rageRounds = null;
     if (c.wildshape) c.wildshape = null;
+    // What comes back on a short rest. A character from the builder says so
+    // on each pool: recharge 'short' refills it (Action Surge, Focus Points,
+    // a Battle Master's dice), 'short-one' gives back one use (2024 Channel
+    // Divinity, Wild Shape, Second Wind). An imported character has no such
+    // field, so the old rule stays for it: a pool named "… (short rest)".
     if (Array.isArray(c.resources)){
       c.resources = c.resources.map(r => {
-        if (/short\s*rest/i.test(r.name || '')) return {...r, current: r.max || r.current};
+        if (r.recharge === 'short') return {...r, current: r.max};
+        if (r.recharge === 'short-one') return {...r, current: Math.min(r.max, (r.current || 0) + 1)};
+        if (!r.recharge && /short\s*rest/i.test(r.name || '')) return {...r, current: r.max || r.current};
         return r;
       });
     }

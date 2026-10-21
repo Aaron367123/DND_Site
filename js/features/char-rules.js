@@ -346,6 +346,7 @@ function sktBlankBuild(edition){
     asi: {},               // level → { type:'asi', inc:{ab:n} } | { type:'feat', feat, choice }
     originFeat: '',        // 2024 Human's extra origin feat; 2014 Variant Human's feat
     featChoices: {},       // feat name → { ability, skills, spells … }
+    featureChoices: {},    // feature name → chosen option (Divine Order → 'Protector')
     optional: {},          // 'Eldritch Invocations' → [names], 'Fighting Style' → [name] …
     masteries: [],         // 2024 weapon mastery picks (weapon names)
     speciesChoice: {},     // 2024 lineage / ancestry / legacy
@@ -408,7 +409,8 @@ function sktBuildFeatures(build, R){
     out.push({
       name: f.name, from, level: level || 0, info: isInfo,
       text: sktRulesText(f.entries),
-      mech: !isInfo && !!sktFeatureEffect(f.name, from, R.edition, cls && cls.key),
+      mech: !isInfo && (!!sktFeatureEffect(f.name, from, R.edition, cls && cls.key)
+                        || !!sktFeatureChoice(f.name, from, R.edition, cls && cls.key)),
     });
   };
   if (cls){
@@ -424,7 +426,7 @@ function sktBuildFeatures(build, R){
       // "Extra Attack (2)", "Destroy Undead (CR 1)", "… improvement") is
       // the same feature at a higher level. It inherits the base's status
       // and is not counted again.
-      const up = _sktUpgradeOf(f.name, cls);
+      const up = _sktUpgradeOf(f.name, cls, f.level);
       if (up){
         out.push({ name: f.name, from: 'class', level: f.level, info: true, upgradeOf: up,
                    text: sktRulesText(f.entries), mech: !!sktFeatureEffect(up, 'class', R.edition, cls.key) });
@@ -453,10 +455,15 @@ function sktBuildFeatures(build, R){
 // "Bardic Inspiration (d8)" → "Bardic Inspiration"; "Action Surge (two
 // uses)" → "Action Surge"; "Unarmored Movement improvement" → "Unarmored
 // Movement". Only when the base is itself one of the class's features.
-function _sktUpgradeOf(name, cls){
+// Also an upgrade when there is no bare base at all but an earlier entry
+// shares the stem: "Brutal Critical (2 dice)" after "Brutal Critical (1
+// die)", "Song of Rest (d8)" after "(d6)". The first of those is the base.
+function _sktUpgradeOf(name, cls, level){
   const base = String(name).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+improvements?$/i, '').trim();
   if (base === name) return null;
-  return cls.features.some(f => f.name === base) ? base : null;
+  if (cls.features.some(f => f.name === base)) return base;
+  const stem = f => String(f.name).replace(/\s*\([^)]*\)\s*$/, '').trim();
+  return cls.features.some(f => f.level < level && stem(f) === base) ? base : null;
 }
 
 // Section headers in the data rather than features: "Fighter Subclass",
@@ -465,7 +472,8 @@ function _sktUpgradeOf(name, cls){
 // numbers already carry (size, speed, age, languages).
 function _sktIsHeader(name, from, sub){
   const n = String(name || '');
-  if (from === 'class' && (/Subclass$/.test(n) || /^Subclass Feature$/i.test(n) || /^Proficiencies$/i.test(n))) return true;
+  if (from === 'class' && (/Subclass$/.test(n) || /^Subclass Feature$/i.test(n) || /^Proficiencies$/i.test(n)
+                           || / Options$/.test(n) || /improvements?$/i.test(n))) return true;
   if (from === 'subclass' && sub && (n === sub.shortName || n === sub.name || /Options$/.test(n))) return true;
   if (from === 'species' && /^(Ability Score Increase|Age|Alignment|Size|Speed|Languages|Creature Type|Subrace)$/i.test(n)) return true;
   return false;
@@ -513,6 +521,11 @@ function sktBuildSpellcasting(build, R, abilities){
   const idx = Math.max(0, Math.min(19, L - 1));
   const out = { ability: ab, dc: 8 + pb + mod, attack: pb + mod, slots: {}, pact: null,
                 cantrips: (caster.cantripProgression || [])[idx] || 0, prepared: 0, known: 0 };
+  // A feature choice can add a cantrip (2024 Thaumaturge, Magician).
+  sktBuildChoices(build, R).forEach(c => {
+    const opt = (c.spec.options || []).find(o => o.value === c.value);
+    if (opt && opt.cantrips) out.cantrips += opt.cantrips;
+  });
   if (caster.preparedSpellsProgression) out.prepared = caster.preparedSpellsProgression[idx] || 0;
   else if (caster.preparedSpells){
     // "<$level$> + <$wis_mod$>", "<$level$> / 2 + <$cha_mod$>"
@@ -565,14 +578,38 @@ function sktSpellOptions(R, build, level){
 // sets, resources, actions, notes — plus the build and the data.
 const SKT_FEATURE_EFFECTS = {};
 function sktFeatureEffect(name, from, edition, clsKey){
-  const tries = [edition + ':' + from + ':' + (clsKey || '') + ':' + name,
-                 edition + ':' + from + ':' + name,
-                 from + ':' + (clsKey || '') + ':' + name,
-                 from + ':' + name];
-  for (const k of tries) if (SKT_FEATURE_EFFECTS[k]) return SKT_FEATURE_EFFECTS[k];
+  const stem = String(name).replace(/\s*\([^)]*\)\s*$/, '').trim();
+  for (const n of stem !== name ? [name, stem] : [name]){
+    const tries = [edition + ':' + from + ':' + (clsKey || '') + ':' + n,
+                   edition + ':' + from + ':' + n,
+                   from + ':' + (clsKey || '') + ':' + n,
+                   from + ':' + n];
+    for (const k of tries) if (SKT_FEATURE_EFFECTS[k]) return SKT_FEATURE_EFFECTS[k];
+  }
   return null;
 }
 function sktDefineEffect(keys, fn){ (Array.isArray(keys) ? keys : [keys]).forEach(k => { SKT_FEATURE_EFFECTS[k] = fn; }); }
+
+// Features that are a CHOICE — a 2024 cleric's Divine Order, a druid's
+// Primal Order, Blessed Strikes. Same key scheme as the effects. The builder
+// asks the question; the chosen option's apply(ctx) runs with the effects.
+//   { label, options: [{ value, label, desc, cantrips? }], apply(ctx, value) }
+const SKT_FEATURE_CHOICES = {};
+function sktDefineChoice(keys, spec){ (Array.isArray(keys) ? keys : [keys]).forEach(k => { SKT_FEATURE_CHOICES[k] = spec; }); }
+function sktFeatureChoice(name, from, edition, clsKey){
+  const tries = [edition + ':' + from + ':' + (clsKey || '') + ':' + name, edition + ':' + from + ':' + name,
+                 from + ':' + (clsKey || '') + ':' + name, from + ':' + name];
+  for (const k of tries) if (SKT_FEATURE_CHOICES[k]) return SKT_FEATURE_CHOICES[k];
+  return null;
+}
+// The choices this build has to make, and what it has picked.
+function sktBuildChoices(build, R){
+  const cls = sktRulesClass(R, build.cls);
+  return sktBuildFeatures(build, R).filter(f => !f.info).map(f => {
+    const spec = sktFeatureChoice(f.name, f.from, R.edition, cls && cls.key);
+    return spec ? { feature: f.name, level: f.level, spec, value: (build.featureChoices || {})[f.name] || '' } : null;
+  }).filter(Boolean);
+}
 
 // Small helpers the effects share.
 function _fxPool(ctx, name, max, recharge, extra){
@@ -851,7 +888,7 @@ function sktComputeCharacter(build, R, prior){
     abilityBonus: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, abilityCapBonus: {},
     jackOfAllTrades: false, remarkableAthlete: false, martialArts: false, martialArtsDie: null,
     sneakAttack: null, rageDamage: 0, agonizingBlast: false, resist: new Set(),
-    senses: { darkvision: 0 },
+    senses: { darkvision: 0 }, skillBonus: {}, immune: new Set(), cantripDamageBonus: 0,
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
 
@@ -908,8 +945,12 @@ function sktComputeCharacter(build, R, prior){
   // Feature effects, in level order.
   const features = sktBuildFeatures(build, R);
   features.forEach(f => {
+    if (f.info) return;
     const fx = sktFeatureEffect(f.name, f.from, R.edition, cls && cls.key);
     if (fx){ try { fx(ctx); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
+    const ch = sktFeatureChoice(f.name, f.from, R.edition, cls && cls.key);
+    const v = ch && (build.featureChoices || {})[f.name];
+    if (ch && v && ch.apply){ try { ch.apply(ctx, v); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
   });
   // Primal Champion and the like raise a score after everything else.
   SKT_ABS.forEach(k => {
@@ -929,7 +970,7 @@ function sktComputeCharacter(build, R, prior){
     else if (ctx.skillProf.has(sk)){ bonus = pb; prof = 1; }
     else if (ctx.jackOfAllTrades) bonus = Math.floor(pb / 2);
     else if (ctx.remarkableAthlete && ['str', 'dex', 'con'].includes(ab)) bonus = Math.ceil(pb / 2);
-    skills[sk] = ctx.mod[ab] + bonus;
+    skills[sk] = ctx.mod[ab] + bonus + (ctx.skillBonus[sk] || 0);
     if (prof) skillProfOut[sk] = prof;
   });
 
@@ -1019,6 +1060,7 @@ function sktComputeCharacter(build, R, prior){
     hitDice: { current: prior.hitDice ? Math.min(L, prior.hitDice.current + Math.max(0, L - (prior.hitDice.max || L))) : L,
                max: L, dieType: 'd' + hd },
     resistances: [...ctx.resist],
+    immunities: [...ctx.immune],
     rules: R.edition,
     build: JSON.parse(JSON.stringify(build)),
     sheet: {
@@ -1033,7 +1075,8 @@ function sktComputeCharacter(build, R, prior){
       spells: spellNames, alwaysPrepared: always,
       activations: ctx.actions, notes: ctx.notes, featureList,
       equipment: gear.list, acSource: best ? best.label + (shield ? ' + Shield' : '') : '',
-      senses: ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
+      senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
+               ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].filter(Boolean).join(', '),
       bio: { features: featureList.map(f => '* ' + f.name + '\n' + f.text).join('\n\n') },
     },
   };
@@ -1181,9 +1224,10 @@ function sktBuildAttacks(ctx, gear, sc){
     let bonus = 0, beams = 0;
     // Eldritch Blast does not roll bigger dice as you level — it fires more
     // beams, each its own attack for 1d10.
+    if (ctx.cantripDamageBonus) bonus += ctx.cantripDamageBonus;
     if (/eldritch blast/i.test(s.name)){
       beams = ctx.level >= 17 ? 4 : ctx.level >= 11 ? 3 : ctx.level >= 5 ? 2 : 1;
-      if (ctx.agonizingBlast) bonus = m.cha;
+      if (ctx.agonizingBlast) bonus += m.cha;
     }
     out.push({
       name: s.name,
@@ -1229,6 +1273,7 @@ function sktBuildTodo(build, R){
     const want = sc.prepared || sc.known;
     if (want && (build.spells || []).length < want) todo.push({ step: 'spells', what: (want - build.spells.length) + ' spell(s)', soft: true });
   }
+  sktBuildChoices(build, R).forEach(c => { if (!c.value) todo.push({ step: 'levels', what: c.feature + ' choice' }); });
   sktOptionalChoices(build, R).forEach(o => {
     const have = ((build.optional || {})[o.name] || []).length;
     if (have < o.count) todo.push({ step: 'levels', what: (o.count - have) + ' × ' + o.name });
@@ -1266,7 +1311,8 @@ function sktOptionalChoices(build, R){
 }
 
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
+  module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
+                     sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };

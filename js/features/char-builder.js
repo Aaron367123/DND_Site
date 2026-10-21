@@ -129,7 +129,8 @@ function cbVisibleSteps(){
   if (!CB || !CB.R) return CB_STEPS;
   const cls = sktRulesClass(CB.R, CB.build.cls);
   const sc = cls ? sktBuildSpellcasting(CB.build, CB.R, sktBuildAbilities(CB.build, CB.R)) : null;
-  const hasLevels = (CB.build.level || 1) > 1 || sktOptionalChoices(CB.build, CB.R).length || cbMasteryCount() > 0;
+  const hasLevels = (CB.build.level || 1) > 1 || sktOptionalChoices(CB.build, CB.R).length || cbMasteryCount() > 0
+    || (cls && sktBuildChoices(CB.build, CB.R).length);
   return CB_STEPS.filter(s => (s.id !== 'spells' || sc) && (s.id !== 'levels' || hasLevels || !cls));
 }
 
@@ -442,6 +443,12 @@ CB_RENDER.levels = () => {
     }
     html += '<div class="cb-dim">Level 1 is always the full d' + cls.hd + '. Your Constitution modifier is added every level.</div>';
   }
+  // Features that are a choice: Divine Order, Primal Order, Blessed Strikes…
+  sktBuildChoices(b, R).forEach(c => {
+    html += '<h4>' + cbEsc(c.spec.label || c.feature) + ' <span class="cb-dim">level ' + c.level + '</span></h4>'
+      + '<div class="cb-cards">' + c.spec.options.map(o => '<button class="cb-card' + (c.value === o.value ? ' on' : '') + '" data-cb-fchoice="'
+        + cbEsc(c.feature + '||' + o.value) + '"><b>' + cbEsc(o.label) + '</b><span>' + cbEsc(o.desc || '') + '</span></button>').join('') + '</div>';
+  });
   // Subclass.
   if (L >= cls.subclassLevel && !b.subclass) html += '<div class="cb-warn">Choose your ' + cbEsc(sktRulesInline(cls.subclassTitle)) + ' on the Class step.</div>';
   // ASI or feat.
@@ -669,6 +676,11 @@ function cbOnClick(e){
   if (d.cbHp) return cbSet(b => { b.hp = b.hp || { rolls: {} }; b.hp.method = d.cbHp; b.hp.rolls = b.hp.rolls || {}; });
   if (d.cbHpdice) return cbSet(b => {
     const cls = sktRulesClass(CB.R, b.cls); b.hp.rolls[d.cbHpdice] = sktD(cls.hd);
+  });
+  if (d.cbFchoice) return cbSet(b => {
+    const [feat, val] = d.cbFchoice.split('||');
+    b.featureChoices = b.featureChoices || {};
+    b.featureChoices[feat] = val;
   });
   if (d.cbAsitype) return cbSet(b => {
     const [l, type] = d.cbAsitype.split(':');

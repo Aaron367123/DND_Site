@@ -34,17 +34,17 @@
  */
 'use strict';
 
-const BUILD = 'eceec7f517';
+const BUILD = '157f2d38da';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=ae3c94474e',
+  'styles/main.css?v=dc479efda6',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=58d1b9e0c5',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=4c451e989e',
+  'js/core/utils.js?v=7a1812f490',
   'js/core/state.js?v=3360b6540c',
   'js/core/undo.js?v=e758143074',
   'js/core/window-manager.js?v=cc67577046',
@@ -52,8 +52,8 @@ const PRECACHE = [
   'js/panels/attacks.js?v=cbee1aeeb4',
   'js/generated/reactions.js?v=faa668dc18',
   'js/generated/rules.js?v=8efb8beae9',
-  'js/panels/turnview.js?v=7de67d9c81',
-  'js/panels/party.js?v=43ee08a899',
+  'js/panels/turnview.js?v=142d13db19',
+  'js/panels/party.js?v=56a3d7bdb2',
   'js/panels/shop.js?v=fadf7d5fe3',
   'js/sync/notes-sync.js?v=8c42540638',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -81,10 +81,11 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=bdaf579267',
   'js/ui/command-palette.js?v=ae849cbcc9',
-  'js/features/char-rules.js?v=5d62b87e1f',
-  'js/features/char-builder.js?v=eccc59ad65',
+  'js/features/char-rules.js?v=d15e2a685a',
+  'js/features/char-effects.js?v=5bca27f710',
+  'js/features/char-builder.js?v=27112e7354',
   'js/features/pdf-import.js?v=06787122c5',
-  'js/player/player-app.js?v=440da73313',
+  'js/player/player-app.js?v=e863ec7692',
   'js/ui/player-view.js?v=6733e4289d',
   'js/sync/realtime.js?v=ec1a0497bb',
   'js/sync/presence.js?v=3c6820c9d8',

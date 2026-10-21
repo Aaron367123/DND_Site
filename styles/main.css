@@ -5059,3 +5059,4 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
   .cb-checks{grid-template-columns:1fr 1fr}
   .cb-foot .btn{padding:10px 14px}
 }
+.feat-note{font-size:var(--fs-sm);color:var(--text-muted);padding:4px 0;border-top:1px solid var(--border)}

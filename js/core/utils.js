@@ -1523,6 +1523,17 @@ const SKT_ACT_USES = /^(\d+)\s*\/\s*(Short Rest|Long Rest|Rest|Day|Turn|Round|En
 
 const _sktActCache = new Map();
 
+// What a party member can activate. A character from the builder carries
+// its actions worked out, with the pool each one spends; an imported one
+// has them read back out of its sheet's features text. Every screen that
+// lists or spends actions asks here, so the two kinds behave the same in the
+// party sheet, the Turn View and on the phone.
+function sktActivationsOf(pc){
+  if (!pc) return [];
+  if (pc.build && pc.sheet && Array.isArray(pc.sheet.activations)) return pc.sheet.activations;
+  return sktDeriveActivations((pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '');
+}
+
 function sktDeriveActivations(featuresText){
   const text = String(featuresText || '');
   if (!text.trim()) return [];

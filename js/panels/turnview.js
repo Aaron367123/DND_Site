@@ -404,9 +404,9 @@ registerPanel('turnview', {
     // In a beast's body the druid's own options are not available — the same
     // reason _attacksFor swaps to the beast's attacks.
     if (this._wsOf(c)) return [];
-    const text = (p.sheet && p.sheet.bio && p.sheet.bio.features) || '';
     let acts = [];
-    try { acts = sktDeriveActivations(text) || []; } catch(e){ return []; }
+    try { acts = (typeof sktActivationsOf === 'function' ? sktActivationsOf(p) : sktDeriveActivations((p.sheet && p.sheet.bio && p.sheet.bio.features) || '')) || []; }
+    catch(e){ return []; }
     return acts.map((a, i) => {
       const res = a.resource || (this._pool(c, a.name) ? a.name : '');
       return { ...a, i, res, pool: res ? this._pool(c, res) : null };
