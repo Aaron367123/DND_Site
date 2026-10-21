@@ -530,10 +530,16 @@ function showToast(msg, opts){
     host.id = 'toast-host';
     document.body.appendChild(host);
   }
-  // Cap to 3 — pop the oldest if needed before adding the new one.
-  while (host.children.length >= 3) host.firstElementChild.remove();
+  // Cap to 3 — pop the oldest if needed before adding the new one. A sticky
+  // toast is never the one popped: it is waiting for a tap, and three
+  // "Combat ended" toasts in a row must not quietly bump it off the screen.
+  while (host.children.length >= 3){
+    const victim = [...host.children].find(c => !c.classList.contains('sticky'));
+    if (!victim) break;
+    victim.remove();
+  }
   const t = document.createElement('div');
-  t.className = 'toast-item';
+  t.className = 'toast-item' + (opts && opts.sticky ? ' sticky' : '');
   const safeMsg = typeof msg === 'string' ? msg : String(msg ?? '');
   let timeoutMs = 1800;
   if (opts && opts.action && typeof opts.action.run === 'function'){
@@ -557,6 +563,8 @@ function showToast(msg, opts){
   // Force reflow so the .show transition fires for the newly inserted node.
   void t.offsetWidth;
   t.classList.add('show');
+  // opts.sticky: stays until its action is tapped (which removes it above).
+  if (opts && opts.sticky) return;
   setTimeout(() => {
     t.classList.remove('show');
     setTimeout(() => t.remove(), 200);

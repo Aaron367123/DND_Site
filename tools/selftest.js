@@ -4553,6 +4553,34 @@
       }
     }
 
+    // -- "A new version is available" waits for a tap ----------------------
+    // Nothing else applies an update — a refresh keeps the old version while
+    // the new one waits — so a prompt that timed out left a device on old
+    // code until every tab was closed.
+    {
+      try {
+        document.getElementById('toast-host')?.remove();
+        let tapped = 0;
+        // Watch what each toast schedules rather than waiting it out: a toast
+        // with a button already lasts five seconds, so a short wait could not
+        // tell a sticky prompt from one that will time out later.
+        const st0 = window.setTimeout, timers = [];
+        window.setTimeout = (fn, ms, ...rest) => { timers.push(ms || 0); return st0(fn, ms, ...rest); };
+        try { showToast('An ordinary one'); } finally { window.setTimeout = st0; }
+        ok('update: an ordinary toast schedules its own exit', timers.some(ms => ms >= 1000), JSON.stringify(timers));
+        timers.length = 0;
+        window.setTimeout = (fn, ms, ...rest) => { timers.push(ms || 0); return st0(fn, ms, ...rest); };
+        try { showToast('A new version is available.', { sticky: true, action: { label: 'Reload', run: () => { tapped++; } } }); }
+        finally { window.setTimeout = st0; }
+        ok('update: the prompt schedules none', !timers.some(ms => ms >= 1000), JSON.stringify(timers));
+        for (let i = 0; i < 4; i++) showToast('Filler ' + i);
+        ok('update: later toasts never push the prompt off', !!document.querySelector('.toast-item.sticky'));
+        document.querySelector('.toast-item.sticky .toast-action').click(); await sleep(300);
+        ok('update: tapping Reload runs it and clears it', tapped === 1 && !document.querySelector('.toast-item.sticky'));
+      } catch(e){ ok('update: the checks ran to completion', false, e.message); }
+      finally { document.getElementById('toast-host')?.remove(); }
+    }
+
     // ── Areas of effect on the map ────────────────────────────────────────
     {
       _remoteUpdate = true;
@@ -5290,6 +5318,20 @@
           } finally { _remoteUpdate = false; }
           paRender();
         }
+      }
+
+      // -- The update prompt on a phone sits clear of the tabs --------------
+      if (paIsPhone()) {
+        try {
+          document.getElementById('toast-host')?.remove();
+          showToast('A new version is available.', { sticky: true, action: { label: 'Reload', run: () => {} } });
+          await sleep(300);
+          const a = document.querySelector('.toast-item.sticky').getBoundingClientRect();
+          const b = document.querySelector('.pa-tabs').getBoundingClientRect();
+          ok('phone: the update prompt leaves the tab bar usable', a.bottom <= b.top + 1,
+             Math.round(a.bottom) + ' vs ' + Math.round(b.top));
+        } catch(e){ ok('phone: the update prompt check ran to completion', false, e.message); }
+        finally { document.getElementById('toast-host')?.remove(); }
       }
 
       // ── "Roll initiative!" on this phone ──────────────────────────────────

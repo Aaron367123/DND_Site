@@ -34,17 +34,17 @@
  */
 'use strict';
 
-const BUILD = '56282dbb60';
+const BUILD = 'c951ceb291';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=0369941ec4',
+  'styles/main.css?v=e4aa370ce1',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=58d1b9e0c5',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=7ef29446e8',
+  'js/core/utils.js?v=4c451e989e',
   'js/core/state.js?v=3360b6540c',
   'js/core/undo.js?v=e758143074',
   'js/core/window-manager.js?v=cc67577046',
@@ -88,7 +88,7 @@ const PRECACHE = [
   'js/sync/presence.js?v=3c6820c9d8',
   'js/ui/tutorial.js?v=e47e670b86',
   'js/ui/onboarding.js?v=42199a671a',
-  'js/app.js?v=e8f171a49d',
+  'js/app.js?v=a4810c1eb7',
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build

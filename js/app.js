@@ -276,7 +276,13 @@ function promptUpdate(reg){
   _updatePrompted = true;
   console.info('[SKT] a new build is available — prompting to reload.');
   if (typeof showToast !== 'function'){ console.info('[SKT] update available — reload to apply.'); return; }
+  // Sticky. It used to vanish after five seconds, and nothing else applies
+  // an update: a normal refresh keeps the old version while the new one
+  // waits (sw.js deliberately does not skipWaiting on its own). So a device
+  // that missed those five seconds ran old code until every tab of the site
+  // was closed — at the table, that read as "the new feature is broken".
   showToast('A new version is available.', {
+    sticky: true,
     action: {
       label: 'Reload',
       run: () => {
