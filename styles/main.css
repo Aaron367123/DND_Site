@@ -5161,3 +5161,17 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .modal.mp .mp-filters select{width:auto;flex:0 0 140px}
 .modal.mp .mp-n input{width:56px}
 @media (max-width: 760px){ .modal.mp .mp-filters select{flex:1 1 120px} }
+/* Turn View, decluttered: empty regions take no room, the extras fold away */
+.tv-result:empty, .tv-log:empty { display:none; }
+.tv-econ-status { font-size:var(--fs-xs); color:var(--accent); border:1px solid var(--accent); border-radius:var(--r-pill); padding:1px 8px; }
+.tv-econ-more { background:none; border:1px solid transparent; color:var(--text-muted); font:inherit; font-size:var(--fs-sm); cursor:pointer; padding:3px 8px; border-radius:var(--r-sm); margin-left:auto; }
+.tv-econ-more:hover, .tv-econ-more.on { color:var(--text); border-color:var(--border); }
+.tv-advbar { display:inline-flex; gap:0; align-self:flex-start; }
+.tv-advbar .btn { border-radius:0; margin-left:-1px; padding:3px 12px; }
+.tv-advbar .btn:first-child { border-radius:var(--r-sm) 0 0 var(--r-sm); margin-left:0; }
+.tv-advbar .btn:last-child { border-radius:0 var(--r-sm) var(--r-sm) 0; }
+.tv-manual-open { align-self:flex-start; background:none; border:none; color:var(--text-muted); font:inherit; font-size:var(--fs-sm); cursor:pointer; padding:4px 2px; }
+.tv-manual-open:hover { color:var(--accent); }
+.tv-manual-x { background:none; border:none; color:var(--text-dim); cursor:pointer; margin-left:auto; font-size:var(--fs-sm); }
+.tv-actas { min-width:96px; }
+.tv-act-line { color:var(--text); opacity:.75; }

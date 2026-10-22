@@ -39,6 +39,12 @@ registerPanel('turnview', {
   // This is what the separate Attack Runner panel was for, and the one thing
   // it did that this panel didn't. Dropped as soon as the turn moves on.
   _actAs: null,
+  // Tucked away until asked for: the six standard actions (Dash … Ready) and,
+  // for a creature with attacks to roll, the "rolled it yourself" row. Both
+  // were always on screen — nine buttons and a form above and below the
+  // attacks that most turns never touch.
+  _stdOpen: false,
+  _manualOpen: false,
   _editInit: false,
   _mapBig: false,
   // Manual zoom over the automatic framing. 1 = fit the fight. Deliberately
@@ -1016,8 +1022,9 @@ registerPanel('turnview', {
       return `<span class="tv-res-i">${esc(r.name)}<span class="tv-pips">${pips}</span></span>`;
     }).join('') : '';
     const rx = this._reactionsFor(c);
-    const rxHtml = !rx.length ? '' :
-      `<span class="tv-rx-l">Reactions</span>` + rx.map(r =>
+    const own = rx.filter(r => r.from !== 'always');
+    const rxHtml = !own.length ? '' :
+      `<span class="tv-rx-l">Reactions</span>` + own.map(r =>
         `<span class="tv-rx ${c.reactionUsed ? 'spent' : ''} ${r.when ? 'hit' : ''}"
                title="${esc(r.note || '')}">${esc(r.name)}<span class="tv-rx-src">${esc(r.from)}${r.lvl ? ' L' + r.lvl : ''}${
           r.scope === 'ally' ? ' · ally' : r.scope === 'both' ? ' · either' : ''}</span></span>`).join('');
@@ -1193,13 +1200,15 @@ registerPanel('turnview', {
       <label class="tv-manual-mag" title="Magical, silvered or adamantine — ticks past &quot;resistance to nonmagical attacks&quot;. A rolled attack reads this off the stat block; a number you typed carries no such clue, so without it a magic longsword does nothing to a werewolf.">
         <input type="checkbox" data-tvman="magical"><span>✦ magic</span>
       </label>
-      <button class="btn ${list.length ? '' : 'primary'}" data-tv="manual">Apply</button>
+      <button class="btn ${list.length ? '' : 'primary'}" data-tv="manual"
+        title="For damage or healing that isn't an attack, use − / + under the target list">Apply</button>
+      ${list.length ? '<button class="tv-manual-x" data-tv="manualopen" title="Hide this row" aria-label="Hide">✕</button>' : ''}
     </div>`;
     if (!list.length){
-      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderClassRow(c)}${manual}
-        <div class="tv-act-line" style="padding:0 2px">Or use the −/+ under the target list for damage
-        and healing that isn't an attack.</div></div></div>`;
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderClassRow(c)}${manual}</div></div>`;
     }
+    const manualSlot = this._manualOpen ? manual
+      : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
     const rows = list.map((a, i) => {
       const line = a.pc
         ? `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`
@@ -1261,13 +1270,10 @@ registerPanel('turnview', {
     }
     const advBtn = (v, label, title) =>
       `<button class="btn ${this._adv === v ? 'primary' : ''}" data-tv="adv" data-v="${v}" title="${title}">${label}</button>`;
-    const advBar = `<div class="tv-advbar">
-      <span class="tv-manual-l">Roll</span>
+    const advBar = `<div class="tv-advbar" title="Sticky for the turn — Reckless Attack lasts all of it. Shift-click a Roll for advantage, Alt-click for disadvantage.">
       ${advBtn(-1, 'Disadv', 'Roll two d20 and keep the lower')}
       ${advBtn(0, 'Straight', 'One d20')}
       ${advBtn(1, 'Adv', 'Roll two d20 and keep the higher')}
-      <span class="tv-note">Sticky for the turn — Reckless Attack lasts all of it.
-        Shift-click a Roll for advantage, Alt-click for disadvantage.</span>
     </div>`;
     // The manual row sits OUTSIDE the scroller. .tv-actions gives way so the
     // result line stays on screen, which meant that on a creature with three
@@ -1276,7 +1282,7 @@ registerPanel('turnview', {
     // so it is the last thing that should disappear when the list gets long.
     return `<div class="tv-actions-wrap">
       <div class="tv-actions">${this._renderEconomy(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
-      ${manual}
+      ${manualSlot}
     </div>`;
   },
 
@@ -1301,9 +1307,11 @@ registerPanel('turnview', {
       ['.tv-headwrap',   () => this._renderActorHead(c)],
       ['.tv-actbody',    () => this._renderActions(c)],
       ['.tv-legendary',  () => this._renderLegendary()],
-      ['.tv-result',     () => (this._result || '<span class="dim">Pick a target, then roll an attack.</span>')
-          + (this._undo ? `<button class="btn tv-undo" data-tv="undo"
-              title="Undo ${esc(this._undo.label)} — HP, death saves, pools and spent reactions">${ICO('i-undo')}Undo</button>` : '')],
+      // Beside a result, the way to take it back: the app's one history, so
+      // it is the same step Ctrl+Z would undo.
+      ['.tv-result',     () => !this._result ? '' : this._result
+          + (typeof sktUndoLabel === 'function' && sktUndoLabel() ? `<button class="btn tv-undo" data-tv="undo"
+              title="Undo ${esc(sktUndoLabel())} (Ctrl+Z)">${ICO('i-undo')}Undo</button>` : '')],
       ['.tv-traits',     () => this._renderTraits(c)],
       ['.tv-log',        () => this._renderLog()],
       ['.tv-targets',    () => this._renderTargets(c)],
@@ -1455,9 +1463,7 @@ registerPanel('turnview', {
     // A PC's class features are the Party panel's Features tab, which resolves
     // them from the same class data. Pointed at rather than reimplemented —
     // two renderers for one list is two things to keep in step.
-    const p3 = p ? `<div class="tv-trait" style="color:var(--text-dim)">Class and subclass features
-      are in the Party panel's <b>Features</b> tab.</div>` : '';
-    return p1 + p2 + p3;
+    return p1 + p2;
   },
 
   _renderTargets(c){
@@ -1561,12 +1567,12 @@ registerPanel('turnview', {
     const turn = this._turnOf();
     if (c && turn && c.id !== turn.id)
       return `Acting as <b>${esc(c.name)}</b>, off-turn · it is <b>${esc(turn.name)}</b>'s turn`;
-    return `<b>${esc(c ? c.name : '—')}</b>'s turn · next up <b>${esc(n ? n.name : '—')}</b>`;
+    return `Next up <b>${esc(n ? n.name : '—')}</b>`;
   },
   _renderLog(){
     return this._log.length
       ? this._log.slice(0, 8).map(l => `<div class="tv-log-line">${l}</div>`).join('')
-      : '<div class="tv-log-line" style="opacity:.55">Rolls this combat appear here.</div>';
+      : '';
   },
 
   // Only a PLACEHOLDER. _render rewrites the whole panel's innerHTML, which
@@ -1955,7 +1961,17 @@ registerPanel('turnview', {
   // rewinds the attack AND any reaction spent answering it — the two are one
   // decision at the table and should be one step here.
   _snapshot(label){
-    this._undo = {
+    const snap = this._capture(label);
+    if (typeof sktUndoRecordCustom === 'function'){
+      let after = null;
+      sktUndoRecordCustom(label,
+        () => { after = this._capture(label); this._restore(snap); },
+        () => { if (after) this._restore(after, 'redid'); },
+        { quiet: true });
+    } else this._undo = snap;
+  },
+  _capture(label){
+    return {
       label,
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
@@ -1981,6 +1997,9 @@ registerPanel('turnview', {
   },
   _undoLast(){
     const u = this._undo; if (!u) return;
+    this._restore(u);
+  },
+  _restore(u, verb){
     u.combat.forEach(s => {
       const c = this._order().find(x => x.id === s.id);
       if (c) Object.assign(c, s);
@@ -1996,8 +2015,8 @@ registerPanel('turnview', {
     });
     state.combatRound = u.round;
     state.activeCombatantId = u.active;
-    this._log.unshift(`<span style="opacity:.7">undid — ${esc(u.label)}</span>`);
-    this._setResult(`<span class="dim">Undone: ${esc(u.label)}.</span>`);
+    this._log.unshift(`<span style="opacity:.7">${verb || 'undid'} — ${esc(u.label)}</span>`);
+    this._setResult(`<span class="dim">${verb === 'redid' ? 'Redone' : 'Undone'}: ${esc(u.label)}.</span>`);
     this._undo = null;
     this._pending = null;
     save();
@@ -2411,12 +2430,15 @@ registerPanel('turnview', {
     // here tracks, so they are recorded and adjudicated — same rule as the
     // reactions with no mechanics.
     const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'];
+    const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : ''].filter(Boolean);
     return `<div class="tv-econ-bar">
       ${pip('actionUsed', 'Action', 'This turn&rsquo;s action')}
       ${pip('bonusUsed', 'Bonus', 'This turn&rsquo;s bonus action')}
       ${pip('reactionUsed', 'Reaction', 'Refreshes at the start of its own turn')}
-      <span class="tv-econ-sep"></span>
-      ${acts.map(a => `<button class="btn tv-econ-act ${(a === 'Dodge' && c.dodging) || (a === 'Disengage' && c.disengaged) ? 'primary' : ''}"
+      ${status.map(t => `<span class="tv-econ-status">${t}</span>`).join('')}
+      <button class="tv-econ-more ${this._stdOpen ? 'on' : ''}" data-tv="stdopen" aria-expanded="${this._stdOpen}"
+        title="Dash, Disengage, Dodge, Help, Hide, Ready">${this._stdOpen ? '▾' : '▸'} Other actions</button>
+      ${!this._stdOpen ? '' : acts.map(a => `<button class="btn tv-econ-act ${(a === 'Dodge' && c.dodging) || (a === 'Disengage' && c.disengaged) ? 'primary' : ''}"
           data-tv="stdact" data-a="${a}"
           title="${a === 'Dodge' ? 'Attacks against this creature have disadvantage until the start of its next turn — applied automatically'
                   : a === 'Disengage' ? 'Its movement provokes no opportunity attacks for the rest of this turn — applied automatically'
@@ -2822,6 +2844,8 @@ registerPanel('turnview', {
       // closest('[data-tv]') finds the innermost, so this wins the click and
       // opening the menu does not also re-target the attack.
       else if (act === 'actas-end'){ this.actAs(null); }
+      else if (act === 'stdopen'){ this._stdOpen = !this._stdOpen; this._render(); }
+      else if (act === 'manualopen'){ this._manualOpen = !this._manualOpen; this._render(); }
       else if (act === 'rx'){
         this._rxMenu = (this._rxMenu === el.dataset.id) ? null : el.dataset.id;
         this._render();
@@ -2870,7 +2894,7 @@ registerPanel('turnview', {
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
-      else if (act === 'undo'){ this._undoLast(); }
+      else if (act === 'undo'){ if (typeof sktUndo === 'function') sktUndo(); else this._undoLast(); }
       else if (act === 'dsroll'){ this._rollDeathSave(); }
       else if (act === 'ds'){
         const c = this._active();

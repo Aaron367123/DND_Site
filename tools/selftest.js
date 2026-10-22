@@ -3775,6 +3775,55 @@
       finally { document.getElementById('cp-backdrop')?.remove(); try { closeSearch(); } catch(e){} }
     }
 
+    // ── Turn View, decluttered ─────────────────────────────────────────────
+    {
+      const before = errs.length;
+      const K0 = JSON.stringify(state.combatants), A0 = state.activeCombatantId;
+      try {
+        _remoteUpdate = true;
+        try { ['skt-combat-v1', 'skt-party-v1'].forEach(k => { if (snapshot[k] != null) localStorage.setItem(k, snapshot[k]); }); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party');
+        const mon = state.combatants.find(c => !c.isPC && panelDefs.turnview._attacksFor(c).length);
+        state.activeCombatantId = mon.id; save();
+        const TV = panelDefs.turnview; TV._stdOpen = false; TV._manualOpen = false; TV._result = ''; TV._log = [];
+        openPanel('turnview'); await sleep(500);
+        const b = TV._body;
+        ok('turnview: no chips for the reactions everyone has', !/Opportunity Attack/.test(b.querySelector('.tv-headwrap').textContent));
+        ok('turnview: the six standard actions wait behind one button',
+           !b.querySelector('[data-tv="stdact"]') && !!b.querySelector('[data-tv="stdopen"]'));
+        b.querySelector('[data-tv="stdopen"]').click(); await sleep(60);
+        ok('turnview: and are there when asked for', b.querySelectorAll('[data-tv="stdact"]').length === 6);
+        ok('turnview: "rolled it yourself" is one small button for a creature with attacks',
+           !b.querySelector('[data-tvman="dmg"]') && !!b.querySelector('.tv-manual-open'));
+        b.querySelector('.tv-manual-open').click(); await sleep(60);
+        ok('turnview: which opens the row', !!b.querySelector('[data-tvman="dmg"]'));
+        ok('turnview: no placeholder boxes before anything has happened',
+           getComputedStyle(b.querySelector('.tv-result')).display === 'none');
+        // One undo history: a rolled attack is a step Ctrl+Z takes back.
+        const tgt = state.combatants.find(c => c.id !== mon.id && c.hp > 0);
+        TV._armed = tgt.id; TV._render();
+        const hp0 = tgt.hp; let tries = 0;
+        while (state.combatants.find(c => c.id === tgt.id).hp === hp0 && tries++ < 30){
+          TV._rollAttack(0); await sleep(10);
+          if (TV._pending){ TV._pending = null; }
+        }
+        const hit = state.combatants.find(c => c.id === tgt.id).hp;
+        ok('turnview: the attack is in the app’s undo history', hit < hp0 && /→/.test(sktUndoLabel() || ''), sktUndoLabel());
+        ok('turnview: with an Undo beside the result', !!b.querySelector('.tv-result [data-tv="undo"]'));
+        sktUndo(); await sleep(60);
+        ok('turnview: Ctrl+Z puts the hit points back', state.combatants.find(c => c.id === tgt.id).hp === hp0,
+           state.combatants.find(c => c.id === tgt.id).hp + ' vs ' + hp0);
+        sktRedo(); await sleep(60);
+        ok('turnview: and redo lands it again', state.combatants.find(c => c.id === tgt.id).hp === hit);
+      } catch(e){ ok('turnview: the declutter checks ran to completion', false, e.message); }
+      finally {
+        try { closePanel('turnview'); } catch(e){}
+        state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save();
+      }
+      ok('turnview: declutter checks silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
     // ── The NPC generator lives in the NPC Library ────────────────────────
     {
       const before = errs.length;
