@@ -1932,6 +1932,10 @@ registerPanel('party',{
       +   `<div class="sheet-stat-row rollable" data-act="roll-init" data-cid="${esc(c.id)}" data-mod="${c.init??0}" title="Click to roll initiative (Shift = adv · Alt = dis)" style="cursor:pointer"><span>Initiative</span><span class="sheet-stat-val">${(c.init>=0?'+':'')+(c.init??0)}</span></div>`
       +   `<div class="sheet-stat-row"><span>Speed</span><span class="sheet-stat-val">${c.spd ?? '—'}</span></div>`
       +   `<div class="sheet-stat-row"><span>AC</span><span class="sheet-stat-val">${c.ac ?? '—'}</span></div>`
+      // From the character builder: size, alignment, and the gold they carry.
+      +   (sh.size ? `<div class="sheet-stat-row"><span>Size</span><span class="sheet-stat-val">${esc(sh.size)}</span></div>` : '')
+      +   (sh.details && sh.details.alignment ? `<div class="sheet-stat-row"><span>Alignment</span><span class="sheet-stat-val">${esc(sh.details.alignment)}</span></div>` : '')
+      +   (typeof c.gold === 'number' ? `<div class="sheet-stat-row"><span>Gold</span><span class="sheet-stat-val"><input class="sheet-gold" type="number" min="0" step="1" value="${c.gold}" data-field="gold" data-idx="${state.party.indexOf(c)}" aria-label="Gold pieces"> gp</span></div>` : '')
       + '</div>'
       + '</div>'
       + (sh.languages ? this._renderLanguages(sh.languages) : '')
@@ -2799,7 +2803,8 @@ registerPanel('party',{
       inp.addEventListener('change',e=>{
         const i=+e.target.dataset.idx, f=e.target.dataset.field;
         let v=e.target.value;
-        if(['hp','hpMax','ac','init','spd','tempHp'].includes(f))v=parseInt(v)||0;
+        if(['hp','hpMax','ac','init','spd','tempHp','gold'].includes(f))v=parseInt(v)||0;
+        if (f === 'gold' && v < 0) v = 0;
         // Temp HP can never go negative — taking damage just zeroes it out
         // before any further damage hits real HP, but the field itself
         // shouldn't display a negative buffer.

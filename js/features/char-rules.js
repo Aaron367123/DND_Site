@@ -353,6 +353,9 @@ function sktBlankBuild(edition){
     cantrips: [], spells: [],
     hp: { method: 'average', rolls: {} },
     equipment: { cls: 'A', bg: 'A', picks: {} },
+    spellbook: [],         // a wizard's book; prepared spells come out of it
+    size: '',              // 2024 species that may be Small or Medium
+    details: {},           // alignment, looks, personality, backstory
     icon: '',
   };
 }
@@ -535,6 +538,9 @@ function sktBuildSpellcasting(build, R, abilities){
     out.prepared = Math.max(1, lv + mod);
   }
   if (caster.spellsKnownProgression) out.known = caster.spellsKnownProgression[idx] || 0;
+  // A wizard prepares from a spellbook, not the whole wizard list: six
+  // spells at 1st level and two more each level after (both editions).
+  if (cls && cls.key === 'wizard' && caster === cls) out.spellbook = 6 + 2 * (L - 1);
   if (caster.casterProgression === 'pact'){
     const n = sktClassColumn(cls, 'Spell Slots', L) || sktClassColumn(cls, 'Pact Slots', L) || 0;
     const lvl = sktClassColumn(cls, 'Slot Level', L);
@@ -566,6 +572,89 @@ function sktSpellOptions(R, build, level){
   if (!cls.casterProgression && sub && sub.casterProgression) listName = 'Wizard';
   return R.spells.filter(s => s.classes.includes(listName) && s.level === level)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ── Spells a feat grants ─────────────────────────────────────────────────────
+// Magic Initiate, Fey Touched, Ritual Caster and the rest describe what they
+// grant in the data's additionalSpells: one block per spell list to choose
+// from, each with fixed spells ("misty step") and choices written as filters
+// ("level=1|class=Bard", "level=1|school=E;D", "…|components &
+// miscellaneous=ritual"). Read generally, so a feat from any book works.
+// A feat taken this way used to grant nothing at all.
+function sktSpellsMatching(R, filter){
+  const f = {};
+  String(filter || '').split('|').forEach(p => { const i = p.indexOf('='); if (i > 0) f[p.slice(0, i).trim().toLowerCase()] = p.slice(i + 1).trim(); });
+  const many = v => String(v).split(';').map(x => x.trim().toLowerCase()).filter(Boolean);
+  return R.spells.filter(s => {
+    if (f.level != null && !many(f.level).includes(String(s.level))) return false;
+    if (f.class && !many(f.class).some(c => s.classes.map(x => x.toLowerCase()).includes(c))) return false;
+    if (f.school && !many(f.school).includes(String(s.school).toLowerCase())) return false;
+    if (/ritual/i.test(f['components & miscellaneous'] || '') && !s.ritual) return false;
+    return true;
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+function _sktGrantItems(block){
+  const out = [];
+  const walk = (node, info) => {
+    if (Array.isArray(node)){
+      node.forEach(x => {
+        if (typeof x === 'string') out.push({ fixed: x.split('|')[0].replace(/#c$/, '').trim(), ...info });
+        else if (x && x.choose) out.push({ choose: String(x.choose), count: x.count || 1, ...info });
+      });
+      return;
+    }
+    if (node && typeof node === 'object') Object.keys(node).forEach(k => walk(node[k], { ...info, daily: info.daily || k === 'daily' }));
+  };
+  ['innate', 'known', 'prepared', 'expanded'].forEach(kind => { if (block[kind]) walk(block[kind], { kind, daily: false }); });
+  return out;
+}
+// The list a 2024 background fixes: "magic initiate; cleric|xphb" → 'cleric'.
+function _sktFeatHint(build, R, featName){
+  const bg = sktRulesBackground(R, build.background);
+  if (R.edition !== '2024' || !bg || !Array.isArray(bg.feats)) return '';
+  for (const o of bg.feats) for (const k of Object.keys(o)){
+    const [nm, rest] = k.split('|')[0].split(';');
+    if (rest && nm.trim().toLowerCase() === String(featName).toLowerCase()) return rest.trim().toLowerCase();
+  }
+  return '';
+}
+// Everything about one feat's spells: the lists, the one in force, the
+// ability, each choice with its options and picks, and what is missing.
+function sktFeatSpellGrant(R, build, featName){
+  const f = sktRulesFeat(R, featName);
+  if (!f || !Array.isArray(f.additionalSpells) || !f.additionalSpells.length) return null;
+  const ch = (build.featChoices || {})[f.name] || {};
+  const blocks = f.additionalSpells.map(b => ({ name: String(b.name || f.name).replace(/ Spells$/, ''), ability: b.ability, items: _sktGrantItems(b) }));
+  const hint = _sktFeatHint(build, R, f.name);
+  const block = blocks.length === 1 ? blocks[0]
+    : blocks.find(b => hint && b.name.toLowerCase() === hint) || blocks.find(b => b.name === ch.spellList) || null;
+  let ability = null, abilityChoices = null;
+  if (block){
+    const a = block.ability;
+    if (typeof a === 'string' && a !== 'inherit') ability = a;
+    else if (a && a.choose){ abilityChoices = a.choose; ability = abilityChoices.includes(ch.spellAbility) ? ch.spellAbility : null; }
+    else if (a === 'inherit') ability = Object.keys(ch.inc || {})[0] || null;
+  }
+  const picked = Array.isArray(ch.spells) ? ch.spells : [];
+  const used = new Set();
+  const choices = [], spells = [], daily = [];
+  if (block) block.items.forEach(it => {
+    if (it.fixed){
+      const sp = sktRulesSpell(R, it.fixed);
+      const n = sp ? sp.name : _sktTitle(it.fixed);
+      spells.push(n); if (it.daily) daily.push(n);
+      return;
+    }
+    const options = sktSpellsMatching(R, it.choose).map(s => s.name);
+    const mine = picked.filter(n => options.includes(n) && !used.has(n)).slice(0, it.count);
+    mine.forEach(n => { used.add(n); spells.push(n); if (it.daily) daily.push(n); });
+    choices.push({ filter: it.choose, count: it.count, options, picked: mine, daily: it.daily });
+  });
+  const missing = (block ? 0 : 1) + (abilityChoices && !ability ? 1 : 0) + choices.reduce((n, c) => n + Math.max(0, c.count - c.picked.length), 0);
+  return { feat: f.name, blocks, block, listFixed: blocks.length === 1 || !!hint, ability, abilityChoices, choices, spells, daily, missing };
+}
+function sktFeatSpells(build, R){
+  return sktBuildFeatNames(build, R).map(n => sktFeatSpellGrant(R, build, n)).filter(Boolean);
 }
 
 // ── Feature effects ──────────────────────────────────────────────────────────
@@ -1033,6 +1122,17 @@ function sktComputeCharacter(build, R, prior){
   const spellNames = [...(build.cantrips || []), ...(build.spells || [])];
   const always = sktBuildAlwaysPrepared(build, R);
   always.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
+  // Spells from feats, with how each is cast.
+  const featSpells = sktFeatSpells(build, R).filter(g => g.spells.length);
+  featSpells.forEach(g => {
+    g.spells.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
+    const ab = g.ability ? ' (' + (SKT_AB_NAME[g.ability] || g.ability) + ')' : '';
+    _fxNote(ctx, g.feat + ab + ': ' + g.spells.join(', ')
+      + (g.daily.length ? ' — ' + g.daily.join(', ') + ' once per long rest without a spell slot' : ''));
+  });
+  // A wizard's spellbook; a book made before there was one starts as the
+  // spells already chosen.
+  const spellbook = (sc && sc.spellbook) ? ((build.spellbook && build.spellbook.length) ? build.spellbook.slice() : (build.spells || []).slice()) : null;
 
   // Resources keep what has been SPENT across a recompute: levelling up
   // mid-adventure does not hand back a used Rage, and a full pool that grows
@@ -1047,6 +1147,10 @@ function sktComputeCharacter(build, R, prior){
   const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, mech: f.mech, text: f.text }));
   const subName = sub ? sub.shortName : '';
   const speciesLabel = species ? (subrace ? subrace.name + ' ' + species.name : species.name) : '';
+  // Size: fixed by most species; a few 2024 species let the player choose.
+  const sizes = (species && Array.isArray(species.size) && species.size.length) ? species.size : ['M'];
+  const sizeCode = sizes.includes(build.size) ? build.size : (sizes.includes('M') ? 'M' : sizes[0]);
+  const SIZE_NAME = { T: 'Tiny', S: 'Small', M: 'Medium', L: 'Large' };
   const hpWas = typeof prior.hp === 'number' && typeof prior.hpMax === 'number' ? prior.hp + (hpMax - prior.hpMax) : hpMax;
 
   return {
@@ -1055,6 +1159,10 @@ function sktComputeCharacter(build, R, prior){
     race: speciesLabel, background: build.background || '',
     icon: build.icon || prior.icon || _SKT_CLASS_ICON[cls && cls.key] || '⚔',
     hp: Math.max(0, Math.min(hpMax, hpWas)), hpMax, ac, init, spd: speed, pp: passive,
+    // Starting gold from the kit (a class's gold option, a background's
+    // pouch). Kept once the character exists — what they have spent since
+    // is theirs, not the kit's.
+    gold: typeof prior.gold === 'number' ? prior.gold : gear.gold,
     tempHp: prior.tempHp || 0, inspiration: !!prior.inspiration,
     abilities, resources, feats,
     hitDice: { current: prior.hitDice ? Math.min(L, prior.hitDice.current + Math.max(0, L - (prior.hitDice.max || L))) : L,
@@ -1073,6 +1181,9 @@ function sktComputeCharacter(build, R, prior){
       spellSlots, spellSaveDc: sc ? sc.dc : null, spellAtkBonus: sc ? sktSigned(sc.attack) : null,
       spellAbility: sc ? sc.ability : null,
       spells: spellNames, alwaysPrepared: always,
+      spellbook, featSpells: featSpells.map(g => ({ feat: g.feat, ability: g.ability, spells: g.spells, daily: g.daily })),
+      size: SIZE_NAME[sizeCode] || 'Medium',
+      details: Object.assign({}, build.details || {}),
       activations: ctx.actions, notes: ctx.notes, featureList,
       equipment: gear.list, acSource: best ? best.label + (shield ? ' + Shield' : '') : '',
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
@@ -1271,8 +1382,11 @@ function sktBuildTodo(build, R){
   if (sc){
     if ((build.cantrips || []).length < sc.cantrips) todo.push({ step: 'spells', what: (sc.cantrips - build.cantrips.length) + ' cantrip(s)' });
     const want = sc.prepared || sc.known;
+    if (sc.spellbook && (build.spellbook || []).length < sc.spellbook)
+      todo.push({ step: 'spells', what: (sc.spellbook - (build.spellbook || []).length) + ' spell(s) for the spellbook' });
     if (want && (build.spells || []).length < want) todo.push({ step: 'spells', what: (want - build.spells.length) + ' spell(s)', soft: true });
   }
+  sktFeatSpells(build, R).forEach(g => { if (g.missing) todo.push({ step: 'spells', what: 'the spells from ' + g.feat }); });
   sktBuildChoices(build, R).forEach(c => { if (!c.value) todo.push({ step: 'levels', what: c.feature + ' choice' }); });
   sktOptionalChoices(build, R).forEach(o => {
     const have = ((build.optional || {})[o.name] || []).length;
@@ -1314,6 +1428,7 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
+                     sktSpellsMatching, sktFeatSpellGrant, sktFeatSpells,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };
 }

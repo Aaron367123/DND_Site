@@ -27,6 +27,7 @@ const CB_STEPS = [
   { id: 'levels',     label: 'Levels' },
   { id: 'spells',     label: 'Spells' },
   { id: 'equipment',  label: 'Equipment' },
+  { id: 'details',    label: 'Details' },
   { id: 'review',     label: 'Review' },
 ];
 
@@ -243,6 +244,12 @@ CB_RENDER.species = () => {
     ? sp.additionalSpells.map(x => x.name).filter(Boolean) : [];
   if (lineages.length){
     html += '<h4>Lineage</h4>' + cbCards(lineages.map(n => ({ value: n, label: n })), b.speciesChoice.lineage, 'cb-lineage');
+  }
+  // Small or Medium, where the species leaves it to you (2024 Human, Tiefling, Aasimar).
+  if (Array.isArray(sp.size) && sp.size.length > 1){
+    const cur = sp.size.includes(b.size) ? b.size : (sp.size.includes('M') ? 'M' : sp.size[0]);
+    const NAME = { T: 'Tiny', S: 'Small', M: 'Medium', L: 'Large' };
+    html += '<h4>Size</h4><div class="cb-seg">' + sp.size.map(z => '<button class="' + (cur === z ? 'on' : '') + '" data-cb-size="' + z + '">' + NAME[z] + '</button>').join('') + '</div>';
   }
   // Choosable ability increases (2014: Half-Elf, Variant Human…).
   const sub = sp.subraces.find(s => s.name === b.subspecies);
@@ -530,7 +537,8 @@ function cbFeatAbilityChoice(f){
 CB_RENDER.spells = () => {
   const b = CB.build, R = CB.R;
   const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
-  if (!sc) return '<h3>Spells</h3><div class="cb-dim">This character does not cast spells yet.</div>';
+  const fromFeats = cbFeatSpellsHtml();
+  if (!sc) return '<h3>Spells</h3>' + (fromFeats || '<div class="cb-dim">This character does not cast spells yet.</div>');
   const want = sc.prepared || sc.known;
   const always = sktBuildAlwaysPrepared(b, R);
   let html = '<h3>Spells</h3><div class="cb-note">' + cbAbLabel(sc.ability) + ' · save DC ' + sc.dc + ' · attack ' + sktSigned(sc.attack)
@@ -539,17 +547,57 @@ CB_RENDER.spells = () => {
     html += '<h4>Cantrips</h4>' + cbCounter((b.cantrips || []).length, sc.cantrips, 'chosen')
       + cbChecks(sktSpellOptions(R, b, 0).map(s => s.name), b.cantrips || [], sc.cantrips, 'cb-cantrip');
   }
+  // A wizard writes spells into a book, and prepares from the book — the
+  // whole wizard list was on offer before.
+  const book = sc.spellbook ? (b.spellbook && b.spellbook.length ? b.spellbook : (b.spells || [])) : null;
+  if (sc.spellbook){
+    html += '<h4>Spellbook</h4><div class="cb-dim">Six spells at 1st level, two more each level after. You prepare from these.</div>'
+      + cbCounter(book.length, sc.spellbook, 'in the book');
+    for (let lv = 1; lv <= sc.maxSpellLevel; lv++){
+      const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
+      if (!opts.length) continue;
+      html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbChecks(opts, book, sc.spellbook, 'cb-book') + '</div>';
+    }
+  }
   if (want){
     html += '<h4>' + (sc.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((b.spells || []).length, want, 'chosen');
-    for (let lv = 1; lv <= sc.maxSpellLevel; lv++){
+    if (book){
+      const opts = book.filter(n => !always.includes(n));
+      html += opts.length ? cbChecks(opts, b.spells || [], want, 'cb-spell') : '<div class="cb-dim">Write spells into the book first.</div>';
+    } else for (let lv = 1; lv <= sc.maxSpellLevel; lv++){
       const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
       if (!opts.length) continue;
       html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbChecks(opts, b.spells || [], want, 'cb-spell') + '</div>';
     }
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
-  return html;
+  return html + fromFeats;
 };
+// The spells a feat grants: which list (unless the background fixed it), the
+// casting ability where the feat lets you choose, and each pick.
+function cbFeatSpellsHtml(){
+  const b = CB.build, R = CB.R;
+  return sktFeatSpells(b, R).map(g => {
+    let h = '<h4>From ' + cbEsc(g.feat) + '</h4>';
+    if (!g.listFixed){
+      h += '<label class="cb-f">Spell list<select class="cb-sel" data-cb-fslist="' + cbEsc(g.feat) + '"><option value="">Choose…</option>'
+        + g.blocks.map(x => '<option' + (g.block && g.block.name === x.name ? ' selected' : '') + '>' + cbEsc(x.name) + '</option>').join('') + '</select></label>';
+    }
+    if (!g.block) return h;
+    if (g.abilityChoices){
+      h += '<label class="cb-f">Casting ability<select class="cb-sel" data-cb-fsab="' + cbEsc(g.feat) + '"><option value="">—</option>'
+        + g.abilityChoices.map(k => '<option value="' + k + '"' + (g.ability === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
+    }
+    const fixed = g.spells.filter(n => !g.choices.some(c => c.picked.includes(n)));
+    if (fixed.length) h += '<div class="cb-dim">You always have: ' + cbEsc(fixed.join(', ')) + '</div>';
+    g.choices.forEach(c => {
+      const lvl = /level=0/.test(c.filter) ? 'cantrip' : 'spell';
+      h += '<div class="cb-spl"><span class="cb-spl-l">' + c.count + ' ' + lvl + (c.count === 1 ? '' : 's') + (c.daily ? ' · once a day' : '') + '</span>'
+        + cbChecks(c.options.map(n => ({ value: g.feat + '||' + n, label: n })), c.picked.map(n => g.feat + '||' + n), c.count, 'cb-fspell') + '</div>';
+    });
+    return h;
+  }).join('');
+}
 
 CB_RENDER.equipment = () => {
   const b = CB.build, R = CB.R;
@@ -581,7 +629,8 @@ CB_RENDER.equipment = () => {
   else if (!cls) html += '<div class="cb-dim">Choose a class first.</div>';
   if (bg && (bg.equipment || []).length) html += '<h4>' + cbEsc(bg.name) + '</h4>' + blockHtml(bg.equipment, 'bg');
   const rec = CB.rec;
-  html += '<h4>Result</h4><div class="cb-note">AC ' + rec.ac + (rec.sheet.acSource ? ' (' + cbEsc(rec.sheet.acSource) + ')' : '') + '</div>'
+  const gold = sktBuildEquipment(b, R).gold;
+  html += '<h4>Result</h4>' + (gold ? '<div class="cb-note">Starting gold: <b>' + gold + ' gp</b> — kept on the character</div>' : '') + '<div class="cb-note">AC ' + rec.ac + (rec.sheet.acSource ? ' (' + cbEsc(rec.sheet.acSource) + ')' : '') + '</div>'
     + '<div class="cb-attacks">' + rec.sheet.attacks.map(a => '<div class="cb-atk"><b>' + cbEsc(a.name) + '</b><span>' + cbEsc(a.atkBonus) + '</span><span>' + cbEsc(a.damage) + '</span>' + (a.mastery ? '<i>' + cbEsc(a.mastery) + '</i>' : '') + '</div>').join('') + '</div>';
   return html;
 };
@@ -590,6 +639,18 @@ const _SKT_EQ_LABEL = { weaponMartial: 'a martial weapon', weaponMartialMelee: '
   weaponSimpleMelee: 'a simple melee weapon', weaponSimpleRanged: 'a simple ranged weapon', focusSpellcastingArcane: 'an arcane focus',
   focusSpellcastingDruidic: 'a druidic focus', focusSpellcastingHoly: 'a holy symbol', instrumentMusical: 'a musical instrument',
   toolArtisan: 'artisan’s tools', setGaming: 'a gaming set' };
+
+const CB_ALIGNMENTS = ['Lawful Good', 'Neutral Good', 'Chaotic Good', 'Lawful Neutral', 'True Neutral', 'Chaotic Neutral', 'Lawful Evil', 'Neutral Evil', 'Chaotic Evil', 'Unaligned'];
+const CB_DETAIL_LINES = [['age', 'Age'], ['height', 'Height'], ['weight', 'Weight'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin'], ['faith', 'Faith']];
+const CB_DETAIL_TEXT = [['appearance', 'Appearance'], ['personality', 'Personality traits'], ['ideals', 'Ideals'], ['bonds', 'Bonds'], ['flaws', 'Flaws'], ['backstory', 'Backstory']];
+CB_RENDER.details = () => {
+  const d = CB.build.details || {};
+  return '<h3>Details</h3><div class="cb-dim">All optional — who they are, for the table.</div>'
+    + '<label class="cb-f">Alignment<select class="cb-sel" data-cb-detail="alignment"><option value="">—</option>'
+    +   CB_ALIGNMENTS.map(a => '<option' + (d.alignment === a ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></label>'
+    + '<div class="cb-detail-grid">' + CB_DETAIL_LINES.map(([k, l]) => '<label class="cb-f">' + l + '<input data-cb-detail="' + k + '" value="' + cbEsc(d[k] || '') + '" maxlength="40"></label>').join('') + '</div>'
+    + CB_DETAIL_TEXT.map(([k, l]) => '<label class="cb-f">' + l + '<textarea data-cb-detail="' + k + '" rows="' + (k === 'backstory' ? 5 : 2) + '" maxlength="4000">' + cbEsc(d[k] || '') + '</textarea></label>').join('');
+};
 
 CB_RENDER.review = () => {
   const rec = CB.rec, b = CB.build;
@@ -601,13 +662,15 @@ CB_RENDER.review = () => {
   const todo = sktBuildTodo(b, CB.R).filter(t => !t.soft);
   return '<h3>Review</h3>'
     + (todo.length ? '<div class="cb-warn">Still to choose: ' + cbEsc(todo.map(t => t.what).join(', ')) + '</div>' : '')
+    + '<div class="cb-note cb-review-who">' + cbEsc([sh.size, (sh.details || {}).alignment, typeof rec.gold === 'number' ? rec.gold + ' gp' : ''].filter(Boolean).join(' · ')) + '</div>'
     + '<div class="cb-review">'
     + '<div><h4>Saving throws</h4><div class="cb-skilltable">' + saves + '</div></div>'
     + '<div><h4>Attacks</h4><div class="cb-attacks">' + sh.attacks.map(a => '<div class="cb-atk"><b>' + cbEsc(a.name) + '</b><span>' + cbEsc(a.atkBonus) + '</span><span>' + cbEsc(a.damage) + '</span></div>').join('') + '</div>'
     + (sh.attacksPerAction > 1 ? '<div class="cb-dim">' + sh.attacksPerAction + ' attacks per Attack action</div>' : '') + '</div>'
     + '</div>'
     + (res ? '<h4>Resources</h4><div class="cb-note">' + res + '</div>' : '')
-    + (sh.spellSaveDc ? '<h4>Spellcasting</h4><div class="cb-note">DC ' + sh.spellSaveDc + ' · attack ' + cbEsc(sh.spellAtkBonus) + ' · ' + cbEsc((sh.spells || []).join(', ') || 'no spells chosen') + '</div>' : '')
+    + (sh.spellSaveDc ? '<h4>Spellcasting</h4><div class="cb-note">DC ' + sh.spellSaveDc + ' · attack ' + cbEsc(sh.spellAtkBonus) + ' · ' + cbEsc((sh.spells || []).join(', ') || 'no spells chosen') + '</div>'
+      + (sh.spellbook ? '<div class="cb-dim">Spellbook: ' + cbEsc(sh.spellbook.join(', ') || 'empty') + '</div>' : '') : '')
     + (sh.senses || (rec.resistances || []).length ? '<div class="cb-note">' + cbEsc([sh.senses, (rec.resistances || []).length ? 'Resistant to ' + rec.resistances.join(', ') : ''].filter(Boolean).join(' · ')) + '</div>' : '')
     + (sh.notes || []).map(n => '<div class="cb-dim">• ' + cbEsc(n) + '</div>').join('')
     + '<h4>Features <span class="cb-dim">' + mech + ' of ' + feats.length + ' applied to the sheet automatically</span></h4>'
@@ -643,7 +706,7 @@ function cbOnClick(e){
   if (d.cbIcon) return cbSet(b => { b.icon = d.cbIcon; });
   if (d.cbCls) return cbSet(b => {
     if (b.cls === d.cbCls) return;
-    b.cls = d.cbCls; b.subclass = ''; b.skills = []; b.expertise = []; b.cantrips = []; b.spells = [];
+    b.cls = d.cbCls; b.subclass = ''; b.skills = []; b.expertise = []; b.cantrips = []; b.spells = []; b.spellbook = [];
     b.optional = {}; b.masteries = []; b.equipment = { cls: 'A', bg: b.equipment.bg || 'A', picks: {} };
   });
   if (d.cbSub) return cbSet(b => { b.subclass = d.cbSub; });
@@ -654,6 +717,7 @@ function cbOnClick(e){
   });
   if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; });
   if (d.cbLineage) return cbSet(b => { b.speciesChoice.lineage = d.cbLineage; });
+  if (d.cbSize) return cbSet(b => { b.size = d.cbSize; });
   if (d.cbBg) return cbSet(b => { if (b.background !== d.cbBg){ b.background = d.cbBg; b.bgAsi = {}; b.bgSkills = []; } });
   if (d.cbBgmode) return cbSet(b => {
     b.bgAsiMode = d.cbBgmode; b.bgAsi = {};
@@ -716,6 +780,29 @@ function cbOnChange(e){
     return cbSet(b => cbToggle(b.spells, d.cbSpell, sc.prepared || sc.known));
   }
   if (d.cbMastery) return cbSet(b => cbToggle(b.masteries, d.cbMastery, cbMasteryCount()));
+  if (d.cbBook){
+    const sc = sktBuildSpellcasting(CB.build, CB.R, sktBuildAbilities(CB.build, CB.R));
+    return cbSet(b => {
+      if (!b.spellbook || !b.spellbook.length) b.spellbook = (b.spells || []).slice();
+      cbToggle(b.spellbook, d.cbBook, sc.spellbook);
+      b.spells = (b.spells || []).filter(n => b.spellbook.includes(n));   // prepared only from the book
+    });
+  }
+  if (d.cbFspell){
+    const [feat, name] = d.cbFspell.split('||');
+    const g = sktFeatSpellGrant(CB.R, CB.build, feat);
+    const c = g && g.choices.find(x => x.options.includes(name));
+    return cbSet(b => {
+      const fc = b.featChoices[feat] = Object.assign({}, b.featChoices[feat]);
+      fc.spells = (fc.spells || []).slice();
+      const i = fc.spells.indexOf(name);
+      if (i >= 0) fc.spells.splice(i, 1);
+      else if (c && c.picked.length < c.count) fc.spells.push(name);
+    });
+  }
+  if (d.cbFslist) return cbSet(b => { b.featChoices[d.cbFslist] = Object.assign({}, b.featChoices[d.cbFslist], { spellList: v, spells: [] }); });
+  if (d.cbFsab) return cbSet(b => { b.featChoices[d.cbFsab] = Object.assign({}, b.featChoices[d.cbFsab], { spellAbility: v }); });
+  if (d.cbDetail === 'alignment') return cbSet(b => { b.details = Object.assign({}, b.details, { alignment: v }); });
   const optKey = Object.keys(d).find(k => /^cbOpt/.test(k));
   if (optKey){
     const o = sktOptionalChoices(CB.build, CB.R).find(x => 'cbOpt' + cbSlug(x.name).replace(/-(\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, c => c.toUpperCase()) === optKey);
@@ -778,6 +865,8 @@ function cbOnInput(e){
   if (!CB) return;
   const t = e.target, d = t.dataset;
   if (d.cbIn === 'name'){ CB.build.name = t.value; cbRefreshSide(); return; }
+  // Details: typed, not chosen — no re-render, so the box keeps the caret.
+  if (d.cbDetail && d.cbDetail !== 'alignment'){ CB.build.details = Object.assign({}, CB.build.details, { [d.cbDetail]: t.value }); return; }
   if (d.cbIn === 'level'){
     const n = Math.max(1, Math.min(20, parseInt(t.value, 10) || 1));
     CB.build.level = n; cbRefreshSide(); cbRefreshSteps();

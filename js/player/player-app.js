@@ -1151,6 +1151,9 @@ function paSheetDetail(p){
   if (sh.spellSaveDc) bits.push(`Spell save DC ${sh.spellSaveDc}`);
   if (sh.spellAtkBonus) bits.push(`Spell attack ${paSign(sh.spellAtkBonus)}`);
   if (p.hitDice) bits.push(`Hit dice ${p.hitDice.current}/${p.hitDice.max}${p.hitDice.dieType || ''}`);
+  if (sh.size && sh.size !== 'Medium') bits.push(sh.size);
+  if (sh.details && sh.details.alignment) bits.push(sh.details.alignment);
+  if (typeof p.gold === 'number') bits.push(`${p.gold} gp`);
 
   const abils = PA_ABIL.filter(([k]) => typeof ab[k] === 'number').map(([k, l]) =>
     `<div class="pa-ab"><span class="pa-ab-l">${l}</span><span class="pa-ab-v">${ab[k]}</span>
@@ -1179,6 +1182,13 @@ function paSheetDetail(p){
 
   const spells = (Array.isArray(sh.spells) ? sh.spells : [])
     .map(s => `<span class="pa-chip">${paEsc(s)}</span>`).join('');
+  // A wizard's book holds more than is prepared today.
+  const book = (Array.isArray(sh.spellbook) ? sh.spellbook : []).filter(s => !(sh.spells || []).includes(s))
+    .map(s => `<span class="pa-chip dim">${paEsc(s)}</span>`).join('');
+  // Who they are, from the builder's Details step.
+  const det = sh.details || {};
+  const about = [['appearance', 'Appearance'], ['personality', 'Personality'], ['ideals', 'Ideals'], ['bonds', 'Bonds'], ['flaws', 'Flaws'], ['backstory', 'Backstory']]
+    .filter(([k]) => det[k]).map(([k, l]) => `<div class="pa-about"><b>${l}</b><div>${paEsc(det[k]).replace(/\n/g, '<br>')}</div></div>`).join('');
   const feats = (Array.isArray(p.feats) ? p.feats : [])
     .map(f => `<span class="pa-chip">${paEsc(f)}</span>`).join('');
 
@@ -1196,6 +1206,8 @@ function paSheetDetail(p){
     ${atks ? `<div class="pa-mate-sec"><h5>Attacks</h5>${atks}</div>` : ''}
     ${sec('Feats', feats)}
     ${sec('Spells', spells)}
+    ${sec('Also in the spellbook', book)}
+    ${about ? `<div class="pa-mate-sec"><h5>About</h5>${about}</div>` : ''}
   </div>`;
 }
 

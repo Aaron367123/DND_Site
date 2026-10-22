@@ -5509,6 +5509,118 @@
       }
     }
 
+    // -- The character builder: feat spells, the spellbook, size, gold, details --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R24 = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        // A 2024 Acolyte's Magic Initiate is fixed to the cleric list.
+        const mi = Object.assign(sktBlankBuild('2024'), { name: 'Mi', species: 'Human', cls: 'Fighter', level: 1, background: 'Acolyte' });
+        const g0 = sktFeatSpellGrant(R24, mi, 'Magic Initiate');
+        ok('feat spells: an Acolyte’s Magic Initiate is the cleric list, ability to choose',
+           !!g0 && g0.listFixed && g0.block && g0.block.name === 'Cleric' && JSON.stringify(g0.abilityChoices) === '["int","wis","cha"]', g0 && g0.block && g0.block.name);
+        ok('feat spells: two cantrips and one 1st-level spell to pick, all cleric',
+           !!g0 && g0.choices.length === 2 && g0.choices[0].count === 1 && g0.choices[1].count === 2
+           && g0.choices[0].options.includes('Bless') && !g0.choices[0].options.includes('Magic Missile') && g0.choices[1].options.includes('Guidance'));
+        ok('feat spells: the builder asks for them until chosen', sktBuildTodo(mi, R24).some(t => /Magic Initiate/.test(t.what)));
+        mi.featChoices = { 'Magic Initiate': { spellAbility: 'wis', spells: ['Guidance', 'Sacred Flame', 'Bless', 'Magic Missile'] } };
+        const M = sktComputeCharacter(mi, R24);
+        ok('feat spells: what was picked goes on the sheet — and nothing off the list',
+           ['Guidance', 'Sacred Flame', 'Bless'].every(n => M.sheet.spells.includes(n)) && !M.sheet.spells.includes('Magic Missile'), M.sheet.spells);
+        ok('feat spells: with how the 1st-level one is cast',
+           (M.sheet.notes || []).some(n => /Magic Initiate \(Wisdom\).*Bless once per long rest/.test(n)), M.sheet.notes);
+        ok('feat spells: and nothing left to choose', !sktBuildTodo(mi, R24).some(t => /Magic Initiate/.test(t.what)));
+        // 2014: six lists to choose from.
+        const g1 = sktFeatSpellGrant(R14, sktBlankBuild('2014'), 'Magic Initiate');
+        ok('feat spells 2014: Magic Initiate offers six lists, none chosen yet', !!g1 && g1.blocks.length === 6 && !g1.block && g1.missing >= 1);
+        // A wizard's spellbook.
+        const wz = Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 3,
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 13, int: 15, wis: 12, cha: 10 } } });
+        const wsc = sktBuildSpellcasting(wz, R24, sktBuildAbilities(wz, R24));
+        ok('spellbook: a 3rd-level wizard has ten spells in the book', wsc.spellbook === 10, wsc.spellbook);
+        ok('spellbook: the builder asks for them', sktBuildTodo(wz, R24).some(t => /spellbook/.test(t.what)));
+        ok('spellbook: other casters have none', !sktBuildSpellcasting(Object.assign({}, wz, { cls: 'Cleric' }), R24, sktBuildAbilities(wz, R24)).spellbook);
+        // Size, gold, details.
+        const hu = Object.assign(sktBlankBuild('2024'), { species: 'Human', cls: 'Fighter', level: 1, background: 'Soldier', size: 'S',
+          details: { alignment: 'Neutral Good', backstory: 'Grew up by the sea.' }, equipment: { cls: 'B', bg: 'A' } });
+        const H = sktComputeCharacter(hu, R24);
+        ok('size: a Human may be Small', H.sheet.size === 'Small', H.sheet.size);
+        ok('size: and is Medium otherwise', sktComputeCharacter(Object.assign({}, hu, { size: '' }), R24).sheet.size === 'Medium');
+        ok('size: a Dwarf cannot be Small', sktComputeCharacter(Object.assign({}, hu, { species: 'Dwarf' }), R24).sheet.size === 'Medium');
+        ok('gold: the kit’s gold is kept on the character', H.gold === 25, H.gold);
+        ok('gold: and what they have now survives a level up', sktComputeCharacter(hu, R24, { gold: 7 }).gold === 7);
+        ok('details: alignment and backstory reach the sheet', H.sheet.details.alignment === 'Neutral Good' && /sea/.test(H.sheet.details.backstory));
+
+        // The builder's screens (the 2024 rules, whatever was used last).
+        await openCharBuilder({ edition: '2024' }); await sleep(150);
+        const root = () => document.getElementById('cb-root');
+        const q = s => root().querySelector(s), qa = s => [...root().querySelectorAll(s)];
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const nm = q('[data-cb-in="name"]'); nm.value = 'Booka'; nm.dispatchEvent(new Event('input', { bubbles: true }));
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Wizard"]'); await sleep(30);
+        click('[data-cb-step="species"]'); await sleep(30); click('[data-cb-species="Human"]'); await sleep(30);
+        ok('builder: a Human is offered Small or Medium', qa('[data-cb-size]').length === 2);
+        click('[data-cb-size="S"]'); await sleep(30);
+        ok('builder: and Small is kept', CB.build.size === 'S' && q('[data-cb-size="S"]').classList.contains('on'));
+        click('[data-cb-species="Dwarf"]'); await sleep(30);
+        ok('builder: a Dwarf has no size to choose', !q('[data-cb-size]'));
+        click('[data-cb-species="Human"]'); await sleep(30); click('[data-cb-size="S"]'); await sleep(30);
+        click('[data-cb-step="background"]'); await sleep(30); click('[data-cb-bg="Acolyte"]'); await sleep(30);
+        click('[data-cb-step="spells"]'); await sleep(30);
+        const books = qa('[data-cb-book]');
+        ok('builder: a wizard writes spells into a book', books.length > 10 && !qa('[data-cb-spell]').length, books.length);
+        for (const e of books.slice(0, 8)){ const s2 = e.dataset.cbBook; tick('[data-cb-book="' + CSS.escape(s2) + '"]'); await sleep(10); }
+        ok('builder: six of them at 1st level', CB.build.spellbook.length === 6, CB.build.spellbook.length);
+        const prep = qa('[data-cb-spell]').map(e => e.dataset.cbSpell);
+        ok('builder: and prepares only from the book', prep.length === 6 && prep.every(n => CB.build.spellbook.includes(n)), prep.join(', '));
+        tick('[data-cb-spell="' + CSS.escape(prep[0]) + '"]'); await sleep(20);
+        tick('[data-cb-book="' + CSS.escape(prep[0]) + '"]'); await sleep(20);
+        ok('builder: a spell taken out of the book is no longer prepared', !CB.build.spellbook.includes(prep[0]) && !CB.build.spells.includes(prep[0]));
+        ok('builder: the Acolyte’s Magic Initiate asks for its spells here', !!q('[data-cb-fsab="Magic Initiate"]') && qa('[data-cb-fspell^="Magic Initiate||"]').length > 3);
+        set('[data-cb-fsab="Magic Initiate"]', 'wis'); await sleep(20);
+        tick('[data-cb-fspell="Magic Initiate||Guidance"]'); await sleep(20);
+        tick('[data-cb-fspell="Magic Initiate||Bless"]'); await sleep(20);
+        tick('[data-cb-fspell="Magic Initiate||Cure Wounds"]'); await sleep(20);
+        const fc = CB.build.featChoices['Magic Initiate'] || {};
+        ok('builder: the picks are kept, one 1st-level spell only', fc.spellAbility === 'wis' && fc.spells.includes('Guidance') && fc.spells.includes('Bless') && !fc.spells.includes('Cure Wounds'), JSON.stringify(fc));
+        click('[data-cb-step="equipment"]'); await sleep(30);
+        ok('builder: the equipment step says the gold is kept', /Starting gold: \d+ gp/.test(q('.cb-main').textContent));
+        click('[data-cb-step="details"]'); await sleep(30);
+        set('[data-cb-detail="alignment"]', 'Lawful Good'); await sleep(20);
+        const bs = q('textarea[data-cb-detail="backstory"]'); bs.value = 'Raised in a temple.\nLeft it.'; bs.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('builder: typing a backstory does not redraw the page under you', q('textarea[data-cb-detail="backstory"]') === bs && CB.build.details.backstory === 'Raised in a temple.\nLeft it.');
+        click('[data-cb-step="review"]'); await sleep(30);
+        ok('builder: Review shows size, alignment and gold', /Small · Lawful Good · \d+ gp/.test((q('.cb-review-who') || {}).textContent || ''));
+        // Skills and the rest are left unchosen: "Save anyway".
+        const sc0 = window.showConfirm; window.showConfirm = () => Promise.resolve(true);
+        try { click('[data-cb="save"]'); await sleep(200); } finally { window.showConfirm = sc0; }
+        const made = state.party.find(p => p.name === 'Booka');
+        ok('builder: the character keeps them all',
+           !!made && typeof made.gold === 'number' && made.sheet.size === 'Small' && made.sheet.details.alignment === 'Lawful Good'
+           && made.sheet.spellbook.length === 5 && made.sheet.spells.includes('Bless'), made && JSON.stringify({ g: made.gold, s: made.sheet.size }));
+        // The party sheet shows them; gold can be changed there.
+        openPanel('party'); await sleep(200);
+        const P = panelDefs.party; P._expanded[made.id] = true; P._activeTab[made.id] = 'stats'; P._render(); await sleep(60);
+        const gi = P._body.querySelector('.sheet-gold[data-idx="' + state.party.findIndex(p => p.id === made.id) + '"]');
+        ok('party: the Stats tab shows size, alignment and gold', !!gi && /Small/.test(P._body.textContent) && /Lawful Good/.test(P._body.textContent));
+        gi.value = '-3'; gi.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
+        ok('party: gold edited there is a whole number, never below zero', state.party.find(p => p.id === made.id).gold === 0);
+        gi.value = '42'; gi.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
+        ok('party: and saved', state.party.find(p => p.id === made.id).gold === 42);
+        closePanel('party');
+      } catch(e){ ok('builder: the feat-spell / spellbook / details checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -6160,6 +6272,19 @@
   // ══════════════════════════════════════════════════════════ player view
   if (MODE === 'player'){
     ok('player: body is in player mode', document.body.classList.contains('player-mode'));
+
+    // ── The full sheet on a phone: what the builder adds ──────────────────
+    if (typeof paSheetDetail === 'function'){
+      try {
+        const html = paSheetDetail({ id: 'x', name: 'X', gold: 12, hitDice: null, resources: [],
+          sheet: { size: 'Small', spells: ['Shield'], spellbook: ['Shield', 'Sleep'],
+                   details: { alignment: 'Chaotic Good', backstory: 'Line one\nline <two>' } } });
+        ok('phone sheet: size, alignment and gold', /Small/.test(html) && /Chaotic Good/.test(html) && /12 gp/.test(html));
+        ok('phone sheet: the rest of the spellbook, not what is already prepared', /Also in the spellbook/.test(html) && /pa-chip dim">Sleep/.test(html) && !/pa-chip dim">Shield/.test(html));
+        ok('phone sheet: the backstory, line breaks kept and escaped', /Line one<br>line &lt;two&gt;/.test(html));
+        ok('phone sheet: nothing extra for a character without them', !/About|spellbook| gp/.test(paSheetDetail({ id: 'y', name: 'Y', resources: [], sheet: {} })));
+      } catch(e){ ok('phone sheet: the checks ran', false, e.message); }
+    }
 
     // ── Notes: a player sees only what the DM shares ──────────────────────
     // With Dropbox configured — which in production is EVERY device, the

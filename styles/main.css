@@ -5126,3 +5126,10 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .window-menu .wm-label { flex:1; min-width:0; }
 .window-menu .wm-chk { width:14px; flex:0 0 14px; text-align:center; color:var(--accent); font-weight:700; }
 .window-menu .window-menu-item.is-disabled { opacity:.55; }
+/* Character builder: details */
+.cb-detail-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:6px 10px; margin:8px 0; }
+#cb-root textarea { width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm); padding:6px 8px; font:inherit; resize:vertical; }
+.sheet-gold { width:64px; text-align:right; }
+.pa-chip.dim { opacity:.6; }
+.pa-about { margin:4px 0 8px; font-size:var(--fs-md); }
+.pa-about b { display:block; font-size:var(--fs-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
