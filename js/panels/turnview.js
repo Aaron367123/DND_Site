@@ -90,9 +90,9 @@ registerPanel('turnview', {
 
   menuItems(){
     return [
-      { label: '↻ Refresh from the tracker', run: () => this._render() },
-      { label: '🧹 Clear this panel\'s log', run: () => { this._log = []; this._render(); } },
-      { label: '🗺 Map art: ' + this._artMode, run: () => {
+      { label: 'Refresh from the tracker', icon: 'i-refresh', run: () => this._render() },
+      { label: 'Clear the log', icon: 'i-trash', run: () => { this._log = []; this._render(); } },
+      { label: 'Map art: ' + this._artMode, icon: 'i-map', run: () => {
           this._artMode = this._artMode === 'auto' ? 'on' : this._artMode === 'on' ? 'off' : 'auto';
           this._render();
         } },

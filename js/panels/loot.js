@@ -804,8 +804,8 @@ registerPanel('loot',{
         ${['cp','sp','ep','gp','pp'].map(c=>`<div class="loot-coin"><div class="l">${c.toUpperCase()}</div><input type="number" id="loot-${c}" value="${this._loot[c]||0}" min="0"></div>`).join('')}
       </div>
       <div class="loot-sumbar">
-        <span>Total: <strong style="color:var(--warning)">${totalGp} gp</strong> equivalent</span>
-        <span>· Per party member: <strong style="color:var(--warning)">${state.party.length?(totalGp/state.party.length).toFixed(2):totalGp} gp</strong></span>
+        <span title="Everything converted to gold, and an even share for each party member">Total <strong style="color:var(--warning)">${(+totalGp).toLocaleString(undefined, { maximumFractionDigits: 2 })} gp</strong>
+          · <strong style="color:var(--warning)">${(+(state.party.length ? totalGp / state.party.length : totalGp)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> each</span>
         <label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
           <input type="checkbox" id="loot-encumbrance-toggle" ${state.settings?.lootEncumbrance?'checked':''}>
           <span>${ICO('i-scale')} Weight</span>

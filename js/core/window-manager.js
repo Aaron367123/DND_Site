@@ -808,54 +808,65 @@ function openWindowMenu(id, anchorBtn){
   const isShared = (state.sharedPanels || []).includes(id);
   const isLocked = !!l.locked;
 
-  // Build menu items. Share is DM-only ("with players" makes no sense from
-  // the player side); Lock + Snap are available to both since they only
-  // affect this tab's layout.
-  const items = [];
-  if (!isPlayer){
-    // Only offer sharing for panels the player view can actually surface. It
-    // used to be offered on all seventeen, and for the rest it set a flag,
-    // lit the eye icon and synced to every device while showing the player
-    // nothing — indistinguishable from a bug. PA_SHAREABLE lives beside the
-    // player's tab list so adding a tab there enables sharing here.
-    const canShare = (typeof PA_SHAREABLE === 'undefined') || PA_SHAREABLE.has(id);
-    if (canShare){
-      items.push({ act:'share', label: (isShared?'👁':'◌')+' '+(isShared?'Shared with players (click to unshare)':'Share with player view') });
-    } else {
-      items.push({ label:'◌ No player view for this panel', disabled:true });
+  // One look for every window's ⋯ menu: the panel's own actions first, each
+  // with an outline icon from the sprite the toolbars use and a check mark
+  // where it is a switch; the window's own options (share, lock, snap) below
+  // a divider. Panels used to put colored emoji in their labels (📋 📱 📊 🛌
+  // 💤 🩺 📺 🗑) beside three kinds of checkbox (☐ ☑ ● ○ ◌), with the window
+  // options on top.
+  //
+  // A panel item is { label, run, icon?, checked? }. An older label that still
+  // starts with a symbol is read for its meaning and the symbol dropped.
+  const _LEAD = /^(?:[←-⇿⌀-⏿■-◿☀-➿⧉⬀-⯿]|\p{Extended_Pictographic})️?\s*/u;
+  const tidy = it => {
+    let label = String(it.label || ''), checked = it.checked;
+    const m = label.match(_LEAD);
+    if (m){
+      const g = m[0].trim();
+      if (checked === undefined && /[☑●]/.test(g)) checked = true;
+      else if (checked === undefined && /[☐○◌]/.test(g)) checked = false;
+      label = label.slice(m[0].length);
     }
-  }
-  items.push({ act:'lock',  label: (isLocked?'🔒':'🔓')+' '+(isLocked?'Locked (click to unlock)':'Lock window') });
-  items.push({ act:'snap',  label:'▢ Snap to layout…' });
-
-  // Panel-specific items, registered via panelDefs[id].menuItems (array or
-  // function returning an array). Each item: { label, run() } — `act` is
-  // synthesized as `panel:<n>` so the click handler can dispatch back.
+    return { label, checked, icon: it.icon || null };
+  };
+  const items = [];
   const def = panelDefs[id] || {};
   let panelItems = [];
   if (typeof def.menuItems === 'function')      panelItems = def.menuItems() || [];
   else if (Array.isArray(def.menuItems))        panelItems = def.menuItems;
-  if (panelItems.length){
-    items.push({ act:'__sep' });
-    panelItems.forEach((it, idx) => {
-      if (it && it.label && typeof it.run === 'function'){
-        items.push({ act:'panel:'+idx, label: it.label, _run: it.run });
-      }
-    });
+  panelItems.forEach((it, idx) => {
+    if (it && it.label && typeof it.run === 'function'){
+      items.push({ act:'panel:'+idx, ...tidy(it), _run: it.run });
+    }
+  });
+  if (items.length) items.push({ act:'__sep' });
+  // Share is DM-only ("with players" makes no sense from the player side);
+  // Lock and Snap affect only this tab's layout.
+  if (!isPlayer){
+    // Only for panels the player view can actually surface — offered on all
+    // of them, it set a flag and showed the player nothing. PA_SHAREABLE lives
+    // beside the player's tab list so adding a tab there enables sharing here.
+    const canShare = (typeof PA_SHAREABLE === 'undefined') || PA_SHAREABLE.has(id);
+    if (canShare) items.push({ act:'share', label:'Shared with players', icon:'i-eye', checked: isShared });
+    else          items.push({ label:'No player view for this panel', icon:'i-eye-off', disabled:true });
   }
+  items.push({ act:'lock', label:'Lock position', icon:'i-lock', checked: isLocked });
+  items.push({ act:'snap', label:'Snap to layout…', icon:'i-grid' });
 
   const menu = document.createElement('div');
   menu.className = 'window-menu';
-  // `disabled` items render as plain text, not buttons. The renderer used to
-  // ignore the flag and emit a <button data-act="undefined"> — clickable,
-  // focusable and inert. party.js has been passing one for its separator.
-  menu.innerHTML = items.map(it =>
-    it.act === '__sep'
-      ? '<div class="window-menu-sep"></div>'
-      : it.disabled
-        ? `<div class="window-menu-item is-disabled">${it.label}</div>`
-        : `<button class="window-menu-item" data-act="${it.act}">${it.label}</button>`
-  ).join('');
+  const row = it => {
+    const ico = '<span class="wm-ico">' + (it.icon && typeof ICO === 'function' ? ICO(it.icon) : '') + '</span>';
+    const chk = it.checked === undefined ? '' : '<span class="wm-chk' + (it.checked ? ' on' : '') + '" aria-hidden="true">' + (it.checked ? '✓' : '') + '</span>';
+    const aria = it.checked === undefined ? '' : ' role="menuitemcheckbox" aria-checked="' + (it.checked ? 'true' : 'false') + '"';
+    const text = '<span class="wm-label">' + esc(it.label) + '</span>';
+    // `disabled` items render as plain text, not buttons — a <button
+    // data-act="undefined"> is clickable, focusable and inert.
+    return it.disabled
+      ? '<div class="window-menu-item is-disabled">' + ico + text + '</div>'
+      : '<button class="window-menu-item" data-act="' + it.act + '"' + aria + '>' + ico + text + chk + '</button>';
+  };
+  menu.innerHTML = items.map(it => it.act === '__sep' ? '<div class="window-menu-sep"></div>' : row(it)).join('');
   document.body.appendChild(menu);
   _windowMenuEl = menu;
 

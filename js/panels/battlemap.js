@@ -120,17 +120,17 @@ registerPanel('battlemap',{
   // Player view sees only the non-destructive "Sync tokens" entry.
   menuItems(){
     const isPlayer = document.body.classList.contains('player-mode');
-    const syncItem = { label: '↺ Sync tokens from Combat tracker', run: () => this._syncParty() };
+    const syncItem = { label: 'Sync tokens from the Combat Tracker', icon: 'i-refresh', run: () => this._syncParty() };
     if (isPlayer) return [syncItem];
     return [
-      { label: '📺 Open player view in new tab', run: () => {
+      { label: 'Open the player view in a new tab', icon: 'i-monitor', run: () => {
         const url = window.location.href.split('?')[0]+'?player=1';
         const w = window.open(url,'skt-player','width=1280,height=720');
         if (!w && typeof showToast==='function') showToast('Allow popups to open player view');
         else if (typeof showToast==='function') showToast('Player view opened');
       } },
       syncItem,
-      { label: '🗑 Clear all drawings', run: () => {
+      { label: 'Clear all drawings', icon: 'i-pencil', run: () => {
         if (!this._drawings.length) return;
         showConfirm('Erase every pencil annotation on this map?', {title:'Clear drawings', confirmLabel:'Clear', danger:true}).then(ok=>{
           if (!ok) return;
@@ -139,7 +139,7 @@ registerPanel('battlemap',{
           this._render();
         });
       } },
-      { label: '✕ Clear all tokens', run: () => {
+      { label: 'Clear all tokens', icon: 'i-trash', run: () => {
         showConfirm('Remove all tokens from the battle map?', {title:'Clear tokens', confirmLabel:'Remove', danger:true}).then(ok=>{
           if (!ok) return;
           this._tokens = []; this._selected = null;
@@ -2677,39 +2677,23 @@ registerPanel('battlemap',{
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
-      +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
-      +'<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted);flex-shrink:0;margin-left:2px">Grid</span>'
-      +'<input type="number" id="map-size" min="8" max="400" step="1" value="'+cs+'" style="width:54px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Cell size in pixels (try 30, 50, 64, 80, 100, 120…)">'
-      +'<select id="map-size-preset" style="width:34px;font-size:var(--fs-sm);padding:2px 1px;flex-shrink:0" title="Common sizes">'
-        +'<option value="">…</option>'
-        +'<option value="30">30</option>'
-        +'<option value="40">40</option>'
-        +'<option value="50">50</option>'
-        +'<option value="64">64</option>'
-        +'<option value="75">75</option>'
-        +'<option value="80">80</option>'
-        +'<option value="100">100</option>'
-        +'<option value="120">120</option>'
-        +'<option value="150">150</option>'
-      +'</select>'
-      +'<input type="color" id="map-bg-color" value="'+this._bgColor+'" style="width:28px;height:24px;padding:1px;border-radius:3px;cursor:pointer;flex-shrink:0" title="Background color">'
-      +'<button class="btn" data-mact="pick-map" style="flex-shrink:0" title="Choose a map image">'+ICO('i-map')+'<span class="bt-l">Map</span></button>'
-      +(_mapBgImage?'<button class="btn danger" data-mact="clear-img" style="flex-shrink:0" title="Remove the map image">'+ICO('i-close')+'<span class="bt-l">Map</span></button>':'')
-      +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:80px;flex-shrink:0" title="Map size">':'')
-      +(_mapBgImage?'<span id="map-bg-scale-pct" style="font-size:var(--fs-xs);color:var(--text-muted);width:34px;text-align:right;flex-shrink:0">'+Math.round((this._bgMapScale||1)*100)+'%</span>':'')
-      +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit map to panel">⊙ Fit</button>':'')
-      +'<button class="btn icon-btn '+(this._showGrid?'active':'')+'" data-mact="toggle-grid" style="flex-shrink:0" title="Grid style: cycle square → hex → none">'+ICO('i-grid')+'</button>'
-      +'<button class="btn icon-btn '+(this._snapToGrid?'active':'')+'" data-mact="toggle-snap" style="flex-shrink:0" title="Snap tokens to grid on drop (Shift inverts)">'+ICO('i-magnet')+'</button>'
-      +(_mapBgImage?'<button class="btn icon-btn '+(this._tool==='align'?'active':'')+'" data-mact="tool-align" style="flex-shrink:0" title="Align grid to printed map grid: click two opposite corners of one cell">'+ICO('i-ruler')+'</button>':'')
-      +((this._gridOffsetX||this._gridOffsetY)?'<button class="btn icon-btn" data-mact="reset-align" style="flex-shrink:0" title="Reset grid alignment (offset back to 0,0)">'+ICO('i-refresh')+'</button>':'')
       // Fog cluster — only the toggle is visible by default. When fog is on,
       // its sub-controls (paint mode, brush radius, hide/show all) appear.
-      +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
       +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">'+ICO('i-cloud')+'<span class="bt-l">Fog</span></button>'
       +(this._fog!==null?'<button class="btn icon-btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">'+ICO('i-pencil')+'</button>':'')
       +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:50px;flex-shrink:0" title="Brush size">':'')
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide entire map (fog everything)">'+ICO('i-eye-off')+'</button>':'')
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-show-all" style="flex-shrink:0" title="Reveal entire map">'+ICO('i-eye')+'</button>':'')
+      // Setting the map up — the grid's size, style and alignment, snapping,
+      // the background colour — is in ⚙. This row is what a fight needs.
+      // There were twenty controls here, half of them setup, and the cell
+      // size showed as a raw "38.46473".
+      +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
+      +'<button class="btn" data-mact="map-menu" style="flex-shrink:0" title="Choose a map, or remove this one">'+ICO('i-map')+'<span class="bt-l">Map ▾</span></button>'
+      +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:56px;flex-shrink:0" title="Zoom">':'')
+      // The zoom reads out on the Fit button, which is where you go to undo it.
+      +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit the map to the panel">⊙ <span id="map-bg-scale-pct">'+Math.round((this._bgMapScale||1)*100)+'%</span></button>':'')
+      +(this._tool==='align'?'<span class="bm-align-note">Align: click two corners of one printed cell</span>':'')
       +'<div class="bm-spacer" style="flex:1"></div>'
       // Undo/redo for fog, drawings and tokens. Fog is the one that matters:
       // a stray reveal shows the party a room you hadn't got to yet.
@@ -2923,6 +2907,13 @@ registerPanel('battlemap',{
       }
       else if(act==='clear-img'){_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();}
       else if(act==='pick-map'){this._openMapPicker();}
+      else if(act==='map-menu'){
+        const r = btn.getBoundingClientRect();
+        const items = [{ label: 'Choose a map…', onClick: () => this._openMapPicker() }];
+        if (_mapBgImage) items.push({ label: 'Remove this map image', onClick: () => { _mapBgImage = null; this._bgMapPath = null; this._saveMap(); this._render(); } });
+        items.push({ label: 'Grid, snapping and alignment…', onClick: () => { this._settingsOpen = true; this._render(); } });
+        if (typeof showContextMenu === 'function') showContextMenu(r.left, r.bottom + 4, items);
+      }
       else if(act==='toggle-toolbar'){
         this._toolbarHidden = !this._toolbarHidden;
         try { localStorage.setItem('skt-bm-toolbar-hidden', this._toolbarHidden ? '1' : '0'); } catch(e){}
@@ -3001,27 +2992,7 @@ registerPanel('battlemap',{
       }
     }));
 
-    const applySize = (val) => {
-      const n = parseInt(val);
-      if (!n || n < 8 || n > 400) return;
-      this._cellSize = n;
-      if (_mapBgImage){
-        // Map loaded: keep grid tight to the image at the new cell size.
-        this._fitGridToBg();
-      } else {
-        const scroll=b.querySelector('#map-scroll');
-        if(scroll){
-          const cs2=this._cellSize;
-          this._cols=Math.max(16,Math.floor(scroll.clientWidth/cs2));
-          this._rows=Math.max(12,Math.floor(scroll.clientHeight/cs2));
-        }
-      }
-      this._saveMap();this._render();
-    };
-    b.querySelector('#map-size')?.addEventListener('change',e=>applySize(e.target.value));
-    b.querySelector('#map-size-preset')?.addEventListener('change',e=>{
-      if (e.target.value) applySize(e.target.value);
-    });
+
     // Map size slider — only present when an image is loaded.
     // `input` fires continuously while dragging; `change` fires on release.
     // Both run the same comprehensive in-place update — no innerHTML thrash,
@@ -3201,7 +3172,7 @@ registerPanel('battlemap',{
       document.addEventListener('touchcancel', onEnd);
     }, { passive:false });
 
-    b.querySelector('#map-bg-color')?.addEventListener('change',e=>{this._bgColor=e.target.value;this._applyBg(stage,W,H);this._saveMap();});
+
     // Update stage cursor when fog tool active
     if(this._fogTool || this._tool==='align') stage.style.cursor='crosshair';
     else stage.style.cursor='default';
@@ -3716,6 +3687,7 @@ registerPanel('battlemap',{
 
   _wireSettingsSidebar(){
     const b = this._body; if (!b) return;
+    b.querySelector('#bm-set-bgcolor')?.addEventListener('change', e => { this._bgColor = e.target.value; this._saveMap(); this._render(); });
     // Tile buttons
     b.querySelectorAll('[data-bmset]').forEach(btn => btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -3723,6 +3695,20 @@ registerPanel('battlemap',{
       const k = btn.dataset.bmset;
       if (k === 'close'){ this._settingsOpen = false; this._render(); return; }
       if (k === 'pick-map'){ this._openMapPicker(); return; }
+      if (k === 'snap'){ this._snapToGrid = !this._snapToGrid; this._saveMap(); this._refreshSettings(); return; }
+      if (k === 'align'){
+        this._tool = this._tool === 'align' ? '' : 'align';
+        this._alignFirstClick = null;
+        if (this._tool !== 'align') this._removeAlignMarker();
+        else if (typeof showToast === 'function') showToast('Align: click two grid intersections. Span MULTIPLE cells for accuracy.');
+        this._render(); return;
+      }
+      if (k === 'reset-align'){
+        this._gridOffsetX = 0; this._gridOffsetY = 0; this._alignFirstClick = null;
+        this._saveMap(); this._render();
+        if (typeof showToast === 'function') showToast('Grid offset reset');
+        return;
+      }
       if (k === 'fog-toggle'){
         this._fog = this._fog!==null ? null : new Set();
         if (this._fog!==null) this._fogTool = true;
@@ -4877,7 +4863,8 @@ registerPanel('battlemap',{
       min = min!=null?min:0; max = max!=null?max:100;
       return '<div class="bm-set-slider">'
         + '<div class="bm-set-slider-row"><span>' + esc(label) + '</span>'
-        + '<span class="bm-set-slider-val" id="bm-set-' + key + '-val">' + esc(value+suffix) + '</span></div>'
+        // Whole numbers on screen: a grid fitted to a map comes out as 38.46473.
+        + '<span class="bm-set-slider-val" id="bm-set-' + key + '-val">' + esc((typeof value === 'number' ? Math.round(value) : value) + suffix) + '</span></div>'
         + '<input type="range" id="bm-set-' + key + '" min="' + min + '" max="' + max + '" value="' + value + '">'
         + '</div>';
     };
@@ -4890,6 +4877,11 @@ registerPanel('battlemap',{
       +   tile('pick-map',    'Battlemap',  mapName,          !!this._bgMapPath, {})
       +   tile('fog-toggle',  'Fog of War', fogOn?'On':'Off', fogOn,             {})
       +   tile('rotate',      'Rotate',     (this._mapRotation||0)+'°', !!this._mapRotation, {})
+      + '</div>'
+      + '<div class="bm-set-slider">'
+      +   '<div class="bm-set-slider-row"><span>Background</span><span class="bm-set-slider-val">around the map</span></div>'
+      +   '<input type="color" id="bm-set-bgcolor" value="' + esc(this._bgColor || '#1a1a1a') + '"'
+      +     ' style="width:100%;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;background:var(--panel-2);cursor:pointer" title="Background colour">'
       + '</div>'
 
       + '<div class="bm-set-section-head">FOG OF WAR</div>'
@@ -4922,6 +4914,11 @@ registerPanel('battlemap',{
       +   tile('grid-hex',    'Hex',    '', this._gridType === 'hex',    {})
       +   tile('grid-none',   'None',   '', this._gridType === 'none',   {})
       +   tile('grid-cell',   'Cell',   '', !!this._cellHighlight, {title:'Hover highlight'})
+      + '</div>'
+      + '<div class="bm-set-tiles">'
+      +   tile('snap',  'Snap', 'tokens to cells', !!this._snapToGrid, {title:'Snap tokens to the grid when dropped (Shift inverts)'})
+      +   tile('align', 'Align', 'to a printed grid', this._tool === 'align', {disabled: !this._bgMapPath, title: this._bgMapPath ? 'Click two opposite corners of one printed cell' : 'Choose a map first'})
+      +   tile('reset-align', 'Reset', 'alignment', false, {disabled: !(this._gridOffsetX || this._gridOffsetY), title:'Put the grid offset back to 0,0'})
       + '</div>'
       + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)
       // Scale is a PROPERTY OF THE MAP, not something to infer from how many

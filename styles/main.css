@@ -5108,3 +5108,21 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .combat-controls { flex-direction:column; align-items:stretch; gap:4px; }
 .combat-controls .cc-row { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
 .combat-controls .cc-row .round-display { margin-left:4px; }
+/* Party: the header row */
+.party-head { display:flex; align-items:center; gap:6px; padding:0 0 8px; flex-wrap:wrap; }
+.party-head .btn .ico { width:14px; height:14px; }
+.party-compact-btn.active { border-color:var(--accent); color:var(--accent); }
+/* NPC Library: words where a symbol meant nothing on its own */
+#npclib-bulk-toggle { width:auto; padding:0 8px; font-size:var(--fs-xs); }
+.npclib-stat .lab { display:flex; align-items:center; justify-content:center; gap:4px; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); }
+.bm-align-note { font-size:var(--fs-xs); color:var(--accent); white-space:nowrap; flex-shrink:0; }
+/* The DM's map toolbar on one row at its default width */
+.map-toolbar { gap:4px; }
+.map-toolbar .btn { padding:2px 6px; gap:3px; }
+/* Window ⋯ menu: icon, label, check — one look everywhere */
+.window-menu .window-menu-item { display:flex; align-items:center; gap:8px; text-align:left; }
+.window-menu .wm-ico { width:16px; flex:0 0 16px; display:inline-flex; color:var(--text-muted); }
+.window-menu .wm-ico .ico { width:15px; height:15px; }
+.window-menu .wm-label { flex:1; min-width:0; }
+.window-menu .wm-chk { width:14px; flex:0 0 14px; text-align:center; color:var(--accent); font-weight:700; }
+.window-menu .window-menu-item.is-disabled { opacity:.55; }

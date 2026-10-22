@@ -253,6 +253,7 @@ registerPanel('books', {
           <span>${hiddenInScope} book${hiddenInScope===1?'':'s'} hidden</span>
           <button class="btn small" id="adv-toggle-hidden">${showingHidden ? 'Hide them again' : 'Show ' + hiddenInScope + ' hidden'}</button>
           ${this._hiddenBooks.size > 0 ? '<button class="btn small" id="adv-unhide-all">Unhide all</button>' : ''}
+          <button class="btn small${this._scopeOpen ? ' active' : ''}" id="adv-scope-toggle" title="Which other panels leave hidden books out">Applies to…</button>
         </div>`
       : '';
     // Filter-scope row — only meaningful when at least one book/adventure is
@@ -282,8 +283,8 @@ registerPanel('books', {
           <input type="search" id="adv-search" placeholder="Filter books…" value="${esc(this._searchQ||'')}" autocomplete="off">
           <span class="adv-list-count">${visible.length} / ${this._adventures.length}</span>
         </div>
-        ${scopeRow}
         <div class="adv-list">${cards || '<div class="empty-state" style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-muted)">No books match.</div>'}</div>
+        ${this._scopeOpen ? scopeRow : ''}
         ${hiddenFooter}
       </div>`;
     // Restore the scroll position on the freshly-built list so hiding a
@@ -299,6 +300,7 @@ registerPanel('books', {
         this._toggleBookHidden(btn.dataset.aid);
       });
     });
+    b.querySelector('#adv-scope-toggle')?.addEventListener('click', () => { this._scopeOpen = !this._scopeOpen; this._render(); });
     b.querySelector('#adv-toggle-hidden')?.addEventListener('click', () => {
       this._showHiddenBooks = !this._showHiddenBooks;
       this._render();

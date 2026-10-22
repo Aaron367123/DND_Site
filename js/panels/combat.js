@@ -303,24 +303,23 @@ registerPanel('combat',{
   menuItems(){
     if (document.body.classList.contains('player-mode')) return [];
     const m = this._statsMode();
-    const dot = active => active ? '●' : '○';
     const items = [];
     // PiP toggle goes first so it's easy to find. Shown even when the
     // Document PiP API isn't present — the click handler prints a clear
     // toast in that case rather than silently hiding the feature.
     items.push(this._pipWin
-      ? { label: '⧉ Bring back from PiP', run: () => this._closePiP() }
-      : { label: '⧉ Pop out to PiP (always-on-top)', run: () => this._openPiP() });
+      ? { label: 'Bring back from picture-in-picture', icon: 'i-monitor', run: () => this._closePiP() }
+      : { label: 'Pop out — always on top', icon: 'i-monitor', run: () => this._openPiP() });
     items.push(
-      { label: dot(m==='show')    + ' Monster HP/AC: Show',
+      { label: 'Players see monster HP / AC', icon: 'i-eye', checked: m === 'show',
         run: () => this._setStatsMode('show') },
-      { label: dot(m==='conceal') + ' Monster HP/AC: Conceal (Bloodied / Wounded / …)',
+      { label: 'Players see a health tier (Bloodied, …)', icon: 'i-heart', checked: m === 'conceal',
         run: () => this._setStatsMode('conceal') },
-      { label: dot(m==='hide')    + ' Monster HP/AC: Hide',
+      { label: 'Players see nothing', icon: 'i-eye-off', checked: m === 'hide',
         run: () => this._setStatsMode('hide') },
-      { label: '🩺 Manage health tiers…',
+      { label: 'Health tiers…', icon: 'i-shield',
         run: () => this._manageHealthTiers() },
-      { label: '⚙ Manage quick-pick names…',
+      { label: 'Quick-pick names…', icon: 'i-tag',
         run: () => this._manageQuickNames() },
     );
     // HP bar visibility toggle — default ON. Stored on settings so it
@@ -330,14 +329,14 @@ registerPanel('combat',{
     const compactOn = !!(state.settings && state.settings.combatCompact);
     const groupOn = !!(state.settings && state.settings.combatGroupSimilar);
     items.push(
-      { label: (compactOn ? '☑' : '☐') + ' Compact cards',
+      { label: 'Compact cards', icon: 'i-minus', checked: compactOn,
         run: () => { state.settings.combatCompact = !compactOn; save(); this._render(); } },
-      { label: (groupOn ? '☑' : '☐') + ' Group identical monsters into one card',
+      { label: 'Group identical monsters', icon: 'i-grid', checked: groupOn,
         run: () => { state.settings.combatGroupSimilar = !groupOn; save(); this._render(); } },
     );
     const hpBarOn = (state.settings && state.settings.combatHpBar !== false);
     items.push({
-      label: (hpBarOn ? '☑' : '☐') + ' Show HP bars',
+      label: 'HP bars', icon: 'i-heart', checked: hpBarOn,
       run: () => {
         if (!state.settings) state.settings = {};
         state.settings.combatHpBar = !hpBarOn;

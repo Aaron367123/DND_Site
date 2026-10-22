@@ -4170,6 +4170,109 @@
       ok('sync costs: silent', errs.length === before, errs.slice(before).join(' | '));
     }
 
+    // ── Toolbars and menus ─────────────────────────────────────────────────
+    {
+      const before = errs.length;
+      const lay0 = JSON.stringify(layout), NP0 = localStorage.getItem('skt-npcs-v2');
+      let cm = null; const sm = window.showContextMenu;
+      try {
+        window.showContextMenu = (x, y, it) => { cm = it; };
+        // #1 Battle Map: play on the toolbar, setup in ⚙.
+        openPanel('battlemap'); await sleep(500);
+        const M = panelDefs.battlemap, mb = M._body;
+        const bar = mb.querySelector('.map-toolbar');
+        ok('map: the toolbar is what a fight needs — no grid size, preset list, colour, grid style, snap or align on it',
+           !bar.querySelector('#map-size, #map-size-preset, #map-bg-color, [data-mact="toggle-grid"], [data-mact="toggle-snap"], [data-mact="tool-align"], [data-mact="clear-img"]')
+           && !!bar.querySelector('[data-mact="map-menu"]') && !!bar.querySelector('[data-mact="tool-add-pc"]') && !!bar.querySelector('[data-mact="fog-toggle"]'));
+        cm = null; bar.querySelector('[data-mact="map-menu"]').click();
+        ok('map: "Map ▾" chooses a map, and reaches the grid setup', !!cm && /Choose a map/.test(cm[0].label) && cm.some(i => /Grid/.test(i.label)));
+        mb.querySelector('[data-mact="toggle-settings"]').click(); await sleep(150);
+        const set = mb.querySelector('.bm-settings');
+        ok('map: snapping, alignment and the background colour are in ⚙',
+           !!set.querySelector('[data-bmset="snap"]') && !!set.querySelector('[data-bmset="align"]') && !!set.querySelector('#bm-set-bgcolor'));
+        const snap0 = !!M._snapToGrid;
+        set.querySelector('[data-bmset="snap"]').click(); await sleep(60);
+        ok('map: and they work from there', !!M._snapToGrid === !snap0);
+        M._snapToGrid = snap0; M._cellSize = 38.46473891664834; M._refreshSettings();
+        ok('map: the cell size reads as a whole number', (mb.querySelector('#bm-set-cellsize-val') || {}).textContent === '38px');
+        M._settingsOpen = false; closePanel('battlemap');
+
+        // #2 Party: the everyday actions in a header row.
+        openPanel('party'); await sleep(250);
+        const P = panelDefs.party, ph = P._body.querySelector('.party-head');
+        ok('party: Add character, Rest and Ask to roll sit in the header row',
+           !!ph && !!ph.querySelector('[data-act="party-add"]') && !!ph.querySelector('[data-act="party-rest"]') && !!ph.querySelector('[data-act="party-ask"]'));
+        cm = null; ph.querySelector('[data-act="party-rest"]').click();
+        ok('party: Rest offers a short rest and a long rest', !!cm && cm.length === 2 && /Short/.test(cm[0].label) && /Long/.test(cm[1].label));
+        ok('party: the ⋯ menu keeps the rest — Manage Party, Party Skills', JSON.stringify(P.menuItems().map(i => i.label)) === JSON.stringify(['Manage Party', 'Party Skills']));
+        closePanel('party');
+
+        // #3 Every ⋯ menu: icons and checks, no emoji, window options last.
+        openPanel('combat'); await sleep(250);
+        document.querySelector('.window[data-panel="combat"] [data-wact="menu"]').click(); await sleep(60);
+        const menu = document.querySelector('.window-menu');
+        const labels = [...menu.querySelectorAll('.wm-label')].map(e => e.textContent);
+        const emoji = /\p{Extended_Pictographic}/u;
+        ok('menu: no emoji in a window menu', labels.length > 5 && !labels.some(l => emoji.test(l)), labels.join(' | '));
+        ok('menu: a switch shows a check, the choice made shows which',
+           menu.querySelectorAll('[role="menuitemcheckbox"]').length >= 5 && menu.querySelectorAll('.wm-chk.on').length >= 1);
+        ok('menu: the window’s own options come after the panel’s', labels.indexOf('Lock position') > labels.indexOf('HP bars') && labels[labels.length - 1] === 'Snap to layout…');
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); menu.remove();
+        closePanel('combat');
+        // An item still written the old way is read for what it means.
+        { const N = panelDefs.notes, mi0 = N.menuItems;
+          N.menuItems = () => [{ label: '📋 Old style', run(){} }, { label: '☑ Old switch', run(){} }];
+          try {
+            openPanel('notes'); await sleep(200);
+            document.querySelector('.window[data-panel="notes"] [data-wact="menu"]').click(); await sleep(60);
+            const m2 = document.querySelector('.window-menu');
+            const l2 = [...m2.querySelectorAll('.wm-label')].map(e => e.textContent);
+            ok('menu: an older label loses its emoji, and a ☑ becomes a check', l2[0] === 'Old style' && l2[1] === 'Old switch'
+               && !!m2.querySelectorAll('.window-menu-item')[1].querySelector('.wm-chk.on'), JSON.stringify(l2.slice(0, 2)));
+            m2.remove();
+          } finally { if (mi0 === undefined) delete N.menuItems; else N.menuItems = mi0; closePanel('notes'); }
+        }
+
+        // #4 Library: the "applies to" chips wait in the footer.
+        const B = panelDefs.books, H0 = B._hiddenBooks ? new Set(B._hiddenBooks) : null;
+        openPanel('books'); await sleep(400);
+        if (B._hiddenBooks && !B._hiddenBooks.size && B._adventures && B._adventures[0]){ B._hiddenBooks.add(B._adventures[0].id); B._render(); await sleep(60); }
+        const lb = B._body;
+        ok('library: the "applies to" row is not above the books', !lb.querySelector('.adv-scope-row') && !!lb.querySelector('#adv-scope-toggle'));
+        lb.querySelector('#adv-scope-toggle').click(); await sleep(60);
+        ok('library: "Applies to…" by the hidden count opens it', !!B._body.querySelector('.adv-scope-row'));
+        B._scopeOpen = false;
+        if (H0){ B._hiddenBooks = H0; }
+        closePanel('library');
+
+        // #5 NPC Library: words where a symbol stood alone.
+        openPanel('npclib'); await sleep(300);
+        if (!panelDefs.npclib._selected()){ panelDefs.npclib._newNpc(); await sleep(100); }
+        const nb = panelDefs.npclib._body;
+        ok('npc: HP, AC and Init are labelled', ['HP', 'AC', 'Init'].every(t => [...nb.querySelectorAll('.npclib-stat .lab')].some(e => e.textContent.trim() === t)));
+        ok('npc: "Select" says what the bulk button does, and the export is not an emoji',
+           (nb.querySelector('#npclib-bulk-toggle') || {}).textContent === 'Select' && !/📷/.test(nb.innerHTML));
+        closePanel('npclib');
+
+        // #6 Loot: the totals and both buttons on one line.
+        openPanel('loot'); await sleep(300);
+        const sb = panelDefs.loot._body.querySelector('.loot-sumbar');
+        // Centres, not tops: a button and a line of text differ in height.
+        const mids = [...sb.children].filter(e => e.offsetParent).map(e => { const r = e.getBoundingClientRect(); return Math.round((r.top + r.bottom) / 2); });
+        ok('loot: the totals, Roll treasure and Divvy up share one line', Math.max(...mids) - Math.min(...mids) < 8, JSON.stringify(mids));
+        closePanel('loot');
+      } catch(e){ ok('toolbars: the checks ran to completion', false, e.message); }
+      finally {
+        window.showContextMenu = sm;
+        document.querySelectorAll('.window-menu').forEach(m => m.remove());
+        _remoteUpdate = true;
+        try { if (NP0 == null) localStorage.removeItem('skt-npcs-v2'); else localStorage.setItem('skt-npcs-v2', NP0); } finally { _remoteUpdate = false; }
+        panelDefs.npclib._npcs = null;
+        Object.keys(layout).forEach(k => delete layout[k]); Object.assign(layout, JSON.parse(lay0)); saveLayout();
+      }
+      ok('toolbars: silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
     // ── The NPC generator lives in the NPC Library ────────────────────────
     {
       const before = errs.length;
@@ -4350,13 +4453,16 @@
     openPanel('party'); await sleep(300);
     {
       const p0 = !!state.settings.partyCompact;
-      const tog = document.querySelector('.window[data-panel="party"] [data-party-compact]');
-      ok('party: compact has a button in the title bar', !!tog);
+      // The switch is redrawn with the panel, so it is looked up each time.
+      const togEl = () => document.querySelector('.window[data-panel="party"] .party-head [data-party-compact]');
+      const tog = togEl();
+      ok('party: compact has a visible switch in the panel’s header row, not a bare icon in the title bar',
+         !!tog && !document.querySelector('.window[data-panel="party"] .window-actions [data-party-compact]'));
       try {
         if (tog){
-          if (state.settings.partyCompact) { tog.click(); await sleep(100); }
-          tog.click(); await sleep(150);
-          ok('party: the button turns compact on', !!state.settings.partyCompact && tog.getAttribute('aria-pressed') === 'true');
+          if (state.settings.partyCompact) { togEl().click(); await sleep(100); }
+          togEl().click(); await sleep(150);
+          ok('party: the button turns compact on', !!state.settings.partyCompact && togEl().getAttribute('aria-pressed') === 'true');
           const cards = [...panelDefs.party._body.querySelectorAll('.party-grid.compact .char-card')];
           const wide = cards.filter(c => c.scrollWidth > c.clientWidth + 1);
           ok('party: no compact row is cut off at the right', cards.length > 0 && wide.length === 0,
@@ -5557,9 +5663,10 @@
       const p0 = localStorage.getItem('skt-party-v1');
       try {
         const P = panelDefs.party;
+        openPanel('party'); await sleep(200);
         const items = P.menuItems().map(i => i.label);
-        ok('add: the party menu has one "Add a character" entry',
-           items.some(l => /Add a character/.test(l)) && !items.some(l => /Build a new character|Import PDF/.test(l)), items.join(' | '));
+        ok('add: one "＋ Add character", in the party header, and nothing else that adds one',
+           !!P._body.querySelector('.party-head [data-act="party-add"]') && !items.some(l => /Add a character|Build a new character|Import PDF/.test(l)), items.join(' | '));
         P._addCharacter(); await sleep(40);
         const opts = [...document.querySelectorAll('#add-char-back [data-add]')].map(b => b.dataset.add);
         ok('add: it offers build, import and blank', ['build', 'pdf', 'blank'].every(k => opts.includes(k)), opts.join(','));

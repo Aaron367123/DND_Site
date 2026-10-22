@@ -48,37 +48,14 @@ registerPanel('party',{
       };
       body.addEventListener('click', this._bodyClickHandler);
     }
-    this._addCompactToggle(body);
+    // The compact switch is in the panel's own header row now (_renderHead).
+    body.closest('.window')?.querySelector('.window-actions [data-party-compact]')?.remove();
     this._render();
   },
   // One click between full cards and the one-row-per-character glance, in
   // the title bar. It lived only in the ⋯ menu, where nobody found it, and
   // the full cards show three characters of five in a default-sized panel.
   // Only in a real window: the player app mounts this panel bare.
-  _addCompactToggle(body){
-    const acts = body.closest('.window')?.querySelector('.window-actions');
-    if (!acts || acts.querySelector('[data-party-compact]')) return;
-    const b = document.createElement('button');
-    b.className = 'btn icon-btn';
-    b.dataset.partyCompact = '1';
-    b.addEventListener('mousedown', e => e.stopPropagation());
-    b.addEventListener('click', e => {
-      e.stopPropagation();
-      if (!state.settings) state.settings = {};
-      state.settings.partyCompact = !state.settings.partyCompact;
-      save(); this._render();
-    });
-    acts.insertBefore(b, acts.firstChild);
-  },
-  _syncCompactToggle(){
-    const b = this._body?.closest('.window')?.querySelector('[data-party-compact]');
-    if (!b) return;
-    const on = !!(state.settings && state.settings.partyCompact);
-    b.textContent = on ? '▤' : '▦';
-    b.title = on ? 'Show full character cards' : 'Compact: one row per character';
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.classList.toggle('active', on);
-  },
   unmount(){
     if (this._body && this._bodyClickHandler){
       this._body.removeEventListener('click', this._bodyClickHandler);
@@ -129,32 +106,36 @@ registerPanel('party',{
     if (typeof showToast === 'function') showToast((foe ? 'Rival' : 'Character') + ' added — open Manage Party to fill it in');
   },
 
+  // What you reach for every session sits in a header row: add a character,
+  // rest the party, ask the players to roll, and the compact switch. Adding
+  // and the rests were only in the ⋯ menu, and the compact switch was a bare
+  // ▦ in the title bar beside a menu entry that did the same thing.
+  _renderHead(){
+    if (document.body.classList.contains('player-mode')) return '';
+    const compact = !!(state.settings && state.settings.partyCompact);
+    const has = state.party.some(p => !p.foe);
+    return '<div class="party-head">'
+      + '<button class="btn small" data-act="party-add" title="Build one, import a character-sheet PDF, or start blank">＋ Add character</button>'
+      + (has ? '<button class="btn small" data-act="party-rest" title="Short rest (players spend hit dice on their phones) or long rest">' + ICO('i-clock') + ' Rest ▾</button>' : '')
+      + (has ? '<button class="btn small" data-act="party-ask" title="Ask the players to roll — initiative, a save or a check — on their phones">' + ICO('i-phone') + ' Ask to roll</button>' : '')
+      + '<span style="flex:1"></span>'
+      + '<button class="btn small party-compact-btn' + (compact ? ' active' : '') + '" data-act="party-compact" data-party-compact="1" aria-pressed="' + compact + '"'
+      +   ' title="' + (compact ? 'Show full character cards' : 'Compact: one row per character') + '">' + (compact ? '▤' : '▦') + ' Compact</button>'
+      + '</div>';
+  },
+  _openRestMenu(anchor){
+    const r = anchor.getBoundingClientRect();
+    if (typeof showContextMenu !== 'function') return;
+    showContextMenu(r.left, r.bottom + 4, [
+      { label: 'Short rest — players spend hit dice', onClick: () => this._shortRestAll() },
+      { label: 'Long rest — everyone recovers', onClick: () => this._longRestAll() },
+    ]);
+  },
+
+  // The ⋯ menu keeps what is not for every session.
   menuItems(){
-    const items = [
-      { label:'➕ Add a character…', run: () => this._addCharacter() },
-      { label:'📋 Manage Party', run: () => this._openManageParty() },
-      { label:'📱 Ask the players to roll…', run: () => { if (typeof sktOpenAskRoll === 'function') sktOpenAskRoll({}); } },
-    ];
-    if (state.party.length){
-      items.push({ label:'📊 Party Skills', run: () => this._openPartySkills() });
-      // Rest actions live in the window menu now (instead of a top-of-panel
-      // toolbar) so the panel itself stays card-focused. Long rest is a
-      // destructive-ish action (overwrites HP / slots / hit dice / etc.) so
-      // it gets a confirm; short rest is a softer touch.
-      items.push({ label:'🛌 Long rest (party)',  run: () => this._longRestAll() });
-      items.push({ label:'💤 Short rest (party) — players spend hit dice', run: () => this._shortRestAll() });
-      // Compact "party glance" mode — one-row-per-character layout. Stored
-      // as a setting so it persists across reloads & syncs.
-      const compact = !!(state.settings && state.settings.partyCompact);
-      items.push({
-        label: (compact?'☑':'☐') + ' Compact party glance',
-        run: () => {
-          if (!state.settings) state.settings = {};
-          state.settings.partyCompact = !state.settings.partyCompact;
-          save(); this._render();
-        }
-      });
-    }
+    const items = [{ label:'Manage Party', icon:'i-user', run: () => this._openManageParty() }];
+    if (state.party.length) items.push({ label:'Party Skills', icon:'i-check', run: () => this._openPartySkills() });
     return items;
   },
 
@@ -190,9 +171,8 @@ registerPanel('party',{
     } else {
       b.style.removeProperty('--party-card-w');
     }
-    b.innerHTML = '<div class="'+gridCls+'">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
+    b.innerHTML = this._renderHead() + '<div class="'+gridCls+'">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
     this._wire();
-    this._syncCompactToggle();
   },
 
   // HP bar visual: clamp 0–100% normally, but flag a "surplus" state when
@@ -2928,6 +2908,10 @@ registerPanel('party',{
   // `el` is the closest [data-act] element to the click target.
   _onAction(el, e){
       const act=el.dataset.act, i=+el.dataset.idx;
+      if(act==='party-add'){ this._addCharacter(); return; }
+      if(act==='party-compact'){ if (!state.settings) state.settings = {}; state.settings.partyCompact = !state.settings.partyCompact; save(); this._render(); return; }
+      if(act==='party-rest'){ this._openRestMenu(el); return; }
+      if(act==='party-ask'){ if (typeof sktOpenAskRoll === 'function') sktOpenAskRoll((state.combatants || []).some(c => c.isPC) ? { kind: 'init' } : {}); return; }
       if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
       // The recipient uses their die: clear it.
       else if(act==='bardic-insp'){

@@ -506,7 +506,7 @@ registerPanel('npclib', {
       <div class="npclib-left" ${leftStyle}>
         <div class="npclib-toolbar">
           <input type="search" id="npclib-search" placeholder="Search NPCs..." value="${esc(this._searchQ)}">
-          <button class="icon-btn npclib-tool-btn ${this._bulkMode?'active':''}" id="npclib-bulk-toggle" title="${this._bulkMode?'Exit bulk-select mode':'Bulk-select mode (checkboxes + bulk actions)'}">${this._bulkMode?'✓':'☐'}</button>
+          <button class="icon-btn npclib-tool-btn ${this._bulkMode?'active':''}" id="npclib-bulk-toggle" title="${this._bulkMode?'Done selecting':'Select several NPCs to move, tag or delete together'}">${this._bulkMode?'Done':'Select'}</button>
           <button class="icon-btn npclib-tool-btn ${this._gen?'active':''}" id="npclib-gen" title="${this._gen?'Back to the selected NPC':'Generate an NPC — race, role, quirks, a secret'}">🎲</button>
           <button class="icon-btn npclib-tool-btn" id="npclib-add" title="New NPC">+</button>
         </div>
@@ -599,15 +599,15 @@ registerPanel('npclib', {
         <div class="npclib-detail-badges">
           <button class="npc-badge group-badge" data-act="edit-group" title="Change group">${esc((n.group||NPC_DEFAULT_GROUP).toUpperCase())}</button>
           <button class="npc-badge attitude-badge attitude-${esc((n.attitude||'Neutral').toLowerCase())}" data-act="edit-attitude" title="Change attitude">${esc((n.attitude||'NEUTRAL').toUpperCase())}</button>
-          <button class="btn icon-btn" data-act="export-image" title="Export as PNG image (for Discord / share)">📷</button>
+          <button class="btn icon-btn" data-act="export-image" title="Save as a picture (PNG) to share">${ICO('i-save')}</button>
           <button class="btn icon-btn danger" data-act="delete" title="Delete NPC">×</button>
         </div>
       </div>
 
       <div class="npclib-stats">
-        <div class="npclib-stat"><div class="lab">${ICO('i-heart')}</div><input type="number" value="${n.hp||0}" data-field="hp"></div>
-        <div class="npclib-stat"><div class="lab">${ICO('i-shield')}</div><input type="number" value="${n.ac||0}" data-field="ac"></div>
-        <div class="npclib-stat"><div class="lab">${ICO('i-bolt')}</div><input type="number" value="${n.init||0}" data-field="init"></div>
+        <div class="npclib-stat"><div class="lab">${ICO('i-heart')} HP</div><input type="number" value="${n.hp||0}" data-field="hp" aria-label="Hit points"></div>
+        <div class="npclib-stat"><div class="lab">${ICO('i-shield')} AC</div><input type="number" value="${n.ac||0}" data-field="ac" aria-label="Armor class"></div>
+        <div class="npclib-stat"><div class="lab">${ICO('i-bolt')} Init</div><input type="number" value="${n.init||0}" data-field="init" aria-label="Initiative bonus"></div>
       </div>
 
       <div class="npclib-section-label">TAGS</div>
