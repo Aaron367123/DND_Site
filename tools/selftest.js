@@ -3984,6 +3984,116 @@
       ok('merges 2: silent', errs.length === before, errs.slice(before).join(' | '));
     }
 
+    // ── Third round: fixes and tidying ─────────────────────────────────────
+    {
+      const before = errs.length;
+      const K0 = localStorage.getItem('skt-combat-v1'), P0 = localStorage.getItem('skt-party-v1');
+      const H0 = localStorage.getItem('skt-handouts-v1'), I0 = localStorage.getItem('skt-ho-imgs-v1');
+      const S0 = JSON.stringify(state.settings);
+      const rt = window.showToast; window.showToast = () => {};
+      const stub = { ready: window.sktMapBlobReady, put: window.sktMapBlobPut, get: window.sktMapBlobGet, del: window.sktMapBlobDelete };
+      try {
+        const C = panelDefs.combat;
+        // #1 Numbering from the name without its number.
+        state.combatants = [{ id: 'zz_h', name: 'hill giant 1', isPC: false, hp: 50, hpMax: 50, ac: 13, initiative: 5, conditions: [] }];
+        save(); C._duplicate(0);
+        const names = state.combatants.map(c => c.name);
+        ok('combat: copying "hill giant 1" makes "hill giant 2", not "hill giant 1 1"',
+           JSON.stringify(names) === JSON.stringify(['hill giant 1', 'hill giant 2']) && state.combatants.every(c => c.baseName === 'hill giant'), JSON.stringify(names));
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-combat-v1', JSON.stringify({ combatRound: 1, activeCombatantId: null, combatants: [
+          { id: 'a', name: 'hill giant 1 1', baseName: 'hill giant 1', isPC: false, hp: 9, hpMax: 9 },
+          { id: 'b', name: 'ogre 1 2', baseName: 'ogre 1', isPC: false, hp: 9, hpMax: 9 },
+          { id: 'c', name: 'Kraken Priest 3', baseName: 'Kraken Priest', isPC: false, hp: 9, hpMax: 9 }] })); }
+        finally { _remoteUpdate = false; }
+        loadDomain('combat');
+        ok('combat: a fight saved with doubled numbers is tidied when it loads',
+           JSON.stringify(state.combatants.map(c => c.name + '|' + c.baseName)) === JSON.stringify(['hill giant 1|hill giant', 'ogre 2|ogre', 'Kraken Priest 3|Kraken Priest']),
+           JSON.stringify(state.combatants.map(c => c.name)));
+        _remoteUpdate = true;
+        try { if (K0 != null) localStorage.setItem('skt-combat-v1', K0); } finally { _remoteUpdate = false; }
+        loadDomain('combat');
+
+        // #2 Settings from the keyboard.
+        const drawer = document.getElementById('settings-drawer');
+        drawer.classList.remove('open');
+        document.getElementById('settings-btn').dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+        ok('settings: Enter or Space on the gear opens Settings', drawer.classList.contains('open'));
+        drawer.classList.remove('open');
+
+        // #3 The Combat Tracker toolbar.
+        openPanel('combat'); await sleep(250);
+        const cb = C._body;
+        ok('combat: the view switches left the toolbar for the ⋯ menu',
+           !cb.querySelector('[data-act="toggle-compact"]') && !cb.querySelector('[data-act="toggle-group"]')
+           && C.menuItems().some(i => /Compact cards/.test(i.label)) && C.menuItems().some(i => /Group identical/.test(i.label)));
+        ok('combat: Sort stays in the toolbar', !!cb.querySelector('[data-act="sort-init"]'));
+        ok('combat: one "＋ Add" instead of + and the paw', !!cb.querySelector('[data-act="add-menu"]') && !cb.querySelector('[data-act="add-monster"]') && !cb.querySelector('.combat-controls [data-act="add"]'));
+        let items = null; const sm = window.showContextMenu;
+        window.showContextMenu = (x, y, it) => { items = it; };
+        try { cb.querySelector('[data-act="add-menu"]').click(); } finally { window.showContextMenu = sm; }
+        ok('combat: "＋ Add" offers monsters, party members not in the fight, and Other',
+           !!items && /Monsters/.test(items[0].label) && /Other/.test(items[items.length - 1].label), JSON.stringify((items || []).map(i => i.label)));
+        state.settings.monsterStatsMode = 'conceal'; C._render();
+        ok('combat: what players see of monster HP is a small icon, not a banner',
+           !!cb.querySelector('.combat-controls .combat-stats-ind') && !cb.querySelector('.combat-hide-banner'));
+        state.settings = JSON.parse(S0); C._render();
+        ok('combat: the phone and area-save buttons are drawn icons, not emoji',
+           /i-phone/.test((cb.querySelector('[data-act="ask-init"]') || {}).innerHTML || 'i-phone') && /i-burst/.test((cb.querySelector('[data-act="area-save"]') || {}).innerHTML || 'i-burst'));
+
+        // #4 A character's turn has the action pips too.
+        const pc = state.combatants.find(c => c.isPC);
+        const A0 = state.activeCombatantId; state.activeCombatantId = pc.id; save();
+        openPanel('turnview'); await sleep(400);
+        ok('turnview: a character’s turn shows Action, Bonus and Reaction', panelDefs.turnview._body.querySelectorAll('.tv-econ').length === 3);
+        closePanel('turnview'); state.activeCombatantId = A0; save();
+
+        // #5 The damage-type chip.
+        openPanel('party'); await sleep(250);
+        ok('party: the damage-type chip says "type" when none is picked',
+           [...panelDefs.party._body.querySelectorAll('.party-hp-type-label')].some(e => e.textContent === 'type'));
+        closePanel('party');
+
+        // #7 Handout pictures on their own node.
+        const store = {}; let deleted = null;
+        window.sktMapBlobReady = () => true;
+        window.sktMapBlobPut = (id, url) => { store[id] = url; return Promise.resolve(true); };
+        window.sktMapBlobGet = id => Promise.resolve(store[id] || null);
+        window.sktMapBlobDelete = id => { deleted = id; delete store[id]; return Promise.resolve(true); };
+        const cv = document.createElement('canvas'); cv.width = 60; cv.height = 40;
+        const pic = cv.toDataURL('image/jpeg', 0.8);
+        const hid = panelDefs.handouts.send({ title: 'ZZ map scrap', text: '', img: pic, to: 'all' });
+        await sleep(30);
+        const rec = sktHandouts().list.find(h => h.id === hid);
+        ok('handouts: a picture is stored on its own, and the handout carries only its id',
+           !!rec && !rec.img && rec.imgBlob === hid && store[hid] === pic && !localStorage.getItem('skt-handouts-v1').includes('data:image'));
+        delete _hoImgMem[hid]; localStorage.removeItem('skt-ho-imgs-v1');
+        const box = document.createElement('div'); box.innerHTML = sktHoImgTag(rec, 'pa-ho-img'); document.body.appendChild(box);
+        ok('handouts: a device without the picture asks for it', !!box.querySelector('img[data-ho-blob="' + hid + '"]'));
+        sktHoFillImgs(box); await sleep(40);
+        ok('handouts: and shows it once it arrives', box.querySelector('img').src === pic);
+        box.remove();
+        panelDefs.handouts.remove(hid);
+        ok('handouts: deleting the handout deletes its picture', deleted === hid && !store[hid]);
+        window.sktMapBlobReady = () => false;
+        const hid2 = panelDefs.handouts.send({ title: 'ZZ offline', text: '', img: pic, to: 'all' });
+        ok('handouts: offline, the picture rides inline as before', (sktHandouts().list.find(h => h.id === hid2) || {}).img === pic);
+      } catch(e){ ok('round 3: the checks ran to completion', false, e.message); }
+      finally {
+        window.showToast = rt;
+        window.sktMapBlobReady = stub.ready; window.sktMapBlobPut = stub.put; window.sktMapBlobGet = stub.get; window.sktMapBlobDelete = stub.del;
+        state.settings = JSON.parse(S0);
+        _remoteUpdate = true;
+        try {
+          [['skt-combat-v1', K0], ['skt-party-v1', P0], ['skt-handouts-v1', H0], ['skt-ho-imgs-v1', I0]]
+            .forEach(([k, v]) => { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); });
+        } finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party');
+        ['combat', 'party', 'turnview'].forEach(id => { try { closePanel(id); } catch(e){} });
+      }
+      ok('round 3: silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
     // ── The NPC generator lives in the NPC Library ────────────────────────
     {
       const before = errs.length;
@@ -6296,6 +6406,28 @@
             if (p0 != null) localStorage.setItem('skt-party-v1', p0);
             if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
           } finally { _remoteUpdate = false; }
+          loadDomain('party'); paRender();
+        }
+      }
+
+      // -- The same weapon twice is one row ---------------------------------
+      {
+        const p0 = localStorage.getItem('skt-party-v1');
+        try {
+          const me = paMe().pcId || (state.party[0] || {}).id;
+          if (!paMe().pcId) paSetPc(me);
+          const pc = state.party.find(p => p.id === me);
+          pc.sheet = pc.sheet || {};
+          pc.sheet.attacks = [{ name: 'Dagger', atkBonus: '+5', damage: '1d4+2 piercing' },
+                              { name: 'Dagger', atkBonus: '+5', damage: '1d4+2 piercing' },
+                              { name: 'Shortbow', atkBonus: '+5', damage: '1d6+2 piercing' }];
+          paTab = 'you'; paRender(); await sleep(150);
+          const rows = [...document.querySelectorAll('.pa-atk .pa-atk-n')].map(e => e.textContent.replace(/\s+/g, ' ').trim());
+          ok('player: two identical daggers are one row, ×2', rows.length === 2 && rows[0] === 'Dagger ×2' && rows[1] === 'Shortbow', JSON.stringify(rows));
+        } catch(e){ ok('player: the weapon-row check ran to completion', false, e.message); }
+        finally {
+          _remoteUpdate = true;
+          try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
           loadDomain('party'); paRender();
         }
       }

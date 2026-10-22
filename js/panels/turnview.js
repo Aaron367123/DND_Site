@@ -1206,8 +1206,10 @@ registerPanel('turnview', {
         title="For damage or healing that isn't an attack, use − / + under the target list">Apply</button>
       ${list.length ? '<button class="tv-manual-x" data-tv="manualopen" title="Hide this row" aria-label="Hide">✕</button>' : ''}
     </div>`;
+    // A character's turn has an action, a bonus action and a reaction too —
+    // the pips were only drawn for a creature with attacks to roll.
     if (!list.length){
-      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderClassRow(c)}${manual}</div></div>`;
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderEconomy(c)}${this._renderClassRow(c)}${manual}</div></div>`;
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;

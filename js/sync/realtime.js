@@ -1580,6 +1580,9 @@ function _blobBase(){ return _root() + '/' + _BLOB_BASE_REL; }
 // came back with tokens and fog on an empty background. Cleaning up uploads
 // nobody wants is now the battle map's job, done deliberately (_retireBlob),
 // instead of as a side effect of every upload.
+// Whether a picture can be stored on its own node right now (connected).
+window.sktMapBlobReady = function(){ return !!_fbDb && !!_realtimeStarted; };
+
 window.sktMapBlobPut = function(id, dataUrl){
   if (!_fbDb) return Promise.resolve(false);
   return _fbDb.ref(_blobBase() + '/' + id).set(String(dataUrl))

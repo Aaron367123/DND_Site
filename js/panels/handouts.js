@@ -16,6 +16,64 @@
 const HO_KEY = 'skt-handouts-v1';
 const HO_BUDGET = 1800000;   // characters of JSON
 
+// ── Pictures ───────────────────────────────────────────────────────────────
+// A handout's picture is stored on its own database node (the one map uploads
+// use), and the handout carries only its id (imgBlob). It used to ride inside
+// skt-handouts-v1, which syncs whole — so once a few pictures had been sent,
+// every whisper and every "Show again" re-sent all of them, up to 1.8 MB, to
+// every device. Offline (or ?nosync) there is nowhere else to put it, so it
+// stays inline as before (img).
+//
+// The device that sent a picture keeps a copy (HO_IMG_LOCAL, not synced);
+// other devices fetch it once and hold it for the session.
+const HO_IMG_LOCAL = 'skt-ho-imgs-v1';
+const _hoImgMem = {};
+function _hoLocalImgs(){ try { return JSON.parse(localStorage.getItem(HO_IMG_LOCAL) || '{}') || {}; } catch(e){ return {}; } }
+function _hoKeepLocal(id, url){
+  _hoImgMem[id] = url;
+  const m = _hoLocalImgs(); m[id] = url;
+  try { localStorage.setItem(HO_IMG_LOCAL, JSON.stringify(m)); } catch(e){ /* full: memory only */ }
+}
+function _hoDropLocal(id){
+  delete _hoImgMem[id];
+  const m = _hoLocalImgs(); if (!(id in m)) return;
+  delete m[id];
+  try { localStorage.setItem(HO_IMG_LOCAL, JSON.stringify(m)); } catch(e){}
+}
+// The picture for a handout: inline, kept here, or fetched. A handout can
+// reach a phone a moment before its picture lands, so a miss is retried.
+function sktHandoutImg(h, tries){
+  if (!h) return Promise.resolve(null);
+  if (h.img) return Promise.resolve(h.img);
+  const id = h.imgBlob; if (!id) return Promise.resolve(null);
+  const have = _hoImgMem[id] || _hoLocalImgs()[id];
+  if (have){ _hoImgMem[id] = have; return Promise.resolve(have); }
+  if (typeof window.sktMapBlobGet !== 'function') return Promise.resolve(null);
+  return window.sktMapBlobGet(id).catch(() => null).then(url => {
+    if (url){ _hoImgMem[id] = url; return url; }
+    const n = tries == null ? 4 : tries;
+    return n > 0 ? new Promise(r => setTimeout(r, 1500)).then(() => sktHandoutImg(h, n - 1)) : null;
+  });
+}
+// An <img> for it: filled now when the picture is at hand, otherwise marked
+// for sktHoFillImgs to fill once it arrives.
+function sktHoImgTag(h, cls){
+  if (!h) return '';
+  if (h.img) return '<img class="' + cls + '" src="' + h.img + '" alt="">';
+  if (!h.imgBlob) return '';
+  const u = _hoImgMem[h.imgBlob] || _hoLocalImgs()[h.imgBlob];
+  return u ? '<img class="' + cls + '" src="' + u + '" alt="">'
+           : '<img class="' + cls + ' ho-img-loading" data-ho-blob="' + esc(h.imgBlob) + '" alt="">';
+}
+function sktHoFillImgs(root){
+  if (!root) return;
+  root.querySelectorAll('img[data-ho-blob]').forEach(img => {
+    sktHandoutImg({ imgBlob: img.dataset.hoBlob }).then(u => {
+      if (u){ img.src = u; img.classList.remove('ho-img-loading'); img.removeAttribute('data-ho-blob'); }
+    });
+  });
+}
+
 function sktHandouts(){
   try { const d = JSON.parse(localStorage.getItem(HO_KEY) || 'null'); return d && Array.isArray(d.list) ? d : { list: [] }; }
   catch(e){ return { list: [] }; }
@@ -206,7 +264,7 @@ registerPanel('handouts', {
       </div>
       <div class="ho-list">
         ${data.list.length ? data.list.map(h => `<div class="ho-item" data-id="${esc(h.id)}">
-            ${h.img ? `<img class="ho-item-img" src="${h.img}" alt="">` : '<div class="ho-item-img ho-noimg">📜</div>'}
+            ${(h.img || h.imgBlob) ? sktHoImgTag(h, 'ho-item-img') : '<div class="ho-item-img ho-noimg">📜</div>'}
             <div class="ho-item-body">
               <div class="ho-item-title">${esc(h.title || 'Untitled')}</div>
               <div class="ho-item-meta">${esc(this._toText(h.to))} · ${esc(this._ago(h.shownAt || h.ts))}</div>
@@ -221,6 +279,7 @@ registerPanel('handouts', {
       <div class="ho-budget">Using ${(used / 1048576).toFixed(2)} MB of ${(HO_BUDGET / 1048576).toFixed(1)} MB for handouts</div>
     </div>`;
     this._wire();
+    sktHoFillImgs(b);
   },
 
   _wire(){
@@ -262,9 +321,23 @@ registerPanel('handouts', {
       return false;
     }
     const now = Date.now();
-    const h = { id: 'ho_' + (typeof uid === 'function' ? uid() : now.toString(36)),
-                title: String(draft.title || '').trim(), text: String(draft.text || ''),
-                img: draft.img || null, to, ts: now, shownAt: now };
+    const id = 'ho_' + (typeof uid === 'function' ? uid() : now.toString(36));
+    let img = draft.img || null, imgBlob = null;
+    if (img && /^data:/.test(img) && typeof window.sktMapBlobReady === 'function' && window.sktMapBlobReady()){
+      imgBlob = id;
+      _hoKeepLocal(imgBlob, img);
+      const pic = img;
+      window.sktMapBlobPut(imgBlob, pic).then(ok => {
+        if (ok) return;
+        // Couldn't store it on its own: put it back inline so it still arrives.
+        const d = sktHandouts(); const x = d.list.find(e => e.id === id);
+        if (x && !x.img){ x.img = pic; delete x.imgBlob; this._save(d); this._render(); }
+      });
+      img = null;
+    }
+    const h = { id, title: String(draft.title || '').trim(), text: String(draft.text || ''),
+                img, to, ts: now, shownAt: now };
+    if (imgBlob) h.imgBlob = imgBlob;
     const data = sktHandouts();
     data.list.unshift(h);
     if (JSON.stringify(data).length > HO_BUDGET){
@@ -287,6 +360,11 @@ registerPanel('handouts', {
   },
   remove(id){
     const data = sktHandouts();
+    const gone = data.list.find(x => x.id === id);
+    if (gone && gone.imgBlob){
+      if (typeof window.sktMapBlobDelete === 'function') window.sktMapBlobDelete(gone.imgBlob);
+      _hoDropLocal(gone.imgBlob);
+    }
     data.list = data.list.filter(x => x.id !== id);
     this._save(data); this._render();
   },

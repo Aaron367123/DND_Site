@@ -316,7 +316,7 @@ function paOnHandouts(){
   if (fresh.length) paShowHandout(fresh[0].id, true);
 }
 function paHandoutBody(h){
-  return (h.img ? '<img class="pa-ho-img" src="' + h.img + '" alt="">' : '')
+  return (typeof sktHoImgTag === 'function' ? sktHoImgTag(h, 'pa-ho-img') : (h.img ? '<img class="pa-ho-img" src="' + h.img + '" alt="">' : ''))
     + (h.text ? '<div class="pa-ho-text">' + paEsc(h.text).replace(/\n/g, '<br>') + '</div>' : '');
 }
 function paShowHandout(id, arriving){
@@ -335,6 +335,7 @@ function paShowHandout(id, arriving){
     ov.remove();
   };
   ov.querySelector('.pa-ho-close').addEventListener('click', close);
+  if (typeof sktHoFillImgs === 'function') sktHoFillImgs(ov);
   ov.addEventListener('click', e => { if (e.target === ov) close(); });
   document.body.appendChild(ov);
   if (arriving){ try { navigator.vibrate && navigator.vibrate(120); } catch(e){} }
@@ -800,10 +801,18 @@ function paYouScreen(){
         <span class="pa-res-pips">${pips}</span><span class="pa-res-c">${left}/${total}</span></div>`;
     }).join('') : '';
 
-  const atks = (pc.sheet && Array.isArray(pc.sheet.attacks) ? pc.sheet.attacks : [])
-    .filter(a => a && a.name).map((a, i) => `
+  // Two daggers are one row reading "Dagger ×2" — the sheet lists each
+  // weapon carried, and identical rows read like a mistake.
+  const atkRows = [];
+  (pc.sheet && Array.isArray(pc.sheet.attacks) ? pc.sheet.attacks : []).forEach((a, i) => {
+    if (!a || !a.name) return;
+    const k = [a.name, a.atkBonus || '', a.damage || ''].join('|').toLowerCase();
+    const same = atkRows.find(r => r.k === k);
+    if (same) same.n++; else atkRows.push({ k, a, i, n: 1 });
+  });
+  const atks = atkRows.map(({ a, i, n }) => `
       <button class="pa-atk" data-pa-atk="${i}">
-        <span class="pa-atk-n">${paEsc(a.name)}</span>
+        <span class="pa-atk-n">${paEsc(a.name)}${n > 1 ? ' <span class="pa-atk-x">×' + n + '</span>' : ''}</span>
         <span class="pa-atk-d">${paEsc(a.atkBonus || '')}${a.atkBonus ? ' · ' : ''}${paEsc(a.damage || '')}</span>
         ${typeof ICO === 'function' ? ICO('i-dice') : '🎲'}
       </button>`).join('');

@@ -69,6 +69,15 @@ function initSettings(){
     e.stopPropagation();
     drawer.classList.toggle('open');
   });
+  // Enter / Space on the focused button arrive as a click with no mouse
+  // behind it (detail 0) — and only as a click, so the mousedown above never
+  // saw them and Settings could not be opened from the keyboard.
+  settingsBtn.addEventListener('click',e=>{
+    if (e.detail !== 0) return;
+    e.stopPropagation();
+    drawer.classList.toggle('open');
+    if (drawer.classList.contains('open')) drawer.querySelector('button, input, select')?.focus();
+  });
   document.getElementById('close-drawer').addEventListener('click',()=>drawer.classList.remove('open'));
   drawer.addEventListener('mousedown',e=>e.stopPropagation());
   document.addEventListener('mousedown',()=>{

@@ -3791,91 +3791,15 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .qn-add-row{display:flex;gap:6px;padding-top:8px;border-top:1px solid var(--border)}
 .qn-add-input{flex:1;font-size:var(--fs-md);padding:5px 8px}
 
-/* ─── Attack Runner ──────────────────────────────────────────────────────── */
-.atk-root { display:flex; flex-direction:column; height:100%; font-size:var(--fs-md); }
-.atk-list { flex:1; overflow-y:auto; padding:6px; }
-.atk-empty { padding:28px 16px; text-align:center; color:var(--text-muted); }
-.atk-empty-sub { font-size:var(--fs-sm); color:var(--text-dim); margin-top:6px; }
-
-.atk-mon { border:1px solid var(--border); border-radius:var(--r-md); background:var(--panel-2);
-           margin-bottom:6px; overflow:hidden; }
-.atk-mon.dead { opacity:.5; }
-.atk-mon-head { display:flex; align-items:center; gap:6px; padding:6px 8px; cursor:pointer;
-                background:rgba(255,255,255,.03); }
-.atk-mon-head:hover { background:rgba(255,255,255,.06); }
-.atk-caret { color:var(--text-dim); font-size:var(--fs-xs); }
-.atk-mon-name { font-weight:600; flex:1; }
-.atk-mon-hp { color:var(--text-dim); font-size:var(--fs-sm); font-variant-numeric:tabular-nums; }
-.atk-none { padding:6px 10px; font-size:var(--fs-sm); color:var(--text-dim); font-style:italic; }
-
-.atk-row { padding:5px 8px; border-top:1px solid var(--border); }
-.atk-row-main { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
-.atk-name { font-weight:600; }
-.atk-tohit { color:var(--accent); font-variant-numeric:tabular-nums; }
-.atk-save { color:#9ad1ff; font-size:var(--fs-sm); }
-.atk-dmg { color:var(--text-muted); font-size:var(--fs-sm); margin-left:auto; }
-.atk-dice { color:var(--text-dim); }
-.atk-tag { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em; padding:1px 4px;
-           border:1px solid var(--border); border-radius:var(--r-sm); color:var(--text-dim); }
-.atk-tag.magical { color:#d8b4fe; border-color:#7c4dab; }
-
-.atk-actions { display:flex; gap:4px; margin-top:4px; }
-.atk-btn { background:var(--panel); border:1px solid var(--border); color:var(--text);
-           border-radius:var(--r-sm); padding:2px 9px; font-size:var(--fs-sm); font-family:inherit; cursor:pointer; }
-.atk-btn:hover { border-color:var(--accent); color:var(--accent); }
-.atk-btn.roll { background:rgba(212,165,116,.12); }
-.atk-btn.ghost { color:var(--text-dim); }
-.atk-btn.small { padding:1px 6px; font-size:var(--fs-xs); }
-.atk-alt { display:flex; align-items:center; gap:5px; margin-top:3px; padding-left:8px;
-           border-left:2px solid var(--border); }
-.atk-alt-label { font-size:var(--fs-xs); color:var(--text-dim); flex:1; }
-
-.atk-targetbar { border-bottom:1px solid var(--border); background:var(--panel-2); padding:6px 8px; }
-.atk-pending { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
-.atk-pending-label { font-weight:600; }
-.atk-pending-amt { color:var(--accent); font-variant-numeric:tabular-nums; }
-.atk-pending-detail { font-size:var(--fs-xs); color:var(--text-dim); }
-.atk-pending .atk-btn { margin-left:auto; }
-.atk-targets { display:flex; gap:4px; flex-wrap:wrap; }
-.atk-target { background:var(--panel); border:1px solid var(--border); color:var(--text);
-              border-radius:var(--r-sm); padding:3px 8px; font-size:var(--fs-sm); font-family:inherit;
-              cursor:pointer; display:flex; align-items:center; gap:5px; }
-.atk-target:hover { border-color:var(--accent); color:var(--accent); }
-.atk-target.pc { border-left:3px solid var(--accent); }
-.atk-target.dead { opacity:.45; }
-.atk-target.last { box-shadow:0 0 0 1px var(--accent) inset; }
-.atk-target-hp { color:var(--text-dim); font-size:var(--fs-xs); font-variant-numeric:tabular-nums; }
-
-.atk-log { border-top:1px solid var(--border); padding:5px 8px; max-height:110px; overflow-y:auto;
-           font-size:var(--fs-xs); color:var(--text-dim); line-height:1.55; }
-
 /* Rounds remaining on a rage, ticked by the combat round counter. */
 .rage-rounds { font-variant-numeric:tabular-nums; opacity:.75; font-size:.85em;
                padding:0 3px; border-radius:var(--r-sm); background:rgba(0,0,0,.25); }
-.atk-tag.recharge { color:#9ad1ff; border-color:#3a6b8f; }
 /* Multiattack — the instruction for the whole turn, so it reads as a banner
    above the individual attacks rather than as another row among them. */
-.atk-multi { display:flex; gap:6px; align-items:flex-start; margin:2px 6px 4px;
-  padding:5px 7px; background:var(--panel-2); border:1px solid var(--border);
-  border-left:2px solid #c8a45c; border-radius:var(--r-sm); }
-.atk-multi-tag { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em;
-  color:#e0c07a; font-weight:600; flex-shrink:0; padding-top:1px; }
-.atk-multi-text { font-size:var(--fs-sm); color:var(--text-muted); line-height:1.35; }
 /* ×N on an attack the multiattack repeats. Same weight as the recharge chip —
    both are "read this before you pick a button". */
-.atk-tag.rep { color:#ffd9a0; border-color:#8a6a35; }
-.atk-multi-run { display:flex; align-items:center; gap:4px; margin-left:auto; flex-shrink:0; }
-.atk-multi-run-label { font-size:var(--fs-xs); color:var(--text-dim); }
 /* A running sequence gets a warm edge so it's obvious the panel is mid-turn
    and the next click lands on a target rather than starting something new. */
-.atk-targetbar.multi { border-left:2px solid #c8a45c; }
-.atk-queue-step { font-size:var(--fs-xs); font-weight:600; color:#e0c07a; flex-shrink:0;
-  padding:1px 5px; border:1px solid #8a6a35; border-radius:var(--r-sm); }
-.atk-queue-rest { display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px 6px; }
-.atk-queue-pip { font-size:var(--fs-2xs); padding:1px 5px; border-radius:var(--r-sm);
-  border:1px solid var(--border); color:var(--text-dim); }
-.atk-queue-pip.done { opacity:.45; text-decoration:line-through; }
-.atk-queue-pip.now { color:#1a1a1a; background:#e0c07a; border-color:#e0c07a; font-weight:600; }
 
 /* ── Turn View ────────────────────────────────────────────────────────────
    One creature's turn on one surface. Two columns: what it can do and what has
@@ -4748,24 +4672,6 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .tv-pip-r[data-tv]:hover { border-color:var(--accent); color:var(--text); }
 .tv-pip-r.spent { opacity:.4; text-decoration:line-through; }
 
-/* Manual damage row in the Attack Runner. Everything else in that panel comes
-   out of a stat block; this is the way in for what the parser missed, what
-   the DM improvised, and what a player rolled themselves. */
-.atk-manual { display:flex; flex-wrap:wrap; align-items:center; gap:6px;
-  padding:7px 9px; background:var(--panel-2); border-bottom:1px solid var(--border); }
-.atk-manual-l { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.07em;
-  color:var(--text-muted); }
-.atk-manual-mag { display:inline-flex; align-items:center; gap:4px;
-  font-size:var(--fs-sm); color:var(--text-muted); cursor:pointer; }
-.atk-in { width:64px; background:var(--panel-3); border:1px solid var(--border);
-  color:var(--text); border-radius:var(--r-sm); padding:4px 7px; font:inherit;
-  font-size:var(--fs-md); text-align:center; font-variant-numeric:tabular-nums; }
-.atk-in.wide { width:126px; text-align:left; }
-/* .atk-in resets background with the shorthand, which drops the global select
-   caret and its 26px of padding — restore both, same as the Turn View picker. */
-select.atk-in { cursor:pointer; padding-right:26px;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat:no-repeat; background-position:right 9px center; }
 
 /* Map scale: a number and its unit, side by side in the grid settings. */
 .bm-set-scale { display:flex; gap:5px; margin-top:4px; }
@@ -5191,3 +5097,14 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .tv-actbody { display:flex; flex-direction:column; min-height:0; flex:0 1 auto; }
 /* The traits and the log give way first; the attacks only once they're gone. */
 .tv-tail { min-height:0; overflow-y:auto; flex-shrink:2000; }
+/* Combat Tracker toolbar */
+.combat-add-btn { padding:3px 10px; white-space:nowrap; }
+.combat-stats-ind { display:inline-flex; align-items:center; color:var(--text-muted); cursor:help; }
+.combat-stats-ind .ico { width:15px; height:15px; }
+/* Phone: the same weapon carried twice */
+.pa-atk-x { font-weight:400; color:var(--text-muted); font-size:var(--fs-md); }
+.ho-img-loading { min-height:80px; background:var(--panel-2); }
+/* Two deliberate rows: the turn (◀ ▶ round … End), then what you add or roll. */
+.combat-controls { flex-direction:column; align-items:stretch; gap:4px; }
+.combat-controls .cc-row { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+.combat-controls .cc-row .round-display { margin-left:4px; }

@@ -75,14 +75,14 @@ function save(){
     // silently discarded while the session looks fine.
     if (typeof warnStorageFailure === 'function') warnStorageFailure('party & combat', e);
   }
-  // The Attack Runner is driven entirely by the combat tracker, so it has to
+  // The Turn View is driven entirely by the combat tracker, so it has to
   // notice when that changes. Hooked HERE rather than in combat's _render for
   // two reasons: that returns early when the combat panel is closed, so adding
   // a monster from search would never reach it; and every path that changes a
   // combatant ends up in save() anyway. The panel does its own cheap
   // signature check and only redraws when something it displays moved.
-  // Generalised from a hard-coded call to the Attack Runner once the Turn View
-  // needed the same hook — both are driven entirely by the combat tracker, and
+  // Generalised from a hard-coded call to the old Attack Runner once the Turn
+  // View needed the same hook — both were driven entirely by the tracker, and
   // a list of two names here would have become a list of names to forget to
   // add the third to.
   // Give every combatant a token before the panels above redraw, so the Turn
@@ -106,6 +106,22 @@ function save(){
 // Re-read ONE domain from localStorage into `state`. Used at boot (via
 // load) and by realtime.js when that domain's key arrives from Firebase —
 // a party update no longer re-parses combat/shop/settings.
+// Fights saved with the double-numbering bug ("hill giant 1 1", baseName
+// "hill giant 1"): put the group name back to the creature's name and keep
+// the card's own number — unless that name is already taken.
+function _tidyGroupNames(){
+  const list = state.combatants || [];
+  list.forEach((c, i) => {
+    if (!c || c.isPC || !c.baseName) return;
+    const b = String(c.baseName).match(/^(.*\S)\s+\d+$/); if (!b) return;
+    const name = String(c.name || '');
+    if (name.indexOf(c.baseName + ' ') !== 0) return;
+    const n = name.slice(c.baseName.length + 1); if (!/^\d+$/.test(n)) return;
+    const fixed = b[1] + ' ' + n;
+    if (list.some((o, j) => j !== i && o && o.name === fixed)) return;
+    list[i] = { ...c, baseName: b[1], name: fixed };
+  });
+}
 function loadDomain(domain){
   try{
     if(domain==='party'){
@@ -124,6 +140,7 @@ function loadDomain(domain){
       const r=localStorage.getItem(COMBAT_KEY);
       if(r){const d=JSON.parse(r)||{};if(Array.isArray(d.combatants))state.combatants=d.combatants.filter(c=>c&&typeof c==='object');if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;}
       reconcilePcHp();
+      _tidyGroupNames();
     }else if(domain==='shop'){
       const r=localStorage.getItem(SHOP_KEY);
       if(r)state.shop=JSON.parse(r);

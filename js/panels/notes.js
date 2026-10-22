@@ -602,6 +602,7 @@ registerPanel('notes', {
     // editor; either way it is never the top row, which is where a phone's
     // status area and the turn bar live.
     b.innerHTML = '<div class="notes-player">' + list + body + '</div>';
+    if (typeof sktHoFillImgs === 'function') sktHoFillImgs(b);
   },
   // Write the player's text to their note. Refuses anything they don't own —
   // sync would refuse it anyway, but the local copy should not drift either.

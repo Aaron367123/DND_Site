@@ -326,6 +326,15 @@ registerPanel('combat',{
     // HP bar visibility toggle — default ON. Stored on settings so it
     // persists across reloads and syncs across tabs via the existing
     // workspace-key path. Pure visual toggle — HP numerals always render.
+    // How the cards look — these were two icon buttons in the toolbar.
+    const compactOn = !!(state.settings && state.settings.combatCompact);
+    const groupOn = !!(state.settings && state.settings.combatGroupSimilar);
+    items.push(
+      { label: (compactOn ? '☑' : '☐') + ' Compact cards',
+        run: () => { state.settings.combatCompact = !compactOn; save(); this._render(); } },
+      { label: (groupOn ? '☑' : '☐') + ' Group identical monsters into one card',
+        run: () => { state.settings.combatGroupSimilar = !groupOn; save(); this._render(); } },
+    );
     const hpBarOn = (state.settings && state.settings.combatHpBar !== false);
     items.push({
       label: (hpBarOn ? '☑' : '☐') + ' Show HP bars',
@@ -405,30 +414,30 @@ registerPanel('combat',{
     const grouped = !!(state.settings && state.settings.combatGroupSimilar);
     b.innerHTML=`
       <div class="combat-controls">
-        ${inCombat?'<button class="btn icon-btn" data-act="prev" title="Step back one turn (undo turn advance)">◀</button>':''}
-        <button class="btn icon-btn" data-act="next" title="Advance turn">▶</button>
-        <button class="btn icon-btn" data-act="add" title="Add custom combatant">+</button>
-        <button class="btn icon-btn" data-act="add-monster" title="Add monster from bestiary">${ICO('i-paw')}</button>
-        ${state.party.some(p => !p.foe)?'<button class="btn icon-btn" data-act="ask-init" title="Ask the players to roll — initiative, a save or a check — on their phones">📱</button>':''}
-        ${inCombat?'<button class="btn icon-btn" data-act="area-save" title="Area save — roll one saving throw for each of several creatures (Fireball, a breath weapon, a trap)">💥</button>':''}
-        <button class="btn icon-btn ${compact?'active':''}" data-act="toggle-compact" title="${compact?'Show full cards':'Compact card mode'}">${compact?'▤':'▦'}</button>
-        <button class="btn icon-btn ${grouped?'active':''}" data-act="toggle-group" title="${grouped?'Show every monster individually':'Group identical monsters into one card'}">${grouped?'▣':'⊞'}</button>
-        ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for every NPC (d20 + their bonus; PCs keep their own rolls)">'+ICO('i-dice')+'</button>':''}
-        ${inCombat?'<button class="btn icon-btn" data-act="sort-init" title="Sort by initiative — highest first, Dex breaks ties">⇅</button>':''}
-        ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
-        <span style="flex:1"></span>
-        ${inCombat?'<button class="btn icon-btn danger" data-act="end" title="End combat (clears all combatants)">⏹ End</button>':''}
+        <div class="cc-row">
+          ${inCombat?'<button class="btn icon-btn" data-act="prev" title="Step back one turn (undo turn advance)">◀</button>':''}
+          <button class="btn icon-btn" data-act="next" title="Advance turn">▶</button>
+          ${inCombat?`<span class="round-display">Round ${state.combatRound||1}</span>`:''}
+          <span style="flex:1"></span>
+          ${(() => {
+            // What the players see of monster HP, as one small icon rather than
+            // a banner across the panel. The ⋯ menu changes it.
+            if (document.body.classList.contains('player-mode')) return '';
+            const m = this._statsMode();
+            if (m === 'hide')    return '<span class="combat-stats-ind" title="Monster HP &amp; AC are hidden from players — change it in the ⋯ menu">'+ICO('i-eye-off')+'</span>';
+            if (m === 'conceal') return '<span class="combat-stats-ind" title="Players see monster HP as a health tier (Healthy / Bloodied / …) — change it in the ⋯ menu">'+ICO('i-eye')+'</span>';
+            return '';
+          })()}
+          ${inCombat?'<button class="btn icon-btn danger" data-act="end" title="End combat (clears all combatants)">⏹ End</button>':''}
+        </div>
+        <div class="cc-row">
+          <button class="btn combat-add-btn" data-act="add-menu" title="Add to the fight — a monster, a party member, or a creature with no stat block">＋ Add</button>
+          ${state.party.some(p => !p.foe)?'<button class="btn icon-btn" data-act="ask-init" title="Ask the players to roll — initiative, a save or a check — on their phones">'+ICO('i-phone')+'</button>':''}
+          ${inCombat?'<button class="btn icon-btn" data-act="area-save" title="Area save — roll one saving throw for each of several creatures (Fireball, a breath weapon, a trap)">'+ICO('i-burst')+'</button>':''}
+          ${inCombat?'<button class="btn icon-btn" data-act="roll-init" title="Roll initiative for every NPC (d20 + their bonus; PCs keep their own rolls)">'+ICO('i-dice')+'</button>':''}
+          ${inCombat?'<button class="btn icon-btn" data-act="sort-init" title="Sort by initiative — highest first, Dex breaks ties">⇅</button>':''}
+        </div>
       </div>
-
-      ${(() => {
-        // DM-only: the banner is a status reminder for the DM about what
-        // players are seeing. Players themselves don't need to see it.
-        if (document.body.classList.contains('player-mode')) return '';
-        const m = this._statsMode();
-        if (m === 'hide')    return '<div class="combat-hide-banner">'+ICO('i-eye-off')+' Monster HP &amp; AC hidden from players</div>';
-        if (m === 'conceal') return '<div class="combat-hide-banner">'+ICO('i-eye')+' Monster HP shown as health tier (Healthy / Bloodied / …) to players</div>';
-        return '';
-      })()}
 
       ${(inCombat && this._lairDue) ? `<div class="lair-banner" role="status">🏰 <b>Lair action</b> — initiative 20: ${this._lairDue.names.map(esc).join(', ')}
           <button class="btn small" data-act="lair-done">Done</button></div>` : ''}
@@ -626,7 +635,7 @@ registerPanel('combat',{
     // stats mode).
     // The damage-type select and the attack-property chip that used to sit on
     // this row are gone — the strip is now just − / amount / +, and manual
-    // damage is untyped. Typed damage still happens: the Attack Runner passes
+    // damage is untyped. Typed damage still happens: the Turn View passes
     // a real type per damage part to _applyHpDelta (and sets _lastAtkProp
     // around the call), so resist/vuln/immune math is unchanged on that path.
     // Heal/damage strip is now a HORIZONTAL row that sits between the stats
@@ -847,6 +856,7 @@ registerPanel('combat',{
         }
       }
       else if(act==='add')            this._addPrompt();
+      else if(act==='add-menu')       this._openAddMenu(el);
       else if(act==='add-monster')    this._openMonsterPicker();
       else if(act==='remove'){
         const i = parseInt(el.dataset.idx);
@@ -917,7 +927,7 @@ registerPanel('combat',{
         if (!amt) return;
         this._lastDmgAmount = amt;
         // No damage type — the strip's type select is gone, so manual damage
-        // lands raw. The Attack Runner still passes a type on its own path.
+        // lands raw. The Turn View still passes a type on its own path.
         // Wrapped so a number typed into the wrong card is one click to
         // put back, with the creature's name in the toast so you can see
         // which card it went into.
@@ -1201,6 +1211,18 @@ registerPanel('combat',{
     if(i>=0){this._removeCombatantAt(i);save();this._render();}
   },
 
+  // "＋ Add": the same three ways in as Turn View's Add row.
+  _openAddMenu(anchor){
+    const r = anchor ? anchor.getBoundingClientRect() : { left: 100, bottom: 100 };
+    const inFight = new Set(state.combatants.map(c => c.id));
+    const items = [{ label: '🐾 Monsters…', onClick: () => this._openMonsterPicker() }];
+    state.party.forEach((p, pi) => {
+      if (!p.foe && !inFight.has(p.id)) items.push({ label: '＋ ' + p.name, onClick: () => this._addPartyToCombat(pi) });
+    });
+    items.push({ label: '＋ Other — no stat block…', onClick: () => this._addPrompt() });
+    if (typeof showContextMenu === 'function') showContextMenu(r.left, r.bottom + 4, items);
+  },
+
   _addPrompt(){
     showModal('⚔ Add Combatant',[
       {id:'name',  label:'Name',       type:'text',   value:'',  placeholder:'Bandit, Ogre...'},
@@ -1258,7 +1280,10 @@ registerPanel('combat',{
     const members = state.combatants.filter(this._inGroup(base));
     if (members.length !== 1) return;
     const oi = state.combatants.findIndex(this._inGroup(base));
-    if (oi >= 0) state.combatants[oi] = {...state.combatants[oi], name: base + ' 1', baseName: base};
+    if (oi < 0) return;
+    // Only a bare "Goblin" becomes "Goblin 1"; one already numbered keeps it.
+    const o = state.combatants[oi];
+    state.combatants[oi] = {...o, name: o.name === base ? base + ' 1' : o.name, baseName: base};
   },
 
   // Duplicate a monster card. Re-uses the same baseName logic addMonster
@@ -1266,7 +1291,11 @@ registerPanel('combat',{
   // renamed to "Goblin 1" so the group is unambiguous).
   _duplicate(i){
     const c = state.combatants[i]; if (!c || c.isPC) return;
-    const base = c.baseName || c.name;
+    // The group's name is the creature's name WITHOUT a trailing number. A
+    // card named "hill giant 1" by hand used the whole name, and its copy
+    // became "hill giant 1 1".
+    const base = c.baseName || String(c.name || '').replace(/\s+\d+$/, '') || c.name;
+    if (!c.baseName) state.combatants[i] = {...c, baseName: base};
     this._numberFirstOfGroup(base);
     state.combatants.splice(i+1, 0, {
       ...c,
@@ -1711,7 +1740,7 @@ registerPanel('combat',{
   // How the current blow was delivered. _lastAtkProp carries 'magical' for
   // qualified resistances; _lastAtkCrit carries whether it was a critical hit,
   // which RAW doubles the death-save failure at 0 hp. Both are set by the
-  // Attack Runner and Turn View around their damage loops and restored in a
+  // Turn View around its damage loops and restored in a
   // `finally`, so at rest a blow reads as an ordinary, nonmagical one.
   _lastAtkCrit: false,
   _applyHpDelta(i, delta, dmgType){
@@ -1735,9 +1764,9 @@ registerPanel('combat',{
         // attacks" read as immunity to all three however the blow was
         // delivered — a Werewolf shrugged off a silvered longsword.
         //
-        // _lastAtkProp is now written only by the Attack Runner, which sets it
-        // from the monster's own attack and restores the previous value in a
-        // `finally` (see attacks.js). The cycling chip that used to set it by
+        // _lastAtkProp is written only by the Turn View, which sets it from the
+        // monster's own attack and restores the previous value in a
+        // `finally` (see turnview.js). The cycling chip that used to set it by
         // hand is gone, so at rest this is empty and the attack reads as plain.
         const atk = this._lastAtkProp ? { [this._lastAtkProp]: true } : {};
         const has = (arr) => sktAnyResistApplies(arr, t, atk);

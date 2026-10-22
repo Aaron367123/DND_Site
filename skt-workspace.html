@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
-<link rel="stylesheet" href="styles/main.css?v=d7ecb8d03d">
+<link rel="stylesheet" href="styles/main.css?v=3bcaa50260">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -88,6 +88,8 @@
   <g id="i-scale"><path d="M12 4.5v15M7 19.5h10M12 6.5 5 9m7-2.5L19 9"/><path d="M2.5 14a2.5 2.5 0 0 0 5 0L5 9zM16.5 14a2.5 2.5 0 0 0 5 0L19 9z"/></g>
   <g id="i-tag"><path d="M3.5 11.4V4.5a1 1 0 0 1 1-1h6.9a1 1 0 0 1 .7.3l8.1 8.1a1 1 0 0 1 0 1.4l-6.9 6.9a1 1 0 0 1-1.4 0L3.8 12.1a1 1 0 0 1-.3-.7z"/><circle cx="7.8" cy="7.8" r="1.4"/></g>
   <g id="i-sparkle"><path d="M12 3.2l1.9 5.2 5.2 1.9-5.2 1.9L12 17.4l-1.9-5.2L4.9 10.3l5.2-1.9z"/><path d="M18.5 15.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/></g>
+  <g id="i-phone"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></g>
+  <g id="i-burst"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/><circle cx="12" cy="12" r="3"/></g>
 </defs></svg>
 
 <div class="app" id="app">
@@ -399,27 +401,27 @@
 <script defer src="js/core/campaign.js?v=171a617f55"></script>
 <script defer src="js/core/utils.js?v=c0d58da4bf"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
-<script defer src="js/core/state.js?v=f4037b7f2e"></script>
+<script defer src="js/core/state.js?v=5f08b82835"></script>
 <!-- 4. Window manager (depends on state) -->
 <script defer src="js/core/undo.js?v=0daa45d5b7"></script>
 <script defer src="js/features/roll-requests.js?v=bceb453f6d"></script>
 <script defer src="js/features/monster-picker.js?v=7030540ec7"></script>
 <script defer src="js/core/window-manager.js?v=8671eac73a"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=9d2fc26c04"></script>
-<script defer src="js/panels/attacks.js?v=cbee1aeeb4"></script>
+<script defer src="js/panels/combat.js?v=acd127ff0c"></script>
+<script defer src="js/panels/attacks.js?v=57acabc3ca"></script>
 <!-- Turn View reads combat, attacks and battlemap through panelDefs at call
      time, so load order only has to put it among the panels. -->
 <script defer src="js/generated/reactions.js?v=faa668dc18"></script>
 <script defer src="js/generated/rules.js?v=8efb8beae9"></script>
-<script defer src="js/panels/turnview.js?v=93f30fa05f"></script>
-<script defer src="js/panels/party.js?v=0ed5c60a73"></script>
+<script defer src="js/panels/turnview.js?v=5dec8bb33f"></script>
+<script defer src="js/panels/party.js?v=e1bb13ce82"></script>
 <script defer src="js/panels/shop.js?v=fadf7d5fe3"></script>
 <script defer src="js/sync/notes-sync.js?v=8c42540638"></script>
 <script defer src="js/sync/dropbox-config.js?v=ccf8533d50"></script>
 <script defer src="js/sync/dropbox-sync.js?v=ab773edfd6"></script>
-<script defer src="js/panels/notes.js?v=e8483a3221"></script>
-<script defer src="js/panels/handouts.js?v=4ae311ee74"></script>
+<script defer src="js/panels/notes.js?v=b4f7d337a6"></script>
+<script defer src="js/panels/handouts.js?v=92072fbc59"></script>
 <script defer src="js/panels/battlemap.js?v=32e7b0ba78"></script>
 <script defer src="js/panels/npc-library.js?v=95ecdf2024"></script>
 <script defer src="js/panels/bestiary.js?v=8b3658dc0a"></script>
@@ -441,7 +443,7 @@
 <script defer src="js/content/search.js?v=0b5239207b"></script>
 <!-- Whole-state snapshot/restore. Before settings.js, which wires its UI. -->
 <script defer src="js/features/backup.js?v=d1b9766012"></script>
-<script defer src="js/ui/settings.js?v=4b37f688c6"></script>
+<script defer src="js/ui/settings.js?v=0309ec1a5b"></script>
 <script defer src="js/ui/campaign-ui.js?v=87872361dd"></script>
 <script defer src="js/ui/context-menu.js?v=738247f1b2"></script>
 <script defer src="js/ui/zoom-pan.js?v=31a2882b02"></script>
@@ -451,9 +453,9 @@
 <script defer src="js/features/char-effects.js?v=5bca27f710"></script>
 <script defer src="js/features/char-builder.js?v=27112e7354"></script>
 <script defer src="js/features/pdf-import.js?v=06787122c5"></script>
-<script defer src="js/player/player-app.js?v=986cdaaa4a"></script>
+<script defer src="js/player/player-app.js?v=4de10be419"></script>
 <script defer src="js/ui/player-view.js?v=3c47cb84bd"></script>
-<script defer src="js/sync/realtime.js?v=21765cba50"></script>
+<script defer src="js/sync/realtime.js?v=b7e7d9a08a"></script>
 <script defer src="js/sync/presence.js?v=3c6820c9d8"></script>
 <script defer src="js/ui/tutorial.js?v=496c1bc236"></script>
 <script defer src="js/ui/onboarding.js?v=42199a671a"></script>

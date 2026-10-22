@@ -342,7 +342,8 @@ registerPanel('party',{
             // the 2-letter abbreviation. The visible chip text is an overlay
             // <span> sitting on top of a transparent-text <select>.
             const dmgTypes = [
-              ['', '— untyped', '—'],
+              // "type", not "—": a dash beside − and + read as a third button.
+              ['', '— untyped', 'type'],
               ['acid','acid','ac'],['bludgeoning','bludgeoning','bl'],['cold','cold','co'],
               ['fire','fire','fi'],['force','force','fo'],['lightning','lightning','li'],
               ['necrotic','necrotic','ne'],['piercing','piercing','pi'],['poison','poison','po'],
