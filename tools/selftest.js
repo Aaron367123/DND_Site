@@ -5621,6 +5621,109 @@
       }
     }
 
+    // -- The character builder: other books -----------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const uniq = a => new Set(a.map(x => x.name)).size === a.length;
+        ok('books 2014: species, backgrounds and feats from every 2014 book, the handbook’s marked',
+           R14.species.length > 60 && R14.species.filter(x => x.core).length === 9 && R14.backgrounds.length > 80 && R14.feats.length > 90
+           && R14.feats.filter(x => x.core).length === 42, [R14.species.length, R14.backgrounds.length, R14.feats.length].join('/'));
+        ok('books: one of each name — reprints and repeats dropped', [R14.species, R14.backgrounds, R14.feats, R14.spells, R24.species, R24.backgrounds, R24.feats, R24.spells].every(uniq));
+        ok('books 2014: the newer printing of a reprint (Multiverse Aasimar, not Volo’s)', (sktRulesSpecies(R14, 'Aasimar') || {}).source === 'MPMM');
+        ok('books 2024: its own Aasimar, and older species the 2024 rules allow', (sktRulesSpecies(R24, 'Aasimar') || {}).source === 'XPHB' && (sktRulesSpecies(R24, 'Tabaxi') || {}).core === false);
+        ok('books 2024: no 2014 handbook background', !R24.backgrounds.some(b => b.source === 'PHB'));
+        ok('books 2024: an older spell renamed in the 2024 book appears once, by its 2024 name',
+           !sktRulesSpell(R24, 'Feeblemind') && !!sktRulesSpell(R24, 'Befuddlement') && !sktRulesSpell(R24, 'Summon Draconic Spirit') && !!sktRulesSpell(R24, 'Summon Dragon')
+           && !!sktRulesSpell(R14, 'Feeblemind') && !sktRulesSpell(R14, 'Befuddlement'));
+        ok('books 2014: where two books print a species, Multiverse’s', (sktRulesSpecies(R14, 'Hobgoblin') || {}).source === 'MPMM' && (sktRulesSpecies(R14, 'Triton') || {}).source === 'MPMM');
+        const wz14 = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 1 });
+        const can = (R, b) => sktSpellOptions(R, b, 0).map(s => s.name);
+        ok('books: Xanathar’s spells only with other books on', !can(R14, wz14).includes('Toll the Dead') && can(R14, Object.assign({}, wz14, { allBooks: true })).includes('Toll the Dead'));
+        ok('books: the handbook’s spell lists unchanged with them off', sktSpellOptions(R14, wz14, 1).every(s => s.core) && sktSpellOptions(R14, wz14, 1).length >= 30);
+        // A species' spells.
+        const tf = L => sktSpeciesSpellGrant(R14, Object.assign(sktBlankBuild('2014'), { species: 'Tiefling', cls: 'Fighter', level: L }));
+        ok('species spells: a Tiefling knows Thaumaturgy, gains Hellish Rebuke at 3rd and Darkness at 5th',
+           JSON.stringify(tf(1).spells) === '["Thaumaturgy"]' && tf(3).daily.includes('Hellish Rebuke') && !tf(3).spells.includes('Darkness') && tf(5).spells.includes('Darkness') && tf(5).ability === 'cha');
+        const he = Object.assign(sktBlankBuild('2014'), { name: 'He', species: 'Elf', subspecies: 'High', cls: 'Fighter', level: 1 });
+        ok('species spells: a High Elf is asked for a wizard cantrip', sktBuildTodo(he, R14).some(t => t.step === 'species' && /spells/.test(t.what)));
+        he.speciesChoice = { spells: ['Fire Bolt'] };
+        const HE = sktComputeCharacter(he, R14);
+        ok('species spells: and has it', HE.sheet.spells.includes('Fire Bolt') && !sktBuildTodo(he, R14).some(t => t.step === 'species') && (HE.sheet.notes || []).some(n => /High Elf \(Intelligence\): Fire Bolt/.test(n)), HE.sheet.notes);
+        const t24 = Object.assign(sktBlankBuild('2024'), { species: 'Tiefling', cls: 'Fighter', level: 3 });
+        ok('species spells 2024: a Tiefling is asked for a legacy', sktBuildTodo(t24, R24).some(t => t.what === 'a lineage'));
+        t24.speciesChoice = { lineage: 'Infernal', spellAbility: 'cha' };
+        ok('species spells 2024: the Infernal legacy’s spells, Hellish Rebuke at 3rd', sktComputeCharacter(t24, R24).sheet.spells.includes('Hellish Rebuke') && sktComputeCharacter(t24, R24).sheet.spells.includes('Fire Bolt'));
+        // A Multiverse species: increases anywhere, other speeds.
+        const tb = Object.assign(sktBlankBuild('2014'), { name: 'Tb', species: 'Tabaxi', cls: 'Rogue', level: 1, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 } } });
+        ok('books: a Tabaxi asks where its increases go', JSON.stringify(sktSpeciesAsiChoice(sktRulesSpecies(R14, 'Tabaxi'), null)) === '{"flex":true}' && sktBuildTodo(tb, R14).some(t => /ability increases/.test(t.what)));
+        tb.speciesAsi = { dex: 2, cha: 1 };
+        const TB = sktComputeCharacter(tb, R14);
+        ok('books: and applies them, with its climbing speed', TB.abilities.dex === 16 && TB.abilities.cha === 11 && (TB.sheet.notes || []).some(n => /Climb 30 ft/.test(n))
+           && !sktBuildTodo(tb, R14).some(t => /ability increases/.test(t.what)), JSON.stringify(TB.abilities));
+        // A Tasha's feat.
+        const ft = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', level: 4, allBooks: true, asi: { 4: { type: 'feat', feat: 'Fey Touched' } } });
+        const fg = sktFeatSpellGrant(R14, ft, 'Fey Touched');
+        const fg0 = sktFeatSpellGrant(R14, Object.assign({}, ft, { allBooks: false }), 'Fey Touched');
+        ok('books: its picks come from the handbook unless other books are on',
+           fg0.choices[0].options.every(n => (sktRulesSpell(R14, n) || {}).core) && sktFeatSpellGrant(R14, ft, 'Fey Touched').choices[0].options.some(n => !(sktRulesSpell(R14, n) || {}).core));
+        ok('books: Fey Touched gives Misty Step and a 1st-level divination or enchantment', !!fg && fg.spells.includes('Misty Step') && fg.choices[0].options.includes('Bless') && !fg.choices[0].options.includes('Magic Missile'));
+
+        // The builder's screens.
+        await openCharBuilder({ edition: '2014' }); await sleep(800);
+        const root = () => document.getElementById('cb-root');
+        const q = s => root().querySelector(s), qa = s => [...root().querySelectorAll(s)];
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const nm = q('[data-cb-in="name"]'); nm.value = 'Bookworm'; nm.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('builder: Basics has the other-books switch, off', !!q('[data-cb-allbooks]') && !q('[data-cb-allbooks]').checked && !CB.build.allBooks);
+        click('[data-cb-step="species"]'); await sleep(30);
+        ok('builder: the handbook’s nine species without it', qa('[data-cb-species]').length === 9 && !q('[data-cb-species="Tabaxi"]'));
+        tick('[data-cb-allbooks]'); await sleep(30);
+        ok('builder: with it, the rest under “Other books”, each naming its book',
+           CB.build.allBooks && qa('[data-cb-species]').length > 60 && /Other books/.test(q('.cb-books-h').textContent) && /MPMM/.test(q('[data-cb-species="Tabaxi"]').textContent));
+        click('[data-cb-species="Tabaxi"]'); await sleep(30);
+        set('[data-cb-spflex="2"]', 'dex'); await sleep(20); set('[data-cb-spflex="1"]', 'cha'); await sleep(20);
+        ok('builder: +2 and +1 where you want them', JSON.stringify(CB.build.speciesAsi) === '{"dex":2,"cha":1}', JSON.stringify(CB.build.speciesAsi));
+        set('[data-cb-spflex="1"]', 'dex'); await sleep(20);
+        ok('builder: not both on the same score', JSON.stringify(CB.build.speciesAsi) === '{"dex":1}', JSON.stringify(CB.build.speciesAsi));
+        click('[data-cb-spmode="111"]'); await sleep(20);
+        ['str', 'con', 'wis', 'int'].forEach(k => tick('[data-cb-spasi="' + k + '"]'));
+        await sleep(30);
+        ok('builder: or three +1s', JSON.stringify(CB.build.speciesAsi) === '{"str":1,"con":1,"wis":1}', JSON.stringify(CB.build.speciesAsi));
+        click('[data-cb-species="Elf"]'); await sleep(30); click('[data-cb-subspecies="High"]'); await sleep(30);
+        ok('builder: a High Elf picks its cantrip on the species step', qa('[data-cb-fspell^="@species||"]').length > 10);
+        tick('[data-cb-fspell="@species||Fire Bolt"]'); await sleep(20);
+        ok('builder: and it is kept', JSON.stringify(CB.build.speciesChoice.spells) === '["Fire Bolt"]');
+        click('[data-cb-subspecies="Wood"]'); await sleep(30);
+        ok('builder: another subrace starts that over', !CB.build.speciesChoice.spells);
+        click('[data-cb-step="background"]'); await sleep(30);
+        ok('builder: backgrounds from other books too', qa('[data-cb-bg]').length > 80 && !!q('[data-cb-bg="Far Traveler"]'));
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Wizard"]'); await sleep(30);
+        click('[data-cb-step="spells"]'); await sleep(30);
+        ok('builder: Xanathar’s cantrips for a wizard', !!q('[data-cb-cantrip="Toll the Dead"]'));
+        tick('[data-cb-cantrip="Toll the Dead"]'); await sleep(20);
+        click('[data-cb-step="review"]'); await sleep(30);
+        const sc0 = window.showConfirm; window.showConfirm = () => Promise.resolve(true);
+        try { click('[data-cb="save"]'); await sleep(200); } finally { window.showConfirm = sc0; }
+        const i = state.party.findIndex(p => p.name === 'Bookworm');
+        ok('builder: the switch is saved with the character', i >= 0 && state.party[i].build.allBooks === true && state.party[i].sheet.spells.includes('Toll the Dead'));
+        // A character from before the switch, using another book, opens with it on.
+        const old = JSON.parse(JSON.stringify(state.party[i].build)); delete old.allBooks;
+        ok('builder: an older character using another book opens with it on', cbUsesOtherBooks(old, R14) && !cbUsesOtherBooks(Object.assign({}, old, { cantrips: [], species: 'Dwarf', subspecies: 'Hill' }), R14));
+      } catch(e){ ok('builder: the other-books checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -5133,3 +5133,4 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .pa-chip.dim { opacity:.6; }
 .pa-about { margin:4px 0 8px; font-size:var(--fs-md); }
 .pa-about b { display:block; font-size:var(--fs-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
+#cb-root .cb-books-h { margin-top:14px; color:var(--text-muted); }

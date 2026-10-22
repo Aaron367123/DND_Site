@@ -56,8 +56,33 @@ async function cbLoad(edition){
   CB.loading = true; cbRender();
   try { CB.R = await sktRulesLoad(edition); }
   catch(e){ CB.error = 'The rules data did not load (' + e.message + '). Check the connection and try again.'; }
+  if (CB.R && !CB.build.allBooks && cbUsesOtherBooks(CB.build, CB.R)) CB.build.allBooks = true;
   CB.loading = false;
   cbRender();
+}
+
+// Whether anything chosen comes from beyond the handbook — a build made
+// before the switch was saved on it.
+function cbUsesOtherBooks(b, R){
+  const cls = sktRulesClass(R, b.cls), sub = sktRulesSubclass(cls, b.subclass);
+  const sp = sktRulesSpecies(R, b.species), bg = sktRulesBackground(R, b.background);
+  const off = x => x && x.core === false;
+  return off(sub) || off(sp) || off(sp && sp.subraces.find(s => s.name === b.subspecies)) || off(bg)
+    || sktBuildFeatNames(b, R).some(n => off(sktRulesFeat(R, n)))
+    || [].concat(b.cantrips || [], b.spells || [], b.spellbook || []).some(n => off(sktRulesSpell(R, n)));
+}
+// Cards for one list: the handbook's, then (with other books on) the rest
+// under their own heading, each naming its book.
+function cbBookCards(list, selected, attr, sub){
+  const b = CB.build;
+  const core = list.filter(x => x.core !== false);
+  const more = list.filter(x => x.core === false && (b.allBooks || x.name === selected));
+  const card = x => ({ value: x.name, label: x.name, sub: [sub ? sub(x) : '', x.core === false ? x.source : ''].filter(Boolean).join(' · ') });
+  return cbCards(core.map(card), selected, attr)
+    + (more.length ? '<h4 class="cb-books-h">Other books</h4>' + cbCards(more.map(card), selected, attr) : '');
+}
+function cbBooksToggle(){
+  return '<label class="cb-inline"><input type="checkbox" data-cb-allbooks' + (CB.build.allBooks ? ' checked' : '') + '> Include other books</label>';
 }
 
 function cbMount(){
@@ -201,6 +226,8 @@ CB_RENDER.basics = () => {
     +   '<div class="cb-seg"><button class="' + (b.edition === '2024' ? 'on' : '') + '" data-cb-ed="2024">2024 Player’s Handbook</button>'
     +   '<button class="' + (b.edition === '2014' ? 'on' : '') + '" data-cb-ed="2014">2014 Player’s Handbook</button></div>'
     +   '<div class="cb-dim">Switching edition keeps the name and level and clears choices that don’t exist in the other book.</div></div>'
+    + '<div class="cb-f">Books' + cbBooksToggle()
+    +   '<div class="cb-dim">Species, backgrounds, feats, spells and subclasses from the other ' + (b.edition === '2014' ? '2014-era books — Xanathar’s, Tasha’s, Monsters of the Multiverse, the setting books' : '2024-era books — Heroes of Faerûn, Eberron, and older species and spells the 2024 rules allow') + '. Their own rules show as text where the sheet can’t apply them.</div></div>'
     + '<div class="cb-f">Token icon<div class="cb-icons">' + icons.map(i => '<button class="' + (b.icon === i ? 'on' : '') + '" data-cb-icon="' + i + '">' + i + '</button>').join('') + '</div></div>';
 };
 
@@ -215,12 +242,12 @@ CB_RENDER.class = () => {
     html += '<div class="cb-note"><b>' + cbEsc(cls.name) + '</b> — at level 1: ' + cbEsc(lvl1) + '.</div>';
     const title = sktRulesInline(cls.subclassTitle);
     if ((b.level || 1) >= cls.subclassLevel){
-      const showAll = !!CB.allBooks;
+      const showAll = !!b.allBooks;
       const subs = cls.subclasses.filter(s => s.core || showAll)
         .filter((s, i, a) => a.findIndex(x => x.shortName === s.shortName) === i)
         .map(s => ({ value: s.shortName, label: s.shortName, sub: s.core ? '' : s.source }));
       html += '<h4>' + cbEsc(title) + '</h4>' + cbCards(subs, b.subclass, 'cb-sub')
-        + '<label class="cb-inline"><input type="checkbox" data-cb-allbooks' + (showAll ? ' checked' : '') + '> Include subclasses from other books</label>';
+        + cbBooksToggle();
       const sub = sktRulesSubclass(cls, b.subclass);
       if (sub) html += sub.features.filter(f => f.level <= b.level).map(f => '<div class="cb-feat"><b>' + cbEsc(f.name) + '</b> <span class="cb-dim">level ' + f.level + '</span>' + cbFeatureText(sktRulesText(f.entries)) + '</div>').join('');
     } else {
@@ -233,11 +260,12 @@ CB_RENDER.class = () => {
 CB_RENDER.species = () => {
   const b = CB.build, R = CB.R;
   const sp = sktRulesSpecies(R, b.species);
-  let html = '<h3>Species</h3>' + cbCards(R.species.map(s => ({ value: s.name, label: s.name,
-    sub: (typeof s.speed === 'number' ? s.speed : (s.speed && s.speed.walk) || 30) + ' ft' + (s.darkvision ? ' · darkvision' : '') })), b.species, 'cb-species');
+  let html = '<h3>Species</h3>' + cbBookCards(R.species, b.species, 'cb-species',
+    s => (typeof s.speed === 'number' ? s.speed : (s.speed && s.speed.walk) || 30) + ' ft' + (s.darkvision ? ' · darkvision' : '')) + cbBooksToggle();
   if (!sp) return html;
-  if (sp.subraces.length){
-    html += '<h4>' + (R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>' + cbCards(sp.subraces.map(s => ({ value: s.name, label: s.name })), b.subspecies, 'cb-subspecies');
+  const subs = sp.subraces.filter(s => s.core !== false || b.allBooks || s.name === b.subspecies);
+  if (subs.length){
+    html += '<h4>' + (R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>' + cbCards(subs.map(s => ({ value: s.name, label: s.name, sub: s.core === false ? s.source : '' })), b.subspecies, 'cb-subspecies');
   }
   // 2024 lineages that live in additionalSpells (Elf, Gnome, Tiefling).
   const lineages = (R.edition === '2024' && Array.isArray(sp.additionalSpells) && sp.additionalSpells.length > 1)
@@ -253,8 +281,21 @@ CB_RENDER.species = () => {
   }
   // Choosable ability increases (2014: Half-Elf, Variant Human…).
   const sub = sp.subraces.find(s => s.name === b.subspecies);
-  const ch = R.edition === '2014' ? cbSpeciesAsiChoice(sp, sub) : null;
-  if (ch){
+  const ch = R.edition === '2014' ? sktSpeciesAsiChoice(sp, sub) : null;
+  if (ch && ch.flex){
+    // Monsters of the Multiverse and later: +2 and +1, or three +1s, anywhere.
+    const mode = b.speciesChoice.asiMode || '21', inc = b.speciesAsi || {};
+    html += '<h4>Ability increases</h4><div class="cb-dim">Increase one score by 2 and another by 1, or three scores by 1.</div>'
+      + '<div class="cb-seg"><button class="' + (mode === '21' ? 'on' : '') + '" data-cb-spmode="21">+2 / +1</button><button class="' + (mode === '111' ? 'on' : '') + '" data-cb-spmode="111">+1 / +1 / +1</button></div>';
+    if (mode === '21'){
+      const two = Object.keys(inc).find(k => inc[k] === 2) || '', one = Object.keys(inc).find(k => inc[k] === 1) || '';
+      const sel = (amt, cur) => '<select class="cb-sel" data-cb-spflex="' + amt + '"><option value="">—</option>'
+        + SKT_ABS.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select>';
+      html += '<div class="cb-row"><label class="cb-f">+2' + sel(2, two) + '</label><label class="cb-f">+1' + sel(1, one) + '</label></div>';
+    } else {
+      html += cbChecks(SKT_ABS.map(k => ({ value: k, label: cbAbLabel(k) })), Object.keys(inc), 3, 'cb-spasi');
+    }
+  } else if (ch){
     const picked = Object.keys(b.speciesAsi || {});
     html += '<h4>Ability increases</h4><div class="cb-dim">Choose ' + ch.count + ' to increase by ' + ch.amount + '.</div>'
       + cbChecks(ch.from.map(k => ({ value: k, label: cbAbLabel(k) })), picked, ch.count, 'cb-spasi');
@@ -266,24 +307,22 @@ CB_RENDER.species = () => {
       + cbChecks(skillPick.from.map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), b.speciesSkills || [], skillPick.count, 'cb-spskill');
   }
   // A bonus feat: 2014 Variant Human; 2024 Human (Versatile, an origin feat).
-  if ((R.edition === '2014' && sub && /variant/i.test(sub.name)) || (R.edition === '2024' && sp.name === 'Human')){
-    const pool = R.feats.filter(f => R.edition === '2014' ? true : f.category === 'O');
+  if ((R.edition === '2014' && ((sub && /variant/i.test(sub.name)) || cbSpeciesGivesFeat(sp, sub))) || (R.edition === '2024' && sp.name === 'Human')){
+    const pool = R.feats.filter(f => (R.edition === '2014' ? true : f.category === 'O') && (f.core !== false || b.allBooks || f.name === b.originFeat));
     html += '<h4>' + (R.edition === '2024' ? 'Versatile — an origin feat' : 'Feat') + '</h4>'
       + '<select class="cb-sel" data-cb-originfeat><option value="">Choose a feat…</option>'
       + pool.map(f => '<option' + (b.originFeat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select>'
       + (b.originFeat ? cbFeatureText(sktRulesText((sktRulesFeat(R, b.originFeat) || {}).entries)) : '');
   }
+  // The species' spells (a Tiefling's legacy, a High Elf's cantrip…).
+  const spg = sktSpeciesSpellGrant(R, b);
+  if (spg && spg.block) html += cbGrantHtml(spg, '@species', 'Spells');
   html += '<h4>Traits</h4>' + [sp].concat(sub ? [sub] : []).map(s => (s.entries || []).filter(e => e && e.name && e.entries)
     .map(e => '<div class="cb-feat"><b>' + cbEsc(sktRulesInline(e.name)) + '</b>' + cbFeatureText(sktRulesText(e.entries)) + '</div>').join('')).join('');
   return html;
 };
-function cbSpeciesAsiChoice(sp, sub){
-  for (const list of [sub && sub.ability, sp.ability]){
-    for (const a of (list || [])){
-      if (a.choose) return { from: a.choose.from, count: a.choose.count || 1, amount: a.choose.amount || 1 };
-    }
-  }
-  return null;
+function cbSpeciesGivesFeat(sp, sub){
+  return [sp, sub].some(s => s && (s.feats || []).some(f => f && f.any));
 }
 function cbSpeciesSkillChoice(sp, sub){
   for (const list of [sub && sub.skills, sp.skills]){
@@ -302,7 +341,7 @@ CB_RENDER.background = () => {
   const b = CB.build, R = CB.R;
   const bg = sktRulesBackground(R, b.background);
   const skillsOf = x => (x.skills || []).flatMap(o => Object.keys(o).filter(k => o[k] === true).map(k => SKT_SKILL_LABEL[sktSkillKey(k)] || k));
-  let html = '<h3>Background</h3>' + cbCards(R.backgrounds.map(x => ({ value: x.name, label: x.name, sub: skillsOf(x).join(', ') })), b.background, 'cb-bg');
+  let html = '<h3>Background</h3>' + cbBookCards(R.backgrounds, b.background, 'cb-bg', x => skillsOf(x).join(', ')) + cbBooksToggle();
   if (!bg) return html;
   if (R.edition === '2024' && Array.isArray(bg.ability)){
     const from = ((bg.ability[0] || {}).choose || {}).weighted ? bg.ability[0].choose.weighted.from : SKT_ABS;
@@ -473,9 +512,10 @@ CB_RENDER.levels = () => {
       };
       html += '<div class="cb-row"><label class="cb-f">+1' + sel(0) + '</label><label class="cb-f">+1' + sel(1) + '</label></div><div class="cb-dim">Pick the same ability twice for +2.</div>';
     } else if (isFeat){
-      const pool = R.feats.filter(f => R.edition === '2014' || f.category === 'G' || (l >= 19 && f.category === 'EB'));
+      const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || (l >= 19 && f.category === 'EB'))
+                                    && (f.core !== false || b.allBooks || p.feat === f.name));
       html += '<select class="cb-sel" data-cb-asifeat="' + l + '"><option value="">Choose a feat…</option>'
-        + pool.map(f => '<option' + (p.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select>';
+        + pool.map(f => '<option value="' + cbEsc(f.name) + '"' + (p.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '') + '</option>').join('') + '</select>';
       const f = p.feat && sktRulesFeat(R, p.feat);
       if (f){
         const ch = cbFeatAbilityChoice(f);
@@ -499,7 +539,8 @@ CB_RENDER.levels = () => {
     const have = (b.optional[o.name] || []);
     const pool = o.kind === 'feat'
       ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && (String(f.category) === 'FS' || o.types.includes(f.category)))
-      : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)));
+          .filter(f => f.core !== false || b.allBooks || have.includes(f.name))
+      : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && (x.core !== false || b.allBooks || have.includes(x.name)));
     html += '<h4>' + cbEsc(o.name) + '</h4>' + cbCounter(have.length, o.count, 'chosen')
       + cbChecks(pool.map(x => ({ value: x.name, label: x.name + cbPrereqNote(x) })), have, o.count, 'cb-opt-' + cbSlug(o.name));
     have.forEach(n => { const x = pool.find(p => p.name === n); if (x) html += '<div class="cb-feat"><b>' + cbEsc(n) + '</b>' + cbFeatureText(sktRulesText(x.entries)) + '</div>'; });
@@ -573,30 +614,31 @@ CB_RENDER.spells = () => {
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
   return html + fromFeats;
 };
-// The spells a feat grants: which list (unless the background fixed it), the
-// casting ability where the feat lets you choose, and each pick.
+// The spells a feat or a species grants: which list (unless fixed), the
+// casting ability where it is a choice, and each pick. `key` is the feat's
+// name, or '@species'.
 function cbFeatSpellsHtml(){
-  const b = CB.build, R = CB.R;
-  return sktFeatSpells(b, R).map(g => {
-    let h = '<h4>From ' + cbEsc(g.feat) + '</h4>';
-    if (!g.listFixed){
-      h += '<label class="cb-f">Spell list<select class="cb-sel" data-cb-fslist="' + cbEsc(g.feat) + '"><option value="">Choose…</option>'
-        + g.blocks.map(x => '<option' + (g.block && g.block.name === x.name ? ' selected' : '') + '>' + cbEsc(x.name) + '</option>').join('') + '</select></label>';
-    }
-    if (!g.block) return h;
-    if (g.abilityChoices){
-      h += '<label class="cb-f">Casting ability<select class="cb-sel" data-cb-fsab="' + cbEsc(g.feat) + '"><option value="">—</option>'
-        + g.abilityChoices.map(k => '<option value="' + k + '"' + (g.ability === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
-    }
-    const fixed = g.spells.filter(n => !g.choices.some(c => c.picked.includes(n)));
-    if (fixed.length) h += '<div class="cb-dim">You always have: ' + cbEsc(fixed.join(', ')) + '</div>';
-    g.choices.forEach(c => {
-      const lvl = /level=0/.test(c.filter) ? 'cantrip' : 'spell';
-      h += '<div class="cb-spl"><span class="cb-spl-l">' + c.count + ' ' + lvl + (c.count === 1 ? '' : 's') + (c.daily ? ' · once a day' : '') + '</span>'
-        + cbChecks(c.options.map(n => ({ value: g.feat + '||' + n, label: n })), c.picked.map(n => g.feat + '||' + n), c.count, 'cb-fspell') + '</div>';
-    });
-    return h;
-  }).join('');
+  return sktFeatSpells(CB.build, CB.R).map(g => cbGrantHtml(g, g.feat, 'From ' + g.feat)).join('');
+}
+function cbGrantHtml(g, key, title){
+  let h = '<h4>' + cbEsc(title) + '</h4>';
+  if (!g.listFixed){
+    h += '<label class="cb-f">Spell list<select class="cb-sel" data-cb-fslist="' + cbEsc(key) + '"><option value="">Choose…</option>'
+      + g.blocks.map(x => '<option' + (g.block && g.block.name === x.name ? ' selected' : '') + '>' + cbEsc(x.name) + '</option>').join('') + '</select></label>';
+  }
+  if (!g.block) return h;
+  if (g.abilityChoices){
+    h += '<label class="cb-f">Casting ability<select class="cb-sel" data-cb-fsab="' + cbEsc(key) + '"><option value="">—</option>'
+      + g.abilityChoices.map(k => '<option value="' + k + '"' + (g.ability === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
+  }
+  const fixed = g.spells.filter(n => !g.choices.some(c => c.picked.includes(n)));
+  if (fixed.length) h += '<div class="cb-dim">You always have: ' + cbEsc(fixed.join(', ')) + (g.daily.length ? ' — ' + cbEsc(g.daily.join(', ')) + ' once per long rest' : '') + '</div>';
+  g.choices.forEach(c => {
+    const lvl = /level=0/.test(c.filter) ? 'cantrip' : 'spell';
+    h += '<div class="cb-spl"><span class="cb-spl-l">' + c.count + ' ' + lvl + (c.count === 1 ? '' : 's') + (c.daily ? ' · once a day' : '') + '</span>'
+      + cbChecks(c.options.map(n => ({ value: key + '||' + n, label: n })), c.picked.map(n => key + '||' + n), c.count, 'cb-fspell') + '</div>';
+  });
+  return h;
 }
 
 CB_RENDER.equipment = () => {
@@ -715,9 +757,10 @@ function cbOnClick(e){
     b.species = d.cbSpecies; b.subspecies = ''; b.speciesAsi = {}; b.speciesSkills = []; b.speciesChoice = {};
     b.originFeat = '';
   });
-  if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; });
-  if (d.cbLineage) return cbSet(b => { b.speciesChoice.lineage = d.cbLineage; });
+  if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
+  if (d.cbLineage) return cbSet(b => { if (b.speciesChoice.lineage !== d.cbLineage) delete b.speciesChoice.spells; b.speciesChoice.lineage = d.cbLineage; });
   if (d.cbSize) return cbSet(b => { b.size = d.cbSize; });
+  if (d.cbSpmode) return cbSet(b => { if ((b.speciesChoice.asiMode || '21') !== d.cbSpmode){ b.speciesChoice.asiMode = d.cbSpmode; b.speciesAsi = {}; } });
   if (d.cbBg) return cbSet(b => { if (b.background !== d.cbBg){ b.background = d.cbBg; b.bgAsi = {}; b.bgSkills = []; } });
   if (d.cbBgmode) return cbSet(b => {
     b.bgAsiMode = d.cbBgmode; b.bgAsi = {};
@@ -757,7 +800,7 @@ function cbOnChange(e){
   const t = e.target, d = t.dataset;
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
-  if ('cbAllbooks' in d){ CB.allBooks = t.checked; cbRender(); return; }
+  if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
   if (d.cbSkill){ const cls = sktRulesClass(CB.R, CB.build.cls); return cbSet(b => cbToggle(b.skills, d.cbSkill, cls.skillChoice.count)); }
   if (d.cbExpert) return cbSet(b => cbToggle(b.expertise, d.cbExpert, cbExpertiseCount()));
   if (d.cbLang) return cbSet(b => cbToggle(b.languages, d.cbLang, cbLanguageCount()));
@@ -768,10 +811,20 @@ function cbOnChange(e){
   }
   if (d.cbSpasi){
     const sp = sktRulesSpecies(CB.R, CB.build.species), sub = sp && sp.subraces.find(s => s.name === CB.build.subspecies);
-    const ch = cbSpeciesAsiChoice(sp, sub);
+    const ch = sktSpeciesAsiChoice(sp, sub);
+    const count = ch.flex ? 3 : ch.count, amount = ch.flex ? 1 : ch.amount;
     return cbSet(b => {
       if (b.speciesAsi[d.cbSpasi]) delete b.speciesAsi[d.cbSpasi];
-      else if (Object.keys(b.speciesAsi).length < ch.count) b.speciesAsi[d.cbSpasi] = ch.amount;
+      else if (Object.keys(b.speciesAsi).length < count) b.speciesAsi[d.cbSpasi] = amount;
+    });
+  }
+  if (d.cbSpflex){
+    const amt = +d.cbSpflex;
+    return cbSet(b => {
+      const inc = {};
+      Object.keys(b.speciesAsi || {}).forEach(k => { if (b.speciesAsi[k] !== amt) inc[k] = b.speciesAsi[k]; });
+      if (v) inc[v] = amt;
+      b.speciesAsi = inc;
     });
   }
   if (d.cbCantrip){ const sc = sktBuildSpellcasting(CB.build, CB.R, sktBuildAbilities(CB.build, CB.R)); return cbSet(b => cbToggle(b.cantrips, d.cbCantrip, sc.cantrips)); }
@@ -790,10 +843,10 @@ function cbOnChange(e){
   }
   if (d.cbFspell){
     const [feat, name] = d.cbFspell.split('||');
-    const g = sktFeatSpellGrant(CB.R, CB.build, feat);
+    const g = feat === '@species' ? sktSpeciesSpellGrant(CB.R, CB.build) : sktFeatSpellGrant(CB.R, CB.build, feat);
     const c = g && g.choices.find(x => x.options.includes(name));
     return cbSet(b => {
-      const fc = b.featChoices[feat] = Object.assign({}, b.featChoices[feat]);
+      const fc = feat === '@species' ? b.speciesChoice : (b.featChoices[feat] = Object.assign({}, b.featChoices[feat]));
       fc.spells = (fc.spells || []).slice();
       const i = fc.spells.indexOf(name);
       if (i >= 0) fc.spells.splice(i, 1);
@@ -801,6 +854,7 @@ function cbOnChange(e){
     });
   }
   if (d.cbFslist) return cbSet(b => { b.featChoices[d.cbFslist] = Object.assign({}, b.featChoices[d.cbFslist], { spellList: v, spells: [] }); });
+  if (d.cbFsab === '@species') return cbSet(b => { b.speciesChoice.spellAbility = v; });
   if (d.cbFsab) return cbSet(b => { b.featChoices[d.cbFsab] = Object.assign({}, b.featChoices[d.cbFsab], { spellAbility: v }); });
   if (d.cbDetail === 'alignment') return cbSet(b => { b.details = Object.assign({}, b.details, { alignment: v }); });
   const optKey = Object.keys(d).find(k => /^cbOpt/.test(k));
