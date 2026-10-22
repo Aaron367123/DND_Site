@@ -411,6 +411,7 @@ function sktBlankBuild(edition){
     hp: { method: 'average', rolls: {} },
     equipment: { cls: 'A', bg: 'A', picks: {} },
     allBooks: false,       // offer species, feats, spells… from books beyond the handbook
+    items: [],             // magic items and gear given since: { name, base|stats, bonuses, reqAttune, attuned }
     spellbook: [],         // a wizard's book; prepared spells come out of it
     size: '',              // 2024 species that may be Small or Medium
     details: {},           // alignment, looks, personality, backstory
@@ -455,6 +456,12 @@ function sktBuildAbilities(build, R){
     if (f && f.category === 'EB') Object.keys((build.featChoices[pick.feat] || {}).inc || {}).forEach(k => { boonCap[k] = 30; });
   });
   SKT_ABS.forEach(k => { out[k] = Math.max(1, Math.min(boonCap[k] || 20, out[k])); });
+  // Magic items: a score set to a number (it never lowers one), or raised.
+  _sktActiveItems(build).forEach(m => {
+    const a = m.ability; if (!a || typeof a !== 'object') return;
+    Object.keys(a.static || {}).forEach(k => { if (k in out) out[k] = Math.max(out[k], +a.static[k] || 0); });
+    SKT_ABS.forEach(k => { if (typeof a[k] === 'number') out[k] = Math.min(20, out[k] + a[k]); });
+  });
   return out;
 }
 
@@ -1060,7 +1067,7 @@ function sktComputeCharacter(build, R, prior){
     build, R, edition: R.edition, cls, sub, level: L, pb, abilities,
     mod: {}, acOptions: [], armoredAcBonus: 0, mediumDexCap: 2,
     hpPerLevel: 0, speedBonus: 0, speedBonusUnlessHeavy: 0, speedBonusUnarmored: 0,
-    initBonus: 0, saveBonusAll: 0, passiveBonus: { perception: 0, investigation: 0, insight: 0 },
+    initBonus: 0, saveBonusAll: _sktItemSum(build, 'bonusSavingThrow'), passiveBonus: { perception: 0, investigation: 0, insight: 0 },
     saveProf: new Set((cls && cls.saves) || []), skillProf: new Set(), expertise: new Set(build.expertise || []),
     armorProf: new Set(), weaponProf: new Set(), weaponPropRules: [], toolProf: new Set(), languages: new Set(),
     resources: [], actions: [], notes: [], attacksPerAction: 1, critRange: 20,
@@ -1071,6 +1078,7 @@ function sktComputeCharacter(build, R, prior){
     senses: { darkvision: 0 }, skillBonus: {}, immune: new Set(), cantripDamageBonus: 0,
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
+  _sktActiveItems(build).forEach(m => (m.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); }));
 
   // Proficiencies from the class, species, background and feats.
   ((cls && cls.armor) || []).forEach(a => ctx.armorProf.add(typeof a === 'string' ? sktRulesInline(a).toLowerCase() : 'shield'));
@@ -1171,7 +1179,7 @@ function sktComputeCharacter(build, R, prior){
   if (armor){
     const t = String(armor.type || '').split('|')[0];
     const dex = t === 'HA' ? 0 : t === 'MA' ? Math.min(ctx.mediumDexCap, ctx.mod.dex) : ctx.mod.dex;
-    acArmor = { label: armor.name, value: (+armor.ac || 10) + dex + ctx.armoredAcBonus };
+    acArmor = { label: armor._name || armor.name, value: (+armor.ac || 10) + (armor._ac || 0) + dex + ctx.armoredAcBonus };
   }
   const candidates = [];
   if (acArmor) candidates.push({ ...acArmor, shieldOk: true });
@@ -1179,8 +1187,13 @@ function sktComputeCharacter(build, R, prior){
     candidates.push({ label: 'Unarmored', value: 10 + ctx.mod.dex, shieldOk: true });
     ctx.acOptions.forEach(o => { if (!o.noArmor || !armor) candidates.push(o); });
   }
-  const best = candidates.map(c => ({ ...c, total: c.value + (shield && c.shieldOk !== false ? (+shield.ac || 2) : 0) }))
+  const best = candidates.map(c => ({ ...c, total: c.value + (shield && c.shieldOk !== false ? (+shield.ac || 2) + (shield._ac || 0) : 0) }))
     .sort((a, b) => b.total - a.total)[0];
+  // A Ring or Cloak of Protection adds to whatever is worn; Bracers of
+  // Defense only without armour or a shield.
+  const acItems = _sktActiveItems(build).filter(m => m.bonusAc && !m.stats && !m.base
+    && !(m.unarmoredOnly && armor) && !(m.noShield && shield));
+  if (best) acItems.forEach(m => { best.total += m.bonusAc; best.label += ' + ' + m.name; });
   const ac = best ? best.total : 10;
 
   // Speed.
@@ -1199,6 +1212,7 @@ function sktComputeCharacter(build, R, prior){
 
   // Spellcasting.
   const sc = sktBuildSpellcasting(build, R, abilities);
+  if (sc){ sc.attack += _sktItemSum(build, 'bonusSpellAttack'); sc.dc += _sktItemSum(build, 'bonusSpellSaveDc'); }
   const spellSlots = {};
   if (sc) Object.keys(sc.slots).forEach(l => {
     const was = prior.sheet && prior.sheet.spellSlots && prior.sheet.spellSlots[l];
@@ -1290,7 +1304,8 @@ function sktComputeCharacter(build, R, prior){
       size: SIZE_NAME[sizeCode] || 'Medium',
       details: Object.assign({}, build.details || {}),
       activations: ctx.actions, notes: ctx.notes, featureList,
-      equipment: gear.list, acSource: best ? best.label + (shield ? ' + Shield' : '') : '',
+      equipment: gear.list.concat((build.items || []).map(m => m.name + (m.reqAttune ? (m.attuned ? ' (attuned)' : ' (not attuned)') : ''))),
+      acSource: best ? best.label + (shield ? ' + ' + (shield._name || 'Shield') : '') : '',
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
                ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].filter(Boolean).join(', '),
       bio: { features: featureList.map(f => '* ' + f.name + '\n' + f.text).join('\n\n') },
@@ -1368,12 +1383,23 @@ function sktBuildEquipment(build, R){
   if (bg) takeBlocks(bg.equipment, 'bg');
   (eq.extra || []).forEach(n => names.push(String(n).toLowerCase()));
   const items = names.map(n => R.items[n]).filter(Boolean);
+  // Magic weapons and armour fight and are worn like any other, with their
+  // bonus (only once attuned, where that is needed).
+  (build.items || []).forEach(m => {
+    const st = m.stats || (m.base && R.items[m.base]);
+    if (!st) return;
+    const on = !m.reqAttune || _sktActiveItems(build).includes(m);
+    items.push(Object.assign({}, st, { _name: m.name,
+      _hit: on ? (m.bonusWeapon || 0) + (m.bonusWeaponAttack || 0) : 0,
+      _dmg: on ? (m.bonusWeapon || 0) + (m.bonusWeaponDamage || 0) : 0,
+      _ac: on ? (m.bonusAc || 0) : 0 }));
+  });
   const armors = items.filter(i => /^(LA|MA|HA)/.test(String(i.type)));
-  const shield = items.find(i => /^S(\||$)/.test(String(i.type))) || null;
+  const shield = items.filter(i => /^S(\||$)/.test(String(i.type))).sort((a, b) => (b._ac || 0) - (a._ac || 0))[0] || null;
   const weapons = items.filter(i => /^(M|R)(\||$)/.test(String(i.type)));
   // Wear the armour that gives the best AC; a wizard handed chain mail by a
   // background does not put it on.
-  const armor = armors.sort((a, b) => (+b.ac || 0) - (+a.ac || 0))[0] || null;
+  const armor = armors.sort((a, b) => ((+b.ac || 0) + (b._ac || 0)) - ((+a.ac || 0) + (a._ac || 0)))[0] || null;
   return { armor, shield, weapons, gold: Math.round(gold * 100) / 100, list: names.map(_sktTitle) };
 }
 // What "any martial weapon" becomes until the player picks one.
@@ -1404,21 +1430,22 @@ function sktBuildAttacks(ctx, gear, sc){
   };
   const seen = new Set();
   (gear.weapons || []).forEach(w => {
-    if (seen.has(w.name)) return; seen.add(w.name);
+    const key = w._name || w.name;
+    if (seen.has(key)) return; seen.add(key);
     const props = (w.property || []).map(p => String(p).split('|')[0]);
     const ranged = String(w.type).split('|')[0] === 'R';
     const finesse = props.includes('F');
     let ab = ranged ? m.dex : (finesse ? Math.max(m.str, m.dex) : m.str);
     // A monk's weapons use Dexterity if it is better (martial arts weapons).
     if (ctx.martialArts && !ranged && (String(w.weaponCategory) === 'simple' || props.includes('L'))) ab = Math.max(m.str, m.dex);
-    const hit = ab + (prof(w) ? pb : 0) + (ranged ? ctx.rangedAttackBonus : 0);
-    let dmgBonus = ab + (!ranged && !props.includes('2H') && ctx.duelingBonus ? ctx.duelingBonus : 0);
+    const hit = ab + (prof(w) ? pb : 0) + (ranged ? ctx.rangedAttackBonus : 0) + (w._hit || 0);
+    let dmgBonus = ab + (!ranged && !props.includes('2H') && ctx.duelingBonus ? ctx.duelingBonus : 0) + (w._dmg || 0);
     let die = w.dmg1 || '1';
     if (ctx.martialArts && ctx.martialArtsDie && !ranged && _sktDieAvg(ctx.martialArtsDie) > _sktDieAvg(die)) die = ctx.martialArtsDie;
     const type = SKT_DMG[String(w.dmgType || '').charAt(0)] || '';
     const mastery = (w.mastery || [])[0] ? String(w.mastery[0]).split('|')[0] : '';
     out.push({
-      name: _sktTitle(w.name), atkBonus: sktSigned(hit),
+      name: w._name || _sktTitle(w.name), atkBonus: sktSigned(hit),
       damage: die + (dmgBonus ? (dmgBonus > 0 ? '+' : '') + dmgBonus : '') + (type ? ' ' + type : ''),
       versatile: w.dmg2 ? w.dmg2 + (dmgBonus ? sktSigned(dmgBonus) : '') : null,
       range: w.range || null,
@@ -1508,6 +1535,99 @@ function sktBuildTodo(build, R){
   return todo;
 }
 
+// ── Magic items ──────────────────────────────────────────────────────────────
+// A character's items live on the build as copies of what the sheet needs
+// (bonuses, the base weapon or armour, attunement), so working out the sheet
+// never needs the item data, the biggest file there is. The builder loads
+// that only to list what can be added.
+function _sktActiveItems(build){
+  let attuned = 0;
+  return (build.items || []).filter(m => {
+    if (!m.reqAttune) return true;
+    if (!m.attuned || attuned >= 3) return false;
+    attuned++; return true;
+  });
+}
+function _sktItemSum(build, key){
+  return _sktActiveItems(build).reduce((n, m) => n + (+m[key] || 0), 0);
+}
+const _sktMagicCache = {};
+async function sktMagicLoad(edition, read){
+  edition = edition === '2014' ? '2014' : '2024';
+  if (_sktMagicCache[edition] && !read) return _sktMagicCache[edition];
+  const job = (async () => {
+    read = read || sktRulesReader();
+    const [items, mv] = await Promise.all([read('items.json'), read('magicvariants.json')]);
+    const pick = _sktEraPicker(edition, edition === '2024' ? 'XDMG' : 'DMG');
+    const magic = (items.item || []).filter(i => i.rarity && !/^(none|unknown)/.test(i.rarity) && !/^\$/.test(String(i.type || '')));
+    // Picked as one list: the 2024 book reprints some items as variants
+    // (Dwarven Plate, Moonblade), and the reprint should replace the item.
+    const flat = (mv.magicvariant || []).map(v => Object.assign({}, v.inherits || {}, { name: String(v.name).replace(/\s*\(\*\)$/, ''), requires: v.requires || [], excludes: v.excludes || null, _variant: true }));
+    return pick(magic.concat(flat), { legacy: edition === '2024' }).map(i => _sktMagicEntry(i, i._variant ? 'variant' : 'item'))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+  if (!read) _sktMagicCache[edition] = job;
+  return job;
+}
+function _sktBonus(v){ const n = parseInt(String(v == null ? '' : v).replace(/\s/g, ''), 10); return isNaN(n) ? 0 : n; }
+function _sktMagicEntry(i, kind){
+  const t = String(i.type || '').split('|')[0];
+  const isGear = /^(M|R|LA|MA|HA|S)$/.test(t);
+  const text = sktRulesText(i.entries || []);
+  return {
+    kind, name: i.name, source: i.source, rarity: i.rarity || '', reqAttune: !!i.reqAttune,
+    requires: i.requires || null, excludes: i.excludes || null,
+    namePrefix: i.namePrefix || '', nameSuffix: i.nameSuffix || '',
+    base: i.baseItem ? String(i.baseItem).split('|')[0].toLowerCase() : null,
+    stats: isGear && !i.baseItem ? { name: i.name, type: i.type, ac: i.ac, dmg1: i.dmg1, dmg2: i.dmg2, dmgType: i.dmgType,
+                                    property: i.property, weaponCategory: i.weaponCategory, range: i.range, strength: i.strength } : null,
+    bonusWeapon: _sktBonus(i.bonusWeapon), bonusWeaponAttack: _sktBonus(i.bonusWeaponAttack), bonusWeaponDamage: _sktBonus(i.bonusWeaponDamage),
+    bonusAc: _sktBonus(i.bonusAc), bonusSavingThrow: _sktBonus(i.bonusSavingThrow),
+    bonusSpellAttack: _sktBonus(i.bonusSpellAttack), bonusSpellSaveDc: _sktBonus(i.bonusSpellSaveDc),
+    ability: i.ability || null, resist: (i.resist || []).filter(r => typeof r === 'string'),
+    unarmoredOnly: /wearing no armou?r/i.test(text), noShield: /no armou?r and (are )?(not )?(using|wielding) (a|no) shield|no shield/i.test(text),
+    text,
+  };
+}
+// The weapons or armour a variant ("+1 Weapon", "Flame Tongue", "Armor of
+// Resistance") can be made from, as keys into R.items.
+function sktMagicBases(R, v){
+  const lower = x => String(x).toLowerCase();
+  const typ = x => String(x || '').split('|')[0];
+  const match = (it, cond) => Object.keys(cond).every(k => {
+    if (k === 'source') return true;
+    if (k === 'type') return typ(it.type) === typ(cond.type);
+    if (k === 'name') return lower(it.name) === lower(cond.name);
+    return it[k] === cond[k];
+  });
+  const excluded = (it, ex) => !!ex && Object.keys(ex).some(k => {
+    const want = [].concat(ex[k]).map(x => lower(typ(x)));
+    const have = [].concat(it[k] == null ? [] : it[k]).map(x => lower(typ(x)));
+    return ex[k] === true ? it[k] === true : want.some(w => have.includes(w));
+  });
+  return Object.keys(R.items).filter(k => {
+    const it = R.items[k];
+    return (v.requires || []).some(c => match(it, c)) && !excluded(it, v.excludes);
+  }).sort();
+}
+// The copy a build keeps: no text, no lists — what the sheet reads.
+function sktMagicMake(R, e, baseKey){
+  const base = e.kind === 'variant' ? baseKey : e.base;
+  const bi = base && R.items[base];
+  if (e.kind === 'variant' && !bi) return null;
+  const name = e.kind === 'variant' ? (e.namePrefix + (bi ? bi.name : '') + e.nameSuffix).trim() || e.name : e.name;
+  const out = { name, source: e.source, rarity: e.rarity, reqAttune: e.reqAttune, attuned: false };
+  if (base && bi) out.base = base;
+  if (e.stats) out.stats = e.stats;
+  ['bonusWeapon', 'bonusWeaponAttack', 'bonusWeaponDamage', 'bonusAc', 'bonusSavingThrow', 'bonusSpellAttack', 'bonusSpellSaveDc']
+    .forEach(k => { if (e[k]) out[k] = e[k]; });
+  if (e.ability) out.ability = e.ability;
+  if (e.resist && e.resist.length) out.resist = e.resist;
+  if (e.unarmoredOnly) out.unarmoredOnly = true;
+  if (e.noShield) out.noShield = true;
+  return out;
+}
+
 // The part of a 2014 species' ability increases the player chooses:
 // { from, count, amount } (Half-Elf: two +1s), or { flex: true } for the
 // Multiverse-style species that leave all of it to you (+2 and +1, or three
@@ -1558,6 +1678,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
                      sktSpellsMatching, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
+                     sktMagicLoad, sktMagicBases, sktMagicMake,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };
 }

@@ -670,6 +670,7 @@ CB_RENDER.equipment = () => {
   if (cls && cls.equipment && Array.isArray(cls.equipment.defaultData)) html += '<h4>' + cbEsc(cls.name) + '</h4>' + blockHtml(cls.equipment.defaultData, 'cls');
   else if (!cls) html += '<div class="cb-dim">Choose a class first.</div>';
   if (bg && (bg.equipment || []).length) html += '<h4>' + cbEsc(bg.name) + '</h4>' + blockHtml(bg.equipment, 'bg');
+  html += cbGearHtml();
   const rec = CB.rec;
   const gold = sktBuildEquipment(b, R).gold;
   html += '<h4>Result</h4>' + (gold ? '<div class="cb-note">Starting gold: <b>' + gold + ' gp</b> — kept on the character</div>' : '') + '<div class="cb-note">AC ' + rec.ac + (rec.sheet.acSource ? ' (' + cbEsc(rec.sheet.acSource) + ')' : '') + '</div>'
@@ -677,6 +678,48 @@ CB_RENDER.equipment = () => {
   return html;
 };
 function _sktTitleCase(s){ return _sktTitle(s); }
+
+// Magic items and gear given since the kit: a +1 longsword, magic armour, a
+// Ring of Protection, a shield bought in town. Searched by name; a variant
+// ("+1 Weapon", "Flame Tongue") asks which weapon or armour it is. There was
+// no way to give a built character anything before.
+function cbGearEntries(){
+  const R = CB.R;
+  // Plain weapons and armour need no download; the magic list does.
+  const plain = Object.keys(R.items).filter(k => /^(M|R|LA|MA|HA|S)(\||$)/.test(String(R.items[k].type)))
+    .map(k => ({ kind: 'base', name: R.items[k].name, base: k, rarity: '', source: R.items[k].source, text: '' }));
+  return (CB.magic || []).concat(plain);
+}
+function cbGearFind(name){
+  const n = String(name || '').trim().toLowerCase();
+  return n ? cbGearEntries().find(e => e.name.toLowerCase() === n) || null : null;
+}
+function cbGearHtml(){
+  const b = CB.build, R = CB.R;
+  if (CB.magicEd !== R.edition){
+    CB.magic = null; CB.magicEd = R.edition;
+    sktMagicLoad(R.edition).then(list => { if (CB && CB.magicEd === R.edition){ CB.magic = list; if (CB.step === 'equipment') cbRender(); } })
+      .catch(e => { if (CB){ CB.magicErr = e.message; if (CB.step === 'equipment') cbRender(); } });
+  }
+  const items = b.items || [];
+  const attuned = items.filter(m => m.reqAttune && m.attuned).length;
+  let h = '<h4>Magic items and gear</h4><div class="cb-dim">Anything found or bought since: a +1 longsword, magic armour, a Ring of Protection, a shield. The sheet applies their bonuses. Up to three can be attuned.</div>';
+  const e = cbGearFind(CB.magicQ);
+  const bases = e && e.kind === 'variant' ? sktMagicBases(R, e) : null;
+  h += '<div class="cb-row cb-gear-add"><input class="cb-grow" data-cb-magicq list="cb-magic-dl" placeholder="' + (CB.magic ? 'Search items…' : CB.magicErr ? 'Weapons and armour (the magic item list did not load)' : 'Loading the item list…') + '" value="' + cbEsc(CB.magicQ || '') + '">'
+    + (bases ? '<select class="cb-sel" data-cb-magicbase><option value="">Which one?</option>' + bases.map(k => '<option value="' + cbEsc(k) + '"' + (CB.magicBase === k ? ' selected' : '') + '>' + cbEsc(R.items[k].name) + '</option>').join('') + '</select>' : '')
+    + '<button class="btn" data-cb="magic-add"' + (e && (!bases || (CB.magicBase && bases.includes(CB.magicBase))) ? '' : ' disabled') + '>Add</button></div>'
+    + '<datalist id="cb-magic-dl">' + cbGearEntries().map(x => '<option value="' + cbEsc(x.name) + '">' + cbEsc(x.rarity || '') + '</option>').join('') + '</datalist>';
+  if (e && e.text) h += '<div class="cb-note cb-gear-prev"><b>' + cbEsc(e.name) + '</b> <span class="cb-dim">' + cbEsc([e.rarity, e.reqAttune ? 'attunement' : ''].filter(Boolean).join(' · ')) + '</span>' + cbFeatureText(e.text) + '</div>';
+  if (items.length){
+    h += '<div class="cb-gear-list">' + items.map((m, i) => '<div class="cb-gear"><b>' + cbEsc(m.name) + '</b>'
+      + (m.rarity ? ' <span class="cb-dim">' + cbEsc(m.rarity) + '</span>' : '')
+      + (m.reqAttune ? '<label class="cb-inline"><input type="checkbox" data-cb-attune="' + i + '"' + (m.attuned ? ' checked' : '') + (!m.attuned && attuned >= 3 ? ' disabled' : '') + '> Attuned</label>' : '')
+      + '<button class="btn" data-cb-itemdel="' + i + '" aria-label="Remove ' + cbEsc(m.name) + '">Remove</button></div>').join('') + '</div>'
+      + (items.some(m => m.reqAttune) ? '<div class="cb-dim">Attuned: ' + attuned + ' of 3</div>' : '');
+  }
+  return h;
+}
 const _SKT_EQ_LABEL = { weaponMartial: 'a martial weapon', weaponMartialMelee: 'a martial melee weapon', weaponSimple: 'a simple weapon',
   weaponSimpleMelee: 'a simple melee weapon', weaponSimpleRanged: 'a simple ranged weapon', focusSpellcastingArcane: 'an arcane focus',
   focusSpellcastingDruidic: 'a druidic focus', focusSpellcastingHoly: 'a holy symbol', instrumentMusical: 'a musical instrument',
@@ -739,6 +782,14 @@ function cbOnClick(e){
   if (d.cb === 'next'){ CB.step = vis[Math.min(vis.length - 1, at + 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'back'){ CB.step = vis[Math.max(0, at - 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'save') return cbSave();
+  if (d.cb === 'magic-add'){
+    const e = cbGearFind(CB.magicQ); if (!e) return;
+    const it = e.kind === 'base' ? { name: e.name, base: e.base } : sktMagicMake(CB.R, e, CB.magicBase);
+    if (!it) return;
+    CB.magicQ = ''; CB.magicBase = '';
+    return cbSet(b => { b.items = (b.items || []).concat([it]); });
+  }
+  if (d.cbItemdel != null) return cbSet(b => { b.items = (b.items || []).filter((x, i) => i !== +d.cbItemdel); });
   if (d.cb === 'roll') return cbSet(b => {
     const r = () => { const d4 = [sktD(6), sktD(6), sktD(6), sktD(6)].sort((x, y) => y - x); return d4[0] + d4[1] + d4[2]; };
     b.abilities.rolled = [r(), r(), r(), r(), r(), r()].sort((x, y) => y - x);
@@ -801,6 +852,16 @@ function cbOnChange(e){
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
+  if ('cbMagicq' in d){ CB.magicQ = v; CB.magicBase = ''; cbRender(); const q = document.querySelector('#cb-root [data-cb-magicq]'); if (q && !cbGearFind(v)) q.focus(); return; }
+  if ('cbMagicbase' in d){ CB.magicBase = v; cbRender(); return; }
+  if (d.cbAttune != null){
+    const i = +d.cbAttune;
+    return cbSet(b => {
+      const m = b.items[i]; if (!m) return;
+      const n = b.items.filter(x => x.reqAttune && x.attuned).length;
+      if (m.attuned) m.attuned = false; else if (n < 3) m.attuned = true;
+    });
+  }
   if (d.cbSkill){ const cls = sktRulesClass(CB.R, CB.build.cls); return cbSet(b => cbToggle(b.skills, d.cbSkill, cls.skillChoice.count)); }
   if (d.cbExpert) return cbSet(b => cbToggle(b.expertise, d.cbExpert, cbExpertiseCount()));
   if (d.cbLang) return cbSet(b => cbToggle(b.languages, d.cbLang, cbLanguageCount()));
@@ -919,6 +980,7 @@ function cbOnInput(e){
   if (!CB) return;
   const t = e.target, d = t.dataset;
   if (d.cbIn === 'name'){ CB.build.name = t.value; cbRefreshSide(); return; }
+  if ('cbMagicq' in d){ CB.magicQ = t.value; return; }
   // Details: typed, not chosen — no re-render, so the box keeps the caret.
   if (d.cbDetail && d.cbDetail !== 'alignment'){ CB.build.details = Object.assign({}, CB.build.details, { [d.cbDetail]: t.value }); return; }
   if (d.cbIn === 'level'){
@@ -938,7 +1000,8 @@ function cbRefreshSteps(){
 }
 
 async function cbSwitchEdition(ed){
-  const keep = { name: CB.build.name, level: CB.build.level, icon: CB.build.icon };
+  const keep = { name: CB.build.name, level: CB.build.level, icon: CB.build.icon,
+                 allBooks: !!CB.build.allBooks, items: (CB.build.items || []).slice() };
   CB.build = Object.assign(sktBlankBuild(ed), keep);
   if (state.settings){ state.settings.builderEdition = ed; save(); }
   await cbLoad(ed);

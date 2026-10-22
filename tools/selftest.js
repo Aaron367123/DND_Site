@@ -5724,6 +5724,111 @@
       }
     }
 
+    // -- The character builder: magic items and gear ---------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), M14 = await sktMagicLoad('2014');
+        const M24 = await sktMagicLoad('2024');
+        const f = (M, n) => M.find(m => m.name === n);
+        ok('items: the magic item list for each edition, one of each name',
+           M14.length > 1000 && M24.length > 1000 && new Set(M14.map(m => m.name)).size === M14.length && new Set(M24.map(m => m.name)).size === M24.length);
+        ok('items: an item the 2024 book made a variant is listed once, as the variant', (f(M24, 'Dwarven Plate') || {}).kind === 'variant' && (f(M14, 'Dwarven Plate') || {}).kind === 'item');
+        ok('items: a 2014 Flame Tongue is a sword', JSON.stringify(sktMagicBases(R14, f(M14, 'Flame Tongue'))) === '["greatsword","longsword","rapier","scimitar","shortsword"]');
+        ok('items: a +1 Shield is a shield, and no +1 net', JSON.stringify(sktMagicBases(R14, f(M14, '+1 Shield'))) === '["shield"]'
+           && sktMagicBases(R14, f(M14, '+1 Weapon')).includes('longsword') && !sktMagicBases(R14, f(M14, '+1 Weapon')).includes('net'));
+        { const R24 = await sktRulesLoad('2024'); const am = sktMagicBases(R24, f(M24, '+1 Ammunition'));
+          ok('items: ammunition matches whichever book printed it', am.includes('crossbow bolt') && am.includes('arrow'), am.join(',')); }
+        ok('items: +1 Armor is any armour, not a shield', sktMagicBases(R14, f(M14, '+1 Armor')).includes('plate armor') && !sktMagicBases(R14, f(M14, '+1 Armor')).includes('shield'));
+        const fi = Object.assign(sktBlankBuild('2014'), { name: 'F', species: 'Human', cls: 'Fighter', level: 1, background: 'Soldier',
+          abilities: { method: 'manual', base: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 8 } }, equipment: { cls: 'A', bg: 'A' } });
+        const F0 = sktComputeCharacter(fi, R14);
+        const mk = (n, base) => sktMagicMake(R14, f(M14, n), base);
+        fi.items = [mk('+1 Weapon', 'longsword'), mk('Cloak of Protection'), mk('Gauntlets of Ogre Power'), mk('+1 Armor', 'plate armor')];
+        const F1 = sktComputeCharacter(fi, R14);
+        const ls = a => (a.sheet.attacks.find(x => x.name === '+1 Longsword') || {});
+        ok('items: a +1 longsword hits and hurts one better', ls(F1).atkBonus === '+6' && ls(F1).damage === '1d8+4 slashing', JSON.stringify(ls(F1)));
+        ok('items: +1 plate is worn over chain mail', F1.ac === F0.ac + 2 + 1 && /\+1 Plate Armor/.test(F1.sheet.acSource), F0.ac + ' → ' + F1.ac + ' ' + F1.sheet.acSource);
+        ok('items: an item that needs attunement does nothing until attuned', F1.abilities.str === 16 && F1.sheet.saves.str === F0.sheet.saves.str);
+        fi.items[1].attuned = true; fi.items[2].attuned = true;
+        const F2 = sktComputeCharacter(fi, R14);
+        ok('items: attuned, the Cloak adds 1 to AC and saves, the Gauntlets make STR 19',
+           F2.ac === F1.ac + 1 && F2.sheet.saves.dex === F1.sheet.saves.dex + 1 && F2.abilities.str === 19, F2.ac + ' ' + F2.abilities.str);
+        ok('items: and the sheet lists them, saying which are attuned', F2.sheet.equipment.includes('Cloak of Protection (attuned)') && F2.sheet.equipment.includes('+1 Longsword'));
+        // A weapon that needs attunement is an ordinary one until attuned.
+        const ha = Object.assign(sktBlankBuild('2014'), fi, { items: [sktMagicMake(R14, f(M14, 'Holy Avenger'), 'longsword')] });
+        const haAtk = b2 => (sktComputeCharacter(b2, R14).sheet.attacks.find(x => x.name === 'Holy Avenger Longsword' || /Holy Avenger/.test(x.name)) || {}).atkBonus;
+        ok('items: a Holy Avenger is +0 until attuned, +3 after', haAtk(ha) === '+5' && (ha.items[0].attuned = true, haAtk(ha) === '+8'), haAtk(ha));
+        // Gauntlets never lower a score.
+        fi.abilities.base.str = 20;
+        ok('items: a score item never lowers a score', sktComputeCharacter(fi, R14).abilities.str === 20);
+        fi.abilities.base.str = 16;
+        // Three attuned at most.
+        fi.items.push(Object.assign(mk('Ring of Protection'), { attuned: true }), Object.assign(mk('Cloak of Protection'), { attuned: true }));
+        ok('items: only three attuned items work', sktComputeCharacter(fi, R14).ac === F2.ac + 1, sktComputeCharacter(fi, R14).ac);
+        // Bracers of Defense: only without armour or a shield.
+        const mo = Object.assign(sktBlankBuild('2014'), { cls: 'Monk', level: 1, abilities: { method: 'manual', base: { str: 10, dex: 16, con: 12, int: 10, wis: 14, cha: 8 } },
+                                 items: [Object.assign(mk('Bracers of Defense'), { attuned: true })] });
+        ok('items: Bracers of Defense on an unarmoured monk', sktComputeCharacter(mo, R14).ac === 10 + 3 + 2 + 2);
+        fi.items = [Object.assign(mk('Bracers of Defense'), { attuned: true })];
+        ok('items: and not over chain mail', sktComputeCharacter(fi, R14).ac === F0.ac);
+        // Spell attack and DC.
+        const wz = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 1, abilities: { method: 'manual', base: { str: 8, dex: 14, con: 12, int: 16, wis: 10, cha: 8 } } });
+        const W0 = sktComputeCharacter(wz, R14);
+        wz.items = [Object.assign(mk('+2 Wand of the War Mage'), { attuned: true })];
+        ok('items: a Wand of the War Mage raises the spell attack', sktComputeCharacter(wz, R14).sheet.spellAtkBonus === sktSigned(parseInt(W0.sheet.spellAtkBonus, 10) + 2), sktComputeCharacter(wz, R14).sheet.spellAtkBonus);
+
+        // The builder's equipment step.
+        await openCharBuilder({ edition: '2014' }); await sleep(800);
+        const root = () => document.getElementById('cb-root');
+        const q = s => root().querySelector(s), qa = s => [...root().querySelectorAll(s)];
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const nm = q('[data-cb-in="name"]'); nm.value = 'Gearhead'; nm.dispatchEvent(new Event('input', { bubbles: true }));
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Fighter"]'); await sleep(30);
+        click('[data-cb-step="equipment"]'); await sleep(400);
+        ok('builder: the equipment step lists magic items to add', qa('#cb-magic-dl option').length > 1000 && !!q('[data-cb-magicq]'));
+        const mq = q('[data-cb-magicq]'); mq.value = '+1 Wea'; mq.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('builder: typing searches without redrawing', q('[data-cb-magicq]') === mq && CB.magicQ === '+1 Wea');
+        set('[data-cb-magicq]', '+1 Weapon'); await sleep(30);
+        ok('builder: a variant asks which weapon', !!q('[data-cb-magicbase]') && q('[data-cb="magic-add"]').disabled);
+        set('[data-cb-magicbase]', 'longsword'); await sleep(30);
+        click('[data-cb="magic-add"]'); await sleep(30);
+        set('[data-cb-magicq]', 'Cloak of Protection'); await sleep(30);
+        ok('builder: what an item does is shown before adding it', /bonus to AC/.test((q('.cb-gear-prev') || {}).textContent || ''));
+        click('[data-cb="magic-add"]'); await sleep(30);
+        set('[data-cb-magicq]', 'Shield'); await sleep(30); click('[data-cb="magic-add"]'); await sleep(30);
+        ok('builder: the items are on the character', JSON.stringify(CB.build.items.map(m => m.name)) === '["+1 Longsword","Cloak of Protection","Shield"]', JSON.stringify(CB.build.items.map(m => m.name)));
+        const acA = CB.rec.ac;
+        tick('[data-cb-attune="1"]'); await sleep(30);
+        ok('builder: attuning the cloak raises AC on the spot', CB.build.items[1].attuned && CB.rec.ac === acA + 1 && /Attuned: 1 of 3/.test(q('.cb-main').textContent));
+        ok('builder: the result shows the +1 longsword', /\+1 Longsword/.test(q('.cb-attacks').textContent));
+        // A fourth attunement is refused.
+        const keep = CB.build.items;
+        CB.build.items = keep.concat([0, 1, 2].map(() => Object.assign(sktMagicMake(CB.R, CB.magic.find(m => m.name === 'Ring of Protection')), {})));
+        CB.build.items[3].attuned = true; CB.build.items[4].attuned = true; cbRender(); await sleep(20);
+        tick('[data-cb-attune="5"]'); await sleep(20);
+        ok('builder: no more than three attuned', !CB.build.items[5].attuned && CB.build.items.filter(m => m.attuned).length === 3);
+        CB.build.items = keep; cbRender(); await sleep(20);
+        click('[data-cb-itemdel="2"]'); await sleep(30);
+        ok('builder: Remove takes an item off', CB.build.items.length === 2);
+        click('[data-cb-step="review"]'); await sleep(30);
+        const sc0 = window.showConfirm; window.showConfirm = () => Promise.resolve(true);
+        try { click('[data-cb="save"]'); await sleep(200); } finally { window.showConfirm = sc0; }
+        const g = state.party.find(p => p.name === 'Gearhead');
+        ok('builder: saved with the character', !!g && g.build.items.length === 2 && g.sheet.equipment.includes('Cloak of Protection (attuned)'));
+      } catch(e){ ok('builder: the magic item checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
