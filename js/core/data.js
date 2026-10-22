@@ -63,7 +63,9 @@ const DEFAULT_LAYOUT = {
   notes:      {x:400, y:60,  w:820, h:640, open:false, minimized:false, z:4},
   battlemap:  {x:60,  y:60,  w:680, h:500, open:false, minimized:false, z:5},
   npclib:     {x:100, y:80,  w:760, h:660, open:false, minimized:false, z:6},
-  loot:       {x:200, y:100, w:480, h:480, open:false, minimized:false, z:8},
+  // 560, not 480: a row is a name plus five controls, and at 480 a real
+  // campaign's longer names ("Instrument of the Bards, Cli Lyre") were cut.
+  loot:       {x:200, y:100, w:560, h:480, open:false, minimized:false, z:8},
   encounter:   {x:150, y:80,  w:700, h:520, open:false, minimized:false, z:8},
   soundboard:  {x:200, y:100, w:580, h:500, open:false, minimized:false, z:9},
   // The date, the clock and the sky in one window (js/panels/world.js):
@@ -106,6 +108,9 @@ function sktMigrateLayout(l){
     } else if (h && !l[host]) l[host] = h;
     delete l[old];
   });
+  // The Loot window still at the old 480px default gets the new one. Only
+  // that exact width: anything else is a size someone chose.
+  if (l.loot && l.loot.w === 480) l.loot = { ...l.loot, w: 560 };
   return l;
 }
 

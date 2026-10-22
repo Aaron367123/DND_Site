@@ -34,12 +34,12 @@
  */
 'use strict';
 
-const BUILD = '210c0e87bb';
+const BUILD = '8fc975d2d8';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=50a4b30696',
+  'styles/main.css?v=111758def7',
   'js/core/errors.js?v=67c70f2e1d',
-  'js/core/data.js?v=1bc0ac49c0',
+  'js/core/data.js?v=5ead9a4764',
   'js/core/theme.js?v=4589bc6790',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
@@ -70,7 +70,7 @@ const PRECACHE = [
   'js/panels/books.js?v=beba2c9cfd',
   'js/panels/library.js?v=d41e1e85e4',
   'js/panels/npc-generator.js?v=423e1d0e4f',
-  'js/panels/loot.js?v=cd74ce012b',
+  'js/panels/loot.js?v=0d84aa21b3',
   'js/panels/encounter.js?v=45cc488342',
   'js/panels/soundboard.js?v=6ee51d8589',
   'js/panels/weather.js?v=ab1bd498ab',

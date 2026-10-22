@@ -3991,6 +3991,38 @@
       const cut = rows.map(r => r.querySelector('.loot-name-input')).filter(i => i.scrollWidth > i.clientWidth + 1);
       ok('loot: item names are not cut off', cut.length === 0, cut.map(i => i.value).join(', '));
     }
+    // A real campaign's names, at the default size: long, and given to a
+    // character with a long name. The fixture's are short and unassigned, so
+    // the check above passed while a live table's "Handaxe → Ulrick
+    // Axeborne" got a 12px name box — the pill repeated the dropdown and took
+    // the name's room.
+    {
+      const L = panelDefs.loot, l0 = JSON.stringify(L._loot), lay0 = JSON.stringify(layout.loot);
+      try {
+        closePanel('loot');
+        layout.loot = { ...DEFAULT_LAYOUT.loot, open: false };
+        const who = state.party.find(p => !p.foe);
+        const nm0 = who.name; who.name = 'Ulrick Axeborne the Unyielding';
+        L._loot = L._loot || { items: [] };
+        L._loot.items = [
+          { name: 'Instrument of the Bards, Cli Lyre', qty: 1, value: '5000 gp', assignedTo: who.id },
+          { name: 'Handaxe', qty: 3, value: '5 gp', assignedTo: who.id },
+          { name: 'Spell Scroll (Charm Person)', qty: 1, value: '50 gp' },
+        ];
+        openPanel('loot'); await sleep(350);
+        const ins = [...L._body.querySelectorAll('.loot-item .loot-name-input')];
+        const cutL = ins.filter(i => i.scrollWidth > i.clientWidth + 1);
+        ok('loot: long names given to a long-named character fit at the default size',
+           ins.length === 3 && cutL.length === 0, cutL.map(i => i.value + ' ' + i.clientWidth + '/' + i.scrollWidth).join(', '));
+        ok('loot: who has it is said once, by the dropdown', !L._body.querySelector('.loot-assigned-pill')
+           && L._body.querySelector('.loot-item .loot-assign').value === who.id);
+        who.name = nm0;
+        ok('layout: a Loot window saved at the old 480px default opens at the new one',
+           sktMigrateLayout({ loot: { x: 1, y: 2, w: 480, h: 480, open: false } }).loot.w === 560
+           && sktMigrateLayout({ loot: { x: 1, y: 2, w: 500, h: 480, open: false } }).loot.w === 500);
+      } catch(e){ ok('loot: the long-name checks ran to completion', false, e.message); }
+      finally { closePanel('loot'); L._loot = JSON.parse(l0); layout.loot = JSON.parse(lay0); loadDomain('party'); }
+    }
     closePanel('loot');
 
     // ── Map: names never run into each other; drops never stack ───────────
