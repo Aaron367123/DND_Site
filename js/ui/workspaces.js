@@ -303,11 +303,34 @@ async function _wsPromptEdit(id){
   wsRenderSwitcher();
 }
 
+// The right-click menu's old "focuses" (skt-focuses-v1). _wsMigrate turned
+// them into workspaces the first time, but the menu went on saving new ones
+// that only it showed. Any not yet here (by name) become workspaces, and the
+// old list goes — the menu now lists workspaces instead.
+function _wsAdoptFocuses(){
+  let focuses = [];
+  try { focuses = JSON.parse(localStorage.getItem(WS_LEGACY_FOCUS_KEY) || '[]') || []; } catch(e){}
+  if (!focuses.length) return;
+  const have = new Set(_wsState.list.map(w => String(w.name).toLowerCase()));
+  focuses.forEach(f => {
+    const name = String((f && f.name) || '').slice(0, 24);
+    if (!name || have.has(name.toLowerCase()) || _wsState.list.length >= WS_MAX) return;
+    const snap = (f.snap && f.snap.panels) ? f.snap.panels : (f.snap || {});
+    const panels = {};
+    Object.keys(layout).forEach(pid => { panels[pid] = { ...layout[pid], open: false }; });
+    Object.keys(snap).forEach(pid => { panels[pid] = { ...(layout[pid] || {}), ...snap[pid], open: true }; });
+    _wsState.list.push({ id: _wsId(), name, panels: sktMigrateLayout(panels) });
+    have.add(name.toLowerCase());
+  });
+  try { localStorage.removeItem(WS_LEGACY_FOCUS_KEY); } catch(e){}
+}
+
 function initWorkspaces(){
   // Players get one fullscreen panel at a time and no dock — nothing here
   // applies, and sizing the canvas would fight the mobile CSS.
   if (document.body.classList.contains('player-mode')) return;
   _wsState = _wsLoad() || _wsMigrate();
+  _wsAdoptFocuses();
   // Repair a dangling or missing active id HERE, which is the only place that
   // should — wsActive() is deliberately strict so a mid-delete commit can't
   // land in the wrong workspace.

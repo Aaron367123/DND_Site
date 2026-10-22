@@ -1637,12 +1637,15 @@ registerPanel('party',{
   _applyLongRest(){
     // A rest taken one fight early used to be unrecoverable: every slot,
     // hit die and point of exhaustion in the party, gone in one click.
-    sktUndoable('🛌 Long rest — party fully recovered', () => {
+    // Eight hours pass on the world clock too, in the same undo step.
+    const clock = typeof sktAdvanceClock === 'function' && !document.body.classList.contains('player-mode');
+    sktUndoable('🛌 Long rest — party fully recovered' + (clock ? ' · 8 hours pass' : ''), () => {
       state.party.forEach((c, i) => this._longRestOne(c, i));
       save();
       this._render();
       panelDefs.combat?._render?.();
-    });
+      if (clock) sktAdvanceClock(8);
+    }, typeof SKT_REST_KEYS !== 'undefined' ? { keys: SKT_REST_KEYS } : undefined);
   },
 
   // One character's long rest. Split out because there were TWO of these: the
@@ -1737,14 +1740,17 @@ registerPanel('party',{
     const done = new Set(Object.keys((r && r.answers) || {}).filter(id => r.answers[id].rid === r.id));
     const left = state.party.map((p, i) => ({ p, i })).filter(x => (r.pcs || []).includes(x.p.id) && !done.has(x.p.id));
     let pact = 0;
+    let moved = false;
     const go = () => {
       left.forEach(x => { if (this._shortRestOne(x.p, x.i)) pact++; });
       save(); this._render(); panelDefs.combat?._render?.();
+      // An hour passes — when the rest ends, not when it starts.
+      if (typeof sktAdvanceClock === 'function') moved = sktAdvanceClock(1);
     };
-    if (typeof sktUndoable === 'function') sktUndoable('💤 Short rest', go, { quiet: true }); else go();
+    if (typeof sktUndoable === 'function') sktUndoable('💤 Short rest', go, { quiet: true, keys: typeof SKT_REST_KEYS !== 'undefined' ? SKT_REST_KEYS : undefined }); else go();
     if (typeof sktCloseRoll === 'function') sktCloseRoll();
     showToast('💤 Short rest done' + (left.length ? ' — finished for ' + left.map(x => x.p.name).join(', ') : '')
-      + (pact ? ' · Pact Magic restored' : ''), typeof sktUndo === 'function' ? { action: { label: 'Undo', run: sktUndo } } : undefined);
+      + (pact ? ' · Pact Magic restored' : '') + (moved ? ' · an hour passes' : ''), typeof sktUndo === 'function' ? { action: { label: 'Undo', run: sktUndo } } : undefined);
   },
   _applyShortRest(){
     let pactRestored = 0;
@@ -3118,26 +3124,30 @@ registerPanel('party',{
             },
           });
         }
-        items.push({ label: '─────', disabled: true });
-        // Inspiration grants
-        items.push({
-          label: c.inspiration ? '✨ Spend Heroic Inspiration' : '✨ Grant Heroic Inspiration',
-          onClick: () => {
-            const r = resolve(); if (!r) return;
-            state.party[r.idx] = {...r.c, inspiration: !r.c.inspiration};
-            save(); this._render();
-          }
-        });
-        // Bardic Inspiration is grantable to anyone — any character can be
-        // the recipient of a bard's buff.
-        items.push({
-          label: c.bardicInspiration ? '🎵 Spend Bardic Inspiration' : '🎵 Grant Bardic Inspiration',
-          onClick: () => {
-            const r = resolve(); if (!r) return;
-            state.party[r.idx] = {...r.c, bardicInspiration: !r.c.bardicInspiration};
-            save(); this._render();
-          }
-        });
+        // Inspiration: the card's own Grant / 🎵 Bardic buttons and badges do
+        // this, so the menu repeats it only on a compact card, which hides
+        // them. Bardic goes through the bard's pool like the button does —
+        // this entry used to hand one out without spending a use.
+        if (state.settings && state.settings.partyCompact){
+          items.push({ label: '─────', disabled: true });
+          items.push({
+            label: c.inspiration ? '✨ Spend Heroic Inspiration' : '✨ Grant Heroic Inspiration',
+            onClick: () => {
+              const r = resolve(); if (!r) return;
+              state.party[r.idx] = {...r.c, inspiration: !r.c.inspiration};
+              save(); this._render();
+            }
+          });
+          const bardsHere = (typeof sktBards === 'function') ? sktBards().filter(b => b.id !== c.id) : [];
+          if (c.bardicInspiration || bardsHere.length) items.push({
+            label: c.bardicInspiration ? '🎵 Use Bardic Inspiration' : '🎵 Give Bardic Inspiration…',
+            onClick: () => {
+              const r = resolve(); if (!r) return;
+              if (r.c.bardicInspiration){ state.party[r.idx] = {...r.c, bardicInspiration: false, bardicFrom: null}; save(); this._render(); }
+              else if (typeof sktAskBardic === 'function') sktAskBardic({ to: r.c.id });
+            }
+          });
+        }
         items.push({ label: '─────', disabled: true });
         items.push({ label:'✎ Edit details…',  onClick: () => {
           const r = resolve(); if (!r) return;

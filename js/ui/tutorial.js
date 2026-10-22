@@ -192,7 +192,8 @@ const TUTORIAL_PAGES = [
       <p>Drag the divider to resize the file tree. Connect an Obsidian-style
       <strong>vault folder</strong> via the pill in the tree header for two-way sync with
       a folder of <code>.md</code> files on disk.</p>
-      <p><strong>📜 Send…</strong> on any note sends it to the players' phones — everyone, some, or one —
+      <p><strong>📜 Send…</strong> on any note sends it to the players' phones — everyone, some, or one; as a
+      copy that pops up now, or kept in their Notes and following your edits —
       and <strong>📜 Sent to players</strong> in the tree header lists what you've sent (pictures too),
       with Show again. Players find it in their Notes, under <em>From the DM</em>.</p>
     `,

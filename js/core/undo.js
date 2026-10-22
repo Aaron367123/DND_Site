@@ -144,6 +144,15 @@ function _sktUndoGoto(entry, target, other){
     if (d) domains.add(d);
   });
   domains.forEach(d => { try { loadDomain(d); } catch(e){} });
+  // The clock first, then the weather — reloading the weather against the
+  // restored date keeps it from rolling a "new day" all over again.
+  ['skt-time-v1', 'skt-weather-v2'].forEach(k => {
+    if (!entry.keys.includes(k) || target[k] === other[k]) return;
+    const P = (typeof panelDefs !== 'undefined') && panelDefs[k === 'skt-time-v1' ? 'time' : 'weather'];
+    if (!P) return;
+    P._data = null;
+    try { if (P._body) P.mount(P._body); } catch(e){}
+  });
   try { save(); } catch(e){}
   if (mapBack && typeof panelDefs !== 'undefined' && panelDefs.battlemap){
     try {

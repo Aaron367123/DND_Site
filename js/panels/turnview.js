@@ -973,16 +973,18 @@ registerPanel('turnview', {
         title="Roll for someone off their turn (a readied attack, a legendary action) without moving the turn">
         <option value="">Act as…</option>${others.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>`;
   },
+  // Adding to the fight is the Combat Tracker's, reached from here: the
+  // shared monster picker (stat block and all), a party member who isn't in
+  // yet, or a creature with no stat block. This row used to be its own
+  // name / init / hp / ac form, which added monsters with no attacks.
   _renderAddRow(){
+    const inFight = new Set(this._order().map(c => c.id));
+    const missing = (state.party || []).map((p, i) => ({ p, i })).filter(x => !x.p.foe && !inFight.has(x.p.id));
     return `<div class="tv-init-add">
       <span class="tv-manual-l">Add</span>
-      <input class="tv-in wide" data-tvadd="name" placeholder="name" aria-label="Name">
-      <input class="tv-in" data-tvadd="init" type="number" placeholder="init" aria-label="Initiative">
-      <input class="tv-in" data-tvadd="hp" type="number" placeholder="hp" aria-label="Hit points">
-      <input class="tv-in" data-tvadd="ac" type="number" placeholder="ac" aria-label="Armour class">
-      <button class="btn primary" data-tv="add">Add</button>
-      <span class="tv-note">Blank initiative rolls a d20. For a creature with a stat block, add it
-        from the Bestiary or the Combat Tracker so its attacks come with it.</span>
+      <button class="btn primary" data-tv="addmon">＋ Monsters…</button>
+      ${missing.map(x => `<button class="btn" data-tv="addpc" data-pi="${x.i}">＋ ${esc(x.p.name)}</button>`).join('')}
+      <button class="btn" data-tv="addother" title="A creature with no stat block — name, HP, AC">＋ Other…</button>
     </div>`;
   },
 
@@ -2765,33 +2767,15 @@ registerPanel('turnview', {
     panelDefs.combat?._sortByInitiative?.(true);
     save(); panelDefs.combat?._render?.(); this._render();
   },
+  // The Combat Tracker's roll, then sorted — there were two of these, and
+  // only this one put the fight in order afterwards.
   _rollNpcInit(){
-    this._order().forEach(c => {
-      if (c.isPC) return;
-      c.initiative = this._d(20) + (c.initBonus || 0);
-    });
-    panelDefs.combat?._sortByInitiative?.(true);
+    const C = panelDefs.combat;
+    if (C && typeof C._rollInitiative === 'function') C._rollInitiative();
+    C?._sortByInitiative?.(true);
     this._setResult('<span class="dim">Rolled initiative for '
       + this._order().filter(c => !c.isPC).map(c => esc(c.name) + ' ' + c.initiative).join(', ') + '.</span>', true);
     save(); panelDefs.combat?._render?.(); this._render();
-  },
-  _addCombatant(){
-    const b = this._body;
-    const g = k => b.querySelector(`[data-tvadd="${k}"]`);
-    const name = (g('name').value || '').trim();
-    if (!name){ this._setResult('<span class="dim">Give the combatant a name.</span>'); this._render(); return; }
-    const iv = parseInt(g('init').value, 10);
-    const hp = Math.max(1, parseInt(g('hp').value, 10) || 10);
-    const ac = Math.max(1, parseInt(g('ac').value, 10) || 10);
-    state.combatants.push({ id: uid(), name, isPC: false, hp, hpMax: hp, ac,
-                            initBonus: 0, initiative: isNaN(iv) ? this._d(20) : iv, conditions: [] });
-    if (!state.combatRound) state.combatRound = 1;
-    panelDefs.combat?._sortByInitiative?.(true);
-    ['name','init','hp','ac'].forEach(k => { g(k).value = ''; });
-    this._log.unshift(`<strong>${esc(name)}</strong> joined the fight`);
-    this._setResult(`<span class="dim"><strong>${esc(name)}</strong> added, ${hp} HP.</span>`, true);
-    save(); panelDefs.combat?._render?.(); this._render();
-    this._body.querySelector('[data-tvadd="name"]')?.focus();
   },
   _removeCombatant(id){
     const C = panelDefs.combat; if (!C) return;
@@ -2873,7 +2857,9 @@ registerPanel('turnview', {
       else if (act === 'initedit'){ this._editInit = true;  this._render(); }
       else if (act === 'initdone'){ this._editInit = false; this._render(); }
       else if (act === 'rollinit'){ this._rollNpcInit(); }
-      else if (act === 'add'){ this._addCombatant(); }
+      else if (act === 'addmon'){ panelDefs.combat?._openMonsterPicker?.(); }
+      else if (act === 'addpc'){ panelDefs.combat?._addPartyToCombat?.(+el.dataset.pi); }
+      else if (act === 'addother'){ panelDefs.combat?._addPrompt?.(); }
       else if (act === 'rm'){ this._removeCombatant(el.dataset.id); }
       else if (act === 'arm'){
         this._armed = el.dataset.id;
@@ -2929,9 +2915,6 @@ registerPanel('turnview', {
       if (f) this._setInit(f.dataset.tvinit, parseInt(f.value, 10));
       const as = e.target.closest('[data-tvactas]');
       if (as && as.value) this.actAs(as.value);
-    });
-    b.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && e.target.closest('.tv-init-add')){ e.preventDefault(); this._addCombatant(); }
     });
 
     // Map: enlarge on approach so it is already the right size by the time the

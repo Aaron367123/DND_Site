@@ -495,10 +495,17 @@ registerPanel('notes', {
     b.querySelector('[data-notes-sent="back"]').addEventListener('click', () => this.showSent(false));
     if (H) H.mount(b.querySelector('.notes-sent-body'));
   },
+  // Send this note: a copy that pops up, or a live read-only copy in their
+  // Notes (file.shared: true for everyone, or a list of character ids).
   _sendNote(file){
     if (!file || typeof sktSendToPlayers !== 'function') return null;
     this._commitEditing();
-    return sktSendToPlayers({ title: file.name, text: file.content || '' });
+    return sktSendToPlayers({ title: file.name, text: file.content || '' }, {
+      note: {
+        shared: file.shared || null,
+        setShared: v => { file.shared = v || false; this._save(); this._renderKeepScroll(); },
+      },
+    });
   },
 
   // ── What a player sees ────────────────────────────────────────────────────
@@ -519,14 +526,14 @@ registerPanel('notes', {
     const pc = this._playerPc();
     return pc ? (this._data.items || []).filter(i => i.type === 'file' && i.owner === pc.id) : [];
   },
+  // Notes the DM put in players' Notes with "Send… → Keep it in their
+  // Notes": shared is true (everyone) or a list of character ids. It used to
+  // need the Notes window shared too, which the window menu never offered —
+  // so a note shown this way reached nobody.
   _sharedNotes(){
-    // Two switches, as the DM's toast says: the note's 👁, and the Notes panel
-    // itself. The tab is always there now for the player's own notes, so the
-    // panel switch has to be honoured here rather than by hiding the tab.
-    if (!(state.sharedPanels || []).includes('notes')) return [];
     const pc = this._playerPc();
-    return (this._data.items || []).filter(i => i.type === 'file' && i.shared === true
-                                             && !(pc && i.owner === pc.id));
+    return (this._data.items || []).filter(i => i.type === 'file' && !(pc && i.owner === pc.id)
+      && (i.shared === true || (Array.isArray(i.shared) && pc && i.shared.includes(pc.id))));
   },
   // The folders a player's notes sit in, created on first use. Both are
   // writes the sync rules allow: the shared root once, the character's own
@@ -836,7 +843,7 @@ registerPanel('notes', {
       } else {
         const sel = it.id === this._data.selectedId ? ' selected' : '';
         return `<div class="notes-tree-row notes-file${sel}" data-id="${it.id}" data-act="select-file" draggable="true" style="padding-left:${8+depth*14+12}px">
-          <span class="notes-tree-name">${esc(it.name)}.md${it.shared ? ' <span class="notes-shared-mark" title="Shown to players">👁</span>' : ''}</span>
+          <span class="notes-tree-name">${esc(it.name)}.md${it.shared ? ' <span class="notes-shared-mark" title="In players’ Notes">👁</span>' : ''}</span>
           <span class="notes-tree-actions">
             <button class="icon-btn" data-act="rename" data-id="${it.id}" title="Rename"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/><line x1="10" y1="4" x2="12" y2="6"/></svg></button>
             <button class="icon-btn danger" data-act="delete" data-id="${it.id}" title="Delete"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h10M6 5V3.5h4V5M5 5l.6 8.2c0 .5.4.8.9.8h3c.5 0 .9-.3.9-.8L11 5"/></svg></button>
@@ -855,12 +862,9 @@ registerPanel('notes', {
           >${trHidden ? '☰' : '⇤'}</button>
         <input class="notes-file-title" type="text" value="${esc(file.name)}" data-act="rename-inline">
         <span class="notes-file-tag">MARKDOWN</span>
-        <button class="btn small" data-act="notes-send" title="Send this note to the players' phones — everyone, some of them, or one">📜 Send…</button>
-        <button class="btn small notes-share-btn${file.shared ? ' active' : ''}" data-act="notes-share"
-          title="${file.shared
-            ? 'Players can read this note. Click to hide it from them.'
-            : 'Show this note to players, read-only. Nothing else in your notes is visible to them.'}"
-          aria-pressed="${file.shared ? 'true' : 'false'}">👁 Players</button>
+        <button class="btn small notes-send-btn${file.shared ? ' active' : ''}" data-act="notes-send"
+          title="${file.shared ? 'In players\u2019 Notes — click to change who, or stop sharing' : 'Send this note to the players\u2019 phones — a copy now, or kept in their Notes'}"
+          >${file.shared ? '👁 Shared…' : '📜 Send…'}</button>
         <!-- No spacer here: the title is already flex:1, and a second flex:1
              beside it took half the free room and truncated every title. -->
         <button class="btn small" id="note-download" title="Save to desktop">${ICO('i-save')}</button>
@@ -1535,20 +1539,6 @@ registerPanel('notes', {
       this._treeHidden = !this._treeHidden;
       try { localStorage.setItem('skt-notes-tree-hidden', this._treeHidden ? '1' : '0'); } catch(e){}
       this._render();
-    });
-    b.querySelector('[data-act="notes-share"]')?.addEventListener('click', () => {
-      const file = this._selected(); if (!file) return;
-      file.shared = !file.shared;
-      this._save();
-      this._renderKeepScroll();
-      if (typeof showToast !== 'function') return;
-      // Two switches decide what a player sees: this note, and the Notes panel
-      // itself. Say so, or a DM flips this one and wonders why nothing shows.
-      const panelShared = (state.sharedPanels || []).includes('notes');
-      showToast(file.shared
-        ? (panelShared ? '"' + file.name + '" is now visible to players'
-                       : '"' + file.name + '" will be visible once you share the Notes panel with players')
-        : '"' + file.name + '" is hidden from players again');
     });
     b.querySelector('[data-act="notes-toggle-toolbar"]')?.addEventListener('click', () => {
       this._toolbarHidden = !this._toolbarHidden;

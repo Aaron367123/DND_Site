@@ -5175,3 +5175,19 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .tv-manual-x { background:none; border:none; color:var(--text-dim); cursor:pointer; margin-left:auto; font-size:var(--fs-sm); }
 .tv-actas { min-width:96px; }
 .tv-act-line { color:var(--text); opacity:.75; }
+.ho-send-msg{width:100%;margin:6px 0 10px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);padding:8px;font:inherit}
+.ho-send-modes{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.ho-send-modes label{display:flex;align-items:baseline;gap:6px;font-size:var(--fs-sm);cursor:pointer}
+.ho-send-modes span{color:var(--text-muted);font-size:var(--fs-xs)}
+.notes-send-btn.active{border-color:var(--accent);color:var(--accent)}
+.modal .ho-send-modes label{flex-direction:row;justify-content:flex-start;align-items:baseline;width:auto;margin:0}
+.modal .ho-send-modes input{width:auto;flex:0 0 auto;margin:0}
+.modal .ho-send-modes b{white-space:nowrap}
+/* A short window: the attack list scrolls inside the actor column rather than
+   running under the footer. The region div the list is painted into sat
+   between the column and the scroller with no height limit of its own, and
+   the grid's one row grew to fit its content. */
+.tv-main { grid-template-rows:minmax(0, 1fr); }
+.tv-actbody { display:flex; flex-direction:column; min-height:0; flex:0 1 auto; }
+/* The traits and the log give way first; the attacks only once they're gone. */
+.tv-tail { min-height:0; overflow-y:auto; flex-shrink:2000; }

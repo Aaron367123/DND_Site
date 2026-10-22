@@ -104,6 +104,26 @@ function _timeRingSvg(curHour) {
   </svg>`;
 }
 
+// Move the world clock on, whether or not the World window is open — a
+// party rest takes time. The weather rolls for the new day as it would in
+// the World window. DM only: a player device never moves the table's clock.
+function sktAdvanceClock(hours){
+  if (document.body.classList.contains('player-mode')) return false;
+  const T = (typeof panelDefs !== 'undefined') && panelDefs.time; if (!T) return false;
+  if (!T._data) T._data = _timeHydrate();
+  T._data = _timeAdvance(T._data, hours);
+  T._save();                                   // rolls the weather when it is on screen
+  if (T._body) T._render();
+  const W = panelDefs.weather;
+  if (W && !W._body && typeof _weatherHydrate === 'function'){
+    if (!W._data) W._data = _weatherHydrate();
+    try { W._maybeAutoTick(); } catch(e){}
+  }
+  return true;
+}
+// The keys a rest can change, for its undo.
+const SKT_REST_KEYS = ['skt-combat-v1', 'skt-party-v1', 'skt-weather-v2', 'skt-time-v1'];
+
 registerPanel('time', {
   title:'Time Tracker', icon:'⏱',
   _data:null,
@@ -227,8 +247,8 @@ registerPanel('time', {
       <div class="time-buttons" style="flex-wrap:wrap">
         <button class="btn time-btn" data-delta-s="${toSunriseSec}" title="Advance to dawn (hour 6:00) — ${Math.round(toSunriseSec/3600*10)/10}h away">🌅 Sunrise</button>
         <button class="btn time-btn" data-delta-s="${toSunsetSec}" title="Advance to dusk (hour 18:00) — ${Math.round(toSunsetSec/3600*10)/10}h away">🌇 Sunset</button>
-        <button class="btn time-btn" data-delta-h="8" title="Long rest — 8 hours">🛌 Long rest</button>
-        <button class="btn time-btn" data-delta-h="1" title="Short rest — 1 hour">⏳ Short rest</button>
+        <button class="btn time-btn" data-rest="long" title="The party takes a long rest: everyone recovers, and 8 hours pass">🛌 Long rest</button>
+        <button class="btn time-btn" data-rest="short" title="The party takes a short rest: each phone spends hit dice; an hour passes when you finish it">⏳ Short rest</button>
       </div>
     `;
 
@@ -272,8 +292,14 @@ registerPanel('time', {
     //   data-delta-m  → integer minutes
     //   data-delta-s  → integer seconds (used by fast-forward to snap
     //                   exactly to a :00 sunrise/sunset)
+    // A rest is the party's rest, which moves the clock itself — these used
+    // to move only the clock, and the party rest only the party.
     b.querySelectorAll('.time-btn').forEach(btn => btn.addEventListener('click', () => {
-      if (btn.dataset.deltaH != null)      this._advance(+btn.dataset.deltaH);
+      if (btn.dataset.rest){
+        const P = panelDefs.party; if (!P) return;
+        if (btn.dataset.rest === 'long') P._longRestAll(); else P._shortRestAll();
+      }
+      else if (btn.dataset.deltaH != null) this._advance(+btn.dataset.deltaH);
       else if (btn.dataset.deltaM != null) this._advanceSeconds((+btn.dataset.deltaM) * 60);
       else if (btn.dataset.deltaS != null) this._advanceSeconds(+btn.dataset.deltaS);
     }));

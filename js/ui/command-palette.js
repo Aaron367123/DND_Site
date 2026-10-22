@@ -57,9 +57,6 @@ function _cpCommands(){
     add('Combat', 'Next turn',      combat('_nextTurn'),       'advance end turn');
     add('Combat', 'Previous turn',  combat('_prevTurn'),       'back undo turn');
     add('Combat', 'Roll initiative for monsters', combat('_rollInitiative'), 'npc init d20');
-    if ((state.combatants || []).some(c => c.isPC))
-      add('Combat', 'Ask players for initiative', () => { if (!mounted.has('combat')) ensurePanel('combat'); panelDefs.combat.askInitiative(); },
-          'roll initiative phones players');
     add('Combat', 'Area save…', () => { if (!mounted.has('combat')) ensurePanel('combat'); panelDefs.combat.openAreaSave({}); },
         'fireball breath aoe saving throw several targets');
   }
@@ -72,7 +69,8 @@ function _cpCommands(){
       if (P && typeof P[fn] === 'function') P[fn]();
     };
     if (typeof sktOpenAskRoll === 'function')
-      add('Party', 'Ask the players to roll…', () => sktOpenAskRoll({}), 'check save skill perception stealth group roll phones initiative');
+      add('Party', 'Ask the players to roll…', () => sktOpenAskRoll((state.combatants || []).some(c => c.isPC) ? { kind: 'init' } : {}),
+          'initiative check save skill perception stealth group roll phones');
     add('Party', 'Long rest (whole party)',  party('_longRestAll'),  'rest sleep recover');
     add('Party', 'Short rest (whole party)', party('_shortRestAll'), 'rest hit dice');
   }

@@ -76,49 +76,92 @@ function sktSendWhisper(pcId, text){
   return true;
 }
 
+// A whisper is the same dialog, with one player ticked and a box to write in.
 function sktWhisperTo(pcId){
-  const pc = (state.party || []).find(p => p.id === pcId);
-  if (!pc || typeof showModal !== 'function') return;
-  showModal('\ud83d\udcac A word to ' + pc.name, [
-    { id: 'text', label: 'Only ' + pc.name + ' sees this', type: 'text', value: '',
-      placeholder: 'The innkeeper\u2019s hands are shaking.' },
-  ], 'Send').then(r => { if (r) sktSendWhisper(pcId, r.text); });
+  return sktSendToPlayers({ title: 'A word from the DM' }, { to: [pcId], compose: true });
 }
 
-// "Send to players…" — the one way to send anything to the phones: a note
-// from Notes, or a picture or note written in "Sent to players". Everyone,
-// some of them, or one. Resolves to the handout's id, or null.
-function sktSendToPlayers(draft){
+// "Send to players…" — the one way to send anything to the phones.
+//   draft: { title, text, img }
+//   opts.to       preselect these character ids (default: everyone)
+//   opts.compose  write the message here (a whisper; no draft text yet)
+//   opts.note     a note from Notes: also offers "keep it in their Notes",
+//                 a live, read-only copy that follows your edits
+//                 ({ shared, setShared(toOrNull) })
+// Everyone, some of them, or one. Resolves to the handout's id (true for a
+// whisper, { live } for a note kept in their Notes), or null if cancelled.
+//
+// It replaced three: the Handouts composer's own Send to, a whisper's
+// one-line box, and a note's "👁 Players" switch — which also needed the
+// Notes window shared, and Notes had no way to be shared, so a note shown
+// that way never reached anyone.
+function sktSendToPlayers(draft, opts){
+  draft = draft || {}; opts = opts || {};
   const pcs = (state.party || []).filter(p => !p.foe);
+  const note = opts.note || null;
+  const liveNow = note ? note.shared : null;
+  const pre = Array.isArray(opts.to) ? opts.to
+            : Array.isArray(liveNow) ? liveNow : null;
   document.getElementById('ho-send-back')?.remove();
   const back = document.createElement('div');
   back.className = 'modal-backdrop'; back.id = 'ho-send-back';
+  const what = opts.compose
+    ? '<textarea class="ho-send-msg" id="ho-send-msg" rows="3" placeholder="The innkeeper’s hands are shaking."></textarea>'
+    : '<div class="ho-send-what"><b>' + esc(draft.title || 'Untitled') + '</b>'
+      + (draft.img ? '<img class="ho-thumb" src="' + draft.img + '" alt="">' : '')
+      + (draft.text ? '<div class="ho-send-text">' + esc(String(draft.text).slice(0, 240)) + (String(draft.text).length > 240 ? '…' : '') + '</div>' : '')
+      + '</div>';
+  const modes = !note ? '' : '<div class="ho-send-modes">'
+    + '<label><input type="radio" name="ho-send-mode" value="copy"' + (liveNow ? '' : ' checked') + '> <b>Pop it up now</b> <span>a copy, kept under “From the DM”</span></label>'
+    + '<label><input type="radio" name="ho-send-mode" value="live"' + (liveNow ? ' checked' : '') + '> <b>Keep it in their Notes</b> <span>read-only, and it follows your edits</span></label>'
+    + '</div>';
   back.innerHTML = '<div class="modal ho-send" role="dialog" aria-modal="true" aria-label="Send to players">'
-    + '<h3>📜 Send to players</h3>'
-    + '<div class="ho-send-what"><b>' + esc(draft.title || 'Untitled') + '</b>'
-    +   (draft.img ? '<img class="ho-thumb" src="' + draft.img + '" alt="">' : '')
-    +   (draft.text ? '<div class="ho-send-text">' + esc(String(draft.text).slice(0, 240)) + (String(draft.text).length > 240 ? '…' : '') + '</div>' : '')
-    + '</div>'
+    + '<h3>' + (opts.compose ? '💬 A word to the players' : '📜 Send to players') + '</h3>'
+    + what + modes
     + '<div class="ho-send-to">'
-    +   '<label class="ho-send-all"><input type="checkbox" id="ho-send-all" checked> Everyone</label>'
-    +   pcs.map(p => '<label class="ho-pc"><input type="checkbox" class="ho-send-pc" value="' + esc(p.id) + '" checked> ' + esc(p.name) + '</label>').join('')
+    +   '<label class="ho-send-all"><input type="checkbox" id="ho-send-all"' + (pre ? '' : ' checked') + '> Everyone</label>'
+    +   pcs.map(p => '<label class="ho-pc"><input type="checkbox" class="ho-send-pc" value="' + esc(p.id) + '"'
+          + (!pre || pre.includes(p.id) ? ' checked' : '') + '> ' + esc(p.name) + '</label>').join('')
     + '</div>'
-    + '<div class="modal-actions"><button class="btn" data-ho-send="cancel">Cancel</button>'
-    + '<button class="btn primary" data-ho-send="go">📜 Send</button></div></div>';
+    + '<div class="modal-actions">'
+    +   (liveNow ? '<button class="btn danger" data-ho-send="unshare" title="Take it out of their Notes">Stop sharing</button>' : '')
+    +   '<button class="btn" data-ho-send="cancel">Cancel</button>'
+    +   '<button class="btn primary" data-ho-send="go">' + (opts.compose ? '💬 Send' : '📜 Send') + '</button></div></div>';
   document.body.appendChild(back);
   const all = back.querySelector('#ho-send-all');
   const boxes = () => [...back.querySelectorAll('.ho-send-pc')];
   all.addEventListener('change', () => boxes().forEach(b => { b.checked = all.checked; }));
   boxes().forEach(b => b.addEventListener('change', () => { all.checked = boxes().every(x => x.checked); }));
+  setTimeout(() => back.querySelector('#ho-send-msg')?.focus(), 30);
   return new Promise(resolve => {
     const done = v => { back.remove(); resolve(v); };
     back.addEventListener('click', e => {
       if (e.target === back) return done(null);
       const btn = e.target.closest('[data-ho-send]'); if (!btn) return;
-      if (btn.dataset.hoSend === 'cancel') return done(null);
+      const act = btn.dataset.hoSend;
+      if (act === 'cancel') return done(null);
+      if (act === 'unshare'){
+        note.setShared(null);
+        if (typeof showToast === 'function') showToast('“' + (draft.title || 'Note') + '” is out of their Notes');
+        return done({ live: false });
+      }
       const picked = boxes().filter(b => b.checked).map(b => b.value);
       if (!picked.length){ if (typeof showToast === 'function') showToast('Pick who should get it'); return; }
       const to = (all.checked || picked.length === pcs.length) ? 'all' : picked;
+      const names = to === 'all' ? 'everyone' : picked.map(id => (pcs.find(p => p.id === id) || {}).name).join(', ');
+      if (opts.compose){
+        const text = (back.querySelector('#ho-send-msg').value || '').trim();
+        if (!text){ if (typeof showToast === 'function') showToast('Write something to send'); return; }
+        // To one player it is a whisper ("For you alone"); to more, a handout.
+        if (to !== 'all' && picked.length === 1) return done(sktSendWhisper(picked[0], text) || null);
+        return done(panelDefs.handouts.send({ title: draft.title || 'A word from the DM', text, img: null, to }) || null);
+      }
+      const mode = (back.querySelector('input[name="ho-send-mode"]:checked') || {}).value || 'copy';
+      if (note && mode === 'live'){
+        note.setShared(to === 'all' ? true : picked);
+        if (typeof showToast === 'function') showToast('👁 “' + (draft.title || 'Note') + '” is in ' + (to === 'all' ? 'everyone’s' : names + '’s') + ' Notes');
+        return done({ live: true });
+      }
       done(panelDefs.handouts.send(Object.assign({}, draft, { to })) || null);
     });
   });

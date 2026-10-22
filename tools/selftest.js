@@ -1380,19 +1380,38 @@
         try {
           openPanel('notes'); await sleep(300);
           N._data = null; N.mount(N._body); N._view = 'local'; N._render(); await sleep(100);
-          const btn = () => N._body.querySelector('[data-act="notes-share"]');
-          ok('notes: an open note has a "Show to players" switch', !!btn());
+          // One way to show players a note: Send…, as a copy that pops up or
+          // kept in their Notes (live, read-only). The 👁 switch folded in.
+          const btn = () => N._body.querySelector('[data-act="notes-send"]');
+          ok('notes: an open note has one "Send…" and no separate share switch', !!btn() && !N._body.querySelector('[data-act="notes-share"]'));
           const id = N._selected() && N._selected().id;
-          if (btn()) btn().click();
-          await sleep(120);
-          const stored = (JSON.parse(localStorage.getItem('skt-notes-v2') || '{}').items || []).find(i => i.id === id) || {};
-          ok('notes: switching it on marks the note shared, and saves it', stored.shared === true);
-          ok('notes: the switch shows that it is on', btn() && btn().getAttribute('aria-pressed') === 'true');
+          const storedNote = () => (JSON.parse(localStorage.getItem('skt-notes-v2') || '{}').items || []).find(i => i.id === id) || {};
+          btn().click(); await sleep(80);
+          let dlg = document.getElementById('ho-send-back');
+          ok('notes: Send offers a copy now, or keeping it in their Notes',
+             !!dlg && !!dlg.querySelector('input[name="ho-send-mode"][value="copy"]:checked') && !!dlg.querySelector('input[name="ho-send-mode"][value="live"]'));
+          dlg.querySelector('input[name="ho-send-mode"][value="live"]').checked = true;
+          dlg.querySelector('[data-ho-send="go"]').click(); await sleep(120);
+          ok('notes: kept in their Notes marks it shared with everyone, and saves it', storedNote().shared === true);
+          ok('notes: the button says it is shared', /Shared/.test(btn().textContent) && btn().classList.contains('active'));
           ok('notes: a shared note is marked in the tree',
              !!N._body.querySelector('.notes-file.selected .notes-shared-mark'));
-          if (btn()) btn().click();
-          await sleep(120);
-          ok('notes: switching it off hides it from players again', N._selected().shared === false);
+          // To one player only — which needs a party of two.
+          const P0n = JSON.stringify(state.party);
+          if (state.party.filter(p => !p.foe).length < 2) state.party.push({ id: 'zz_second', name: 'ZZ Second', hp: 10, hpMax: 10 });
+          btn().click(); await sleep(80);
+          dlg = document.getElementById('ho-send-back');
+          ok('notes: reopening it starts on "kept in their Notes", with Stop sharing',
+             !!dlg.querySelector('input[name="ho-send-mode"][value="live"]:checked') && !!dlg.querySelector('[data-ho-send="unshare"]'));
+          const all = dlg.querySelector('#ho-send-all'); all.checked = false; all.dispatchEvent(new Event('change'));
+          const first = dlg.querySelector('.ho-send-pc'); first.checked = true; first.dispatchEvent(new Event('change'));
+          dlg.querySelector('[data-ho-send="go"]').click(); await sleep(120);
+          ok('notes: it can be in one player\u2019s Notes only', JSON.stringify(storedNote().shared) === JSON.stringify([first.value]),
+             JSON.stringify(storedNote().shared) + ' · party of ' + state.party.filter(p => !p.foe).length);
+          btn().click(); await sleep(80);
+          document.querySelector('#ho-send-back [data-ho-send="unshare"]').click(); await sleep(120);
+          ok('notes: Stop sharing takes it out of their Notes', N._selected().shared === false && !storedNote().shared);
+          state.party = JSON.parse(P0n);
         } finally {
           window.showToast = rt;
           if (N0 != null) localStorage.setItem('skt-notes-v2', N0);
@@ -3816,12 +3835,153 @@
            state.combatants.find(c => c.id === tgt.id).hp + ' vs ' + hp0);
         sktRedo(); await sleep(60);
         ok('turnview: and redo lands it again', state.combatants.find(c => c.id === tgt.id).hp === hit);
+        // A short window: the attacks scroll inside the column instead of
+        // running under the footer with End turn on it.
+        closePanel('turnview');
+        const lay0 = JSON.stringify(layout.turnview);
+        layout.turnview = { ...layout.turnview, h: 420 }; openPanel('turnview'); await sleep(400);
+        const foot = TV._body.querySelector('.tv-foot').getBoundingClientRect().top;
+        const acts = TV._body.querySelector('.tv-actions').getBoundingClientRect().bottom;
+        ok('turnview: in a short window the attacks end above the footer', acts <= foot + 1, Math.round(acts) + ' vs ' + Math.round(foot));
+        closePanel('turnview'); layout.turnview = JSON.parse(lay0);
       } catch(e){ ok('turnview: the declutter checks ran to completion', false, e.message); }
       finally {
         try { closePanel('turnview'); } catch(e){}
         state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save();
       }
       ok('turnview: declutter checks silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
+    // ── Second round of merges: one of each ───────────────────────────────
+    {
+      const before = errs.length;
+      const K0 = localStorage.getItem('skt-combat-v1'), P0 = localStorage.getItem('skt-party-v1');
+      const T0 = localStorage.getItem('skt-time-v1'), W0 = localStorage.getItem('skt-weather-v2');
+      const H0 = localStorage.getItem('skt-handouts-v1'), S0 = JSON.stringify(state.settings);
+      const rt = window.showToast, rc = window.showConfirm;
+      window.showToast = () => {}; window.showConfirm = () => Promise.resolve(true);
+      const restore = () => {
+        _remoteUpdate = true;
+        try {
+          [['skt-combat-v1', K0], ['skt-party-v1', P0], ['skt-time-v1', T0], ['skt-weather-v2', W0], ['skt-handouts-v1', H0]]
+            .forEach(([k, v]) => { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); });
+        } finally { _remoteUpdate = false; }
+        loadDomain('combat'); loadDomain('party');
+        panelDefs.time._data = null; panelDefs.weather._data = null;
+      };
+      try {
+        // #1 The right-click menu lists workspaces; focuses are gone.
+        const ws = document.getElementById('workspace');
+        ws.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 600, clientY: 400 }));
+        await sleep(60);
+        const menu = document.getElementById('workspace-ctx-menu');
+        ok('menu: right-click lists the workspaces, and offers a new one',
+           menu.querySelectorAll('[data-ws-id]').length === _wsState.list.length && !!menu.querySelector('[data-ctx-act="ws-add"]')
+           && !/Focus/.test(menu.textContent));
+        document.body.dispatchEvent(new MouseEvent('click', { bubbles: true })); await sleep(20);
+        {
+          const st0 = JSON.stringify(_wsState);
+          try {
+            localStorage.setItem('skt-focuses-v1', JSON.stringify([{ id: 'f1', name: 'ZZ Travel', snap: { panels: { world: { x: 5, y: 5, w: 400, h: 400 } } } },
+                                                                   { id: 'f2', name: _wsState.list[0].name, snap: { panels: {} } }]));
+            const n0 = _wsState.list.length;
+            _wsAdoptFocuses();
+            const added = _wsState.list.filter(w => w.name === 'ZZ Travel');
+            ok('menu: an old saved focus becomes a workspace, once, and the old list goes',
+               added.length === 1 && _wsState.list.length === n0 + 1 && added[0].panels.world.open === true
+               && localStorage.getItem('skt-focuses-v1') == null);
+          } finally { _wsState = JSON.parse(st0); wsSave(); }
+        }
+
+        // #2 A rest moves the clock; undoing it puts the clock back.
+        const T = panelDefs.time;
+        T._data = null; T._data = _timeHydrate(); T._save();
+        const clock = () => { const d = JSON.parse(localStorage.getItem('skt-time-v1')); return d.day * 24 + d.hour + (d.month * 30 + d.year * 360) * 24; };
+        const c0 = clock();
+        panelDefs.party._longRestAll(); await sleep(80);
+        ok('rest: a party long rest moves the world clock 8 hours', clock() - c0 === 8, String(clock() - c0));
+        sktUndo(); await sleep(60);
+        ok('rest: undoing it puts the clock back too', clock() === c0, String(clock() - c0));
+        panelDefs.party._shortRestAll(); await sleep(40);
+        ok('rest: starting a short rest does not move the clock yet', clock() === c0);
+        panelDefs.party._finishShortRest(sktRollReq()); await sleep(60);
+        ok('rest: finishing it moves the clock an hour', clock() - c0 === 1, String(clock() - c0));
+        openPanel('world'); await sleep(250);
+        const longBtn = panelDefs.time._body.querySelector('[data-rest="long"]');
+        const c1 = clock();
+        longBtn.click(); await sleep(120);
+        const hpFull = state.party.filter(p => !p.foe && !p.dead).every(p => p.hp === p.hpMax || p.hp == null);
+        ok('rest: World’s Long rest is the party’s long rest, and 8 hours pass', clock() - c1 === 8 && hpFull, (clock() - c1) + 'h, full ' + hpFull);
+        closePanel('world');
+
+        // #4 A whisper is the Send dialog, with a box to write in.
+        const pcs = state.party.filter(p => !p.foe);
+        let pr = sktWhisperTo(pcs[0].id); await sleep(60);
+        let dlg = document.getElementById('ho-send-back');
+        ok('whisper: it opens Send to players, one player ticked, a box to write in',
+           !!dlg && !!dlg.querySelector('#ho-send-msg') && [...dlg.querySelectorAll('.ho-send-pc:checked')].map(b => b.value).join() === pcs[0].id);
+        dlg.querySelector('#ho-send-msg').value = 'ZZ the innkeeper is lying';
+        dlg.querySelector('[data-ho-send="go"]').click(); await pr;
+        let top = sktHandouts().list[0];
+        ok('whisper: to one player it arrives as a whisper', top.whisper === true && JSON.stringify(top.to) === JSON.stringify([pcs[0].id]) && /innkeeper/.test(top.text));
+        if (pcs.length > 1){
+          pr = sktWhisperTo(pcs[0].id); await sleep(60);
+          dlg = document.getElementById('ho-send-back');
+          const b2 = dlg.querySelector('.ho-send-pc[value="' + pcs[1].id + '"]'); b2.checked = true; b2.dispatchEvent(new Event('change'));
+          dlg.querySelector('#ho-send-msg').value = 'ZZ for two';
+          dlg.querySelector('[data-ho-send="go"]').click(); await pr;
+          top = sktHandouts().list[0];
+          ok('whisper: to more than one it is a handout to them', !top.whisper && top.to.length === 2 && /for two/.test(top.text));
+        }
+
+        // #5 Turn View adds through the Combat Tracker.
+        openPanel('turnview'); await sleep(400);
+        const TV = panelDefs.turnview;
+        TV._body.querySelector('[data-tv="initedit"]').click(); await sleep(80);
+        ok('turnview: adding to the fight is the picker, a party member, or Other',
+           !!TV._body.querySelector('[data-tv="addmon"]') && !!TV._body.querySelector('[data-tv="addother"]') && !TV._body.querySelector('[data-tvadd]'));
+        TV._body.querySelector('[data-tv="addmon"]').click(); await sleep(80);
+        ok('turnview: + Monsters opens the shared picker', /Add to combat/.test((document.getElementById('mp-back') || {}).textContent || ''));
+        document.getElementById('mp-back')?.remove();
+        let rolled = 0; const rI = panelDefs.combat._rollInitiative;
+        panelDefs.combat._rollInitiative = function(){ rolled++; return rI.apply(this, arguments); };
+        try { TV._body.querySelector('[data-tv="rollinit"]').click(); await sleep(80); }
+        finally { panelDefs.combat._rollInitiative = rI; }
+        ok('turnview: Roll NPCs is the tracker’s roll, then sorted',
+           rolled === 1 && state.combatants.every((c, i, a) => i === 0 || +a[i - 1].initiative >= +c.initiative));
+        TV._body.querySelector('[data-tv="initdone"]').click(); await sleep(40);
+        closePanel('turnview');
+
+        // #6 Inspiration in the card menu only on a compact card.
+        const P = panelDefs.party; openPanel('party'); await sleep(250);
+        const menuFor = async () => {
+          let items = null; const sm = window.showContextMenu;
+          window.showContextMenu = (x, y, it) => { items = it; };
+          try { P._body.querySelector('[data-act="actions-menu"]').click(); await sleep(40); }
+          finally { window.showContextMenu = sm; }
+          return (items || []).map(i => i.label || '');
+        };
+        state.settings.partyCompact = false; P._render();
+        const full = await menuFor();
+        state.settings.partyCompact = true; P._render();
+        const compact = await menuFor();
+        ok('party: the card menu repeats inspiration only when the card hides its buttons',
+           full.length > 0 && !full.some(l => /Inspiration/.test(l)) && compact.some(l => /Heroic Inspiration/.test(l)), JSON.stringify([full.length, compact.length]));
+        state.settings = JSON.parse(S0); P._render(); closePanel('party');
+
+        // #7 One Ctrl+K entry for asking the table to roll.
+        const labels = _cpCommands().map(c => c.label);
+        ok('palette: one "Ask the players to roll…", no separate initiative entry',
+           labels.filter(l => /Ask the players to roll/.test(l)).length === 1 && !labels.includes('Ask players for initiative'));
+      } catch(e){ ok('merges 2: the checks ran to completion', false, e.message); }
+      finally {
+        window.showToast = rt; window.showConfirm = rc;
+        document.getElementById('ho-send-back')?.remove(); document.getElementById('mp-back')?.remove(); document.getElementById('rr-card')?.remove();
+        ['turnview', 'party', 'world'].forEach(id => { try { closePanel(id); } catch(e){} });
+        state.settings = JSON.parse(S0);
+        restore();
+      }
+      ok('merges 2: silent', errs.length === before, errs.slice(before).join(' | '));
     }
 
     // ── The NPC generator lives in the NPC Library ────────────────────────
@@ -4570,6 +4730,9 @@
         const me = sktDeviceId();
         ok('presence: this device is in the list', sktPresenceRows().some(r => r.mine && r.id === me));
         const mine = sktPresenceSignature();
+        // The list compares against this device's own signature, cached for
+        // half a second; this test moves faster than that, so measure afresh.
+        _presSig = null;
         const now = Date.now();
         sktPresenceSeed({ zz: { ts: now, who: 'Zoey', kind: 'phone', sig: mine } });
         let rows = sktPresenceRows();
@@ -6403,15 +6566,15 @@
           paSetPc(me.id);
           const d = JSON.parse(localStorage.getItem('skt-notes-v2') || '{"items":[]}');
           d.items.push({ id: 'pnn_zzother', type: 'file', name: 'ZZ Other Player Note', owner: other.id, parent: 'pnf_' + other.id, content: 'not yours' });
-          const open = d.items.find(i => i.id === 'n_open'); if (open) open.shared = true;
+          const open = d.items.find(i => i.id === 'n_open'); if (open) open.shared = [other.id];
           localStorage.setItem('skt-notes-v2', JSON.stringify(d));
-          state.sharedPanels = ['party'];                 // the Notes PANEL is not shared
+          state.sharedPanels = ['party'];                 // the Notes PANEL is not shared — it no longer matters
           ok('pnotes: every player has a Notes tab, shared or not',
              paVisibleTabs().some(t => t.id === 'notes'));
           paTab = 'notes'; paRender(); await sleep(350);
           if (N._body){ N._data = null; N.mount(N._body); await sleep(150); }
           ok('pnotes: another player’s notes are not shown', !/ZZ Other Player Note/.test(txt()));
-          ok('pnotes: a DM note switched on stays hidden until the Notes panel is shared',
+          ok('pnotes: a DM note kept in ANOTHER player\u2019s Notes is not shown here',
              !/reached the gate/.test(txt()));
 
           const add = N._body && N._body.querySelector('[data-player-new]');
@@ -6431,10 +6594,13 @@
           N._body.querySelector('[data-player-rename]')?.click(); await sleep(150);
           ok('pnotes: a player can rename their note', stored().some(i => i.owner === me.id && i.name === 'ZZ Renamed'));
 
-          state.sharedPanels = ['party', 'notes'];
+          // Kept in this player's Notes too: it shows, with no other switch.
+          { const d2 = JSON.parse(localStorage.getItem('skt-notes-v2') || '{"items":[]}');
+            const o2 = d2.items.find(i => i.id === 'n_open'); if (o2) o2.shared = [other.id, me.id];
+            localStorage.setItem('skt-notes-v2', JSON.stringify(d2)); }
           N._data = null; N.mount(N._body); await sleep(200);
           const chip = [...N._body.querySelectorAll('[data-player-note]')].find(b => /Session 21/.test(b.textContent));
-          ok('pnotes: once the panel is shared, the DM’s note is listed too', !!chip);
+          ok('pnotes: a DM note kept in this player\u2019s Notes is listed — no Notes window share needed', !!chip);
           if (chip){ chip.click(); await sleep(120); }
           ok('pnotes: and it is read-only', !!chip && !N._body.querySelector('#note-player-text'));
 
