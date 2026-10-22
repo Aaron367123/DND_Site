@@ -235,7 +235,9 @@ registerPanel('party',{
     const subRace = c.race || sheet.race || '';
     const subCls  = c.cls  || sheet.class || '';
     const subLvl  = c.level || sheet.level;
-    const clsLvl  = [subCls, subLvl].filter(x => x != null && x !== '').join(' ');
+    const split   = Array.isArray(sheet.classLevels) && sheet.classLevels.length > 1 ? sheet.classLevels : null;
+    const clsLvl  = split ? split.map(p => p.cls + ' ' + p.level).join(' / ')
+                          : [subCls, subLvl].filter(x => x != null && x !== '').join(' ');
     const sublineParts = [subRace, clsLvl].filter(Boolean);
     const sublineHtml = sublineParts.length
       ? '<div class="char-subline">' + esc(sublineParts.join(' · ')) + '</div>'

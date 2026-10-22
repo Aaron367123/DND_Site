@@ -5142,3 +5142,8 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 #cb-root .cb-gear { display:flex; align-items:center; gap:10px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; }
 #cb-root .cb-gear b { flex:1; min-width:0; }
 #cb-root .cb-gear-prev { max-height:180px; overflow:auto; }
+#cb-root .cb-mc { display:flex; flex-direction:column; gap:6px; margin:6px 0 10px; }
+#cb-root .cb-mc-row { display:flex; align-items:center; gap:10px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; }
+#cb-root .cb-mc-row b { flex:1; min-width:0; }
+#cb-root .cb-counter-ctl { display:inline-flex; align-items:center; gap:6px; }
+#cb-root .cb-counter-ctl span { min-width:1.5em; text-align:center; font-weight:600; }

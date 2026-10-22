@@ -223,6 +223,7 @@ async function _sktRulesBuild(edition, read){
       cantripProgression: cls.cantripProgression || null,
       optionalfeatureProgression: cls.optionalfeatureProgression || null,
       featProgression: cls.featProgression || null,
+      multiclassing: cls.multiclassing || null,
       tableGroups: cls.classTableGroups || [],
       subclassTitle: cls.subclassTitle || 'Subclass',
       subclassLevel: (features.find(f => f.gainSubclass) || {}).level || 3,
@@ -383,6 +384,71 @@ function _sktCell(cell){
   return null;
 }
 
+// ── Multiclassing ────────────────────────────────────────────────────────────
+// build.cls is the first class and build.multi the others, each with its
+// own levels and the choices that belong to it (skills, spells). build.level
+// is the character's total; the first class has what the others leave. The
+// single-class functions below work on a "view" of one class at its own
+// level, and the multiclass versions combine the views.
+function sktClassLevels(build, R){
+  const full = build;
+  const seen = new Set([String(full.cls || '').toLowerCase()]);
+  const multi = (full.multi || []).filter(m => {
+    const c = sktRulesClass(R, m && m.cls); if (!c || seen.has(c.key)) return false;
+    seen.add(c.key); return true;
+  });
+  const others = multi.reduce((n, m) => n + Math.max(1, +m.level || 1), 0);
+  const first = Math.max(1, (full.level || 1) - others);
+  const key = n => (sktRulesClass(R, n) || {}).key || '';
+  return [{ cls: full.cls, key: key(full.cls), subclass: full.subclass || '', level: first, primary: true, entry: null }]
+    .concat(multi.map(m => ({ cls: m.cls, key: key(m.cls), subclass: m.subclass || '', level: Math.max(1, +m.level || 1), primary: false, entry: m })));
+}
+function _sktA(s){ return (/^[aeiou]/i.test(s) ? 'an ' : 'a ') + s; }
+function sktIsMulticlass(build, R){ return sktClassLevels(build, R).length > 1; }
+function sktClassView(build, R, part){
+  const full = build._full || build;
+  if (part.primary) return Object.assign({}, full, { level: part.level, multi: [], _full: full });
+  const m = part.entry || {};
+  return Object.assign({}, full, { cls: m.cls, subclass: m.subclass || '', level: part.level, multi: [], _full: full,
+    skills: m.skills || [], cantrips: m.cantrips || [], spells: m.spells || [], spellbook: m.spellbook || [] });
+}
+// The Ability Score Improvements a build has: the first class's keyed by its
+// level ("4"), another class's by class and level ("wizard@4").
+function sktAsiSlots(build, R){
+  const out = [];
+  sktClassLevels(build._full || build, R).forEach(p => {
+    sktAsiLevels(sktRulesClass(R, p.cls)).filter(l => l <= p.level)
+      .forEach(l => out.push({ key: p.primary ? String(l) : p.key + '@' + l, cls: p.cls, level: l, primary: p.primary }));
+  });
+  return out;
+}
+// What a class asks of a character to multiclass into or out of it: 13 in
+// an ability. 2014 writes it as requirements ({int:13}; {or:[{str:13,
+// dex:13}]} for either); 2024 as the primary ability (any one entry, all of
+// its abilities).
+function _sktMcNeeds(R, clsName){
+  const c = sktRulesClass(R, clsName); if (!c) return null;
+  const req = c.multiclassing && c.multiclassing.requirements;
+  if (req){
+    const all = Object.keys(req).filter(k => k !== 'or').map(k => [[k, req[k]]]);
+    const any = (req.or || []).map(o => Object.keys(o).map(k => [k, o[k]]));
+    return { all, any };
+  }
+  const pa = (Array.isArray(c.primaryAbility) ? c.primaryAbility : []).map(o => Object.keys(o).filter(k => o[k] === true).map(k => [k, 13])).filter(x => x.length);
+  return pa.length ? { all: [], anyAll: pa } : null;
+}
+function sktMulticlassOk(R, clsName, ab){
+  const n = _sktMcNeeds(R, clsName); if (!n) return true;
+  const ge = ([k, v]) => (ab[k] || 0) >= v;
+  return n.all.every(g => g.every(ge)) && (n.any || []).every(g => g.some(ge)) && (!n.anyAll || n.anyAll.some(g => g.every(ge)));
+}
+function sktMulticlassNeedText(R, clsName){
+  const n = _sktMcNeeds(R, clsName); if (!n) return '';
+  const t = ([k, v]) => k.toUpperCase() + ' ' + v;
+  return [].concat(n.all.map(g => g.map(t).join(' and ')), (n.any || []).map(g => g.map(t).join(' or ')),
+                   n.anyAll ? [n.anyAll.map(g => g.map(t).join(' and ')).join(', or ')] : []).join(' and ');
+}
+
 // ── The build ────────────────────────────────────────────────────────────────
 // Every field is a choice. Missing fields mean "not chosen yet", and the
 // sheet is still computed from whatever is there, so the builder can show a
@@ -412,6 +478,7 @@ function sktBlankBuild(edition){
     equipment: { cls: 'A', bg: 'A', picks: {} },
     allBooks: false,       // offer species, feats, spells… from books beyond the handbook
     items: [],             // magic items and gear given since: { name, base|stats, bonuses, reqAttune, attuned }
+    multi: [],             // more classes: { cls, subclass, level, skills, cantrips, spells, spellbook }
     spellbook: [],         // a wizard's book; prepared spells come out of it
     size: '',              // 2024 species that may be Small or Medium
     details: {},           // alignment, looks, personality, backstory
@@ -440,8 +507,9 @@ function sktBuildAbilities(build, R){
   } else {
     add(build.bgAsi);
   }
-  Object.keys(build.asi || {}).sort((a, b) => a - b).forEach(lvl => {
-    if (+lvl > (build.level || 1)) return;
+  const slots = new Set(sktAsiSlots(build, R).map(s => s.key));
+  Object.keys(build.asi || {}).sort((a, b) => (parseInt(a.split('@').pop(), 10) || 0) - (parseInt(b.split('@').pop(), 10) || 0)).forEach(lvl => {
+    if (!slots.has(String(lvl))) return;
     const pick = build.asi[lvl] || {};
     if (pick.type === 'asi') add(pick.inc);
     else if (pick.type === 'feat') add((build.featChoices[pick.feat] || {}).inc);
@@ -469,6 +537,15 @@ function sktBuildAbilities(build, R){
 // background, feats and optional features. Each carries where it came from,
 // its text, and whether this file applies it mechanically.
 function sktBuildFeatures(build, R){
+  const parts = sktClassLevels(build, R);
+  const tag = (f, p) => (f.from === 'class' || f.from === 'subclass') ? Object.assign(f, { cls: p.key, clsLevel: p.level }) : f;
+  if (parts.length === 1) return _sktBuildFeaturesOne(build, R).map(f => tag(f, parts[0]));
+  const out = _sktBuildFeaturesOne(sktClassView(build, R, parts[0]), R).map(f => tag(f, parts[0]));
+  parts.slice(1).forEach(p => _sktBuildFeaturesOne(sktClassView(build, R, p), R)
+    .filter(f => f.from === 'class' || f.from === 'subclass').forEach(f => out.push(tag(f, p))));
+  return out;
+}
+function _sktBuildFeaturesOne(build, R){
   const cls = sktRulesClass(R, build.cls), sub = sktRulesSubclass(cls, build.subclass);
   const L = build.level || 1;
   const out = [];
@@ -562,9 +639,10 @@ function sktBuildFeatNames(build, R){
     bg.feats.forEach(o => Object.keys(o).forEach(k => out.push(_sktTitle(k.split('|')[0]))));
   }
   if (build.originFeat) out.push(build.originFeat);
+  const slots = new Set(sktAsiSlots(build, R).map(s => s.key));
   Object.keys(build.asi || {}).forEach(lvl => {
     const p = build.asi[lvl];
-    if (+lvl <= (build.level || 1) && p && p.type === 'feat' && p.feat) out.push(p.feat);
+    if (slots.has(String(lvl)) && p && p.type === 'feat' && p.feat) out.push(p.feat);
   });
   return out;
 }
@@ -579,6 +657,44 @@ function _sktTitle(s){
 // the class table. Pact magic (warlock) is its own pool, as the app's rests
 // already expect: sheet.spellSlots gets the pact slots at the pact level.
 function sktBuildSpellcasting(build, R, abilities){
+  const parts = sktClassLevels(build, R);
+  if (parts.length === 1) return _sktSpellcastingOne(build, R, abilities);
+  const each = parts.map(p => { const view = sktClassView(build, R, p); return { p, view, sc: _sktSpellcastingOne(view, R, abilities) }; })
+    .filter(x => x.sc);
+  if (!each.length) return null;
+  // The sheet's DC and attack are the first casting class's; each class
+  // keeps its own counts, spells and DC in `classes`.
+  const main = each[0];
+  const out = Object.assign({}, main.sc, { slots: {}, pact: null,
+    classes: each.map(x => ({ cls: x.p.cls, key: x.p.key, primary: x.p.primary, entry: x.p.entry, level: x.p.level, view: x.view, sc: x.sc })) });
+  if (!main.p.primary){ out.cantrips = 0; out.prepared = 0; out.known = 0; delete out.spellbook; }
+  // Slots: one slot-casting class uses its own table; two or more add up
+  // their levels (full, half, a third) on the multiclass table, which is the
+  // full caster's. Half casters round down in 2014 and up in 2024.
+  const slotted = each.filter(x => !x.sc.pact);
+  if (slotted.length === 1) Object.assign(out.slots, slotted[0].sc.slots);
+  else if (slotted.length > 1){
+    let lvl = 0;
+    slotted.forEach(x => {
+      const pr = x.sc.progression, L = x.p.level;
+      lvl += pr === 'full' ? L : pr === '1/2' ? (R.edition === '2024' ? Math.ceil(L / 2) : Math.floor(L / 2))
+           : pr === 'artificer' ? Math.ceil(L / 2) : pr === '1/3' ? Math.floor(L / 3) : 0;
+    });
+    const full = R.classes.find(c => c.casterProgression === 'full' && (c.tableGroups || []).some(g => g.rowsSpellProgression));
+    if (lvl > 0 && full) _sktSpellTable(full, lvl).forEach((n, i) => { if (n) out.slots[i + 1] = n; });
+    out.casterLevel = lvl;
+  }
+  // Pact Magic stays its own, recovered on a short rest.
+  const pact = each.find(x => x.sc.pact);
+  if (pact && pact.sc.pact.count){
+    out.pact = pact.sc.pact;
+    out.slots[out.pact.level] = (out.slots[out.pact.level] || 0) + out.pact.count;
+  }
+  out.maxSpellLevel = Math.max(0, ...Object.keys(out.slots).map(Number));
+  out.cantripLists = each.map(x => ({ names: x.p.primary ? (build.cantrips || []) : ((x.p.entry || {}).cantrips || []), attack: x.sc.attack, dc: x.sc.dc }));
+  return out;
+}
+function _sktSpellcastingOne(build, R, abilities){
   const cls = sktRulesClass(R, build.cls), sub = sktRulesSubclass(cls, build.subclass);
   const L = build.level || 1;
   const caster = cls && (cls.casterProgression ? cls : (sub && sub.casterProgression && L >= 3 ? sub : null));
@@ -587,7 +703,9 @@ function sktBuildSpellcasting(build, R, abilities){
   const pb = sktProfBonus(L);
   const mod = sktMod(abilities[ab]);
   const idx = Math.max(0, Math.min(19, L - 1));
-  const out = { ability: ab, dc: 8 + pb + mod, attack: pb + mod, slots: {}, pact: null,
+  // Proficiency is the character's, not the class's.
+  const out = { ability: ab, dc: 8 + sktProfBonus((build._full || build).level || L) + mod, attack: sktProfBonus((build._full || build).level || L) + mod, slots: {}, pact: null,
+                progression: caster.casterProgression,
                 cantrips: (caster.cantripProgression || [])[idx] || 0, prepared: 0, known: 0 };
   // A feature choice can add a cantrip (2024 Thaumaturge, Magician).
   sktBuildChoices(build, R).forEach(c => {
@@ -793,8 +911,8 @@ function sktFeatureChoice(name, from, edition, clsKey){
 function sktBuildChoices(build, R){
   const cls = sktRulesClass(R, build.cls);
   return sktBuildFeatures(build, R).filter(f => !f.info).map(f => {
-    const spec = sktFeatureChoice(f.name, f.from, R.edition, cls && cls.key);
-    return spec ? { feature: f.name, level: f.level, spec, value: (build.featureChoices || {})[f.name] || '' } : null;
+    const spec = sktFeatureChoice(f.name, f.from, R.edition, f.cls || (cls && cls.key));
+    return spec ? { feature: f.name, level: f.level, cls: f.cls || '', spec, value: (build.featureChoices || {})[f.name] || '' } : null;
   }).filter(Boolean);
 }
 
@@ -1099,6 +1217,21 @@ function sktComputeCharacter(build, R, prior){
     }
     ctx.weaponProf.add(sktRulesInline(w).toLowerCase().replace(/ weapons?$/, '').trim());
   });
+  // Another class brings only its multiclassing proficiencies, and a skill
+  // where it gives one.
+  const parts = sktClassLevels(build, R);
+  parts.slice(1).forEach(p => {
+    const c2 = sktRulesClass(R, p.cls);
+    const g = (c2 && c2.multiclassing && c2.multiclassing.proficienciesGained) || {};
+    (g.armor || []).forEach(a => ctx.armorProf.add(typeof a === 'string' ? sktRulesInline(a).toLowerCase() : 'shield'));
+    (g.weapons || []).forEach(w => {
+      if (typeof w !== 'string') return;
+      const tag = /^\{@item ([^|}]+)/i.exec(w);
+      ctx.weaponProf.add(tag ? tag[1].toLowerCase().trim() : sktRulesInline(w).toLowerCase().replace(/ weapons?$/, '').trim());
+    });
+    (g.tools || []).forEach(t => { if (typeof t === 'string') ctx.toolProf.add(sktRulesInline(t).toLowerCase()); });
+    ((p.entry && p.entry.skills) || []).forEach(k => ctx.skillProf.add(k));
+  });
   (build.skills || []).forEach(k => ctx.skillProf.add(k));
   (build.speciesSkills || []).forEach(k => ctx.skillProf.add(k));
   (build.bgSkills || []).forEach(k => ctx.skillProf.add(k));
@@ -1132,13 +1265,23 @@ function sktComputeCharacter(build, R, prior){
 
   // Feature effects, in level order.
   const features = sktBuildFeatures(build, R);
+  // A class's features see that class's level (three rages for a 3rd-level
+  // barbarian, whatever else the character is).
+  const partOf = {};
+  parts.forEach(p => { const c = sktRulesClass(R, p.cls); if (c) partOf[c.key] = { level: p.level, cls: c, sub: sktRulesSubclass(c, p.subclass) }; });
   features.forEach(f => {
     if (f.info) return;
-    const fx = sktFeatureEffect(f.name, f.from, R.edition, cls && cls.key);
-    if (fx){ try { fx(ctx); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
-    const ch = sktFeatureChoice(f.name, f.from, R.edition, cls && cls.key);
-    const v = ch && (build.featureChoices || {})[f.name];
-    if (ch && v && ch.apply){ try { ch.apply(ctx, v); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
+    const p = f.cls && partOf[f.cls];
+    const was = [ctx.level, ctx.cls, ctx.sub];
+    if (p){ ctx.level = p.level; ctx.cls = p.cls; ctx.sub = p.sub; }
+    try {
+      const key = p ? p.cls.key : (cls && cls.key);
+      const fx = sktFeatureEffect(f.name, f.from, R.edition, key);
+      if (fx){ try { fx(ctx); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
+      const ch = sktFeatureChoice(f.name, f.from, R.edition, key);
+      const v = ch && (build.featureChoices || {})[f.name];
+      if (ch && v && ch.apply){ try { ch.apply(ctx, v); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
+    } finally { [ctx.level, ctx.cls, ctx.sub] = was; }
   });
   // Primal Champion and the like raise a score after everything else.
   SKT_ABS.forEach(k => {
@@ -1165,7 +1308,13 @@ function sktComputeCharacter(build, R, prior){
   // Hit points: the full hit die at level 1, then the average or the rolls.
   const hd = (cls && cls.hd) || 8;
   let hpMax = 0;
-  for (let lv = 1; lv <= L; lv++){
+  // The first class's dice (the full die at 1st level); each other class's
+  // average from its first level on.
+  parts.slice(1).forEach(p => {
+    const h2 = (sktRulesClass(R, p.cls) || {}).hd || 8;
+    for (let i = 0; i < p.level; i++) hpMax += Math.max(1, Math.floor(h2 / 2) + 1 + ctx.mod.con) + ctx.hpPerLevel;
+  });
+  for (let lv = 1; lv <= parts[0].level; lv++){
     const roll = lv === 1 ? hd
       : (build.hp && build.hp.method === 'rolled' && build.hp.rolls && build.hp.rolls[lv])
         ? Math.max(1, Math.min(hd, +build.hp.rolls[lv])) : Math.floor(hd / 2) + 1;
@@ -1212,19 +1361,26 @@ function sktComputeCharacter(build, R, prior){
 
   // Spellcasting.
   const sc = sktBuildSpellcasting(build, R, abilities);
-  if (sc){ sc.attack += _sktItemSum(build, 'bonusSpellAttack'); sc.dc += _sktItemSum(build, 'bonusSpellSaveDc'); }
+  if (sc){
+    const ba = _sktItemSum(build, 'bonusSpellAttack'), bd = _sktItemSum(build, 'bonusSpellSaveDc');
+    sc.attack += ba; sc.dc += bd;
+    (sc.cantripLists || []).forEach(l => { l.attack += ba; l.dc += bd; });
+  }
   const spellSlots = {};
   if (sc) Object.keys(sc.slots).forEach(l => {
     const was = prior.sheet && prior.sheet.spellSlots && prior.sheet.spellSlots[l];
     spellSlots[l] = { total: sc.slots[l], expended: was ? Math.min(was.expended || 0, sc.slots[l]) : 0 };
   });
-  if (sc && sc.pact) spellSlots[sc.pact.level].pact = true;
+  if (sc && sc.pact && spellSlots[sc.pact.level] && spellSlots[sc.pact.level].total === sc.pact.count) spellSlots[sc.pact.level].pact = true;
+  else if (sc && sc.pact) _fxNote(ctx, 'Pact Magic: ' + sc.pact.count + ' of the level ' + sc.pact.level + ' slots come back on a short rest.');
+  if (sc && sc.classes) sc.classes.slice(1).forEach(x => _fxNote(ctx, _sktTitle(x.cls) + ' spells: ' + (SKT_AB_NAME[x.sc.ability] || x.sc.ability) + ', save DC ' + x.sc.dc + ', attack ' + sktSigned(x.sc.attack) + '.'));
 
   // Attacks: weapons carried, an unarmed strike, and attack cantrips.
   const attacks = sktBuildAttacks(ctx, gear, sc);
 
   // Hit dice, and the spells on the sheet.
   const spellNames = [...(build.cantrips || []), ...(build.spells || [])];
+  parts.slice(1).forEach(p => [].concat((p.entry || {}).cantrips || [], (p.entry || {}).spells || []).forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); }));
   const always = sktBuildAlwaysPrepared(build, R);
   always.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
   // Spells from feats and the species, with how each is cast.
@@ -1244,7 +1400,10 @@ function sktComputeCharacter(build, R, prior){
   });
   // A wizard's spellbook; a book made before there was one starts as the
   // spells already chosen.
-  const spellbook = (sc && sc.spellbook) ? ((build.spellbook && build.spellbook.length) ? build.spellbook.slice() : (build.spells || []).slice()) : null;
+  const wizPart = sc && sc.classes ? sc.classes.find(x => x.key === 'wizard') : null;
+  const bookOf = o => (o.spellbook && o.spellbook.length) ? o.spellbook.slice() : (o.spells || []).slice();
+  const spellbook = wizPart ? bookOf(wizPart.primary ? build : (wizPart.entry || {}))
+    : (sc && sc.spellbook) ? bookOf(build) : null;
 
   // Resources keep what has been SPENT across a recompute: levelling up
   // mid-adventure does not hand back a used Rage, and a full pool that grows
@@ -1291,7 +1450,8 @@ function sktComputeCharacter(build, R, prior){
     build: JSON.parse(JSON.stringify(build)),
     sheet: {
       skills, skillProf: skillProfOut, saves, saveProf: [...ctx.saveProf], profBonus: pb, passivePerception: passive,
-      classLevels: cls ? [{ cls: cls.key, level: L }] : [],
+      classLevels: cls ? parts.filter(p => p.key).map(p => ({ cls: p.key, level: p.level, subclass: p.subclass || '' })) : [],
+      hitDiceByClass: parts.length > 1 ? parts.filter(p => p.key).map(p => p.level + 'd' + ((sktRulesClass(R, p.cls) || {}).hd || 8)).join(' + ') : '',
       languages: [...ctx.languages].join(', '),
       proficiencies: { armor: [...ctx.armorProf].filter(Boolean), weapons: [...ctx.weaponProf].filter(Boolean),
                        weaponRules: ctx.weaponPropRules, tools: [...ctx.toolProf].filter(Boolean) },
@@ -1318,6 +1478,11 @@ const _SKT_CLASS_ICON = { barbarian: '🪓', bard: '🎵', cleric: '✨', druid:
 // Domain spells, oath spells and the like — always prepared, from the
 // subclass (and 2014 species) additionalSpells, up to the current level.
 function sktBuildAlwaysPrepared(build, R){
+  const parts = sktClassLevels(build, R);
+  if (parts.length === 1) return _sktAlwaysPreparedOne(build, R);
+  return [...new Set([].concat(...parts.map(p => _sktAlwaysPreparedOne(sktClassView(build, R, p), R))))];
+}
+function _sktAlwaysPreparedOne(build, R){
   const cls = sktRulesClass(R, build.cls), sub = sktRulesSubclass(cls, build.subclass);
   const out = [];
   const take = (spec) => {
@@ -1459,7 +1624,7 @@ function sktBuildAttacks(ctx, gear, sc){
   out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb),
              damage: (ctx.martialArts ? ctx.martialArtsDie + sktSigned(uab) : String(Math.max(1, 1 + m.str))) + ' bludgeoning' });
   // Attack cantrips the character knows.
-  if (sc) (ctx.build.cantrips || []).forEach(n => {
+  if (sc) (sc.cantripLists || [{ names: ctx.build.cantrips || [], attack: sc.attack, dc: sc.dc }]).forEach(list => list.names.forEach(n => {
     const s = sktRulesSpell(ctx.R, n); if (!s) return;
     const dice = _sktCantripDice(s, ctx.level); if (!dice) return;
     const type = (s.damageInflict || [])[0] || '';
@@ -1474,11 +1639,11 @@ function sktBuildAttacks(ctx, gear, sc){
     }
     out.push({
       name: s.name,
-      atkBonus: isAttack ? sktSigned(sc.attack) : 'DC ' + sc.dc + ' ' + String((s.savingThrow || [''])[0]).slice(0, 3).toUpperCase(),
+      atkBonus: isAttack ? sktSigned(list.attack) : 'DC ' + list.dc + ' ' + String((s.savingThrow || [''])[0]).slice(0, 3).toUpperCase(),
       damage: (beams ? '1d10' : dice) + (bonus ? sktSigned(bonus) : '') + (type ? ' ' + type : '') + (beams > 1 ? ' ×' + beams + ' beams' : ''),
       spell: true,
     });
-  });
+  }));
   return out;
 }
 function _sktDieAvg(d){ const m = /^(\d+)d(\d+)/.exec(String(d)); return m ? +m[1] * (+m[2] + 1) / 2 : +d || 0; }
@@ -1506,17 +1671,27 @@ function sktBuildTodo(build, R){
   if (!build.species) todo.push({ step: 'species', what: 'a species' });
   if (!cls) { todo.push({ step: 'class', what: 'a class' }); return todo; }
   if (!build.background) todo.push({ step: 'background', what: 'a background' });
-  if (L >= cls.subclassLevel && !build.subclass) todo.push({ step: 'class', what: 'a ' + sktRulesInline(cls.subclassTitle).toLowerCase() });
+  if (sktClassLevels(build, R)[0].level >= cls.subclassLevel && !build.subclass) todo.push({ step: 'class', what: _sktA(sktRulesInline(cls.subclassTitle).toLowerCase()) });
   if ((build.skills || []).length < cls.skillChoice.count) todo.push({ step: 'skills', what: (cls.skillChoice.count - (build.skills || []).length) + ' class skill' + (cls.skillChoice.count - (build.skills || []).length === 1 ? '' : 's') });
-  const asiLevels = sktAsiLevels(cls, R).filter(l => l <= L);
-  asiLevels.forEach(l => { if (!build.asi[l]) todo.push({ step: 'levels', what: 'level ' + l + ' ability score improvement or feat' }); });
+  const parts = sktClassLevels(build, R), multi = parts.length > 1;
+  parts.slice(1).forEach(p => {
+    const c2 = sktRulesClass(R, p.cls);
+    if (p.level >= c2.subclassLevel && !p.subclass) todo.push({ step: 'class', what: _sktA(sktRulesInline(c2.subclassTitle).toLowerCase()) + ' for ' + c2.name });
+    const sk = _sktSkillChoice(((c2.multiclassing || {}).proficienciesGained || {}).skills);
+    const have = ((p.entry || {}).skills || []).length;
+    if (have < sk.count) todo.push({ step: 'class', what: (sk.count - have) + ' ' + c2.name + ' skill' + (sk.count - have === 1 ? '' : 's') });
+  });
+  sktAsiSlots(build, R).forEach(s => { if (!build.asi[s.key]) todo.push({ step: 'levels', what: (multi ? _sktTitle(s.cls) + ' ' : 'level ') + s.level + ' ability score improvement or feat' }); });
   const sc = sktBuildSpellcasting(build, R, sktBuildAbilities(build, R));
   if (sc){
-    if ((build.cantrips || []).length < sc.cantrips) todo.push({ step: 'spells', what: (sc.cantrips - build.cantrips.length) + ' cantrip(s)' });
-    const want = sc.prepared || sc.known;
-    if (sc.spellbook && (build.spellbook || []).length < sc.spellbook)
-      todo.push({ step: 'spells', what: (sc.spellbook - (build.spellbook || []).length) + ' spell(s) for the spellbook' });
-    if (want && (build.spells || []).length < want) todo.push({ step: 'spells', what: (want - build.spells.length) + ' spell(s)', soft: true });
+    (sc.classes || [{ primary: true, sc, cls: build.cls }]).forEach(x => {
+      const s = x.sc, lst = x.primary ? build : (x.entry || {}), pre = multi ? _sktTitle(x.cls) + ': ' : '';
+      if ((lst.cantrips || []).length < s.cantrips) todo.push({ step: 'spells', what: pre + (s.cantrips - (lst.cantrips || []).length) + ' cantrip(s)' });
+      const want = s.prepared || s.known;
+      if (s.spellbook && (lst.spellbook || []).length < s.spellbook)
+        todo.push({ step: 'spells', what: pre + (s.spellbook - (lst.spellbook || []).length) + ' spell(s) for the spellbook' });
+      if (want && (lst.spells || []).length < want) todo.push({ step: 'spells', what: pre + (want - (lst.spells || []).length) + ' spell(s)', soft: true });
+    });
   }
   sktFeatSpells(build, R).forEach(g => { if (g.missing) todo.push({ step: 'spells', what: 'the spells from ' + g.feat }); });
   const spg = sktSpeciesSpellGrant(R, build);
@@ -1654,6 +1829,15 @@ function sktAsiLevels(cls){
 // fighting styles (featProgression, category FS). Returns
 // [{ name, count, types:[featureType…], kind:'optional'|'feat' }].
 function sktOptionalChoices(build, R){
+  const parts = sktClassLevels(build, R);
+  if (parts.length === 1) return _sktOptionalOne(build, R);
+  const by = {};
+  parts.forEach(p => _sktOptionalOne(sktClassView(build, R, p), R).forEach(o => {
+    if (by[o.name]) by[o.name].count += o.count; else by[o.name] = Object.assign({}, o);
+  }));
+  return Object.values(by);
+}
+function _sktOptionalOne(build, R){
   const cls = sktRulesClass(R, build.cls), sub = sktRulesSubclass(cls, build.subclass);
   const L = build.level || 1, out = [];
   const read = (prog) => {
@@ -1679,6 +1863,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktSpellsMatching, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake,
+                     sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };
 }

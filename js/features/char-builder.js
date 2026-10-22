@@ -45,9 +45,10 @@ async function openCharBuilder(opts){
   else build = sktBlankBuild(opts.edition || (state.settings && state.settings.builderEdition) || '2024');
   const mode = prior ? (opts.levelup ? 'levelup' : 'edit') : 'create';
   if (mode === 'levelup') build.level = Math.min(20, (build.level || 1) + 1);
+  const multi0 = JSON.parse(JSON.stringify(build.multi || []));
   CB = { build, R: null, step: mode === 'create' ? 'basics' : (mode === 'levelup' ? 'levels' : 'review'),
          mode, idx: opts.idx != null ? opts.idx : null, onDone: opts.onDone || null,
-         fromLevel: prior && prior.build ? prior.build.level : null, loading: true };
+         fromLevel: prior && prior.build ? prior.build.level : null, loading: true, multi0, lvlTo: 'first' };
   cbMount();
   await cbLoad(build.edition);
 }
@@ -161,6 +162,12 @@ function cbVisibleSteps(){
 }
 
 // The live sheet beside every step.
+function cbClassLabel(rec){
+  const cl = (rec.sheet && rec.sheet.classLevels) || [];
+  if (cl.length > 1) return cl.map(p => _sktTitle(p.cls) + ' ' + p.level).join(' / ');
+  const cls = sktRulesClass(CB.R, CB.build.cls);
+  return cls ? cls.name + ' ' + rec.level : '';
+}
 function cbSide(rec){
   const b = CB.build, R = CB.R;
   const cls = sktRulesClass(R, b.cls);
@@ -169,7 +176,7 @@ function cbSide(rec){
   const todo = sktBuildTodo(b, R);
   return '<div class="cb-sheet">'
     + '<div class="cb-sheet-name">' + cbEsc(rec.icon) + ' ' + cbEsc(b.name || 'Unnamed') + '</div>'
-    + '<div class="cb-sheet-sub">' + cbEsc([rec.race, cls ? cls.name + ' ' + rec.level : '', rec.subclass].filter(Boolean).join(' · ') || 'Choose a species and a class') + '</div>'
+    + '<div class="cb-sheet-sub">' + cbEsc([rec.race, cbClassLabel(rec), rec.subclass].filter(Boolean).join(' · ') || 'Choose a species and a class') + '</div>'
     + '<div class="cb-big"><div><span>AC</span><b>' + rec.ac + '</b></div><div><span>HP</span><b>' + rec.hpMax + '</b></div>'
     + '<div><span>Init</span><b>' + sktSigned(rec.init) + '</b></div><div><span>Speed</span><b>' + rec.spd + '</b></div>'
     + '<div><span>Prof</span><b>+' + rec.sheet.profBonus + '</b></div></div>'
@@ -241,7 +248,7 @@ CB_RENDER.class = () => {
     const lvl1 = cls.features.filter(f => f.level === 1 && !/Proficiencies/.test(f.name)).map(f => f.name).join(', ');
     html += '<div class="cb-note"><b>' + cbEsc(cls.name) + '</b> — at level 1: ' + cbEsc(lvl1) + '.</div>';
     const title = sktRulesInline(cls.subclassTitle);
-    if ((b.level || 1) >= cls.subclassLevel){
+    if (sktClassLevels(b, R)[0].level >= cls.subclassLevel){
       const showAll = !!b.allBooks;
       const subs = cls.subclasses.filter(s => s.core || showAll)
         .filter((s, i, a) => a.findIndex(x => x.shortName === s.shortName) === i)
@@ -253,9 +260,61 @@ CB_RENDER.class = () => {
     } else {
       html += '<div class="cb-dim">' + cbEsc(title) + ' is chosen at level ' + cls.subclassLevel + '.</div>';
     }
+    html += cbMulticlassHtml();
   }
   return html;
 };
+// More classes: each with its levels (taken from the first class), its
+// subclass when it reaches one, and the skill some classes give. The
+// character's total level stays what Basics says. There was no
+// multiclassing before.
+function cbMulticlassHtml(){
+  const b = CB.build, R = CB.R;
+  const parts = sktClassLevels(b, R);
+  const ab = sktBuildAbilities(b, R);
+  const first = parts[0];
+  let h = '<h4>Multiclass</h4>';
+  if (parts.length === 1 && (b.level || 1) < 2) return h + '<div class="cb-dim">From 2nd level a character can take levels in another class.</div>';
+  h += '<div class="cb-mc"><div class="cb-mc-row"><b>' + cbEsc(_sktTitle(first.cls)) + '</b><span class="cb-dim">' + first.level + ' level' + (first.level === 1 ? '' : 's') + ' — the rest of the character’s ' + (b.level || 1) + '</span></div>';
+  parts.slice(1).forEach((p, i) => {
+    const c2 = sktRulesClass(R, p.cls);
+    const ok = sktMulticlassOk(R, p.cls, ab) && sktMulticlassOk(R, b.cls, ab);
+    h += '<div class="cb-mc-row"><b>' + cbEsc(c2.name) + '</b>'
+      + '<span class="cb-counter-ctl"><button class="btn small" data-cb-mclvl="' + i + ':-1"' + (p.level <= 1 ? ' disabled' : '') + ' aria-label="One level less">−</button>'
+      + '<span>' + p.level + '</span><button class="btn small" data-cb-mclvl="' + i + ':1"' + (first.level <= 1 ? ' disabled' : '') + ' aria-label="One level more">+</button></span>'
+      + '<button class="btn small" data-cb-mcdel="' + i + '">Remove</button></div>';
+    if (!ok) h += '<div class="cb-warn">Multiclassing asks for ' + cbEsc([sktMulticlassNeedText(R, b.cls), sktMulticlassNeedText(R, p.cls)].filter(Boolean).join('; ')) + '. The sheet allows it anyway.</div>';
+    if (p.level >= c2.subclassLevel){
+      const subs = c2.subclasses.filter(s => s.core || b.allBooks || s.shortName === p.subclass)
+        .filter((s, k, a) => a.findIndex(x => x.shortName === s.shortName) === k)
+        .map(s => ({ value: i + '||' + s.shortName, label: s.shortName, sub: s.core ? '' : s.source }));
+      h += cbCards(subs, p.subclass ? i + '||' + p.subclass : '', 'cb-mcsub');
+    }
+    const sk = _sktSkillChoice(((c2.multiclassing || {}).proficienciesGained || {}).skills);
+    if (sk.count){
+      h += '<div class="cb-dim">' + cbEsc(c2.name) + ' gives ' + sk.count + ' skill' + (sk.count === 1 ? '' : 's') + '.</div>'
+        + cbChecks(sk.from.map(k => ({ value: i + '||' + k, label: SKT_SKILL_LABEL[k] })), ((p.entry || {}).skills || []).map(k => i + '||' + k), sk.count, 'cb-mcskill');
+    }
+  });
+  h += '</div>';
+  const taken = new Set(parts.map(p => p.key));
+  if (first.level > 1){
+    h += '<label class="cb-f">Add a class<select class="cb-sel" data-cb-mcadd><option value="">Choose…</option>'
+      + R.classes.filter(c => !taken.has(c.key)).map(c => '<option value="' + cbEsc(c.name) + '">' + cbEsc(c.name) + (sktMulticlassOk(R, c.name, ab) ? '' : ' (needs ' + cbEsc(sktMulticlassNeedText(R, c.name)) + ')') + '</option>').join('') + '</select></label>';
+  } else h += '<div class="cb-dim">Raise the character’s level on Basics to add another class.</div>';
+  return h;
+}
+// Keep the classes' levels within the character's: the first class always
+// has at least one.
+function cbFitLevels(b){
+  b.multi = (b.multi || []).filter(m => m && m.cls && m.cls !== b.cls);
+  let over = b.multi.reduce((n, m) => n + Math.max(1, +m.level || 1), 0) - ((b.level || 1) - 1);
+  for (let i = b.multi.length - 1; i >= 0 && over > 0; i--){
+    const m = b.multi[i], cut = Math.min(over, Math.max(1, +m.level || 1));
+    if (cut >= m.level) { b.multi.splice(i, 1); over -= m.level; }
+    else { m.level -= cut; over -= cut; }
+  }
+}
 
 CB_RENDER.species = () => {
   const b = CB.build, R = CB.R;
@@ -469,8 +528,14 @@ CB_RENDER.levels = () => {
   if (!cls) return '<h3>Levels</h3><div class="cb-dim">Choose a class first.</div>';
   const L = b.level || 1;
   let html = '<h3>Levels</h3>';
+  if (CB.mode === 'levelup' && CB.fromLevel && (CB.multi0 || []).length){
+    html += '<h4>This level goes to</h4><div class="cb-seg"><button class="' + (CB.lvlTo === 'first' ? 'on' : '') + '" data-cb-lvlto="first">' + cbEsc(cls.name) + '</button>'
+      + CB.multi0.map((m, i) => '<button class="' + (CB.lvlTo === String(i) ? 'on' : '') + '" data-cb-lvlto="' + i + '">' + cbEsc(_sktTitle(m.cls)) + '</button>').join('')
+      + '</div><div class="cb-dim">Another class entirely is added on the Class step.</div>';
+  }
   if (CB.mode === 'levelup' && CB.fromLevel){
-    const fresh = sktBuildFeatures(b, R).filter(f => f.level > CB.fromLevel && f.level <= L && !f.info);
+    const was = {}; sktClassLevels(Object.assign({}, b, { level: CB.fromLevel, multi: CB.multi0 || [] }), R).forEach(p => { was[p.key] = p.level; });
+    const fresh = sktBuildFeatures(b, R).filter(f => !f.info && f.cls && f.level > (was[f.cls] || 0));
     html += '<div class="cb-new"><b>New at level ' + L + '</b>' + (fresh.length ? fresh.map(f => '<div class="cb-feat"><b>' + cbEsc(f.name) + '</b> ' + (f.mech ? '<span class="cb-badge">applied</span>' : '') + cbFeatureText(f.text, true) + '</div>').join('') : '<div class="cb-dim">No new features — just hit points and anything below.</div>') + '</div>';
   }
   // Hit points.
@@ -481,13 +546,14 @@ CB_RENDER.levels = () => {
       + '<button class="' + (hm === 'rolled' ? 'on' : '') + '" data-cb-hp="rolled">Roll</button></div>';
     if (hm === 'rolled'){
       let rows = '';
-      for (let lv = 2; lv <= L; lv++){
+      for (let lv = 2; lv <= sktClassLevels(b, R)[0].level; lv++){
         const v = (b.hp.rolls || {})[lv] || '';
         rows += '<label class="cb-hproll">Level ' + lv + ' <input type="number" min="1" max="' + cls.hd + '" data-cb-hproll="' + lv + '" value="' + v + '"><button class="btn small" data-cb-hpdice="' + lv + '">🎲 d' + cls.hd + '</button></label>';
       }
       html += '<div class="cb-hprolls">' + rows + '</div>';
     }
-    html += '<div class="cb-dim">Level 1 is always the full d' + cls.hd + '. Your Constitution modifier is added every level.</div>';
+    html += '<div class="cb-dim">Level 1 is always the full d' + cls.hd + '. Your Constitution modifier is added every level.'
+      + (sktIsMulticlass(b, R) ? ' Levels in other classes take their average.' : '') + '</div>';
   }
   // Features that are a choice: Divine Order, Primal Order, Blessed Strikes…
   sktBuildChoices(b, R).forEach(c => {
@@ -496,12 +562,14 @@ CB_RENDER.levels = () => {
         + cbEsc(c.feature + '||' + o.value) + '"><b>' + cbEsc(o.label) + '</b><span>' + cbEsc(o.desc || '') + '</span></button>').join('') + '</div>';
   });
   // Subclass.
-  if (L >= cls.subclassLevel && !b.subclass) html += '<div class="cb-warn">Choose your ' + cbEsc(sktRulesInline(cls.subclassTitle)) + ' on the Class step.</div>';
+  if (sktClassLevels(b, R)[0].level >= cls.subclassLevel && !b.subclass) html += '<div class="cb-warn">Choose your ' + cbEsc(sktRulesInline(cls.subclassTitle)) + ' on the Class step.</div>';
   // ASI or feat.
-  sktAsiLevels(cls).filter(l => l <= L).forEach(l => {
+  const multiAsi = sktIsMulticlass(b, R);
+  sktAsiSlots(b, R).forEach(s => {
+    const l = s.key;
     const p = b.asi[l] || {};
     const isFeat = p.type === 'feat';
-    html += '<div class="cb-asi"><h4>Level ' + l + '</h4><div class="cb-seg">'
+    html += '<div class="cb-asi"><h4>' + (multiAsi ? cbEsc(_sktTitle(s.cls)) + ' ' : 'Level ') + s.level + '</h4><div class="cb-seg">'
       + '<button class="' + (p.type === 'asi' ? 'on' : '') + '" data-cb-asitype="' + l + ':asi">Ability Score Improvement</button>'
       + '<button class="' + (isFeat ? 'on' : '') + '" data-cb-asitype="' + l + ':feat">A feat</button></div>';
     if (p.type === 'asi'){
@@ -580,7 +648,9 @@ CB_RENDER.spells = () => {
   const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
   const fromFeats = cbFeatSpellsHtml();
   if (!sc) return '<h3>Spells</h3>' + (fromFeats || '<div class="cb-dim">This character does not cast spells yet.</div>');
+  if (sc.classes && !sc.classes[0].primary) return '<h3>Spells</h3><div class="cb-note">Spell slots: ' + cbSlotText(sc) + '</div>' + cbMultiSpellsHtml() + fromFeats;
   const want = sc.prepared || sc.known;
+  const maxLv = sc.classes ? sc.classes[0].sc.maxSpellLevel : sc.maxSpellLevel;
   const always = sktBuildAlwaysPrepared(b, R);
   let html = '<h3>Spells</h3><div class="cb-note">' + cbAbLabel(sc.ability) + ' · save DC ' + sc.dc + ' · attack ' + sktSigned(sc.attack)
     + ' · slots ' + (Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—') + '</div>';
@@ -594,7 +664,7 @@ CB_RENDER.spells = () => {
   if (sc.spellbook){
     html += '<h4>Spellbook</h4><div class="cb-dim">Six spells at 1st level, two more each level after. You prepare from these.</div>'
       + cbCounter(book.length, sc.spellbook, 'in the book');
-    for (let lv = 1; lv <= sc.maxSpellLevel; lv++){
+    for (let lv = 1; lv <= maxLv; lv++){
       const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
       if (!opts.length) continue;
       html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbChecks(opts, book, sc.spellbook, 'cb-book') + '</div>';
@@ -605,15 +675,50 @@ CB_RENDER.spells = () => {
     if (book){
       const opts = book.filter(n => !always.includes(n));
       html += opts.length ? cbChecks(opts, b.spells || [], want, 'cb-spell') : '<div class="cb-dim">Write spells into the book first.</div>';
-    } else for (let lv = 1; lv <= sc.maxSpellLevel; lv++){
+    } else for (let lv = 1; lv <= maxLv; lv++){
       const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
       if (!opts.length) continue;
       html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbChecks(opts, b.spells || [], want, 'cb-spell') + '</div>';
     }
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
-  return html + fromFeats;
+  return html + cbMultiSpellsHtml() + fromFeats;
 };
+function cbSlotText(sc){
+  return Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—';
+}
+// Another class's spells, from its own list and at its own level.
+function cbMultiSpellsHtml(){
+  const b = CB.build, R = CB.R;
+  const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
+  if (!sc || !sc.classes) return '';
+  return sc.classes.filter(x => !x.primary).map(x => {
+    const i = b.multi.indexOf(x.entry), m = x.entry || {}, s = x.sc, v = x.view;
+    const chk = (opts, chosen, max, kind) => cbChecks(opts.map(n => ({ value: i + '|' + kind + '|' + n, label: n })), (chosen || []).map(n => i + '|' + kind + '|' + n), max, 'cb-mcspell');
+    const always = sktBuildAlwaysPrepared(v, R);
+    let h = '<h3>' + cbEsc(_sktTitle(x.cls)) + ' spells</h3><div class="cb-note">' + cbAbLabel(s.ability) + ' · save DC ' + s.dc + ' · attack ' + sktSigned(s.attack) + '</div>';
+    if (s.cantrips) h += '<h4>Cantrips</h4>' + cbCounter((m.cantrips || []).length, s.cantrips, 'chosen') + chk(sktSpellOptions(R, v, 0).map(o => o.name), m.cantrips, s.cantrips, 'cantrips');
+    const book = s.spellbook ? (m.spellbook && m.spellbook.length ? m.spellbook : (m.spells || [])) : null;
+    if (s.spellbook){
+      h += '<h4>Spellbook</h4>' + cbCounter(book.length, s.spellbook, 'in the book');
+      for (let lv = 1; lv <= s.maxSpellLevel; lv++){
+        const opts = sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n));
+        if (opts.length) h += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + chk(opts, book, s.spellbook, 'spellbook') + '</div>';
+      }
+    }
+    const want = s.prepared || s.known;
+    if (want){
+      h += '<h4>' + (s.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((m.spells || []).length, want, 'chosen');
+      if (book) h += chk(book.filter(n => !always.includes(n)), m.spells, want, 'spells');
+      else for (let lv = 1; lv <= s.maxSpellLevel; lv++){
+        const opts = sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n));
+        if (opts.length) h += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + chk(opts, m.spells, want, 'spells') + '</div>';
+      }
+    }
+    if (always.length) h += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
+    return h;
+  }).join('');
+}
 // The spells a feat or a species grants: which list (unless fixed), the
 // casting ability where it is a choice, and each pick. `key` is the feat's
 // name, or '@species'.
@@ -800,9 +905,28 @@ function cbOnClick(e){
   if (d.cbCls) return cbSet(b => {
     if (b.cls === d.cbCls) return;
     b.cls = d.cbCls; b.subclass = ''; b.skills = []; b.expertise = []; b.cantrips = []; b.spells = []; b.spellbook = [];
+    cbFitLevels(b);
     b.optional = {}; b.masteries = []; b.equipment = { cls: 'A', bg: b.equipment.bg || 'A', picks: {} };
   });
   if (d.cbSub) return cbSet(b => { b.subclass = d.cbSub; });
+  if (d.cbMcsub){ const [i, s] = d.cbMcsub.split('||'); return cbSet(b => { if (b.multi[+i]) b.multi[+i].subclass = s; }); }
+  if (d.cbMclvl){
+    const [i, dlt] = d.cbMclvl.split(':').map(Number);
+    return cbSet(b => {
+      const m = b.multi[i]; if (!m) return;
+      // "+" is disabled once the first class is down to one level.
+      if (dlt > 0) m.level = (+m.level || 1) + 1;
+      if (dlt < 0 && m.level > 1) m.level -= 1;
+    });
+  }
+  if (d.cbMcdel != null) return cbSet(b => { b.multi.splice(+d.cbMcdel, 1); });
+  if (d.cbLvlto != null) return cbSet(b => {
+    // Level up: which class the new level goes to. Undo the last choice,
+    // then give it to this one (the first class takes it by default).
+    b.multi = JSON.parse(JSON.stringify(CB.multi0 || []));
+    if (d.cbLvlto !== 'first'){ const m = b.multi[+d.cbLvlto]; if (m) m.level = (+m.level || 1) + 1; }
+    CB.lvlTo = d.cbLvlto;
+  });
   if (d.cbSpecies) return cbSet(b => {
     if (b.species === d.cbSpecies) return;
     b.species = d.cbSpecies; b.subspecies = ''; b.speciesAsi = {}; b.speciesSkills = []; b.speciesChoice = {};
@@ -852,6 +976,31 @@ function cbOnChange(e){
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
+  if ('cbMcadd' in d){
+    if (!v) return;
+    return cbSet(b => {
+      if (sktClassLevels(b, CB.R)[0].level <= 1) return;
+      b.multi = (b.multi || []).concat([{ cls: v, subclass: '', level: 1, skills: [], cantrips: [], spells: [], spellbook: [] }]);
+    });
+  }
+  if (d.cbMcskill){
+    const [i, k] = d.cbMcskill.split('||');
+    const c2 = sktRulesClass(CB.R, (CB.build.multi[+i] || {}).cls);
+    const sk = _sktSkillChoice(((c2 && c2.multiclassing || {}).proficienciesGained || {}).skills);
+    return cbSet(b => { const m = b.multi[+i]; if (!m) return; m.skills = m.skills || []; cbToggle(m.skills, k, sk.count); });
+  }
+  if (d.cbMcspell){
+    // Another class's cantrips, spells and spellbook: "i|kind|name".
+    const [i, kind, name] = d.cbMcspell.split('|');
+    const x = (sktBuildSpellcasting(CB.build, CB.R, sktBuildAbilities(CB.build, CB.R)).classes || []).find(c => c.entry === CB.build.multi[+i]);
+    if (!x) return;
+    return cbSet(b => {
+      const m = b.multi[+i]; m[kind] = m[kind] || [];
+      const max = kind === 'cantrips' ? x.sc.cantrips : kind === 'spellbook' ? x.sc.spellbook : (x.sc.prepared || x.sc.known);
+      cbToggle(m[kind], name, max);
+      if (kind === 'spellbook') m.spells = (m.spells || []).filter(n => m.spellbook.includes(n));
+    });
+  }
   if ('cbMagicq' in d){ CB.magicQ = v; CB.magicBase = ''; cbRender(); const q = document.querySelector('#cb-root [data-cb-magicq]'); if (q && !cbGearFind(v)) q.focus(); return; }
   if ('cbMagicbase' in d){ CB.magicBase = v; cbRender(); return; }
   if (d.cbAttune != null){
@@ -985,7 +1134,7 @@ function cbOnInput(e){
   if (d.cbDetail && d.cbDetail !== 'alignment'){ CB.build.details = Object.assign({}, CB.build.details, { [d.cbDetail]: t.value }); return; }
   if (d.cbIn === 'level'){
     const n = Math.max(1, Math.min(20, parseInt(t.value, 10) || 1));
-    CB.build.level = n; cbRefreshSide(); cbRefreshSteps();
+    CB.build.level = n; cbFitLevels(CB.build); cbRefreshSide(); cbRefreshSteps();
   }
 }
 function cbRefreshSide(){

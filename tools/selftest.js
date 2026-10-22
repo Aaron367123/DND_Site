@@ -5829,6 +5829,115 @@
       }
     }
 
+    // -- The character builder: multiclassing -----------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const base = { str: 15, dex: 14, con: 14, int: 14, wis: 10, cha: 8 };
+        const fw = Object.assign(sktBlankBuild('2014'), { name: 'Mc', species: 'Human', cls: 'Fighter', subclass: 'Champion', level: 5,
+          abilities: { method: 'manual', base }, equipment: { cls: 'A', bg: 'A' },
+          multi: [{ cls: 'Wizard', subclass: '', level: 2, skills: ['arcana'], cantrips: ['Fire Bolt', 'Mage Hand', 'Light'], spells: ['Shield'], spellbook: ['Shield', 'Sleep'] }] });
+        const FW = sktComputeCharacter(fw, R14);
+        ok('multiclass: Fighter 3 / Wizard 2 — each class at its own level',
+           JSON.stringify(FW.sheet.classLevels.map(p => p.cls + p.level)) === '["fighter3","wizard2"]' && FW.level === 5);
+        ok('multiclass: hit points by each class’s die (10+2, then 2×(6+2) and 2×(4+2))', FW.hpMax === 40 && FW.sheet.hitDiceByClass === '3d10 + 2d6', FW.hpMax);
+        const fl = FW.sheet.featureList.map(f => f.name);
+        ok('multiclass: a 3rd-level fighter’s features and a 2nd-level wizard’s — no Extra Attack',
+           ['Action Surge', 'Improved Critical', 'Arcane Recovery'].every(n => fl.includes(n)) && !fl.includes('Extra Attack') && FW.sheet.attacksPerAction === 1);
+        ok('multiclass: only the first class’s saving throws', FW.sheet.saveProf.includes('str') && !FW.sheet.saveProf.includes('int'));
+        ok('multiclass: a wizard’s spells with the character’s proficiency (DC 8+3+2)', FW.sheet.spellSaveDc === 13 && FW.sheet.spells.includes('Fire Bolt') && JSON.stringify(Object.keys(FW.sheet.spellSlots)) === '["1"]' && FW.sheet.spellSlots[1].total === 3);
+        ok('multiclass: the skill the second class gives', FW.sheet.skillProf.arcana === 1);
+        ok('multiclass: the second class’s subclass is asked for', sktBuildTodo(fw, R14).some(t => t.what === 'an arcane tradition for Wizard'));
+        const pal = Object.assign(sktBlankBuild('2014'), { cls: 'Paladin', level: 5, abilities: { method: 'manual', base: { str: 15, dex: 10, con: 14, int: 8, wis: 10, cha: 15 } },
+          multi: [{ cls: 'Sorcerer', subclass: 'Draconic Bloodline', level: 3 }] });
+        const PS = sktComputeCharacter(pal, R14).sheet.spellSlots;
+        ok('multiclass: Paladin 2 / Sorcerer 3 casts as a 4th-level caster (4 + 3 slots)', PS[1].total === 4 && PS[2].total === 3 && !PS[3]);
+        const wl = Object.assign({}, pal, { cls: 'Warlock', subclass: 'The Fiend' });
+        const WL = sktComputeCharacter(wl, R14);
+        ok('multiclass: a warlock’s pact slots stay their own', WL.sheet.spellSlots[1].total === 6 && WL.sheet.notes.some(n => /Pact Magic: 2 of the level 1 slots/.test(n)));
+        const bf = Object.assign(sktBlankBuild('2014'), { cls: 'Barbarian', level: 5, abilities: { method: 'manual', base }, multi: [{ cls: 'Fighter', level: 3, subclass: 'Champion' }] });
+        ok('multiclass: a 2nd-level barbarian rages twice, whatever else they are', (sktComputeCharacter(bf, R14).resources.find(r => r.name === 'Rage') || {}).max === 2);
+        const p3 = sktComputeCharacter(Object.assign({}, pal, { multi: [{ cls: 'Sorcerer', subclass: 'Draconic Bloodline', level: 2 }] }), R14).sheet.spellSlots;
+        ok('multiclass: a paladin’s levels count half, rounded down in 2014 (Paladin 3 / Sorcerer 2 → 4 + 2)', p3[1].total === 4 && p3[2].total === 2, JSON.stringify(p3));
+        const wf = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 2, abilities: { method: 'manual', base }, multi: [{ cls: 'Fighter', level: 1 }] });
+        ok('multiclass: a fighter’s armour training comes with it', ['light', 'medium'].every(a => sktComputeCharacter(wf, R14).sheet.proficiencies.armor.includes(a)) && !sktComputeCharacter(wf, R14).sheet.proficiencies.armor.includes('heavy'));
+        const fp = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', level: 3, abilities: { method: 'manual', base }, multi: [{ cls: 'Paladin', level: 2 }] });
+        ok('multiclass: a fighting style from each class', (sktOptionalChoices(fp, R14).find(o => o.name === 'Fighting Style') || {}).count === 2);
+        const fw4 = Object.assign({}, fw, { level: 8, multi: [Object.assign({}, fw.multi[0], { level: 4 })], asi: { 4: { type: 'asi', inc: { str: 1 } }, 'wizard@4': { type: 'asi', inc: { int: 2 } } } });
+        ok('multiclass: each class’s ability score improvements', JSON.stringify(sktAsiSlots(fw4, R14).map(s => s.key)) === '["4","wizard@4"]' && sktComputeCharacter(fw4, R14).abilities.int === 16 && sktComputeCharacter(fw4, R14).abilities.str === 16);
+        ok('multiclass: and one that no longer exists does nothing', sktComputeCharacter(Object.assign({}, fw4, { level: 7, multi: [Object.assign({}, fw.multi[0], { level: 3 })] }), R14).abilities.int === 14);
+        ok('multiclass: the 13s it asks for', sktMulticlassNeedText(R14, 'Paladin') === 'STR 13 and CHA 13' && sktMulticlassNeedText(R14, 'Fighter') === 'STR 13 or DEX 13'
+           && sktMulticlassNeedText(R24, 'Monk') === 'DEX 13 and WIS 13' && !sktMulticlassOk(R24, 'Monk', { dex: 13, wis: 12 }) && sktMulticlassOk(R14, 'Fighter', { str: 8, dex: 13 }));
+        const one = sktComputeCharacter(Object.assign({}, fw, { multi: [] }), R14);
+        ok('multiclass: a single-class character is as before', one.hpMax === 44 && one.sheet.attacksPerAction === 2 && one.sheet.classLevels.length === 1);
+
+        // The builder.
+        await openCharBuilder({ edition: '2014' }); await sleep(800);
+        const root = () => document.getElementById('cb-root');
+        const q = s => root().querySelector(s), qa = s => [...root().querySelectorAll(s)];
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const nm = q('[data-cb-in="name"]'); nm.value = 'Duo'; nm.dispatchEvent(new Event('input', { bubbles: true }));
+        const lv = q('[data-cb-in="level"]'); lv.value = '5'; lv.dispatchEvent(new Event('input', { bubbles: true }));
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Fighter"]'); await sleep(30);
+        ok('builder: the Class step offers another class', !!q('[data-cb-mcadd]'));
+        set('[data-cb-mcadd]', 'Wizard'); await sleep(30);
+        ok('builder: adding one takes a level from the first', CB.build.multi.length === 1 && sktClassLevels(CB.build, CB.R)[0].level === 4);
+        click('[data-cb-mclvl="0:1"]'); await sleep(30);
+        ok('builder: + gives it another', CB.build.multi[0].level === 2 && /Fighter 3 \/ Wizard 2/.test(q('.cb-sheet-sub').textContent), q('.cb-sheet-sub').textContent);
+        ok('builder: its subclass, once it reaches one', qa('[data-cb-mcsub]').length >= 8);
+        click('[data-cb-mcsub="0||Evocation"]'); await sleep(30);
+        ok('builder: the subclass is kept on the class, and a wizard gives no skill', CB.build.multi[0].subclass === 'Evocation' && !q('[data-cb-mcskill]'));
+        set('[data-cb-mcadd]', 'Rogue'); await sleep(30);
+        tick('[data-cb-mcskill="1||stealth"]'); await sleep(30); tick('[data-cb-mcskill="1||acrobatics"]'); await sleep(30);
+        ok('builder: a rogue gives one skill', JSON.stringify(CB.build.multi[1].skills) === '["stealth"]' && CB.rec.sheet.skillProf.stealth === 1);
+        click('[data-cb-mcdel="1"]'); await sleep(30);
+        ok('builder: Remove drops a class, its level back to the first', CB.build.multi.length === 1 && sktClassLevels(CB.build, CB.R)[0].level === 3);
+        click('[data-cb-step="spells"]'); await sleep(30);
+        ok('builder: the wizard’s spells on the Spells step', /Wizard spells/.test(q('.cb-main').textContent) && !!q('[data-cb-mcspell="0|cantrips|Fire Bolt"]'));
+        tick('[data-cb-mcspell="0|cantrips|Fire Bolt"]'); await sleep(20);
+        tick('[data-cb-mcspell="0|spellbook|Shield"]'); await sleep(20);
+        tick('[data-cb-mcspell="0|spells|Shield"]'); await sleep(20);
+        ok('builder: kept with the wizard', JSON.stringify(CB.build.multi[0].cantrips) === '["Fire Bolt"]' && CB.build.multi[0].spells.includes('Shield') && CB.rec.sheet.spells.includes('Fire Bolt'));
+        const lv2 = q('[data-cb-step="basics"]'); lv2.click(); await sleep(30);
+        const lvi = q('[data-cb-in="level"]'); lvi.value = '2'; lvi.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
+        ok('builder: lowering the level trims the other classes first', CB.build.multi[0].level === 1 && sktClassLevels(CB.build, CB.R)[0].level === 1);
+        lvi.value = '5'; lvi.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
+        click('[data-cb-step="review"]'); await sleep(30);
+        const sc0 = window.showConfirm; window.showConfirm = () => Promise.resolve(true);
+        try { click('[data-cb="save"]'); await sleep(200); } finally { window.showConfirm = sc0; }
+        const i = state.party.findIndex(p => p.name === 'Duo');
+        ok('builder: saved with both classes', i >= 0 && JSON.stringify(state.party[i].sheet.classLevels.map(p => p.cls + p.level)) === '["fighter4","wizard1"]');
+        openPanel('party'); await sleep(200);
+        ok('party: the card names both classes', [...panelDefs.party._body.querySelectorAll('.char-subline')].some(e => /fighter 4 \/ wizard 1/.test(e.textContent)));
+        closePanel('party');
+        // Level up: the new level can go to either class.
+        await openCharBuilder({ idx: i, levelup: true }); await sleep(150);
+        ok('builder: level up asks which class gets the level', qa('[data-cb-lvlto]').length === 2 && sktClassLevels(CB.build, CB.R)[0].level === 5);
+        click('[data-cb-lvlto="0"]'); await sleep(30);
+        ok('builder: given to the wizard', CB.build.multi[0].level === 2 && sktClassLevels(CB.build, CB.R)[0].level === 4 && /Sculpt Spells/.test(q('.cb-new').textContent) && !/Extra Attack/.test(q('.cb-new').textContent), q('.cb-new').textContent.slice(0, 200));
+        click('[data-cb-lvlto="first"]'); await sleep(30);
+        ok('builder: and back to the fighter', CB.build.multi[0].level === 1 && sktClassLevels(CB.build, CB.R)[0].level === 5 && /Extra Attack/.test(q('.cb-new').textContent));
+        // A wizard multiclassed into a cleric prepares from its own levels:
+        // Wizard 3 / Cleric 2 has 3rd-level slots, but a 3rd-level wizard
+        // knows no 3rd-level spells.
+        Object.assign(CB.build, { cls: 'Wizard', subclass: 'Evocation', level: 5, multi: [{ cls: 'Cleric', subclass: 'Life Domain', level: 2 }], spellbook: [], spells: [], cantrips: [] });
+        CB.step = 'spells'; cbRender(); await sleep(30);
+        ok('builder: the first class’s spells stop at its own level', !!q('[data-cb-book="Magic Missile"]') && !q('[data-cb-book="Fireball"]') && CB.rec.sheet.spellSlots[3] && CB.rec.sheet.spellSlots[3].total === 2);
+        cbClose();
+      } catch(e){ ok('builder: the multiclass checks ran to completion', false, e.message); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
