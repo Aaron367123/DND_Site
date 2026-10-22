@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'a84995cdab';
+const BUILD = '0cf6915c9a';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=3bcaa50260',
@@ -45,7 +45,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=e043a461be',
   'js/core/campaign.js?v=171a617f55',
   'js/core/utils.js?v=c0d58da4bf',
-  'js/core/state.js?v=5f08b82835',
+  'js/core/state.js?v=2dbd774649',
   'js/core/undo.js?v=0daa45d5b7',
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
@@ -57,9 +57,9 @@ const PRECACHE = [
   'js/panels/turnview.js?v=5dec8bb33f',
   'js/panels/party.js?v=e1bb13ce82',
   'js/panels/shop.js?v=fadf7d5fe3',
-  'js/sync/notes-sync.js?v=8c42540638',
+  'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
-  'js/sync/dropbox-sync.js?v=ab773edfd6',
+  'js/sync/dropbox-sync.js?v=c4897e8ffa',
   'js/panels/notes.js?v=b4f7d337a6',
   'js/panels/handouts.js?v=92072fbc59',
   'js/panels/battlemap.js?v=32e7b0ba78',
@@ -91,7 +91,7 @@ const PRECACHE = [
   'js/features/pdf-import.js?v=06787122c5',
   'js/player/player-app.js?v=4de10be419',
   'js/ui/player-view.js?v=3c47cb84bd',
-  'js/sync/realtime.js?v=b7e7d9a08a',
+  'js/sync/realtime.js?v=62f2e30973',
   'js/sync/presence.js?v=3c6820c9d8',
   'js/ui/tutorial.js?v=496c1bc236',
   'js/ui/onboarding.js?v=42199a671a',

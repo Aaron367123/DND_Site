@@ -16,6 +16,7 @@
 
   const STATE_KEY = 'skt-dropbox-sync-v1';
   const POLL_MS = 8000;
+  let _pollVisWired = false;
   const PUSH_DEBOUNCE_MS = 800;
   const API  = 'https://api.dropboxapi.com/2';
   const CONT = 'https://content.dropboxapi.com/2';
@@ -672,7 +673,15 @@
   function startPolling(getData) {
     stopPolling();
     if (!isConfigured()) return;
-    _pollTimer = setInterval(() => { _pollOnce(getData).catch(() => {}); }, POLL_MS);
+    // Not while the tab is hidden: nobody is looking, the browser throttles
+    // it anyway, and the first look back catches up at once.
+    _pollTimer = setInterval(() => { if (document.hidden) return; _pollOnce(getData).catch(() => {}); }, POLL_MS);
+    if (!_pollVisWired){
+      _pollVisWired = true;
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && _pollTimer) _pollOnce(getData).catch(() => {});
+      });
+    }
   }
   function stopPolling() {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }

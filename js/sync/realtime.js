@@ -143,6 +143,74 @@ const _PANELS_FOR_KEY = {
 //     entity level instead of last-write-wins clobbering the loser;
 //   • same-entity races stay LWW — acceptable for this app, and no worse
 //     than before.
+// ─── Portraits ────────────────────────────────────────────────────────────────
+// A character's portrait is a picture in the party record (icon: a data URL).
+// Party records sync whole, one per character, so every hit, heal and spent
+// slot re-sent the picture to every device — 4.5 KB of a 6.8 KB record in a
+// live campaign. On the way to the server the picture is swapped for an id
+// and stored once on its own node (the one map uploads use); on the way back
+// it is put back from this device's copy, or fetched once. Everything that
+// draws a portrait goes on reading p.icon and never knows.
+const _PORTRAIT_MIN = 1000;              // smaller than this rides along: an emoji, a short path
+const _portraitMem = {};                 // id -> data URL, this session
+const _portraitState = {};               // id -> 'pending' | 'ok' | 'fail'
+const _portraitFetching = {};
+function _hashStr(s){ let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function _portraitId(rec){ return 'pi_' + String(rec.id || 'x').replace(/[^\w-]/g, '') + '_' + _hashStr(rec.icon); }
+// The record as it goes to the server.
+function _portraitOut(rec){
+  if (!rec || typeof rec.icon !== 'string' || rec.icon.indexOf('data:') !== 0 || rec.icon.length < _PORTRAIT_MIN) return rec;
+  const id = _portraitId(rec);
+  if (_portraitState[id] === 'fail') return rec;             // couldn't store it on its own: inline, as before
+  _portraitMem[id] = rec.icon;
+  if (!_portraitState[id]){
+    _portraitState[id] = 'pending';
+    const put = (typeof window.sktMapBlobPut === 'function') ? window.sktMapBlobPut(id, rec.icon) : Promise.resolve(false);
+    put.then(ok => { _portraitState[id] = ok ? 'ok' : 'fail'; });
+  }
+  return { ...rec, icon: null, iconBlob: id };
+}
+// The record as it comes back: the picture from memory, from this device's
+// own copy of the party, or fetched.
+function _portraitIn(rec){
+  if (!rec || !rec.iconBlob || rec.icon) return rec;
+  const id = rec.iconBlob;
+  if (!_portraitState[id]) _portraitState[id] = 'ok';       // it's on the server — no need to send it again
+  let url = _portraitMem[id];
+  if (!url){
+    try {
+      const mine = (JSON.parse(localStorage.getItem('skt-party-v1') || '[]') || []).find(p => p && p.id === rec.id);
+      if (mine && mine.icon && mine.iconBlob === id) url = mine.icon;
+    } catch(e){}
+  }
+  if (url){ _portraitMem[id] = url; return { ...rec, icon: url }; }
+  _portraitFetch(id);
+  return rec;
+}
+function _portraitFetch(id, tries){
+  if (_portraitFetching[id] || typeof window.sktMapBlobGet !== 'function') return;
+  _portraitFetching[id] = true;
+  const go = n => window.sktMapBlobGet(id).catch(() => null).then(url => {
+    if (!url){
+      // The record can land a moment before its picture does.
+      if (n > 0) setTimeout(() => go(n - 1), 2000); else delete _portraitFetching[id];
+      return;
+    }
+    _portraitMem[id] = url; delete _portraitFetching[id];
+    try {
+      const arr = JSON.parse(localStorage.getItem('skt-party-v1') || '[]') || [];
+      let hit = false;
+      arr.forEach(p => { if (p && p.iconBlob === id && !p.icon){ p.icon = url; hit = true; } });
+      if (!hit) return;
+      _remoteUpdate = true;
+      try { localStorage.setItem('skt-party-v1', JSON.stringify(arr)); } finally { _remoteUpdate = false; }
+      loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
+      if (typeof paRender === 'function') paRender();
+    } catch(e){ _diag('portrait', e); }
+  });
+  go(tries == null ? 4 : tries);
+}
+
 const _ENTITY_KEYS = {
   'skt-combat-v1': {
     base: 'combat_v2',   // relative to sktFbRoot()
@@ -202,7 +270,7 @@ const _ENTITY_KEYS = {
       const arr = Array.isArray(parsed) ? parsed : [];
       const ids = _entityNodeIds(arr);
       const nodes = { meta: JSON.stringify({ order: ids }) };
-      arr.forEach((c, i) => { nodes['items/' + ids[i]] = JSON.stringify(c); });
+      arr.forEach((c, i) => { nodes['items/' + ids[i]] = JSON.stringify(_portraitOut(c)); });
       return nodes;
     },
     assemble(nodes){
@@ -213,7 +281,7 @@ const _ENTITY_KEYS = {
       const items = {};
       Object.keys(nodes).forEach(n => {
         if (!n.startsWith('items/')) return;
-        try { const c = JSON.parse(nodes[n]); if (c) items[n.slice(6)] = c; } catch(e){ _diag('party node ' + n, e); }
+        try { const c = JSON.parse(nodes[n]); if (c) items[n.slice(6)] = _portraitIn(c); } catch(e){ _diag('party node ' + n, e); }
       });
       const out = [], used = new Set();
       (Array.isArray(meta.order) ? meta.order : []).forEach(id => {
@@ -1442,6 +1510,49 @@ function _attachEntityListener(k){
     }, err => _onListenError(_baseOf(spec), _baseOf(spec), err, () => _attachEntityListener(k)));
 }
 
+// Safety net: when the tab comes back, re-read every sync key once. This
+// covers the cases where a long-running on('value') listener missed events
+// (background tab throttling, transient connection blips), so the UI never
+// sits on stale data after the user comes back to the tab.
+//
+// Cheap now. Returning to the window fires focus AND visibilitychange, and
+// each one used to re-read all nineteen keys and re-apply every whole key
+// whether or not it had changed — so alt-tabbing back from a PDF rebuilt the
+// NPC Library, the Bestiary and the Loot window from scratch (scroll and all)
+// and redrew the tracker twice. Now: once per ten seconds unless forced, and
+// a whole key that still holds exactly what this window last had from the
+// server is left alone. The per-record keys already skip an unchanged
+// snapshot in _applyEntitySnapshot.
+const _REFRESH_EVERY_MS = 10000;
+let _refreshLast = 0;
+function _refreshAll(force, db){
+  db = db || _fbDb;
+  if (!db) return false;
+  const now = Date.now();
+  if (!force && now - _refreshLast < _REFRESH_EVERY_MS) return false;
+  _refreshLast = now;
+  SKT_SYNC_KEYS.forEach(k => {
+    if (_ENTITY_KEYS[k]){
+      // _baseOf, not .base: .base is RELATIVE ('battlemap_v2'), so this read
+      // the database root instead of skt/c/<campaign>/battlemap_v2 and found
+      // nothing. The safety net never ran for the map, combat, party or
+      // notes — the four that change most during play.
+      db.ref(_baseOf(_ENTITY_KEYS[k])).once('value').then(snap => {
+        if (snap.exists()) _applyEntitySnapshot(k, snap.val());
+      }).catch(()=>{});
+      return;
+    }
+    db.ref(_wholePath(k)).once('value').then(snap => {
+      if (!snap.exists()) return;
+      let v = snap.val();
+      if (typeof v !== 'string'){ try { v = JSON.stringify(v); } catch(e){ return; } }
+      if (v === _lastServer[k]) return;        // nothing new since we last heard
+      _applyRemoteKey(k, v);
+    }).catch(()=>{});
+  });
+  return true;
+}
+
 // Everything that only needs to happen once per page, after listeners exist.
 function _startRealtimeExtras() {
   // Track connection state for the status indicator. Firebase queues writes
@@ -1460,28 +1571,6 @@ function _startRealtimeExtras() {
   // listeners above are started from onAuthStateChanged to avoid.
   if (typeof sktPresenceOnline === 'function') sktPresenceOnline();
 
-  // Safety net: if the tab regains focus, re-pull every sync key once. This
-  // covers cases where the long-running on('value') listener missed events
-  // (background tab throttling, transient connection blips) so the UI never
-  // sits on stale data after the user comes back to the tab.
-  const _refreshAll = () => {
-    if (!_fbDb) return;
-    SKT_SYNC_KEYS.forEach(k => {
-      if (_ENTITY_KEYS[k]){
-        // _baseOf, not .base: .base is RELATIVE ('battlemap_v2'), so this read
-        // the database root instead of skt/c/<campaign>/battlemap_v2 and found
-        // nothing. The safety net never ran for the map, combat, party or
-        // notes — the four that change most during play.
-        _fbDb.ref(_baseOf(_ENTITY_KEYS[k])).once('value').then(snap => {
-          if (snap.exists()) _applyEntitySnapshot(k, snap.val());
-        }).catch(()=>{});
-        return;
-      }
-      _fbDb.ref(_wholePath(k)).once('value').then(snap => {
-        if (snap.exists()) _applyRemoteKey(k, snap.val());
-      }).catch(()=>{});
-    });
-  };
   // A phone that slept can come back with a connection that only LOOKS open:
   // the socket died with the radio, nothing has noticed yet, and every change
   // made in the meantime sits in Firebase's outgoing queue until a keepalive
@@ -1492,16 +1581,17 @@ function _startRealtimeExtras() {
   const _reconnect = () => { try { _fbDb.goOffline(); _fbDb.goOnline(); } catch(e){ _diag('reconnect', e); } };
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden'){ _hiddenAt = Date.now(); return; }
-    if (_hiddenAt && Date.now() - _hiddenAt > 15000) _reconnect();
+    const away = _hiddenAt && Date.now() - _hiddenAt > 15000;
+    if (away) _reconnect();
     _hiddenAt = 0;
-    _refreshAll();
+    _refreshAll(away);           // a real absence always re-checks
   });
-  window.addEventListener('focus', _refreshAll);
+  window.addEventListener('focus', () => _refreshAll(false));
   // Pull everything again on demand. The presence strip offers this as
   // "Resync" on a device that has drifted, and the device itself runs it
   // when another device asks — a reload with nothing lost.
-  window.realtimeRefreshAll = _refreshAll;
-  window.addEventListener('online', () => { _reconnect(); _refreshAll(); });
+  window.realtimeRefreshAll = () => _refreshAll(true);
+  window.addEventListener('online', () => { _reconnect(); _refreshAll(true); });
 
   // Legacy-blob migration, Firebase side. load() migrates a LOCAL
   // 'skt-workspace-v1' blob into the split keys, but a client with a fresh

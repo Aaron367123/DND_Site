@@ -287,6 +287,12 @@ function load(){
       save(); // seed the split keys (and, via the sync layer, Firebase)
     }else{
       loadDomain('party');loadDomain('combat');loadDomain('shop');loadDomain('settings');loadDomain('prompt');
+      // The combined blob was kept as a rollback snapshot of the one-time
+      // split above. That split is long done; the copy only grew stale and
+      // sat in every browser's storage (21 KB in a live campaign). Gone once
+      // the split keys are in use — the migration path above still has it on
+      // a device that has never split.
+      if(hasSplit&&legacy){try{localStorage.removeItem(LEGACY_SAVE_KEY);}catch(e){}}
     }
     const lr=localStorage.getItem(LAYOUT_KEY);
     if(lr)layout=sktMigrateLayout({...layout,...JSON.parse(lr)});

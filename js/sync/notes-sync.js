@@ -492,6 +492,7 @@
     if (_pollTimer) return;
     _pollTimer = setInterval(async () => {
       if (!_vaultHandle) return;
+      if (document.hidden) return;     // nobody looking; the next look catches up
       const data = getData();
       if (!data) return;
       const changed = await fullSync(data);

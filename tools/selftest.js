@@ -4094,6 +4094,82 @@
       ok('round 3: silent', errs.length === before, errs.slice(before).join(' | '));
     }
 
+    // ── Sync costs: the focus refresh, portraits, the old blob ────────────
+    {
+      const before = errs.length;
+      const P0 = localStorage.getItem('skt-party-v1');
+      const stub = { put: window.sktMapBlobPut, get: window.sktMapBlobGet };
+      const applyRK = window._applyRemoteKey;
+      try {
+        // #1 Coming back to the window: once per ten seconds, unchanged keys left alone.
+        const store = {}; let reads = 0;
+        const fakeDb = { ref: path => ({ once: () => { reads++; return Promise.resolve({ exists: () => path in store, val: () => store[path] }); } }) };
+        let applied = [];
+        window._applyRemoteKey = (k, v) => { applied.push(k); };
+        try {
+          SKT_SYNC_KEYS.filter(k => !_ENTITY_KEYS[k]).forEach(k => { store[_wholePath(k)] = 'same-' + k; _lastServer[k] = 'same-' + k; });
+          store[_wholePath('skt-loot-v1')] = 'changed';
+          _refreshLast = 0;
+          const first = _refreshAll(false, fakeDb);
+          await sleep(30);
+          ok('refresh: coming back re-reads, but re-applies only what changed',
+             first === true && JSON.stringify(applied) === JSON.stringify(['skt-loot-v1']), JSON.stringify(applied));
+          const r0 = reads;
+          ok('refresh: a second return within ten seconds (focus + visibility) does nothing', _refreshAll(false, fakeDb) === false && reads === r0);
+          ok('refresh: a forced one (a long absence, Resync) still runs', _refreshAll(true, fakeDb) === true);
+        } finally { window._applyRemoteKey = applyRK; SKT_SYNC_KEYS.forEach(k => { delete _lastServer[k]; }); _refreshLast = 0; }
+
+        // #2 Portraits travel once, on their own.
+        const blobs = {};
+        window.sktMapBlobPut = (id, url) => { blobs[id] = url; return Promise.resolve(true); };
+        window.sktMapBlobGet = id => Promise.resolve(blobs[id] || null);
+        const spec = _ENTITY_KEYS['skt-party-v1'];
+        const cv = document.createElement('canvas'); cv.width = 80; cv.height = 80;
+        { const g = cv.getContext('2d'); for (let i = 0; i < 400; i++){ g.fillStyle = 'hsl(' + (i * 37 % 360) + ',60%,50%)'; g.fillRect((i * 13) % 80, (i * 7) % 80, 4, 4); } }
+        const pic = cv.toDataURL('image/png');
+        const party = JSON.parse(P0);
+        party[0] = { ...party[0], icon: pic };
+        party[1] = { ...party[1], icon: '🧝' };
+        const nodes = spec.explode(JSON.stringify(party));
+        const ids = Object.keys(nodes).filter(n => n.startsWith('items/'));
+        const sent0 = JSON.parse(nodes[ids[0]]), sent1 = JSON.parse(nodes[ids[1]]);
+        await sleep(10);
+        ok('portrait: a character record goes to the server without its picture, which is stored once on its own',
+           pic.length > 1000 && sent0.icon === null && /^pi_/.test(sent0.iconBlob) && blobs[sent0.iconBlob] === pic && nodes[ids[0]].length < 4000);
+        ok('portrait: a small icon (an emoji) still rides along', sent1.icon === '🧝' && !sent1.iconBlob);
+        // Back from the server on this device: from the local copy.
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-party-v1', JSON.stringify(party.map((p, i) => i === 0 ? { ...p, iconBlob: sent0.iconBlob } : p))); } finally { _remoteUpdate = false; }
+        Object.keys(_portraitMem).forEach(k => delete _portraitMem[k]);
+        const back = JSON.parse(spec.assemble(nodes));
+        ok('portrait: coming back, it is put back from this device’s own copy', back[0].icon === pic);
+        // On a device that has never had it: fetched, then drawn.
+        Object.keys(_portraitMem).forEach(k => delete _portraitMem[k]);
+        _remoteUpdate = true;
+        try { localStorage.setItem('skt-party-v1', JSON.stringify(party.map((p, i) => i === 0 ? { ...p, icon: null, iconBlob: sent0.iconBlob } : p))); } finally { _remoteUpdate = false; }
+        const fresh = JSON.parse(spec.assemble(nodes));
+        await sleep(60);
+        const stored = JSON.parse(localStorage.getItem('skt-party-v1'))[0];
+        ok('portrait: a device without it fetches it once and shows it', fresh[0].icon == null && stored.icon === pic);
+
+        // #4 The old combined copy goes once the split keys are in use.
+        const LG0 = localStorage.getItem('skt-workspace-v1');
+        localStorage.setItem('skt-workspace-v1', '{"party":[]}');
+        const lay0 = JSON.stringify(layout);
+        load();
+        ok('storage: the stale pre-split copy of the campaign is removed', localStorage.getItem('skt-workspace-v1') == null);
+        if (LG0 != null) localStorage.setItem('skt-workspace-v1', LG0);
+        Object.keys(layout).forEach(k => delete layout[k]); Object.assign(layout, JSON.parse(lay0));
+      } catch(e){ ok('sync costs: the checks ran to completion', false, e.message); }
+      finally {
+        window.sktMapBlobPut = stub.put; window.sktMapBlobGet = stub.get; window._applyRemoteKey = applyRK;
+        _remoteUpdate = true;
+        try { if (P0 != null) localStorage.setItem('skt-party-v1', P0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+      ok('sync costs: silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
     // ── The NPC generator lives in the NPC Library ────────────────────────
     {
       const before = errs.length;
