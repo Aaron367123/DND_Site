@@ -5938,6 +5938,30 @@
       }
     }
 
+    // -- Party card: death saves between fights -------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember, d: window.sktD };
+      try {
+        window._findCombatantForPartyMember = () => -1; window.sktD = () => 12;
+        openPanel('party'); await sleep(200);
+        const P = panelDefs.party;
+        state.party[0] = { ...state.party[0], hp: 3, tempHp: 0 }; save(); P._render();
+        P._applyHpDelta(0, -10, null); await sleep(30);
+        const btn = P._body.querySelector('[data-act="death-roll"]');
+        ok('party: a downed PC between fights gets a death-save button', !!btn && /0\/3 saves/.test(btn.textContent));
+        btn.click(); await sleep(40);
+        ok('party: which rolls and records it', (state.party[0].deathSaves || {}).success === 1 && /1\/3 saves/.test(P._body.querySelector('[data-act="death-roll"]').textContent));
+        closePanel('party');
+      } catch(e){ ok('party: the death-save checks ran to completion', false, e.message); }
+      finally {
+        window._findCombatantForPartyMember = st.find; window.sktD = st.d;
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -6797,6 +6821,76 @@
           }
         } catch(e){ ok('player: the phone undo checks ran to completion', false, e.message); }
         finally {
+          if (p0 != null){
+            _remoteUpdate = true;
+            try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+            loadDomain('party');
+          }
+          paTab = tab0; paRender();
+        }
+      }
+
+      // -- The phone between fights: damage, temp HP, death saves, rests -------
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab;
+        const stub = { pc: window.paCombatant, find: window._findCombatantForPartyMember, d: window.sktD, conf: window.showConfirm };
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          const mi = paMyIdx();
+          window.paCombatant = () => null; window._findCombatantForPartyMember = () => -1;
+          const me = () => state.party[paMyIdx()];
+          const set = (o) => { state.party[mi] = { ...state.party[mi], ...o }; save(); paTab = 'you'; paRender(); };
+          const hit = (n, sign, type) => {
+            document.getElementById('pa-hp-amt').value = String(n);
+            if (type) document.getElementById('pa-hp-type').value = type;
+            document.querySelector('[data-pa-hp="' + sign + '"]').click();
+          };
+          set({ hp: 20, hpMax: 30, tempHp: 5, resistances: ['fire'], deathSaves: undefined, stable: undefined, dead: undefined });
+          await sleep(60);
+          hit(7, -1); await sleep(60);
+          ok('phone: out of a fight, temporary hit points soak damage first', me().tempHp === 0 && me().hp === 18, JSON.stringify({ t: me().tempHp, hp: me().hp }));
+          hit(10, -1, 'fire'); await sleep(60);
+          ok('phone: and a resistance halves it', me().hp === 13, me().hp);
+          document.getElementById('pa-hp-amt').value = '8'; document.querySelector('[data-pa-temp]').click(); await sleep(40);
+          document.getElementById('pa-hp-amt').value = '3'; document.querySelector('[data-pa-temp]').click(); await sleep(40);
+          ok('phone: temporary hit points can be set, and the higher stays', me().tempHp === 8, me().tempHp);
+          set({ hp: 2, tempHp: 0 }); await sleep(40);
+          hit(5, -1); await sleep(60);
+          ok('phone: dropping to 0 between fights starts death saves', me().hp === 0 && JSON.stringify(me().deathSaves) === '{"success":0,"fail":0}' && !!document.querySelector('[data-pa-death]'));
+          window.sktD = () => 15;
+          document.querySelector('[data-pa-death]').click(); await sleep(60);
+          ok('phone: and they can be rolled', (me().deathSaves || {}).success === 1);
+          hit(3, -1); await sleep(60);
+          ok('phone: a hit at 0 is a failed save', (me().deathSaves || {}).fail === 1);
+          document.querySelector('[data-pa-death]').click(); await sleep(40);
+          document.querySelector('[data-pa-death]').click(); await sleep(60);
+          ok('phone: three successes and they are stable', me().stable === true && !me().deathSaves && /Stable/.test(document.querySelector('.pa-death').textContent));
+          hit(4, 1); await sleep(60);
+          ok('phone: healing ends it all', me().hp === 4 && !me().stable && !me().deathSaves);
+          set({ hp: 0, deathSaves: { success: 0, fail: 0 } }); window.sktD = () => 1;
+          document.querySelector('[data-pa-death]').click(); await sleep(40);
+          document.querySelector('[data-pa-death]').click(); await sleep(60);
+          ok('phone: a natural 1 counts twice; three failures and they are dead', me().dead === true && /died/.test(document.querySelector('.pa-death').textContent));
+          set({ hp: 0, dead: undefined, deathSaves: { success: 0, fail: 0 } }); window.sktD = () => 20;
+          document.querySelector('[data-pa-death]').click(); await sleep(60);
+          ok('phone: a natural 20 wakes them at 1 HP', me().hp === 1 && !me().deathSaves);
+          // Heroic Inspiration.
+          set({ inspiration: true }); await sleep(40);
+          ok('phone: Heroic Inspiration shows', !!document.querySelector('[data-pa-insp]'));
+          document.querySelector('[data-pa-insp]').click(); await sleep(40);
+          ok('phone: and can be spent', me().inspiration === false && !document.querySelector('[data-pa-insp]'));
+          // Long rest.
+          const slots = me().sheet && me().sheet.spellSlots;
+          set({ hp: 3, tempHp: 4, exhaustion: 2 });
+          window.showConfirm = () => Promise.resolve(true);
+          document.querySelector('[data-pa-longrest]').click(); await sleep(80);
+          ok('phone: a long rest from the phone', me().hp === me().hpMax && me().tempHp === 0 && me().exhaustion === 1);
+          set({ hp: 0, dead: true });
+          document.querySelector('[data-pa-longrest]').click(); await sleep(80);
+          ok('phone: a long rest does not raise the dead', me().hp === 0 && me().dead === true);
+        } catch(e){ ok('phone: the between-fights checks ran to completion', false, e.message); }
+        finally {
+          window.paCombatant = stub.pc; window._findCombatantForPartyMember = stub.find; window.sktD = stub.d; window.showConfirm = stub.conf;
           if (p0 != null){
             _remoteUpdate = true;
             try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }

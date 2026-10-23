@@ -5147,3 +5147,7 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 #cb-root .cb-mc-row b { flex:1; min-width:0; }
 #cb-root .cb-counter-ctl { display:inline-flex; align-items:center; gap:6px; }
 #cb-root .cb-counter-ctl span { min-width:1.5em; text-align:center; font-weight:600; }
+.pa-hp-type { width:100%; margin-top:6px; }
+.pa-insp { display:block; width:100%; margin-top:8px; padding:8px; border:1px solid var(--accent); border-radius:8px; background:transparent; color:var(--accent); font-weight:600; }
+button.char-downed-badge { cursor:pointer; border:none; font:inherit; width:100%; text-align:left; }
+.char-downed-badge.dead { opacity:.8; }

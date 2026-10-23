@@ -352,16 +352,14 @@ registerPanel('party',{
         // on the matching combatant when HP crosses 0 in combat) — we just
         // surface the badge here so the party panel makes the state visible.
         + (downed
-          ? '<div class="char-downed-badge" title="At 0 HP — see combat tracker for death saves">💀 Downed' + (
-              (()=>{
-                const co = state.combatants.find(x => x.id === c.id);
-                if (co && co.deathSaves){
-                  const ds = co.deathSaves;
-                  return ' · ' + (ds.success||0) + '/3 saves · ' + (ds.fail||0) + '/3 fails';
-                }
-                return '';
-              })()
-            ) + '</div>'
+          ? (()=>{
+              const h = sktDeathSaveHolder(c);
+              if (h.dead) return '<div class="char-downed-badge dead">💀 Dead</div>';
+              if (h.stable) return '<div class="char-downed-badge">⚕ Stable at 0 HP</div>';
+              const ds = h.deathSaves || { success: 0, fail: 0 };
+              return '<button class="char-downed-badge" data-act="death-roll" data-idx="'+i+'" title="Roll a death save">💀 Downed · '
+                + (ds.success||0) + '/3 saves · ' + (ds.fail||0) + '/3 fails · Roll</button>';
+            })()
           : '')
       +'</div>'
       // Stats: AC, Init, Spd. The AC input has a computed-breakdown tooltip
@@ -1396,6 +1394,7 @@ registerPanel('party',{
     // path stays: resistances, pools and hp, with the dying rules left to the
     // table. Adding a parallel death-save store on the party slot would be a
     // second source of truth for the same fact.
+    let hpBefore = Math.max(0, c.hp || 0), hitThrough = false;
     if (delta < 0){
       let remaining = -delta; // positive amount of damage
       let typeSuffix = '';
@@ -1472,6 +1471,7 @@ registerPanel('party',{
         remaining -= drain;
       }
       const taken = Math.max(0, remaining);
+      hitThrough = taken > 0;
       if (taken > 0){
         // Floor at 0. Damage that would take you below 0 sets you to 0 in 5e;
         // the excess only matters for instant death, which this tracker does
@@ -1527,6 +1527,15 @@ registerPanel('party',{
         // already sitting on a negative HP from before that clamp existed.
         c.hp = Math.min(cap, Math.max(0, c.hp || 0) + delta);
       }
+    }
+    // Between fights the party slot holds the death saves (see
+    // sktRollDeathSave): dropping to 0 starts them, a hit at 0 is a failed
+    // save, and any healing ends them. They used to exist only in combat, so
+    // a PC dropped by a trap between fights had nothing to roll.
+    if ((c.hp || 0) > 0){ delete c.deathSaves; delete c.stable; delete c.dead; }
+    else if (delta < 0 && !c.dead){
+      if (hpBefore > 0){ c.deathSaves = { success: 0, fail: 0 }; c.stable = false; }
+      else if (hitThrough) sktAddPartyDeathSave(c, 'fail', 1);
     }
     save();
     // Mirror to the matching combat slot. syncPartyToCombat() repaints the
@@ -1649,7 +1658,8 @@ registerPanel('party',{
       const combatant = ci >= 0 ? state.combatants[ci] : null;
       // A long rest does not raise the dead. Leave them exactly as they are;
       // reviving is a deliberate act (revivify, or clearing the flag by hand).
-      if (combatant && combatant.dead) return;
+      if ((combatant && combatant.dead) || c.dead) return;
+      delete c.deathSaves; delete c.stable;
       if (combatant){
         combatant.stable = false;
         combatant.deathSaves = null;
@@ -3045,8 +3055,9 @@ registerPanel('party',{
             if ((liveC.hp || 0) <= 0){
               rollItems.push({ label: '─────', disabled: true });
               rollItems.push({ label:'💀 Death save', onClick: () => {
-                const r = this._rollD20(0, { mode:'normal', label: liveC.name + ' · Death Save' });
-                this._setLastRoll(liveC, r);
+                const r = sktRollDeathSave(liveC);
+                save(); this._render(); panelDefs.combat?._render?.();
+                showToast(liveC.name + ' · death save ' + r.msg);
               }});
             }
             rollItems.push({ label: '─────', disabled: true });
@@ -3335,6 +3346,12 @@ registerPanel('party',{
         showContextMenu(rect.left, rect.bottom + 4, items);
       }
       // (Inventory tab removed.)
+      else if(act==='death-roll'){
+        const c = state.party[+el.dataset.idx]; if (!c) return;
+        const r = sktRollDeathSave(c);
+        save(); this._render(); panelDefs.combat?._render?.();
+        showToast(c.name + ' · death save ' + r.msg);
+      }
       else if(act==='hd-rest'){
         const idx = +el.dataset.idx;
         const c = state.party[idx]; if (!c) return;
@@ -3745,3 +3762,40 @@ registerPanel('party',{
     });
   },
 });
+
+// ── Death saves ───────────────────────────────────────────────────────────────
+// In a fight they live on the combatant, where the combat tracker owns the
+// dying rules; between fights on the party slot, in the same shape. One roll
+// for both, used by the party card and the player's phone.
+function sktDeathSaveHolder(pc){
+  const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
+  return ci >= 0 ? state.combatants[ci] : pc;
+}
+function sktAddPartyDeathSave(pc, kind, n){
+  const ds = Object.assign({ success: 0, fail: 0 }, pc.deathSaves);
+  ds[kind] = Math.max(0, Math.min(3, (ds[kind] || 0) + n));
+  pc.deathSaves = ds;
+  if (ds.success >= 3){ pc.deathSaves = null; pc.stable = true; return 'stable'; }
+  if (ds.fail >= 3){ pc.deathSaves = null; pc.dead = true; return 'dead'; }
+  return null;
+}
+function sktRollDeathSave(pc){
+  const nat = sktD(20);
+  const C = panelDefs.combat;
+  const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
+  const kind = nat >= 10 ? 'success' : 'fail';
+  let outcome = null;
+  if (nat === 20){
+    if (ci >= 0 && C){ state.combatants[ci].deathSaves = null; C._applyHpDelta(ci, 1, null); }
+    else {
+      const pi = state.party.indexOf(pc);
+      pc.deathSaves = null; pc.stable = false; pc.hp = 1;
+      if (pi >= 0) syncPartyToCombat(pi);
+    }
+    return { nat, msg: '20 — natural 20, conscious at 1 HP.' };
+  }
+  outcome = (ci >= 0 && C) ? C._addDeathSave(state.combatants[ci].id, kind, nat === 1 ? 2 : 1)
+                           : sktAddPartyDeathSave(pc, kind, nat === 1 ? 2 : 1);
+  return { nat, outcome, msg: nat + ' — ' + (nat === 1 ? 'natural 1, two failures' : kind)
+    + (outcome === 'stable' ? '. Stable.' : outcome === 'dead' ? '. Dead.' : '.') };
+}

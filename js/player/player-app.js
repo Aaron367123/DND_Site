@@ -779,7 +779,9 @@ function paYouScreen(){
   const conds = (exh ? chip('Exhaustion', 'Exhaustion ' + exh) : '') + condNames.map(x => chip(x)).join('');
   const condDet = condNames.includes(paCondOpen) ? paConditionDetail(paCondOpen)
                 : (paCondOpen === 'Exhaustion' && exh) ? paConditionDetail('Exhaustion', 'Level ' + exh + ' of 6') : '';
-  const down = !!(c && c.isPC && (c.hp || 0) <= 0 && !c.dead && !c.stable);
+  // Down in a fight (the combatant holds the saves) or out of one (the party
+  // slot does — see sktRollDeathSave).
+  const down = c ? !!(c.isPC && (c.hp || 0) <= 0) : (pc.hp || 0) <= 0 && pc.hpMax > 0;
 
   // Tap a lit pip to spend one, an empty one to get one back — one at a
   // time, so a fat-fingered tap on a phone never spends three.
@@ -876,16 +878,21 @@ function paYouScreen(){
           <button class="btn" data-pa-hp="-1">− Damage</button>
           <input class="pa-in" id="pa-hp-amt" type="number" value="5" aria-label="Amount">
           <button class="btn" data-pa-hp="1">+ Heal</button>
+          <button class="btn" data-pa-temp="1" title="Temporary hit points — the higher of the two stays">Temp</button>
         </div>
+        <select class="pa-in pa-hp-type" id="pa-hp-type" aria-label="Damage type">
+          <option value="">Damage type…</option>${PA_DMG_TYPES.map(t => `<option value="${t}">${t[0].toUpperCase() + t.slice(1)}</option>`).join('')}
+        </select>
+        ${pc.inspiration ? '<button class="pa-insp" data-pa-insp="1" title="Spend it to give yourself advantage">✦ Heroic Inspiration — tap to spend</button>' : ''}
       </div>
 
       ${conds ? `<div class="pa-conds">${conds}</div>${condDet}` : ''}
       ${paConcRow(pc)}
-      ${down ? paDeathBlock(c) : ''}
+      ${down ? paDeathBlock(c || pc) : ''}
       ${res ? `<div class="pa-sec"><h4>Resources</h4>${res}</div>` : ''}
       ${slots ? `<div class="pa-sec"><h4>Spell slots</h4>${slots}</div>` : ''}
       ${pc.hitDice && pc.hitDice.max ? `<div class="pa-sec pa-rest-row"><span>Hit dice <b>${Math.max(0, pc.hitDice.current ?? pc.hitDice.max)}/${pc.hitDice.max}</b> ${paEsc(pc.hitDice.dieType || 'd8')}</span>
-        <button class="btn" data-pa-rest="open">💤 Short rest</button></div>` : ''}
+        <button class="btn" data-pa-rest="open">💤 Short rest</button><button class="btn" data-pa-longrest="1">🛌 Long rest</button></div>` : `<div class="pa-sec pa-rest-row"><span></span><button class="btn" data-pa-longrest="1">🛌 Long rest</button></div>`}
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
       ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
       <div class="pa-roll" id="pa-roll"></div>
@@ -1075,7 +1082,10 @@ function paOpenShortRest(req){
   document.body.appendChild(ov);
 }
 
+const PA_DMG_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
 function paDeathBlock(c){
+  if (c.dead) return '<div class="pa-death"><span class="pa-death-l">You have died.</span></div>';
+  if (c.stable) return '<div class="pa-death"><span class="pa-death-l">Stable at 0 HP.</span></div>';
   const ds = c.deathSaves || { success:0, fail:0 };
   const row = kind => Array.from({ length:3 }, (_, i) =>
     `<span class="pa-ds-pip ${kind} ${(ds[kind] || 0) > i ? 'on' : ''}"></span>`).join('');
@@ -1262,10 +1272,16 @@ function paApplyHp(sign){
 function _paApplyHp(sign, n){
   const pc = paPc(); if (!pc) return;
   const c = paCombatant();
-  const C = panelDefs.combat;
+  const C = panelDefs.combat, P = panelDefs.party;
+  const type = (document.getElementById('pa-hp-type') || {}).value || null;
+  const pi = (state.party || []).indexOf(pc);
   if (c && C && typeof C._applyHpDelta === 'function'){
     const i = (state.combatants || []).indexOf(c);
-    if (i >= 0) C._applyHpDelta(i, sign < 0 ? -n : n, null);
+    if (i >= 0) C._applyHpDelta(i, sign < 0 ? -n : n, sign < 0 ? type : null);
+  } else if (P && typeof P._applyHpDelta === 'function' && pi >= 0){
+    // Out of a fight the party card's own rules: temporary hit points soak
+    // first and resistances apply. This used to subtract straight from hp.
+    P._applyHpDelta(pi, sign < 0 ? -n : n, sign < 0 ? type : null);
   } else {
     // Not in the fight — write to the party slot directly, then mirror. The
     // mirror is not dead code just because paCombatant() found nothing:
@@ -1279,6 +1295,28 @@ function _paApplyHp(sign, n){
     if (pi >= 0 && typeof syncPartyToCombat === 'function') syncPartyToCombat(pi);
   }
   save(); paRender();
+}
+
+// Temporary hit points don't stack: the higher of the two stays.
+function paSetTemp(){
+  const pc = paPc(); if (!pc) return;
+  const n = Math.abs(parseInt((document.getElementById('pa-hp-amt') || {}).value, 10) || 0);
+  const run = () => { pc.tempHp = Math.max(pc.tempHp || 0, n); save(); paRender(); };
+  if (typeof sktUndoable === 'function') return sktUndoable('Temp HP ' + n, run);
+  run();
+}
+function paLongRest(){
+  const pc = paPc(); if (!pc) return;
+  const pi = state.party.indexOf(pc), P = panelDefs.party;
+  if (pi < 0 || !P) return;
+  const go = () => {
+    const run = () => { P._longRestOne(pc, pi); save(); paRender(); };
+    if (typeof sktUndoable === 'function') sktUndoable(pc.name + ' took a long rest', run); else run();
+    if (typeof showToast === 'function') showToast('🛌 Long rest: hit points, slots and features back');
+  };
+  if (typeof showConfirm === 'function')
+    showConfirm('Hit points to full, half your hit dice, every spell slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
+  else go();
 }
 
 function paRollAttack(i){
@@ -1313,22 +1351,8 @@ function paRollAttack(i){
 }
 
 function paRollDeathSave(){
-  const c = paCombatant(); if (!c) return;
-  const C = panelDefs.combat; if (!C) return;
-  const d = sktD;                       // shared roller, see js/core/utils.js
-  const nat = d(20);
-  let msg;
-  if (nat === 20){
-    const i = (state.combatants || []).indexOf(c);
-    c.deathSaves = null;
-    if (i >= 0) C._applyHpDelta(i, 1, null);
-    msg = 'Natural 20 — you are conscious at 1 HP.';
-  } else {
-    const kind = nat >= 10 ? 'success' : 'fail';
-    const outcome = C._addDeathSave(c.id, kind, nat === 1 ? 2 : 1);
-    msg = `${nat} — ${nat === 1 ? 'natural 1, two failures' : kind}`
-        + (outcome === 'stable' ? '. Stable.' : outcome === 'dead' ? '. You have died.' : '.');
-  }
+  const pc = paPc(); if (!pc || typeof sktRollDeathSave !== 'function') return;
+  const msg = sktRollDeathSave(pc).msg;
   save();
   const box = document.getElementById('pa-roll');
   if (box) box.innerHTML = `<div class="pa-roll-in"><span class="pa-roll-l">Death save</span>
@@ -1370,6 +1394,14 @@ function paOnClick(e){
   const cc = e.target.closest('[data-pa-conc]');
   if (cc){ cc.dataset.paConc === 'drop' ? paSetConcentration(null) : paPromptConcentration(); return; }
   if (e.target.closest('[data-pa-rest]')){ paOpenShortRest(); return; }
+  if (e.target.closest('[data-pa-longrest]')){ paLongRest(); return; }
+  if (e.target.closest('[data-pa-temp]')){ paSetTemp(); return; }
+  if (e.target.closest('[data-pa-insp]')){
+    const pc = paPc(); if (!pc) return;
+    const run = () => { pc.inspiration = false; save(); paRender(); };
+    if (typeof sktUndoable === 'function') sktUndoable('Spent Heroic Inspiration', run); else run();
+    return;
+  }
   const cond = e.target.closest('[data-pa-cond]');
   if (cond){ paCondOpen = paCondOpen === cond.dataset.paCond ? null : cond.dataset.paCond; paRenderScreen(); return; }
   if (e.target.closest('[data-pa-condclose]')){ paCondOpen = null; paRenderScreen(); return; }
