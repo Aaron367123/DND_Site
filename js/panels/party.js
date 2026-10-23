@@ -1728,7 +1728,13 @@ registerPanel('party',{
       // model is for expendables: {name, type, current, max}. Anything that
       // genuinely shouldn't come back doesn't belong in it.
       if (Array.isArray(c.resources)){
-        c.resources = c.resources.map(r => ({ ...r, current: r.max ?? r.current }));
+        c.resources = c.resources.map(r => {
+          // A magic item regains its charges at dawn by its own roll (a
+          // wand's 1d6 + 1), not all of them.
+          const m = r.recharge === 'dawn' && /Regains (\d+)d(\d+)(?:\s*\+\s*(\d+))?/.exec(r.note || '');
+          if (m){ let n = +(m[3] || 0); for (let k = 0; k < +m[1]; k++) n += 1 + Math.floor(Math.random() * +m[2]); return { ...r, current: Math.min(r.max, (+r.current || 0) + n) }; }
+          return { ...r, current: r.max ?? r.current };
+        });
       }
       // Exhaustion: -1 (clamped at 0).
       c.exhaustion = Math.max(0, (+c.exhaustion || 0) - 1);

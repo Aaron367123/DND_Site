@@ -7826,6 +7826,35 @@
       } catch(e){ ok('round 38 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 39: magic item charges; an artificer's attunement for bonuses ---------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember, rnd: Math.random };
+      try {
+        const R14 = await sktRulesLoad('2014'), M14 = await sktMagicLoad('2014');
+        const wand = sktMagicMake(R14, M14.find(x => x.name === 'Wand of Magic Missiles'));
+        ok('charges: a wand keeps its charges and how it regains them', wand.charges === 7 && wand.recharge === 'dawn' && /1d6 \+ 1/.test(wand.rechargeAmount));
+        window._findCombatantForPartyMember = () => -1;
+        const pc = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Wandy', cls: 'Wizard', species: 'Human', level: 3, items: [wand], equipment: { materialized: true } }), R14);
+        const wr = pc.resources.find(r => r.name === 'Wand of Magic Missiles');
+        ok('charges: a carried wand counts its 7 charges', !!wr && wr.max === 7 && wr.recharge === 'dawn');
+        pc.id = 'pc_r39'; wr.current = 0; state.party.push(pc); save();
+        Math.random = () => 0;
+        panelDefs.party._longRestOne(state.party.find(p => p.id === 'pc_r39'), state.party.length - 1);
+        ok('charges: a long rest gives back 1d6 + 1, not all seven', state.party.find(p => p.id === 'pc_r39').resources.find(r => r.name === 'Wand of Magic Missiles').current === 2);
+        Math.random = st.rnd;
+        const rings = [1, 2, 3, 4, 5].map(n => ({ name: 'Ring ' + n, reqAttune: true, attuned: true, bonusAc: 1 }));
+        const ac = (cls, L) => sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls, level: L, items: rings, equipment: { materialized: true } }), R14).ac;
+        ok('attunement: a 10th-level artificer\'s fourth attuned item counts', ac('Artificer', 10) === ac('Artificer', 9) + 1 && ac('Artificer', 14) === ac('Artificer', 9) + 2);
+      } catch(e){ ok('round 39 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        Math.random = st.rnd; window._findCombatantForPartyMember = st.find;
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

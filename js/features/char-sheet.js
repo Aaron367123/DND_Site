@@ -459,7 +459,7 @@ CS_TAB_RENDER.actions = pc => {
   if (res.length){
     h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(r.name) + '</b>'
       + '<span class="cs-pips">' + Array.from({ length: Math.min(r.max || 0, 20) }, (_, n) => '<button class="cs-pip' + (n < (r.current || 0) ? ' on' : '') + '" data-cs-res="' + i + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(r.name) + ' ' + (n + 1) + '"></button>').join('') + '</span>'
-      + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : /short/.test(r.recharge) ? 'short rest' : 'long rest') : '') + '</span></div>').join('') + '</div>';
+      + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : /short/.test(r.recharge) ? 'short rest' : r.recharge === 'dawn' ? (r.note || 'at dawn') : 'long rest') : '') + '</span></div>').join('') + '</div>';
   }
   if (!ro && pc.build){
     h += '<details class="cs-addcustom"><summary>+ Add a tracker or an action</summary>'

@@ -2147,6 +2147,10 @@ function sktComputeCharacter(build, R, prior){
   // Resources keep what has been SPENT across a recompute: levelling up
   // mid-adventure does not hand back a used Rage, and a full pool that grows
   // stays full (Lay on Hands 15/15 becomes 20/20, not 15/20).
+  // A charged magic item in use (carried, and attuned if it needs it) counts its charges.
+  _sktActiveItems(build).filter(m => +m.charges > 0).forEach(m => { if (!ctx.resources.some(x => x.name === m.name))
+    ctx.resources.push({ name: m.name, type: 'pool', current: +m.charges, max: +m.charges, recharge: m.recharge === 'dawn' ? 'dawn' : 'long', item: true,
+                         note: m.rechargeAmount ? 'Regains ' + m.rechargeAmount + (m.recharge === 'dawn' ? ' at dawn' : '') : '' }); });
   (build.customResources || []).forEach(r => { if (r && r.name && !ctx.resources.some(x => x.name === r.name))
     ctx.resources.push({ name: r.name, type: 'pool', current: +r.max || 1, max: +r.max || 1, recharge: r.recharge || 'long', custom: true }); });
   (build.customActions || []).forEach(a => { if (a && a.name) _fxAction(ctx, { name: a.name, action: a.action || 'Action', desc: a.desc || '', resource: a.resource || undefined, amount: a.resource ? 1 : undefined, custom: true }); });
@@ -2656,9 +2660,14 @@ function sktBuildTodo(build, R){
 // that only to list what can be added.
 function _sktActiveItems(build){
   let attuned = 0;
+  // An artificer attunes to 4 items at 10th level, 5 at 14th, 6 at 18th.
+  const full = build._full || build;
+  const others = (full.multi || []).reduce((n, m) => n + Math.max(1, +m.level || 1), 0);
+  const artLv = /^artificer$/i.test(full.cls || '') ? (full.level || 1) - others : ((full.multi || []).find(m => /^artificer$/i.test(m.cls || '')) || {}).level || 0;
+  const max = artLv >= 18 ? 6 : artLv >= 14 ? 5 : artLv >= 10 ? 4 : 3;
   return (build.items || []).filter(m => {
     if (!m.reqAttune) return true;
-    if (!m.attuned || attuned >= 3) return false;
+    if (!m.attuned || attuned >= max) return false;
     attuned++; return true;
   });
 }
@@ -2718,6 +2727,7 @@ function _sktMagicEntry(i, kind){
     bonusSpellAttack: _sktBonus(i.bonusSpellAttack), bonusSpellSaveDc: _sktBonus(i.bonusSpellSaveDc),
     ability: i.ability || null, resist: (i.resist || []).filter(r => typeof r === 'string'),
     unarmoredOnly: /wearing no armou?r/i.test(text), noShield: /no armou?r and (are )?(not )?(using|wielding) (a|no) shield|no shield/i.test(text),
+    charges: +i.charges > 0 ? +i.charges : null, recharge: i.recharge || null, rechargeAmount: i.rechargeAmount ? sktRulesInline(String(i.rechargeAmount)) : null,
     text,
   };
 }
@@ -2758,6 +2768,7 @@ function sktMagicMake(R, e, baseKey){
   if (e.resist && e.resist.length) out.resist = e.resist;
   if (e.unarmoredOnly) out.unarmoredOnly = true;
   if (e.noShield) out.noShield = true;
+  if (e.charges){ out.charges = e.charges; out.recharge = e.recharge; if (e.rechargeAmount) out.rechargeAmount = e.rechargeAmount; }
   return out;
 }
 
