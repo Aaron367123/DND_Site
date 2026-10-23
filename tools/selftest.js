@@ -7985,6 +7985,20 @@
       } catch(e){ ok('round 44 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 45: lasting benefits read from the text ----------------------------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const pc = (R, ed, cls, sub, L) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L }), R);
+        ok('passive: a forge cleric resists fire from 6th level', pc(R14, '2014', 'Cleric', 'Forge', 6).resistances.includes('fire') && !pc(R14, '2014', 'Cleric', 'Forge', 5).resistances.includes('fire'));
+        ok('passive: a twilight cleric sees 300 ft in the dark', /Darkvision 300/.test(pc(R24, '2024', 'Cleric', 'Twilight', 3).sheet.senses));
+        ok('passive: a scout moves 10 ft faster from 9th level', pc(R14, '2014', 'Rogue', 'Scout', 9).spd === pc(R14, '2014', 'Rogue', 'Scout', 8).spd + 10);
+        ok('passive: Bladesong\'s speed is only while it\'s active', pc(R14, '2014', 'Wizard', 'Bladesinging', 2).spd === 30 && pc(R24, '2024', 'Wizard', 'Bladesinger', 3).spd === 30);
+        ok('passive: Dread Ambusher\'s speed is only the first turn', pc(R14, '2014', 'Ranger', 'Gloom Stalker', 3).spd === 30);
+        ok('passive: a celestial warlock resists radiant damage', pc(R14, '2014', 'Warlock', 'Celestial', 6).resistances.includes('radiant'));
+      } catch(e){ ok('round 45 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

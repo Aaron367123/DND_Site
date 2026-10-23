@@ -1593,6 +1593,33 @@ function sktUsesFromText(text, ctx, name){
   return { max, recharge };
 }
 
+// Lasting benefits a class or subclass feature states plainly: a damage
+// resistance or immunity (Soul of the Forge, Radiant Soul), darkvision (Eyes of
+// Night), a faster walk (Superior Mobility). Only where nothing in the same
+// sentence makes it conditional ("while raging", "until the end of your
+// turn", "when you…").
+function sktPassiveGrants(text){
+  const out = { resist: [], immune: [], darkvision: 0, speed: 0 };
+  // Benefits listed under a condition ("While your Bladesong is active, you
+  // gain the following benefits") are the condition's, not lasting.
+  if (/\bwhile (?:the|your|you're|you are|raging|it is)[^.]*(?:following benefits|benefits:)/i.test(String(text || ''))) return Object.assign(out, { any: false });
+  String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).forEach(s => {
+    const lasting = (m) => {
+      const before = s.slice(0, m.index), after = s.slice(m.index + m[0].length, m.index + m[0].length + 20);
+      return !/\b(while|when|whenever|until|if|during|as long as|for the duration|for 1 (minute|hour)|each time|once)\b/i.test(before)
+        && !/^\W*(while|until|when|for|if|during)\b/i.test(after) && !/lasts until|until the end/i.test(s.slice(m.index));
+    };
+    let m;
+    const res = /you (?:gain|have) resistance to (acid|cold|fire|force|lightning|necrotic|poison|psychic|radiant|thunder) damage/i;
+    if ((m = res.exec(s)) && lasting(m)) out.resist.push(m[1].toLowerCase());
+    if ((m = /(?:you (?:gain|have) )?immunity to (acid|cold|fire|force|lightning|necrotic|poison|psychic|radiant|thunder) damage/i.exec(s)) && lasting(m)) out.immune.push(m[1].toLowerCase());
+    if ((m = /you have darkvision out to a range of (\d+) feet/i.exec(s)) && lasting(m)) out.darkvision = Math.max(out.darkvision, +m[1]);
+    if ((m = /your (?:walking )?speed increases by (\d+) feet/i.exec(s)) && lasting(m)) out.speed += +m[1];
+  });
+  out.any = out.resist.length || out.immune.length || out.darkvision || out.speed;
+  return out;
+}
+
 // Small helpers the effects share.
 function _fxPool(ctx, name, max, recharge, extra){
   if (!(max > 0)) return;
@@ -1988,6 +2015,12 @@ function sktComputeCharacter(build, R, prior){
       const ch = sktFeatureChoice(f.name, f.from, R.edition, key) || f.optionSpec;
       // Species traits and feats too, except a once-a-day spell, which the
       // sheet already casts for free.
+      if (!fx && !ch && !f.info && (f.from === 'class' || f.from === 'subclass')){
+        const g = sktPassiveGrants(f.text);
+        g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r));
+        if (g.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, g.darkvision);
+        if (g.speed) ctx.speedBonus += g.speed;
+      }
       if (!fx && !ch && !f.info && /^(class|subclass|species|feat)$/.test(f.from) && !/^Channel Divinity:/.test(f.name)
           && !((f.from === 'species' || f.from === 'feat') && /\bcast\b/i.test(f.text || ''))){
         const u = sktUsesFromText(f.text, ctx, f.name);
@@ -2848,7 +2881,7 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
-                     sktSpellsMatching, sktExpandedSpells, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
+                     sktSpellsMatching, sktExpandedSpells, sktPassiveGrants, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
