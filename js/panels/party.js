@@ -156,6 +156,7 @@ registerPanel('party',{
 
   _render(){
     const b=this._body;if(!b)return;
+    this._announceRolls();
     this._pruneTransientState();
     const compact = !!(state.settings && state.settings.partyCompact);
     const gridCls = 'party-grid' + (compact ? ' compact' : '');
@@ -288,6 +289,7 @@ registerPanel('party',{
       // Status badges — concentration, rage, wildshape, inspiration. Only
       // renders for ACTIVE states. Empty row collapses to nothing.
       + this._statusBadges(c, i)
+      + this._playerRollsHtml(c)
       // BIG HP block — large numeral, thick bar, color-coded by tier. The
       // current/max/temp inputs live UNDER the numeral as small fields so
       // the eye lands on the big number first. Heal/damage strip is below.
@@ -1859,6 +1861,20 @@ registerPanel('party',{
 
   // Persist a roll result + keep up to 5 most-recent per character. New
   // entries push to the front (index 0); older drop off the tail.
+  // A roll a player made on their sheet or phone arrives with the party
+  // record. Shown once, as it arrives — not the ones already there when the
+  // page opened.
+  _announceRolls(){
+    if (document.body.classList.contains('player-mode')) return;
+    if (!this._rollsSeen){ this._rollsSeen = {}; (state.party || []).forEach(c => { this._rollsSeen[c.id] = ((c.rolls || [])[0] || {}).at || 0; }); return; }
+    (state.party || []).forEach(c => {
+      const seen = this._rollsSeen[c.id] || 0;
+      const fresh = (c.rolls || []).filter(r => r.at > seen && r.from === 'player').reverse();
+      if ((c.rolls || [])[0]) this._rollsSeen[c.id] = Math.max(seen, c.rolls[0].at || 0);
+      fresh.forEach(r => { if (typeof showToast === 'function') showToast('🎲 ' + c.name + ' — ' + r.label + ': ' + r.text); });
+    });
+  },
+
   _setLastRoll(c, result){
     if (!this._rollHistory) this._rollHistory = {};
     const list = this._rollHistory[c.id] || [];
@@ -1869,6 +1885,12 @@ registerPanel('party',{
     if (!this._lastRoll) this._lastRoll = {};
     this._lastRoll[c.id] = result;
     this._render();
+  },
+
+  _playerRollsHtml(c){
+    const rs = (c.rolls || []).filter(r => r.from === 'player').slice(0, 3);
+    if (!rs.length) return '';
+    return '<div class="char-prolls" title="Rolled on their sheet">' + rs.map(r => '<span>🎲 ' + esc(r.label) + ' <b>' + esc(String(r.total)) + '</b></span>').join('') + '</div>';
   },
 
   _abilityBlock(c){

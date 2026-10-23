@@ -1322,17 +1322,13 @@ function paRollAttack(i){
   const d = sktD;                       // shared roller, see js/core/utils.js
   const bonus = parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0;
   const nat = d(20), total = nat + bonus;
-  // Damage expression off the sheet: "1d8+3 slashing".
-  const m = String(a.damage || '').match(/(\d*)d(\d+)\s*([+-]\s*\d+)?\s*(.*)/i);
+  // Damage off the sheet, every term of it ("2d6+1d4+3 slashing").
   let dmg = '', type = '';
-  if (m){
-    const n = parseInt(m[1] || '1'), sides = parseInt(m[2]), mod = parseInt(String(m[3] || '0').replace(/\s+/g, '')) || 0;
-    const crit = nat === 20;
-    const rolls = [];
-    for (let k = 0; k < n * (crit ? 2 : 1); k++) rolls.push(d(sides));
-    dmg = String(Math.max(0, rolls.reduce((s, x) => s + x, 0) + mod));
-    type = (m[4] || '').trim();
+  if (a.damage && /\d*d\d+/.test(a.damage) && typeof sktDamageRoll === 'function'){
+    const r = sktDamageRoll(a.damage, nat === 20);
+    dmg = String(r.total); type = r.type;
   }
+  if (typeof sktKeepRoll === 'function') sktKeepRoll(pc, total + ' to hit' + (dmg ? ', ' + dmg + ' ' + type : '') + (nat === 20 ? ' (crit)' : nat === 1 ? ' (nat 1)' : ''), { label: a.name, total });
   const box = document.getElementById('pa-roll');
   if (!box) return;
   // Shown, not applied. The player reads it out; the DM decides whether it

@@ -5465,6 +5465,7 @@
         set('[data-cb-bg2]', 'str'); await sleep(20); set('[data-cb-bg1]', 'con'); await sleep(20);
         click('[data-cb-step="skills"]'); await sleep(30);
         tick('[data-cb-skill="perception"]'); await sleep(20); tick('[data-cb-skill="survival"]'); await sleep(20);
+        tick('[data-cb-tool="background||Dice Set"]'); await sleep(20);
         click('[data-cb-step="levels"]'); await sleep(30);
         tick('[data-cb-opt-fighting-style="Defense"]'); await sleep(20);
         ['greatsword', 'flail', 'javelin'].forEach(n => tick('[data-cb-mastery="' + n + '"]'));
@@ -5989,6 +5990,7 @@
         window.sktD = () => 10;
         click('[data-cs-roll="save:int"]'); await sleep(30);
         ok('sheet: a click rolls the save', CS.log[0] && CS.log[0].total === 16 && CS.log[0].rolls.length === 1 && /16/.test(q('.cs-last').textContent));
+        ok('sheet: the roll is kept on the character, for the game log', (me().rolls || [])[0] && me().rolls[0].label === 'Intelligence save' && me().rolls[0].total === 16 && me().rolls[0].from === 'dm');
         click('[data-cs-mode="adv"]'); await sleep(20);
         { let k = 0; window.sktD = () => (k++ % 2 ? 15 : 5); }
         click('[data-cs-roll="skill:arcana"]'); await sleep(30);
@@ -6096,6 +6098,148 @@
       finally {
         window.sktD = st.d; window.showConfirm = st.conf; window._findCombatantForPartyMember = st.find;
         if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Builder: tools, characteristics, gold, spell picker, prerequisites, Tasha's, XP --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      const st = { d: window.sktD, conf: window.showConfirm };
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const base = { method: 'manual', base: { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 } };
+        // #8 Tools.
+        const monk = Object.assign(sktBlankBuild('2014'), { name: 'M', cls: 'Monk', species: 'Human', background: 'Soldier', level: 1, abilities: base });
+        const tc = sktToolChoices(monk, R14);
+        const mc = tc.find(c => c.key === 'class'), bc = tc.find(c => c.key === 'background');
+        ok('tools: a monk picks an artisan’s tool or an instrument; a soldier a gaming set',
+           !!mc && mc.count === 1 && mc.options.includes("Smith's Tools") && mc.options.includes('Lute') && !!bc && bc.options.includes('Dice Set'));
+        ok('tools: asked for until chosen', sktBuildTodo(monk, R14).some(t => /tool proficienc/.test(t.what)));
+        monk.toolPicks = { class: ['Lute'], background: ['Dice Set'] };
+        const MK = sktComputeCharacter(monk, R14);
+        ok('tools: the picks are proficiencies', MK.sheet.proficiencies.tools.includes('lute') && MK.sheet.proficiencies.tools.includes('dice set') && !sktBuildTodo(monk, R14).some(t => /tool/.test(t.what)));
+        ok('tools: a bard picks three instruments', (sktToolChoices(Object.assign({}, monk, { cls: 'Bard' }), R14).find(c => c.key === 'class') || {}).count === 3);
+        ok('tools: a rogue simply has thieves’ tools', sktComputeCharacter(Object.assign({}, monk, { cls: 'Rogue' }), R14).sheet.proficiencies.tools.includes("thieves' tools"));
+        ok('tools: a dwarf picks one of three', JSON.stringify((sktToolChoices(Object.assign({}, monk, { species: 'Dwarf', subspecies: 'Hill' }), R14).find(c => c.key === 'species') || {}).options) === JSON.stringify(["Brewer's Supplies", "Mason's Tools", "Smith's Tools"]));
+        // #9 Characteristics.
+        const ac = (sktRulesBackground(R14, 'Acolyte') || {}).characteristics || {};
+        ok('background: the Acolyte’s d8 of traits and d6s of ideals, bonds and flaws', (ac.personality || []).length === 8 && (ac.ideals || []).length === 6 && (ac.bonds || []).length === 6 && (ac.flaws || []).length === 6);
+        // #10 Gold instead of the kit.
+        const fg = sktClassGold(sktRulesClass(R14, 'Fighter'));
+        ok('gold: a 2014 fighter may take 5d4 × 10 gp', !!fg && fg.n === 5 && fg.d === 4 && fg.mult === 10 && fg.avg === 120);
+        const fi = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', species: 'Human', background: 'Soldier', level: 1, abilities: base, equipment: { cls: 'A', bg: 'A', clsGold: 130 } });
+        const FI = sktComputeCharacter(fi, R14);
+        ok('gold: taking it means no class kit', FI.gold >= 130 && !/Chain Mail/.test(FI.sheet.acSource) && !FI.sheet.attacks.some(a => a.name === 'Longsword'), FI.sheet.acSource);
+        // #12 Prerequisites.
+        const wz = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', species: 'Human', level: 4, abilities: { method: 'manual', base: { str: 8, dex: 14, con: 13, int: 15, wis: 12, cha: 10 } } });
+        const ham = sktRulesFeat(R14, 'Heavy Armor Master');
+        ok('feats: Heavy Armor Master needs heavy armour — a wizard has none, a fighter does',
+           !sktFeatPrereq(R14, wz, ham, sktComputeCharacter(wz, R14)).ok && sktFeatPrereq(R14, fi, ham, FI).ok && /heavy armor/.test(sktFeatPrereq(R14, wz, ham, null).text));
+        ok('feats: Grappler needs STR 13, War Caster a spell', !sktFeatPrereq(R14, wz, sktRulesFeat(R14, 'Grappler'), null).ok
+           && sktFeatPrereq(R14, wz, sktRulesFeat(R14, 'War Caster'), sktComputeCharacter(wz, R14)).ok && !sktFeatPrereq(R14, fi, sktRulesFeat(R14, 'War Caster'), FI).ok);
+        // #13 Tasha's.
+        const dw = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', species: 'Dwarf', subspecies: 'Hill', level: 1, abilities: base });
+        ok('Tasha’s: a hill dwarf’s increases are CON +2, WIS +1 as printed', sktBuildAbilities(dw, R14).con === 15 && sktBuildAbilities(dw, R14).wis === 11);
+        dw.speciesChoice = { customOrigin: true }; dw.speciesAsi = { str: 2, dex: 1 };
+        ok('Tasha’s: Customizing Your Origin moves them', sktBuildAbilities(dw, R14).con === 13 && sktBuildAbilities(dw, R14).str === 17 && sktBuildAbilities(dw, R14).dex === 15
+           && JSON.stringify(sktSpeciesAsiChoice(sktRulesSpecies(R14, 'Dwarf'), null, dw)) === '{"flex":true}');
+        const rg = Object.assign(sktBlankBuild('2014'), { cls: 'Ranger', level: 4, abilities: base });
+        const fn = b => sktBuildFeatures(b, R14).filter(f => f.from === 'class').map(f => f.name);
+        ok('Tasha’s: without the option, the handbook’s ranger', fn(rg).includes('Natural Explorer') && !fn(rg).includes('Deft Explorer'));
+        rg.optionalFeatures = true;
+        ok('Tasha’s: with it, Deft Explorer and Favored Foe replace Natural Explorer and Favored Enemy', fn(rg).includes('Deft Explorer') && fn(rg).includes('Favored Foe') && fn(rg).includes('Martial Versatility')
+           && !fn(rg).includes('Natural Explorer') && !fn(rg).includes('Favored Enemy'), fn(rg).join(', '));
+
+        // The builder's screens.
+        await openCharBuilder({ edition: '2014' }); await sleep(800);
+        const root = () => document.getElementById('cb-root');
+        const q = s => root().querySelector(s), qa = s => [...root().querySelectorAll(s)];
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const nm = q('[data-cb-in="name"]'); nm.value = 'Toolsy'; nm.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('builder: Basics has a picture upload and the levelling choice', !!q('[data-cb="upload"]') && !!q('[data-cb-advance]'));
+        set('[data-cb-advance]', 'xp'); await sleep(20);
+        ok('builder: XP levelling is kept', CB.build.advancement === 'xp');
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Monk"]'); await sleep(30);
+        click('[data-cb-step="background"]'); await sleep(30); click('[data-cb-bg="Acolyte"]'); await sleep(30);
+        click('[data-cb-step="skills"]'); await sleep(30);
+        ok('builder: the Skills step asks for the monk’s tool', qa('[data-cb-tool^="class||"]').length > 20);
+        tick('[data-cb-tool="class||Lute"]'); await sleep(20);
+        ok('builder: and keeps it', JSON.stringify((CB.build.toolPicks || {}).class) === '["Lute"]');
+        click('[data-cb-step="details"]'); await sleep(30);
+        set('[data-cb-suggest="ideals"]', '0'); await sleep(30);
+        ok('builder: a suggested ideal fills the box', (CB.build.details.ideals || '').length > 10 && q('textarea[data-cb-detail="ideals"]').value === CB.build.details.ideals);
+        window.sktD = () => 2;
+        click('[data-cb-suggestroll="flaws"]'); await sleep(30);
+        ok('builder: or a roll picks one', CB.build.details.flaws === ac.flaws[1]);
+        // Gold instead of the kit.
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Fighter"]'); await sleep(30);
+        click('[data-cb-step="equipment"]'); await sleep(200);
+        click('[data-cb-clsgold="gold"]'); await sleep(30);
+        ok('builder: gold instead of the kit, the average to start', CB.build.equipment.clsGold === 120 && !q('[data-cb-eq^="cls:"]'));
+        window.sktD = () => 3;
+        click('[data-cb-clsgold="roll"]'); await sleep(30);
+        ok('builder: or rolled (5d4 × 10)', CB.build.equipment.clsGold === 150);
+        click('[data-cb-clsgold="kit"]'); await sleep(30);
+        ok('builder: and back to the kit', CB.build.equipment.clsGold === undefined && !!q('[data-cb-eq^="cls:"]'));
+        // Spell picker.
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Wizard"]'); await sleep(30);
+        click('[data-cb-step="spells"]'); await sleep(30);
+        const sq = q('[data-cb-spq]'); sq.value = 'fire'; sq.dispatchEvent(new Event('input', { bubbles: true })); await sleep(350);
+        ok('builder: searching the spells', qa('[data-cb-cantrip]').map(e => e.dataset.cbCantrip).join() === 'Fire Bolt' && document.activeElement === q('[data-cb-spq]'));
+        const sq2 = q('[data-cb-spq]'); sq2.value = ''; sq2.dispatchEvent(new Event('input', { bubbles: true })); await sleep(350);
+        set('[data-cb-spschool]', 'V'); await sleep(30);
+        ok('builder: filtering by school', qa('[data-cb-book]').length > 0 && qa('[data-cb-book]').every(e => (sktRulesSpell(CB.R, e.dataset.cbBook) || {}).school === 'V'));
+        set('[data-cb-spschool]', ''); await sleep(30);
+        click('[data-cb-spinfo="Magic Missile"]'); await sleep(30);
+        ok('builder: a spell’s text on the Spells step', /dart/.test((q('.cb-spinfo') || {}).textContent || '') && !CB.build.spellbook.includes('Magic Missile'));
+        // Prerequisites in the feat picker.
+        const lv = q('[data-cb-step="basics"]'); lv.click(); await sleep(30);
+        const lvi = q('[data-cb-in="level"]'); lvi.value = '4'; lvi.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
+        click('[data-cb-step="levels"]'); await sleep(30);
+        click('[data-cb-asitype="4:feat"]'); await sleep(30);
+        const opts = () => [...q('[data-cb-asifeat="4"]').options].map(o => o.value);
+        ok('builder: feats the character can’t take are hidden', !opts().includes('Heavy Armor Master') && opts().includes('Alert'));
+        tick('[data-cb-qualified]'); await sleep(30);
+        ok('builder: or shown, saying what they need', opts().includes('Heavy Armor Master') && /needs proficiency with heavy armor/.test(q('[data-cb-asifeat="4"] option[value="Heavy Armor Master"]').textContent));
+        // Tasha's.
+        click('[data-cb-step="species"]'); await sleep(30); click('[data-cb-species="Dwarf"]'); await sleep(30);
+        tick('[data-cb-customorigin]'); await sleep(30);
+        ok('builder: Customizing Your Origin offers the increases anywhere', CB.build.speciesChoice.customOrigin === true && !!q('[data-cb-spflex="2"]'));
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Ranger"]'); await sleep(30);
+        tick('[data-cb-optfeat]'); await sleep(30);
+        ok('builder: Tasha’s optional class features, with what each replaces', CB.build.optionalFeatures === true && /replaces Natural Explorer/.test(q('.cb-main').textContent));
+        click('[data-cb-step="review"]'); await sleep(30);
+        window.showConfirm = () => Promise.resolve(true);
+        click('[data-cb="save"]'); await sleep(200);
+        const made = state.party.find(p => p.name === 'Toolsy');
+        // XP on the sheet.
+        openCharSheet(made.id); await sleep(200);
+        ok('sheet: XP shows for a character levelled by XP', /XP 0 \/ 6,500/.test(document.querySelector('#cs-root .cs-xp').textContent));
+        const xi = document.querySelector('#cs-root [data-cs-xp]'); xi.value = '7000';
+        document.querySelector('#cs-root [data-cs="addxp"]').click(); await sleep(40);
+        ok('sheet: adding XP, and Level up lights at the mark', state.party.find(p => p.id === made.id).xp === 7000 && document.querySelector('#cs-root [data-cs="levelup"]').classList.contains('primary'));
+        // A player's roll reaching the DM.
+        csClose();
+        openPanel('party'); await sleep(200);
+        const P = panelDefs.party; P._render();
+        const pc = state.party.find(p => p.id === made.id);
+        pc.rolls = [{ label: 'Stealth', total: 17, text: '17 (d20 14 +3)', at: Date.now() + 1000, from: 'player' }].concat(pc.rolls || []);
+        P._render(); await sleep(30);
+        ok('party: a player’s roll pops up on the DM’s screen, and sits on the card',
+           [...document.querySelectorAll('.toast-item')].some(t => /Toolsy — Stealth: 17/.test(t.textContent)) && /Stealth/.test((P._body.querySelector('.char-prolls') || {}).textContent || ''));
+        closePanel('party');
+      } catch(e){ ok('builder: the D&D Beyond extras ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window.showConfirm = st.conf;
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (typeof csClose === 'function') csClose();
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
         _remoteUpdate = true;
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
         loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
@@ -7036,6 +7180,26 @@
             try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
             loadDomain('party');
           }
+          paTab = tab0; paRender();
+        }
+      }
+
+      // -- The phone's attack buttons: every damage term, and the roll is kept ----
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab, d0 = window.sktD;
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          const mi = paMyIdx();
+          state.party[mi] = { ...state.party[mi], sheet: { ...(state.party[mi].sheet || {}), attacks: [{ name: 'Flame Blade', atkBonus: '+5', damage: '2d6+1d4+3 fire' }] }, rolls: [] };
+          save(); paTab = 'you'; paRender(); await sleep(60);
+          window.sktD = () => 4;
+          document.querySelector('[data-pa-atk="0"]').click(); await sleep(40);
+          ok('phone: an attack rolls every damage term', /\b15\b/.test(document.querySelector('.pa-roll-dmg').textContent), document.querySelector('.pa-roll-dmg').textContent);
+          ok('phone: and the roll is kept for the DM to see', (state.party[mi].rolls || [])[0] && state.party[mi].rolls[0].label === 'Flame Blade' && state.party[mi].rolls[0].from === 'player');
+        } catch(e){ ok('phone: the attack checks ran to completion', false, e.message); }
+        finally {
+          window.sktD = d0;
+          if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
           paTab = tab0; paRender();
         }
       }

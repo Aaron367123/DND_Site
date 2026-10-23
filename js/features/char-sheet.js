@@ -27,6 +27,7 @@ const CS_TABS = [
 ];
 const CS_CONDITIONS = ['Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible',
                        'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious'];
+const CS_XP = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
 const CS_AB = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
 const CS_SKILLS = {
   acrobatics: ['Acrobatics', 'dex'], animal_handling: ['Animal Handling', 'wis'], arcana: ['Arcana', 'int'], athletics: ['Athletics', 'str'],
@@ -125,10 +126,17 @@ function _csTitle(s){ s = String(s || ''); return s ? s.replace(/\b\w/g, c => c.
 function csHead(pc){
   const icon = typeof renderIcon === 'function' ? renderIcon(pc.icon, pc.name) : csE(String(pc.name || '?').charAt(0));
   const ro = CS.readOnly;
+  const xpOn = pc.build && pc.build.advancement === 'xp';
+  const lvl = pc.level || 1, xp = +pc.xp || 0, next = CS_XP[Math.min(19, lvl)];
+  const ready = xpOn && lvl < 20 && xp >= next;
   return '<div class="cb-head cs-head"><span class="cs-avatar">' + icon + '</span>'
-    + '<div class="cs-who"><b class="cb-title">' + csE(pc.name) + '</b><span class="cs-sub">' + csE(csClassLine(pc)) + '</span></div>'
+    + '<div class="cs-who"><b class="cb-title">' + csE(pc.name) + '</b><span class="cs-sub">' + csE(csClassLine(pc)) + '</span>'
+    + (xpOn ? '<span class="cs-xp' + (ready ? ' ready' : '') + '">XP ' + xp.toLocaleString() + (lvl < 20 ? ' / ' + next.toLocaleString() : '')
+      + '<i class="cs-xpbar"><i style="width:' + (lvl < 20 ? Math.min(100, Math.round(100 * (xp - CS_XP[lvl - 1]) / Math.max(1, next - CS_XP[lvl - 1]))) : 100) + '%"></i></i>'
+      + (ro ? '' : '<input type="number" min="0" data-cs-xp placeholder="+XP" aria-label="Add experience points"><button class="btn small" data-cs="addxp">Add</button>') + '</span>' : '')
+    + '</div>'
     + (ro ? '' : '<button class="btn" data-cs="short">💤 Short rest</button><button class="btn" data-cs="long">🛌 Long rest</button>')
-    + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
+    + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
     + (!ro && pc.build ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
     + '<button class="cb-x" data-cs="close" aria-label="Close">✕</button></div>';
 }
@@ -225,7 +233,7 @@ function csRollD20(label, mod, ev){
   return r;
 }
 // "2d6+1d4+3 slashing", "1d10+4 force ×2 beams": every term, crits double the dice.
-function csRollDamage(label, expr, crit){
+function sktDamageRoll(expr, crit){
   const s = String(expr || '');
   const math = s.split(/[a-z]{2,}/i)[0];
   const type = s.slice(math.length).trim();
@@ -239,13 +247,23 @@ function csRollDamage(label, expr, crit){
     } else if (k){ const v = (+k) * (sg2 === '-' ? -1 : 1); total += v; parts.push(String(v)); }
     return m;
   });
-  const r = { kind: 'dmg', label, total: Math.max(0, total), detail: parts.join(' + '), type, crit: !!crit };
+  return { total: Math.max(0, total), detail: parts.join(' + '), type, crit: !!crit };
+}
+function csRollDamage(label, expr, crit){
+  const r = Object.assign({ kind: 'dmg', label }, sktDamageRoll(expr, crit));
   csLog(r);
   return r;
 }
 function csLog(r){
   CS.log.unshift(r); CS.log = CS.log.slice(0, 8);
   if (typeof showToast === 'function') showToast(csRollPlain(r));
+  const pc = csPc();
+  if (pc && !CS.readOnly) sktKeepRoll(pc, csRollPlain(r).replace(/^[^:]*: /, ''), r);
+}
+function sktKeepRoll(pc, text, r){
+  pc.rolls = [{ label: r.label, total: r.total, text, at: Date.now(),
+                from: document.body.classList.contains('player-mode') ? 'player' : 'dm' }].concat(pc.rolls || []).slice(0, 6);
+  save();
 }
 function csRollPlain(r){
   if (r.kind === 'dmg') return r.label + ': ' + r.total + (r.type ? ' ' + r.type : '') + (r.crit ? ' (crit)' : '') + ' — ' + r.detail;
@@ -418,6 +436,15 @@ function csOnClick(e){
     return openCharBuilder({ idx: i, levelup: d.cs === 'levelup' });
   }
   if (d.cs === 'customize' && typeof csCustomizeOpen === 'function') return csCustomizeOpen(pc);
+  if (d.cs === 'addxp'){
+    const n = parseInt((document.querySelector('#cs-root [data-cs-xp]') || {}).value, 10) || 0;
+    if (!n) return;
+    return csEdit((n > 0 ? 'Gained ' : 'Lost ') + Math.abs(n) + ' XP', p => {
+      const before = +p.xp || 0; p.xp = Math.max(0, before + n);
+      const lv = p.level || 1;
+      if (lv < 20 && before < CS_XP[lv] && p.xp >= CS_XP[lv] && typeof showToast === 'function') showToast(p.name + ' can reach level ' + (lv + 1) + ' — Level up');
+    });
+  }
   if (typeof csSpellsClick === 'function' && csSpellsClick(e, t, d, pc)) return;
   if (typeof csInventoryClick === 'function' && csInventoryClick(e, t, d, pc)) return;
 }

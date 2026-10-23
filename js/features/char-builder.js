@@ -235,7 +235,11 @@ CB_RENDER.basics = () => {
     +   '<div class="cb-dim">Switching edition keeps the name and level and clears choices that don’t exist in the other book.</div></div>'
     + '<div class="cb-f">Books' + cbBooksToggle()
     +   '<div class="cb-dim">Species, backgrounds, feats, spells and subclasses from the other ' + (b.edition === '2014' ? '2014-era books — Xanathar’s, Tasha’s, Monsters of the Multiverse, the setting books' : '2024-era books — Heroes of Faerûn, Eberron, and older species and spells the 2024 rules allow') + '. Their own rules show as text where the sheet can’t apply them.</div></div>'
-    + '<div class="cb-f">Token icon<div class="cb-icons">' + icons.map(i => '<button class="' + (b.icon === i ? 'on' : '') + '" data-cb-icon="' + i + '">' + i + '</button>').join('') + '</div></div>';
+    + '<div class="cb-f">Portrait<div class="cb-icons">' + (/^data:image|^img\/|^https?:/.test(String(b.icon || '')) ? '<span class="cb-portrait on">' + renderIcon(b.icon, b.name) + '</span>' : '')
+    +   '<button class="cb-upload" data-cb="upload" title="Upload a picture">📷 Upload</button>'
+    +   icons.map(i => '<button class="' + (b.icon === i ? 'on' : '') + '" data-cb-icon="' + i + '">' + i + '</button>').join('') + '</div></div>'
+    + '<label class="cb-f">Levelling<select class="cb-sel" data-cb-advance><option value="milestone"' + (b.advancement !== 'xp' ? ' selected' : '') + '>Milestone — the DM says when</option>'
+    +   '<option value="xp"' + (b.advancement === 'xp' ? ' selected' : '') + '>Experience points</option></select></label>';
 };
 
 CB_RENDER.class = () => {
@@ -259,6 +263,11 @@ CB_RENDER.class = () => {
       if (sub) html += sub.features.filter(f => f.level <= b.level).map(f => '<div class="cb-feat"><b>' + cbEsc(f.name) + '</b> <span class="cb-dim">level ' + f.level + '</span>' + cbFeatureText(sktRulesText(f.entries)) + '</div>').join('');
     } else {
       html += '<div class="cb-dim">' + cbEsc(title) + ' is chosen at level ' + cls.subclassLevel + '.</div>';
+    }
+    if (R.edition === '2014' && cls.features.some(f => f.optional)){
+      const on = !!b.optionalFeatures;
+      html += '<h4>Optional class features</h4><label class="cb-inline"><input type="checkbox" data-cb-optfeat' + (on ? ' checked' : '') + '> Use Tasha’s optional class features</label>';
+      if (on) html += cls.features.filter(f => f.optional && f.level <= (b.level || 1)).map(f => '<div class="cb-feat"><b>' + cbEsc(f.name) + '</b> <span class="cb-dim">level ' + f.level + (f.replaces ? ' · replaces ' + cbEsc(f.replaces) : '') + '</span>' + cbFeatureText(sktRulesText(f.entries)) + '</div>').join('');
     }
     html += cbMulticlassHtml();
   }
@@ -340,7 +349,10 @@ CB_RENDER.species = () => {
   }
   // Choosable ability increases (2014: Half-Elf, Variant Human…).
   const sub = sp.subraces.find(s => s.name === b.subspecies);
-  const ch = R.edition === '2014' ? sktSpeciesAsiChoice(sp, sub) : null;
+  if (R.edition === '2014'){
+    html += '<label class="cb-inline cb-tasha"><input type="checkbox" data-cb-customorigin' + ((b.speciesChoice || {}).customOrigin ? ' checked' : '') + '> Customizing Your Origin (Tasha’s): place the ability increases yourself</label>';
+  }
+  const ch = R.edition === '2014' ? sktSpeciesAsiChoice(sp, sub, b) : null;
   if (ch && ch.flex){
     // Monsters of the Multiverse and later: +2 and +1, or three +1s, anywhere.
     const mode = b.speciesChoice.asiMode || '21', inc = b.speciesAsi || {};
@@ -487,6 +499,12 @@ CB_RENDER.skills = () => {
     html += '<h4>Languages</h4><div class="cb-dim">Already known: ' + cbEsc(known.join(', ') || '—') + '. Choose ' + langCount + ' more.</div>'
       + cbChecks(R.languages.map(l => l.name).filter(n => !known.includes(n)), b.languages || [], langCount, 'cb-lang');
   }
+  // Tools the class, background or species leaves to the player.
+  sktToolChoices(b, R).forEach(c => {
+    const picks = (b.toolPicks || {})[c.key] || [];
+    html += '<h4>Tools — ' + cbEsc(c.label) + '</h4>' + cbCounter(picks.length, c.count, 'chosen')
+      + cbChecks(c.options.map(t => ({ value: c.key + '||' + t, label: t })), picks.map(t => c.key + '||' + t), c.count, 'cb-tool');
+  });
   html += '<h4>All skills</h4><div class="cb-skilltable">' + Object.keys(SKT_SKILLS).map(k =>
     '<div class="cb-sk' + (rec.sheet.skillProf[k] ? ' prof' + rec.sheet.skillProf[k] : '') + '"><span>' + SKT_SKILL_LABEL[k] + ' <i>' + SKT_SKILLS[k].toUpperCase() + '</i></span><b>' + sktSigned(rec.sheet.skills[k]) + '</b></div>').join('') + '</div>';
   return html;
@@ -580,10 +598,15 @@ CB_RENDER.levels = () => {
       };
       html += '<div class="cb-row"><label class="cb-f">+1' + sel(0) + '</label><label class="cb-f">+1' + sel(1) + '</label></div><div class="cb-dim">Pick the same ability twice for +2.</div>';
     } else if (isFeat){
+      const pre = f => sktFeatPrereq(R, Object.assign({}, b, { level: s.primary ? s.level : b.level }), f, CB.rec);
       const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || (l >= 19 && f.category === 'EB'))
-                                    && (f.core !== false || b.allBooks || p.feat === f.name));
+                                    && (f.core !== false || b.allBooks || p.feat === f.name)
+                                    && (b.showAllFeats || p.feat === f.name || pre(f).ok));
       html += '<select class="cb-sel" data-cb-asifeat="' + l + '"><option value="">Choose a feat…</option>'
-        + pool.map(f => '<option value="' + cbEsc(f.name) + '"' + (p.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '') + '</option>').join('') + '</select>';
+        + pool.map(f => { const q = pre(f); return '<option value="' + cbEsc(f.name) + '"' + (p.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '')
+          + (q.ok ? '' : ' — needs ' + cbEsc(q.text)) + '</option>'; }).join('') + '</select>'
+        + '<label class="cb-inline"><input type="checkbox" data-cb-qualified' + (b.showAllFeats ? '' : ' checked') + '> Only feats this character qualifies for</label>';
+      { const pf = p.feat && sktRulesFeat(R, p.feat), q = pf && pre(pf); if (q && q.text) html += '<div class="' + (q.ok ? 'cb-dim' : 'cb-warn') + '">Prerequisite: ' + cbEsc(q.text) + '</div>'; }
       const f = p.feat && sktRulesFeat(R, p.feat);
       if (f){
         const ch = cbFeatAbilityChoice(f);
@@ -643,6 +666,44 @@ function cbFeatAbilityChoice(f){
   return null;
 }
 
+// Search and filters for every spell list on the Spells step; the chosen
+// spells always stay in view.
+function cbSpellFilterHtml(){
+  const schools = { A: 'Abjuration', C: 'Conjuration', D: 'Divination', E: 'Enchantment', V: 'Evocation', I: 'Illusion', N: 'Necromancy', T: 'Transmutation' };
+  return '<div class="cb-spfilter"><input data-cb-spq placeholder="Search spells…" value="' + cbEsc(CB.spQ || '') + '">'
+    + '<select class="cb-sel" data-cb-spschool><option value="">Any school</option>' + Object.keys(schools).map(k => '<option value="' + k + '"' + (CB.spSchool === k ? ' selected' : '') + '>' + schools[k] + '</option>').join('') + '</select>'
+    + '<label class="cb-inline"><input type="checkbox" data-cb-spritual' + (CB.spRitual ? ' checked' : '') + '> Ritual</label>'
+    + '<label class="cb-inline"><input type="checkbox" data-cb-spconc' + (CB.spConc ? ' checked' : '') + '> Concentration</label></div>'
+    + (CB.spInfo ? cbSpellInfoHtml(CB.spInfo) : '');
+}
+function cbSpellPass(name, chosen){
+  if ((chosen || []).includes(name)) return true;
+  const s = sktRulesSpell(CB.R, name); if (!s) return true;
+  if (CB.spQ && !s.name.toLowerCase().includes(CB.spQ.toLowerCase())) return false;
+  if (CB.spSchool && s.school !== CB.spSchool) return false;
+  if (CB.spRitual && !s.ritual) return false;
+  if (CB.spConc && !s.concentration) return false;
+  return true;
+}
+function cbSpellInfoHtml(name){
+  const s = sktRulesSpell(CB.R, name); if (!s) return '';
+  const lvl = s.level ? 'level ' + s.level : 'cantrip';
+  return '<div class="cb-spinfo"><b>' + cbEsc(s.name) + '</b> <span class="cb-dim">' + cbEsc(lvl + (s.concentration ? ' · concentration' : '') + (s.ritual ? ' · ritual' : '')) + '</span>'
+    + '<button class="cb-x" data-cb-spinfo="" aria-label="Close">✕</button>' + cbFeatureText(sktRulesText(s.entries), true) + '</div>';
+}
+// A checklist of spells, each with a button to read it.
+function cbSpellChecks(options, chosen, max, attr, valueOf){
+  valueOf = valueOf || (n => n);
+  const shown = options.filter(n => cbSpellPass(n, chosen.map ? chosen.map(x => String(x).split('|').pop()) : []));
+  const vals = chosen;
+  const full = max != null && vals.length >= max;
+  if (!shown.length) return '<div class="cb-dim">No spells match.</div>';
+  return '<div class="cb-checks">' + shown.map(n => {
+    const v = valueOf(n), on = vals.includes(v);
+    return '<label class="cb-check' + (on ? ' on' : '') + (!on && full ? ' dim' : '') + '"><input type="checkbox" data-' + attr + '="' + cbEsc(v) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + '>'
+      + '<span>' + cbEsc(n) + '</span><button class="cb-spi" data-cb-spinfo="' + cbEsc(n) + '" title="What it does" aria-label="About ' + cbEsc(n) + '">i</button></label>';
+  }).join('') + '</div>';
+}
 CB_RENDER.spells = () => {
   const b = CB.build, R = CB.R;
   const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
@@ -652,11 +713,11 @@ CB_RENDER.spells = () => {
   const want = sc.prepared || sc.known;
   const maxLv = sc.classes ? sc.classes[0].sc.maxSpellLevel : sc.maxSpellLevel;
   const always = sktBuildAlwaysPrepared(b, R);
-  let html = '<h3>Spells</h3><div class="cb-note">' + cbAbLabel(sc.ability) + ' · save DC ' + sc.dc + ' · attack ' + sktSigned(sc.attack)
+  let html = '<h3>Spells</h3>' + cbSpellFilterHtml() + '<div class="cb-note">' + cbAbLabel(sc.ability) + ' · save DC ' + sc.dc + ' · attack ' + sktSigned(sc.attack)
     + ' · slots ' + (Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—') + '</div>';
   if (sc.cantrips){
     html += '<h4>Cantrips</h4>' + cbCounter((b.cantrips || []).length, sc.cantrips, 'chosen')
-      + cbChecks(sktSpellOptions(R, b, 0).map(s => s.name), b.cantrips || [], sc.cantrips, 'cb-cantrip');
+      + cbSpellChecks(sktSpellOptions(R, b, 0).map(s => s.name), b.cantrips || [], sc.cantrips, 'cb-cantrip');
   }
   // A wizard writes spells into a book, and prepares from the book — the
   // whole wizard list was on offer before.
@@ -667,18 +728,18 @@ CB_RENDER.spells = () => {
     for (let lv = 1; lv <= maxLv; lv++){
       const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
       if (!opts.length) continue;
-      html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbChecks(opts, book, sc.spellbook, 'cb-book') + '</div>';
+      html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbSpellChecks(opts, book, sc.spellbook, 'cb-book') + '</div>';
     }
   }
   if (want){
     html += '<h4>' + (sc.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((b.spells || []).length, want, 'chosen');
     if (book){
       const opts = book.filter(n => !always.includes(n));
-      html += opts.length ? cbChecks(opts, b.spells || [], want, 'cb-spell') : '<div class="cb-dim">Write spells into the book first.</div>';
+      html += opts.length ? cbSpellChecks(opts, b.spells || [], want, 'cb-spell') : '<div class="cb-dim">Write spells into the book first.</div>';
     } else for (let lv = 1; lv <= maxLv; lv++){
       const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
       if (!opts.length) continue;
-      html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbChecks(opts, b.spells || [], want, 'cb-spell') + '</div>';
+      html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbSpellChecks(opts, b.spells || [], want, 'cb-spell') + '</div>';
     }
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
@@ -772,7 +833,17 @@ CB_RENDER.equipment = () => {
     if (fixed) out += '<div class="cb-dim">Also: ' + cbEsc(fixed) + '</div>';
     return out;
   }).join('');
-  if (cls && cls.equipment && Array.isArray(cls.equipment.defaultData)) html += '<h4>' + cbEsc(cls.name) + '</h4>' + blockHtml(cls.equipment.defaultData, 'cls');
+  const goldAlt = R.edition === '2014' ? sktClassGold(cls) : null;
+  const takingGold = goldAlt && typeof b.equipment.clsGold === 'number';
+  if (goldAlt){
+    html += '<h4>' + cbEsc(cls.name) + '</h4><div class="cb-seg"><button class="' + (takingGold ? '' : 'on') + '" data-cb-clsgold="kit">Take the equipment</button>'
+      + '<button class="' + (takingGold ? 'on' : '') + '" data-cb-clsgold="gold">Take ' + cbEsc(goldAlt.text) + ' instead</button></div>';
+    if (takingGold) html += '<div class="cb-row cb-goldrow"><label class="cb-f">Gold<input type="number" min="0" data-cb-clsgoldv value="' + b.equipment.clsGold + '"></label>'
+      + '<button class="btn" data-cb-clsgold="roll">🎲 Roll ' + cbEsc(goldAlt.text) + '</button><button class="btn" data-cb-clsgold="avg">Average (' + goldAlt.avg + ')</button></div>'
+      + '<div class="cb-dim">Buy gear with it under "Magic items and gear" below, or on the character sheet’s Inventory.</div>';
+  }
+  if (takingGold){ /* the class's kit is not taken */ }
+  else if (cls && cls.equipment && Array.isArray(cls.equipment.defaultData)) html += (goldAlt ? '' : '<h4>' + cbEsc(cls.name) + '</h4>') + blockHtml(cls.equipment.defaultData, 'cls');
   else if (!cls) html += '<div class="cb-dim">Choose a class first.</div>';
   if (bg && (bg.equipment || []).length) html += '<h4>' + cbEsc(bg.name) + '</h4>' + blockHtml(bg.equipment, 'bg');
   html += cbGearHtml();
@@ -839,8 +910,39 @@ CB_RENDER.details = () => {
     + '<label class="cb-f">Alignment<select class="cb-sel" data-cb-detail="alignment"><option value="">—</option>'
     +   CB_ALIGNMENTS.map(a => '<option' + (d.alignment === a ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></label>'
     + '<div class="cb-detail-grid">' + CB_DETAIL_LINES.map(([k, l]) => '<label class="cb-f">' + l + '<input data-cb-detail="' + k + '" value="' + cbEsc(d[k] || '') + '" maxlength="40"></label>').join('') + '</div>'
-    + CB_DETAIL_TEXT.map(([k, l]) => '<label class="cb-f">' + l + '<textarea data-cb-detail="' + k + '" rows="' + (k === 'backstory' ? 5 : 2) + '" maxlength="4000">' + cbEsc(d[k] || '') + '</textarea></label>').join('');
+    + CB_DETAIL_TEXT.map(([k, l]) => '<label class="cb-f">' + l + '<textarea data-cb-detail="' + k + '" rows="' + (k === 'backstory' ? 5 : 2) + '" maxlength="4000">' + cbEsc(d[k] || '') + '</textarea></label>'
+      + cbCharacteristicsHtml(k)).join('');
 };
+// The background's own suggestions (a 2014 background's d8 of traits and d6s
+// of ideals, bonds and flaws): pick one or roll. A 2024 background borrows
+// the 2014 printing's tables, which the 2024 book dropped.
+function cbCharacteristics(){
+  const b = CB.build;
+  const own = (sktRulesBackground(CB.R, b.background) || {}).characteristics;
+  if (own) return own;
+  if (CB.R.edition === '2024' && b.background){
+    if (!CB.R14 && !CB.R14loading){ CB.R14loading = true; sktRulesLoad('2014').then(R => { if (CB){ CB.R14 = R; if (CB.step === 'details') cbRender(); } }).catch(() => {}); }
+    const old = CB.R14 && sktRulesBackground(CB.R14, b.background);
+    return old && old.characteristics || null;
+  }
+  return null;
+}
+function cbCharacteristicsHtml(k){
+  if (!['personality', 'ideals', 'bonds', 'flaws'].includes(k)) return '';
+  const list = (cbCharacteristics() || {})[k];
+  if (!list || !list.length) return '';
+  return '<div class="cb-suggest"><select class="cb-sel" data-cb-suggest="' + k + '"><option value="">Suggestions from ' + cbEsc(CB.build.background) + '…</option>'
+    + list.map((t, i) => '<option value="' + i + '">' + (i + 1) + '. ' + cbEsc(t.length > 90 ? t.slice(0, 88) + '…' : t) + '</option>').join('') + '</select>'
+    + '<button class="btn small" data-cb-suggestroll="' + k + '" title="Roll d' + list.length + '">🎲 d' + list.length + '</button></div>';
+}
+function cbAddCharacteristic(k, i){
+  const list = (cbCharacteristics() || {})[k]; if (!list || !list[i]) return;
+  cbSet(b => {
+    b.details = Object.assign({}, b.details);
+    const cur = String(b.details[k] || '').trim();
+    b.details[k] = cur ? cur + '\n' + list[i] : list[i];
+  });
+}
 
 CB_RENDER.review = () => {
   const rec = CB.rec, b = CB.build;
@@ -887,6 +989,17 @@ function cbOnClick(e){
   if (d.cb === 'next'){ CB.step = vis[Math.min(vis.length - 1, at + 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'back'){ CB.step = vis[Math.max(0, at - 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'save') return cbSave();
+  if (d.cb === 'upload'){
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.addEventListener('change', async ev => {
+      const f = ev.target.files[0]; if (!f) return;
+      try {
+        const url = typeof showCropModal === 'function' ? await showCropModal(f, { size: 96, shape: 'circle', title: 'Crop the portrait' }) : await fileToIconDataUrl(f, 96);
+        if (url && CB) cbSet(b => { b.icon = url; });
+      } catch(err){ if (typeof showToast === 'function') showToast('Upload failed: ' + err.message); }
+    });
+    inp.click(); return;
+  }
   if (d.cb === 'magic-add'){
     const e = cbGearFind(CB.magicQ); if (!e) return;
     const it = e.kind === 'base' ? { name: e.name, base: e.base } : sktMagicMake(CB.R, e, CB.magicBase);
@@ -906,6 +1019,7 @@ function cbOnClick(e){
     if (b.cls === d.cbCls) return;
     b.cls = d.cbCls; b.subclass = ''; b.skills = []; b.expertise = []; b.cantrips = []; b.spells = []; b.spellbook = [];
     cbFitLevels(b);
+    if (b.toolPicks) delete b.toolPicks.class;
     b.optional = {}; b.masteries = []; b.equipment = { cls: 'A', bg: b.equipment.bg || 'A', picks: {} };
   });
   if (d.cbSub) return cbSet(b => { b.subclass = d.cbSub; });
@@ -930,11 +1044,25 @@ function cbOnClick(e){
   if (d.cbSpecies) return cbSet(b => {
     if (b.species === d.cbSpecies) return;
     b.species = d.cbSpecies; b.subspecies = ''; b.speciesAsi = {}; b.speciesSkills = []; b.speciesChoice = {};
+    if (b.toolPicks) delete b.toolPicks.species;
     b.originFeat = '';
   });
   if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
   if (d.cbLineage) return cbSet(b => { if (b.speciesChoice.lineage !== d.cbLineage) delete b.speciesChoice.spells; b.speciesChoice.lineage = d.cbLineage; });
   if (d.cbSize) return cbSet(b => { b.size = d.cbSize; });
+  if (d.cbSpinfo != null){ e.preventDefault(); CB.spInfo = d.cbSpinfo || ''; return cbRender(); }
+  if (d.cbClsgold){
+    const g = sktClassGold(sktRulesClass(CB.R, CB.build.cls)); if (!g) return;
+    const roll = () => { let t = 0; for (let k = 0; k < g.n; k++) t += sktD(g.d); return t * g.mult; };
+    return cbSet(b => {
+      b.equipment = Object.assign({}, b.equipment);
+      if (d.cbClsgold === 'kit') delete b.equipment.clsGold;
+      else if (d.cbClsgold === 'gold') b.equipment.clsGold = g.avg;
+      else if (d.cbClsgold === 'roll') b.equipment.clsGold = roll();
+      else if (d.cbClsgold === 'avg') b.equipment.clsGold = g.avg;
+    });
+  }
+  if (d.cbSuggestroll){ const list = (cbCharacteristics() || {})[d.cbSuggestroll] || []; if (list.length) cbAddCharacteristic(d.cbSuggestroll, sktD(list.length) - 1); return; }
   if (d.cbSpmode) return cbSet(b => { if ((b.speciesChoice.asiMode || '21') !== d.cbSpmode){ b.speciesChoice.asiMode = d.cbSpmode; b.speciesAsi = {}; } });
   if (d.cbBg) return cbSet(b => { if (b.background !== d.cbBg){ b.background = d.cbBg; b.bgAsi = {}; b.bgSkills = []; } });
   if (d.cbBgmode) return cbSet(b => {
@@ -976,6 +1104,14 @@ function cbOnChange(e){
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
+  if ('cbClsgoldv' in d) return cbSet(b => { b.equipment = Object.assign({}, b.equipment, { clsGold: Math.max(0, parseInt(v, 10) || 0) }); });
+  if ('cbQualified' in d) return cbSet(b => { b.showAllFeats = !t.checked; });
+  if ('cbCustomorigin' in d) return cbSet(b => { b.speciesChoice = Object.assign({}, b.speciesChoice, { customOrigin: t.checked }); b.speciesAsi = {}; });
+  if ('cbOptfeat' in d) return cbSet(b => { b.optionalFeatures = t.checked; });
+  if ('cbAdvance' in d) return cbSet(b => { b.advancement = v; });
+  if ('cbSpschool' in d){ CB.spSchool = v; return cbRender(); }
+  if ('cbSpritual' in d){ CB.spRitual = t.checked; return cbRender(); }
+  if ('cbSpconc' in d){ CB.spConc = t.checked; return cbRender(); }
   if ('cbMcadd' in d){
     if (!v) return;
     return cbSet(b => {
@@ -1014,6 +1150,11 @@ function cbOnChange(e){
   if (d.cbSkill){ const cls = sktRulesClass(CB.R, CB.build.cls); return cbSet(b => cbToggle(b.skills, d.cbSkill, cls.skillChoice.count)); }
   if (d.cbExpert) return cbSet(b => cbToggle(b.expertise, d.cbExpert, cbExpertiseCount()));
   if (d.cbLang) return cbSet(b => cbToggle(b.languages, d.cbLang, cbLanguageCount()));
+  if (d.cbTool){
+    const [key, tool] = d.cbTool.split('||');
+    const c = sktToolChoices(CB.build, CB.R).find(x => x.key === key); if (!c) return;
+    return cbSet(b => { b.toolPicks = Object.assign({}, b.toolPicks); b.toolPicks[key] = (b.toolPicks[key] || []).slice(); cbToggle(b.toolPicks[key], tool, c.count); });
+  }
   if (d.cbSpskill){
     const sp = sktRulesSpecies(CB.R, CB.build.species), sub = sp && sp.subraces.find(s => s.name === CB.build.subspecies);
     const ch = cbSpeciesSkillChoice(sp, sub);
@@ -1021,7 +1162,7 @@ function cbOnChange(e){
   }
   if (d.cbSpasi){
     const sp = sktRulesSpecies(CB.R, CB.build.species), sub = sp && sp.subraces.find(s => s.name === CB.build.subspecies);
-    const ch = sktSpeciesAsiChoice(sp, sub);
+    const ch = sktSpeciesAsiChoice(sp, sub, CB.build);
     const count = ch.flex ? 3 : ch.count, amount = ch.flex ? 1 : ch.amount;
     return cbSet(b => {
       if (b.speciesAsi[d.cbSpasi]) delete b.speciesAsi[d.cbSpasi];
@@ -1067,6 +1208,7 @@ function cbOnChange(e){
   if (d.cbFsab === '@species') return cbSet(b => { b.speciesChoice.spellAbility = v; });
   if (d.cbFsab) return cbSet(b => { b.featChoices[d.cbFsab] = Object.assign({}, b.featChoices[d.cbFsab], { spellAbility: v }); });
   if (d.cbDetail === 'alignment') return cbSet(b => { b.details = Object.assign({}, b.details, { alignment: v }); });
+  if (d.cbSuggest){ if (v !== '') cbAddCharacteristic(d.cbSuggest, +v); return; }
   const optKey = Object.keys(d).find(k => /^cbOpt/.test(k));
   if (optKey){
     const o = sktOptionalChoices(CB.build, CB.R).find(x => 'cbOpt' + cbSlug(x.name).replace(/-(\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, c => c.toUpperCase()) === optKey);
@@ -1129,6 +1271,15 @@ function cbOnInput(e){
   if (!CB) return;
   const t = e.target, d = t.dataset;
   if (d.cbIn === 'name'){ CB.build.name = t.value; cbRefreshSide(); return; }
+  if ('cbSpq' in d){
+    // Filter as you type, keeping the caret in the box.
+    CB.spQ = t.value; clearTimeout(CB._spT);
+    CB._spT = setTimeout(() => {
+      if (!CB) return; const at = t.selectionStart; cbRender();
+      const q = document.querySelector('#cb-root [data-cb-spq]'); if (q){ q.focus(); try { q.setSelectionRange(at, at); } catch(_){} }
+    }, 200);
+    return;
+  }
   if ('cbMagicq' in d){ CB.magicQ = t.value; return; }
   // Details: typed, not chosen — no re-render, so the box keeps the caret.
   if (d.cbDetail && d.cbDetail !== 'alignment'){ CB.build.details = Object.assign({}, CB.build.details, { [d.cbDetail]: t.value }); return; }

@@ -178,10 +178,18 @@ async function _sktRulesBuild(edition, read){
     (cls.classFeatures || []).forEach(ref => {
       const s = typeof ref === 'string' ? ref : ref.classFeature;
       const [name, , , lvl, fsrc] = String(s).split('|');
-      // The 2014 class lists Tasha's optional features alongside the PHB
-      // ones ("Martial Versatility|Fighter||4|TCE"). Core only.
-      if (fsrc && fsrc !== src) return;
       const level = +lvl;
+      // The 2014 class lists Tasha's optional features alongside the PHB
+      // ones ("Martial Versatility|Fighter||4|TCE"). Kept, marked optional,
+      // with the feature each replaces; used only when the build turns them on.
+      if (fsrc && fsrc !== src){
+        if (fsrc !== 'TCE' || edition !== '2014') return;
+        const of = (file.classFeature || []).find(x => x.name === name && x.level === level && x.source === 'TCE');
+        const first = sktRulesText((of && of.entries || [])[0] || '');
+        const rep = /replaces the ([A-Z][\w' ]+?) feature/.exec(first);
+        features.push({ name, level, entries: of ? of.entries : [], optional: true, replaces: rep ? rep[1].trim() : null });
+        return;
+      }
       const f = featureAt(name, level);
       features.push({ name, level, entries: f ? f.entries : [],
                       gainSubclass: !!(ref && ref.gainSubclassFeature) });
@@ -212,6 +220,7 @@ async function _sktRulesBuild(edition, read){
       armor: (cls.startingProficiencies && cls.startingProficiencies.armor) || [],
       weapons: (cls.startingProficiencies && cls.startingProficiencies.weapons) || [],
       tools: (cls.startingProficiencies && cls.startingProficiencies.tools) || [],
+      toolProfs: (cls.startingProficiencies && cls.startingProficiencies.toolProficiencies) || null,
       skillChoice: _sktSkillChoice(cls.startingProficiencies && cls.startingProficiencies.skills),
       equipment: cls.startingEquipment || {},
       primaryAbility: cls.primaryAbility || null,
@@ -269,7 +278,7 @@ async function _sktRulesBuild(edition, read){
       ability: b.ability || null, feats: b.feats || null,
       skills: b.skillProficiencies || [], tools: b.toolProficiencies || [],
       languages: b.languageProficiencies || [], equipment: b.startingEquipment || [],
-      entries: b.entries || [],
+      entries: b.entries || [], characteristics: _sktCharacteristics(b.entries),
     });
   });
 
@@ -322,6 +331,24 @@ async function _sktRulesBuild(edition, read){
       .map(n => ({ name: n, type: 'standard' }));
   }
   return R;
+}
+
+// A 2014 background's "Suggested Characteristics" tables: the d8 of
+// personality traits and the d6s of ideals, bonds and flaws.
+function _sktCharacteristics(entries){
+  const out = {};
+  const KEY = { 'personality trait': 'personality', 'ideal': 'ideals', 'bond': 'bonds', 'flaw': 'flaws' };
+  const walk = e => {
+    if (Array.isArray(e)) return e.forEach(walk);
+    if (!e || typeof e !== 'object') return;
+    if (e.type === 'table' && Array.isArray(e.colLabels) && e.colLabels.length >= 2){
+      const k = KEY[sktRulesInline(String(e.colLabels[1])).toLowerCase()];
+      if (k) out[k] = (e.rows || []).map(r => sktRulesText(r[1])).filter(Boolean);
+    }
+    walk(e.entries); walk(e.items);
+  };
+  walk(entries || []);
+  return Object.keys(out).length ? out : null;
 }
 
 function _sktSkillChoice(skills){
@@ -382,6 +409,86 @@ function _sktCell(cell){
     return (d.number || 1) + 'd' + (d.faces || 4);
   }
   return null;
+}
+
+// ── Tool proficiencies to choose ─────────────────────────────────────────────
+// "Any one type of artisan's tools or one musical instrument" (a 2014 monk),
+// three instruments (a bard), a gaming set (a soldier), one of three tools (a
+// dwarf). None of these were asked for. Each choice: { key, label, options,
+// count }; the picks live in build.toolPicks[key].
+const SKT_TOOL_SETS = {
+  anyArtisansTool: ["Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies", "Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools",
+    "Cook's Utensils", "Glassblower's Tools", "Jeweler's Tools", "Leatherworker's Tools", "Mason's Tools", "Painter's Supplies", "Potter's Tools",
+    "Smith's Tools", "Tinker's Tools", "Weaver's Tools", "Woodcarver's Tools"],
+  anyMusicalInstrument: ['Bagpipes', 'Drum', 'Dulcimer', 'Flute', 'Horn', 'Lute', 'Lyre', 'Pan Flute', 'Shawm', 'Viol'],
+  anyGamingSet: ['Dice Set', 'Dragonchess Set', 'Playing Card Set', 'Three-Dragon Ante Set'],
+};
+function _sktToolList(list){
+  if (!Array.isArray(list) || !list.length) return { fixed: [], choice: null };
+  const fixed = [], opts = new Set();
+  let count = 0;
+  // Several objects are alternatives; their choices pool into one pick.
+  list.forEach((o, i) => Object.keys(o || {}).forEach(k => {
+    if (SKT_TOOL_SETS[k]){ SKT_TOOL_SETS[k].forEach(t => opts.add(t)); count = Math.max(count, +o[k] || 1); }
+    else if (k === 'any'){ Object.values(SKT_TOOL_SETS).forEach(s => s.forEach(t => opts.add(t))); ["Disguise Kit", "Forgery Kit", "Herbalism Kit", "Navigator's Tools", "Poisoner's Kit", "Thieves' Tools"].forEach(t => opts.add(t)); count = Math.max(count, +o.any || 1); }
+    else if (k === 'choose'){ ((o.choose || {}).from || []).forEach(t => opts.add(_sktTitle(String(t).split('|')[0]))); count = Math.max(count, (o.choose || {}).count || 1); }
+    else if (o[k] === true && i === 0) fixed.push(_sktTitle(String(k).split('|')[0]));
+  }));
+  return { fixed, choice: count ? { options: [...opts].sort(), count } : null };
+}
+function sktToolChoices(build, R){
+  const cls = sktRulesClass(R, build.cls), bg = sktRulesBackground(R, build.background);
+  const sp = sktRulesSpecies(R, build.species), sub = sp && sp.subraces.find(s => s.name === build.subspecies);
+  const out = [];
+  const add = (key, label, list) => { const c = _sktToolList(list).choice; if (c) out.push(Object.assign({ key, label }, c)); };
+  if (cls) add('class', cls.name, cls.toolProfs);
+  if (bg) add('background', bg.name, bg.tools);
+  if (sp) add('species', sub ? sub.name + ' ' + sp.name : sp.name, (sub && sub.tools && sub.tools.length) ? sub.tools : sp.tools);
+  return out;
+}
+function sktToolFixed(build, R){
+  const cls = sktRulesClass(R, build.cls), sp = sktRulesSpecies(R, build.species);
+  const sub = sp && sp.subraces.find(s => s.name === build.subspecies);
+  return [].concat(cls ? _sktToolList(cls.toolProfs).fixed : [], sp ? _sktToolList((sub && sub.tools && sub.tools.length) ? sub.tools : sp.tools).fixed : []);
+}
+
+// ── Feat prerequisites ───────────────────────────────────────────────────────
+// Whether a character meets a feat's prerequisite, and what it is in words.
+// The data lists alternatives; within one, every condition counts. A
+// condition this can't judge (a campaign, free text) passes, with its words.
+function sktFeatPrereq(R, build, feat, rec){
+  const ps = (feat && feat.prerequisite) || [];
+  if (!ps.length) return { ok: true, text: '' };
+  const ab = sktBuildAbilities(build, R);
+  const sh = (rec && rec.sheet) || {};
+  const armor = ((sh.proficiencies || {}).armor || []).map(a => String(a).toLowerCase());
+  const feats = sktBuildFeatNames(build, R).map(n => n.toLowerCase());
+  const texts = [], oks = ps.map(p => {
+    const parts = [], ok = [];
+    if (p.level != null){ const lv = typeof p.level === 'object' ? p.level.level : p.level; parts.push('level ' + lv); ok.push((build.level || 1) >= lv); }
+    if (p.ability){ const any = p.ability.map(o => Object.keys(o).map(k => k.toUpperCase() + ' ' + o[k]).join(' and ')); parts.push(any.join(' or ')); ok.push(p.ability.some(o => Object.keys(o).every(k => (ab[k] || 0) >= o[k]))); }
+    if (p.spellcasting || p.spellcasting2020 || p.spellcastingFeature){ parts.push('the ability to cast a spell'); ok.push(sh.spellSaveDc != null || (sh.spells || []).length > 0); }
+    if (p.proficiency){ p.proficiency.forEach(o => { if (o.armor){ parts.push('proficiency with ' + o.armor + ' armor'); ok.push(armor.includes(String(o.armor).toLowerCase())); } if (o.weaponGroup || o.weapon){ parts.push('proficiency with ' + (o.weaponGroup || o.weapon) + ' weapons'); ok.push(true); } }); }
+    if (p.race){ const names = p.race.map(r => _sktTitle(r.name) + (r.subrace ? ' (' + _sktTitle(r.subrace) + ')' : '')); parts.push(names.join(' or ')); ok.push(p.race.some(r => String(build.species || '').toLowerCase().includes(String(r.name).toLowerCase()))); }
+    if (p.feat){ const names = p.feat.map(f => _sktTitle(String(f).split('|')[0])); parts.push('the ' + names.join(' or ') + ' feat'); ok.push(p.feat.some(f => feats.includes(String(f).split('|')[0].toLowerCase()))); }
+    if (p.background){ parts.push(p.background.map(b => _sktTitle(b.name)).join(' or ') + ' background'); ok.push(p.background.some(b => String(build.background || '').toLowerCase() === String(b.name).toLowerCase())); }
+    if (p.other){ parts.push(String(p.other)); ok.push(true); }
+    if (p.otherSummary){ parts.push(sktRulesInline(String(p.otherSummary.entry || p.otherSummary.entrySummary || ''))); ok.push(true); }
+    texts.push(parts.filter(Boolean).join(', '));
+    return ok.every(Boolean);
+  });
+  return { ok: oks.some(Boolean), text: texts.filter(Boolean).join('; or ') };
+}
+
+// ── Starting gold instead of the kit (2014) ──────────────────────────────────
+// "5d4 × 10" from the class's goldAlternative: the dice, the multiplier, and
+// the average a player can take instead of rolling.
+function sktClassGold(cls){
+  const g = cls && cls.equipment && cls.equipment.goldAlternative;
+  const m = /(\d+)d(\d+)(?:\s*[×x]\s*(\d+))?/.exec(String(g || ''));
+  if (!m) return null;
+  const n = +m[1], d = +m[2], mult = +(m[3] || 1);
+  return { n, d, mult, text: n + 'd' + d + (mult > 1 ? ' × ' + mult : '') + ' gp', avg: Math.floor(n * (d + 1) / 2) * mult };
 }
 
 // ── Multiclassing ────────────────────────────────────────────────────────────
@@ -499,7 +606,9 @@ function sktBuildAbilities(build, R){
       const sub = species.subraces.find(s => s.name === build.subspecies) || null;
       // Fixed increases from the species and the subrace; the chosen part of
       // either ("+1 to two others") comes from build.speciesAsi.
-      [species.ability, sub && sub.ability].forEach(list => (list || []).forEach(a => {
+      // Tasha's "Customizing Your Origin": none of the fixed increases; the
+      // player places them (build.speciesAsi), as for a Multiverse species.
+      if (!(build.speciesChoice && build.speciesChoice.customOrigin)) [species.ability, sub && sub.ability].forEach(list => (list || []).forEach(a => {
         Object.keys(a).forEach(k => { if (k !== 'choose' && k in out) out[k] += a[k]; });
       }));
       add(build.speciesAsi);
@@ -560,7 +669,10 @@ function _sktBuildFeaturesOne(build, R){
   };
   if (cls){
     const title = sktRulesInline(cls.subclassTitle || '').toLowerCase();
-    cls.features.filter(f => f.level <= L).forEach(f => {
+    const opt = !!build.optionalFeatures;
+    const replaced = opt ? cls.features.filter(f => f.optional && f.replaces && f.level <= L).map(f => f.replaces.toLowerCase()) : [];
+    cls.features.filter(f => f.level <= L && (!f.optional || opt)
+      && !replaced.some(r => f.name.toLowerCase() === r || f.name.toLowerCase().startsWith(r + ' '))).forEach(f => {
       if (/^Ability Score Improvement$/i.test(f.name)) return;     // shown as the choice it became
       // The subclass slot ("Primal Path", "Path Feature", "Bard College
       // feature") is a header: the subclass's own features are listed below.
@@ -1249,6 +1361,8 @@ function sktComputeCharacter(build, R, prior){
   }
   (build.languages || []).forEach(l => ctx.languages.add(l));
   (build.tools || []).forEach(t => ctx.toolProf.add(t));
+  sktToolFixed(build, R).forEach(t => ctx.toolProf.add(t.toLowerCase()));
+  Object.values(build.toolPicks || {}).forEach(l => (l || []).forEach(t => ctx.toolProf.add(String(t).toLowerCase())));
   if (R.edition === '2024') ctx.languages.add('Common');
   const feats = sktBuildFeatNames(build, R);
   feats.forEach(n => {
@@ -1557,7 +1671,8 @@ function sktBuildEquipment(build, R){
   // Once the sheet's inventory has taken over (eq.materialized) the kit is
   // history: what is carried is build.items.
   if (!eq.materialized){
-    if (cls && cls.equipment && Array.isArray(cls.equipment.defaultData)) takeBlocks(cls.equipment.defaultData, 'cls');
+    if (typeof eq.clsGold === 'number') gold += eq.clsGold;
+    else if (cls && cls.equipment && Array.isArray(cls.equipment.defaultData)) takeBlocks(cls.equipment.defaultData, 'cls');
     if (bg) takeBlocks(bg.equipment, 'bg');
     (eq.extra || []).forEach(n => names.push(String(n).toLowerCase()));
   }
@@ -1748,11 +1863,15 @@ function sktBuildTodo(build, R){
     });
   }
   sktFeatSpells(build, R).forEach(g => { if (g.missing) todo.push({ step: 'spells', what: 'the spells from ' + g.feat }); });
+  sktToolChoices(build, R).forEach(c => {
+    const have = ((build.toolPicks || {})[c.key] || []).length;
+    if (have < c.count) todo.push({ step: 'skills', what: (c.count - have) + ' tool proficienc' + (c.count - have === 1 ? 'y' : 'ies') + ' (' + c.label + ')' });
+  });
   const spg = sktSpeciesSpellGrant(R, build);
   if (spg && spg.missing) todo.push({ step: 'species', what: spg.block ? 'the species’ spells' : 'a lineage' });
   if (R.edition === '2014'){
     const sp = sktRulesSpecies(R, build.species), sub = sp && sp.subraces.find(s => s.name === build.subspecies);
-    const ac = sktSpeciesAsiChoice(sp, sub), got = build.speciesAsi || {};
+    const ac = sktSpeciesAsiChoice(sp, sub, build), got = build.speciesAsi || {};
     if (ac && (ac.flex ? Object.values(got).reduce((n, v) => n + (+v || 0), 0) < 3 : Object.keys(got).length < ac.count))
       todo.push({ step: 'species', what: 'the species’ ability increases' });
   }
@@ -1862,8 +1981,9 @@ function sktMagicMake(R, e, baseKey){
 // { from, count, amount } (Half-Elf: two +1s), or { flex: true } for the
 // Multiverse-style species that leave all of it to you (+2 and +1, or three
 // +1s). Null when it is all fixed.
-function sktSpeciesAsiChoice(sp, sub){
+function sktSpeciesAsiChoice(sp, sub, build){
   if (!sp) return null;
+  if (build && build.speciesChoice && build.speciesChoice.customOrigin) return { flex: true };
   for (const list of [sub && sub.ability, sp.ability]){
     for (const a of (list || [])){
       if (a.choose) return { from: a.choose.from, count: a.choose.count || 1, amount: a.choose.amount || 1 };
@@ -1918,6 +2038,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktSpellsMatching, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
+                     sktToolChoices, sktFeatPrereq, sktClassGold,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };
