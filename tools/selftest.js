@@ -7791,6 +7791,21 @@
       }
     }
 
+    // -- Round 36: draconic sorcery's ancestor and affinity ---------------------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const b14 = Object.assign(sktBlankBuild('2014'), { cls: 'Sorcerer', subclass: 'Draconic', level: 6 });
+        ok('draconic: a 2014 draconic sorcerer chooses a dragon ancestor', (sktBuildChoices(b14, R14).find(c => c.feature === 'Dragon Ancestor') || { spec: { options: [] } }).spec.options.length === 10);
+        b14.featureChoices = { 'Dragon Ancestor': 'Red' };
+        const p14 = sktComputeCharacter(b14, R14).sheet;
+        ok('draconic: Elemental Affinity follows it (fire)', p14.notes.some(n => /^Elemental Affinity: .* fire spell/.test(n)));
+        ok('draconic: and speaks Draconic', /Draconic/.test(p14.languages));
+        const p24 = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { cls: 'Sorcerer', subclass: 'Draconic', level: 6, featureChoices: { 'Elemental Affinity': 'Cold' } }), R24);
+        ok('draconic: a 2024 sorcerer\'s Elemental Affinity gives resistance to its type', (p24.resistances || []).includes('cold'));
+      } catch(e){ ok('round 36 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

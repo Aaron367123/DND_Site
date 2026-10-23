@@ -95,6 +95,27 @@
     apply(ctx, v){ note(ctx, 'Elemental Adept (' + v + '): spells ignore resistance to ' + v.toLowerCase() + ' damage; 1s on its damage dice count as 2s.'); },
   });
 
+  // ── Draconic sorcery: the ancestor, and its damage type ────────────────
+  // 2014: Dragon Ancestor picks a dragon; Elemental Affinity (6th) adds
+  // Charisma to that damage and can buy resistance. 2024: Elemental Affinity
+  // picks the type and gives resistance to it.
+  const SKT_DRAGONS = [['Black', 'Acid'], ['Blue', 'Lightning'], ['Brass', 'Fire'], ['Bronze', 'Lightning'], ['Copper', 'Acid'],
+                       ['Gold', 'Fire'], ['Green', 'Poison'], ['Red', 'Fire'], ['Silver', 'Cold'], ['White', 'Cold']];
+  choice(['2014:subclass:sorcerer:Dragon Ancestor'], {
+    label: 'Dragon Ancestor',
+    options: SKT_DRAGONS.map(([d, t]) => ({ value: d, label: d + ' (' + t + ')', desc: t + ' damage: your later draconic features use it.' })),
+    apply(ctx, v){ const d = SKT_DRAGONS.find(x => x[0] === v); if (d){ ctx.dragonDamage = d[1]; note(ctx, 'Dragon Ancestor: ' + d[0] + ' dragon (' + d[1].toLowerCase() + ').'); } },
+  });
+  def('2014:subclass:sorcerer:Elemental Affinity', ctx => {
+    const v = ((ctx.build._full || ctx.build).featureChoices || {})['Dragon Ancestor'], d = SKT_DRAGONS.find(x => x[0] === v);
+    note(ctx, 'Elemental Affinity: add ' + signed(ctx.mod.cha) + ' to one damage roll of a ' + (d ? d[1].toLowerCase() : 'your ancestry’s') + ' spell; 1 sorcery point for resistance to it for 1 hour.');
+  });
+  choice(['2024:subclass:sorcerer:Elemental Affinity'], {
+    label: 'Elemental Affinity',
+    options: ['Acid', 'Cold', 'Fire', 'Lightning', 'Poison'].map(t => ({ value: t, label: t, desc: 'Resistance to ' + t.toLowerCase() + ' damage, and your Charisma modifier on one damage roll of a ' + t.toLowerCase() + ' spell.' })),
+    apply(ctx, v){ ctx.resist.add(v.toLowerCase()); note(ctx, 'Elemental Affinity (' + v + '): resistance to ' + v.toLowerCase() + '; add ' + signed(ctx.mod.cha) + ' to one damage roll of a ' + v.toLowerCase() + ' spell.'); },
+  });
+
   // ── Psionic Energy (Psi Warrior, Soulknife) ────────────────────────────
   def('2014:subclass:Psionic Power', ctx => {
     const L = ctx.level, die = L >= 17 ? 'd12' : L >= 11 ? 'd10' : L >= 5 ? 'd8' : 'd6';

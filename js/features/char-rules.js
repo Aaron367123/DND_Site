@@ -599,7 +599,7 @@ function sktProfGrants(text){
   const pickOne = /one of the following (benefits|options)|following benefits of your choice/i.test(text);
   if (/Choose two types of weapons to be your kensei weapons/i.test(text)) out.choices.push({ kind: 'weapons', count: 2, from: '@kensei', more: [6, 11, 17] });
   text.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).forEach(s => {
-    if (!/proficien|language|training with/i.test(s) || (pickOne && /^[•*]/.test(s.trim()))) return;
+    if (!/proficien|language|training with|speak, read, and write/i.test(s) || (pickOne && /^[•*]/.test(s.trim()))) return;
     if (/for (10 minutes|1 hour|one hour|the duration)|until |while (you|wearing|raging|it)|double your|expertise|you are proficient with it|you add your proficiency|^\W*if you/i.test(s)) return;
     let m;
     if ((m = /(one|two|three|four) (?:of the following skills|skills from the following list|of these skills)(?: of your choice)?:\s*([^.]+)/i.exec(s))
