@@ -7610,6 +7610,42 @@
       }
     }
 
+    // -- Round 29: kensei weapons; the origin feat once ------------------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const kc = L => sktProfChoices(Object.assign(sktBlankBuild('2014'), { cls: 'Monk', subclass: 'Kensei', level: L }), R14).find(c => c.kind === 'weapons');
+        ok('kensei: two kensei weapons at 3rd level, five by 17th', !!kc(3) && kc(3).count === 2 && kc(6).count === 3 && kc(17).count === 5);
+        ok('kensei: no heavy weapons, but the longbow', kc(3).options.includes('longbow') && !kc(3).options.includes('greatsword') && kc(3).options.includes('shortsword'));
+        const kb = Object.assign(sktBlankBuild('2014'), { cls: 'Monk', subclass: 'Kensei', level: 3, profPicks: { 'Path of the Kensei': { weapons: ['longsword', 'longbow'] } } });
+        ok('kensei: and is proficient with them', ['longsword', 'longbow'].every(w => sktComputeCharacter(kb, R14).sheet.proficiencies.weapons.includes(w)));
+        const ea = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 4, asi: { 4: { type: 'feat', feat: 'Elemental Adept' } } });
+        ok('feats: Elemental Adept asks for its damage type', sktBuildTodo(ea, R14).some(t => t.what === 'Elemental Adept choice'));
+        ea.featureChoices = { 'Elemental Adept': 'Fire' };
+        ok('feats: and notes it on the sheet', sktComputeCharacter(ea, R14).sheet.notes.some(n => /^Elemental Adept \(Fire\)/.test(n)));
+        const pcd = (sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Paladin', subclass: 'Devotion', level: 3 }), R14).resources || []).find(r => r.name === 'Channel Divinity');
+        ok('paladin: a 2014 oath gives Channel Divinity once per short rest', !!pcd && pcd.max === 1 && pcd.recharge === 'short');
+        const acts = (cls, sub, L) => (sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls, subclass: sub, level: L }), R14).sheet.activations || []).filter(a => a.resource === 'Channel Divinity');
+        const life = acts('Cleric', 'Life', 2).map(a => a.name);
+        ok('channel divinity: a life cleric can Turn Undead or Preserve Life from the sheet', life.includes('Turn Undead') && life.includes('Preserve Life'), life.join());
+        const dev = acts('Paladin', 'Devotion', 3);
+        ok('channel divinity: a devotion paladin has Sacred Weapon and Turn the Unholy, as actions', dev.map(a => a.name).join() === 'Sacred Weapon,Turn the Unholy' && dev.every(a => a.action === 'Action'));
+        ok('channel divinity: Guided Strike costs no action', (acts('Cleric', 'War', 2).find(a => a.name === 'Guided Strike') || {}).action === 'Free');
+        // A variant human's feat doesn't repeat one taken later.
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Fighter', level: 4, species: 'Human', subspecies: 'Variant', asi: { 4: { type: 'feat', feat: 'Alert' } } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'species'; cbRender(); await sleep(20);
+        const of = [...(document.querySelector('#cb-root [data-cb-originfeat]') || { options: [] }).options].map(o => o.value);
+        ok('feats: the variant human\'s feat list leaves out one already taken', of.length > 10 && !of.includes('Alert') && of.includes('Lucky'), of.length);
+        cbClose();
+      } catch(e){ ok('round 29 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

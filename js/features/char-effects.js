@@ -86,6 +86,15 @@
   });
   both(['subclass:Steel Defender'], ctx => note(ctx, 'Steel Defender: your companion acts on your turn; it takes the Dodge action unless you use a bonus action to command it. Its stat block uses your proficiency bonus.'));
 
+  // ── Feats ──────────────────────────────────────────────────────────────
+  // Elemental Adept names its damage type only in the text.
+  choice(['feat:Elemental Adept'], {
+    label: 'Elemental Adept',
+    options: ['Acid', 'Cold', 'Fire', 'Lightning', 'Thunder'].map(d => ({ value: d, label: d,
+      desc: 'Your spells ignore resistance to ' + d.toLowerCase() + ' damage, and a 1 on their ' + d.toLowerCase() + ' damage dice counts as a 2.' })),
+    apply(ctx, v){ note(ctx, 'Elemental Adept (' + v + '): spells ignore resistance to ' + v.toLowerCase() + ' damage; 1s on its damage dice count as 2s.'); },
+  });
+
   // ── Psionic Energy (Psi Warrior, Soulknife) ────────────────────────────
   def('2014:subclass:Psionic Power', ctx => {
     const L = ctx.level, die = L >= 17 ? 'd12' : L >= 11 ? 'd10' : L >= 5 ? 'd8' : 'd6';

@@ -597,6 +597,7 @@ function sktProfGrants(text){
   const out = { armor: [], weapons: [], tools: [], skills: [], saves: [], languages: [], choices: [] };
   const list = s => String(s).replace(/\(your choice\)/i, '').split(/,\s*(?:and |or )?|\s+(?:and|or)\s+/).map(x => x.replace(/^(the|either)\s+/i, '').replace(/\s+skills?$/i, '').trim()).filter(Boolean);
   const pickOne = /one of the following (benefits|options)|following benefits of your choice/i.test(text);
+  if (/Choose two types of weapons to be your kensei weapons/i.test(text)) out.choices.push({ kind: 'weapons', count: 2, from: '@kensei', more: [6, 11, 17] });
   text.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).forEach(s => {
     if (!/proficien|language|training with/i.test(s) || (pickOne && /^[•*]/.test(s.trim()))) return;
     if (/for (10 minutes|1 hour|one hour|the duration)|until |while (you|wearing|raging|it)|double your|expertise|you are proficient with it|you add your proficiency|^\W*if you/i.test(s)) return;
@@ -647,7 +648,8 @@ function _sktWeaponGroup(R, tag){
   const ranged = i => /^R(\||$)/.test(String(i.type)), melee = i => /^M(\||$)/.test(String(i.type));
   const pick = tag === '@martial ranged' ? all.filter(i => i.weaponCategory === 'martial' && ranged(i))
     : tag === '@martial melee light' ? all.filter(i => i.weaponCategory === 'martial' && melee(i) && !props(i).includes('2H') && !props(i).includes('H'))
-    : tag === '@one-handed melee' ? all.filter(i => melee(i) && !props(i).includes('2H')) : [];
+    : tag === '@one-handed melee' ? all.filter(i => melee(i) && !props(i).includes('2H'))
+    : tag === '@kensei' ? all.filter(i => (!props(i).includes('H') && !props(i).includes('S')) || /^longbow$/i.test(i.name)) : [];
   return [...new Set(pick.map(i => i.name.toLowerCase()))].sort();
 }
 // The subclass features with proficiency grants, and the picks they ask for
@@ -660,6 +662,8 @@ function sktProfChoices(build, R){
   const out = [];
   sktSubclassProfFeatures(build, R).forEach(({ feature, cls, g }) => g.choices.forEach(c => {
     if (c.kind !== 'skills' && c.kind !== 'weapons') return;
+    const part = sktClassLevels(build, R).find(p => p.key === cls) || sktClassLevels(build, R)[0];
+    c = Object.assign({}, c, { count: c.count + (c.more || []).filter(l => part.level >= l).length });
     const fromCls = c.fromClass && sktRulesClass(R, c.fromClass);
     const options = c.kind === 'weapons' ? _sktWeaponGroup(R, c.from)
       : fromCls ? fromCls.skillChoice.from : (c.from || Object.keys(SKT_SKILLS));
@@ -1592,6 +1596,11 @@ sktDefineEffect(['class:bard:Jack of All Trades'], ctx => { ctx.jackOfAllTrades 
 sktDefineEffect(['class:cleric:Channel Divinity', '2014:class:cleric:Channel Divinity'], ctx => {
   const n = _fxCol(ctx, 'Channel Divinity') || (ctx.level >= 18 ? 3 : ctx.level >= 6 ? 2 : 1);
   _fxPool(ctx, 'Channel Divinity', n, ctx.edition === '2024' ? 'short-one' : 'short');
+  const dc = 8 + ctx.pb + ctx.mod.wis;
+  _fxAction(ctx, { name: 'Turn Undead', action: ctx.edition === '2024' ? 'Magic' : 'Action', resource: 'Channel Divinity', amount: 1, feature: 'Channel Divinity',
+    desc: 'Undead within 30 feet make a DC ' + dc + ' Wisdom save or are turned for 1 minute.' });
+  if (ctx.edition === '2024') _fxAction(ctx, { name: 'Divine Spark', action: 'Magic', resource: 'Channel Divinity', amount: 1, feature: 'Channel Divinity',
+    desc: 'A creature within 30 feet regains, or takes (DC ' + dc + ' Constitution save for half), ' + (ctx.level >= 18 ? 4 : ctx.level >= 13 ? 3 : ctx.level >= 7 ? 2 : 1) + 'd8 + ' + ctx.mod.wis + ' radiant or necrotic.' });
 });
 
 // ---- Druid
@@ -1661,6 +1670,8 @@ sktDefineEffect(['class:paladin:Aura of Protection'], ctx => {
 sktDefineEffect(['class:paladin:Channel Divinity'], ctx => {
   _fxPool(ctx, 'Channel Divinity', _fxCol(ctx, 'Channel Divinity') || (ctx.level >= 11 ? 3 : 2), ctx.edition === '2024' ? 'short-one' : 'short');
 });
+// A 2014 paladin's Channel Divinity comes with the oath: once per short rest.
+sktDefineEffect(['2014:subclass:paladin:Channel Divinity'], ctx => { _fxPool(ctx, 'Channel Divinity', 1, 'short'); });
 
 // ---- Ranger
 sktDefineEffect(['2024:class:ranger:Favored Enemy'], ctx => {
@@ -1934,6 +1945,13 @@ function sktComputeCharacter(build, R, prior){
           && !((f.from === 'species' || f.from === 'feat') && /\bcast\b/i.test(f.text || ''))){
         const u = sktUsesFromText(f.text, ctx, f.name);
         if (u) _fxPool(ctx, f.name, u.max, u.recharge, { auto: true });
+      }
+      if (!fx && (f.from === 'class' || f.from === 'subclass') && f.name !== 'Channel Divinity'
+          && (/^Channel Divinity:/.test(f.name) || /(?:using|use|expend (?:a|one) use of) (?:your )?Channel Divinity|as a Channel Divinity option/i.test(f.text || ''))){
+        const t = String(f.text || '').replace(/\s+/g, ' ');
+        const action = /\breaction\b/i.test(t) ? 'Reaction' : /bonus action/i.test(t) ? 'Bonus Action' : /magic action/i.test(t) ? 'Magic' : /\b(as an action|use your action|take an action|an action to)\b/i.test(t) ? 'Action' : 'Free';
+        const first = (t.split(/(?<=\.)\s+/).find(s => /action|reaction|channel divinity/i.test(s) && !/^(Starting|At|When you)\b.*level/i.test(s)) || t).slice(0, 220);
+        _fxAction(ctx, { name: f.name.replace(/^Channel Divinity:\s*/, ''), action, resource: 'Channel Divinity', amount: 1, feature: f.name, desc: first });
       }
       const v = ch && (build.featureChoices || {})[f.name];
       if (ch && v && ch.apply){ try { ch.apply(ctx, v); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
