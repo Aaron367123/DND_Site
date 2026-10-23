@@ -5424,6 +5424,8 @@
           asi: { 4: { type: 'asi', inc: { cha: 1, con: 1 } } }, cantrips: ['Eldritch Blast'], optional: { 'Eldritch Invocations': ['Agonizing Blast'] } });
         const K = sktComputeCharacter(k, R24);
         ok('builder 2024: two pact slots at 3rd level', K.sheet.spellSlots[3] && K.sheet.spellSlots[3].total === 2 && !K.sheet.spellSlots[1]);
+        { const wl = L => sktBuildSpellcasting(Object.assign(sktBlankBuild('2014'), { cls: 'Warlock', level: L }), R14, { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 16 }).slots;
+          ok('builder 2014: a warlock’s pact slots rise with its level (2nd at 3, 5th at 9 and 20)', JSON.stringify(wl(3)) === '{"2":2}' && JSON.stringify(wl(9)) === '{"5":2}' && JSON.stringify(wl(20)) === '{"5":4}', JSON.stringify([wl(3), wl(9), wl(20)])); }
         ok('builder 2024: Eldritch Blast is two beams of 1d10+4', /^1d10\+4 force .2 beams$/.test((K.sheet.attacks.find(a => a.name === 'Eldritch Blast') || {}).damage || ''));
         // Weapon proficiency written as an item tag with a plural display.
         const bd = Object.assign(sktBlankBuild('2014'), { name: 'T5', species: 'Half-Elf', cls: 'Bard', level: 1, background: 'Entertainer',
@@ -6604,8 +6606,8 @@
             r.querySelector('[data-cb-step="basics"]').click(); await sleep(20);
             const lv = r.querySelector('[data-cb-in="level"]'); lv.value = '5'; lv.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20);
             r.querySelector('[data-cb="quick"]').click(); await sleep(60);
-            const todo = sktBuildTodo(CB.build, CB.R).filter(t => !t.soft);
-            ok('quick build ' + ed + ' ' + cls + ' 5: nothing left to choose', todo.length === 0, JSON.stringify(todo));
+            const todo = sktBuildTodo(CB.build, CB.R);
+            ok('quick build ' + ed + ' ' + cls + ' 5: nothing left to choose, spells included', todo.length === 0, JSON.stringify(todo));
             const order = SKT_ABILITY_ORDER[cls.toLowerCase()];
             const ab = sktBuildAbilities(CB.build, CB.R);
             if (cls === 'Wizard') ok('quick build ' + ed + ': the wizard’s best score is INT', order.every(k => ab.int >= ab[k]), JSON.stringify(ab));
@@ -6731,6 +6733,317 @@
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
         loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
       }
+    }
+
+    // -- Round 10: score breakdowns, spell filters, item text, coin transactions --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const b10 = Object.assign(sktBlankBuild('2014'), { name: 'Tally', cls: 'Wizard', species: 'Elf', subspecies: 'High', level: 4, background: 'Sage',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 13, int: 15, wis: 12, cha: 10 } }, asi: { 4: { type: 'asi', inc: { int: 2 } } },
+          cantrips: ['Fire Bolt', 'Light', 'Mage Hand'], spellbook: ['Magic Missile', 'Shield', 'Misty Step', 'Sleep', 'Web', 'Burning Hands'], spells: ['Magic Missile', 'Shield', 'Misty Step', 'Sleep', 'Web', 'Burning Hands'] });
+        const why = sktAbilityBreakdown(b10, R14);
+        ok('scores: where INT comes from — base, species, the level 4 improvement', why.int === 'Base 15 · Species +1 · Level 4 improvement +2', why.int);
+        ok('scores: and DEX', why.dex === 'Base 14 · Species +2', why.dex);
+        const r10 = sktComputeCharacter(b10, R14); r10.id = 'pc_r10'; r10.gold = 5; r10.coins = { pp: 0, ep: 0, sp: 0, cp: 0 }; state.party.push(r10); save();
+        const me = () => state.party.find(p => p.id === 'pc_r10');
+        openCharSheet('pc_r10'); await sleep(400);
+        ok('scores: the sheet’s INT box says why', /Level 4 improvement \+2/.test(document.querySelector('#cs-root [data-cs-roll="ab:int"]').title));
+        // Spell filters.
+        document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(30);
+        const spellNames = () => [...document.querySelectorAll('#cs-root .cs-spell-n b')].map(e => e.textContent);
+        document.querySelector('#cs-root [data-cs-splv="0"]').click(); await sleep(30);
+        ok('spells: the Cantrips pill shows only cantrips', JSON.stringify(spellNames()) === '["Fire Bolt","Light","Mage Hand"]', JSON.stringify(spellNames()));
+        document.querySelector('#cs-root [data-cs-splv="all"]').click(); await sleep(30);
+        const sq = document.querySelector('#cs-root [data-cs-spq]'); sq.value = 'mis'; sq.dispatchEvent(new Event('input', { bubbles: true })); await sleep(350);
+        ok('spells: search narrows the list, the box keeps the caret', JSON.stringify(spellNames()) === '["Magic Missile","Misty Step"]' && document.activeElement === document.querySelector('#cs-root [data-cs-spq]'), JSON.stringify(spellNames()));
+        // Item text.
+        document.querySelector('#cs-root [data-cs-tab="inventory"]').click(); await sleep(1500);
+        const qi = me().build.items && me().build.items.length ? 0 : 0;
+        document.querySelector('#cs-root [data-cs-open="it:0"]').click(); await sleep(40);
+        ok('items: an item opens to what it is', !!document.querySelector('#cs-root .cs-itemt'));
+        // Coins.
+        const tx = document.querySelector('#cs-root [data-cs-txn]'); tx.value = '30'; document.querySelector('#cs-root [data-cs-txc]').value = 'sp';
+        document.querySelector('#cs-root [data-cs="coinadd"]').click(); await sleep(40);
+        ok('coins: adding 30 sp', me().coins.sp === 30);
+        document.querySelector('#cs-root [data-cs-txn]').value = '7'; document.querySelector('#cs-root [data-cs-txc]').value = 'gp';
+        document.querySelector('#cs-root [data-cs="coinspend"]').click(); await sleep(40);
+        ok('coins: spending 7 gp from 5 gp and 30 sp: silver first, 1 gp left', me().gold === 1 && me().coins.sp === 0, JSON.stringify({ g: me().gold, c: me().coins }));
+        document.querySelector('#cs-root [data-cs-txn]').value = '50'; document.querySelector('#cs-root [data-cs="coinspend"]').click(); await sleep(40);
+        ok('coins: not more than there is', me().gold === 1 && me().coins.sp === 0);
+        csClose();
+      } catch(e){ ok('round 10 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 11: manual hit points, containers, theme colour -------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const b11 = Object.assign(sktBlankBuild('2014'), { name: 'Packer', cls: 'Fighter', species: 'Human', level: 3, background: 'Soldier', abilities: { method: 'manual', base: { str: 15, dex: 12, con: 14, int: 10, wis: 10, cha: 8 } } });
+        ok('hit points: entered by hand', sktComputeCharacter(Object.assign({}, b11, { hp: { method: 'manual', manual: 40, rolls: {} } }), R14).hpMax === 40);
+        const r11 = sktComputeCharacter(b11, R14); r11.id = 'pc_r11'; state.party.push(r11); save();
+        const me = () => state.party.find(p => p.id === 'pc_r11');
+        openCharSheet('pc_r11', { tab: 'inventory' }); await sleep(1800);
+        const q = s => document.querySelector('#cs-root ' + s);
+        q('[data-cs-custom]').value = 'Bag of Holding'; q('[data-cs-customwt]').value = '15'; q('[data-cs="addcustom"]').click(); await sleep(400);
+        q('[data-cs-custom]').value = 'Anvil'; q('[data-cs-customwt]').value = '100'; q('[data-cs="addcustom"]').click(); await sleep(400);
+        const carry = () => parseFloat((/Carrying ([\d.]+)/.exec(q('.cs-carry').textContent) || [])[1]);
+        const before = carry();
+        const ai = me().build.items.findIndex(x => x.name === 'Anvil');
+        const sel = q('[data-cs-in="' + ai + '"]');
+        ok('containers: an item can go into a bag', !!sel && [...sel.options].some(o => o.value === 'Bag of Holding'));
+        sel.value = 'Bag of Holding'; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(400);
+        ok('containers: in a Bag of Holding it weighs nothing', me().build.items.find(x => x.name === 'Anvil').in === 'Bag of Holding' && Math.round(before - carry()) === 100, before + ' → ' + carry());
+        // Theme colour.
+        q('[data-cs="customize"]').click(); await sleep(30);
+        const tc = q('[data-cs-theme]'); tc.value = '#3366cc'; tc.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+        ok('theme: the sheet takes the character’s colour', me().theme === '#3366cc' && document.getElementById('cs-root').classList.contains('themed'));
+        csClose();
+      } catch(e){ ok('round 11 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 12: Lucky, Reliable Talent, Heroic Inspiration reroll, the roll log --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { d: window.sktD, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const base = { method: 'manual', base: { str: 8, dex: 16, con: 12, int: 12, wis: 10, cha: 14 } };
+        const h = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Pip', cls: 'Rogue', species: 'Halfling', subspecies: 'Lightfoot', level: 11, abilities: base,
+          skills: ['stealth', 'acrobatics', 'perception', 'deception'] }), R14);
+        h.id = 'pc_r12'; h.inspiration = true; state.party.push(h); save();
+        const me = () => state.party.find(p => p.id === 'pc_r12');
+        openCharSheet('pc_r12'); await sleep(300);
+        const q = s => document.querySelector('#cs-root ' + s);
+        let seq = [1, 14]; window.sktD = () => seq.length ? seq.shift() : 10;
+        q('[data-cs-roll="save:con"]').click(); await sleep(30);
+        ok('Lucky: a halfling’s natural 1 is rolled again', CS.log[0].natural === 14 && /Lucky/.test(CS.log[0].why));
+        seq = [3]; q('[data-cs-roll="skill:stealth"]').click(); await sleep(30);
+        ok('Reliable Talent: a proficient check never shows under 10', CS.log[0].natural === 10 && /Reliable Talent/.test(CS.log[0].why));
+        seq = [3]; q('[data-cs-roll="skill:arcana"]').click(); await sleep(30);
+        ok('Reliable Talent: not for a skill without proficiency', CS.log[0].natural === 3);
+        ok('inspiration: a Reroll button while inspired', !!q('[data-cs="reroll"]'));
+        seq = [18]; q('[data-cs="reroll"]').click(); await sleep(40);
+        ok('inspiration: rerolling spends it', CS.log[0].natural === 18 && /reroll/.test(CS.log[0].label) && me().inspiration === false && !q('[data-cs="reroll"]'));
+        q('[data-cs="log"]').click(); await sleep(20);
+        ok('log: the recent rolls', document.querySelectorAll('#cs-root .cs-log > div').length >= 4);
+        csClose();
+      } catch(e){ ok('round 12 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 13: party XP, Level up badge, prepared count ---------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { modal: window.showModal, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const mk = (id, name) => { const r = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name, cls: 'Cleric', subclass: 'Life', species: 'Human', level: 1, advancement: 'xp',
+          abilities: { method: 'manual', base: { str: 10, dex: 10, con: 14, int: 10, wis: 16, cha: 10 } }, cantrips: ['Light', 'Guidance', 'Sacred Flame'], spells: ['Bless'] }), R14); r.id = id; r.xp = 0; state.party.push(r); return r; };
+        mk('pc_x1', 'Xa'); mk('pc_x2', 'Xb'); save();
+        openPanel('party'); await sleep(200);
+        const P = panelDefs.party;
+        ok('xp: the party menu offers Award XP', P.menuItems().some(i => i.label === 'Award XP…'));
+        window.showModal = () => Promise.resolve({ xp: '600' });
+        P._awardXp(); await sleep(60);
+        const x = id => state.party.find(p => p.id === id);
+        ok('xp: shared evenly', x('pc_x1').xp === 300 && x('pc_x2').xp === 300);
+        P._render(); await sleep(30);
+        ok('xp: enough for level 2 shows Level up!', !!P._body.querySelector('[data-act="xp-levelup"]'));
+        closePanel('party');
+        openCharSheet('pc_x1', { tab: 'spells' }); await sleep(300);
+        ok('spells: the prepared count, and how many more', /prepared 1 \/ 4/.test(document.querySelector('#cs-root .cs-prepcount').textContent) && !!document.querySelector('#cs-root .cs-prepcount [data-cs="manage"]'),
+           document.querySelector('#cs-root .cs-prepcount') && document.querySelector('#cs-root .cs-prepcount').textContent);
+        csClose();
+      } catch(e){ ok('round 13 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.showModal = st.modal; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 15: crit range, extra crit dice, Great Weapon Fighting ------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { d: window.sktD, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        window._findCombatantForPartyMember = () => -1;
+        const base = { method: 'manual', base: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 8 } };
+        // A half-orc Champion with a greatsword and Great Weapon Fighting.
+        const ch = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Crit', cls: 'Fighter', subclass: 'Champion', species: 'Half-Orc', level: 3, abilities: base,
+          optional: { 'Fighting Style': ['Great Weapon Fighting'] }, equipment: { cls: 'A', bg: 'A', clsBlocks: ['a', 'b', 'a', 'a'], picks: { 'cls:1:0': 'greatsword', 'cls:1:1': 'greatsword' } } }), R14);
+        ok('rules: a Champion crits on 19, a half-orc adds a die, GWF is noted', ch.sheet.critRange === 19 && ch.sheet.critExtraDice === 1 && ch.sheet.greatWeaponFighting === true);
+        ch.id = 'pc_r15'; state.party.push(ch); save();
+        openCharSheet('pc_r15'); await sleep(300);
+        const gi = ch.sheet.attacks.findIndex(a => a.name === 'Greatsword');
+        ok('setup: a greatsword', gi >= 0, JSON.stringify(ch.sheet.attacks.map(a => a.name)));
+        window.sktD = () => 19;
+        document.querySelector('#cs-root [data-cs-atk="' + gi + '"]').click(); await sleep(30);
+        ok('crit: a 19 is a critical hit for a Champion', CS.lastAtkCrit && CS.lastAtkCrit.crit === true);
+        // Damage: 2d6 doubled (4) + 1 Savage die = 5 dice; GWF rerolls the 1s.
+        const seq = [1, 6, 6, 6, 6, 6]; window.sktD = () => seq.length ? seq.shift() : 6;
+        document.querySelector('#cs-root [data-cs-dmg="' + gi + '"]').click(); await sleep(30);
+        ok('crit: five dice (two doubled, one Savage Attacks), the 1 rerolled by Great Weapon Fighting', CS.log[0].total === 5 * 6 + 4 && /5d6/.test(CS.log[0].detail), CS.log[0].detail + ' = ' + CS.log[0].total);
+        csClose();
+        ok('2024: Great Weapon Fighting counts 1s and 2s as 3s', (() => { const q = [1, 2]; window.sktD = () => q.length ? q.shift() : 4; return sktDamageRoll('2d6', false, { gwf: '2024' }).total === 6; })());
+      } catch(e){ ok('round 15 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 16: how hit points and AC are worked out ------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const f16 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Sums', cls: 'Fighter', species: 'Human', level: 5, abilities: { method: 'manual', base: { str: 15, dex: 12, con: 13, int: 10, wis: 10, cha: 8 } },
+          optional: { 'Fighting Style': ['Defense'] }, equipment: { cls: 'A', bg: 'A', clsBlocks: ['a', 'a', 'a', 'a'] } }), R14);
+        ok('working: hit points show their sum', /^level 1: 10 [+-]\d CON · Fighter levels 2–5: 4 × 6 [+-]\d each = \d+$/.test(f16.sheet.hpDetail) && f16.sheet.hpDetail.endsWith('= ' + f16.hpMax), f16.sheet.hpDetail);
+        ok('working: AC shows its parts', /^Chain Mail 16 \+ Defense 1 \+ Shield 2 = 19$/.test(f16.sheet.acDetail), f16.sheet.acDetail);
+        f16.id = 'pc_r16'; state.party.push(f16); save();
+        openCharSheet('pc_r16'); await sleep(250);
+        ok('working: on the sheet, on hover', /Chain Mail 16/.test(document.querySelector('#cs-root .cs-boxes .cs-box').title) && /level 1/.test(document.querySelector('#cs-root .cs-hp').title));
+        csClose();
+      } catch(e){ ok('round 16 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 17: custom trackers and actions ---------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const c17 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Charges', cls: 'Wizard', species: 'Human', level: 3 }), R14);
+        c17.id = 'pc_r17'; state.party.push(c17); save();
+        const me = () => state.party.find(p => p.id === 'pc_r17');
+        openCharSheet('pc_r17'); await sleep(300);
+        const q = s => document.querySelector('#cs-root ' + s);
+        q('.cs-addcustom').open = true;
+        q('[data-cs-trk]').value = 'Wand of Magic Missiles'; q('[data-cs-trkmax]').value = '7'; q('[data-cs="addtrk"]').click(); await sleep(300);
+        ok('custom: a tracker with its uses', (me().resources.find(r => r.name === 'Wand of Magic Missiles') || {}).max === 7);
+        q('.cs-addcustom').open = true;
+        q('[data-cs-act]').value = 'Gnome Trick'; q('[data-cs-acttype]').value = 'Bonus Action'; q('[data-cs-actdesc]').value = 'A small illusion.'; q('[data-cs="addact"]').click(); await sleep(300);
+        ok('custom: an action under its kind', me().sheet.activations.some(a => a.name === 'Gnome Trick' && a.action === 'Bonus Action') && /Gnome Trick/.test(q('.cs-pane').textContent));
+        // Spend a charge, level up: the tracker and what was spent come through.
+        const ri = me().resources.findIndex(r => r.name === 'Wand of Magic Missiles');
+        me().resources[ri].current = 4; save();
+        const R = await sktRulesLoad('2014');
+        const b = JSON.parse(JSON.stringify(me().build)); b.level = 4;
+        const up = sktComputeCharacter(b, R, me());
+        ok('custom: kept through a level up, charges spent stay spent', (up.resources.find(r => r.name === 'Wand of Magic Missiles') || {}).current === 4);
+        csClose();
+      } catch(e){ ok('round 17 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- The sheet opens for everyone, built or imported, on every tab ----------
+    {
+      const before = errs.length;
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const list = state.party.slice(0, 8);
+        let opened = 0, bad = [];
+        for (const pc of list){
+          try {
+            openCharSheet(pc.id); await sleep(150);
+            for (const t of CS_TABS.map(x => x.id)){ CS.tab = t; csRender(); }
+            if (!document.querySelector('#cs-root .cs-pane')) bad.push(pc.name);
+            opened++; csClose();
+          } catch(e){ bad.push(pc.name + ': ' + e.message); }
+        }
+        ok('sheet: opens on every tab for every party member (' + opened + ')', opened === list.length && !bad.length, bad.join(' | '));
+      } finally { if (typeof csClose === 'function') csClose(); }
+      ok('sheet: silent while doing it', errs.length === before, errs.slice(before).join(' | '));
+    }
+
+    // -- Quick Build for every class, both editions, levels 1 to 20 -------------
+    {
+      const before = errs.length;
+      const ed0 = state.settings && state.settings.builderEdition;
+      const p0 = localStorage.getItem('skt-party-v1');
+      const left = [], broken = [];
+      try {
+        for (const ed of ['2014', '2024']){
+          const R = await sktRulesLoad(ed);
+          await openCharBuilder({ edition: ed }); await sleep(ed === '2014' ? 600 : 300);
+          for (const cls of R.classes.map(c => c.name)){
+            for (const lv of [1, 3, 5, 11, 20]){
+              try {
+                CB.build = Object.assign(sktBlankBuild(ed), { level: lv, cls, name: cls + ' ' + lv });
+                cbQuickBuild();
+                const todo = sktBuildTodo(CB.build, CB.R);
+                if (todo.length) left.push(ed + ' ' + cls + ' ' + lv + ': ' + todo.map(t => t.what).join(', '));
+                const rec = sktComputeCharacter(CB.build, CB.R);
+                if (!(rec.hpMax > 0) || !(rec.ac >= 10)) broken.push(ed + ' ' + cls + ' ' + lv + ' hp ' + rec.hpMax + ' ac ' + rec.ac);
+              } catch(e){ broken.push(ed + ' ' + cls + ' ' + lv + ': ' + e.message); }
+            }
+          }
+          cbClose();
+        }
+      } catch(e){ broken.push('setup: ' + e.message); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+      ok('quick build: every class at levels 1, 3, 5, 11 and 20 ends with nothing to choose', !left.length, left.slice(0, 6).join(' | '));
+      ok('quick build: and a working character', !broken.length, broken.slice(0, 6).join(' | '));
+      ok('quick build: silent', errs.length === before, errs.slice(before).join(' | '));
     }
 
     // -- Class features: represented, not just text ------------------------

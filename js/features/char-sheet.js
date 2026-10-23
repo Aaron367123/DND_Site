@@ -79,6 +79,8 @@ function csRender(){
   const root = document.getElementById('cs-root'); if (!root || !CS) return;
   const pc = csPc(); if (!pc){ csClose(); return; }
   const keep = [...root.querySelectorAll('[data-cs-scroll]')].map(e => [e.dataset.csScroll, e.scrollTop]);
+  root.style.setProperty('--cs-accent', pc.theme || '');
+  root.classList.toggle('themed', !!pc.theme);
   root.innerHTML = csHead(pc) + '<div class="cs-body"><aside class="cs-side" data-cs-scroll="side">' + csSide(pc) + '</aside>'
     + '<div class="cs-main" data-cs-scroll="main">' + (CS.customize && !CS.readOnly ? csCustomizeHtml(pc) : '') + csTop(pc)
     + '<nav class="cs-tabs">' + CS_TABS.map(t => '<button class="cs-tab' + (t.phone ? ' cs-phone' : '') + (CS.tab === t.id ? ' on' : '') + '" data-cs-tab="' + t.id + '">' + t.label + '</button>').join('') + '</nav>'
@@ -130,7 +132,7 @@ function csHead(pc){
   const xpOn = pc.build && pc.build.advancement === 'xp';
   const lvl = pc.level || 1, xp = +pc.xp || 0, next = CS_XP[Math.min(19, lvl)];
   const ready = xpOn && lvl < 20 && xp >= next;
-  return '<div class="cb-head cs-head"><span class="cs-avatar">' + icon + '</span>'
+  return '<div class="cb-head cs-head">' + (ro ? '<span class="cs-avatar">' + icon + '</span>' : '<button class="cs-avatar" data-cs="portrait" title="Change the portrait">' + icon + '</button>')
     + '<div class="cs-who"><b class="cb-title">' + csE(pc.name) + '</b><span class="cs-sub">' + csE(csClassLine(pc)) + '</span>'
     + (xpOn ? '<span class="cs-xp' + (ready ? ' ready' : '') + '">XP ' + xp.toLocaleString() + (lvl < 20 ? ' / ' + next.toLocaleString() : '')
       + '<i class="cs-xpbar"><i style="width:' + (lvl < 20 ? Math.min(100, Math.round(100 * (xp - CS_XP[lvl - 1]) / Math.max(1, next - CS_XP[lvl - 1]))) : 100) + '%"></i></i>'
@@ -153,7 +155,7 @@ function csTop(pc){
   const conds = typeof _csConditions === 'function' ? _csConditions(pc) : [];
   let h = '<div class="cs-top">';
   // Hit points.
-  h += '<div class="cs-hp"><div class="cs-hp-n"><b>' + hp + '</b><span>/ ' + max + '</span>'
+  h += '<div class="cs-hp"' + (sh.hpDetail ? ' title="Maximum: ' + csE(sh.hpDetail) + '"' : '') + '><div class="cs-hp-n"><b>' + hp + '</b><span>/ ' + max + '</span>'
     + (pc.tempHp > 0 ? '<i title="Temporary hit points">+' + pc.tempHp + ' temp</i>' : '') + '</div>'
     + '<div class="cs-hpbar"><i style="width:' + pct + '%"></i></div>'
     + (ro ? '' : '<div class="cs-hp-ctl"><input type="number" min="0" data-cs-amt value="' + (CS.amt || 5) + '" aria-label="Amount">'
@@ -166,7 +168,7 @@ function csTop(pc){
   h += csRestHtml(pc);
   if (CS.conc && pc.concentration && !ro) h += '<div class="cs-conc">Concentration check: <b>CON save DC ' + CS.conc.dc + '</b> to keep ' + csE(CS.conc.spell)
     + ' <button class="btn primary" data-cs="concsave">Roll it</button><button class="btn" data-cs="dropconc">Drop it</button></div>';
-  h += '<div class="cs-boxes">' + box('AC', pc.ac ?? '—', null, sh.acSource || '')
+  h += '<div class="cs-boxes">' + box('AC', pc.ac ?? '—', null, sh.acDetail || sh.acSource || '')
     + box('Initiative', csSigned(pc.init ?? csMod((pc.abilities || {}).dex)), 'init')
     + box('Speed', csSpeed(pc) + ' ft', null, csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft normally' : '')
     + box('Proficiency', csSigned(sh.profBonus || 2))
@@ -191,7 +193,10 @@ function csTop(pc){
   // How a click rolls, and what it rolled.
   h += '<div class="cs-rollbar"><span class="cb-seg cs-mode">' + [['normal', 'Normal'], ['adv', 'Advantage'], ['dis', 'Disadvantage']]
       .map(([k, l]) => '<button class="' + (CS.mode === k ? 'on' : '') + '" data-cs-mode="' + k + '">' + l + '</button>').join('') + '</span>'
-    + '<span class="cs-last" aria-live="polite">' + (CS.log[0] ? csRollText(CS.log[0]) : '<span class="cb-dim">Click a score, save, skill or attack to roll.<span class="cs-keys"> Shift: advantage · Alt: disadvantage.</span></span>') + '</span></div>';
+    + (!ro && pc.inspiration && CS.log[0] && CS.log[0].kind === 'd20' && !CS.log[0].rerolled ? '<button class="btn small" data-cs="reroll" title="Spend Heroic Inspiration to roll that again">✦ Reroll</button>' : '')
+    + (CS.log.length > 1 ? '<button class="btn small" data-cs="log">' + (CS.showLog ? 'Hide log' : 'Log') + '</button>' : '')
+    + '<span class="cs-last" aria-live="polite">' + (CS.log[0] ? csRollText(CS.log[0]) : '<span class="cb-dim">Click a score, save, skill or attack to roll.<span class="cs-keys"> Shift: advantage · Alt: disadvantage.</span></span>') + '</span></div>'
+    + (CS.showLog ? '<div class="cs-log">' + CS.log.map(r => '<div>' + csRollText(r) + '</div>').join('') + '</div>' : '');
   return h + '</div>';
 }
 // Exhaustion slows: 5 ft a level in 2024; halved at 2 and nothing at 5 in 2014.
@@ -234,7 +239,8 @@ function csSide(pc){
   const pb = sh.profBonus || 2;
   const saveOf = k => sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0);
   const skillOf = k => sh.skills && sh.skills[k] != null ? sh.skills[k] : csMod(ab[CS_SKILLS[k][1]]);
-  let h = '<div class="cs-abs">' + Object.keys(CS_AB).map(k => '<button class="cs-ab" data-cs-roll="ab:' + k + '" title="' + CS_AB[k] + ' check">'
+  const why = pc.build && CS.R && typeof sktAbilityBreakdown === 'function' ? sktAbilityBreakdown(pc.build, CS.R) : {};
+  let h = '<div class="cs-abs">' + Object.keys(CS_AB).map(k => '<button class="cs-ab" data-cs-roll="ab:' + k + '" title="' + CS_AB[k] + ' check' + (why[k] ? ' — ' + csE(why[k]) : '') + '">'
     + '<span>' + k.toUpperCase() + '</span><b>' + csSigned(csMod(ab[k])) + '</b><i>' + (ab[k] ?? '—') + '</i></button>').join('') + '</div>';
   h += '<h5>Saving throws</h5><div class="cs-list">' + Object.keys(CS_AB).map(k => '<button class="cs-row" data-cs-roll="save:' + k + '">'
     + '<span class="cs-dot' + ((sh.saveProf || []).includes(k) ? ' on' : '') + '"></span><span>' + CS_AB[k] + '</span><b>' + csSigned(saveOf(k)) + '</b></button>').join('') + '</div>';
@@ -344,11 +350,20 @@ function csRollD20(label, mod, ev, kind){
   const fx = kind ? csRollEffects(csPc() || {}, kind) : { adv: [], dis: [], bonus: 0, autoFail: '' };
   const up = pick === 'adv' || fx.adv.length > 0, down = pick === 'dis' || fx.dis.length > 0;
   const mode = up && !down ? 'adv' : down && !up ? 'dis' : 'normal';
-  const a = csD(20), b = mode === 'normal' ? null : csD(20);
-  const nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
+  const pcNow = csPc() || {};
+  const has = n => ((pcNow.sheet || {}).featureList || []).some(f => f.name === n && !f.info);
+  // Halfling Lucky: a 1 on the d20 is rolled again (and the new roll kept).
+  const lucky = has('Lucky') && ((pcNow.sheet || {}).featureList || []).some(f => f.name === 'Lucky' && f.from === 'species');
+  const die = () => { const x = csD(20); return lucky && x === 1 ? (fx._lucky = true, csD(20)) : x; };
+  const a = die(), b = mode === 'normal' ? null : die();
+  let nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
+  // Reliable Talent: a proficient ability check treats a roll under 10 as 10.
+  const skillKey = /^check:/.test(kind || '') ? kind.slice(6) : '';
+  if (skillKey && has('Reliable Talent') && ((pcNow.sheet || {}).skillProf || {})[skillKey] && nat < 10){ fx._reliable = nat; nat = 10; }
   mod = (+mod || 0) + fx.bonus;
-  const why = [fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : ''].filter(Boolean).join('; ');
-  const r = { kind: 'd20', label, mod, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail };
+  const why = [fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : '',
+               fx._lucky ? 'Lucky: rerolled a 1' : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : ''].filter(Boolean).join('; ');
+  const r = { kind: 'd20', label, mod: mod - fx.bonus, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail, kindTag: kind || null };
   csLog(r);
   // The party card's own strip shows the DM the same roll.
   const pc = csPc();
@@ -357,15 +372,25 @@ function csRollD20(label, mod, ev, kind){
   return r;
 }
 // "2d6+1d4+3 slashing", "1d10+4 force ×2 beams": every term, crits double the dice.
-function sktDamageRoll(expr, crit){
+function sktDamageRoll(expr, crit, opts){
+  opts = opts || {};
   const s = String(expr || '');
   const math = s.split(/[a-z]{2,}/i)[0];
   const type = s.slice(math.length).trim();
   let total = 0; const parts = [];
   math.replace(/([+-]?)\s*(\d*)d(\d+)|([+-]?)\s*(\d+)/gi, (m, sg, n, d, sg2, k) => {
     if (d){
-      const cnt = (parseInt(n || '1', 10) || 1) * (crit ? 2 : 1), rs = [];
-      for (let i = 0; i < cnt; i++) rs.push(csD(+d));
+      // A crit doubles the dice; Brutal Critical / Savage Attacks add more of
+      // the first die; Great Weapon Fighting rerolls 1s and 2s (2014) or
+      // counts them as 3s (2024).
+      const first = !parts.length;
+      const cnt = (parseInt(n || '1', 10) || 1) * (crit ? 2 : 1) + (crit && first ? (opts.extraDice || 0) : 0), rs = [];
+      for (let i = 0; i < cnt; i++){
+        let x = csD(+d);
+        if (opts.gwf === '2014' && x <= 2) x = csD(+d);
+        else if (opts.gwf === '2024' && x <= 2) x = 3;
+        rs.push(x);
+      }
       const sum = rs.reduce((x, y) => x + y, 0) * (sg === '-' ? -1 : 1);
       total += sum; parts.push(cnt + 'd' + d + ' [' + rs.join(', ') + ']');
     } else if (k){ const v = (+k) * (sg2 === '-' ? -1 : 1); total += v; parts.push(String(v)); }
@@ -373,8 +398,8 @@ function sktDamageRoll(expr, crit){
   });
   return { total: Math.max(0, total), detail: parts.join(' + '), type, crit: !!crit };
 }
-function csRollDamage(label, expr, crit){
-  const r = Object.assign({ kind: 'dmg', label }, sktDamageRoll(expr, crit));
+function csRollDamage(label, expr, crit, opts){
+  const r = Object.assign({ kind: 'dmg', label }, sktDamageRoll(expr, crit, opts));
   csLog(r);
   return r;
 }
@@ -433,6 +458,17 @@ CS_TAB_RENDER.actions = pc => {
     h += '<h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(r.name) + '</b>'
       + '<span class="cs-pips">' + Array.from({ length: Math.min(r.max || 0, 20) }, (_, n) => '<button class="cs-pip' + (n < (r.current || 0) ? ' on' : '') + '" data-cs-res="' + i + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(r.name) + ' ' + (n + 1) + '"></button>').join('') + '</span>'
       + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (/short/.test(r.recharge) ? 'short rest' : 'long rest') : '') + '</span></div>').join('');
+  }
+  if (!ro && pc.build){
+    h += '<details class="cs-addcustom"><summary>+ Add a tracker or an action</summary>'
+      + '<div class="cs-add"><input data-cs-trk placeholder="Tracker — e.g. Wand charges" maxlength="40"><input type="number" min="1" max="99" data-cs-trkmax placeholder="Uses" aria-label="Uses">'
+      + '<select class="cb-sel" data-cs-trkrec aria-label="Recharge"><option value="long">Long rest</option><option value="short">Short rest</option><option value="dawn">Dawn</option></select><button class="btn" data-cs="addtrk">Add tracker</button></div>'
+      + '<div class="cs-add"><input data-cs-act placeholder="Action — e.g. Breath of the Wyrm" maxlength="40"><select class="cb-sel" data-cs-acttype aria-label="Kind"><option>Action</option><option>Bonus Action</option><option>Reaction</option><option>Free</option></select>'
+      + '<input data-cs-actdesc placeholder="What it does" maxlength="200"><button class="btn" data-cs="addact">Add action</button></div>'
+      + ((pc.build.customResources || []).length || (pc.build.customActions || []).length ? '<div class="cb-dim">Yours: '
+        + (pc.build.customResources || []).map((r, i) => csE(r.name) + ' <button class="cs-linkbtn" data-cs-deltrk="' + i + '">remove</button>').concat(
+          (pc.build.customActions || []).map((a, i) => csE(a.name) + ' <button class="cs-linkbtn" data-cs-delact="' + i + '">remove</button>')).join(' · ') + '</div>' : '')
+      + '</details>';
   }
   h += '<details class="cs-std"><summary>Standard actions</summary><div class="cb-dim">'
     + ((pc.rules || (pc.build && pc.build.edition)) === '2014'
@@ -553,13 +589,34 @@ function csOnClick(e){
   const d = t.dataset, pc = csPc(); if (!pc) return;
   if (d.cs === 'close') return csClose();
   if (d.cs === 'print') return csPrint(pc);
+  if (d.cs === 'portrait' && !CS.readOnly){
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.addEventListener('change', async ev => {
+      const f = ev.target.files[0]; if (!f) return;
+      try {
+        const url = typeof showCropModal === 'function' ? await showCropModal(f, { size: 96, shape: 'circle', title: 'Crop the portrait' }) : await fileToIconDataUrl(f, 96);
+        if (url) csEdit('New portrait', p => { p.icon = url; if (p.build) p.build.icon = url; });
+      } catch(err){ if (typeof showToast === 'function') showToast('Upload failed: ' + err.message); }
+    });
+    inp.click(); return;
+  }
   if (d.cs === 'export') return sktExportCharacter(pc);
   if (d.csTab){ CS.tab = d.csTab; return csRender(); }
   if (d.csMode){ CS.mode = d.csMode; return csRender(); }
+  if (d.cs === 'log'){ CS.showLog = !CS.showLog; return csRender(); }
+  if (d.cs === 'reroll' && !CS.readOnly && pc.inspiration){
+    const last = CS.log[0]; if (!last || last.kind !== 'd20') return;
+    csEdit('Spent Heroic Inspiration', p => { p.inspiration = false; });
+    const r = csRollD20(last.label + ' (reroll)', last.mod - 0, null, last.kindTag || null);
+    r.rerolled = true;
+    return csRender();
+  }
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
     const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, 'attack');
+    // A Champion crits on a 19 (or 18).
+    if (!a.spell && r.natural >= ((pc.sheet || {}).critRange || 20) && !r.crit){ r.crit = true; r.why = [r.why, 'critical on ' + pc.sheet.critRange + '+'].filter(Boolean).join('; '); }
     csSpendAmmo(pc, a);
     CS.lastAtkCrit = { i: +d.csAtk, crit: r.crit };
     return csRender();
@@ -584,13 +641,13 @@ function csOnClick(e){
     const a = (pc.sheet.attacks || [])[+d.csDmg2]; if (!a || !a.versatile) return;
     const crit = !!(CS.lastAtkCrit && CS.lastAtkCrit.i === +d.csDmg2 && CS.lastAtkCrit.crit);
     const type = (/[a-z]{3,}.*$/i.exec(a.damage || '') || [''])[0];
-    csRollDamage(a.name + ' damage (two hands)', a.versatile + (type ? ' ' + type : ''), crit); CS.lastAtkCrit = null;
+    csRollDamage(a.name + ' damage (two hands)', a.versatile + (type ? ' ' + type : ''), crit, csDamageOpts(pc, a, true)); CS.lastAtkCrit = null;
     return csRender();
   }
   if (d.csDmg != null){
     const a = (pc.sheet.attacks || [])[+d.csDmg]; if (!a) return;
     const crit = !!(CS.lastAtkCrit && CS.lastAtkCrit.i === +d.csDmg && CS.lastAtkCrit.crit);
-    csRollDamage(a.name + ' damage', a.damage, crit); CS.lastAtkCrit = null;
+    csRollDamage(a.name + ' damage', a.damage, crit, csDamageOpts(pc, a, false)); CS.lastAtkCrit = null;
     return csRender();
   }
   if (CS.readOnly) return;
@@ -672,6 +729,21 @@ function csOnClick(e){
     return openCharBuilder({ idx: i, levelup: d.cs === 'levelup' });
   }
   if (d.cs === 'customize' && typeof csCustomizeOpen === 'function') return csCustomizeOpen(pc);
+  if (d.cs === 'addtrk'){
+    const nm = ((document.querySelector('#cs-root [data-cs-trk]') || {}).value || '').trim(); if (!nm) return;
+    const max = Math.max(1, Math.min(99, parseInt((document.querySelector('#cs-root [data-cs-trkmax]') || {}).value, 10) || 1));
+    const rec = (document.querySelector('#cs-root [data-cs-trkrec]') || {}).value || 'long';
+    return csRebuild('Added ' + nm, b => { b.customResources = (b.customResources || []).concat([{ name: nm, max, recharge: rec === 'short' ? 'short' : 'long' }]); });
+  }
+  if (d.cs === 'addact'){
+    const nm = ((document.querySelector('#cs-root [data-cs-act]') || {}).value || '').trim(); if (!nm) return;
+    const action = (document.querySelector('#cs-root [data-cs-acttype]') || {}).value || 'Action';
+    const desc = ((document.querySelector('#cs-root [data-cs-actdesc]') || {}).value || '').trim();
+    return csRebuild('Added ' + nm, b => { b.customActions = (b.customActions || []).concat([{ name: nm, action, desc }]); });
+  }
+  if (d.csDeltrk != null) return csRebuild('Removed a tracker', b => { b.customResources = (b.customResources || []).filter((x, i) => i !== +d.csDeltrk); });
+  if (d.csDelact != null) return csRebuild('Removed an action', b => { b.customActions = (b.customActions || []).filter((x, i) => i !== +d.csDelact); });
+  if (d.cs === 'notheme') return csEdit('Sheet colour', p => { delete p.theme; });
   if (d.cs === 'addextra'){
     const q = ((document.querySelector('#cs-root [data-cs-exq]') || {}).value || '').trim(); if (!q) return;
     const m = csMonster(q);
@@ -700,6 +772,16 @@ function csOnClick(e){
   if (typeof csInventoryClick === 'function' && csInventoryClick(e, t, d, pc)) return;
 }
 // A bow uses an arrow, a crossbow a bolt, a sling a bullet, a blowgun a needle.
+// What changes this weapon's damage roll for this character.
+function csDamageOpts(pc, a, twoHands){
+  const sh = pc.sheet || {}, props = a.props || [];
+  const melee = !a.spell && !(props.includes('A')) && !/^Unarmed/.test(a.name);
+  const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
+  return {
+    extraDice: melee ? (sh.critExtraDice || 0) : 0,
+    gwf: sh.greatWeaponFighting && melee && (props.includes('2H') || twoHands) ? ed : null,
+  };
+}
 function csAmmoFor(a){
   const n = String(a.name || '').toLowerCase();
   return /crossbow/.test(n) ? /bolt/ : /bow/.test(n) ? /arrow/ : /sling/.test(n) ? /bullet/ : /blowgun/.test(n) ? /needle/ : null;
@@ -738,6 +820,7 @@ function csOnChange(e){
   if (!CS) return;
   const t = e.target, d = t.dataset, pc = csPc(); if (!pc) return;
   if ('csDtype' in d){ CS.dtype = t.value; return; }
+  if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; });
   if (CS.readOnly) return;
   if ('csAddcond' in d){ if (t.value) csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), t.value)); return; }
   if (typeof csSpellsChange === 'function' && csSpellsChange(e, t, d, pc)) return;
@@ -745,14 +828,21 @@ function csOnChange(e){
 }
 // Typing: saved as it goes, no redraw, so the box keeps the caret.
 function csOnInput(e){
-  if (!CS || CS.readOnly) return;
+  if (!CS) return;
   const t = e.target, d = t.dataset, pc = csPc(); if (!pc) return;
+  if (CS.readOnly && !('csSpq' in d)) return;
   if ('csNotes' in d){ pc.playerNotes = t.value; csSaveSoon(); return; }
   if (d.csDetail){
     pc.sheet = pc.sheet || {};
     pc.sheet.details = Object.assign({}, pc.sheet.details, { [d.csDetail]: t.value });
     if (pc.build) pc.build.details = Object.assign({}, pc.build.details, { [d.csDetail]: t.value });
     csSaveSoon(); return;
+  }
+  if ('csSpq' in d){
+    CS.spQ = t.value; clearTimeout(CS._spT);
+    CS._spT = setTimeout(() => { if (!CS) return; const at = t.selectionStart; csRender();
+      const q = document.querySelector('#cs-root [data-cs-spq]'); if (q){ q.focus(); try { q.setSelectionRange(at, at); } catch(_){} } }, 200);
+    return;
   }
   if (typeof csInventoryInput === 'function') csInventoryInput(e, t, d, pc);
 }
@@ -830,6 +920,17 @@ function csSpellsHtml(pc){
   if (sh.spellSaveDc) h += '<div class="cs-spellhead"><div class="cs-box"><span>Ability</span><b>' + csE(String(sh.spellAbility || '').toUpperCase() || '—') + '</b></div>'
     + '<div class="cs-box"><span>Save DC</span><b>' + sh.spellSaveDc + '</b></div>'
     + '<button class="cs-box" data-cs-spatk="1"><span>Spell attack</span><b>' + csE(sh.spellAtkBonus || '') + '</b></button></div>';
+  // How many are prepared against how many may be (a builder character).
+  if (pc.build && CS.R && typeof sktBuildSpellcasting === 'function'){
+    const sc = sktBuildSpellcasting(pc.build, CS.R, sktBuildAbilities(pc.build, CS.R));
+    (sc && (sc.classes || [{ primary: true, sc, cls: pc.build.cls }]) || []).forEach(x => {
+      const lst = x.primary ? pc.build : (x.entry || {}), want = x.sc.prepared || x.sc.known;
+      if (!want) return;
+      const have = (lst.spells || []).length;
+      h += '<div class="cs-prepcount' + (have < want ? ' short' : '') + '">' + csE(_csTitle(x.cls)) + ': ' + (x.sc.prepared ? 'prepared' : 'known') + ' <b>' + have + ' / ' + want + '</b>'
+        + (have < want && !CS.readOnly ? ' — <button class="cs-linkbtn" data-cs="manage">choose ' + (want - have) + ' more</button>' : '') + '</div>';
+    });
+  }
   if (lvls.length) h += '<div class="cs-slots">' + lvls.map(l => {
     const s = slots[l];
     return '<div class="cs-slot"><span>' + CS_ORD[l] + (s.pact ? ' (pact)' : '') + '</span><span class="cs-pips">'
@@ -842,8 +943,14 @@ function csSpellsHtml(pc){
   (sh.featSpells || []).forEach(g => g.spells.forEach(n => { from[n] = g.feat; }));
   if (sh.speciesSpells) sh.speciesSpells.spells.forEach(n => { from[n] = 'Species'; });
   const daily = new Set([].concat(...(sh.featSpells || []).map(g => g.daily || []), (sh.speciesSpells && sh.speciesSpells.daily) || []));
-  const names = [...new Set(sh.spells || [])];
-  if (!names.length) h += '<div class="cb-dim">No spells.</div>';
+  const all = [...new Set(sh.spells || [])];
+  if (!all.length) h += '<div class="cb-dim">No spells.</div>';
+  // D&D Beyond's level pills and search.
+  const lvSet = [...new Set(all.map(n => { const s = csSpell(n); return s ? +s.level || 0 : 0; }))].sort((a, b) => a - b);
+  if (all.length > 4) h += '<div class="cs-spfilter"><span class="cb-seg">' + ['all'].concat(lvSet).map(v => '<button class="' + (String(CS.spLv ?? 'all') === String(v) ? 'on' : '') + '" data-cs-splv="' + v + '">' + (v === 'all' ? 'All' : v === 0 ? 'Cantrips' : CS_ORD[v].replace(' level', '')) + '</button>').join('') + '</span>'
+    + '<input data-cs-spq placeholder="Search…" value="' + csE(CS.spQ || '') + '"></div>';
+  const names = all.filter(n => { const s = csSpell(n), l = s ? +s.level || 0 : 0;
+    return (CS.spLv == null || CS.spLv === 'all' || +CS.spLv === l) && (!CS.spQ || n.toLowerCase().includes(CS.spQ.toLowerCase())); });
   const by = {};
   names.forEach(n => { const s = csSpell(n); const l = s ? +s.level || 0 : 0; (by[l] = by[l] || []).push({ n, s }); });
   Object.keys(by).map(Number).sort((a, b) => a - b).forEach(l => {
@@ -946,7 +1053,8 @@ function csManageSpellsHtml(pc){
   return h;
 }
 function csSpellsClick(e, t, d, pc){
-  if (d.csOpen){ CS.open[d.csOpen] = !CS.open[d.csOpen]; csRender(); return true; }
+  if (d.csOpen){ CS.open[d.csOpen] = !CS.open[d.csOpen]; csRender(); return true; }   // spells, items and extras
+  if (d.csSplv != null){ CS.spLv = d.csSplv; csRender(); return true; }
   if (d.csSpatk){ csRollD20('Spell attack', parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, e, 'attack'); csRender(); return true; }
   if (d.csSpdmg){
     const s = csSpell(d.csSpdmg); if (!s) return true;
@@ -1047,24 +1155,31 @@ function csInventoryHtml(pc){
     }).catch(() => { if (CS) CS.gearLoading = false; });
   }
   const items = csItems(pc), coins = csCoins(pc);
-  const lb = items.reduce((n, m) => n + (+m.weight || 0) * (m.qty || 1), 0) + CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50;
+  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0) + CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50;
+  const boxes = items.filter(x => CS_CONTAINER.test(x.name));
   const str = (pc.abilities || {}).str || 10, size = ((pc.sheet || {}).size || 'Medium');
   const cap = str * 15 * (size === 'Tiny' ? 0.5 : size === 'Large' ? 2 : 1);
   const attuned = items.filter(m => m.reqAttune && m.attuned).length;
   let h = '<div class="cs-coins">' + CS_COINS.map(([k]) => '<label class="cs-coin"><span>' + k.toUpperCase() + '</span>'
     + (ro ? '<b>' + (coins[k] || 0) + '</b>' : '<input type="number" min="0" data-cs-coin="' + k + '" value="' + (coins[k] || 0) + '">') + '</label>').join('')
-    + '<span class="cb-dim">Worth ' + Math.round(CS_COINS.reduce((n, [k, v]) => n + (+coins[k] || 0) * v, 0) * 100) / 100 + ' gp</span></div>';
+    + '<span class="cb-dim">Worth ' + Math.round(CS_COINS.reduce((n, [k, v]) => n + (+coins[k] || 0) * v, 0) * 100) / 100 + ' gp</span></div>'
+    + (ro ? '' : '<div class="cs-add cs-cointx"><input type="number" min="0" data-cs-txn placeholder="Amount" aria-label="Amount"><select class="cb-sel" data-cs-txc aria-label="Coin">'
+      + CS_COINS.map(([k]) => '<option value="' + k + '"' + (k === 'gp' ? ' selected' : '') + '>' + k + '</option>').join('') + '</select>'
+      + '<button class="btn" data-cs="coinadd">Add</button><button class="btn" data-cs="coinspend">Spend</button></div>');
   h += '<div class="cs-carry' + (lb > cap ? ' over' : '') + '">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b> of ' + cap + ' lb'
     + (lb > cap ? ' — over the limit: speed drops to 5 ft' : '') + (items.some(m => m.reqAttune) ? ' · attuned ' + attuned + ' of 3' : '') + '</div>';
   const gearType = m => { const st = m.stats || (m.base && CS.R && CS.R.items[m.base]); return st && /^(M|R|LA|MA|HA|S)(\||$)/.test(String(st.type)); };
   h += '<div class="cs-inv">' + (items.length ? items.map((m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
     + (gearType(m) ? '<label class="cs-eq" title="Equipped"><input type="checkbox" data-cs-equip="' + i + '"' + (m.equipped !== false ? ' checked' : '') + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
-    + '<b>' + csE(m.name) + '</b>'
+    + '<button class="cs-itemn" data-cs-open="it:' + i + '"><b>' + csE(m.name) + '</b></button>'
     + (m.reqAttune ? '<label class="cs-att"><input type="checkbox" data-cs-attune="' + i + '"' + (m.attuned ? ' checked' : '') + (ro || (!m.attuned && attuned >= 3) ? ' disabled' : '') + '> attuned</label>' : '')
     + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-qty="' + i + ':-1" aria-label="One fewer">−</button>') + '×' + (m.qty || 1)
     + (ro ? '' : '<button class="btn small" data-cs-qty="' + i + ':1" aria-label="One more">+</button>') + '</span>'
-    + '<span class="cb-dim cs-wt">' + (m.weight ? Math.round((+m.weight) * (m.qty || 1) * 10) / 10 + ' lb' : '') + '</span>'
-    + (ro ? '' : '<button class="btn small" data-cs-del="' + i + '" aria-label="Remove ' + csE(m.name) + '">✕</button>') + '</div>').join('')
+    + (boxes.length && !CS_CONTAINER.test(m.name) && !ro ? '<select class="cb-sel cs-in" data-cs-in="' + i + '" aria-label="Carried in"><option value="">carried</option>'
+      + boxes.map(x => '<option' + (m.in === x.name ? ' selected' : '') + '>' + csE(x.name) + '</option>').join('') + '</select>' : (m.in ? '<span class="cb-dim">in ' + csE(m.in) + '</span>' : ''))
+    + '<span class="cb-dim cs-wt">' + (m.weight ? (csItemWeight(items, m) ? Math.round(csItemWeight(items, m) * 10) / 10 + ' lb' : 'weightless') : '') + '</span>'
+    + (ro ? '' : '<button class="btn small" data-cs-del="' + i + '" aria-label="Remove ' + csE(m.name) + '">✕</button>') + '</div>'
+    + (CS.open['it:' + i] ? '<div class="cs-feat-t cs-itemt">' + csItemText(m) + '</div>' : '')).join('')
     : '<div class="cb-dim">Nothing carried.</div>') + '</div>';
   if (!ro){
     const e = csGearFind(CS.q);
@@ -1083,6 +1198,29 @@ function csInventoryHtml(pc){
   return h;
 }
 function csGearEntries(){ return [].concat(CS.magic || [], CS.gear || []); }
+// An item's description: from the item data where it has one, else what
+// the sheet knows (its weapon or armour numbers, its bonuses).
+function csItemText(m){
+  const n = String(m.name || '').toLowerCase();
+  const named = (CS.magic || []).find(x => x.name.toLowerCase() === n && x.text);
+  const bi = m.base && CS.R && CS.R.items[m.base];
+  const st = m.stats || bi;
+  const facts = [];
+  if (m.rarity) facts.push(m.rarity + (m.reqAttune ? ', requires attunement' : ''));
+  if (st && st.dmg1) facts.push(st.dmg1 + (st.dmgType ? ' ' + ({ A: 'acid', B: 'bludgeoning', C: 'cold', F: 'fire', O: 'force', L: 'lightning', N: 'necrotic', P: 'piercing', I: 'poison', Y: 'psychic', R: 'radiant', S: 'slashing', T: 'thunder' }[st.dmgType] || '') : ''));
+  if (st && st.ac) facts.push('AC ' + st.ac);
+  ['bonusWeapon', 'bonusAc', 'bonusSavingThrow', 'bonusSpellAttack', 'bonusSpellSaveDc'].forEach(k => { if (m[k]) facts.push({ bonusWeapon: 'weapon', bonusAc: 'AC', bonusSavingThrow: 'saving throws', bonusSpellAttack: 'spell attack', bonusSpellSaveDc: 'spell save DC' }[k] + ' +' + m[k]); });
+  if (m.weight) facts.push(m.weight + ' lb each');
+  const text = named ? named.text : bi && bi.entries ? (typeof sktRulesText === 'function' ? sktRulesText(bi.entries) : '') : '';
+  return '<div class="cb-dim">' + csE(facts.join(' · ')) + '</div>' + (text ? csE(text).replace(/\n/g, '<br>') : (m.custom ? '<i>Your own item.</i>' : ''));
+}
+// Containers, and the magic ones whose contents weigh nothing.
+const CS_CONTAINER = /backpack|\bbag\b|bag of|pouch|sack|chest|haversack|portable hole|quiver|case|basket|barrel/i;
+const CS_WEIGHTLESS = /bag of holding|portable hole|handy haversack|heward/i;
+function csItemWeight(items, m){
+  const box = m.in && items.find(x => x.name === m.in);
+  return box && CS_WEIGHTLESS.test(box.name) ? 0 : (+m.weight || 0) * (m.qty || 1);
+}
 function csPrice(e){
   if (!e) return 0;
   if (e.kind === 'variant'){ const bi = CS.qBase && CS.R.items[CS.qBase]; return bi && e.value ? e.value + (bi.value || 0) : 0; }
@@ -1150,6 +1288,18 @@ function csInventoryClick(e, t, d, pc){
     if (price){ const p = csPc(); if (p && csPay(p, price)) csCommit(); }
     return true;
   }
+  if (d.cs === 'coinadd' || d.cs === 'coinspend'){
+    const n = Math.max(0, parseInt((document.querySelector('#cs-root [data-cs-txn]') || {}).value, 10) || 0);
+    const c = (document.querySelector('#cs-root [data-cs-txc]') || {}).value || 'gp';
+    if (!n) return true;
+    const cp = n * { pp: 1000, gp: 100, ep: 50, sp: 10, cp: 1 }[c];
+    if (d.cs === 'coinspend'){
+      const purse = csCoins(pc), have = purse.cp + purse.sp * 10 + purse.ep * 50 + purse.gp * 100 + purse.pp * 1000;
+      if (have < cp){ if (typeof showToast === 'function') showToast('Not that much money'); return true; }
+      csEdit('Spent ' + n + ' ' + c, p => { csPay(p, cp); });
+    } else csEdit('Gained ' + n + ' ' + c, p => { if (c === 'gp') p.gold = (+p.gold || 0) + n; else p.coins = Object.assign({}, p.coins, { [c]: (+(p.coins || {})[c] || 0) + n }); });
+    return true;
+  }
   if (d.cs === 'addcustom'){
     const nm = (document.querySelector('#cs-root [data-cs-custom]') || {}).value || '';
     const wt = parseFloat((document.querySelector('#cs-root [data-cs-customwt]') || {}).value) || 0;
@@ -1177,6 +1327,7 @@ function csInventoryClick(e, t, d, pc){
   return false;
 }
 function csInventoryChange(e, t, d, pc){
+  if (d.csIn != null){ const i = +d.csIn, v = t.value; csItemsEdit(v ? 'Put in ' + v : 'Took out', l => { if (l[i]) { if (v) l[i].in = v; else delete l[i].in; } }); return true; }
   if (d.csEquip != null){ const i = +d.csEquip; csItemsEdit(t.checked ? 'Equipped' : 'Unequipped', l => { if (l[i]) l[i].equipped = t.checked; }); return true; }
   if (d.csAttune != null){
     const i = +d.csAttune;
@@ -1212,6 +1363,7 @@ function csCustomizeHtml(pc){
   const num = (k, v) => '<input type="number" step="1" data-cs-ov="' + k + '" value="' + (v || 0) + '">';
   return '<div class="cs-custom"><h4>Customize <button class="btn small" data-cs="customize">Done</button></h4>'
     + '<div class="cb-dim">Added on top of what the rules work out. Use negative numbers to take away.</div>'
+    + '<label class="cs-kv"><span>Sheet colour</span><input type="color" data-cs-theme value="' + csE(pc.theme || '#c8a26b') + '"><button class="btn small" data-cs="notheme">Default</button></label>'
     + '<div class="cs-ovgrid">' + CS_OV.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span>' + num(k, o[k]) + '</label>').join('')
     + Object.keys(CS_AB).map(k => '<label class="cs-kv"><span>' + CS_AB[k] + ' save</span>' + num('save:' + k, (o.saves || {})[k]) + '</label>').join('')
     + Object.keys(CS_SKILLS).map(k => '<label class="cs-kv"><span>' + CS_SKILLS[k][0] + '</span>' + num('skill:' + k, (o.skills || {})[k]) + '</label>').join('')

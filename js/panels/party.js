@@ -136,6 +136,9 @@ registerPanel('party',{
   menuItems(){
     const items = [{ label:'Manage Party', icon:'i-user', run: () => this._openManageParty() }];
     if (state.party.length) items.push({ label:'Party Skills', icon:'i-check', run: () => this._openPartySkills() });
+    // Experience for everyone levelled by XP, split evenly (D&D Beyond's
+    // party XP).
+    if (state.party.some(c => c.build && c.build.advancement === 'xp')) items.push({ label:'Award XP…', icon:'i-star', run: () => this._awardXp() });
     // A character exported from this or another campaign.
     if (typeof sktImportCharacter === 'function') items.push({ label:'Import a character…', icon:'i-upload', run: () => {
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
@@ -147,6 +150,21 @@ registerPanel('party',{
       inp.click();
     } });
     return items;
+  },
+
+  _awardXp(){
+    const who = state.party.filter(c => c.build && c.build.advancement === 'xp' && !c.foe);
+    if (!who.length) return;
+    showModal('Award XP', [{ id: 'xp', label: 'Experience to share among ' + who.map(c => esc(c.name)).join(', '), type: 'number', min: 0, placeholder: '450' }], 'Award').then(r => {
+      const n = Math.max(0, parseInt(r && r.xp, 10) || 0); if (!n) return;
+      const each = Math.floor(n / who.length);
+      sktUndoable('Awarded ' + n + ' XP', () => {
+        who.forEach(c => { c.xp = (+c.xp || 0) + each; });
+        save(); this._render();
+      });
+      const ready = who.filter(c => (c.level || 1) < 20 && c.xp >= sktXpFor((c.level || 1) + 1));
+      showToast(each + ' XP each' + (ready.length ? ' — ' + ready.map(c => c.name).join(', ') + ' can level up' : ''));
+    });
   },
 
   // Drop transient per-character UI state for PCs no longer in the party.
@@ -1220,6 +1238,10 @@ registerPanel('party',{
   // the eye catches it before falling to HP.
   _statusBadges(c, i){
     const badges = [];
+    // Enough experience for the next level.
+    if (c.build && c.build.advancement === 'xp' && (c.level || 1) < 20 && (+c.xp || 0) >= sktXpFor((c.level || 1) + 1) && typeof openCharBuilder === 'function'){
+      badges.push(`<span class="status-badge levelup" data-act="xp-levelup" data-idx="${i}" title="${esc(String(c.xp))} XP — click to level up">⬆ Level up!</span>`);
+    }
     if (c.concentration){
       badges.push(`<span class="status-badge conc" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(c.concentration)} — click to drop">🌀 ${esc(c.concentration)}</span>`);
     }
@@ -3381,6 +3403,9 @@ registerPanel('party',{
         showContextMenu(rect.left, rect.bottom + 4, items);
       }
       // (Inventory tab removed.)
+      else if(act==='xp-levelup'){
+        if (typeof openCharBuilder === 'function') openCharBuilder({ idx: +el.dataset.idx, levelup: true });
+      }
       else if(act==='open-sheet'){
         const c = state.party[+el.dataset.idx]; if (c && typeof openCharSheet === 'function') openCharSheet(c.id);
       }
@@ -3837,3 +3862,7 @@ function sktRollDeathSave(pc){
   return { nat, outcome, msg: nat + ' — ' + (nat === 1 ? 'natural 1, two failures' : kind)
     + (outcome === 'stable' ? '. Stable.' : outcome === 'dead' ? '. Dead.' : '.') };
 }
+
+// The experience needed to reach a level (the handbook's table, both editions).
+const SKT_XP_TABLE = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
+function sktXpFor(level){ return SKT_XP_TABLE[Math.max(1, Math.min(20, level)) - 1]; }

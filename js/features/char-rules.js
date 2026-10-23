@@ -89,6 +89,10 @@ function sktRulesInline(s){
     .replace(/\{@(?:h|hom)\}/g, '')
     .replace(/\{@dc (\d+)\}/g, 'DC $1')
     .replace(/\{@hit ([+-]?\d+)\}/g, (_, n) => sktSigned(+n))
+    // A filter link's text is its first part ({@filter 5th|spells|level=5}).
+    // Read as the third, a warlock's pact slots were 1st level at every
+    // level, and table headings read "level=0".
+    .replace(/\{@filter ([^|}]*)[^}]*\}/g, '$1')
     .replace(/\{@\w+ ([^}]*)\}/g, (_, body) => {
       const parts = body.split('|');
       // The display text, when a tag gives one, is its last segment for
@@ -325,7 +329,10 @@ async function _sktRulesBuild(edition, read){
   const allSpells = [].concat(...spellFiles.map(f => f.spell || []));
   const listsFor = (s, keys) => {
     const e = (spellSources[s.source] || {})[s.name] || {};
-    return [...new Set([].concat(...keys.map(k => e[k] || [])).filter(c => c.source === src).map(c => c.name))];
+    // The handbook's classes by its own printing; a class the handbook
+    // doesn't have (the Artificer) by whichever book prints it, so a feat
+    // like Artificer Initiate still has a list to choose from.
+    return [...new Set([].concat(...keys.map(k => e[k] || [])).filter(c => c.source === src || !SKT_CORE_CLASSES.includes(String(c.name).toLowerCase())).map(c => c.name))];
   };
   sp(allSpells, { legacy: edition === '2024' }).forEach(s => {
     const core = s.source === src;
@@ -716,11 +723,14 @@ function sktBlankBuild(edition){
 
 // Ability scores, every source in order: base, species or background,
 // ability score improvements, feats, then the cap.
-function sktBuildAbilities(build, R){
+function sktBuildAbilities(build, R, trace){
   const base = Object.assign({ str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
                              (build.abilities && build.abilities.base) || {});
   const out = { ...base };
-  const add = (inc) => Object.keys(inc || {}).forEach(k => { if (k in out) out[k] += +inc[k] || 0; });
+  // With `trace`, each change is written down: { str: [['Base', 15], ['Species', 1]…] }.
+  const note = (label, k, n) => { if (trace && n) (trace[k] = trace[k] || []).push([label, n]); };
+  if (trace) SKT_ABS.forEach(k => { trace[k] = [['Base', base[k]]]; });
+  const add = (inc, label) => Object.keys(inc || {}).forEach(k => { if (k in out){ out[k] += +inc[k] || 0; note(label || 'Increase', k, +inc[k] || 0); } });
   const species = sktRulesSpecies(R, build.species);
   if (R.edition === '2014'){
     if (species){
@@ -730,21 +740,22 @@ function sktBuildAbilities(build, R){
       // Tasha's "Customizing Your Origin": none of the fixed increases; the
       // player places them (build.speciesAsi), as for a Multiverse species.
       if (!(build.speciesChoice && build.speciesChoice.customOrigin)) [species.ability, sub && sub.ability].forEach(list => (list || []).forEach(a => {
-        Object.keys(a).forEach(k => { if (k !== 'choose' && k in out) out[k] += a[k]; });
+        Object.keys(a).forEach(k => { if (k !== 'choose' && k in out){ out[k] += a[k]; note('Species', k, a[k]); } });
       }));
-      add(build.speciesAsi);
+      add(build.speciesAsi, 'Species');
     }
   } else {
-    add(build.bgAsi);
+    add(build.bgAsi, 'Background');
   }
   const slots = new Set(sktAsiSlots(build, R).map(s => s.key));
   Object.keys(build.asi || {}).sort((a, b) => (parseInt(a.split('@').pop(), 10) || 0) - (parseInt(b.split('@').pop(), 10) || 0)).forEach(lvl => {
     if (!slots.has(String(lvl))) return;
     const pick = build.asi[lvl] || {};
-    if (pick.type === 'asi') add(pick.inc);
-    else if (pick.type === 'feat') add((build.featChoices[pick.feat] || {}).inc);
+    const at = String(lvl).includes('@') ? _sktTitle(String(lvl).split('@')[0]) + ' ' + String(lvl).split('@')[1] : 'Level ' + lvl;
+    if (pick.type === 'asi') add(pick.inc, at + ' improvement');
+    else if (pick.type === 'feat') add((build.featChoices[pick.feat] || {}).inc, pick.feat + ' (' + at + ')');
   });
-  if (build.originFeat) add((build.featChoices[build.originFeat] || {}).inc);
+  if (build.originFeat) add((build.featChoices[build.originFeat] || {}).inc, build.originFeat);
   // Ability scores top out at 20; an Epic Boon (2024, level 19) raises the
   // cap to 30 for the score it improves.
   const boonCap = {};
@@ -753,13 +764,21 @@ function sktBuildAbilities(build, R){
     const f = pick.type === 'feat' && sktRulesFeat(R, pick.feat);
     if (f && f.category === 'EB') Object.keys((build.featChoices[pick.feat] || {}).inc || {}).forEach(k => { boonCap[k] = 30; });
   });
-  SKT_ABS.forEach(k => { out[k] = Math.max(1, Math.min(boonCap[k] || 20, out[k])); });
+  SKT_ABS.forEach(k => { const c = Math.max(1, Math.min(boonCap[k] || 20, out[k])); if (c < out[k]) note('Capped at ' + (boonCap[k] || 20), k, c - out[k]); out[k] = c; });
   // Magic items: a score set to a number (it never lowers one), or raised.
   _sktActiveItems(build).forEach(m => {
     const a = m.ability; if (!a || typeof a !== 'object') return;
-    Object.keys(a.static || {}).forEach(k => { if (k in out) out[k] = Math.max(out[k], +a.static[k] || 0); });
-    SKT_ABS.forEach(k => { if (typeof a[k] === 'number') out[k] = Math.min(20, out[k] + a[k]); });
+    Object.keys(a.static || {}).forEach(k => { if (k in out && (+a.static[k] || 0) > out[k]){ note(m.name + ' (sets ' + a.static[k] + ')', k, (+a.static[k] || 0) - out[k]); out[k] = +a.static[k]; } });
+    SKT_ABS.forEach(k => { if (typeof a[k] === 'number'){ const v = Math.min(20, out[k] + a[k]); note(m.name, k, v - out[k]); out[k] = v; } });
   });
+  return out;
+}
+
+// "Base 15 · Species +1 · Level 4 improvement +2" for each score.
+function sktAbilityBreakdown(build, R){
+  const t = {}; sktBuildAbilities(build, R, t);
+  const out = {};
+  SKT_ABS.forEach(k => { out[k] = (t[k] || []).map(([l, n], i) => i === 0 ? l + ' ' + n : l + ' ' + (n > 0 ? '+' : '') + n).join(' · '); });
   return out;
 }
 
@@ -968,6 +987,9 @@ function _sktSpellcastingOne(build, R, abilities){
     prog.forEach((n, i) => { if (n) out.slots[i + 1] = n; });
   }
   out.maxSpellLevel = Math.max(0, ...Object.keys(out.slots).map(Number));
+  // Not a caster yet: a 2014 paladin or ranger at 1st level has the class's
+  // casting ability but no slots, cantrips or spells until 2nd.
+  if (!out.maxSpellLevel && !out.cantrips) return null;
   return out;
 }
 function _sktSpellTable(caster, L){
@@ -1181,6 +1203,7 @@ sktDefineEffect(['class:barbarian:Reckless Attack'], ctx => {
 sktDefineEffect(['class:barbarian:Primal Champion'], ctx => { ctx.abilityBonus.str += 4; ctx.abilityBonus.con += 4; ctx.abilityCapBonus.str = 24; ctx.abilityCapBonus.con = 24; });
 sktDefineEffect(['2014:class:barbarian:Brutal Critical'], ctx => {
   const n = ctx.level >= 17 ? 3 : ctx.level >= 13 ? 2 : 1;
+  ctx.critExtraDice = Math.max(ctx.critExtraDice || 0, n);
   _fxNote(ctx, 'Critical hits with melee weapons roll ' + n + ' extra weapon damage ' + (n === 1 ? 'die' : 'dice') + ' (Brutal Critical).');
 });
 
@@ -1358,7 +1381,7 @@ sktDefineEffect(['feat:Defense', 'optional:Defense'], ctx => { ctx.armoredAcBonu
 sktDefineEffect(['feat:Archery', 'optional:Archery'], ctx => { ctx.rangedAttackBonus += 2; });
 sktDefineEffect(['feat:Dueling', 'optional:Dueling'], ctx => { ctx.duelingBonus = 2; });
 sktDefineEffect(['feat:Two-Weapon Fighting', 'optional:Two-Weapon Fighting'], ctx => { ctx.twoWeaponMod = true; });
-sktDefineEffect(['feat:Great Weapon Fighting', 'optional:Great Weapon Fighting'], ctx => _fxNote(ctx, 'Great Weapon Fighting: with a two-handed or versatile weapon held in two hands, treat 1s and 2s on damage dice as 3s (2024) or reroll them (2014).'));
+sktDefineEffect(['feat:Great Weapon Fighting', 'optional:Great Weapon Fighting'], ctx => (ctx.gwf = true) && _fxNote(ctx, 'Great Weapon Fighting: with a two-handed or versatile weapon held in two hands, treat 1s and 2s on damage dice as 3s (2024) or reroll them (2014).'));
 // Eldritch Invocations that change numbers.
 sktDefineEffect(['optional:Agonizing Blast'], ctx => { ctx.agonizingBlast = true; });
 sktDefineEffect(['optional:Armor of Shadows'], ctx => _fxNote(ctx, 'Armor of Shadows: cast Mage Armor on yourself at will (AC 13 + Dexterity).'));
@@ -1559,6 +1582,15 @@ function sktComputeCharacter(build, R, prior){
         ? Math.max(1, Math.min(hd, +build.hp.rolls[lv])) : Math.floor(hd / 2) + 1;
     hpMax += Math.max(1, roll + ctx.mod.con) + ctx.hpPerLevel;
   }
+  // The working, for the sheet: the first level, the rest, extras per level.
+  const conS = (ctx.mod.con >= 0 ? '+' : '') + ctx.mod.con;
+  const hpBits = ['level 1: ' + hd + ' ' + conS + ' CON'];
+  if (parts[0].level > 1) hpBits.push((cls ? cls.name : 'Class') + ' levels 2–' + parts[0].level + ': ' + (build.hp && build.hp.method === 'rolled' ? 'rolled' : (parts[0].level - 1) + ' × ' + (Math.floor(hd / 2) + 1)) + ' ' + conS + ' each');
+  parts.slice(1).forEach(p => { const h2 = (sktRulesClass(R, p.cls) || {}).hd || 8; hpBits.push(_sktTitle(p.cls) + ' ' + p.level + ' × ' + (Math.floor(h2 / 2) + 1) + ' ' + conS); });
+  if (ctx.hpPerLevel) hpBits.push('+' + ctx.hpPerLevel + ' a level (' + L + ')');
+  let hpDetail = hpBits.join(' · ') + ' = ' + hpMax;
+  // The table's own number (D&D Beyond's "Manual" hit points).
+  if (build.hp && build.hp.method === 'manual' && +build.hp.manual > 0){ hpMax = Math.floor(+build.hp.manual); hpDetail = 'Entered by hand: ' + hpMax; }
 
   // Equipment → armour, shield and weapons.
   const gear = sktBuildEquipment(build, R);
@@ -1581,6 +1613,19 @@ function sktComputeCharacter(build, R, prior){
   // Defense only without armour or a shield.
   const acItems = _sktActiveItems(build).filter(m => m.bonusAc && !m.stats && !m.base
     && !(m.unarmoredOnly && armor) && !(m.noShield && shield));
+  // "Chain Mail 16 + Shield 2 + Cloak of Protection 1 = 19".
+  const acParts = [];
+  if (best){
+    if (acArmor && best.label === acArmor.label){
+      const t = String(armor.type || '').split('|')[0];
+      acParts.push((armor._name || _sktTitle(armor.name)) + ' ' + ((+armor.ac || 10) + (armor._ac || 0)));
+      const dexPart = t === 'HA' ? 0 : t === 'MA' ? Math.min(ctx.mediumDexCap, ctx.mod.dex) : ctx.mod.dex;
+      if (dexPart) acParts.push('DEX ' + dexPart);
+      if (ctx.armoredAcBonus) acParts.push('Defense ' + ctx.armoredAcBonus);
+    } else acParts.push(best.label + ' ' + best.value);
+    if (shield && best.shieldOk !== false) acParts.push((shield._name || 'Shield') + ' ' + ((+shield.ac || 2) + (shield._ac || 0)));
+    acItems.forEach(m => acParts.push(m.name + ' ' + m.bonusAc));
+  }
   if (best) acItems.forEach(m => { best.total += m.bonusAc; best.label += ' + ' + m.name; });
   let ac = best ? best.total : 10;
 
@@ -1649,6 +1694,9 @@ function sktComputeCharacter(build, R, prior){
   // Resources keep what has been SPENT across a recompute: levelling up
   // mid-adventure does not hand back a used Rage, and a full pool that grows
   // stays full (Lay on Hands 15/15 becomes 20/20, not 15/20).
+  (build.customResources || []).forEach(r => { if (r && r.name && !ctx.resources.some(x => x.name === r.name))
+    ctx.resources.push({ name: r.name, type: 'pool', current: +r.max || 1, max: +r.max || 1, recharge: r.recharge || 'long', custom: true }); });
+  (build.customActions || []).forEach(a => { if (a && a.name) _fxAction(ctx, { name: a.name, action: a.action || 'Action', desc: a.desc || '', resource: a.resource || undefined, amount: a.resource ? 1 : undefined, custom: true }); });
   const resources = ctx.resources.map(r => {
     const was = (prior.resources || []).find(x => x.name === r.name);
     if (!was || r.type !== 'pool') return r;
@@ -1720,6 +1768,9 @@ function sktComputeCharacter(build, R, prior){
       proficiencies: { armor: [...ctx.armorProf].filter(Boolean), weapons: [...ctx.weaponProf].filter(Boolean),
                        weaponRules: ctx.weaponPropRules, tools: [...ctx.toolProf].filter(Boolean) },
       attacks, attacksPerAction: ctx.attacksPerAction, critRange: ctx.critRange,
+      // A half-orc's Savage Attacks adds a weapon die on a melee crit, as does Brutal Critical.
+      critExtraDice: (ctx.critExtraDice || 0) + (features.some(f => f.from === 'species' && f.name === 'Savage Attacks') ? 1 : 0),
+      greatWeaponFighting: !!ctx.gwf,
       spellSlots, spellSaveDc: sc ? sc.dc : null, spellAtkBonus: sc ? sktSigned(sc.attack) : null,
       spellAbility: sc ? sc.ability : null,
       spells: spellNames, alwaysPrepared: always,
@@ -1731,6 +1782,8 @@ function sktComputeCharacter(build, R, prior){
       equipment: gear.list.concat((build.items || []).map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '') + (m.reqAttune ? (m.attuned ? ' (attuned)' : ' (not attuned)') : ''))),
       stealthDis: !!(armor && armor.stealth),
       acSource: best ? best.label + (shield ? ' + ' + (shield._name || 'Shield') : '') : '',
+      acDetail: acParts.join(' + ') + (add('ac') ? ' + custom ' + add('ac') : '') + ' = ' + ac,
+      hpDetail: hpDetail + (add('hpMax') ? ' ' + (add('hpMax') > 0 ? '+' : '') + add('hpMax') + ' custom' : ''),
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
                ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].concat(extraSenses).filter(Boolean).join(', '),
       bio: { features: featureList.map(f => '* ' + f.name + '\n' + f.text).join('\n\n') },
@@ -2207,7 +2260,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
-                     sktBuildBackground, SKT_CUSTOM_BG, SKT_ABILITY_ORDER,
+                     sktBuildBackground, SKT_CUSTOM_BG, SKT_ABILITY_ORDER, sktAbilityBreakdown,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };

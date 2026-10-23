@@ -30,6 +30,7 @@
   // ── Barbarian ──────────────────────────────────────────────────────────
   def('2014:class:barbarian:Brutal Critical', ctx => {
     const n = ctx.level >= 17 ? 3 : ctx.level >= 13 ? 2 : 1;
+    ctx.critExtraDice = Math.max(ctx.critExtraDice || 0, n);
     note(ctx, 'Brutal Critical: a critical hit with a melee weapon rolls ' + n + ' extra weapon damage ' + (n === 1 ? 'die' : 'dice') + '.');
   });
   both(['class:barbarian:Relentless Rage'], ctx => note(ctx, 'Relentless Rage: dropping to 0 HP while raging, make a DC 10 Constitution save (DC +5 each time) to drop to 1 HP instead.'));

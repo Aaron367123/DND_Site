@@ -499,6 +499,11 @@ function cbSuggestScores(b){
   b.abilities.assign = {};
   order.forEach((k, i) => { b.abilities.base[k] = SKT_STANDARD_ARRAY[i]; if (b.abilities.method === 'array') b.abilities.assign[k] = i; });
 }
+function cbQuickPrereqOk(x, b){
+  const ps = x.prerequisite || [];
+  if (!ps.length) return true;
+  return ps.some(p => Object.keys(p).every(k => k === 'level' && (b.level || 1) >= (typeof p.level === 'object' ? p.level.level : p.level)));
+}
 // Quick Build: every choice still open gets a sensible answer — the class's
 // best scores, the skills its abilities favour, the first options where
 // there is no better guide. Nothing already chosen changes.
@@ -569,7 +574,7 @@ function cbQuickBuild(){
       const have = (b.optional[o.name] || []);
       if (have.length >= o.count) return;
       const pool = o.kind === 'feat' ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && f.core !== false)
-                                     : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && x.core !== false && !(x.prerequisite || []).length);
+                                     : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && x.core !== false && cbQuickPrereqOk(x, b));
       b.optional[o.name] = have.concat(pool.map(x => x.name).filter(n => !have.includes(n))).slice(0, o.count);
     });
     const mc = cbMasteryCount();
@@ -578,16 +583,26 @@ function cbQuickBuild(){
       b.masteries = [...new Set((b.masteries || []).concat(kit))].slice(0, mc);
     }
     // Spells: the class list in order, lowest levels first.
+    // Each casting class from its own list (a multiclass character too).
     const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
-    if (sc && !sc.classes){
-      const always = sktBuildAlwaysPrepared(b, R);
-      if ((b.cantrips || []).length < sc.cantrips) b.cantrips = (b.cantrips || []).concat(sktSpellOptions(R, b, 0).map(s => s.name).filter(n => !(b.cantrips || []).includes(n))).slice(0, sc.cantrips);
+    if (sc) (sc.classes || [{ primary: true, sc, view: b, entry: null }]).forEach(x => {
+      const s = x.sc, v = x.view || b, lst = x.primary ? b : x.entry;
+      if (!lst) return;
+      const always = sktBuildAlwaysPrepared(v, R);
+      if ((lst.cantrips || []).length < s.cantrips) lst.cantrips = (lst.cantrips || []).concat(sktSpellOptions(R, v, 0).map(o => o.name).filter(n => !(lst.cantrips || []).includes(n))).slice(0, s.cantrips);
       const pool = [];
-      for (let lv = 1; lv <= sc.maxSpellLevel; lv++) sktSpellOptions(R, b, lv).forEach(s => { if (!always.includes(s.name)) pool.push(s.name); });
-      if (sc.spellbook && (b.spellbook || []).length < sc.spellbook) b.spellbook = (b.spellbook || []).concat(pool.filter(n => !(b.spellbook || []).includes(n))).slice(0, sc.spellbook);
-      const want = sc.prepared || sc.known, src = sc.spellbook ? b.spellbook : pool;
-      if (want && (b.spells || []).length < want) b.spells = (b.spells || []).concat(src.filter(n => !(b.spells || []).includes(n))).slice(0, want);
-    }
+      for (let lv = 1; lv <= s.maxSpellLevel; lv++) sktSpellOptions(R, v, lv).forEach(o => { if (!always.includes(o.name)) pool.push(o.name); });
+      if (s.spellbook && (lst.spellbook || []).length < s.spellbook) lst.spellbook = (lst.spellbook || []).concat(pool.filter(n => !(lst.spellbook || []).includes(n))).slice(0, s.spellbook);
+      const want = s.prepared || s.known, src = s.spellbook ? lst.spellbook : pool;
+      if (want && (lst.spells || []).length < want) lst.spells = (lst.spells || []).concat(src.filter(n => !(lst.spells || []).includes(n))).slice(0, want);
+    });
+    // Another class's subclass and skill.
+    sktClassLevels(b, R).slice(1).forEach(p => {
+      const c2 = sktRulesClass(R, p.cls), m = p.entry;
+      if (p.level >= c2.subclassLevel && !m.subclass){ const s2 = c2.subclasses.find(x => x.core) || c2.subclasses[0]; if (s2) m.subclass = s2.shortName; }
+      const sk = _sktSkillChoice(((c2.multiclassing || {}).proficienciesGained || {}).skills);
+      if (sk.count && (m.skills || []).length < sk.count) m.skills = bySkill(sk.from.filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k))).slice(0, sk.count);
+    });
     // Spells from feats and the species; a feat's own picks.
     sktFeatSpells(b, R).concat([sktSpeciesSpellGrant(R, b)].filter(Boolean)).forEach(g => {
       const key = g.feat === '@species' ? null : g.feat;
@@ -615,6 +630,7 @@ CB_RENDER.abilities = () => {
   const m = b.abilities.method || 'array';
   const base = b.abilities.base;
   const final = sktBuildAbilities(b, R);
+  const why = sktAbilityBreakdown(b, R);
   const seg = [['array', 'Standard array'], ['pointbuy', 'Point buy'], ['roll', 'Roll'], ['manual', 'Enter scores']]
     .map(([k, l]) => '<button class="' + (m === k ? 'on' : '') + '" data-cb-method="' + k + '">' + l + '</button>').join('');
   let pool = null, note = '';
@@ -633,13 +649,14 @@ CB_RENDER.abilities = () => {
     else ctrl = pool ? '<select class="cb-sel" data-cb-assign="' + k + '">' + pool.map((v, i) => '<option value="' + i + '"' + ((b.abilities.assign || {})[k] === i ? ' selected' : '') + '>' + v + '</option>').join('') + '</select>' : '<span class="cb-dim">roll first</span>';
     const bonus = final[k] - base[k];
     return '<div class="cb-abrow"><span class="cb-abn">' + cbAbLabel(k) + '</span><span class="cb-abc">' + ctrl + '</span>'
-      + '<span class="cb-abb">' + (bonus ? sktSigned(bonus) : '') + '</span><b class="cb-abf">' + final[k] + '</b><i class="cb-abm">' + sktSigned(sktMod(final[k])) + '</i></div>';
+      + '<span class="cb-abb" title="' + cbEsc(why[k] || '') + '">' + (bonus ? sktSigned(bonus) : '') + '</span><b class="cb-abf" title="' + cbEsc(why[k] || '') + '">' + final[k] + '</b><i class="cb-abm">' + sktSigned(sktMod(final[k])) + '</i></div>';
   }).join('');
   const where = R.edition === '2024' ? 'Background and feat increases are included.' : 'Species and feat increases are included.';
   return '<h3>Ability scores</h3><div class="cb-seg">' + seg + '</div>'
     + (b.cls && (m === 'array' || m === 'pointbuy') ? '<button class="btn small cb-suggest-btn" data-cb="suggest">Suggest for a ' + cbEsc(b.cls) + '</button>' : '') + note
     + '<div class="cb-abtable"><div class="cb-abrow cb-abhead"><span></span><span>Base</span><span>Bonus</span><span>Score</span><span>Mod</span></div>' + rows + '</div>'
-    + '<div class="cb-dim">' + where + '</div>';
+    + '<div class="cb-dim">' + where + '</div>'
+    + '<div class="cb-whylist">' + SKT_ABS.filter(k => (why[k] || '').includes('·')).map(k => '<div><b>' + cbAbLabel(k) + '</b> ' + cbEsc(why[k]) + '</div>').join('') + '</div>';
 };
 
 CB_RENDER.skills = () => {
@@ -732,7 +749,9 @@ CB_RENDER.levels = () => {
     const avg = Math.floor(cls.hd / 2) + 1;
     const hm = (b.hp && b.hp.method) || 'average';
     html += '<h4>Hit points</h4><div class="cb-seg"><button class="' + (hm === 'average' ? 'on' : '') + '" data-cb-hp="average">Take the average (' + avg + ')</button>'
-      + '<button class="' + (hm === 'rolled' ? 'on' : '') + '" data-cb-hp="rolled">Roll</button></div>';
+      + '<button class="' + (hm === 'rolled' ? 'on' : '') + '" data-cb-hp="rolled">Roll</button>'
+      + '<button class="' + (hm === 'manual' ? 'on' : '') + '" data-cb-hp="manual">Enter it</button></div>';
+    if (hm === 'manual') html += '<label class="cb-f">Hit point maximum<input type="number" min="1" data-cb-hpmanual value="' + (b.hp.manual || CB.rec.hpMax) + '"></label>';
     if (hm === 'rolled'){
       let rows = '';
       for (let lv = 2; lv <= sktClassLevels(b, R)[0].level; lv++){
@@ -1282,7 +1301,7 @@ function cbOnClick(e){
     const spent = SKT_ABS.reduce((s, x) => s + SKT_POINT_BUY[x === k ? v : b.abilities.base[x]], 0);
     if (spent <= 27) b.abilities.base[k] = v;
   });
-  if (d.cbHp) return cbSet(b => { b.hp = b.hp || { rolls: {} }; b.hp.method = d.cbHp; b.hp.rolls = b.hp.rolls || {}; });
+  if (d.cbHp) return cbSet(b => { b.hp = b.hp || { rolls: {} }; if (d.cbHp === 'manual' && !b.hp.manual) b.hp.manual = CB.rec.hpMax; b.hp.method = d.cbHp; b.hp.rolls = b.hp.rolls || {}; });
   if (d.cbHpdice) return cbSet(b => {
     const cls = sktRulesClass(CB.R, b.cls); b.hp.rolls[d.cbHpdice] = sktD(cls.hd);
   });
@@ -1303,6 +1322,7 @@ function cbOnChange(e){
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
+  if ('cbHpmanual' in d) return cbSet(b => { b.hp = Object.assign({}, b.hp, { manual: Math.max(1, parseInt(v, 10) || 1) }); });
   if (d.cbCbg && d.cbCbg !== 'name') return cbSet(b => { b.customBg = Object.assign({}, b.customBg, { [d.cbCbg]: d.cbCbg === 'languages' ? +v : v });
     if (d.cbCbg === 'languages') b.customBg.tools = (b.customBg.tools || []).slice(0, 2 - (+v || 0)); });
   if (d.cbCbgskill) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.skills = (b.customBg.skills || []).slice(); cbToggle(b.customBg.skills, d.cbCbgskill, 2); });

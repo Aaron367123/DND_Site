@@ -1205,6 +1205,7 @@ function paSheetDetail(p){
     Nothing on this sheet yet — the DM fills these in on the party card, or a
     character-sheet PDF import brings them across.</div></div>`;
   return `<div class="pa-mate-body">
+    ${typeof openCharSheet === 'function' ? `<button class="btn pa-mate-sheet" data-pa-sheet="${paEsc(p.id)}">📜 Open the whole sheet</button>` : ''}
     ${bits.length ? `<div class="pa-mate-line">${bits.map(paEsc).join(' · ')}</div>` : ''}
     ${abils ? `<div class="pa-abs">${abils}</div>` : ''}
     ${sec('Saving throws', saves)}

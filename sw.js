@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '745051d4f6';
+const BUILD = '9d5a2c1a71';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=66de0ef764',
+  'styles/main.css?v=5f22ab94e0',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=5ead9a4764',
   'js/core/theme.js?v=4589bc6790',
@@ -55,7 +55,7 @@ const PRECACHE = [
   'js/generated/reactions.js?v=faa668dc18',
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=ee48d66c40',
-  'js/panels/party.js?v=0679e6cbdd',
+  'js/panels/party.js?v=291cfb11ae',
   'js/panels/shop.js?v=fadf7d5fe3',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -85,12 +85,12 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=07664d648a',
   'js/ui/command-palette.js?v=8aded06220',
-  'js/features/char-rules.js?v=d248b5f42b',
-  'js/features/char-effects.js?v=5bca27f710',
-  'js/features/char-sheet.js?v=2eccc54b9e',
-  'js/features/char-builder.js?v=c2af5c2c83',
+  'js/features/char-rules.js?v=29e78c65f9',
+  'js/features/char-effects.js?v=da3c41b613',
+  'js/features/char-sheet.js?v=a1951a4401',
+  'js/features/char-builder.js?v=8a7dbd044d',
   'js/features/pdf-import.js?v=06787122c5',
-  'js/player/player-app.js?v=13c2a49774',
+  'js/player/player-app.js?v=2e7e31f6c1',
   'js/ui/player-view.js?v=3c47cb84bd',
   'js/sync/realtime.js?v=62f2e30973',
   'js/sync/presence.js?v=3c6820c9d8',

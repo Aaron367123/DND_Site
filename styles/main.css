@@ -5352,3 +5352,23 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 #cb-root .cb-suggest-btn { margin:6px 0; }
 .cs-ovlists { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:4px 16px; }
 .cs-ovlists input { flex:1; min-width:0; width:auto; }
+button.cs-avatar { border:none; cursor:pointer; padding:0; }
+button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
+.cs-in { width:auto; max-width:140px; padding:1px 4px; font-size:var(--fs-xs); }
+#cs-root.themed { --accent: var(--cs-accent); }
+.cs-log { max-height:180px; overflow:auto; font-size:var(--fs-sm); border:1px solid var(--border); border-radius:8px; padding:6px 8px; }
+.cs-log > div { padding:2px 0; border-bottom:1px solid var(--border); }
+.pa-mate-sheet.btn { width:100%; margin:0 0 8px; }
+.cs-prepcount { font-size:var(--fs-sm); margin:4px 0; }
+.cs-prepcount.short { color:var(--warning, #d9a441); }
+.cs-linkbtn { background:none; border:none; color:var(--accent); text-decoration:underline; cursor:pointer; padding:0; font:inherit; }
+.status-badge.levelup { cursor:pointer; color:var(--accent); border-color:var(--accent); }
+.cs-addcustom { margin-top:12px; }
+.cs-addcustom .cs-add input[data-cs-trkmax] { flex:0 0 70px; }
+#cb-root .cb-whylist { margin-top:8px; font-size:var(--fs-xs); color:var(--text-muted); }
+#cb-root .cb-whylist b { color:var(--text); }
+.cs-spfilter { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; }
+.cs-spfilter input { flex:1 1 160px; min-width:0; }
+.cs-itemn { flex:1; min-width:0; background:none; border:none; color:var(--text); font:inherit; text-align:left; padding:0; cursor:pointer; }
+.cs-itemt { padding:4px 8px 8px 34px; }
+.cs-cointx input[type=number] { flex:0 0 100px; }
