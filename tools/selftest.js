@@ -7666,6 +7666,32 @@
       }
     }
 
+    // -- Round 31: a 2014 ranger's favored enemies and terrains ----------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const rc = L => sktProfChoices(Object.assign(sktBlankBuild('2014'), { cls: 'Ranger', level: L }), R14);
+        ok('ranger: one favored enemy and terrain at 1st, more at 6th, 10th and 14th', rc(1).map(c => c.kind + c.count).join() === 'enemies1,terrains1' && rc(10).map(c => c.kind + c.count).join() === 'enemies2,terrains3' && rc(14).map(c => c.kind + c.count).join() === 'enemies3,terrains3');
+        ok('ranger: and asks for them', sktBuildTodo(Object.assign(sktBlankBuild('2014'), { cls: 'Ranger', level: 6 }), R14).some(t => t.what === '2 favored enemies from Favored Enemy'));
+        const rb = Object.assign(sktBlankBuild('2014'), { cls: 'Ranger', level: 1, profPicks: { 'Favored Enemy': { enemies: ['Undead'] }, 'Natural Explorer': { terrains: ['Swamp'] } } });
+        const notes = sktComputeCharacter(rb, R14).sheet.notes;
+        ok('ranger: the sheet says which', notes.some(n => /^Favored Enemy \(Undead\)/.test(n)) && notes.some(n => /^Natural Explorer \(Swamp\)/.test(n)));
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Ranger', level: 1 }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'skills'; cbRender(); await sleep(20);
+        const box = document.querySelector('#cb-root [data-cb-profpick="Favored Enemy||enemies||Dragons"]');
+        ok('ranger: the Skills step offers the enemy types', !!box);
+        if (box){ box.click(); await sleep(30); }
+        ok('ranger: and keeps the pick', (((CB.build.profPicks || {})['Favored Enemy'] || {}).enemies || []).includes('Dragons'));
+        cbClose();
+      } catch(e){ ok('round 31 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

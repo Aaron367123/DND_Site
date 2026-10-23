@@ -658,8 +658,20 @@ function _sktWeaponGroup(R, tag){
 function sktSubclassProfFeatures(build, R){
   return sktBuildFeatures(build, R).filter(f => f.from === 'subclass').map(f => ({ feature: f.name, cls: f.cls, g: sktProfGrants(f.text) })).filter(x => x.g.any);
 }
+// A 2014 ranger's favored enemies and terrains: one each at 1st level, more
+// at 6th and 14th (enemies) and 6th and 10th (terrains).
+const SKT_RANGER_PICKS = {
+  'Favored Enemy': { kind: 'enemies', more: [6, 14], options: ['Aberrations', 'Beasts', 'Celestials', 'Constructs', 'Dragons', 'Elementals', 'Fey', 'Fiends', 'Giants', 'Monstrosities', 'Oozes', 'Plants', 'Undead', 'Humanoids (two races)'] },
+  'Natural Explorer': { kind: 'terrains', more: [6, 10], options: ['Arctic', 'Coast', 'Desert', 'Forest', 'Grassland', 'Mountain', 'Swamp', 'Underdark'] },
+};
 function sktProfChoices(build, R){
   const out = [];
+  if (R.edition === '2014') sktBuildFeatures(build, R).filter(f => f.from === 'class' && SKT_RANGER_PICKS[f.name] && f.cls === 'ranger').forEach(f => {
+    const spec = SKT_RANGER_PICKS[f.name], part = sktClassLevels(build, R).find(p => p.key === 'ranger');
+    const count = 1 + spec.more.filter(l => part && part.level >= l).length;
+    const picked = (((build.profPicks || {})[f.name] || {})[spec.kind] || []).filter(x => spec.options.includes(x)).slice(0, count);
+    out.push({ feature: f.name, kind: spec.kind, count, options: spec.options, picked });
+  });
   sktSubclassProfFeatures(build, R).forEach(({ feature, cls, g }) => g.choices.forEach(c => {
     if (c.kind !== 'skills' && c.kind !== 'weapons') return;
     const part = sktClassLevels(build, R).find(p => p.key === cls) || sktClassLevels(build, R)[0];
@@ -1904,7 +1916,7 @@ function sktComputeCharacter(build, R, prior){
     g.tools.forEach(t => ctx.toolProf.add(t));
     g.languages.forEach(l => ctx.languages.add(l));
   });
-  if (cls) sktProfChoices(build, R).forEach(c => c.picked.forEach(x => (c.kind === 'skills' ? ctx.skillProf : ctx.weaponProf).add(x)));
+  if (cls) sktProfChoices(build, R).forEach(c => { if (c.kind === 'skills' || c.kind === 'weapons') c.picked.forEach(x => (c.kind === 'skills' ? ctx.skillProf : ctx.weaponProf).add(x)); });
   sktToolFixed(build, R).forEach(t => ctx.toolProf.add(t.toLowerCase()));
   Object.values(build.toolPicks || {}).forEach(l => (l || []).forEach(t => ctx.toolProf.add(String(t).toLowerCase())));
   if (R.edition === '2024') ctx.languages.add('Common');
@@ -2561,7 +2573,8 @@ function sktBuildTodo(build, R){
   }
   sktBuildChoices(build, R).forEach(c => { if (!c.value) todo.push({ step: 'levels', what: c.feature + ' choice' }); });
   sktArcanumLevels(build, R).forEach(lv => { if (!(build.arcanum || {})[lv]) todo.push({ step: 'spells', what: 'a ' + lv + 'th-level Mystic Arcanum spell' }); });
-  sktProfChoices(build, R).forEach(c => { const n = c.count - c.picked.length; if (n > 0) todo.push({ step: 'skills', what: n + ' ' + (c.kind === 'skills' ? 'skill' : 'weapon') + (n === 1 ? '' : 's') + ' from ' + c.feature }); });
+  const kindName = { skills: ['skill', 'skills'], weapons: ['weapon', 'weapons'], enemies: ['favored enemy', 'favored enemies'], terrains: ['favored terrain', 'favored terrains'] };
+  sktProfChoices(build, R).forEach(c => { const n = c.count - c.picked.length; if (n > 0) todo.push({ step: 'skills', what: n + ' ' + kindName[c.kind][n === 1 ? 0 : 1] + ' from ' + c.feature }); });
   sktOptionalChoices(build, R).forEach(o => {
     const have = ((build.optional || {})[o.name] || []).length;
     if (have < o.count) todo.push({ step: 'levels', what: (o.count - have) + ' × ' + o.name });

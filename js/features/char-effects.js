@@ -292,8 +292,11 @@
   def('2024:class:paladin:Aura Expansion', () => {});              // Aura of Protection reads the level
 
   // ── Ranger ─────────────────────────────────────────────────────────────
-  def('2014:class:ranger:Favored Enemy', ctx => note(ctx, 'Favored Enemy: advantage on Survival checks to track, and Intelligence checks to recall information, about your favored enemies.'));
-  def('2014:class:ranger:Natural Explorer', ctx => note(ctx, 'Natural Explorer: in your favored terrain, double proficiency on Intelligence and Wisdom checks, and the party can’t be slowed or lost.'));
+  const picks = (ctx, f) => ((((ctx.build._full || ctx.build).profPicks || {})[f] || {})[f === 'Favored Enemy' ? 'enemies' : 'terrains'] || []);
+  def('2014:class:ranger:Favored Enemy', ctx => { const p = picks(ctx, 'Favored Enemy');
+    note(ctx, 'Favored Enemy' + (p.length ? ' (' + p.join(', ') + ')' : '') + ': advantage on Survival checks to track, and Intelligence checks to recall information, about your favored enemies.'); });
+  def('2014:class:ranger:Natural Explorer', ctx => { const p = picks(ctx, 'Natural Explorer');
+    note(ctx, 'Natural Explorer' + (p.length ? ' (' + p.join(', ') + ')' : '') + ': in your favored terrain, double proficiency on Intelligence and Wisdom checks, and the party can’t be slowed or lost.'); });
   def('2014:class:ranger:Primeval Awareness', ctx => act(ctx, { name: 'Primeval Awareness', action: 'Action', feature: 'Primeval Awareness', desc: 'Spend a spell slot to sense aberrations, celestials, dragons, elementals, fey, fiends and undead within 1 mile (6 in favored terrain).' }));
   both(['class:ranger:Land\'s Stride', 'class:ranger:Land’s Stride'], ctx => note(ctx, 'Land’s Stride: nonmagical difficult terrain costs no extra movement, and plants don’t harm or slow you.'));
   def('2014:class:ranger:Hide in Plain Sight', ctx => note(ctx, 'Hide in Plain Sight: spend a minute camouflaging to gain +10 to Stealth while you stay still.'));
