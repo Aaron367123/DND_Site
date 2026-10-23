@@ -1312,6 +1312,7 @@ function csInventoryHtml(pc){
     + (boxes.length && !CS_CONTAINER.test(m.name) && !ro ? '<select class="cb-sel cs-in" data-cs-in="' + i + '" aria-label="Carried in"><option value="">carried</option>'
       + boxes.map(x => '<option' + (m.in === x.name ? ' selected' : '') + '>' + csE(x.name) + '</option>').join('') + '</select>' : (m.in ? '<span class="cb-dim">in ' + csE(m.in) + '</span>' : ''))
     + '<span class="cb-dim cs-wt">' + (m.weight ? (csItemWeight(items, m) ? Math.round(csItemWeight(items, m) * 10) / 10 + ' lb' : 'weightless') : '') + '</span>'
+    + (!ro && !m.charges && csCatalogCharges(m) ? '<button class="btn small" data-cs-trackchg="' + i + '" title="Count this item\u2019s charges">Track charges</button>' : '')
     + (ro ? '' : '<button class="btn small" data-cs-del="' + i + '" aria-label="Remove ' + csE(m.name) + '">✕</button>') + '</div>'
     + (CS.open['it:' + i] ? '<div class="cs-feat-t cs-itemt">' + csItemText(m) + '</div>' : '')).join('')
     : '<div class="cb-dim">Nothing carried.</div>') + '</div>';
@@ -1397,6 +1398,12 @@ function csGearFind(name){
   return n ? csGearEntries().find(e => e.name.toLowerCase() === n) || null : null;
 }
 // Change the list: for a built character, materialize the kit first.
+// A magic item's charges from the catalogue, for one added before they were
+// recorded (a wand from an older save).
+function csCatalogCharges(m){
+  const e = (CS.magic || []).find(x => x.name === m.name && x.charges);
+  return e ? { charges: e.charges, recharge: e.recharge, rechargeAmount: e.rechargeAmount } : null;
+}
 function csItemsEdit(label, fn){
   const pc = csPc(); if (!pc) return;
   if (pc.build){
@@ -1412,6 +1419,11 @@ function csItemsEdit(label, fn){
 }
 function csInventoryClick(e, t, d, pc){
   if (CS.readOnly) return false;
+  if (d.csTrackchg != null){
+    const i = +d.csTrackchg, it = csItems(pc)[i], c = it && csCatalogCharges(it);
+    if (c) csItemsEdit('Charges for ' + it.name, items => { if (items[i]) Object.assign(items[i], c); });
+    return true;
+  }
   if (d.csQty){ const [i, n] = d.csQty.split(':').map(Number); csItemsEdit('Quantity', l => { if (l[i]) l[i].qty = Math.max(1, (l[i].qty || 1) + n); }); return true; }
   if (d.csDel != null){ csItemsEdit('Removed an item', l => { l.splice(+d.csDel, 1); }); return true; }
   if (d.cs === 'additem' || d.cs === 'buyitem'){

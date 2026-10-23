@@ -7942,6 +7942,35 @@
       }
     }
 
+    // -- Round 43: an older wand takes up its charges ---------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const pc = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Old', cls: 'Wizard', species: 'Human', level: 3,
+          items: [{ name: 'Wand of Magic Missiles', qty: 1, rarity: 'uncommon' }], equipment: { materialized: true } }), R14);
+        pc.id = 'pc_r43'; state.party.push(pc); save();
+        const me = () => state.party.find(p => p.id === 'pc_r43');
+        openCharSheet('pc_r43', { tab: 'inventory' }); await sleep(300);
+        for (let k = 0; k < 40 && !(CS && CS.magic); k++) await sleep(100);
+        csRender(); await sleep(60);
+        const b = document.querySelector('#cs-root [data-cs-trackchg="0"]');
+        ok('charges: an older wand offers to track its charges', !!b);
+        if (b){ b.click(); await sleep(200); }
+        ok('charges: and then counts them', (me().resources || []).some(r => r.name === 'Wand of Magic Missiles' && r.max === 7));
+        csClose();
+      } catch(e){ ok('round 43 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') try { csClose(); } catch(_){ }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
