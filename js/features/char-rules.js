@@ -220,7 +220,18 @@ async function _sktRulesBuild(edition, read){
       features.push({ name, level, entries: f ? f.entries : [],
                       gainSubclass: !!(ref && ref.gainSubclassFeature) });
     });
-    const subclasses = (file.subclass || []).filter(sc => sc.classSource === csrc).map(sc => ({
+    // A 2014 subclass offered for the 2024 class is a copy of its 2014 entry
+    // ("_copy"): its spells, spellcasting and tables come from that entry.
+    const subKey = s => [s.shortName, s.source, s.className, s.classSource].join('|');
+    const subBy = new Map((file.subclass || []).map(s => [subKey(s), s]));
+    const resolve = (sc, depth) => {
+      if (!sc._copy || depth > 3) return sc;
+      const base = subBy.get(subKey(sc._copy));
+      const out = Object.assign({}, base ? resolve(base, (depth || 0) + 1) : {}, sc);
+      delete out._copy;
+      return out;
+    };
+    const subclasses = (file.subclass || []).filter(sc => sc.classSource === csrc).map(sc => resolve(sc)).map(sc => ({
       name: sc.name, shortName: sc.shortName, source: sc.source,
       core: sc.source === csrc,
       additionalSpells: sc.additionalSpells || null,
@@ -277,6 +288,11 @@ async function _sktRulesBuild(edition, read){
     const subOf = (races.subrace || []).filter(s => s.raceName === r.name && s.raceSource === r.source && s.name
                                                  && SKT_2024_ERA.has(s.source) === SKT_2024_ERA.has(r.source));
     const seenSub = new Set();
+    const versions = (r._versions || []).filter(v => v && v.name && !v._abstract).map(v => _sktSpeciesVersion(r, v, src));
+    // 2024 Elf, Gnome and Tiefling choose theirs through the lineage's
+    // spells; the rest pick a version like a subrace.
+    const byLineage = edition === '2024' && Array.isArray(r.additionalSpells) && r.additionalSpells.length > 1;
+    if (byLineage) versions.forEach(v => { v.additionalSpells = null; v.overrides = v.overrides.filter(k => k !== 'additionalSpells'); });
     R.species.push({
       name: r.name, source: r.source, core: r.source === src,
       ability: r.ability || null, lineage: !!r.lineage, speed: r.speed, size: r.size || ['M'],
@@ -286,7 +302,17 @@ async function _sktRulesBuild(edition, read){
       armor: r.armorProficiencies || [], feats: r.feats || null,
       additionalSpells: r.additionalSpells || null,
       entries: r.entries || [],
-      subraces: subOf.sort((x, y) => (y.source === src) - (x.source === src))
+      versions: byLineage ? versions : [],
+      // Draconic ancestries (2024 Dragonborn, Fizban's chromatic, gem and
+      // metallic): each colour's damage type and resistance.
+      ancestries: [].concat(...(r._versions || []).filter(v => v && v._abstract).map(v => (v._implementations || []).map(im => {
+        const vars = im._variables || {}, dmg = String(vars.damageType || '').toLowerCase();
+        return { name: vars.color || dmg, damage: dmg, resist: im.resist || vars.resist || (dmg ? [dmg] : []) };
+      }))).filter(a => a.name),
+      // A plain option exists (the 2014 Human's subrace is only "Variant").
+      subraceOptional: (races.subrace || []).some(s => s.raceName === r.name && s.raceSource === r.source && !s.name)
+        || (!byLineage && versions.length > 0 && versions.every(v => v.optional)),
+      subraces: (byLineage || !versions.length ? [] : versions).concat(subOf.sort((x, y) => (y.source === src) - (x.source === src))
         .filter(s => !seenSub.has(s.name) && seenSub.add(s.name)).map(s => ({
         name: s.name, source: s.source, core: s.source === src && r.source === src,
         ability: s.ability || null, speed: s.speed, darkvision: s.darkvision,
@@ -294,7 +320,7 @@ async function _sktRulesBuild(edition, read){
         armor: s.armorProficiencies || [], languages: s.languageProficiencies || [],
         tools: s.toolProficiencies || [],
         feats: s.feats || null, additionalSpells: s.additionalSpells || null, entries: s.entries || [],
-      })),
+      }))),
     });
   });
 
@@ -383,7 +409,6 @@ async function _sktRulesBuild(edition, read){
   sp(allSpells, { legacy: edition === '2024' }).forEach(s => {
     const core = s.source === src;
     const classesAll = listsFor(s, ['class', 'classVariant']);
-    if (!core && !classesAll.length) return;
     R.spells.push({ name: s.name, level: s.level, school: s.school, source: s.source, core,
                     classes: core ? listsFor(s, ['class']) : [], classesAll,
                     time: s.time, range: s.range, duration: s.duration, components: s.components || null,
@@ -395,8 +420,11 @@ async function _sktRulesBuild(edition, read){
                     entries: s.entries || [] });
   });
 
-  R.languages = (languages.language || []).filter(l => l.source === src || (l.source === 'PHB' && edition === '2014'))
-    .map(l => ({ name: l.name, type: l.type || 'standard' }));
+  // Languages: the handbook's, then the other books' of this era (the Sword
+  // Coast's and Faerûn's tongues, Zemnian, Leonin…), offered with "other
+  // books" on like the rest of their content.
+  R.languages = sp(languages.language || [], { legacy: edition === '2024' })
+    .map(l => ({ name: l.name, type: l.type || 'standard', source: l.source, core: l.source === src }));
   if (!R.languages.length){
     R.languages = ['Common', 'Dwarvish', 'Elvish', 'Giant', 'Gnomish', 'Goblin', 'Halfling', 'Orc',
                    'Abyssal', 'Celestial', 'Draconic', 'Deep Speech', 'Infernal', 'Primordial', 'Sylvan', 'Undercommon']
@@ -438,7 +466,9 @@ function sktRulesSubclass(cls, name){
   // The edition's own printing first: the 2024 fighter lists both its own
   // Battle Master and the 2014 one adapted for it.
   const hits = cls.subclasses.filter(s => s.shortName.toLowerCase() === n || s.name.toLowerCase() === n);
-  return hits.find(s => s.core) || hits[0] || null;
+  // Then the class's own era: the 2024 cleric's Knowledge Domain is Heroes
+  // of Faerûn's, not the 2014 one adapted for it.
+  return hits.find(s => s.core) || hits.find(s => SKT_2024_ERA.has(s.source) === SKT_2024_ERA.has(cls.source)) || hits[0] || null;
 }
 function sktRulesSpecies(R, name){ return R.species.find(s => s.name === name) || null; }
 function sktRulesBackground(R, name){ return R.backgrounds.find(b => b.name === name) || null; }
@@ -533,7 +563,7 @@ function _sktToolList(list){
 }
 function sktToolChoices(build, R){
   const cls = sktRulesClass(R, build.cls), bg = sktBuildBackground(R, build);
-  const sp = sktRulesSpecies(R, build.species), sub = sp && sp.subraces.find(s => s.name === build.subspecies);
+  const sp = sktRulesSpecies(R, build.species), sub = sp && sktSpeciesSub(sp, build);
   const out = [];
   const add = (key, label, list) => { const c = _sktToolList(list).choice; if (c) out.push(Object.assign({ key, label }, c)); };
   if (cls) add('class', cls.name, cls.toolProfs);
@@ -543,7 +573,7 @@ function sktToolChoices(build, R){
 }
 function sktToolFixed(build, R){
   const cls = sktRulesClass(R, build.cls), sp = sktRulesSpecies(R, build.species);
-  const sub = sp && sp.subraces.find(s => s.name === build.subspecies);
+  const sub = sp && sktSpeciesSub(sp, build);
   return [].concat(cls ? _sktToolList(cls.toolProfs).fixed : [], sp ? _sktToolList((sub && sub.tools && sub.tools.length) ? sub.tools : sp.tools).fixed : []);
 }
 
@@ -567,7 +597,7 @@ function sktFeatChoices(R, build, featName, rec){
   }));
   if (f.tools){ const t = _sktToolList(f.tools); out.fixed.tools.push(...t.fixed); if (t.choice) out.choices.push({ kind: 'tools', count: t.choice.count, options: t.choice.options, label: 'tool' }); }
   (f.languages || []).forEach(o => Object.keys(o).forEach(k => {
-    if (k === 'any') out.choices.push({ kind: 'languages', count: +o.any || 1, options: R.languages.map(l => l.name), label: 'language' });
+    if (k === 'any') out.choices.push({ kind: 'languages', count: +o.any || 1, options: sktLanguageOptions(R, build), label: 'language' });
     else if (o[k] === true) out.fixed.languages.push(_sktTitle(k));
   }));
   (f.weapons || []).forEach(o => Object.keys(o).forEach(k => {
@@ -622,6 +652,17 @@ function sktFeatPrereq(R, build, feat, rec){
     if (p.race){ const names = p.race.map(r => _sktTitle(r.name) + (r.subrace ? ' (' + _sktTitle(r.subrace) + ')' : '')); parts.push(names.join(' or ')); ok.push(p.race.some(r => String(build.species || '').toLowerCase().includes(String(r.name).toLowerCase()))); }
     if (p.feat){ const names = p.feat.map(f => _sktTitle(String(f).split('|')[0])); parts.push('the ' + names.join(' or ') + ' feat'); ok.push(p.feat.some(f => feats.includes(String(f).split('|')[0].toLowerCase()))); }
     if (p.background){ parts.push(p.background.map(b => _sktTitle(b.name)).join(' or ') + ' background'); ok.push(p.background.some(b => String(build.background || '').toLowerCase() === String(b.name).toLowerCase())); }
+    // A class feature (the 2024 fighting-style feats need Fighting Style), a
+    // campaign (Eberron's dragonmarks, Planescape's scions: the DM's call),
+    // and one feat of a kind (a single dragonmark).
+    if (p.feature){ const have = (sh.featureList || []).map(f => String(f.name).toLowerCase()); parts.push(p.feature.map(f => _sktTitle(String(f))).join(' or ') + ' feature'); ok.push(p.feature.some(f => have.includes(String(f).toLowerCase()))); }
+    if (p.campaign){ parts.push(p.campaign.join(' or ') + ' campaign'); ok.push(true); }
+    if (p.exclusiveFeatCategory){
+      const cats = p.exclusiveFeatCategory.map(String);
+      parts.push('no other ' + (cats.includes('D') ? 'dragonmark' : cats.join('/')) + ' feat');
+      const others = sktBuildFeatNames(build, R).filter(n => n.toLowerCase() !== String(feat.name).toLowerCase()).map(n => sktRulesFeat(R, n)).filter(Boolean);
+      ok.push(!others.some(f => cats.includes(String(f.category).split(':')[0])));
+    }
     if (p.other){ parts.push(String(p.other)); ok.push(true); }
     if (p.otherSummary){ parts.push(sktRulesInline(String(p.otherSummary.entry || p.otherSummary.entrySummary || ''))); ok.push(true); }
     texts.push(parts.filter(Boolean).join(', '));
@@ -651,6 +692,11 @@ function sktCoinText(cp){
 // ── Which books a character draws on ─────────────────────────────────────────
 // The handbook always; the others when "other books" is on — all of them, or
 // just the ones ticked (build.books, a list of source codes).
+// The languages a character can pick: the handbook's and, with other books
+// on, theirs. Secret languages (Druidic, Thieves' Cant) come from a feature.
+function sktLanguageOptions(R, build){
+  return (R.languages || []).filter(l => l.type !== 'secret' && !/^(Druidic|Thieves' Cant)$/.test(l.name) && (l.core !== false || sktBookOk(build, l))).map(l => l.name);
+}
 function sktBookOk(build, x){
   if (!x || x.core !== false) return true;
   if (!build || !build.allBooks) return false;
@@ -780,7 +826,7 @@ function sktBuildAbilities(build, R, trace){
   const species = sktRulesSpecies(R, build.species);
   if (R.edition === '2014'){
     if (species){
-      const sub = species.subraces.find(s => s.name === build.subspecies) || null;
+      const sub = sktSpeciesSub(species, build) || null;
       // Fixed increases from the species and the subrace; the chosen part of
       // either ("+1 to two others") comes from build.speciesAsi.
       // Tasha's "Customizing Your Origin": none of the fixed increases; the
@@ -794,14 +840,22 @@ function sktBuildAbilities(build, R, trace){
     add(build.bgAsi, 'Background');
   }
   const slots = new Set(sktAsiSlots(build, R).map(s => s.key));
+  // A feat's fixed increase (Actor's +1 Charisma, Durable's +1 Constitution);
+  // the part the player chooses is in featChoices.
+  const featFixed = name => {
+    const f = sktRulesFeat(R, name), a = f && (f.ability || []).length === 1 ? f.ability[0] : null;
+    if (!a) return null;
+    const o = {}; Object.keys(a).forEach(k => { if (k in out && typeof a[k] === 'number') o[k] = a[k]; });
+    return Object.keys(o).length ? o : null;
+  };
   Object.keys(build.asi || {}).sort((a, b) => (parseInt(a.split('@').pop(), 10) || 0) - (parseInt(b.split('@').pop(), 10) || 0)).forEach(lvl => {
     if (!slots.has(String(lvl))) return;
     const pick = build.asi[lvl] || {};
     const at = String(lvl).includes('@') ? _sktTitle(String(lvl).split('@')[0]) + ' ' + String(lvl).split('@')[1] : 'Level ' + lvl;
     if (pick.type === 'asi') add(pick.inc, at + ' improvement');
-    else if (pick.type === 'feat') add((build.featChoices[pick.feat] || {}).inc, pick.feat + ' (' + at + ')');
+    else if (pick.type === 'feat'){ add(featFixed(pick.feat), pick.feat + ' (' + at + ')'); add((build.featChoices[pick.feat] || {}).inc, pick.feat + ' (' + at + ')'); }
   });
-  if (build.originFeat) add((build.featChoices[build.originFeat] || {}).inc, build.originFeat);
+  if (build.originFeat){ add(featFixed(build.originFeat), build.originFeat); add((build.featChoices[build.originFeat] || {}).inc, build.originFeat); }
   // Ability scores top out at 20; an Epic Boon (2024, level 19) raises the
   // cap to 30 for the score it improves.
   const boonCap = {};
@@ -881,8 +935,8 @@ function _sktBuildFeaturesOne(build, R){
   if (sub) sub.features.filter(f => f.level <= L).forEach(f => push(f, 'subclass', f.level));
   const sp = sktRulesSpecies(R, build.species);
   if (sp){
-    _sktTraits(sp.entries).forEach(t => push(t, 'species', 1));
-    const sr = sp.subraces.find(s => s.name === build.subspecies);
+    const sr = sktSpeciesSub(sp, build);
+    _sktTraits(sp.entries).filter(t => !(sr && sr.replaces || []).includes(t.name)).forEach(t => push(t, 'species', 1));
     if (sr) _sktTraits(sr.entries).forEach(t => push(t, 'species', 1));
   }
   const bg = sktBuildBackground(R, build);
@@ -933,8 +987,13 @@ function _sktTraits(entries){
 function sktBuildFeatNames(build, R){
   const out = [];
   const bg = sktBuildBackground(R, build);
-  if (R.edition === '2024' && bg && Array.isArray(bg.feats)){
-    bg.feats.forEach(o => Object.keys(o).forEach(k => out.push(_sktTitle(k.split('|')[0]))));
+  // A background's feat: the 2024 origin feat, and the 2014 backgrounds from
+  // later books that grant one (Astral Drifter, the Strixhaven students).
+  // Several listed are a choice (Rewarded: Lucky, Magic Initiate or
+  // Skilled), kept in build.bgFeat.
+  if (bg && Array.isArray(bg.feats) && bg.feats.length){
+    const o = bg.feats[Math.min(Math.max(0, +build.bgFeat || 0), bg.feats.length - 1)] || {};
+    Object.keys(o).forEach(k => { if (o[k] === true) out.push(_sktTitle(k.split('|')[0])); });
   }
   if (build.originFeat) out.push(build.originFeat);
   const slots = new Set(sktAsiSlots(build, R).map(s => s.key));
@@ -943,6 +1002,57 @@ function sktBuildFeatNames(build, R){
     if (slots.has(String(lvl)) && p && p.type === 'feat' && p.feat) out.push(p.feat);
   });
   return out;
+}
+// A species version from the data's _versions: the traits it adds, the
+// species traits it replaces or removes, and the numbers it sets (Drow's
+// 120-foot darkvision, Wood Elf's 35 feet, a Tiefling legacy's resistance).
+// A field set to null takes the species' away (Custom Lineage's skill when
+// darkvision is chosen).
+function _sktSpeciesVersion(r, v, src){
+  const label = String(v.name).split(';').slice(1).join(';').trim() || String(v.name);
+  const adds = [], replaces = [];
+  [].concat((v._mod || {}).entries || []).forEach(m => {
+    if (!m || typeof m !== 'object') return;
+    const items = [].concat(m.items || []);
+    if (m.mode === 'replaceArr'){ replaces.push(...[].concat(m.replace).map(String)); adds.push(...items); }
+    else if (m.mode === 'removeArr') replaces.push(...[].concat(m.names || []).map(String));
+    else if (/^(append|prepend|insert)Arr$/.test(m.mode)) adds.push(...items);
+  });
+  const has = k => Object.prototype.hasOwnProperty.call(v, k);
+  const map = { darkvision: 'darkvision', resist: 'resist', skills: 'skillProficiencies', additionalSpells: 'additionalSpells', speed: 'speed' };
+  return {
+    name: label, source: v.source || r.source, core: (v.source || r.source) === src, version: true,
+    optional: /^Variant;/i.test(String(v.name)), replaces,
+    overrides: Object.keys(map).filter(k => has(map[k])),
+    ability: null, speed: has('speed') ? v.speed : undefined, darkvision: has('darkvision') ? (v.darkvision || 0) : undefined,
+    resist: v.resist || [], skills: v.skillProficiencies || [], weapons: [], armor: [], languages: [], tools: [],
+    feats: null, additionalSpells: has('additionalSpells') ? v.additionalSpells : null, entries: adds,
+  };
+}
+// What a species asks for its damage resistance: a draconic ancestry (the
+// colour sets the resistance and the breath weapon's damage), or a pick
+// from the species' list (the 2014 Dragonborn). Null when it has none to
+// choose, or its version settles it (a Tiefling's legacy).
+function sktSpeciesResistChoice(sp, sub){
+  if (!sp) return null;
+  if (sub && (sub.overrides || []).includes('resist')) return null;
+  if ((sp.ancestries || []).length) return { kind: 'ancestry', options: sp.ancestries };
+  const ch = (sp.resist || []).find(r => r && r.choose);
+  return ch ? { kind: 'resist', options: (ch.choose.from || []).map(d => ({ name: d, damage: d, resist: [d] })) } : null;
+}
+function sktSpeciesResist(sp, sub, build){
+  const c = sktSpeciesResistChoice(sp, sub), sc = (build && build.speciesChoice) || {};
+  if (!c) return null;
+  return c.options.find(o => o.name === (c.kind === 'ancestry' ? sc.ancestry : sc.resist)) || null;
+}
+// The subrace or version a build has: the one named, or for a species that
+// picks it through its lineage's spells, the version of that lineage.
+function sktSpeciesSub(sp, build){
+  if (!sp) return null;
+  const named = build && build.subspecies ? sp.subraces.find(x => x.name === build.subspecies) : null;
+  if (named) return named;
+  const lin = build && build.speciesChoice && build.speciesChoice.lineage;
+  return lin && sp.versions ? (sp.versions.find(v => v.name === lin || v.name.startsWith(lin + ' ')) || null) : null;
 }
 // Title case that leaves an apostrophe alone: "Diplomat's Pack", not
 // "Diplomat'S Pack".
@@ -1054,8 +1164,38 @@ function sktSpellOptions(R, build, level){
   let listName = cls.name;
   // Eldritch Knight and Arcane Trickster cast from the wizard list.
   if (!cls.casterProgression && sub && sub.casterProgression) listName = 'Wizard';
-  return R.spells.filter(s => sktSpellOnList(s, listName, build) && s.level === level)
+  const extra = sktExpandedSpells(sub, build);
+  return R.spells.filter(s => s.level === level && (sktSpellOnList(s, listName, build) || extra(s)))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+// A subclass's expanded spell list: a warlock patron's spells ("s1": burning
+// hands, command…) or a filter (Chronurgy's "source=EGW", the dunamancy
+// spells). They join the class's list for this character only; choosing the
+// subclass is choosing its book, so no "other books" tick is needed. A
+// numbered key is the class level the spells arrive at.
+function sktExpandedSpells(sub, build){
+  const names = new Set(), filters = [];
+  (sub && sub.additionalSpells || []).forEach(block => {
+    const ex = block && block.expanded; if (!ex) return;
+    Object.keys(ex).forEach(k => {
+      if (/^\d+$/.test(k) && (build.level || 1) < +k) return;
+      (Array.isArray(ex[k]) ? ex[k] : []).forEach(x => {
+        if (typeof x === 'string') names.add(x.split('|')[0].replace(/#.*$/, '').trim().toLowerCase());
+        else if (x && x.all) filters.push(x.all);
+      });
+    });
+  });
+  if (!names.size && !filters.length) return () => false;
+  const match = (s, filter) => String(filter).split('|').every(p => {
+    const i = p.indexOf('='); if (i < 0) return true;
+    const k = p.slice(0, i).trim().toLowerCase(), v = p.slice(i + 1).trim().toLowerCase().split(';');
+    if (k === 'source') return v.includes(String(s.source).toLowerCase());
+    if (k === 'level') return v.includes(String(s.level));
+    if (k === 'school') return v.includes(String(s.school).toLowerCase());
+    if (k === 'class') return v.some(c => sktSpellOnList(s, _sktTitle(c), build));
+    return true;
+  });
+  return s => names.has(s.name.toLowerCase()) || filters.some(f => match(s, f));
 }
 // Whether a spell is on a class's list for this character: the handbook's
 // lists, or every book's with "other books" on.
@@ -1159,8 +1299,9 @@ function sktFeatSpellGrant(R, build, featName){
 function sktSpeciesSpellGrant(R, build){
   const sp = sktRulesSpecies(R, build.species);
   if (!sp) return null;
-  const sub = sp.subraces.find(s => s.name === build.subspecies);
-  const spec = (sub && Array.isArray(sub.additionalSpells) && sub.additionalSpells.length) ? sub.additionalSpells : sp.additionalSpells;
+  const sub = sktSpeciesSub(sp, build);
+  const spec = (sub && (sub.overrides || []).includes('additionalSpells')) ? (sub.additionalSpells || [])
+    : (sub && Array.isArray(sub.additionalSpells) && sub.additionalSpells.length) ? sub.additionalSpells : sp.additionalSpells;
   if (!Array.isArray(spec) || !spec.length) return null;
   const ch = Object.assign({}, build.speciesChoice || {});
   if (ch.lineage) ch.spellList = ch.lineage;
@@ -1400,6 +1541,8 @@ sktDefineEffect(['species:Relentless Endurance'], ctx => { _fxPool(ctx, 'Relentl
 sktDefineEffect(['species:Breath Weapon'], ctx => {
   const n = ctx.edition === '2024' ? ctx.pb : 1;
   _fxPool(ctx, 'Breath Weapon', n, ctx.edition === '2024' ? 'long' : 'short');
+  const sp = sktRulesSpecies(ctx.R, ctx.build.species), pick = sktSpeciesResist(sp, sktSpeciesSub(sp, ctx.build), ctx.build);
+  if (pick) _fxNote(ctx, 'Breath Weapon: ' + pick.damage + ' damage' + (sp.ancestries.length ? ' (' + pick.name + ' ancestry)' : '') + '.');
 });
 sktDefineEffect(['species:Stone\'s Endurance'], ctx => { _fxPool(ctx, 'Stone’s Endurance', ctx.pb, 'long'); });
 sktDefineEffect(['species:Healing Hands'], ctx => { _fxPool(ctx, 'Healing Hands', 1, 'long'); });
@@ -1444,9 +1587,10 @@ sktDefineEffect(['class:Eldritch Invocations', 'class:Metamagic'], () => {});   
 sktDefineEffect(['class:Epic Boon'], () => {});                                 // a feat chosen at 19
 sktDefineEffect(['species:Darkvision', 'species:Superior Darkvision'], ctx => {
   const sp = sktRulesSpecies(ctx.R, ctx.build.species);
-  const sr = sp && sp.subraces.find(s => s.name === ctx.build.subspecies);
+  const sr = sp && sktSpeciesSub(sp, ctx.build);
   ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, (sr && sr.darkvision) || (sp && sp.darkvision) || 60);
 });
+sktDefineEffect(['species:Variable Trait; Darkvision'], ctx => { ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, 60); });
 sktDefineEffect(['species:Dwarven Resilience'], ctx => { ctx.resist.add('poison'); _fxNote(ctx, 'Advantage on saving throws to avoid or end the Poisoned condition.'); });
 sktDefineEffect(['species:Fey Ancestry'], ctx => _fxNote(ctx, 'Advantage on saving throws against being Charmed; magic can’t put you to sleep (2014).'));
 sktDefineEffect(['species:Brave'], ctx => _fxNote(ctx, 'Advantage on saving throws against being Frightened.'));
@@ -1479,7 +1623,7 @@ function sktComputeCharacter(build, R, prior){
   const L = Math.max(1, Math.min(20, +build.level || 1));
   const pb = sktProfBonus(L);
   const species = sktRulesSpecies(R, build.species);
-  const subrace = species && species.subraces.find(s => s.name === build.subspecies);
+  const subrace = species && sktSpeciesSub(species, build);
   const bg = sktBuildBackground(R, build);
   const abilities = sktBuildAbilities(build, R);
 
@@ -1539,15 +1683,20 @@ function sktComputeCharacter(build, R, prior){
   (build.bgSkills || []).forEach(k => ctx.skillProf.add(k));
   [species, subrace].forEach(s => {
     if (!s) return;
+    const ov = s === species && subrace && subrace.overrides || [];
     (s.skills || []).forEach(o => Object.keys(o).forEach(k => { const sk = sktSkillKey(k); if (sk && o[k] === true) ctx.skillProf.add(sk); }));
     (s.weapons || []).forEach(o => Object.keys(o).forEach(k => { if (o[k] === true) ctx.weaponProf.add(sktRefName(k)); }));
     (s.armor || []).forEach(o => Object.keys(o).forEach(k => { if (o[k] === true) ctx.armorProf.add(k); }));
-    (s.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); });
+    (ov.includes('resist') ? [] : s.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); });
+    if (s === species){ const pick = sktSpeciesResist(species, subrace, build); if (pick) pick.resist.forEach(r => ctx.resist.add(String(r).toLowerCase())); }
     (s.languages || []).forEach(o => Object.keys(o).forEach(k => { if (o[k] === true) ctx.languages.add(_sktTitle(k)); }));
   });
   if (bg){
     (bg.skills || []).forEach(o => Object.keys(o).forEach(k => { const sk = sktSkillKey(k); if (sk && o[k] === true) ctx.skillProf.add(sk); }));
     (bg.tools || []).forEach(o => Object.keys(o).forEach(k => { if (o[k] === true) ctx.toolProf.add(sktRefName(k)); }));
+    // Fixed languages (Rune Carver's Giant). Several entries are
+    // alternatives (Clan Crafter: Dwarvish, or another language): the first.
+    (bg.languages || []).slice(0, 1).forEach(o => Object.keys(o).forEach(k => { if (o[k] === true) ctx.languages.add(_sktTitle(k)); }));
   }
   (build.languages || []).forEach(l => ctx.languages.add(l));
   (build.tools || []).forEach(t => ctx.toolProf.add(t));
@@ -1681,7 +1830,8 @@ function sktComputeCharacter(build, R, prior){
     : (species && species.speed && species.speed.walk) || 30;
   const heavy = armor && String(armor.type).split('|')[0] === 'HA';
   let speed = baseSpeed + ctx.speedBonus + (heavy ? 0 : ctx.speedBonusUnlessHeavy) + (!armor && !shield ? ctx.speedBonusUnarmored : 0);
-  if (heavy && armor.strength && abilities.str < +armor.strength) speed -= 10;
+  const notSlowed = /speed is not reduced by wearing heavy armou?r/i.test(JSON.stringify([species && species.entries, subrace && subrace.entries]));
+  if (heavy && armor.strength && abilities.str < +armor.strength && !notSlowed) speed -= 10;
 
   // Initiative and passive perception.
   let init = ctx.mod.dex + ctx.initBonus;
@@ -1975,7 +2125,9 @@ async function sktGearLoad(edition, read){
     read = read || sktRulesReader();
     const [items, base] = await Promise.all([read('items.json'), read('items-base.json')]);
     const pick = _sktEraPicker(edition, SKT_EDITION_SRC[edition]);
-    const plain = (items.item || []).concat(base.baseitem || []).filter(i => (!i.rarity || i.rarity === 'none') && !/^\$/.test(String(i.type || '')) && !i._copy);
+    // Mundane gear, and the adventures' unrated curios (rarity "unknown").
+    const plain = _sktItemCopies((items.item || []).concat(base.baseitem || []))
+      .filter(i => (!i.rarity || i.rarity === 'none' || i.rarity === 'unknown') && !/^\$/.test(String(i.type || '')));
     return pick(plain, { legacy: edition === '2024' }).map(i => ({ kind: 'gear', name: i.name, source: i.source, weight: i.weight || 0, value: i.value || 0,
       base: /^(M|R|LA|MA|HA|S)(\||$)/.test(String(i.type || '')) ? i.name.toLowerCase() : null }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -2133,10 +2285,14 @@ function sktBuildTodo(build, R){
     const have = ((build.toolPicks || {})[c.key] || []).length;
     if (have < c.count) todo.push({ step: 'skills', what: (c.count - have) + ' tool proficienc' + (c.count - have === 1 ? 'y' : 'ies') + ' (' + c.label + ')' });
   });
+  { const sp = sktRulesSpecies(R, build.species), rc = sktSpeciesResistChoice(sp, sktSpeciesSub(sp, build));
+    if (rc && !sktSpeciesResist(sp, sktSpeciesSub(sp, build), build)) todo.push({ step: 'species', what: rc.kind === 'ancestry' ? 'a draconic ancestry' : 'a damage resistance' });
+    if (sp && sp.subraces.length && !sp.subraceOptional && !sktSpeciesSub(sp, build))
+      todo.push({ step: 'species', what: sp.subraces.every(s => s.version) ? 'a ' + sp.name + ' option' : 'a subrace' }); }
   const spg = sktSpeciesSpellGrant(R, build);
   if (spg && spg.missing) todo.push({ step: 'species', what: spg.block ? 'the species’ spells' : 'a lineage' });
   if (R.edition === '2014'){
-    const sp = sktRulesSpecies(R, build.species), sub = sp && sp.subraces.find(s => s.name === build.subspecies);
+    const sp = sktRulesSpecies(R, build.species), sub = sp && sktSpeciesSub(sp, build);
     const ac = sktSpeciesAsiChoice(sp, sub, build), got = build.speciesAsi || {};
     if (ac && (ac.flex ? Object.values(got).reduce((n, v) => n + (+v || 0), 0) < 3 : Object.keys(got).length < ac.count))
       todo.push({ step: 'species', what: 'the species’ ability increases' });
@@ -2173,7 +2329,10 @@ async function sktMagicLoad(edition, read){
     read = read || sktRulesReader();
     const [items, mv] = await Promise.all([read('items.json'), read('magicvariants.json')]);
     const pick = _sktEraPicker(edition, edition === '2024' ? 'XDMG' : 'DMG');
-    const magic = (items.item || []).filter(i => i.rarity && !/^(none|unknown)/.test(i.rarity) && !/^\$/.test(String(i.type || '')));
+    // Every rated magic item, the adventures' unrated ones ("unknown
+    // (magic)": the Silver Sword, Ivana's Whisper) and items printed as a
+    // copy of another (the Wildemount vestiges' awakened and exalted states).
+    const magic = _sktItemCopies(items.item || []).filter(i => i.rarity && i.rarity !== 'none' && i.rarity !== 'unknown' && !/^\$/.test(String(i.type || '')));
     // Picked as one list: the 2024 book reprints some items as variants
     // (Dwarven Plate, Moonblade), and the reprint should replace the item.
     const flat = (mv.magicvariant || []).map(v => Object.assign({}, v.inherits || {}, { name: String(v.name).replace(/\s*\(\*\)$/, ''), requires: v.requires || [], excludes: v.excludes || null, _variant: true }));
@@ -2182,6 +2341,21 @@ async function sktMagicLoad(edition, read){
   })();
   if (!read) _sktMagicCache[edition] = job;
   return job;
+}
+// Items written as a copy of another ("_copy"): the base's fields under the
+// copy's own.
+function _sktItemCopies(list){
+  const by = new Map(list.map(i => [i.name + '|' + i.source, i]));
+  const resolve = (i, depth) => {
+    if (!i._copy || depth > 3) return i;
+    const base = by.get(i._copy.name + '|' + i._copy.source);
+    const out = Object.assign({}, base ? resolve(base, depth + 1) : {}, i);
+    delete out._copy; delete out._mod;
+    // A reprint of the base isn't a reprint of this item.
+    if (!i.reprintedAs) delete out.reprintedAs;
+    return out;
+  };
+  return list.map(i => resolve(i, 0));
 }
 function _sktBonus(v){ const n = parseInt(String(v == null ? '' : v).replace(/\s/g, ''), 10); return isNaN(n) ? 0 : n; }
 function _sktMagicEntry(i, kind){
@@ -2305,7 +2479,7 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
-                     sktSpellsMatching, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
+                     sktSpellsMatching, sktExpandedSpells, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,

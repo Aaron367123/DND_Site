@@ -7266,6 +7266,123 @@
       }
     }
 
+    // -- Round 23: the book audit's fixes -----------------------------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const base = { method: 'manual', base: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } };
+        const mk = (R, ed, extra) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { cls: 'Wizard', level: 1, allBooks: true, abilities: JSON.parse(JSON.stringify(base)) }, extra), R);
+        // Feats with a fixed increase.
+        const actor = mk(R14, '2014', { cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: 'Actor' } } });
+        ok('audit: Actor gives its +1 Charisma', actor.abilities.cha === 11, actor.abilities.cha);
+        const durable = mk(R14, '2014', { cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: 'Durable' } } });
+        ok('audit: Durable gives its +1 Constitution', durable.abilities.con === 11);
+        // 2014 backgrounds: languages and feats.
+        const rune = mk(R14, '2014', { background: 'Rune Carver' });
+        ok('audit: Rune Carver speaks Giant', /Giant/.test(rune.sheet.languages), rune.sheet.languages);
+        ok('audit: Rune Carver grants Rune Shaper', rune.sheet.featureList.some(f => f.name === 'Rune Shaper'));
+        const strix = mk(R14, '2014', { background: 'Lorehold Student' });
+        ok('audit: a Strixhaven student gets Strixhaven Initiate', strix.sheet.featureList.some(f => f.name === 'Strixhaven Initiate'));
+        const rew = mk(R14, '2014', { background: 'Rewarded', bgFeat: 2 });
+        ok('audit: Rewarded grants the one feat chosen', rew.sheet.featureList.some(f => f.name === 'Skilled') && !rew.sheet.featureList.some(f => f.name === 'Lucky'));
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { background: 'Rewarded', allBooks: true }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'background'; cbRender(); await sleep(20);
+        const bf = document.querySelector('#cb-root [data-cb-bgfeat]');
+        ok('audit: the builder asks which of Rewarded\'s feats', !!bf && bf.options.length === 3);
+        bf.value = '1'; bf.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
+        ok('audit: and keeps the pick', CB.build.bgFeat === 1);
+        cbClose();
+        // A dwarf in heavy armour.
+        const dw = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', level: 1, species: 'Dwarf', subspecies: 'Hill', abilities: JSON.parse(JSON.stringify(base)),
+          items: [{ name: 'Chain Mail', base: 'chain mail', qty: 1, equipped: true }], equipment: { materialized: true } }), R14);
+        ok('audit: a dwarf in chain mail without the Strength keeps 25 ft', dw.spd === 25, dw.spd + ' ac ' + dw.ac);
+        const hu = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', level: 1, species: 'Human', abilities: JSON.parse(JSON.stringify(base)),
+          items: [{ name: 'Chain Mail', base: 'chain mail', qty: 1, equipped: true }], equipment: { materialized: true } }), R14);
+        ok('audit: a human in the same armour is slowed to 20 ft', hu.spd === 20, hu.spd);
+        // Subrace to choose, unless there's a plain option.
+        ok('audit: a dwarf asks for a subrace', sktBuildTodo(Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', species: 'Dwarf' }), R14).some(t => t.what === 'a subrace'));
+        ok('audit: a human doesn\'t', !sktBuildTodo(Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', species: 'Human' }), R14).some(t => t.what === 'a subrace'));
+        // 2024 lineages and legacies carry their numbers.
+        const elf = lin => mk(R24, '2024', { species: 'Elf', speciesChoice: { lineage: lin } });
+        ok('audit: a drow elf sees 120 ft in the dark', /Darkvision 120/.test(elf('Drow').sheet.senses), elf('Drow').sheet.senses);
+        ok('audit: a wood elf moves 35 ft', elf('Wood Elf').spd === 35, elf('Wood Elf').spd);
+        const tf = mk(R24, '2024', { species: 'Tiefling', speciesChoice: { lineage: 'Infernal' } });
+        ok('audit: an infernal tiefling resists fire', (tf.resistances || []).includes('fire'), JSON.stringify(tf.resistances));
+        // Goliath's giant ancestry, chosen like a subrace.
+        const gol = sktRulesSpecies(R24, 'Goliath');
+        ok('audit: Goliath offers its six giant ancestries', gol.subraces.filter(s => s.version).length === 6, gol.subraces.map(s => s.name).join());
+        ok('audit: and asks for one', sktBuildTodo(Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', species: 'Goliath' }), R24).some(t => t.what === 'a Goliath option'));
+        const cloud = mk(R24, '2024', { species: 'Goliath', subspecies: 'Cloud Giant Ancestry' });
+        const gf = cloud.sheet.featureList.map(f => f.name);
+        ok('audit: the chosen ancestry replaces the generic trait', gf.includes('Giant Ancestry (Cloud)') && !gf.includes('Giant Ancestry'), gf.join());
+        const clD = mk(R14, '2014', { species: 'Custom Lineage', subspecies: 'Darkvision' }), clS = mk(R14, '2014', { species: 'Custom Lineage', subspecies: 'Skill Proficiency' });
+        ok('audit: Custom Lineage: darkvision or a skill, not both', /Darkvision 60/.test(clD.sheet.senses) && !/Darkvision/.test(clS.sheet.senses || ''), clD.sheet.senses + ' / ' + clS.sheet.senses);
+        // Expanded spell lists, and 2014 subclasses for 2024 classes.
+        const opts = (R, ed, cls, sub, L, lv) => sktSpellOptions(R, Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L }), lv).map(x => x.name);
+        ok('audit: a fiend warlock can learn Burning Hands', opts(R14, '2014', 'Warlock', 'Fiend', 1, 1).includes('Burning Hands') && !opts(R14, '2014', 'Warlock', 'Archfey', 1, 1).includes('Burning Hands'));
+        ok('audit: a 2024 hexblade gets the hexblade list', opts(R24, '2024', 'Warlock', 'Hexblade', 3, 1).includes('Shield'));
+        ok('audit: chronurgy wizards get the dunamancy spells', opts(R14, '2014', 'Wizard', 'Chronurgy', 2, 1).includes('Gift of Alacrity') && !opts(R14, '2014', 'Wizard', 'Evoker', 2, 1).includes('Gift of Alacrity'));
+        const forge = mk(R24, '2024', { cls: 'Cleric', subclass: 'Forge', level: 3 });
+        ok('audit: a 2024 forge cleric has the domain spells', (forge.sheet.alwaysPrepared || []).includes('Searing Smite'), JSON.stringify(forge.sheet.alwaysPrepared));
+        ok('audit: the 2024 Knowledge Domain is Heroes of Faerûn\'s', sktRulesSubclass(sktRulesClass(R24, 'Cleric'), 'Knowledge').source === 'FRHoF');
+        // Items printed as copies, and the adventures' unrated ones.
+        const m14 = await sktMagicLoad('2014'), m24 = await sktMagicLoad('2024'), g14 = await sktGearLoad('2014');
+        ok('audit: the Wildemount vestiges’ exalted states can be added', m14.some(i => i.name === 'Blade of Broken Mirrors (Exalted)') && m14.some(i => i.name === "Danoth's Visor (Awakened)"));
+        ok('audit: unrated magic items too (the Silver Sword)', m14.some(i => i.name === 'Silver Sword'));
+        ok('audit: a copy of a reprinted item still loads in 2024', m24.some(i => i.name === "Jakarion's Staff of Frost"));
+        ok('audit: and unrated curios are gear', g14.some(i => i.name === 'Iron Ball'));
+        // Languages from the other books; secret ones stay with their features.
+        const lc = sktLanguageOptions(R24, sktBlankBuild('2024')), la = sktLanguageOptions(R24, Object.assign(sktBlankBuild('2024'), { allBooks: true }));
+        ok('audit: other books’ languages with other books on (Zemnian, Leonin)', !lc.includes('Zemnian') && la.includes('Zemnian') && la.includes('Leonin'));
+        ok('audit: Druidic and Thieves’ Cant aren’t free picks', !la.includes('Druidic') && !la.includes("Thieves' Cant"));
+        // Prerequisites the data writes as a feature, a campaign or one-of-a-kind.
+        const fb = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', level: 4, species: 'Human', asi: { 4: { type: 'feat', feat: 'Mark of Detection' } } });
+        const frec = sktComputeCharacter(fb, R24), q = (b, r, f) => sktFeatPrereq(R24, b, sktRulesFeat(R24, f), r);
+        ok('audit: a second dragonmark is refused', !q(fb, frec, 'Aberrant Dragonmark').ok && /Eberron campaign/.test(q(fb, frec, 'Aberrant Dragonmark').text));
+        const wb = Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 4, species: 'Human' }), wrec = sktComputeCharacter(wb, R24);
+        ok('audit: fighting-style feats need Fighting Style', q(fb, frec, 'Archery').ok && !q(wb, wrec, 'Archery').ok);
+        // Draconic ancestry / damage resistance.
+        const db14 = mk(R14, '2014', { species: 'Dragonborn', speciesChoice: { resist: 'cold' } }), db24 = mk(R24, '2024', { species: 'Dragonborn', speciesChoice: { ancestry: 'Red' } });
+        ok('audit: a 2014 dragonborn resists the damage chosen', (db14.resistances || []).includes('cold'), JSON.stringify(db14.resistances));
+        ok('audit: a red 2024 dragonborn resists fire and breathes it', (db24.resistances || []).includes('fire') && db24.sheet.notes.some(n => /Breath Weapon: fire damage \(Red/.test(n)));
+        ok('audit: a dragonborn is asked for its ancestry', sktBuildTodo(Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', species: 'Dragonborn' }), R24).some(t => t.what === 'a draconic ancestry'));
+        ok('audit: a tiefling\'s legacy settles its resistance', !sktSpeciesResistChoice(sktRulesSpecies(R24, 'Tiefling'), sktSpeciesSub(sktRulesSpecies(R24, 'Tiefling'), { speciesChoice: { lineage: 'Infernal' } })));
+        // Divine Soul: cleric spells, by sorcerer level.
+        ok('audit: a divine soul can learn Cure Wounds', opts(R14, '2014', 'Sorcerer', 'Divine Soul', 1, 1).includes('Cure Wounds'));
+        ok('audit: and level-2 cleric spells from sorcerer 3', !opts(R14, '2014', 'Sorcerer', 'Divine Soul', 1, 2).includes('Prayer of Healing') && opts(R14, '2014', 'Sorcerer', 'Divine Soul', 3, 2).includes('Prayer of Healing'));
+        // Kobold legacies: Craftiness has no spell, Draconic Sorcery has.
+        const kob = sktRulesSpecies(R14, 'Kobold');
+        ok('audit: a kobold\'s legacy decides its spell', !sktSpeciesSpellGrant(R14, Object.assign(sktBlankBuild('2014'), { species: 'Kobold', subspecies: 'Craftiness' })) && !!sktSpeciesSpellGrant(R14, Object.assign(sktBlankBuild('2014'), { species: 'Kobold', subspecies: 'Draconic Sorcery' })), kob.subraces.map(s => s.name).join());
+        // A feat taken at 1st level keeps its fixed increase.
+        const vh = mk(R14, '2014', { species: 'Human', subspecies: 'Variant', originFeat: 'Actor' });
+        ok('audit: a variant human\'s Actor still gives +1 Charisma', vh.abilities.cha === 11, vh.abilities.cha);
+        // The builder: the 2024 Knowledge card, Goliath's traits, Custom Lineage's skill.
+        await openCharBuilder({ edition: '2024' }); await sleep(300);
+        Object.assign(CB.build, { cls: 'Cleric', level: 3, allBooks: true }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'class'; cbRender(); await sleep(20);
+        const kc = document.querySelector('#cb-root [data-cb-sub="Knowledge"]');
+        ok('audit: the 2024 Knowledge card is Heroes of Faerûn\'s', !!kc && /FRHoF/.test(kc.textContent), kc && kc.textContent);
+        Object.assign(CB.build, { species: 'Goliath', subspecies: 'Cloud Giant Ancestry' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'species'; cbRender(); await sleep(20);
+        const traits = [...document.querySelectorAll('#cb-root .cb-feat b')].map(x => x.textContent);
+        ok('audit: the Goliath step shows the chosen ancestry, not the generic trait', traits.includes('Giant Ancestry (Cloud)') && !traits.includes('Giant Ancestry'), traits.join());
+        cbClose();
+        await openCharBuilder({ edition: '2014' }); await sleep(300);
+        Object.assign(CB.build, { species: 'Custom Lineage', subspecies: 'Darkvision', allBooks: true }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'species'; cbRender(); await sleep(20);
+        const noSkill = !document.querySelector('#cb-root [data-cb-spskill]');
+        CB.build.subspecies = 'Skill Proficiency'; CB.rec = sktComputeCharacter(CB.build, CB.R); cbRender(); await sleep(20);
+        ok('audit: Custom Lineage asks for a skill only with that option', noSkill && !!document.querySelector('#cb-root [data-cb-spskill]'));
+        cbClose();
+      } catch(e){ ok('round 23 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
