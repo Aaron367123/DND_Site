@@ -602,6 +602,10 @@ function cbQuickBuild(){
       b.languages = (b.languages || []).concat(sktLanguageOptions(R, b).filter(n => !known.includes(n))).slice(0, lc);
     }
     sktToolChoices(b, R).forEach(c => { b.toolPicks = b.toolPicks || {}; if ((b.toolPicks[c.key] || []).length < c.count) b.toolPicks[c.key] = c.options.slice(0, c.count); });
+    { const ms = sktMagicalSecrets(b, R); if (ms && ms.picked.length < ms.count){ const known = new Set([].concat(b.spells || [], b.cantrips || [])); const lv = n => (sktRulesSpell(R, n) || {}).level || 0;
+      // Another class's spells, the highest level first: what the feature is for.
+      const other = ms.options.filter(n => !known.has(n) && !ms.picked.includes(n) && !sktSpellOnList(sktRulesSpell(R, n), 'Bard', b)).sort((x, y) => lv(y) - lv(x) || x.localeCompare(y));
+      b.secrets = ms.picked.concat(other).slice(0, ms.count); } }
     sktArcanumLevels(b, R).forEach(lv => { if (!(b.arcanum || {})[lv]){ const o = sktArcanumOptions(b, R, lv)[0]; if (o){ b.arcanum = Object.assign({}, b.arcanum); b.arcanum[lv] = o; } } });
     sktProfChoices(b, R).forEach(c => {
       if (c.picked.length >= c.count) return;
@@ -981,6 +985,13 @@ function cbSpellInfoHtml(name){
   return '<div class="cb-spinfo"><b>' + cbEsc(s.name) + '</b> <span class="cb-dim">' + cbEsc(lvl + (s.concentration ? ' · concentration' : '') + (s.ritual ? ' · ritual' : '')) + '</span>'
     + '<button class="cb-x" data-cb-spinfo="" aria-label="Close">✕</button>' + cbFeatureText(sktRulesText(s.entries), true) + '</div>';
 }
+// A 2014 bard's Magical Secrets: spells from any class.
+function cbSecretsHtml(){
+  const ms = sktMagicalSecrets(CB.build, CB.R);
+  if (!ms) return '';
+  return '<h4>Magical Secrets</h4><div class="cb-dim">Spells from any class, cantrips included; they count as bard spells.</div>'
+    + cbCounter(ms.picked.length, ms.count, 'chosen') + cbSpellChecks(ms.options, ms.picked, ms.count, 'cb-secret');
+}
 // A warlock's Mystic Arcanum: one spell of each level it has reached.
 function cbArcanumHtml(){
   const b = CB.build, R = CB.R, lvls = sktArcanumLevels(b, R);
@@ -1041,7 +1052,7 @@ CB_RENDER.spells = () => {
     }
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
-  return html + cbArcanumHtml() + cbMultiSpellsHtml() + fromFeats;
+  return html + cbSecretsHtml() + cbArcanumHtml() + cbMultiSpellsHtml() + fromFeats;
 };
 function cbSlotText(sc){
   return Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—';
@@ -1503,6 +1514,10 @@ function cbOnChange(e){
     const [feature, kind, k] = d.cbProfpick.split('||');
     const c = sktProfChoices(CB.build, CB.R).find(x => x.feature === feature && x.kind === kind);
     return cbSet(b => { b.profPicks = Object.assign({}, b.profPicks); const p = b.profPicks[feature] = Object.assign({}, b.profPicks[feature]); p[kind] = (p[kind] || []).slice(); cbToggle(p[kind], k, c ? c.count : 1); });
+  }
+  if (d.cbSecret){
+    const ms = sktMagicalSecrets(CB.build, CB.R);
+    return cbSet(b => { b.secrets = (b.secrets || []).slice(); cbToggle(b.secrets, d.cbSecret, ms ? ms.count : 2); });
   }
   if (d.cbArcanum){
     const i = d.cbArcanum.indexOf('|'), lv = d.cbArcanum.slice(0, i), n = d.cbArcanum.slice(i + 1);

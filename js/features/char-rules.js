@@ -1282,6 +1282,8 @@ function _sktSpellcastingOne(build, R, abilities){
     out.prepared = Math.max(1, lv + mod);
   }
   if (caster.spellsKnownProgression) out.known = caster.spellsKnownProgression[idx] || 0;
+  // A 2014 bard's Magical Secrets are picked on their own (sktMagicalSecrets).
+  if (R.edition === '2014' && cls.key === 'bard') out.known = Math.max(0, out.known - [10, 14, 18].filter(l => L >= l).length * 2);
   // A wizard prepares from a spellbook, not the whole wizard list: six
   // spells at 1st level and two more each level after (both editions).
   if (cls && cls.key === 'wizard' && caster === cls) out.spellbook = 6 + 2 * (L - 1);
@@ -1318,7 +1320,8 @@ function sktSpellOptions(R, build, level){
   // Eldritch Knight and Arcane Trickster cast from the wizard list.
   if (!cls.casterProgression && sub && sub.casterProgression) listName = 'Wizard';
   const extra = sktExpandedSpells(sub, build);
-  return R.spells.filter(s => s.level === level && (sktSpellOnList(s, listName, build) || extra(s)))
+  const lists = [listName].concat(cls.key === 'bard' && R.edition === '2024' && (build.level || 1) >= 10 ? ['Cleric', 'Druid', 'Wizard'] : []);
+  return R.spells.filter(s => s.level === level && (lists.some(l => sktSpellOnList(s, l, build)) || extra(s)))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 // A subclass's expanded spell list: a warlock patron's spells ("s1": burning
@@ -2094,6 +2097,7 @@ function sktComputeCharacter(build, R, prior){
   // Hit dice, and the spells on the sheet.
   const spellNames = [...(build.cantrips || []), ...(build.spells || [])];
   (build.customSpells || []).forEach(s => { if (s && s.name && !spellNames.includes(s.name)) spellNames.push(s.name); });
+  { const ms = sktMagicalSecrets(build, R); if (ms) ms.picked.forEach(n => { if (!spellNames.includes(n)) spellNames.push(n); }); }
   const arcanum = {};
   sktArcanumLevels(build, R).forEach(lv => { const n = (build.arcanum || {})[lv]; if (n){ arcanum[lv] = n; if (!spellNames.includes(n)) spellNames.push(n); } });
   parts.slice(1).forEach(p => [].concat((p.entry || {}).cantrips || [], (p.entry || {}).spells || []).forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); }));
@@ -2248,6 +2252,22 @@ function sktSubclassBlocks(sub, build){
   if (!pick) return (sub && sub.additionalSpells) || [];
   const o = pick.options.find(x => x.value === (build && build.subclassPick));
   return o ? [o.block] : [];
+}
+
+// A bard's Magical Secrets. 2014: two spells from any class at 10th, 14th
+// and 18th level (a cantrip or a level the bard can cast), counted in Spells
+// Known; kept in build.secrets. 2024: from 10th level the bard prepares from
+// the cleric, druid and wizard lists too (see sktSpellOptions).
+function sktMagicalSecrets(build, R){
+  if (R.edition !== '2014') return null;
+  const p = sktClassLevels(build, R).find(x => x.key === 'bard');
+  const n = p ? [10, 14, 18].filter(l => p.level >= l).length * 2 : 0;
+  if (!n) return null;
+  const view = sktClassView(build, R, p);
+  const sc = _sktSpellcastingOne(view, R, sktBuildAbilities(build, R));
+  const max = (sc && sc.maxSpellLevel) || 0;
+  const options = R.spells.filter(s => s.level <= max && (build.allBooks ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
+  return { count: n, options, picked: (build.secrets || []).filter(x => options.includes(x)).slice(0, n) };
 }
 
 // A warlock's Mystic Arcanum: one spell each of 6th to 9th level, arriving at
@@ -2580,6 +2600,7 @@ function sktBuildTodo(build, R){
   }
   sktBuildChoices(build, R).forEach(c => { if (!c.value) todo.push({ step: 'levels', what: c.feature + ' choice' }); });
   sktArcanumLevels(build, R).forEach(lv => { if (!(build.arcanum || {})[lv]) todo.push({ step: 'spells', what: 'a ' + lv + 'th-level Mystic Arcanum spell' }); });
+  { const ms = sktMagicalSecrets(build, R); if (ms && ms.picked.length < ms.count) todo.push({ step: 'spells', what: (ms.count - ms.picked.length) + ' Magical Secrets spell' + (ms.count - ms.picked.length === 1 ? '' : 's') }); }
   const kindName = { skills: ['skill', 'skills'], weapons: ['weapon', 'weapons'], enemies: ['favored enemy', 'favored enemies'], terrains: ['favored terrain', 'favored terrains'] };
   sktProfChoices(build, R).forEach(c => { const n = c.count - c.picked.length; if (n > 0) todo.push({ step: 'skills', what: n + ' ' + kindName[c.kind][n === 1 ? 0 : 1] + ' from ' + c.feature }); });
   sktOptionalChoices(build, R).forEach(o => {
@@ -2763,7 +2784,7 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
-                     sktSpellsMatching, sktExpandedSpells, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
+                     sktSpellsMatching, sktExpandedSpells, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,

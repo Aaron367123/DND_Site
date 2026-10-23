@@ -7734,6 +7734,37 @@
       }
     }
 
+    // -- Round 34: a bard's Magical Secrets -------------------------------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const bd = L => Object.assign(sktBlankBuild('2014'), { cls: 'Bard', level: L });
+        const known = L => sktBuildSpellcasting(bd(L), R14, sktBuildAbilities(bd(L), R14)).known;
+        ok('secrets: a 10th-level bard picks two Magical Secrets beside 12 bard spells (the table\'s 14)', known(10) === 12 && sktMagicalSecrets(bd(10), R14).count === 2 && !sktMagicalSecrets(bd(9), R14));
+        ok('secrets: six by 18th level', sktMagicalSecrets(bd(18), R14).count === 6 && known(18) === 16);
+        ok('secrets: from any class (Fireball)', sktMagicalSecrets(bd(10), R14).options.includes('Fireball'));
+        ok('secrets: asked for', sktBuildTodo(bd(10), R14).some(t => t.what === '2 Magical Secrets spells'));
+        ok('secrets: and on the sheet once chosen', sktComputeCharacter(Object.assign(bd(10), { secrets: ['Fireball', 'Counterspell'] }), R14).sheet.spells.includes('Fireball'));
+        const o = (L, lv) => sktSpellOptions(R24, Object.assign(sktBlankBuild('2024'), { cls: 'Bard', level: L }), lv).map(s => s.name);
+        ok('secrets: a 2024 bard prepares from the cleric, druid and wizard lists from 10th level', o(10, 3).includes('Fireball') && !o(9, 3).includes('Fireball'));
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Bard', level: 10 }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'spells'; cbRender(); await sleep(20);
+        const box = document.querySelector('#cb-root [data-cb-secret="Fireball"]');
+        ok('secrets: the Spells step offers them', !!box);
+        if (box){ box.click(); await sleep(30); }
+        ok('secrets: and keeps the pick', (CB.build.secrets || []).includes('Fireball'));
+        CB.build.secrets = []; cbQuickBuild();
+        ok('secrets: Quick Build takes another class\'s spells', (CB.build.secrets || []).length === 2 && CB.build.secrets.every(n => !sktSpellOnList(sktRulesSpell(CB.R, n), 'Bard', CB.build)));
+        cbClose();
+      } catch(e){ ok('round 34 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
