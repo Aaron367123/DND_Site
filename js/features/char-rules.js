@@ -663,6 +663,18 @@ const SKT_RANGER_PICKS = {
 };
 function sktProfChoices(build, R){
   const out = [];
+  // The Simic Hybrid's animal enhancements: one from the trait's first list
+  // at 1st level, a second at 5th from either list.
+  { const sp = sktRulesSpecies(R, build.species), tr = sp && (sp.entries || []).find(e => e && e.name === 'Animal Enhancement');
+    if (tr){
+      const lists = [];
+      (function walk(e){ if (Array.isArray(e)) return e.forEach(walk); if (e && typeof e === 'object'){ if (e.type === 'list') lists.push((e.items || []).map(i => i && i.name).filter(Boolean)); else Object.values(e).forEach(walk); } })(tr.entries);
+      const L = (build._full || build).level || 1, count = L >= 5 ? 2 : 1;
+      const options = L >= 5 ? [].concat(...lists) : (lists[0] || []);
+      const picked = (((build.profPicks || {})['Animal Enhancement'] || {}).enhancements || []).filter(x => options.includes(x)).slice(0, count);
+      if (options.length) out.push({ feature: 'Animal Enhancement', kind: 'enhancements', count, options, picked });
+    }
+  }
   if (R.edition === '2014') sktBuildFeatures(build, R).filter(f => f.from === 'class' && SKT_RANGER_PICKS[f.name] && f.cls === 'ranger').forEach(f => {
     const spec = SKT_RANGER_PICKS[f.name], part = sktClassLevels(build, R).find(p => p.key === 'ranger');
     const count = 1 + spec.more.filter(l => part && part.level >= l).length;
@@ -1857,7 +1869,7 @@ function sktComputeCharacter(build, R, prior){
 
   const ctx = {
     build, R, edition: R.edition, cls, sub, level: L, pb, abilities,
-    mod: {}, acOptions: [], armoredAcBonus: 0, mediumDexCap: 2,
+    mod: {}, acOptions: [], armoredAcBonus: 0, acUnlessHeavy: 0, mediumDexCap: 2,
     hpPerLevel: 0, speedBonus: 0, speedBonusUnlessHeavy: 0, speedBonusUnarmored: 0,
     initBonus: 0, saveBonusAll: _sktItemSum(build, 'bonusSavingThrow'), passiveBonus: { perception: 0, investigation: 0, insight: 0 },
     saveProf: new Set((cls && cls.saves) || []), skillProf: new Set(), expertise: new Set(build.expertise || []),
@@ -2054,7 +2066,8 @@ function sktComputeCharacter(build, R, prior){
     candidates.push({ label: 'Unarmored', value: 10 + ctx.mod.dex, shieldOk: true });
     ctx.acOptions.forEach(o => { if (!o.noArmor || !armor) candidates.push(o); });
   }
-  const best = candidates.map(c => ({ ...c, total: c.value + (shield && c.shieldOk !== false ? (+shield.ac || 2) + (shield._ac || 0) : 0) }))
+  const notHeavy = !(armor && String(armor.type || '').split('|')[0] === 'HA');
+  const best = candidates.map(c => ({ ...c, total: c.value + (shield && c.shieldOk !== false ? (+shield.ac || 2) + (shield._ac || 0) : 0) + (notHeavy ? ctx.acUnlessHeavy : 0) }))
     .sort((a, b) => b.total - a.total)[0];
   // A Ring or Cloak of Protection adds to whatever is worn; Bracers of
   // Defense only without armour or a shield.
@@ -2070,6 +2083,7 @@ function sktComputeCharacter(build, R, prior){
       if (dexPart) acParts.push('DEX ' + dexPart);
       if (ctx.armoredAcBonus) acParts.push('Defense ' + ctx.armoredAcBonus);
     } else acParts.push(best.label + ' ' + best.value);
+    if (ctx.acUnlessHeavy && notHeavy) acParts.push('Carapace ' + ctx.acUnlessHeavy);
     if (shield && best.shieldOk !== false) acParts.push((shield._name || 'Shield') + ' ' + ((+shield.ac || 2) + (shield._ac || 0)));
     acItems.forEach(m => acParts.push(m.name + ' ' + m.bonusAc));
   }
@@ -2644,7 +2658,7 @@ function sktBuildTodo(build, R){
   sktArcanumLevels(build, R).forEach(lv => { if (!(build.arcanum || {})[lv]) todo.push({ step: 'spells', what: 'a ' + lv + 'th-level Mystic Arcanum spell' }); });
   sktFeatureSpellPicks(build, R).forEach(x => { const n = x.count - x.picked.length; if (n > 0) todo.push({ step: 'spells', what: n + ' ' + x.level + (x.level === 1 ? 'st' : x.level === 2 ? 'nd' : 'rd') + '-level spell' + (n === 1 ? '' : 's') + ' for ' + x.feature }); });
   { const ms = sktMagicalSecrets(build, R); if (ms && ms.picked.length < ms.count) todo.push({ step: 'spells', what: (ms.count - ms.picked.length) + ' Magical Secrets spell' + (ms.count - ms.picked.length === 1 ? '' : 's') }); }
-  const kindName = { skills: ['skill', 'skills'], weapons: ['weapon', 'weapons'], enemies: ['favored enemy', 'favored enemies'], terrains: ['favored terrain', 'favored terrains'] };
+  const kindName = { skills: ['skill', 'skills'], weapons: ['weapon', 'weapons'], enemies: ['favored enemy', 'favored enemies'], terrains: ['favored terrain', 'favored terrains'], enhancements: ['animal enhancement', 'animal enhancements'] };
   sktProfChoices(build, R).forEach(c => { const n = c.count - c.picked.length; if (n > 0) todo.push({ step: 'skills', what: n + ' ' + kindName[c.kind][n === 1 ? 0 : 1] + ' from ' + c.feature }); });
   sktOptionalChoices(build, R).forEach(o => {
     const have = ((build.optional || {})[o.name] || []).length;

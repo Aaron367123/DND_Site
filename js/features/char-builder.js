@@ -758,7 +758,7 @@ CB_RENDER.skills = () => {
     // Skills the character already has from elsewhere can't be picked again.
     const locked = {};
     if (c.kind === 'skills') c.options.forEach(k => { if ((rec.sheet.skillProf || {})[k] && !c.picked.includes(k)) locked[c.feature + '||skills||' + k] = 'already'; });
-    html += '<h4>' + ({ skills: 'Skills', weapons: 'Weapons', enemies: 'Favored enemies', terrains: 'Favored terrains' }[c.kind]) + ' — ' + cbEsc(c.feature) + '</h4>' + cbCounter(c.picked.length, c.count, 'chosen')
+    html += '<h4>' + ({ skills: 'Skills', weapons: 'Weapons', enemies: 'Favored enemies', terrains: 'Favored terrains', enhancements: 'Animal enhancements' }[c.kind]) + ' — ' + cbEsc(c.feature) + '</h4>' + cbCounter(c.picked.length, c.count, 'chosen')
       + cbChecks(c.options.map(k => ({ value: c.feature + '||' + c.kind + '||' + k, label: label(k) })), c.picked.map(k => c.feature + '||' + c.kind + '||' + k), c.count, 'cb-profpick', locked);
   });
   // Tools the class, background or species leaves to the player.

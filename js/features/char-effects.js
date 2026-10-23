@@ -123,6 +123,20 @@
     apply(ctx, v){ ctx.resist.add(v.toLowerCase()); note(ctx, 'Aura of Elemental Shielding (' + v + '): you and allies in your aura resist ' + v.toLowerCase() + ' damage.'); },
   });
 
+  // ── The Simic Hybrid's animal enhancements ─────────────────────────────
+  def('species:Animal Enhancement', ctx => {
+    const p = ((((ctx.build._full || ctx.build).profPicks || {})['Animal Enhancement'] || {}).enhancements || []);
+    const say = { 'Manta Glide': 'Manta Glide: subtract up to 100 feet from a fall, and glide 2 feet sideways per foot you fall.',
+      'Nimble Climber': 'Nimble Climber: a climbing speed equal to your walking speed.',
+      'Underwater Adaptation': 'Underwater Adaptation: you breathe air and water, and have a swimming speed equal to your walking speed.',
+      'Grappling Appendage': 'Grappling Appendage: two claws or tentacles; grapple with one as an action, 1d6 + Strength unarmed strikes.',
+      'Carapace': 'Carapace: +1 AC while you aren’t wearing heavy armor.',
+      'Acid Spit': 'Acid Spit: an action, a creature within 30 feet makes a Dexterity save or takes acid damage.' };
+    p.forEach(n => { if (say[n]) note(ctx, say[n]); });
+    if (p.includes('Carapace')) ctx.acUnlessHeavy += 1;
+    if (p.includes('Acid Spit')) pool(ctx, 'Acid Spit', abm(ctx, 'con'), 'long');
+  });
+
   // ── Psionic Energy (Psi Warrior, Soulknife) ────────────────────────────
   def('2014:subclass:Psionic Power', ctx => {
     const L = ctx.level, die = L >= 17 ? 'd12' : L >= 11 ? 'd10' : L >= 5 ? 'd8' : 'd6';

@@ -7971,6 +7971,20 @@
       }
     }
 
+    // -- Round 44: the Simic Hybrid's animal enhancements -----------------------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const sb = (L, picks) => Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: L, species: 'Simic Hybrid', allBooks: true, profPicks: picks ? { 'Animal Enhancement': { enhancements: picks } } : {} });
+        const c1 = sktProfChoices(sb(1), R14).find(c => c.kind === 'enhancements'), c5 = sktProfChoices(sb(5), R14).find(c => c.kind === 'enhancements');
+        ok('simic: one enhancement from the first list at 1st level, two by 5th', !!c1 && c1.count === 1 && c1.options.length === 3 && !c1.options.includes('Carapace') && c5.count === 2 && c5.options.includes('Carapace'));
+        ok('simic: asked for', sktBuildTodo(sb(1), R14).some(t => t.what === '1 animal enhancement from Animal Enhancement'));
+        const withC = sktComputeCharacter(sb(5, ['Nimble Climber', 'Carapace']), R14), without = sktComputeCharacter(sb(5, ['Nimble Climber', 'Acid Spit']), R14);
+        ok('simic: Carapace adds 1 to AC', withC.ac === without.ac + 1 && /Carapace 1/.test(withC.sheet.acDetail));
+        ok('simic: Acid Spit is counted', (without.resources || []).some(r => r.name === 'Acid Spit'));
+      } catch(e){ ok('round 44 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
