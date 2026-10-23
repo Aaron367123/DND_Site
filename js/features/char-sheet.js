@@ -855,6 +855,15 @@ function csSaveSoon(){ clearTimeout(_csSaveT); _csSaveT = setTimeout(() => save(
 // concentration, and — for a character made in the builder — preparing and
 // unpreparing on the sheet, the way D&D Beyond does it.
 function csSpell(name){
+  // The character's own homebrew spells first.
+  const pc0 = csPc();
+  const own = pc0 && pc0.build && (pc0.build.customSpells || []).find(s => s.name === name);
+  if (own) return { name: own.name, level: +own.level || 0, school: own.school || '', entries: [own.text || ''],
+    time: [{ number: 1, unit: own.time || 'action' }], range: own.range ? { type: 'point', distance: { type: 'feet', amount: +own.range || 0 } } : {},
+    duration: [own.concentration ? { type: 'timed', concentration: true, duration: { type: 'minute', amount: 1 } } : { type: 'instant' }],
+    concentration: !!own.concentration, ritual: !!own.ritual, custom: true,
+    // csSpellDamage reads {@damage …} from the text.
+    entriesDamage: own.damage || '' };
   const R = CS && CS.R;
   const s = R && typeof sktRulesSpell === 'function' ? sktRulesSpell(R, name) : null;
   if (s) return s;
@@ -881,6 +890,7 @@ function csSpellMeta(s){
 // the {@scaledamage} step for each level above its own.
 function csSpellDamage(s, slot){
   if (!s) return '';
+  if (s.custom) return s.entriesDamage || '';
   const m = /\{@damage ([^}|]+)/.exec(JSON.stringify(s.entries || []));
   if (!m) return '';
   let expr = m[1].trim();
@@ -978,8 +988,17 @@ function csSpellsHtml(pc){
     }).join('');
   });
   if (!ro) h += csSlotToolsHtml(pc, lvls, slots);
-  if (!ro && pc.build) h += csManageSpellsHtml(pc);
+  if (!ro && pc.build) h += csManageSpellsHtml(pc) + csCustomSpellHtml(pc);
   return h;
+}
+function csCustomSpellHtml(pc){
+  const own = pc.build.customSpells || [];
+  return '<details class="cs-addcustom"><summary>+ A homebrew spell</summary>'
+    + '<div class="cs-add"><input data-cs-csn placeholder="Name" maxlength="40"><select class="cb-sel" data-cs-csl aria-label="Level">' + CS_ORD.map((l, i) => '<option value="' + i + '">' + l + '</option>').join('') + '</select>'
+    + '<input data-cs-csd placeholder="Damage, e.g. 3d8 fire" maxlength="30"><label class="cb-inline"><input type="checkbox" data-cs-csc> Concentration</label><label class="cb-inline"><input type="checkbox" data-cs-csr> Ritual</label></div>'
+    + '<textarea data-cs-cst rows="2" maxlength="2000" placeholder="What it does"></textarea><button class="btn" data-cs="addspell">Add spell</button>'
+    + (own.length ? '<div class="cb-dim">Yours: ' + own.map((s, i) => csE(s.name) + ' <button class="cs-linkbtn" data-cs-delspell="' + i + '">remove</button>').join(' · ') + '</div>' : '')
+    + '</details>';
 }
 // Features that move spell slots: recovering them on a short rest (a
 // wizard's Arcane Recovery, a land druid's Natural Recovery) and a
@@ -1096,6 +1115,14 @@ function csSpellsClick(e, t, d, pc){
     return true;
   }
   if (d.cs === 'manage'){ CS.manage = !CS.manage; csRender(); return true; }
+  if (d.cs === 'addspell'){
+    const v = s => (document.querySelector('#cs-root [data-cs-' + s + ']') || {});
+    const name = (v('csn').value || '').trim(); if (!name) return true;
+    const sp = { name, level: +v('csl').value || 0, damage: (v('csd').value || '').trim(), concentration: !!v('csc').checked, ritual: !!v('csr').checked, text: (v('cst').value || '').trim() };
+    csRebuild('Added ' + name, b => { b.customSpells = (b.customSpells || []).filter(x => x.name !== name).concat([sp]); });
+    return true;
+  }
+  if (d.csDelspell != null){ csRebuild('Removed a spell', b => { b.customSpells = (b.customSpells || []).filter((x, i) => i !== +d.csDelspell); }); return true; }
   if (d.csSlot){
     const [l, n] = d.csSlot.split(':').map(Number);
     csEdit('Spell slot', p => {

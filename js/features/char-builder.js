@@ -154,7 +154,8 @@ function cbShell(main, side){
     + '<div class="cb-foot">'
     +   '<button class="btn" data-cb="back"' + (at <= 0 ? ' disabled' : '') + '>‹ Back</button>'
     +   '<span class="cb-foot-todo">' + (blocking.length ? blocking.length + ' still to choose' : 'Everything chosen') + '</span>'
-    +   (last ? '<button class="btn primary" data-cb="save">' + (CB.mode === 'create' ? 'Create character' : 'Save changes') + '</button>'
+    +   (last ? (CB.mode === 'create' && typeof openCharSheet === 'function' ? '<button class="btn" data-cb="save">Create</button><button class="btn primary" data-cb="savesheet">Create and open the sheet</button>'
+                  : '<button class="btn primary" data-cb="save">' + (CB.mode === 'create' ? 'Create character' : 'Save changes') + '</button>')
              : '<button class="btn primary" data-cb="next">Next ›</button>')
     + '</div>';
 }
@@ -1015,6 +1016,12 @@ CB_RENDER.equipment = () => {
   const b = CB.build, R = CB.R;
   const cls = sktRulesClass(R, b.cls), bg = sktBuildBackground(R, b);
   let html = '<h3>Equipment</h3>';
+  if ((b.equipment || {}).materialized){
+    html += '<div class="cb-note">This character’s inventory is kept on their sheet now — what they carry, equipped and attuned. The starting kit no longer applies.</div>'
+      + '<div class="cb-dim">Carrying: ' + cbEsc((b.items || []).map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '')).join(', ') || 'nothing') + '</div>';
+    const rec = CB.rec;
+    return html + '<h4>Result</h4><div class="cb-note">AC ' + rec.ac + (rec.sheet.acSource ? ' (' + cbEsc(rec.sheet.acSource) + ')' : '') + '</div>';
+  }
   const itemText = (it) => typeof it === 'string' ? _sktTitleCase(sktRefName(it))
     : it.value ? (it.value / 100) + ' gp'
     : it.item ? (it.quantity > 1 ? it.quantity + ' × ' : '') + (it.displayName || _sktTitleCase(sktRefName(it.item)))
@@ -1202,6 +1209,11 @@ function cbOnClick(e){
   if (d.cb === 'next'){ CB.step = vis[Math.min(vis.length - 1, at + 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'back'){ CB.step = vis[Math.max(0, at - 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'save') return cbSave();
+  if (d.cb === 'savesheet'){
+    const done0 = CB.onDone;
+    CB.onDone = (saved, idx) => { if (typeof done0 === 'function') done0(saved, idx); if (saved && typeof openCharSheet === 'function') openCharSheet(saved.id); };
+    return cbSave();
+  }
   if (d.cb === 'suggest') return cbSet(b => cbSuggestScores(b));
   if (d.cb === 'quick') return cbSet(() => cbQuickBuild());
   if (d.cb === 'upload'){

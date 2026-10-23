@@ -1666,6 +1666,7 @@ function sktComputeCharacter(build, R, prior){
 
   // Hit dice, and the spells on the sheet.
   const spellNames = [...(build.cantrips || []), ...(build.spells || [])];
+  (build.customSpells || []).forEach(s => { if (s && s.name && !spellNames.includes(s.name)) spellNames.push(s.name); });
   parts.slice(1).forEach(p => [].concat((p.entry || {}).cantrips || [], (p.entry || {}).spells || []).forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); }));
   const always = sktBuildAlwaysPrepared(build, R);
   always.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });

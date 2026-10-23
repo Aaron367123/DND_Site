@@ -6265,6 +6265,8 @@
         const FB = sktComputeCharacter(fb, R14);
         ok('feats: the picks land on the sheet', FB.sheet.skillProf.stealth === 1 && FB.sheet.skillProf.arcana === 1 && FB.sheet.proficiencies.tools.includes('lute') && !sktBuildTodo(fb, R14).some(t => /Skilled/.test(t.what)));
         const ling = sktFeatChoices(R14, fb, 'Linguist'), wm = sktFeatChoices(R14, fb, 'Weapon Master');
+        { const ai = sktFeatSpellGrant(R14, Object.assign({}, fb, { allBooks: true }), 'Artificer Initiate');
+          ok('feats: Artificer Initiate has the artificer’s list to choose from', !!ai && ai.choices.length >= 2 && ai.choices.every(c => c.options.length > 0), ai && JSON.stringify(ai.choices.map(c => c.options.length))); }
         ok('feats: Linguist three languages, Weapon Master four martial weapons', ling.choices[0].kind === 'languages' && ling.choices[0].count === 3
            && wm.choices[0].kind === 'weapons' && wm.choices[0].count === 4 && wm.choices[0].options.includes('Longsword') && !wm.choices[0].options.includes('Club'));
         ok('feats: an armour feat gives its armour from the data', sktComputeCharacter(Object.assign({}, fb, { cls: 'Wizard', asi: { 4: { type: 'feat', feat: 'Moderately Armored' } } }), R14).sheet.proficiencies.armor.includes('medium'));
@@ -6760,6 +6762,10 @@
         document.querySelector('#cs-root [data-cs-splv="all"]').click(); await sleep(30);
         const sq = document.querySelector('#cs-root [data-cs-spq]'); sq.value = 'mis'; sq.dispatchEvent(new Event('input', { bubbles: true })); await sleep(350);
         ok('spells: search narrows the list, the box keeps the caret', JSON.stringify(spellNames()) === '["Magic Missile","Misty Step"]' && document.activeElement === document.querySelector('#cs-root [data-cs-spq]'), JSON.stringify(spellNames()));
+        CS.readOnly = true; csRender();
+        const sq2 = document.querySelector('#cs-root [data-cs-spq]'); sq2.value = 'fire'; sq2.dispatchEvent(new Event('input', { bubbles: true })); await sleep(350);
+        ok('spells: someone else’s read-only sheet can be searched too', JSON.stringify(spellNames()) === '["Fire Bolt"]', JSON.stringify(spellNames()));
+        CS.readOnly = false; CS.spQ = ''; csRender();
         // Item text.
         document.querySelector('#cs-root [data-cs-tab="inventory"]').click(); await sleep(1500);
         const qi = me().build.items && me().build.items.length ? 0 : 0;
@@ -6773,7 +6779,7 @@
         document.querySelector('#cs-root [data-cs="coinspend"]').click(); await sleep(40);
         ok('coins: spending 7 gp from 5 gp and 30 sp: silver first, 1 gp left', me().gold === 1 && me().coins.sp === 0, JSON.stringify({ g: me().gold, c: me().coins }));
         document.querySelector('#cs-root [data-cs-txn]').value = '50'; document.querySelector('#cs-root [data-cs="coinspend"]').click(); await sleep(40);
-        ok('coins: not more than there is', me().gold === 1 && me().coins.sp === 0);
+        ok('coins: not more than there is, and it says so', me().gold === 1 && me().coins.sp === 0 && [...document.querySelectorAll('.toast-item')].some(t => /Not that much money/.test(t.textContent)));
         csClose();
       } catch(e){ ok('round 10 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
@@ -7044,6 +7050,72 @@
       ok('quick build: every class at levels 1, 3, 5, 11 and 20 ends with nothing to choose', !left.length, left.slice(0, 6).join(' | '));
       ok('quick build: and a working character', !broken.length, broken.slice(0, 6).join(' | '));
       ok('quick build: silent', errs.length === before, errs.slice(before).join(' | '));
+    }
+
+    // -- Round 18: homebrew spells -------------------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { d: window.sktD, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const c18 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Brewer', cls: 'Wizard', species: 'Human', level: 3 }), R14);
+        c18.id = 'pc_r18'; state.party.push(c18); save();
+        const me = () => state.party.find(p => p.id === 'pc_r18');
+        openCharSheet('pc_r18', { tab: 'spells' }); await sleep(300);
+        const q = s => document.querySelector('#cs-root ' + s);
+        q('[data-cs-csn]').value = 'Grease Fire'; q('[data-cs-csl]').value = '2'; q('[data-cs-csd]').value = '3d8 fire'; q('[data-cs-csc]').checked = true; q('[data-cs-cst]').value = 'A slick of burning oil.';
+        q('[data-cs="addspell"]').click(); await sleep(300);
+        ok('homebrew spell: added to the sheet', me().sheet.spells.includes('Grease Fire') && (me().build.customSpells || []).length === 1);
+        ok('homebrew spell: under its level, with its tags and damage', /2nd level/.test(q('.cs-pane').textContent) && !!q('[data-cs-spdmg="Grease Fire"]') && /3d8 fire/.test(q('[data-cs-spdmg="Grease Fire"]').textContent));
+        window.sktD = () => 4;
+        q('[data-cs-spdmg="Grease Fire"]').click(); await sleep(30);
+        ok('homebrew spell: its damage rolls', CS.log[0].total === 12);
+        q('[data-cs-cast="Grease Fire:2"]').click(); await sleep(40);
+        ok('homebrew spell: cast with a slot, and concentration', me().concentration === 'Grease Fire' && me().sheet.spellSlots[2].expended === 1);
+        csClose();
+      } catch(e){ ok('round 18 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 19: create and open the sheet; equipment once the sheet keeps it --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      const st = { conf: window.showConfirm };
+      try {
+        await openCharBuilder({ edition: '2024' }); await sleep(300);
+        const r = document.getElementById('cb-root');
+        r.querySelector('[data-cb="quick"]').click(); await sleep(60);
+        CB.step = 'review'; cbRender(); await sleep(20);
+        window.showConfirm = () => Promise.resolve(true);
+        r.querySelector('[data-cb="savesheet"]').click(); await sleep(400);
+        ok('builder: Create and open the sheet', !document.getElementById('cb-root') && !!document.getElementById('cs-root') && state.party.some(p => p.id === CS.id));
+        const id = CS.id;
+        csClose();
+        const i = state.party.findIndex(p => p.id === id);
+        state.party[i].build.equipment = Object.assign({}, state.party[i].build.equipment, { materialized: true });
+        state.party[i].build.items = [{ name: 'Rope', qty: 1 }]; save();
+        await openCharBuilder({ idx: i }); await sleep(300);
+        CB.step = 'equipment'; cbRender(); await sleep(20);
+        ok('builder: once the sheet keeps the inventory, the kit choices are gone', /kept on their sheet/.test(document.querySelector('#cb-root .cb-main').textContent) && !document.querySelector('#cb-root [data-cb-eq]'));
+        cbClose();
+      } catch(e){ ok('round 19 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.showConfirm = st.conf;
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (typeof csClose === 'function') csClose();
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
     }
 
     // -- Class features: represented, not just text ------------------------
@@ -8020,12 +8092,43 @@
           csClose();
           const other = sktPlayerParty().find(p => p.id !== paPc().id);
           if (other){
-            openCharSheet(other.id); await sleep(100);
+            paOpenMates.add(other.id); paTab = 'party'; paRender(); await sleep(60);
+            const mb = document.querySelector('[data-pa-sheet="' + other.id + '"]');
+            ok('phone: a party-mate’s card offers the whole sheet', !!mb);
+            if (mb){ mb.click(); await sleep(100); } else openCharSheet(other.id);
+            await sleep(100);
             ok('phone: a party-mate’s sheet opens read-only', CS.readOnly && !document.querySelector('#cs-root [data-cs-hp]') && !document.querySelector('#cs-root [data-cs="long"]'));
             csClose();
           }
         } catch(e){ ok('phone: the sheet checks ran to completion', false, e.message); }
         finally { if (typeof csClose === 'function') csClose(); paTab = tab0; paRender(); }
+      }
+
+      // -- The builder and the sheet fit a phone, every step and tab -----------
+      {
+        const wide = [];
+        try {
+          await openCharBuilder({ edition: '2024' }); await sleep(400);
+          const r = document.getElementById('cb-root');
+          r.querySelector('[data-cb="quick"]') && r.querySelector('[data-cb="quick"]').click(); await sleep(60);
+          for (const st of cbVisibleSteps().map(x => x.id)){
+            CB.step = st; cbRender(); await sleep(30);
+            const main = r.querySelector('.cb-main') || r;
+            if (r.scrollWidth > r.clientWidth + 1 || main.scrollWidth > main.clientWidth + 1) wide.push('builder:' + st + ' ' + main.scrollWidth + '>' + main.clientWidth);
+          }
+          cbClose();
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          openCharSheet(paPc().id); await sleep(300);
+          const root = document.getElementById('cs-root');
+          for (const t of CS_TABS.map(x => x.id)){
+            CS.tab = t; csRender(); await sleep(20);
+            const main = root.querySelector('.cs-main');
+            if (root.scrollWidth > root.clientWidth + 1 || (main && main.scrollWidth > main.clientWidth + 1)) wide.push('sheet:' + t + ' ' + (main ? main.scrollWidth + '>' + main.clientWidth : ''));
+          }
+          csClose();
+        } catch(e){ wide.push('error: ' + e.message); }
+        finally { document.getElementById('cb-root')?.remove(); CB = null; if (typeof csClose === 'function') csClose(); }
+        if (paIsPhone && paIsPhone()) ok('phone: every builder step and sheet tab fits the screen', !wide.length, wide.join(' | '));
       }
 
       // -- "Make a DEX save" on this phone ----------------------------------
