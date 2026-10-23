@@ -521,10 +521,25 @@ CS_TAB_RENDER.features = pc => {
     const fs = list.filter(f => f.from === k); if (!fs.length) return;
     h += '<h4>' + l + '</h4>' + fs.map(f => '<details class="cs-feat"><summary><b>' + csE(f.name) + '</b>'
       + (f.level ? ' <span class="cb-dim">' + (f.cls ? _csTitle(f.cls) + ' ' : 'level ') + f.level + '</span>' : '')
-      + (f.mech ? ' <span class="cb-badge">applied</span>' : '') + '</summary><div class="cs-feat-t">' + csE(f.text || '').replace(/\n/g, '<br>') + '</div></details>').join('');
+      + (f.mech ? ' <span class="cb-badge">applied</span>' : '') + csFeatureUses(pc, f.name) + '</summary><div class="cs-feat-t">' + csE(f.text || '').replace(/\n/g, '<br>') + '</div></details>').join('');
   });
   return h;
 };
+
+// The uses a feature has left, with pips to spend and a Use button for its
+// action, when it has a tracker.
+function csFeatureUses(pc, name){
+  const res = pc.resources || [];
+  const ri = res.findIndex(r => r.name === name || (r.feature && r.feature === name));
+  const act = ((pc.sheet || {}).activations || []).find(a => a.feature === name || a.name === name);
+  if (ri < 0 && !act) return '';
+  const r = res[ri], ro = CS.readOnly;
+  let h = ' <span class="cs-fuses">';
+  if (r && r.type !== 'toggle') h += '<span class="cs-pips">' + Array.from({ length: Math.min(r.max || 0, 20) }, (_, n) => '<button class="cs-pip' + (n < (r.current || 0) ? ' on' : '') + '" data-cs-res="' + ri + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(r.name) + ' ' + (n + 1) + '"></button>').join('') + '</span>'
+    + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + '</span>';
+  if (act && act.resource && !ro) h += '<button class="btn small" data-cs-use="' + csE(act.name) + '"' + ((res.find(x => x.name === act.resource) || {}).current >= (act.amount || 1) ? '' : ' disabled') + '>Use</button>';
+  return h + '</span>';
+}
 
 // Background: who they are. Written into the build too, so the builder shows it.
 CS_TAB_RENDER.background = pc => {
