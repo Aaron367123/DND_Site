@@ -116,6 +116,13 @@
     apply(ctx, v){ ctx.resist.add(v.toLowerCase()); note(ctx, 'Elemental Affinity (' + v + '): resistance to ' + v.toLowerCase() + '; add ' + signed(ctx.mod.cha) + ' to one damage roll of a ' + v.toLowerCase() + ' spell.'); },
   });
 
+  // A Noble Genies paladin's aura resists the damage type chosen.
+  choice(['2024:subclass:paladin:Aura of Elemental Shielding'], {
+    label: 'Aura of Elemental Shielding',
+    options: ['Acid', 'Cold', 'Fire', 'Lightning', 'Thunder'].map(t => ({ value: t, label: t, desc: 'You and allies in your aura have resistance to ' + t.toLowerCase() + ' damage.' })),
+    apply(ctx, v){ ctx.resist.add(v.toLowerCase()); note(ctx, 'Aura of Elemental Shielding (' + v + '): you and allies in your aura resist ' + v.toLowerCase() + ' damage.'); },
+  });
+
   // ── Psionic Energy (Psi Warrior, Soulknife) ────────────────────────────
   def('2014:subclass:Psionic Power', ctx => {
     const L = ctx.level, die = L >= 17 ? 'd12' : L >= 11 ? 'd10' : L >= 5 ? 'd8' : 'd6';

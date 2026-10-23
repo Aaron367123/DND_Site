@@ -7806,6 +7806,17 @@
       } catch(e){ ok('round 36 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 37: the Moon bard's skill; the Noble Genies aura -----------------------
+    {
+      try {
+        const R24 = await sktRulesLoad('2024');
+        const mb = sktProfChoices(Object.assign(sktBlankBuild('2024'), { cls: 'Bard', subclass: 'Moon', level: 3 }), R24).find(c => c.feature === 'Primal Lore');
+        ok('moon bard: Primal Lore asks for one of its six skills', !!mb && mb.count === 1 && mb.options.length === 6 && mb.options.includes('survival'));
+        const g = Object.assign(sktBlankBuild('2024'), { cls: 'Paladin', subclass: 'Noble Genies', level: 7, featureChoices: { 'Aura of Elemental Shielding': 'Fire' } });
+        ok('noble genies: the aura resists the damage type chosen', (sktComputeCharacter(g, R24).resistances || []).includes('fire'));
+      } catch(e){ ok('round 37 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
