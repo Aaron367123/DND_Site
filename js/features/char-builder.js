@@ -192,6 +192,14 @@ function cbSide(rec){
     + '<div><span>Prof</span><b>+' + rec.sheet.profBonus + '</b></div></div>'
     + '<div class="cb-abs">' + abil + '</div>'
     + (rec.sheet.acSource ? '<div class="cb-dim">AC from ' + cbEsc(rec.sheet.acSource) + '</div>' : '')
+    // The rest of what D&D Beyond's summary shows as you build.
+    + '<div class="cb-sidefacts">'
+    +   '<div><span>Passive Perception</span><b>' + rec.sheet.passivePerception + '</b></div>'
+    +   (rec.sheet.spellSaveDc ? '<div><span>Spell save DC</span><b>' + rec.sheet.spellSaveDc + '</b></div><div><span>Spell attack</span><b>' + cbEsc(rec.sheet.spellAtkBonus) + '</b></div>' : '')
+    +   (rec.sheet.size ? '<div><span>Size</span><b>' + cbEsc(rec.sheet.size) + '</b></div>' : '')
+    +   (rec.sheet.senses ? '<div><span>Senses</span><b>' + cbEsc(rec.sheet.senses) + '</b></div>' : '')
+    +   (rec.sheet.languages ? '<div><span>Languages</span><b>' + cbEsc(rec.sheet.languages) + '</b></div>' : '')
+    + '</div>'
     + (todo.length ? '<div class="cb-todo"><b>Still to choose</b>' + todo.map(t => '<div class="cb-todo-i' + (t.soft ? ' soft' : '') + '" data-cb-step="' + t.step + '">' + cbEsc(t.what) + '</div>').join('') + '</div>' : '<div class="cb-done">✓ Ready</div>')
     + '</div>';
 }
@@ -523,7 +531,10 @@ function cbQuickBuild(){
     b.background = R.backgrounds.filter(x => x.core !== false).sort((x, y) => score(y) - score(x))[0].name;
   }
   if (!b.name) b.name = 'New ' + cls.name;
-  const pristine = SKT_ABS.every(k => (b.abilities.base[k] || 10) === 10) || (b.abilities.method === 'array' && !Object.keys(b.abilities.assign || {}).length);
+  // Untouched scores: all 10s, nothing assigned, or the standard array still
+  // in the order a new character starts with (STR 15 … CHA 8).
+  const pristine = SKT_ABS.every(k => (b.abilities.base[k] || 10) === 10) || (b.abilities.method === 'array' && !Object.keys(b.abilities.assign || {}).length)
+    || (b.abilities.method === 'array' && SKT_ABS.every((k, i) => b.abilities.base[k] === SKT_STANDARD_ARRAY[i]));
   if (pristine) cbSuggestScores(b);
   const bg = sktBuildBackground(R, b);
   if (R.edition === '2024' && bg && Array.isArray(bg.ability) && !Object.keys(b.bgAsi || {}).length){

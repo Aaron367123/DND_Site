@@ -5461,6 +5461,7 @@
         ok('builder: it opens on Basics, with nothing chosen', !!root() && CB.step === 'basics' && sktBuildTodo(CB.build, CB.R).length >= 3);
         const nm = q('[data-cb-in="name"]'); nm.value = 'Testa'; nm.dispatchEvent(new Event('input', { bubbles: true }));
         ok('builder: the sheet beside it follows as you type', /Testa/.test(q('.cb-side').textContent));
+        ok('builder: the summary shows passive Perception, size and languages', /Passive Perception/.test(q('.cb-side').textContent) && /Languages/.test(q('.cb-side').textContent));
         click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Fighter"]'); await sleep(30);
         click('[data-cb-step="species"]'); await sleep(30); click('[data-cb-species="Dwarf"]'); await sleep(30);
         click('[data-cb-step="background"]'); await sleep(30); click('[data-cb-bg="Soldier"]'); await sleep(30);
@@ -6611,8 +6612,8 @@
             const todo = sktBuildTodo(CB.build, CB.R);
             ok('quick build ' + ed + ' ' + cls + ' 5: nothing left to choose, spells included', todo.length === 0, JSON.stringify(todo));
             const order = SKT_ABILITY_ORDER[cls.toLowerCase()];
-            const ab = sktBuildAbilities(CB.build, CB.R);
-            if (cls === 'Wizard') ok('quick build ' + ed + ': the wizard’s best score is INT', order.every(k => ab.int >= ab[k]), JSON.stringify(ab));
+            ok('quick build ' + ed + ' ' + cls + ': the 15 goes in ' + order[0].toUpperCase() + ', the 14 in ' + order[1].toUpperCase(),
+               CB.build.abilities.base[order[0]] === 15 && CB.build.abilities.base[order[1]] === 14, JSON.stringify(CB.build.abilities.base));
             cbClose();
           }
         }

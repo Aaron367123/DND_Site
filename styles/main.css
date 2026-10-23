@@ -5373,3 +5373,7 @@ button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
 .cs-itemt { padding:4px 8px 8px 34px; }
 .cs-cointx input[type=number] { flex:0 0 100px; }
 .cs-fuses { display:inline-flex; align-items:center; gap:6px; margin-left:8px; vertical-align:middle; }
+#cb-root .cb-sidefacts { margin:8px 0; font-size:var(--fs-sm); }
+#cb-root .cb-sidefacts > div { display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px solid var(--border); }
+#cb-root .cb-sidefacts span { color:var(--text-muted); }
+#cb-root .cb-sidefacts b { text-align:right; font-weight:500; }
