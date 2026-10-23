@@ -5387,7 +5387,9 @@
     {
       try {
         const R24 = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
-        ok('builder: both editions load twelve classes', R24.classes.length === 12 && R14.classes.length === 12);
+        ok('builder: both editions load thirteen classes, the Artificer from its own book', R24.classes.length === 13 && R14.classes.length === 13
+          && sktRulesClass(R14, 'Artificer').source === 'TCE' && sktRulesClass(R24, 'Artificer').source === 'EFA');
+        ok('builder: a book class’s features keep their rules text', ['2014', '2024'].every(ed => { const c = sktRulesClass(ed === '2014' ? R14 : R24, 'Artificer'); const f = c && c.features.find(x => x.name === 'Flash of Genius'); return f && /Intelligence modifier/.test(sktRulesText(f.entries)); }));
         // 2024 Human Fighter 1, Soldier, chain mail, Defense.
         const f = Object.assign(sktBlankBuild('2024'), { name: 'T1', species: 'Human', cls: 'Fighter', level: 1, background: 'Soldier',
           abilities: { method: 'manual', base: { str: 15, dex: 14, con: 13, int: 8, wis: 12, cha: 10 } },
@@ -6601,7 +6603,7 @@
       const st = { conf: window.showConfirm, find: window._findCombatantForPartyMember };
       try {
         for (const ed of ['2014', '2024']){
-          for (const cls of ['Wizard', 'Cleric', 'Rogue', 'Paladin']){
+          for (const cls of ['Wizard', 'Cleric', 'Rogue', 'Paladin', 'Artificer']){
             await openCharBuilder({ edition: ed }); await sleep(ed === '2014' ? 700 : 300);
             const r = document.getElementById('cb-root');
             r.querySelector('[data-cb-step="class"]').click(); await sleep(20);
@@ -7142,6 +7144,60 @@
         _remoteUpdate = true;
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
         loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 21: the Artificer -------------------------------------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        const r = document.getElementById('cb-root');
+        r.querySelector('[data-cb-step="class"]').click(); await sleep(20);
+        const card = r.querySelector('[data-cb-cls="Artificer"]');
+        ok('artificer: offered on the Class step, with its book', !!card && /Tasha/.test(card.textContent));
+        card.click(); await sleep(20);
+        r.querySelector('[data-cb-step="basics"]').click(); await sleep(20);
+        const lv = r.querySelector('[data-cb-in="level"]'); lv.value = '2'; lv.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20);
+        CB.step = 'levels'; cbRender(); await sleep(20);
+        const main = r.querySelector('.cb-main');
+        const names = R14.optional.filter(o => (o.featureType || []).includes('AI')).map(o => o.name);
+        const inf = [...main.querySelectorAll('label')].filter(l => l.querySelector('input[type=checkbox]') && names.some(n => l.textContent.startsWith(n)));
+        ok('artificer: infusions to choose without ticking other books', /Infusions/.test(main.textContent) && /Enhanced Defense/.test(main.textContent) && inf.length >= 10, inf.length);
+        ok('artificer: an infusion shows what it goes on and its level', /Boots of the Winding Path \(level 6\+ · A pair of boots/.test(main.textContent));
+        cbClose();
+        // An infusion's level is the artificer's, not the character's.
+        await openCharBuilder({ edition: '2014' }); await sleep(300);
+        Object.assign(CB.build, { cls: 'Fighter', level: 16, multi: [{ cls: 'Artificer', level: 2 }] });
+        CB.build.abilities.base.int = 14; CB.build.abilities.base.str = 14;
+        CB.rec = sktComputeCharacter(CB.build, CB.R); cbQuickBuild();
+        const picked = (CB.build.optional || {}).Infusions || [];
+        ok('artificer multiclass: Quick Build picks only infusions a level-2 artificer can take', picked.length === 4 && !picked.some(n => /Arcane Propulsion|Winding Path|Helm of Awareness|Radiant Weapon/.test(n)), JSON.stringify(picked));
+        cbClose();
+
+        const art = (R, ed, L, extra) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { name: 'Art', cls: 'Artificer', species: 'Human', level: L,
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } } }, extra || {}), R);
+        const a7 = art(R14, '2014', 7);
+        const slots = a7.sheet.spellSlots || {};
+        ok('artificer 2014 7: half-caster slots rounded up (4 1st, 3 2nd), INT casting', slots[1] && slots[1].total === 4 && slots[2] && slots[2].total === 3 && !slots[3] && a7.sheet.spellAbility === 'int', JSON.stringify(slots));
+        const fg = a7.resources.find(x => x.name === 'Flash of Genius');
+        ok('artificer: Flash of Genius uses = INT modifier, on a long rest', !!fg && fg.max === 3 && fg.recharge === 'long');
+        ok('artificer: the saves and armour the book gives', (a7.sheet.saveProf || []).join() === 'con,int'
+           && ['light', 'medium', 'shield'].every(x => a7.sheet.proficiencies.armor.includes(x)), JSON.stringify(a7.sheet.saveProf));
+        const a14 = art(R24, '2024', 14);
+        ok('artificer 2024 14: Advanced Artifice gives Flash of Genius back on a short rest', (a14.resources.find(x => x.name === 'Flash of Genius') || {}).recharge === 'short-one');
+        const al = art(R24, '2024', 5, { subclass: 'Alchemist' });
+        ok('artificer 2024 alchemist 5: three experimental elixirs', (al.resources.find(x => x.name === 'Experimental Elixir') || {}).max === 3);
+        ok('artificer 2024: Tinker\'s Magic uses = INT modifier', (al.resources.find(x => x.name === 'Tinker\'s Magic') || {}).max === 3);
+        const mc = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'MC', cls: 'Wizard', species: 'Human', level: 6,
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 13 } }, multi: [{ cls: 'Artificer', level: 3 }] }), R14);
+        const ms = mc.sheet.spellSlots || {};
+        ok('artificer multiclass: wizard 3 + artificer 3 casts as level 5 (4/3/2)', ms[1] && ms[1].total === 4 && ms[2] && ms[2].total === 3 && ms[3] && ms[3].total === 2, JSON.stringify(ms));
+      } catch(e){ ok('round 21 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
       }
     }
 

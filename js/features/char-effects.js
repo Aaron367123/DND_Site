@@ -27,6 +27,64 @@
   const abm = (ctx, k) => Math.max(1, ctx.mod[k]);   // "your X modifier (minimum of 1)"
   const signed = n => (n >= 0 ? '+' : '') + n;
 
+  // ── Artificer ──────────────────────────────────────────────────────────
+  def('2014:class:artificer:Magical Tinkering', ctx => note(ctx, 'Magical Tinkering: touch a Tiny object to give it light, a recorded message, a sound or a picture; up to ' + abm(ctx, 'int') + ' objects at once.'));
+  def('2024:class:artificer:Tinker\'s Magic', ctx => {
+    pool(ctx, 'Tinker\'s Magic', abm(ctx, 'int'), 'long');
+    act(ctx, { name: 'Tinker\'s Magic', action: 'Magic', resource: 'Tinker\'s Magic', amount: 1, feature: 'Tinker\'s Magic',
+      desc: 'Holding tinker\'s tools, create an item from the list (rope, a torch, a lamp…) within 5 feet; it lasts until a long rest.' });
+  });
+  def('2014:class:artificer:Optional Rule: Firearm Proficiency', ctx => note(ctx, 'Firearm Proficiency: if your DM uses firearms, you are proficient with them.'));
+  def('2024:class:artificer:Replicate Magic Item', ctx => {
+    const plans = col(ctx, 'Plans Known') || 4, items = col(ctx, 'Magic Items') || 2;
+    note(ctx, 'Replicate Magic Item: you know ' + plans + ' magic item plans; at the end of a long rest, make up to ' + items + ' items from them with the right tools. They last until you replace them.');
+  });
+  def('2024:class:artificer:Magic Item Tinker', ctx => note(ctx, 'Magic Item Tinker: as a bonus action, recharge an item you replicated with a spell slot, or make one vanish to gain a spell slot (level 1 for Common, 2 for Uncommon or Rare) once per long rest.'));
+  def('2024:class:artificer:Advanced Artifice', ctx => {
+    note(ctx, 'Advanced Artifice: you can attune to up to five magic items; a short rest restores one use of Flash of Genius.');
+    const r = ctx.resources.find(x => x.name === 'Flash of Genius');
+    if (r) r.recharge = 'short-one';
+  });
+  def('2014:class:artificer:Infuse Item', ctx => {
+    const n = col(ctx, 'Infused Items') || 2;
+    note(ctx, 'Infuse Item: at the end of a long rest, infuse up to ' + n + ' nonmagical items with infusions you know; an infusion lasts until you replace it.');
+  });
+  both(['class:artificer:Flash of Genius'], ctx => {
+    pool(ctx, 'Flash of Genius', abm(ctx, 'int'), 'long');
+    act(ctx, { name: 'Flash of Genius', action: 'Reaction', resource: 'Flash of Genius', amount: 1, feature: 'Flash of Genius',
+      desc: 'When you or a creature within 30 feet ' + (ctx.edition === '2024' ? 'fails' : 'makes') + ' an ability check or save, add ' + signed(abm(ctx, 'int')) + ' to it.' });
+  });
+  both(['class:artificer:Spell-Storing Item'], ctx => {
+    pool(ctx, 'Spell-Storing Item', 2 * abm(ctx, 'int'), 'long');
+    act(ctx, { name: 'Spell-Storing Item', action: 'Action', resource: 'Spell-Storing Item', amount: 1, feature: 'Spell-Storing Item',
+      desc: 'Whoever holds the stored item casts its ' + (ctx.edition === '2024' ? 'level 1–3' : '1st- or 2nd-level') + ' artificer spell, using your spellcasting modifier.' });
+  });
+  both(['class:artificer:Tool Expertise'], ctx => note(ctx, 'Tool Expertise: your proficiency bonus is doubled for any ability check using a tool you\'re proficient with.'));
+  both(['class:artificer:The Right Tool for the Job'], ctx => note(ctx, 'The Right Tool for the Job: with thieves\' tools or artisan\'s tools in hand, spend an hour (or a short rest) to make one set of artisan\'s tools.'));
+  both(['class:artificer:Magic Item Adept'], ctx => note(ctx, 'Magic Item Adept: you can attune to up to four magic items at once' + (ctx.edition === '2014' ? '; crafting a common or uncommon magic item takes a quarter of the time and half the gold.' : '.')));
+  both(['class:artificer:Magic Item Savant'], ctx => note(ctx, 'Magic Item Savant: you can attune to up to five magic items and ignore class, species, spell and level requirements on them.'));
+  both(['class:artificer:Magic Item Master'], ctx => note(ctx, 'Magic Item Master: you can attune to up to six magic items at once.'));
+  def('2014:class:artificer:Soul of Artifice', ctx => note(ctx, 'Soul of Artifice: +1 to all saving throws per magic item you\'re attuned to; when reduced to 0 HP, use your reaction to end an infusion and drop to 1 HP instead.'));
+  def('2024:class:artificer:Soul of Artifice', ctx => note(ctx, 'Soul of Artifice: +1 to saving throws per attuned magic item; when reduced to 0 HP, disintegrate Uncommon or Rare items you replicated to drop to 20 HP per item instead.'));
+  both(['subclass:Experimental Elixir'], ctx => {
+    const L = ctx.level;
+    const n = ctx.edition === '2024' ? (L >= 15 ? 5 : L >= 9 ? 4 : L >= 5 ? 3 : 2) : (L >= 15 ? 3 : L >= 6 ? 2 : 1);
+    pool(ctx, 'Experimental Elixir', n, 'long');
+    act(ctx, { name: 'Experimental Elixir', action: ctx.edition === '2024' ? 'Bonus Action' : 'Action', feature: 'Experimental Elixir',
+      desc: 'Elixirs made at the end of a long rest (' + n + '): healing, swiftness, resilience, boldness, flight or transformation, rolled on the table. More cost a spell slot each.' });
+  });
+  both(['subclass:Eldritch Cannon'], ctx => {
+    pool(ctx, 'Eldritch Cannon', 1, 'long');
+    act(ctx, { name: 'Eldritch Cannon', action: ctx.edition === '2024' ? 'Magic' : 'Action', resource: 'Eldritch Cannon', amount: 1, feature: 'Eldritch Cannon',
+      desc: 'Create a Small or Tiny cannon within 5 feet: flamethrower, force ballista or protector. Make another by spending a spell slot.' });
+  });
+  both(['subclass:Arcane Jolt'], ctx => {
+    pool(ctx, 'Arcane Jolt', abm(ctx, 'int'), 'long');
+    act(ctx, { name: 'Arcane Jolt', action: 'Free', resource: 'Arcane Jolt', amount: 1, feature: 'Arcane Jolt',
+      desc: 'Once per turn when you or your steel defender hit with a magic weapon: an extra ' + (ctx.level >= 15 ? '4d6' : '2d6') + ' force damage, or heal a creature within 30 feet that much.' });
+  });
+  both(['subclass:Steel Defender'], ctx => note(ctx, 'Steel Defender: your companion acts on your turn; it takes the Dodge action unless you use a bonus action to command it. Its stat block uses your proficiency bonus.'));
+
   // ── Barbarian ──────────────────────────────────────────────────────────
   def('2014:class:barbarian:Brutal Critical', ctx => {
     const n = ctx.level >= 17 ? 3 : ctx.level >= 13 ? 2 : 1;

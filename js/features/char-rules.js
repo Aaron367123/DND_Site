@@ -48,6 +48,9 @@ const SKT_SKILL_LABEL = {
 const SKT_CORE_CLASSES = ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk',
                           'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'];
 const SKT_EDITION_SRC = { '2014': 'PHB', '2024': 'XPHB' };
+// Classes printed outside the handbook, as D&D Beyond offers them: the
+// Artificer (Tasha's for 2014, Eberron: Forge of the Artificer for 2024).
+const SKT_BOOK_CLASSES = ['artificer'];
 // Books written for the 2024 rules. Everything else in the data is a 2014
 // book (Xanathar's, Tasha's, Monsters of the Multiverse, the setting books).
 const SKT_2024_ERA = new Set(['XPHB', 'XDMG', 'XMM', 'ABH', 'FRHoF', 'LFL', 'EFA']);
@@ -171,7 +174,8 @@ function _sktEraPicker(edition, src){
 
 async function _sktRulesBuild(edition, read){
   const src = SKT_EDITION_SRC[edition];
-  const classFiles = await Promise.all(SKT_CORE_CLASSES.map(c => read('class/class-' + c + '.json')));
+  const classFiles = await Promise.all(SKT_CORE_CLASSES.map(c => read('class/class-' + c + '.json'))
+    .concat(SKT_BOOK_CLASSES.map(c => read('class/class-' + c + '.json').catch(() => ({})))));
   const [races, backgrounds, feats, optional, base, spellIndex, spellSources, languages, books] = await Promise.all([
     read('races.json'), read('backgrounds.json'), read('feats.json'), read('optionalfeatures.json'),
     read('items-base.json'), read('spells/index.json').catch(() => ({ [src]: 'spells-' + src.toLowerCase() + '.json' })),
@@ -188,9 +192,13 @@ async function _sktRulesBuild(edition, read){
 
   // Classes, their features by level, and their subclasses.
   classFiles.forEach(file => {
-    const cls = (file.class || []).find(c => c.source === src);
+    // The handbook's printing, or for a class it doesn't have, this
+    // edition's printing from the class's own book.
+    const cls = (file.class || []).find(c => c.source === src)
+      || (file.class || []).find(c => (c.edition === 'one') === (edition === '2024'));
     if (!cls) return;
-    const feats = (file.classFeature || []).filter(f => f.classSource === src && f.source === src);
+    const csrc = cls.source;
+    const feats = (file.classFeature || []).filter(f => f.classSource === csrc && f.source === csrc);
     const featureAt = (name, level) => feats.find(f => f.name === name && f.level === level);
     const features = [];
     (cls.classFeatures || []).forEach(ref => {
@@ -200,7 +208,7 @@ async function _sktRulesBuild(edition, read){
       // The 2014 class lists Tasha's optional features alongside the PHB
       // ones ("Martial Versatility|Fighter||4|TCE"). Kept, marked optional,
       // with the feature each replaces; used only when the build turns them on.
-      if (fsrc && fsrc !== src){
+      if (fsrc && fsrc !== csrc){
         if (fsrc !== 'TCE' || edition !== '2014') return;
         const of = (file.classFeature || []).find(x => x.name === name && x.level === level && x.source === 'TCE');
         const first = sktRulesText((of && of.entries || [])[0] || '');
@@ -212,9 +220,9 @@ async function _sktRulesBuild(edition, read){
       features.push({ name, level, entries: f ? f.entries : [],
                       gainSubclass: !!(ref && ref.gainSubclassFeature) });
     });
-    const subclasses = (file.subclass || []).filter(sc => sc.classSource === src).map(sc => ({
+    const subclasses = (file.subclass || []).filter(sc => sc.classSource === csrc).map(sc => ({
       name: sc.name, shortName: sc.shortName, source: sc.source,
-      core: sc.source === src,
+      core: sc.source === csrc,
       additionalSpells: sc.additionalSpells || null,
       spellcastingAbility: sc.spellcastingAbility || null,
       casterProgression: sc.casterProgression || null,
@@ -228,11 +236,11 @@ async function _sktRulesBuild(edition, read){
       // subclass ("Maneuver Options" is Tasha's).
       features: (file.subclassFeature || [])
         .filter(f => f.subclassShortName === sc.shortName && f.subclassSource === sc.source
-                  && (sc.source !== src || f.source === src))
+                  && (sc.source !== csrc || f.source === csrc))
         .map(f => ({ name: f.name, level: f.level, entries: f.entries || [] })),
     }));
     R.classes.push({
-      name: cls.name, key: cls.name.toLowerCase(), source: cls.source,
+      name: cls.name, key: cls.name.toLowerCase(), source: cls.source, core: csrc === src,
       hd: (cls.hd && cls.hd.faces) || 8,
       saves: cls.proficiency || [],
       armor: (cls.startingProficiencies && cls.startingProficiencies.armor) || [],
@@ -313,8 +321,14 @@ async function _sktRulesBuild(edition, read){
                    entries: f.entries || [] });
   });
 
+  // A book class's own options (the Artificer's infusions) come with the
+  // class, so they count as core like the handbook's invocations.
+  const classOwn = new Set();
+  R.classes.filter(c => c.core === false).forEach(c => [c].concat(c.subclasses).forEach(x =>
+    (x.optionalfeatureProgression || []).forEach(p => (p.featureType || []).forEach(t => classOwn.add(c.source + '|' + t)))));
   sp(optional.optionalfeature).forEach(o => {
-    R.optional.push({ name: o.name, source: o.source, core: o.source === src,
+    R.optional.push({ name: o.name, source: o.source,
+                      core: o.source === src || (o.featureType || []).some(t => classOwn.has(o.source + '|' + t)),
                       featureType: o.featureType || [], prerequisite: o.prerequisite || null,
                       entries: o.entries || [] });
   });

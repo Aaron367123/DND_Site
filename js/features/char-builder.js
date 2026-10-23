@@ -265,7 +265,7 @@ CB_RENDER.class = () => {
   const b = CB.build, R = CB.R;
   const cls = sktRulesClass(R, b.cls);
   const cards = R.classes.map(c => ({ value: c.name, label: c.name,
-    sub: 'd' + c.hd + ' · saves ' + c.saves.map(s => s.toUpperCase()).join('/') }));
+    sub: 'd' + c.hd + ' · saves ' + c.saves.map(s => s.toUpperCase()).join('/') + (c.core === false ? ' · ' + ((R.bookNames || {})[c.source] || c.source) : '') }));
   let html = '<h3>Class</h3>' + cbCards(cards, cls && cls.name, 'cb-cls');
   if (cls){
     const lvl1 = cls.features.filter(f => f.level === 1 && !/Proficiencies/.test(f.name)).map(f => f.name).join(', ');
@@ -511,7 +511,15 @@ function cbSuggestScores(b){
 function cbQuickPrereqOk(x, b){
   const ps = x.prerequisite || [];
   if (!ps.length) return true;
-  return ps.some(p => Object.keys(p).every(k => k === 'level' && (b.level || 1) >= (typeof p.level === 'object' ? p.level.level : p.level)));
+  // A level in a named class counts that class's levels ("6th-level
+  // artificer"); an infusion's item is only what it goes on.
+  const lvl = p => {
+    const c = typeof p.level === 'object' && p.level.class;
+    if (!c) return b.level || 1;
+    const part = CB.R ? sktClassLevels(b, CB.R).find(q => q.key === String(c.name).toLowerCase()) : null;
+    return part ? part.level : 0;
+  };
+  return ps.some(p => Object.keys(p).every(k => k === 'item' || (k === 'level' && lvl(p) >= (typeof p.level === 'object' ? p.level.level : p.level))));
 }
 // Quick Build: every choice still open gets a sensible answer — the class's
 // best scores, the skills its abilities favour, the first options where
@@ -857,7 +865,8 @@ CB_RENDER.levels = () => {
 function cbSlug(s){ return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 function cbPrereqNote(x){
   const p = (x.prerequisite || [])[0]; if (!p) return '';
-  if (p.level) return ' (level ' + (p.level.level || p.level) + '+)';
+  if (p.level) return ' (level ' + (p.level.level || p.level) + '+' + (p.item ? ' · ' + p.item[0] : '') + ')';
+  if (p.item) return ' (' + p.item[0] + ')';
   if (p.pact) return ' (' + p.pact + ')';
   if (p.spell) return ' (needs ' + String(p.spell[0]).split('|')[0].replace(/#c$/, '') + ')';
   return '';
