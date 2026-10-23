@@ -7855,6 +7855,31 @@
       }
     }
 
+    // -- Round 40: a wizard's spellbook rituals -----------------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const pc = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Rit', cls: 'Wizard', species: 'Human', level: 3,
+          spellbook: ['Detect Magic', 'Find Familiar', 'Magic Missile', 'Shield'], spells: ['Magic Missile', 'Shield'] }), R14);
+        pc.id = 'pc_r40'; state.party.push(pc); save();
+        openCharSheet('pc_r40', { tab: 'spells' }); await sleep(300);
+        const rit = document.querySelector('#cs-root [data-cs-cast="Detect Magic:ritual"]');
+        ok('rituals: an unprepared ritual in the spellbook can be cast as a ritual', !!rit && !document.querySelector('#cs-root [data-cs-cast="Detect Magic:1"]'));
+        ok('rituals: a spell that isn\'t a ritual stays off the list until prepared', !/Find Familiar/.test(document.querySelector('#cs-root').textContent) || !!document.querySelector('#cs-root [data-cs-cast="Find Familiar:ritual"]'));
+        csClose();
+      } catch(e){ ok('round 40 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

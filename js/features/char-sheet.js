@@ -975,6 +975,10 @@ function csSpellsHtml(pc){
   const daily = new Set([].concat(...(sh.featSpells || []).map(g => g.daily || []), (sh.speciesSpells && sh.speciesSpells.daily) || []));
   const arcLv = {}; Object.keys(sh.arcanum || {}).forEach(lv => { arcLv[sh.arcanum[lv]] = lv; from[sh.arcanum[lv]] = 'Mystic Arcanum'; });
   const all = [...new Set(sh.spells || [])];
+  // A wizard casts the rituals in the spellbook without preparing them: they
+  // are listed with only the ritual to cast.
+  const ritualOnly = new Set();
+  (sh.spellbook || []).forEach(n => { const s = csSpell(n); if (s && s.ritual && !all.includes(n)){ all.push(n); ritualOnly.add(n); from[n] = 'Spellbook · ritual only'; } });
   if (!all.length) h += '<div class="cb-dim">No spells.</div>';
   // D&D Beyond's level pills and search.
   const lvSet = [...new Set(all.map(n => { const s = csSpell(n); return s ? +s.level || 0 : 0; }))].sort((a, b) => a - b);
@@ -989,7 +993,8 @@ function csSpellsHtml(pc){
       const open = CS.open['sp:' + n];
       const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '');
       const avail = l ? lvls.filter(x => x >= l && (slots[x].total - (slots[x].expended || 0)) > 0) : [];
-      const cast = ro ? '' : l === 0 ? '<button class="btn small" data-cs-cast="' + csE(n) + ':0">Cast</button>'
+      const cast = ro ? '' : ritualOnly.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>'
+        : l === 0 ? '<button class="btn small" data-cs-cast="' + csE(n) + ':0">Cast</button>'
         : (avail.length ? (avail.length > 1 ? '<select class="cb-sel cs-castlvl" data-cs-castlvl="' + csE(n) + '">' + avail.map(x => '<option value="' + x + '">' + CS_ORD[x] + '</option>').join('') + '</select>' : '')
           + '<button class="btn small" data-cs-cast="' + csE(n) + ':' + avail[0] + '">Cast</button>' : '<span class="cb-dim">no slots</span>')
           + (daily.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':free" title="Once per long rest without a slot">Free</button>' : '')
