@@ -7880,6 +7880,40 @@
       }
     }
 
+    // -- Round 41: companions in Extras ---------------------------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const pc = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Smith', cls: 'Artificer', subclass: 'Battle Smith', species: 'Human', level: 3,
+          abilities: { method: 'manual', base: { str: 10, dex: 12, con: 14, int: 16, wis: 10, cha: 8 } } }), R14);
+        pc.id = 'pc_r41'; state.party.push(pc); save();
+        const me = () => state.party.find(p => p.id === 'pc_r41');
+        openCharSheet('pc_r41', { tab: 'extras' }); await sleep(300);
+        const btn = document.querySelector('#cs-root [data-cs-comp="Steel Defender"]');
+        ok('companions: a battle smith is offered the Steel Defender', !!btn);
+        if (btn){ btn.click(); await sleep(60); }
+        const sd = (me().extras || []).find(x => x.name === 'Steel Defender');
+        ok('companions: its AC and HP worked out for the character (15, 2 + 3 + 15)', !!sd && sd.ac === 15 && sd.hpMax === 20, JSON.stringify(sd));
+        ok('companions: and isn\'t offered twice', !document.querySelector('#cs-root [data-cs-comp="Steel Defender"]'));
+        csClose();
+        const rg = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Drk', cls: 'Ranger', subclass: 'Drakewarden', species: 'Human', level: 5 }), R14);
+        const m = csCompanionMonster(rg, 'Drake Companion');
+        CS = { R: R14 }; const dst = csCompanionStats(rg, m); CS = null;
+        ok('companions: a drake\'s AC is 14 + PB and HP 5 + five times the ranger level', !!m && dst.ac === 17 && dst.hp === 30, JSON.stringify(dst));
+      } catch(e){ ok('round 41 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') try { csClose(); } catch(_){ }
+        CS = null;
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

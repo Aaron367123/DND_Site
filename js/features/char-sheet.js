@@ -578,6 +578,47 @@ function csMonster(name){
   const n = String(name || '').toLowerCase();
   return _5eData.find(d => d.cat === 'monster' && String(d.name).toLowerCase() === n) || null;
 }
+// Companions a feature brings, as D&D Beyond adds them to Extras: the
+// Battle Smith's Steel Defender, the Drakewarden's drake, the Beast Master's
+// primal companion, the Wildfire Spirit, a Homunculus Servant infusion.
+const CS_COMPANIONS = [
+  { feature: 'Steel Defender', names: ['Steel Defender'] },
+  { feature: 'Drake Companion', names: ['Drake Companion'] },
+  { feature: 'Primal Companion', names: ['Beast of the Land', 'Beast of the Sea', 'Beast of the Sky'] },
+  { feature: 'Summon Wildfire Spirit', names: ['Wildfire Spirit'] },
+  { feature: 'Homunculus Servant', names: ['Homunculus Servant'], edition: '2014' },
+];
+// A stat block's AC or HP written as a formula ("5 + five times your
+// Artificer level", "12 + your Intelligence modifier", "14 + PB"), worked
+// out for this character. Null when it isn't one.
+function csCompanionFormula(pc, text){
+  let s = String(text || '').split('(')[0].toLowerCase();
+  if (!/your|pb/.test(s)) return null;
+  const NUM = { two: 2, three: 3, four: 4, five: 5, six: 6 };
+  const lvl = cls => { const p = pc.build && CS.R ? sktClassLevels(pc.build, CS.R).find(x => x.key === cls) : null; return p ? p.level : (pc.level || 1); };
+  const mod = ab => Math.floor((((pc.abilities || {})[ab.slice(0, 3)] || 10) - 10) / 2);
+  const pb = (pc.sheet && pc.sheet.profBonus) || sktProfBonus(pc.level || 1);
+  s = s.replace(/(two|three|four|five|six) times your (\w+) level/g, (_, n, c) => String(NUM[n] * lvl(c)))
+       .replace(/your (\w+) level/g, (_, c) => String(lvl(c)))
+       .replace(/your (strength|dexterity|constitution|intelligence|wisdom|charisma) modifier/g, (_, a) => String(mod(a)))
+       .replace(/\bpb\b|your proficiency bonus/g, String(pb));
+  const nums = s.match(/-?\d+/g);
+  return nums ? nums.reduce((t, n) => t + +n, 0) : null;
+}
+// The edition's own printing where both books have the creature (the 2014
+// and 2024 Steel Defender differ).
+function csCompanionMonster(pc, name){
+  if (typeof _5eData === 'undefined' || !Array.isArray(_5eData)) return null;
+  const n = String(name).toLowerCase(), new24 = (pc.rules || (pc.build && pc.build.edition)) === '2024';
+  const hits = _5eData.filter(d => d.cat === 'monster' && String(d.name).toLowerCase() === n);
+  return hits.find(d => (typeof SKT_2024_ERA !== 'undefined' && SKT_2024_ERA.has(d._source || d.source)) === new24) || hits[0] || null;
+}
+function csCompanionStats(pc, m){
+  const raw = (m && m._raw) || {};
+  const ac = raw.ac_special ? csCompanionFormula(pc, raw.ac_special) : (((raw.armor_class || [])[0] || {}).value || parseInt(m && m.ac, 10) || null);
+  const hp = raw.hp_special ? csCompanionFormula(pc, raw.hp_special) : (raw.hit_points || parseInt(m && m.hp, 10) || 0);
+  return { ac, hp: Math.max(1, hp || 1) };
+}
 CS_TAB_RENDER.extras = pc => {
   const ro = CS.readOnly, list = pc.extras || [];
   let h = '<div class="cb-dim">Familiars, mounts, companions and summoned creatures.</div>';
@@ -591,6 +632,11 @@ CS_TAB_RENDER.extras = pc => {
       + (open && m && typeof buildDetailCard === 'function' ? '<div class="cs-extra-card">' + buildDetailCard(m, '-cs-' + i) + '</div>' : '') + '</div>';
   }).join('') : '<div class="cb-dim">None yet.</div>';
   if (!ro){
+    const feats = new Set(((pc.sheet || {}).featureList || []).map(f => f.name));
+    const ed = pc.rules || (pc.build && pc.build.edition);
+    const have = new Set(list.map(x => x.name));
+    const offer = [].concat(...CS_COMPANIONS.filter(c => feats.has(c.feature) && (!c.edition || c.edition === ed)).map(c => c.names)).filter(n => !have.has(n) && csCompanionMonster(pc, n));
+    if (offer.length) h += '<h5>Your companions</h5><div class="cs-add">' + offer.map(n => '<button class="btn" data-cs-comp="' + csE(n) + '">+ ' + csE(n) + '</button>').join('') + '</div>';
     const names = typeof _5eData !== 'undefined' && Array.isArray(_5eData) ? [...new Set(_5eData.filter(d => d.cat === 'monster').map(d => d.name))].sort() : [];
     h += '<h5>Add a creature</h5><div class="cs-add"><input data-cs-exq list="cs-mon-dl" placeholder="Owl, Riding Horse, Wolf…"><button class="btn" data-cs="addextra">Add</button></div>'
       + '<datalist id="cs-mon-dl">' + names.map(n => '<option value="' + csE(n) + '">').join('') + '</datalist>';
@@ -764,6 +810,11 @@ function csOnClick(e){
   if (d.csDeltrk != null) return csRebuild('Removed a tracker', b => { b.customResources = (b.customResources || []).filter((x, i) => i !== +d.csDeltrk); });
   if (d.csDelact != null) return csRebuild('Removed an action', b => { b.customActions = (b.customActions || []).filter((x, i) => i !== +d.csDelact); });
   if (d.cs === 'notheme') return csEdit('Sheet colour', p => { delete p.theme; });
+  if (d.csComp){
+    const pc = csPc(), m = pc && csCompanionMonster(pc, d.csComp); if (!m || !pc) return true;
+    const st = csCompanionStats(pc, m);
+    return csEdit('Added ' + m.name, p => { p.extras = (p.extras || []).concat([{ name: m.name, hp: st.hp, hpMax: st.hp, ac: st.ac }]); });
+  }
   if (d.cs === 'addextra'){
     const q = ((document.querySelector('#cs-root [data-cs-exq]') || {}).value || '').trim(); if (!q) return;
     const m = csMonster(q);

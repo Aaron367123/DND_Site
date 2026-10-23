@@ -499,6 +499,10 @@ function _convertMonster(d) {
     type:  _parseType(d.type),
     armor_class: _parseAC(d.ac),
     hit_points:  d.hp?.average || 0,
+    // A companion's stats written as a formula ("5 + five times your
+    // Artificer level"): the character sheet works them out.
+    ac_special: (Array.isArray(d.ac) && d.ac[0] && d.ac[0].special) || '',
+    hp_special: d.hp?.special || '',
     hit_dice:    d.hp?.formula || '',
     speed:       _parseSpeed(d.speed),
     strength:d.str||10, dexterity:d.dex||10, constitution:d.con||10,
