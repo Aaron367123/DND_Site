@@ -127,6 +127,7 @@ function sktRulesText(entries, depth){
 // One promise per edition. `read(path)` returns parsed JSON: fetch in the
 // browser, a file read in a test run.
 const _sktRulesCache = {};
+const _sktRulesReady = {};   // the same, once loaded
 function sktRulesReader(base){
   base = base || 'data/';
   return p => fetch(base + p).then(r => { if (!r.ok) throw new Error(p + ': ' + r.status); return r.json(); });
@@ -137,7 +138,7 @@ async function sktRulesLoad(edition, read){
   if (_sktRulesCache[edition] && !read) return _sktRulesCache[edition];
   read = read || sktRulesReader();
   const job = _sktRulesBuild(edition, read);
-  if (read === undefined || !_sktRulesCache[edition]) _sktRulesCache[edition] = job;
+  if (read === undefined || !_sktRulesCache[edition]){ _sktRulesCache[edition] = job; job.then(R => { _sktRulesReady[edition] = R; }, () => {}); }
   return job;
 }
 
@@ -1538,6 +1539,32 @@ function sktFeatureEffect(name, from, edition, clsKey){
   }
   return null;
 }
+// On/off states the sheet switches, D&D Beyond's toggles: Rage, Bladesong,
+// Shield, Bless… Each changes numbers while it's on. Where one is on lives
+// with the character, not the build: Rage is the party card's own switch, a
+// concentration spell is on while it's the one concentrated on, the rest
+// are in pc.active.
+const SKT_STATES = [];
+function sktDefineState(s){ SKT_STATES.push(s); }
+function sktStateSig(pc){
+  pc = pc || {}; const a = pc.active || {};
+  return [pc.rage ? 'R' : '', pc.concentration ? 'C:' + pc.concentration : ''].concat(Object.keys(a).filter(k => a[k]).sort().map(k => 'A:' + k + '=' + a[k])).filter(Boolean).join('|');
+}
+// The states a character has, and which are on.
+function _sktStates(ctx, prior){
+  const out = [];
+  SKT_STATES.forEach(s => {
+    if (s.edition && s.edition !== ctx.edition) return;
+    if (s.spell ? !ctx.knows.has(s.spell) : !(s.has && s.has(ctx))) return;
+    const sp = s.spell ? sktRulesSpell(ctx.R, s.spell) : null;
+    const conc = !!(sp && (sp.duration || []).some(d => d && d.concentration));
+    const on = s.key === 'Rage' ? !!prior.rage : conc ? prior.concentration === s.spell : !!(prior.active || {})[s.key];
+    const opts = s.options ? s.options(ctx) : [];
+    const value = opts.includes((prior.active || {})[s.key + ':opt']) ? prior.active[s.key + ':opt'] : (opts[0] || '');
+    out.push({ s, on, conc, value });
+  });
+  return out;
+}
 function sktDefineEffect(keys, fn){ (Array.isArray(keys) ? keys : [keys]).forEach(k => { SKT_FEATURE_EFFECTS[k] = fn; }); }
 
 // Features that are a CHOICE — a 2024 cleric's Divine Order, a druid's
@@ -1618,6 +1645,28 @@ function sktPassiveGrants(text){
   });
   out.any = out.resist.length || out.immune.length || out.darkvision || out.speed;
   return out;
+}
+
+// Every built character whose on/off states changed since its numbers were
+// worked out (Rage ended by the tracker, concentration lost to a hit, a
+// toggle on the sheet) is worked out again. Called from save(), which every
+// one of those paths ends in.
+let _sktStatesBusy = false;
+function sktStatesSyncAll(){
+  if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
+  _sktStatesBusy = true;
+  try {
+    state.party.forEach(p => {
+      if (!p || !p.build || !p.sheet || (p.sheet.stateSig || '') === sktStateSig(p)) return;
+      const ed = (p.build.edition || p.rules) === '2014' ? '2014' : '2024';
+      const R = _sktRulesReady[ed];
+      if (!R){ if (!_sktRulesCache[ed]) sktRulesLoad(ed).then(() => typeof save === 'function' && save(), () => {}); return; }
+      const rec = sktComputeCharacter(JSON.parse(JSON.stringify(p.build)), R, p);
+      Object.assign(p, rec, { id: p.id, portrait: p.portrait });
+      const ci = typeof _findCombatantForPartyMember === 'function' ? _findCombatantForPartyMember(p) : -1;
+      if (ci >= 0 && state.combatants[ci]) state.combatants[ci].ac = p.ac;
+    });
+  } finally { _sktStatesBusy = false; }
 }
 
 // Small helpers the effects share.
@@ -1907,6 +1956,9 @@ function sktComputeCharacter(build, R, prior){
     jackOfAllTrades: false, remarkableAthlete: false, martialArts: false, martialArtsDie: null,
     sneakAttack: null, rageDamage: 0, agonizingBlast: false, resist: new Set(),
     senses: { darkvision: 0 }, skillBonus: {}, immune: new Set(), cantripDamageBonus: 0,
+    // What an on/off state changes (SKT_STATES).
+    acBonus: [], acFloor: null, speedMult: 1, spellDcBonus: 0, spellAtkBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0,
+    shillelagh: null, rollAdv: [], rollDice: [], extraDamage: [], concBonus: 0,
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
   _sktActiveItems(build).forEach(m => (m.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); }));
@@ -2044,6 +2096,39 @@ function sktComputeCharacter(build, R, prior){
     ctx.mod[k] = sktMod(abilities[k]);
   });
 
+  // The spells on the sheet.
+  const spellNames = [...(build.cantrips || []), ...(build.spells || [])];
+  (build.customSpells || []).forEach(s => { if (s && s.name && !spellNames.includes(s.name)) spellNames.push(s.name); });
+  { const ms = sktMagicalSecrets(build, R); if (ms) ms.picked.forEach(n => { if (!spellNames.includes(n)) spellNames.push(n); }); }
+  const arcanum = {};
+  sktArcanumLevels(build, R).forEach(lv => { const n = (build.arcanum || {})[lv]; if (n){ arcanum[lv] = n; if (!spellNames.includes(n)) spellNames.push(n); } });
+  parts.slice(1).forEach(p => [].concat((p.entry || {}).cantrips || [], (p.entry || {}).spells || []).forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); }));
+  const always = sktBuildAlwaysPrepared(build, R);
+  sktFeatureSpellPicks(build, R).filter(x => x.feature === 'Signature Spells').forEach(x => x.picked.forEach(n => { if (!always.includes(n)) always.push(n); }));
+  always.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
+  // Spells from feats and the species, with how each is cast.
+  const spGrant = sktSpeciesSpellGrant(R, build);
+  if (spGrant && spGrant.spells.length){
+    spGrant.spells.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
+    const ab = spGrant.ability ? ' (' + (SKT_AB_NAME[spGrant.ability] || spGrant.ability) + ')' : '';
+    _fxNote(ctx, spGrant.label + ab + ': ' + spGrant.spells.join(', ')
+      + (spGrant.daily.length ? ' — ' + spGrant.daily.join(', ') + ' once per long rest without a spell slot' : ''));
+  }
+  const featSpells = sktFeatSpells(build, R).filter(g => g.spells.length);
+  featSpells.forEach(g => {
+    g.spells.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
+    const ab = g.ability ? ' (' + (SKT_AB_NAME[g.ability] || g.ability) + ')' : '';
+    _fxNote(ctx, g.feat + ab + ': ' + g.spells.join(', ')
+      + (g.daily.length ? ' — ' + g.daily.join(', ') + ' once per long rest without a spell slot' : ''));
+  });
+  // The states that are on (Rage, Bladesong, Shield, Bless…) change the
+  // numbers below.
+  ctx.knows = new Set(spellNames);
+  ctx.featureNames = new Set(features.filter(f => !f.info).map(f => f.name));
+  ctx.classLevel = key => (parts.find(p => p.key === key) || {}).level || 0;
+  const states = _sktStates(ctx, prior);
+  states.forEach(x => { if (x.on && x.s.apply){ try { x.s.apply(ctx, x.value); } catch(e){ ctx.notes.push('Could not apply ' + x.s.label + ': ' + e.message); } } });
+
   // Saving throws and skills, as the modifiers the sheet stores.
   const saves = {};
   SKT_ABS.forEach(k => { saves[k] = ctx.mod[k] + (ctx.saveProf.has(k) ? pb : 0) + ctx.saveBonusAll; });
@@ -2122,6 +2207,8 @@ function sktComputeCharacter(build, R, prior){
   }
   if (best) acItems.forEach(m => { best.total += m.bonusAc; best.label += ' + ' + m.name; });
   let ac = best ? best.total : 10;
+  if (ctx.acFloor && ac < ctx.acFloor.value){ ac = ctx.acFloor.value; acParts.length = 0; acParts.push(ctx.acFloor.label + ' ' + ctx.acFloor.value); }
+  ctx.acBonus.forEach(x => { ac += x.value; acParts.push(x.label + ' ' + x.value); });
 
   // Speed.
   const baseSpeed = typeof (subrace && subrace.speed) === 'number' ? subrace.speed
@@ -2131,6 +2218,7 @@ function sktComputeCharacter(build, R, prior){
   let speed = baseSpeed + ctx.speedBonus + (heavy ? 0 : ctx.speedBonusUnlessHeavy) + (!armor && !shield ? ctx.speedBonusUnarmored : 0);
   const notSlowed = /speed is not reduced by wearing heavy armou?r/i.test(JSON.stringify([species && species.entries, subrace && subrace.entries]));
   if (heavy && armor.strength && abilities.str < +armor.strength && !notSlowed) speed -= 10;
+  speed *= ctx.speedMult;
 
   // Initiative and passive perception.
   let init = ctx.mod.dex + ctx.initBonus;
@@ -2142,8 +2230,8 @@ function sktComputeCharacter(build, R, prior){
   const sc = sktBuildSpellcasting(build, R, abilities);
   if (sc){
     // Items, and the sheet's custom bonuses.
-    const ba = _sktItemSum(build, 'bonusSpellAttack') + (+(build.overrides || {}).spellAttack || 0);
-    const bd = _sktItemSum(build, 'bonusSpellSaveDc') + (+(build.overrides || {}).spellDc || 0);
+    const ba = _sktItemSum(build, 'bonusSpellAttack') + (+(build.overrides || {}).spellAttack || 0) + ctx.spellAtkBonus;
+    const bd = _sktItemSum(build, 'bonusSpellSaveDc') + (+(build.overrides || {}).spellDc || 0) + ctx.spellDcBonus;
     sc.attack += ba; sc.dc += bd;
     (sc.cantripLists || []).forEach(l => { l.attack += ba; l.dc += bd; });
   }
@@ -2159,31 +2247,6 @@ function sktComputeCharacter(build, R, prior){
   // Attacks: weapons carried, an unarmed strike, and attack cantrips.
   const attacks = sktBuildAttacks(ctx, gear, sc);
 
-  // Hit dice, and the spells on the sheet.
-  const spellNames = [...(build.cantrips || []), ...(build.spells || [])];
-  (build.customSpells || []).forEach(s => { if (s && s.name && !spellNames.includes(s.name)) spellNames.push(s.name); });
-  { const ms = sktMagicalSecrets(build, R); if (ms) ms.picked.forEach(n => { if (!spellNames.includes(n)) spellNames.push(n); }); }
-  const arcanum = {};
-  sktArcanumLevels(build, R).forEach(lv => { const n = (build.arcanum || {})[lv]; if (n){ arcanum[lv] = n; if (!spellNames.includes(n)) spellNames.push(n); } });
-  parts.slice(1).forEach(p => [].concat((p.entry || {}).cantrips || [], (p.entry || {}).spells || []).forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); }));
-  const always = sktBuildAlwaysPrepared(build, R);
-  sktFeatureSpellPicks(build, R).filter(x => x.feature === 'Signature Spells').forEach(x => x.picked.forEach(n => { if (!always.includes(n)) always.push(n); }));
-  always.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
-  // Spells from feats and the species, with how each is cast.
-  const spGrant = sktSpeciesSpellGrant(R, build);
-  if (spGrant && spGrant.spells.length){
-    spGrant.spells.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
-    const ab = spGrant.ability ? ' (' + (SKT_AB_NAME[spGrant.ability] || spGrant.ability) + ')' : '';
-    _fxNote(ctx, spGrant.label + ab + ': ' + spGrant.spells.join(', ')
-      + (spGrant.daily.length ? ' — ' + spGrant.daily.join(', ') + ' once per long rest without a spell slot' : ''));
-  }
-  const featSpells = sktFeatSpells(build, R).filter(g => g.spells.length);
-  featSpells.forEach(g => {
-    g.spells.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
-    const ab = g.ability ? ' (' + (SKT_AB_NAME[g.ability] || g.ability) + ')' : '';
-    _fxNote(ctx, g.feat + ab + ': ' + g.spells.join(', ')
-      + (g.daily.length ? ' — ' + g.daily.join(', ') + ' once per long rest without a spell slot' : ''));
-  });
   // A wizard's spellbook; a book made before there was one starts as the
   // spells already chosen.
   const wizPart = sc && sc.classes ? sc.classes.find(x => x.key === 'wizard') : null;
@@ -2272,6 +2335,9 @@ function sktComputeCharacter(build, R, prior){
       proficiencies: { armor: [...ctx.armorProf].filter(Boolean), weapons: [...ctx.weaponProf].filter(Boolean),
                        weaponRules: ctx.weaponPropRules, tools: [...ctx.toolProf].filter(Boolean) },
       attacks, attacksPerAction: ctx.attacksPerAction, critRange: ctx.critRange,
+      states: states.map(x => ({ key: x.s.key, label: x.s.label, on: x.on, conc: x.conc, spell: x.s.spell || '', resource: x.s.resource || '',
+        desc: typeof x.s.desc === 'function' ? x.s.desc(ctx, x.value) : (x.s.desc || ''), options: x.s.options && x.s.options(ctx).length ? x.s.options(ctx) : null, value: x.value })),
+      stateSig: sktStateSig(prior), rollAdv: ctx.rollAdv, rollDice: ctx.rollDice, extraDamage: ctx.extraDamage, concBonus: ctx.concBonus,
       // A half-orc's Savage Attacks adds a weapon die on a melee crit, as does Brutal Critical.
       critExtraDice: (ctx.critExtraDice || 0) + (features.some(f => f.from === 'species' && f.name === 'Savage Attacks') ? 1 : 0),
       greatWeaponFighting: !!ctx.gwf,
@@ -2557,9 +2623,15 @@ function sktBuildAttacks(ctx, gear, sc){
     let ab = ranged ? m.dex : (finesse ? Math.max(m.str, m.dex) : m.str);
     // A monk's weapons use Dexterity if it is better (martial arts weapons).
     if (ctx.martialArts && monkWeapon(w, props, ranged)) ab = Math.max(m.str, m.dex);
-    const hit = ab + (prof(w) ? pb : 0) + (ranged ? ctx.rangedAttackBonus : 0) + (w._hit || 0);
-    let dmgBonus = ab + (!ranged && !props.includes('2H') && ctx.duelingBonus ? ctx.duelingBonus : 0) + (w._dmg || 0);
-    let die = w.dmg1 || '1';
+    // Shillelagh: a club or quarterstaff hits with the spellcasting ability
+    // and a bigger die.
+    const shil = ctx.shillelagh && sc && /^(club|quarterstaff)$/i.test(w.name);
+    if (shil) ab = Math.max(ab, m[sc.ability] || 0);
+    const hit = ab + (prof(w) ? pb : 0) + (ranged ? ctx.rangedAttackBonus : 0) + (w._hit || 0) + ctx.weaponHit;
+    // Rage adds its damage to a melee attack made with Strength.
+    const flat = (w._dmg || 0) + (!ranged && ab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
+    let dmgBonus = ab + (!ranged && !props.includes('2H') && ctx.duelingBonus ? ctx.duelingBonus : 0) + flat;
+    let die = shil ? ctx.shillelagh.die : (w.dmg1 || '1');
     if (ctx.martialArts && ctx.martialArtsDie && !ranged && monkWeapon(w, props, ranged) && _sktDieAvg(ctx.martialArtsDie) > _sktDieAvg(die)) die = ctx.martialArtsDie;
     const type = SKT_DMG[String(w.dmgType || '').charAt(0)] || '';
     const mastery = (w.mastery || [])[0] ? String(w.mastery[0]).split('|')[0] : '';
@@ -2569,7 +2641,7 @@ function sktBuildAttacks(ctx, gear, sc){
       versatile: w.dmg2 ? w.dmg2 + (dmgBonus ? sktSigned(dmgBonus) : '') : null,
       range: w.range || null,
       mastery: (ctx.build.masteries || []).map(s => s.toLowerCase()).includes(w.name.toLowerCase()) ? mastery : '',
-      props,
+      props, _ab: ab, _flat: flat,
     });
   });
   // Two light melee weapons: a bonus-action attack with the other one, its
@@ -2582,26 +2654,31 @@ function sktBuildAttacks(ctx, gear, sc){
     const main = lightMelee[0], off = lightMelee[1] || lightMelee[0];
     const m2 = /^(\d*d\d+)([+-]\d+)?(.*)$/.exec(off.damage || '');
     if (m2){
-      const mod = parseInt(m2[2] || '0', 10);
-      const keep = ctx.twoWeaponMod ? mod : Math.min(0, mod);
+      // The ability modifier comes off (unless it's negative, or the style
+      // keeps it); a magic weapon's bonus and Rage's stay.
+      const mod = off._ab != null ? off._ab : parseInt(m2[2] || '0', 10);
+      const keep = (ctx.twoWeaponMod ? mod : Math.min(0, mod)) + (off._flat || 0);
       out.push(Object.assign({}, off, { name: off.name + ' (off-hand)', damage: m2[1] + (keep ? (keep > 0 ? '+' : '') + keep : '') + m2[3], offhand: true, versatile: null }));
     }
   }
   // Unarmed strike: 1 + Strength, or a martial arts die with the better of
   // Strength and Dexterity.
   const uab = ctx.martialArts ? Math.max(m.str, m.dex) : m.str;
+  const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
   out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb),
-             damage: (ctx.martialArts ? ctx.martialArtsDie + sktSigned(uab) : String(Math.max(1, 1 + m.str))) + ' bludgeoning' });
+             damage: (ctx.martialArts ? ctx.martialArtsDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
   // Attack cantrips the character knows.
   if (sc) (sc.cantripLists || [{ names: ctx.build.cantrips || [], attack: sc.attack, dc: sc.dc }]).forEach(list => list.names.forEach(n => {
     const s = sktRulesSpell(ctx.R, n); if (!s) return;
     const dice = _sktCantripDice(s, ctx.level); if (!dice) return;
     const type = (s.damageInflict || [])[0] || '';
     const isAttack = !!(s.spellAttack && s.spellAttack.length);
+    if (!isAttack && !(s.savingThrow || []).length) return;
     let bonus = 0, beams = 0;
     // Eldritch Blast does not roll bigger dice as you level — it fires more
     // beams, each its own attack for 1d10.
     if (ctx.cantripDamageBonus) bonus += ctx.cantripDamageBonus;
+    bonus += ctx.damageBonusAll;
     if (/eldritch blast/i.test(s.name)){
       beams = ctx.level >= 17 ? 4 : ctx.level >= 11 ? 3 : ctx.level >= 5 ? 2 : 1;
       if (ctx.agonizingBlast) bonus += m.cha;
@@ -2613,6 +2690,7 @@ function sktBuildAttacks(ctx, gear, sc){
       spell: true,
     });
   }));
+  out.forEach(a => { delete a._ab; delete a._flat; });
   return out;
 }
 function _sktDieAvg(d){ const m = /^(\d+)d(\d+)/.exec(String(d)); return m ? +m[1] * (+m[2] + 1) / 2 : +d || 0; }
@@ -2895,7 +2973,8 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
-                     sktSpellsMatching, sktExpandedSpells, sktPassiveGrants, sktSpellExcess, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
+                     sktSpellsMatching, sktExpandedSpells, sktPassiveGrants, sktSpellExcess,
+                     sktDefineState, sktStateSig, sktStatesSyncAll, SKT_STATES, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,

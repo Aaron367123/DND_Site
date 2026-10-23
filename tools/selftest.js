@@ -8030,6 +8030,154 @@
       } catch(e){ ok('round 46 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 47: on/off states change the numbers -------------------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const ab = { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 16, wis: 14, cha: 16 } };
+        const mk = (R, ed, cls, sub, L, extra, prior) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L, abilities: JSON.parse(JSON.stringify(ab)) }, extra || {}), R, prior);
+        const atk = (r, n) => (r.sheet.attacks.find(a => a.name === n) || {}).damage;
+        const st = (r, k) => (r.sheet.states || []).find(s => s.key === k);
+        const bear = { featureChoices: { 'Totem Spirit': 'Bear' } };
+        const calm = mk(R14, '2014', 'Barbarian', 'Totem Warrior', 5, bear), mad = mk(R14, '2014', 'Barbarian', 'Totem Warrior', 5, bear, { rage: true });
+        ok('states: a barbarian can rage, and it starts off', !!st(calm, 'Rage') && !st(calm, 'Rage').on && st(mad, 'Rage').on);
+        ok('states: Rage adds its damage to Strength melee attacks', atk(calm, 'Greataxe') === '1d12+3 slashing' && atk(mad, 'Greataxe') === '1d12+5 slashing' && atk(mad, 'Unarmed Strike') === '6 bludgeoning', atk(mad, 'Greataxe'));
+        ok('states: and to the off-hand attack, which drops only the ability modifier', atk(calm, 'Handaxe (off-hand)') === '1d6 slashing' && atk(mad, 'Handaxe (off-hand)') === '1d6+2 slashing', atk(mad, 'Handaxe (off-hand)'));
+        ok('states: a 2014 Bear totem resists all but psychic while raging', calm.resistances.length === 0 && mad.resistances.length === 12 && !mad.resistances.includes('psychic'));
+        const wh = o => mk(R24, '2024', 'Barbarian', 'Wild Heart', 5, {}, { rage: true, active: { 'Rage:opt': o } });
+        ok('states: a 2024 Wild Heart chooses its animal each rage; Bear resists all but four', JSON.stringify(st(wh('Bear'), 'Rage').options) === '["Bear","Eagle","Wolf"]' && wh('Bear').resistances.length === 9 && !wh('Bear').resistances.includes('force') && wh('Wolf').resistances.length === 3);
+        ok('states: a Zealot’s Divine Fury while raging', JSON.stringify(mk(R24, '2024', 'Barbarian', 'Zealot', 5, {}, { rage: true }).sheet.extraDamage) === JSON.stringify([{ label: 'Divine Fury', dice: '1d6+2 radiant', note: 'the first creature you hit each turn while raging' }]));
+        ok('states: Rage gives advantage on Strength checks and saves', JSON.stringify(mad.sheet.rollAdv) === JSON.stringify([{ on: ['ab:str', 'save:str'], label: 'Rage' }]) && calm.sheet.rollAdv.length === 0);
+        const bw = { spells: ['Shield', 'Mage Armor', 'Haste'] };
+        const b0 = mk(R24, '2024', 'Wizard', 'Bladesinger', 6, bw), b1 = mk(R24, '2024', 'Wizard', 'Bladesinger', 6, bw, { active: { Bladesong: true } });
+        ok('states: Bladesong adds Intelligence to AC and 10 ft of speed', b1.ac === b0.ac + 3 && b1.spd === b0.spd + 10 && b1.sheet.concBonus === 3 && /Bladesong 3/.test(b1.sheet.acDetail));
+        const b2 = mk(R24, '2024', 'Wizard', 'Bladesinger', 6, bw, { active: { Bladesong: true, Shield: true, 'Mage Armor': true }, concentration: 'Haste' });
+        ok('states: Mage Armor, Shield and Haste stack with it', b2.ac === 25 && b2.spd === 80 && b2.sheet.acDetail === 'Mage Armor 15 + Bladesong 3 + Shield 5 + Haste 2 = 25', b2.sheet.acDetail);
+        ok('states: a concentration spell is on while it is the one concentrated on', st(b2, 'Haste').conc && st(b2, 'Haste').on && !st(b0, 'Haste').on && !st(b2, 'Shield').conc);
+        ok('states: only spells the character has are offered', !st(b0, 'Bless') && !st(b0, 'Barkskin'));
+        const bk = (R, ed, prior) => mk(R, ed, 'Druid', '', 3, { spells: ['Barkskin'] }, prior);
+        ok('states: Barkskin keeps AC at 16 (2014, concentration) or 17 (2024)', bk(R14, '2014', { concentration: 'Barkskin' }).ac === 16 && st(bk(R14, '2014'), 'Barkskin').conc
+           && bk(R24, '2024', { active: { Barkskin: true } }).ac === 17 && !st(bk(R24, '2024'), 'Barkskin').conc);
+        ok('states: Innate Sorcery raises the spell save DC by 1', mk(R24, '2024', 'Sorcerer', 'Draconic', 3, {}, { active: { 'Innate Sorcery': true } }).sheet.spellSaveDc === mk(R24, '2024', 'Sorcerer', 'Draconic', 3).sheet.spellSaveDc + 1);
+        const dv = mk(R14, '2014', 'Paladin', 'Devotion', 3, {}, { active: { 'Sacred Weapon': true } });
+        ok('states: Sacred Weapon adds Charisma to weapon attacks only', dv.sheet.attacks.find(a => a.name === 'Longsword').atkBonus === '+8' && dv.sheet.attacks.find(a => a.name === 'Unarmed Strike').atkBonus === '+5');
+        const hx = mk(R14, '2014', 'Warlock', 'Hexblade', 3, { cantrips: ['Eldritch Blast'] }, { active: { "Hexblade's Curse": true } });
+        ok('states: Hexblade’s Curse adds the proficiency bonus to damage and crits on 19', atk(hx, 'Eldritch Blast') === '1d10+2 force' && hx.sheet.critRange === 19);
+        const weak = { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 16, wis: 14, cha: 16 } };
+        const sh = (L, on) => mk(R24, '2024', 'Wizard', '', L, { cantrips: ['Shillelagh', 'True Strike'], abilities: weak }, on ? { active: { Shillelagh: true } } : {});
+        ok('states: Shillelagh makes the quarterstaff hit with the casting ability and a bigger die', atk(sh(1), 'Quarterstaff') === '1d6 bludgeoning' && atk(sh(1, true), 'Quarterstaff') === '1d8+3 bludgeoning' && atk(sh(5, true), 'Quarterstaff') === '1d10+3 bludgeoning', atk(sh(1), 'Quarterstaff') + ' / ' + atk(sh(5, true), 'Quarterstaff'));
+        const fx = { pb: 3, mod: { str: 3, dex: 3, con: 0, int: 0, wis: 0, cha: 0 }, weaponProf: new Set(['martial', 'simple']), weaponPropRules: [], build: { masteries: [] }, edition: '2014', R: R14,
+                     rangedAttackBonus: 0, duelingBonus: 0, weaponHit: 0, rageOn: 2, damageBonusAll: 0, level: 5 };
+        const bow = sktBuildAttacks(fx, { weapons: [R14.items.longbow, R14.items.longsword] }, null);
+        ok('states: Rage stays off a ranged attack, even with Strength equal to Dexterity', bow[0].damage === '1d8+3 piercing' && bow[1].damage === '1d8+5 slashing', bow.map(a => a.damage).join(' / '));
+        ok('states: and neither it nor True Strike is an attack row of its own', !sh(5).sheet.attacks.some(a => /Shillelagh|True Strike/.test(a.name)));
+        ok('states: what is on, as one signature', sktStateSig({}) === '' && sktStateSig({ rage: true, concentration: 'Bless', active: { Shield: true, Off: false } }) === 'R|C:Bless|A:Shield=true');
+
+        // On the sheet.
+        const p0 = localStorage.getItem('skt-party-v1');
+        const keep = { d: window.sktD, find: window._findCombatantForPartyMember };
+        try {
+          window._findCombatantForPartyMember = () => -1;
+          const rb = Object.assign(sktBlankBuild('2024'), { name: 'Ragey', cls: 'Barbarian', subclass: 'Wild Heart', level: 5, abilities: JSON.parse(JSON.stringify(ab)) });
+          const rr = sktComputeCharacter(rb, R24); rr.id = 'pc_state_barb'; state.party.push(rr);
+          const bb = Object.assign(sktBlankBuild('2014'), { name: 'Bladey', cls: 'Wizard', subclass: 'Bladesinging', level: 2, abilities: JSON.parse(JSON.stringify(ab)) });
+          const br = sktComputeCharacter(bb, R14); br.id = 'pc_state_blade'; state.party.push(br);
+          const wb = Object.assign(sktBlankBuild('2014'), { name: 'Blessy', cls: 'Cleric', subclass: 'Life', level: 5, abilities: JSON.parse(JSON.stringify(ab)), spells: ['Bless', 'Shield of Faith', 'Cure Wounds', 'Divine Favor'] });
+          const wr = sktComputeCharacter(wb, R14); wr.id = 'pc_state_cler'; state.party.push(wr);
+          const mb = Object.assign(sktBlankBuild('2014'), { name: 'Shieldy', cls: 'Wizard', level: 3, abilities: JSON.parse(JSON.stringify(ab)), spells: ['Shield', 'Mage Armor'], spellbook: ['Shield', 'Mage Armor'] });
+          const mr = sktComputeCharacter(mb, R14); mr.id = 'pc_state_wiz'; state.party.push(mr);
+          save();
+          const me = id => state.party.find(p => p.id === id);
+          const root = () => document.getElementById('cs-root');
+          const q = s => root().querySelector(s);
+          const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+          openCharSheet('pc_state_barb'); await sleep(300);
+          const rages = () => me('pc_state_barb').resources.find(r => r.name === 'Rage').current;
+          const r0 = rages(), g0 = me('pc_state_barb').sheet.attacks.find(a => a.name === 'Greataxe').damage;
+          ok('sheet states: the switch is there, off', !!q('[data-cs-state="Rage"]') && q('[data-cs-state="Rage"]').getAttribute('aria-pressed') === 'false');
+          click('[data-cs-state="Rage"]'); await sleep(60);
+          const g1 = me('pc_state_barb').sheet.attacks.find(a => a.name === 'Greataxe').damage;
+          ok('sheet states: turning Rage on spends a use and the numbers follow', me('pc_state_barb').rage === true && rages() === r0 - 1 && g0 === '1d12+3 slashing' && g1 === '1d12+5 slashing'
+             && me('pc_state_barb').resistances.includes('slashing') && q('[data-cs-state="Rage"]').classList.contains('on'), g0 + ' → ' + g1);
+          ok('sheet states: what it does is spelled out', /Rage \(Bear\):.*resistance to all damage except force, necrotic, psychic and radiant/.test(q('.cs-stdesc').textContent));
+          window.sktD = n => n === 20 ? 9 : 1;
+          click('[data-cs-roll="save:str"]'); await sleep(30);
+          ok('sheet states: a Strength save while raging rolls with advantage', CS.log[0].mode === 'adv' && /Rage/.test(CS.log[0].why), CS.log[0].why);
+          click('[data-cs-roll="ab:str"]'); await sleep(30);
+          const strAdv = CS.log[0].mode;
+          click('[data-cs-roll="ab:dex"]'); await sleep(30);
+          ok('sheet states: and a Strength check, not a Dexterity one', strAdv === 'adv' && CS.log[0].mode === 'normal');
+          click('[data-cs-roll="skill:athletics"]'); await sleep(30);
+          const athAdv = CS.log[0].mode;
+          click('[data-cs-roll="skill:acrobatics"]'); await sleep(30);
+          ok('sheet states: Athletics is a Strength check too; Acrobatics isn’t', athAdv === 'adv' && CS.log[0].mode === 'normal');
+          const opt = q('[data-cs-stateopt="Rage"]');
+          opt.value = 'Bear'; opt.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
+          ok('sheet states: a Wild Heart picks Bear for this rage, and resists nearly everything', me('pc_state_barb').resistances.length === 9 && me('pc_state_barb').active['Rage:opt'] === 'Bear');
+          // The tracker ending it (its minute up): the numbers come back by themselves.
+          me('pc_state_barb').rage = false; save(); await sleep(30);
+          ok('sheet states: Rage ended elsewhere puts the numbers back', me('pc_state_barb').sheet.attacks.find(a => a.name === 'Greataxe').damage === '1d12+3 slashing' && !me('pc_state_barb').resistances.includes('slashing'));
+          csClose();
+
+          openCharSheet('pc_state_cler'); await sleep(300);
+          const ac0 = me('pc_state_cler').ac;
+          click('[data-cs-state="Shield of Faith"]'); await sleep(60);
+          ok('sheet states: a concentration spell switched on is concentrated on, +2 AC', me('pc_state_cler').concentration === 'Shield of Faith' && me('pc_state_cler').ac === ac0 + 2);
+          click('[data-cs-state="Shield of Faith"]'); await sleep(60);
+          ok('sheet states: switched off, concentration ends with it', !me('pc_state_cler').concentration && me('pc_state_cler').ac === ac0);
+          click('[data-cs-state="Shield of Faith"]'); await sleep(60);
+          click('[data-cs-state="Bless"]'); await sleep(60);
+          ok('sheet states: another one ends the first', me('pc_state_cler').concentration === 'Bless' && me('pc_state_cler').ac === ac0);
+          window.sktD = n => n === 4 ? 3 : 10;
+          click('[data-cs-roll="save:wis"]'); await sleep(30);
+          const sv = me('pc_state_cler').sheet.saves.wis;
+          ok('sheet states: Bless adds its d4 to a save', CS.log[0].total === 10 + sv + 3 && /Bless d4: 3/.test(CS.log[0].why), CS.log[0].total + ' ' + CS.log[0].why);
+          click('[data-cs-roll="ab:wis"]'); await sleep(30);
+          ok('sheet states: but not to an ability check', CS.log[0].total === 10 + Math.floor((me('pc_state_cler').abilities.wis - 10) / 2));
+          click('[data-cs="dropconc"]'); await sleep(60);
+          ok('sheet states: dropping concentration ends it', !me('pc_state_cler').concentration && !me('pc_state_cler').sheet.states.find(s => s.key === 'Bless').on && me('pc_state_cler').sheet.rollDice.length === 0);
+          click('[data-cs-state="Divine Favor"]'); await sleep(60);
+          click('[data-cs-tab="actions"]'); await sleep(40);
+          ok('sheet states: Divine Favor puts its 1d4 on the extra damage buttons', !!q('[data-cs-xdmg="Divine Favor|1d4 radiant"]'));
+          csClose();
+
+          openCharSheet('pc_state_blade'); await sleep(300);
+          const bl0 = me('pc_state_blade').ac, uses0 = me('pc_state_blade').resources.find(r => r.name === 'Bladesong').current;
+          click('[data-cs-state="Bladesong"]'); await sleep(60);
+          ok('sheet states: Bladesong spends a use and raises AC', me('pc_state_blade').ac === bl0 + 3 && me('pc_state_blade').resources.find(r => r.name === 'Bladesong').current === uses0 - 1);
+          me('pc_state_blade').concentration = 'Haste'; CS.conc = { dc: 10, spell: 'Haste' }; csRender();
+          window.sktD = () => 10;
+          click('[data-cs="concsave"]'); await sleep(30);
+          ok('sheet states: and adds Intelligence to a concentration save', CS.log[0].total === 10 + me('pc_state_blade').sheet.saves.con + 3, CS.log[0].total + ' vs con ' + me('pc_state_blade').sheet.saves.con);
+          me('pc_state_blade').resources.find(r => r.name === 'Bladesong').current = 0; me('pc_state_blade').active = null; save(); csRender();
+          click('[data-cs-state="Bladesong"]'); await sleep(60);
+          ok('sheet states: with no uses left it stays off', !me('pc_state_blade').active && me('pc_state_blade').ac === bl0);
+          csClose();
+
+          openCharSheet('pc_state_wiz', { tab: 'spells' }); await sleep(300);
+          const w0 = me('pc_state_wiz').ac;
+          click('[data-cs-cast="Shield:1"]'); await sleep(60);
+          ok('sheet states: casting Shield turns it on: +5 AC', me('pc_state_wiz').active && me('pc_state_wiz').active.Shield === true && me('pc_state_wiz').ac === w0 + 5);
+          click('[data-cs-state="Mage Armor"]'); await sleep(60);
+          ok('sheet states: Mage Armor too', me('pc_state_wiz').ac === w0 + 5 + 3);
+          click('[data-cs-state="Shield"]'); await sleep(60);
+          ok('sheet states: and off again', me('pc_state_wiz').ac === w0 + 3 && !me('pc_state_wiz').active.Shield);
+          const wi = state.party.findIndex(p => p.id === 'pc_state_wiz');
+          panelDefs.party._shortRestOne(state.party[wi], wi); save();
+          ok('sheet states: a short rest keeps Mage Armor (eight hours)', me('pc_state_wiz').ac === w0 + 3);
+          panelDefs.party._longRestOne(state.party[wi], wi); save();
+          ok('sheet states: a long rest ends it', me('pc_state_wiz').ac === w0 && !me('pc_state_wiz').active);
+          csClose();
+        } finally {
+          window.sktD = keep.d; window._findCombatantForPartyMember = keep.find;
+          if (typeof csClose === 'function') csClose();
+          _remoteUpdate = true;
+          try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+          loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+        }
+      } catch(e){ ok('round 47 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

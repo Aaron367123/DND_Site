@@ -173,6 +173,7 @@ function csTop(pc){
     + box('Speed', csSpeed(pc) + ' ft', null, csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft normally' : '')
     + box('Proficiency', csSigned(sh.profBonus || 2))
     + '<button class="cs-box cs-insp' + (pc.inspiration ? ' on' : '') + '" data-cs="insp"' + (ro ? ' disabled' : '') + ' title="Heroic Inspiration"><span>Inspiration</span><b>' + (pc.inspiration ? '✦' : '—') + '</b></button></div>';
+  h += csStatesHtml(pc);
   // Conditions, exhaustion, concentration, death saves.
   h += '<div class="cs-state">'
     + conds.map(c => '<span class="cs-chip">' + csE(c) + (ro ? '' : '<button data-cs-cond="' + csE(c) + '" aria-label="Remove ' + csE(c) + '">×</button>') + '</span>').join('')
@@ -198,6 +199,23 @@ function csTop(pc){
     + '<span class="cs-last" aria-live="polite">' + (CS.log[0] ? csRollText(CS.log[0]) : '<span class="cb-dim">Click a score, save, skill or attack to roll.<span class="cs-keys"> Shift: advantage · Alt: disadvantage.</span></span>') + '</span></div>'
     + (CS.showLog ? '<div class="cs-log">' + CS.log.map(r => '<div>' + csRollText(r) + '</div>').join('') + '</div>' : '');
   return h + '</div>';
+}
+// The on/off states (Rage, Bladesong, Shield, Bless…), D&D Beyond's
+// toggles: each changes the numbers on the sheet while it's on. What the
+// ones that are on do is spelled out under them, for a phone with no
+// hover.
+function csStatesHtml(pc){
+  const st = (pc.sheet || {}).states || []; if (!st.length) return '';
+  const ro = CS.readOnly;
+  const on = st.filter(s => s.on);
+  return '<div class="cs-states"><span class="cb-dim">Active effects</span>' + st.map(s => {
+    const res = s.resource ? (pc.resources || []).find(r => r.name === s.resource) : null;
+    const tip = s.desc + (s.conc ? ' Concentration.' : '') + (res && !s.on ? ' Uses one ' + s.resource + ' (' + (res.current || 0) + ' left).' : '');
+    return '<button class="cs-stbtn' + (s.on ? ' on' : '') + '" data-cs-state="' + csE(s.key) + '" aria-pressed="' + s.on + '" title="' + csE(tip) + '"' + (ro ? ' disabled' : '') + '>'
+      + csE(s.label) + (s.conc ? ' <i title="Concentration">C</i>' : '') + '</button>'
+      + (s.on && s.options ? '<select class="cb-sel" data-cs-stateopt="' + csE(s.key) + '" aria-label="' + csE(s.label) + ' option"' + (ro ? ' disabled' : '') + '>'
+        + s.options.map(o => '<option' + (o === s.value ? ' selected' : '') + '>' + csE(o) + '</option>').join('') + '</select>' : '');
+  }).join('') + (on.length ? '<div class="cs-stdesc">' + on.map(s => '<span><b>' + csE(s.label) + (s.options ? ' (' + csE(s.value) + ')' : '') + ':</b> ' + csE(s.desc) + '</span>').join('') + '</div>' : '') + '</div>';
 }
 // Exhaustion slows: 5 ft a level in 2024; halved at 2 and nothing at 5 in 2014.
 function csSpeed(pc){
@@ -323,12 +341,23 @@ function csD(n){ return typeof sktD === 'function' ? sktD(n) : 1 + Math.floor(Ma
 // What the character's conditions do to a roll, the way D&D Beyond marks
 // it: kind is 'check', 'init', 'attack' or 'save:<ability>'. Advantage and
 // disadvantage from any number of sources cancel to a straight roll.
+// What a roll is, for the states that change some rolls: 'attack',
+// 'save', 'save:dex', 'check', 'skill:acrobatics', 'ab:str'…
+function csRollTags(kind){
+  kind = String(kind || '');
+  const t = [kind];
+  if (/^attack/.test(kind)) t.push('attack');
+  if (/^save:/.test(kind)) t.push('save');
+  if (/^check:/.test(kind)){ const sk = kind.slice(6); t.push('check', 'skill:' + sk); if (CS_SKILLS[sk]) t.push('ab:' + CS_SKILLS[sk][1]); }
+  if (/^abcheck:/.test(kind)) t.push('check', 'ab:' + kind.slice(8));
+  return t;
+}
 function csRollEffects(pc, kind){
   const conds = _csConditions(pc).map(c => String(c).toLowerCase());
   const has = c => conds.some(x => x === c || x.startsWith(c + ' '));
   const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
   const exh = +pc.exhaustion || 0;
-  const isCheck = kind === 'check' || kind === 'init' || /^check:/.test(kind), isAtk = kind === 'attack', save = /^save:/.test(kind) ? kind.slice(5) : '';
+  const isCheck = kind === 'check' || kind === 'init' || /^(ab)?check:/.test(kind), isAtk = /^attack/.test(kind), save = /^save:/.test(kind) ? kind.slice(5) : '';
   const skill = /^check:/.test(kind) ? kind.slice(6) : '';
   const adv = [], dis = []; let bonus = 0, autoFail = '';
   if (exh){
@@ -343,6 +372,9 @@ function csRollEffects(pc, kind){
   // Armour that's loud (chain mail, plate…): Stealth at disadvantage.
   if (skill === 'stealth' && pc.sheet && pc.sheet.stealthDis) dis.push('armour');
   if (save === 'str' || save === 'dex') ['paralyzed', 'stunned', 'petrified', 'unconscious'].forEach(c => { if (has(c) && !autoFail) autoFail = c; });
+  // Rage, Haste, Bladesong…
+  const tags = csRollTags(kind);
+  ((pc.sheet || {}).rollAdv || []).forEach(x => { if ((x.on || []).some(t => tags.includes(t))) adv.push(x.label); });
   return { adv: [...new Set(adv)], dis: [...new Set(dis)], bonus, autoFail };
 }
 function csRollD20(label, mod, ev, kind){
@@ -361,9 +393,13 @@ function csRollD20(label, mod, ev, kind){
   const skillKey = /^check:/.test(kind || '') ? kind.slice(6) : '';
   if (skillKey && has('Reliable Talent') && ((pcNow.sheet || {}).skillProf || {})[skillKey] && nat < 10){ fx._reliable = nat; nat = 10; }
   mod = (+mod || 0) + fx.bonus;
-  const why = [fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : '',
+  // Dice a state adds (Bless's d4).
+  const tags = csRollTags(kind);
+  const extra = ((pcNow.sheet || {}).rollDice || []).filter(x => (x.on || []).some(t => tags.includes(t))).map(x => ({ label: x.label, die: x.die, n: csD(x.die) }));
+  const extraSum = extra.reduce((s, x) => s + x.n, 0);
+  const why = [extra.map(x => x.label + ' d' + x.die + ': ' + x.n).join(', '), fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : '',
                fx._lucky ? 'Lucky: rerolled a 1' : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : ''].filter(Boolean).join('; ');
-  const r = { kind: 'd20', label, mod: mod - fx.bonus, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail, kindTag: kind || null };
+  const r = { kind: 'd20', label, mod: mod - fx.bonus, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod + extraSum, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail, kindTag: kind || null };
   csLog(r);
   // The party card's own strip shows the DM the same roll.
   const pc = csPc();
@@ -500,6 +536,7 @@ function csExtraDamageHtml(pc){
   }
   if ((sh.spells || []).includes('Hex')) rows.push('<div class="cs-act"><div class="cs-act-h"><b>Hex</b><span class="cb-dim">each hit on the cursed target</span><button class="btn small" data-cs-xdmg="Hex|1d6 necrotic">1d6 necrotic</button></div></div>');
   if ((sh.spells || []).some(n => /Hunter.s Mark/.test(n))) rows.push('<div class="cs-act"><div class="cs-act-h"><b>Hunter’s Mark</b><span class="cb-dim">each weapon hit on the marked target</span><button class="btn small" data-cs-xdmg="Hunter’s Mark|1d6 force">1d6</button></div></div>');
+  (sh.extraDamage || []).forEach(x => rows.push('<div class="cs-act"><div class="cs-act-h"><b>' + csE(x.label) + '</b><span class="cb-dim">' + csE(x.note || '') + '</span><button class="btn small" data-cs-xdmg="' + csE(x.label + '|' + x.dice) + '">' + csE(x.dice) + '</button></div></div>'));
   return rows.length ? '<h4>Extra damage</h4>' + rows.join('') : '';
 }
 function csActHtml(pc, a){
@@ -694,7 +731,7 @@ function csOnClick(e){
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
-    const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, 'attack');
+    const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, a.spell ? 'attack:spell' : 'attack');
     // A Champion crits on a 19 (or 18).
     if (!a.spell && r.natural >= ((pc.sheet || {}).critRange || 20) && !r.crit){ r.crit = true; r.why = [r.why, 'critical on ' + pc.sheet.critRange + '+'].filter(Boolean).join('; '); }
     csSpendAmmo(pc, a);
@@ -746,7 +783,7 @@ function csOnClick(e){
   if (d.cs === 'dropconc'){ CS.conc = null; return csEdit('Dropped concentration', p => { p.concentration = null; }); }
   if (d.cs === 'concsave'){
     const c = CS.conc; if (!c) return;
-    const sh = pc.sheet || {}, mod = sh.saves && sh.saves.con != null ? sh.saves.con : csMod((pc.abilities || {}).con);
+    const sh = pc.sheet || {}, mod = (sh.saves && sh.saves.con != null ? sh.saves.con : csMod((pc.abilities || {}).con)) + (+sh.concBonus || 0);
     const r = csRollD20('Concentration (DC ' + c.dc + ')', mod, e, 'save:con');
     CS.conc = null;
     if (r.total < c.dc || r.autoFail){
@@ -782,6 +819,34 @@ function csOnClick(e){
     });
     if (rage && panelDefs.party && panelDefs.party._setRage){ panelDefs.party._setRage(csIdx(), true); csRender(); }
     return;
+  }
+  if (d.csState != null){
+    if (CS.readOnly) return;
+    const s = ((pc.sheet || {}).states || []).find(x => x.key === d.csState); if (!s) return;
+    const P = panelDefs.party, i = csIdx();
+    const res = !s.on && s.resource ? (pc.resources || []).find(x => x.name === s.resource) : null;
+    if (res && (res.current || 0) <= 0){ if (typeof showToast === 'function') showToast('No ' + s.resource + ' left'); return; }
+    const spend = p => { if (!res) return; const r = (p.resources || []).find(x => x.name === s.resource); if (r) r.current = Math.max(0, (r.current || 0) - 1); };
+    // Rage is the party card's own switch (it ends concentration, and the
+    // tracker counts its minute down).
+    if (s.key === 'Rage'){
+      if (!s.on) csEdit('Rage', spend);
+      if (P && P._setRage) P._setRage(i, !s.on); else csEdit(s.on ? 'Rage ends' : 'Rage', p => { p.rage = !s.on; });
+      return csRender();
+    }
+    return csEdit((s.on ? 'Ended ' : '') + s.label, p => {
+      if (s.conc){
+        if (s.on) p.concentration = null;
+        else {
+          if (p.concentration && p.concentration !== s.spell && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
+          p.concentration = s.spell;
+        }
+      } else {
+        p.active = Object.assign({}, p.active);
+        if (s.on) delete p.active[s.key]; else p.active[s.key] = true;
+      }
+      spend(p);
+    });
   }
   if (d.cs === 'endrage'){ if (panelDefs.party && panelDefs.party._setRage) panelDefs.party._setRage(csIdx(), false); return csRender(); }
   if (d.cs === 'endwild') return csEdit('Wild Shape ends', p => { p.wildshape = null; });
@@ -902,7 +967,7 @@ function csRollFor(pc, what, e){
       if (typeof showToast === 'function') showToast(pc.name + "'s initiative is " + r.total + ' on the Combat Tracker');
     }
   }
-  else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]), e, 'check');
+  else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]), e, 'abcheck:' + k);
   else if (kind === 'save') csRollD20(CS_AB[k] + ' save', sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0), e, 'save:' + k);
   else if (kind === 'skill') csRollD20(CS_SKILLS[k][0], sh.skills && sh.skills[k] != null ? sh.skills[k] : csMod(ab[CS_SKILLS[k][1]]), e, 'check:' + k);
   csRender();
@@ -914,6 +979,7 @@ function csOnChange(e){
   if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; });
   if (CS.readOnly) return;
   if ('csAddcond' in d){ if (t.value) csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), t.value)); return; }
+  if ('csStateopt' in d) return csEdit(d.csStateopt + ': ' + t.value, p => { p.active = Object.assign({}, p.active, { [d.csStateopt + ':opt']: t.value }); });
   if (typeof csSpellsChange === 'function' && csSpellsChange(e, t, d, pc)) return;
   if (typeof csInventoryChange === 'function' && csInventoryChange(e, t, d, pc)) return;
 }
@@ -1173,7 +1239,7 @@ function csSpellsClick(e, t, d, pc){
   if (d.csOpen){ CS.open[d.csOpen] = !CS.open[d.csOpen]; csRender(); return true; }   // spells, items and extras
   if (d.csSplv != null){ CS.spLv = d.csSplv; csRender(); return true; }
   if (d.csActf){ CS.actF = d.csActf; csRender(); return true; }
-  if (d.csSpatk){ csRollD20('Spell attack', parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, e, 'attack'); csRender(); return true; }
+  if (d.csSpatk){ csRollD20('Spell attack', parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, e, 'attack:spell'); csRender(); return true; }
   if (d.csSpdmg){
     const s = csSpell(d.csSpdmg); if (!s) return true;
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpdmg) + '"]');
@@ -1255,6 +1321,8 @@ function csSpellsClick(e, t, d, pc){
         if (p.concentration && p.concentration !== name && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
         p.concentration = name;
       }
+      const tg = ((p.sheet || {}).states || []).find(x => x.spell === name && !x.conc);
+      if (tg) p.active = Object.assign({}, p.active, { [tg.key]: true });
     });
     if (typeof showToast === 'function') showToast('Cast ' + name + (/^\d+$/.test(how) && +how > 0 ? ' (' + CS_ORD[+how] + ' slot)' : how === 'ritual' ? ' as a ritual' : how === 'free' ? ' (free use)' : how === 'arcanum' ? ' (Mystic Arcanum)' : ''));
     return true;

@@ -1743,6 +1743,7 @@ registerPanel('party',{
       // Rage / Wild Shape: both end at any rest (rage lasts 1 minute;
       // wildshape ends at the druid's choice or when its hours expire).
       c.rage = false; c.rageRounds = null;
+      c.active = null;   // the sheet's toggles (Bladesong, Mage Armor…)
       c.wildshape = null;
       // Silent mirror — one combat render at the bottom, not N.
       this._mirrorPartyToCombatSilent(i);
@@ -1808,6 +1809,8 @@ registerPanel('party',{
     // rest cleared it — and the long rest's own comment claims "rage and
     // wild shape end at any rest", which was true of one of the two rests.
     c.rage = false; c.rageRounds = null;
+    // The sheet's toggles: an hour is past all but Mage Armor's eight.
+    if (c.active) c.active = c.active['Mage Armor'] ? { 'Mage Armor': true } : null;
     if (c.wildshape) c.wildshape = null;
     // What comes back on a short rest. A character from the builder says so
     // on each pool: recharge 'short' refills it (Action Surge, Focus Points,

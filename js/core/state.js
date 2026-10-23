@@ -62,6 +62,9 @@ let layout=JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
 // value is byte-identical to what's stored, so only the domain(s) that
 // actually changed get marked dirty and pushed to Firebase.
 function save(){
+  // A character whose on/off states changed (Rage, concentration, a sheet
+  // toggle) gets its numbers worked out again before they're stored.
+  if (typeof sktStatesSyncAll === 'function'){ try { sktStatesSyncAll(); } catch(e){} }
   try{
     localStorage.setItem(PARTY_KEY,JSON.stringify(state.party));
     localStorage.setItem(COMBAT_KEY,JSON.stringify({combatants:state.combatants,combatRound:state.combatRound,activeCombatantId:state.activeCombatantId}));

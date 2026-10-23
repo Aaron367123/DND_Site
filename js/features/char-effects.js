@@ -418,4 +418,61 @@
   def('2024:class:wizard:Scholar', () => {});                       // an expertise pick in the builder
   def('2024:class:wizard:Memorize Spell', ctx => note(ctx, 'Memorize Spell: after a short rest, swap one prepared spell for another from your spellbook.'));
 
+  // ── On/off states: the sheet's toggles ─────────────────────────────────
+  // Each one changes numbers while it's on, the way D&D Beyond's do. A
+  // spell's is offered when the character has the spell; turning on a
+  // concentration spell is concentrating on it.
+  const st = api.sktDefineState, has = (ctx, n) => ctx.featureNames.has(n);
+  const DMG = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
+  st({ key: 'Rage', label: 'Rage', resource: 'Rage', has: ctx => has(ctx, 'Rage') && ctx.rageDamage,
+    // The 2024 Wild Heart picks an animal each time it rages.
+    options: ctx => has(ctx, 'Rage of the Wilds') ? ['Bear', 'Eagle', 'Wolf'] : [],
+    desc: (ctx, v) => 'Advantage on Strength checks and saves, +' + ctx.rageDamage + ' damage on Strength melee attacks, '
+      + (ctx.edition === '2014' && (ctx.build.featureChoices || {})['Totem Spirit'] === 'Bear' ? 'resistance to all damage but psychic.'
+        : v === 'Bear' ? 'resistance to all damage except force, necrotic, psychic and radiant.'
+        : 'resistance to bludgeoning, piercing and slashing.'
+          + (v === 'Eagle' ? ' Dash and Disengage as one bonus action.' : v === 'Wolf' ? ' Allies have advantage on attacks against enemies within 5 ft of you.' : '')),
+    apply: (ctx, v) => {
+      ctx.rageOn = ctx.rageDamage;
+      ['bludgeoning', 'piercing', 'slashing'].forEach(t => ctx.resist.add(t));
+      if (ctx.edition === '2014' && (ctx.build.featureChoices || {})['Totem Spirit'] === 'Bear') DMG.filter(t => t !== 'psychic').forEach(t => ctx.resist.add(t));
+      if (v === 'Bear') DMG.filter(t => !['force', 'necrotic', 'psychic', 'radiant'].includes(t)).forEach(t => ctx.resist.add(t));
+      ctx.rollAdv.push({ on: ['ab:str', 'save:str'], label: 'Rage' });
+      if (has(ctx, 'Divine Fury')) ctx.extraDamage.push({ label: 'Divine Fury', dice: '1d6+' + Math.floor(ctx.classLevel('barbarian') / 2) + ' radiant', note: 'the first creature you hit each turn while raging' });
+    } });
+  st({ key: 'Bladesong', label: 'Bladesong', resource: 'Bladesong', has: ctx => has(ctx, 'Bladesong'),
+    desc: ctx => '+' + abm(ctx, 'int') + ' AC and to concentration saves, +10 ft speed, advantage on Acrobatics. Not in medium or heavy armour' + (ctx.edition === '2014' ? ' or with a shield.' : '.'),
+    apply: ctx => {
+      const b = abm(ctx, 'int');
+      ctx.acBonus.push({ label: 'Bladesong', value: b }); ctx.speedBonus += 10; ctx.concBonus += b;
+      ctx.rollAdv.push({ on: ['skill:acrobatics'], label: 'Bladesong' });
+    } });
+  st({ key: 'Innate Sorcery', label: 'Innate Sorcery', resource: 'Innate Sorcery', edition: '2024', has: ctx => has(ctx, 'Innate Sorcery'),
+    desc: '+1 to your sorcerer spell save DC and advantage on sorcerer spell attacks, for 1 minute.',
+    apply: ctx => { ctx.spellDcBonus += 1; ctx.rollAdv.push({ on: ['attack:spell'], label: 'Innate Sorcery' }); } });
+  st({ key: 'Sacred Weapon', label: 'Sacred Weapon', resource: 'Channel Divinity', has: ctx => ctx.actions.some(a => a.name === 'Sacred Weapon'),
+    desc: ctx => '+' + abm(ctx, 'cha') + ' to attack rolls with weapons for 1 minute.',
+    apply: ctx => { ctx.weaponHit += abm(ctx, 'cha'); } });
+  st({ key: 'Hexblade\'s Curse', label: 'Hexblade’s Curse', resource: 'Hexblade\'s Curse', has: ctx => has(ctx, 'Hexblade\'s Curse'),
+    desc: ctx => 'Against the cursed target: +' + ctx.pb + ' damage, and a critical hit on 19 or 20.',
+    apply: ctx => { ctx.damageBonusAll += ctx.pb; ctx.critRange = Math.min(ctx.critRange, 19); } });
+  st({ key: 'Shield', label: 'Shield', spell: 'Shield', desc: '+5 AC until the start of your next turn.', apply: ctx => ctx.acBonus.push({ label: 'Shield', value: 5 }) });
+  st({ key: 'Shield of Faith', label: 'Shield of Faith', spell: 'Shield of Faith', desc: '+2 AC.', apply: ctx => ctx.acBonus.push({ label: 'Shield of Faith', value: 2 }) });
+  st({ key: 'Mage Armor', label: 'Mage Armor', spell: 'Mage Armor', desc: 'Base AC 13 + Dexterity without armour.',
+    apply: ctx => ctx.acOptions.push({ label: 'Mage Armor', value: 13 + ctx.mod.dex, noArmor: true, shieldOk: true }) });
+  st({ key: 'Barkskin', label: 'Barkskin', spell: 'Barkskin', desc: ctx => 'AC can’t be lower than ' + (ctx.edition === '2014' ? 16 : 17) + '.',
+    apply: ctx => { ctx.acFloor = { label: 'Barkskin', value: ctx.edition === '2014' ? 16 : 17 }; } });
+  st({ key: 'Haste', label: 'Haste', spell: 'Haste', desc: '+2 AC, double speed, advantage on Dexterity saves, an extra action.',
+    apply: ctx => { ctx.acBonus.push({ label: 'Haste', value: 2 }); ctx.speedMult *= 2; ctx.rollAdv.push({ on: ['save:dex'], label: 'Haste' }); } });
+  st({ key: 'Bless', label: 'Bless', spell: 'Bless', desc: '+1d4 to attack rolls and saving throws.',
+    apply: ctx => ctx.rollDice.push({ on: ['attack', 'save'], die: 4, label: 'Bless' }) });
+  st({ key: 'Longstrider', label: 'Longstrider', spell: 'Longstrider', desc: '+10 ft speed.', apply: ctx => { ctx.speedBonus += 10; } });
+  st({ key: 'Stoneskin', label: 'Stoneskin', spell: 'Stoneskin', desc: ctx => 'Resistance to ' + (ctx.edition === '2014' ? 'nonmagical ' : '') + 'bludgeoning, piercing and slashing damage.',
+    apply: ctx => ['bludgeoning', 'piercing', 'slashing'].forEach(t => ctx.resist.add(t)) });
+  st({ key: 'Shillelagh', label: 'Shillelagh', spell: 'Shillelagh',
+    desc: 'A club or quarterstaff hits with your spellcasting ability and a bigger die.',
+    apply: ctx => { const L = ctx.level; ctx.shillelagh = { die: ctx.edition === '2014' || L < 5 ? '1d8' : L < 11 ? '1d10' : L < 17 ? '1d12' : '2d6' }; } });
+  st({ key: 'Divine Favor', label: 'Divine Favor', spell: 'Divine Favor', desc: '+1d4 radiant damage on weapon hits.',
+    apply: ctx => ctx.extraDamage.push({ label: 'Divine Favor', dice: '1d4 radiant', note: 'each weapon hit' }) });
+
 })(typeof module !== 'undefined' && module.exports ? require('./char-rules.js') : window);
