@@ -7320,7 +7320,7 @@
         const clD = mk(R14, '2014', { species: 'Custom Lineage', subspecies: 'Darkvision' }), clS = mk(R14, '2014', { species: 'Custom Lineage', subspecies: 'Skill Proficiency' });
         ok('audit: Custom Lineage: darkvision or a skill, not both', /Darkvision 60/.test(clD.sheet.senses) && !/Darkvision/.test(clS.sheet.senses || ''), clD.sheet.senses + ' / ' + clS.sheet.senses);
         // Expanded spell lists, and 2014 subclasses for 2024 classes.
-        const opts = (R, ed, cls, sub, L, lv) => sktSpellOptions(R, Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L }), lv).map(x => x.name);
+        const opts = (R, ed, cls, sub, L, lv) => sktSpellOptions(R, Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L, subclassPick: sub === 'Divine Soul' ? 'Good' : sub === 'Genie' ? 'Dao' : '' }), lv).map(x => x.name);
         ok('audit: a fiend warlock can learn Burning Hands', opts(R14, '2014', 'Warlock', 'Fiend', 1, 1).includes('Burning Hands') && !opts(R14, '2014', 'Warlock', 'Archfey', 1, 1).includes('Burning Hands'));
         ok('audit: a 2024 hexblade gets the hexblade list', opts(R24, '2024', 'Warlock', 'Hexblade', 3, 1).includes('Shield'));
         ok('audit: chronurgy wizards get the dunamancy spells', opts(R14, '2014', 'Wizard', 'Chronurgy', 2, 1).includes('Gift of Alacrity') && !opts(R14, '2014', 'Wizard', 'Evoker', 2, 1).includes('Gift of Alacrity'));
@@ -7377,6 +7377,233 @@
         ok('audit: Custom Lineage asks for a skill only with that option', noSkill && !!document.querySelector('#cb-root [data-cb-spskill]'));
         cbClose();
       } catch(e){ ok('round 23 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
+    // -- Round 24: subclass picks D&D Beyond asks for --------------------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const ap = (R, ed, cls, sub, L, pick) => sktBuildAlwaysPrepared(Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L, subclassPick: pick }), R);
+        ok('picks: a 2014 arctic druid has the arctic circle spells', ap(R14, '2014', 'Druid', 'Land', 5, 'Arctic').join() === 'Hold Person,Spike Growth,Sleet Storm,Slow');
+        ok('picks: a 2024 polar druid has the polar spells', ap(R24, '2024', 'Druid', 'Land', 3, 'Polar Land').includes('Ray of Frost') && !ap(R24, '2024', 'Druid', 'Land', 3, 'Polar Land').includes('Fire Bolt'));
+        ok('picks: and the land is asked for', sktBuildTodo(Object.assign(sktBlankBuild('2014'), { cls: 'Druid', subclass: 'Land', level: 3 }), R14).some(t => t.what === 'a land type for Land'));
+        ok('picks: a good divine soul knows Cure Wounds', ap(R14, '2014', 'Sorcerer', 'Divine Soul', 1, 'Good').includes('Cure Wounds'));
+        ok('picks: a giant barbarian\'s cantrip is the one chosen', ap(R14, '2014', 'Barbarian', 'Giant', 3, 'Thaumaturgy').join() === 'Thaumaturgy');
+        const gen = n => sktSpellOptions(R14, Object.assign(sktBlankBuild('2014'), { cls: 'Warlock', subclass: 'Genie', level: 1, subclassPick: n }), 1).map(x => x.name);
+        ok('picks: a dao genie warlock gets the dao spells, not the djinni\'s', gen('Dao').includes('Sanctuary') && !gen('Dao').includes('Thunderwave') && gen('Djinni').includes('Thunderwave'));
+        // The Hunter's options and the totems.
+        const h = Object.assign(sktBlankBuild('2014'), { cls: 'Ranger', subclass: 'Hunter', level: 11 });
+        ok('picks: the Hunter asks for its prey, tactics and multiattack', sktBuildChoices(h, R14).map(c => c.feature).join() === "Hunter's Prey,Defensive Tactics,Multiattack");
+        h.featureChoices = { "Hunter's Prey": 'Colossus Slayer', 'Defensive Tactics': 'Steel Will', Multiattack: 'Volley' };
+        const hf = sktComputeCharacter(h, R14).sheet.featureList.map(f => f.name);
+        ok('picks: and only the chosen options are the character\'s', hf.includes('Colossus Slayer') && !hf.includes('Giant Killer') && hf.includes('Steel Will') && !hf.includes('Escape the Horde'), hf.join());
+        const h24 = Object.assign(sktBlankBuild('2024'), { cls: 'Ranger', subclass: 'Hunter', level: 7, featureChoices: { "Hunter's Prey": 'Horde Breaker' } });
+        ok('picks: the 2024 Hunter\'s prey shows as chosen', sktComputeCharacter(h24, R24).sheet.notes.includes("Hunter's Prey: Horde Breaker."));
+        ok('picks: the totem warrior chooses each animal', sktBuildChoices(Object.assign(sktBlankBuild('2014'), { cls: 'Barbarian', subclass: 'Totem Warrior', level: 14 }), R14).map(c => c.feature + ':' + c.spec.options.length).join() === 'Totem Spirit:5,Aspect of the Beast:5,Totemic Attunement:5');
+        // The Armorer's armour model, and the model's own features.
+        const arm = Object.assign(sktBlankBuild('2014'), { cls: 'Artificer', subclass: 'Armorer', level: 3, featureChoices: { 'Armor Model': 'Guardian' } });
+        const af = sktComputeCharacter(arm, R14).sheet.featureList.map(f => f.name);
+        ok('picks: a guardian armorer has thunder gauntlets, not the infiltrator’s launcher', af.includes('Thunder Gauntlets') && !af.includes('Lightning Launcher'), af.join());
+        ok('picks: the 2024 armorer chooses from three models', (sktBuildChoices(Object.assign(sktBlankBuild('2024'), { cls: 'Artificer', subclass: 'Armorer', level: 3 }), R24).find(c => c.feature === 'Armor Model') || { spec: { options: [] } }).spec.options.length === 3);
+        // Spells a subclass lets you pick.
+        const gr = (R, ed, cls, sub, L) => sktSubclassSpellGrants(Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L }), R);
+        const arcana = gr(R14, '2014', 'Cleric', 'Arcana', 1)[0];
+        ok('picks: an arcana cleric chooses two wizard cantrips', !!arcana && arcana.choices[0].count === 2 && arcana.choices[0].options.includes('Fire Bolt') && !arcana.choices[0].options.includes('Guidance'));
+        const ab = Object.assign(sktBlankBuild('2014'), { cls: 'Cleric', subclass: 'Arcana', level: 1, featChoices: { 'Arcana Domain': { spells: ['Fire Bolt', 'Light'] } } });
+        ok('picks: and has them', sktComputeCharacter(ab, R14).sheet.featSpells.some(g => g.feat === 'Arcana Domain' && g.spells.includes('Fire Bolt')));
+        ok('picks: unpicked, they are on the to-do list', sktBuildTodo(Object.assign(sktBlankBuild('2014'), { cls: 'Cleric', subclass: 'Arcana', level: 1 }), R14).some(t => t.what === 'the spells from Arcana Domain'));
+        const scion = gr(R24, '2024', 'Rogue', 'Scion of the Three', 3)[0];
+        ok('picks: a choice written as a list offers only that list', !!scion && scion.choices[0].options.join() === 'Minor Illusion,Blade Ward,Chill Touch', scion && scion.choices[0].options.length);
+        ok('picks: the Lore bard’s Additional Magical Secrets are two picks', gr(R14, '2014', 'Bard', 'Lore', 6)[0].choices.length === 2);
+        // The builder: the land cards, and Quick Build keeping a storm herald's environment.
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Druid', level: 3, subclass: 'Land' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'class'; cbRender(); await sleep(20);
+        const arc = document.querySelector('#cb-root [data-cb-subpick="Arctic"]');
+        ok('picks: the Class step offers the lands', !!arc && document.querySelectorAll('#cb-root [data-cb-subpick]').length === 8);
+        arc.click(); await sleep(30);
+        ok('picks: and keeps the one clicked', CB.build.subclassPick === 'Arctic');
+        // A multiclassed druid picks its land on its row.
+        Object.assign(CB.build, { cls: 'Fighter', level: 5, subclass: 'Champion', multi: [{ cls: 'Druid', level: 3, subclass: 'Land' }] }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('picks: a multiclass land druid is asked for its land', sktBuildTodo(CB.build, CB.R).some(t => t.what === 'a land type for Land'));
+        CB.step = 'class'; cbRender(); await sleep(20);
+        const mc = document.querySelector('#cb-root [data-cb-mcpick="0||Coast"]');
+        ok('picks: its row offers the lands', !!mc);
+        if (mc){ mc.click(); await sleep(30); }
+        ok('picks: and keeps the one clicked', CB.build.multi[0].subclassPick === 'Coast' && sktBuildAlwaysPrepared(CB.build, CB.R).includes('Mirror Image'));
+        CB.build.multi = [];
+        Object.assign(CB.build, { cls: 'Barbarian', level: 14, subclass: 'Storm Herald', featureChoices: { 'Storm Aura': 'Sea' } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        cbQuickBuild();
+        ok('picks: Quick Build keeps the storm herald\'s environment', CB.build.featureChoices['Storm Soul'] === 'Sea' && CB.build.featureChoices['Raging Storm'] === 'Sea', JSON.stringify(CB.build.featureChoices));
+        cbClose();
+      } catch(e){ ok('round 24 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
+    // -- Round 25: proficiencies subclass features grant -----------------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const pc = (R, ed, cls, sub, L, extra) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L }, extra || {}), R);
+        const hex = pc(R14, '2014', 'Warlock', 'Hexblade', 1).sheet.proficiencies;
+        ok('profs: a hexblade wears medium armour and shields and uses martial weapons', hex.armor.includes('medium') && hex.armor.includes('shield') && hex.weapons.includes('martial'));
+        const tem = pc(R24, '2024', 'Cleric', 'Tempest', 3).sheet.proficiencies;
+        ok('profs: a tempest cleric has heavy armour and martial weapons', tem.armor.includes('heavy') && tem.weapons.includes('martial'));
+        const val = pc(R14, '2014', 'Bard', 'Valor', 3).sheet.proficiencies;
+        ok('profs: a valor bard has medium armour, shields and martial weapons', val.armor.includes('medium') && val.armor.includes('shield') && val.weapons.includes('martial'));
+        ok('profs: a gloom stalker gains Wisdom saves at 7', pc(R14, '2014', 'Ranger', 'Gloom Stalker', 7).sheet.saveProf.includes('wis') && !pc(R14, '2014', 'Ranger', 'Gloom Stalker', 6).sheet.saveProf.includes('wis'));
+        ok('profs: an artillerist uses martial ranged weapons', pc(R24, '2024', 'Artificer', 'Artillerist', 3).sheet.proficiencies.weapons.includes('longbow'));
+        ok('profs: a forge cleric has smith\'s tools', pc(R14, '2014', 'Cleric', 'Forge', 1).sheet.proficiencies.tools.includes("smith's tools"));
+        ok('profs: a rune knight speaks Giant', /Giant/.test(pc(R14, '2014', 'Fighter', 'Rune Knight', 3).sheet.languages));
+        ok('profs: a temporary proficiency is not kept', !sktProfGrants('As an action, you touch a creature. For 1 hour, you gain proficiency with heavy armor.').any && sktProfGrants('You gain proficiency with heavy armor.').armor.includes('heavy'));
+        // Choices.
+        const lore = Object.assign(sktBlankBuild('2014'), { cls: 'Bard', subclass: 'Lore', level: 3 });
+        ok('profs: a lore bard is asked for three skills', sktBuildTodo(lore, R14).some(t => t.what === '3 skills from Bonus Proficiencies'));
+        lore.profPicks = { 'Bonus Proficiencies': { skills: ['arcana', 'history', 'stealth'] } };
+        const ls = sktComputeCharacter(lore, R14).sheet.skillProf;
+        ok('profs: and has the ones picked', ls.arcana && ls.history && ls.stealth);
+        ok('profs: a knowledge cleric picks two of four skills', (sktProfChoices(Object.assign(sktBlankBuild('2014'), { cls: 'Cleric', subclass: 'Knowledge', level: 1 }), R14)[0] || {}).options.join() === 'arcana,history,nature,religion');
+        ok('profs: a battle master picks an artisan\'s tool', sktToolChoices(Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', subclass: 'Battle Master', level: 3 }), R14).some(c => c.key === 'sub:Student of War' && c.options.includes("Smith's Tools")));
+        const blade = sktProfChoices(Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', subclass: 'Bladesinging', level: 2 }), R14).find(c => c.kind === 'weapons');
+        ok('profs: a 2014 bladesinger picks a one-handed melee weapon', !!blade && blade.options.includes('rapier') && !blade.options.includes('greatsword'));
+        // The builder: the picks on the Skills step, languages counted, Quick Build.
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Bard', level: 3, subclass: 'Lore' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'skills'; cbRender(); await sleep(20);
+        const box = document.querySelector('#cb-root [data-cb-profpick="Bonus Proficiencies||skills||insight"]');
+        ok('profs: the Skills step offers the lore bard\'s skills', !!box);
+        if (box){ box.click(); await sleep(30); }
+        ok('profs: and keeps the one clicked', ((CB.build.profPicks || {})['Bonus Proficiencies'] || {}).skills.includes('insight'));
+        Object.assign(CB.build, { cls: 'Cleric', level: 1, subclass: 'Knowledge', profPicks: {}, background: 'Acolyte' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('profs: a knowledge cleric learns two more languages', cbLanguageCount() === 4, cbLanguageCount());
+        const kcount = cbLanguageCount();
+        Object.assign(CB.build, { cls: 'Ranger', level: 6, subclass: 'Hunter' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('profs: a 2014 ranger learns a language per favored enemy', cbLanguageCount() === 4, cbLanguageCount());
+        Object.assign(CB.build, { cls: 'Cleric', level: 1, subclass: 'Knowledge' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        cbQuickBuild();
+        const kc = sktProfChoices(CB.build, CB.R)[0];
+        ok('profs: Quick Build fills the subclass\'s picks', !!kc && kc.picked.length === 2 && !sktBuildTodo(CB.build, CB.R).some(t => /from Blessings/.test(t.what)));
+        cbClose();
+        await openCharBuilder({ edition: '2024' }); await sleep(300);
+        Object.assign(CB.build, { cls: 'Rogue', level: 1 }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('profs: a 2024 rogue learns a language beside Thieves’ Cant', cbLanguageCount() === 3, cbLanguageCount());
+        Object.assign(CB.build, { cls: 'Ranger', level: 2 }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('profs: a 2024 ranger’s Deft Explorer adds two', cbLanguageCount() === 4, cbLanguageCount());
+        Object.assign(CB.build, { cls: 'Rogue', level: 3, subclass: 'Mastermind' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('profs: a 2024 mastermind learns two more', cbLanguageCount() === 5, cbLanguageCount());
+        cbClose();
+      } catch(e){ ok('round 25 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
+    // -- Round 26: Mystic Arcanum ----------------------------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const wb = Object.assign(sktBlankBuild('2014'), { cls: 'Warlock', subclass: 'Fiend', level: 13 });
+        ok('arcanum: a 13th-level warlock has 6th and 7th', sktArcanumLevels(wb, R14).join() === '6,7' && !sktArcanumLevels(Object.assign({}, wb, { level: 10 }), R14).length);
+        ok('arcanum: and is asked for them', sktBuildTodo(wb, R14).filter(t => /Mystic Arcanum/.test(t.what)).length === 2);
+        ok('arcanum: the 6th-level choices are warlock spells', sktArcanumOptions(wb, R14, 6).includes('Circle of Death') && !sktArcanumOptions(wb, R14, 6).includes('Heal'));
+        // 2024 third-casters prepare spells by their own column.
+        const R24 = await sktRulesLoad('2024');
+        const ek = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', subclass: 'Eldritch Knight', level: 3, abilities: { method: 'manual', base: { str: 15, dex: 12, con: 14, int: 14, wis: 10, cha: 8 } } });
+        ok('casting: a 2024 eldritch knight prepares 3 spells at 3rd level', (sktBuildSpellcasting(ek, R24, sktBuildAbilities(ek, R24)) || {}).prepared === 3);
+        const at = Object.assign({}, ek, { cls: 'Rogue', subclass: 'Arcane Trickster', level: 10 });
+        ok('casting: a 2024 arcane trickster prepares 7 at 10th', (sktBuildSpellcasting(at, R24, sktBuildAbilities(at, R24)) || {}).prepared === 7);
+        ok('casting: and is asked for them', sktBuildTodo(ek, R24).some(t => t.step === 'spells'));
+        // The builder.
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Warlock', level: 11, subclass: 'Fiend' }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'spells'; cbRender(); await sleep(20);
+        const pick = document.querySelector('#cb-root [data-cb-arcanum="6|Circle of Death"]');
+        ok('arcanum: the Spells step offers them', !!pick);
+        if (pick){ pick.click(); await sleep(30); }
+        ok('arcanum: and keeps the pick', (CB.build.arcanum || {})[6] === 'Circle of Death');
+        CB.build.arcanum = {}; CB.build.level = 13; cbQuickBuild();
+        ok('arcanum: Quick Build fills them', !!(CB.build.arcanum || {})[6] && !!(CB.build.arcanum || {})[7]);
+        cbClose();
+        // The sheet: cast once with its own daily use.
+        window._findCombatantForPartyMember = () => -1;
+        const w = sktComputeCharacter(Object.assign({}, wb, { name: 'Arc', species: 'Human', arcanum: { 6: 'Circle of Death' } }), R14);
+        w.id = 'pc_r26'; state.party.push(w); save();
+        const me = () => state.party.find(p => p.id === 'pc_r26');
+        openCharSheet('pc_r26', { tab: 'spells' }); await sleep(300);
+        const btn = document.querySelector('#cs-root [data-cs-cast="Circle of Death:arcanum"]');
+        ok('arcanum: the sheet offers it as Mystic Arcanum', !!btn && !btn.disabled);
+        if (btn){ btn.click(); await sleep(60); }
+        ok('arcanum: casting spends the 6th-level use, not a slot', (me().resources.find(r => r.name === 'Mystic Arcanum (6th)') || {}).current === 0);
+        const again = document.querySelector('#cs-root [data-cs-cast="Circle of Death:arcanum"]');
+        ok('arcanum: and it can\'t be cast again until a long rest', !!again && again.disabled);
+        csClose();
+      } catch(e){ ok('round 26 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (typeof csClose === 'function') csClose();
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 27: limited uses read from the text -----------------------------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const ab = { method: 'manual', base: { str: 14, dex: 14, con: 14, int: 14, wis: 16, cha: 14 } };
+        const res = (R, ed, cls, sub, L, name) => (sktComputeCharacter(Object.assign(sktBlankBuild(ed), { cls, subclass: sub, level: L, abilities: JSON.parse(JSON.stringify(ab)) }), R).resources || []).find(r => r.name === name) || null;
+        const ws = res(R14, '2014', 'Cleric', 'Tempest', 1, 'Wrath of the Storm');
+        ok('uses: Wrath of the Storm, Wisdom modifier times a long rest', !!ws && ws.max === 3 && ws.recharge === 'long');
+        const dl = res(R14, '2014', 'Warlock', 'Fiend', 6, "Dark One's Own Luck");
+        ok('uses: Dark One\'s Own Luck, once per short rest', !!dl && dl.max === 1 && dl.recharge === 'short');
+        const as = res(R14, '2014', 'Fighter', 'Arcane Archer', 3, 'Arcane Shot');
+        ok('uses: Arcane Shot, two uses per short rest', !!as && as.max === 2 && as.recharge === 'short');
+        const fs = res(R24, '2024', 'Fighter', 'Samurai', 3, 'Fighting Spirit');
+        ok('uses: Fighting Spirit, three times a long rest', !!fs && fs.max === 3);
+        const pe14 = res(R14, '2014', 'Rogue', 'Soulknife', 5, 'Psionic Energy'), pe24 = res(R24, '2024', 'Fighter', 'Psi Warrior', 10, 'Psionic Energy');
+        ok('uses: psionic energy dice (2014: twice proficiency, d8 at 5th)', !!pe14 && pe14.max === 6 && pe14.die === 'd8');
+        ok('uses: psionic energy dice (2024: the table, one back on a short rest)', !!pe24 && pe24.max === 8 && pe24.die === 'd8' && pe24.recharge === 'short-one');
+        ok('uses: a Channel Divinity option spends Channel Divinity, not its own', !res(R14, '2014', 'Cleric', 'Tempest', 2, 'Channel Divinity: Destructive Wrath'));
+        const sp = x => (sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', level: 5, allBooks: true }, x), R14).resources || []);
+        ok('uses: species traits too (Rabbit Hop, proficiency bonus times)', (sp({ species: 'Harengon' }).find(r => r.name === 'Rabbit Hop') || {}).max === 3);
+        ok('uses: and feats (Orcish Fury, once per short rest)', (sp({ species: 'Half-Orc', asi: { 4: { type: 'feat', feat: 'Orcish Fury' } } }).find(r => r.name === 'Orcish Fury') || {}).recharge === 'short');
+        ok('uses: but not a once-a-day spell, which casts free from the sheet', !sp({ asi: { 4: { type: 'feat', feat: 'Fey Touched' } } }).some(r => r.name === 'Fey Touched'));
+        ok('uses: a feature with no stated limit has no tracker', sktUsesFromText('You can use your action to frighten someone with your menacing presence.', { pb: 2, mod: {} }, 'Intimidating Presence') === null);
+      } catch(e){ ok('round 27 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
+    // -- Round 28: a feat once, unless it repeats ------------------------------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Fighter', level: 8, showAllFeats: true, asi: { 4: { type: 'feat', feat: 'Alert' }, 6: { type: 'feat', feat: '' } } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'levels'; cbRender(); await sleep(20);
+        const opts = [...(document.querySelector('#cb-root [data-cb-asifeat="6"]') || { options: [] }).options].map(o => o.value);
+        ok('feats: a feat already taken isn\'t offered again', opts.length > 10 && !opts.includes('Alert'), opts.length);
+        CB.build.asi[4] = { type: 'feat', feat: 'Elemental Adept' }; CB.rec = sktComputeCharacter(CB.build, CB.R); cbRender(); await sleep(20);
+        const opts2 = [...(document.querySelector('#cb-root [data-cb-asifeat="6"]') || { options: [] }).options].map(o => o.value);
+        ok('feats: a repeatable one is (Elemental Adept)', opts2.includes('Elemental Adept'));
+        const own = [...(document.querySelector('#cb-root [data-cb-asifeat="4"]') || { options: [] }).options].map(o => o.value);
+        ok('feats: and a slot still lists its own pick', own.includes('Elemental Adept'));
+        cbClose();
+      } catch(e){ ok('round 28 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         document.getElementById('cb-root')?.remove(); CB = null;
         if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }

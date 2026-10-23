@@ -278,6 +278,8 @@ CB_RENDER.class = () => {
       html += '<h4>' + cbEsc(title) + '</h4>' + cbCards(subs, b.subclass, 'cb-sub')
         + cbBooksToggle();
       const sub = sktRulesSubclass(cls, b.subclass);
+      const pk = sktSubclassSpellPick(sub);
+      if (pk) html += '<h4>' + cbEsc(pk.label) + '</h4>' + cbCards(pk.options.map(o => ({ value: o.value, label: o.value })), b.subclassPick, 'cb-subpick');
       if (sub) html += sub.features.filter(f => f.level <= b.level).map(f => '<div class="cb-feat"><b>' + cbEsc(f.name) + '</b> <span class="cb-dim">level ' + f.level + '</span>' + cbFeatureText(sktRulesText(f.entries)) + '</div>').join('');
     } else {
       html += '<div class="cb-dim">' + cbEsc(title) + ' is chosen at level ' + cls.subclassLevel + '.</div>';
@@ -329,9 +331,12 @@ function cbMulticlassHtml(){
     if (!ok) h += '<div class="cb-warn">Multiclassing asks for ' + cbEsc([sktMulticlassNeedText(R, b.cls), sktMulticlassNeedText(R, p.cls)].filter(Boolean).join('; ')) + '. The sheet allows it anyway.</div>';
     if (p.level >= c2.subclassLevel){
       const subs = c2.subclasses.filter(s => s.core || sktBookOk(b, Object.assign({ core: false }, s)) || s.shortName === p.subclass)
-        .filter((s, k, a) => a.findIndex(x => x.shortName === s.shortName) === k)
+        .filter((s, k, a) => { const same = a.filter(x => x.shortName === s.shortName); const pick = sktRulesSubclass(c2, s.shortName); return same.includes(pick) ? s === pick : same[0] === s; })
         .map(s => ({ value: i + '||' + s.shortName, label: s.shortName, sub: s.core ? '' : s.source }));
       h += cbCards(subs, p.subclass ? i + '||' + p.subclass : '', 'cb-mcsub');
+      // Its land, affinity or kind of genie.
+      const pk = sktSubclassSpellPick(sktRulesSubclass(c2, p.subclass)), cur = (p.entry || {}).subclassPick;
+      if (pk) h += '<div class="cb-dim">' + cbEsc(pk.label) + '</div>' + cbCards(pk.options.map(o => ({ value: i + '||' + o.value, label: o.value })), cur ? i + '||' + cur : '', 'cb-mcpick');
     }
     const sk = _sktSkillChoice(((c2.multiclassing || {}).proficienciesGained || {}).skills);
     if (sk.count){
@@ -420,7 +425,9 @@ CB_RENDER.species = () => {
   }
   // A bonus feat: 2014 Variant Human; 2024 Human (Versatile, an origin feat).
   if ((R.edition === '2014' && ((sub && /variant/i.test(sub.name)) || cbSpeciesGivesFeat(sp, sub))) || (R.edition === '2024' && sp.name === 'Human')){
-    const pool = R.feats.filter(f => (R.edition === '2014' ? true : f.category === 'O') && (sktBookOk(b, f) || f.name === b.originFeat));
+    const others = new Set(sktBuildFeatNames(Object.assign({}, b, { originFeat: '' }), R));
+    const pool = R.feats.filter(f => (R.edition === '2014' ? true : f.category === 'O') && (sktBookOk(b, f) || f.name === b.originFeat)
+      && (f.repeatable || f.name === b.originFeat || !others.has(f.name)));
     html += '<h4>' + (R.edition === '2024' ? 'Versatile — an origin feat' : 'Feat') + '</h4>'
       + '<select class="cb-sel" data-cb-originfeat><option value="">Choose a feat…</option>'
       + pool.map(f => '<option' + (b.originFeat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select>'
@@ -567,6 +574,7 @@ function cbQuickBuild(){
   }
   const L = b.level || 1;
   if (L >= cls.subclassLevel && !b.subclass){ const s = cls.subclasses.find(x => x.core) || cls.subclasses[0]; if (s) b.subclass = s.shortName; }
+  { const pk = sktSubclassSpellPick(sktRulesSubclass(cls, b.subclass)); if (pk && !pk.options.some(o => o.value === b.subclassPick)) b.subclassPick = pk.options[0].value; }
   // Fill what the to-do list still asks for, a few passes (one answer can open another).
   for (let pass = 0; pass < 4; pass++){
     const rec = sktComputeCharacter(b, R);
@@ -594,6 +602,15 @@ function cbQuickBuild(){
       b.languages = (b.languages || []).concat(sktLanguageOptions(R, b).filter(n => !known.includes(n))).slice(0, lc);
     }
     sktToolChoices(b, R).forEach(c => { b.toolPicks = b.toolPicks || {}; if ((b.toolPicks[c.key] || []).length < c.count) b.toolPicks[c.key] = c.options.slice(0, c.count); });
+    sktArcanumLevels(b, R).forEach(lv => { if (!(b.arcanum || {})[lv]){ const o = sktArcanumOptions(b, R, lv)[0]; if (o){ b.arcanum = Object.assign({}, b.arcanum); b.arcanum[lv] = o; } } });
+    sktProfChoices(b, R).forEach(c => {
+      if (c.picked.length >= c.count) return;
+      const known = Object.keys(sktComputeCharacter(b, R).sheet.skillProf || {});
+      // Skills not already known first; if too few are left, the rest of the list.
+      const opts = c.kind === 'skills' ? bySkill(c.options.filter(k => !known.includes(k))).concat(c.options.filter(k => known.includes(k))) : c.options;
+      b.profPicks = Object.assign({}, b.profPicks); const p = b.profPicks[c.feature] = Object.assign({}, b.profPicks[c.feature]);
+      p[c.kind] = c.picked.concat(opts.filter(k => !c.picked.includes(k))).slice(0, c.count);
+    });
     // Ability Score Improvements: +2 to the class's best score (to 20), else spread.
     sktAsiSlots(b, R).forEach(s => {
       if (b.asi[s.key]) return;
@@ -604,7 +621,12 @@ function cbQuickBuild(){
     });
     if ((R.edition === '2014' && sub && /variant/i.test(sub.name) || (R.edition === '2024' && sp.name === 'Human')) && !b.originFeat)
       b.originFeat = (R.feats.find(f => f.name === 'Alert' && (R.edition === '2014' || f.category === 'O')) || {}).name || '';
-    sktBuildChoices(b, R).forEach(c => { if (!c.value){ b.featureChoices = b.featureChoices || {}; b.featureChoices[c.feature] = c.spec.options[0].value; } });
+    sktBuildChoices(b, R).forEach(c => {
+      if (c.value) return;
+      b.featureChoices = b.featureChoices || {};
+      const same = c.spec.options.find(o => Object.values(b.featureChoices).includes(o.value));
+      b.featureChoices[c.feature] = (same || c.spec.options[0]).value;
+    });
     sktOptionalChoices(b, R).forEach(o => {
       const have = (b.optional[o.name] || []);
       if (have.length >= o.count) return;
@@ -635,6 +657,7 @@ function cbQuickBuild(){
     sktClassLevels(b, R).slice(1).forEach(p => {
       const c2 = sktRulesClass(R, p.cls), m = p.entry;
       if (p.level >= c2.subclassLevel && !m.subclass){ const s2 = c2.subclasses.find(x => x.core) || c2.subclasses[0]; if (s2) m.subclass = s2.shortName; }
+      { const pk = sktSubclassSpellPick(sktRulesSubclass(c2, m.subclass)); if (pk && !pk.options.some(o => o.value === m.subclassPick)) m.subclassPick = pk.options[0].value; }
       const sk = _sktSkillChoice(((c2.multiclassing || {}).proficienciesGained || {}).skills);
       if (sk.count && (m.skills || []).length < sk.count) m.skills = bySkill(sk.from.filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k))).slice(0, sk.count);
     });
@@ -722,6 +745,12 @@ CB_RENDER.skills = () => {
     html += '<h4>Languages</h4><div class="cb-dim">Already known: ' + cbEsc(known.join(', ') || '—') + '. Choose ' + langCount + ' more.</div>'
       + cbChecks([...new Set(sktLanguageOptions(R, b).concat(b.languages || []))].filter(n => !known.includes(n)), b.languages || [], langCount, 'cb-lang');
   }
+  // Skills and weapons a subclass feature lets the player choose.
+  sktProfChoices(b, R).forEach(c => {
+    const label = k => c.kind === 'skills' ? SKT_SKILL_LABEL[k] : _sktTitle(k);
+    html += '<h4>' + (c.kind === 'skills' ? 'Skills' : 'Weapon') + ' — ' + cbEsc(c.feature) + '</h4>' + cbCounter(c.picked.length, c.count, 'chosen')
+      + cbChecks(c.options.map(k => ({ value: c.feature + '||' + c.kind + '||' + k, label: label(k) })), c.picked.map(k => c.feature + '||' + c.kind + '||' + k), c.count, 'cb-profpick');
+  });
   // Tools the class, background or species leaves to the player.
   sktToolChoices(b, R).forEach(c => {
     const picks = (b.toolPicks || {})[c.key] || [];
@@ -740,16 +769,32 @@ function cbExpertiseCount(){
   if (CB.R.edition === '2024' && cls.key === 'wizard' && L >= 2) n += 1;         // Scholar
   return n;
 }
+// Languages a subclass feature lets the player learn (Knowledge Domain, Mastermind).
+function cbSubclassLanguages(){
+  return sktRulesClass(CB.R, CB.build.cls) ? sktSubclassProfFeatures(CB.build, CB.R).reduce((n, x) => n + x.g.choices.filter(c => c.kind === 'languages').reduce((m, c) => m + c.count, 0), 0) : 0;
+}
+// Languages class features add: the 2024 rogue's one beside Thieves' Cant,
+// the 2024 ranger's two from Deft Explorer, a 2014 ranger's one per
+// favored enemy (1st, 6th and 14th level).
+function cbClassLanguages(){
+  const R = CB.R;
+  return sktClassLevels(CB.build, R).reduce((n, p) => {
+    if (p.key === 'rogue' && R.edition === '2024') n += 1;
+    if (p.key === 'ranger' && R.edition === '2024' && p.level >= 2) n += 2;
+    if (p.key === 'ranger' && R.edition === '2014') n += [1, 6, 14].filter(l => p.level >= l).length;
+    return n;
+  }, 0);
+}
 function cbLanguageCount(){
   const R = CB.R, b = CB.build;
-  if (R.edition === '2024') return 2;
+  if (R.edition === '2024') return 2 + cbSubclassLanguages() + cbClassLanguages();
   let n = 0;
   const sp = sktRulesSpecies(R, b.species), sub = sp && sktSpeciesSub(sp, b);
   const bg = sktBuildBackground(R, b);
   [sp && sp.languages, sub && sub.languages, bg && bg.languages].forEach(list => (list || []).forEach(o => {
     n += (+o.anyStandard || 0) + (+o.any || 0) + (o.choose ? (o.choose.count || 1) : 0);
   }));
-  return n;
+  return n + cbSubclassLanguages() + cbClassLanguages();
 }
 function cbMasteryCount(){
   if (!CB || !CB.R || CB.R.edition !== '2024') return 0;
@@ -824,7 +869,9 @@ CB_RENDER.levels = () => {
       html += '<div class="cb-row"><label class="cb-f">+1' + sel(0) + '</label><label class="cb-f">+1' + sel(1) + '</label></div><div class="cb-dim">Pick the same ability twice for +2.</div>';
     } else if (isFeat){
       const pre = f => sktFeatPrereq(R, Object.assign({}, b, { level: s.primary ? s.level : b.level }), f, CB.rec);
+      const taken = new Set(sktBuildFeatNames(b, R));
       const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || (l >= 19 && f.category === 'EB'))
+                                    && (f.repeatable || p.feat === f.name || !taken.has(f.name))
                                     && (sktBookOk(b, f) || p.feat === f.name)
                                     && (b.showAllFeats || p.feat === f.name || pre(f).ok));
       html += '<select class="cb-sel" data-cb-asifeat="' + l + '"><option value="">Choose a feat…</option>'
@@ -931,6 +978,14 @@ function cbSpellInfoHtml(name){
   return '<div class="cb-spinfo"><b>' + cbEsc(s.name) + '</b> <span class="cb-dim">' + cbEsc(lvl + (s.concentration ? ' · concentration' : '') + (s.ritual ? ' · ritual' : '')) + '</span>'
     + '<button class="cb-x" data-cb-spinfo="" aria-label="Close">✕</button>' + cbFeatureText(sktRulesText(s.entries), true) + '</div>';
 }
+// A warlock's Mystic Arcanum: one spell of each level it has reached.
+function cbArcanumHtml(){
+  const b = CB.build, R = CB.R, lvls = sktArcanumLevels(b, R);
+  if (!lvls.length) return '';
+  return '<h4>Mystic Arcanum</h4><div class="cb-dim">One spell of each level, cast once per long rest without a slot.</div>'
+    + lvls.map(lv => '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>'
+      + cbSpellChecks(sktArcanumOptions(b, R, lv), (b.arcanum || {})[lv] ? [lv + '|' + b.arcanum[lv]] : [], 1, 'cb-arcanum', n => lv + '|' + n) + '</div>').join('');
+}
 // A checklist of spells, each with a button to read it.
 function cbSpellChecks(options, chosen, max, attr, valueOf){
   valueOf = valueOf || (n => n);
@@ -983,7 +1038,7 @@ CB_RENDER.spells = () => {
     }
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
-  return html + cbMultiSpellsHtml() + fromFeats;
+  return html + cbArcanumHtml() + cbMultiSpellsHtml() + fromFeats;
 };
 function cbSlotText(sc){
   return Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—';
@@ -1286,8 +1341,8 @@ function cbOnClick(e){
     if (b.toolPicks) delete b.toolPicks.class;
     b.optional = {}; b.masteries = []; b.equipment = { cls: 'A', bg: b.equipment.bg || 'A', picks: {} };
   });
-  if (d.cbSub) return cbSet(b => { b.subclass = d.cbSub; });
-  if (d.cbMcsub){ const [i, s] = d.cbMcsub.split('||'); return cbSet(b => { if (b.multi[+i]) b.multi[+i].subclass = s; }); }
+  if (d.cbSub) return cbSet(b => { if (b.subclass !== d.cbSub) b.subclassPick = ''; b.subclass = d.cbSub; });
+  if (d.cbMcsub){ const [i, s] = d.cbMcsub.split('||'); return cbSet(b => { if (b.multi[+i]){ if (b.multi[+i].subclass !== s) b.multi[+i].subclassPick = ''; b.multi[+i].subclass = s; } }); }
   if (d.cbMclvl){
     const [i, dlt] = d.cbMclvl.split(':').map(Number);
     return cbSet(b => {
@@ -1314,6 +1369,8 @@ function cbOnClick(e){
   if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
   if (d.cbAncestry) return cbSet(b => { b.speciesChoice.ancestry = d.cbAncestry; });
   if (d.cbSpresist) return cbSet(b => { b.speciesChoice.resist = d.cbSpresist; });
+  if (d.cbMcpick){ const [i, v] = d.cbMcpick.split('||'); return cbSet(b => { if (b.multi[+i]) b.multi[+i].subclassPick = v; }); }
+  if (d.cbSubpick) return cbSet(b => { b.subclassPick = d.cbSubpick; });
   if (d.cbLineage) return cbSet(b => { if (b.speciesChoice.lineage !== d.cbLineage) delete b.speciesChoice.spells; b.speciesChoice.lineage = d.cbLineage; });
   if (d.cbSize) return cbSet(b => { b.size = d.cbSize; });
   if (d.cbSrcall) return cbSet(b => { if (d.cbSrcall === '1') delete b.books; else b.books = []; });
@@ -1439,6 +1496,15 @@ function cbOnChange(e){
     const c = sktToolChoices(CB.build, CB.R).find(x => x.key === key); if (!c) return;
     return cbSet(b => { b.toolPicks = Object.assign({}, b.toolPicks); b.toolPicks[key] = (b.toolPicks[key] || []).slice(); cbToggle(b.toolPicks[key], tool, c.count); });
   }
+  if (d.cbProfpick){
+    const [feature, kind, k] = d.cbProfpick.split('||');
+    const c = sktProfChoices(CB.build, CB.R).find(x => x.feature === feature && x.kind === kind);
+    return cbSet(b => { b.profPicks = Object.assign({}, b.profPicks); const p = b.profPicks[feature] = Object.assign({}, b.profPicks[feature]); p[kind] = (p[kind] || []).slice(); cbToggle(p[kind], k, c ? c.count : 1); });
+  }
+  if (d.cbArcanum){
+    const i = d.cbArcanum.indexOf('|'), lv = d.cbArcanum.slice(0, i), n = d.cbArcanum.slice(i + 1);
+    return cbSet(b => { b.arcanum = Object.assign({}, b.arcanum); if (b.arcanum[lv] === n) delete b.arcanum[lv]; else b.arcanum[lv] = n; });
+  }
   if (d.cbSpskill){
     const sp = sktRulesSpecies(CB.R, CB.build.species), sub = sp && sktSpeciesSub(sp, CB.build);
     const ch = cbSpeciesSkillChoice(sp, sub);
@@ -1478,7 +1544,7 @@ function cbOnChange(e){
   }
   if (d.cbFspell){
     const [feat, name] = d.cbFspell.split('||');
-    const g = feat === '@species' ? sktSpeciesSpellGrant(CB.R, CB.build) : sktFeatSpellGrant(CB.R, CB.build, feat);
+    const g = feat === '@species' ? sktSpeciesSpellGrant(CB.R, CB.build) : sktFeatSpells(CB.build, CB.R).find(x => x.feat === feat);
     const c = g && g.choices.find(x => x.options.includes(name));
     return cbSet(b => {
       const fc = feat === '@species' ? b.speciesChoice : (b.featChoices[feat] = Object.assign({}, b.featChoices[feat]));

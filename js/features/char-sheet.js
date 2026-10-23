@@ -968,6 +968,7 @@ function csSpellsHtml(pc){
   (sh.featSpells || []).forEach(g => g.spells.forEach(n => { from[n] = g.feat; }));
   if (sh.speciesSpells) sh.speciesSpells.spells.forEach(n => { from[n] = 'Species'; });
   const daily = new Set([].concat(...(sh.featSpells || []).map(g => g.daily || []), (sh.speciesSpells && sh.speciesSpells.daily) || []));
+  const arcLv = {}; Object.keys(sh.arcanum || {}).forEach(lv => { arcLv[sh.arcanum[lv]] = lv; from[sh.arcanum[lv]] = 'Mystic Arcanum'; });
   const all = [...new Set(sh.spells || [])];
   if (!all.length) h += '<div class="cb-dim">No spells.</div>';
   // D&D Beyond's level pills and search.
@@ -987,6 +988,7 @@ function csSpellsHtml(pc){
         : (avail.length ? (avail.length > 1 ? '<select class="cb-sel cs-castlvl" data-cs-castlvl="' + csE(n) + '">' + avail.map(x => '<option value="' + x + '">' + CS_ORD[x] + '</option>').join('') + '</select>' : '')
           + '<button class="btn small" data-cs-cast="' + csE(n) + ':' + avail[0] + '">Cast</button>' : '<span class="cb-dim">no slots</span>')
           + (daily.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':free" title="Once per long rest without a slot">Free</button>' : '')
+          + (arcLv[n] ? '<button class="btn small" data-cs-cast="' + csE(n) + ':arcanum"' + (((pc.resources || []).find(r => r.name === 'Mystic Arcanum (' + arcLv[n] + 'th)') || {}).current > 0 ? '' : ' disabled') + ' title="Mystic Arcanum: once per long rest">Arcanum</button>' : '')
           + (s && s.ritual ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>' : '');
       const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
       const atk = l && s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(sh.spellAtkBonus || '') + '</button>' : '';
@@ -1161,12 +1163,18 @@ function csSpellsClick(e, t, d, pc){
         if (!slot || slot.total - (slot.expended || 0) <= 0) return;
         slot.expended = (slot.expended || 0) + 1;
       }
+      if (how === 'arcanum'){
+        const lv = Object.keys(p.sheet.arcanum || {}).find(k => p.sheet.arcanum[k] === name);
+        const r = (p.resources || []).find(x => x.name === 'Mystic Arcanum (' + lv + 'th)');
+        if (!r || r.current <= 0) return;
+        r.current -= 1;
+      }
       if (s && s.concentration){
         if (p.concentration && p.concentration !== name && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
         p.concentration = name;
       }
     });
-    if (typeof showToast === 'function') showToast('Cast ' + name + (/^\d+$/.test(how) && +how > 0 ? ' (' + CS_ORD[+how] + ' slot)' : how === 'ritual' ? ' as a ritual' : how === 'free' ? ' (free use)' : ''));
+    if (typeof showToast === 'function') showToast('Cast ' + name + (/^\d+$/.test(how) && +how > 0 ? ' (' + CS_ORD[+how] + ' slot)' : how === 'ritual' ? ' as a ritual' : how === 'free' ? ' (free use)' : how === 'arcanum' ? ' (Mystic Arcanum)' : ''));
     return true;
   }
   return false;

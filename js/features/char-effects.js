@@ -86,6 +86,17 @@
   });
   both(['subclass:Steel Defender'], ctx => note(ctx, 'Steel Defender: your companion acts on your turn; it takes the Dodge action unless you use a bonus action to command it. Its stat block uses your proficiency bonus.'));
 
+  // ── Psionic Energy (Psi Warrior, Soulknife) ────────────────────────────
+  def('2014:subclass:Psionic Power', ctx => {
+    const L = ctx.level, die = L >= 17 ? 'd12' : L >= 11 ? 'd10' : L >= 5 ? 'd8' : 'd6';
+    pool(ctx, 'Psionic Energy', 2 * ctx.pb, 'long', { die });
+    note(ctx, 'Psionic Energy: ' + 2 * ctx.pb + ' ' + die + ' dice; once per short rest, a bonus action regains one.');
+  });
+  def('2024:subclass:Psionic Power', ctx => {
+    const n = col(ctx, 'Number') || 4, die = String(col(ctx, 'Die Size') || 'd6').toLowerCase();
+    pool(ctx, 'Psionic Energy', typeof n === 'number' ? n : 4, 'short-one', { die });
+  });
+
   // ── Barbarian ──────────────────────────────────────────────────────────
   def('2014:class:barbarian:Brutal Critical', ctx => {
     const n = ctx.level >= 17 ? 3 : ctx.level >= 13 ? 2 : 1;
