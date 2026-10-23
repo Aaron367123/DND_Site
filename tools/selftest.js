@@ -5962,6 +5962,146 @@
       }
     }
 
+    // -- The character sheet window -------------------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { d: window.sktD, conf: window.showConfirm, find: window._findCombatantForPartyMember };
+      try {
+        const R = await sktRulesLoad('2014');
+        const b = Object.assign(sktBlankBuild('2014'), { name: 'Sheeta', species: 'Elf', subspecies: 'High', cls: 'Wizard', subclass: 'Evocation', level: 5, background: 'Sage',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } }, skills: ['arcana', 'investigation'],
+          cantrips: ['Fire Bolt', 'Mage Hand', 'Light'], spellbook: ['Magic Missile', 'Shield', 'Fireball', 'Misty Step', 'Sleep', 'Detect Magic', 'Mage Armor', 'Burning Hands', 'Hold Person', 'Counterspell', 'Haste', 'Web', 'Thunderwave', 'Find Familiar'],
+          spells: ['Magic Missile', 'Shield', 'Fireball', 'Misty Step', 'Hold Person', 'Counterspell', 'Haste', 'Web'], speciesChoice: { spells: ['Prestidigitation'] } });
+        const rec = sktComputeCharacter(b, R); rec.id = 'pc_sheet_test'; state.party.push(rec); save();
+        window._findCombatantForPartyMember = () => -1;
+        const me = () => state.party.find(p => p.id === 'pc_sheet_test');
+        openCharSheet('pc_sheet_test'); await sleep(400);
+        const root = () => document.getElementById('cs-root');
+        const q = s => root().querySelector(s), qa = s => [...root().querySelectorAll(s)];
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const tab = async t => { click('[data-cs-tab="' + t + '"]'); await sleep(40); };
+        ok('sheet: it opens with the six tabs D&D Beyond has', !!root() && JSON.stringify(qa('.cs-tab').filter(e => e.offsetParent).map(e => e.textContent)) === '["Actions","Spells","Inventory","Features & Traits","Background","Notes"]');
+        ok('sheet: abilities, saves and skills down the side', qa('.cs-ab').length === 6 && qa('[data-cs-roll^="save:"]').length === 6 && qa('[data-cs-roll^="skill:"]').length === 18
+           && /Intelligence/.test(q('[data-cs-roll="save:int"]').textContent) && /\+6/.test(q('[data-cs-roll="save:int"]').textContent));
+        // Rolling.
+        window.sktD = () => 10;
+        click('[data-cs-roll="save:int"]'); await sleep(30);
+        ok('sheet: a click rolls the save', CS.log[0] && CS.log[0].total === 16 && CS.log[0].rolls.length === 1 && /16/.test(q('.cs-last').textContent));
+        click('[data-cs-mode="adv"]'); await sleep(20);
+        { let k = 0; window.sktD = () => (k++ % 2 ? 15 : 5); }
+        click('[data-cs-roll="skill:arcana"]'); await sleep(30);
+        ok('sheet: with advantage, two dice and the higher', CS.log[0].rolls.length === 2 && CS.log[0].mode === 'adv' && CS.log[0].natural === 15);
+        click('[data-cs-mode="dis"]'); await sleep(20);
+        click('[data-cs-roll="skill:arcana"]'); await sleep(30);
+        ok('sheet: with disadvantage, the lower', CS.log[0].natural === 5);
+        window.sktD = () => 10;
+        click('[data-cs-mode="normal"]'); await sleep(20);
+        const r = csRollDamage('Test', '2d6+1d4+3 slashing', false);
+        const rc = csRollDamage('Test', '2d6+1d4+3 slashing', true);
+        ok('sheet: damage rolls every term, and a crit doubles the dice', r.total === 33 && r.type === 'slashing' && rc.total === 63, r.total + ' ' + rc.total);
+        ok('sheet: written with spaces too', csRollDamage('Test', '1d10 + 4 force', false).total === 14);
+        click('[data-cs-atk="0"]'); await sleep(20);
+        ok('sheet: an attack button rolls to hit', /attack/.test(CS.log[0].label));
+        // Hit points.
+        const hp0 = me().hp;
+        q('[data-cs-amt]').value = '7'; click('[data-cs-hp="-1"]'); await sleep(40);
+        ok('sheet: damage from the sheet', me().hp === hp0 - 7);
+        q('[data-cs-amt]').value = '4'; click('[data-cs-hp="temp"]'); await sleep(40);
+        ok('sheet: and temporary hit points', me().tempHp === 4);
+        // Conditions, exhaustion, inspiration.
+        set('[data-cs-addcond]', 'Poisoned'); await sleep(40);
+        ok('sheet: a condition can be added', (me().conditions || []).includes('Poisoned') && /Poisoned/.test(q('.cs-state').textContent));
+        click('[data-cs-cond="Poisoned"]'); await sleep(40);
+        ok('sheet: and removed', !(me().conditions || []).includes('Poisoned'));
+        click('[data-cs-exh="1"]'); await sleep(40);
+        ok('sheet: exhaustion goes up', me().exhaustion === 1);
+        click('[data-cs="insp"]'); await sleep(40);
+        ok('sheet: Heroic Inspiration toggles', me().inspiration === true);
+        // Limited use.
+        click('[data-cs-res="0:0"]'); await sleep(40);
+        ok('sheet: a lit pip spends the use', me().resources[0].current === 0);
+        // Spells.
+        await tab('spells');
+        ok('sheet: spells by level, with their source', /Cantrips/.test(q('.cs-pane').textContent) && /3rd level/.test(q('.cs-pane').textContent) && /Species/.test(q('.cs-pane').textContent));
+        const s1 = me().sheet.spellSlots[1].expended || 0;
+        click('[data-cs-slot="1:3"]'); await sleep(40);
+        ok('sheet: a slot pip spends a slot', me().sheet.spellSlots[1].expended === s1 + 1);
+        set('[data-cs-castlvl="Magic Missile"]', '2'); await sleep(10);
+        click('[data-cs-cast="Magic Missile:1"]'); await sleep(40);
+        ok('sheet: Cast spends the slot chosen (2nd level)', me().sheet.spellSlots[2].expended === 1);
+        click('[data-cs-cast="Hold Person:2"]'); await sleep(40);
+        ok('sheet: casting a concentration spell starts concentration', me().concentration === 'Hold Person' && me().sheet.spellSlots[2].expended === 2);
+        click('[data-cs-cast="Fire Bolt:0"]'); await sleep(40);
+        ok('sheet: a cantrip costs nothing', me().sheet.spellSlots[2].expended === 2);
+        click('[data-cs-open="sp:Fireball"]'); await sleep(40);
+        ok('sheet: a spell opens to its text', /20-foot-radius/.test(q('.cs-pane').textContent));
+        click('[data-cs="manage"]'); await sleep(40);
+        ok('sheet: Manage spells shows the prepared count', /Prepared 8 \/ 8/.test(q('.cs-pane').textContent));
+        tick('[data-cs-prep="-1|spells|Web"]'); await sleep(300);
+        ok('sheet: unpreparing a spell takes it off the sheet', !me().build.spells.includes('Web') && !me().sheet.spells.includes('Web'));
+        tick('[data-cs-prep="-1|spells|Sleep"]'); await sleep(300);
+        ok('sheet: and preparing another puts it on', me().sheet.spells.includes('Sleep'));
+        // Inventory.
+        await tab('inventory'); await sleep(1500);
+        ok('sheet: the inventory starts as the kit, with weight against what STR 8 carries', qa('.cs-item').length >= 4 && /Quarterstaff/.test(q('.cs-inv').textContent)
+           && /Carrying [1-9][\d.]* lb of 120 lb/.test(q('.cs-carry').textContent), q('.cs-carry').textContent);
+        tick('[data-cs-equip="0"]'); await sleep(300);
+        ok('sheet: unequipping a weapon takes it out of the attacks', me().build.equipment.materialized && !me().sheet.attacks.some(a => a.name === 'Quarterstaff'));
+        ok('sheet: and the rest of the kit is still carried', ['Quarterstaff', 'Spellbook'].every(n => me().build.items.some(x => x.name === n)) && qa('.cs-item').length >= 4);
+        const n0 = me().build.items.length;
+        set('[data-cs-q]', '+1 Armor'); await sleep(40); set('[data-cs-qbase]', 'leather armor'); await sleep(40);
+        const ac0 = me().ac;
+        click('[data-cs="additem"]'); await sleep(300);
+        ok('sheet: adding +1 leather armour puts it on', me().build.items.length === n0 + 1 && me().ac === 11 + 1 + 3, ac0 + ' → ' + me().ac);
+        q('[data-cs-custom]').value = 'Lucky coin'; q('[data-cs-customwt]').value = '0.1'; click('[data-cs="addcustom"]'); await sleep(300);
+        ok('sheet: a custom item', me().build.items.some(x => x.name === 'Lucky coin' && x.custom));
+        const i = me().build.items.findIndex(x => x.name === 'Lucky coin');
+        click('[data-cs-qty="' + i + ':1"]'); await sleep(300);
+        ok('sheet: quantities', me().build.items[i].qty === 2);
+        click('[data-cs-del="' + i + '"]'); await sleep(300);
+        ok('sheet: remove', !me().build.items.some(x => x.name === 'Lucky coin'));
+        set('[data-cs-coin="sp"]', '30'); await sleep(40);
+        ok('sheet: coins of every kind', me().coins.sp === 30 && /Worth 13 gp/.test(q('.cs-coins').textContent), q('.cs-coins').textContent);
+        // Customize.
+        click('[data-cs="customize"]'); await sleep(40);
+        const acC = me().ac;
+        set('[data-cs-ov="ac"]', '2'); await sleep(300);
+        set('[data-cs-ov="skill:stealth"]', '1'); await sleep(300);
+        ok('sheet: Customize adds a bonus the rules don’t know', me().ac === acC + 2 && me().build.overrides.ac === 2 && me().sheet.skills.stealth === 4);
+        click('[data-cs="customize"]'); await sleep(40);
+        // Features, background, notes.
+        await tab('features');
+        ok('sheet: features by source', /Class features/.test(q('.cs-pane').textContent) && /Arcane Recovery/.test(q('.cs-pane').textContent) && /Species traits/.test(q('.cs-pane').textContent));
+        await tab('background');
+        const bs = q('textarea[data-cs-detail="backstory"]'); bs.value = 'Raised among books.'; bs.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('sheet: the backstory is written to the character and its build', me().sheet.details.backstory === 'Raised among books.' && me().build.details.backstory === 'Raised among books.' && q('textarea[data-cs-detail="backstory"]') === bs);
+        await tab('notes');
+        const nt = q('[data-cs-notes]'); nt.value = 'Owes Gundren 10 gp'; nt.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('sheet: notes are kept', me().playerNotes === 'Owes Gundren 10 gp');
+        // Rests.
+        window.showConfirm = () => Promise.resolve(true);
+        click('[data-cs="long"]'); await sleep(80);
+        ok('sheet: a long rest from the sheet', me().hp === me().hpMax && me().sheet.spellSlots[2].expended === 0 && me().exhaustion === 0);
+        click('[data-cs="close"]'); await sleep(20);
+        ok('sheet: closes', !root());
+        // From the party card.
+        openPanel('party'); await sleep(200);
+        const pi = state.party.findIndex(p => p.id === 'pc_sheet_test');
+        panelDefs.party._body.querySelector('[data-act="open-sheet"][data-idx="' + pi + '"]').click(); await sleep(100);
+        ok('party: the card’s Sheet button opens it', !!root() && CS.id === 'pc_sheet_test');
+        csClose(); closePanel('party');
+      } catch(e){ ok('sheet: the checks ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window.showConfirm = st.conf; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -6898,6 +7038,30 @@
           }
           paTab = tab0; paRender();
         }
+      }
+
+      // -- The character sheet on a phone -------------------------------------
+      {
+        const tab0 = paTab;
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          paTab = 'you'; paRender(); await sleep(60);
+          const btn = document.querySelector('[data-pa-sheet]');
+          ok('phone: a Character sheet button', !!btn);
+          btn.click(); await sleep(150);
+          const root = document.getElementById('cs-root');
+          ok('phone: opens the player’s own sheet, editable', !!root && CS.id === paPc().id && !CS.readOnly && !!root.querySelector('[data-cs-hp="-1"]'));
+          const w = root.getBoundingClientRect().width, sw = root.scrollWidth;
+          ok('phone: it fits the screen', sw <= Math.ceil(w) + 1, sw + ' > ' + w);
+          csClose();
+          const other = sktPlayerParty().find(p => p.id !== paPc().id);
+          if (other){
+            openCharSheet(other.id); await sleep(100);
+            ok('phone: a party-mate’s sheet opens read-only', CS.readOnly && !document.querySelector('#cs-root [data-cs-hp]') && !document.querySelector('#cs-root [data-cs="long"]'));
+            csClose();
+          }
+        } catch(e){ ok('phone: the sheet checks ran to completion', false, e.message); }
+        finally { if (typeof csClose === 'function') csClose(); paTab = tab0; paRender(); }
       }
 
       // -- "Make a DEX save" on this phone ----------------------------------

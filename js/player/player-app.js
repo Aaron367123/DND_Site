@@ -898,10 +898,7 @@ function paYouScreen(){
       <div class="pa-roll" id="pa-roll"></div>
       ${pc.build && (pc.build.level || 1) < 20 && typeof openCharBuilder === 'function'
         ? '<button class="btn pa-levelup" data-pa-build="levelup">⬆ Level up to ' + ((pc.build.level || 1) + 1) + '</button>' : ''}
-      <button class="pa-sheet-t" data-pa-mate="${paEsc(pc.id)}">
-        ${paOpenMates.has(pc.id) ? '▾ Hide full sheet' : '▸ Full sheet'}
-      </button>
-      ${paOpenMates.has(pc.id) ? paSheetDetail(pc) : ''}
+      <button class="btn primary pa-sheet-t" data-pa-sheet="${paEsc(pc.id)}">📜 Character sheet</button>
     </div>`;
 }
 
@@ -1406,6 +1403,8 @@ function paOnClick(e){
   if (cond){ paCondOpen = paCondOpen === cond.dataset.paCond ? null : cond.dataset.paCond; paRenderScreen(); return; }
   if (e.target.closest('[data-pa-condclose]')){ paCondOpen = null; paRenderScreen(); return; }
   if (e.target.closest('[data-pa-death]')){ paRollDeathSave(); return; }
+  const sheetBtn = e.target.closest('[data-pa-sheet]');
+  if (sheetBtn && typeof openCharSheet === 'function'){ openCharSheet(sheetBtn.dataset.paSheet); return; }
   const mate = e.target.closest('[data-pa-mate]');
   if (mate){
     const id = mate.dataset.paMate;

@@ -275,6 +275,7 @@ registerPanel('party',{
         // One-click toggle to add/remove this PC from the combat tracker —
         // drag-drop still works, this is the discoverable affordance for new
         // DMs (and saves a panel-switch when the combat tracker isn't open).
+        +'<button class="char-sheet-btn" data-act="open-sheet" data-idx="'+i+'" title="Open the full character sheet">Sheet</button>'
         +'<button class="char-combat-btn'+(inCombat?' in-combat':'')+'" data-act="toggle-combat" data-idx="'+i+'" title="'+(inCombat?'Remove from combat':'Add to combat')+'">'
           +(inCombat?'⚔ In':'+ ⚔')
         +'</button>'
@@ -3007,6 +3008,7 @@ registerPanel('party',{
         const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
         const isBarb  = /\bbarbarian\b/.test(cls);
         const isDruid = /\bdruid\b/.test(cls);
+        if (typeof openCharSheet === 'function') items.push({ label: '📜 Character sheet', onClick: () => { const r = resolve(); if (r) openCharSheet(state.party[r.idx].id); } });
         // Built in the character builder: level up, or change a choice.
         if (c.build && typeof openCharBuilder === 'function'){
           if ((c.build.level || 1) < 20)
@@ -3346,6 +3348,9 @@ registerPanel('party',{
         showContextMenu(rect.left, rect.bottom + 4, items);
       }
       // (Inventory tab removed.)
+      else if(act==='open-sheet'){
+        const c = state.party[+el.dataset.idx]; if (c && typeof openCharSheet === 'function') openCharSheet(c.id);
+      }
       else if(act==='death-roll'){
         const c = state.party[+el.dataset.idx]; if (!c) return;
         const r = sktRollDeathSave(c);

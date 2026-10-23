@@ -306,7 +306,7 @@ async function _sktRulesBuild(edition, read){
     if (!core && !classesAll.length) return;
     R.spells.push({ name: s.name, level: s.level, school: s.school, source: s.source, core,
                     classes: core ? listsFor(s, ['class']) : [], classesAll,
-                    time: s.time, range: s.range, duration: s.duration,
+                    time: s.time, range: s.range, duration: s.duration, components: s.components || null,
                     concentration: !!(s.duration || []).some(d => d.concentration),
                     ritual: !!(s.meta && s.meta.ritual),
                     damageInflict: s.damageInflict || null, savingThrow: s.savingThrow || null,
@@ -1343,7 +1343,7 @@ function sktComputeCharacter(build, R, prior){
   const acItems = _sktActiveItems(build).filter(m => m.bonusAc && !m.stats && !m.base
     && !(m.unarmoredOnly && armor) && !(m.noShield && shield));
   if (best) acItems.forEach(m => { best.total += m.bonusAc; best.label += ' + ' + m.name; });
-  const ac = best ? best.total : 10;
+  let ac = best ? best.total : 10;
 
   // Speed.
   const baseSpeed = typeof (subrace && subrace.speed) === 'number' ? subrace.speed
@@ -1357,12 +1357,14 @@ function sktComputeCharacter(build, R, prior){
   let init = ctx.mod.dex + ctx.initBonus;
   if (R.edition === '2014' && ctx.jackOfAllTrades) init += Math.floor(pb / 2);
   if (R.edition === '2014' && ctx.remarkableAthlete) init += Math.ceil(pb / 2);
-  const passive = 10 + skills.perception + ctx.passiveBonus.perception;
+  let passive = 10 + skills.perception + ctx.passiveBonus.perception;
 
   // Spellcasting.
   const sc = sktBuildSpellcasting(build, R, abilities);
   if (sc){
-    const ba = _sktItemSum(build, 'bonusSpellAttack'), bd = _sktItemSum(build, 'bonusSpellSaveDc');
+    // Items, and the sheet's custom bonuses.
+    const ba = _sktItemSum(build, 'bonusSpellAttack') + (+(build.overrides || {}).spellAttack || 0);
+    const bd = _sktItemSum(build, 'bonusSpellSaveDc') + (+(build.overrides || {}).spellDc || 0);
     sc.attack += ba; sc.dc += bd;
     (sc.cantripLists || []).forEach(l => { l.attack += ba; l.dc += bd; });
   }
@@ -1428,6 +1430,14 @@ function sktComputeCharacter(build, R, prior){
   const sizes = (species && Array.isArray(species.size) && species.size.length) ? species.size : ['M'];
   const sizeCode = sizes.includes(build.size) ? build.size : (sizes.includes('M') ? 'M' : sizes[0]);
   const SIZE_NAME = { T: 'Tiny', S: 'Small', M: 'Medium', L: 'Large' };
+  // Custom bonuses from the sheet's Customize: on top of everything else.
+  const ov = build.overrides || {};
+  const add = (k) => +ov[k] || 0;
+  if (add('ac')) { ac += add('ac'); _fxNote(ctx, 'Custom bonus: AC ' + sktSigned(add('ac')) + '.'); }
+  init += add('init'); speed += add('speed'); hpMax = Math.max(1, hpMax + add('hpMax'));
+  SKT_ABS.forEach(k => { saves[k] += add('saveAll') + (+(ov.saves || {})[k] || 0); });
+  Object.keys(ov.skills || {}).forEach(k => { if (k in skills) skills[k] += +ov.skills[k] || 0; });
+  passive += add('passive') + (+(ov.skills || {}).perception || 0);
   const hpWas = typeof prior.hp === 'number' && typeof prior.hpMax === 'number' ? prior.hp + (hpMax - prior.hpMax) : hpMax;
 
   return {
@@ -1464,7 +1474,7 @@ function sktComputeCharacter(build, R, prior){
       size: SIZE_NAME[sizeCode] || 'Medium',
       details: Object.assign({}, build.details || {}),
       activations: ctx.actions, notes: ctx.notes, featureList,
-      equipment: gear.list.concat((build.items || []).map(m => m.name + (m.reqAttune ? (m.attuned ? ' (attuned)' : ' (not attuned)') : ''))),
+      equipment: gear.list.concat((build.items || []).map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '') + (m.reqAttune ? (m.attuned ? ' (attuned)' : ' (not attuned)') : ''))),
       acSource: best ? best.label + (shield ? ' + ' + (shield._name || 'Shield') : '') : '',
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
                ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].filter(Boolean).join(', '),
@@ -1544,15 +1554,19 @@ function sktBuildEquipment(build, R){
       });
     });
   };
-  if (cls && cls.equipment && Array.isArray(cls.equipment.defaultData)) takeBlocks(cls.equipment.defaultData, 'cls');
-  if (bg) takeBlocks(bg.equipment, 'bg');
-  (eq.extra || []).forEach(n => names.push(String(n).toLowerCase()));
+  // Once the sheet's inventory has taken over (eq.materialized) the kit is
+  // history: what is carried is build.items.
+  if (!eq.materialized){
+    if (cls && cls.equipment && Array.isArray(cls.equipment.defaultData)) takeBlocks(cls.equipment.defaultData, 'cls');
+    if (bg) takeBlocks(bg.equipment, 'bg');
+    (eq.extra || []).forEach(n => names.push(String(n).toLowerCase()));
+  }
   const items = names.map(n => R.items[n]).filter(Boolean);
   // Magic weapons and armour fight and are worn like any other, with their
   // bonus (only once attuned, where that is needed).
   (build.items || []).forEach(m => {
     const st = m.stats || (m.base && R.items[m.base]);
-    if (!st) return;
+    if (!st || m.equipped === false) return;
     const on = !m.reqAttune || _sktActiveItems(build).includes(m);
     items.push(Object.assign({}, st, { _name: m.name,
       _hit: on ? (m.bonusWeapon || 0) + (m.bonusWeaponAttack || 0) : 0,
@@ -1565,7 +1579,47 @@ function sktBuildEquipment(build, R){
   // Wear the armour that gives the best AC; a wizard handed chain mail by a
   // background does not put it on.
   const armor = armors.sort((a, b) => ((+b.ac || 0) + (b._ac || 0)) - ((+a.ac || 0) + (a._ac || 0)))[0] || null;
-  return { armor, shield, weapons, gold: Math.round(gold * 100) / 100, list: names.map(_sktTitle) };
+  return { armor, shield, weapons, gold: Math.round(gold * 100) / 100, list: names.map(_sktTitle), names };
+}
+// The starting kit as an inventory: one line per item with its count, its
+// weight, and the armour, shield and weapons in use marked equipped. What the
+// sheet turns the kit into the first time the inventory is changed.
+function sktKitItems(build, R, gear){
+  const g = sktBuildEquipment(Object.assign({}, build, { items: [], equipment: Object.assign({}, build.equipment, { materialized: false }) }), R);
+  const count = {};
+  g.names.forEach(n => { count[n] = (count[n] || 0) + 1; });
+  const gw = {};
+  (gear || []).forEach(x => { gw[String(x.name).toLowerCase()] = x.weight; });
+  return Object.keys(count).map(n => {
+    const bi = R.items[n];
+    const it = { name: bi ? bi.name : _sktTitle(n), qty: count[n], weight: (bi && bi.weight) || gw[n] || 0, kit: true };
+    if (bi){
+      it.base = n;
+      const t = String(bi.type || '').split('|')[0];
+      if (/^(LA|MA|HA)$/.test(t)) it.equipped = !!(g.armor && g.armor.name === bi.name);
+      else if (t === 'S') it.equipped = !!(g.shield && g.shield.name === bi.name);
+      else if (/^(M|R)$/.test(t)) it.equipped = true;
+    }
+    return it;
+  });
+}
+// Ordinary gear for the sheet's "add an item": everything in the item data
+// that isn't magic, one edition's printing.
+const _sktGearCache = {};
+async function sktGearLoad(edition, read){
+  edition = edition === '2014' ? '2014' : '2024';
+  if (_sktGearCache[edition] && !read) return _sktGearCache[edition];
+  const job = (async () => {
+    read = read || sktRulesReader();
+    const [items, base] = await Promise.all([read('items.json'), read('items-base.json')]);
+    const pick = _sktEraPicker(edition, SKT_EDITION_SRC[edition]);
+    const plain = (items.item || []).concat(base.baseitem || []).filter(i => (!i.rarity || i.rarity === 'none') && !/^\$/.test(String(i.type || '')) && !i._copy);
+    return pick(plain, { legacy: edition === '2024' }).map(i => ({ kind: 'gear', name: i.name, source: i.source, weight: i.weight || 0, value: i.value || 0,
+      base: /^(M|R|LA|MA|HA|S)(\||$)/.test(String(i.type || '')) ? i.name.toLowerCase() : null }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+  if (!read) _sktGearCache[edition] = job;
+  return job;
 }
 // What "any martial weapon" becomes until the player picks one.
 const _SKT_EQ_DEFAULT = {
@@ -1750,7 +1804,7 @@ function _sktMagicEntry(i, kind){
   const isGear = /^(M|R|LA|MA|HA|S)$/.test(t);
   const text = sktRulesText(i.entries || []);
   return {
-    kind, name: i.name, source: i.source, rarity: i.rarity || '', reqAttune: !!i.reqAttune,
+    kind, name: i.name, source: i.source, rarity: i.rarity || '', reqAttune: !!i.reqAttune, weight: i.weight || null,
     requires: i.requires || null, excludes: i.excludes || null,
     namePrefix: i.namePrefix || '', nameSuffix: i.nameSuffix || '',
     base: i.baseItem ? String(i.baseItem).split('|')[0].toLowerCase() : null,
@@ -1791,7 +1845,8 @@ function sktMagicMake(R, e, baseKey){
   const bi = base && R.items[base];
   if (e.kind === 'variant' && !bi) return null;
   const name = e.kind === 'variant' ? (e.namePrefix + (bi ? bi.name : '') + e.nameSuffix).trim() || e.name : e.name;
-  const out = { name, source: e.source, rarity: e.rarity, reqAttune: e.reqAttune, attuned: false };
+  const out = { name, source: e.source, rarity: e.rarity, reqAttune: e.reqAttune, attuned: false,
+                weight: e.weight != null ? e.weight : (bi && bi.weight) || 0 };
   if (base && bi) out.base = base;
   if (e.stats) out.stats = e.stats;
   ['bonusWeapon', 'bonusWeaponAttack', 'bonusWeaponDamage', 'bonusAc', 'bonusSavingThrow', 'bonusSpellAttack', 'bonusSpellSaveDc']
@@ -1862,7 +1917,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
                      sktSpellsMatching, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
-                     sktMagicLoad, sktMagicBases, sktMagicMake,
+                     sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };
