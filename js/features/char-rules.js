@@ -306,10 +306,7 @@ async function _sktRulesBuild(edition, read){
       versions: byLineage ? versions : [],
       // Draconic ancestries (2024 Dragonborn, Fizban's chromatic, gem and
       // metallic): each colour's damage type and resistance.
-      ancestries: [].concat(...(r._versions || []).filter(v => v && v._abstract).map(v => (v._implementations || []).map(im => {
-        const vars = im._variables || {}, dmg = String(vars.damageType || '').toLowerCase();
-        return { name: vars.color || dmg, damage: dmg, resist: im.resist || vars.resist || (dmg ? [dmg] : []) };
-      }))).filter(a => a.name),
+      ancestries: _sktAncestries(r),
       // A plain option exists (the 2014 Human's subrace is only "Variant").
       subraceOptional: (races.subrace || []).some(s => s.raceName === r.name && s.raceSource === r.source && !s.name)
         || (!byLineage && versions.length > 0 && versions.every(v => v.optional)),
@@ -1181,6 +1178,27 @@ function _sktSpeciesVersion(r, v, src){
     resist: v.resist || [], skills: v.skillProficiencies || [], weapons: [], armor: [], languages: [], tools: [],
     feats: null, additionalSpells: has('additionalSpells') ? v.additionalSpells : null, entries: adds,
   };
+}
+// A dragonborn's ancestries: the data's colour template (2024, Fizban's), or
+// the Draconic Ancestry table in the 2014 handbook's traits (Dragon, Damage
+// Type, Breath Weapon).
+function _sktAncestries(r){
+  const fromTemplate = [].concat(...(r._versions || []).filter(v => v && v._abstract).map(v => (v._implementations || []).map(im => {
+    const vars = im._variables || {}, dmg = String(vars.damageType || '').toLowerCase();
+    return { name: vars.color || dmg, damage: dmg, resist: im.resist || vars.resist || (dmg ? [dmg] : []) };
+  }))).filter(a => a.name);
+  if (fromTemplate.length) return fromTemplate;
+  const out = [];
+  (function walk(e){
+    if (Array.isArray(e)) return e.forEach(walk);
+    if (!e || typeof e !== 'object') return;
+    if (e.type === 'table' && (e.colLabels || []).map(String).some(l => /^Dragon$/i.test(l)) && (e.colLabels || []).map(String).some(l => /Damage Type/i.test(l))){
+      const di = e.colLabels.findIndex(l => /Damage Type/i.test(String(l)));
+      (e.rows || []).forEach(row => { const dmg = sktRulesInline(String(row[di] || '')).toLowerCase(); if (row[0] && dmg) out.push({ name: sktRulesInline(String(row[0])), damage: dmg, resist: [dmg] }); });
+    }
+    Object.values(e).forEach(walk);
+  })(r.entries || []);
+  return out;
 }
 // What a species asks for its damage resistance: a draconic ancestry (the
 // colour sets the resistance and the breath weapon's damage), or a pick

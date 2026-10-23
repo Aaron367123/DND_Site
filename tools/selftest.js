@@ -7344,7 +7344,7 @@
         const wb = Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 4, species: 'Human' }), wrec = sktComputeCharacter(wb, R24);
         ok('audit: fighting-style feats need Fighting Style', q(fb, frec, 'Archery').ok && !q(wb, wrec, 'Archery').ok);
         // Draconic ancestry / damage resistance.
-        const db14 = mk(R14, '2014', { species: 'Dragonborn', speciesChoice: { resist: 'cold' } }), db24 = mk(R24, '2024', { species: 'Dragonborn', speciesChoice: { ancestry: 'Red' } });
+        const db14 = mk(R14, '2014', { species: 'Dragonborn', speciesChoice: { ancestry: 'Silver' } }), db24 = mk(R24, '2024', { species: 'Dragonborn', speciesChoice: { ancestry: 'Red' } });
         ok('audit: a 2014 dragonborn resists the damage chosen', (db14.resistances || []).includes('cold'), JSON.stringify(db14.resistances));
         ok('audit: a red 2024 dragonborn resists fire and breathes it', (db24.resistances || []).includes('fire') && db24.sheet.notes.some(n => /Breath Weapon: fire damage \(Red/.test(n)));
         ok('audit: a dragonborn is asked for its ancestry', sktBuildTodo(Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', species: 'Dragonborn' }), R24).some(t => t.what === 'a draconic ancestry'));
@@ -7815,6 +7815,15 @@
         const g = Object.assign(sktBlankBuild('2024'), { cls: 'Paladin', subclass: 'Noble Genies', level: 7, featureChoices: { 'Aura of Elemental Shielding': 'Fire' } });
         ok('noble genies: the aura resists the damage type chosen', (sktComputeCharacter(g, R24).resistances || []).includes('fire'));
       } catch(e){ ok('round 37 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
+    // -- Round 38: the 2014 Dragonborn's ancestry table -------------------------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const anc = sktRulesSpecies(R14, 'Dragonborn').ancestries;
+        ok('dragonborn: the 2014 ancestry table\'s ten dragons', anc.length === 10 && anc.find(a => a.name === 'Silver').damage === 'cold');
+      } catch(e){ ok('round 38 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
     // -- Class features: represented, not just text ------------------------
