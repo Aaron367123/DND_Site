@@ -588,6 +588,13 @@ const CS_COMPANIONS = [
   { feature: 'Summon Wildfire Spirit', names: ['Wildfire Spirit'] },
   { feature: 'Homunculus Servant', names: ['Homunculus Servant'], edition: '2014' },
 ];
+// Creatures a spell or a pact calls, offered as a list: a familiar's forms,
+// Pact of the Chain's special ones, a steed.
+const CS_SUMMONS = [
+  { label: 'Familiar', spell: 'Find Familiar', names: ['Bat', 'Cat', 'Crab', 'Frog', 'Hawk', 'Lizard', 'Octopus', 'Owl', 'Poisonous Snake', 'Venomous Snake', 'Quipper', 'Rat', 'Raven', 'Sea Horse', 'Spider', 'Weasel'] },
+  { label: 'Pact familiar', feature: 'Pact of the Chain', names: ['Imp', 'Pseudodragon', 'Quasit', 'Sprite', 'Skeleton', 'Slaad Tadpole', 'Sphinx of Wonder'] },
+  { label: 'Steed', spell: 'Find Steed', names: ['Warhorse', 'Pony', 'Camel', 'Elk', 'Mastiff', 'Otherworldly Steed'] },
+];
 // A stat block's AC or HP written as a formula ("5 + five times your
 // Artificer level", "12 + your Intelligence modifier", "14 + PB"), worked
 // out for this character. Null when it isn't one.
@@ -637,6 +644,13 @@ CS_TAB_RENDER.extras = pc => {
     const have = new Set(list.map(x => x.name));
     const offer = [].concat(...CS_COMPANIONS.filter(c => feats.has(c.feature) && (!c.edition || c.edition === ed)).map(c => c.names)).filter(n => !have.has(n) && csCompanionMonster(pc, n));
     if (offer.length) h += '<h5>Your companions</h5><div class="cs-add">' + offer.map(n => '<button class="btn" data-cs-comp="' + csE(n) + '">+ ' + csE(n) + '</button>').join('') + '</div>';
+    const known = new Set([].concat((pc.sheet || {}).spells || [], (pc.sheet || {}).spellbook || []));
+    const opts = name => (pc.build && pc.build.optional && Object.values(pc.build.optional).some(l => (l || []).includes(name)));
+    CS_SUMMONS.filter(c => (c.spell && known.has(c.spell)) || (c.feature && (feats.has(c.feature) || opts(c.feature)))).forEach(c => {
+      const forms = c.names.filter(n => csCompanionMonster(pc, n));
+      if (forms.length) h += '<h5>' + csE(c.label) + '</h5><div class="cs-add"><select class="cb-sel" data-cs-sumsel="' + csE(c.label) + '">' + forms.map(n => '<option>' + csE(n) + '</option>').join('') + '</select>'
+        + '<button class="btn" data-cs="addsummon" data-cs-sumfor="' + csE(c.label) + '">Add</button></div>';
+    });
     const names = typeof _5eData !== 'undefined' && Array.isArray(_5eData) ? [...new Set(_5eData.filter(d => d.cat === 'monster').map(d => d.name))].sort() : [];
     h += '<h5>Add a creature</h5><div class="cs-add"><input data-cs-exq list="cs-mon-dl" placeholder="Owl, Riding Horse, Wolf…"><button class="btn" data-cs="addextra">Add</button></div>'
       + '<datalist id="cs-mon-dl">' + names.map(n => '<option value="' + csE(n) + '">').join('') + '</datalist>';
@@ -810,6 +824,12 @@ function csOnClick(e){
   if (d.csDeltrk != null) return csRebuild('Removed a tracker', b => { b.customResources = (b.customResources || []).filter((x, i) => i !== +d.csDeltrk); });
   if (d.csDelact != null) return csRebuild('Removed an action', b => { b.customActions = (b.customActions || []).filter((x, i) => i !== +d.csDelact); });
   if (d.cs === 'notheme') return csEdit('Sheet colour', p => { delete p.theme; });
+  if (d.cs === 'addsummon'){
+    const sel = document.querySelector('#cs-root [data-cs-sumsel="' + CSS.escape(d.csSumfor || '') + '"]');
+    const pc = csPc(), m = sel && pc && csCompanionMonster(pc, sel.value); if (!m) return true;
+    const st = csCompanionStats(pc, m);
+    return csEdit('Added ' + m.name, p => { p.extras = (p.extras || []).concat([{ name: m.name, hp: st.hp, hpMax: st.hp, ac: st.ac }]); });
+  }
   if (d.csComp){
     const pc = csPc(), m = pc && csCompanionMonster(pc, d.csComp); if (!m || !pc) return true;
     const st = csCompanionStats(pc, m);

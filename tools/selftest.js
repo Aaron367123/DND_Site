@@ -7914,6 +7914,34 @@
       }
     }
 
+    // -- Round 42: a familiar or a steed from its spell -------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const pc = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Fam', cls: 'Wizard', species: 'Human', level: 1, spellbook: ['Find Familiar', 'Magic Missile'], spells: ['Magic Missile'] }), R14);
+        pc.id = 'pc_r42'; state.party.push(pc); save();
+        const me = () => state.party.find(p => p.id === 'pc_r42');
+        openCharSheet('pc_r42', { tab: 'extras' }); await sleep(300);
+        const sel = document.querySelector('#cs-root [data-cs-sumsel="Familiar"]');
+        ok('familiar: Find Familiar offers the familiar forms', !!sel && [...sel.options].some(o => o.value === 'Owl'));
+        if (sel){ sel.value = 'Owl'; document.querySelector('#cs-root [data-cs="addsummon"][data-cs-sumfor="Familiar"]').click(); await sleep(60); }
+        const owl = (me().extras || []).find(x => x.name === 'Owl');
+        ok('familiar: and adds the chosen one with its stats', !!owl && owl.hpMax >= 1 && owl.ac >= 10, JSON.stringify(owl));
+        ok('familiar: a character without the spell isn\'t offered one', (() => { csClose(); const p2 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'NoFam', cls: 'Fighter', species: 'Human', level: 1 }), R14); p2.id = 'pc_r42b'; state.party.push(p2); save(); openCharSheet('pc_r42b', { tab: 'extras' }); return !document.querySelector('#cs-root [data-cs-sumsel="Familiar"]'); })());
+        csClose();
+      } catch(e){ ok('round 42 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') try { csClose(); } catch(_){ }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
