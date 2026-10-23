@@ -24,6 +24,7 @@ const CS_TABS = [
   { id: 'features',  label: 'Features & Traits' },
   { id: 'background',label: 'Background' },
   { id: 'notes',     label: 'Notes' },
+  { id: 'extras',    label: 'Extras' },
 ];
 const CS_CONDITIONS = ['Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible',
                        'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious'];
@@ -138,6 +139,7 @@ function csHead(pc){
     + (ro ? '' : '<button class="btn" data-cs="short">💤 Short rest</button><button class="btn" data-cs="long">🛌 Long rest</button>')
     + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
     + (!ro && pc.build ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
+    + '<button class="btn" data-cs="print" title="Print the sheet, or save it as a PDF">🖨 Print</button>'
     + '<button class="cb-x" data-cs="close" aria-label="Close">✕</button></div>';
 }
 
@@ -216,6 +218,31 @@ function csSide(pc){
   const def = [['Resistant', pc.resistances], ['Immune', pc.immunities], ['Vulnerable', pc.vulnerabilities]].filter(([, v]) => v && v.length);
   if (def.length) h += '<h5>Defenses</h5>' + def.map(([l, v]) => line(l, v)).join('');
   return h;
+}
+
+// ── Printing ─────────────────────────────────────────────────────────────────
+// The whole sheet on paper (or a PDF from the print dialog): every tab at
+// once, without the buttons.
+function csPrint(pc){
+  const ro = CS.readOnly;
+  CS.readOnly = true;
+  let html;
+  try {
+    html = '<div class="cs-p-head"><h1>' + csE(pc.name) + '</h1><div>' + csE(csClassLine(pc)) + '</div></div>'
+      + '<div class="cs-p-grid"><div class="cs-p-side">' + csSide(pc) + '</div><div class="cs-p-main">'
+      + '<div class="cs-boxes">' + [['AC', pc.ac], ['HP', pc.hpMax || 0], ['Initiative', csSigned(pc.init)], ['Speed', (pc.spd || 30) + ' ft'], ['Proficiency', csSigned((pc.sheet || {}).profBonus || 2)]]
+        .map(([l, v]) => '<div class="cs-box"><span>' + l + '</span><b>' + csE(v) + '</b></div>').join('') + '</div>'
+      + ['actions', 'spells', 'inventory', 'features', 'background'].map(t => '<h2>' + CS_TABS.find(x => x.id === t).label + '</h2>' + CS_TAB_RENDER[t](pc)).join('')
+      + '</div></div>';
+  } finally { CS.readOnly = ro; }
+  document.getElementById('cs-print')?.remove();
+  const box = document.createElement('div');
+  box.id = 'cs-print'; box.className = 'cs cs-print'; box.innerHTML = html;
+  document.body.appendChild(box);
+  const done = () => { box.remove(); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  if (typeof window.print === 'function') window.print();
+  return box;
 }
 
 // ── Rolling ──────────────────────────────────────────────────────────────────
@@ -344,10 +371,11 @@ CS_TAB_RENDER.background = pc => {
   const bgFeat = (sh.featureList || []).filter(f => f.from === 'background');
   let h = '<h4>' + csE(pc.background || (pc.build && pc.build.background) || 'Background') + '</h4>'
     + bgFeat.map(f => '<div class="cs-feat-t"><b>' + csE(f.name) + '</b><br>' + csE(f.text || '').replace(/\n/g, '<br>') + '</div>').join('');
-  const facts = [['alignment', 'Alignment'], ['faith', 'Faith'], ['age', 'Age'], ['height', 'Height'], ['weight', 'Weight'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin']];
+  const facts = [['alignment', 'Alignment'], ['gender', 'Gender'], ['faith', 'Faith'], ['lifestyle', 'Lifestyle'], ['age', 'Age'], ['height', 'Height'], ['weight', 'Weight'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin']];
   h += '<div class="cs-facts">' + (sh.size ? '<div class="cs-kv"><span>Size</span><b>' + csE(sh.size) + '</b></div>' : '')
     + facts.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span>' + (ro ? '<b>' + csE(d[k] || '—') + '</b>' : '<input data-cs-detail="' + k + '" value="' + csE(d[k] || '') + '" maxlength="40">') + '</label>').join('') + '</div>';
-  [['personality', 'Personality traits'], ['ideals', 'Ideals'], ['bonds', 'Bonds'], ['flaws', 'Flaws'], ['appearance', 'Appearance'], ['backstory', 'Backstory']].forEach(([k, l]) => {
+  [['personality', 'Personality traits'], ['ideals', 'Ideals'], ['bonds', 'Bonds'], ['flaws', 'Flaws'], ['appearance', 'Appearance'],
+   ['allies', 'Allies & organizations'], ['enemies', 'Enemies'], ['backstory', 'Backstory']].forEach(([k, l]) => {
     if (ro && !d[k]) return;
     h += '<h5>' + l + '</h5>' + (ro ? '<div class="cs-text">' + csE(d[k]).replace(/\n/g, '<br>') + '</div>'
       : '<textarea data-cs-detail="' + k + '" rows="' + (k === 'backstory' ? 6 : 2) + '" maxlength="4000">' + csE(d[k] || '') + '</textarea>');
@@ -362,6 +390,33 @@ CS_TAB_RENDER.notes = pc => {
     + '<textarea class="cs-notes" data-cs-notes rows="16" maxlength="20000">' + csE(pc.playerNotes || '') + '</textarea>';
 };
 
+// Extras: a familiar, a steed, a beast companion — any creature from the
+// bestiary, with its hit points kept here and its stat block a tap away.
+function csMonster(name){
+  if (typeof _5eData === 'undefined' || !Array.isArray(_5eData)) return null;
+  const n = String(name || '').toLowerCase();
+  return _5eData.find(d => d.cat === 'monster' && String(d.name).toLowerCase() === n) || null;
+}
+CS_TAB_RENDER.extras = pc => {
+  const ro = CS.readOnly, list = pc.extras || [];
+  let h = '<div class="cb-dim">Familiars, mounts, companions and summoned creatures.</div>';
+  h += list.length ? list.map((x, i) => {
+    const m = csMonster(x.name), open = CS.open['ex:' + i];
+    return '<div class="cs-extra"><div class="cs-extra-h"><b>' + csE(x.name) + '</b><span>AC ' + csE(x.ac ?? '—') + '</span>'
+      + '<span class="cs-qty">HP ' + (ro ? '' : '<button class="btn small" data-cs-exhp="' + i + ':-1" aria-label="Damage">−</button>') + '<b>' + (x.hp ?? 0) + '</b> / ' + (x.hpMax ?? 0)
+      + (ro ? '' : '<button class="btn small" data-cs-exhp="' + i + ':1" aria-label="Heal">+</button>') + '</span>'
+      + (m ? '<button class="btn small" data-cs-open="ex:' + i + '">' + (open ? 'Hide' : 'Stat block') + '</button>' : '')
+      + (ro ? '' : '<button class="btn small" data-cs-exdel="' + i + '" aria-label="Remove ' + csE(x.name) + '">✕</button>') + '</div>'
+      + (open && m && typeof buildDetailCard === 'function' ? '<div class="cs-extra-card">' + buildDetailCard(m, '-cs-' + i) + '</div>' : '') + '</div>';
+  }).join('') : '<div class="cb-dim">None yet.</div>';
+  if (!ro){
+    const names = typeof _5eData !== 'undefined' && Array.isArray(_5eData) ? [...new Set(_5eData.filter(d => d.cat === 'monster').map(d => d.name))].sort() : [];
+    h += '<h5>Add a creature</h5><div class="cs-add"><input data-cs-exq list="cs-mon-dl" placeholder="Owl, Riding Horse, Wolf…"><button class="btn" data-cs="addextra">Add</button></div>'
+      + '<datalist id="cs-mon-dl">' + names.map(n => '<option value="' + csE(n) + '">').join('') + '</datalist>';
+  }
+  return h;
+};
+
 // Spells and Inventory are filled in by their own sections below.
 CS_TAB_RENDER.spells = pc => typeof csSpellsHtml === 'function' ? csSpellsHtml(pc) : '';
 CS_TAB_RENDER.inventory = pc => typeof csInventoryHtml === 'function' ? csInventoryHtml(pc) : '';
@@ -372,6 +427,7 @@ function csOnClick(e){
   const t = e.target.closest('button, [data-cs-tab]'); if (!t) return;
   const d = t.dataset, pc = csPc(); if (!pc) return;
   if (d.cs === 'close') return csClose();
+  if (d.cs === 'print') return csPrint(pc);
   if (d.csTab){ CS.tab = d.csTab; return csRender(); }
   if (d.csMode){ CS.mode = d.csMode; return csRender(); }
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
@@ -436,6 +492,21 @@ function csOnClick(e){
     return openCharBuilder({ idx: i, levelup: d.cs === 'levelup' });
   }
   if (d.cs === 'customize' && typeof csCustomizeOpen === 'function') return csCustomizeOpen(pc);
+  if (d.cs === 'addextra'){
+    const q = ((document.querySelector('#cs-root [data-cs-exq]') || {}).value || '').trim(); if (!q) return;
+    const m = csMonster(q);
+    const raw = (m && m._raw) || {};
+    const hp = m ? (parseInt(m.hp, 10) || (raw.hp && raw.hp.average) || 0) : 0;
+    const ac0 = Array.isArray(raw.ac) ? raw.ac[0] : null;
+    const acv = m ? (parseInt(m.ac, 10) || (typeof ac0 === 'number' ? ac0 : ac0 && ac0.ac) || null) : null;
+    return csEdit('Added ' + q, p => { p.extras = (p.extras || []).concat([{ name: m ? m.name : q, hp, hpMax: hp, ac: acv }]); });
+  }
+  if (d.csExhp){
+    const [i, sg] = d.csExhp.split(':').map(Number);
+    const n = Math.abs(parseInt((document.querySelector('#cs-root [data-cs-amt]') || {}).value, 10) || 1);
+    return csEdit('Companion HP', p => { const x = p.extras[i]; if (x) x.hp = Math.max(0, Math.min(x.hpMax || 0, (x.hp || 0) + sg * n)); });
+  }
+  if (d.csExdel != null) return csEdit('Removed a companion', p => { p.extras = (p.extras || []).filter((x, i) => i !== +d.csExdel); });
   if (d.cs === 'addxp'){
     const n = parseInt((document.querySelector('#cs-root [data-cs-xp]') || {}).value, 10) || 0;
     if (!n) return;
@@ -682,13 +753,38 @@ function csInventoryHtml(pc){
     const bases = e && e.kind === 'variant' && typeof sktMagicBases === 'function' ? sktMagicBases(CS.R, e) : null;
     h += '<h5>Add an item</h5><div class="cs-add"><input data-cs-q list="cs-gear-dl" placeholder="' + (CS.gear ? 'Search gear and magic items…' : 'Loading the item list…') + '" value="' + csE(CS.q || '') + '">'
       + (bases ? '<select class="cb-sel" data-cs-qbase><option value="">Which one?</option>' + bases.map(k => '<option value="' + csE(k) + '"' + (CS.qBase === k ? ' selected' : '') + '>' + csE(CS.R.items[k].name) + '</option>').join('') + '</select>' : '')
-      + '<button class="btn" data-cs="additem"' + (e && (!bases || (CS.qBase && bases.includes(CS.qBase))) ? '' : ' disabled') + '>Add</button></div>'
+      + '<button class="btn" data-cs="additem"' + (e && (!bases || (CS.qBase && bases.includes(CS.qBase))) ? '' : ' disabled') + '>Add</button>'
+      + (csPrice(e) ? '<button class="btn primary" data-cs="buyitem">Buy (' + sktCoinText(csPrice(e)) + ')</button>' : '') + '</div>'
       + '<datalist id="cs-gear-dl">' + csGearEntries().map(x => '<option value="' + csE(x.name) + '">' + csE(x.rarity && x.rarity !== 'none' ? x.rarity : '') + '</option>').join('') + '</datalist>'
       + '<div class="cs-add"><input data-cs-custom placeholder="Or a custom item…" maxlength="60"><input type="number" min="0" step="0.1" data-cs-customwt placeholder="lb" aria-label="Weight"><button class="btn" data-cs="addcustom">Add</button></div>';
   }
   return h;
 }
 function csGearEntries(){ return [].concat(CS.magic || [], CS.gear || []); }
+function csPrice(e){
+  if (!e) return 0;
+  if (e.kind === 'variant'){ const bi = CS.qBase && CS.R.items[CS.qBase]; return bi && e.value ? e.value + (bi.value || 0) : 0; }
+  return e.value || 0;
+}
+// Pay a price in copper from the purse, smallest coins first, with change.
+function csPay(p, cp){
+  const VAL = [['cp', 1], ['sp', 10], ['ep', 50], ['gp', 100], ['pp', 1000]];
+  const purse = csCoins(p);
+  const total = VAL.reduce((n, [k, v]) => n + (+purse[k] || 0) * v, 0);
+  if (total < cp) return false;
+  let owe = cp;
+  for (const [k, v] of VAL){
+    if (owe <= 0) break;
+    const use = Math.min(+purse[k] || 0, Math.ceil(owe / v));
+    purse[k] -= use; owe -= use * v;
+  }
+  // Overpaid with a big coin: the change in gold, silver and copper.
+  let change = -owe;
+  purse.gp += Math.floor(change / 100); change %= 100;
+  purse.sp += Math.floor(change / 10); purse.cp += change % 10;
+  p.gold = purse.gp; p.coins = { pp: purse.pp, ep: purse.ep, sp: purse.sp, cp: purse.cp };
+  return true;
+}
 function csGearFind(name){
   const n = String(name || '').trim().toLowerCase();
   return n ? csGearEntries().find(e => e.name.toLowerCase() === n) || null : null;
@@ -711,8 +807,13 @@ function csInventoryClick(e, t, d, pc){
   if (CS.readOnly) return false;
   if (d.csQty){ const [i, n] = d.csQty.split(':').map(Number); csItemsEdit('Quantity', l => { if (l[i]) l[i].qty = Math.max(1, (l[i].qty || 1) + n); }); return true; }
   if (d.csDel != null){ csItemsEdit('Removed an item', l => { l.splice(+d.csDel, 1); }); return true; }
-  if (d.cs === 'additem'){
+  if (d.cs === 'additem' || d.cs === 'buyitem'){
     const g = csGearFind(CS.q); if (!g) return true;
+    const price = d.cs === 'buyitem' ? csPrice(g) : 0;
+    if (price){
+      const purse = csCoins(pc), have = purse.cp + purse.sp * 10 + purse.ep * 50 + purse.gp * 100 + purse.pp * 1000;
+      if (have < price){ if (typeof showToast === 'function') showToast('Not enough money for ' + g.name); return true; }
+    }
     let it;
     if (g.kind === 'item' || g.kind === 'variant') it = sktMagicMake(CS.R, g, CS.qBase);
     else it = { name: g.name, base: g.base || undefined, weight: g.weight || 0 };
@@ -720,7 +821,8 @@ function csInventoryClick(e, t, d, pc){
     if (it.weight == null){ const bi = it.base && CS.R.items[it.base]; it.weight = (g.weight != null ? g.weight : bi && bi.weight) || 0; }
     it.qty = 1;
     CS.q = ''; CS.qBase = '';
-    csItemsEdit('Added ' + it.name, l => { l.push(it); });
+    csItemsEdit((price ? 'Bought ' : 'Added ') + it.name, l => { l.push(it); });
+    if (price){ const p = csPc(); if (p && csPay(p, price)) csCommit(); }
     return true;
   }
   if (d.cs === 'addcustom'){

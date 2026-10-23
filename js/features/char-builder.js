@@ -77,13 +77,22 @@ function cbUsesOtherBooks(b, R){
 function cbBookCards(list, selected, attr, sub){
   const b = CB.build;
   const core = list.filter(x => x.core !== false);
-  const more = list.filter(x => x.core === false && (b.allBooks || x.name === selected));
+  const more = list.filter(x => x.core === false && (sktBookOk(b, x) || x.name === selected));
   const card = x => ({ value: x.name, label: x.name, sub: [sub ? sub(x) : '', x.core === false ? x.source : ''].filter(Boolean).join(' · ') });
   return cbCards(core.map(card), selected, attr)
     + (more.length ? '<h4 class="cb-books-h">Other books</h4>' + cbCards(more.map(card), selected, attr) : '');
 }
 function cbBooksToggle(){
   return '<label class="cb-inline"><input type="checkbox" data-cb-allbooks' + (CB.build.allBooks ? ' checked' : '') + '> Include other books</label>';
+}
+// Which other books, one by one.
+function cbBookListHtml(){
+  const b = CB.build; if (!b.allBooks || !CB.R) return '';
+  const books = sktOtherBooks(CB.R);
+  const on = src => !Array.isArray(b.books) || b.books.includes(src);
+  return '<details class="cb-books"' + (Array.isArray(b.books) ? ' open' : '') + '><summary>Choose the books (' + (Array.isArray(b.books) ? b.books.length : books.length) + ' of ' + books.length + ')</summary>'
+    + '<div class="cb-dim"><button class="btn small" data-cb-srcall="1">All</button> <button class="btn small" data-cb-srcall="0">None</button></div>'
+    + '<div class="cb-checks cb-booklist">' + books.map(x => '<label class="cb-check' + (on(x.source) ? ' on' : '') + '"><input type="checkbox" data-cb-src="' + cbEsc(x.source) + '"' + (on(x.source) ? ' checked' : '') + '><span>' + cbEsc(x.name) + ' <i>' + x.count + '</i></span></label>').join('') + '</div></details>';
 }
 
 function cbMount(){
@@ -233,7 +242,7 @@ CB_RENDER.basics = () => {
     +   '<div class="cb-seg"><button class="' + (b.edition === '2024' ? 'on' : '') + '" data-cb-ed="2024">2024 Player’s Handbook</button>'
     +   '<button class="' + (b.edition === '2014' ? 'on' : '') + '" data-cb-ed="2014">2014 Player’s Handbook</button></div>'
     +   '<div class="cb-dim">Switching edition keeps the name and level and clears choices that don’t exist in the other book.</div></div>'
-    + '<div class="cb-f">Books' + cbBooksToggle()
+    + '<div class="cb-f">Books' + cbBooksToggle() + cbBookListHtml()
     +   '<div class="cb-dim">Species, backgrounds, feats, spells and subclasses from the other ' + (b.edition === '2014' ? '2014-era books — Xanathar’s, Tasha’s, Monsters of the Multiverse, the setting books' : '2024-era books — Heroes of Faerûn, Eberron, and older species and spells the 2024 rules allow') + '. Their own rules show as text where the sheet can’t apply them.</div></div>'
     + '<div class="cb-f">Portrait<div class="cb-icons">' + (/^data:image|^img\/|^https?:/.test(String(b.icon || '')) ? '<span class="cb-portrait on">' + renderIcon(b.icon, b.name) + '</span>' : '')
     +   '<button class="cb-upload" data-cb="upload" title="Upload a picture">📷 Upload</button>'
@@ -250,11 +259,10 @@ CB_RENDER.class = () => {
   let html = '<h3>Class</h3>' + cbCards(cards, cls && cls.name, 'cb-cls');
   if (cls){
     const lvl1 = cls.features.filter(f => f.level === 1 && !/Proficiencies/.test(f.name)).map(f => f.name).join(', ');
-    html += '<div class="cb-note"><b>' + cbEsc(cls.name) + '</b> — at level 1: ' + cbEsc(lvl1) + '.</div>';
+    html += '<div class="cb-note"><b>' + cbEsc(cls.name) + '</b> — at level 1: ' + cbEsc(lvl1) + '.</div>' + cbClassTableHtml(cls);
     const title = sktRulesInline(cls.subclassTitle);
     if (sktClassLevels(b, R)[0].level >= cls.subclassLevel){
-      const showAll = !!b.allBooks;
-      const subs = cls.subclasses.filter(s => s.core || showAll)
+      const subs = cls.subclasses.filter(s => s.core || sktBookOk(b, Object.assign({ core: false }, s)) || s.shortName === b.subclass)
         .filter((s, i, a) => a.findIndex(x => x.shortName === s.shortName) === i)
         .map(s => ({ value: s.shortName, label: s.shortName, sub: s.core ? '' : s.source }));
       html += '<h4>' + cbEsc(title) + '</h4>' + cbCards(subs, b.subclass, 'cb-sub')
@@ -273,6 +281,22 @@ CB_RENDER.class = () => {
   }
   return html;
 };
+// The class table, as the book prints it: proficiency bonus, features and
+// the class's own columns (rages, sneak attack, spell slots…) by level.
+function cbClassTableHtml(cls){
+  const b = CB.build, L = sktClassLevels(b, CB.R)[0].level;
+  const ORD = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
+  const heads = [];
+  (cls.tableGroups || []).forEach(g => (g.colLabels || []).forEach((l, i) => heads.push({ g, i, label: sktRulesInline(String(l)) || ORD[i] })));
+  const cell = (h, lv) => { const rows = h.g.rows || h.g.rowsSpellProgression || []; const c = _sktCell((rows[lv - 1] || [])[h.i]); return c == null || c === 0 ? '—' : c; };
+  let t = '<table class="cb-ctable"><thead><tr><th>Level</th><th>Prof.</th><th>Features</th>' + heads.map(h => '<th>' + cbEsc(String(h.label)) + '</th>').join('') + '</tr></thead><tbody>';
+  for (let lv = 1; lv <= 20; lv++){
+    const fs = cls.features.filter(f => f.level === lv && (!f.optional || b.optionalFeatures)).map(f => f.name);
+    t += '<tr' + (lv === L ? ' class="on"' : '') + '><td>' + lv + '</td><td>+' + sktProfBonus(lv) + '</td><td>' + cbEsc(fs.join(', ') || '—') + '</td>'
+      + heads.map(h => '<td>' + cbEsc(String(cell(h, lv))) + '</td>').join('') + '</tr>';
+  }
+  return '<details class="cb-ctwrap"><summary>The ' + cbEsc(cls.name) + ' table</summary><div class="cb-ctscroll">' + t + '</tbody></table></div></details>';
+}
 // More classes: each with its levels (taken from the first class), its
 // subclass when it reaches one, and the skill some classes give. The
 // character's total level stays what Basics says. There was no
@@ -294,7 +318,7 @@ function cbMulticlassHtml(){
       + '<button class="btn small" data-cb-mcdel="' + i + '">Remove</button></div>';
     if (!ok) h += '<div class="cb-warn">Multiclassing asks for ' + cbEsc([sktMulticlassNeedText(R, b.cls), sktMulticlassNeedText(R, p.cls)].filter(Boolean).join('; ')) + '. The sheet allows it anyway.</div>';
     if (p.level >= c2.subclassLevel){
-      const subs = c2.subclasses.filter(s => s.core || b.allBooks || s.shortName === p.subclass)
+      const subs = c2.subclasses.filter(s => s.core || sktBookOk(b, Object.assign({ core: false }, s)) || s.shortName === p.subclass)
         .filter((s, k, a) => a.findIndex(x => x.shortName === s.shortName) === k)
         .map(s => ({ value: i + '||' + s.shortName, label: s.shortName, sub: s.core ? '' : s.source }));
       h += cbCards(subs, p.subclass ? i + '||' + p.subclass : '', 'cb-mcsub');
@@ -331,7 +355,7 @@ CB_RENDER.species = () => {
   let html = '<h3>Species</h3>' + cbBookCards(R.species, b.species, 'cb-species',
     s => (typeof s.speed === 'number' ? s.speed : (s.speed && s.speed.walk) || 30) + ' ft' + (s.darkvision ? ' · darkvision' : '')) + cbBooksToggle();
   if (!sp) return html;
-  const subs = sp.subraces.filter(s => s.core !== false || b.allBooks || s.name === b.subspecies);
+  const subs = sp.subraces.filter(s => sktBookOk(b, s) || s.name === b.subspecies);
   if (subs.length){
     html += '<h4>' + (R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>' + cbCards(subs.map(s => ({ value: s.name, label: s.name, sub: s.core === false ? s.source : '' })), b.subspecies, 'cb-subspecies');
   }
@@ -379,11 +403,11 @@ CB_RENDER.species = () => {
   }
   // A bonus feat: 2014 Variant Human; 2024 Human (Versatile, an origin feat).
   if ((R.edition === '2014' && ((sub && /variant/i.test(sub.name)) || cbSpeciesGivesFeat(sp, sub))) || (R.edition === '2024' && sp.name === 'Human')){
-    const pool = R.feats.filter(f => (R.edition === '2014' ? true : f.category === 'O') && (f.core !== false || b.allBooks || f.name === b.originFeat));
+    const pool = R.feats.filter(f => (R.edition === '2014' ? true : f.category === 'O') && (sktBookOk(b, f) || f.name === b.originFeat));
     html += '<h4>' + (R.edition === '2024' ? 'Versatile — an origin feat' : 'Feat') + '</h4>'
       + '<select class="cb-sel" data-cb-originfeat><option value="">Choose a feat…</option>'
       + pool.map(f => '<option' + (b.originFeat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select>'
-      + (b.originFeat ? cbFeatureText(sktRulesText((sktRulesFeat(R, b.originFeat) || {}).entries)) : '');
+      + (b.originFeat ? cbFeatChoicesHtml(b.originFeat) + cbFeatureText(sktRulesText((sktRulesFeat(R, b.originFeat) || {}).entries)) : '');
   }
   // The species' spells (a Tiefling's legacy, a High Elf's cantrip…).
   const spg = sktSpeciesSpellGrant(R, b);
@@ -429,7 +453,7 @@ CB_RENDER.background = () => {
       html += '<div class="cb-dim">' + from.map(cbAbLabel).join(', ') + ' each +1.</div>';
     }
     const feat = sktBuildFeatNames({ ...b, originFeat: '', asi: {} }, R)[0];
-    if (feat) html += '<h4>Origin feat — ' + cbEsc(feat) + '</h4>' + cbFeatureText(sktRulesText((sktRulesFeat(R, feat) || {}).entries), false);
+    if (feat) html += '<h4>Origin feat — ' + cbEsc(feat) + '</h4>' + cbFeatChoicesHtml(feat) + cbFeatureText(sktRulesText((sktRulesFeat(R, feat) || {}).entries), false);
   }
   html += '<div class="cb-note">Skills: ' + cbEsc(skillsOf(bg).join(', ') || '—') + '</div>';
   html += _sktTraitsHtml(bg.entries);
@@ -600,7 +624,7 @@ CB_RENDER.levels = () => {
     } else if (isFeat){
       const pre = f => sktFeatPrereq(R, Object.assign({}, b, { level: s.primary ? s.level : b.level }), f, CB.rec);
       const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || (l >= 19 && f.category === 'EB'))
-                                    && (f.core !== false || b.allBooks || p.feat === f.name)
+                                    && (sktBookOk(b, f) || p.feat === f.name)
                                     && (b.showAllFeats || p.feat === f.name || pre(f).ok));
       html += '<select class="cb-sel" data-cb-asifeat="' + l + '"><option value="">Choose a feat…</option>'
         + pool.map(f => { const q = pre(f); return '<option value="' + cbEsc(f.name) + '"' + (p.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '')
@@ -615,6 +639,7 @@ CB_RENDER.levels = () => {
           html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(f.name) + ':' + ch.amount + '"><option value="">—</option>'
             + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
         }
+        html += cbFeatChoicesHtml(f.name);
         if (/^Resilient$/i.test(f.name)){
           const cur = (b.featChoices[f.name] || {}).save || '';
           html += '<label class="cb-f">Saving throw proficiency<select class="cb-sel" data-cb-featsave="' + cbEsc(f.name) + '"><option value="">—</option>'
@@ -630,8 +655,8 @@ CB_RENDER.levels = () => {
     const have = (b.optional[o.name] || []);
     const pool = o.kind === 'feat'
       ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && (String(f.category) === 'FS' || o.types.includes(f.category)))
-          .filter(f => f.core !== false || b.allBooks || have.includes(f.name))
-      : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && (x.core !== false || b.allBooks || have.includes(x.name)));
+          .filter(f => sktBookOk(b, f) || have.includes(f.name))
+      : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && (sktBookOk(b, x) || have.includes(x.name)));
     html += '<h4>' + cbEsc(o.name) + '</h4>' + cbCounter(have.length, o.count, 'chosen')
       + cbChecks(pool.map(x => ({ value: x.name, label: x.name + cbPrereqNote(x) })), have, o.count, 'cb-opt-' + cbSlug(o.name));
     have.forEach(n => { const x = pool.find(p => p.name === n); if (x) html += '<div class="cb-feat"><b>' + cbEsc(n) + '</b>' + cbFeatureText(sktRulesText(x.entries)) + '</div>'; });
@@ -658,6 +683,19 @@ function cbPrereqNote(x){
   if (p.pact) return ' (' + p.pact + ')';
   if (p.spell) return ' (needs ' + String(p.spell[0]).split('|')[0].replace(/#c$/, '') + ')';
   return '';
+}
+// A feat's skill, tool, language, weapon and expertise picks.
+function cbFeatChoicesHtml(featName){
+  const R = CB.R, b = CB.build;
+  const f = sktRulesFeat(R, featName); if (!f) return '';
+  const fc = sktFeatChoices(R, b, f.name, CB.rec);
+  const ch = b.featChoices[f.name] || {};
+  const label = v => v.startsWith('s:') ? SKT_SKILL_LABEL[v.slice(2)] : v.startsWith('t:') ? v.slice(2) : (SKT_SKILL_LABEL[v] || _sktTitle(v));
+  return fc.choices.map(c => {
+    const picked = c.kind === 'skillsTools' ? [...(ch.skills || []).map(s => 's:' + s), ...(ch.tools || []).map(t => 't:' + t)] : (ch[c.kind] || []);
+    return '<div class="cb-fc"><div class="cb-dim">' + cbEsc(f.name) + ': choose ' + c.count + ' ' + c.label + (c.count === 1 ? '' : 's') + '</div>'
+      + cbChecks(c.options.map(o => ({ value: f.name + '||' + c.kind + '||' + o, label: label(o) })), picked.map(o => f.name + '||' + c.kind + '||' + o), c.count, 'cb-fc') + '</div>';
+  }).join('');
 }
 function cbFeatAbilityChoice(f){
   for (const a of (f.ability || [])){
@@ -866,6 +904,13 @@ function cbGearEntries(){
     .map(k => ({ kind: 'base', name: R.items[k].name, base: k, rarity: '', source: R.items[k].source, text: '' }));
   return (CB.magic || []).concat(plain);
 }
+// The price of an item in copper, when the data has one.
+function cbGearPrice(e, bases){
+  if (!e) return 0;
+  if (e.kind === 'base'){ const bi = CB.R.items[e.base]; return (bi && bi.value) || 0; }
+  if (e.kind === 'variant'){ const bi = CB.magicBase && CB.R.items[CB.magicBase]; return bases && bi && e.value ? e.value + (bi.value || 0) : 0; }
+  return e.value || 0;
+}
 function cbGearFind(name){
   const n = String(name || '').trim().toLowerCase();
   return n ? cbGearEntries().find(e => e.name.toLowerCase() === n) || null : null;
@@ -884,7 +929,8 @@ function cbGearHtml(){
   const bases = e && e.kind === 'variant' ? sktMagicBases(R, e) : null;
   h += '<div class="cb-row cb-gear-add"><input class="cb-grow" data-cb-magicq list="cb-magic-dl" placeholder="' + (CB.magic ? 'Search items…' : CB.magicErr ? 'Weapons and armour (the magic item list did not load)' : 'Loading the item list…') + '" value="' + cbEsc(CB.magicQ || '') + '">'
     + (bases ? '<select class="cb-sel" data-cb-magicbase><option value="">Which one?</option>' + bases.map(k => '<option value="' + cbEsc(k) + '"' + (CB.magicBase === k ? ' selected' : '') + '>' + cbEsc(R.items[k].name) + '</option>').join('') + '</select>' : '')
-    + '<button class="btn" data-cb="magic-add"' + (e && (!bases || (CB.magicBase && bases.includes(CB.magicBase))) ? '' : ' disabled') + '>Add</button></div>'
+    + '<button class="btn" data-cb="magic-add"' + (e && (!bases || (CB.magicBase && bases.includes(CB.magicBase))) ? '' : ' disabled') + '>Add</button>'
+    + (cbGearPrice(e, bases) ? '<button class="btn primary" data-cb="magic-buy">Buy (' + sktCoinText(cbGearPrice(e, bases)) + ')</button>' : '') + '</div>'
     + '<datalist id="cb-magic-dl">' + cbGearEntries().map(x => '<option value="' + cbEsc(x.name) + '">' + cbEsc(x.rarity || '') + '</option>').join('') + '</datalist>';
   if (e && e.text) h += '<div class="cb-note cb-gear-prev"><b>' + cbEsc(e.name) + '</b> <span class="cb-dim">' + cbEsc([e.rarity, e.reqAttune ? 'attunement' : ''].filter(Boolean).join(' · ')) + '</span>' + cbFeatureText(e.text) + '</div>';
   if (items.length){
@@ -902,8 +948,9 @@ const _SKT_EQ_LABEL = { weaponMartial: 'a martial weapon', weaponMartialMelee: '
   toolArtisan: 'artisan’s tools', setGaming: 'a gaming set' };
 
 const CB_ALIGNMENTS = ['Lawful Good', 'Neutral Good', 'Chaotic Good', 'Lawful Neutral', 'True Neutral', 'Chaotic Neutral', 'Lawful Evil', 'Neutral Evil', 'Chaotic Evil', 'Unaligned'];
-const CB_DETAIL_LINES = [['age', 'Age'], ['height', 'Height'], ['weight', 'Weight'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin'], ['faith', 'Faith']];
-const CB_DETAIL_TEXT = [['appearance', 'Appearance'], ['personality', 'Personality traits'], ['ideals', 'Ideals'], ['bonds', 'Bonds'], ['flaws', 'Flaws'], ['backstory', 'Backstory']];
+const CB_DETAIL_LINES = [['gender', 'Gender'], ['age', 'Age'], ['height', 'Height'], ['weight', 'Weight'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin'], ['faith', 'Faith'], ['lifestyle', 'Lifestyle']];
+const CB_DETAIL_TEXT = [['appearance', 'Appearance'], ['personality', 'Personality traits'], ['ideals', 'Ideals'], ['bonds', 'Bonds'], ['flaws', 'Flaws'],
+                        ['allies', 'Allies & organizations'], ['enemies', 'Enemies'], ['backstory', 'Backstory']];
 CB_RENDER.details = () => {
   const d = CB.build.details || {};
   return '<h3>Details</h3><div class="cb-dim">All optional — who they are, for the table.</div>'
@@ -1000,12 +1047,14 @@ function cbOnClick(e){
     });
     inp.click(); return;
   }
-  if (d.cb === 'magic-add'){
+  if (d.cb === 'magic-add' || d.cb === 'magic-buy'){
     const e = cbGearFind(CB.magicQ); if (!e) return;
+    const price = d.cb === 'magic-buy' ? cbGearPrice(e, e.kind === 'variant' ? sktMagicBases(CB.R, e) : null) : 0;
+    if (price && sktBuildEquipment(CB.build, CB.R).gold * 100 < price){ if (typeof showToast === 'function') showToast('Not enough money for ' + e.name); return; }
     const it = e.kind === 'base' ? { name: e.name, base: e.base } : sktMagicMake(CB.R, e, CB.magicBase);
     if (!it) return;
     CB.magicQ = ''; CB.magicBase = '';
-    return cbSet(b => { b.items = (b.items || []).concat([it]); });
+    return cbSet(b => { b.items = (b.items || []).concat([it]); if (price) b.equipment = Object.assign({}, b.equipment, { spent: ((b.equipment || {}).spent || 0) + price }); });
   }
   if (d.cbItemdel != null) return cbSet(b => { b.items = (b.items || []).filter((x, i) => i !== +d.cbItemdel); });
   if (d.cb === 'roll') return cbSet(b => {
@@ -1050,6 +1099,7 @@ function cbOnClick(e){
   if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
   if (d.cbLineage) return cbSet(b => { if (b.speciesChoice.lineage !== d.cbLineage) delete b.speciesChoice.spells; b.speciesChoice.lineage = d.cbLineage; });
   if (d.cbSize) return cbSet(b => { b.size = d.cbSize; });
+  if (d.cbSrcall) return cbSet(b => { if (d.cbSrcall === '1') delete b.books; else b.books = []; });
   if (d.cbSpinfo != null){ e.preventDefault(); CB.spInfo = d.cbSpinfo || ''; return cbRender(); }
   if (d.cbClsgold){
     const g = sktClassGold(sktRulesClass(CB.R, CB.build.cls)); if (!g) return;
@@ -1104,6 +1154,16 @@ function cbOnChange(e){
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
+  if (d.cbSrc){
+    const all = sktOtherBooks(CB.R).map(x => x.source);
+    return cbSet(b => {
+      const cur = Array.isArray(b.books) ? b.books.slice() : all.slice();
+      const at = cur.indexOf(d.cbSrc);
+      if (t.checked && at < 0) cur.push(d.cbSrc);
+      if (!t.checked && at >= 0) cur.splice(at, 1);
+      if (all.every(x => cur.includes(x))) delete b.books; else b.books = cur;
+    });
+  }
   if ('cbClsgoldv' in d) return cbSet(b => { b.equipment = Object.assign({}, b.equipment, { clsGold: Math.max(0, parseInt(v, 10) || 0) }); });
   if ('cbQualified' in d) return cbSet(b => { b.showAllFeats = !t.checked; });
   if ('cbCustomorigin' in d) return cbSet(b => { b.speciesChoice = Object.assign({}, b.speciesChoice, { customOrigin: t.checked }); b.speciesAsi = {}; });
@@ -1255,6 +1315,20 @@ function cbOnChange(e){
     return cbSet(b => { b.featChoices[name] = Object.assign({}, b.featChoices[name], { inc: v ? { [v]: +amount || 1 } : {} }); });
   }
   if (d.cbFeatsave) return cbSet(b => { b.featChoices[d.cbFeatsave] = Object.assign({}, b.featChoices[d.cbFeatsave], { save: v }); });
+  if (d.cbFc){
+    const [feat, kind, val] = d.cbFc.split('||');
+    const c = sktFeatChoices(CB.R, CB.build, feat, CB.rec).choices.find(x => x.kind === kind); if (!c) return;
+    return cbSet(b => {
+      const ch = b.featChoices[feat] = Object.assign({}, b.featChoices[feat]);
+      if (kind === 'skillsTools'){
+        const k = val.startsWith('s:') ? 'skills' : 'tools', v2 = val.slice(2);
+        ch[k] = (ch[k] || []).slice();
+        const at = ch[k].indexOf(v2);
+        if (at >= 0) ch[k].splice(at, 1);
+        else if ((ch.skills || []).length + (ch.tools || []).length < c.count) ch[k].push(v2);
+      } else { ch[kind] = (ch[kind] || []).slice(); cbToggle(ch[kind], val, c.count); }
+    });
+  }
   if (d.cbEq){
     const [kind, i, letter] = d.cbEq.split(':');
     return cbSet(b => {

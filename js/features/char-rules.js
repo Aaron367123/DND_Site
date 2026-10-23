@@ -156,17 +156,19 @@ function _sktEraPicker(edition, src){
 async function _sktRulesBuild(edition, read){
   const src = SKT_EDITION_SRC[edition];
   const classFiles = await Promise.all(SKT_CORE_CLASSES.map(c => read('class/class-' + c + '.json')));
-  const [races, backgrounds, feats, optional, base, spellIndex, spellSources, languages] = await Promise.all([
+  const [races, backgrounds, feats, optional, base, spellIndex, spellSources, languages, books] = await Promise.all([
     read('races.json'), read('backgrounds.json'), read('feats.json'), read('optionalfeatures.json'),
     read('items-base.json'), read('spells/index.json').catch(() => ({ [src]: 'spells-' + src.toLowerCase() + '.json' })),
     read('spells/sources.json'), read('languages.json').catch(() => ({ language: [] })),
+    read('books.json').catch(() => ({ book: [] })),
   ]);
   // Every book's spells: the core book's always, the others for "other books".
   const spellFiles = await Promise.all(Object.keys(spellIndex).map(k =>
     read('spells/' + spellIndex[k]).catch(() => (k === src ? Promise.reject(new Error('spells ' + k)) : { spell: [] }))));
 
   const R = { edition, src, classes: [], species: [], backgrounds: [], feats: [], optional: [],
-              spells: [], items: {}, languages: [] };
+              spells: [], items: {}, languages: [], bookNames: {} };
+  (books.book || []).forEach(b => { R.bookNames[b.id] = b.name; });
 
   // Classes, their features by level, and their subclasses.
   classFiles.forEach(file => {
@@ -288,6 +290,10 @@ async function _sktRulesBuild(edition, read){
                    ability: f.ability || null, skills: f.skillProficiencies || null,
                    saves: f.savingThrowProficiencies || null, resist: f.resist || null,
                    additionalSpells: f.additionalSpells || null, repeatable: !!f.repeatable,
+                   tools: f.toolProficiencies || null, languages: f.languageProficiencies || null,
+                   weapons: f.weaponProficiencies || null, armor: f.armorProficiencies || null,
+                   expertise: f.expertise || null, skillsTools: f.skillToolLanguageProficiencies || null,
+                   optionalProgression: f.optionalfeatureProgression || null,
                    entries: f.entries || [] });
   });
 
@@ -452,6 +458,61 @@ function sktToolFixed(build, R){
   return [].concat(cls ? _sktToolList(cls.toolProfs).fixed : [], sp ? _sktToolList((sub && sub.tools && sub.tools.length) ? sub.tools : sp.tools).fixed : []);
 }
 
+// ── What a feat asks the player to choose ────────────────────────────────────
+// Skilled's three skills or tools, Linguist's languages, Weapon Master's
+// weapons, Skill Expert's skill and expertise, Crafter's tools — read from
+// the data, so a feat from any book works. Only ability increases and
+// Resilient's save were asked for before; the rest granted nothing.
+// Returns { fixed: { skills, tools, languages, weapons, armor, expertise },
+// choices: [{ kind, count, options, label }] }; picks live in
+// build.featChoices[feat][kind] ('skillsTools' fills skills and tools).
+function sktFeatChoices(R, build, featName, rec){
+  const f = sktRulesFeat(R, featName);
+  const out = { fixed: { skills: [], tools: [], languages: [], weapons: [], armor: [], expertise: [] }, choices: [] };
+  if (!f) return out;
+  const allSkills = Object.keys(SKT_SKILLS);
+  (f.skills || []).forEach(o => Object.keys(o).forEach(k => {
+    if (k === 'choose') out.choices.push({ kind: 'skills', count: o.choose.count || 1, options: (o.choose.from || []).map(sktSkillKey).filter(Boolean), label: 'skill' });
+    else if (k === 'any') out.choices.push({ kind: 'skills', count: +o.any || 1, options: allSkills, label: 'skill' });
+    else if (o[k] === true){ const sk = sktSkillKey(k); if (sk) out.fixed.skills.push(sk); }
+  }));
+  if (f.tools){ const t = _sktToolList(f.tools); out.fixed.tools.push(...t.fixed); if (t.choice) out.choices.push({ kind: 'tools', count: t.choice.count, options: t.choice.options, label: 'tool' }); }
+  (f.languages || []).forEach(o => Object.keys(o).forEach(k => {
+    if (k === 'any') out.choices.push({ kind: 'languages', count: +o.any || 1, options: R.languages.map(l => l.name), label: 'language' });
+    else if (o[k] === true) out.fixed.languages.push(_sktTitle(k));
+  }));
+  (f.weapons || []).forEach(o => Object.keys(o).forEach(k => {
+    if (k === 'choose'){
+      const cat = /martial/i.test(o.choose.fromFilter || '') ? 'martial' : /simple/i.test(o.choose.fromFilter || '') ? 'simple' : null;
+      const opts = Object.values(R.items).filter(i => /^(M|R)(\||$)/.test(String(i.type)) && i.weaponCategory && (!cat || i.weaponCategory === cat))
+        .map(i => i.name).filter((n, k2, a) => a.indexOf(n) === k2).sort();
+      out.choices.push({ kind: 'weapons', count: o.choose.count || 1, options: opts, label: 'weapon' });
+    } else if (o[k] === true) out.fixed.weapons.push(k.toLowerCase());
+  }));
+  (f.armor || []).forEach(o => Object.keys(o).forEach(k => { if (o[k] === true) out.fixed.armor.push(k.split('|')[0].toLowerCase()); }));
+  (f.expertise || []).forEach(o => Object.keys(o).forEach(k => {
+    if (k === 'anyProficientSkill'){
+      const prof = rec && rec.sheet ? Object.keys(rec.sheet.skillProf || {}) : allSkills;
+      out.choices.push({ kind: 'expertise', count: +o[k] || 1, options: prof, label: 'skill for expertise' });
+    } else if (o[k] === true){ const sk = sktSkillKey(k); if (sk) out.fixed.expertise.push(sk); }
+  }));
+  (f.skillsTools || []).forEach(o => (Array.isArray(o.choose) ? o.choose : []).forEach(c => {
+    const opts = [];
+    if ((c.from || []).includes('anySkill')) allSkills.forEach(s => opts.push('s:' + s));
+    if ((c.from || []).includes('anyTool')) Object.values(SKT_TOOL_SETS).forEach(set => set.forEach(t => opts.push('t:' + t)));
+    out.choices.push({ kind: 'skillsTools', count: c.count || 1, options: opts, label: 'skill or tool' });
+  }));
+  return out;
+}
+// How many of a feat's choices are still to make.
+function sktFeatChoicesMissing(R, build, featName, rec){
+  const ch = (build.featChoices || {})[sktRulesFeat(R, featName) ? sktRulesFeat(R, featName).name : featName] || {};
+  return sktFeatChoices(R, build, featName, rec).choices.reduce((n, c) => {
+    const have = c.kind === 'skillsTools' ? (ch.skills || []).length + (ch.tools || []).length : (ch[c.kind] || []).length;
+    return n + Math.max(0, c.count - have);
+  }, 0);
+}
+
 // ── Feat prerequisites ───────────────────────────────────────────────────────
 // Whether a character meets a feat's prerequisite, and what it is in words.
 // The data lists alternatives; within one, every condition counts. A
@@ -489,6 +550,30 @@ function sktClassGold(cls){
   if (!m) return null;
   const n = +m[1], d = +m[2], mult = +(m[3] || 1);
   return { n, d, mult, text: n + 'd' + d + (mult > 1 ? ' × ' + mult : '') + ' gp', avg: Math.floor(n * (d + 1) / 2) * mult };
+}
+
+// "15 gp", "5 sp", "1 gp 5 sp" from copper.
+function sktCoinText(cp){
+  cp = Math.round(+cp || 0);
+  const gp = Math.floor(cp / 100), sp = Math.floor((cp % 100) / 10), c = cp % 10;
+  return [gp ? gp + ' gp' : '', sp ? sp + ' sp' : '', c ? c + ' cp' : ''].filter(Boolean).join(' ') || '0 gp';
+}
+
+// ── Which books a character draws on ─────────────────────────────────────────
+// The handbook always; the others when "other books" is on — all of them, or
+// just the ones ticked (build.books, a list of source codes).
+function sktBookOk(build, x){
+  if (!x || x.core !== false) return true;
+  if (!build || !build.allBooks) return false;
+  return !Array.isArray(build.books) || build.books.includes(x.source);
+}
+// The other books this edition's data holds, with how much each brings.
+function sktOtherBooks(R){
+  const n = {};
+  const count = x => { if (x && x.core === false && x.source) n[x.source] = (n[x.source] || 0) + 1; };
+  R.species.forEach(count); R.backgrounds.forEach(count); R.feats.forEach(count); R.spells.forEach(count); R.optional.forEach(count);
+  R.classes.forEach(c => c.subclasses.forEach(s => { if (!s.core) count({ core: false, source: s.source }); }));
+  return Object.keys(n).map(k => ({ source: k, name: (R.bookNames || {})[k] || k, count: n[k] })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ── Multiclassing ────────────────────────────────────────────────────────────
@@ -871,7 +956,7 @@ function sktSpellOptions(R, build, level){
 // Whether a spell is on a class's list for this character: the handbook's
 // lists, or every book's with "other books" on.
 function sktSpellOnList(s, listName, build){
-  return (build && build.allBooks) ? s.classesAll.includes(listName) : (s.core && s.classes.includes(listName));
+  return (build && build.allBooks) ? (sktBookOk(build, s) && s.classesAll.includes(listName)) : (s.core && s.classes.includes(listName));
 }
 
 // ── Spells a feat grants ─────────────────────────────────────────────────────
@@ -887,7 +972,7 @@ function sktSpellsMatching(R, filter, build){
   const many = v => String(v).split(';').map(x => x.trim().toLowerCase()).filter(Boolean);
   return R.spells.filter(s => {
     if (f.level != null && !many(f.level).includes(String(s.level))) return false;
-    if (!s.core && !(build && build.allBooks)) return false;
+    if (!sktBookOk(build, s)) return false;
     if (f.class && !many(f.class).some(c => (build && build.allBooks ? s.classesAll : s.classes).map(x => x.toLowerCase()).includes(c))) return false;
     if (f.school && !many(f.school).includes(String(s.school).toLowerCase())) return false;
     if (/ritual/i.test(f['components & miscellaneous'] || '') && !s.ritual) return false;
@@ -1371,9 +1456,13 @@ function sktComputeCharacter(build, R, prior){
     (ch.skills || []).forEach(k => ctx.skillProf.add(k));
     (ch.expertise || []).forEach(k => ctx.expertise.add(k));
     if (ch.save) ctx.saveProf.add(ch.save);
-    if (/heavily armored/i.test(n)) ctx.armorProf.add('heavy');
-    if (/moderately armored/i.test(n)) { ctx.armorProf.add('medium'); ctx.armorProf.add('shield'); }
-    if (/lightly armored/i.test(n)) ctx.armorProf.add('light');
+    (ch.tools || []).forEach(t => ctx.toolProf.add(String(t).toLowerCase()));
+    (ch.languages || []).forEach(l => ctx.languages.add(l));
+    (ch.weapons || []).forEach(w => ctx.weaponProf.add(String(w).toLowerCase()));
+    const fx = sktFeatChoices(R, build, n).fixed;
+    fx.skills.forEach(k => ctx.skillProf.add(k)); fx.expertise.forEach(k => ctx.expertise.add(k));
+    fx.tools.forEach(t => ctx.toolProf.add(t.toLowerCase())); fx.languages.forEach(l => ctx.languages.add(l));
+    fx.weapons.forEach(w => ctx.weaponProf.add(w)); fx.armor.forEach(a => ctx.armorProf.add(a));
     (f.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); });
   });
 
@@ -1694,6 +1783,8 @@ function sktBuildEquipment(build, R){
   // Wear the armour that gives the best AC; a wizard handed chain mail by a
   // background does not put it on.
   const armor = armors.sort((a, b) => ((+b.ac || 0) + (b._ac || 0)) - ((+a.ac || 0) + (a._ac || 0)))[0] || null;
+  // Gear bought in the builder comes out of the starting money.
+  if (!eq.materialized && eq.spent) gold = Math.max(0, gold - eq.spent / 100);
   return { armor, shield, weapons, gold: Math.round(gold * 100) / 100, list: names.map(_sktTitle), names };
 }
 // The starting kit as an inventory: one line per item with its count, its
@@ -1863,6 +1954,10 @@ function sktBuildTodo(build, R){
     });
   }
   sktFeatSpells(build, R).forEach(g => { if (g.missing) todo.push({ step: 'spells', what: 'the spells from ' + g.feat }); });
+  const bgFeat = R.edition === '2024' ? sktBuildFeatNames(Object.assign({}, build, { originFeat: '', asi: {} }), R)[0] : null;
+  sktBuildFeatNames(build, R).forEach(n => {
+    if (sktFeatChoicesMissing(R, build, n)) todo.push({ step: n === build.originFeat ? 'species' : n === bgFeat ? 'background' : 'levels', what: 'choices for ' + n });
+  });
   sktToolChoices(build, R).forEach(c => {
     const have = ((build.toolPicks || {})[c.key] || []).length;
     if (have < c.count) todo.push({ step: 'skills', what: (c.count - have) + ' tool proficienc' + (c.count - have === 1 ? 'y' : 'ies') + ' (' + c.label + ')' });
@@ -1923,7 +2018,7 @@ function _sktMagicEntry(i, kind){
   const isGear = /^(M|R|LA|MA|HA|S)$/.test(t);
   const text = sktRulesText(i.entries || []);
   return {
-    kind, name: i.name, source: i.source, rarity: i.rarity || '', reqAttune: !!i.reqAttune, weight: i.weight || null,
+    kind, name: i.name, source: i.source, rarity: i.rarity || '', reqAttune: !!i.reqAttune, weight: i.weight || null, value: i.value || null,
     requires: i.requires || null, excludes: i.excludes || null,
     namePrefix: i.namePrefix || '', nameSuffix: i.nameSuffix || '',
     base: i.baseItem ? String(i.baseItem).split('|')[0].toLowerCase() : null,
@@ -2005,11 +2100,15 @@ function sktAsiLevels(cls){
 // [{ name, count, types:[featureType…], kind:'optional'|'feat' }].
 function sktOptionalChoices(build, R){
   const parts = sktClassLevels(build, R);
-  if (parts.length === 1) return _sktOptionalOne(build, R);
   const by = {};
-  parts.forEach(p => _sktOptionalOne(sktClassView(build, R, p), R).forEach(o => {
-    if (by[o.name]) by[o.name].count += o.count; else by[o.name] = Object.assign({}, o);
-  }));
+  const add = o => { if (by[o.name]) by[o.name].count += o.count; else by[o.name] = Object.assign({}, o); };
+  if (parts.length === 1) _sktOptionalOne(build, R).forEach(add);
+  else parts.forEach(p => _sktOptionalOne(sktClassView(build, R, p), R).forEach(add));
+  // Fighting Initiate, Martial Adept, Eldritch Adept, Metamagic Adept.
+  sktBuildFeatNames(build, R).forEach(n => {
+    const f = sktRulesFeat(R, n);
+    (f && f.optionalProgression || []).forEach(p => add({ name: p.name, count: +((p.progression || {})['*']) || 1, types: p.featureType || [], kind: 'optional' }));
+  });
   return Object.values(by);
 }
 function _sktOptionalOne(build, R){
@@ -2038,7 +2137,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktSpellsMatching, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
-                     sktToolChoices, sktFeatPrereq, sktClassGold,
+                     sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };

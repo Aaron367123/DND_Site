@@ -5983,7 +5983,7 @@
         const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
         const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
         const tab = async t => { click('[data-cs-tab="' + t + '"]'); await sleep(40); };
-        ok('sheet: it opens with the six tabs D&D Beyond has', !!root() && JSON.stringify(qa('.cs-tab').filter(e => e.offsetParent).map(e => e.textContent)) === '["Actions","Spells","Inventory","Features & Traits","Background","Notes"]');
+        ok('sheet: it opens with the tabs D&D Beyond has', !!root() && JSON.stringify(qa('.cs-tab').filter(e => e.offsetParent).map(e => e.textContent)) === '["Actions","Spells","Inventory","Features & Traits","Background","Notes","Extras"]');
         ok('sheet: abilities, saves and skills down the side', qa('.cs-ab').length === 6 && qa('[data-cs-roll^="save:"]').length === 6 && qa('[data-cs-roll^="skill:"]').length === 18
            && /Intelligence/.test(q('[data-cs-roll="save:int"]').textContent) && /\+6/.test(q('[data-cs-roll="save:int"]').textContent));
         // Rolling.
@@ -6239,6 +6239,128 @@
         window.sktD = st.d; window.showConfirm = st.conf;
         document.getElementById('cb-root')?.remove(); CB = null;
         if (typeof csClose === 'function') csClose();
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Builder round 3: feat choices, books, buying, class table, extras, print --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      const st = { d: window.sktD, conf: window.showConfirm, pr: window.print, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const base = { method: 'manual', base: { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 } };
+        // Feat choices.
+        const fb = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', species: 'Human', level: 4, abilities: base, asi: { 4: { type: 'feat', feat: 'Skilled' } } });
+        const sk = sktFeatChoices(R14, fb, 'Skilled');
+        ok('feats: Skilled asks for three skills or tools', sk.choices.length === 1 && sk.choices[0].kind === 'skillsTools' && sk.choices[0].count === 3 && sk.choices[0].options.includes('s:stealth') && sk.choices[0].options.includes('t:Lute'));
+        ok('feats: and the builder asks until they are chosen', sktBuildTodo(fb, R14).some(t => t.what === 'choices for Skilled' && t.step === 'levels'));
+        fb.featChoices = { Skilled: { skills: ['stealth', 'arcana'], tools: ['Lute'] } };
+        const FB = sktComputeCharacter(fb, R14);
+        ok('feats: the picks land on the sheet', FB.sheet.skillProf.stealth === 1 && FB.sheet.skillProf.arcana === 1 && FB.sheet.proficiencies.tools.includes('lute') && !sktBuildTodo(fb, R14).some(t => /Skilled/.test(t.what)));
+        const ling = sktFeatChoices(R14, fb, 'Linguist'), wm = sktFeatChoices(R14, fb, 'Weapon Master');
+        ok('feats: Linguist three languages, Weapon Master four martial weapons', ling.choices[0].kind === 'languages' && ling.choices[0].count === 3
+           && wm.choices[0].kind === 'weapons' && wm.choices[0].count === 4 && wm.choices[0].options.includes('Longsword') && !wm.choices[0].options.includes('Club'));
+        ok('feats: an armour feat gives its armour from the data', sktComputeCharacter(Object.assign({}, fb, { cls: 'Wizard', asi: { 4: { type: 'feat', feat: 'Moderately Armored' } } }), R14).sheet.proficiencies.armor.includes('medium'));
+        const fi = Object.assign({}, fb, { asi: { 4: { type: 'feat', feat: 'Fighting Initiate' } }, allBooks: true });
+        ok('feats: Fighting Initiate asks for a fighting style', (sktOptionalChoices(fi, R14).find(o => o.name === 'Fighting Style') || {}).count === 2);
+        const cr = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', species: 'Human', background: 'Artisan', level: 1, abilities: base });
+        ok('feats: a 2024 Artisan’s Crafter asks for three tools on the Background step', sktBuildTodo(cr, R24).some(t => t.what === 'choices for Crafter' && t.step === 'background'));
+        // Books one by one.
+        const bk = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 1, allBooks: true });
+        const can = b => sktSpellOptions(R14, b, 0).map(x => x.name);
+        ok('books: Xanathar’s cantrips with every book', can(bk).includes('Toll the Dead'));
+        ok('books: not when Xanathar’s is left out', !can(Object.assign({}, bk, { books: ['TCE'] })).includes('Toll the Dead') && can(Object.assign({}, bk, { books: ['XGE'] })).includes('Toll the Dead'));
+        ok('books: the list names each book', sktOtherBooks(R14).some(x => x.source === 'XGE' && /Xanathar/.test(x.name) && x.count > 10));
+        // The builder.
+        await openCharBuilder({ edition: '2014' }); await sleep(800);
+        const root = () => document.getElementById('cb-root');
+        const q = s => root().querySelector(s), qa = s => [...root().querySelectorAll(s)];
+        const click = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        const tick = s => { const e = q(s); if (!e) throw new Error('missing ' + s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const set = (s, v) => { const e = q(s); if (!e) throw new Error('missing ' + s); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        const nm = q('[data-cb-in="name"]'); nm.value = 'Shopper'; nm.dispatchEvent(new Event('input', { bubbles: true }));
+        tick('[data-cb-allbooks]'); await sleep(30);
+        ok('builder: with other books on, the books are listed one by one', qa('[data-cb-src]').length > 10);
+        click('[data-cb-srcall="0"]'); await sleep(30);
+        click('[data-cb-step="species"]'); await sleep(30);
+        ok('builder: with none ticked, only the handbook’s species', !q('.cb-books-h') && CB.build.books.length === 0);
+        click('[data-cb-step="basics"]'); await sleep(30);
+        tick('[data-cb-src="MPMM"]'); await sleep(30);
+        click('[data-cb-step="species"]'); await sleep(30);
+        ok('builder: tick one book and its species appear', !!q('[data-cb-species="Tabaxi"]') && !q('[data-cb-species="Kalashtar"]'));
+        { const all = sktOtherBooks(CB.R).map(x => x.source); CB.build.books = all.filter(x => x !== 'XGE'); click('[data-cb-step="basics"]'); await sleep(30);
+          tick('[data-cb-src="XGE"]'); await sleep(30);
+          ok('builder: every book ticked is "all books" again', CB.build.books === undefined); click('[data-cb-step="species"]'); await sleep(30); }
+        click('[data-cb-step="background"]'); await sleep(30); click('[data-cb-bg="Soldier"]'); await sleep(30);
+        click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Fighter"]'); await sleep(30);
+        ok('builder: the class table, as the book prints it', !!q('.cb-ctable') && qa('.cb-ctable tbody tr').length === 20 && /Action Surge/.test(q('.cb-ctable').textContent));
+        // Buying with the starting money.
+        click('[data-cb-step="equipment"]'); await sleep(400);
+        const gold0 = sktBuildEquipment(CB.build, CB.R).gold;
+        set('[data-cb-magicq]', 'Shield'); await sleep(30);
+        ok('builder: an item with a price can be bought', /Buy \(10 gp\)/.test((q('[data-cb="magic-buy"]') || {}).textContent || ''));
+        ok('builder: the Soldier’s pouch pays for it', gold0 >= 10, gold0);
+        click('[data-cb="magic-buy"]'); await sleep(30);
+        ok('builder: buying takes it out of the starting money', sktBuildEquipment(CB.build, CB.R).gold === gold0 - 10 && CB.build.items.some(x => x.name === 'Shield'));
+        // Feat choices in the builder.
+        const lvi = (click('[data-cb-step="basics"]'), q('[data-cb-in="level"]')); lvi.value = '4'; lvi.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
+        click('[data-cb-step="levels"]'); await sleep(30);
+        click('[data-cb-asitype="4:feat"]'); await sleep(30);
+        set('[data-cb-asifeat="4"]', 'Skilled'); await sleep(30);
+        ok('builder: Skilled asks for its three picks', qa('[data-cb-fc^="Skilled||skillsTools||"]').length > 30);
+        tick('[data-cb-fc="Skilled||skillsTools||s:stealth"]'); await sleep(20);
+        tick('[data-cb-fc="Skilled||skillsTools||t:Lute"]'); await sleep(20);
+        tick('[data-cb-fc="Skilled||skillsTools||s:arcana"]'); await sleep(20);
+        tick('[data-cb-fc="Skilled||skillsTools||s:history"]'); await sleep(20);
+        ok('builder: three and no more', JSON.stringify(CB.build.featChoices.Skilled) === '{"skills":["stealth","arcana"],"tools":["Lute"]}', JSON.stringify(CB.build.featChoices.Skilled));
+        // More details.
+        click('[data-cb-step="details"]'); await sleep(30);
+        ok('builder: gender, lifestyle, allies and enemies too', !!q('[data-cb-detail="gender"]') && !!q('[data-cb-detail="lifestyle"]') && !!q('textarea[data-cb-detail="allies"]') && !!q('textarea[data-cb-detail="enemies"]'));
+        click('[data-cb-step="review"]'); await sleep(30);
+        window.showConfirm = () => Promise.resolve(true);
+        click('[data-cb="save"]'); await sleep(200);
+        const made = state.party.find(p => p.name === 'Shopper');
+        // The sheet: buying with change, extras, printing.
+        window._findCombatantForPartyMember = () => -1;
+        made.gold = 2; made.coins = { pp: 1, ep: 0, sp: 0, cp: 0 }; save();
+        openCharSheet(made.id, { tab: 'inventory' }); await sleep(2500);
+        const cq = document.querySelector('#cs-root [data-cs-q]'); cq.value = 'Hempen Rope (50 feet)'; cq.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+        const buy = document.querySelector('#cs-root [data-cs="buyitem"]');
+        ok('sheet: gear shows its price', !!buy && /Buy \(1 gp\)/.test(buy.textContent), buy && buy.textContent);
+        buy.click(); await sleep(400);
+        const me = () => state.party.find(p => p.id === made.id);
+        ok('sheet: buying pays from the purse', me().gold === 1 && me().coins.pp === 1 && me().build.items.some(x => /Rope/.test(x.name)), JSON.stringify({ g: me().gold, c: me().coins }));
+        const cq2 = document.querySelector('#cs-root [data-cs-q]'); cq2.value = 'Handaxe'; cq2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+        document.querySelector('#cs-root [data-cs="buyitem"]').click(); await sleep(400);
+        ok('sheet: a 5 gp handaxe from 1 gp and 1 pp breaks the platinum: 6 gp left', me().coins.pp === 0 && me().gold === 6, JSON.stringify({ g: me().gold, c: me().coins }));
+        const cq3 = document.querySelector('#cs-root [data-cs-q]'); cq3.value = 'Plate Armor'; cq3.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+        const n3 = me().build.items.length;
+        document.querySelector('#cs-root [data-cs="buyitem"]').click(); await sleep(300);
+        ok('sheet: not when the purse is short', me().build.items.length === n3 && me().gold === 6);
+        document.querySelector('#cs-root [data-cs-tab="extras"]').click(); await sleep(40);
+        const eq = document.querySelector('#cs-root [data-cs-exq]'); eq.value = 'Owl'; document.querySelector('#cs-root [data-cs="addextra"]').click(); await sleep(60);
+        ok('sheet: a companion from the bestiary, with its hit points', (me().extras || []).length === 1 && me().extras[0].name === 'Owl' && me().extras[0].hpMax > 0, JSON.stringify(me().extras));
+        document.querySelector('#cs-root [data-cs-amt]').value = '1';
+        document.querySelector('#cs-root [data-cs-exhp="0:-1"]').click(); await sleep(40);
+        ok('sheet: its hit points go down', me().extras[0].hp === me().extras[0].hpMax - 1);
+        let printed = 0; window.print = () => { printed++; };
+        document.querySelector('#cs-root [data-cs="print"]').click(); await sleep(40);
+        const pv = document.getElementById('cs-print');
+        ok('sheet: Print lays out the whole sheet without buttons', printed === 1 && !!pv && /Actions/.test(pv.textContent) && /Inventory/.test(pv.textContent) && /Saving throws/i.test(pv.textContent) && !pv.querySelector('[data-cs-hp], [data-cs-cast], [data-cs-del], [data-cs-qty], [data-cs-equip]:not([disabled])'));
+        window.dispatchEvent(new Event('afterprint')); await sleep(20);
+        ok('sheet: and tidies up after', !document.getElementById('cs-print'));
+        csClose();
+      } catch(e){ ok('builder: round 3 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window.showConfirm = st.conf; window.print = st.pr; window._findCombatantForPartyMember = st.find;
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (typeof csClose === 'function') csClose();
+        document.getElementById('cs-print')?.remove();
         if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
         _remoteUpdate = true;
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
