@@ -8237,6 +8237,48 @@
       } catch(e){ ok('round 48 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 49: readable on every theme --------------------------------------
+    {
+      try {
+        const h2r = h => { h = String(h).replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+        const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+        const ratio = (a, b) => { const x = lum(h2r(a)), y = lum(h2r(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        const bad = [];
+        Object.entries(THEME_PRESETS).forEach(([id, t]) => {
+          const v = t.vars, p3 = v['--panel-3'];
+          ['--text-muted', '--text-dim', '--danger', '--success', '--warning', '--accent'].forEach(k => { if (!v[k] || ratio(v[k], p3) < 4.5) bad.push(id + ' ' + k + ' ' + (v[k] ? ratio(v[k], p3).toFixed(2) : 'unset')); });
+          const on = v['--on-accent'] || '#1a1a1a';
+          if (ratio(on, v['--accent']) < 4.5) bad.push(id + ' on-accent ' + ratio(on, v['--accent']).toFixed(2));
+        });
+        ok('readable: every theme’s secondary text, status colours and accent read at 4.5:1 on the lightest panel', bad.length === 0, bad.join(', '));
+        const keep = { pref: localStorage.getItem('skt-theme-v1') };
+        applyTheme('parchment', null, null);
+        ok('readable: a light theme says so, and draws native controls light', document.documentElement.dataset.themeTone === 'light' && getComputedStyle(document.documentElement).colorScheme === 'light');
+        applyTheme('default', null, null);
+        ok('readable: and a dark one dark', document.documentElement.dataset.themeTone === 'dark' && getComputedStyle(document.documentElement).colorScheme === 'dark');
+        if (keep.pref) localStorage.setItem('skt-theme-v1', keep.pref);
+        const r = document.createElement('input'); r.type = 'radio'; document.body.appendChild(r);
+        ok('readable: a radio is its own size, not the row’s width', r.getBoundingClientRect().width < 30, r.getBoundingClientRect().width + 'px');
+        r.remove();
+        const t = document.createElement('div');
+        t.innerHTML = '<div class="combatant-card"><div class="card-stats" style="width:180px"><div class="card-stat" title="HP"><span class="lab">♥</span><input type="number" value="61"><span class="hp-temp-badge">+8</span></div><div class="card-stat"><input value="15"></div><div class="card-stat"><input value="20"></div></div></div>';
+        document.body.appendChild(t);
+        const hp = t.querySelector('[title="HP"] input');
+        ok('readable: the HP number keeps room beside a temp-HP badge', hp.clientWidth >= hp.scrollWidth && hp.getBoundingClientRect().width > 20, hp.getBoundingClientRect().width + 'px');
+        t.remove();
+        // The builder's upload button and the party card's name.
+        await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
+        CB.step = 'basics'; cbRender(); await sleep(30);
+        const up = document.querySelector('#cb-root .cb-upload');
+        ok('readable: the portrait Upload button holds its word', !!up && up.scrollWidth <= up.clientWidth + 1 && up.getBoundingClientRect().width > 50, up ? up.scrollWidth + ' in ' + up.clientWidth : 'missing');
+        cbClose();
+        openPanel('party'); await sleep(250);
+        const nm = document.querySelector('.window[data-panel="party"] .char-name');
+        ok('readable: a party card’s name isn’t squeezed by its buttons', !!nm && nm.getBoundingClientRect().width >= 90, nm ? Math.round(nm.getBoundingClientRect().width) + 'px' : 'no card');
+        closePanel('party');
+      } catch(e){ ok('round 49 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

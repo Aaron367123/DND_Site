@@ -304,6 +304,9 @@ registerPanel('party',{
         // One-click toggle to add/remove this PC from the combat tracker —
         // drag-drop still works, this is the discoverable affordance for new
         // DMs (and saves a panel-switch when the combat tracker isn't open).
+        // The buttons as one group, so on a narrow card they drop below the
+        // name together instead of squeezing it to "Na…".
+        +'<div class="char-header-btns">'
         +'<button class="char-sheet-btn" data-act="open-sheet" data-idx="'+i+'" title="Open the full character sheet">Sheet</button>'
         +'<button class="char-combat-btn'+(inCombat?' in-combat':'')+'" data-act="toggle-combat" data-idx="'+i+'" title="'+(inCombat?'Remove from combat':'Add to combat')+'">'
           +(inCombat?'⚔ In':'+ ⚔')
@@ -313,6 +316,7 @@ registerPanel('party',{
         // remove). Roll d20 also reachable in the actions menu now that
         // the dedicated 🎲 button has been removed.
         +'<button class="char-action-btn menu" data-act="actions-menu" data-idx="'+i+'" title="More actions — roll, combat toggle, hit die, inspiration, edit, remove">⋯</button>'
+        +'</div>'
       +'</div>'
       // Status badges — concentration, rage, wildshape, inspiration. Only
       // renders for ACTIVE states. Empty row collapses to nothing.

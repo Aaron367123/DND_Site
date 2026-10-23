@@ -232,6 +232,18 @@ function _updateToolbarOcclusion(){
     }
   });
   document.body.classList.toggle('toolbar-occluded', occluded);
+  // The zoom buttons in the corner the same way: faded while a window sits
+  // under them (they covered the Battle Map's and the Encounter Builder's
+  // bottom lines), back on hover.
+  const zc = document.querySelector('.zoom-controls');
+  if (zc){
+    const z = zc.getBoundingClientRect();
+    const under = z.width > 0 && [...document.querySelectorAll('.window:not(.minimized)')].some(w => {
+      const b = w.getBoundingClientRect();
+      return b.right > z.left && b.left < z.right && b.bottom > z.top && b.top < z.bottom;
+    });
+    document.body.classList.toggle('zoom-occluded', under);
+  }
 }
 window._updateToolbarOcclusion = _updateToolbarOcclusion;
 

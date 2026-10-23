@@ -5047,7 +5047,10 @@ registerPanel('battlemap',{
       // touch a 32px tap target without drawing the token any bigger. Nothing
       // is actually clipped by it: portraits carry their own border-radius,
       // icon SVGs sit at 90%, and the name label is a sibling.
-      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:#fff;text-align:center;line-height:1.1;overflow:visible;box-sizing:border-box`;
+      // Lettering that reads on the token's colour: dark on a light token
+      // (a yellow PC had white text at 1.2:1), light on a dark one.
+      const ink = (typeof _bmInk === 'function') ? _bmInk(t.color) : '#fff';
+      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:${ink};text-shadow:${ink === '#fff' ? '0 1px 2px rgba(0,0,0,.7)' : 'none'};text-align:center;line-height:1.1;overflow:visible;box-sizing:border-box`;
       if (hasIcon){
         el.innerHTML = (typeof renderIcon === 'function')
           ? renderIcon(iconSource, displayLabel)
@@ -5688,4 +5691,15 @@ function _bmDist(ft){
     return (mi >= 10 ? Math.round(mi) : Math.round(mi * 10) / 10) + ' mi';
   }
   return (Math.round(ft * 10) / 10) + ' ft';
+}
+
+// Dark or light lettering for a token's colour (hex), whichever reads
+// better; white when the colour isn't a hex.
+function _bmInk(color){
+  let h = String(color || '').trim().replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (!/^[0-9a-f]{6}$/i.test(h)) return '#fff';
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(parseInt(h.slice(0, 2), 16)) + 0.7152 * lin(parseInt(h.slice(2, 4), 16)) + 0.0722 * lin(parseInt(h.slice(4, 6), 16));
+  return (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.0603) ? '#fff' : '#1a1a1a';
 }

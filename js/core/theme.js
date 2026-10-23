@@ -5,45 +5,54 @@
 // persisted per-browser in localStorage (not synced via Firebase
 // — players each get their own preference).
 
+// Secondary text (--text-muted, --text-dim), the status colours and the
+// accent are set per theme so each reads at 4.5:1 or better on the
+// lightest panel (--panel-3): the 2026-10 audit found #666 "dim" text at
+// 2.5:1 and the danger red at 2.8:1 across most windows.
 const THEME_PRESETS = {
   default: {
     label: 'Tan & Charcoal (default)',
     vars: {
       '--bg':'#1a1a1a','--panel':'#232323','--panel-2':'#2a2a2a','--panel-3':'#333',
-      '--border':'#3a3a3a','--text':'#e8e8e8','--text-muted':'#999','--text-dim':'#666',
+      '--border':'#3a3a3a','--text':'#e8e8e8','--text-muted':'#ababab','--text-dim':'#9c9c9c',
       '--accent':'#d4a574','--accent-dark':'#a87f53',
+      '--danger':'#ec7c78','--success':'#5bb05b','--warning':'#c9a050',
     },
   },
   forest: {
     label: 'Forest (green & moss)',
     vars: {
       '--bg':'#161c17','--panel':'#1f2920','--panel-2':'#26302a','--panel-3':'#2f3a33',
-      '--border':'#3a4a3e','--text':'#e6ebe6','--text-muted':'#94a896','--text-dim':'#627066',
+      '--border':'#3a4a3e','--text':'#e6ebe6','--text-muted':'#a5b6a7','--text-dim':'#98a59c',
       '--accent':'#8fbf85','--accent-dark':'#5e8a57',
+      '--danger':'#ed8581','--success':'#62b462','--warning':'#c9a050',
     },
   },
   royal: {
     label: 'Royal (purple & indigo)',
     vars: {
       '--bg':'#1a172a','--panel':'#221f36','--panel-2':'#2a2740','--panel-3':'#36314f',
-      '--border':'#3f3a5a','--text':'#ebe6ff','--text-muted':'#9d96b8','--text-dim':'#69648a',
+      '--border':'#3f3a5a','--text':'#ebe6ff','--text-muted':'#b1abc6','--text-dim':'#a09cb8',
       '--accent':'#b691f0','--accent-dark':'#8463c0',
+      '--danger':'#ec807c','--success':'#5db15d','--warning':'#c9a050',
     },
   },
   sanguine: {
     label: 'Sanguine (crimson & ash)',
     vars: {
       '--bg':'#1a1414','--panel':'#221b1b','--panel-2':'#2c2222','--panel-3':'#3a2a2a',
-      '--border':'#4a3232','--text':'#eee0e0','--text-muted':'#a89090','--text-dim':'#6e5858',
-      '--accent':'#d05a5a','--accent-dark':'#9c3e3e',
+      '--border':'#4a3232','--text':'#eee0e0','--text-muted':'#b5a1a1','--text-dim':'#a89393',
+      '--accent':'#da7c7c','--accent-dark':'#9c3e3e',
+      '--danger':'#ea736f','--success':'#5bb05b','--warning':'#c9a050',
     },
   },
   arcane: {
     label: 'Arcane (cyan & midnight)',
     vars: {
       '--bg':'#10172a','--panel':'#1a2238','--panel-2':'#202b46','--panel-3':'#283556',
-      '--border':'#34416a','--text':'#dee9ff','--text-muted':'#94a3c4','--text-dim':'#5e6c8c',
+      '--border':'#34416a','--text':'#dee9ff','--text-muted':'#a3b0cc','--text-dim':'#95a0b8',
       '--accent':'#5fc8e0','--accent-dark':'#3990a8',
+      '--danger':'#ed827f','--success':'#5fb25f','--warning':'#c9a050',
     },
   },
   parchment: {
@@ -52,21 +61,23 @@ const THEME_PRESETS = {
       '--bg':'#e8dfc8','--panel':'#dfd4b8','--panel-2':'#d6c9aa','--panel-3':'#cab999',
       // #857658 measured 1.99:1 against --panel-3 — the drag handles and the
       // "Human · rogue 6" sublines were most of 61 unreadable elements.
-      '--border':'#a89770','--text':'#2e2618','--text-muted':'#5a4f3a','--text-dim':'#6a5c40',
-      '--accent':'#8b3a1f','--accent-dark':'#5a2410',
+      '--border':'#a89770','--text':'#2e2618','--text-muted':'#463d2d','--text-dim':'#524732',
+      '--accent':'#7c341c','--accent-dark':'#5a2410',
       // The only light preset, and the only one that has to restate these.
       // They were left at their dark-theme values on every preset, so on
       // parchment the HP − and + buttons — the most-clicked control in the
       // app — sat at 2.02:1 and 1.62:1 against the card. Effectively invisible.
-      '--danger':'#9e2f2b','--success':'#3d6b3d','--warning':'#7d5a10',
+      '--danger':'#911915','--success':'#285228','--warning':'#60450c',
+      '--on-accent':'#fbf6ea',
     },
   },
   midnight: {
     label: 'Midnight (true black)',
     vars: {
       '--bg':'#0a0a0a','--panel':'#141414','--panel-2':'#1a1a1a','--panel-3':'#222',
-      '--border':'#2a2a2a','--text':'#e0e0e0','--text-muted':'#888','--text-dim':'#555',
+      '--border':'#2a2a2a','--text':'#e0e0e0','--text-muted':'#999999','--text-dim':'#8b8b8b',
       '--accent':'#7aa6ff','--accent-dark':'#4d7cd6',
+      '--danger':'#e75e59','--success':'#6b9e6b','--warning':'#c9a050',
     },
   },
 };
@@ -128,6 +139,10 @@ function applyTheme(id, custom, pref){
   // as inline styles on <html>, outranking the :root defaults forever.
   _ALL_THEME_VARS.forEach(k => { if (!(k in vars)) root.style.removeProperty(k); });
   Object.entries(vars).forEach(([k,v]) => root.style.setProperty(k, v));
+  // Light or dark, for the colours CSS keeps fixed per tone (rarity badges,
+  // status pills): from how light the page background is.
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(vars['--bg'] || '').length === 4 ? String(vars['--bg']).replace(/^#(.)(.)(.)$/, '#$1$1$2$2$3$3') : String(vars['--bg'] || ''));
+  root.dataset.themeTone = m && (0.2126 * parseInt(m[1], 16) + 0.7152 * parseInt(m[2], 16) + 0.0722 * parseInt(m[3], 16)) > 128 ? 'light' : 'dark';
 }
 
 // Every variable any preset can set. Custom themes are built on the default
