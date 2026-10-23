@@ -7705,6 +7705,35 @@
       } catch(e){ ok('round 32 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 33: the Actions filter -------------------------------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R24 = await sktRulesLoad('2024');
+        window._findCombatantForPartyMember = () => -1;
+        const pc = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Filt', cls: 'Cleric', subclass: 'Life', species: 'Human', level: 6 }), R24);
+        pc.id = 'pc_r33'; state.party.push(pc); save();
+        openCharSheet('pc_r33', { tab: 'actions' }); await sleep(300);
+        const sec = k => document.querySelector('#cs-root .cs-asec[data-k="' + k + '"]');
+        ok('actions: a 2024 Magic action is listed with the actions', !!sec('action') && /Turn Undead/.test(sec('action').textContent));
+        document.querySelector('#cs-root [data-cs-actf="limited"]').click(); await sleep(40);
+        const vis = k => { const e = sec(k); return !!e && getComputedStyle(e).display !== 'none'; };
+        ok('actions: the filter shows only limited uses', vis('limited') && !vis('action') && !vis('attack'));
+        document.querySelector('#cs-root [data-cs-actf="all"]').click(); await sleep(40);
+        ok('actions: and All shows everything again', vis('limited') && vis('action') && vis('attack'));
+        csClose();
+      } catch(e){ ok('round 33 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        if (typeof CS !== 'undefined' && CS) CS.actF = 'all';
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

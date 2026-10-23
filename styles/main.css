@@ -5377,3 +5377,6 @@ button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
 #cb-root .cb-sidefacts > div { display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px solid var(--border); }
 #cb-root .cb-sidefacts span { color:var(--text-muted); }
 #cb-root .cb-sidefacts b { text-align:right; font-weight:500; }
+.cs-actions:not([data-f="all"]) .cs-asec, .cs-actions:not([data-f="all"]) > :not(.cs-asec) { display:none; }
+.cs-actions[data-f="attack"] .cs-asec[data-k="attack"], .cs-actions[data-f="action"] .cs-asec[data-k="action"], .cs-actions[data-f="bonus"] .cs-asec[data-k="bonus"],
+.cs-actions[data-f="reaction"] .cs-asec[data-k="reaction"], .cs-actions[data-f="other"] .cs-asec[data-k="other"], .cs-actions[data-f="limited"] .cs-asec[data-k="limited"] { display:block; }

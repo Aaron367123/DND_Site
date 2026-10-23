@@ -431,7 +431,7 @@ CS_TAB_RENDER.abilities = pc => '<div class="cs-side-tab">' + csSide(pc) + '</di
 CS_TAB_RENDER.actions = pc => {
   const sh = pc.sheet || {}, ro = CS.readOnly;
   const atks = (sh.attacks || []).filter(a => a && a.name);
-  let h = '<h4>Attacks' + (sh.attacksPerAction > 1 ? ' <span class="cb-dim">' + sh.attacksPerAction + ' per Attack action</span>' : '') + '</h4>';
+  let h = '<div class="cs-asec" data-k="attack"><h4>Attacks' + (sh.attacksPerAction > 1 ? ' <span class="cb-dim">' + sh.attacksPerAction + ' per Attack action</span>' : '') + '</h4>';
   h += atks.length ? '<div class="cs-atks"><div class="cs-atk cs-atk-h"><span>Name</span><span>Hit / DC</span><span>Damage</span><span>Notes</span></div>'
     + atks.map((a, i) => '<div class="cs-atk"><b>' + csE(a.name) + '</b>'
       + (/^[+-]?\d+$/.test(String(a.atkBonus || '').trim()) ? '<button class="btn small" data-cs-atk="' + i + '">' + csE(a.atkBonus) + '</button>' : '<span>' + csE(a.atkBonus || '') + '</span>')
@@ -444,20 +444,22 @@ CS_TAB_RENDER.actions = pc => {
   if (spl.length) h += '<h4>Spells</h4><div class="cs-atks">' + spl.map(s => '<div class="cs-atk"><b>' + csE(s.name) + ' <span class="cb-dim">' + CS_ORD[s.level] + '</span></b>'
     + ((s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">' + csE(sh.spellAtkBonus || '') + '</button>' : '<span>DC ' + (sh.spellSaveDc || '?') + ' ' + csE(String(s.savingThrow[0]).slice(0, 3).toUpperCase()) + '</span>')
     + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csE(csSpellDamage(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
-  h += csExtraDamageHtml(pc);
+  h += csExtraDamageHtml(pc) + '</div>';
   const acts = sh.activations || [];
-  const groups = [['Action', 'Actions'], ['Bonus Action', 'Bonus actions'], ['Reaction', 'Reactions']];
-  groups.forEach(([k, l]) => {
-    const list = acts.filter(a => (a.action || 'Action') === k);
-    if (list.length) h += '<h4>' + l + '</h4>' + list.map(a => csActHtml(pc, a)).join('');
+  // A 2024 Magic action is an action.
+  const kind = a => a.action === 'Magic' ? 'Action' : (a.action || 'Action');
+  const groups = [['Action', 'Actions', 'action'], ['Bonus Action', 'Bonus actions', 'bonus'], ['Reaction', 'Reactions', 'reaction']];
+  groups.forEach(([k, l, tag]) => {
+    const list = acts.filter(a => kind(a) === k);
+    if (list.length) h += '<div class="cs-asec" data-k="' + tag + '"><h4>' + l + '</h4>' + list.map(a => csActHtml(pc, a)).join('') + '</div>';
   });
-  const other = acts.filter(a => !groups.some(([k]) => k === (a.action || 'Action')));
-  if (other.length) h += '<h4>Other</h4>' + other.map(a => csActHtml(pc, a)).join('');
+  const other = acts.filter(a => !groups.some(([k]) => k === kind(a)));
+  if (other.length) h += '<div class="cs-asec" data-k="other"><h4>Other</h4>' + other.map(a => csActHtml(pc, a)).join('') + '</div>';
   const res = pc.resources || [];
   if (res.length){
-    h += '<h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(r.name) + '</b>'
+    h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(r.name) + '</b>'
       + '<span class="cs-pips">' + Array.from({ length: Math.min(r.max || 0, 20) }, (_, n) => '<button class="cs-pip' + (n < (r.current || 0) ? ' on' : '') + '" data-cs-res="' + i + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(r.name) + ' ' + (n + 1) + '"></button>').join('') + '</span>'
-      + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (/short/.test(r.recharge) ? 'short rest' : 'long rest') : '') + '</span></div>').join('');
+      + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : /short/.test(r.recharge) ? 'short rest' : 'long rest') : '') + '</span></div>').join('') + '</div>';
   }
   if (!ro && pc.build){
     h += '<details class="cs-addcustom"><summary>+ Add a tracker or an action</summary>'
@@ -474,7 +476,10 @@ CS_TAB_RENDER.actions = pc => {
     + ((pc.rules || (pc.build && pc.build.edition)) === '2014'
       ? 'Attack · Cast a Spell · Dash · Disengage · Dodge · Help · Hide · Ready · Search · Use an Object · Grapple · Shove'
       : 'Attack · Dash · Disengage · Dodge · Help · Hide · Influence · Magic · Ready · Search · Study · Utilize') + '</div></details>';
-  return h;
+  const f = CS.actF || 'all';
+  const pills = [['all', 'All'], ['attack', 'Attack'], ['action', 'Action'], ['bonus', 'Bonus action'], ['reaction', 'Reaction'], ['other', 'Other'], ['limited', 'Limited use']];
+  return '<div class="cs-spfilter"><span class="cb-seg">' + pills.map(([k, l]) => '<button class="' + (f === k ? 'on' : '') + '" data-cs-actf="' + k + '">' + l + '</button>').join('') + '</span></div>'
+    + '<div class="cs-actions" data-f="' + f + '">' + h + '</div>';
 };
 // Damage a hit can add: a rogue's Sneak Attack, a paladin's smite (paid
 // with a slot), Hex and Hunter's Mark — rolled on their own, like D&D
@@ -1091,6 +1096,7 @@ function csManageSpellsHtml(pc){
 function csSpellsClick(e, t, d, pc){
   if (d.csOpen){ CS.open[d.csOpen] = !CS.open[d.csOpen]; csRender(); return true; }   // spells, items and extras
   if (d.csSplv != null){ CS.spLv = d.csSplv; csRender(); return true; }
+  if (d.csActf){ CS.actF = d.csActf; csRender(); return true; }
   if (d.csSpatk){ csRollD20('Spell attack', parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, e, 'attack'); csRender(); return true; }
   if (d.csSpdmg){
     const s = csSpell(d.csSpdmg); if (!s) return true;
