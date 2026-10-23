@@ -53,6 +53,18 @@ const SKT_EDITION_SRC = { '2014': 'PHB', '2024': 'XPHB' };
 const SKT_2024_ERA = new Set(['XPHB', 'XDMG', 'XMM', 'ABH', 'FRHoF', 'LFL', 'EFA']);
 const SKT_POINT_BUY = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
 const SKT_STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
+// Where each class wants its best scores, highest first: the order the
+// standard array goes in when the builder suggests it (D&D Beyond's quick
+// build does the same).
+const SKT_ABILITY_ORDER = {
+  barbarian: ['str', 'con', 'dex', 'wis', 'cha', 'int'], bard: ['cha', 'dex', 'con', 'wis', 'int', 'str'],
+  cleric: ['wis', 'con', 'str', 'dex', 'cha', 'int'], druid: ['wis', 'con', 'dex', 'int', 'cha', 'str'],
+  fighter: ['str', 'con', 'dex', 'wis', 'cha', 'int'], monk: ['dex', 'wis', 'con', 'str', 'int', 'cha'],
+  paladin: ['str', 'cha', 'con', 'wis', 'dex', 'int'], ranger: ['dex', 'wis', 'con', 'str', 'int', 'cha'],
+  rogue: ['dex', 'con', 'int', 'wis', 'cha', 'str'], sorcerer: ['cha', 'con', 'dex', 'wis', 'int', 'str'],
+  warlock: ['cha', 'con', 'dex', 'wis', 'int', 'str'], wizard: ['int', 'con', 'dex', 'wis', 'cha', 'str'],
+  artificer: ['int', 'con', 'dex', 'wis', 'cha', 'str'],
+};
 const SKT_DMG = { A: 'acid', B: 'bludgeoning', C: 'cold', F: 'fire', O: 'force', L: 'lightning',
                   N: 'necrotic', P: 'piercing', I: 'poison', Y: 'psychic', R: 'radiant',
                   S: 'slashing', T: 'thunder' };
@@ -322,6 +334,7 @@ async function _sktRulesBuild(edition, read){
     R.spells.push({ name: s.name, level: s.level, school: s.school, source: s.source, core,
                     classes: core ? listsFor(s, ['class']) : [], classesAll,
                     time: s.time, range: s.range, duration: s.duration, components: s.components || null,
+                    higher: s.entriesHigherLevel || null,
                     concentration: !!(s.duration || []).some(d => d.concentration),
                     ritual: !!(s.meta && s.meta.ritual),
                     damageInflict: s.damageInflict || null, savingThrow: s.savingThrow || null,
@@ -376,6 +389,29 @@ function sktRulesSubclass(cls, name){
 }
 function sktRulesSpecies(R, name){ return R.species.find(s => s.name === name) || null; }
 function sktRulesBackground(R, name){ return R.backgrounds.find(b => b.name === name) || null; }
+// The character's background: one from the books, or their own (the 2014
+// "customizing a background" rule, the 2024 "create your own"): two skills,
+// tools or languages, a feature borrowed from a printed one (2014); three
+// abilities, an origin feat and a tool (2024). The same shape as a printed
+// one, so everything that reads a background reads this too.
+const SKT_CUSTOM_BG = '(Custom)';
+function sktBuildBackground(R, build){
+  if (!build || build.background !== SKT_CUSTOM_BG) return sktRulesBackground(R, build && build.background);
+  const c = build.customBg || {};
+  const from = c.feature && sktRulesBackground(R, c.feature);
+  const kit = c.equipment && sktRulesBackground(R, c.equipment);
+  const obj = list => list && list.length ? [Object.fromEntries(list.map(k => [String(k).toLowerCase(), true]))] : [];
+  return {
+    name: c.name || 'Custom background', source: R.src, core: true, custom: true,
+    skills: obj((c.skills || []).map(k => (SKT_SKILL_LABEL[k] || k))),
+    tools: obj(c.tools || []), languages: (c.languages || 0) ? [{ anyStandard: +c.languages }] : [],
+    ability: R.edition === '2024' && (c.abilities || []).length === 3 ? [{ choose: { weighted: { from: c.abilities, weights: [2, 1] } } }] : null,
+    feats: R.edition === '2024' && c.feat ? [{ [String(c.feat).toLowerCase()]: true }] : null,
+    equipment: kit ? kit.equipment : [{ _: [{ value: R.edition === '2024' ? 5000 : 1000 }] }],
+    entries: from ? (from.entries || []).filter(e => e && typeof e === 'object' && /^Feature:/i.test(e.name || '')) : [],
+    characteristics: from ? from.characteristics : null,
+  };
+}
 function sktRulesFeat(R, name){
   const n = String(name || '').toLowerCase().split(';')[0].trim();
   return R.feats.find(f => f.name.toLowerCase() === n) || null;
@@ -443,7 +479,7 @@ function _sktToolList(list){
   return { fixed, choice: count ? { options: [...opts].sort(), count } : null };
 }
 function sktToolChoices(build, R){
-  const cls = sktRulesClass(R, build.cls), bg = sktRulesBackground(R, build.background);
+  const cls = sktRulesClass(R, build.cls), bg = sktBuildBackground(R, build);
   const sp = sktRulesSpecies(R, build.species), sub = sp && sp.subraces.find(s => s.name === build.subspecies);
   const out = [];
   const add = (key, label, list) => { const c = _sktToolList(list).choice; if (c) out.push(Object.assign({ key, label }, c)); };
@@ -784,7 +820,7 @@ function _sktBuildFeaturesOne(build, R){
     const sr = sp.subraces.find(s => s.name === build.subspecies);
     if (sr) _sktTraits(sr.entries).forEach(t => push(t, 'species', 1));
   }
-  const bg = sktRulesBackground(R, build.background);
+  const bg = sktBuildBackground(R, build);
   if (bg) _sktTraits(bg.entries).filter(t => /^Feature:/i.test(t.name) || R.edition === '2014')
     .filter(t => /^Feature:/i.test(t.name)).forEach(t => push(t, 'background', 1));
   sktBuildFeatNames(build, R).forEach(n => { const f = sktRulesFeat(R, n); if (f) push(f, 'feat', 1); });
@@ -831,7 +867,7 @@ function _sktTraits(entries){
 // fighting styles (which are feats there) and epic boons.
 function sktBuildFeatNames(build, R){
   const out = [];
-  const bg = sktRulesBackground(R, build.background);
+  const bg = sktBuildBackground(R, build);
   if (R.edition === '2024' && bg && Array.isArray(bg.feats)){
     bg.feats.forEach(o => Object.keys(o).forEach(k => out.push(_sktTitle(k.split('|')[0]))));
   }
@@ -1001,7 +1037,7 @@ function _sktGrantItems(block){
 }
 // The list a 2024 background fixes: "magic initiate; cleric|xphb" → 'cleric'.
 function _sktFeatHint(build, R, featName){
-  const bg = sktRulesBackground(R, build.background);
+  const bg = sktBuildBackground(R, build);
   if (R.edition !== '2024' || !bg || !Array.isArray(bg.feats)) return '';
   for (const o of bg.feats) for (const k of Object.keys(o)){
     const [nm, rest] = k.split('|')[0].split(';');
@@ -1375,7 +1411,7 @@ function sktComputeCharacter(build, R, prior){
   const pb = sktProfBonus(L);
   const species = sktRulesSpecies(R, build.species);
   const subrace = species && species.subraces.find(s => s.name === build.subspecies);
-  const bg = sktRulesBackground(R, build.background);
+  const bg = sktBuildBackground(R, build);
   const abilities = sktBuildAbilities(build, R);
 
   const ctx = {
@@ -1635,6 +1671,15 @@ function sktComputeCharacter(build, R, prior){
   const SIZE_NAME = { T: 'Tiny', S: 'Small', M: 'Medium', L: 'Large' };
   // Custom bonuses from the sheet's Customize: on top of everything else.
   const ov = build.overrides || {};
+  const list = k => String(ov[k] || '').split(',').map(x => x.trim()).filter(Boolean);
+  list('languages').forEach(l => ctx.languages.add(_sktTitle(l)));
+  list('tools').forEach(t => ctx.toolProf.add(t.toLowerCase()));
+  list('weapons').forEach(w => ctx.weaponProf.add(w.toLowerCase().replace(/ weapons?$/, '')));
+  list('armor').forEach(a => ctx.armorProf.add(a.toLowerCase().replace(/ armou?r$/, '')));
+  list('resist').forEach(r => ctx.resist.add(r.toLowerCase()));
+  list('immune').forEach(r => ctx.immune.add(r.toLowerCase()));
+  const extraVuln = list('vulnerable').map(v => v.toLowerCase());
+  const extraSenses = list('senses');
   const add = (k) => +ov[k] || 0;
   if (add('ac')) { ac += add('ac'); _fxNote(ctx, 'Custom bonus: AC ' + sktSigned(add('ac')) + '.'); }
   init += add('init'); speed += add('speed'); hpMax = Math.max(1, hpMax + add('hpMax'));
@@ -1659,6 +1704,12 @@ function sktComputeCharacter(build, R, prior){
                max: L, dieType: 'd' + hd },
     resistances: [...ctx.resist],
     immunities: [...ctx.immune],
+    // The party card edits vulnerabilities by hand; Customize's are added,
+    // and the ones it added last time and has since dropped come off.
+    vulnerabilities: (() => {
+      const was = String((((prior.build || {}).overrides) || {}).vulnerable || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+      return [...new Set((prior.vulnerabilities || []).filter(v => !was.includes(String(v).toLowerCase())).concat(extraVuln))];
+    })(),
     rules: R.edition,
     build: JSON.parse(JSON.stringify(build)),
     sheet: {
@@ -1678,9 +1729,10 @@ function sktComputeCharacter(build, R, prior){
       details: Object.assign({}, build.details || {}),
       activations: ctx.actions, notes: ctx.notes, featureList,
       equipment: gear.list.concat((build.items || []).map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '') + (m.reqAttune ? (m.attuned ? ' (attuned)' : ' (not attuned)') : ''))),
+      stealthDis: !!(armor && armor.stealth),
       acSource: best ? best.label + (shield ? ' + ' + (shield._name || 'Shield') : '') : '',
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
-               ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].filter(Boolean).join(', '),
+               ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].concat(extraSenses).filter(Boolean).join(', '),
       bio: { features: featureList.map(f => '* ' + f.name + '\n' + f.text).join('\n\n') },
     },
   };
@@ -1726,7 +1778,7 @@ function _sktAlwaysPreparedOne(build, R){
 // armour and shield worn (the best the character is proficient with) and
 // the weapons carried.
 function sktBuildEquipment(build, R){
-  const cls = sktRulesClass(R, build.cls), bg = sktRulesBackground(R, build.background);
+  const cls = sktRulesClass(R, build.cls), bg = sktBuildBackground(R, build);
   const eq = build.equipment || {};
   const names = [];
   let gold = 0;
@@ -1799,6 +1851,8 @@ function sktKitItems(build, R, gear){
   return Object.keys(count).map(n => {
     const bi = R.items[n];
     const it = { name: bi ? bi.name : _sktTitle(n), qty: count[n], weight: (bi && bi.weight) || gw[n] || 0, kit: true };
+    const bundle = /^(.*?)\s*\((\d+)\)$/.exec(it.name);
+    if (bundle){ it.name = bundle[1]; it.weight = (it.weight || 0) / +bundle[2]; it.qty *= +bundle[2]; return it; }
     if (bi){
       it.base = n;
       const t = String(bi.type || '').split('|')[0];
@@ -1878,6 +1932,21 @@ function sktBuildAttacks(ctx, gear, sc){
       props,
     });
   });
+  // Two light melee weapons: a bonus-action attack with the other one, its
+  // damage without the ability modifier (unless it is negative, or the
+  // character has the Two-Weapon Fighting style).
+  const lightMelee = out.filter(a => a.props && a.props.includes('L') && !a.spell && !/^(Unarmed|.*\(off-hand\))/.test(a.name)
+    && (gear.weapons || []).some(w => (w._name || _sktTitle(w.name)) === a.name && String(w.type).split('|')[0] === 'M'));
+  const weaponsCarried = (gear.weapons || []).filter(w => (w.property || []).map(p => String(p).split('|')[0]).includes('L') && String(w.type).split('|')[0] === 'M');
+  if (lightMelee.length && weaponsCarried.length >= 2){
+    const main = lightMelee[0], off = lightMelee[1] || lightMelee[0];
+    const m2 = /^(\d*d\d+)([+-]\d+)?(.*)$/.exec(off.damage || '');
+    if (m2){
+      const mod = parseInt(m2[2] || '0', 10);
+      const keep = ctx.twoWeaponMod ? mod : Math.min(0, mod);
+      out.push(Object.assign({}, off, { name: off.name + ' (off-hand)', damage: m2[1] + (keep ? (keep > 0 ? '+' : '') + keep : '') + m2[3], offhand: true, versatile: null }));
+    }
+  }
   // Unarmed strike: 1 + Strength, or a martial arts die with the better of
   // Strength and Dexterity.
   const uab = ctx.martialArts ? Math.max(m.str, m.dex) : m.str;
@@ -2138,6 +2207,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
+                     sktBuildBackground, SKT_CUSTOM_BG, SKT_ABILITY_ORDER,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };

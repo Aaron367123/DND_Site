@@ -140,6 +140,7 @@ function csHead(pc){
     + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
     + (!ro && pc.build ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
     + '<button class="btn" data-cs="print" title="Print the sheet, or save it as a PDF">🖨 Print</button>'
+    + '<button class="btn" data-cs="export" title="Save the character to a file, to bring into another campaign">⤓ Export</button>'
     + '<button class="cb-x" data-cs="close" aria-label="Close">✕</button></div>';
 }
 
@@ -162,9 +163,12 @@ function csTop(pc){
     + '</div>';
   // The boxes D&D Beyond puts along the top.
   const box = (l, v, act, title) => '<' + (act ? 'button data-cs-roll="' + act + '"' : 'div') + ' class="cs-box"' + (title ? ' title="' + csE(title) + '"' : '') + '><span>' + l + '</span><b>' + v + '</b></' + (act ? 'button' : 'div') + '>';
+  h += csRestHtml(pc);
+  if (CS.conc && pc.concentration && !ro) h += '<div class="cs-conc">Concentration check: <b>CON save DC ' + CS.conc.dc + '</b> to keep ' + csE(CS.conc.spell)
+    + ' <button class="btn primary" data-cs="concsave">Roll it</button><button class="btn" data-cs="dropconc">Drop it</button></div>';
   h += '<div class="cs-boxes">' + box('AC', pc.ac ?? '—', null, sh.acSource || '')
     + box('Initiative', csSigned(pc.init ?? csMod((pc.abilities || {}).dex)), 'init')
-    + box('Speed', (pc.spd ?? 30) + ' ft')
+    + box('Speed', csSpeed(pc) + ' ft', null, csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft normally' : '')
     + box('Proficiency', csSigned(sh.profBonus || 2))
     + '<button class="cs-box cs-insp' + (pc.inspiration ? ' on' : '') + '" data-cs="insp"' + (ro ? ' disabled' : '') + ' title="Heroic Inspiration"><span>Inspiration</span><b>' + (pc.inspiration ? '✦' : '—') + '</b></button></div>';
   // Conditions, exhaustion, concentration, death saves.
@@ -172,6 +176,10 @@ function csTop(pc){
     + conds.map(c => '<span class="cs-chip">' + csE(c) + (ro ? '' : '<button data-cs-cond="' + csE(c) + '" aria-label="Remove ' + csE(c) + '">×</button>') + '</span>').join('')
     + (ro ? '' : '<select class="cb-sel cs-addcond" data-cs-addcond><option value="">+ Condition</option>' + CS_CONDITIONS.filter(c => !conds.includes(c)).map(c => '<option>' + c + '</option>').join('') + '</select>')
     + '<span class="cs-exh">Exhaustion ' + (ro ? '' : '<button class="btn small" data-cs-exh="-1" aria-label="Less exhaustion">−</button>') + '<b>' + (+pc.exhaustion || 0) + '</b>' + (ro ? '' : '<button class="btn small" data-cs-exh="1" aria-label="More exhaustion">+</button>') + '</span>'
+    + (csEffectLine(pc) ? '<span class="cs-fx">' + csE(csEffectLine(pc)) + '</span>' : '')
+    + (pc.rage ? '<span class="cs-chip conc">Raging' + (ro ? '' : '<button data-cs="endrage" aria-label="End the rage">×</button>') + '</span>' : '')
+    + (pc.wildshape && pc.wildshape.name ? '<span class="cs-chip conc">Wild Shape: ' + csE(pc.wildshape.name) + ' ' + (pc.wildshape.hp ?? '') + '/' + (pc.wildshape.hpMax ?? '') + ' HP' + (ro ? '' : '<button data-cs="endwild" aria-label="End Wild Shape">×</button>') + '</span>' : '')
+    + (pc.hitDice && pc.hitDice.max ? '<span class="cs-hd">Hit dice <b>' + Math.max(0, pc.hitDice.current ?? pc.hitDice.max) + '/' + pc.hitDice.max + '</b> ' + csE((pc.sheet && pc.sheet.hitDiceByClass) || pc.hitDice.dieType || '') + '</span>' : '')
     + (pc.concentration ? '<span class="cs-chip conc">Concentrating: ' + csE(pc.concentration) + (ro ? '' : '<button data-cs="dropconc" aria-label="Drop concentration">×</button>') + '</span>' : '')
     + '</div>';
   if (hp <= 0 && max > 0){
@@ -185,6 +193,35 @@ function csTop(pc){
       .map(([k, l]) => '<button class="' + (CS.mode === k ? 'on' : '') + '" data-cs-mode="' + k + '">' + l + '</button>').join('') + '</span>'
     + '<span class="cs-last" aria-live="polite">' + (CS.log[0] ? csRollText(CS.log[0]) : '<span class="cb-dim">Click a score, save, skill or attack to roll.<span class="cs-keys"> Shift: advantage · Alt: disadvantage.</span></span>') + '</span></div>';
   return h + '</div>';
+}
+// Exhaustion slows: 5 ft a level in 2024; halved at 2 and nothing at 5 in 2014.
+function csSpeed(pc){
+  const s = pc.spd ?? 30, exh = +pc.exhaustion || 0;
+  const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
+  if (!exh) return s;
+  if (ed === '2024') return Math.max(0, s - 5 * exh);
+  return exh >= 5 ? 0 : exh >= 2 ? Math.floor(s / 2) : s;
+}
+// In words, what the conditions are doing to rolls right now.
+function csEffectLine(pc){
+  const parts = [];
+  const a = csRollEffects(pc, 'attack'), c = csRollEffects(pc, 'check'), s = csRollEffects(pc, 'save:dex');
+  if (a.dis.length) parts.push('attacks at disadvantage'); else if (a.adv.length) parts.push('attacks at advantage');
+  if (c.dis.length) parts.push('ability checks at disadvantage');
+  if (c.bonus) parts.push('d20 tests ' + c.bonus);
+  if (s.autoFail) parts.push('fails STR and DEX saves');
+  return parts.join(' · ');
+}
+// The short rest panel: hit dice to spend, one at a time, then Finish.
+function csRestHtml(pc){
+  if (!CS.resting || CS.readOnly) return '';
+  const hd = pc.hitDice || { current: 0, max: 0, dieType: 'd8' };
+  return '<div class="cs-rest"><h4>Short rest</h4>'
+    + '<div>Hit dice <b>' + Math.max(0, hd.current ?? hd.max) + ' / ' + hd.max + '</b> ' + csE(hd.dieType || '') + (pc.sheet && pc.sheet.hitDiceByClass ? ' <span class="cb-dim">(' + csE(pc.sheet.hitDiceByClass) + ')</span>' : '') + ' · HP <b>' + (pc.hp || 0) + ' / ' + (pc.hpMax || 0) + '</b></div>'
+    + (CS.resting.rolls.length ? '<div class="cb-dim">Rolled ' + csE(CS.resting.rolls.join(', ')) + ' — healed ' + CS.resting.healed + '</div>' : '')
+    + '<div class="cs-rest-b"><button class="btn" data-cs="restdie"' + ((hd.current || 0) > 0 && (pc.hp || 0) < (pc.hpMax || 0) ? '' : ' disabled') + '>🎲 Spend a hit die</button>'
+    + '<button class="btn primary" data-cs="restdone">Finish the rest</button><button class="btn" data-cs="restcancel">Cancel</button></div>'
+    + '<div class="cb-dim">Finishing gives back what a short rest restores (Second Wind, Action Surge, Pact Magic…).</div></div>';
 }
 function _csConditions(pc){
   const co = (state.combatants || []).find(x => x.id === pc.id);
@@ -203,8 +240,9 @@ function csSide(pc){
     + '<span class="cs-dot' + ((sh.saveProf || []).includes(k) ? ' on' : '') + '"></span><span>' + CS_AB[k] + '</span><b>' + csSigned(saveOf(k)) + '</b></button>').join('') + '</div>';
   h += '<h5>Skills</h5><div class="cs-list">' + Object.keys(CS_SKILLS).map(k => {
     const p = (sh.skillProf || {})[k] || 0;
+    const disad = k === 'stealth' && sh.stealthDis;
     return '<button class="cs-row" data-cs-roll="skill:' + k + '"><span class="cs-dot' + (p >= 2 ? ' exp' : p ? ' on' : '') + '" title="' + (p >= 2 ? 'Expertise' : p ? 'Proficient' : '') + '"></span>'
-      + '<span>' + CS_SKILLS[k][0] + ' <i>' + CS_SKILLS[k][1].toUpperCase() + '</i></span><b>' + csSigned(skillOf(k)) + '</b></button>';
+      + '<span>' + CS_SKILLS[k][0] + ' <i>' + CS_SKILLS[k][1].toUpperCase() + '</i>' + (disad ? ' <i class="cs-dis" title="Disadvantage from armour">D</i>' : '') + '</span><b>' + csSigned(skillOf(k)) + '</b></button>';
   }).join('') + '</div>';
   const pas = k => 10 + skillOf(k);
   h += '<h5>Senses</h5><div class="cs-kv"><span>Passive Perception</span><b>' + (sh.passivePerception || pas('perception')) + '</b></div>'
@@ -218,6 +256,35 @@ function csSide(pc){
   const def = [['Resistant', pc.resistances], ['Immune', pc.immunities], ['Vulnerable', pc.vulnerabilities]].filter(([, v]) => v && v.length);
   if (def.length) h += '<h5>Defenses</h5>' + def.map(([l, v]) => line(l, v)).join('');
   return h;
+}
+
+// ── A character to a file, and back ──────────────────────────────────────────
+// The whole party record (and the build, so it can level up) as JSON. The
+// portrait goes with it when it is a picture inside the record.
+function sktCharacterFile(pc){
+  return JSON.stringify({ format: 'skt-character', version: 1, exported: new Date().toISOString(), character: pc }, null, 1);
+}
+function sktExportCharacter(pc){
+  const blob = new Blob([sktCharacterFile(pc)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = String(pc.name || 'character').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  return a.download;
+}
+// A file from Export (or a bare record) back into the party, as a new member.
+function sktImportCharacter(text){
+  let data;
+  try { data = JSON.parse(text); } catch(e){ throw new Error('That isn’t a character file.'); }
+  const pc = data && data.format === 'skt-character' ? data.character : data;
+  if (!pc || typeof pc !== 'object' || !pc.name || !(pc.sheet || pc.build)) throw new Error('That file has no character in it.');
+  const rec = JSON.parse(JSON.stringify(pc));
+  rec.id = (typeof uid === 'function') ? uid() : 'pc_' + Date.now().toString(36);
+  delete rec.rolls;
+  const run = () => { state.party.push(rec); save(); try { panelDefs.party && panelDefs.party._render && panelDefs.party._render(); } catch(_){} };
+  if (typeof sktUndoable === 'function') sktUndoable('Imported ' + rec.name, run); else run();
+  return rec;
 }
 
 // ── Printing ─────────────────────────────────────────────────────────────────
@@ -247,11 +314,41 @@ function csPrint(pc){
 
 // ── Rolling ──────────────────────────────────────────────────────────────────
 function csD(n){ return typeof sktD === 'function' ? sktD(n) : 1 + Math.floor(Math.random() * n); }
-function csRollD20(label, mod, ev){
-  const mode = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : CS.mode;
+// What the character's conditions do to a roll, the way D&D Beyond marks
+// it: kind is 'check', 'init', 'attack' or 'save:<ability>'. Advantage and
+// disadvantage from any number of sources cancel to a straight roll.
+function csRollEffects(pc, kind){
+  const conds = _csConditions(pc).map(c => String(c).toLowerCase());
+  const has = c => conds.some(x => x === c || x.startsWith(c + ' '));
+  const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
+  const exh = +pc.exhaustion || 0;
+  const isCheck = kind === 'check' || kind === 'init' || /^check:/.test(kind), isAtk = kind === 'attack', save = /^save:/.test(kind) ? kind.slice(5) : '';
+  const skill = /^check:/.test(kind) ? kind.slice(6) : '';
+  const adv = [], dis = []; let bonus = 0, autoFail = '';
+  if (exh){
+    if (ed === '2024') bonus -= 2 * exh;
+    else { if (isCheck) dis.push('exhaustion'); if (exh >= 3 && (isAtk || save)) dis.push('exhaustion'); }
+  }
+  if (has('poisoned') && (isAtk || isCheck)) dis.push('poisoned');
+  if (has('frightened') && (isAtk || isCheck)) dis.push('frightened');
+  ['blinded', 'prone', 'restrained'].forEach(c => { if (has(c) && isAtk) dis.push(c); });
+  if (has('restrained') && save === 'dex') dis.push('restrained');
+  if (has('invisible') && isAtk) adv.push('invisible');
+  // Armour that's loud (chain mail, plate…): Stealth at disadvantage.
+  if (skill === 'stealth' && pc.sheet && pc.sheet.stealthDis) dis.push('armour');
+  if (save === 'str' || save === 'dex') ['paralyzed', 'stunned', 'petrified', 'unconscious'].forEach(c => { if (has(c) && !autoFail) autoFail = c; });
+  return { adv: [...new Set(adv)], dis: [...new Set(dis)], bonus, autoFail };
+}
+function csRollD20(label, mod, ev, kind){
+  const pick = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : CS.mode;
+  const fx = kind ? csRollEffects(csPc() || {}, kind) : { adv: [], dis: [], bonus: 0, autoFail: '' };
+  const up = pick === 'adv' || fx.adv.length > 0, down = pick === 'dis' || fx.dis.length > 0;
+  const mode = up && !down ? 'adv' : down && !up ? 'dis' : 'normal';
   const a = csD(20), b = mode === 'normal' ? null : csD(20);
   const nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
-  const r = { kind: 'd20', label, mod: +mod || 0, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + (+mod || 0), mode, crit: nat === 20, fumble: nat === 1 };
+  mod = (+mod || 0) + fx.bonus;
+  const why = [fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : ''].filter(Boolean).join('; ');
+  const r = { kind: 'd20', label, mod, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail };
   csLog(r);
   // The party card's own strip shows the DM the same roll.
   const pc = csPc();
@@ -295,7 +392,7 @@ function sktKeepRoll(pc, text, r){
 function csRollPlain(r){
   if (r.kind === 'dmg') return r.label + ': ' + r.total + (r.type ? ' ' + r.type : '') + (r.crit ? ' (crit)' : '') + ' — ' + r.detail;
   return r.label + ': ' + r.total + ' (d20 ' + r.rolls.join(' / ') + (r.mod ? ' ' + csSigned(r.mod) : '') + (r.mode !== 'normal' ? ', ' + (r.mode === 'adv' ? 'advantage' : 'disadvantage') : '') + ')'
-    + (r.crit ? ' — natural 20' : r.fumble ? ' — natural 1' : '');
+    + (r.crit ? ' — natural 20' : r.fumble ? ' — natural 1' : '') + (r.why ? ' [' + r.why + ']' : '');
 }
 function csRollText(r){
   return '<b class="cs-last-n' + (r.crit ? ' crit' : r.fumble ? ' fumble' : '') + '">' + r.total + '</b> ' + csE(csRollPlain(r).replace(/^[^:]*: \d+ ?/, r.label + ' '));
@@ -313,9 +410,16 @@ CS_TAB_RENDER.actions = pc => {
   h += atks.length ? '<div class="cs-atks"><div class="cs-atk cs-atk-h"><span>Name</span><span>Hit / DC</span><span>Damage</span><span>Notes</span></div>'
     + atks.map((a, i) => '<div class="cs-atk"><b>' + csE(a.name) + '</b>'
       + (/^[+-]?\d+$/.test(String(a.atkBonus || '').trim()) ? '<button class="btn small" data-cs-atk="' + i + '">' + csE(a.atkBonus) + '</button>' : '<span>' + csE(a.atkBonus || '') + '</span>')
-      + (a.damage ? '<button class="btn small" data-cs-dmg="' + i + '">' + csE(a.damage) + '</button>' : '<span></span>')
-      + '<span class="cb-dim">' + csE([a.mastery ? 'Mastery: ' + a.mastery : '', a.versatile ? 'Two hands ' + a.versatile : '', a.range ? a.range + ' ft' : ''].filter(Boolean).join(' · ')) + '</span></div>').join('') + '</div>'
+      + (a.damage ? '<span class="cs-dmgs"><button class="btn small" data-cs-dmg="' + i + '">' + csE(a.damage) + '</button>'
+        + (a.versatile ? '<button class="btn small" data-cs-dmg2="' + i + '" title="Two-handed">' + csE(a.versatile) + '</button>' : '') + '</span>' : '<span></span>')
+      + '<span class="cb-dim">' + csE([a.mastery ? 'Mastery: ' + a.mastery : '', a.range ? a.range + ' ft' : '', (a.props || []).includes('A') ? csAmmoLeft(pc, a) : ''].filter(Boolean).join(' · ')) + '</span></div>').join('') + '</div>'
     : '<div class="cb-dim">No attacks recorded.</div>';
+  // Levelled spells that attack or call for a save, as D&D Beyond lists them.
+  const spl = [...new Set(sh.spells || [])].map(n => csSpell(n)).filter(s => s && s.level > 0 && ((s.spellAttack || []).length || (s.savingThrow || []).length) && csSpellDamage(s, s.level));
+  if (spl.length) h += '<h4>Spells</h4><div class="cs-atks">' + spl.map(s => '<div class="cs-atk"><b>' + csE(s.name) + ' <span class="cb-dim">' + CS_ORD[s.level] + '</span></b>'
+    + ((s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">' + csE(sh.spellAtkBonus || '') + '</button>' : '<span>DC ' + (sh.spellSaveDc || '?') + ' ' + csE(String(s.savingThrow[0]).slice(0, 3).toUpperCase()) + '</span>')
+    + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csE(csSpellDamage(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
+  h += csExtraDamageHtml(pc);
   const acts = sh.activations || [];
   const groups = [['Action', 'Actions'], ['Bonus Action', 'Bonus actions'], ['Reaction', 'Reactions']];
   groups.forEach(([k, l]) => {
@@ -336,6 +440,27 @@ CS_TAB_RENDER.actions = pc => {
       : 'Attack · Dash · Disengage · Dodge · Help · Hide · Influence · Magic · Ready · Search · Study · Utilize') + '</div></details>';
   return h;
 };
+// Damage a hit can add: a rogue's Sneak Attack, a paladin's smite (paid
+// with a slot), Hex and Hunter's Mark — rolled on their own, like D&D
+// Beyond's damage buttons.
+function csExtraDamageHtml(pc){
+  const sh = pc.sheet || {}, ro = CS.readOnly;
+  const rows = [];
+  const sa = (pc.resources || []).find(r => r.name === 'Sneak Attack' && r.die);
+  if (sa) rows.push('<div class="cs-act"><div class="cs-act-h"><b>Sneak Attack</b><span class="cb-dim">once a turn, with advantage or an ally beside the target</span>'
+    + '<button class="btn small" data-cs-xdmg="Sneak Attack|' + csE(sa.die) + '">' + csE(sa.die) + '</button></div></div>');
+  const smite = (sh.activations || []).some(a => /Divine Smite|Paladin.s Smite/.test(a.name)) || (sh.spells || []).includes('Divine Smite');
+  if (smite){
+    const slots = sh.spellSlots || {};
+    const avail = Object.keys(slots).map(Number).filter(l => (slots[l].total - (slots[l].expended || 0)) > 0).sort((a, b) => a - b);
+    rows.push('<div class="cs-act"><div class="cs-act-h"><b>Divine Smite</b><span class="cb-dim">on a melee hit: 2d8 radiant, +1d8 a slot level above 1st (+1d8 against fiends and undead)</span>'
+      + (ro ? '' : avail.length ? '<select class="cb-sel" data-cs-smitelvl>' + avail.map(l => '<option value="' + l + '">' + CS_ORD[l] + ' slot</option>').join('') + '</select>'
+        + '<label class="cb-inline"><input type="checkbox" data-cs-smiteundead> fiend/undead</label><button class="btn small" data-cs="smite">Smite</button>' : '<span class="cb-dim">no slots</span>') + '</div></div>');
+  }
+  if ((sh.spells || []).includes('Hex')) rows.push('<div class="cs-act"><div class="cs-act-h"><b>Hex</b><span class="cb-dim">each hit on the cursed target</span><button class="btn small" data-cs-xdmg="Hex|1d6 necrotic">1d6 necrotic</button></div></div>');
+  if ((sh.spells || []).some(n => /Hunter.s Mark/.test(n))) rows.push('<div class="cs-act"><div class="cs-act-h"><b>Hunter’s Mark</b><span class="cb-dim">each weapon hit on the marked target</span><button class="btn small" data-cs-xdmg="Hunter’s Mark|1d6 force">1d6</button></div></div>');
+  return rows.length ? '<h4>Extra damage</h4>' + rows.join('') : '';
+}
 function csActHtml(pc, a){
   const r = a.resource ? (pc.resources || []).find(x => x.name === a.resource) : null;
   const can = !CS.readOnly && r && (r.current || 0) >= (a.amount || 1);
@@ -428,13 +553,38 @@ function csOnClick(e){
   const d = t.dataset, pc = csPc(); if (!pc) return;
   if (d.cs === 'close') return csClose();
   if (d.cs === 'print') return csPrint(pc);
+  if (d.cs === 'export') return sktExportCharacter(pc);
   if (d.csTab){ CS.tab = d.csTab; return csRender(); }
   if (d.csMode){ CS.mode = d.csMode; return csRender(); }
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
-    const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e);
+    const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, 'attack');
+    csSpendAmmo(pc, a);
     CS.lastAtkCrit = { i: +d.csAtk, crit: r.crit };
+    return csRender();
+  }
+  if (d.csXdmg){
+    const [label, expr] = d.csXdmg.split('|');
+    const crit = !!(CS.lastAtkCrit && CS.lastAtkCrit.crit);
+    csRollDamage(label + (crit ? ' (crit)' : ''), expr, crit);
+    return csRender();
+  }
+  if (d.cs === 'smite' && !CS.readOnly){
+    const l = +((document.querySelector('#cs-root [data-cs-smitelvl]') || {}).value || 0); if (!l) return;
+    const extra = (document.querySelector('#cs-root [data-cs-smiteundead]') || {}).checked ? 1 : 0;
+    const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
+    const dice = Math.min(ed === '2014' ? 5 : 99, 1 + l) + extra;
+    const crit = !!(CS.lastAtkCrit && CS.lastAtkCrit.crit);
+    csEdit('Divine Smite', p => { const s = p.sheet.spellSlots[l]; if (s && s.total - (s.expended || 0) > 0) s.expended = (s.expended || 0) + 1; });
+    csRollDamage('Divine Smite (' + CS_ORD[l] + ')', dice + 'd8 radiant', crit);
+    return csRender();
+  }
+  if (d.csDmg2 != null){
+    const a = (pc.sheet.attacks || [])[+d.csDmg2]; if (!a || !a.versatile) return;
+    const crit = !!(CS.lastAtkCrit && CS.lastAtkCrit.i === +d.csDmg2 && CS.lastAtkCrit.crit);
+    const type = (/[a-z]{3,}.*$/i.exec(a.damage || '') || [''])[0];
+    csRollDamage(a.name + ' damage (two hands)', a.versatile + (type ? ' ' + type : ''), crit); CS.lastAtkCrit = null;
     return csRender();
   }
   if (d.csDmg != null){
@@ -449,12 +599,26 @@ function csOnClick(e){
     CS.amt = n;
     if (d.csHp === 'temp') return csEdit('Temp HP ' + n, p => { p.tempHp = Math.max(p.tempHp || 0, n); });
     const i = csIdx(), sign = +d.csHp, type = sign < 0 ? (CS.dtype || null) : null;
+    // Hurt while concentrating: a CON save to keep it, DC 10 or half the damage.
+    if (sign < 0 && pc.concentration) CS.conc = { dc: Math.max(10, Math.floor(n / 2)), spell: pc.concentration };
     const run = () => { panelDefs.party._applyHpDelta(i, sign * n, type); csCommit(); };
     if (typeof sktUndoable === 'function') return sktUndoable((sign < 0 ? 'Took ' : 'Healed ') + n, run);
     return run();
   }
   if (d.cs === 'insp') return csEdit(pc.inspiration ? 'Spent Heroic Inspiration' : 'Heroic Inspiration', p => { p.inspiration = !p.inspiration; });
-  if (d.cs === 'dropconc') return csEdit('Dropped concentration', p => { p.concentration = null; });
+  if (d.cs === 'dropconc'){ CS.conc = null; return csEdit('Dropped concentration', p => { p.concentration = null; }); }
+  if (d.cs === 'concsave'){
+    const c = CS.conc; if (!c) return;
+    const sh = pc.sheet || {}, mod = sh.saves && sh.saves.con != null ? sh.saves.con : csMod((pc.abilities || {}).con);
+    const r = csRollD20('Concentration (DC ' + c.dc + ')', mod, e, 'save:con');
+    CS.conc = null;
+    if (r.total < c.dc || r.autoFail){
+      if (typeof showToast === 'function') showToast(pc.name + ' loses concentration on ' + c.spell);
+      return csEdit('Lost concentration', p => { p.concentration = null; });
+    }
+    if (typeof showToast === 'function') showToast(pc.name + ' keeps concentrating on ' + c.spell);
+    return csRender();
+  }
   if (d.csCond) return csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), d.csCond));
   if (d.csExh) return csEdit('Exhaustion', p => { p.exhaustion = Math.max(0, Math.min(6, (+p.exhaustion || 0) + (+d.csExh))); });
   if (d.cs === 'death'){
@@ -472,16 +636,32 @@ function csOnClick(e){
   }
   if (d.csUse){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csUse); if (!a) return;
-    return csEdit('Used ' + a.name, p => {
+    // Rage turns on what raging does (resistances, the damage bonus) via the
+    // party card's own switch.
+    const rage = /^Rage$/i.test(a.name) && !pc.rage;
+    csEdit('Used ' + a.name, p => {
       const r = (p.resources || []).find(x => x.name === a.resource);
       if (r) r.current = Math.max(0, (r.current || 0) - (a.amount || 1));
     });
+    if (rage && panelDefs.party && panelDefs.party._setRage){ panelDefs.party._setRage(csIdx(), true); csRender(); }
+    return;
   }
-  if (d.cs === 'short'){
+  if (d.cs === 'endrage'){ if (panelDefs.party && panelDefs.party._setRage) panelDefs.party._setRage(csIdx(), false); return csRender(); }
+  if (d.cs === 'endwild') return csEdit('Wild Shape ends', p => { p.wildshape = null; });
+  if (d.cs === 'short'){ CS.resting = { healed: 0, rolls: [] }; return csRender(); }
+  if (d.cs === 'restdie'){
     const P = panelDefs.party, i = csIdx();
-    if (document.body.classList.contains('player-mode') && typeof paOpenShortRest === 'function'){ csClose(); return paOpenShortRest(); }
-    return csEdit(pc.name + ' took a short rest', () => P._shortRestOne(state.party[i], i));
+    const r = P && P._rollHitDie ? P._rollHitDie(i) : null;
+    if (!r) return;
+    CS.resting.healed += r.heal; CS.resting.rolls.push(r.roll + csSigned(r.conMod) + ' = ' + r.heal);
+    const p = state.party[i]; p.hp = Math.min(p.hpMax || p.hp, (p.hp || 0));
+    return csCommit();
   }
+  if (d.cs === 'restdone'){
+    const i = csIdx(); CS.resting = null;
+    return csEdit(pc.name + ' took a short rest', () => panelDefs.party._shortRestOne(state.party[i], i));
+  }
+  if (d.cs === 'restcancel'){ CS.resting = null; return csRender(); }
   if (d.cs === 'long'){
     const go = () => csEdit(pc.name + ' took a long rest', () => panelDefs.party._longRestOne(state.party[csIdx()], csIdx()));
     if (typeof showConfirm === 'function') return showConfirm('Hit points to full, half the hit dice, every slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
@@ -519,13 +699,39 @@ function csOnClick(e){
   if (typeof csSpellsClick === 'function' && csSpellsClick(e, t, d, pc)) return;
   if (typeof csInventoryClick === 'function' && csInventoryClick(e, t, d, pc)) return;
 }
+// A bow uses an arrow, a crossbow a bolt, a sling a bullet, a blowgun a needle.
+function csAmmoFor(a){
+  const n = String(a.name || '').toLowerCase();
+  return /crossbow/.test(n) ? /bolt/ : /bow/.test(n) ? /arrow/ : /sling/.test(n) ? /bullet/ : /blowgun/.test(n) ? /needle/ : null;
+}
+function csAmmoLeft(pc, a){
+  const re = csAmmoFor(a); if (!re) return '';
+  const n = csItems(pc).filter(x => re.test(String(x.name).toLowerCase())).reduce((t, x) => t + (x.qty || 1), 0);
+  return n + ' ' + (re.source === 'arrow' ? 'arrows' : re.source + 's') + ' left';
+}
+function csSpendAmmo(pc, a){
+  if (CS.readOnly || !(a.props || []).includes('A')) return;
+  const re = csAmmoFor(a); if (!re) return;
+  const items = csItems(pc), at = items.findIndex(x => re.test(String(x.name).toLowerCase()) && (x.qty || 1) > 0);
+  if (at < 0){ if (typeof showToast === 'function') showToast('No ammunition for the ' + a.name + ' in the inventory'); return; }
+  csItemsEdit('Used ammunition', l => { const x = l[at]; if (!x) return; x.qty = (x.qty || 1) - 1; if (x.qty <= 0) l.splice(at, 1); });
+}
 function csRollFor(pc, what, e){
   const sh = pc.sheet || {}, ab = pc.abilities || {}, pb = sh.profBonus || 2;
   const [kind, k] = what.split(':');
-  if (kind === 'init') csRollD20('Initiative', pc.init ?? csMod(ab.dex), e);
-  else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]), e);
-  else if (kind === 'save') csRollD20(CS_AB[k] + ' save', sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0), e);
-  else if (kind === 'skill') csRollD20(CS_SKILLS[k][0], sh.skills && sh.skills[k] != null ? sh.skills[k] : csMod(ab[CS_SKILLS[k][1]]), e);
+  if (kind === 'init'){
+    const r = csRollD20('Initiative', pc.init ?? csMod(ab.dex), e, 'init');
+    // In a fight: the combat card takes the roll.
+    const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
+    if (ci >= 0 && !CS.readOnly){
+      state.combatants[ci] = Object.assign({}, state.combatants[ci], { initiative: r.total });
+      save(); try { panelDefs.combat && panelDefs.combat._render && panelDefs.combat._render(); } catch(_){}
+      if (typeof showToast === 'function') showToast(pc.name + "'s initiative is " + r.total + ' on the Combat Tracker');
+    }
+  }
+  else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]), e, 'check');
+  else if (kind === 'save') csRollD20(CS_AB[k] + ' save', sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0), e, 'save:' + k);
+  else if (kind === 'skill') csRollD20(CS_SKILLS[k][0], sh.skills && sh.skills[k] != null ? sh.skills[k] : csMod(ab[CS_SKILLS[k][1]]), e, 'check:' + k);
   csRender();
 }
 function csOnChange(e){
@@ -581,6 +787,40 @@ function csSpellMeta(s){
   const comp = [c.v ? 'V' : '', c.s ? 'S' : '', c.m ? 'M' : ''].filter(Boolean).join(', ');
   return [time, range, comp, dur].filter(Boolean).join(' · ');
 }
+// A spell's damage at a slot level: the first {@damage} in its text, plus
+// the {@scaledamage} step for each level above its own.
+function csSpellDamage(s, slot){
+  if (!s) return '';
+  const m = /\{@damage ([^}|]+)/.exec(JSON.stringify(s.entries || []));
+  if (!m) return '';
+  let expr = m[1].trim();
+  const sc = /\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || []));
+  const up = Math.max(0, (slot || s.level) - s.level);
+  if (sc && up){
+    const st = /^(\d+)d(\d+)$/.exec(sc[1].trim()), bm = /^(\d+)d(\d+)(.*)$/.exec(expr);
+    if (st && bm && st[2] === bm[2]) expr = (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3];
+    else if (st) expr += ' + ' + (up * +st[1]) + 'd' + st[2];
+  }
+  return expr;
+}
+// A healing spell's dice at a slot level: {@dice} where the text says hit
+// points are regained, plus the {@scaledice} step above its level, plus the
+// caster's spellcasting modifier when the text adds it.
+function csSpellHeal(s, slot, mod){
+  if (!s) return '';
+  const txt = JSON.stringify(s.entries || []);
+  if (!/regain/i.test(txt)) return '';
+  const m = /\{@dice ([^}|]+)/.exec(txt); if (!m) return '';
+  let expr = m[1].trim();
+  const sc = /\{@scaledice [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || []));
+  const up = Math.max(0, (slot || s.level) - s.level);
+  if (sc && up){
+    const st = /^(\d+)d(\d+)$/.exec(sc[1].trim()), bm = /^(\d+)d(\d+)(.*)$/.exec(expr);
+    if (st && bm && st[2] === bm[2]) expr = (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3];
+  }
+  if (/spellcasting ability modifier/i.test(txt) && mod) expr += (mod >= 0 ? '+' : '') + mod;
+  return expr;
+}
 const CS_ORD = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
 function csSpellsHtml(pc){
   const sh = pc.sheet || {}, ro = CS.readOnly;
@@ -616,13 +856,53 @@ function csSpellsHtml(pc){
           + '<button class="btn small" data-cs-cast="' + csE(n) + ':' + avail[0] + '">Cast</button>' : '<span class="cb-dim">no slots</span>')
           + (daily.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':free" title="Once per long rest without a slot">Free</button>' : '')
           + (s && s.ritual ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>' : '');
+      const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
+      const atk = l && s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(sh.spellAtkBonus || '') + '</button>' : '';
+      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csE(csSpellDamage(s, avail[0] || l)) + '</button>' : '';
+      const cantripAtk = !l ? (sh.attacks || []).find(a => a.name === n) : null;
+      const scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
+      const heal = l && csSpellHeal(s, avail[0] || l, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(n) + '">Heal ' + csE(csSpellHeal(s, avail[0] || l, scMod)) + '</button>' : '';
+      const info = [sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '', atk, dmg, heal,
+                    cantripAtk ? '<button class="btn small" data-cs-dmg="' + (sh.attacks || []).indexOf(cantripAtk) + '">' + csE(cantripAtk.damage) + '</button>' : ''].join('');
       return '<div class="cs-spell"><button class="cs-spell-n" data-cs-open="sp:' + csE(n) + '"><b>' + csE(n) + '</b>' + tags
         + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span>' + (from[n] ? '<span class="cs-from">' + csE(from[n]) + '</span>' : '') + '</button>'
-        + '<span class="cs-spell-c">' + cast + '</span>'
+        + '<span class="cs-spell-c">' + info + cast + '</span>'
         + (open ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>') : 'Loading the rules…') + '</div>' : '') + '</div>';
     }).join('');
   });
+  if (!ro) h += csSlotToolsHtml(pc, lvls, slots);
   if (!ro && pc.build) h += csManageSpellsHtml(pc);
+  return h;
+}
+// Features that move spell slots: recovering them on a short rest (a
+// wizard's Arcane Recovery, a land druid's Natural Recovery) and a
+// sorcerer's Font of Magic.
+const CS_FONT_COST = { 1: 2, 2: 3, 3: 5, 4: 6, 5: 7 };
+function csClassLevel(pc, key){
+  const cl = ((pc.sheet || {}).classLevels || []).find(p => p.cls === key);
+  return cl ? cl.level : (String(pc.cls || '').toLowerCase() === key ? (pc.level || 1) : 0);
+}
+function csRecoveryBudget(pc){
+  const r = (pc.resources || []).find(x => /^(Arcane|Natural) Recovery$/.test(x.name) && (x.current || 0) > 0);
+  if (!r) return null;
+  const lvl = csClassLevel(pc, /Arcane/.test(r.name) ? 'wizard' : 'druid') || pc.level || 1;
+  return { res: r, budget: Math.ceil(lvl / 2) };
+}
+function csSlotToolsHtml(pc, lvls, slots){
+  let h = '';
+  const rec = csRecoveryBudget(pc);
+  const spent = lvls.filter(l => l < 6 && (slots[l].expended || 0) > 0);
+  if (rec && spent.length) h += '<div class="cs-slottool"><b>' + csE(rec.res.name) + '</b> <span class="cb-dim">get back slots worth up to ' + rec.budget + ' levels (none 6th or higher), once a day after a short rest</span>'
+    + '<button class="btn small" data-cs="recover">Recover slots</button></div>';
+  const sp = (pc.resources || []).find(x => x.name === 'Sorcery Points');
+  if (sp){
+    const toPts = lvls.filter(l => (slots[l].total - (slots[l].expended || 0)) > 0);
+    const toSlot = Object.keys(CS_FONT_COST).map(Number).filter(l => slots[l] && (slots[l].expended || 0) > 0 && (sp.current || 0) >= CS_FONT_COST[l]);
+    h += '<div class="cs-slottool"><b>Font of Magic</b> <span class="cb-dim">' + (sp.current || 0) + ' sorcery points</span>'
+      + (toPts.length ? '<select class="cb-sel" data-cs-fontslot>' + toPts.map(l => '<option value="' + l + '">' + CS_ORD[l] + ' slot → ' + l + ' points</option>').join('') + '</select><button class="btn small" data-cs="font2pts">Convert</button>' : '')
+      + (toSlot.length ? '<select class="cb-sel" data-cs-fontpts>' + toSlot.map(l => '<option value="' + l + '">' + CS_FONT_COST[l] + ' points → ' + CS_ORD[l] + ' slot</option>').join('') + '</select><button class="btn small" data-cs="font2slot">Create</button>' : '')
+      + '</div>';
+  }
   return h;
 }
 // Preparing on the sheet: each casting class's list, its limits from the rules.
@@ -667,8 +947,46 @@ function csManageSpellsHtml(pc){
 }
 function csSpellsClick(e, t, d, pc){
   if (d.csOpen){ CS.open[d.csOpen] = !CS.open[d.csOpen]; csRender(); return true; }
-  if (d.csSpatk){ csRollD20('Spell attack', parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, e); csRender(); return true; }
+  if (d.csSpatk){ csRollD20('Spell attack', parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, e, 'attack'); csRender(); return true; }
+  if (d.csSpdmg){
+    const s = csSpell(d.csSpdmg); if (!s) return true;
+    const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpdmg) + '"]');
+    const lvl = sel ? +sel.value : s.level;
+    csRollDamage(s.name + (lvl > s.level ? ' (level ' + lvl + ')' : ''), csSpellDamage(s, lvl), false);
+    csRender(); return true;
+  }
+  if (d.csSpheal){
+    const s = csSpell(d.csSpheal); if (!s) return true;
+    const sh = pc.sheet || {}, scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
+    const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpheal) + '"]');
+    const lvl = sel ? +sel.value : s.level;
+    const r = Object.assign({ kind: 'dmg', label: s.name + ' heals' }, sktDamageRoll(csSpellHeal(s, lvl, scMod), false));
+    r.type = 'hit points'; csLog(r); csRender(); return true;
+  }
   if (CS.readOnly) return false;
+  if (d.cs === 'recover'){
+    const rec = csRecoveryBudget(pc); if (!rec) return true;
+    csEdit(rec.res.name, p => {
+      let left = rec.budget;
+      // Highest slots first: the most a day's recovery can give back.
+      Object.keys(p.sheet.spellSlots).map(Number).filter(l => l < 6).sort((a, b) => b - a).forEach(l => {
+        const s = p.sheet.spellSlots[l];
+        while ((s.expended || 0) > 0 && left >= l){ s.expended -= 1; left -= l; }
+      });
+      const r = p.resources.find(x => x.name === rec.res.name); if (r) r.current = Math.max(0, (r.current || 0) - 1);
+    });
+    return true;
+  }
+  if (d.cs === 'font2pts' || d.cs === 'font2slot'){
+    const to = d.cs === 'font2pts';
+    const l = +((document.querySelector('#cs-root [data-cs-' + (to ? 'fontslot' : 'fontpts') + ']') || {}).value || 0); if (!l) return true;
+    csEdit(to ? 'Slot into sorcery points' : 'Sorcery points into a slot', p => {
+      const sp = p.resources.find(x => x.name === 'Sorcery Points'), s = p.sheet.spellSlots[l]; if (!sp || !s) return;
+      if (to){ if (s.total - (s.expended || 0) <= 0) return; s.expended = (s.expended || 0) + 1; sp.current = Math.min(sp.max || 99, (sp.current || 0) + l); }
+      else { if ((s.expended || 0) <= 0 || (sp.current || 0) < CS_FONT_COST[l]) return; s.expended -= 1; sp.current -= CS_FONT_COST[l]; }
+    });
+    return true;
+  }
   if (d.cs === 'manage'){ CS.manage = !CS.manage; csRender(); return true; }
   if (d.csSlot){
     const [l, n] = d.csSlot.split(':').map(Number);
@@ -756,7 +1074,11 @@ function csInventoryHtml(pc){
       + '<button class="btn" data-cs="additem"' + (e && (!bases || (CS.qBase && bases.includes(CS.qBase))) ? '' : ' disabled') + '>Add</button>'
       + (csPrice(e) ? '<button class="btn primary" data-cs="buyitem">Buy (' + sktCoinText(csPrice(e)) + ')</button>' : '') + '</div>'
       + '<datalist id="cs-gear-dl">' + csGearEntries().map(x => '<option value="' + csE(x.name) + '">' + csE(x.rarity && x.rarity !== 'none' ? x.rarity : '') + '</option>').join('') + '</datalist>'
-      + '<div class="cs-add"><input data-cs-custom placeholder="Or a custom item…" maxlength="60"><input type="number" min="0" step="0.1" data-cs-customwt placeholder="lb" aria-label="Weight"><button class="btn" data-cs="addcustom">Add</button></div>';
+      + '<div class="cs-add"><input data-cs-custom placeholder="Or a custom item…" maxlength="60"><input type="number" min="0" step="0.1" data-cs-customwt placeholder="lb" aria-label="Weight">'
+      + '<select class="cb-sel" data-cs-customkind aria-label="Kind"><option value="">Gear</option><option value="simple">Simple weapon</option><option value="martial">Martial weapon</option><option value="LA">Light armour</option><option value="MA">Medium armour</option><option value="HA">Heavy armour</option><option value="S">Shield</option></select>'
+      + '<input data-cs-customstat placeholder="1d8 slashing / AC 14" maxlength="30" aria-label="Damage or armour class">'
+      + '<input type="number" min="0" max="3" data-cs-custombonus placeholder="+0" aria-label="Magic bonus">'
+      + '<button class="btn" data-cs="addcustom">Add</button></div>';
   }
   return h;
 }
@@ -817,9 +1139,12 @@ function csInventoryClick(e, t, d, pc){
     let it;
     if (g.kind === 'item' || g.kind === 'variant') it = sktMagicMake(CS.R, g, CS.qBase);
     else it = { name: g.name, base: g.base || undefined, weight: g.weight || 0 };
+    // A bundle ("Arrows (20)") is twenty of a thing, not one.
+    const bundle = !it.base && /^(.*?)\s*\((\d+)\)$/.exec(it.name);
+    if (bundle){ it.name = bundle[1]; it.qty = +bundle[2]; it.weight = (+it.weight || 0) / +bundle[2]; }
     if (!it) return true;
     if (it.weight == null){ const bi = it.base && CS.R.items[it.base]; it.weight = (g.weight != null ? g.weight : bi && bi.weight) || 0; }
-    it.qty = 1;
+    it.qty = it.qty || 1;
     CS.q = ''; CS.qBase = '';
     csItemsEdit((price ? 'Bought ' : 'Added ') + it.name, l => { l.push(it); });
     if (price){ const p = csPc(); if (p && csPay(p, price)) csCommit(); }
@@ -829,7 +1154,24 @@ function csInventoryClick(e, t, d, pc){
     const nm = (document.querySelector('#cs-root [data-cs-custom]') || {}).value || '';
     const wt = parseFloat((document.querySelector('#cs-root [data-cs-customwt]') || {}).value) || 0;
     if (!nm.trim()) return true;
-    csItemsEdit('Added ' + nm.trim(), l => { l.push({ name: nm.trim(), qty: 1, weight: wt, custom: true }); });
+    const kind = (document.querySelector('#cs-root [data-cs-customkind]') || {}).value || '';
+    const stat = ((document.querySelector('#cs-root [data-cs-customstat]') || {}).value || '').trim();
+    const bonus = Math.max(0, Math.min(3, parseInt((document.querySelector('#cs-root [data-cs-custombonus]') || {}).value, 10) || 0));
+    const it = { name: nm.trim(), qty: 1, weight: wt, custom: true };
+    // A homebrew weapon or armour the sheet fights with and wears.
+    const DT = { acid: 'A', bludgeoning: 'B', cold: 'C', fire: 'F', force: 'O', lightning: 'L', necrotic: 'N', piercing: 'P', poison: 'I', psychic: 'Y', radiant: 'R', slashing: 'S', thunder: 'T' };
+    if (kind === 'simple' || kind === 'martial'){
+      const m = /(\d*d\d+)\s*([a-z]+)?/i.exec(stat) || [];
+      it.stats = { name: it.name, type: 'M', weaponCategory: kind, dmg1: m[1] || '1d6', dmgType: DT[String(m[2] || 'bludgeoning').toLowerCase()] || 'B', property: [] };
+      if (bonus) it.bonusWeapon = bonus;
+      it.equipped = true;
+    } else if (kind){
+      const ac = parseInt((/\d+/.exec(stat) || [])[0], 10) || (kind === 'S' ? 2 : 11);
+      it.stats = { name: it.name, type: kind, ac };
+      if (bonus) it.bonusAc = bonus;
+      it.equipped = true;
+    }
+    csItemsEdit('Added ' + nm.trim(), l => { l.push(it); });
     return true;
   }
   return false;
@@ -860,6 +1202,8 @@ function csInventoryInput(e, t, d){ if ('csQ' in d) CS.q = t.value; }
 // Bonuses the rules don't know about — a blessing, a house rule, an item the
 // list lacks: added to AC, initiative, speed, hit points, saves, skills and
 // spellcasting. Kept on the build, so they survive levelling up.
+const CS_OV_LISTS = [['languages', 'Languages'], ['tools', 'Tool proficiencies'], ['weapons', 'Weapon proficiencies'], ['armor', 'Armour training'],
+                     ['resist', 'Resistances'], ['immune', 'Immunities'], ['vulnerable', 'Vulnerabilities'], ['senses', 'Senses (e.g. Darkvision 60 ft.)']];
 const CS_OV = [['ac', 'Armor Class'], ['init', 'Initiative'], ['speed', 'Speed (ft)'], ['hpMax', 'Hit point maximum'], ['saveAll', 'All saving throws'],
                ['spellAttack', 'Spell attack'], ['spellDc', 'Spell save DC'], ['passive', 'Passive Perception']];
 function csCustomizeOpen(){ CS.customize = !CS.customize; csRender(); }
@@ -871,10 +1215,16 @@ function csCustomizeHtml(pc){
     + '<div class="cs-ovgrid">' + CS_OV.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span>' + num(k, o[k]) + '</label>').join('')
     + Object.keys(CS_AB).map(k => '<label class="cs-kv"><span>' + CS_AB[k] + ' save</span>' + num('save:' + k, (o.saves || {})[k]) + '</label>').join('')
     + Object.keys(CS_SKILLS).map(k => '<label class="cs-kv"><span>' + CS_SKILLS[k][0] + '</span>' + num('skill:' + k, (o.skills || {})[k]) + '</label>').join('')
-    + '</div></div>';
+    + '</div><h5>Also</h5><div class="cb-dim">Comma-separated: what the rules don’t know about — a language learned in play, a curse’s vulnerability.</div>'
+    + '<div class="cs-ovlists">' + CS_OV_LISTS.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span><input data-cs-ovlist="' + k + '" value="' + csE(o[k] || '') + '" maxlength="200"></label>').join('') + '</div></div>';
 }
 
 function csSpellsChange(e, t, d, pc){
+  if (d.csOvlist){
+    const v = t.value;
+    csRebuild('Custom ' + d.csOvlist, b => { b.overrides = Object.assign({}, b.overrides, { [d.csOvlist]: v }); });
+    return true;
+  }
   if (d.csOv){
     const v = parseInt(t.value, 10) || 0;
     csRebuild('Custom bonus', b => {

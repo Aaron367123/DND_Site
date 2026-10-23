@@ -136,6 +136,16 @@ registerPanel('party',{
   menuItems(){
     const items = [{ label:'Manage Party', icon:'i-user', run: () => this._openManageParty() }];
     if (state.party.length) items.push({ label:'Party Skills', icon:'i-check', run: () => this._openPartySkills() });
+    // A character exported from this or another campaign.
+    if (typeof sktImportCharacter === 'function') items.push({ label:'Import a character…', icon:'i-upload', run: () => {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+      inp.addEventListener('change', async ev => {
+        const f = ev.target.files[0]; if (!f) return;
+        try { const rec = sktImportCharacter(await f.text()); showToast(rec.name + ' joined the party'); }
+        catch(err){ showToast(err.message); }
+      });
+      inp.click();
+    } });
     return items;
   },
 
@@ -3031,6 +3041,7 @@ registerPanel('party',{
         const isBarb  = /\bbarbarian\b/.test(cls);
         const isDruid = /\bdruid\b/.test(cls);
         if (typeof openCharSheet === 'function') items.push({ label: '📜 Character sheet', onClick: () => { const r = resolve(); if (r) openCharSheet(state.party[r.idx].id); } });
+        if (typeof sktExportCharacter === 'function') items.push({ label: '⤓ Export to a file', onClick: () => { const r = resolve(); if (r) sktExportCharacter(state.party[r.idx]); } });
         // Built in the character builder: level up, or change a choice.
         if (c.build && typeof openCharBuilder === 'function'){
           if ((c.build.level || 1) < 20)

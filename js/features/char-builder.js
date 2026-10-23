@@ -66,7 +66,7 @@ async function cbLoad(edition){
 // before the switch was saved on it.
 function cbUsesOtherBooks(b, R){
   const cls = sktRulesClass(R, b.cls), sub = sktRulesSubclass(cls, b.subclass);
-  const sp = sktRulesSpecies(R, b.species), bg = sktRulesBackground(R, b.background);
+  const sp = sktRulesSpecies(R, b.species), bg = sktBuildBackground(R, b);
   const off = x => x && x.core === false;
   return off(sub) || off(sp) || off(sp && sp.subraces.find(s => s.name === b.subspecies)) || off(bg)
     || sktBuildFeatNames(b, R).some(n => off(sktRulesFeat(R, n)))
@@ -236,6 +236,7 @@ CB_RENDER.basics = () => {
   const b = CB.build;
   const icons = ['⚔', '🗡', '🏹', '🪓', '🛡', '🔥', '✨', '🌿', '🎵', '👊', '📘', '👁', '🐉', '🌙'];
   return '<h3>Basics</h3>'
+    + '<div class="cb-quick"><button class="btn primary" data-cb="quick">⚡ Quick build</button><span class="cb-dim">Fills in every choice you haven’t made — scores, skills, spells, gear — with sensible picks for the class. Change anything after.</span></div>'
     + '<div class="cb-row"><label class="cb-f cb-grow">Name<input data-cb-in="name" value="' + cbEsc(b.name) + '" placeholder="Character name" maxlength="60"></label>'
     + '<label class="cb-f">Level<input type="number" min="1" max="20" data-cb-in="level" value="' + (b.level || 1) + '"' + (CB.mode === 'levelup' ? ' disabled' : '') + '></label></div>'
     + '<div class="cb-f">Rules'
@@ -434,9 +435,11 @@ function cbSpeciesSkillChoice(sp, sub){
 
 CB_RENDER.background = () => {
   const b = CB.build, R = CB.R;
-  const bg = sktRulesBackground(R, b.background);
+  const bg = sktBuildBackground(R, b);
   const skillsOf = x => (x.skills || []).flatMap(o => Object.keys(o).filter(k => o[k] === true).map(k => SKT_SKILL_LABEL[sktSkillKey(k)] || k));
-  let html = '<h3>Background</h3>' + cbBookCards(R.backgrounds, b.background, 'cb-bg', x => skillsOf(x).join(', ')) + cbBooksToggle();
+  let html = '<h3>Background</h3>' + cbBookCards(R.backgrounds, b.background, 'cb-bg', x => skillsOf(x).join(', '))
+    + cbCards([{ value: SKT_CUSTOM_BG, label: 'Custom background', sub: 'your own' }], b.background, 'cb-bg') + cbBooksToggle();
+  if (b.background === SKT_CUSTOM_BG) html += cbCustomBgHtml();
   if (!bg) return html;
   if (R.edition === '2024' && Array.isArray(bg.ability)){
     const from = ((bg.ability[0] || {}).choose || {}).weighted ? bg.ability[0].choose.weighted.from : SKT_ABS;
@@ -459,9 +462,152 @@ CB_RENDER.background = () => {
   html += _sktTraitsHtml(bg.entries);
   return html;
 };
+// Your own background: a name, two skills, tools or languages, a feature
+// (2014); three abilities, an origin feat, a tool (2024); a kit borrowed
+// from a printed background, or the gold instead.
+function cbCustomBgHtml(){
+  const b = CB.build, R = CB.R, c = b.customBg || {};
+  const ARTS = Object.values(SKT_TOOL_SETS).reduce((a, x) => a.concat(x), []).concat(["Disguise Kit", "Forgery Kit", "Herbalism Kit", "Navigator's Tools", "Poisoner's Kit", "Thieves' Tools"]).sort();
+  let h = '<div class="cb-custombg"><label class="cb-f">Name<input data-cb-cbg="name" value="' + cbEsc(c.name || '') + '" placeholder="Sailor, Smuggler, Hermit-monk…" maxlength="40"></label>';
+  h += '<h4>Two skills</h4>' + cbChecks(Object.keys(SKT_SKILLS).map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), c.skills || [], 2, 'cb-cbgskill');
+  if (R.edition === '2024'){
+    h += '<h4>Three abilities</h4><div class="cb-dim">The ones your background increases.</div>' + cbChecks(SKT_ABS.map(k => ({ value: k, label: cbAbLabel(k) })), c.abilities || [], 3, 'cb-cbgab');
+    h += '<label class="cb-f">Origin feat<select class="cb-sel" data-cb-cbg="feat"><option value="">Choose…</option>'
+      + R.feats.filter(f => f.category === 'O' && sktBookOk(b, f)).map(f => '<option' + (c.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select></label>';
+    h += '<h4>A tool</h4>' + cbChecks(ARTS, c.tools || [], 1, 'cb-cbgtool');
+  } else {
+    const n = (c.tools || []).length + (+c.languages || 0);
+    h += '<h4>Two tools or languages</h4><div class="cb-dim">Tools here; each language you take instead is picked on the Skills step.</div>'
+      + '<label class="cb-f">Languages<select class="cb-sel" data-cb-cbg="languages">' + [0, 1, 2].map(k => '<option' + ((+c.languages || 0) === k ? ' selected' : '') + '>' + k + '</option>').join('') + '</select></label>'
+      + cbChecks(ARTS, c.tools || [], 2 - (+c.languages || 0), 'cb-cbgtool');
+    h += '<label class="cb-f">Feature (borrowed from a printed background)<select class="cb-sel" data-cb-cbg="feature"><option value="">Choose…</option>'
+      + R.backgrounds.filter(x => sktBookOk(b, x) && (x.entries || []).some(e => e && /^Feature:/i.test(e.name || ''))).map(x => '<option value="' + cbEsc(x.name) + '"' + (c.feature === x.name ? ' selected' : '') + '>' + cbEsc(((x.entries || []).find(e => e && /^Feature:/i.test(e.name || '')) || {}).name.replace(/^Feature:\s*/i, '')) + ' (' + cbEsc(x.name) + ')</option>').join('') + '</select></label>';
+  }
+  h += '<label class="cb-f">Equipment<select class="cb-sel" data-cb-cbg="equipment"><option value="">' + (R.edition === '2024' ? '50 gp' : '10 gp') + ' instead</option>'
+    + R.backgrounds.filter(x => sktBookOk(b, x) && (x.equipment || []).length).map(x => '<option value="' + cbEsc(x.name) + '"' + (c.equipment === x.name ? ' selected' : '') + '>' + cbEsc(x.name) + '’s kit</option>').join('') + '</select></label>';
+  return h + '</div>';
+}
 function _sktTraitsHtml(entries){
   return (entries || []).filter(e => e && typeof e === 'object' && e.name && e.entries && !/^(Skill|Tool|Language|Equipment|Ability|Feat)/i.test(e.name))
     .map(e => '<div class="cb-feat"><b>' + cbEsc(sktRulesInline(e.name)) + '</b>' + cbFeatureText(sktRulesText(e.entries)) + '</div>').join('');
+}
+
+// The standard array (or the matching point buy) in the class's order.
+function cbSuggestScores(b){
+  const order = SKT_ABILITY_ORDER[String(b.cls || '').toLowerCase()] || SKT_ABS;
+  if (b.abilities.method !== 'array' && b.abilities.method !== 'pointbuy') b.abilities.method = 'array';
+  b.abilities.assign = {};
+  order.forEach((k, i) => { b.abilities.base[k] = SKT_STANDARD_ARRAY[i]; if (b.abilities.method === 'array') b.abilities.assign[k] = i; });
+}
+// Quick Build: every choice still open gets a sensible answer — the class's
+// best scores, the skills its abilities favour, the first options where
+// there is no better guide. Nothing already chosen changes.
+function cbQuickBuild(){
+  const b = CB.build, R = CB.R;
+  const pickCore = list => list.filter(x => x.core !== false)[0];
+  if (!b.cls) b.cls = 'Fighter';
+  const cls = sktRulesClass(R, b.cls);
+  const order = SKT_ABILITY_ORDER[cls.key] || SKT_ABS;
+  if (!b.species){ const sp = R.species.find(s => s.name === 'Human') || pickCore(R.species); b.species = sp.name; }
+  const sp = sktRulesSpecies(R, b.species);
+  if (sp.subraces.length && !b.subspecies) b.subspecies = (sp.subraces.find(s => s.core !== false) || sp.subraces[0]).name;
+  if (!b.background){
+    // A background whose skills the class's abilities like.
+    const score = bg => (bg.skills || []).reduce((n, o) => n + Object.keys(o).filter(k => o[k] === true).reduce((m, k) => { const sk = sktSkillKey(k); return m + (sk ? 6 - order.indexOf(SKT_SKILLS[sk]) : 0); }, 0), 0);
+    b.background = R.backgrounds.filter(x => x.core !== false).sort((x, y) => score(y) - score(x))[0].name;
+  }
+  if (!b.name) b.name = 'New ' + cls.name;
+  const pristine = SKT_ABS.every(k => (b.abilities.base[k] || 10) === 10) || (b.abilities.method === 'array' && !Object.keys(b.abilities.assign || {}).length);
+  if (pristine) cbSuggestScores(b);
+  const bg = sktBuildBackground(R, b);
+  if (R.edition === '2024' && bg && Array.isArray(bg.ability) && !Object.keys(b.bgAsi || {}).length){
+    const from = ((bg.ability[0] || {}).choose || {}).weighted ? bg.ability[0].choose.weighted.from : SKT_ABS;
+    const best = order.filter(k => from.includes(k));
+    b.bgAsiMode = '21'; b.bgAsi = {}; if (best[0]) b.bgAsi[best[0]] = 2; if (best[1]) b.bgAsi[best[1]] = 1;
+  }
+  const L = b.level || 1;
+  if (L >= cls.subclassLevel && !b.subclass){ const s = cls.subclasses.find(x => x.core) || cls.subclasses[0]; if (s) b.subclass = s.shortName; }
+  // Fill what the to-do list still asks for, a few passes (one answer can open another).
+  for (let pass = 0; pass < 4; pass++){
+    const rec = sktComputeCharacter(b, R);
+    const ab = sktBuildAbilities(b, R);
+    const bySkill = list => list.slice().sort((x, y) => (ab[SKT_SKILLS[y]] || 0) - (ab[SKT_SKILLS[x]] || 0));
+    // Species ability increases (2014).
+    const sub = sp.subraces.find(s => s.name === b.subspecies);
+    const ach = R.edition === '2014' ? sktSpeciesAsiChoice(sp, sub, b) : null;
+    if (ach && !Object.keys(b.speciesAsi || {}).length){
+      b.speciesAsi = {};
+      if (ach.flex){ b.speciesAsi[order[0]] = 2; b.speciesAsi[order[1]] = 1; }
+      else order.filter(k => (ach.from || []).includes(k)).slice(0, ach.count).forEach(k => { b.speciesAsi[k] = ach.amount; });
+    }
+    const granted = new Set(Object.keys(rec.sheet.skillProf || {}).filter(k => !(b.skills || []).includes(k)));
+    if ((b.skills || []).length < cls.skillChoice.count)
+      b.skills = (b.skills || []).concat(bySkill(cls.skillChoice.from.filter(k => !granted.has(k) && !(b.skills || []).includes(k)))).slice(0, cls.skillChoice.count);
+    const skp = cbSpeciesSkillChoice(sp, sub);
+    if (skp && (b.speciesSkills || []).length < skp.count)
+      b.speciesSkills = bySkill(skp.from.filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k))).slice(0, skp.count);
+    const ex = cbExpertiseCount();
+    if (ex && (b.expertise || []).length < ex) b.expertise = bySkill(Object.keys(rec.sheet.skillProf || {})).slice(0, ex);
+    const lc = cbLanguageCount();
+    if (lc && (b.languages || []).length < lc){
+      const known = (rec.sheet.languages || '').split(', ');
+      b.languages = (b.languages || []).concat(R.languages.map(l => l.name).filter(n => !known.includes(n))).slice(0, lc);
+    }
+    sktToolChoices(b, R).forEach(c => { b.toolPicks = b.toolPicks || {}; if ((b.toolPicks[c.key] || []).length < c.count) b.toolPicks[c.key] = c.options.slice(0, c.count); });
+    // Ability Score Improvements: +2 to the class's best score (to 20), else spread.
+    sktAsiSlots(b, R).forEach(s => {
+      if (b.asi[s.key]) return;
+      const cur = sktBuildAbilities(b, R);
+      const k1 = order.find(k => cur[k] <= 18), inc = {};
+      if (k1) inc[k1] = 2; else { const k2 = order.filter(k => cur[k] < 20).slice(0, 2); k2.forEach(k => { inc[k] = 1; }); }
+      b.asi[s.key] = { type: 'asi', inc };
+    });
+    if ((R.edition === '2014' && sub && /variant/i.test(sub.name) || (R.edition === '2024' && sp.name === 'Human')) && !b.originFeat)
+      b.originFeat = (R.feats.find(f => f.name === 'Alert' && (R.edition === '2014' || f.category === 'O')) || {}).name || '';
+    sktBuildChoices(b, R).forEach(c => { if (!c.value){ b.featureChoices = b.featureChoices || {}; b.featureChoices[c.feature] = c.spec.options[0].value; } });
+    sktOptionalChoices(b, R).forEach(o => {
+      const have = (b.optional[o.name] || []);
+      if (have.length >= o.count) return;
+      const pool = o.kind === 'feat' ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && f.core !== false)
+                                     : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && x.core !== false && !(x.prerequisite || []).length);
+      b.optional[o.name] = have.concat(pool.map(x => x.name).filter(n => !have.includes(n))).slice(0, o.count);
+    });
+    const mc = cbMasteryCount();
+    if (mc && (b.masteries || []).length < mc){
+      const kit = (rec.sheet.attacks || []).map(a => String(a.name).toLowerCase()).filter(n => R.items[n] && R.items[n].mastery);
+      b.masteries = [...new Set((b.masteries || []).concat(kit))].slice(0, mc);
+    }
+    // Spells: the class list in order, lowest levels first.
+    const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
+    if (sc && !sc.classes){
+      const always = sktBuildAlwaysPrepared(b, R);
+      if ((b.cantrips || []).length < sc.cantrips) b.cantrips = (b.cantrips || []).concat(sktSpellOptions(R, b, 0).map(s => s.name).filter(n => !(b.cantrips || []).includes(n))).slice(0, sc.cantrips);
+      const pool = [];
+      for (let lv = 1; lv <= sc.maxSpellLevel; lv++) sktSpellOptions(R, b, lv).forEach(s => { if (!always.includes(s.name)) pool.push(s.name); });
+      if (sc.spellbook && (b.spellbook || []).length < sc.spellbook) b.spellbook = (b.spellbook || []).concat(pool.filter(n => !(b.spellbook || []).includes(n))).slice(0, sc.spellbook);
+      const want = sc.prepared || sc.known, src = sc.spellbook ? b.spellbook : pool;
+      if (want && (b.spells || []).length < want) b.spells = (b.spells || []).concat(src.filter(n => !(b.spells || []).includes(n))).slice(0, want);
+    }
+    // Spells from feats and the species; a feat's own picks.
+    sktFeatSpells(b, R).concat([sktSpeciesSpellGrant(R, b)].filter(Boolean)).forEach(g => {
+      const key = g.feat === '@species' ? null : g.feat;
+      const ch = key ? (b.featChoices[key] = Object.assign({}, b.featChoices[key])) : (b.speciesChoice = Object.assign({}, b.speciesChoice));
+      if (!g.block && g.blocks.length) ch.spellList = g.blocks[0].name;
+      if (g.abilityChoices && !g.ability) ch.spellAbility = order.find(k => g.abilityChoices.includes(k)) || g.abilityChoices[0];
+      g.choices.forEach(c => { if (c.picked.length < c.count){ ch.spells = (ch.spells || []).concat(c.options.filter(n => !(ch.spells || []).includes(n)).slice(0, c.count - c.picked.length)); } });
+    });
+    sktBuildFeatNames(b, R).forEach(n => {
+      const fc = sktFeatChoices(R, b, n, rec), f = sktRulesFeat(R, n); if (!f) return;
+      const ch = b.featChoices[f.name] = Object.assign({}, b.featChoices[f.name]);
+      fc.choices.forEach(c => {
+        if (c.kind === 'skillsTools'){ if ((ch.skills || []).length + (ch.tools || []).length < c.count) ch.skills = bySkill(c.options.filter(o => o.startsWith('s:')).map(o => o.slice(2))).slice(0, c.count); }
+        else if ((ch[c.kind] || []).length < c.count) ch[c.kind] = (c.kind === 'skills' ? bySkill(c.options) : c.options).slice(0, c.count);
+      });
+      const ac2 = cbFeatAbilityChoice(f);
+      if (ac2 && !Object.keys(ch.inc || {}).length){ const k = order.find(x => ac2.from.includes(x)); if (k) ch.inc = { [k]: ac2.amount }; }
+    });
+    if (R.edition === '2024' && sp.additionalSpells && sp.additionalSpells.length > 1 && !b.speciesChoice.lineage) b.speciesChoice.lineage = sp.additionalSpells[0].name;
+  }
 }
 
 CB_RENDER.abilities = () => {
@@ -490,7 +636,8 @@ CB_RENDER.abilities = () => {
       + '<span class="cb-abb">' + (bonus ? sktSigned(bonus) : '') + '</span><b class="cb-abf">' + final[k] + '</b><i class="cb-abm">' + sktSigned(sktMod(final[k])) + '</i></div>';
   }).join('');
   const where = R.edition === '2024' ? 'Background and feat increases are included.' : 'Species and feat increases are included.';
-  return '<h3>Ability scores</h3><div class="cb-seg">' + seg + '</div>' + note
+  return '<h3>Ability scores</h3><div class="cb-seg">' + seg + '</div>'
+    + (b.cls && (m === 'array' || m === 'pointbuy') ? '<button class="btn small cb-suggest-btn" data-cb="suggest">Suggest for a ' + cbEsc(b.cls) + '</button>' : '') + note
     + '<div class="cb-abtable"><div class="cb-abrow cb-abhead"><span></span><span>Base</span><span>Bonus</span><span>Score</span><span>Mod</span></div>' + rows + '</div>'
     + '<div class="cb-dim">' + where + '</div>';
 };
@@ -502,7 +649,7 @@ CB_RENDER.skills = () => {
   const rec = CB.rec;
   // What other choices already grant, shown ticked and fixed.
   const granted = {};
-  const sp = sktRulesSpecies(R, b.species), bg = sktRulesBackground(R, b.background);
+  const sp = sktRulesSpecies(R, b.species), bg = sktBuildBackground(R, b);
   const grant = (list, label) => (list || []).forEach(o => Object.keys(o).forEach(k => { const sk = sktSkillKey(k); if (sk && o[k] === true) granted[sk] = label; }));
   grant(bg && bg.skills, 'background'); grant(sp && sp.skills, 'species');
   (b.speciesSkills || []).forEach(k => { granted[k] = 'species'; });
@@ -546,7 +693,7 @@ function cbLanguageCount(){
   if (R.edition === '2024') return 2;
   let n = 0;
   const sp = sktRulesSpecies(R, b.species), sub = sp && sp.subraces.find(s => s.name === b.subspecies);
-  const bg = sktRulesBackground(R, b.background);
+  const bg = sktBuildBackground(R, b);
   [sp && sp.languages, sub && sub.languages, bg && bg.languages].forEach(list => (list || []).forEach(o => {
     n += (+o.anyStandard || 0) + (+o.any || 0) + (o.choose ? (o.choose.count || 1) : 0);
   }));
@@ -847,7 +994,7 @@ function cbGrantHtml(g, key, title){
 
 CB_RENDER.equipment = () => {
   const b = CB.build, R = CB.R;
-  const cls = sktRulesClass(R, b.cls), bg = sktRulesBackground(R, b.background);
+  const cls = sktRulesClass(R, b.cls), bg = sktBuildBackground(R, b);
   let html = '<h3>Equipment</h3>';
   const itemText = (it) => typeof it === 'string' ? _sktTitleCase(sktRefName(it))
     : it.value ? (it.value / 100) + ' gp'
@@ -965,7 +1112,7 @@ CB_RENDER.details = () => {
 // the 2014 printing's tables, which the 2024 book dropped.
 function cbCharacteristics(){
   const b = CB.build;
-  const own = (sktRulesBackground(CB.R, b.background) || {}).characteristics;
+  const own = (sktBuildBackground(CB.R, b) || {}).characteristics;
   if (own) return own;
   if (CB.R.edition === '2024' && b.background){
     if (!CB.R14 && !CB.R14loading){ CB.R14loading = true; sktRulesLoad('2014').then(R => { if (CB){ CB.R14 = R; if (CB.step === 'details') cbRender(); } }).catch(() => {}); }
@@ -1036,6 +1183,8 @@ function cbOnClick(e){
   if (d.cb === 'next'){ CB.step = vis[Math.min(vis.length - 1, at + 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'back'){ CB.step = vis[Math.max(0, at - 1)].id; CB.scrollTop = 0; cbRender(); return; }
   if (d.cb === 'save') return cbSave();
+  if (d.cb === 'suggest') return cbSet(b => cbSuggestScores(b));
+  if (d.cb === 'quick') return cbSet(() => cbQuickBuild());
   if (d.cb === 'upload'){
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
     inp.addEventListener('change', async ev => {
@@ -1118,7 +1267,7 @@ function cbOnClick(e){
   if (d.cbBgmode) return cbSet(b => {
     b.bgAsiMode = d.cbBgmode; b.bgAsi = {};
     if (d.cbBgmode === '111'){
-      const bg = sktRulesBackground(CB.R, b.background);
+      const bg = sktBuildBackground(CB.R, b);
       const from = bg && bg.ability && bg.ability[0] && bg.ability[0].choose && bg.ability[0].choose.weighted ? bg.ability[0].choose.weighted.from : [];
       from.forEach(k => { b.bgAsi[k] = 1; });
     }
@@ -1154,6 +1303,12 @@ function cbOnChange(e){
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
+  if (d.cbCbg && d.cbCbg !== 'name') return cbSet(b => { b.customBg = Object.assign({}, b.customBg, { [d.cbCbg]: d.cbCbg === 'languages' ? +v : v });
+    if (d.cbCbg === 'languages') b.customBg.tools = (b.customBg.tools || []).slice(0, 2 - (+v || 0)); });
+  if (d.cbCbgskill) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.skills = (b.customBg.skills || []).slice(); cbToggle(b.customBg.skills, d.cbCbgskill, 2); });
+  if (d.cbCbgab) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.abilities = (b.customBg.abilities || []).slice(); cbToggle(b.customBg.abilities, d.cbCbgab, 3); b.bgAsi = {}; });
+  if (d.cbCbgtool){ const c = CB.build.customBg || {}; const max = CB.R.edition === '2024' ? 1 : 2 - (+c.languages || 0);
+    return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.tools = (b.customBg.tools || []).slice(); cbToggle(b.customBg.tools, d.cbCbgtool, max); }); }
   if (d.cbSrc){
     const all = sktOtherBooks(CB.R).map(x => x.source);
     return cbSet(b => {
@@ -1345,6 +1500,7 @@ function cbOnInput(e){
   if (!CB) return;
   const t = e.target, d = t.dataset;
   if (d.cbIn === 'name'){ CB.build.name = t.value; cbRefreshSide(); return; }
+  if (d.cbCbg === 'name'){ CB.build.customBg = Object.assign({}, CB.build.customBg, { name: t.value }); return; }
   if ('cbSpq' in d){
     // Filter as you type, keeping the caret in the box.
     CB.spQ = t.value; clearTimeout(CB._spT);

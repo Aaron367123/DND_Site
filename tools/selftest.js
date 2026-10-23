@@ -4204,7 +4204,7 @@
            !!ph && !!ph.querySelector('[data-act="party-add"]') && !!ph.querySelector('[data-act="party-rest"]') && !!ph.querySelector('[data-act="party-ask"]'));
         cm = null; ph.querySelector('[data-act="party-rest"]').click();
         ok('party: Rest offers a short rest and a long rest', !!cm && cm.length === 2 && /Short/.test(cm[0].label) && /Long/.test(cm[1].label));
-        ok('party: the ⋯ menu keeps the rest — Manage Party, Party Skills', JSON.stringify(P.menuItems().map(i => i.label)) === JSON.stringify(['Manage Party', 'Party Skills']));
+        ok('party: the ⋯ menu keeps the rest — Manage Party, Party Skills', JSON.stringify(P.menuItems().map(i => i.label)) === JSON.stringify(['Manage Party', 'Party Skills', 'Import a character…']));
         closePanel('party');
 
         // #3 Every ⋯ menu: icons and checks, no emoji, window options last.
@@ -6362,6 +6362,371 @@
         if (typeof csClose === 'function') csClose();
         document.getElementById('cs-print')?.remove();
         if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Sheet round 4: conditions in rolls, spell damage, short rest, custom background --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      const st = { d: window.sktD, conf: window.showConfirm, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        window._findCombatantForPartyMember = () => -1;
+        const base = { method: 'manual', base: { str: 15, dex: 14, con: 14, int: 16, wis: 10, cha: 8 } };
+        const wb = Object.assign(sktBlankBuild('2014'), { name: 'Roundfour', cls: 'Wizard', subclass: 'Evocation', species: 'Human', level: 5, abilities: base,
+          cantrips: ['Fire Bolt'], spellbook: ['Fireball', 'Magic Missile', 'Shield', 'Burning Hands'], spells: ['Fireball', 'Magic Missile', 'Shield', 'Burning Hands'] });
+        const rec = sktComputeCharacter(wb, R14); rec.id = 'pc_r4'; rec.hitDice = { current: 5, max: 5, dieType: 'd6' }; state.party.push(rec); save();
+        const me = () => state.party.find(p => p.id === 'pc_r4');
+        openCharSheet('pc_r4'); await sleep(400);
+        const q = s => document.querySelector('#cs-root ' + s);
+        // Conditions in rolls.
+        let k = 0; window.sktD = () => (k++ % 2 ? 15 : 5);
+        me().conditions = ['Poisoned']; csRender();
+        q('[data-cs-roll="skill:arcana"]').click(); await sleep(30);
+        ok('rolls: poisoned, an ability check is at disadvantage', CS.log[0].mode === 'dis' && CS.log[0].natural === 5 && /poisoned/.test(CS.log[0].why));
+        q('[data-cs-mode="adv"]').click(); await sleep(20);
+        q('[data-cs-roll="skill:arcana"]').click(); await sleep(30);
+        ok('rolls: advantage and disadvantage cancel', CS.log[0].mode === 'normal' && CS.log[0].rolls.length === 1);
+        q('[data-cs-mode="normal"]').click(); await sleep(20);
+        q('[data-cs-roll="save:con"]').click(); await sleep(30);
+        ok('rolls: but a save is not affected by poison', CS.log[0].mode === 'normal');
+        ok('rolls: the sheet says what the conditions do', /attacks at disadvantage/.test(q('.cs-fx').textContent));
+        me().conditions = ['Stunned']; csRender();
+        q('[data-cs-roll="save:dex"]').click(); await sleep(30);
+        ok('rolls: stunned, a DEX save fails automatically', CS.log[0].autoFail && /automatic failure/.test(CS.log[0].why));
+        me().conditions = []; me().exhaustion = 2; csRender();
+        q('[data-cs-roll="skill:arcana"]').click(); await sleep(30);
+        ok('rolls: 2014 exhaustion — checks at disadvantage, speed halved', CS.log[0].mode === 'dis' && /15 ft/.test(document.querySelector('#cs-root .cs-boxes').textContent));
+        me().exhaustion = 0; csRender();
+        ok('rolls: 2024 exhaustion is −2 a level', csRollEffects({ exhaustion: 3, rules: '2024', conditions: [] }, 'check').bonus === -6 && csRollEffects({ exhaustion: 3, rules: '2024', conditions: [] }, 'attack').bonus === -6);
+        // Spell damage.
+        q('[data-cs-tab="spells"]').click(); await sleep(40);
+        const fb = q('[data-cs-spdmg="Fireball"]');
+        ok('spells: Fireball shows its damage and its save', !!fb && /8d6/.test(fb.textContent) && /DEX save DC 14/.test(q('.cs-pane').textContent));
+        window.sktD = () => 3;
+        fb.click(); await sleep(30);
+        ok('spells: and rolls it', CS.log[0].kind === 'dmg' && CS.log[0].total === 24);
+        ok('spells: cast higher, more dice', csSpellDamage(csSpell('Fireball'), 5) === '10d6' && csSpellDamage(csSpell('Burning Hands'), 3) === '5d6');
+        ok('spells: a cantrip shows its scaled damage', /2d10/.test(q('.cs-pane').textContent));
+        // Short rest with hit dice.
+        q('[data-cs-tab="actions"]').click(); await sleep(20);
+        me().hp = 10; me().resources.forEach(r => { r.current = 0; }); csRender();
+        q('[data-cs="short"]').click(); await sleep(30);
+        ok('rest: a short rest opens with the hit dice to spend', /Hit dice 5 \/ 5/.test(q('.cs-rest').textContent));
+        window.sktD = () => 4;
+        q('[data-cs="restdie"]').click(); await sleep(40);
+        ok('rest: spending one rolls and heals (d6 4 + CON 2)', me().hp === 16 && me().hitDice.current === 4 && /healed 6/.test(q('.cs-rest').textContent));
+        q('[data-cs="restdone"]').click(); await sleep(40);
+        ok('rest: finishing restores what a short rest gives back', !q('.cs-rest') && (me().resources.find(r => r.name === 'Arcane Recovery') || { current: 0 }).current >= 0);
+        csClose();
+        // A custom background.
+        const cb = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', species: 'Human', level: 1, abilities: base, background: SKT_CUSTOM_BG,
+          customBg: { name: 'Sailor', skills: ['athletics', 'perception'], abilities: ['str', 'dex', 'con'], feat: 'Alert', tools: ["Navigator's Tools"] }, bgAsi: { str: 2, con: 1 } });
+        const CBR = sktComputeCharacter(cb, R24);
+        ok('background: your own — two skills, the abilities you chose, an origin feat, a tool', CBR.sheet.skillProf.athletics && CBR.sheet.skillProf.perception
+           && CBR.abilities.str === 17 && CBR.feats.includes('Alert') && CBR.sheet.proficiencies.tools.includes("navigator's tools") && CBR.background === SKT_CUSTOM_BG, JSON.stringify(CBR.feats));
+        const c14 = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', species: 'Human', level: 1, abilities: base, background: SKT_CUSTOM_BG,
+          customBg: { name: 'Hermit-monk', skills: ['religion', 'medicine'], tools: ['Herbalism Kit'], languages: 1, feature: 'Acolyte', equipment: 'Acolyte' } });
+        const C14 = sktComputeCharacter(c14, R14);
+        ok('background 2014: a borrowed feature and kit', C14.sheet.featureList.some(f => f.from === 'background' && /Shelter of the Faithful/.test(f.name)) && C14.sheet.skillProf.religion && C14.sheet.proficiencies.tools.includes('herbalism kit'));
+        // In the builder.
+        await openCharBuilder({ edition: '2024' }); await sleep(800);
+        const bq = s => document.querySelector('#cb-root ' + s);
+        bq('[data-cb-step="background"]').click(); await sleep(30);
+        bq('[data-cb-bg="' + SKT_CUSTOM_BG + '"]').click(); await sleep(30);
+        ok('builder: a Custom background card opens its choices', !!bq('[data-cb-cbg="name"]') && document.querySelectorAll('#cb-root [data-cb-cbgskill]').length === 18 && !!bq('[data-cb-cbg="feat"]'));
+        const tk = s => { const e = bq(s); e.checked = !e.checked; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        tk('[data-cb-cbgskill="stealth"]'); await sleep(20); tk('[data-cb-cbgskill="survival"]'); await sleep(20); tk('[data-cb-cbgskill="arcana"]'); await sleep(20);
+        ok('builder: two skills and no more', JSON.stringify(CB.build.customBg.skills) === '["stealth","survival"]');
+        cbClose();
+      } catch(e){ ok('sheet: round 4 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window.showConfirm = st.conf; window._findCombatantForPartyMember = st.find;
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (typeof csClose === 'function') csClose();
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Sheet round 5: concentration checks, initiative, ammunition, healing, homebrew, two hands --
+    {
+      const p0 = localStorage.getItem('skt-party-v1'), c0 = localStorage.getItem('skt-combat-v1');
+      const st = { d: window.sktD, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const base = { method: 'manual', base: { str: 14, dex: 16, con: 14, int: 10, wis: 15, cha: 8 } };
+        const rb = Object.assign(sktBlankBuild('2014'), { name: 'Archer', cls: 'Ranger', species: 'Human', level: 5, abilities: base,
+          equipment: { cls: 'A', bg: 'A', clsBlocks: ['a', 'a', 'a'] }, spells: ['Cure Wounds', 'Hunter’s Mark'.replace('’', "'")] });
+        const rec = sktComputeCharacter(rb, R14); rec.id = 'pc_r5'; state.party.push(rec); save();
+        const me = () => state.party.find(p => p.id === 'pc_r5');
+        window._findCombatantForPartyMember = () => -1;
+        openCharSheet('pc_r5'); await sleep(500);
+        const q = s => document.querySelector('#cs-root ' + s);
+        // Concentration check.
+        me().concentration = "Hunter's Mark"; csRender();
+        q('[data-cs-amt]').value = '24'; q('[data-cs-hp="-1"]').click(); await sleep(40);
+        ok('concentration: damage while concentrating asks for a CON save, DC half the damage', /CON save DC 12/.test((q('.cs-conc') || {}).textContent || ''));
+        window.sktD = () => 2;
+        q('[data-cs="concsave"]').click(); await sleep(60);
+        ok('concentration: failing it ends the spell', !me().concentration && !q('.cs-conc'));
+        me().concentration = "Hunter's Mark"; csRender();
+        q('[data-cs-amt]').value = '4'; q('[data-cs-hp="-1"]').click(); await sleep(40);
+        window.sktD = () => 15;
+        q('[data-cs="concsave"]').click(); await sleep(60);
+        ok('concentration: passing keeps it (DC 10 at least)', me().concentration === "Hunter's Mark");
+        // Ammunition.
+        const lb = (me().sheet.attacks || []).findIndex(a => a.name === 'Longbow');
+        ok('ammo: the longbow shows the arrows left', lb >= 0 && /20 arrows left/.test(q('.cs-atks').textContent), q('.cs-atks') && q('.cs-atks').textContent.slice(0, 300));
+        q('[data-cs-atk="' + lb + '"]').click(); await sleep(400);
+        ok('ammo: an attack uses one', /19 arrows left/.test(q('.cs-atks').textContent) && me().build.items.some(x => x.name === 'Arrows' && x.qty === 19));
+        // Two hands.
+        const vs = (me().sheet.attacks || []).findIndex(a => a.versatile);
+        if (vs >= 0){
+          q('[data-cs-dmg2="' + vs + '"]').click(); await sleep(30);
+          ok('two hands: a versatile weapon rolls its bigger die', /two hands/.test(CS.log[0].label));
+        }
+        // Healing.
+        q('[data-cs-tab="spells"]').click(); await sleep(40);
+        const cw = q('[data-cs-spheal="Cure Wounds"]');
+        ok('healing: Cure Wounds shows its healing with the modifier', !!cw && /1d8\+2/.test(cw.textContent), cw && cw.textContent);
+        window.sktD = () => 5; cw.click(); await sleep(30);
+        ok('healing: and rolls it', CS.log[0].total === 7 && /heals/.test(CS.log[0].label));
+        ok('healing: more at a higher slot', csSpellHeal(csSpell('Cure Wounds'), 2, 2) === '2d8+2');
+        // Homebrew gear.
+        q('[data-cs-tab="inventory"]').click(); await sleep(1500);
+        q('[data-cs-custom]').value = 'Sunblade-ish'; q('[data-cs-customkind]').value = 'martial'; q('[data-cs-customstat]').value = '1d10 radiant'; q('[data-cs-custombonus]').value = '2';
+        q('[data-cs="addcustom"]').click(); await sleep(400);
+        const sb = (me().sheet.attacks || []).find(a => a.name === 'Sunblade-ish');
+        ok('homebrew: a custom weapon fights, with its bonus', !!sb && /1d10\+\d+ radiant/.test(sb.damage) && sb.atkBonus === sktSigned(2 + 3 + 2), sb && JSON.stringify(sb));
+        q('[data-cs-custom]').value = 'Dragonhide'; q('[data-cs-customkind]').value = 'MA'; q('[data-cs-customstat]').value = 'AC 15';
+        q('[data-cs="addcustom"]').click(); await sleep(400);
+        ok('homebrew: custom armour is worn when it is the best', me().ac >= 15 + 2 && /Dragonhide/.test(me().sheet.acSource), me().ac + ' ' + me().sheet.acSource);
+        // Initiative into the fight.
+        csClose();
+        const cmb = { id: 'cmb_r5', name: 'Archer', isPC: true, hp: me().hp, hpMax: me().hpMax, ac: me().ac, initiative: 0, conditions: [] };
+        state.combatants.push(cmb); save();
+        window._findCombatantForPartyMember = p => p.id === 'pc_r5' ? state.combatants.findIndex(c => c.id === 'cmb_r5') : -1;
+        openCharSheet('pc_r5'); await sleep(200);
+        window.sktD = () => 11;
+        document.querySelector('#cs-root [data-cs-roll="init"]').click(); await sleep(40);
+        ok('initiative: a roll on the sheet lands on the combat card', state.combatants.find(c => c.id === 'cmb_r5').initiative === 11 + me().init);
+        csClose();
+      } catch(e){ ok('sheet: round 5 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); if (c0 != null) localStorage.setItem('skt-combat-v1', c0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); loadDomain('combat');
+        panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Sheet round 6: armour and stealth, slot recovery, Font of Magic, rage, hit dice --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { d: window.sktD, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const base = { method: 'manual', base: { str: 16, dex: 12, con: 14, int: 16, wis: 10, cha: 16 } };
+        const mk = (id, extra) => { const r = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { species: 'Human', abilities: base }, extra), R14); r.id = id; state.party.push(r); save(); return r; };
+        const me = id => state.party.find(p => p.id === id);
+        // Chain mail: Stealth at disadvantage.
+        mk('pc_r6a', { name: 'Clank', cls: 'Fighter', level: 1, equipment: { cls: 'A', bg: 'A', clsBlocks: ['a', 'a', 'a', 'a'] } });
+        openCharSheet('pc_r6a'); await sleep(300);
+        ok('stealth: chain mail marks Stealth', me('pc_r6a').sheet.stealthDis === true && /D/.test(document.querySelector('#cs-root [data-cs-roll="skill:stealth"] .cs-dis').textContent));
+        let k = 0; window.sktD = () => (k++ % 2 ? 15 : 5);
+        document.querySelector('#cs-root [data-cs-roll="skill:stealth"]').click(); await sleep(30);
+        ok('stealth: and rolls it at disadvantage', CS.log[0].mode === 'dis' && /armour/.test(CS.log[0].why));
+        document.querySelector('#cs-root [data-cs-roll="skill:athletics"]').click(); await sleep(30);
+        ok('stealth: other skills are not affected', CS.log[0].mode === 'normal');
+        ok('hit dice: shown on the sheet', /Hit dice 1\/1/.test(document.querySelector('#cs-root .cs-state').textContent));
+        csClose();
+        // Arcane Recovery.
+        mk('pc_r6b', { name: 'Recall', cls: 'Wizard', level: 6 });
+        const w = me('pc_r6b');
+        w.sheet.spellSlots[3].expended = 2; w.sheet.spellSlots[1].expended = 1; save();
+        openCharSheet('pc_r6b', { tab: 'spells' }); await sleep(300);
+        document.querySelector('#cs-root [data-cs="recover"]').click(); await sleep(40);
+        ok('Arcane Recovery: three levels back for a 6th-level wizard, highest first', me('pc_r6b').sheet.spellSlots[3].expended === 1 && me('pc_r6b').sheet.spellSlots[1].expended === 1
+           && me('pc_r6b').resources.find(r => r.name === 'Arcane Recovery').current === 0 && !document.querySelector('#cs-root [data-cs="recover"]'));
+        csClose();
+        // Font of Magic.
+        mk('pc_r6c', { name: 'Fonty', cls: 'Sorcerer', subclass: 'Draconic Bloodline', level: 5 });
+        openCharSheet('pc_r6c', { tab: 'spells' }); await sleep(300);
+        const sp0 = me('pc_r6c').resources.find(r => r.name === 'Sorcery Points');
+        sp0.current = 1; save(); csRender();
+        const sel = document.querySelector('#cs-root [data-cs-fontslot]'); sel.value = '2';
+        document.querySelector('#cs-root [data-cs="font2pts"]').click(); await sleep(40);
+        ok('Font of Magic: a 2nd-level slot becomes 2 points', me('pc_r6c').resources.find(r => r.name === 'Sorcery Points').current === 3 && me('pc_r6c').sheet.spellSlots[2].expended === 1);
+        const sel2 = document.querySelector('#cs-root [data-cs-fontpts]'); sel2.value = '2';
+        document.querySelector('#cs-root [data-cs="font2slot"]').click(); await sleep(40);
+        ok('Font of Magic: and 3 points make it back', me('pc_r6c').resources.find(r => r.name === 'Sorcery Points').current === 0 && me('pc_r6c').sheet.spellSlots[2].expended === 0);
+        csClose();
+        // Rage.
+        mk('pc_r6d', { name: 'Grr', cls: 'Barbarian', level: 1 });
+        openCharSheet('pc_r6d'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-use="Rage"]').click(); await sleep(60);
+        ok('rage: using Rage turns raging on', me('pc_r6d').rage === true && me('pc_r6d').resources.find(r => r.name === 'Rage').current === 1 && /Raging/.test(document.querySelector('#cs-root .cs-state').textContent));
+        document.querySelector('#cs-root [data-cs="endrage"]').click(); await sleep(40);
+        ok('rage: and it can be ended', me('pc_r6d').rage === false);
+        csClose();
+      } catch(e){ ok('sheet: round 6 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 7: Quick Build, suggested scores, export/import, spells in Actions --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      const st = { conf: window.showConfirm, find: window._findCombatantForPartyMember };
+      try {
+        for (const ed of ['2014', '2024']){
+          for (const cls of ['Wizard', 'Cleric', 'Rogue', 'Paladin']){
+            await openCharBuilder({ edition: ed }); await sleep(ed === '2014' ? 700 : 300);
+            const r = document.getElementById('cb-root');
+            r.querySelector('[data-cb-step="class"]').click(); await sleep(20);
+            r.querySelector('[data-cb-cls="' + cls + '"]').click(); await sleep(20);
+            r.querySelector('[data-cb-step="basics"]').click(); await sleep(20);
+            const lv = r.querySelector('[data-cb-in="level"]'); lv.value = '5'; lv.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20);
+            r.querySelector('[data-cb="quick"]').click(); await sleep(60);
+            const todo = sktBuildTodo(CB.build, CB.R).filter(t => !t.soft);
+            ok('quick build ' + ed + ' ' + cls + ' 5: nothing left to choose', todo.length === 0, JSON.stringify(todo));
+            const order = SKT_ABILITY_ORDER[cls.toLowerCase()];
+            const ab = sktBuildAbilities(CB.build, CB.R);
+            if (cls === 'Wizard') ok('quick build ' + ed + ': the wizard’s best score is INT', order.every(k => ab.int >= ab[k]), JSON.stringify(ab));
+            cbClose();
+          }
+        }
+        // Suggested scores.
+        await openCharBuilder({ edition: '2024' }); await sleep(300);
+        const r = document.getElementById('cb-root');
+        r.querySelector('[data-cb-step="class"]').click(); await sleep(20); r.querySelector('[data-cb-cls="Rogue"]').click(); await sleep(20);
+        r.querySelector('[data-cb-step="abilities"]').click(); await sleep(20);
+        r.querySelector('[data-cb="suggest"]').click(); await sleep(30);
+        ok('suggest: a rogue’s 15 goes in DEX, 14 in CON', CB.build.abilities.base.dex === 15 && CB.build.abilities.base.con === 14 && CB.build.abilities.base.str === 8);
+        cbClose();
+        // Export and import.
+        const src = state.party.find(p => p.build) || state.party[0];
+        const file = sktCharacterFile(src);
+        ok('export: the file carries the character and its build', JSON.parse(file).format === 'skt-character' && JSON.parse(file).character.name === src.name);
+        const n0 = state.party.length;
+        const rec = sktImportCharacter(file);
+        ok('import: it joins the party as a new member', state.party.length === n0 + 1 && rec.id !== src.id && rec.name === src.name);
+        let bad = '';
+        try { sktImportCharacter('{"hello":1}'); } catch(e){ bad = e.message; }
+        ok('import: a file without a character is refused, with a reason', /no character/.test(bad) && state.party.length === n0 + 1);
+        ok('party: the panel menu offers Import', panelDefs.party.menuItems().some(i => /Import a character/.test(i.label)));
+        // Spells in Actions.
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const wz = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Bolt', cls: 'Wizard', species: 'Human', level: 5, abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } },
+          spellbook: ['Fireball', 'Shield', 'Ray of Sickness'], spells: ['Fireball', 'Shield', 'Ray of Sickness'] }), R14);
+        wz.id = 'pc_r7'; state.party.push(wz); save();
+        openCharSheet('pc_r7'); await sleep(300);
+        const at = document.querySelector('#cs-root .cs-pane').textContent;
+        ok('actions: attack and save spells listed with their damage', /Fireball/.test(at) && /8d6/.test(at) && /DC 14 DEX/.test(at) && /Ray of Sickness/.test(at) && !/Shield 1st/.test(at));
+        csClose();
+      } catch(e){ ok('round 7 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.showConfirm = st.conf; window._findCombatantForPartyMember = st.find;
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (typeof csClose === 'function') csClose();
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 8: off-hand attacks, Sneak Attack, Divine Smite --------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { d: window.sktD, find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const base = { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 12, wis: 10, cha: 14 } };
+        // A rogue with two shortswords (kit A then two daggers): the off-hand attack.
+        const rg = Object.assign(sktBlankBuild('2014'), { name: 'Twin', cls: 'Rogue', species: 'Human', level: 5, abilities: base, equipment: { cls: 'A', bg: 'A', clsBlocks: ['b', 'a', 'a'] } });
+        const RG = sktComputeCharacter(rg, R14);
+        const off = RG.sheet.attacks.find(a => /\(off-hand\)/.test(a.name));
+        ok('off-hand: two light weapons give a bonus-action attack without the modifier', !!off && /^1d\d+ (piercing|slashing)$/.test(off.damage), JSON.stringify(RG.sheet.attacks.map(a => a.name + ' ' + a.damage)));
+        const fb = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', species: 'Human', level: 1, abilities: { method: 'manual', base: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 8 } },
+          equipment: { cls: 'A', bg: 'A', clsBlocks: ['a', 'a', 'b', 'a'] } });
+        const offOf = b => (sktComputeCharacter(b, R14).sheet.attacks.find(a => a.name === 'Handaxe (off-hand)') || {}).damage;
+        ok('off-hand: two handaxes — no modifier on the off-hand…', offOf(fb) === '1d6 slashing', offOf(fb));
+        ok('off-hand: …until Two-Weapon Fighting adds it', offOf(Object.assign({}, fb, { optional: { 'Fighting Style': ['Two-Weapon Fighting'] } })) === '1d6+3 slashing', offOf(Object.assign({}, fb, { optional: { 'Fighting Style': ['Two-Weapon Fighting'] } })));
+        RG.id = 'pc_r8a'; state.party.push(RG); save();
+        openCharSheet('pc_r8a'); await sleep(300);
+        const sb = document.querySelector('#cs-root [data-cs-xdmg^="Sneak Attack|"]');
+        ok('sneak attack: a 5th-level rogue rolls 3d6', !!sb && /3d6/.test(sb.textContent));
+        window.sktD = () => 4;
+        sb.click(); await sleep(30);
+        ok('sneak attack: and the roll adds up', CS.log[0].total === 12);
+        csClose();
+        // A paladin smites with a slot.
+        const pl = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Smiter', cls: 'Paladin', species: 'Human', level: 5, abilities: { method: 'manual', base: { str: 16, dex: 10, con: 14, int: 8, wis: 10, cha: 16 } } }), R14);
+        pl.id = 'pc_r8b'; state.party.push(pl); save();
+        openCharSheet('pc_r8b'); await sleep(300);
+        const lvl = document.querySelector('#cs-root [data-cs-smitelvl]'); lvl.value = '2';
+        document.querySelector('#cs-root [data-cs-smiteundead]').checked = true;
+        document.querySelector('#cs-root [data-cs="smite"]').click(); await sleep(40);
+        const me = state.party.find(p => p.id === 'pc_r8b');
+        ok('smite: a 2nd-level slot against undead is 4d8, and spends the slot', CS.log[0].total === 16 && /radiant/.test(CS.log[0].type) && me.sheet.spellSlots[2].expended === 1);
+        csClose();
+      } catch(e){ ok('round 8 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.sktD = st.d; window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
+    // -- Round 9: custom proficiencies, languages, defences, senses ---------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const r9 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Custom', cls: 'Fighter', species: 'Human', level: 1 }), R14);
+        r9.id = 'pc_r9'; state.party.push(r9); save();
+        const me = () => state.party.find(p => p.id === 'pc_r9');
+        openCharSheet('pc_r9'); await sleep(300);
+        document.querySelector('#cs-root [data-cs="customize"]').click(); await sleep(30);
+        const set = (k, v) => { const e = document.querySelector('#cs-root [data-cs-ovlist="' + k + '"]'); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+        set('languages', 'Sylvan, Thieves cant'); await sleep(300);
+        set('tools', "Smith's Tools"); await sleep(300);
+        set('resist', 'cold'); await sleep(300);
+        set('vulnerable', 'radiant'); await sleep(300);
+        set('senses', 'Darkvision 60 ft.'); await sleep(300);
+        ok('customize: an extra language and tool', /Sylvan/.test(me().sheet.languages) && me().sheet.proficiencies.tools.includes("smith's tools"));
+        ok('customize: a resistance and a vulnerability the rules don’t know', me().resistances.includes('cold') && me().vulnerabilities.includes('radiant'));
+        ok('customize: and a sense', /Darkvision 60 ft/.test(me().sheet.senses));
+        set('vulnerable', ''); await sleep(300);
+        ok('customize: taking it off takes it away', !me().vulnerabilities.includes('radiant'));
+        csClose();
+      } catch(e){ ok('round 9 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        if (typeof csClose === 'function') csClose();
         _remoteUpdate = true;
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
         loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
