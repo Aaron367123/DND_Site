@@ -5207,6 +5207,10 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-stbtn.on i { color:inherit; }
 .cs-stbtn:disabled { cursor:default; opacity:.8; }
 .cs-states .cb-sel { width:auto; flex:0 0 auto; padding:2px 6px; font-size:var(--fs-sm); }
+.cs-adv { font-style:normal; font-size:var(--fs-xs); font-weight:700; color:var(--success); border:1px solid var(--success); border-radius:3px; padding:0 3px; margin-left:4px; }
+.cs-savemods { font-size:var(--fs-sm); color:var(--text-muted); margin:4px 0 8px; display:flex; flex-direction:column; gap:3px; }
+.cs-savemods b { color:var(--text); font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.04em; }
+.cs-savemods i { font-style:normal; opacity:.75; }
 .cs-stdesc { flex-basis:100%; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-sm); color:var(--text-muted); }
 .cs-addcond { width:auto; }
 .cs-exh { display:inline-flex; align-items:center; gap:4px; font-size:var(--fs-sm); }

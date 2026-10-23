@@ -8178,6 +8178,65 @@
       } catch(e){ ok('round 47 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 48: advantage on saves, as D&D Beyond lists it ----------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const mk = (R, ed, x) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { cls: 'Fighter', level: 4 }, x), R);
+        const d14 = mk(R14, '2014', { species: 'Dwarf', subspecies: 'Hill' }), d24 = mk(R24, '2024', { species: 'Dwarf' });
+        ok('saves: a dwarf’s poison advantage is listed beside the saves, not rolled in', JSON.stringify(d14.sheet.saveMods) === JSON.stringify([{ abs: ['all'], text: 'Advantage on saving throws against poison', src: 'Dwarven Resilience' }])
+           && d24.sheet.saveMods[0].text === 'Advantage on saving throws to avoid or end the Poisoned condition' && d14.sheet.rollAdv.length === 0);
+        const g14 = mk(R14, '2014', { species: 'Gnome', subspecies: 'Rock' }), g24 = mk(R24, '2024', { species: 'Gnome', subspecies: 'Rock' });
+        ok('saves: a 2014 gnome’s is against magic; a 2024 gnome’s is every mental save, rolled in', g14.sheet.saveMods[0].text === 'Advantage on Intelligence, Wisdom and Charisma saves against magic' && JSON.stringify(g14.sheet.saveMods[0].abs) === '["int","wis","cha"]'
+           && JSON.stringify(g24.sheet.rollAdv) === JSON.stringify([{ on: ['save:int', 'save:wis', 'save:cha'], label: 'Gnomish Cunning' }]) && g24.sheet.saveMods.length === 0);
+        ok('saves: War Caster rolls concentration saves with advantage', JSON.stringify(mk(R14, '2014', { asi: { 4: { type: 'feat', feat: 'War Caster' } } }).sheet.rollAdv) === JSON.stringify([{ on: ['conc'], label: 'War Caster' }]));
+        ok('saves: Durable’s is on death saves', mk(R24, '2024', { asi: { 4: { type: 'feat', feat: 'Durable' } } }).sheet.saveMods.some(m => m.abs[0] === 'death' && m.src === 'Durable'));
+        const b14 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Barbarian', level: 2 }), R14), b24 = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { cls: 'Barbarian', level: 7 }), R24);
+        ok('saves: Danger Sense — 2014 against what you can see (listed), 2024 always (rolled in)', b14.sheet.saveMods.some(m => m.src === 'Danger Sense' && m.abs[0] === 'dex') && b24.sheet.rollAdv.some(a => a.label === 'Danger Sense' && a.on[0] === 'save:dex'));
+        ok('saves: Feral Instinct gives advantage on initiative', b24.sheet.rollAdv.some(a => a.label === 'Feral Instinct' && a.on[0] === 'init'));
+        ok('saves: temporary advantage is left out', sktSaveAdvantages('As a bonus action, you gain the following benefits for 1 minute: You have advantage on Strength saving throws.').length === 0
+           && sktSaveAdvantages('Until you emerge, you have advantage on Strength and Constitution saving throws.').length === 0
+           && sktSaveAdvantages('The target has disadvantage on saving throws against your spells.').length === 0
+           && sktSaveAdvantages('You have advantage on one attack roll, ability check, or saving throw.').length === 0
+           && sktSaveAdvantages('Allies have advantage on saving throws while within 30 feet of you.').length === 0);
+        ok('saves: a benefit that lasts a minute, and someone else’s disadvantage, are left out too',
+           sktSaveAdvantages('As a bonus action, you gain the following benefits, which last for 1 minute. You have advantage on Strength saving throws.').length === 0
+           && sktSaveAdvantages('Enemies have disadvantage on saving throws against your spells.').length === 0);
+        ok('saves: a subclass feature’s (an abjurer’s Spell Resistance)', sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', subclass: 'Abjuration', level: 14 }), R14).sheet.saveMods.some(m => m.src === 'Spell Resistance' && m.text === 'Advantage on saving throws against spells'));
+        ok('saves: an "unless" still counts as always', sktSaveAdvantages('You have Advantage on Dexterity saving throws unless you have the Incapacitated condition.')[0].auto === true);
+
+        const p0 = localStorage.getItem('skt-party-v1');
+        const keep = { d: window.sktD, find: window._findCombatantForPartyMember };
+        try {
+          window._findCombatantForPartyMember = () => -1;
+          const rec = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Stubby', cls: 'Barbarian', level: 7, species: 'Dwarf', asi: { 4: { type: 'feat', feat: 'War Caster' } }, spells: ['Bless'] }), R24);
+          rec.id = 'pc_save_mods'; state.party.push(rec); save();
+          openCharSheet('pc_save_mods'); await sleep(300);
+          const root = document.getElementById('cs-root'), q = s => root.querySelector(s);
+          ok('sheet saves: the modifiers sit under the saving throws', /Saving throw modifiers.*Advantage on saving throws to avoid or end the Poisoned condition.*Dwarven Resilience/.test(q('.cs-savemods').textContent));
+          ok('sheet saves: an A beside the Dexterity save and initiative, and only there', !!q('[data-cs-roll="save:dex"] .cs-adv') && !q('[data-cs-roll="save:str"] .cs-adv') && !!q('[data-cs-roll="init"] .cs-adv'));
+          window.sktD = () => 7;
+          q('[data-cs-roll="save:dex"]').click(); await sleep(30);
+          ok('sheet saves: the Dexterity save rolls with advantage', CS.log[0].mode === 'adv' && /Danger Sense/.test(CS.log[0].why));
+          q('[data-cs-roll="init"]').click(); await sleep(30);
+          ok('sheet saves: so does initiative', CS.log[0].mode === 'adv' && /Feral Instinct/.test(CS.log[0].why));
+          document.querySelector('#cs-root [data-cs-roll="save:con"]').click(); await sleep(30);
+          ok('sheet saves: a Constitution save reminds of the poison advantage', CS.log[0].mode === 'normal' && /check: advantage on saving throws to avoid or end the Poisoned condition \(Dwarven Resilience\)/.test(CS.log[0].why), CS.log[0].why);
+          state.party.find(p => p.id === 'pc_save_mods').concentration = 'Bless'; save(); CS.conc = { dc: 10, spell: 'Bless' }; csRender();
+          document.querySelector('#cs-root [data-cs="concsave"]').click(); await sleep(30);
+          ok('sheet saves: War Caster’s advantage on the concentration save', CS.log[0].mode === 'adv' && /War Caster/.test(CS.log[0].why), CS.log[0].why);
+          ok('sheet saves: and Bless (concentrated on) adds its d4 to it, a save like any other', /Bless d4/.test(CS.log[0].why), CS.log[0].why);
+          csClose();
+        } finally {
+          window.sktD = keep.d; window._findCombatantForPartyMember = keep.find;
+          if (typeof csClose === 'function') csClose();
+          _remoteUpdate = true;
+          try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+          loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+        }
+      } catch(e){ ok('round 48 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

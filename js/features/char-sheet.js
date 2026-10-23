@@ -169,7 +169,7 @@ function csTop(pc){
   if (CS.conc && pc.concentration && !ro) h += '<div class="cs-conc">Concentration check: <b>CON save DC ' + CS.conc.dc + '</b> to keep ' + csE(CS.conc.spell)
     + ' <button class="btn primary" data-cs="concsave">Roll it</button><button class="btn" data-cs="dropconc">Drop it</button></div>';
   h += '<div class="cs-boxes">' + box('AC', pc.ac ?? '—', null, sh.acDetail || sh.acSource || '')
-    + box('Initiative', csSigned(pc.init ?? csMod((pc.abilities || {}).dex)), 'init')
+    + box('Initiative' + csAdvMark(pc, 'init'), csSigned(pc.init ?? csMod((pc.abilities || {}).dex)), 'init')
     + box('Speed', csSpeed(pc) + ' ft', null, csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft normally' : '')
     + box('Proficiency', csSigned(sh.profBonus || 2))
     + '<button class="cs-box cs-insp' + (pc.inspiration ? ' on' : '') + '" data-cs="insp"' + (ro ? ' disabled' : '') + ' title="Heroic Inspiration"><span>Inspiration</span><b>' + (pc.inspiration ? '✦' : '—') + '</b></button></div>';
@@ -261,12 +261,13 @@ function csSide(pc){
   let h = '<div class="cs-abs">' + Object.keys(CS_AB).map(k => '<button class="cs-ab" data-cs-roll="ab:' + k + '" title="' + CS_AB[k] + ' check' + (why[k] ? ' — ' + csE(why[k]) : '') + '">'
     + '<span>' + k.toUpperCase() + '</span><b>' + csSigned(csMod(ab[k])) + '</b><i>' + (ab[k] ?? '—') + '</i></button>').join('') + '</div>';
   h += '<h5>Saving throws</h5><div class="cs-list">' + Object.keys(CS_AB).map(k => '<button class="cs-row" data-cs-roll="save:' + k + '">'
-    + '<span class="cs-dot' + ((sh.saveProf || []).includes(k) ? ' on' : '') + '"></span><span>' + CS_AB[k] + '</span><b>' + csSigned(saveOf(k)) + '</b></button>').join('') + '</div>';
+    + '<span class="cs-dot' + ((sh.saveProf || []).includes(k) ? ' on' : '') + '"></span><span>' + CS_AB[k] + csAdvMark(pc, 'save:' + k) + '</span><b>' + csSigned(saveOf(k)) + '</b></button>').join('') + '</div>'
+    + ((sh.saveMods || []).length ? '<div class="cs-savemods"><b>Saving throw modifiers</b>' + sh.saveMods.map(m => '<div>' + csE(m.text) + ' <i>— ' + csE(m.src) + '</i></div>').join('') + '</div>' : '');
   h += '<h5>Skills</h5><div class="cs-list">' + Object.keys(CS_SKILLS).map(k => {
     const p = (sh.skillProf || {})[k] || 0;
     const disad = k === 'stealth' && sh.stealthDis;
     return '<button class="cs-row" data-cs-roll="skill:' + k + '"><span class="cs-dot' + (p >= 2 ? ' exp' : p ? ' on' : '') + '" title="' + (p >= 2 ? 'Expertise' : p ? 'Proficient' : '') + '"></span>'
-      + '<span>' + CS_SKILLS[k][0] + ' <i>' + CS_SKILLS[k][1].toUpperCase() + '</i>' + (disad ? ' <i class="cs-dis" title="Disadvantage from armour">D</i>' : '') + '</span><b>' + csSigned(skillOf(k)) + '</b></button>';
+      + '<span>' + CS_SKILLS[k][0] + ' <i>' + CS_SKILLS[k][1].toUpperCase() + '</i>' + (disad ? ' <i class="cs-dis" title="Disadvantage from armour">D</i>' : '') + csAdvMark(pc, 'check:' + k) + '</span><b>' + csSigned(skillOf(k)) + '</b></button>';
   }).join('') + '</div>';
   const pas = k => 10 + skillOf(k);
   h += '<h5>Senses</h5><div class="cs-kv"><span>Passive Perception</span><b>' + (sh.passivePerception || pas('perception')) + '</b></div>'
@@ -280,6 +281,14 @@ function csSide(pc){
   const def = [['Resistant', pc.resistances], ['Immune', pc.immunities], ['Vulnerable', pc.vulnerabilities]].filter(([, v]) => v && v.length);
   if (def.length) h += '<h5>Defenses</h5>' + def.map(([l, v]) => line(l, v)).join('');
   return h;
+}
+
+// An "A" where the character rolls with advantage (Rage on Strength saves,
+// Feral Instinct on initiative…), with what gives it.
+function csAdvMark(pc, kind){
+  const tags = csRollTags(kind);
+  const by = ((pc.sheet || {}).rollAdv || []).filter(x => (x.on || []).some(t => tags.includes(t))).map(x => x.label);
+  return by.length ? ' <i class="cs-adv" title="Advantage: ' + csE(by.join(', ')) + '">A</i>' : '';
 }
 
 // ── A character to a file, and back ──────────────────────────────────────────
@@ -348,6 +357,7 @@ function csRollTags(kind){
   const t = [kind];
   if (/^attack/.test(kind)) t.push('attack');
   if (/^save:/.test(kind)) t.push('save');
+  if (kind === 'conc') t.push('save', 'save:con');
   if (/^check:/.test(kind)){ const sk = kind.slice(6); t.push('check', 'skill:' + sk); if (CS_SKILLS[sk]) t.push('ab:' + CS_SKILLS[sk][1]); }
   if (/^abcheck:/.test(kind)) t.push('check', 'ab:' + kind.slice(8));
   return t;
@@ -357,7 +367,7 @@ function csRollEffects(pc, kind){
   const has = c => conds.some(x => x === c || x.startsWith(c + ' '));
   const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
   const exh = +pc.exhaustion || 0;
-  const isCheck = kind === 'check' || kind === 'init' || /^(ab)?check:/.test(kind), isAtk = /^attack/.test(kind), save = /^save:/.test(kind) ? kind.slice(5) : '';
+  const isCheck = kind === 'check' || kind === 'init' || /^(ab)?check:/.test(kind), isAtk = /^attack/.test(kind), save = /^save:/.test(kind) ? kind.slice(5) : kind === 'conc' ? 'con' : '';
   const skill = /^check:/.test(kind) ? kind.slice(6) : '';
   const adv = [], dis = []; let bonus = 0, autoFail = '';
   if (exh){
@@ -398,7 +408,8 @@ function csRollD20(label, mod, ev, kind){
   const extra = ((pcNow.sheet || {}).rollDice || []).filter(x => (x.on || []).some(t => tags.includes(t))).map(x => ({ label: x.label, die: x.die, n: csD(x.die) }));
   const extraSum = extra.reduce((s, x) => s + x.n, 0);
   const why = [extra.map(x => x.label + ' d' + x.die + ': ' + x.n).join(', '), fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : '',
-               fx._lucky ? 'Lucky: rerolled a 1' : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : ''].filter(Boolean).join('; ');
+               fx._lucky ? 'Lucky: rerolled a 1' : '',
+               /^save:/.test(kind || '') ? ((pcNow.sheet || {}).saveMods || []).filter(m => m.abs.includes('all') || m.abs.includes(kind.slice(5))).map(m => 'check: ' + m.text.replace(/^Advantage on /, 'advantage on ') + ' (' + m.src + ')').join('; ') : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : ''].filter(Boolean).join('; ');
   const r = { kind: 'd20', label, mod: mod - fx.bonus, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod + extraSum, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail, kindTag: kind || null };
   csLog(r);
   // The party card's own strip shows the DM the same roll.
@@ -784,7 +795,7 @@ function csOnClick(e){
   if (d.cs === 'concsave'){
     const c = CS.conc; if (!c) return;
     const sh = pc.sheet || {}, mod = (sh.saves && sh.saves.con != null ? sh.saves.con : csMod((pc.abilities || {}).con)) + (+sh.concBonus || 0);
-    const r = csRollD20('Concentration (DC ' + c.dc + ')', mod, e, 'save:con');
+    const r = csRollD20('Concentration (DC ' + c.dc + ')', mod, e, 'conc');
     CS.conc = null;
     if (r.total < c.dc || r.autoFail){
       if (typeof showToast === 'function') showToast(pc.name + ' loses concentration on ' + c.spell);

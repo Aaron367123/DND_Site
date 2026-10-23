@@ -1669,6 +1669,40 @@ function sktStatesSyncAll(){
   } finally { _sktStatesBusy = false; }
 }
 
+// Advantage on saving throws a trait or feat gives, read from its text, the
+// way D&D Beyond lists "Saving Throw Modifiers": "against poison" (shown
+// beside the saves, for the player to apply), "all Wisdom saving throws"
+// (applied to the roll), "to maintain concentration" (applied to a
+// concentration save), death saves. Advantage that's temporary or someone
+// else's (for 1 minute, while in the aura, the target has…) is left out.
+const _SKT_AB_WORD = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+// Class and subclass features whose advantage is always theirs.
+const SKT_SAVE_ADV_FEATURES = /^(Beguiling Twist|Psychic Defenses|Spell Resistance|Among the Dead|Unyielding Spirit|Land's Stride|Born to the Saddle|Survivor)$/;
+function sktSaveAdvantages(text){
+  const t = String(text || '').replace(/\{@\w+ ([^|}]+)[^}]*\}/g, '$1').replace(/\s+/g, ' ');
+  if (/\bwhile (?:the|your|you're|you are|raging|it is)[^.]*(?:following benefits|benefits:)/i.test(t)
+      || /following benefits[^.]*(?:for 1 minute|for 10 minutes|until)/i.test(t)) return [];
+  const out = [];
+  t.split(/(?<=[.!?])\s+/).forEach(s => {
+    const m = /(?<!dis)advantage on ([^.]*?)saving throws?\b([^.;]*)/i.exec(s); if (!m) return;
+    if (/\b(while|when|whenever|if|until|for 1 minute|for the next|before the start|the first|target|creature)\b/i.test(s.slice(0, m.index))) return;
+    const pre = m[1];
+    if (/\b(one|an?)\b[^.]*\b(attack|check)/i.test(pre)) return;
+    let post = m[2].replace(/,? and you (?:have|are|can|gain).*$/i, '').replace(/,? (?:and )?magic can.t.*$/i, '').trim().replace(/^(?:that )?(?:you make |made )/i, '');
+    if (/\b(for 1 (minute|hour)|until|for the duration|while (in|within)|as do your allies)\b/i.test(post)) return;
+    const abs = [...new Set((pre.replace(/[a-z]+-based ability checks and /ig, '').match(/strength|dexterity|constitution|intelligence|wisdom|charisma/ig) || []).map(x => _SKT_AB_WORD[x.toLowerCase()]))];
+    out.push({ abs, when: post, death: /death/i.test(pre), conc: /concentration/i.test(post), auto: !post || /^unless\b/i.test(post) });
+  });
+  return out;
+}
+function _sktSaveAdv(ctx, a, src){
+  const names = a.abs.map(k => SKT_AB_NAME[k] || k);
+  if (a.death) ctx.saveMods.push({ abs: ['death'], text: 'Advantage on death saving throws', src });
+  else if (a.conc) ctx.rollAdv.push({ on: ['conc'], label: src });
+  else if (a.auto) ctx.rollAdv.push({ on: a.abs.length ? a.abs.map(k => 'save:' + k) : ['save'], label: src });
+  else ctx.saveMods.push({ abs: a.abs.length ? a.abs : ['all'], text: 'Advantage on ' + (names.length ? names.join(', ').replace(/, ([^,]*)$/, ' and $1') + ' saves' : 'saving throws') + ' ' + a.when, src });
+}
+
 // Small helpers the effects share.
 function _fxPool(ctx, name, max, recharge, extra){
   if (!(max > 0)) return;
@@ -1693,8 +1727,12 @@ sktDefineEffect(['class:barbarian:Unarmored Defense'], ctx => {
   ctx.acOptions.push({ label: 'Unarmored Defense', value: 10 + ctx.mod.dex + ctx.mod.con, noArmor: true, shieldOk: true });
 });
 sktDefineEffect(['class:barbarian:Fast Movement'], ctx => { ctx.speedBonusUnlessHeavy += 10; });
-sktDefineEffect(['class:barbarian:Danger Sense'], ctx => _fxNote(ctx, 'Advantage on Dexterity saving throws (Danger Sense).'));
-sktDefineEffect(['class:barbarian:Feral Instinct'], ctx => _fxNote(ctx, 'Advantage on initiative rolls (Feral Instinct).'));
+// 2014: against what you can see; 2024: always, unless Incapacitated.
+sktDefineEffect(['class:barbarian:Danger Sense'], ctx => {
+  if (ctx.edition === '2014') ctx.saveMods.push({ abs: ['dex'], text: 'Advantage on Dexterity saves against effects you can see (not while blinded, deafened or incapacitated)', src: 'Danger Sense' });
+  else ctx.rollAdv.push({ on: ['save:dex'], label: 'Danger Sense' });
+});
+sktDefineEffect(['class:barbarian:Feral Instinct'], ctx => ctx.rollAdv.push({ on: ['init'], label: 'Feral Instinct' }));
 sktDefineEffect(['class:barbarian:Reckless Attack'], ctx => {
   ctx.resources.push({ name: 'Reckless Attack', type: 'toggle', current: 1, max: 1, recharge: 'turn' });
 });
@@ -1836,7 +1874,7 @@ sktDefineEffect(['subclass:Draconic Resilience'], ctx => {
 });
 sktDefineEffect(['subclass:Remarkable Athlete'], ctx => {
   if (ctx.edition === '2014') ctx.remarkableAthlete = true;
-  else _fxNote(ctx, 'Advantage on initiative rolls and Strength (Athletics) checks (Remarkable Athlete).');
+  else ctx.rollAdv.push({ on: ['init', 'skill:athletics'], label: 'Remarkable Athlete' });
 });
 sktDefineEffect(['subclass:Improved Critical'], ctx => { ctx.critRange = Math.min(ctx.critRange, 19); });
 sktDefineEffect(['subclass:Superior Critical'], ctx => { ctx.critRange = Math.min(ctx.critRange, 18); });
@@ -1958,7 +1996,7 @@ function sktComputeCharacter(build, R, prior){
     senses: { darkvision: 0 }, skillBonus: {}, immune: new Set(), cantripDamageBonus: 0,
     // What an on/off state changes (SKT_STATES).
     acBonus: [], acFloor: null, speedMult: 1, spellDcBonus: 0, spellAtkBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0,
-    shillelagh: null, rollAdv: [], rollDice: [], extraDamage: [], concBonus: 0,
+    shillelagh: null, rollAdv: [], rollDice: [], extraDamage: [], concBonus: 0, saveMods: [],
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
   _sktActiveItems(build).forEach(m => (m.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); }));
@@ -2085,6 +2123,9 @@ function sktComputeCharacter(build, R, prior){
         const first = (t.split(/(?<=\.)\s+/).find(s => /action|reaction|channel divinity/i.test(s) && !/^(Starting|At|When you)\b.*level/i.test(s)) || t).slice(0, 220);
         _fxAction(ctx, { name: f.name.replace(/^Channel Divinity:\s*/, ''), action, resource: 'Channel Divinity', amount: 1, feature: f.name, desc: first });
       }
+      // Advantage on saves a trait or feat gives (Dwarven Resilience…).
+      if ((f.from === 'species' || f.from === 'feat' || ((f.from === 'class' || f.from === 'subclass') && SKT_SAVE_ADV_FEATURES.test(f.name)))
+          && !SKT_STATES.some(s => s.key === f.name)) sktSaveAdvantages(f.text).forEach(a => _sktSaveAdv(ctx, a, f.name));
       const v = ch && (build.featureChoices || {})[f.name];
       if (ch && v && ch.apply){ try { ch.apply(ctx, v); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
     } finally { [ctx.level, ctx.cls, ctx.sub] = was; }
@@ -2337,7 +2378,7 @@ function sktComputeCharacter(build, R, prior){
       attacks, attacksPerAction: ctx.attacksPerAction, critRange: ctx.critRange,
       states: states.map(x => ({ key: x.s.key, label: x.s.label, on: x.on, conc: x.conc, spell: x.s.spell || '', resource: x.s.resource || '',
         desc: typeof x.s.desc === 'function' ? x.s.desc(ctx, x.value) : (x.s.desc || ''), options: x.s.options && x.s.options(ctx).length ? x.s.options(ctx) : null, value: x.value })),
-      stateSig: sktStateSig(prior), rollAdv: ctx.rollAdv, rollDice: ctx.rollDice, extraDamage: ctx.extraDamage, concBonus: ctx.concBonus,
+      stateSig: sktStateSig(prior), saveMods: ctx.saveMods, rollAdv: ctx.rollAdv, rollDice: ctx.rollDice, extraDamage: ctx.extraDamage, concBonus: ctx.concBonus,
       // A half-orc's Savage Attacks adds a weapon die on a melee crit, as does Brutal Critical.
       critExtraDice: (ctx.critExtraDice || 0) + (features.some(f => f.from === 'species' && f.name === 'Savage Attacks') ? 1 : 0),
       greatWeaponFighting: !!ctx.gwf,
@@ -2974,7 +3015,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
                      sktSpellsMatching, sktExpandedSpells, sktPassiveGrants, sktSpellExcess,
-                     sktDefineState, sktStateSig, sktStatesSyncAll, SKT_STATES, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
+                     sktDefineState, sktStateSig, sktStatesSyncAll, SKT_STATES, sktSaveAdvantages, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
