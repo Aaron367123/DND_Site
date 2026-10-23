@@ -1114,7 +1114,9 @@ function sktBuildFeatNames(build, R){
 // chosen are left off the sheet.
 const SKT_OPTION_CHOICES = /^(Totem Spirit|Aspect of the Beast|Totemic Attunement|Storm Aura|Storm Soul|Raging Storm|Hunter's Prey|Defensive Tactics|Multiattack|Superior Hunter's Defense|Armor Model)$/;
 function _sktOptionFeatures(sc){
-  const first = e => sktRulesText([].concat(e || [])).split(/(?<=\.)\s/)[0];
+  // The first two sentences: the first is often only flavour ("Your tenacity
+  // can wear down the most potent foes.").
+  const first = e => sktRulesText([].concat(e || [])).split(/(?<=\.)\s/).slice(0, 2).join(' ').slice(0, 260);
   sc.features.forEach(f => {
     if (!SKT_OPTION_CHOICES.test(f.name)) return;
     const refs = [], inline = [];

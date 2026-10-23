@@ -748,8 +748,11 @@ CB_RENDER.skills = () => {
   // Skills and weapons a subclass feature lets the player choose.
   sktProfChoices(b, R).forEach(c => {
     const label = k => c.kind === 'skills' ? SKT_SKILL_LABEL[k] : _sktTitle(k);
+    // Skills the character already has from elsewhere can't be picked again.
+    const locked = {};
+    if (c.kind === 'skills') c.options.forEach(k => { if ((rec.sheet.skillProf || {})[k] && !c.picked.includes(k)) locked[c.feature + '||skills||' + k] = 'already'; });
     html += '<h4>' + (c.kind === 'skills' ? 'Skills' : 'Weapon') + ' — ' + cbEsc(c.feature) + '</h4>' + cbCounter(c.picked.length, c.count, 'chosen')
-      + cbChecks(c.options.map(k => ({ value: c.feature + '||' + c.kind + '||' + k, label: label(k) })), c.picked.map(k => c.feature + '||' + c.kind + '||' + k), c.count, 'cb-profpick');
+      + cbChecks(c.options.map(k => ({ value: c.feature + '||' + c.kind + '||' + k, label: label(k) })), c.picked.map(k => c.feature + '||' + c.kind + '||' + k), c.count, 'cb-profpick', locked);
   });
   // Tools the class, background or species leaves to the player.
   sktToolChoices(b, R).forEach(c => {

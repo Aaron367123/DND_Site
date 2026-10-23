@@ -7646,6 +7646,26 @@
       }
     }
 
+    // -- Round 30: picks that say what they do; known skills locked -----------------
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const hp = sktBuildChoices(Object.assign(sktBlankBuild('2014'), { cls: 'Ranger', subclass: 'Hunter', level: 3 }), R14).find(c => c.feature === "Hunter's Prey");
+        ok('picks: an option says what it does, not only its flavour', /extra 1d8 damage/.test((hp.spec.options.find(o => o.value === 'Colossus Slayer') || {}).desc || ''), (hp.spec.options[0] || {}).desc);
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Bard', level: 3, subclass: 'Lore', skills: ['arcana', 'history', 'insight'] }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'skills'; cbRender(); await sleep(20);
+        const box = document.querySelector('#cb-root [data-cb-profpick="Bonus Proficiencies||skills||arcana"]');
+        ok('picks: a skill already known can\'t be picked again', !!box && box.disabled);
+        cbClose();
+      } catch(e){ ok('round 30 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
