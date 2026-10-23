@@ -369,7 +369,8 @@
   });
 
   // ── Wizard ─────────────────────────────────────────────────────────────
-  both(['class:wizard:Spell Mastery'], ctx => note(ctx, 'Spell Mastery: cast your chosen 1st- and 2nd-level spells at their lowest level without a slot.'));
+  both(['class:wizard:Spell Mastery'], ctx => { const p = (((ctx.build._full || ctx.build).featureSpells || {})['Spell Mastery'] || []);
+    note(ctx, 'Spell Mastery' + (p.length ? ' (' + p.join(', ') + ')' : '') + ': cast your chosen 1st- and 2nd-level spells at their lowest level without a slot.'); });
   both(['class:wizard:Signature Spells'], ctx => pool(ctx, 'Signature Spells', 2, 'short', { note: 'Each of your two 3rd-level signature spells once per rest without a slot.' }));
   def('2024:class:wizard:Ritual Adept', ctx => note(ctx, 'Ritual Adept: cast any ritual spell in your spellbook as a ritual without preparing it.'));
   def('2024:class:wizard:Scholar', () => {});                       // an expertise pick in the builder

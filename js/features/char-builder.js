@@ -606,6 +606,7 @@ function cbQuickBuild(){
       // Another class's spells, the highest level first: what the feature is for.
       const other = ms.options.filter(n => !known.has(n) && !ms.picked.includes(n) && !sktSpellOnList(sktRulesSpell(R, n), 'Bard', b)).sort((x, y) => lv(y) - lv(x) || x.localeCompare(y));
       b.secrets = ms.picked.concat(other).slice(0, ms.count); } }
+    sktFeatureSpellPicks(b, R).forEach(x => { if (x.picked.length < x.count && x.options.length){ b.featureSpells = Object.assign({}, b.featureSpells); b.featureSpells[x.feature] = (b.featureSpells[x.feature] || []).concat(x.options.filter(n => !x.picked.includes(n)).slice(0, x.count - x.picked.length)); } });
     sktArcanumLevels(b, R).forEach(lv => { if (!(b.arcanum || {})[lv]){ const o = sktArcanumOptions(b, R, lv)[0]; if (o){ b.arcanum = Object.assign({}, b.arcanum); b.arcanum[lv] = o; } } });
     sktProfChoices(b, R).forEach(c => {
       if (c.picked.length >= c.count) return;
@@ -643,16 +644,18 @@ function cbQuickBuild(){
       const kit = (rec.sheet.attacks || []).map(a => String(a.name).toLowerCase()).filter(n => R.items[n] && R.items[n].mastery);
       b.masteries = [...new Set((b.masteries || []).concat(kit))].slice(0, mc);
     }
-    // Spells: the class list in order, lowest levels first.
-    // Each casting class from its own list (a multiclass character too).
+    // Spells: one of each level in turn, the highest first, so a high-level
+    // caster has spells of every level (and a wizard's book has 3rd-level
+    // spells for Signature Spells). Each casting class from its own list.
     const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
     if (sc) (sc.classes || [{ primary: true, sc, view: b, entry: null }]).forEach(x => {
       const s = x.sc, v = x.view || b, lst = x.primary ? b : x.entry;
       if (!lst) return;
       const always = sktBuildAlwaysPrepared(v, R);
       if ((lst.cantrips || []).length < s.cantrips) lst.cantrips = (lst.cantrips || []).concat(sktSpellOptions(R, v, 0).map(o => o.name).filter(n => !(lst.cantrips || []).includes(n))).slice(0, s.cantrips);
-      const pool = [];
-      for (let lv = 1; lv <= s.maxSpellLevel; lv++) sktSpellOptions(R, v, lv).forEach(o => { if (!always.includes(o.name)) pool.push(o.name); });
+      const pool = [], byLv = [];
+      for (let lv = 1; lv <= s.maxSpellLevel; lv++) byLv[lv] = sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n));
+      for (let i = 0; byLv.some(l => l && l.length > i); i++) for (let lv = s.maxSpellLevel; lv >= 1; lv--) if (byLv[lv] && byLv[lv][i]) pool.push(byLv[lv][i]);
       if (s.spellbook && (lst.spellbook || []).length < s.spellbook) lst.spellbook = (lst.spellbook || []).concat(pool.filter(n => !(lst.spellbook || []).includes(n))).slice(0, s.spellbook);
       const want = s.prepared || s.known, src = s.spellbook ? lst.spellbook : pool;
       if (want && (lst.spells || []).length < want) lst.spells = (lst.spells || []).concat(src.filter(n => !(lst.spells || []).includes(n))).slice(0, want);
@@ -985,6 +988,12 @@ function cbSpellInfoHtml(name){
   return '<div class="cb-spinfo"><b>' + cbEsc(s.name) + '</b> <span class="cb-dim">' + cbEsc(lvl + (s.concentration ? ' · concentration' : '') + (s.ritual ? ' · ritual' : '')) + '</span>'
     + '<button class="cb-x" data-cb-spinfo="" aria-label="Close">✕</button>' + cbFeatureText(sktRulesText(s.entries), true) + '</div>';
 }
+// A wizard's Spell Mastery and Signature Spells, from the spellbook.
+function cbWizardPicksHtml(){
+  const picks = sktFeatureSpellPicks(CB.build, CB.R);
+  return picks.map(x => '<h4>' + cbEsc(x.feature) + ' <span class="cb-dim">' + x.level + (x.level === 1 ? 'st' : x.level === 2 ? 'nd' : 'rd') + ' level</span></h4>'
+    + (x.options.length ? cbSpellChecks(x.options, x.picked.map(n => x.level + '|' + n), x.count, 'cb-wizpick', n => x.level + '|' + n) : '<div class="cb-dim">Write a spell of this level into the spellbook first.</div>')).join('');
+}
 // A 2014 bard's Magical Secrets: spells from any class.
 function cbSecretsHtml(){
   const ms = sktMagicalSecrets(CB.build, CB.R);
@@ -1052,7 +1061,7 @@ CB_RENDER.spells = () => {
     }
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
-  return html + cbSecretsHtml() + cbArcanumHtml() + cbMultiSpellsHtml() + fromFeats;
+  return html + cbSecretsHtml() + cbArcanumHtml() + cbWizardPicksHtml() + cbMultiSpellsHtml() + fromFeats;
 };
 function cbSlotText(sc){
   return Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—';
@@ -1514,6 +1523,17 @@ function cbOnChange(e){
     const [feature, kind, k] = d.cbProfpick.split('||');
     const c = sktProfChoices(CB.build, CB.R).find(x => x.feature === feature && x.kind === kind);
     return cbSet(b => { b.profPicks = Object.assign({}, b.profPicks); const p = b.profPicks[feature] = Object.assign({}, b.profPicks[feature]); p[kind] = (p[kind] || []).slice(); cbToggle(p[kind], k, c ? c.count : 1); });
+  }
+  if (d.cbWizpick){
+    const i = d.cbWizpick.indexOf('|'), lv = +d.cbWizpick.slice(0, i), n = d.cbWizpick.slice(i + 1);
+    const x = sktFeatureSpellPicks(CB.build, CB.R).find(y => y.level === lv);
+    return cbSet(b => {
+      b.featureSpells = Object.assign({}, b.featureSpells);
+      const all = (b.featureSpells[x.feature] || []).filter(m => (sktRulesSpell(CB.R, m) || {}).level !== lv);
+      const mine = (b.featureSpells[x.feature] || []).filter(m => (sktRulesSpell(CB.R, m) || {}).level === lv);
+      cbToggle(mine, n, x.count);
+      b.featureSpells[x.feature] = all.concat(mine);
+    });
   }
   if (d.cbSecret){
     const ms = sktMagicalSecrets(CB.build, CB.R);

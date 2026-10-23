@@ -7765,6 +7765,32 @@
       }
     }
 
+    // -- Round 35: a wizard's Spell Mastery and Signature Spells; Quick Build's spread --
+    {
+      const ed0 = state.settings && state.settings.builderEdition;
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const wz = (L, book, picks) => Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: L, spellbook: book || [], spells: [], featureSpells: picks || {} });
+        const book = ['Shield', 'Magic Missile', 'Misty Step', 'Invisibility', 'Fireball', 'Counterspell', 'Haste'];
+        ok('wizard: Spell Mastery at 18th asks for a 1st- and a 2nd-level spell', sktFeatureSpellPicks(wz(18, book), R14).map(x => x.level + ':' + x.count).join() === '1:1,2:1' && !sktFeatureSpellPicks(wz(17, book), R14).length);
+        ok('wizard: from the spellbook', sktFeatureSpellPicks(wz(18, book), R14)[0].options.join() === 'Shield,Magic Missile');
+        ok('wizard: Signature Spells at 20th, asked for', sktBuildTodo(wz(20, book), R14).some(t => t.what === '2 3rd-level spells for Signature Spells'));
+        const sig = sktComputeCharacter(wz(20, book, { 'Signature Spells': ['Fireball', 'Counterspell'], 'Spell Mastery': ['Shield', 'Misty Step'] }), R14).sheet;
+        ok('wizard: signature spells are always prepared', ['Fireball', 'Counterspell'].every(n => sig.alwaysPrepared.includes(n)));
+        ok('wizard: the mastery spells are named on the sheet', sig.notes.some(n => /^Spell Mastery \(Shield, Misty Step\)/.test(n)));
+        await openCharBuilder({ edition: '2014' }); await sleep(700);
+        Object.assign(CB.build, { cls: 'Wizard', level: 20 }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        cbQuickBuild();
+        ok('wizard: Quick Build fills both from a book with every level', (CB.build.featureSpells['Signature Spells'] || []).length === 2 && (CB.build.featureSpells['Spell Mastery'] || []).length === 2);
+        ok('quick build: a 20th-level wizard\'s book has 9th-level spells', (CB.build.spellbook || []).some(n => (sktRulesSpell(CB.R, n) || {}).level === 9));
+        cbClose();
+      } catch(e){ ok('round 35 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

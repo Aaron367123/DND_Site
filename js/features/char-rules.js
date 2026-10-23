@@ -2102,6 +2102,7 @@ function sktComputeCharacter(build, R, prior){
   sktArcanumLevels(build, R).forEach(lv => { const n = (build.arcanum || {})[lv]; if (n){ arcanum[lv] = n; if (!spellNames.includes(n)) spellNames.push(n); } });
   parts.slice(1).forEach(p => [].concat((p.entry || {}).cantrips || [], (p.entry || {}).spells || []).forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); }));
   const always = sktBuildAlwaysPrepared(build, R);
+  sktFeatureSpellPicks(build, R).filter(x => x.feature === 'Signature Spells').forEach(x => x.picked.forEach(n => { if (!always.includes(n)) always.push(n); }));
   always.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
   // Spells from feats and the species, with how each is cast.
   const spGrant = sktSpeciesSpellGrant(R, build);
@@ -2268,6 +2269,25 @@ function sktMagicalSecrets(build, R){
   const max = (sc && sc.maxSpellLevel) || 0;
   const options = R.spells.filter(s => s.level <= max && (build.allBooks ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
   return { count: n, options, picked: (build.secrets || []).filter(x => options.includes(x)).slice(0, n) };
+}
+
+// A wizard's capstone spells, chosen from the spellbook: Spell Mastery (18th
+// level: a 1st- and a 2nd-level spell, at will) and Signature Spells (20th:
+// two 3rd-level spells, always prepared, each free once per short rest).
+// Kept in build.featureSpells[feature].
+function sktFeatureSpellPicks(build, R){
+  const p = sktClassLevels(build, R).find(x => x.key === 'wizard');
+  if (!p) return [];
+  const view = sktClassView(build, R, p);
+  const book = (view.spellbook && view.spellbook.length ? view.spellbook : view.spells) || [];
+  const slots = [];
+  if (p.level >= 18) slots.push(['Spell Mastery', 1, 1], ['Spell Mastery', 2, 1]);
+  if (p.level >= 20) slots.push(['Signature Spells', 3, 2]);
+  return slots.map(([feature, level, count]) => {
+    const options = book.filter(n => (sktRulesSpell(R, n) || {}).level === level);
+    const picked = (((build.featureSpells || {})[feature]) || []).filter(n => options.includes(n)).slice(0, count);
+    return { feature, level, count, options, picked };
+  });
 }
 
 // A warlock's Mystic Arcanum: one spell each of 6th to 9th level, arriving at
@@ -2600,6 +2620,7 @@ function sktBuildTodo(build, R){
   }
   sktBuildChoices(build, R).forEach(c => { if (!c.value) todo.push({ step: 'levels', what: c.feature + ' choice' }); });
   sktArcanumLevels(build, R).forEach(lv => { if (!(build.arcanum || {})[lv]) todo.push({ step: 'spells', what: 'a ' + lv + 'th-level Mystic Arcanum spell' }); });
+  sktFeatureSpellPicks(build, R).forEach(x => { const n = x.count - x.picked.length; if (n > 0) todo.push({ step: 'spells', what: n + ' ' + x.level + (x.level === 1 ? 'st' : x.level === 2 ? 'nd' : 'rd') + '-level spell' + (n === 1 ? '' : 's') + ' for ' + x.feature }); });
   { const ms = sktMagicalSecrets(build, R); if (ms && ms.picked.length < ms.count) todo.push({ step: 'spells', what: (ms.count - ms.picked.length) + ' Magical Secrets spell' + (ms.count - ms.picked.length === 1 ? '' : 's') }); }
   const kindName = { skills: ['skill', 'skills'], weapons: ['weapon', 'weapons'], enemies: ['favored enemy', 'favored enemies'], terrains: ['favored terrain', 'favored terrains'] };
   sktProfChoices(build, R).forEach(c => { const n = c.count - c.picked.length; if (n > 0) todo.push({ step: 'skills', what: n + ' ' + kindName[c.kind][n === 1 ? 0 : 1] + ' from ' + c.feature }); });
@@ -2784,7 +2805,7 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
-                     sktSpellsMatching, sktExpandedSpells, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
+                     sktSpellsMatching, sktExpandedSpells, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
