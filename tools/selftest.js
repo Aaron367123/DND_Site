@@ -7692,6 +7692,19 @@
       }
     }
 
+    // -- Round 32: kensei weapons are monk weapons ------------------------------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014');
+        const mk = (sub, weapons, picks) => sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Monk', subclass: sub, level: 3, abilities: { method: 'manual', base: { str: 10, dex: 16, con: 12, int: 10, wis: 14, cha: 8 } },
+          items: weapons.map(n => ({ name: n, base: n.toLowerCase(), qty: 1, equipped: true })), equipment: { materialized: true }, profPicks: picks || {} }), R14);
+        const ls = mk('Kensei', ['Longsword'], { 'Path of the Kensei': { weapons: ['longsword'] } }).sheet.attacks.find(a => a.name === 'Longsword');
+        ok('kensei: a kensei longsword uses Dexterity like a monk weapon', !!ls && /^1d8\+3/.test(ls.damage), ls && ls.damage);
+        const plain = mk('Open Hand', ['Longsword']).sheet.attacks.find(a => a.name === 'Longsword');
+        ok('kensei: another monk\'s longsword doesn\'t', !!plain && /^1d8 /.test(plain.damage), plain && plain.damage);
+      } catch(e){ ok('round 32 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

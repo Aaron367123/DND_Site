@@ -2431,6 +2431,13 @@ function sktBuildAttacks(ctx, gear, sc){
       || ctx.weaponPropRules.some(r => r.cat === cat && r.props.some(p => props.includes(p)))
       || (ctx.martialArts && cat === 'simple');
   };
+  // Monk weapons: 2014, simple melee weapons without two-handed or heavy and
+  // the shortsword; 2024, simple melee and martial melee with Light. A
+  // Kensei's chosen weapons too, ranged ones included.
+  const kensei = new Set((((ctx.build._full || ctx.build).profPicks || {})['Path of the Kensei'] || {}).weapons || []);
+  const monkWeapon = (w, props, ranged) => kensei.has(String(w._name || w.name).toLowerCase()) || kensei.has(String(w.name).toLowerCase())
+    || (!ranged && (ctx.edition === '2024' ? (String(w.weaponCategory) === 'simple' || props.includes('L'))
+      : ((String(w.weaponCategory) === 'simple' && !props.includes('2H') && !props.includes('H')) || /^shortsword$/i.test(w.name))));
   const seen = new Set();
   (gear.weapons || []).forEach(w => {
     const key = w._name || w.name;
@@ -2440,11 +2447,11 @@ function sktBuildAttacks(ctx, gear, sc){
     const finesse = props.includes('F');
     let ab = ranged ? m.dex : (finesse ? Math.max(m.str, m.dex) : m.str);
     // A monk's weapons use Dexterity if it is better (martial arts weapons).
-    if (ctx.martialArts && !ranged && (String(w.weaponCategory) === 'simple' || props.includes('L'))) ab = Math.max(m.str, m.dex);
+    if (ctx.martialArts && monkWeapon(w, props, ranged)) ab = Math.max(m.str, m.dex);
     const hit = ab + (prof(w) ? pb : 0) + (ranged ? ctx.rangedAttackBonus : 0) + (w._hit || 0);
     let dmgBonus = ab + (!ranged && !props.includes('2H') && ctx.duelingBonus ? ctx.duelingBonus : 0) + (w._dmg || 0);
     let die = w.dmg1 || '1';
-    if (ctx.martialArts && ctx.martialArtsDie && !ranged && _sktDieAvg(ctx.martialArtsDie) > _sktDieAvg(die)) die = ctx.martialArtsDie;
+    if (ctx.martialArts && ctx.martialArtsDie && !ranged && monkWeapon(w, props, ranged) && _sktDieAvg(ctx.martialArtsDie) > _sktDieAvg(die)) die = ctx.martialArtsDie;
     const type = SKT_DMG[String(w.dmgType || '').charAt(0)] || '';
     const mastery = (w.mastery || [])[0] ? String(w.mastery[0]).split('|')[0] : '';
     out.push({
