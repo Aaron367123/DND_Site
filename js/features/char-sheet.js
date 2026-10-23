@@ -1197,19 +1197,21 @@ function csInventoryHtml(pc){
     }).catch(() => { if (CS) CS.gearLoading = false; });
   }
   const items = csItems(pc), coins = csCoins(pc);
-  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0) + CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50;
+  const pref = (pc.build && pc.build.overrides) || {};
+  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0) + (pref.coinWeight === false ? 0 : CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50);
   const boxes = items.filter(x => CS_CONTAINER.test(x.name));
   const str = (pc.abilities || {}).str || 10, size = ((pc.sheet || {}).size || 'Medium');
   const cap = str * 15 * (size === 'Tiny' ? 0.5 : size === 'Large' ? 2 : 1);
-  const attuned = items.filter(m => m.reqAttune && m.attuned).length;
+  const attuned = items.filter(m => m.reqAttune && m.attuned).length, attMax = (pc.sheet || {}).attuneMax || 3;
   let h = '<div class="cs-coins">' + CS_COINS.map(([k]) => '<label class="cs-coin"><span>' + k.toUpperCase() + '</span>'
     + (ro ? '<b>' + (coins[k] || 0) + '</b>' : '<input type="number" min="0" data-cs-coin="' + k + '" value="' + (coins[k] || 0) + '">') + '</label>').join('')
     + '<span class="cb-dim">Worth ' + Math.round(CS_COINS.reduce((n, [k, v]) => n + (+coins[k] || 0) * v, 0) * 100) / 100 + ' gp</span></div>'
     + (ro ? '' : '<div class="cs-add cs-cointx"><input type="number" min="0" data-cs-txn placeholder="Amount" aria-label="Amount"><select class="cb-sel" data-cs-txc aria-label="Coin">'
       + CS_COINS.map(([k]) => '<option value="' + k + '"' + (k === 'gp' ? ' selected' : '') + '>' + k + '</option>').join('') + '</select>'
       + '<button class="btn" data-cs="coinadd">Add</button><button class="btn" data-cs="coinspend">Spend</button></div>');
-  h += '<div class="cs-carry' + (lb > cap ? ' over' : '') + '">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b> of ' + cap + ' lb'
-    + (lb > cap ? ' — over the limit: speed drops to 5 ft' : '') + (items.some(m => m.reqAttune) ? ' · attuned ' + attuned + ' of 3' : '') + '</div>';
+  h += '<div class="cs-carry' + (csCarryNote(pref.encumbrance, lb, cap) ? ' over' : '') + '">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b>'
+    + (pref.encumbrance === 'none' ? '' : ' of ' + cap + ' lb') + csCarryNote(pref.encumbrance, lb, cap)
+    + (items.some(m => m.reqAttune) ? ' · attuned ' + attuned + ' of ' + attMax : '') + '</div>';
   const gearType = m => { const st = m.stats || (m.base && CS.R && CS.R.items[m.base]); return st && /^(M|R|LA|MA|HA|S)(\||$)/.test(String(st.type)); };
   h += '<div class="cs-inv">' + (items.length ? items.map((m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
     + (gearType(m) ? '<label class="cs-eq" title="Equipped"><input type="checkbox" data-cs-equip="' + i + '"' + (m.equipped !== false ? ' checked' : '') + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
@@ -1258,6 +1260,19 @@ function csItemText(m){
 }
 // Containers, and the magic ones whose contents weigh nothing.
 const CS_CONTAINER = /backpack|\bbag\b|bag of|pouch|sack|chest|haversack|portable hole|quiver|case|basket|barrel/i;
+// What the load does to the character under the chosen encumbrance rule.
+// cap is 15 x Strength (size-adjusted); the variant's steps are a third and
+// two thirds of it.
+function csCarryNote(rule, lb, cap){
+  if (rule === 'none') return '';
+  if (rule === 'variant'){
+    if (lb > cap) return ' — over the limit: speed drops to 5 ft';
+    if (lb > cap * 2 / 3) return ' — heavily encumbered: speed −20 ft, disadvantage on STR, DEX and CON checks, saves and attacks';
+    if (lb > cap / 3) return ' — encumbered: speed −10 ft';
+    return '';
+  }
+  return lb > cap ? ' — over the limit: speed drops to 5 ft' : '';
+}
 const CS_WEIGHTLESS = /bag of holding|portable hole|handy haversack|heward/i;
 function csItemWeight(items, m){
   const box = m.in && items.find(x => x.name === m.in);
@@ -1406,6 +1421,9 @@ function csCustomizeHtml(pc){
   return '<div class="cs-custom"><h4>Customize <button class="btn small" data-cs="customize">Done</button></h4>'
     + '<div class="cb-dim">Added on top of what the rules work out. Use negative numbers to take away.</div>'
     + '<label class="cs-kv"><span>Sheet colour</span><input type="color" data-cs-theme value="' + csE(pc.theme || '#c8a26b') + '"><button class="btn small" data-cs="notheme">Default</button></label>'
+    + '<label class="cs-kv"><span>Encumbrance</span><select class="cb-sel" data-cs-ovpref="encumbrance">'
+    +   [['', 'Standard: up to 15 × STR'], ['variant', 'Variant: slowed at 5 × and 10 × STR'], ['none', 'Don’t track it']].map(([v, l]) => '<option value="' + v + '"' + ((o.encumbrance || '') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>'
+    + '<label class="cb-inline"><input type="checkbox" data-cs-ovpref="coinWeight"' + (o.coinWeight === false ? '' : ' checked') + '> Coins have weight (50 to a pound)</label>'
     + '<div class="cs-ovgrid">' + CS_OV.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span>' + num(k, o[k]) + '</label>').join('')
     + Object.keys(CS_AB).map(k => '<label class="cs-kv"><span>' + CS_AB[k] + ' save</span>' + num('save:' + k, (o.saves || {})[k]) + '</label>').join('')
     + Object.keys(CS_SKILLS).map(k => '<label class="cs-kv"><span>' + CS_SKILLS[k][0] + '</span>' + num('skill:' + k, (o.skills || {})[k]) + '</label>').join('')
@@ -1414,6 +1432,11 @@ function csCustomizeHtml(pc){
 }
 
 function csSpellsChange(e, t, d, pc){
+  if (d.csOvpref){
+    const v = t.type === 'checkbox' ? (t.checked ? undefined : false) : (t.value || undefined);
+    csRebuild('Preference', b => { b.overrides = Object.assign({}, b.overrides, { [d.csOvpref]: v }); if (v === undefined) delete b.overrides[d.csOvpref]; });
+    return true;
+  }
   if (d.csOvlist){
     const v = t.value;
     csRebuild('Custom ' + d.csOvlist, b => { b.overrides = Object.assign({}, b.overrides, { [d.csOvlist]: v }); });

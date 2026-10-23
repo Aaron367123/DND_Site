@@ -333,6 +333,38 @@ async function _sktRulesBuild(edition, read){
                       entries: o.entries || [] });
   });
 
+  // The 2024 Artificer's magic item plans. The book prints them as tables in
+  // Replicate Magic Item; each row becomes a pick like an infusion, with the
+  // table's Artificer level as its prerequisite and the Plans Known column as
+  // how many. The book's recommended four come first.
+  R.classes.filter(c => c.key === 'artificer' && c.source === 'EFA').forEach(c => {
+    const f = c.features.find(x => x.name === 'Replicate Magic Item'); if (!f) return;
+    const tables = [], recommended = [];
+    const itemName = s => (/\{@item ([^|}]+)/.exec(String(s)) || [])[1] || sktRulesInline(String(s));
+    (function walk(e){
+      if (Array.isArray(e)) return e.forEach(walk);
+      if (typeof e === 'string'){ if (/are recommended/.test(e)) (e.match(/\{@item [^}]+\}/g) || []).forEach(m => recommended.push(itemName(m))); return; }
+      if (e && typeof e === 'object'){ if (e.type === 'table' && /Magic Item Plans/.test(e.caption || '')) tables.push(e); Object.values(e).forEach(walk); }
+    })(f.entries);
+    if (!tables.length) return;
+    const plans = [];
+    tables.forEach(t => {
+      const level = +((/Level (\d+)/.exec(t.caption) || [])[1]) || 2;
+      (t.rows || []).forEach(row => {
+        const name = itemName(row[0]);
+        if (!name || plans.some(p => p.name === name)) return;
+        const att = /^yes/i.test(String(row[1] || ''));
+        plans.push({ name, source: c.source, core: true, featureType: ['EFA:Plan'], plan: true,
+                     prerequisite: level > 2 ? [{ level: { level, class: { name: 'Artificer', source: c.source } } }] : null,
+                     entries: ['A magic item plan' + (att ? ' (the item requires attunement)' : '') + '. Replicate Magic Item makes it at the end of a long rest; the Dungeon Master\u2019s Guide describes the item.'] });
+      });
+    });
+    plans.sort((a, b) => (recommended.includes(b.name) - recommended.includes(a.name)));
+    R.optional.push(...plans);
+    const prog = Array.from({ length: 20 }, (_, i) => +sktClassColumn(c, 'Plans Known', i + 1) || 0);
+    c.optionalfeatureProgression = (c.optionalfeatureProgression || []).concat([{ name: 'Magic Item Plans', featureType: ['EFA:Plan'], progression: prog }]);
+  });
+
   // Base weapons and armour, keyed by lower-case name.
   (base.baseitem || []).filter(i => i.source === src || (!R.items[i.name.toLowerCase()] && i.source === 'PHB'))
     .forEach(i => { R.items[i.name.toLowerCase()] = i; });
@@ -1786,6 +1818,8 @@ function sktComputeCharacter(build, R, prior){
       // A half-orc's Savage Attacks adds a weapon die on a melee crit, as does Brutal Critical.
       critExtraDice: (ctx.critExtraDice || 0) + (features.some(f => f.from === 'species' && f.name === 'Savage Attacks') ? 1 : 0),
       greatWeaponFighting: !!ctx.gwf,
+      // Magic items attuned at once: three, more for an artificer.
+      attuneMax: ctx.attuneMax || 3,
       spellSlots, spellSaveDc: sc ? sc.dc : null, spellAtkBonus: sc ? sktSigned(sc.attack) : null,
       spellAbility: sc ? sc.ability : null,
       spells: spellNames, alwaysPrepared: always,

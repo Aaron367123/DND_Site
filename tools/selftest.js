@@ -7187,6 +7187,7 @@
            && ['light', 'medium', 'shield'].every(x => a7.sheet.proficiencies.armor.includes(x)), JSON.stringify(a7.sheet.saveProf));
         const a14 = art(R24, '2024', 14);
         ok('artificer 2024 14: Advanced Artifice gives Flash of Genius back on a short rest', (a14.resources.find(x => x.name === 'Flash of Genius') || {}).recharge === 'short-one');
+        ok('artificer 2024 14: and five attuned items', a14.sheet.attuneMax === 5);
         const al = art(R24, '2024', 5, { subclass: 'Alchemist' });
         ok('artificer 2024 alchemist 5: three experimental elixirs', (al.resources.find(x => x.name === 'Experimental Elixir') || {}).max === 3);
         ok('artificer 2024: Tinker\'s Magic uses = INT modifier', (al.resources.find(x => x.name === 'Tinker\'s Magic') || {}).max === 3);
@@ -7198,6 +7199,70 @@
       finally {
         document.getElementById('cb-root')?.remove(); CB = null;
         if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+      }
+    }
+
+    // -- Round 22: artificer plans, attunement, encumbrance ------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const ed0 = state.settings && state.settings.builderEdition;
+      const st = { find: window._findCombatantForPartyMember };
+      try {
+        const R24 = await sktRulesLoad('2024');
+        const plans = R24.optional.filter(o => (o.featureType || []).includes('EFA:Plan'));
+        ok('plans: the four Magic Item Plans tables become picks (56 plans)', plans.length === 56, plans.length);
+        ok('plans: the book\'s recommended four come first', plans.slice(0, 4).map(x => x.name).sort().join() === ['+1 Wand of the War Mage', 'Bag of Holding', 'Cap of Water Breathing', 'Sending Stones'].sort().join(), plans.slice(0, 4).map(x => x.name).join());
+        const boots = plans.find(x => x.name === 'Boots of the Winding Path');
+        ok('plans: a level-6 table\'s plan needs artificer level 6', !!boots && boots.prerequisite[0].level.level === 6 && /attunement/.test(boots.entries[0]));
+        await openCharBuilder({ edition: '2024' }); await sleep(300);
+        Object.assign(CB.build, { cls: 'Artificer', level: 6 });
+        CB.rec = sktComputeCharacter(CB.build, CB.R);
+        CB.step = 'levels'; cbRender(); await sleep(20);
+        const main = document.querySelector('#cb-root .cb-main');
+        ok('plans: the builder asks for Magic Item Plans at the Plans Known count', /Magic Item Plans/.test(main.textContent) && /0\s*\/\s*5|0 of 5/.test(main.textContent), (main.textContent.match(/Magic Item Plans.{0,40}/) || [''])[0]);
+        cbQuickBuild();
+        const got = CB.build.optional['Magic Item Plans'] || [];
+        ok('plans: Quick Build picks the recommended ones first', got.length === 5 && got.includes('Bag of Holding') && got.includes('Sending Stones'), JSON.stringify(got));
+        const rec = sktComputeCharacter(CB.build, CB.R);
+        ok('plans: chosen plans are listed with the features', rec.sheet.featureList.some(f => f.name === 'Bag of Holding'));
+        cbClose();
+
+        const R14 = await sktRulesLoad('2014');
+        window._findCombatantForPartyMember = () => -1;
+        const a = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Att', cls: 'Artificer', species: 'Human', level: 10,
+          abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 16, wis: 12, cha: 8 } } }), R14);
+        ok('attunement: Magic Item Adept raises it to four', a.sheet.attuneMax === 4);
+        a.id = 'pc_r22'; state.party.push(a); save();
+        const me = () => state.party.find(p => p.id === 'pc_r22');
+        me().build.items = [{ name: 'Cloak of Protection', qty: 1, reqAttune: true, attuned: true }, { name: 'Sack of rocks', qty: 1, weight: 60 }];
+        me().build.equipment = Object.assign({}, me().build.equipment, { materialized: true });
+        me().coins = { cp: 0, sp: 0, ep: 0, pp: 0 }; me().gold = 500; save();
+        openCharSheet('pc_r22', { tab: 'inventory' }); await sleep(300);
+        const carry = () => document.querySelector('#cs-root .cs-carry').textContent;
+        ok('attunement: the inventory counts against four', /attuned 1 of 4/.test(carry()), carry());
+        ok('encumbrance: standard rule, 60 lb + 10 lb of coins is fine at STR 10', /70 lb/.test(carry()) && /of 150 lb/.test(carry()) && !/encumbered|over/.test(carry()), carry());
+        document.querySelector('#cs-root [data-cs="customize"]').click(); await sleep(40);
+        const sel = document.querySelector('#cs-root [data-cs-ovpref="encumbrance"]');
+        sel.value = 'variant'; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+        ok('encumbrance: the variant slows the character past 5 × STR', me().build.overrides.encumbrance === 'variant' && /encumbered: speed −10/.test(carry()), carry());
+        const cw = document.querySelector('#cs-root [data-cs-ovpref="coinWeight"]');
+        cw.checked = false; cw.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+        ok('encumbrance: coins can weigh nothing', me().build.overrides.coinWeight === false && /60 lb/.test(carry()), carry());
+        me().build.items[1].weight = 200; save(); csRender(); await sleep(40);
+        ok('encumbrance: 200 lb is over the limit', /over the limit/.test(carry()), carry());
+        const sel2 = document.querySelector('#cs-root [data-cs-ovpref="encumbrance"]');
+        sel2.value = 'none'; sel2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+        ok('encumbrance: or not be tracked at all', !/of 150/.test(carry()) && !/encumbered|over the limit/.test(carry()), carry());
+        csClose();
+      } catch(e){ ok('round 22 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window._findCombatantForPartyMember = st.find;
+        document.getElementById('cb-root')?.remove(); CB = null;
+        if (typeof csClose === 'function') csClose();
+        if (state.settings){ if (ed0 === undefined) delete state.settings.builderEdition; else state.settings.builderEdition = ed0; }
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
       }
     }
 

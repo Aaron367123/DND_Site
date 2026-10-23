@@ -41,6 +41,7 @@
   });
   def('2024:class:artificer:Magic Item Tinker', ctx => note(ctx, 'Magic Item Tinker: as a bonus action, recharge an item you replicated with a spell slot, or make one vanish to gain a spell slot (level 1 for Common, 2 for Uncommon or Rare) once per long rest.'));
   def('2024:class:artificer:Advanced Artifice', ctx => {
+    ctx.attuneMax = Math.max(ctx.attuneMax || 3, 5);
     note(ctx, 'Advanced Artifice: you can attune to up to five magic items; a short rest restores one use of Flash of Genius.');
     const r = ctx.resources.find(x => x.name === 'Flash of Genius');
     if (r) r.recharge = 'short-one';
@@ -61,9 +62,9 @@
   });
   both(['class:artificer:Tool Expertise'], ctx => note(ctx, 'Tool Expertise: your proficiency bonus is doubled for any ability check using a tool you\'re proficient with.'));
   both(['class:artificer:The Right Tool for the Job'], ctx => note(ctx, 'The Right Tool for the Job: with thieves\' tools or artisan\'s tools in hand, spend an hour (or a short rest) to make one set of artisan\'s tools.'));
-  both(['class:artificer:Magic Item Adept'], ctx => note(ctx, 'Magic Item Adept: you can attune to up to four magic items at once' + (ctx.edition === '2014' ? '; crafting a common or uncommon magic item takes a quarter of the time and half the gold.' : '.')));
-  both(['class:artificer:Magic Item Savant'], ctx => note(ctx, 'Magic Item Savant: you can attune to up to five magic items and ignore class, species, spell and level requirements on them.'));
-  both(['class:artificer:Magic Item Master'], ctx => note(ctx, 'Magic Item Master: you can attune to up to six magic items at once.'));
+  both(['class:artificer:Magic Item Adept'], ctx => (ctx.attuneMax = Math.max(ctx.attuneMax || 3, 4), note(ctx, 'Magic Item Adept: you can attune to up to four magic items at once' + (ctx.edition === '2014' ? '; crafting a common or uncommon magic item takes a quarter of the time and half the gold.' : '.'))));
+  both(['class:artificer:Magic Item Savant'], ctx => (ctx.attuneMax = Math.max(ctx.attuneMax || 3, 5), note(ctx, 'Magic Item Savant: you can attune to up to five magic items and ignore class, species, spell and level requirements on them.')));
+  both(['class:artificer:Magic Item Master'], ctx => (ctx.attuneMax = Math.max(ctx.attuneMax || 3, 6), note(ctx, 'Magic Item Master: you can attune to up to six magic items at once.')));
   def('2014:class:artificer:Soul of Artifice', ctx => note(ctx, 'Soul of Artifice: +1 to all saving throws per magic item you\'re attuned to; when reduced to 0 HP, use your reaction to end an infusion and drop to 1 HP instead.'));
   def('2024:class:artificer:Soul of Artifice', ctx => note(ctx, 'Soul of Artifice: +1 to saving throws per attuned magic item; when reduced to 0 HP, disintegrate Uncommon or Rare items you replicated to drop to 20 HP per item instead.'));
   both(['subclass:Experimental Elixir'], ctx => {
