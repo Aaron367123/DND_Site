@@ -229,8 +229,8 @@ function cbChecks(options, chosen, max, attr, locked){
   }).join('') + '</div>';
 }
 function cbCounter(have, want, what){
-  const ok = have >= want;
-  return '<div class="cb-counter' + (ok ? ' ok' : '') + '">' + have + ' / ' + want + ' ' + cbEsc(what) + '</div>';
+  const ok = have >= want, over = have > want;
+  return '<div class="cb-counter' + (over ? ' over' : ok ? ' ok' : '') + '">' + have + ' / ' + want + ' ' + cbEsc(what) + (over ? ' — remove ' + (have - want) : '') + '</div>';
 }
 function cbFeatureText(text, open){
   const t = String(text || '').trim(); if (!t) return '';
@@ -1043,26 +1043,30 @@ CB_RENDER.spells = () => {
   if (sc.spellbook){
     html += '<h4>Spellbook</h4><div class="cb-dim">Six spells at 1st level, two more each level after. You prepare from these.</div>'
       + cbCounter(book.length, sc.spellbook, 'in the book');
-    for (let lv = 1; lv <= maxLv; lv++){
-      const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
-      if (!opts.length) continue;
-      html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbSpellChecks(opts, book, sc.spellbook, 'cb-book') + '</div>';
-    }
+    html += cbSpellRows(R, maxLv, book, lv => sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n)), opts => cbSpellChecks(opts, book, sc.spellbook, 'cb-book'));
   }
   if (want){
     html += '<h4>' + (sc.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((b.spells || []).length, want, 'chosen');
     if (book){
       const opts = book.filter(n => !always.includes(n));
       html += opts.length ? cbSpellChecks(opts, b.spells || [], want, 'cb-spell') : '<div class="cb-dim">Write spells into the book first.</div>';
-    } else for (let lv = 1; lv <= maxLv; lv++){
-      const opts = sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n));
-      if (!opts.length) continue;
-      html += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + cbSpellChecks(opts, b.spells || [], want, 'cb-spell') + '</div>';
-    }
+    } else html += cbSpellRows(R, maxLv, b.spells, lv => sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n)), opts => cbSpellChecks(opts, b.spells || [], want, 'cb-spell'));
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
   return html + cbSecretsHtml() + cbArcanumHtml() + cbWizardPicksHtml() + cbMultiSpellsHtml() + fromFeats;
 };
+// The levels to list: up to what the class casts, and past it for any
+// picked spell that's now too high (a lower level), showing only those.
+function cbSpellRows(R, maxLv, chosen, optsAt, row){
+  const lv = n => (sktRulesSpell(R, n) || {}).level || 0;
+  const top = Math.max(maxLv, ...(chosen || []).map(lv));
+  let h = '';
+  for (let l = 1; l <= top; l++){
+    const high = l > maxLv, opts = high ? (chosen || []).filter(n => lv(n) === l) : optsAt(l);
+    if (opts.length) h += '<div class="cb-spl"><span class="cb-spl-l">Level ' + l + (high ? ' · too high' : '') + '</span>' + row(opts) + '</div>';
+  }
+  return h;
+}
 function cbSlotText(sc){
   return Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—';
 }
@@ -1080,19 +1084,13 @@ function cbMultiSpellsHtml(){
     const book = s.spellbook ? (m.spellbook && m.spellbook.length ? m.spellbook : (m.spells || [])) : null;
     if (s.spellbook){
       h += '<h4>Spellbook</h4>' + cbCounter(book.length, s.spellbook, 'in the book');
-      for (let lv = 1; lv <= s.maxSpellLevel; lv++){
-        const opts = sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n));
-        if (opts.length) h += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + chk(opts, book, s.spellbook, 'spellbook') + '</div>';
-      }
+      h += cbSpellRows(R, s.maxSpellLevel, book, lv => sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n)), opts => chk(opts, book, s.spellbook, 'spellbook'));
     }
     const want = s.prepared || s.known;
     if (want){
       h += '<h4>' + (s.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((m.spells || []).length, want, 'chosen');
       if (book) h += chk(book.filter(n => !always.includes(n)), m.spells, want, 'spells');
-      else for (let lv = 1; lv <= s.maxSpellLevel; lv++){
-        const opts = sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n));
-        if (opts.length) h += '<div class="cb-spl"><span class="cb-spl-l">Level ' + lv + '</span>' + chk(opts, m.spells, want, 'spells') + '</div>';
-      }
+      else h += cbSpellRows(R, s.maxSpellLevel, m.spells, lv => sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n)), opts => chk(opts, m.spells, want, 'spells'));
     }
     if (always.length) h += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
     return h;

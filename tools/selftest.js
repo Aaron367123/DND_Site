@@ -7999,6 +7999,37 @@
       } catch(e){ ok('round 45 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 46: picks over the limit after the limit drops ----------------
+    {
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const ab = { method: 'manual', base: { str: 10, dex: 10, con: 10, int: 16, wis: 16, cha: 16 } };
+        const mk = (R, ed, cls, L) => {
+          const b = Object.assign(sktBlankBuild(ed), { cls, level: L, abilities: JSON.parse(JSON.stringify(ab)) });
+          const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
+          b.cantrips = sktSpellOptions(R, b, 0).map(s => s.name).slice(0, sc.cantrips);
+          b.spells = [4, 3, 2, 1].flatMap(l => sktSpellOptions(R, b, l).map(s => s.name).slice(0, 3)).slice(0, sc.prepared || sc.known);
+          return b;
+        };
+        const rm = (b, R) => sktBuildTodo(b, R).filter(t => /^(\w+: )?remove /.test(t.what) && !t.soft).map(t => t.what);
+        const full = mk(R24, '2024', 'Cleric', 7);
+        ok('limit: a full list at the limit asks nothing removed', rm(full, R24).length === 0, JSON.stringify(rm(full, R24)));
+        full.level = 1;
+        const w = rm(full, R24);
+        ok('limit: lowering the level flags the extra cantrip', w.includes('remove 1 cantrip (3 allowed)'), JSON.stringify(w));
+        ok('limit: and the extra prepared spells', w.includes('remove 7 spells (4 allowed)'), JSON.stringify(w));
+        ok('limit: and the spells too high to cast now', w.some(x => /^remove 9 spells above level 1 \(/.test(x)), JSON.stringify(w));
+        const cl = mk(R14, '2014', 'Cleric', 3);
+        cl.abilities.base.wis = 10;
+        ok('limit: a 2014 cleric whose Wisdom drops prepares fewer', rm(cl, R14).includes('remove 3 spells (3 allowed)'), JSON.stringify(rm(cl, R14)));
+        const wz = mk(R24, '2024', 'Wizard', 7); wz.spellbook = wz.spells.slice(); wz.level = 1;
+        ok('limit: a wizard’s spellbook too', rm(wz, R24).includes('remove 5 spells from the spellbook (6 allowed)'), JSON.stringify(rm(wz, R24)));
+        ok('limit: the counter turns red and says how many to remove', /cb-counter over/.test(cbCounter(6, 4, 'chosen')) && /remove 2/.test(cbCounter(6, 4, 'chosen')) && !/over/.test(cbCounter(4, 4, 'chosen')));
+        const rows = cbSpellRows(R24, 1, ['Bless', 'Banishment'], () => ['Bless', 'Cure Wounds'], o => o.join('+'));
+        ok('limit: a spell now too high is listed to untick, alone on its row', /Level 4 · too high<\/span>Banishment</.test(rows) && /Level 1<\/span>Bless\+Cure Wounds/.test(rows) && !/Level [23]/.test(rows), rows);
+      } catch(e){ ok('round 46 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

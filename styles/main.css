@@ -4904,6 +4904,7 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .cb-inline{display:flex;align-items:center;gap:6px;margin:8px 0;font-size:var(--fs-sm);color:var(--text-muted)}
 .cb-counter{display:inline-block;font-size:var(--fs-xs);border:1px solid var(--warning);color:var(--warning);border-radius:999px;padding:1px 8px;margin:2px 0 6px}
 .cb-counter.ok{border-color:var(--success);color:var(--success)}
+.cb-counter.over{border-color:var(--danger);color:var(--danger)}
 .cb-feat{border-top:1px solid var(--border);padding:7px 0}
 .cb-ft summary{cursor:pointer;color:var(--text-dim);font-size:var(--fs-xs);margin-top:3px}
 .cb-ft div{font-size:var(--fs-sm);color:var(--text-muted);margin-top:4px;line-height:1.45}

@@ -2632,6 +2632,19 @@ function _sktCantripDice(s, level){
 // The builder asks these questions; the sheet is computed regardless. Each
 // entry names a step and what is missing, so the builder can show a count
 // on each step and refuse "Create" until the required ones are done.
+// Picks a class no longer allows: more cantrips or spells than it gives now
+// (a lower level, a lower casting score), or spells above the highest level
+// it can cast. Phrased for the to-do list.
+function sktSpellExcess(lst, s, R){
+  const out = [], n = k => (lst[k] || []).length, pl = (c, w) => c + ' ' + w + (c === 1 ? '' : 's');
+  const want = s.prepared || s.known;
+  if (n('cantrips') > s.cantrips) out.push('remove ' + pl(n('cantrips') - s.cantrips, 'cantrip') + ' (' + s.cantrips + ' allowed)');
+  if (s.spellbook && n('spellbook') > s.spellbook) out.push('remove ' + pl(n('spellbook') - s.spellbook, 'spell') + ' from the spellbook (' + s.spellbook + ' allowed)');
+  if (want && n('spells') > want) out.push('remove ' + pl(n('spells') - want, 'spell') + ' (' + want + ' allowed)');
+  const high = [].concat(lst.spells || [], lst.spellbook || []).filter((x, i, a) => a.indexOf(x) === i && ((sktRulesSpell(R, x) || {}).level || 0) > (s.maxSpellLevel || 0));
+  if (high.length) out.push('remove ' + pl(high.length, 'spell') + ' above level ' + (s.maxSpellLevel || 0) + ' (' + high.join(', ') + ')');
+  return out;
+}
 function sktBuildTodo(build, R){
   const todo = [];
   const cls = sktRulesClass(R, build.cls);
@@ -2664,6 +2677,7 @@ function sktBuildTodo(build, R){
       if (s.spellbook && (lst.spellbook || []).length < s.spellbook)
         todo.push({ step: 'spells', what: pre + (s.spellbook - (lst.spellbook || []).length) + ' spell(s) for the spellbook' });
       if (want && (lst.spells || []).length < want) todo.push({ step: 'spells', what: pre + (want - (lst.spells || []).length) + ' spell(s)', soft: true });
+      sktSpellExcess(lst, s, R).forEach(x => todo.push({ step: 'spells', what: pre + x }));
     });
   }
   sktFeatSpells(build, R).forEach(g => { if (g.missing) todo.push({ step: 'spells', what: 'the spells from ' + g.feat }); });
@@ -2881,7 +2895,7 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { sktSigned, sktDefineEffect, sktDefineChoice, sktBuildChoices, _fxPool, _fxAction, _fxNote, _fxCol, SKT_FEATURE_CHOICES,
                      sktRulesLoad, sktComputeCharacter, sktBuildEquipment, sktEquipmentOptions, sktBlankBuild, sktBuildTodo, sktBuildFeatures,
                      sktFeatureCoverage, sktRulesClass, sktRulesSubclass, sktSpellOptions, sktOptionalChoices,
-                     sktSpellsMatching, sktExpandedSpells, sktPassiveGrants, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
+                     sktSpellsMatching, sktExpandedSpells, sktPassiveGrants, sktSpellExcess, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
