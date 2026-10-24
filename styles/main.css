@@ -1174,6 +1174,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .party-grid.compact .char-header{flex:0 0 auto;gap:6px}
 .party-grid.compact .char-icon-btn{width:28px;height:28px}
 .party-grid.compact .char-icon-btn svg{width:18px;height:18px}
+.party-grid.compact .char-icon-btn .icon-img{width:100%;height:100%}
 .party-grid.compact .char-header-text{min-width:120px;max-width:200px}
 .party-grid.compact .char-name{font-size:var(--fs-lg);font-weight:600;line-height:1.1}
 .party-grid.compact .char-subline{font-size:var(--fs-2xs);line-height:1.1}
@@ -1762,6 +1763,18 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .hd-row .hd-pip.filled:hover{transform:scale(1.2)}
 .hd-row .hd-count{font-size:var(--fs-xs);color:var(--text-dim);min-width:32px;text-align:right}
 .hd-row .btn{font-size:var(--fs-xs);padding:2px 6px}
+/* Narrow cards (the grip goes down to 140px) reflow instead of overflowing.
+   The number and Temp side by side needed ~195px; a 210px card has 165, so
+   the Temp box hung off the card's edge. "Temp" now sits over its box (DDB's
+   way), which fits; narrower still, the box drops under the number.
+   The hit-dice row squeezed its dots into a column 22px wide while Long rest
+   kept its full width. The dots keep room for five in a row, and Long rest
+   moves to a line of its own when the row runs out. */
+.char-hp-big{flex-wrap:wrap;justify-content:center;gap:4px 8px}
+.char-hp-temp-row{flex-direction:column;gap:3px}
+.hd-row{flex-wrap:wrap;row-gap:5px}
+.hd-row .hd-pips{flex:1 1 0;min-width:65px}
+.hd-row .btn{margin-left:auto}
 
 /* ===== Status badges in the card header ===== */
 /* Row of active-state pills (concentration, rage, wild shape, inspiration).
@@ -1894,6 +1907,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
    one: reading down an 18-item inventory carried the controls off the top with
    it, and "Generate Shop" was somewhere above the fold. Measured 823px of
    overflow on a standard shop. */
+.shop-root{height:100%;container:shopwin / inline-size}
 .shop-layout{
   display:grid;grid-template-columns:220px 1fr;gap:12px;padding:12px;
   height:100%;min-height:0;box-sizing:border-box;
@@ -1938,11 +1952,18 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
    configure at the top, read the shop below, one scroll for the lot.
 
    Category and Rarity are dropped from the table here — not hidden data, just
-   not what you need at the counter. Item, price, stock and Buy are. */
-@media (max-width: 768px) and (pointer: coarse){
+   not what you need at the counter. Item, price, stock and Buy are.
+
+   Both follow the WINDOW's width, not the screen's. As a media query a Shop
+   window dragged to 520px on a monitor kept the 220px column, and the table
+   beside it wrapped item names over three lines and lost Price and Stock off
+   its right edge. */
+@container shopwin (max-width: 700px){
   .shop-layout{grid-template-columns:1fr; height:auto; min-height:100%; overflow-y:auto}
   .shop-controls{align-self:stretch; max-height:none; overflow:visible}
   .shop-display{overflow:visible}
+}
+@container shopwin (max-width: 520px){
   .shop-table th:nth-child(2), .shop-table td:nth-child(2),
   .shop-table th:nth-child(3), .shop-table td:nth-child(3){display:none}
 }
@@ -3271,9 +3292,21 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .loot-group .loot-item{border-radius:0;margin-bottom:0;border-top:none}
 .loot-group .loot-item:last-child{border-radius:0 0 4px 4px}
 /* ENCOUNTER */
+.enc-root{height:100%;container:encwin / inline-size}
 .enc-panel{display:flex;height:100%}
 .enc-left{width:220px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
 .enc-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
+/* A narrow window stacks the columns: party and monsters on top, the budget
+   below, one scroll for the lot. Side by side on a phone the 220px left column
+   left the budget 150px: the difficulty scale ran together as
+   "TRIVIALEASYMEDHARDDEADLY", the monster's HP vanished, and a saved
+   encounter's name broke one word per line. */
+@container encwin (max-width: 560px){
+  .enc-panel{flex-direction:column;height:auto}
+  .enc-left{width:auto;border-right:none;border-bottom:1px solid var(--border);overflow:visible}
+  .enc-right{overflow:visible}
+  .enc-monsters-list{flex:none;overflow:visible}
+}
 .enc-section{padding:10px;border-bottom:1px solid var(--border)}
 .enc-section h3{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:0 0 8px}
 .enc-monster-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:var(--fs-sm)}
@@ -3756,7 +3789,7 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
    right. Every rule below uses the shared tokens — this panel introduces no
    colours, sizes or radii of its own, because a panel that looks like a
    different app is exactly what four separate windows already felt like. */
-.tv-root { display:flex; flex-direction:column; height:100%; min-height:0; }
+.tv-root { display:flex; flex-direction:column; height:100%; min-height:0; container:tvroot / inline-size; }
 .tv-root-empty { justify-content:center; }
 
 /* Initiative strip. A horizontal ordered run because the order IS the
@@ -3815,11 +3848,11 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
    layout reports ~900px of it — enough to lay the panel out wider than the
    window and scroll it sideways. */
 .tv-actor { display:flex; flex-direction:column; min-height:0; min-width:0; gap:10px; }
-.tv-actor-head { display:flex; align-items:center; gap:12px; }
+.tv-actor-head { display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; }
 .tv-avatar { width:48px; height:48px; border-radius:var(--r-full); flex-shrink:0;
   background:linear-gradient(135deg,#3d2a2a,#6b3939); border:2px solid var(--accent);
   display:flex; align-items:center; justify-content:center; font-size:var(--fs-2xl); font-weight:600; }
-.tv-actor-id { flex:1; min-width:0; }
+.tv-actor-id { flex:1 1 130px; min-width:0; overflow-wrap:anywhere; }
 .tv-actor-name { font-size:var(--fs-3xl); font-weight:600; letter-spacing:-.01em; }
 .tv-actor-sub { font-size:var(--fs-sm); color:var(--text-muted); margin-top:1px; }
 .tv-vitals { display:flex; gap:8px; flex-shrink:0; }
@@ -4184,10 +4217,14 @@ select.tv-in.wide { width:126px; }
   display:inline-flex; align-items:center; gap:4px; }
 .tv-undo .ico { width:13px; height:13px; }
 
-/* Phone layout. Declared AFTER the defaults on purpose: a media query adds no
-   specificity, so an override written earlier loses to an equally-specific rule
-   declared later. */
-@media (max-width: 760px){
+/* Phone layout. Declared AFTER the defaults on purpose: a container query adds
+   no specificity, so an override written earlier loses to an equally-specific
+   rule declared later.
+   It follows the WINDOW's width, not the screen's. As a media query a Turn View
+   window dragged to 520px on a monitor kept two columns: the stat side got
+   230px and the HP and AC boxes sat on top of the creature's name. Below 640px
+   the two columns don't fit, whatever the screen is. */
+@container tvroot (max-width: 640px){
   /* One column, and the whole thing scrolls. grid-auto-rows:min-content plus
      overflow-y is load-bearing: the default `auto` rows get compressed when the
      container is shorter than the content, and the content then overflows its

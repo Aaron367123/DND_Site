@@ -8609,6 +8609,78 @@
         closePanel('combat');
       } catch(e){ ok('round 59 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
+    // -- Round 60: narrow windows and narrow cards reflow, nothing pokes out ----
+    {
+      const p0 = localStorage.getItem('skt-party-v1'), cw0 = state.settings.partyCardWidth, cmp0 = state.settings.partyCompact;
+      try {
+        const T = 'rgba(0, 0, 0, 0)', phone = innerWidth < 760;
+        const vis = el => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; const c = getComputedStyle(el); return c.visibility !== 'hidden' && c.display !== 'none'; };
+        const isBox = el => { const c = getComputedStyle(el); return c.backgroundColor !== T || (parseFloat(c.borderRightWidth) > 0 && c.borderRightColor !== T); };
+        const lab = el => el.tagName.toLowerCase() + '.' + String(el.className).split(' ')[0];
+        // spill: a control or text past the edge of the box it sits in.
+        // column: a row of 3+ small items (pips, chips) crushed to ≤2 a line.
+        const scan = (root, where, bad) => {
+          for (const el of root.querySelectorAll('*')){
+            if (!vis(el) || el.closest('svg, .map-token, .tv-map')) continue;
+            const pos = getComputedStyle(el).position;
+            if ((!el.children.length || /^(INPUT|SELECT|BUTTON|IMG)$/.test(el.tagName)) && pos !== 'absolute' && pos !== 'fixed'){
+              const r = el.getBoundingClientRect();
+              for (let a = el.parentElement; a && root.contains(a); a = a.parentElement){
+                if (a !== root && getComputedStyle(a).overflowX !== 'visible') break;
+                if (isBox(a)){ const ar = a.getBoundingClientRect(), o = Math.max(r.right - ar.right, ar.left - r.left);
+                  if (o > 1.5) bad.push(where + ': ' + lab(el) + ' out of ' + lab(a) + ' by ' + Math.round(o)); break; }
+              }
+            }
+            const kids = [...el.children].filter(vis), small = kids.filter(k => { const r = k.getBoundingClientRect(); return r.width <= 28 && r.height <= 28; });
+            if (small.length >= 3 && small.length >= kids.length * 0.8){
+              const rows = {}; small.forEach(k => { const t = Math.round(k.getBoundingClientRect().top / 4); rows[t] = (rows[t] || 0) + 1; });
+              const n = Object.values(rows); if (n.length >= 3 && Math.max(...n) <= 2) bad.push(where + ': ' + lab(el) + ' crushed to a column');
+            }
+          }
+        };
+        const P = panelDefs.party;
+        openPanel('party'); await sleep(250);
+        const pw = P._body.closest('.window');
+        if (!phone) Object.assign(pw.style, { left: '60px', top: '0px', width: '1200px', height: '600px' });
+        const pb = [];
+        for (const cw of (phone ? [0] : [140, 200, 260])){ if (cw) state.settings.partyCardWidth = cw; P._render(); await sleep(60); scan(pw, 'party cards ' + (cw || 'phone'), pb); }
+        state.settings.partyCompact = true; P._render(); await sleep(60); scan(pw, 'party compact', pb);
+        state.settings.partyCompact = cmp0; state.settings.partyCardWidth = cw0; P._render();
+        ok('narrow: party cards at every width keep Temp, hit dice and resources inside the card', pb.length === 0, [...new Set(pb)].slice(0, 4).join(' | '));
+        const card = P._body.querySelector('.char-card .hd-pips');
+        if (card){ const tops = new Set([...card.children].map(p => Math.round(p.getBoundingClientRect().top))); ok('narrow: the hit-dice dots stay one row for a level-6 character', [...card.children].length > 6 || tops.size === 1, tops.size + ' rows'); }
+        closePanel('party');
+        // Every window, narrow
+        const wb = [];
+        for (const id of ['adventures','battlemap','bestiary','books','combat','encounter','handouts','library','loot','notes','npcgen','npclib','shop','soundboard','time','turnview','world']){
+          openPanel(id); await sleep(250);
+          const B = panelDefs[id] && panelDefs[id]._body; if (!B) continue;
+          const w = B.closest('.window');
+          for (const W of (phone ? [0] : [360, 520])){
+            if (W){ Object.assign(w.style, { left: '60px', top: '0px', width: W + 'px', height: '640px' }); await sleep(120); }
+            scan(w, id + (W ? '@' + W : ' phone'), wb);
+          }
+          closePanel(id);
+        }
+        ok('narrow: no window lets a control or text poke out of its box, or crushes a row into a column', wb.length === 0, [...new Set(wb)].slice(0, 5).join(' | '));
+        // The three that kept two columns when the window (not the screen) was narrow
+        const lay = [];
+        for (const [id, sel, one] of [['turnview', '.tv-main', s => s.gridTemplateColumns.split(' ').length === 1], ['shop', '.shop-layout', s => s.gridTemplateColumns.split(' ').length === 1], ['encounter', '.enc-panel', s => s.flexDirection === 'column']]){
+          openPanel(id); await sleep(250);
+          const B = panelDefs[id]._body, w = B.closest('.window');
+          if (!phone) Object.assign(w.style, { left: '60px', top: '0px', width: '520px', height: '640px' });
+          await sleep(120);
+          const el = B.querySelector(sel); if (el && !one(getComputedStyle(el))) lay.push(id);
+          closePanel(id);
+        }
+        ok('narrow: Turn View, Shop and Encounter go to one column in a narrow window', lay.length === 0, lay.join(', '));
+      } catch(e){ ok('round 60 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        state.settings.partyCardWidth = cw0; state.settings.partyCompact = cmp0;
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

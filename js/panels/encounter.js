@@ -115,7 +115,9 @@ registerPanel('encounter',{
     const xp=this._calcXP();
     const system=this._systemMode();
     const diff=system==='2024' ? this._difficulty2024(xp.raw) : this._difficulty(xp.adjusted);
-    b.innerHTML=`<div class="enc-panel">
+    // .enc-root is there to be measured: the two columns stack when the
+    // window is narrow (a container query in main.css).
+    b.innerHTML=`<div class="enc-root"><div class="enc-panel">
       <div class="enc-left">
         <div class="enc-section">
           <h3>Party</h3>
@@ -183,7 +185,7 @@ registerPanel('encounter',{
           </div>
         </div>
       </div>
-    </div>`;
+    </div></div>`;
     // Party inputs
     b.querySelector('#enc-level').addEventListener('change',e=>{this._partyLevel=parseInt(e.target.value)||6;this._save();this._render();});
     b.querySelector('#enc-size').addEventListener('change',e=>{this._partySize=parseInt(e.target.value)||5;this._save();this._render();});

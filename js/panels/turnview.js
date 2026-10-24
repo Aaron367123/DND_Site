@@ -1628,7 +1628,12 @@ registerPanel('turnview', {
   // "enlarged" version was a 210px-wide box thrown on top of the controls —
   // it cost more than it showed. 760px is the same breakpoint .tv-main uses
   // to go single-column, so the CSS and this agree about what "small" means.
-  _canExpandMap(){ return !matchMedia('(max-width: 760px)').matches; },
+  // The same width the one-column layout switches at (the tvroot container
+  // query in main.css): the window's, not the screen's.
+  _canExpandMap(){
+    const r = this._body && this._body.querySelector('.tv-root');
+    return r ? r.clientWidth > 640 : !matchMedia('(max-width: 760px)').matches;
+  },
   _mapHint(onMap){
     if (!onMap) return 'no tokens on the battle map';
     if (this._mapBig) return 'drag a token — reach updates live, and leaving it provokes';

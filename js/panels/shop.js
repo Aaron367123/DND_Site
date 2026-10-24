@@ -30,7 +30,10 @@ registerPanel('shop',{
   _render(){
     const b=this._body;if(!b)return;
     const types=Object.keys(ITEM_CATALOG);
-    b.innerHTML=`<div class="shop-layout">
+    // .shop-root is only there to be measured: the layout follows the
+    // window's width (a container query in main.css), and a container can't
+    // restyle itself.
+    b.innerHTML=`<div class="shop-root"><div class="shop-layout">
       <div class="shop-controls">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px">
           <span class="field-label" style="margin:0">Shop</span>
@@ -47,7 +50,7 @@ registerPanel('shop',{
         ${this._renderSavedShops()}
       </div>
       <div class="shop-display" id="shop-display">${this._renderDisplay()}</div>
-    </div>`;
+    </div></div>`;
     b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._invLimit=20;this._generate();});
     b.querySelector('[data-act="settings"]').addEventListener('click',e=>{e.stopPropagation();this._openSettings();});
     b.querySelector('[data-act="save-shop"]')?.addEventListener('click', () => this._saveCurrentShop());
