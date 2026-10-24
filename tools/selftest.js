@@ -8554,6 +8554,28 @@
       }
     }
 
+    // -- Round 57: every dropdown has one arrow, focused or not ---------------
+    {
+      try {
+        const bad = [];
+        const check = where => document.querySelectorAll('select').forEach(s => {
+          if (!s.offsetParent || s.classList.contains('party-hp-type')) return;   // that one is a label with an invisible select over it
+          const look = () => { const c = getComputedStyle(s); return c.backgroundImage === 'none' ? 'no arrow' : c.backgroundRepeat !== 'no-repeat' ? 'arrow tiles' : parseFloat(c.paddingRight) < 18 ? 'arrow over the text' : ''; };
+          const a = look(); s.focus(); const b = look(); s.blur();
+          if (a || b) bad.push(where + ' ' + (s.id || s.className || 'select') + ': ' + (a || '') + (b ? ' (focused: ' + b + ')' : ''));
+        });
+        await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
+        CB.build.cls = 'Wizard'; CB.build.level = 5; cbQuickBuild();
+        for (const st of CB_STEPS){ CB.step = st.id; cbRender(); await sleep(20); check('builder ' + st.id); }
+        cbClose();
+        for (const id of ['encounter', 'loot', 'world']){ openPanel(id); await sleep(300); check(id); closePanel(id); }
+        document.getElementById('settings-btn').click(); await sleep(200); check('settings');
+        document.getElementById('close-drawer')?.click(); await sleep(100);
+        ok('dropdowns: every one shows a single arrow, focused or not', bad.length === 0, bad.slice(0, 5).join(' | '));
+      } catch(e){ ok('round 57 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

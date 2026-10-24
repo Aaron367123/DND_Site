@@ -50,7 +50,7 @@ input:hover:not(:focus),textarea:hover:not(:focus){border-color:var(--text-dim)}
    border so the user has feedback on every interaction. */
 select{appearance:none;-webkit-appearance:none;-moz-appearance:none;padding-right:26px;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
 select:hover:not(:focus){border-color:var(--text-dim);background-color:var(--panel-3)}
-select:focus{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23d4a574' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
+select:focus{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23d4a574' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
 /* Native <option> styling — most browsers (Chrome on Windows especially)
    draw the open dropdown with default light colors. color-scheme:dark on
    :root tells Chromium to use dark-themed popups; the explicit option bg
@@ -2246,7 +2246,7 @@ input.card-name-input.clickable:hover{background:rgba(212,165,116,.08)}
 /* Unify form controls inside the drawer */
 .drawer input[type="text"],
 .drawer input[type="number"],
-.drawer select{height:28px;padding:4px 8px;border-radius:var(--r-sm);font-size:var(--fs-md);background:var(--panel);border:1px solid var(--border);color:var(--text);outline:none;transition:border-color .12s,box-shadow .12s}
+.drawer select{height:28px;padding:4px 26px 4px 8px;border-radius:var(--r-sm);font-size:var(--fs-md);background-color:var(--panel);border:1px solid var(--border);color:var(--text);outline:none;transition:border-color .12s,box-shadow .12s}
 .drawer input[type="text"]:focus,
 .drawer input[type="number"]:focus,
 .drawer select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(212,165,116,.18)}
@@ -3225,7 +3225,7 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .cg-member{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-md);color:var(--text);user-select:none}
 .cg-member:hover{background:var(--panel-3)}
 .cg-member input[type=checkbox]{margin:0;cursor:pointer}
-.loot-item .loot-assign{width:120px;max-width:100%;font-size:var(--fs-xs);padding:2px 4px;background:var(--panel-3);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);cursor:pointer}
+.loot-item .loot-assign{width:120px;max-width:100%;font-size:var(--fs-xs);padding:2px 20px 2px 4px;background-color:var(--panel-3);background-position:right 6px center;border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);cursor:pointer}
 .loot-item.assigned{border-left:3px solid var(--accent)}
 /* Mark-paid round button + paid-row styling. Paid rows fade and strike
    through the name so the user can still see what was on the table without
@@ -4844,7 +4844,9 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 .cb-new{border:1px solid var(--accent);border-radius:var(--r-sm);padding:10px;margin-bottom:12px;background:var(--panel-2)}
 .cb-row{display:flex;gap:10px;flex-wrap:wrap}
 .cb-f{display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:var(--fs-sm);color:var(--text-muted)}
-.cb-f input,.cb-sel{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);padding:7px 9px;font-family:inherit;font-size:var(--fs-md);max-width:100%}
+.cb-f input,.cb-sel{background-color:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);padding:7px 9px;font-family:inherit;font-size:var(--fs-md);max-width:100%}
+/* A dropdown keeps room for its arrow (the base select rule draws it). */
+select.cb-sel{padding-right:28px}
 .cb-grow{flex:1;min-width:200px}
 .cb-seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;margin:4px 0}
 .cb-seg button{background:var(--panel-2);border:none;border-right:1px solid var(--border);color:var(--text-muted);padding:7px 12px;cursor:pointer;font-family:inherit;font-size:var(--fs-sm)}
@@ -5169,7 +5171,7 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-stbtn.on { background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:600; }
 .cs-stbtn.on i { color:inherit; }
 .cs-stbtn:disabled { cursor:default; opacity:.8; }
-.cs-states .cb-sel { width:auto; flex:0 0 auto; padding:2px 6px; font-size:var(--fs-sm); }
+.cs-states .cb-sel { width:auto; flex:0 0 auto; padding:2px 24px 2px 6px; font-size:var(--fs-sm); }
 .cs-adv { font-style:normal; font-size:var(--fs-xs); font-weight:700; color:var(--success); border:1px solid var(--success); border-radius:3px; padding:0 3px; margin-left:4px; }
 .cs-savemods { font-size:var(--fs-sm); color:var(--text-muted); margin:4px 0 8px; display:flex; flex-direction:column; gap:3px; }
 .cs-savemods b { color:var(--text); font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.04em; }

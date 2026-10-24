@@ -156,7 +156,7 @@ registerPanel('encounter',{
           ${this._renderEncStats(system, xp, diff)}
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <label style="font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Scale to:</label>
-            <select id="enc-scale-target" style="font-size:var(--fs-sm);padding:3px 6px;flex:0 0 auto;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
+            <select id="enc-scale-target" style="font-size:var(--fs-sm);padding:3px 24px 3px 6px;flex:0 0 auto;background-color:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
               <option value="">—</option>
               ${(system==='2024'?['Moderate','High','Deadly']:['Easy','Medium','Hard','Deadly']).map(o=>`<option value="${o}">${o}</option>`).join('')}
             </select>
