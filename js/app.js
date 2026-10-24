@@ -72,6 +72,8 @@ function init(){
   load();
   initRealtime();
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>btn.addEventListener('click',()=>togglePanel(btn.dataset.panel)));
+  // The top-right toolbar's tools into the dock, on a wide screen.
+  if (typeof sktDockTools === 'function') sktDockTools();
   initDockNames();
   initUndoKeys();
   if (typeof initPresence === 'function') initPresence();

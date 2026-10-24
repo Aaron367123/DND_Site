@@ -227,7 +227,10 @@ function sktPresenceToggle(){
   document.body.appendChild(pop);
   const anchor = document.getElementById('sync-status');
   const r = anchor ? anchor.getBoundingClientRect() : null;
-  if (r){
+  if (r && anchor.closest('.dock-tools')){
+    pop.style.left = (r.right + 8) + 'px';
+    pop.style.top = Math.max(8, Math.min(r.top, window.innerHeight - pop.offsetHeight - 8)) + 'px';
+  } else if (r){
     pop.style.top = (r.bottom + 6) + 'px';
     pop.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
   }

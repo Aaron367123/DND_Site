@@ -8486,6 +8486,43 @@
       finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
 
+    // -- Round 54: the toolbar's tools live in the dock ----------------------
+    {
+      const app = document.querySelector('.app'), h0 = app.style.height;
+      try {
+        const id = s => document.getElementById(s);
+        ok('dock tools: nothing floats in the top-right corner', getComputedStyle(id('float-toolbar')).display === 'none' && document.body.classList.contains('tools-in-dock'));
+        ok('dock tools: search at the top of the dock', id('dock-tools-top').contains(id('float-search-btn')));
+        ok('dock tools: campaign, sync, player view, help and settings at the bottom', ['campaign-btn', 'sync-status', 'player-view-btn', 'tutorial-btn', 'settings-btn'].every(k => id('dock-tools-bottom').contains(id(k))));
+        ok('dock tools: each one named, as the panel buttons are', ['float-search-btn', 'campaign-btn', 'sync-status', 'player-view-btn', 'tutorial-btn', 'settings-btn'].every(k => id(k).dataset.label && id(k).querySelector('.dt-label')));
+        ok('dock tools: the campaign button is named for the campaign, with an icon', id('campaign-btn').dataset.label === sktActiveCampaignName() && !!id('campaign-btn').querySelector('.dt-ico'));
+        _setSyncStatus('live'); await sleep(30);
+        const live = id('sync-status').dataset.label;
+        _setSyncStatus('offline'); await sleep(30);
+        ok('dock tools: the sync button’s name follows the connection', live === 'Sync: Live' && id('sync-status').dataset.label === 'Sync: Offline', live + ' / ' + id('sync-status').dataset.label);
+        ok('dock tools: no native tooltip on top of the hover label', !id('settings-btn').hasAttribute('title') && !id('campaign-btn').hasAttribute('title') && !!id('settings-btn').getAttribute('aria-label'));
+        sktRefreshCampaignChip(); await sleep(30);   // it sets the chip's tooltip again
+        ok('dock tools: nor after the campaign chip is refreshed', !id('campaign-btn').hasAttribute('title') && /Campaign: /.test(id('campaign-btn').getAttribute('aria-label') || ''));
+        // Who's connected opens beside the chip, not off the bottom of the screen.
+        sktPresenceToggle(); await sleep(20);
+        const pp = id('presence-pop').getBoundingClientRect(), chip = id('sync-status').getBoundingClientRect();
+        ok('dock tools: who’s connected opens beside the sync button, on screen', pp.left >= chip.right && pp.bottom <= innerHeight && pp.top >= 0, JSON.stringify([Math.round(pp.left), Math.round(pp.top), Math.round(pp.bottom)]));
+        sktPresenceClose();
+        // The full search box, centred.
+        sktOpenFullSearch('goblin'); await sleep(80);
+        const sw = id('search-wrap').getBoundingClientRect();
+        ok('dock tools: the full search opens centred over the workspace', getComputedStyle(id('search-wrap')).display !== 'none' && sw.width >= 600 && Math.abs((sw.left + sw.right) / 2 - innerWidth / 2) < 4, JSON.stringify([Math.round(sw.left), Math.round(sw.width)]));
+        document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); await sleep(30);
+        ok('dock tools: and closes on a click away', !id('search-wrap').classList.contains('open'));
+        // A short screen: the panel list scrolls; search and settings stay in reach.
+        app.style.height = '600px'; await sleep(60);
+        const set = id('settings-btn').getBoundingClientRect(), btn = document.querySelector('.dock-panels .dock-btn[data-panel="combat"]').getBoundingClientRect();
+        const pl = document.querySelector('.dock-panels');
+        ok('dock tools: on a short screen the panels scroll and the tools stay on screen', set.bottom <= 600 && btn.height >= 30 && pl.scrollHeight > pl.clientHeight, Math.round(set.bottom) + ' / btn ' + Math.round(btn.height));
+      } catch(e){ ok('round 54 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally { app.style.height = h0; if (typeof sktPresenceClose === 'function') sktPresenceClose(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

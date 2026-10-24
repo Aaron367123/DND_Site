@@ -1,7 +1,7 @@
 // ============================================================
 // TUTORIAL — guided tour of every panel and global feature.
 // ============================================================
-// Triggered from the ❓ button in the top toolbar, or auto-shown
+// Triggered from the ❓ button (in the dock; the top-right pill on a phone), or auto-shown
 // on a user's first visit (gated by localStorage). Each page is
 // a self-contained chunk of HTML; navigation is prev/next.
 
@@ -20,7 +20,7 @@ const TUTORIAL_PAGES = [
       <p style="color:var(--text-muted)">This tour takes about a minute. Use
       <strong>Next</strong> / <strong>Prev</strong> to flip pages, or <strong>Skip</strong>
       to dismiss it. You can re-open the tutorial any time from the
-      <strong>❓</strong> button in the top toolbar.</p>
+      <strong>❓</strong> button at the bottom of the dock on the left (top right on a phone).</p>
     `,
   },
   {
@@ -257,7 +257,7 @@ const TUTORIAL_PAGES = [
     target: '#player-view-btn, .float-toolbar',
     icon: '🖥',
     body: `
-      <p>Click <strong>🖥 Player View</strong> in the top toolbar to open a separate window
+      <p>Click <strong>🖥 Player View</strong> at the bottom of the dock to open a separate window
       that mirrors only the windows you've marked with the <strong>👁 share</strong> icon —
       perfect for a TV at the table or a streamed call.</p>
       <p>The player tab is <strong>read-only by design</strong>: the battle-map toolbar there is
@@ -276,7 +276,7 @@ const TUTORIAL_PAGES = [
     target: '#settings-btn',
     icon: '⚙',
     body: `
-      <p>The <strong>⚙</strong> button in the top toolbar opens settings:</p>
+      <p>The <strong>⚙</strong> button at the bottom of the dock opens settings:</p>
       <ul>
         <li><strong>Theme</strong> — 8 presets (Forest, Royal, Sanguine, Arcane, Parchment, …) or pick custom accent / panel colors.</li>
         <li><strong>Currency &amp; jitter</strong> for the shop generator.</li>

@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
-<link rel="stylesheet" href="styles/main.css?v=88cf5a71b5">
+<link rel="stylesheet" href="styles/main.css?v=6ba67af644">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -135,12 +135,18 @@
 
   <!-- DOCK -->
   <div class="panel-dock">
+    <!-- The toolbar's tools on a wide screen (js/ui/dock-tools.js): search
+         here, the rest at the bottom. -->
+    <div class="dock-tools dock-tools-top" id="dock-tools-top"></div>
     <!-- Workspace switcher. Populated by js/ui/workspaces.js. -->
     <div class="ws-switch" id="ws-switch"></div>
     <!-- Grouped, and each button carries its name: shown beside the icon when
          the dock is widened (the button at the bottom), or as an instant
          label on hover when it is not. Order is by what you reach for
          together, not by when each panel was added. -->
+    <!-- The panels: this part scrolls on a short screen, so search above
+         and the tools below always stay in reach. -->
+    <div class="dock-panels">
     <div class="dock-divider" data-group="Combat"><span class="dock-group-label">Combat</span></div>
     <button class="dock-btn" data-panel="combat" data-label="Combat Tracker" title="Combat Tracker"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-combat"/></svg><span class="dock-label">Combat Tracker</span></button>
     <button class="dock-btn" data-panel="turnview" data-label="Turn View" title="Turn View — run one creature's turn on one surface"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-turn"/></svg><span class="dock-label">Turn View</span></button>
@@ -159,6 +165,8 @@
     <button class="dock-btn" data-panel="bestiary" data-label="Bestiary"   title="Bestiary"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-paw"/></svg><span class="dock-label">Bestiary</span></button>
     <button class="dock-btn" data-panel="library" data-label="Library" title="Library — the books and the adventures"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-books"/></svg><span class="dock-label">Library</span></button>
     <div class="spacer"></div>
+    </div>
+    <div class="dock-tools dock-tools-bottom" id="dock-tools-bottom"></div>
     <button class="dock-btn" id="dock-expand-btn" data-label="Show names" title="Show panel names" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sidebar"/></svg><span class="dock-label">Hide names</span></button>
     <button class="dock-btn" id="reset-layout-btn" data-label="Reset layout" title="Reset layout"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg><span class="dock-label">Reset layout</span></button>
   </div>
@@ -458,10 +466,11 @@
 <script defer src="js/player/player-app.js?v=2e7e31f6c1"></script>
 <script defer src="js/ui/player-view.js?v=3c47cb84bd"></script>
 <script defer src="js/sync/realtime.js?v=62f2e30973"></script>
-<script defer src="js/sync/presence.js?v=3c6820c9d8"></script>
-<script defer src="js/ui/tutorial.js?v=496c1bc236"></script>
+<script defer src="js/sync/presence.js?v=50e9bead2e"></script>
+<script defer src="js/ui/tutorial.js?v=7427317caa"></script>
 <script defer src="js/ui/onboarding.js?v=42199a671a"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->
-<script defer src="js/app.js?v=77f875f973"></script>
+<script defer src="js/ui/dock-tools.js?v=966a634053"></script>
+<script defer src="js/app.js?v=2406de712f"></script>
 </body>
 </html>
