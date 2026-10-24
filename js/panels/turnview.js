@@ -1092,7 +1092,7 @@ registerPanel('turnview', {
       const p = this._partyOf(c);
       const rows = (p && p.sheet && Array.isArray(p.sheet.attacks)) ? p.sheet.attacks : [];
       return rows.filter(a => a && a.name).map(a => ({
-        name: a.name, pc: true,
+        name: a.name, pc: true, str: !!a.str, spell: !!a.spell,
         bonus: parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0,
         dmgText: a.damage || '',
       }));
@@ -2314,6 +2314,9 @@ registerPanel('turnview', {
     if (asked > 0) advWhy.unshift('called');
     if (asked < 0) disWhy.unshift('called');
     if (t.dodging) disWhy.push('target dodging');
+    const pcSheet = a.pc ? ((this._partyOf(c) || {}).sheet || {}) : {};
+    const atkTags = ['attack', a.spell ? 'attack:spell' : a.str ? 'attack:str' : ''];
+    (pcSheet.rollAdv || []).forEach(x => { if ((x.on || []).some(k => atkTags.includes(k))) advWhy.push(x.label); });
     const adv = advWhy.length > 0, dis = disWhy.length > 0;
     const mode = (adv && dis) ? 0 : adv ? 1 : dis ? -1 : 0;
     let nat = this._d(20);
@@ -2338,7 +2341,10 @@ registerPanel('turnview', {
     // A multiattack is one action for the whole sequence, not one per swing.
     if (!o.queued || (this._queue && this._queue.i === 0)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
-    const total = nat + bonus;
+    // Dice a state adds to the roll (Bless's d4).
+    const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
+    if (extra.length) hitNote = (hitNote ? hitNote + ' · ' : '') + extra.map(x => x.label + ' +' + x.n).join(', ');
+    const total = nat + bonus + extra.reduce((s, x) => s + x.n, 0);
     // "Any attack that hits a paralysed or unconscious creature is a
     // critical hit if the attacker is within 5 feet of it." It has to be a
     // hit first, so this is applied after the comparison and not before.
@@ -2557,7 +2563,12 @@ registerPanel('turnview', {
   _rollDeathSave(){
     const c = this._active(); if (!this._isDowned(c)) return;
     this._snapshot(`${c.name} · death save`);
-    const nat = this._d(20);
+    // A PC with advantage on death saves (Durable, Survivor) rolls twice.
+    const pc = this._partyOf(c);
+    const by = (((pc || {}).sheet || {}).rollAdv || []).filter(x => (x.on || []).includes('death')).map(x => x.label);
+    const d1 = this._d(20), d2 = by.length ? this._d(20) : null;
+    const nat = d2 == null ? d1 : Math.max(d1, d2);
+    const advNote = d2 == null ? '' : ` (advantage, ${by.join(', ')}: ${d1} / ${d2})`;
     const C = panelDefs.combat;
     if (nat === 20){
       // Back on their feet at 1 HP, saves cleared — the one result that isn't
@@ -2566,7 +2577,7 @@ registerPanel('turnview', {
       c.deathSaves = null;
       this._applying = true;
       try { C._applyHpDelta(i, 1, null); } finally { this._applying = false; }
-      this._setResult(`<span class="hit">Natural 20</span> — <strong>${esc(c.name)}</strong> is conscious at 1 HP.`, true);
+      this._setResult(`<span class="hit">Natural 20</span> — <strong>${esc(c.name)}</strong> is conscious at 1 HP.${esc(advNote)}`, true);
       this._log.unshift(`<strong>${esc(c.name)}</strong> death save — <strong>natural 20</strong>, up at 1 HP`);
     } else {
       const kind = nat >= 10 ? 'success' : 'fail';
@@ -2575,7 +2586,7 @@ registerPanel('turnview', {
       const word = nat === 1 ? 'natural 1 — two failures' : (kind === 'success' ? 'success' : 'failure');
       this._setResult(`Death save <strong>${nat}</strong> — ${esc(word)}${
         outcome === 'stable' ? '. <span class="hit">Stable.</span>' :
-        outcome === 'dead' ? '. <span class="miss">Dead.</span>' : '.'}`, true);
+        outcome === 'dead' ? '. <span class="miss">Dead.</span>' : '.'}${esc(advNote)}`, true);
       this._log.unshift(`<strong>${esc(c.name)}</strong> death save <strong>${nat}</strong> — ${esc(word)}${outcome ? ' · ' + outcome : ''}`);
     }
     save(); C._render?.(); this._render();

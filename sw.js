@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'bc0f81e549';
+const BUILD = 'b3b812c071';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=c8c6a01b73',
@@ -50,12 +50,12 @@ const PRECACHE = [
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
   'js/core/window-manager.js?v=cca9e98e31',
-  'js/panels/combat.js?v=3c07bb97fd',
+  'js/panels/combat.js?v=1445827151',
   'js/panels/attacks.js?v=57acabc3ca',
   'js/generated/reactions.js?v=faa668dc18',
   'js/generated/rules.js?v=8efb8beae9',
-  'js/panels/turnview.js?v=ee48d66c40',
-  'js/panels/party.js?v=e64f3f13d2',
+  'js/panels/turnview.js?v=8e7c9a5fce',
+  'js/panels/party.js?v=2322263f69',
   'js/panels/shop.js?v=fadf7d5fe3',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -85,9 +85,9 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=07664d648a',
   'js/ui/command-palette.js?v=8aded06220',
-  'js/features/char-rules.js?v=7ea307a661',
-  'js/features/char-effects.js?v=c5f2780253',
-  'js/features/char-sheet.js?v=daa9d0a5da',
+  'js/features/char-rules.js?v=899e4b0d88',
+  'js/features/char-effects.js?v=7db79e629f',
+  'js/features/char-sheet.js?v=af48e92cc0',
   'js/features/char-builder.js?v=e55ef14a79',
   'js/features/pdf-import.js?v=06787122c5',
   'js/player/player-app.js?v=2e7e31f6c1',

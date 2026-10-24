@@ -1697,7 +1697,7 @@ function sktSaveAdvantages(text){
 }
 function _sktSaveAdv(ctx, a, src){
   const names = a.abs.map(k => SKT_AB_NAME[k] || k);
-  if (a.death) ctx.saveMods.push({ abs: ['death'], text: 'Advantage on death saving throws', src });
+  if (a.death) ctx.rollAdv.push({ on: ['death'], label: src });
   else if (a.conc) ctx.rollAdv.push({ on: ['conc'], label: src });
   else if (a.auto) ctx.rollAdv.push({ on: a.abs.length ? a.abs.map(k => 'save:' + k) : ['save'], label: src });
   else ctx.saveMods.push({ abs: a.abs.length ? a.abs : ['all'], text: 'Advantage on ' + (names.length ? names.join(', ').replace(/, ([^,]*)$/, ' and $1') + ' saves' : 'saving throws') + ' ' + a.when, src });
@@ -1733,9 +1733,8 @@ sktDefineEffect(['class:barbarian:Danger Sense'], ctx => {
   else ctx.rollAdv.push({ on: ['save:dex'], label: 'Danger Sense' });
 });
 sktDefineEffect(['class:barbarian:Feral Instinct'], ctx => ctx.rollAdv.push({ on: ['init'], label: 'Feral Instinct' }));
-sktDefineEffect(['class:barbarian:Reckless Attack'], ctx => {
-  ctx.resources.push({ name: 'Reckless Attack', type: 'toggle', current: 1, max: 1, recharge: 'turn' });
-});
+// An on/off state (char-effects.js): advantage on Strength attacks.
+sktDefineEffect(['class:barbarian:Reckless Attack'], () => {});
 sktDefineEffect(['class:barbarian:Primal Champion'], ctx => { ctx.abilityBonus.str += 4; ctx.abilityBonus.con += 4; ctx.abilityCapBonus.str = 24; ctx.abilityCapBonus.con = 24; });
 sktDefineEffect(['2014:class:barbarian:Brutal Critical'], ctx => {
   const n = ctx.level >= 17 ? 3 : ctx.level >= 13 ? 2 : 1;
@@ -2682,7 +2681,7 @@ function sktBuildAttacks(ctx, gear, sc){
       versatile: w.dmg2 ? w.dmg2 + (dmgBonus ? sktSigned(dmgBonus) : '') : null,
       range: w.range || null,
       mastery: (ctx.build.masteries || []).map(s => s.toLowerCase()).includes(w.name.toLowerCase()) ? mastery : '',
-      props, _ab: ab, _flat: flat,
+      props, str: !ranged && ab === m.str, _ab: ab, _flat: flat,
     });
   });
   // Two light melee weapons: a bonus-action attack with the other one, its
@@ -2706,7 +2705,7 @@ function sktBuildAttacks(ctx, gear, sc){
   // Strength and Dexterity.
   const uab = ctx.martialArts ? Math.max(m.str, m.dex) : m.str;
   const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
-  out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb),
+  out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb), str: uab === m.str,
              damage: (ctx.martialArts ? ctx.martialArtsDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
   // Attack cantrips the character knows.
   if (sc) (sc.cantripLists || [{ names: ctx.build.cantrips || [], attack: sc.attack, dc: sc.dc }]).forEach(list => list.names.forEach(n => {

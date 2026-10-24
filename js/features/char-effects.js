@@ -440,6 +440,10 @@
       ctx.rollAdv.push({ on: ['ab:str', 'save:str'], label: 'Rage' });
       if (has(ctx, 'Divine Fury')) ctx.extraDamage.push({ label: 'Divine Fury', dice: '1d6+' + Math.floor(ctx.classLevel('barbarian') / 2) + ' radiant', note: 'the first creature you hit each turn while raging' });
     } });
+  // Until the start of your next turn: the combat tracker turns it off then.
+  st({ key: 'Reckless Attack', label: 'Reckless Attack', has: ctx => has(ctx, 'Reckless Attack'),
+    desc: ctx => 'Advantage on ' + (ctx.edition === '2014' ? 'melee weapon attacks' : 'attacks') + ' using Strength this turn; attacks against you have advantage until your next turn.',
+    apply: ctx => ctx.rollAdv.push({ on: ['attack:str'], label: 'Reckless Attack' }) });
   st({ key: 'Bladesong', label: 'Bladesong', resource: 'Bladesong', has: ctx => has(ctx, 'Bladesong'),
     desc: ctx => '+' + abm(ctx, 'int') + ' AC and to concentration saves, +10 ft speed, advantage on Acrobatics. Not in medium or heavy armour' + (ctx.edition === '2014' ? ' or with a shield.' : '.'),
     apply: ctx => {

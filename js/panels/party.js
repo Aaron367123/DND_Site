@@ -3855,8 +3855,16 @@ function sktAddPartyDeathSave(pc, kind, n){
   if (ds.fail >= 3){ pc.deathSaves = null; pc.dead = true; return 'dead'; }
   return null;
 }
+// A death save's d20: twice, the higher kept, when something gives
+// advantage on death saves (Durable, Survivor…).
+function sktDeathSaveD20(pc){
+  const by = (((pc || {}).sheet || {}).rollAdv || []).filter(x => (x.on || []).includes('death')).map(x => x.label);
+  const a = sktD(20); if (!by.length) return { nat: a, note: '' };
+  const b = sktD(20);
+  return { nat: Math.max(a, b), note: ' (advantage, ' + by.join(', ') + ': ' + a + ' / ' + b + ')' };
+}
 function sktRollDeathSave(pc){
-  const nat = sktD(20);
+  const d = sktDeathSaveD20(pc), nat = d.nat;
   const C = panelDefs.combat;
   const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
   const kind = nat >= 10 ? 'success' : 'fail';
@@ -3868,12 +3876,12 @@ function sktRollDeathSave(pc){
       pc.deathSaves = null; pc.stable = false; pc.hp = 1;
       if (pi >= 0) syncPartyToCombat(pi);
     }
-    return { nat, msg: '20 — natural 20, conscious at 1 HP.' };
+    return { nat, msg: '20 — natural 20, conscious at 1 HP.' + d.note };
   }
   outcome = (ci >= 0 && C) ? C._addDeathSave(state.combatants[ci].id, kind, nat === 1 ? 2 : 1)
                            : sktAddPartyDeathSave(pc, kind, nat === 1 ? 2 : 1);
   return { nat, outcome, msg: nat + ' — ' + (nat === 1 ? 'natural 1, two failures' : kind)
-    + (outcome === 'stable' ? '. Stable.' : outcome === 'dead' ? '. Dead.' : '.') };
+    + (outcome === 'stable' ? '. Stable.' : outcome === 'dead' ? '. Dead.' : '.') + d.note };
 }
 
 // The experience needed to reach a level (the handbook's table, both editions).

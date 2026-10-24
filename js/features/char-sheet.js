@@ -742,7 +742,7 @@ function csOnClick(e){
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
-    const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, a.spell ? 'attack:spell' : 'attack');
+    const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, a.spell ? 'attack:spell' : a.str ? 'attack:str' : 'attack');
     // A Champion crits on a 19 (or 18).
     if (!a.spell && r.natural >= ((pc.sheet || {}).critRange || 20) && !r.crit){ r.crit = true; r.why = [r.why, 'critical on ' + pc.sheet.critRange + '+'].filter(Boolean).join('; '); }
     csSpendAmmo(pc, a);

@@ -8190,7 +8190,7 @@
         ok('saves: a 2014 gnome’s is against magic; a 2024 gnome’s is every mental save, rolled in', g14.sheet.saveMods[0].text === 'Advantage on Intelligence, Wisdom and Charisma saves against magic' && JSON.stringify(g14.sheet.saveMods[0].abs) === '["int","wis","cha"]'
            && JSON.stringify(g24.sheet.rollAdv) === JSON.stringify([{ on: ['save:int', 'save:wis', 'save:cha'], label: 'Gnomish Cunning' }]) && g24.sheet.saveMods.length === 0);
         ok('saves: War Caster rolls concentration saves with advantage', JSON.stringify(mk(R14, '2014', { asi: { 4: { type: 'feat', feat: 'War Caster' } } }).sheet.rollAdv) === JSON.stringify([{ on: ['conc'], label: 'War Caster' }]));
-        ok('saves: Durable’s is on death saves', mk(R24, '2024', { asi: { 4: { type: 'feat', feat: 'Durable' } } }).sheet.saveMods.some(m => m.abs[0] === 'death' && m.src === 'Durable'));
+        ok('saves: Durable’s is on death saves, rolled in', mk(R24, '2024', { asi: { 4: { type: 'feat', feat: 'Durable' } } }).sheet.rollAdv.some(x => x.on[0] === 'death' && x.label === 'Durable'));
         const b14 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls: 'Barbarian', level: 2 }), R14), b24 = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { cls: 'Barbarian', level: 7 }), R24);
         ok('saves: Danger Sense — 2014 against what you can see (listed), 2024 always (rolled in)', b14.sheet.saveMods.some(m => m.src === 'Danger Sense' && m.abs[0] === 'dex') && b24.sheet.rollAdv.some(a => a.label === 'Danger Sense' && a.on[0] === 'save:dex'));
         ok('saves: Feral Instinct gives advantage on initiative', b24.sheet.rollAdv.some(a => a.label === 'Feral Instinct' && a.on[0] === 'init'));
@@ -8277,6 +8277,91 @@
         ok('readable: a party card’s name isn’t squeezed by its buttons', !!nm && nm.getBoundingClientRect().width >= 90, nm ? Math.round(nm.getBoundingClientRect().width) + 'px' : 'no card');
         closePanel('party');
       } catch(e){ ok('round 49 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
+    // -- Round 50: Reckless Attack, and advantage on death saves -------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1'), c0 = localStorage.getItem('skt-combat-v1');
+      const keep = { find: window._findCombatantForPartyMember };
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const ab = { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 8, wis: 10, cha: 10 } };
+        const barb = (ed, R, prior) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { name: 'Grog', cls: 'Barbarian', level: 2, abilities: JSON.parse(JSON.stringify(ab)) }), R, prior);
+        const b0 = barb('2024', R24), b1 = barb('2024', R24, { active: { 'Reckless Attack': true } });
+        const st = b0.sheet.states.find(s => s.key === 'Reckless Attack');
+        ok('reckless: a switch, off, and no longer a counter', !!st && !st.on && !b0.resources.some(r => r.name === 'Reckless Attack'));
+        ok('reckless: on, Strength attacks roll with advantage', JSON.stringify(b1.sheet.rollAdv.filter(x => x.label === 'Reckless Attack')) === JSON.stringify([{ on: ['attack:str'], label: 'Reckless Attack' }]) && !b0.sheet.rollAdv.some(x => x.label === 'Reckless Attack'));
+        ok('reckless: the greataxe and an unarmed strike use Strength', b0.sheet.attacks.find(a => a.name === 'Greataxe').str === true && b0.sheet.attacks.find(a => a.name === 'Unarmed Strike').str === true);
+        const fx = { pb: 2, mod: { str: 1, dex: 3, con: 0, int: 0, wis: 0, cha: 0 }, weaponProf: new Set(['martial', 'simple']), weaponPropRules: [], build: { masteries: [] }, edition: '2014', R: R14,
+                     rangedAttackBonus: 0, duelingBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0, level: 2 };
+        const rows = sktBuildAttacks(fx, { weapons: [R14.items.longbow, R14.items.rapier, R14.items.greataxe] }, null);
+        ok('reckless: a bow, or a rapier swung with Dexterity, doesn’t', rows.find(a => a.name === 'Longbow').str === false && rows.find(a => a.name === 'Rapier').str === false && rows.find(a => a.name === 'Greataxe').str === true);
+        const even = sktBuildAttacks(Object.assign({}, fx, { mod: Object.assign({}, fx.mod, { str: 3, dex: 3 }) }), { weapons: [R14.items.longbow] }, null);
+        ok('reckless: a bow isn’t a Strength attack even when Strength equals Dexterity', even.find(a => a.name === 'Longbow').str === false);
+        ok('death: Durable rolls death saves with advantage', JSON.stringify(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: 'Durable' } } }), R24).sheet.rollAdv) === JSON.stringify([{ on: ['death'], label: 'Durable' }]));
+
+        const seq = v => { const l = v.slice(); sktSetRandom(() => (l.shift() - 1) / 20 + 1e-9); };
+        window._findCombatantForPartyMember = () => -1;
+        const rec = barb('2024', R24); rec.id = 'pc_reck'; state.party.push(rec); save();
+        const me = () => state.party.find(p => p.id === 'pc_reck');
+        openCharSheet('pc_reck', { tab: 'actions' }); await sleep(300);
+        const q = s => document.querySelector('#cs-root ' + s);
+        q('[data-cs-state="Reckless Attack"]').click(); await sleep(60);
+        const gi = me().sheet.attacks.findIndex(a => a.name === 'Greataxe');
+        sktSetRandom(() => 0.3);
+        q('[data-cs-atk="' + gi + '"]').click(); await sleep(30);
+        ok('sheet: with Reckless Attack on, the greataxe rolls with advantage', CS.log[0].mode === 'adv' && /Reckless Attack/.test(CS.log[0].why), CS.log[0].why);
+        csClose();
+        // The start of the barbarian's next turn ends it (and Shield with it).
+        state.combatants = [{ id: 'pc_reck', name: 'Grog', isPC: true, hp: 20, hpMax: 20, initiative: 10 }];
+        window._findCombatantForPartyMember = keep.find;
+        me().active = { 'Reckless Attack': true, Shield: true, 'Mage Armor': true }; save();
+        panelDefs.combat._refreshTurnEconomy('pc_reck'); save();
+        ok('turn: the start of their turn ends Reckless Attack and Shield, not Mage Armor', JSON.stringify(me().active) === '{"Mage Armor":true}' && !me().sheet.rollAdv.some(x => x.label === 'Reckless Attack'), JSON.stringify(me().active));
+        // The Turn View's attack roll: Reckless Attack's advantage, Bless's d4.
+        me().build.spells = ['Bless']; me().active = { 'Reckless Attack': true }; me().concentration = 'Bless';
+        Object.assign(me(), sktComputeCharacter(me().build, R24, me())); save();
+        state.combatants = [{ id: 'pc_reck', name: 'Grog', isPC: true, hp: 20, hpMax: 20, initiative: 10 }, { id: 'tgt_x', name: 'Dummy', hp: 30, hpMax: 30, ac: 30, initiative: 5 }];
+        state.activeCombatantId = 'pc_reck'; save();
+        openPanel('turnview'); await sleep(300);
+        const T = panelDefs.turnview, was = T._resolve; let got = null;
+        T._resolve = o => { got = o; };
+        try {
+          const ai = T._attacksFor(state.combatants[0]).findIndex(a => a.name === 'Greataxe');
+          seq([5, 14, 12, 10, 10, 10, 10]);
+          T._rollAttack(ai, { attacker: state.combatants[0], target: state.combatants[1] });
+        } finally { T._resolve = was; }
+        const gb = parseInt(me().sheet.attacks.find(a => a.name === 'Greataxe').atkBonus, 10);
+        ok('turn view: a reckless greataxe rolls with advantage and adds Bless', !!got && got.nat === 14 && /Reckless Attack/.test(got.hitNote) && /Bless \+3/.test(got.hitNote) && got.total === 14 + gb + 3, got ? got.nat + ' ' + got.total + ' ' + got.hitNote : 'no roll');
+        closePanel('turnview');
+
+        // Death saves: two dice, the higher kept.
+        window._findCombatantForPartyMember = () => -1;
+        const tough = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Hardy', cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: 'Durable' } } }), R24);
+        tough.id = 'pc_dur'; tough.hp = 0; state.party.push(tough); save();
+        const dur = () => state.party.find(p => p.id === 'pc_dur');
+        seq([4, 15]); const r1 = sktRollDeathSave(dur());
+        ok('death: advantage keeps the higher die (4 and 15: a success)', r1.nat === 15 && dur().deathSaves.success === 1 && /advantage, Durable: 4 \/ 15/.test(r1.msg), r1.msg);
+        rec.hp = 0; me().hp = 0; me().deathSaves = null; save();
+        seq([4, 15]); const r2 = sktRollDeathSave(me());
+        ok('death: without it, one die (4: a failure)', r2.nat === 4 && me().deathSaves.fail === 1 && !/advantage/.test(r2.msg), r2.msg);
+        // The Turn View's death save too.
+        window._findCombatantForPartyMember = keep.find;
+        state.combatants = [{ id: 'pc_dur', name: 'Hardy', isPC: true, hp: 0, hpMax: 40, deathSaves: { success: 0, fail: 0 } }];
+        state.activeCombatantId = 'pc_dur'; save();
+        openPanel('turnview'); await sleep(300);
+        seq([3, 12]); panelDefs.turnview._rollDeathSave();
+        ok('death: the Turn View rolls a Durable PC’s save with advantage too', JSON.stringify(state.combatants[0].deathSaves) === '{"success":1,"fail":0}', JSON.stringify(state.combatants[0].deathSaves));
+        closePanel('turnview');
+      } catch(e){ ok('round 50 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        sktSetRandom(null); window._findCombatantForPartyMember = keep.find;
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); if (c0 != null) localStorage.setItem('skt-combat-v1', c0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); loadDomain('combat');
+        panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
     }
 
     // -- Class features: represented, not just text ------------------------

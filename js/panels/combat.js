@@ -1429,6 +1429,13 @@ registerPanel('combat',{
     // turn." Same moment as the rest of its economy, so the same place.
     if (c.legendaryMax) c.legendaryUsed = 0;
     this._tickCondTimers(c, 'start');
+    if (c.isPC){
+      const p = typeof _findPartyMemberForCombatant === 'function' ? state.party[_findPartyMemberForCombatant(c)] : null;
+      if (p && p.active && (p.active['Reckless Attack'] || p.active.Shield)){
+        const a = Object.assign({}, p.active); delete a['Reckless Attack']; delete a.Shield;
+        p.active = Object.keys(a).length ? a : null;
+      }
+    }
   },
 
   // Dodge lasts "until the start of your next turn", so it is cleared when
