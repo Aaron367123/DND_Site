@@ -140,6 +140,8 @@ function csHead(pc){
       + '<i class="cs-xpbar"><i style="width:' + (lvl < 20 ? Math.min(100, Math.round(100 * (xp - CS_XP[lvl - 1]) / Math.max(1, next - CS_XP[lvl - 1]))) : 100) + '%"></i></i>'
       + (ro ? '' : '<input type="number" min="0" data-cs-xp placeholder="+XP" aria-label="Add experience points"><button class="btn small" data-cs="addxp">Add</button>') + '</span>' : '')
     + '</div>'
+    // The buttons as a row on a wide screen; on a phone one ⋯ menu instead.
+    + '<div class="cs-headbtns">'
     + (ro ? '' : '<button class="btn" data-cs="short">💤 Short rest</button><button class="btn" data-cs="long">🛌 Long rest</button>')
     + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
     + (!ro && pc.build ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
@@ -149,8 +151,22 @@ function csHead(pc){
       + '<button role="menuitem" data-cs="print"><b>PDF character sheet</b><small>Opens the print dialog — choose “Save as PDF”, or print it</small></button>'
       + '<button role="menuitem" data-cs="export"><b>Character file (.json)</b><small>To bring the character into another campaign</small></button>'
       + '<button role="menuitem" data-cs="copytext"><b>Copy as text</b><small>The numbers and lists, to paste into a chat or a note</small></button></div>' : '')
-    + '</span>'
-    + '<button class="cb-x" data-cs="close" aria-label="Close">✕</button></div>';
+    + '</span></div>'
+    + '<button class="cs-headmore" data-cs="headmenu" aria-haspopup="true" aria-expanded="' + !!CS.headMenu + '" aria-label="Sheet menu">⋯</button>'
+    + '<button class="cb-x" data-cs="close" aria-label="Close">✕</button>'
+    + (CS.headMenu ? csHeadMenuHtml(pc, ready) : '') + '</div>';
+}
+// The phone's sheet menu: everything the header's row of buttons does, as a
+// list that opens under the header and closes after a choice.
+function csHeadMenuHtml(pc, ready){
+  const ro = CS.readOnly, built = !!pc.build;
+  const item = (cs, icon, label, extra) => '<button role="menuitem" data-cs="' + cs + '"' + (extra || '') + '><span class="cs-hm-i">' + icon + '</span>' + label + '</button>';
+  return '<div class="cs-headmenu" role="menu">'
+    + (ro ? '' : item('short', '💤', 'Short rest') + item('long', '🛌', 'Long rest'))
+    + (!ro && built && typeof openCharBuilder === 'function' ? item('levelup', '⬆', 'Level up' + (ready ? ' — ready' : ''), (pc.build.level || 1) >= 20 ? ' disabled' : '') + item('edit', '✎', 'Edit') : '')
+    + (!ro && built ? item('customize', '⚙', 'Customize') : '')
+    + item('print', '🖨', 'PDF / print') + item('export', '⤓', 'Character file') + item('copytext', '📋', 'Copy as text')
+    + '</div>';
 }
 
 // ── Across the top: hit points, defences, the day's state, rolls ─────────────
@@ -718,6 +734,8 @@ function csOnClick(e){
   if (!CS) return;
   // The Export menu closes on a click anywhere else.
   if (CS.exportOpen && !e.target.closest('.cs-exwrap')){ CS.exportOpen = false; csRender(); }
+  if (e.target.closest('[data-cs="headmenu"]')){ CS.headMenu = !CS.headMenu; return csRender(); }
+  if (CS.headMenu){ CS.headMenu = false; csRender(); }
   const t = e.target.closest('button, [data-cs-tab]'); if (!t) return;
   const d = t.dataset, pc = csPc(); if (!pc) return;
   if (d.cs === 'close') return csClose();

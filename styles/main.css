@@ -5336,6 +5336,27 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
   .cs-head .btn { padding:4px 8px; font-size:var(--fs-sm); }
   .cs-tabs { top:0; }
 }
+/* The header's buttons: a row on a wide screen, one ⋯ menu on a phone (the
+   row wrapped to three lines of big buttons above the sheet). */
+.cs-headbtns { display:contents; }
+.cs-headmore { display:none; }
+.cs-headmenu { display:none; }
+@media (max-width: 768px){
+  .cs .cs-head { flex-wrap:nowrap; position:relative; padding:8px 10px; gap:8px; }
+  .cs-head .cs-headbtns { display:none; }
+  .cs-head .cs-avatar { width:34px; height:34px; flex:0 0 auto; }
+  .cs-head .cs-who { flex:1; min-width:0; }
+  .cs-head .cs-who .cb-title, .cs-head .cs-sub { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cs-head .cb-title { font-size:var(--fs-xl); }
+  .cs-headmore { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; flex:0 0 auto; border-radius:var(--r-md); border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-size:var(--fs-2xl); line-height:1; cursor:pointer; }
+  .cs-headmore[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); }
+  .cs-head .cb-x { flex:0 0 auto; }
+  .cs-headmenu { display:grid; grid-template-columns:1fr 1fr; gap:4px; position:absolute; left:8px; right:8px; top:calc(100% + 4px); z-index:30;
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--sh-3); padding:6px; }
+  .cs-headmenu button { display:flex; align-items:center; gap:8px; min-height:44px; padding:6px 10px; border:none; border-radius:var(--r-sm); background:var(--panel-2); color:var(--text); font:inherit; font-size:var(--fs-lg); text-align:left; cursor:pointer; }
+  .cs-headmenu button:disabled { opacity:.5; }
+  .cs-hm-i { width:20px; text-align:center; }
+}
 .char-sheet-btn { background:none; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; padding:2px 8px; font:inherit; font-size:var(--fs-xs); cursor:pointer; }
 .char-sheet-btn:hover { color:var(--text); border-color:var(--accent); }
 .pa-sheet-t.btn { width:100%; margin-top:8px; }

@@ -10536,6 +10536,37 @@
     }
     closePanel('turnview');
 
+    // ── The character sheet's header: one slim row and a ⋯ menu ─────────────
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const R = await sktRulesLoad('2024');
+        const rec = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Phoney', cls: 'Cleric', level: 5 }), R);
+        rec.id = 'pc_phone_head'; state.party.push(rec); save();
+        openCharSheet('pc_phone_head'); await sleep(300);
+        const q = s => document.querySelector('#cs-root ' + s);
+        const head = q('.cs-head');
+        ok('mobile: the sheet header is one slim row', head.offsetHeight <= 64 && getComputedStyle(q('.cs-headbtns')).display === 'none', head.offsetHeight + 'px');
+        ok('mobile: with the name, a ⋯ menu and close', !!q('.cs-headmore') && q('.cs-headmore').getBoundingClientRect().width > 30 && !!q('.cb-x'));
+        q('.cs-headmore').click(); await sleep(30);
+        const m = q('.cs-headmenu');
+        ok('mobile: the menu holds every header action', !!m && ['short', 'long', 'levelup', 'edit', 'customize', 'print', 'export', 'copytext'].every(k => m.querySelector('[data-cs="' + k + '"]'))
+           && m.getBoundingClientRect().right <= innerWidth && m.getBoundingClientRect().left >= 0);
+        ok('mobile: its choices are big enough to tap', [...m.querySelectorAll('button')].every(b => b.getBoundingClientRect().height >= 44));
+        m.querySelector('[data-cs="customize"]').click(); await sleep(40);
+        ok('mobile: a choice does its job and closes the menu', !q('.cs-headmenu') && !!CS.customize);
+        q('.cs-headmore').click(); await sleep(20); q('.cs-hp, .cs-boxes').click(); await sleep(30);
+        ok('mobile: a tap elsewhere closes it', !q('.cs-headmenu'));
+        csClose();
+      } catch(e){ ok('mobile: the sheet header checks ran', false, e.message); }
+      finally {
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+    }
+
     // ── The dock's names stay off the bottom bar ─────────────────────────
     {
       const exp = document.getElementById('dock-expand-btn');
