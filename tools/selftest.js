@@ -8425,6 +8425,40 @@
       }
     }
 
+    // -- Round 52: the sheet reads at table distance ------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const R24 = await sktRulesLoad('2024');
+        const rec = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Keith', cls: 'Bard', level: 6, spells: ['Healing Word'] }), R24);
+        rec.id = 'pc_big'; state.party.push(rec);
+        // A character brought in from a PDF: no casting ability, an unsigned bonus.
+        state.party.push({ id: 'pc_imp', name: 'Imported', cls: 'bard', level: 6, hp: 30, hpMax: 30, abilities: { str: 10, dex: 14, con: 12, int: 10, wis: 12, cha: 16 },
+          sheet: { spellSaveDc: 15, spellAtkBonus: 7, spells: ['Healing Word'], profBonus: 3 } });
+        save();
+        openCharSheet('pc_big'); await sleep(300);
+        const q = s => document.querySelector('#cs-root ' + s);
+        const px = s => parseFloat(getComputedStyle(q(s)).fontSize);
+        ok('big: rows are 14px, not 12', px('.cs-row') >= 14 && px('.cs-row span:nth-child(2)') >= 14, px('.cs-row') + 'px');
+        const b = q('.cs-row > b'), bs = getComputedStyle(b);
+        ok('big: each save and skill bonus sits in its own box', parseFloat(bs.fontSize) >= 15 && bs.borderTopStyle === 'solid' && b.getBoundingClientRect().width >= 40);
+        ok('big: ability modifiers at 24px', px('.cs-ab b') >= 24);
+        ok('big: the rest of the app keeps its own sizes', parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fs-md')) === 12);
+        csClose();
+        openCharSheet('pc_imp', { tab: 'spells' }); await sleep(300);
+        const head = q('.cs-spellhead').textContent;
+        ok('big: an imported bard’s spell header says CHA and +7', /Ability\s*CHA/.test(head) && /Spell attack\s*\+7/.test(head), head);
+        ok('big: the bonus reads signed whatever it was stored as', csAtkText(7) === '+7' && csAtkText('+7') === '+7' && csAtkText(-1) === '-1' && csAtkText('') === '' && csAtkText('DC 13') === 'DC 13');
+        csClose();
+      } catch(e){ ok('round 52 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

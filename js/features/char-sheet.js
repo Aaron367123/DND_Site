@@ -508,7 +508,7 @@ CS_TAB_RENDER.actions = pc => {
   // Levelled spells that attack or call for a save, as D&D Beyond lists them.
   const spl = [...new Set(sh.spells || [])].map(n => csSpell(n)).filter(s => s && s.level > 0 && ((s.spellAttack || []).length || (s.savingThrow || []).length) && csSpellDamage(s, s.level));
   if (spl.length) h += '<h4>Spells</h4><div class="cs-atks">' + spl.map(s => '<div class="cs-atk"><b>' + csE(s.name) + ' <span class="cb-dim">' + CS_ORD[s.level] + '</span></b>'
-    + ((s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">' + csE(sh.spellAtkBonus || '') + '</button>' : '<span>DC ' + (sh.spellSaveDc || '?') + ' ' + csE(String(s.savingThrow[0]).slice(0, 3).toUpperCase()) + '</span>')
+    + ((s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '<span>DC ' + (sh.spellSaveDc || '?') + ' ' + csE(String(s.savingThrow[0]).slice(0, 3).toUpperCase()) + '</span>')
     + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csE(csSpellDamage(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
   h += csExtraDamageHtml(pc) + '</div>';
   const acts = sh.activations || [];
@@ -1123,15 +1123,29 @@ function csSpellHeal(s, slot, mod){
   if (/spellcasting ability modifier/i.test(txt) && mod) expr += (mod >= 0 ? '+' : '') + mod;
   return expr;
 }
+// The casting ability: the sheet's, or for a character brought in from a PDF
+// (which has none) the class's.
+const CS_CAST_AB = { artificer: 'int', bard: 'cha', cleric: 'wis', druid: 'wis', paladin: 'cha', ranger: 'wis', sorcerer: 'cha', warlock: 'cha', wizard: 'int' };
+function csSpellAbility(pc){
+  const sh = pc.sheet || {};
+  if (sh.spellAbility) return sh.spellAbility;
+  const cls = String(pc.cls || sh.class || '').toLowerCase().split(/[\s/,]+/).find(c => CS_CAST_AB[c]);
+  return cls ? CS_CAST_AB[cls] : '';
+}
+// An attack bonus as the table says it: "+7", not "7".
+function csAtkText(v){
+  const n = parseInt(v, 10);
+  return v == null || v === '' ? '' : isNaN(n) ? String(v) : csSigned(n);
+}
 const CS_ORD = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
 function csSpellsHtml(pc){
   const sh = pc.sheet || {}, ro = CS.readOnly;
   const slots = sh.spellSlots || {};
   const lvls = Object.keys(slots).map(Number).filter(l => (slots[l].total || 0) > 0).sort((a, b) => a - b);
   let h = '';
-  if (sh.spellSaveDc) h += '<div class="cs-spellhead"><div class="cs-box"><span>Ability</span><b>' + csE(String(sh.spellAbility || '').toUpperCase() || '—') + '</b></div>'
+  if (sh.spellSaveDc) h += '<div class="cs-spellhead"><div class="cs-box"><span>Ability</span><b>' + csE(String(csSpellAbility(pc) || '').toUpperCase() || '—') + '</b></div>'
     + '<div class="cs-box"><span>Save DC</span><b>' + sh.spellSaveDc + '</b></div>'
-    + '<button class="cs-box" data-cs-spatk="1"><span>Spell attack</span><b>' + csE(sh.spellAtkBonus || '') + '</b></button></div>';
+    + '<button class="cs-box" data-cs-spatk="1"><span>Spell attack</span><b>' + csE(csAtkText(sh.spellAtkBonus)) + '</b></button></div>';
   // How many are prepared against how many may be (a builder character).
   if (pc.build && CS.R && typeof sktBuildSpellcasting === 'function'){
     const sc = sktBuildSpellcasting(pc.build, CS.R, sktBuildAbilities(pc.build, CS.R));
@@ -1183,7 +1197,7 @@ function csSpellsHtml(pc){
           + (arcLv[n] ? '<button class="btn small" data-cs-cast="' + csE(n) + ':arcanum"' + (((pc.resources || []).find(r => r.name === 'Mystic Arcanum (' + arcLv[n] + 'th)') || {}).current > 0 ? '' : ' disabled') + ' title="Mystic Arcanum: once per long rest">Arcanum</button>' : '')
           + (s && s.ritual ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>' : '');
       const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
-      const atk = l && s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(sh.spellAtkBonus || '') + '</button>' : '';
+      const atk = l && s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
       const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csE(csSpellDamage(s, avail[0] || l)) + '</button>' : '';
       const cantripAtk = !l ? (sh.attacks || []).find(a => a.name === n) : null;
       const scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);

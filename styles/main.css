@@ -5535,3 +5535,21 @@ button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
 .cs-actions:not([data-f="all"]) .cs-asec, .cs-actions:not([data-f="all"]) > :not(.cs-asec) { display:none; }
 .cs-actions[data-f="attack"] .cs-asec[data-k="attack"], .cs-actions[data-f="action"] .cs-asec[data-k="action"], .cs-actions[data-f="bonus"] .cs-asec[data-k="bonus"],
 .cs-actions[data-f="reaction"] .cs-asec[data-k="reaction"], .cs-actions[data-f="other"] .cs-asec[data-k="other"], .cs-actions[data-f="limited"] .cs-asec[data-k="limited"] { display:block; }
+
+/* ── The character sheet, readable at the table ─────────────────────────────
+   Measured against D&D Beyond's: its body text is ~14px and every bonus sits
+   in its own box at ~18px; ours was 12px rows with 10-11px labels and the
+   numbers loose at the end of a line. The sheet's own type scale goes up
+   (the rest of the app keeps its denser one), bonuses get boxes, rows room. */
+#cs-root { --fs-2xs:11px; --fs-xs:12px; --fs-sm:13px; --fs-md:14px; --fs-lg:15px; --fs-xl:17px; --fs-2xl:20px; --fs-3xl:24px; --fs-4xl:28px; font-size:var(--fs-md); }
+#cs-root .cs-side { width:330px; flex-basis:330px; }
+#cs-root .cs-side h5, #cs-root .cs h5 { font-size:var(--fs-sm); font-weight:700; color:var(--text); letter-spacing:.05em; margin:16px 0 6px; }
+#cs-root .cs-row { padding:5px 6px; min-height:34px; }
+#cs-root .cs-row > b { min-width:42px; text-align:center; font-size:var(--fs-lg); padding:2px 6px; border:1px solid var(--border); border-radius:6px; background:var(--panel-2); }
+#cs-root .cs-row:hover > b { border-color:var(--accent); }
+#cs-root .cs-dot { width:10px; height:10px; flex-basis:10px; }
+#cs-root .cs-ab b, #cs-root .cs-box b { font-size:24px; }
+#cs-root .cs-ab span, #cs-root .cs-box span { font-weight:600; }
+#cs-root .cs-ab i { font-size:var(--fs-sm); border:1px solid var(--border); border-radius:10px; padding:0 8px; margin-top:2px; }
+#cs-root .cs-kv { padding:3px 0; }
+#cs-root .cs-hp-n b { font-size:36px; }
