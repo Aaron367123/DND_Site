@@ -8594,6 +8594,21 @@
         closePanel('party');
       } catch(e){ ok('round 58 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
+    // -- Round 59: the combat tracker's toolbar is a strip too, its buttons all boxed
+    {
+      try {
+        openPanel('combat'); await sleep(250); panelDefs.combat._render(); await sleep(60);
+        const B = panelDefs.combat._body, bar = B.querySelector('.combat-controls'), card = B.querySelector('.combatant-card');
+        const btns = [...bar.querySelectorAll('.btn')], hs = getComputedStyle(bar);
+        ok('combat toolbar: its first button lines up with the cards', !card || Math.abs(btns[0].getBoundingClientRect().left - card.getBoundingClientRect().left) < 1.5, Math.round(btns[0].getBoundingClientRect().left) + ' vs ' + (card && Math.round(card.getBoundingClientRect().left)));
+        ok('combat toolbar: a strip with its own background, staying put', hs.backgroundColor !== 'rgba(0, 0, 0, 0)' && hs.position === 'sticky', hs.backgroundColor + ' / ' + hs.position);
+        const bare = btns.filter(b => { const c = getComputedStyle(b); return c.backgroundColor === 'rgba(0, 0, 0, 0)' || c.borderTopColor === 'rgba(0, 0, 0, 0)'; }).map(b => b.dataset.act);
+        ok('combat toolbar: every button has a box, none a loose symbol', bare.length === 0, bare.join(','));
+        const h = btns.map(b => Math.round(b.getBoundingClientRect().height));
+        ok('combat toolbar: every button the same height', new Set(h).size === 1, h.join(','));
+        closePanel('combat');
+      } catch(e){ ok('round 59 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

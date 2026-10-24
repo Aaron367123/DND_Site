@@ -5075,6 +5075,17 @@ select.cb-sel{padding-right:28px}
 .combat-controls { flex-direction:column; align-items:stretch; gap:4px; }
 .combat-controls .cc-row { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
 .combat-controls .cc-row .round-display { margin-left:4px; }
+/* The same toolbar strip as the party's and the map's: its own background,
+   lined up with the cards, and still there when a long fight
+   scrolls — ▶ Next turn never scrolls away. The icon buttons get a box like
+   "＋ Add" beside them; they were bare glyphs, so ◀ looked indented and the
+   second row read as one button and some loose symbols. */
+.window-body .combat-controls { position:sticky; top:0; z-index:3; background:var(--panel-2); }
+.combat-controls .btn { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-height:28px; line-height:1.2; }
+.combat-controls .btn.icon-btn { min-width:30px; background:var(--panel-3); border-color:var(--border); color:var(--text); }
+.combat-controls .btn.icon-btn:hover { border-color:var(--accent); }
+.combat-controls .btn.icon-btn.danger { color:var(--danger); }
+.combat-controls .btn .ico { width:15px; height:15px; }
 /* Party: the header row */
 .party-head { display:flex; align-items:center; gap:6px; padding:0 0 8px; flex-wrap:wrap; }
 .party-head .btn .ico { width:14px; height:14px; }
