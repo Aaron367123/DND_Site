@@ -82,7 +82,9 @@ function csRender(){
   root.style.setProperty('--cs-accent', pc.theme || '');
   root.classList.toggle('themed', !!pc.theme);
   root.innerHTML = csHead(pc) + '<div class="cs-body"><aside class="cs-side" data-cs-scroll="side">' + csSide(pc) + '</aside>'
-    + '<div class="cs-main" data-cs-scroll="main">' + (CS.customize && !CS.readOnly ? csCustomizeHtml(pc) : '') + csTop(pc)
+    + '<div class="cs-main" data-cs-scroll="main">' + (CS.customize && !CS.readOnly ? csCustomizeHtml(pc) : '')
+    + (CS.textOut ? '<div class="cs-textout"><div class="cs-textout-h"><b>Copy this text</b><span class="cb-dim">The browser didn’t allow copying it for you.</span><button class="btn small" data-cs="closetext">Done</button></div>'
+      + '<textarea data-cs-textout rows="12" readonly>' + csE(CS.textOut) + '</textarea></div>' : '') + csTop(pc)
     + '<nav class="cs-tabs">' + CS_TABS.map(t => '<button class="cs-tab' + (t.phone ? ' cs-phone' : '') + (CS.tab === t.id ? ' on' : '') + '" data-cs-tab="' + t.id + '">' + t.label + '</button>').join('') + '</nav>'
     + '<div class="cs-pane">' + (CS_TAB_RENDER[CS.tab] || (() => ''))(pc) + '</div></div></div>';
   keep.forEach(([k, t]) => { const e = root.querySelector('[data-cs-scroll="' + k + '"]'); if (e) e.scrollTop = t; });
@@ -142,7 +144,12 @@ function csHead(pc){
     + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
     + (!ro && pc.build ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
     + '<button class="btn" data-cs="print" title="Print the sheet, or save it as a PDF">🖨 Print</button>'
-    + '<button class="btn" data-cs="export" title="Save the character to a file, to bring into another campaign">⤓ Export</button>'
+    + '<span class="cs-exwrap"><button class="btn" data-cs="exportmenu" aria-haspopup="true" aria-expanded="' + !!CS.exportOpen + '" title="Save or share the character">⤓ Export ▾</button>'
+    + (CS.exportOpen ? '<div class="cs-exmenu" role="menu">'
+      + '<button role="menuitem" data-cs="print"><b>PDF character sheet</b><small>Opens the print dialog — choose “Save as PDF”, or print it</small></button>'
+      + '<button role="menuitem" data-cs="export"><b>Character file (.json)</b><small>To bring the character into another campaign</small></button>'
+      + '<button role="menuitem" data-cs="copytext"><b>Copy as text</b><small>The numbers and lists, to paste into a chat or a note</small></button></div>' : '')
+    + '</span>'
     + '<button class="cb-x" data-cs="close" aria-label="Close">✕</button></div>';
 }
 
@@ -321,19 +328,15 @@ function sktImportCharacter(text){
 }
 
 // ── Printing ─────────────────────────────────────────────────────────────────
-// The whole sheet on paper (or a PDF from the print dialog): every tab at
-// once, without the buttons.
+// The whole sheet on paper (or a PDF from the print dialog).
 function csPrint(pc){
   const ro = CS.readOnly;
   CS.readOnly = true;
   let html;
   try {
-    html = '<div class="cs-p-head"><h1>' + csE(pc.name) + '</h1><div>' + csE(csClassLine(pc)) + '</div></div>'
-      + '<div class="cs-p-grid"><div class="cs-p-side">' + csSide(pc) + '</div><div class="cs-p-main">'
-      + '<div class="cs-boxes">' + [['AC', pc.ac], ['HP', pc.hpMax || 0], ['Initiative', csSigned(pc.init)], ['Speed', (pc.spd || 30) + ' ft'], ['Proficiency', csSigned((pc.sheet || {}).profBonus || 2)]]
-        .map(([l, v]) => '<div class="cs-box"><span>' + l + '</span><b>' + csE(v) + '</b></div>').join('') + '</div>'
-      + ['actions', 'spells', 'inventory', 'features', 'background'].map(t => '<h2>' + CS_TABS.find(x => x.id === t).label + '</h2>' + CS_TAB_RENDER[t](pc)).join('')
-      + '</div></div>';
+    // The paper sheet (char-print.js): every feature and spell written out,
+    // boxes to keep in pencil, nothing that's a button.
+    html = csPrintSheet(pc);
   } finally { CS.readOnly = ro; }
   document.getElementById('cs-print')?.remove();
   const box = document.createElement('div');
@@ -713,10 +716,12 @@ CS_TAB_RENDER.inventory = pc => typeof csInventoryHtml === 'function' ? csInvent
 // ── Events ───────────────────────────────────────────────────────────────────
 function csOnClick(e){
   if (!CS) return;
+  // The Export menu closes on a click anywhere else.
+  if (CS.exportOpen && !e.target.closest('.cs-exwrap')){ CS.exportOpen = false; csRender(); }
   const t = e.target.closest('button, [data-cs-tab]'); if (!t) return;
   const d = t.dataset, pc = csPc(); if (!pc) return;
   if (d.cs === 'close') return csClose();
-  if (d.cs === 'print') return csPrint(pc);
+  if (d.cs === 'print'){ if (CS.exportOpen){ CS.exportOpen = false; csRender(); } return csPrint(pc); }
   if (d.cs === 'portrait' && !CS.readOnly){
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
     inp.addEventListener('change', async ev => {
@@ -728,7 +733,18 @@ function csOnClick(e){
     });
     inp.click(); return;
   }
-  if (d.cs === 'export') return sktExportCharacter(pc);
+  if (d.cs === 'exportmenu'){ CS.exportOpen = !CS.exportOpen; return csRender(); }
+  if (d.cs === 'export' || d.cs === 'print' || d.cs === 'copytext') CS.exportOpen = false;
+  if (d.cs === 'export'){ csRender(); return sktExportCharacter(pc); }
+  if (d.cs === 'copytext'){
+    const text = csCharacterText(pc);
+    CS.textOut = null;
+    const shown = () => { CS.textOut = text; csRender(); const ta = document.querySelector('#cs-root [data-cs-textout]'); if (ta){ ta.focus(); ta.select(); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => { if (typeof showToast === 'function') showToast('Copied ' + pc.name + ' as text'); csRender(); }, shown);
+    else shown();
+    return;
+  }
+  if (d.cs === 'closetext'){ CS.textOut = null; return csRender(); }
   if (d.csTab){ CS.tab = d.csTab; return csRender(); }
   if (d.csMode){ CS.mode = d.csMode; return csRender(); }
   if (d.cs === 'log'){ CS.showLog = !CS.showLog; return csRender(); }

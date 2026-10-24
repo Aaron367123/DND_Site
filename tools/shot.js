@@ -67,7 +67,7 @@ const CHROME_CANDIDATES = [
 function parseArgs(argv){
   const a = { preset:'desktop', url:null, out:null, full:false, wait:800,
               evalJs:null, evalFile:null, seed:null, ready:null, tour:false, player:false, size:null,
-              touch:null, state:null };
+              touch:null, state:null, pdf:null, media:null };
   for (let i = 0; i < argv.length; i++){
     const k = argv[i];
     if      (k === '--preset') a.preset = argv[++i];
@@ -84,6 +84,11 @@ function parseArgs(argv){
     else if (k === '--ready')  a.ready  = argv[++i];
     else if (k === '--tour')   a.tour   = true;
     else if (k === '--full')   a.full   = true;
+    // --pdf FILE: also print the page to a PDF, as the browser's print
+    // dialog would (print stylesheet, Letter paper).
+    else if (k === '--pdf')    a.pdf    = argv[++i];
+    // --media print: screenshot the page as its print stylesheet lays it out.
+    else if (k === '--media')  a.media  = argv[++i];
     else if (k === '--player') a.player = true;
     else if (k === '--touch')  a.touch  = true;
     else if (k === '--no-touch') a.touch = false;
@@ -97,7 +102,7 @@ function usage(){
   console.log('       [--size WxH] [--touch|--no-touch] [--url URL] [--player]');
   console.log('       [--out FILE] [--full] [--wait MS] [--eval JS] [--seed JS] [--tour]');
   console.log('');
-  console.log('       [--state BACKUP.json]');
+  console.log('       [--state BACKUP.json] [--pdf FILE] [--media print]');
   console.log('');
   console.log('  --state F  load a Settings → Export backup as the starting state');
   console.log('  --seed JS  runs BEFORE page scripts (use for localStorage setup)');
@@ -418,6 +423,14 @@ function findChrome(){
           ? r.result.value : JSON.stringify(r.result.value, null, 2)));
       }
       await sleep(a.wait);
+    }
+
+    if (a.media) await cdp.send('Emulation.setEmulatedMedia', { media: a.media });
+    if (a.pdf){
+      const pr = await cdp.send('Page.printToPDF', { printBackground: true, paperWidth: 8.5, paperHeight: 11,
+        marginTop: 0.4, marginBottom: 0.4, marginLeft: 0.4, marginRight: 0.4 });
+      require('fs').writeFileSync(a.pdf, Buffer.from(pr.data, 'base64'));
+      console.log('[shot] pdf ' + a.pdf);
     }
 
     // Report what the page actually believes it is. Without this a wrong

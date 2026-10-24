@@ -5376,15 +5376,96 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-extra-h b:first-child { flex:1; min-width:120px; }
 .cs-extra-card { margin-top:8px; }
 #cs-print { display:none; }
+/* The paper sheet (char-print.js): black on white, boxes to fill in pencil,
+   page one for play and the text after it. */
 @media print {
+  @page { size: letter; margin: 0.4in; }
   body > *:not(#cs-print) { display:none !important; }
-  #cs-print { display:block !important; position:static; color:#000; background:#fff; font-size:11px; }
-  #cs-print * { color:#000 !important; background:transparent !important; border-color:#999 !important; }
-  #cs-print h1 { margin:0; font-size:20px; }
-  #cs-print h2 { font-size:14px; margin:12px 0 4px; border-bottom:1px solid #999; }
-  #cs-print .cs-p-grid { display:grid; grid-template-columns:220px 1fr; gap:14px; }
-  #cs-print .cs-boxes { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
+  html, body { background:#fff !important; overflow:visible !important; height:auto !important; }
+  #cs-print { display:block !important; position:static; color:#111; background:#fff; font:10px/1.35 Georgia, "Times New Roman", serif; font-variant-numeric:lining-nums tabular-nums; }
+  #cs-print * { color:#111 !important; background:transparent !important; box-shadow:none !important; }
+  #cs-print small { font-size:8px; color:#444 !important; }
+  #cs-print h2 { font:700 14px/1.2 Georgia, serif; margin:0 0 6px; padding-bottom:2px; border-bottom:2px solid #111; text-transform:uppercase; letter-spacing:.05em; }
+  #cs-print h3 { font:700 8.5px/1.2 Arial, sans-serif; margin:0 0 3px; text-transform:uppercase; letter-spacing:.06em; }
+  #cs-print h4 { font:700 10px/1.25 Georgia, serif; margin:0 0 2px; }
+  #cs-print .cp-page { break-after:page; }
+  #cs-print .cp-last { break-after:auto; }
+  #cs-print .cp-head { display:grid; grid-template-columns:2fr 5fr; gap:8px; border:1.5px solid #111; border-radius:6px; padding:5px 8px; margin-bottom:6px; }
+  #cs-print .cp-meta { display:grid; grid-template-columns:1.8fr 1fr 1fr 1fr .7fr; gap:6px; }
+  #cs-print .cp-field { display:flex; flex-direction:column; border-bottom:1px solid #777; min-height:24px; justify-content:flex-end; }
+  #cs-print .cp-field b { font-size:11px; }
+  #cs-print .cp-name .cp-field b { font-size:16px; }
+  #cs-print .cp-field small { text-transform:uppercase; letter-spacing:.05em; font-family:Arial, sans-serif; font-size:7px; }
+  #cs-print .cp-cols { display:grid; grid-template-columns:1fr 1.25fr 1fr; gap:8px; align-items:start; }
+  #cs-print .cp-col { display:flex; flex-direction:column; gap:6px; }
+  #cs-print .cp-abs { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+  #cs-print .cp-ab { border:1.5px solid #111; border-radius:6px; text-align:center; padding:2px 0 3px; display:flex; flex-direction:column; }
+  #cs-print .cp-ab small { font:700 6.5px Arial, sans-serif; text-transform:uppercase; letter-spacing:.04em; }
+  #cs-print .cp-ab b { font-size:17px; line-height:1.1; }
+  #cs-print .cp-ab span { width:26px; margin:0 auto; border:1px solid #111; border-radius:8px; font-size:9px; }
+  #cs-print .cp-mini { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  #cs-print .cp-mini > div { border:1px solid #777; border-radius:4px; padding:2px 5px; display:flex; align-items:center; gap:5px; }
+  #cs-print .cp-block { border:1px solid #777; border-radius:5px; padding:4px 6px; break-inside:avoid; }
+  #cs-print .cp-row { display:flex; align-items:center; gap:5px; line-height:1.45; }
+  #cs-print .cp-row span { flex:1; }
+  #cs-print .cp-dot { width:7px; height:7px; border:1px solid #111; border-radius:50%; flex:0 0 auto; display:inline-block; }
+  #cs-print .cp-dot.on { background:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  #cs-print .cp-dot.exp { background:#111 !important; outline:1.5px solid #111; outline-offset:1px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  #cs-print .cp-key { margin-top:3px; font-size:8px; color:#444 !important; display:flex; align-items:center; gap:4px; }
+  #cs-print .cp-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+  #cs-print .cp-stat { border:1.5px solid #111; border-radius:6px; text-align:center; padding:2px 0; display:flex; flex-direction:column; }
+  #cs-print .cp-stat small { font:700 6.5px Arial, sans-serif; text-transform:uppercase; letter-spacing:.04em; }
+  #cs-print .cp-stat b { font-size:16px; }
+  #cs-print .cp-hp { border:1.5px solid #111; border-radius:6px; padding:4px 6px; display:flex; flex-direction:column; gap:4px; break-inside:avoid; }
+  #cs-print .cp-hpmax { font-size:9px; border-bottom:1px solid #777; padding-bottom:2px; }
+  #cs-print .cp-hpbox { border:1px solid #777; border-radius:4px; height:46px; padding:2px 4px; }
+  #cs-print .cp-hprow { display:grid; grid-template-columns:1fr 1.3fr 1.3fr; gap:4px; }
+  #cs-print .cp-hpbox.sm { height:auto; min-height:42px; }
+  #cs-print .cp-hpbox small { display:block; font:700 6.5px Arial, sans-serif; text-transform:uppercase; letter-spacing:.04em; }
+  #cs-print .cp-spent, #cs-print .cp-ds { font-size:8px; display:flex; align-items:center; gap:3px; flex-wrap:wrap; margin-top:2px; }
+  #cs-print .cp-ring { width:9px; height:9px; border:1px solid #111; border-radius:50%; display:inline-block; }
+  #cs-print .cp-boxes { display:inline-flex; flex-wrap:wrap; gap:2px; vertical-align:middle; }
+  #cs-print .cp-box { width:9px; height:9px; border:1px solid #111; display:inline-block; }
+  #cs-print .cp-line { display:inline-block; width:34px; border-bottom:1px solid #111; height:9px; vertical-align:bottom; }
+  #cs-print .cp-tbl { width:100%; border-collapse:collapse; font-size:9px; }
+  #cs-print .cp-tbl th { font:700 7px Arial, sans-serif; text-transform:uppercase; text-align:left; border-bottom:1px solid #111; padding:1px 3px; }
+  #cs-print .cp-tbl td { border-bottom:1px solid #ccc; padding:2px 3px; vertical-align:top; }
+  #cs-print .cp-tbl tr { break-inside:avoid; }
+  #cs-print .cp-act { margin-top:4px; font-size:9px; break-inside:avoid; }
+  #cs-print .cp-res { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin:2px 0; }
+  #cs-print .cp-res > span:first-child { min-width:70px; font-weight:700; }
+  #cs-print .cp-kv { margin:1px 0; }
+  #cs-print .cp-write { min-height:44px; }
+  #cs-print .cp-lines { height:28px; background-image:repeating-linear-gradient(transparent 0 13px, #bbb 13px 14px) !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  #cs-print .cp-dim { color:#666 !important; font-style:italic; }
+  #cs-print .cp-flow { column-count:2; column-gap:14px; column-rule:1px solid #ddd; }
+  #cs-print .cp-group { margin:8px 0 3px; border-bottom:1px solid #111; break-after:avoid; }
+  #cs-print .cp-feat { break-inside:avoid; margin:0 0 6px; }
+  #cs-print .cp-meta-line { font:italic 8.5px Georgia, serif; color:#444 !important; margin-bottom:1px; }
+  #cs-print .cp-spellhead { grid-template-columns:repeat(3,90px) 1fr; align-items:stretch; margin-bottom:8px; }
+  #cs-print .cp-slots { border:1px solid #777; border-radius:5px; padding:3px 6px; display:grid; grid-template-columns:repeat(3,1fr); gap:0 8px; text-align:left; }
+  #cs-print .cp-coins { display:grid; grid-template-columns:repeat(5,60px); gap:4px; margin-bottom:6px; }
+  #cs-print .cp-facts { display:grid; grid-template-columns:repeat(4,1fr); gap:0 10px; margin-bottom:6px; }
+  #cs-print .cp-last h2 { margin-top:10px; }
+  #cs-print .cp-last .cp-block { margin-bottom:6px; }
 }
+/* The Export menu. */
+.cs-exwrap { position:relative; display:inline-flex; }
+.cs-exmenu { position:absolute; top:calc(100% + 4px); right:0; z-index:20; min-width:280px; background:var(--panel); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--sh-3); padding:4px; display:flex; flex-direction:column; }
+.cs-exmenu button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; background:none; border:none; border-radius:var(--r-sm); padding:8px 10px; color:var(--text); cursor:pointer; font:inherit; }
+.cs-exmenu button:hover, .cs-exmenu button:focus-visible { background:var(--panel-2); }
+.cs-exmenu small { color:var(--text-muted); font-size:var(--fs-sm); }
+/* On a phone the header's buttons wrap, so the menu opens full width under
+   the header rather than off the edge from wherever the button landed. */
+@media (max-width: 768px){
+  .cs-head { position:relative; }
+  .cs-exwrap { position:static; }
+  .cs-exmenu { left:12px; right:12px; top:calc(100% - 6px); min-width:0; }
+}
+.cs-textout { border:1px solid var(--accent); border-radius:var(--r-md); padding:8px 10px; margin-bottom:10px; }
+.cs-textout-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+.cs-textout-h .btn { margin-left:auto; }
+.cs-textout textarea { width:100%; font-family:ui-monospace, Consolas, monospace; font-size:var(--fs-sm); }
 .cs-fx { font-size:var(--fs-xs); color:var(--warning, #d9a441); }
 .cs-save { font-size:var(--fs-xs); color:var(--text-muted); margin-right:4px; }
 .cs-rest { padding:10px; border:1px solid var(--accent); border-radius:10px; }

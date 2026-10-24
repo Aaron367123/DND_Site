@@ -6358,7 +6358,7 @@
         let printed = 0; window.print = () => { printed++; };
         document.querySelector('#cs-root [data-cs="print"]').click(); await sleep(40);
         const pv = document.getElementById('cs-print');
-        ok('sheet: Print lays out the whole sheet without buttons', printed === 1 && !!pv && /Actions/.test(pv.textContent) && /Inventory/.test(pv.textContent) && /Saving throws/i.test(pv.textContent) && !pv.querySelector('[data-cs-hp], [data-cs-cast], [data-cs-del], [data-cs-qty], [data-cs-equip]:not([disabled])'));
+        ok('sheet: Print lays out the whole sheet without buttons', printed === 1 && !!pv && /Actions/.test(pv.textContent) && /Equipment/.test(pv.textContent) && /Saving throws/i.test(pv.textContent) && !pv.querySelector('button, input, select, textarea'));
         window.dispatchEvent(new Event('afterprint')); await sleep(20);
         ok('sheet: and tidies up after', !document.getElementById('cs-print'));
         csClose();
@@ -8361,6 +8361,67 @@
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); if (c0 != null) localStorage.setItem('skt-combat-v1', c0); } finally { _remoteUpdate = false; }
         loadDomain('party'); loadDomain('combat');
         panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+    // -- Round 51: the sheet on paper, and the Export menu ---------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      const keep = { pr: window.print, find: window._findCombatantForPartyMember, clip: navigator.clipboard };
+      try {
+        window._findCombatantForPartyMember = () => -1;
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const cler = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Brother Tam', cls: 'Cleric', subclass: 'Life', level: 5, species: 'Dwarf', background: 'Acolyte',
+          spells: ['Bless', 'Cure Wounds', 'Spirit Guardians'], cantrips: ['Sacred Flame'], details: { personality: 'Quotes scripture.' } }), R24);
+        cler.id = 'pc_print'; state.party.push(cler); save();
+        openCharSheet('pc_print'); await sleep(300);
+        const html = csPrintSheet(cler), box = document.createElement('div'); box.innerHTML = html;
+        const txt = box.textContent;
+        ok('paper: no buttons, inputs or menus on it', !box.querySelector('button, input, select, textarea, details'));
+        ok('paper: page one has hit points, hit dice and death saves to keep in pencil', /Current hit points/.test(txt) && box.querySelectorAll('.cp-ds .cp-ring').length === 6
+           && box.querySelector('.cp-spent').querySelectorAll('.cp-box').length === 5 && /Hit point maximum\s*38/.test(txt));
+        ok('paper: limited uses as boxes to tick', [...box.querySelectorAll('.cp-res')].some(r => /Channel Divinity/.test(r.textContent) && r.querySelectorAll('.cp-box').length === 2));
+        ok('paper: every feature with its text, not just its name', /Disciple of Life/.test(txt) && /additional Hit Points/i.test(txt));
+        ok('paper: spells with their casting line and text, and slots to tick', /Protective spirits/.test(txt) && [...box.querySelectorAll('.cp-meta-line')].some(m => /^1 action · Emanation/.test(m.textContent)) && /3rd level/.test(txt)
+           && [...box.querySelectorAll('.cp-slots .cp-res')].some(r => /1st level/.test(r.textContent) && r.querySelectorAll('.cp-box').length === 4));
+        ok('paper: what the player wrote, and lines where they haven’t', /Quotes scripture/.test(txt) && box.querySelectorAll('.cp-write .cp-lines').length >= 3);
+        ok('paper: only armour and weapons are marked equipped', [...box.querySelectorAll('.cp-tbl tr')].some(r => /Mace/.test(r.textContent) && /equipped/.test(r.textContent))
+           && ![...box.querySelectorAll('.cp-tbl tr')].some(r => /Calligrapher/.test(r.textContent) && /equipped/.test(r.textContent)));
+        const barb = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Grog', cls: 'Barbarian', level: 3 }), R14);
+        ok('paper: a character without spells gets no spell page', !/Spellcasting/.test(csPrintSheet(barb)));
+        ok('paper: class and level read as they would be written', cpClassLevel(cler) === 'Cleric 5 · Life'
+           && cpClassLevel({ sheet: { classLevels: [{ cls: 'fighter', level: 3, subclass: 'Champion' }, { cls: 'wizard', level: 2, subclass: '' }] } }) === 'Fighter 3 / Wizard 2 · Champion', cpClassLevel(cler));
+        const t = csCharacterText(cler);
+        ok('text: the numbers and the lists', /^Brother Tam — /.test(t) && /AC \d+ · HP 38/.test(t) && /WIS 10 \(\+0\)/.test(t) && /- 3rd level \(2 slots\): .*Spirit Guardians/.test(t) && /Coins: \d+ gp/.test(t), t.slice(0, 200));
+
+        // The menu.
+        const q = s => document.querySelector('#cs-root ' + s);
+        q('[data-cs="exportmenu"]').click(); await sleep(30);
+        ok('menu: Export opens three choices', !!q('.cs-exmenu') && !!q('.cs-exmenu [data-cs="print"]') && !!q('.cs-exmenu [data-cs="export"]') && !!q('.cs-exmenu [data-cs="copytext"]'));
+        q('.cs-boxes').click(); await sleep(30);
+        ok('menu: and closes on a click elsewhere', !q('.cs-exmenu'));
+        let printed = 0; window.print = () => { printed++; };
+        q('[data-cs="exportmenu"]').click(); await sleep(20); q('.cs-exmenu [data-cs="print"]').click(); await sleep(30);
+        ok('menu: the PDF choice prints the paper sheet and closes the menu', printed === 1 && /Current hit points/.test((document.querySelector('#cs-print .cp-p1') || {}).textContent || '') && !q('.cs-exmenu'));
+        window.dispatchEvent(new Event('afterprint')); await sleep(20);
+        let copied = null;
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: s => { copied = s; return Promise.resolve(); } } });
+        q('[data-cs="exportmenu"]').click(); await sleep(20); q('.cs-exmenu [data-cs="copytext"]').click(); await sleep(40);
+        ok('menu: Copy as text puts the text on the clipboard', copied === csCharacterText(state.party.find(p => p.id === 'pc_print')) && !q('.cs-textout'));
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('denied')) } });
+        q('[data-cs="exportmenu"]').click(); await sleep(20); q('.cs-exmenu [data-cs="copytext"]').click(); await sleep(60);
+        ok('menu: where copying is refused, the text is shown to copy by hand', !!q('[data-cs-textout]') && /Brother Tam/.test(q('[data-cs-textout]').value));
+        q('[data-cs="closetext"]').click(); await sleep(20);
+        ok('menu: and put away', !q('[data-cs-textout]'));
+        csClose();
+      } catch(e){ ok('round 51 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        window.print = keep.pr; window._findCombatantForPartyMember = keep.find;
+        try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: keep.clip }); } catch(_){}
+        document.getElementById('cs-print')?.remove();
+        if (typeof csClose === 'function') csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
       }
     }
 
