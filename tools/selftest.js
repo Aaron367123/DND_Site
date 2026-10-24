@@ -8533,6 +8533,27 @@
       } catch(e){ ok('round 55 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
 
+    // -- Round 56: a lowered maximum doesn't push the card's temp box out --------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        state.party.push({ id: 'pc_maxloss', name: 'Zindle "Deathwhistle" Farrago', cls: 'bard', level: 6, hp: 34, hpMax: 39, hpMaxNormal: 53, ac: 14, tempHp: 0 });
+        save(); openPanel('party'); await sleep(250); panelDefs.party._render(); await sleep(60);
+        const i = state.party.findIndex(p => p.id === 'pc_maxloss');
+        const card = panelDefs.party._body.querySelector('.char-card[data-cidx="' + i + '"]');
+        const cr = card.getBoundingClientRect(), t = card.querySelector('.char-hp-temp').getBoundingClientRect();
+        const b = card.querySelector('.char-hpmax-loss').getBoundingClientRect(), strip = card.querySelector('.party-hp-dmg').getBoundingClientRect();
+        ok('party: with a lowered maximum the temp box stays inside the card', t.right <= cr.right - 4, Math.round(t.right) + ' vs card ' + Math.round(cr.right));
+        ok('party: and the ▼ tag sits under the numbers, clear of the damage row', b.bottom <= strip.top && b.top > card.querySelector('.char-hp-current').getBoundingClientRect().top, Math.round(b.bottom) + ' vs ' + Math.round(strip.top));
+        closePanel('party');
+      } catch(e){ ok('round 56 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party'); panelDefs.party && panelDefs.party._render && panelDefs.party._render();
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

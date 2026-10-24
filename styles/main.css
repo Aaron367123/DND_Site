@@ -4689,6 +4689,15 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .card-stat[title="HP"]{position:relative}
 .card-stat .hp-maxloss-badge{position:absolute; top:-8px; right:-4px; margin:0; padding:0 4px; font-size:10px; line-height:1.35; z-index:1}
 .char-hpmax-loss:hover{background:rgba(194,84,80,.28)}
+/* On the party card the badge sat in the row with the numbers and the temp
+   box, and pushed the temp box out past the card's edge (Zindle: ending at
+   900px on an 866px card). Pinned under the numbers instead, centred, with
+   the room it needs made only when it's there. */
+.char-hp-big-num{position:relative}
+.char-hp-big-num .char-hpmax-loss{position:absolute; left:50%; top:calc(100% + 3px); transform:translateX(-50%); margin:0}
+.char-hp-big:has(.char-hpmax-loss){padding-bottom:22px}
+.party-grid.compact .char-hp-big-num .char-hpmax-loss{position:static; transform:none; margin-left:4px}
+.party-grid.compact .char-hp-big:has(.char-hpmax-loss){padding-bottom:0}
 .pa-hp-loss{margin-top:6px; font-size:var(--fs-sm); color:var(--danger)}
 
 /* ─── Combat: legendary resistance, lair, timed conditions, end-of-turn saves */
