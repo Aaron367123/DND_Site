@@ -5078,6 +5078,19 @@ select.cb-sel{padding-right:28px}
 /* Party: the header row */
 .party-head { display:flex; align-items:center; gap:6px; padding:0 0 8px; flex-wrap:wrap; }
 .party-head .btn .ico { width:14px; height:14px; }
+/* A window toolbar like the map's: a strip of its own across the top, inset
+   the same 10px as the cards and staying put while they scroll. It was bare
+   buttons jammed against the window's left edge, 10px left of every card. */
+.window-body .party-head { position:sticky; top:0; z-index:3; padding:6px 10px; gap:6px;
+  background:var(--panel-2); border-bottom:1px solid var(--border); align-items:stretch; }
+.party-head .btn { display:inline-flex; align-items:center; gap:5px; min-height:28px; }
+/* A phone fits the row on one line: Compact keeps its symbol, drops the word. */
+@media (max-width: 520px){
+  .window-body .party-head { flex-wrap:nowrap; padding:6px 10px; }
+  .party-head .btn { padding-left:9px; padding-right:9px; white-space:nowrap; }
+  .party-head .party-compact-btn .pc-word { display:none; }
+}
+.party-head .party-add-plus { font-size:1.15em; line-height:1; font-weight:600; }
 .party-compact-btn.active { border-color:var(--accent); color:var(--accent); }
 /* NPC Library: words where a symbol meant nothing on its own */
 #npclib-bulk-toggle { width:auto; padding:0 8px; font-size:var(--fs-xs); }

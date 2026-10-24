@@ -113,12 +113,12 @@ registerPanel('party',{
     const compact = !!(state.settings && state.settings.partyCompact);
     const has = state.party.some(p => !p.foe);
     return '<div class="party-head">'
-      + '<button class="btn small" data-act="party-add" title="Build one, import a character-sheet PDF, or start blank">＋ Add character</button>'
+      + '<button class="btn small" data-act="party-add" title="Build one, import a character-sheet PDF, or start blank"><span class="party-add-plus">+</span> Add character</button>'
       + (has ? '<button class="btn small" data-act="party-rest" title="Short rest (players spend hit dice on their phones) or long rest">' + ICO('i-clock') + ' Rest ▾</button>' : '')
       + (has ? '<button class="btn small" data-act="party-ask" title="Ask the players to roll — initiative, a save or a check — on their phones">' + ICO('i-phone') + ' Ask to roll</button>' : '')
       + '<span style="flex:1"></span>'
       + '<button class="btn small party-compact-btn' + (compact ? ' active' : '') + '" data-act="party-compact" data-party-compact="1" aria-pressed="' + compact + '"'
-      +   ' title="' + (compact ? 'Show full character cards' : 'Compact: one row per character') + '">' + (compact ? '▤' : '▦') + ' Compact</button>'
+      +   ' title="' + (compact ? 'Show full character cards' : 'Compact: one row per character') + '">' + (compact ? '▤' : '▦') + '<span class="pc-word"> Compact</span></button>'
       + '</div>';
   },
   _openRestMenu(anchor){

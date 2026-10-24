@@ -8576,6 +8576,24 @@
       finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
 
+    // -- Round 58: the party's toolbar is a strip of its own, lined up with the cards
+    {
+      try {
+        openPanel('party'); await sleep(250); panelDefs.party._render(); await sleep(60);
+        const B = panelDefs.party._body, head = B.querySelector('.party-head'), card = B.querySelector('.party-grid .char-card');
+        const btn = head.querySelector('[data-act="party-add"]').getBoundingClientRect(), c = card.getBoundingClientRect(), h = getComputedStyle(head);
+        ok('party toolbar: its first button lines up with the first card, not the window edge', Math.abs(btn.left - c.left) <= 2, Math.round(btn.left) + ' vs card ' + Math.round(c.left));
+        ok('party toolbar: a strip with its own background and a line under it', h.backgroundColor !== 'rgba(0, 0, 0, 0)' && parseFloat(h.borderBottomWidth) >= 1, h.backgroundColor + ' / ' + h.borderBottomWidth);
+        B.scrollTop = 200; await sleep(30);
+        ok('party toolbar: stays at the top while the cards scroll', B.scrollHeight <= B.clientHeight || Math.abs(head.getBoundingClientRect().top - B.getBoundingClientRect().top) <= 1, Math.round(head.getBoundingClientRect().top) + ' vs ' + Math.round(B.getBoundingClientRect().top));
+        B.scrollTop = 0;
+        const hs = [...head.querySelectorAll('.btn')].map(b => Math.round(b.getBoundingClientRect().height));
+        ok('party toolbar: every button the same height', new Set(hs).size === 1, hs.join(','));
+        const tops = [...head.querySelectorAll('.btn')].map(b => Math.round(b.getBoundingClientRect().top));
+        ok('party toolbar: one row, even on a phone', new Set(tops).size === 1, tops.join(','));
+        closePanel('party');
+      } catch(e){ ok('round 58 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
