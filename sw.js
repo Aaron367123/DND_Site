@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '64d97f91e6';
+const BUILD = 'bfd9a78417';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=6ba67af644',
@@ -93,12 +93,12 @@ const PRECACHE = [
   'js/features/pdf-import.js?v=06787122c5',
   'js/player/player-app.js?v=2e7e31f6c1',
   'js/ui/player-view.js?v=3c47cb84bd',
-  'js/sync/realtime.js?v=62f2e30973',
+  'js/sync/realtime.js?v=b526ecd3bc',
   'js/sync/presence.js?v=50e9bead2e',
   'js/ui/tutorial.js?v=7427317caa',
   'js/ui/onboarding.js?v=42199a671a',
   'js/ui/dock-tools.js?v=966a634053',
-  'js/app.js?v=2406de712f',
+  'js/app.js?v=64d094bb26',
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build

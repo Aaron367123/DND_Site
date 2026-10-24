@@ -66,6 +66,7 @@ function init(){
         }
       });
     }
+    window.__sktBooted = true; document.getElementById('skt-boot-stuck')?.remove();
     return;
   }
 
@@ -224,6 +225,9 @@ function init(){
   if (typeof initWorkspaces === 'function') initWorkspaces();
   if (typeof initOnboarding === 'function') initOnboarding();
   initServiceWorker();
+  // The startup watchdog in the HTML stands down (and takes back its notice
+  // if a slow start had already put one up).
+  window.__sktBooted = true; document.getElementById('skt-boot-stuck')?.remove();
   // Rolling local snapshots. Starts its own timer; the first fires a minute
   // in, so it never competes with boot. Player view doesn't need it — it
   // holds no authoritative state of its own.

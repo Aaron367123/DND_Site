@@ -1358,6 +1358,40 @@ function initRealtime() {
     return;
   }
 
+  // The Firebase libraries are fetched here rather than by <script> tags. As
+  // tags they sat in front of every one of the app's own scripts, and a
+  // deferred script waits for the one before it: a slow or blocked
+  // gstatic.com (a VPN, a browser's ad blocker) kept the whole app from
+  // starting — no dock, no windows, no error. Now the app starts, the sync
+  // dot says "Connecting…", and sync begins when they arrive.
+  _setSyncStatus('connecting');
+  _rtLoadSdk().then(_rtConnect, err => {
+    console.warn('[SKT] the Firebase libraries did not load (' + ((err && err.message) || err) + ') — running offline. Reload to try again.');
+    _setSyncStatus('offline');
+  });
+}
+
+const _RT_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+function _rtScript(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = false;
+    s.onload = () => res();
+    s.onerror = () => rej(new Error('could not load ' + src.split('/').pop()));
+    document.head.appendChild(s);
+  });
+}
+// The app library first; the database and auth ones both build on it. Given
+// up on after 20 seconds (offline then, until a reload).
+function _rtLoadSdk(){
+  if (window.firebase && firebase.database && firebase.auth) return Promise.resolve();
+  const load = _rtScript(_RT_SDK + 'firebase-app-compat.js')
+    .then(() => Promise.all([_rtScript(_RT_SDK + 'firebase-database-compat.js'), _rtScript(_RT_SDK + 'firebase-auth-compat.js')]));
+  const late = new Promise((_, rej) => setTimeout(() => rej(new Error('timed out')), 20000));
+  return Promise.race([load, late]);
+}
+
+function _rtConnect(){
   try {
     // Avoid duplicate init if module is re-loaded
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);

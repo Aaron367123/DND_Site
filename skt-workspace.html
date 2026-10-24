@@ -9,6 +9,60 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
+<script>
+/* Startup watchdog. Inline and first, so it runs even when a deferred script
+   never arrives (every <script defer> waits for the one before it, so one
+   hung download stops the whole app with no error anywhere). If the app has
+   not said it started (window.__sktBooted, set at the end of init) after 12
+   seconds, it says so on screen: the errors it saw, the scripts that never
+   finished loading, and three ways out that keep the campaign's data. */
+(function(){
+  var errs = [];
+  window.__sktBootErrors = errs;
+  window.addEventListener('error', function(e){
+    var t = e.target;
+    if (t && t !== window && (t.src || t.href)) errs.push('Could not load ' + (t.src || t.href));
+    else errs.push((e.message || 'Error') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''));
+  }, true);
+  window.addEventListener('unhandledrejection', function(e){ errs.push('Unhandled: ' + ((e.reason && (e.reason.message || e.reason)) || 'rejection')); });
+  setTimeout(function(){
+    if (window.__sktBooted || document.getElementById('skt-boot-stuck')) return;
+    var done = {};
+    try { performance.getEntriesByType('resource').forEach(function(r){ done[r.name] = 1; }); } catch(e){}
+    var waiting = [].slice.call(document.querySelectorAll('script[src]')).map(function(s){ return s.src; }).filter(function(u){ return !done[u]; });
+    var esc = function(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var short = function(u){ try { var x = new URL(u); return (x.host === location.host ? '' : x.host + ' ') + x.pathname.split('/').pop(); } catch(e){ return u; } };
+    var box = document.createElement('div');
+    box.id = 'skt-boot-stuck';
+    box.setAttribute('role', 'alert');
+    box.style.cssText = 'position:fixed;inset:auto 16px 16px 16px;max-width:620px;margin:0 auto;z-index:2147483647;background:#232323;color:#e8e8e8;border:1px solid #ec7c78;border-radius:10px;padding:14px 16px;font:14px/1.45 system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.6)';
+    box.innerHTML = '<b style="font-size:16px">The app didn\u2019t finish starting.</b>'
+      + '<div style="margin:6px 0;color:#bbb">Your campaign is safe; nothing has been changed. A screenshot of this helps find the cause.</div>'
+      + (waiting.length ? '<div><b>Still waiting for:</b> ' + esc(waiting.slice(0, 6).map(short).join(', ')) + (waiting.length > 6 ? ' and ' + (waiting.length - 6) + ' more' : '') + '</div>' : '')
+      + (errs.length ? '<div><b>Errors:</b><br>' + errs.slice(0, 6).map(esc).join('<br>') + '</div>' : '')
+      + (!waiting.length && !errs.length ? '<div>No errors and every script loaded, so something is still running.</div>' : '')
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">'
+      + '<button data-boot="reload" style="padding:7px 12px">Reload</button>'
+      + '<button data-boot="fresh" style="padding:7px 12px">Reload with a fresh offline cache</button>'
+      + '<button data-boot="nosync" style="padding:7px 12px">Start without sync (this tab)</button></div>';
+    box.addEventListener('click', function(e){
+      var b = e.target.closest && e.target.closest('[data-boot]'); if (!b) return;
+      var go = function(){ location.reload(); };
+      if (b.dataset.boot === 'nosync'){ var u = new URL(location.href); u.searchParams.set('nosync', '1'); location.href = u.toString(); return; }
+      if (b.dataset.boot === 'fresh'){
+        // The offline copy of the app only: service worker and its caches.
+        // localStorage (the campaign) is not touched.
+        var jobs = [];
+        try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })); } catch(e){}
+        try { if (window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^skt-/.test(k); }).map(function(k){ return caches.delete(k); })); })); } catch(e){}
+        Promise.all(jobs).then(go, go); return;
+      }
+      go();
+    });
+    (document.body || document.documentElement).appendChild(box);
+  }, 12000);
+})();
+</script>
 <link rel="stylesheet" href="styles/main.css?v=6ba67af644">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
@@ -393,9 +447,6 @@
      parsing, and a syntax error in any of it gets logged instead of lost. -->
 <script defer src="js/core/errors.js?v=67c70f2e1d"></script>
 <!-- Firebase (required for real-time sync; safe to remove if not using) -->
-<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <!-- 1. Data (no deps) -->
 <script defer src="js/core/data.js?v=5ead9a4764"></script>
 <!-- 1b. Theme (no deps; applies CSS vars before any panels render) -->
@@ -465,12 +516,12 @@
 <script defer src="js/features/pdf-import.js?v=06787122c5"></script>
 <script defer src="js/player/player-app.js?v=2e7e31f6c1"></script>
 <script defer src="js/ui/player-view.js?v=3c47cb84bd"></script>
-<script defer src="js/sync/realtime.js?v=62f2e30973"></script>
+<script defer src="js/sync/realtime.js?v=b526ecd3bc"></script>
 <script defer src="js/sync/presence.js?v=50e9bead2e"></script>
 <script defer src="js/ui/tutorial.js?v=7427317caa"></script>
 <script defer src="js/ui/onboarding.js?v=42199a671a"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->
 <script defer src="js/ui/dock-tools.js?v=966a634053"></script>
-<script defer src="js/app.js?v=2406de712f"></script>
+<script defer src="js/app.js?v=64d094bb26"></script>
 </body>
 </html>

@@ -8523,6 +8523,16 @@
       finally { app.style.height = h0; if (typeof sktPresenceClose === 'function') sktPresenceClose(); }
     }
 
+    // -- Round 55: starting up can't be held hostage by a slow download -------
+    {
+      try {
+        ok('boot: the app says it started, and the watchdog stood down', window.__sktBooted === true && !document.getElementById('skt-boot-stuck') && Array.isArray(window.__sktBootErrors));
+        ok('boot: no <script> tag waits on gstatic.com (Firebase loads when sync starts)', ![...document.querySelectorAll('script[src]')].some(s => /gstatic\.com/.test(s.src)));
+        ok('boot: the watchdog is the first script, inline in the head', !!document.head.querySelector('script:not([src])') && /__sktBooted/.test(document.head.querySelector('script:not([src])').textContent));
+        ok('boot: the Firebase loader exists for sync to use', typeof _rtLoadSdk === 'function' && typeof _rtConnect === 'function');
+      } catch(e){ ok('round 55 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
