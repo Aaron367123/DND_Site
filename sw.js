@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '00f56d7f4f';
+const BUILD = 'a5bb77a563';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=3e0db95b93',
+  'styles/main.css?v=d52356195d',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=5ead9a4764',
   'js/core/theme.js?v=9db78fe46f',

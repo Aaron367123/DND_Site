@@ -8459,6 +8459,22 @@
       }
     }
 
+    // -- Round 53: the builder reads like the sheet -------------------------
+    {
+      try {
+        await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
+        CB.build.cls = 'Wizard'; CB.build.level = 5; cbQuickBuild();
+        const px = s => { const e = document.querySelector('#cb-root ' + s); return e ? parseFloat(getComputedStyle(e).fontSize) : 0; };
+        CB.step = 'class'; cbRender(); await sleep(30);
+        ok('builder big: class choices at 16px and the step tabs at 14px', px('.cb-card') >= 16 && px('[data-cb-step]') >= 14, px('.cb-card') + ' / ' + px('[data-cb-step]'));
+        CB.step = 'spells'; cbRender(); await sleep(30);
+        ok('builder big: spell options and notes at 14px, the info button 12px', px('.cb-check') >= 14 && px('.cb-dim') >= 14 && px('.cb-spi') >= 12, px('.cb-check') + ' / ' + px('.cb-dim') + ' / ' + px('.cb-spi'));
+        ok('builder big: headings at 20px', px('.cb-main h3') >= 20);
+        cbClose();
+      } catch(e){ ok('round 53 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

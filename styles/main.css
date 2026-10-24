@@ -5553,3 +5553,16 @@ button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
 #cs-root .cs-ab i { font-size:var(--fs-sm); border:1px solid var(--border); border-radius:10px; padding:0 8px; margin-top:2px; }
 #cs-root .cs-kv { padding:3px 0; }
 #cs-root .cs-hp-n b { font-size:36px; }
+
+/* ── The builder, readable like the sheet ───────────────────────────────────
+   Its options, step tabs, notes and summary were 11px. Inside the builder
+   the type scale goes up (options and notes 14px, choices 16px, headings
+   20px); the rest of the app keeps its denser one. */
+#cb-root { --fs-2xs:11px; --fs-xs:12px; --fs-sm:14px; --fs-md:15px; --fs-lg:16px; --fs-xl:20px; --fs-2xl:22px; --fs-3xl:24px; font-size:var(--fs-md); }
+#cb-root .cb-card { font-size:var(--fs-lg); padding:10px 12px; }
+#cb-root .cb-checks { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:6px 12px; }
+#cb-root .cb-check { padding:7px 8px; }
+#cb-root .cb-check input[type="checkbox"], #cb-root .cb-check input[type="radio"] { width:16px; height:16px; }
+#cb-root .cb-spi { width:20px; height:20px; font-size:12px; line-height:18px; }
+/* A proficient skill's tinted row keeps its ability label readable. */
+.cb-sk.prof1 i, .cb-sk.prof2 i { color:var(--text-muted); }
