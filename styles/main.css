@@ -1185,7 +1185,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .party-grid.compact .char-hp-block{
   flex:1;display:flex;align-items:center;gap:8px;background:transparent;padding:0
 }
-.party-grid.compact .char-hp-big{flex:1;display:flex;align-items:center;gap:6px}
+.party-grid.compact .char-hp-big{flex:1;display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
 .party-grid.compact .char-hp-big-num{flex:0 0 auto}
 .party-grid.compact .char-hp-big-num .char-hp-current{font-size:var(--fs-2xl);width:38px}
 .party-grid.compact .char-hp-big-num .char-hp-max{font-size:var(--fs-sm);width:30px}
