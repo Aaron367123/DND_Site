@@ -633,8 +633,6 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   body.player-mode .window-body .hd-pip{width:18px;height:18px}
   /* Death-save pips */
   body.player-mode .window-body .ds-pip{width:22px;height:22px}
-  /* Spell slot pips */
-  body.player-mode .window-body .slot-pip{width:18px;height:18px}
 
   /* × close buttons on cards (party, bestiary, resource rows) — the most
      common "I hit the wrong thing" target. Make them clearly larger and
@@ -647,7 +645,6 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   }
 
   /* Sheet tab bar */
-  body.player-mode .window-body .sheet-tab{padding:10px 6px;font-size:var(--fs-sm)}
 
   /* Combat tracker action buttons in card */
   body.player-mode .window-body .combatant-card .btn{min-height:34px}
@@ -1217,9 +1214,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .party-grid.compact .char-wildshape,
 .party-grid.compact .hd-row,
 .party-grid.compact .resource-section,
-.party-grid.compact .insp-give-row,
-.party-grid.compact .sheet-tab-strip,
-.party-grid.compact .sheet-content-open{display:none}
+.party-grid.compact .insp-give-row{display:none}
 .party-settings{padding:0 10px 10px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .party-settings-body{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);width:100%;box-sizing:border-box}
 /* MANAGE PARTY modal */
@@ -1304,7 +1299,6 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .char-card > .hd-row            {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
 .char-card > .resource-section  {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
 .char-card > .insp-give-row     {padding-top:6px;border-top:1px dashed rgba(255,255,255,.06)}
-.char-card > .sheet-tab-strip   {margin-top:4px}
 /* Compact mode keeps the row dividers off — they only make sense in the
    stacked-vertical full card layout. No !important needed: this selector is
    (0,3,0) and every divider rule above is `.char-card > .child` (0,2,0), so it
@@ -1611,16 +1605,6 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .sheet-resist-collapsed .btn.small{font-size:var(--fs-xs);opacity:.7}
 .sheet-resist-collapsed .btn.small:hover{opacity:1}
 
-/* Slot pips are now interactive — restore cursor + a hover state so the
-   affordance is obvious. The available/spent colors stay as defined. */
-.slot-pip{cursor:pointer;transition:transform .12s,box-shadow .12s}
-.slot-pip:hover{transform:scale(1.18);box-shadow:0 0 0 1px var(--accent)}
-
-/* Attack table row click target — subtle highlight on hover for rollable
-   rows; non-rollable rows render identically (no extra chrome). */
-.sheet-table tr.attack-row.rollable:hover{background:rgba(212,165,116,.10)}
-.sheet-table tr.attack-row.rollable td:first-child::before{content:'🎲 ';opacity:.55;font-size:var(--fs-xs)}
-
 /* One-click "Add to combat" button in the party-card header. Sits to the
    right of the name/subline column. Affordance flips: "+ ⚔" when not in
    combat → "⚔ In" once added (accent-tinted, click again to remove). */
@@ -1808,54 +1792,11 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 }
 .insp-give-btn:hover{background:rgba(232,199,95,.10);border-color:rgba(232,199,95,.55);color:color-mix(in srgb, #e8c75f 55%, var(--text))}
 .insp-give-btn.bardic:hover{background:rgba(192,143,222,.10);border-color:rgba(192,143,222,.55);color:color-mix(in srgb, #c08fde 55%, var(--text))}
-
-/* ===== Character sheet — always-visible tab strip ===== */
-.sheet-tab-strip{
-  display:flex;margin-top:4px;
-  border:1px solid var(--border);border-radius:var(--r-md);background:var(--panel-3);overflow:hidden
-}
-.sheet-tab-strip .sheet-tab{
-  flex:1;padding:5px 4px;background:transparent;border:none;border-right:1px solid var(--border);
-  color:var(--text-muted);font-size:var(--fs-xs);cursor:pointer;letter-spacing:.04em;text-transform:uppercase;
-  font-weight:600;transition:background .12s,color .12s;font-family:inherit
-}
-.sheet-tab-strip .sheet-tab:last-child{border-right:none}
-.sheet-tab-strip .sheet-tab:hover{background:rgba(255,255,255,.05);color:var(--text)}
-.sheet-tab-strip .sheet-tab.active{background:var(--panel-2);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
-.sheet-content-open{
-  margin-top:-1px;
-  padding:8px 10px;font-size:var(--fs-sm);color:var(--text);
-  max-height:380px;overflow-y:auto;
-  background:var(--panel-2);border:1px solid var(--border);border-top:none;
-  border-radius:0 0 5px 5px
-}
-.sheet-content-open .sheet-empty{padding:14px;text-align:center;color:var(--text-muted);font-size:var(--fs-sm);font-style:italic}
-
-.sheet-body{margin-top:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--panel-2);overflow:hidden}
-.sheet-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel-3)}
-.sheet-tabs .sheet-tab{flex:1;padding:6px 4px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--text-muted);font-size:var(--fs-xs);cursor:pointer;letter-spacing:.04em;text-transform:uppercase;font-weight:600;transition:background .12s,color .12s}
-.sheet-tabs .sheet-tab:last-child{border-right:none}
-.sheet-tabs .sheet-tab:hover{background:rgba(255,255,255,.04);color:var(--text)}
-.sheet-tabs .sheet-tab.active{background:var(--panel-2);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
-.sheet-content{padding:8px 10px;font-size:var(--fs-sm);color:var(--text);max-height:380px;overflow-y:auto}
 .sheet-empty{padding:14px;text-align:center;color:var(--text-muted);font-size:var(--fs-sm);font-style:italic}
 .sheet-block{margin-top:10px}
 .sheet-block:first-child{margin-top:0}
 .sheet-block h5{margin:0 0 4px;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700}
-.sheet-text{font-size:var(--fs-sm);line-height:1.4;color:var(--text);background:var(--panel-3);padding:6px 8px;border-radius:var(--r-sm);border:1px solid var(--border)}
-.sheet-text-pre{white-space:pre-wrap;word-wrap:break-word;max-height:240px;overflow-y:auto}
 .sheet-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
-.sheet-col h5{margin:0 0 4px;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700}
-.sheet-stat-row{display:flex;justify-content:space-between;align-items:center;padding:2px 4px;border-bottom:1px dotted var(--border);font-size:var(--fs-sm)}
-.sheet-stat-row:last-child{border-bottom:none}
-.sheet-stat-val{font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
-.sheet-abilities{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:6px}
-.sheet-ab{background:var(--panel-3);border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 2px;text-align:center;transition:border-color .12s,background .12s}
-.sheet-ab.rollable{cursor:pointer}
-.sheet-ab.rollable:hover{border-color:var(--accent);background:rgba(212,165,116,.12)}
-.sheet-ab.rollable:active{transform:scale(.97)}
-.sheet-stat-row.rollable:hover{background:rgba(212,165,116,.1);border-radius:var(--r-sm)}
-.sheet-stat-row.rollable:hover .sheet-stat-val{color:var(--accent)}
 /* Last-roll strip — pinned above the ability block on Stats / Skills tabs. */
 .roll-strip{display:flex;align-items:center;gap:6px;background:var(--panel-3);border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;margin-bottom:4px;font-size:var(--fs-sm);transition:border-color .2s,background .2s;animation:rollPulse .5s ease-out}
 .roll-strip.history{
@@ -1891,42 +1832,8 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .roll-strip .roll-status.crit{background:rgba(107,158,107,.25);color:#9ad19a}
 .roll-strip .roll-status.fumble{background:rgba(194,84,80,.25);color:#e0a8a6}
 .roll-strip .roll-hint{font-size:var(--fs-xs);color:var(--text-dim);cursor:help;border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;line-height:1}
-.sheet-ab-lbl{font-size:var(--fs-2xs);color:var(--text-muted);font-weight:700;letter-spacing:.05em}
-.sheet-ab-val{font-size:var(--fs-xl);font-weight:700;color:var(--text)}
-.sheet-ab-mod{font-size:var(--fs-xs);color:var(--accent);font-weight:600}
-.sheet-skills{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
-/* Skill chip glyphs (used by the per-character sheet AND the party-skills
-   modal). Round colored circles indicate proficiency level. */
-.sheet-skill-chip{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;font-size:var(--fs-xs);line-height:1;background:var(--panel-3);border:1px solid var(--border);margin-right:4px}
-.sheet-skill-chip.expert{color:var(--accent);border-color:rgba(212,165,116,.4);background:rgba(212,165,116,.10)}
-.sheet-skill-chip.proficient{color:#7aa87a;border-color:rgba(122,168,122,.4);background:rgba(122,168,122,.10)}
-.sheet-skill-chip.half{color:var(--text-muted);border-color:rgba(160,160,160,.3);background:rgba(255,255,255,.04)}
-/* Per-character skills tab — grouped by proficiency level */
-.sheet-skills-prof{display:flex;flex-direction:column;gap:8px}
-.sheet-prof-section h5{display:flex;align-items:center;gap:4px;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin:0 0 4px}
-.sheet-prof-section.expert h5{color:var(--accent)}
-.sheet-prof-section.proficient h5{color:#7aa87a}
-.sheet-prof-count{font-size:var(--fs-2xs);background:var(--panel-3);color:var(--text-dim);padding:1px 6px;border-radius:var(--r-lg);margin-left:auto;font-weight:600;letter-spacing:.04em}
-.sheet-prof-untrained{margin-top:4px;border-top:1px dotted var(--border);padding-top:6px}
-.sheet-prof-untrained summary{cursor:pointer;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);padding:4px 0;outline:none;list-style:none}
-.sheet-prof-untrained summary::-webkit-details-marker{display:none}
-.sheet-prof-untrained summary::before{content:'▸ ';display:inline-block;transition:transform .12s}
-.sheet-prof-untrained[open] summary::before{transform:rotate(90deg)}
-.sheet-prof-untrained summary:hover{color:var(--text-muted)}
-.sheet-table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);margin-top:4px}
-.sheet-table th,.sheet-table td{padding:3px 6px;text-align:left;border-bottom:1px dotted var(--border)}
-.sheet-table th{font-size:var(--fs-2xs);text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
-.sheet-table td:nth-child(2),.sheet-table td:nth-child(3){font-variant-numeric:tabular-nums;text-align:center;color:var(--accent);font-weight:600}
-.sheet-slots{display:flex;flex-direction:column;gap:4px}
-.sheet-slot-row{display:flex;align-items:center;gap:6px;font-size:var(--fs-sm)}
 .slot-lvl{font-weight:700;color:var(--text-muted);min-width:28px}
-.slot-pip{width:11px;height:11px;border-radius:var(--r-sm);border:1px solid var(--border);transition:background .18s ease,border-color .18s ease,box-shadow .18s ease}
-.slot-pip.available{background:var(--accent);border-color:var(--accent)}
-.slot-pip.spent{background:transparent}
 .slot-count{font-size:var(--fs-xs);color:var(--text-dim);margin-left:auto;font-variant-numeric:tabular-nums}
-.sheet-spell-list{display:flex;flex-wrap:wrap;gap:4px}
-.sheet-spell-chip{background:var(--panel-3);border:1px solid var(--border);border-radius:var(--r-lg);padding:2px 8px;font-size:var(--fs-xs);color:var(--text);cursor:pointer;transition:border-color .12s,color .12s,background .12s}
-.sheet-spell-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
 /* Languages & proficiency chips (Stats tab) */
 .prof-group{margin-top:6px}
 .prof-group:first-child{margin-top:0}
@@ -4707,7 +4614,6 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .tv-pip-r[data-tv]:hover { border-color:var(--accent); color:var(--text); }
 .tv-pip-r.spent { opacity:.6; text-decoration:line-through; }
 
-
 /* Map scale: a number and its unit, side by side in the grid settings. */
 .bm-set-scale { display:flex; gap:5px; margin-top:4px; }
 .bm-set-scale input { flex:1; min-width:0; background:var(--panel-3);
@@ -5167,7 +5073,6 @@ button.pa-res-pip::after{content:''; position:absolute; inset:-7px -3px}
 /* Character builder: details */
 .cb-detail-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:6px 10px; margin:8px 0; }
 #cb-root textarea { width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm); padding:6px 8px; font:inherit; resize:vertical; }
-.sheet-gold { width:64px; text-align:right; }
 .pa-chip.dim { opacity:.6; }
 .pa-about { margin:4px 0 8px; font-size:var(--fs-md); }
 .pa-about b { display:block; font-size:var(--fs-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
@@ -5566,3 +5471,5 @@ button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
 #cb-root .cb-spi { width:20px; height:20px; font-size:12px; line-height:18px; }
 /* A proficient skill's tinted row keeps its ability label readable. */
 .cb-sk.prof1 i, .cb-sk.prof2 i { color:var(--text-muted); }
+/* A compact row is a glance: the card's last roll stays on the full card. */
+.party-grid.compact .roll-history-wrap { display:none; }

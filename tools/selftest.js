@@ -890,10 +890,10 @@
                          ].join(String.fromCharCode(10)) } },
                          resources:[{name:'Focus Points',type:'pool',current:5,max:6}] }];
         panelDefs.party._render(); await sleep(300);
-        const tab = [...document.querySelectorAll('button,[data-tab]')]
-          .find(b => /^features$/i.test((b.textContent || '').trim()));
-        if (tab){ tab.click(); await sleep(300); }
-        const rows = [...document.querySelectorAll('details.feat-block')].filter(d => {
+        // An imported character's features show in the full sheet's
+        // Features tab (the party card no longer has its own tabs).
+        openCharSheet('zzlay', { tab: 'features' }); await sleep(300);
+        const rows = [...document.querySelectorAll('#cs-root details.feat-block')].filter(d => {
           const p = d.querySelector('.feat-lvl');
           return p && p.classList.contains('act');
         });
@@ -917,6 +917,7 @@
           ok('acts/layout: the name is not shredded into single words',
              sb.height <= 70, String(Math.round(sb.height)));
         }
+        if (typeof csClose === 'function') csClose();
         state.party = JSON.parse(P0); panelDefs.party._render(); await sleep(200);
       }
 
@@ -5607,15 +5608,25 @@
         ok('builder: the character keeps them all',
            !!made && typeof made.gold === 'number' && made.sheet.size === 'Small' && made.sheet.details.alignment === 'Lawful Good'
            && made.sheet.spellbook.length === 5 && made.sheet.spells.includes('Bless'), made && JSON.stringify({ g: made.gold, s: made.sheet.size }));
-        // The party sheet shows them; gold can be changed there.
+        // One sheet: the party card is a tracker, and its Sheet button opens
+        // the full sheet, where size, alignment and gold live.
         openPanel('party'); await sleep(200);
-        const P = panelDefs.party; P._expanded[made.id] = true; P._activeTab[made.id] = 'stats'; P._render(); await sleep(60);
-        const gi = P._body.querySelector('.sheet-gold[data-idx="' + state.party.findIndex(p => p.id === made.id) + '"]');
-        ok('party: the Stats tab shows size, alignment and gold', !!gi && /Small/.test(P._body.textContent) && /Lawful Good/.test(P._body.textContent));
-        gi.value = '-3'; gi.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
-        ok('party: gold edited there is a whole number, never below zero', state.party.find(p => p.id === made.id).gold === 0);
-        gi.value = '42'; gi.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
-        ok('party: and saved', state.party.find(p => p.id === made.id).gold === 42);
+        const P = panelDefs.party, pi = state.party.findIndex(p => p.id === made.id);
+        const card = P._body.querySelector('.char-card[data-cidx="' + pi + '"]');
+        ok('party: the card has no mini-sheet tabs of its own', !!card && !card.querySelector('.sheet-tab, .sheet-tab-strip, .sheet-content'));
+        card.querySelector('[data-act="open-sheet"]').click(); await sleep(150);
+        const csr = document.getElementById('cs-root');
+        ok('party: its Sheet button opens the one full sheet', !!csr && CS.id === made.id);
+        CS.tab = 'background'; csRender(); await sleep(20);
+        ok('party: which shows size and alignment', /Small/.test(csr.textContent) && /Lawful Good/.test(document.querySelector('#cs-root [data-cs-detail="alignment"]').value));
+        CS.tab = 'inventory'; csRender(); await sleep(20);
+        const gin = document.querySelector('#cs-root [data-cs-coin="gp"]');
+        gin.value = '42'; gin.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
+        ok('party: and its gold, changed there', state.party.find(p => p.id === made.id).gold === 42);
+        csClose();
+        // A roll from the card's ⋯ menu shows on the card itself.
+        P._setLastRoll(state.party[pi], P._rollD20(3, { mode: 'normal', label: 'Booka · Initiative' })); P._render(); await sleep(30);
+        ok('party: the card shows its last roll', /Initiative/.test(P._body.querySelector('.char-card[data-cidx="' + pi + '"]').textContent));
         closePanel('party');
       } catch(e){ ok('builder: the feat-spell / spellbook / details checks ran to completion', false, e.message); }
       finally {

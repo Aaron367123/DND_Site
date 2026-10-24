@@ -7,8 +7,6 @@ registerPanel('party',{
   title:'Party Tracker',icon:'♥',
   _pickerOpen:null, // idx of card with open icon picker
   // UI-only state (not synced) keyed by character id.
-  _expanded:{},
-  _activeTab:{}, // 'stats' | 'skills' | 'spells'
   // Last heal/damage amount + type, PER character id. Panel-scoping these (one
   // value for the whole panel) bled the type between PCs — set "fire" on one
   // card and every other card's quick-damage defaulted to fire, silently
@@ -175,7 +173,7 @@ registerPanel('party',{
   // remote sync deletion).
   _pruneTransientState(){
     const live = new Set(state.party.map(p => p.id));
-    ['_rollHistory','_activeTab','_expanded','_lastRoll','_historyOpen','_resistancesOpen','_lastDmgType','_lastDmgAmount'].forEach(name => {
+    ['_rollHistory','_lastRoll','_historyOpen','_resistancesOpen','_lastDmgType','_lastDmgAmount'].forEach(name => {
       const m = this[name];
       if (!m || typeof m !== 'object') return;
       for (const id in m){ if (!live.has(id)) delete m[id]; }
@@ -453,38 +451,12 @@ registerPanel('party',{
           }
           return parts.length ? `<div class="insp-give-row">${parts.join('')}</div>` : '';
         })()
-      // Tab strip — always visible. Click a tab to show its content;
-      // click the SAME tab to collapse. Replaces the old ▼/▲ accordion.
-      + this._sheetTabStrip(c, i)
+      // The card's last roll (from its ⋯ Roll menu). The full sheet — the
+      // Sheet button — is the one place for stats, skills, spells, features.
+      + this._renderLastRoll(c)
     +'</div>';
   },
 
-  // ------------------------------------------------------------------
-  // Character sheet — Stats / Skills / Spells / Features tabs.
-  // Tab strip is ALWAYS visible at the bottom of the card. Clicking a tab:
-  //   • If no tab is currently open → opens it.
-  //   • If clicking the OPEN tab → collapses (no content shown).
-  //   • If clicking a DIFFERENT tab → switches the content panel.
-  // _expanded[c.id] tracks open/closed; _activeTab[c.id] tracks which tab.
-  // ------------------------------------------------------------------
-  _sheetTabStrip(c, i){
-    const tabs = ['stats','skills','spells','features'];
-    const labels = {stats:'Stats', skills:'Skills', spells:'Spells', features:'Features'};
-    const expanded = !!this._expanded[c.id];
-    const active = expanded ? (this._activeTab[c.id] || 'stats') : null;
-    const tabBar = tabs.map(t =>
-      `<button class="sheet-tab ${t===active?'active':''}" data-act="sheet-tab-toggle" data-idx="${i}" data-tab="${t}" title="${labels[t]}${t===active?' — click again to collapse':''}">${labels[t]}</button>`
-    ).join('');
-    let body = '';
-    if (expanded){
-      if (active === 'stats')        body = this._tabStats(c);
-      else if (active === 'skills')  body = this._tabSkills(c);
-      else if (active === 'spells')  body = this._tabSpells(c);
-      else if (active === 'features')body = this._tabFeatures(c);
-    }
-    return `<div class="sheet-tab-strip">${tabBar}</div>`
-      + (expanded ? `<div class="sheet-content sheet-content-open">${body}</div>` : '');
-  },
 
   // Features tab — pulls from the loaded 5etools dataset and renders the
   // character's race, class, and subclass features filtered by their level.
@@ -1320,21 +1292,6 @@ registerPanel('party',{
     };
   },
 
-  // Roll an attack: d20 + bonus to-hit, then roll damage dice. Returns the
-  // same shape as _rollD20() with an extra `damage` block when dmgExpr was
-  // provided. Crits double the dice (not modifiers), per 5e RAW.
-  _rollAttack(c, name, atkBonus, dmgExpr, mode){
-    const toHit = this._rollD20(atkBonus, {
-      mode,
-      label: c.name + ' · ' + name + ' attack',
-    });
-    if (dmgExpr){
-      const dmg = this._rollDamageExpr(dmgExpr, toHit.crit);
-      toHit.damage = dmg;
-      toHit.attack = true;
-    }
-    return toHit;
-  },
 
   // Tiny dice-expression evaluator. Accepts things like:
   //   "2d6+3", "1d8 +5", "1d10+3 piercing", "2d6+1d4+3 fire", "1d8"
@@ -1938,297 +1895,6 @@ registerPanel('party',{
     return '<div class="char-prolls" title="Rolled on their sheet">' + rs.map(r => '<span>🎲 ' + esc(r.label) + ' <b>' + esc(String(r.total)) + '</b></span>').join('') + '</div>';
   },
 
-  _abilityBlock(c){
-    const ab = c.abilities || {};
-    const order = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
-    return '<div class="sheet-abilities">' + order.map(([k,lbl])=>{
-      const v = ab[k];
-      const mod = (typeof v === 'number') ? Math.floor((v-10)/2) : null;
-      const rollable = mod != null;
-      // Clickable when the ability score is set. data-roll-ability/data-mod
-      // carry everything needed for the click handler; the visible body is
-      // unchanged from the read-only render.
-      const cls = 'sheet-ab' + (rollable ? ' rollable' : '');
-      const dataAttrs = rollable
-        ? ` data-act="roll-check" data-cid="${esc(c.id)}" data-ability="${k}" data-mod="${mod}" title="Click to roll d20${(mod>=0?'+':'')+mod} (Shift = adv · Alt = dis)"`
-        : '';
-      return `<div class="${cls}"${dataAttrs}><div class="sheet-ab-lbl">${lbl}</div><div class="sheet-ab-val">${v??'—'}</div><div class="sheet-ab-mod">${mod==null?'':(mod>=0?'+':'')+mod}</div></div>`;
-    }).join('') + '</div>';
-  },
-
-  _tabStats(c){
-    const sh = c.sheet || {};
-    const saveDefs = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
-    const ab = c.abilities || {};
-    const saves = sh.saves || {};
-    const saveRows = saveDefs.map(([k,lbl])=>{
-      // Prefer imported save bonus; else compute from ability mod.
-      let v = saves[k];
-      if (v == null && typeof ab[k]==='number') v = Math.floor((ab[k]-10)/2);
-      const rollable = v != null;
-      const extra = rollable
-        ? ` data-act="roll-save" data-cid="${esc(c.id)}" data-ability="${k}" data-mod="${v}" title="Click to roll d20${(v>=0?'+':'')+v} save (Shift = adv · Alt = dis)" style="cursor:pointer"`
-        : '';
-      const cls = 'sheet-stat-row' + (rollable ? ' rollable' : '');
-      return `<div class="${cls}"${extra}><span>${lbl} Save</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
-    }).join('');
-    const prof = sh.profBonus;
-    const pp = sh.passivePerception;
-    const dexMod = (typeof ab.dex==='number') ? Math.floor((ab.dex-10)/2) : null;
-    // Passive score = 10 + the skill's TOTAL modifier.
-    //
-    // sheet.skills[key] already holds that total — ability mod, proficiency
-    // and expertise included; _classifyCharSkill works by subtracting the
-    // ability mod back out of it. So there is nothing to reconstruct.
-    //
-    // This previously fed the raw NUMBER into a helper that compared it
-    // against the strings 'expert' / 'proficient' / 'half'. No branch ever
-    // matched, the bonus came out 0, and every passive score was just
-    // 10 + ability mod. A level 9 rogue with expertise in Perception showed
-    // 12 instead of 20 — eight points low, and silently, on the number a DM
-    // checks every single stealth roll.
-    const skills = sh.skills || {};
-    const passiveOf = (abilKey, skillKey) => {
-      const skillMod = skills[skillKey];
-      if (typeof skillMod === 'number') return 10 + skillMod;
-      // Skill not on the sheet — fall back to the bare ability mod. Still
-      // approximate, but it's all the character record gives us.
-      const m = (typeof ab[abilKey] === 'number') ? Math.floor((ab[abilKey]-10)/2) : null;
-      return m == null ? null : 10 + m;
-    };
-    const computedPP = passiveOf('wis', 'perception');
-    const piVal = passiveOf('wis', 'insight');
-    const pIVal = passiveOf('int', 'investigation');
-    return this._renderLastRoll(c)
-      + this._abilityBlock(c)
-      + this._renderResistances(c)
-      + '<div class="sheet-grid2">'
-      + '<div class="sheet-col"><h5>Saving Throws</h5>'+saveRows+'</div>'
-      + '<div class="sheet-col"><h5>Vitals</h5>'
-      +   `<div class="sheet-stat-row"><span>Proficiency</span><span class="sheet-stat-val">${prof==null?'—':'+'+prof}</span></div>`
-      +   `<div class="sheet-stat-row"><span>Passive Perception</span><span class="sheet-stat-val">${pp ?? computedPP ?? '—'}</span></div>`
-      +   `<div class="sheet-stat-row"><span>Passive Insight</span><span class="sheet-stat-val">${piVal ?? '—'}</span></div>`
-      +   `<div class="sheet-stat-row"><span>Passive Investigation</span><span class="sheet-stat-val">${pIVal ?? '—'}</span></div>`
-      +   `<div class="sheet-stat-row rollable" data-act="roll-init" data-cid="${esc(c.id)}" data-mod="${c.init??0}" title="Click to roll initiative (Shift = adv · Alt = dis)" style="cursor:pointer"><span>Initiative</span><span class="sheet-stat-val">${(c.init>=0?'+':'')+(c.init??0)}</span></div>`
-      +   `<div class="sheet-stat-row"><span>Speed</span><span class="sheet-stat-val">${c.spd ?? '—'}</span></div>`
-      +   `<div class="sheet-stat-row"><span>AC</span><span class="sheet-stat-val">${c.ac ?? '—'}</span></div>`
-      // From the character builder: size, alignment, and the gold they carry.
-      +   (sh.size ? `<div class="sheet-stat-row"><span>Size</span><span class="sheet-stat-val">${esc(sh.size)}</span></div>` : '')
-      +   (sh.details && sh.details.alignment ? `<div class="sheet-stat-row"><span>Alignment</span><span class="sheet-stat-val">${esc(sh.details.alignment)}</span></div>` : '')
-      +   (typeof c.gold === 'number' ? `<div class="sheet-stat-row"><span>Gold</span><span class="sheet-stat-val"><input class="sheet-gold" type="number" min="0" step="1" value="${c.gold}" data-field="gold" data-idx="${state.party.indexOf(c)}" aria-label="Gold pieces"> gp</span></div>` : '')
-      + '</div>'
-      + '</div>'
-      + (sh.languages ? this._renderLanguages(sh.languages) : '')
-      + (sh.attacks?.length ? this._renderAttacks(sh.attacks, c) : '');
-  },
-
-  // Split a free-text "languages & proficiencies" blob into categorized chip
-  // groups. Recognizes either:
-  //   • Labelled lines: "Languages: Common, Elvish\nArmor: Light, Medium"
-  //   • Heuristic categorization based on known keywords for unlabelled text.
-  _renderLanguages(text){
-    const raw = String(text || '').trim();
-    if (!raw) return '';
-    // Try labelled-line format first.
-    const lines = raw.split(/\r?\n+/).map(l=>l.trim()).filter(Boolean);
-    const groups = {};
-    let usedLabelled = false;
-    lines.forEach(line => {
-      const m = line.match(/^([^:]+):\s*(.+)$/);
-      if (m){
-        usedLabelled = true;
-        const cat = m[1].trim();
-        const items = m[2].split(/[,;]/).map(s=>s.trim()).filter(Boolean);
-        groups[cat] = (groups[cat]||[]).concat(items);
-      } else if (!usedLabelled){
-        // Defer; fall back to heuristic
-      }
-    });
-    if (!usedLabelled){
-      // Flatten everything to a single token list, then bucket by keyword.
-      // Strip out section-marker tokens like "=== LANGUAGES ===" — the chip
-      // group labels already serve as headers.
-      const tokens = raw.split(/[,;\n]/).map(s=>s.trim())
-        .filter(Boolean)
-        .filter(t => !/^=+\s*.+?\s*=+$/.test(t));
-      const buckets = { Languages:[], Armor:[], Weapons:[], Tools:[], Other:[] };
-      const KNOWN_LANGS = /^(common|dwarvish|elvish|giant|gnomish|goblin|halfling|orc|abyssal|celestial|draconic|deep speech|infernal|primordial|sylvan|undercommon|aarakocra|sign language|thieves|druidic|aquan|auran|ignan|terran)/i;
-      const ARMOR_KW = /armor|shield/i;
-      const WEAPON_KW = /weapon|crossbow|sword|bow|axe|hammer|spear|whip|mace|flail|club|dagger|firearm|simple|martial/i;
-      const TOOL_KW = /tools?|kit|instrument|gaming|smith|brewer|carpenter|cook|disguise|forgery|herbalism|navigator|painter|poisoner|tinker|pottery|jeweler|leatherworker|mason|cartographer|cobbler|glassblower|weaver|woodcarver|thieves'?\s*tools|musical/i;
-      tokens.forEach(t => {
-        if (!t) return;
-        if (KNOWN_LANGS.test(t)) buckets.Languages.push(t);
-        else if (ARMOR_KW.test(t)) buckets.Armor.push(t);
-        else if (WEAPON_KW.test(t)) buckets.Weapons.push(t);
-        else if (TOOL_KW.test(t)) buckets.Tools.push(t);
-        else buckets.Other.push(t);
-      });
-      Object.entries(buckets).forEach(([k, arr]) => { if (arr.length) groups[k] = arr; });
-    }
-    // Hide empty Other if there's at least one categorized group.
-    if (groups.Other && Object.keys(groups).length > 1 && !groups.Other.length) delete groups.Other;
-    if (!Object.keys(groups).length) return '';
-    const html = Object.entries(groups).map(([cat, arr]) => {
-      const chips = arr.map(x => `<span class="prof-chip">${esc(x)}</span>`).join('');
-      return `<div class="prof-group"><div class="prof-group-label">${esc(cat)}</div><div class="prof-chips">${chips}</div></div>`;
-    }).join('');
-    return `<div class="sheet-block"><h5>Languages &amp; Proficiencies</h5>${html}</div>`;
-  },
-
-  _renderAttacks(attacks, c){
-    // Rows are clickable when atkBonus parses to a number — clicking rolls
-    // d20+bonus (with Shift/Alt = adv/dis), then evaluates the damage dice
-    // expression. Crits double dice (not modifiers), nat-1 still shows the
-    // result but as a miss. Falls back to display-only for ambiguous fields.
-    const rows = attacks.map(a => {
-      const atkNum = this._parseAtkBonus(a.atkBonus);
-      const clickable = (atkNum != null && c && c.id);
-      const cls = clickable ? 'attack-row rollable' : 'attack-row';
-      const extra = clickable
-        ? ` data-act="roll-attack" data-cid="${esc(c.id)}" data-atk="${atkNum}" data-dmg="${esc(a.damage||'')}" data-atk-name="${esc(a.name)}" style="cursor:pointer" title="Click to roll attack (Shift = adv · Alt = dis)"`
-        : '';
-      return `<tr class="${cls}"${extra}><td>${esc(a.name)}</td><td>${esc(a.atkBonus||'—')}</td><td>${esc(a.damage||'—')}</td></tr>`;
-    }).join('');
-    return `<div class="sheet-block"><h5>Attacks</h5>
-      <table class="sheet-table">
-        <thead><tr><th>Name</th><th>Atk</th><th>Damage</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>`;
-  },
-
-  // Extract a signed integer from atkBonus strings like "+7", "+11/+6/+1"
-  // (Extra Attack), "5". Returns null when nothing numeric is found. For
-  // multi-attack chains we just use the first bonus — rolling the others is
-  // a separate click.
-  _parseAtkBonus(s){
-    if (s == null) return null;
-    const str = String(s);
-    // Prefer an explicitly SIGNED number — that's what a to-hit bonus looks
-    // like. Taking the first number of any kind read "1d8 Longsword +5" as a
-    // bonus of 1, because the 1 in "1d8" came first. Unsigned is still
-    // accepted as a fallback so a bare "7" keeps working.
-    const signed = str.match(/[+-]\s*\d+/);
-    if (signed) return parseInt(signed[0].replace(/\s+/g, ''), 10);
-    const any = str.match(/\d+/);
-    return any ? parseInt(any[0], 10) : null;
-  },
-
-  _tabSkills(c){
-    const sh = c.sheet || {};
-    const skills = sh.skills || {};
-    const ab = c.abilities || {};
-    // Skill → governing ability (for the "fallback to ability mod" path)
-    const SKILL_AB = {
-      acrobatics:'dex', animalHandling:'wis', arcana:'int', athletics:'str',
-      deception:'cha', history:'int', insight:'wis', intimidation:'cha',
-      investigation:'int', medicine:'wis', nature:'int', perception:'wis',
-      performance:'cha', persuasion:'cha', religion:'int',
-      sleightOfHand:'dex', stealth:'dex', survival:'wis',
-    };
-    const LABELS = {
-      acrobatics:'Acrobatics (DEX)', animalHandling:'Animal Handling (WIS)',
-      arcana:'Arcana (INT)', athletics:'Athletics (STR)', deception:'Deception (CHA)',
-      history:'History (INT)', insight:'Insight (WIS)', intimidation:'Intimidation (CHA)',
-      investigation:'Investigation (INT)', medicine:'Medicine (WIS)', nature:'Nature (INT)',
-      perception:'Perception (WIS)', performance:'Performance (CHA)', persuasion:'Persuasion (CHA)',
-      religion:'Religion (INT)', sleightOfHand:'Sleight of Hand (DEX)',
-      stealth:'Stealth (DEX)', survival:'Survival (WIS)',
-    };
-    const keys = Object.keys(LABELS);
-
-    // Bucket this character's own skills by proficiency level. Anything they
-    // aren't trained in falls into a small "Untrained" group at the bottom.
-    const groups = { expert:[], proficient:[], half:[], none:[] };
-    keys.forEach(k => {
-      let v = skills[k];
-      if (v == null){
-        const a = ab[SKILL_AB[k]];
-        v = (typeof a === 'number') ? Math.floor((a-10)/2) : null;
-      }
-      const lvl = this._classifyCharSkill(c, k) || 'none';
-      groups[lvl].push({ k, label: LABELS[k], v });
-    });
-
-    const SECTIONS = [
-      { key:'expert',     title:'Expertise',          glyph:'◉' },
-      { key:'proficient', title:'Proficient',         glyph:'●' },
-      { key:'half',       title:'Half-proficiency',   glyph:'◐' },
-    ];
-    // Skill rows are clickable to roll d20 + skill modifier. The lookup at
-    // click time keys off c.id so reordering the party can't desync the
-    // handler. Skipped when there's no usable modifier (no ability score).
-    const renderRow = ({ label, v, k }) => {
-      const rollable = v != null;
-      const extra = rollable
-        ? ` data-act="roll-skill" data-cid="${esc(c.id)}" data-skill="${esc(k)}" data-skill-label="${esc(label)}" data-mod="${v}" title="Click to roll ${esc(label)}: d20${(v>=0?'+':'')+v} (Shift = adv · Alt = dis)" style="cursor:pointer"`
-        : '';
-      const cls = 'sheet-stat-row' + (rollable ? ' rollable' : '');
-      return `<div class="${cls}"${extra}><span>${label}</span><span class="sheet-stat-val">${v==null?'—':(v>=0?'+':'')+v}</span></div>`;
-    };
-    const renderSection = (sec) => {
-      const list = groups[sec.key];
-      if (!list.length) return '';
-      return `<div class="sheet-block sheet-prof-section ${sec.key}">
-        <h5><span class="sheet-skill-chip ${sec.key}">${sec.glyph}</span> ${sec.title} <span class="sheet-prof-count">${list.length}</span></h5>
-        ${list.map(renderRow).join('')}
-      </div>`;
-    };
-
-    const trainedHtml = SECTIONS.map(renderSection).join('');
-    const untrainedHtml = groups.none.length
-      ? `<details class="sheet-prof-untrained"><summary>Untrained (${groups.none.length})</summary>${groups.none.map(renderRow).join('')}</details>`
-      : '';
-
-    if (!trainedHtml && !untrainedHtml){
-      return this._renderLastRoll(c) + '<div class="sheet-empty">No skill data available.</div>';
-    }
-    return this._renderLastRoll(c) + '<div class="sheet-skills-prof">'+(trainedHtml || '<div class="sheet-empty">No skill proficiencies on this character.</div>')+untrainedHtml+'</div>';
-  },
-
-  _tabSpells(c){
-    const sh = c.sheet || {};
-    const slots = sh.spellSlots || {};
-    const lvls = Object.keys(slots).map(n=>parseInt(n)).sort((a,b)=>a-b);
-    let slotsHtml = '';
-    if (lvls.length){
-      // Slot pips are clickable: click the leftmost available pip to mark a
-      // slot expended; click any spent pip to refund. Click handler is keyed
-      // off (level, pip-index) so the rendered order is the source of truth.
-      // Need PC index for the handler — find via state.party (id-based, so
-      // reordering can't desync the wire).
-      const pcIdx = state.party.findIndex(p => p.id === c.id);
-      slotsHtml = '<div class="sheet-block"><h5>Spell Slots</h5><div class="sheet-slots">'
-        + lvls.map(l=>{
-            const s = slots[l];
-            const total = s.total||0, expended = s.expended||0;
-            let pips = '';
-            for (let n=1; n<=total; n++){
-              const filled = n <= (total - expended);
-              pips += `<span class="slot-pip ${filled?'available':'spent'}" data-act="slot-pip" data-idx="${pcIdx}" data-lvl="${l}" data-n="${n}" title="${filled?'Spend a level ' + l + ' slot':'Refund a level ' + l + ' slot'}"></span>`;
-            }
-            return `<div class="sheet-slot-row"><span class="slot-lvl">L${l}</span>${pips}<span class="slot-count">${total-expended}/${total}</span></div>`;
-          }).join('')
-        + '</div></div>';
-    }
-    let metaHtml = '';
-    if (sh.spellSaveDc != null || sh.spellAtkBonus != null){
-      metaHtml = '<div class="sheet-block"><h5>Spellcasting</h5>'
-        + (sh.spellSaveDc!=null ? `<div class="sheet-stat-row"><span>Save DC</span><span class="sheet-stat-val">${sh.spellSaveDc}</span></div>` : '')
-        + (sh.spellAtkBonus!=null ? `<div class="sheet-stat-row"><span>Attack Bonus</span><span class="sheet-stat-val">${sh.spellAtkBonus>=0?'+':''}${sh.spellAtkBonus}</span></div>` : '')
-        + '</div>';
-    }
-    let listHtml = '';
-    if (sh.spells?.length){
-      listHtml = '<div class="sheet-block"><h5>Known Spells (' + sh.spells.length + ')</h5><div class="sheet-spell-list">'
-        + sh.spells.map(s => `<span class="sheet-spell-chip" data-act="spell-open" data-spell="${esc(s)}" title="Click to view ${esc(s)}">${esc(s)}</span>`).join('')
-        + '</div></div>';
-    }
-    if (!slotsHtml && !metaHtml && !listHtml){
-      return '<div class="sheet-empty">No spell data in the imported PDF.</div>';
-    }
-    return metaHtml + slotsHtml + listHtml;
-  },
 
 
 
@@ -3032,25 +2698,6 @@ registerPanel('party',{
         state.party[i] = {...state.party[i], exhaustion: Math.max(0, cur - 1)};
         save(); this._render();
       }
-      else if(act==='spell-open'){
-        this._openSpellDetail(el.dataset.spell);
-      }
-      // Unified tab toggle replaces the old toggle-sheet/sheet-tab pair.
-      //   • clicking the currently-active tab collapses the content panel
-      //   • clicking a different tab (or any tab when collapsed) opens that tab
-      else if(act==='sheet-tab-toggle'){
-        const c = state.party[i]; if (!c) return;
-        const newTab = el.dataset.tab;
-        const wasOpen = !!this._expanded[c.id];
-        const oldTab = this._activeTab[c.id];
-        if (wasOpen && oldTab === newTab){
-          this._expanded[c.id] = false;
-        } else {
-          this._expanded[c.id] = true;
-          this._activeTab[c.id] = newTab;
-        }
-        this._render();
-      }
       // ⋯ actions menu — rare or "drill-down" actions consolidated in one
       // place so the always-visible card stays clean. Class-conditional
       // entries (rage, wild shape) only appear when applicable.
@@ -3102,7 +2749,7 @@ registerPanel('party',{
             rollItems.push({ label:'⚡ Initiative', onClick: () => {
               const r = this._rollD20(liveC.init || 0, { mode:'normal', label: liveC.name + ' · Initiative' });
               this._setLastRoll(liveC, r);
-              if (!this._expanded[cid]) { this._expanded[cid] = true; this._activeTab[cid] = 'stats'; this._render(); }
+              this._render();
             }});
             const ab = liveC.abilities || {};
             const sh = liveC.sheet || {};
@@ -3118,7 +2765,7 @@ registerPanel('party',{
                 rollItems.push({ label: `${lbl} save (${v>=0?'+':''}${v})`, onClick: () => {
                   const r = this._rollD20(v, { mode:'normal', label: liveC.name + ' · ' + lbl + ' Save' });
                   this._setLastRoll(liveC, r);
-                  if (!this._expanded[cid]) { this._expanded[cid] = true; this._activeTab[cid] = 'stats'; this._render(); }
+                  this._render();
                 }});
               });
             }
@@ -3248,22 +2895,6 @@ registerPanel('party',{
         this._historyOpen[cid] = !this._historyOpen[cid];
         this._render();
       }
-      else if(act==='roll-check' || act==='roll-save' || act==='roll-init' || act==='roll-skill'){
-        // d20 roller — Shift = advantage, Alt = disadvantage.
-        const cid = el.dataset.cid;
-        const c = state.party.find(p => p.id === cid);
-        if (!c) return;
-        const mod = parseInt(el.dataset.mod) || 0;
-        const mode = e.shiftKey ? 'adv' : e.altKey ? 'dis' : 'normal';
-        const abilityLabel = (el.dataset.ability || '').toUpperCase();
-        let label;
-        if (act === 'roll-init')        label = c.name + ' · Initiative';
-        else if (act === 'roll-save')   label = c.name + ' · ' + abilityLabel + ' Save';
-        else if (act === 'roll-skill')  label = c.name + ' · ' + (el.dataset.skillLabel || 'Skill');
-        else                             label = c.name + ' · ' + abilityLabel + ' Check';
-        const result = this._rollD20(mod, { mode, label });
-        this._setLastRoll(c, result);
-      }
       else if(act==='hd-spend'){
         const idx = +el.dataset.idx, n = +el.dataset.n;
         const c = state.party[idx]; if (!c || !c.hitDice) return;
@@ -3288,38 +2919,6 @@ registerPanel('party',{
           if (act === 'hp-damage') this._applyHpDelta(i, -amt, type);
           else                     this._applyHpDelta(i, +amt);
         });
-      }
-      // Spell-slot pip — toggle expended state on sheet.spellSlots[lvl]. Click
-      // an available pip to spend, click a spent pip to refund.
-      else if(act==='slot-pip'){
-        const lvl = parseInt(el.dataset.lvl);
-        const n   = parseInt(el.dataset.n);     // 1-based pip index
-        const c = state.party[i]; if (!c || !c.sheet?.spellSlots?.[lvl]) return;
-        const slot = c.sheet.spellSlots[lvl];
-        const total = slot.total || 0;
-        const available = total - (slot.expended || 0);
-        // Pip N=1 is leftmost (available pips drawn first, then spent). To
-        // map pip-index back to action: if N <= available → spend (expended++);
-        // else → refund (expended--).
-        let exp = slot.expended || 0;
-        if (n <= available)  exp = Math.min(total, exp + 1);
-        else                 exp = Math.max(0, exp - 1);
-        const newSlots = {...c.sheet.spellSlots, [lvl]: {...slot, expended: exp}};
-        state.party[i] = {...c, sheet: {...c.sheet, spellSlots: newSlots}};
-        save(); this._render();
-      }
-      // Attack row click — d20 + atk bonus, then roll damage dice. Shift =
-      // advantage, Alt = disadvantage. Crits double damage dice (not modifiers).
-      else if(act==='roll-attack'){
-        const cid = el.dataset.cid;
-        const c = state.party.find(p => p.id === cid);
-        if (!c) return;
-        const atkBonus = parseInt(el.dataset.atk) || 0;
-        const dmgExpr = el.dataset.dmg || '';
-        const name = el.dataset.atkName || 'Attack';
-        const mode = e.shiftKey ? 'adv' : e.altKey ? 'dis' : 'normal';
-        const result = this._rollAttack(c, name, atkBonus, dmgExpr, mode);
-        this._setLastRoll(c, result);
       }
       // (long-rest / short-rest live in the window-options menu now, not a
       // top-of-panel toolbar; their handlers are reachable via menuItems().)
@@ -3488,32 +3087,6 @@ registerPanel('party',{
       }
   },
 
-  // ── Spell quick-view ────────────────────────────────────────────────────
-  // Resolves a spell name to its 5e entry and opens the standard popout
-  // detail (same window the global search uses). Falls back to a toast if
-  // the 5e dataset isn't loaded yet or the name doesn't match.
-  _openSpellDetail(name){
-    if (!name) return;
-    if (typeof _5eLoaded === 'undefined' || !_5eLoaded || !Array.isArray(_5eData)){
-      showToast?.('5e data still loading — try again in a moment'); return;
-    }
-    const lower = name.trim().toLowerCase();
-    // Exact match first; if the PDF saved the name with an "(Concentration)"
-    // / "(Ritual)" suffix or extra whitespace, retry against the prefix only.
-    let match = _5eData.find(d => d.cat === 'spell' && d.name.toLowerCase() === lower);
-    if (!match){
-      const stripped = lower.replace(/\s*\(.*\)\s*$/, '').trim();
-      if (stripped !== lower){
-        match = _5eData.find(d => d.cat === 'spell' && d.name.toLowerCase() === stripped);
-      }
-    }
-    if (!match){
-      // Fuzzy startsWith fallback so "Cure Wo…" still finds Cure Wounds.
-      match = _5eData.find(d => d.cat === 'spell' && d.name.toLowerCase().startsWith(lower));
-    }
-    if (match && typeof popOutDetail === 'function'){ popOutDetail(match); return; }
-    showToast?.(`No 5e entry for "${name}"`);
-  },
 
   // ── Party-wide skills overview ──────────────────────────────────────────
   // Inspects each character's saved skill modifier and infers proficiency
