@@ -8820,6 +8820,27 @@
       } catch(e){ ok('round 67 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
+    // -- Round 68: stats sit in frames of their own, not plain boxes -------------
+    {
+      try {
+        const framed = el => !!el && getComputedStyle(el).clipPath !== 'none' && getComputedStyle(el, '::before').content !== 'none';
+        const shield = el => !!el && /50% 0/.test(getComputedStyle(el).clipPath.replace(/px/g, '')) || (!!el && /polygon\(0(px)? 7%|polygon\(0(px)? 8%/.test(getComputedStyle(el).clipPath));
+        const pc = state.party.find(p => !p.foe);
+        openCharSheet(pc.id); await sleep(200);
+        const r = document.getElementById('cs-root');
+        ok('frames: the sheet\'s ability scores, stat boxes and hit points are framed', framed(r.querySelector('.cs-ab')) && framed(r.querySelector('.cs-box')) && framed(r.querySelector('.cs-hp')));
+        ok('frames: AC is a shield on the sheet', shield(r.querySelector('.cs-boxes > .cs-box:first-child')), getComputedStyle(r.querySelector('.cs-boxes > .cs-box:first-child')).clipPath.slice(0, 60));
+        csClose();
+        openPanel('party'); await sleep(250);
+        const card = panelDefs.party._body.querySelector('.char-card');
+        ok('frames: the party card\'s hit points and stats are framed, AC a shield', framed(card.querySelector('.char-hp-block')) && framed(card.querySelector('.char-stat')) && shield(card.querySelector('.char-stats-row > .char-stat:first-child')));
+        closePanel('party');
+        await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
+        ok('frames: the builder\'s summary boxes are framed', framed(document.querySelector('#cb-root .cb-big > div')));
+        cbClose();
+      } catch(e){ ok('round 68 ran to completion', false, e.message); }
+      finally { if (typeof csClose === 'function' && CS) csClose(); if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
