@@ -5723,3 +5723,133 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 .cs-conddet { margin:8px 0; padding:10px 12px; border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:var(--r-md); background:var(--panel-2); font-size:var(--fs-md); line-height:1.5; }
 .cs-conddet-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
 .cs-atk-x { font-weight:400; color:var(--text-muted); font-size:.9em; }
+
+/* ── The character sheet's frames ────────────────────────────────────────────
+   Stat boxes with a shape of their own instead of plain rounded rectangles:
+   notched corners and a double rule (an outer line and a fine inner one),
+   the AC as a shield, initiative / speed / proficiency as hexagonal plaques,
+   each ability score on a small plaque under its modifier. Our own design,
+   drawn with clip-path so it takes the theme's colours in every preset.
+
+   How: the box is clipped to its outline and painted with the fill plus four
+   hairlines inset a few px; ::before is the outer rule — the same outline
+   with a slightly smaller copy cut out of it (an evenodd polygon). */
+#cs-root {
+  --fx-line: color-mix(in srgb, var(--accent) 55%, var(--border));
+  --fx-hair: color-mix(in srgb, var(--accent) 22%, transparent);
+  --fx-fill: color-mix(in srgb, var(--panel-2) 88%, var(--accent));
+}
+#cs-root :is(.cs-ab, .cs-box, .cs-hp, .cs-side .cs-list, .cs-side-tab .cs-list, .cs-row > b, .cs-ab i, .cs-death, .cs-rest) {
+  --c: 10px; --i: 1.5px; --h: 5px;
+  position:relative; isolation:isolate; border:none; border-radius:0;
+  clip-path: polygon(var(--c) 0, calc(100% - var(--c)) 0, 100% var(--c), 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, var(--c) 100%, 0 calc(100% - var(--c)), 0 var(--c));
+  background:
+    linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--c) + 2px) var(--h) / calc(100% - 2 * var(--c) - 4px) 1px no-repeat,
+    linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--c) + 2px) calc(100% - var(--h)) / calc(100% - 2 * var(--c) - 4px) 1px no-repeat,
+    linear-gradient(var(--fx-hair), var(--fx-hair)) var(--h) calc(var(--c) + 2px) / 1px calc(100% - 2 * var(--c) - 4px) no-repeat,
+    linear-gradient(var(--fx-hair), var(--fx-hair)) calc(100% - var(--h)) calc(var(--c) + 2px) / 1px calc(100% - 2 * var(--c) - 4px) no-repeat,
+    var(--fx-fill);
+}
+#cs-root :is(.cs-ab, .cs-box, .cs-hp, .cs-side .cs-list, .cs-side-tab .cs-list, .cs-row > b, .cs-ab i, .cs-death, .cs-rest)::before {
+  content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--fx-line);
+  clip-path: polygon(evenodd,
+    var(--c) 0, calc(100% - var(--c)) 0, 100% var(--c), 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, var(--c) 100%, 0 calc(100% - var(--c)), 0 var(--c),
+    var(--c) var(--i), calc(100% - var(--c)) var(--i), calc(100% - var(--i)) var(--c), calc(100% - var(--i)) calc(100% - var(--c)), calc(100% - var(--c)) calc(100% - var(--i)), var(--c) calc(100% - var(--i)), var(--i) calc(100% - var(--c)), var(--i) var(--c));
+}
+#cs-root :is(button.cs-ab, button.cs-box):hover::before,
+#cs-root :is(button.cs-ab, button.cs-box):focus-visible::before { background:var(--accent); }
+#cs-root .cs-row:hover > b::before, #cs-root .cs-row:focus-visible > b::before { background:var(--accent); }
+#cs-root :is(button.cs-ab, button.cs-box, .cs-row):focus-visible { outline:none; }
+#cs-root .cs-row:focus-visible { background:var(--fx-hair); }
+
+/* Ability scores: tall plaques; the modifier large, the score on a plaque. */
+#cs-root .cs-abs { gap:8px; }
+#cs-root .cs-ab { --c:12px; padding:10px 6px 9px; gap:3px; }
+#cs-root .cs-ab span { letter-spacing:.12em; font-size:var(--fs-2xs); color:var(--accent); font-weight:700; }
+#cs-root .cs-ab b { font-size:28px; line-height:1; }
+#cs-root .cs-ab i { --c:6px; --h:3px; --fx-fill: var(--panel); padding:1px 12px; margin-top:4px; font-size:var(--fs-sm); font-weight:600; color:var(--text); }
+
+/* AC is a shield. Initiative, speed and proficiency are hexagonal plaques. */
+#cs-root .cs-boxes { gap:8px; align-items:stretch; }
+#cs-root .cs-box { --c:10px; padding:9px 6px 8px; }
+#cs-root .cs-box span { letter-spacing:.1em; color:var(--accent); font-weight:700; }
+#cs-root .cs-boxes > .cs-box:nth-child(2), #cs-root .cs-boxes > .cs-box:nth-child(3), #cs-root .cs-boxes > .cs-box:nth-child(4) {
+  --p: 16px;
+  clip-path: polygon(var(--p) 0, calc(100% - var(--p)) 0, 100% 50%, calc(100% - var(--p)) 100%, var(--p) 100%, 0 50%);
+  background: linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--p) + 2px) 5px / calc(100% - 2 * var(--p) - 4px) 1px no-repeat,
+              linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--p) + 2px) calc(100% - 5px) / calc(100% - 2 * var(--p) - 4px) 1px no-repeat, var(--fx-fill);
+}
+#cs-root .cs-boxes > .cs-box:nth-child(2)::before, #cs-root .cs-boxes > .cs-box:nth-child(3)::before, #cs-root .cs-boxes > .cs-box:nth-child(4)::before {
+  clip-path: polygon(evenodd, var(--p) 0, calc(100% - var(--p)) 0, 100% 50%, calc(100% - var(--p)) 100%, var(--p) 100%, 0 50%,
+    calc(var(--p) + .6px) 1.5px, calc(100% - var(--p) - .6px) 1.5px, calc(100% - 1.7px) 50%, calc(100% - var(--p) - .6px) calc(100% - 1.5px), calc(var(--p) + .6px) calc(100% - 1.5px), 1.7px 50%);
+}
+#cs-root .cs-boxes > .cs-box:first-child {
+  padding:8px 6px 16px;
+  clip-path: polygon(0 7%, 50% 0, 100% 7%, 100% 55%, 86% 79%, 50% 100%, 14% 79%, 0 55%);
+  background: radial-gradient(ellipse at 50% 35%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%), var(--fx-fill);
+}
+#cs-root .cs-boxes > .cs-box:first-child::before {
+  clip-path: polygon(evenodd, 0 7%, 50% 0, 100% 7%, 100% 55%, 86% 79%, 50% 100%, 14% 79%, 0 55%,
+    2px calc(7% + 1px), 50% 2px, calc(100% - 2px) calc(7% + 1px), calc(100% - 2px) 55%, calc(86% - 1px) calc(79% - 1px), 50% calc(100% - 3px), calc(14% + 1px) calc(79% - 1px), 2px 55%);
+}
+#cs-root .cs-boxes > .cs-box:first-child b { font-size:28px; }
+#cs-root .cs-insp.on { --fx-fill: color-mix(in srgb, var(--panel-2) 75%, var(--accent)); }
+
+/* Hit points: a wide framed panel. */
+#cs-root .cs-hp { --c:14px; padding:12px 16px 14px; }
+#cs-root .cs-hp-n b { color:var(--text); }
+
+/* The side column's lists sit in framed panels; bonuses in small plaques. */
+#cs-root .cs-side .cs-list, #cs-root .cs-side-tab .cs-list { --c:12px; padding:8px; gap:2px; }
+#cs-root .cs-row { border:none; border-radius:var(--r-sm); }
+#cs-root .cs-row:hover { background:var(--fx-hair); }
+#cs-root .cs-row > b { --c:5px; --h:3px; --fx-fill: var(--panel); min-width:46px; }
+
+/* Headings: small capitals between ornamental rules. */
+#cs-root .cs-side h5, #cs-root .cs-side-tab h5 { display:flex; align-items:center; gap:10px; text-transform:uppercase; letter-spacing:.14em; font-size:var(--fs-xs); color:var(--accent); margin:18px 0 8px; }
+#cs-root .cs-side h5::before, #cs-root .cs-side h5::after, #cs-root .cs-side-tab h5::before, #cs-root .cs-side-tab h5::after {
+  content:''; flex:1; height:7px;
+  background: linear-gradient(var(--fx-line), var(--fx-line)) center / 100% 1px no-repeat,
+              linear-gradient(45deg, transparent 42%, var(--fx-line) 42% 58%, transparent 58%) left center / 7px 7px no-repeat,
+              linear-gradient(-45deg, transparent 42%, var(--fx-line) 42% 58%, transparent 58%) left center / 7px 7px no-repeat;
+}
+#cs-root .cs-side h5::after, #cs-root .cs-side-tab h5::after { transform:scaleX(-1); }
+#cs-root .cs-pane h4, #cs-root .cs h4 { text-transform:uppercase; letter-spacing:.1em; font-size:var(--fs-sm); }
+#cs-root .cs-pane h4::after { content:''; flex:1; height:1px; background:linear-gradient(90deg, var(--fx-line), transparent); }
+
+/* Tabs as D&D Beyond sets them: small capitals, a rule under the open one. */
+#cs-root .cs-tab { text-transform:uppercase; letter-spacing:.08em; font-size:var(--fs-sm); font-weight:600; }
+#cs-root .cs-tab.on { color:var(--accent); }
+#cs-root .cs-tabs { border-bottom-color:var(--fx-line); }
+
+/* Death saves and the short rest get frames too. */
+#cs-root .cs-death { --c:10px; --fx-line: var(--danger); padding:10px 14px; }
+#cs-root .cs-rest { --c:12px; padding:12px 14px; }
+/* Frames, second pass: a quieter fill, a shield that reads as a shield, and
+   the attack table's numbers on plaques like the skills'. */
+#cs-root { --fx-fill: color-mix(in srgb, var(--panel-2) 95%, var(--accent)); }
+#cs-root .cs-boxes { align-items:center; }
+#cs-root .cs-boxes > .cs-box:nth-child(n+2) { min-height:66px; justify-content:center; }
+#cs-root .cs-boxes > .cs-box:first-child { justify-self:center; width:min(100%, 112px); min-height:92px; justify-content:center; padding:4px 6px 18px; }
+#cs-root .cs-boxes > .cs-box:first-child span { margin-top:6px; }
+#cs-root .cs-atk { background:none; border-radius:0; border-bottom:1px solid var(--fx-hair); padding:6px; }
+#cs-root .cs-atk.cs-atk-h { border-bottom-color:var(--fx-line); }
+#cs-root .cs-atk .btn.small {
+  --c:5px; position:relative; isolation:isolate; border:none; border-radius:0; justify-self:start;
+  clip-path: polygon(var(--c) 0, calc(100% - var(--c)) 0, 100% var(--c), 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, var(--c) 100%, 0 calc(100% - var(--c)), 0 var(--c));
+  background: var(--panel); padding:4px 10px; font-weight:600;
+}
+#cs-root .cs-atk .btn.small::before {
+  content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--fx-line);
+  clip-path: polygon(evenodd,
+    var(--c) 0, calc(100% - var(--c)) 0, 100% var(--c), 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, var(--c) 100%, 0 calc(100% - var(--c)), 0 var(--c),
+    var(--c) 1.5px, calc(100% - var(--c)) 1.5px, calc(100% - 1.5px) var(--c), calc(100% - 1.5px) calc(100% - var(--c)), calc(100% - var(--c)) calc(100% - 1.5px), var(--c) calc(100% - 1.5px), 1.5px calc(100% - var(--c)), 1.5px var(--c));
+}
+#cs-root .cs-atk .btn.small:hover::before, #cs-root .cs-atk .btn.small:focus-visible::before { background:var(--accent); }
+#cs-root .cs-atk .btn.small:focus-visible { outline:none; }
+/* Phone: AC / Initiative / Speed, then Proficiency and Inspiration sharing the row. */
+@media (max-width: 760px){
+  #cs-root .cs-boxes { grid-template-columns:repeat(6, minmax(0,1fr)); }
+  #cs-root .cs-boxes > .cs-box { grid-column:span 2; }
+  #cs-root .cs-boxes > .cs-box:nth-child(4), #cs-root .cs-boxes > .cs-box:nth-child(5) { grid-column:span 3; }
+}
