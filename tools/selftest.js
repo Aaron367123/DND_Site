@@ -8856,6 +8856,55 @@
       } catch(e){ ok('round 68 ran to completion', false, e.message); }
       finally { if (typeof csClose === 'function' && CS) csClose(); if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
+    // -- Round 69: each character's share of the party loot, on their sheet -----
+    {
+      const L0 = localStorage.getItem('skt-loot-v1'), p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const pcs = state.party.filter(p => !p.foe), A = pcs[0], B = pcs[1];
+        const L = JSON.parse(L0 || '{"cp":0,"sp":0,"ep":0,"gp":0,"pp":0,"items":[],"tabGroups":[]}');
+        L.tabGroups = (L.tabGroups || []).concat([{ id: 'grp_t', name: 'Front line', memberIds: [A.id, B && B.id].filter(Boolean) }]);
+        L.items = (L.items || []).filter(x => !/^t_/.test(x.id)).concat([
+          { id: 't_pot', name: 'Potion of Climbing', qty: 1, value: '50 gp', weight: 0.5, assignedTo: A.id },
+          { id: 't_map', name: 'Old Map', qty: 2, value: '', weight: 1, assignedTo: A.id },
+          { id: 't_grp', name: 'Tent', qty: 1, value: '2 gp', weight: 20, assignedTo: 'grp_t' },
+          { id: 't_b', name: 'Lute', qty: 1, value: '35 gp', weight: 2, assignedTo: B ? B.id : 'nobody' }]);
+        localStorage.setItem('skt-loot-v1', JSON.stringify(L)); if (panelDefs.loot) panelDefs.loot._loot = null;
+        openCharSheet(A.id, { tab: 'inventory' }); await sleep(250);
+        const q = s => document.querySelector('#cs-root ' + s), qa = s => [...document.querySelectorAll('#cs-root ' + s)];
+        const names = () => qa('.cs-lootitem .cs-itemn b').map(b => b.textContent);
+        ok('loot: a character\'s sheet lists what the Loot tracker assigned them, and their group\'s', names().includes('Potion of Climbing') && names().includes('Old Map') && names().includes('Tent') && !names().includes('Lute'), names().join(', '));
+        const tentRow = qa('.cs-lootitem').find(r => /Tent/.test(r.textContent));
+        ok('loot: a group\'s item says it\'s shared, and has no Give back', /shared · Front line/.test(tentRow.textContent) && !tentRow.querySelector('[data-cs-lootback]'));
+        ok('loot: what they were given counts toward what they carry (not the group\'s)', /2\.5 lb of it party loot/.test(q('.cs-carry').textContent), q('.cs-carry').textContent);
+        q('[data-cs-lootback="t_map"]').click(); await sleep(40);
+        const lootNow = () => JSON.parse(localStorage.getItem('skt-loot-v1')).items;
+        ok('loot: Give back unassigns it in the Loot tracker', lootNow().find(x => x.id === 't_map').assignedTo === null && !names().includes('Old Map'));
+        sktUndo(); await sleep(40);
+        ok('loot: and Undo gives it to them again', lootNow().find(x => x.id === 't_map').assignedTo === A.id && names().includes('Old Map'));
+        openPanel('loot'); await sleep(250);
+        q('[data-cs-loottake="t_pot"]').click(); await sleep(150);
+        const pc = () => state.party.find(p => p.id === A.id);
+        ok('loot: Take moves it off the party\'s list into their own inventory', !lootNow().some(x => x.id === 't_pot') && csItems(pc()).some(m => m.name === 'Potion of Climbing') && !names().includes('Potion of Climbing'));
+        ok('loot: and the Loot window, open beside it, drops it too', !panelDefs.loot._loot.items.some(x => x.id === 't_pot') && !/Potion of Climbing/.test(panelDefs.loot._body.innerHTML));
+        sktUndo(); await sleep(150);
+        ok('loot: Undo puts it back on the party\'s list and out of the inventory', lootNow().some(x => x.id === 't_pot') && !csItems(pc()).some(m => m.name === 'Potion of Climbing'));
+        ok('loot: the Loot window follows the Undo', !!panelDefs.loot._body && /Potion of Climbing/.test(panelDefs.loot._body.innerHTML));
+        closePanel('loot');
+        csClose();
+        if (B){ openCharSheet(A.id === B.id ? A.id : B.id, { tab: 'inventory' }); await sleep(150);
+          ok('loot: another character\'s sheet lists theirs, not the first one\'s', names().includes('Lute') && !names().includes('Old Map'));
+          csClose(); }
+      } catch(e){ ok('round 69 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        _remoteUpdate = true;
+        try {
+          if (L0 == null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', L0);
+          if (p0 != null) localStorage.setItem('skt-party-v1', p0);
+        } finally { _remoteUpdate = false; }
+        if (panelDefs.loot) panelDefs.loot._loot = null; loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -107,13 +107,13 @@ function csCommit(){
   if (typeof paRender === 'function' && document.body.classList.contains('player-mode')) { try { paRender(); } catch(e){} }
   csRender();
 }
-function csEdit(label, fn){
+function csEdit(label, fn, undoOpts){
   if (CS.readOnly) return;
   const run = () => { const pc = csPc(); if (pc) fn(pc); csCommit(); };
-  if (typeof sktUndoable === 'function') sktUndoable(label, run); else run();
+  if (typeof sktUndoable === 'function') sktUndoable(label, run, undoOpts); else run();
 }
 // A built character worked out again after a change to its build.
-async function csRebuild(label, mut){
+async function csRebuild(label, mut, undoOpts){
   if (CS.readOnly) return;
   const pc = csPc(); if (!pc || !pc.build || typeof sktComputeCharacter !== 'function') return;
   const R = CS.R || await sktRulesLoad(pc.build.edition || pc.rules || '2024');
@@ -125,7 +125,7 @@ async function csRebuild(label, mut){
     state.party[i] = Object.assign({}, p, rec, { id: p.id, portrait: p.portrait });
     csCommit();
   };
-  if (typeof sktUndoable === 'function') sktUndoable(label, run); else run();
+  if (typeof sktUndoable === 'function') sktUndoable(label, run, undoOpts); else run();
 }
 
 // ── The header: who, and the day's buttons ───────────────────────────────────
@@ -1505,7 +1505,8 @@ function csInventoryHtml(pc){
   }
   const items = csItems(pc), coins = csCoins(pc);
   const pref = (pc.build && pc.build.overrides) || {};
-  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0) + (pref.coinWeight === false ? 0 : CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50);
+  const lootLb = csLootLb(csLootFor(pc));
+  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0) + (pref.coinWeight === false ? 0 : CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50) + lootLb;
   const boxes = items.filter(x => CS_CONTAINER.test(x.name));
   const str = (pc.abilities || {}).str || 10, size = ((pc.sheet || {}).size || 'Medium');
   const cap = str * 15 * (size === 'Tiny' ? 0.5 : size === 'Large' ? 2 : 1);
@@ -1518,6 +1519,7 @@ function csInventoryHtml(pc){
       + '<button class="btn" data-cs="coinadd">Add</button><button class="btn" data-cs="coinspend">Spend</button></div>');
   h += '<div class="cs-carry' + (csCarryNote(pref.encumbrance, lb, cap) ? ' over' : '') + '">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b>'
     + (pref.encumbrance === 'none' ? '' : ' of ' + cap + ' lb') + csCarryNote(pref.encumbrance, lb, cap)
+    + (lootLb ? ' <span class="cb-dim">(' + Math.round(lootLb * 10) / 10 + ' lb of it party loot)</span>' : '')
     + (items.some(m => m.reqAttune) ? ' · attuned ' + attuned + ' of ' + attMax : '') + '</div>';
   const gearType = m => { const st = m.stats || (m.base && CS.R && CS.R.items[m.base]); return st && /^(M|R|LA|MA|HA|S)(\||$)/.test(String(st.type)); };
   h += '<div class="cs-inv">' + (items.length ? items.map((m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
@@ -1533,6 +1535,7 @@ function csInventoryHtml(pc){
     + (ro ? '' : '<button class="btn small" data-cs-del="' + i + '" aria-label="Remove ' + csE(m.name) + '">✕</button>') + '</div>'
     + (CS.open['it:' + i] ? '<div class="cs-feat-t cs-itemt">' + csItemText(m) + '</div>' : '')).join('')
     : '<div class="cb-dim">Nothing carried.</div>') + '</div>';
+  h += csLootHtml(pc);
   if (!ro){
     const e = csGearFind(CS.q);
     const bases = e && e.kind === 'variant' && typeof sktMagicBases === 'function' ? sktMagicBases(CS.R, e) : null;
@@ -1621,7 +1624,7 @@ function csCatalogCharges(m){
   const e = (CS.magic || []).find(x => x.name === m.name && x.charges);
   return e ? { charges: e.charges, recharge: e.recharge, rechargeAmount: e.rechargeAmount } : null;
 }
-function csItemsEdit(label, fn){
+function csItemsEdit(label, fn, undoOpts){
   const pc = csPc(); if (!pc) return;
   if (pc.build){
     const kit = !(pc.build.equipment || {}).materialized && typeof sktKitItems === 'function' && CS.R ? sktKitItems(pc.build, CS.R, CS.gear) : null;
@@ -1630,11 +1633,86 @@ function csItemsEdit(label, fn){
       if (!b.equipment.materialized){ b.items = (kit || []).concat(b.items || []); b.equipment.materialized = true; }
       b.items = (b.items || []).map(x => Object.assign({}, x));
       fn(b.items, b);
-    });
+    }, undoOpts);
   }
-  csEdit(label, p => { p.inventory = (p.inventory || []).map(x => Object.assign({}, x)); fn(p.inventory, p); });
+  csEdit(label, p => { p.inventory = (p.inventory || []).map(x => Object.assign({}, x)); fn(p.inventory, p); }, undoOpts);
+}
+
+// ── The party's loot, in each character's inventory ─────────────────────────
+// What the Loot window has assigned to this character (or to a group they're
+// in) shows on their sheet's Inventory tab — it lived only in the window, so
+// a player looking at their own sheet never saw the locket they'd been given.
+// The Loot tracker stays the one record: these rows read it, Give back
+// unassigns there, and Take moves the item off the party's list into the
+// character's own inventory. Read from storage each time, so a change from
+// another device is here as soon as it syncs.
+const CS_LOOT_KEY = 'skt-loot-v1';
+function csLootRead(){
+  try { const L = JSON.parse(localStorage.getItem(CS_LOOT_KEY) || 'null'); if (L && Array.isArray(L.items)) return L; } catch(e){}
+  return { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
+}
+function csLootWrite(L){
+  saveJson(CS_LOOT_KEY, L, 'loot');
+  const P = typeof panelDefs !== 'undefined' && panelDefs.loot;
+  if (P){ P._loot = L; if (P._body){ try { P._render(); } catch(e){} } }
+}
+function csLootFor(pc){
+  const L = csLootRead(), groups = L.tabGroups || [];
+  return (L.items || []).map(it => {
+    if (it.assignedTo === pc.id) return { it, mine: true };
+    const g = groups.find(x => x.id === it.assignedTo && Array.isArray(x.memberIds) && x.memberIds.includes(pc.id));
+    return g ? { it, group: g.name } : null;
+  }).filter(Boolean);
+}
+// A loot entry as an inventory item: the catalogue's version where the name
+// matches one (its weight, its weapon or armour numbers, its text).
+function csLootAsItem(it){
+  const g = csGearFind(it.name);
+  let m = null;
+  if (g && (g.kind === 'item' || g.kind === 'variant') && typeof sktMagicMake === 'function' && CS.R){ try { m = sktMagicMake(CS.R, g, null); } catch(e){ m = null; } }
+  if (!m && g) m = { name: g.name, base: g.base || undefined, weight: g.weight || 0 };
+  if (!m) m = { name: it.name, weight: 0, custom: true };
+  m.qty = Math.max(1, +it.qty || 1);
+  if (it.weight != null && it.weight !== '' && !isNaN(+it.weight)) m.weight = +it.weight;
+  if (it.value) m.value = it.value;
+  return m;
+}
+const csLootLb = rows => rows.filter(r => r.mine).reduce((n, r) => n + (+r.it.weight || 0) * Math.max(1, +r.it.qty || 1), 0);
+function csLootHtml(pc){
+  const rows = csLootFor(pc); if (!rows.length) return '';
+  const ro = CS.readOnly;
+  return '<h5>From the party\u2019s loot <span class="cb-dim">' + rows.length + ' · kept in the Loot tracker</span></h5><div class="cs-inv cs-lootinv">'
+    + rows.map(({ it, mine, group }) => {
+      const k = 'lt:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
+      return '<div class="cs-item cs-lootitem"><span class="cs-eq cs-lootmark" title="From the party\u2019s loot">⛁</span>'
+        + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b>' + (group ? ' <span class="cs-from">shared · ' + csE(group) + '</span>' : '') + '</button>'
+        + '<span class="cs-qty">×' + q + '</span>'
+        + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
+        + (ro ? '' : '<button class="btn small" data-cs-loottake="' + csE(it.id) + '" title="Move it into ' + csE(pc.name) + '\u2019s own inventory">Take</button>'
+          + (mine ? '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Back to the party\u2019s unassigned loot">Give back</button>' : ''))
+        + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
+    }).join('') + '</div>';
+}
+function csLootClick(d, pc){
+  if (d.csLoottake == null && d.csLootback == null) return false;
+  if (CS.readOnly) return true;
+  const id = d.csLoottake != null ? d.csLoottake : d.csLootback;
+  const L0 = csLootRead(), it = (L0.items || []).find(x => x.id === id); if (!it) return true;
+  const keys = { keys: ['skt-party-v1', 'skt-combat-v1', CS_LOOT_KEY] };
+  if (d.csLootback != null){
+    const run = () => { const L = csLootRead(); const x = L.items.find(y => y.id === id); if (x) x.assignedTo = null; csLootWrite(L); csRender(); };
+    if (typeof sktUndoable === 'function') sktUndoable('Gave back ' + it.name, run, { keys: [CS_LOOT_KEY] }); else run();
+    return true;
+  }
+  const m = csLootAsItem(it);
+  csItemsEdit('Took ' + it.name + ' from the loot', l => {
+    l.push(m);
+    const L = csLootRead(); L.items = L.items.filter(y => y.id !== id); csLootWrite(L);
+  }, keys);
+  return true;
 }
 function csInventoryClick(e, t, d, pc){
+  if (csLootClick(d, pc)) return true;
   if (CS.readOnly) return false;
   if (d.csTrackchg != null){
     const i = +d.csTrackchg, it = csItems(pc)[i], c = it && csCatalogCharges(it);

@@ -129,6 +129,7 @@ function _sktUndoRedraw(){
   if (typeof paRender === 'function' && document.body.classList.contains('player-app')){
     try { paRender(); } catch(e){}
   }
+  if (typeof CS !== 'undefined' && CS && typeof csRender === 'function'){ try { csRender(); } catch(e){} }
 }
 
 function _sktUndoGoto(entry, target, other){
@@ -153,6 +154,10 @@ function _sktUndoGoto(entry, target, other){
     P._data = null;
     try { if (P._body) P.mount(P._body); } catch(e){}
   });
+  if (entry.keys.includes('skt-loot-v1') && target['skt-loot-v1'] !== other['skt-loot-v1'] && typeof panelDefs !== 'undefined' && panelDefs.loot){
+    const L = panelDefs.loot; L._loot = null;
+    try { if (L._body) L.mount(L._body); } catch(e){}
+  }
   try { save(); } catch(e){}
   if (mapBack && typeof panelDefs !== 'undefined' && panelDefs.battlemap){
     try {

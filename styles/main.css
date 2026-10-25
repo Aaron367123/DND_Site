@@ -5959,3 +5959,7 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 }
 /* A cover fills its card: the rule goes over it, not behind. */
 .adv-card::before { z-index:3; }
+/* The party loot on a character's Inventory tab */
+.cs-lootinv .cs-lootitem { background:color-mix(in srgb, var(--accent) 6%, transparent); }
+.cs-lootmark { color:var(--accent); text-align:center; }
+#cs-root h5 .cs-h5sub { text-transform:none; letter-spacing:0; font-weight:400; margin-left:6px; }

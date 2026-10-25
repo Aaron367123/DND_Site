@@ -1252,6 +1252,12 @@ function _applyRemoteKey(key, fbVal) {
 
   const panels = _PANELS_FOR_KEY[key] || [];
   panels.forEach(id => _reloadPanel(id));
+  if (key === 'skt-loot-v1'){
+    // A closed Loot window kept its old copy and showed it on the next open.
+    const L = panelDefs && panelDefs.loot; if (L && !L._body) L._loot = null;
+    // The sheet's Inventory tab lists each character's share of it.
+    if (typeof CS !== 'undefined' && CS && typeof csRender === 'function'){ try { csRender(); } catch(e){ _diag('sheet loot', e); } }
+  }
 }
 
 // Per-panel reload. Panels that cache data into their own property need a
