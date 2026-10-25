@@ -1681,7 +1681,7 @@ const csLootLb = rows => rows.filter(r => r.mine).reduce((n, r) => n + (+r.it.we
 function csLootHtml(pc){
   const rows = csLootFor(pc); if (!rows.length) return '';
   const ro = CS.readOnly;
-  return '<h5>From the party\u2019s loot <span class="cb-dim">' + rows.length + ' · kept in the Loot tracker</span></h5><div class="cs-inv cs-lootinv">'
+  return '<h5>From the party\u2019s loot <span class="cb-dim cs-h5sub">' + rows.length + (rows.length === 1 ? ' item' : ' items') + ' · kept in the Loot tracker</span></h5><div class="cs-inv cs-lootinv">'
     + rows.map(({ it, mine, group }) => {
       const k = 'lt:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
       return '<div class="cs-item cs-lootitem"><span class="cs-eq cs-lootmark" title="From the party\u2019s loot">⛁</span>'

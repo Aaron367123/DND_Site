@@ -4098,7 +4098,7 @@
     // ── Sync costs: the focus refresh, portraits, the old blob ────────────
     {
       const before = errs.length;
-      const P0 = localStorage.getItem('skt-party-v1');
+      const P0 = localStorage.getItem('skt-party-v1'), LOOT0 = localStorage.getItem('skt-loot-v1');
       const stub = { put: window.sktMapBlobPut, get: window.sktMapBlobGet };
       const applyRK = window._applyRemoteKey;
       try {
@@ -4118,7 +4118,13 @@
           const r0 = reads;
           ok('refresh: a second return within ten seconds (focus + visibility) does nothing', _refreshAll(false, fakeDb) === false && reads === r0);
           ok('refresh: a forced one (a long absence, Resync) still runs', _refreshAll(true, fakeDb) === true);
-        } finally { window._applyRemoteKey = applyRK; SKT_SYNC_KEYS.forEach(k => { delete _lastServer[k]; }); _refreshLast = 0; }
+        } finally {
+          window._applyRemoteKey = applyRK; SKT_SYNC_KEYS.forEach(k => { delete _lastServer[k]; }); _refreshLast = 0;
+          // The fake server's 'changed' must not stay behind as the loot.
+          _remoteUpdate = true;
+          try { if (LOOT0 == null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', LOOT0); } finally { _remoteUpdate = false; }
+          if (panelDefs.loot && !panelDefs.loot._body) panelDefs.loot._loot = null;
+        }
 
         // #2 Portraits travel once, on their own.
         const blobs = {};
@@ -8861,7 +8867,8 @@
       const L0 = localStorage.getItem('skt-loot-v1'), p0 = localStorage.getItem('skt-party-v1');
       try {
         const pcs = state.party.filter(p => !p.foe), A = pcs[0], B = pcs[1];
-        const L = JSON.parse(L0 || '{"cp":0,"sp":0,"ep":0,"gp":0,"pp":0,"items":[],"tabGroups":[]}');
+        let L; try { L = JSON.parse(L0); } catch(e){ L = null; }
+        if (!L || !Array.isArray(L.items)) L = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
         L.tabGroups = (L.tabGroups || []).concat([{ id: 'grp_t', name: 'Front line', memberIds: [A.id, B && B.id].filter(Boolean) }]);
         L.items = (L.items || []).filter(x => !/^t_/.test(x.id)).concat([
           { id: 't_pot', name: 'Potion of Climbing', qty: 1, value: '50 gp', weight: 0.5, assignedTo: A.id },
