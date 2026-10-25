@@ -3205,6 +3205,17 @@ body.player-mode .loot-coin input{font-size:var(--fs-md);padding:0}
 body.player-mode .loot-sumbar{gap:4px 8px;padding:4px 6px;font-size:var(--fs-2xs)}
 body.player-mode .loot-sumbar .btn.small{padding:2px 6px;font-size:var(--fs-2xs)}
 body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
+/* A narrow Loot window (a phone): the total and the weight switch on one line,
+   Roll treasure and Divvy up sharing the next, rather than Divvy up wrapping
+   onto a line of its own. */
+.loot-panel{container:lootpanel / inline-size}
+@container lootpanel (max-width: 480px){
+  .loot-sumbar > span:first-child{flex:1 1 auto}
+  .loot-sumbar > span[style*="flex:1"]{display:none}
+  /* Each wants 40% of the bar, so neither fits beside the total and they go
+     down together. */
+  .loot-sumbar > #loot-roll, .loot-sumbar > #loot-divvy{flex:1 1 40%;justify-content:center;white-space:nowrap}
+}
 .loot-items{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px;min-width:0}
 .loot-item{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;min-width:0}
 .loot-item .loot-name{flex:1 1 140px;font-size:var(--fs-md);min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -5904,11 +5915,12 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 }
 #cs-root .cs-atk .btn.small:hover::before, #cs-root .cs-atk .btn.small:focus-visible::before { background:var(--accent); }
 #cs-root .cs-atk .btn.small:focus-visible { outline:none; }
-/* Phone: AC / Initiative / Speed, then Proficiency and Inspiration sharing the row. */
+/* Phone: AC / Initiative / Speed, then Proficiency and Inspiration in the same thirds. */
 @media (max-width: 760px){
   #cs-root .cs-boxes { grid-template-columns:repeat(6, minmax(0,1fr)); }
   #cs-root .cs-boxes > .cs-box { grid-column:span 2; }
-  #cs-root .cs-boxes > .cs-box:nth-child(4), #cs-root .cs-boxes > .cs-box:nth-child(5) { grid-column:span 3; }
+  /* Proficiency under AC; Inspiration's two halves under Initiative and Speed. */
+  #cs-root .cs-boxes > .cs-box.cs-inspbox { grid-column:span 4; }
 }
 
 /* ── The same frames beyond the sheet ────────────────────────────────────────
