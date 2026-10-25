@@ -8975,6 +8975,158 @@
         if (panelDefs.loot) panelDefs.loot._loot = null; loadDomain('party');
       }
     }
+    // -- Round 72: equipping changes the numbers by the right amount ------------
+    {
+      const L0 = localStorage.getItem('skt-loot-v1'), p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (id, o) => { state.party = state.party.filter(p => p.id !== id); state.party.push(Object.assign({ id, foe: false, level: 6, hp: 40, hpMax: 40, inventory: [], resistances: [],
+          sheet: { profBonus: 3, saves: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, attacks: [], bio: { features: '' } } }, o)); save(); return () => state.party.find(p => p.id === id); };
+        const open = async id => { openCharSheet(id, { tab: 'inventory' }); for (let i = 0; i < 80 && !(CS.R && CS.gear && CS.magic); i++) await sleep(100); csRender(); await sleep(20); };
+        const q = s => document.querySelector('#cs-root ' + s);
+        const add = (label, item) => new Promise(r => { csItemsEdit(label, l => { l.push(item); }); setTimeout(r, 40); });
+        const inv = pc => pc().inventory || [];
+        const equip = async (pc, name, on) => { const i = inv(pc).findIndex(m => m.name === name); const el = q('[data-cs-equip="' + i + '"]'); el.checked = on; el.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); };
+        const atk = (pc, name) => (pc().sheet.attacks || []).find(a => a.name === name);
+        // A rogue from a PDF: STR 8 DEX 19 CON 14, AC 17 (studded leather +1).
+        const rogue = mk('imp_rogue', { name: 'Imp Rogue', cls: 'rogue', ac: 17, abilities: { str: 8, dex: 19, con: 14, int: 12, wis: 10, cha: 15 } });
+        await open('imp_rogue');
+        ok('imported: the sheet guesses what the PDF\'s AC was made of', q('[data-cs-pdfarmor]') && q('[data-cs-pdfarmor]').value === 'studded leather armor' && q('[data-cs-pdfab]').value === '1', q('[data-cs-pdfarmor]') && q('[data-cs-pdfarmor]').value);
+        q('[data-cs="pdfgear"]').click(); await sleep(60);
+        ok('imported: accepting it puts that armour in the inventory, worn, and keeps AC 17', rogue().ac === 17 && inv(rogue).some(m => m.pdf && m.name === '+1 Studded Leather Armor' && m.equipped !== false) && rogue().acGear.misc === 0);
+        await add('Leather', { name: 'Leather Armor', base: 'leather armor', weight: 10, qty: 1, equipped: false });
+        await equip(rogue, 'Leather Armor', true);
+        ok('imported: swapping to leather armour: 11 + DEX 4 = 15, and the studded leather comes off', rogue().ac === 15 && inv(rogue).find(m => m.name === '+1 Studded Leather Armor').equipped === false, 'AC ' + rogue().ac);
+        await add('Shield', { name: 'Shield', base: 'shield', weight: 6, qty: 1, equipped: true });
+        ok('imported: a shield adds 2 → 17', rogue().ac === 17, 'AC ' + rogue().ac);
+        await equip(rogue, 'Leather Armor', false);
+        ok('imported: no armour: 10 + DEX 4 + shield 2 = 16', rogue().ac === 16, 'AC ' + rogue().ac);
+        await add('Ring', { name: 'Ring of Protection', qty: 1, bonusAc: 1, bonusSavingThrow: 1, reqAttune: true, attuned: false });
+        ok('imported: a Ring of Protection not attuned does nothing', rogue().ac === 16 && rogue().sheet.saves.dex === 0);
+        { const i = inv(rogue).findIndex(m => m.name === 'Ring of Protection'); const el = q('[data-cs-attune="' + i + '"]'); el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); }
+        ok('imported: attuned: +1 AC and +1 to every save', rogue().ac === 17 && rogue().sheet.saves.dex === 1 && rogue().sheet.saves.wis === 1, 'AC ' + rogue().ac + ' dex save ' + rogue().sheet.saves.dex);
+        await add('Rapier', { name: 'Rapier', base: 'rapier', weight: 2, qty: 1 });
+        ok('imported: a rapier (finesse): +3 prof + DEX 4 = +7, 1d8+4 piercing', (atk(rogue, 'Rapier') || {}).atkBonus === '+7' && (atk(rogue, 'Rapier') || {}).damage === '1d8+4 piercing', JSON.stringify(atk(rogue, 'Rapier')));
+        await add('Longsword', { name: 'Longsword', base: 'longsword', weight: 3, qty: 1 });
+        ok('imported: a longsword with STR 8: +3 − 1 = +2, 1d8−1 slashing, two-handed 1d10−1', (atk(rogue, 'Longsword') || {}).atkBonus === '+2' && atk(rogue, 'Longsword').damage === '1d8-1 slashing' && atk(rogue, 'Longsword').versatile === '1d10-1 slashing', JSON.stringify(atk(rogue, 'Longsword')));
+        await add('+1 Longsword', { name: '+1 Longsword', base: 'longsword', weight: 3, qty: 1, bonusWeapon: 1 });
+        ok('imported: a +1 longsword: +3, 1d8 slashing (−1 + 1)', (atk(rogue, '+1 Longsword') || {}).atkBonus === '+3' && atk(rogue, '+1 Longsword').damage === '1d8 slashing', JSON.stringify(atk(rogue, '+1 Longsword')));
+        await add('Shortbow', { name: 'Shortbow', base: 'shortbow', weight: 2, qty: 1 });
+        ok('imported: a shortbow uses DEX: +7, 1d6+4 piercing', (atk(rogue, 'Shortbow') || {}).atkBonus === '+7' && atk(rogue, 'Shortbow').damage === '1d6+4 piercing', JSON.stringify(atk(rogue, 'Shortbow')));
+        await equip(rogue, 'Rapier', false);
+        ok('imported: putting the rapier away takes its attack off', !atk(rogue, 'Rapier'));
+        await add('FireRes', { name: 'Leather Armor of Fire Resistance', base: 'leather armor', weight: 10, qty: 1, equipped: false, resist: ['fire'] });
+        await equip(rogue, 'Leather Armor of Fire Resistance', true);
+        ok('imported: armour of fire resistance worn: resistant to fire, and AC 11 + 4 + 2 + 1 = 18', rogue().resistances.includes('fire') && rogue().ac === 18, 'AC ' + rogue().ac);
+        await equip(rogue, 'Leather Armor of Fire Resistance', false);
+        ok('imported: taken off, the resistance goes', !rogue().resistances.includes('fire'));
+        csClose();
+        // A fighter from a PDF: AC 19 is chain mail + shield + 1 from the Defense style.
+        const fighter = mk('imp_fighter', { name: 'Imp Fighter', cls: 'fighter', ac: 19, abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 12, cha: 8 } });
+        await open('imp_fighter');
+        q('[data-cs-pdfarmor]').value = 'chain mail'; q('[data-cs-pdfab]').value = '0'; q('[data-cs-pdfsh]').checked = true; q('[data-cs-pdfsb]').value = '0';
+        q('[data-cs="pdfgear"]').click(); await sleep(60);
+        ok('imported: chain mail 16 + shield 2 in a 19: the other +1 is kept', fighter().ac === 19 && fighter().acGear.misc === 1);
+        await add('Plate', { name: 'Plate Armor', base: 'plate armor', weight: 65, qty: 1, equipped: false });
+        await equip(fighter, 'Plate Armor', true);
+        ok('imported: into plate: 18 + 2 + 1 = 21 (DEX doesn\'t count in heavy armour)', fighter().ac === 21, 'AC ' + fighter().ac);
+        await add('+1 Shield', { name: '+1 Shield', base: 'shield', weight: 6, qty: 1, equipped: false, bonusAc: 1 });
+        await equip(fighter, '+1 Shield', true);
+        ok('imported: a +1 shield in place of the plain one: 22, one shield worn', fighter().ac === 22 && inv(fighter).filter(m => m.base === 'shield' && m.equipped !== false).length === 1, 'AC ' + fighter().ac);
+        csClose();
+        // A monk: unarmoured defence, lost with a shield.
+        const monk = mk('imp_monk', { name: 'Imp Monk', cls: 'monk', ac: 14, abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 12, cha: 8 } });
+        await open('imp_monk');
+        await add('Shield', { name: 'Shield', base: 'shield', weight: 6, qty: 1, equipped: true });
+        ok('imported: a monk (10 + DEX 3 + WIS 1 = 14) with a shield: 10 + 3 + 2 = 15, unarmoured defence gone', monk().ac === 15 && monk().acGear && monk().acGear.misc === 0, 'AC ' + monk().ac);
+        csClose();
+        // A cleric with medium armour and DEX 18: the DEX bonus stops at 2.
+        const cleric = mk('imp_cleric', { name: 'Imp Cleric', cls: 'cleric', ac: 10, abilities: { str: 12, dex: 18, con: 14, int: 10, wis: 16, cha: 10 } });
+        await open('imp_cleric');
+        q('[data-cs-pdfarmor]').value = ''; q('[data-cs-pdfab]').value = '0'; q('[data-cs-pdfsh]').checked = false; q('[data-cs="pdfgear"]').click(); await sleep(60);
+        const c0 = cleric().acGear.misc;
+        await add('Breastplate', { name: 'Breastplate', base: 'breastplate', weight: 20, qty: 1, equipped: true });
+        ok('imported: a breastplate with DEX +4: 14 + 2 = 16', cleric().ac === 16 + c0, 'AC ' + cleric().ac + ' other ' + c0);
+        csClose();
+        // A barbarian: unarmoured defence keeps a shield.
+        const barb = mk('imp_barb', { name: 'Imp Barb', cls: 'barbarian', ac: 15, abilities: { str: 16, dex: 14, con: 16, int: 8, wis: 10, cha: 10 } });
+        await open('imp_barb');
+        await add('Shield', { name: 'Shield', base: 'shield', weight: 6, qty: 1, equipped: true });
+        ok('imported: a barbarian (10 + DEX 2 + CON 3 = 15) with a shield: 17', barb().ac === 17, 'AC ' + barb().ac);
+        csClose();
+        // A fighter with the Defense style: +1 only while in armour.
+        const def = mk('imp_def', { name: 'Imp Def', cls: 'fighter', ac: 17, feats: ['Defense', 'Tough'], abilities: { str: 18, dex: 12, con: 14, int: 10, wis: 12, cha: 8 } });
+        await open('imp_def');
+        ok('imported: a strong fighter with Defense at AC 17 is guessed as chain mail 16 + Defense 1', q('[data-cs-pdfarmor]').value === 'chain mail' && q('[data-cs-pdfab]').value === '0' && !q('[data-cs-pdfsh]').checked, q('[data-cs-pdfarmor]').value);
+        q('[data-cs="pdfgear"]').click(); await sleep(60);
+        await equip(def, 'Chain Mail', false);
+        ok('imported: out of armour, Defense\'s +1 goes too: 10 + DEX 1 = 11', def().ac === 11 && def().acGear.misc === 0, 'AC ' + def().ac);
+        csClose();
+        // A Valor bard: the PDF's armour list (medium armour and shields) beats the class table.
+        mk('imp_valor', { name: 'Imp Valor', cls: 'bard', ac: 18, abilities: { str: 10, dex: 14, con: 14, int: 10, wis: 10, cha: 18 },
+          sheet: { profBonus: 3, saves: {}, attacks: [], bio: { features: '' }, languages: '=== ARMOR === \nLight Armor, Medium Armor, Shields \n\n=== WEAPONS === \nMartial Weapons' } });
+        await open('imp_valor');
+        ok('imported: a Valor bard at AC 18 is guessed with a shield (the PDF says shields), in the cheapest armour that makes it', q('[data-cs-pdfsh]').checked && q('[data-cs-pdfab]').value === '0' && q('[data-cs-pdfarmor]').value === 'scale mail', q('[data-cs-pdfarmor]').value);
+        csClose();
+        // Armour already in the inventory: worn once, not twice.
+        const r2 = mk('imp_rogue2', { name: 'Imp Rogue2', cls: 'rogue', ac: 17, abilities: { str: 8, dex: 19, con: 14, int: 12, wis: 10, cha: 15 },
+          inventory: [{ name: '+1 Studded Leather Armor', base: 'studded leather armor', bonusAc: 1, weight: 13, qty: 1, equipped: true }] });
+        await open('imp_rogue2');
+        q('[data-cs="pdfgear"]').click(); await sleep(60);
+        ok('imported: the +1 studded leather they already carry is the PDF\'s — no second copy, AC 17', inv(r2).filter(m => m.base === 'studded leather armor').length === 1 && r2().ac === 17, JSON.stringify(inv(r2).map(m => m.name)) + ' AC ' + r2().ac);
+        csClose();
+        const r3 = mk('imp_rogue3', { name: 'Imp Rogue3', cls: 'rogue', ac: 17, abilities: { str: 8, dex: 19, con: 14, int: 12, wis: 10, cha: 15 },
+          inventory: [{ name: 'Leather Armor', base: 'leather armor', weight: 10, qty: 1, equipped: true }] });
+        await open('imp_rogue3');
+        q('[data-cs="pdfgear"]').click(); await sleep(60);
+        ok('imported: wearing other armour already, the PDF\'s is carried, not worn on top', inv(r3).filter(m => /^(LA|MA|HA)$/.test(csGearType(m, CS.R)) && m.equipped !== false).length === 1, JSON.stringify(inv(r3).map(m => m.name + ':' + m.equipped)));
+        csClose();
+        // A 2024 draconic sorcerer: 10 + DEX + CHA.
+        const sorc = mk('imp_sorc', { name: 'Imp Sorc', cls: 'sorcerer', subclass: 'Draconic', ac: 16, abilities: { str: 8, dex: 14, con: 14, int: 10, wis: 10, cha: 18 } });
+        await open('imp_sorc');
+        ok('imported: a draconic sorcerer at 16 is 10 + DEX 2 + CHA 4, no armour', q('[data-cs-pdfarmor]').value === '' && q('[data-cs-pdfab]').value === '0', q('[data-cs-pdfarmor]').value);
+        q('[data-cs="pdfgear"]').click(); await sleep(60);
+        ok('imported: nothing else in that 16', sorc().acGear.misc === 0 && sorc().ac === 16, JSON.stringify(sorc().acGear));
+        csClose();
+        // The builder's own numbers, the same cases.
+        const built = async (cls, items, abil) => {
+          await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+          CB.build.cls = cls; CB.build.level = 5; cbQuickBuild(); const b = JSON.parse(JSON.stringify(CB.build)); cbClose();
+          b.equipment = Object.assign({}, b.equipment, { materialized: true }); b.items = items;
+          return sktComputeCharacter(b, R, null);
+        };
+        const fA = await built('Fighter', [{ name: 'Chain Mail', base: 'chain mail', equipped: true, qty: 1 }]);
+        const fB = await built('Fighter', [{ name: 'Chain Mail', base: 'chain mail', equipped: true, qty: 1 }, { name: 'Shield', base: 'shield', equipped: true, qty: 1 }]);
+        const fC = await built('Fighter', [{ name: 'Chain Mail', base: 'chain mail', equipped: true, qty: 1 }, { name: '+1 Shield', base: 'shield', bonusAc: 1, equipped: true, qty: 1 }]);
+        const fD = await built('Fighter', [{ name: 'Plate Armor', base: 'plate armor', equipped: true, qty: 1 }, { name: 'Shield', base: 'shield', equipped: true, qty: 1 }]);
+        const fE = await built('Fighter', [{ name: 'Plate Armor', base: 'plate armor', equipped: true, qty: 1 }, { name: 'Shield', base: 'shield', equipped: true, qty: 1 }, { name: 'Ring of Protection', bonusAc: 1, reqAttune: true, attuned: true, qty: 1 }]);
+        const fF = await built('Fighter', [{ name: 'Plate Armor', base: 'plate armor', equipped: true, qty: 1 }, { name: 'Shield', base: 'shield', equipped: true, qty: 1 }, { name: 'Ring of Protection', bonusAc: 1, reqAttune: true, attuned: false, qty: 1 }]);
+        ok('builder: a shield adds exactly 2, a +1 shield 3, plate 2 more than chain mail, an attuned ring 1 (unattuned 0)',
+           fB.ac - fA.ac === 2 && fC.ac - fA.ac === 3 && fD.ac - fB.ac === 2 && fE.ac - fD.ac === 1 && fF.ac === fD.ac, [fA.ac, fB.ac, fC.ac, fD.ac, fE.ac, fF.ac].join(','));
+        const rg = await built('Rogue', [{ name: 'Studded Leather Armor', base: 'studded leather armor', equipped: true, qty: 1 }]);
+        ok('builder: studded leather: 12 + DEX', rg.ac === 12 + Math.floor((rg.abilities.dex - 10) / 2), rg.ac + ' dex ' + rg.abilities.dex);
+        const cl = await built('Cleric', [{ name: 'Breastplate', base: 'breastplate', equipped: true, qty: 1 }]);
+        ok('builder: a breastplate: 14 + DEX up to 2', cl.ac === 14 + Math.min(2, Math.floor((cl.abilities.dex - 10) / 2)), cl.ac + ' dex ' + cl.abilities.dex);
+        const mo = await built('Monk', []);
+        const md = k => Math.floor((mo.abilities[k] - 10) / 2);
+        ok('builder: a monk with nothing on: 10 + DEX + WIS', mo.ac === 10 + md('dex') + md('wis'), mo.ac);
+        const mo2 = await built('Monk', [{ name: 'Shield', base: 'shield', equipped: true, qty: 1 }]);
+        ok('builder: and with a shield, the better of unarmoured defence or 10 + DEX + 2', mo2.ac === Math.max(10 + md('dex') + md('wis'), 10 + md('dex') + 2), mo2.ac);
+        const ba = await built('Barbarian', [{ name: 'Shield', base: 'shield', equipped: true, qty: 1 }]);
+        const bd = k => Math.floor((ba.abilities[k] - 10) / 2);
+        ok('builder: a barbarian with a shield: 10 + DEX + CON + 2', ba.ac === 10 + bd('dex') + bd('con') + 2, ba.ac);
+      } catch(e){ ok('round 72 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+        _remoteUpdate = true;
+        try {
+          if (L0 == null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', L0);
+          if (p0 != null) localStorage.setItem('skt-party-v1', p0);
+        } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

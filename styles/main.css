@@ -5321,6 +5321,17 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-att { font-size:var(--fs-xs); display:inline-flex; gap:3px; align-items:center; }
 .cs-qty { display:inline-flex; align-items:center; gap:4px; }
 .cs-wt { min-width:48px; text-align:right; }
+/* A narrow sheet (a phone): the name gets the row, the controls go under it. */
+.cs-inv { container-type:inline-size; }
+@container (max-width: 440px){
+  .cs-item { flex-wrap:wrap; row-gap:4px; }
+  .cs-item .cs-itemn { flex:1 1 calc(100% - 40px); overflow-wrap:anywhere; }
+  .cs-item .cs-itemn + * { margin-left:28px; }
+  .cs-item > :last-child:not(.cs-itemn):not(.cs-eq) { margin-left:auto; }
+  /* The party's pile has only a count and Claim: one line while the name fits. */
+  .cs-partylootitem .cs-itemn { flex:1 1 120px; }
+  .cs-partylootitem .cs-itemn + * { margin-left:0; }
+}
 .cs-add { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
 .cs-add input { flex:1 1 200px; min-width:0; }
 .cs-add input[type=number] { flex:0 0 80px; }
@@ -5976,3 +5987,5 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 #cs-root .cs-insp-h:disabled { cursor:default; }
 #cs-root .cs-insp-h:not(:disabled):hover, #cs-root .cs-insp-h:focus-visible { background:var(--fx-hair); outline:none; }
 #cs-root .cs-insp-h.on:not(:disabled):hover { background:color-mix(in srgb, var(--accent) 24%, transparent); }
+.cs-pdfgear { margin:6px 0 10px; padding:8px 10px; border:1px solid var(--fx-line, var(--border)); border-radius:var(--r-md); font-size:var(--fs-sm); }
+.cs-pdfgear-ask { border-color:var(--accent); display:flex; flex-direction:column; gap:6px; }

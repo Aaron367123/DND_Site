@@ -1530,6 +1530,26 @@ function csItems(pc){
   return pc.inventory || [];
 }
 function csCoins(pc){ return Object.assign({ pp: 0, ep: 0, sp: 0, cp: 0 }, pc.coins || {}, { gp: +pc.gold || 0 }); }
+// For an imported character: what the PDF's AC is made of. A guess until
+// the player says, editable after.
+function csPdfGearHtml(pc){
+  if (pc.build || CS.readOnly || !CS.R) return '';
+  const R = CS.R, g = pc.acGear;
+  const nm = k => k ? (_csTitle(R.items[k] ? R.items[k].name : k)) : 'No armour';
+  const describe = d => [d.armor ? (d.bonus ? '+' + d.bonus + ' ' : '') + nm(d.armor) : 'no armour', d.shield ? (d.shieldBonus ? '+' + d.shieldBonus + ' ' : '') + 'shield' : ''].filter(Boolean).join(' and ');
+  if (g && !CS.pdfGearEdit) return '<div class="cs-pdfgear">AC <b>' + g.pdfAc + '</b> from the PDF: ' + csE(describe(g.decl)) + (g.misc ? ', plus ' + (g.misc > 0 ? '+' : '') + g.misc + ' from elsewhere' : '')
+    + ' <button class="cs-linkbtn" data-cs="pdfgearedit">change</button></div>';
+  const d = g ? g.decl : csGuessPdfGear(pc, R);
+  const armors = Object.keys(R.items).filter(k => /^(LA|MA|HA)$/.test(String(R.items[k].type || '').split('|')[0]) && (!R.items[k].rarity || R.items[k].rarity === 'none'))
+    .sort((a, b) => (+R.items[a].ac || 0) - (+R.items[b].ac || 0));
+  const plus = (attr, v) => '<select class="cb-sel" ' + attr + '>' + [0, 1, 2, 3].map(n => '<option value="' + n + '"' + (+v === n ? ' selected' : '') + '>+' + n + '</option>').join('') + '</select>';
+  return '<div class="cs-pdfgear cs-pdfgear-ask"><div><b>What makes this AC (' + (g ? g.pdfAc : pc.ac) + ') from the PDF?</b> <span class="cb-dim">So putting on other armour changes it by the right amount.' + (g ? '' : ' A guess — check it.') + '</span></div>'
+    + '<div class="cs-add"><select class="cb-sel" data-cs-pdfarmor aria-label="Armour"><option value="">No armour</option>'
+    + armors.map(k => '<option value="' + csE(k) + '"' + (d.armor === k ? ' selected' : '') + '>' + csE(nm(k)) + ' (AC ' + R.items[k].ac + ')</option>').join('') + '</select>'
+    + plus('data-cs-pdfab aria-label="Armour bonus"', d.bonus)
+    + '<label class="cb-inline"><input type="checkbox" data-cs-pdfsh' + (d.shield ? ' checked' : '') + '> Shield</label>' + plus('data-cs-pdfsb aria-label="Shield bonus"', d.shieldBonus)
+    + '<button class="btn primary" data-cs="pdfgear">That\u2019s it</button></div></div>';
+}
 function csInventoryHtml(pc){
   const ro = CS.readOnly;
   if (!CS.gear && !CS.gearLoading && typeof sktGearLoad === 'function' && CS.R){
@@ -1553,6 +1573,7 @@ function csInventoryHtml(pc){
     + (ro ? '' : '<div class="cs-add cs-cointx"><input type="number" min="0" data-cs-txn placeholder="Amount" aria-label="Amount"><select class="cb-sel" data-cs-txc aria-label="Coin">'
       + CS_COINS.map(([k]) => '<option value="' + k + '"' + (k === 'gp' ? ' selected' : '') + '>' + k + '</option>').join('') + '</select>'
       + '<button class="btn" data-cs="coinadd">Add</button><button class="btn" data-cs="coinspend">Spend</button></div>');
+  h += csPdfGearHtml(pc);
   h += '<div class="cs-carry' + (csCarryNote(pref.encumbrance, lb, cap) ? ' over' : '') + '">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b>'
     + (pref.encumbrance === 'none' ? '' : ' of ' + cap + ' lb') + csCarryNote(pref.encumbrance, lb, cap)
     + (items.some(m => m.reqAttune) ? ' · attuned ' + attuned + ' of ' + attMax : '') + '</div>';
@@ -1660,6 +1681,193 @@ function csCatalogCharges(m){
   const e = (CS.magic || []).find(x => x.name === m.name && x.charges);
   return e ? { charges: e.charges, recharge: e.recharge, rechargeAmount: e.rechargeAmount } : null;
 }
+// ── Armour and weapons on a character brought in from a PDF ─────────────────
+// A built character's AC and attacks come from its gear (sktComputeCharacter).
+// An imported one had only the numbers the PDF printed: equipping armour or a
+// weapon changed nothing. Now the same rules apply to it:
+//  • AC: armour's base + DEX (all of it for light, up to 2 for medium, none
+//    for heavy) or unarmoured (10 + DEX; a barbarian's + CON, a monk's + WIS
+//    without a shield, a draconic sorcerer's 13 + DEX); a shield's 2; magic
+//    bonuses; a ring or cloak of protection once attuned.
+//  • The PDF's AC is kept as the truth for what it was made of: the player
+//    says (or the sheet guesses) which armour that was, and whatever else is
+//    in it — a fighting style, a ring the sheet doesn't know — stays as a
+//    fixed "other". Changing armour then changes AC by exactly the difference.
+//  • An equipped weapon not already on the PDF gets an attack row: proficiency
+//    plus STR, DEX for ranged, the better of the two for finesse, plus magic.
+//  • Saving-throw and spell-attack/DC bonuses (a cloak, a rod) and an
+//    armour's resistance follow what's worn.
+const CS_ARMOR_PROF = { barbarian: 'LMS', bard: 'L', cleric: 'LMS', druid: 'LMS', fighter: 'LMHS', monk: '', paladin: 'LMHS', ranger: 'LMS', rogue: 'L', sorcerer: '', warlock: 'L', wizard: '', artificer: 'LMS' };
+function csImpClasses(pc){
+  const cl = (pc.sheet && pc.sheet.classLevels) || [];
+  return (cl.length ? cl.map(c => String(c.cls || '')) : String(pc.cls || '').split(/[\s/,]+/)).map(s => s.toLowerCase()).filter(Boolean);
+}
+function csImpMods(pc){
+  const a = pc.abilities || {}, m = k => Math.floor(((+a[k] || 10) - 10) / 2);
+  return { str: m('str'), dex: m('dex'), con: m('con'), int: m('int'), wis: m('wis'), cha: m('cha') };
+}
+// What the PDF says the character can wear ("=== ARMOR === Light Armor,
+// Medium Armor, Shields"), else what the class gives: a set of L/M/H/S.
+function csImpArmorProf(pc){
+  const m = /=== ARMOR ===([\s\S]*?)(?:===|$)/.exec((pc.sheet && pc.sheet.languages) || '');
+  if (m){
+    const t = m[1], out = new Set();
+    if (/light/i.test(t)) out.add('L'); if (/medium/i.test(t)) out.add('M'); if (/heavy/i.test(t)) out.add('H'); if (/shield/i.test(t)) out.add('S');
+    return out;
+  }
+  return new Set([].concat(...csImpClasses(pc).map(c => (CS_ARMOR_PROF[c] || '').split(''))));
+}
+// The Defense fighting style: +1 AC while wearing armour.
+function csImpDefense(pc){
+  const f = (pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '';
+  return (pc.feats || []).some(x => /^defense$/i.test(String((x && x.name) || x).trim()))
+    || /\+1 to AC when wearing|wearing armou?r, you gain a \+1 bonus to AC/i.test(f);
+}
+function csGearStat(m, R){ return m && (m.stats || (m.base && R && R.items[m.base])) || null; }
+function csGearType(m, R){ const s = csGearStat(m, R); return s ? String(s.type || '').split('|')[0] : ''; }
+// The AC a set of gear gives this character, and how: { ac, parts }.
+function csGearAc(pc, gear, R){
+  const md = csImpMods(pc), cls = csImpClasses(pc);
+  const medCap = /Medium Armor Master/i.test((pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '') ? 3 : 2;
+  const armor = gear.find(m => /^(LA|MA|HA)$/.test(csGearType(m, R))), shield = gear.find(m => csGearType(m, R) === 'S');
+  const cands = [];
+  if (armor){
+    const s = csGearStat(armor, R), t = csGearType(armor, R), dex = t === 'HA' ? 0 : t === 'MA' ? Math.min(medCap, md.dex) : md.dex;
+    const base = (+s.ac || 10) + (+armor.bonusAc || 0), def = csImpDefense(pc) ? 1 : 0;
+    cands.push({ v: base + dex + def, ok: true, parts: [armor.name + ' ' + base].concat(dex ? ['DEX ' + dex] : [], def ? ['Defense 1'] : []) });
+  } else {
+    cands.push({ v: 10 + md.dex, ok: true, parts: ['Unarmored 10', 'DEX ' + md.dex] });
+    if (cls.includes('barbarian')) cands.push({ v: 10 + md.dex + md.con, ok: true, parts: ['Unarmored Defense 10 + DEX ' + md.dex + ' + CON ' + md.con] });
+    if (cls.includes('monk')) cands.push({ v: 10 + md.dex + md.wis, ok: false, parts: ['Unarmored Defense 10 + DEX ' + md.dex + ' + WIS ' + md.wis] });
+    if (cls.includes('sorcerer') && /draconic/i.test(pc.subclass || '')){
+      const f = (pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '';
+      const old = /Draconic Resilience[^*]*?13 \+ your Dexterity|base AC equals 13/i.test(f);
+      cands.push(old ? { v: 13 + md.dex, ok: true, parts: ['Draconic Resilience 13 + DEX ' + md.dex] }
+        : { v: 10 + md.dex + md.cha, ok: true, parts: ['Draconic Resilience 10 + DEX ' + md.dex + ' + CHA ' + md.cha] });
+    }
+  }
+  const sh = shield ? (+csGearStat(shield, R).ac || 2) + (+shield.bonusAc || 0) : 0;
+  const best = cands.map(c => ({ ...c, total: c.v + (shield && c.ok ? sh : 0) })).sort((a, b) => b.total - a.total)[0];
+  const parts = best.parts.slice();
+  if (shield && best.ok) parts.push(shield.name + ' ' + sh);
+  let ac = best.total;
+  gear.forEach(m => {
+    if (!m.bonusAc || csGearStat(m, R) || (m.unarmoredOnly && armor) || (m.noShield && shield)) return;
+    ac += +m.bonusAc; parts.push(m.name + ' ' + m.bonusAc);
+  });
+  return { ac, parts };
+}
+// Worn: equipped (gear defaults to equipped), and attuned where that's needed.
+function csImpWorn(pc){ return (pc.inventory || []).filter(m => m.equipped !== false && (!m.reqAttune || m.attuned)); }
+// An inventory line for armour or a shield, plain or magic.
+function csGearLine(R, key, bonus){
+  const bi = R.items[key]; if (!bi) return null;
+  const t = String(bi.type || '').split('|')[0];
+  const nm = (bonus ? '+' + bonus + ' ' : '') + (typeof _csTitle === 'function' ? _csTitle(bi.name) : bi.name);
+  const m = { name: nm, base: key, weight: +bi.weight || 0, qty: 1, equipped: true };
+  if (bonus) m.bonusAc = bonus;
+  if (t === 'S' && !key) m.base = 'shield';
+  return m;
+}
+// What the PDF's AC is most likely made of: armour the class can wear, a
+// shield if it can use one, the fewest magic bonuses that make the number.
+function csGuessPdfGear(pc, R){
+  const pdfAc = pc.acGear ? pc.acGear.pdfAc : (+pc.ac || 10);
+  const prof = csImpArmorProf(pc);
+  const armors = [''].concat(Object.keys(R.items).filter(k => {
+    const it = R.items[k], t = String(it.type || '').split('|')[0];
+    return /^(LA|MA|HA)$/.test(t) && (!it.rarity || it.rarity === 'none') && prof.has(t[0]);
+  }));
+  const shieldKey = R.items.shield ? 'shield' : Object.keys(R.items).find(k => String(R.items[k].type || '').split('|')[0] === 'S');
+  let best = null;
+  armors.forEach(a => [0, 1, 2, 3].forEach(ab => {
+    if (!a && ab) return;
+    [false, true].forEach(sh => {
+      if (sh && (!prof.has('S') || !shieldKey)) return;
+      [0, 1, 2, 3].forEach(sb => {
+        if (!sh && sb) return;
+        const gear = [a ? csGearLine(R, a, ab) : null, sh ? csGearLine(R, shieldKey, sb) : null].filter(Boolean);
+        const v = csGearAc(pc, gear, R).ac;
+        if (v > pdfAc) return;
+        const t = a ? String(R.items[a].type || '').split('|')[0] : '';
+        // Exact beats close; then the fewest magic pluses; then no shield;
+        // then the armour that suits the character's DEX (heavy armour for the
+        // strong); then the cheaper of two that give the same.
+        const { dex, str } = csImpMods(pc), fit = !a ? 0 : (t === 'LA' ? (dex >= 3 ? 0 : 0.2) : t === 'MA' ? (dex >= 1 && dex <= 2 ? 0 : 0.15) : (dex <= 0 || (str >= 2 && dex <= 1) ? 0 : 0.25));
+        const cost = (pdfAc - v) * 10 + ab + sb + (sh ? 0.5 : 0) + fit + (a ? (+R.items[a].value || 0) / 1e6 : 0);
+        if (!best || cost < best.cost) best = { cost, armor: a, bonus: ab, shield: sh, shieldBonus: sb };
+      });
+    });
+  }));
+  return best || { armor: '', bonus: 0, shield: false, shieldBonus: 0 };
+}
+function csPdfGearItems(decl, R){
+  const shieldKey = R.items.shield ? 'shield' : Object.keys(R.items).find(k => String(R.items[k].type || '').split('|')[0] === 'S');
+  return [decl.armor ? csGearLine(R, decl.armor, +decl.bonus || 0) : null, decl.shield && shieldKey ? csGearLine(R, shieldKey, +decl.shieldBonus || 0) : null]
+    .filter(Boolean).map(m => Object.assign(m, { pdf: true }));
+}
+// Say what the PDF's AC was made of (or accept the guess). Those pieces are
+// in the inventory, worn; an equipped item that already is one of them
+// stands in for it rather than being worn twice.
+function csDeclarePdfGear(p, decl, R){
+  const pdfAc = p.acGear ? p.acGear.pdfAc : (+p.ac || 10);
+  const inv = (p.inventory || []).filter(m => !m.pdf).map(x => Object.assign({}, x));
+  const gear = csPdfGearItems(decl, R);
+  const kindOf = m => { const t = csGearType(m, R); return /^(LA|MA|HA)$/.test(t) ? 'armor' : t === 'S' ? 'shield' : ''; };
+  gear.forEach(g => {
+    const same = inv.find(m => m.base === g.base && (+m.bonusAc || 0) === (+g.bonusAc || 0) && m.equipped !== false);
+    if (same) return;
+    // Something else of that kind is already worn: the PDF's is carried, not worn.
+    if (inv.some(m => kindOf(m) === kindOf(g) && m.equipped !== false)) g.equipped = false;
+    inv.push(g);
+  });
+  p.inventory = inv;
+  p.acGear = { pdfAc, decl: Object.assign({}, decl), misc: pdfAc - csGearAc(p, gear, R).ac };
+}
+function csImpRecalc(p, R){
+  if (!p || p.build || !R) return;
+  const worn = csImpWorn(p);
+  const kinds = worn.map(m => csGearType(m, R));
+  // The first time armour, a shield or a protection item is worn, the PDF's
+  // AC is broken down by the guess so it changes by the right amount.
+  if (!p.acGear && (kinds.some(t => /^(LA|MA|HA|S)$/.test(t)) || worn.some(m => m.bonusAc && !csGearStat(m, R)))) csDeclarePdfGear(p, csGuessPdfGear(p, R), R);
+  const sh = p.sheet = Object.assign({}, p.sheet || {});
+  if (p.acGear){
+    const g = csGearAc(p, csImpWorn(p), R);
+    p.ac = g.ac + (+p.acGear.misc || 0);
+    sh.acDetail = g.parts.concat(p.acGear.misc ? ['other ' + (p.acGear.misc > 0 ? '+' : '') + p.acGear.misc] : []).join(' + ') + ' = ' + p.ac;
+  }
+  // Weapons: a row for each one worn that the PDF doesn't already list.
+  const base = (sh.attacks || []).filter(a => !a.fromInv);
+  const have = new Set(base.map(a => String(a.name || '').toLowerCase()));
+  const md = csImpMods(p), prof = +sh.profBonus || 2, DT = { A: 'acid', B: 'bludgeoning', C: 'cold', F: 'fire', O: 'force', L: 'lightning', N: 'necrotic', P: 'piercing', I: 'poison', Y: 'psychic', R: 'radiant', S: 'slashing', T: 'thunder' };
+  const rows = [];
+  csImpWorn(p).forEach(m => {
+    const s = csGearStat(m, R), t = csGearType(m, R);
+    if (!s || !/^(M|R)$/.test(t) || m.pdf || have.has(String(m.name || '').toLowerCase())) return;
+    const props = (s.property || []).map(x => String(x).split('|')[0]);
+    const ab = t === 'R' ? md.dex : props.includes('F') ? Math.max(md.str, md.dex) : md.str;
+    const hit = prof + ab + (+m.bonusWeapon || 0) + (+m.bonusWeaponAttack || 0);
+    const dm = ab + (+m.bonusWeapon || 0) + (+m.bonusWeaponDamage || 0);
+    const fmt = die => die ? die + (dm ? (dm > 0 ? '+' : '') + dm : '') + (s.dmgType ? ' ' + (DT[s.dmgType] || '') : '') : '';
+    rows.push({ name: m.name, atkBonus: (hit >= 0 ? '+' : '') + hit, damage: fmt(s.dmg1) || String(1 + dm), versatile: props.includes('V') && s.dmg2 ? fmt(s.dmg2) : null,
+      props, range: s.range ? String(s.range).split('/')[0] : '', fromInv: true });
+    have.add(String(m.name || '').toLowerCase());
+  });
+  sh.attacks = base.concat(rows);
+  // Saves and spellcasting numbers: the PDF's, plus what's worn.
+  if (!sh.invBase) sh.invBase = { saves: sh.saves ? Object.assign({}, sh.saves) : null, dc: sh.spellSaveDc, atk: sh.spellAtkBonus };
+  const sum = k => csImpWorn(p).reduce((n, m) => n + (+m[k] || 0), 0);
+  const sv = sum('bonusSavingThrow'), dcB = sum('bonusSpellSaveDc'), atB = sum('bonusSpellAttack');
+  if (sh.invBase.saves){ sh.saves = {}; Object.keys(sh.invBase.saves).forEach(k => { const v = parseInt(sh.invBase.saves[k], 10); sh.saves[k] = isNaN(v) ? sh.invBase.saves[k] : v + sv; }); }
+  if (sh.invBase.dc != null && sh.invBase.dc !== '') sh.spellSaveDc = (+sh.invBase.dc || 0) + dcB;
+  if (sh.invBase.atk != null && sh.invBase.atk !== ''){ const v = (parseInt(sh.invBase.atk, 10) || 0) + atB; sh.spellAtkBonus = (v >= 0 ? '+' : '') + v; }
+  // An armour's resistance while it's worn.
+  const prev = p.invResist || [], baseRes = (p.resistances || []).filter(r => !prev.includes(r));
+  const now = [...new Set([].concat(...csImpWorn(p).map(m => m.resist || [])))];
+  p.resistances = [...new Set(baseRes.concat(now))];
+  p.invResist = now.filter(r => !baseRes.includes(r));
+}
 function csItemsEdit(label, fn, undoOpts){
   const pc = csPc(); if (!pc) return;
   if (pc.build){
@@ -1671,7 +1879,7 @@ function csItemsEdit(label, fn, undoOpts){
       fn(b.items, b);
     }, undoOpts);
   }
-  csEdit(label, p => { p.inventory = (p.inventory || []).map(x => Object.assign({}, x)); fn(p.inventory, p); }, undoOpts);
+  csEdit(label, p => { p.inventory = (p.inventory || []).map(x => Object.assign({}, x)); fn(p.inventory, p); csImpRecalc(p, CS.R); }, undoOpts);
 }
 
 // ── Claimed loot is the character's ─────────────────────────────────────────
@@ -1834,6 +2042,10 @@ function csLootClick(d, pc){
   const m = csLootAsItem(it);
   if (d.csLootequip != null) m.equipped = true;
   csItemsEdit((d.csLootequip != null ? 'Equipped ' : 'Took ') + it.name, l => {
+    if (d.csLootequip != null){
+      const kind = x => { const k = csGearType(x, CS.R); return /^(LA|MA|HA)$/.test(k) ? 'armor' : k === 'S' ? 'shield' : ''; };
+      const k = kind(m); if (k) l.forEach(x => { if (kind(x) === k) x.equipped = false; });
+    }
     l.push(m);
     const L = csLootRead(); L.items = L.items.filter(y => y.id !== id); csLootWrite(L);
   }, keys);
@@ -1842,6 +2054,15 @@ function csLootClick(d, pc){
 function csInventoryClick(e, t, d, pc){
   if (csLootClick(d, pc)) return true;
   if (CS.readOnly) return false;
+  if (d.cs === 'pdfgearedit'){ CS.pdfGearEdit = true; csRender(); return true; }
+  if (d.cs === 'pdfgear'){
+    const v = s => document.querySelector('#cs-root ' + s);
+    const decl = { armor: (v('[data-cs-pdfarmor]') || {}).value || '', bonus: +((v('[data-cs-pdfab]') || {}).value || 0),
+                   shield: !!(v('[data-cs-pdfsh]') || {}).checked, shieldBonus: +((v('[data-cs-pdfsb]') || {}).value || 0) };
+    CS.pdfGearEdit = false;
+    csEdit('Armour in the PDF\u2019s AC', p => { csDeclarePdfGear(p, decl, CS.R); csImpRecalc(p, CS.R); });
+    return true;
+  }
   if (d.csTrackchg != null){
     const i = +d.csTrackchg, it = csItems(pc)[i], c = it && csCatalogCharges(it);
     if (c) csItemsEdit('Charges for ' + it.name, items => { if (items[i]) Object.assign(items[i], c); });
@@ -1911,7 +2132,19 @@ function csInventoryClick(e, t, d, pc){
 function csInventoryChange(e, t, d, pc){
   if (d.csLootequip != null){ if (t.checked) csLootClick({ csLoottake: d.csLootequip, csLootequip: d.csLootequip }, pc); return true; }
   if (d.csIn != null){ const i = +d.csIn, v = t.value; csItemsEdit(v ? 'Put in ' + v : 'Took out', l => { if (l[i]) { if (v) l[i].in = v; else delete l[i].in; } }); return true; }
-  if (d.csEquip != null){ const i = +d.csEquip; csItemsEdit(t.checked ? 'Equipped' : 'Unequipped', l => { if (l[i]) l[i].equipped = t.checked; }); return true; }
+  if (d.csEquip != null){
+    const i = +d.csEquip;
+    csItemsEdit(t.checked ? 'Equipped' : 'Unequipped', l => {
+      if (!l[i]) return;
+      l[i].equipped = t.checked;
+      // One suit of armour and one shield at a time: putting one on takes
+      // the other off.
+      const kind = m => { const k = csGearType(m, CS.R); return /^(LA|MA|HA)$/.test(k) ? 'armor' : k === 'S' ? 'shield' : ''; };
+      const k = kind(l[i]);
+      if (t.checked && k) l.forEach((m, j) => { if (j !== i && kind(m) === k) m.equipped = false; });
+    });
+    return true;
+  }
   if (d.csAttune != null){
     const i = +d.csAttune;
     csItemsEdit(t.checked ? 'Attuned' : 'Ended attunement', l => {
