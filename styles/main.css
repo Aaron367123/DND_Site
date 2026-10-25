@@ -876,6 +876,14 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .combat-controls .btn.icon-btn{padding:3px 7px;font-size:var(--fs-lg)}
 .combat-section-label{padding:6px 10px 4px;font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border)}
 .combatant-list{padding:8px;display:flex;flex-direction:column;gap:8px}
+/* A wide Combat Tracker: cards side by side, in initiative order left to right.
+   One column across 1400px stretched the HP / AC / initiative to 450px apart
+   and the − 5 + buttons to 600px each. */
+.window[data-panel="combat"] > .window-body{container:combatwin / inline-size}
+@container combatwin (min-width: 820px){
+  .combatant-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));align-items:start}
+  .combatant-list.compact{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+}
 /* Floats over the panel — position:absolute so showing/hiding it doesn't
    reflow the panel content. pointer-events:none lets drag events pass
    through, otherwise hovering the tip itself causes leave/enter flicker. */
@@ -1929,8 +1937,11 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 }
 .shop-display{
   background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);
-  min-height:0;overflow-y:auto;
+  min-height:0;display:flex;flex-direction:column;overflow:hidden;
 }
+/* The scrolling happens inside the frame, so the frame's rule stays put and
+   the table's header row can't paint over it. */
+.shop-display-scroll{flex:1;min-height:0;overflow-y:auto;margin:2px 2px 6px}
 /* No sticky header here on purpose: name, keeper and aesthetic total ~240px,
    which would permanently occupy 39% of the display column. Scrolling past
    them costs one flick; losing 240px costs every row. */
@@ -1968,7 +1979,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 @container shopwin (max-width: 700px){
   .shop-layout{grid-template-columns:1fr; height:auto; min-height:100%; overflow-y:auto}
   .shop-controls{align-self:stretch; max-height:none; overflow:visible}
-  .shop-display{overflow:visible}
+  .shop-display, .shop-display-scroll{overflow:visible}
 }
 @container shopwin (max-width: 520px){
   .shop-table th:nth-child(2), .shop-table td:nth-child(2),
@@ -2569,7 +2580,7 @@ body.player-mode #campaign-btn{display:none !important}
 .notes-picker-shell{display:flex;flex:1;min-height:0;overflow:hidden}
 .notes-picker-side{flex:0 0 220px;width:220px;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--panel);padding:14px 0}
 .notes-picker-head{font-size:var(--fs-sm);font-weight:600;letter-spacing:.08em;color:var(--text-muted);padding:0 16px 16px;text-transform:uppercase}
-.notes-picker-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px;align-content:center;flex:1}
+.notes-picker-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px;align-content:start;flex:1}
 .notes-source-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px 8px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .12s,background .12s,transform .12s}
 .notes-source-tile:hover:not(:disabled){border-color:var(--accent);background:var(--panel-3);transform:translateY(-1px)}
 .notes-source-tile.disabled,.notes-source-tile:disabled{opacity:.45;cursor:not-allowed}
@@ -2834,6 +2845,21 @@ body.player-mode #campaign-btn{display:none !important}
 .npclib-card-role{font-size:var(--fs-xs);color:var(--text-muted);margin-top:1px}
 
 .npclib-right{flex:1;overflow-y:auto;padding:14px}
+/* A narrow window (a phone): the list on top, the NPC under it — side by side
+   at 390px the search box came out 20px wide. */
+.window[data-panel="npclib"] > .window-body{container:npclibwin / inline-size}
+@container npclibwin (max-width: 560px){
+  .npclib-root{flex-direction:column;overflow-y:auto}
+  .npclib-left{width:auto !important;min-width:0;flex:0 0 auto;max-height:45%;border-bottom:1px solid var(--border)}
+  .npclib-divider{display:none}
+  .npclib-right{flex:1 0 auto;overflow:visible}
+}
+.window[data-panel="notes"] > .window-body{container:noteswin / inline-size}
+@container noteswin (max-width: 560px){
+  .notes-picker-shell{flex-direction:column}
+  .notes-picker-side{flex:1 1 auto;width:auto;border-right:none}
+  .notes-picker-empty{display:none}
+}
 .npclib-detail-head{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .npclib-detail-avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#3d2a2a,#6b3939);color:#fff;display:flex;align-items:center;justify-content:center;font-size:var(--fs-2xl);font-weight:600;flex-shrink:0;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .12s}
 .npclib-detail-avatar:hover{border-color:var(--accent)}
@@ -2965,7 +2991,7 @@ body.player-mode #campaign-btn{display:none !important}
 .adv-card-imgwrap{position:relative;width:100%;height:220px;flex:0 0 auto;background:var(--panel-3);overflow:hidden}
 .adv-card-img{width:100%;height:100%;object-fit:cover;display:block}
 .adv-card-nopic{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px;color:var(--text-muted)}
-.adv-card-titleover{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 6px;font-size:var(--fs-sm);font-weight:600;color:#fff;line-height:1.2;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,rgba(0,0,0,.55) 60%,rgba(0,0,0,0) 100%);text-shadow:0 1px 2px rgba(0,0,0,.8);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.adv-card-titleover{position:absolute;left:0;right:0;bottom:0;padding:28px 8px 7px;font-size:var(--fs-sm);font-weight:600;color:#fff;line-height:1.2;background:linear-gradient(to top,rgba(0,0,0,.94) 0%,rgba(0,0,0,.8) 55%,rgba(0,0,0,0) 100%);text-shadow:0 1px 2px rgba(0,0,0,.8);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .adv-card-body{padding:6px 8px;flex:0 0 auto;min-height:0}
 .adv-card-meta{font-size:var(--fs-xs);color:var(--text-muted);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 /* Detail view: chapter sidebar + content */
@@ -3280,7 +3306,16 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .loot-item .loot-assign{width:92px}
 .loot-item > .btn.danger{flex-shrink:0; padding:1px 6px}
 /* Narrower than this, the name gets a line of its own rather than a sliver. */
-@container (max-width: 440px){ .loot-item{flex-wrap:wrap} .loot-item .loot-name{flex-basis:100%} }
+/* The handle and the paid mark keep the name company on the first line (alone
+   up there they cost a whole row per item); the controls take the second, and
+   who has it gets what's left of it. */
+@container (max-width: 440px){
+  .loot-item{flex-wrap:wrap; row-gap:4px}
+  .loot-item .loot-name{flex:1 1 calc(100% - 64px)}
+  .loot-item .loot-assign{flex:1 1 auto; width:auto}
+}
+/* Room for a whole name ("Ulrick Axeborne") once the window has it. */
+@container (min-width: 640px){ .loot-item .loot-assign{width:150px} }
 /* Rarity chip on search results — colors mirror .shop-table rarity badges
    for cross-panel consistency. */
 .loot-rarity-chip{display:inline-block;font-size:var(--fs-2xs);font-weight:600;padding:1px 5px;border-radius:var(--r-pill);margin-left:6px;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border);background:var(--panel-3);color:var(--text-muted);vertical-align:middle}
@@ -3361,7 +3396,11 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .enc-search-result .enc-cr-badge{font-size:var(--fs-2xs);color:var(--text-muted)}
 .enc-search-result .enc-result-name{display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .enc-src-badge{font-size:var(--fs-2xs);font-weight:700;color:#a13531;letter-spacing:.04em;background:rgba(161,53,49,.1);border:1px solid rgba(161,53,49,.3);padding:1px 5px;border-radius:var(--r-sm);flex-shrink:0;font-variant:small-caps}
-.enc-monster-row .enc-src-badge{margin-left:6px}
+.enc-monster-row .enc-src-badge{margin-left:6px;color:#e08a84;border-color:rgba(224,138,132,.35);background:rgba(224,138,132,.1)}
+.enc-monster-row .enc-name{display:flex;align-items:center;min-width:0}
+.enc-monster-row .enc-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The name before the book: the badge gives its room up first. */
+.enc-monster-row .enc-src-badge{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:clip}
 /* ── Empty states ─────────────────────────────────────────────────────────
    Every panel used to invent its own: a big colour emoji, a sentence, and
    ad-hoc inline padding, all different sizes. This is the shared shape —
@@ -3762,6 +3801,9 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .npcgen-inline{flex:0 0 auto;width:auto;font-size:var(--fs-md);color:var(--text-muted);background:transparent;border:1px solid transparent;padding:2px 4px;border-radius:var(--r-sm);font-family:inherit}
 .npcgen-inline:hover{border-color:var(--border);background:var(--panel-2);color:var(--text)}
 .npcgen-inline:focus{outline:none;border-color:var(--accent);background:var(--panel-2);color:var(--text)}
+/* As wide as what's in them: "Female 🔒 Firbolg 🔒" read as two words with locks,
+   not two 150px boxes with the locks floating between. */
+.npcgen-inline{field-sizing:content;min-width:3ch;max-width:100%}
 .npcgen-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
 .npcgen-stat-box{background:var(--panel-2);padding:6px 8px;border-radius:var(--r-sm);text-align:center}
 .npcgen-stat-lab{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;margin-bottom:2px}
@@ -4250,6 +4292,10 @@ select.tv-in.wide { width:126px; }
      entry row and the target strip across the log. */
   .tv-main { grid-template-columns:1fr; gap:9px; padding:9px;
     overflow-y:auto; grid-auto-rows:min-content; }
+  /* And not the two-column layout's one squeezed row (declared further down):
+     with it the target-and-map row on a phone came out 0px tall and drew on
+     top of the creature's name, HP and actions. */
+  .tv-root .tv-main { grid-template-rows:none; }
   .tv-actor, .tv-side { min-height:0; }
   /* Targets above the actions on a phone. The flow is "pick a target, then
      roll", and in source order the target strip sits below the whole stat
@@ -5933,7 +5979,7 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
    library covers, the Turn View's blocks, the soundboard). Same mechanics as
    the sheet: clipped to a notched outline, fill plus inner hairlines, the
    outer rule drawn by ::before as an evenodd ring. --c sets the notch. */
-:is(.combatant-card, .enc-stat-box, .loot-coin, .loot-item, .npclib-stat, .shop-controls, .shop-display, .weather-stat,
+:is(.combatant-card, .enc-stat-box, .loot-coin, .loot-item, .npclib-stat, .npcgen-stat-box, .shop-controls, .shop-display, .weather-stat,
     .bestiary-folder, .adv-card, .notes-source-tile, .bm-set-tile, .tv-multi, .tv-act, .tv-targets, .tv-adjust, .sb-tile, .drawer-group) {
   position:relative; isolation:isolate; border:none; border-radius:0;
   clip-path: polygon(var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px));
@@ -5942,7 +5988,7 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
     linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--c, 8px) + 2px) calc(100% - var(--h, 4px)) / calc(100% - 2 * var(--c, 8px) - 4px) 1px no-repeat,
     var(--fx-fill2, var(--fx-fill));
 }
-:is(.combatant-card, .enc-stat-box, .loot-coin, .loot-item, .npclib-stat, .shop-controls, .shop-display, .weather-stat,
+:is(.combatant-card, .enc-stat-box, .loot-coin, .loot-item, .npclib-stat, .npcgen-stat-box, .shop-controls, .shop-display, .weather-stat,
     .bestiary-folder, .adv-card, .notes-source-tile, .bm-set-tile, .tv-multi, .tv-act, .tv-targets, .tv-adjust, .sb-tile, .drawer-group)::before {
   content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--fx-ring, var(--fx-line));
   clip-path: polygon(evenodd,
@@ -5950,9 +5996,9 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
     var(--c, 8px) 1.5px, calc(100% - var(--c, 8px)) 1.5px, calc(100% - 1.5px) var(--c, 8px), calc(100% - 1.5px) calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) calc(100% - 1.5px), var(--c, 8px) calc(100% - 1.5px), 1.5px calc(100% - var(--c, 8px)), 1.5px var(--c, 8px));
 }
 /* Plaques: small notches, the label in the accent. */
-:is(.enc-stat-box, .loot-coin, .npclib-stat, .weather-stat, .notes-source-tile, .bm-set-tile) { --c:7px; --h:3px; }
+:is(.enc-stat-box, .loot-coin, .npclib-stat, .npcgen-stat-box, .weather-stat, .notes-source-tile, .bm-set-tile) { --c:7px; --h:3px; }
 .loot-coin { --fx-fill2: color-mix(in srgb, var(--panel-3) 92%, var(--accent)); }
-.enc-stat-box .l, .loot-coin .lab, .loot-coin > div:first-child, .npclib-stat .lab, .weather-stat .lab { color:var(--accent); font-weight:700; letter-spacing:.06em; }
+.enc-stat-box .l, .loot-coin .lab, .loot-coin > div:first-child, .npclib-stat .lab, .npcgen-stat-lab, .weather-stat .lab { color:var(--accent); font-weight:700; letter-spacing:.06em; }
 /* Panels: bigger notches. */
 :is(.shop-controls, .shop-display, .bestiary-folder, .tv-targets, .drawer-group) { --c:12px; --h:5px; }
 :is(.combatant-card, .adv-card, .sb-tile, .tv-multi, .tv-act, .tv-adjust) { --c:9px; }

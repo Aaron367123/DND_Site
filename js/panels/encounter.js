@@ -137,7 +137,7 @@ registerPanel('encounter',{
                 const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
                 return `<div class="enc-monster-row">
                   <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" style="width:38px;font-size:var(--fs-sm);padding:2px 4px">
-                  <span class="enc-name" title="${esc(m.name)}">${esc(m.name)}${srcBadge}</span>
+                  <span class="enc-name" title="${esc(m.name)}"><span class="enc-nm">${esc(m.name)}</span>${srcBadge}</span>
                   <span class="enc-cr">CR ${m.cr}</span>
                   <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
                 </div>`;

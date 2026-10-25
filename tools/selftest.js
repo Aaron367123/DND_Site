@@ -11466,6 +11466,39 @@
       await sleep(60);
     }
 
+    // Stacked windows stay stacked: nothing in a one-column window draws on top
+    // of anything else. A later two-column rule gave the Turn View one squeezed
+    // row, and on a phone the target-and-map block came out 0px tall and sat
+    // over the creature's name, HP and actions.
+    {
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants), A0 = state.activeCombatantId;
+      try {
+        state.combatants = [{ id:'mob_tv1', name:'Phone Ogre', hp:30, hpMax:59, ac:11, initiative:15, isPC:false },
+                            { id:'mob_tv2', name:'Phone Hero', hp:20, hpMax:20, ac:15, initiative:10, isPC:true }];
+        state.activeCombatantId = 'mob_tv1'; save();
+        openPanel('turnview'); await sleep(900);
+        const b = panelDefs.turnview._body;
+        // Shorter than its content, as it is on a phone with a map in it.
+        const root = b.querySelector('.tv-root'); if (root) root.style.height = '300px';
+        await sleep(60);
+        const side = b.querySelector('.tv-side'), head = b.querySelector('.tv-actor-head');
+        const rs = side && side.getBoundingClientRect(), rh = head && head.getBoundingClientRect();
+        ok('mobile: the Turn View\'s targets and map have their own space, above the creature',
+           !!(rs && rh) && rs.height > 40 && rs.bottom <= rh.top + 1,
+           rs && rh ? 'side ' + Math.round(rs.top) + '-' + Math.round(rs.bottom) + ', head ' + Math.round(rh.top) : 'missing');
+        closePanel('turnview');
+      } finally {
+        state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save();
+      }
+      openPanel('npclib'); await sleep(500);
+      { const L = document.querySelector('.npclib-left'), R = document.querySelector('.npclib-right');
+        const rl = L && L.getBoundingClientRect(), rr = R && R.getBoundingClientRect();
+        ok('mobile: the NPC Library stacks — the list over the NPC, the search box full width',
+           !!(rl && rr) && rl.bottom <= rr.top + 1 && rl.width > window.innerWidth * 0.8,
+           rl && rr ? 'list ' + Math.round(rl.width) + 'w, ends ' + Math.round(rl.bottom) + '; detail starts ' + Math.round(rr.top) : 'missing'); }
+      closePanel('npclib');
+    }
+
     // Party cards must use the row they are given. The grid used a FIXED track
     // width, so every leftover pixel pooled dead on the right — and because
     // partyCardWidth syncs, a width chosen on a monitor followed the DM onto

@@ -49,7 +49,7 @@ registerPanel('shop',{
         </div>
         ${this._renderSavedShops()}
       </div>
-      <div class="shop-display" id="shop-display">${this._renderDisplay()}</div>
+      <div class="shop-display"><div class="shop-display-scroll" id="shop-display">${this._renderDisplay()}</div></div>
     </div></div>`;
     b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._invLimit=20;this._generate();});
     b.querySelector('[data-act="settings"]').addEventListener('click',e=>{e.stopPropagation();this._openSettings();});

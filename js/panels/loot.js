@@ -422,7 +422,7 @@ registerPanel('loot',{
   // ── List rendering ───────────────────────────────────────────────────────────
   _assignSelect(item, idx){
     // Nobody's is the party's: assigned is the character's own.
-    const opts = ['<option value="">— Party loot —</option>'];
+    const opts = ['<option value="">Party loot</option>'];
     state.party.forEach(p => {
       opts.push(`<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`);
     });

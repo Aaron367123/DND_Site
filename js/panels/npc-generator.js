@@ -137,7 +137,7 @@ registerPanel('npcgen',{
           +'<input data-nf="gender" value="'+esc(n.gender)+'" class="npcgen-inline" placeholder="Gender">'+lock('gender')
           +'<input data-nf="race" value="'+esc(n.race)+'" class="npcgen-inline" placeholder="Race">'+lock('race')
           +'<span>·</span>'
-          +'<input type="number" data-nf="age" value="'+n.age+'" class="npcgen-inline" style="width:46px" min="1" max="999" title="Age">'+lock('age')
+          +'<input type="number" data-nf="age" value="'+n.age+'" class="npcgen-inline" min="1" max="999" title="Age">'+lock('age')
           +'<span>yrs</span>'
           +'<span>·</span>'
           +'<input data-nf="role" value="'+esc(n.role)+'" class="npcgen-inline" placeholder="Role">'+lock('role')
@@ -158,7 +158,7 @@ registerPanel('npcgen',{
       const field=(label,key,val,col,isSecret)=>{
         const hidden = isSecret && !this._secretRevealed;
         const reveal = isSecret
-          ? '<button class="btn small npcgen-reveal" data-act="toggle-secret" style="margin-left:auto;font-size:var(--fs-xs)">'
+          ? '<button class="btn small npcgen-reveal" data-act="toggle-secret" style="font-size:var(--fs-xs)">'
               +(this._secretRevealed?'🙈 Hide':'👁 Reveal')
             +'</button>'
           : '';
