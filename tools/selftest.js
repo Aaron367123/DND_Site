@@ -9814,6 +9814,216 @@
         }
       }
 
+      // -- A campaign night on the phone, every class ------------------------
+      // A level-5 character of each class, made in the builder, picked on the
+      // phone and played: checks and saves (the number on the button is the
+      // number rolled), every attack, every feature, a cantrip, a slot spell,
+      // concentration and the save when hit, the turn card, going down and a
+      // death save, a short and a long rest, the map, the party, level up.
+      if (paIsPhone()){
+        const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab, d0 = window.sktD, conf0 = window.showConfirm;
+        const cb0 = JSON.stringify(state.combatants || []), act0 = state.activeCombatantId, sh0 = state.sharedPanels;
+        const B0 = localStorage.getItem('skt-battlemap-v1');
+        const errs = [], onErr = e => errs.push((e.message || '') + ' @' + String(e.filename || '').split('/').pop() + ':' + e.lineno);
+        window.addEventListener('error', onErr);
+        try {
+          window.showConfirm = () => Promise.resolve(true);
+          const closeModals = () => { document.querySelectorAll('.modal-back, #pa-rest, #pa-roll-req, #pa-conc-save').forEach(m => m.remove()); };
+          const card = () => (document.querySelector('#pa-roll') || {}).textContent || '';
+          state.sharedPanels = [...new Set([...(state.sharedPanels || []), 'combat', 'battlemap', 'party'])];
+          const R = await sktRulesLoad('2024');
+          const classes = R.classes.filter(c => c.core !== false).map(c => c.name);
+          ok('campaign night: all twelve classes to play', classes.length >= 12, classes.join(', '));
+      for (const cls of classes){
+        const bad = [], info = [];
+        const note = (cond, msg) => { if (!cond) bad.push(msg); };
+        try {
+          let saved = null;
+          await openCharBuilder(Object.assign({ onDone: rec => { saved = rec; } }, window.__ed ? { edition: window.__ed } : {}));
+          for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+          CB.build.cls = cls; CB.build.level = +(window.__level || 5); CB.build.name = 'Test ' + cls; cbQuickBuild();
+          cbSave(); await sleep(80);
+          if (document.getElementById('cb-root')) { info.push('builder still open'); cbClose(); }
+          saved = saved || state.party.find(p => p.name === 'Test ' + cls);
+          if (!saved){ out.push(cls + ': BUILD FAILED'); continue; }
+          const id = saved.id;
+          paSetPc(id); paTab = 'you'; paRender(); await sleep(60);
+          const pc = () => state.party.find(p => p.id === id);
+          const scr = document.getElementById('pa-screen');
+          note(scr.textContent.includes('Test ' + cls), 'name not on the You screen');
+          note(/\d+\s*\/\s*\d+/.test((scr.querySelector('.pa-hp-row') || {}).textContent || ''), 'no HP');
+          info.push('HP ' + pc().hp + '/' + pc().hpMax + ' AC ' + pc().ac);
+          // Checks
+          window.sktD = () => 10;
+          for (const k of ['save:dex', 'save:wis', 'check:perception', 'check:stealth', 'abcheck:str']){
+            const b = scr.querySelector('[data-pa-chk="' + k + '"]');
+            if (!b && k.startsWith('check:')){ scr.querySelector('[data-pa-sktoggle]')?.click(); await sleep(20); }
+            const b2 = document.querySelector('[data-pa-chk="' + k + '"]');
+            if (!b2){ bad.push('no button for ' + k); continue; }
+            const shown = parseInt((b2.querySelector('b') || b2).textContent.replace(/save\s*/, ''), 10);
+            b2.click(); await sleep(20);
+            const tot = parseInt(((document.querySelector('#pa-roll .pa-roll-hit') || {}).textContent || ''), 10);
+            if (tot !== 10 + shown && !/advantage|disadvantage|exhaustion|Bless|Reliable/i.test(card())) bad.push(k + ': button says ' + shown + ' but rolled ' + tot + ' on a 10');
+          }
+          // Sheet agreement for saves
+          const sh = pc().sheet || {};
+          ['dex', 'wis'].forEach(k => { if (sh.saves && sh.saves[k] != null && paSaveMod(pc(), k) !== sh.saves[k]) bad.push('save ' + k + ' phone ' + paSaveMod(pc(), k) + ' vs sheet ' + sh.saves[k]); });
+          // Attacks
+          const atks = [...document.querySelectorAll('[data-pa-atk]')];
+          info.push(atks.length + ' attacks (' + (sh.attacks || []).map(a => a.name + ' ' + a.atkBonus + ' ' + a.damage).join('; ') + ')');
+          for (const a of atks){
+            const i = a.dataset.paAtk; document.querySelector('[data-pa-atk="' + i + '"]').click(); await sleep(15);
+            if (!/to hit/.test(card())) bad.push('attack ' + i + ' no to-hit on the card');
+            const atk = (sh.attacks || [])[+i];
+            if (atk && atk.damage && /\d*d\d+/.test(atk.damage) && !document.querySelector('#pa-roll .pa-roll-dmg')) bad.push('attack ' + atk.name + ' rolled no damage');
+          }
+          // Features
+          const feats = [...document.querySelectorAll('[data-pa-feat]')];
+          info.push(feats.length + ' features (' + paActivations(pc()).map(a => a.name).join(', ') + ')');
+          for (let fi = 0; fi < feats.length; fi++){
+            document.querySelector('[data-pa-feat="' + fi + '"]')?.click(); await sleep(15);
+            const det = document.querySelector('.pa-featdet');
+            if (!det) { bad.push('feature ' + fi + ' detail did not open'); continue; }
+            const use = det.querySelector('[data-pa-featuse]');
+            if (use){
+              const a = paActivations(pc())[fi], pool = a && paPoolFor(pc(), a), before = pool ? pool.current : null;
+              use.click(); await sleep(30); closeModals();
+              const pool2 = a && paPoolFor(pc(), a);
+              if (pool && a.name !== 'Bardic Inspiration' && pool2 && pool2.current !== Math.max(0, before - (a.amount || 1))) bad.push('feature ' + a.name + ' did not spend (' + before + '→' + (pool2 && pool2.current) + ')');
+            }
+            paFeatOpen = null; paRenderScreen(); await sleep(10);
+          }
+          // Spells
+          const sp = sh.spells || [];
+          const sec = document.querySelector('.pa-spells');
+          if (sp.length || (sh.spellSlots && Object.keys(sh.spellSlots).length)){
+            for (let i = 0; i < 40 && !document.querySelector('.pa-sp-w'); i++){ await sleep(100); paRenderScreen(); }
+            note(!!document.querySelector('.pa-spells'), 'caster without a Spells section');
+            const rows = [...document.querySelectorAll('.pa-sp')];
+            const casts = [...document.querySelectorAll('.pa-sp [data-pa-cast]')];
+            info.push(sp.length + ' spells, slots ' + JSON.stringify(Object.fromEntries(Object.entries(sh.spellSlots || {}).map(([l, s]) => [l, s.total]))) + ', ' + casts.length + ' castable');
+            const unknown = rows.filter(r => !r.querySelector('.pa-sp-w')).map(r => r.querySelector('b').textContent);
+            if (unknown.length) bad.push('spells with no rules data: ' + unknown.join(', '));
+            // a cantrip
+            const can = casts.find(b => /:0$/.test(b.dataset.paCast));
+            if (can){ const n = can.dataset.paCast; can.click(); await sleep(30); if (!/cantrip/.test(card())) bad.push('cantrip ' + n + ': card says ' + card().slice(0, 60)); }
+            // a levelled spell
+            const lv = casts.find(b => /:[1-9]$/.test(b.dataset.paCast));
+            if (lv){
+              const [n, l] = [lv.dataset.paCast.slice(0, lv.dataset.paCast.lastIndexOf(':')), lv.dataset.paCast.slice(-1)];
+              const before = (pc().sheet.spellSlots[l] || {}).expended || 0;
+              document.querySelector('[data-pa-cast="' + CSS.escape(lv.dataset.paCast) + '"]').click(); await sleep(30);
+              if (((pc().sheet.spellSlots[l] || {}).expended || 0) !== before + 1) bad.push('casting ' + n + ' did not spend a level ' + l + ' slot');
+              info.push('cast ' + n + ': ' + card().replace(/\s+/g, ' ').trim().slice(0, 90));
+              document.querySelector('[data-pa-undo]')?.click(); await sleep(20);
+            }
+            // a concentration spell
+            const concName = sp.find(n => { const s = paSpell(pc(), n); return s && s.concentration; });
+            if (concName){
+              const b = document.querySelector('[data-pa-cast^="' + CSS.escape(concName) + ':"]');
+              if (b){ b.click(); await sleep(30); if (pc().concentration !== concName) bad.push('casting ' + concName + ' did not start concentration'); }
+            }
+          } else if (sec) bad.push('non-caster shows a Spells section');
+          paHideRoll();
+          // Into a fight; my turn
+          state.combatants = [{ id, name: pc().name, isPC: true, hp: pc().hp, hpMax: pc().hpMax, initiative: 15, conditions: [] },
+                              { id: 'ogre_pt', name: 'Ogre', hp: 59, hpMax: 59, initiative: 8, conditions: [] }];
+          state.activeCombatantId = id; save(); paRender(); paHideTurnBanner(); await sleep(30);
+          note(!!document.querySelector('.pa-econ.mine'), 'no turn card on my turn');
+          if (document.querySelector('[data-pa-atk]')){ document.querySelector('[data-pa-atk]').click(); await sleep(20); note(state.combatants[0].actionUsed === true, 'attacking did not use the action'); }
+          // Hit while concentrating
+          if (pc().concentration){
+            // Enough to need a save, not enough to drop them (0 HP ends it outright).
+            document.getElementById('pa-hp-amt').value = String(Math.max(1, Math.min(12, (state.combatants[0].hp || 2) - 1))); paApplyHp(-1); await sleep(40);
+            const ov = document.getElementById('pa-conc-save');
+            if (!ov) bad.push('no concentration save after damage');
+            else { const cc = pc().concCheck, mod = paSaveMod(pc(), 'con') + (+(pc().sheet || {}).concBonus || 0), made = 1 + mod >= cc.dc;
+              window.sktD = () => 1; ov.querySelector('[data-pa-cs="roll"]').click(); await sleep(30);
+              if (!!pc().concentration !== made) bad.push('a 1 + ' + mod + ' vs DC ' + cc.dc + ' should have ' + (made ? 'kept' : 'lost') + ' it');
+              if (!(made ? /holds/ : /ends/).test(ov.textContent)) bad.push('concentration result not shown'); closeModals(); window.sktD = () => 10; }
+          }
+          // Down: death saves
+          document.getElementById('pa-hp-amt').value = String((state.combatants[0].hp || 0) + 2); paApplyHp(-1); await sleep(40);
+          const death = document.querySelector('[data-pa-death]');
+          note(!!death, 'at 0 HP: no death save button');
+          if (death){ death.click(); await sleep(30); note(/Death save/.test(card()), 'death save not on the card'); }
+          // End the fight; rests
+          state.combatants = []; state.activeCombatantId = null; save(); paRender(); await sleep(30);
+          const pi = state.party.findIndex(p => p.id === id);
+          state.party[pi] = Object.assign({}, state.party[pi], { hp: Math.max(1, Math.floor(state.party[pi].hpMax / 2)) }); save(); paRender();
+          if (document.querySelector('[data-pa-rest]')){ paOpenShortRest(); await sleep(40); note(!!document.getElementById('pa-rest'), 'short rest screen did not open'); closeModals(); }
+          paLongRest(); await sleep(60);
+          note(pc().hp === pc().hpMax, 'long rest did not restore HP (' + pc().hp + '/' + pc().hpMax + ')');
+          Object.entries(pc().sheet.spellSlots || {}).forEach(([l, s]) => { if (s.expended) bad.push('long rest left level ' + l + ' slots spent'); });
+          (pc().resources || []).forEach(r => { if (r.current < r.max) bad.push('long rest left ' + r.name + ' at ' + r.current + '/' + r.max); });
+          // Map: a token for me
+          const B = panelDefs.battlemap;
+          const tk0 = JSON.stringify(B._tokens || []);
+          paTab = 'map'; paRender(); await sleep(200);
+          B._tokens = (B._tokens || []).concat([{ id: 'tk_' + id, cid: id, label: pc().name, x: 225, y: 225, isPC: true, size: 1, color: '#446688' }]);
+          B._render(); await sleep(300);
+          note(!!document.querySelector('[data-pa-me]'), 'no Me button on the map');
+          note(!!document.querySelector('.map-token[data-tid="tk_' + id + '"]'), 'my token not drawn');
+          B._tokens = JSON.parse(tk0);
+          paTab = 'party'; paRender(); await sleep(30);
+          note(document.getElementById('pa-screen').textContent.includes('Test ' + cls), 'not on the Party tab');
+          paTab = 'you'; paRender(); await sleep(20);
+          note(!!document.querySelector('[data-pa-build="levelup"]') === (pc().level < 20), 'level-up button wrong for level ' + pc().level);
+          const featNames = ((pc().sheet || {}).featureList || []).filter(f => f.from === 'feat' || /^(Alert|Tough|Lucky|Skilled|Savage Attacker|Magic Initiate)$/.test(f.name)).map(f => f.name);
+          const dup = featNames.filter((n, i) => featNames.indexOf(n) !== i && !/Magic Initiate|Skilled/.test(n));
+          note(!dup.length, 'the same feat twice: ' + dup.join(', '));
+          (pc().resources || []).forEach(r => { if (!paActivations(pc()).some(a => (a.resource || a.name) === r.name)) bad.push(r.name + ' has uses but no button'); });
+          note(!!document.querySelector('[data-pa-sheet]'), 'no character sheet button');
+        } catch(e){ bad.push('THREW ' + e.message + ' ' + (e.stack || '').split('\n')[1]); }
+        closeModals(); paHideRoll();
+        ok('campaign night: a level-5 ' + cls + ' plays through the phone', !bad.length, bad.join(' ;; '));
+      }
+          ok('campaign night: no script errors all evening', !errs.length, [...new Set(errs)].slice(0, 4).join(' | '));
+        } catch(e){ ok('campaign night ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+        finally {
+          window.removeEventListener('error', onErr);
+          window.sktD = d0; window.showConfirm = conf0; paHideRoll(); paSpOpen = null; paFeatOpen = null; paSkOpen = false;
+          document.querySelectorAll('#pa-rest, #pa-roll-req, #pa-conc-save').forEach(m => m.remove());
+          if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+          // The map's own auto-tokens followed the test fight; put its saved state back.
+          if (B0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', B0); } finally { _remoteUpdate = false; }
+            if (panelDefs.battlemap) panelDefs.battlemap._tokens = (JSON.parse(B0).tokens || []); }
+          state.combatants = JSON.parse(cb0); state.activeCombatantId = act0; state.sharedPanels = sh0;
+          if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          save(); paTab = tab0; paRender(); paHideTurnBanner();
+        }
+      }
+
+      // -- The sheet reads a PDF character's skills; the map follows you -------
+      ok('sheet: a PDF character\'s Animal Handling and Sleight of Hand are its own, not the bare ability',
+         csSkillVal({ skills: { animalHandling: 4, sleightOfHand: 7 } }, 'animal_handling') === 4 && csSkillVal({ skills: { sleight_of_hand: 2 } }, 'sleight_of_hand') === 2 && csSkillVal({ skills: {} }, 'stealth') == null);
+      if (paIsPhone() && panelDefs.battlemap){
+        const B = panelDefs.battlemap, bm0 = localStorage.getItem('skt-battlemap-v1'), vs0 = B._viewScale, tab0 = paTab, sh0 = state.sharedPanels;
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          const me = state.party[paMyIdx()];
+          state.sharedPanels = [...new Set([...(state.sharedPanels || []), 'battlemap'])];
+          paTab = 'map'; paRender(); await sleep(200);
+          B._tokens = (B._tokens || []).filter(t => t.cid !== me.id).concat([{ id: 'tk_follow', cid: me.id, label: me.name, x: 125, y: 125, isPC: true, size: 1, color: '#446688' }]);
+          B._viewScale = 3; B._render(); await sleep(350);
+          const off = () => { const el = document.querySelector('.map-token[data-tid="tk_follow"]'), sc = document.querySelector('#pa-screen #map-scroll');
+            if (!el || !sc) return 999; const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
+            return Math.round(Math.hypot(r.left + r.width / 2 - s.left - s.width / 2, r.top + r.height / 2 - s.top - s.height / 2)); };
+          ok('map: a Me button once your token is on the map', !!document.querySelector('[data-pa-me]'));
+          document.querySelector('#pa-screen #map-scroll').scrollTo(0, 0); await sleep(30);
+          document.querySelector('[data-pa-me]').click(); await sleep(450);
+          ok('map: Me centres your token', off() <= 30, off() + 'px off');
+          document.querySelector('#pa-screen #map-scroll').scrollTo(0, 0); await sleep(30);
+          const t = B._tokens.find(x => x.id === 'tk_follow'); t.x += 200; t.y += 150; B._render(); await sleep(700);
+          ok('map: and follows it when it moves', off() <= 30, off() + 'px off');
+        } catch(e){ ok('map follow ran to completion', false, e.message); }
+        finally {
+          B._viewScale = vs0; state.sharedPanels = sh0; paTab = tab0; paRender();
+          if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } B._tokens = JSON.parse(bm0).tokens || []; }
+        }
+      }
+
       // -- The character sheet on a phone -------------------------------------
       {
         const tab0 = paTab;
@@ -10084,7 +10294,7 @@
           ok('player: and this phone becomes that character', !!pc && paMe().pcId === pc.id && paTab === 'you');
           ok('player: with a Level up button on its own sheet', !!document.querySelector('[data-pa-build="levelup"]'));
           ok('player: its actions come from the builder, not from parsed text',
-             Array.isArray(pc.sheet.activations) && paActivations(pc) === pc.sheet.activations);
+             Array.isArray(pc.sheet.activations) && pc.sheet.activations.every((a, i) => paActivations(pc)[i] === a));
         } catch(e){ ok('player: the build-your-own checks ran to completion', false, e.message); }
         finally {
           document.getElementById('cb-root')?.remove(); if (typeof CB !== 'undefined') CB = null;

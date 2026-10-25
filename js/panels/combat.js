@@ -1984,7 +1984,10 @@ registerPanel('combat',{
       // damageDealt is post-absorption and would show 0 in that case.
       else if (conc && damageForConc > 0){
         const dc = Math.max(10, Math.floor(damageForConc / 2));
-        showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
+        // On a player's phone the save itself pops up; no reminder on top of it.
+        if (!document.body.classList.contains('player-app')) showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
+        // The player's phone asks them to roll it (player-app.js).
+        if (c.isPC && partySlot) partySlot.concCheck = { id: uid(), dc, spell: conc, at: Date.now() };
       }
       // Rage ends on falling unconscious too, for the same reason and with the
       // same consequence if missed: the B/P/S resistance would go on halving

@@ -1837,6 +1837,8 @@ sktDefineEffect(['2014:subclass:paladin:Channel Divinity'], ctx => { _fxPool(ctx
 sktDefineEffect(['2024:class:ranger:Favored Enemy'], ctx => {
   const n = _fxCol(ctx, 'Favored Enemy') || 2;
   _fxPool(ctx, 'Favored Enemy', typeof n === 'number' ? n : 2, 'long');
+  _fxAction(ctx, { name: "Hunter's Mark (Favored Enemy)", action: 'Bonus Action', resource: 'Favored Enemy', amount: 1, feature: 'Favored Enemy',
+    desc: "Cast Hunter's Mark without expending a spell slot. You always have it prepared." });
 });
 
 // ---- Rogue
@@ -1863,7 +1865,11 @@ sktDefineEffect(['2024:class:sorcerer:Innate Sorcery'], ctx => {
 // ---- Warlock — pact magic is handled by sktBuildSpellcasting.
 
 // ---- Wizard
-sktDefineEffect(['class:wizard:Arcane Recovery'], ctx => { _fxPool(ctx, 'Arcane Recovery', 1, 'long'); });
+sktDefineEffect(['class:wizard:Arcane Recovery'], ctx => {
+  _fxPool(ctx, 'Arcane Recovery', 1, 'long');
+  _fxAction(ctx, { name: 'Arcane Recovery', action: 'Short rest', resource: 'Arcane Recovery', amount: 1, feature: 'Arcane Recovery',
+    desc: 'When you finish a Short Rest, regain spent spell slots with a combined level of up to half your wizard level (round up), none of 6th level or higher. Once per Long Rest.' });
+});
 
 // ---- Subclasses that change the numbers
 sktDefineEffect(['subclass:Draconic Resilience'], ctx => {

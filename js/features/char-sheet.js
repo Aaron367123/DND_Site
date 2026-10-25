@@ -269,6 +269,16 @@ function csRestHtml(pc){
     + '<button class="btn primary" data-cs="restdone">Finish the rest</button><button class="btn" data-cs="restcancel">Cancel</button></div>'
     + '<div class="cb-dim">Finishing gives back what a short rest restores (Second Wind, Action Surge, Pact Magic…).</div></div>';
 }
+// A skill's bonus off the sheet. A character built here keys them
+// animal_handling; one brought in from a PDF keys them animalHandling — so
+// for every imported character Animal Handling and Sleight of Hand showed,
+// and rolled, the bare ability modifier.
+function csSkillVal(sh, k){
+  const s = sh && sh.skills; if (!s) return null;
+  if (s[k] != null) return s[k];
+  const camel = k.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
+  return s[camel] != null ? s[camel] : null;
+}
 function _csConditions(pc){
   const co = (state.combatants || []).find(x => x.id === pc.id);
   return [...new Set([...(pc.conditions || []), ...((co && co.conditions) || [])])];
@@ -279,7 +289,7 @@ function csSide(pc){
   const sh = pc.sheet || {}, ab = pc.abilities || {};
   const pb = sh.profBonus || 2;
   const saveOf = k => sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0);
-  const skillOf = k => sh.skills && sh.skills[k] != null ? sh.skills[k] : csMod(ab[CS_SKILLS[k][1]]);
+  const skillOf = k => { const v = csSkillVal(sh, k); return v != null ? v : csMod(ab[CS_SKILLS[k][1]]); };
   const why = pc.build && CS.R && typeof sktAbilityBreakdown === 'function' ? sktAbilityBreakdown(pc.build, CS.R) : {};
   let h = '<div class="cs-abs">' + Object.keys(CS_AB).map(k => '<button class="cs-ab" data-cs-roll="ab:' + k + '" title="' + CS_AB[k] + ' check' + (why[k] ? ' — ' + csE(why[k]) : '') + '">'
     + '<span>' + k.toUpperCase() + '</span><b>' + csSigned(csMod(ab[k])) + '</b><i>' + (ab[k] ?? '—') + '</i></button>').join('') + '</div>';
@@ -1014,7 +1024,7 @@ function csRollFor(pc, what, e){
   }
   else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]), e, 'abcheck:' + k);
   else if (kind === 'save') csRollD20(CS_AB[k] + ' save', sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0), e, 'save:' + k);
-  else if (kind === 'skill') csRollD20(CS_SKILLS[k][0], sh.skills && sh.skills[k] != null ? sh.skills[k] : csMod(ab[CS_SKILLS[k][1]]), e, 'check:' + k);
+  else if (kind === 'skill') csRollD20(CS_SKILLS[k][0], csSkillVal(sh, k) != null ? csSkillVal(sh, k) : csMod(ab[CS_SKILLS[k][1]]), e, 'check:' + k);
   csRender();
 }
 function csOnChange(e){

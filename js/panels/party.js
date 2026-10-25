@@ -1486,9 +1486,11 @@ registerPanel('party',{
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
       if (c.concentration && damageForConc > 0){
         const dc = Math.max(10, Math.floor(damageForConc / 2));
-        if (typeof showToast === 'function'){
+        if (typeof showToast === 'function' && !document.body.classList.contains('player-app')){
           showToast('🌀 ' + c.name + ': DC ' + dc + ' CON save to maintain ' + c.concentration);
         }
+        // The player's phone asks them to roll it (player-app.js).
+        c.concCheck = { id: uid(), dc, spell: c.concentration, at: Date.now() };
       }
       // Damage-type readout so the DM sees the resist/etc. applied. Report
       // what was DEALT, noting anything a pool soaked — "took 0 damage" when

@@ -436,6 +436,7 @@ function paRender(){
   paRenderPrompt();
   paRenderTabs(tabs);
   paRenderScreen();
+  paCheckConc();
 }
 
 // ─── The reaction prompt ─────────────────────────────────────────────────────
@@ -642,6 +643,7 @@ function paRenderScreen(){
 function paUnmountCurrent(host){
   const box = host.querySelector('.pa-mount');
   if (!box) return;
+  if (box.dataset.paMount === 'map' && paMapObs){ paMapObs.disconnect(); paMapObs = null; }
   const tab = box.dataset.paMount;
   const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes'
            : tab === 'loot' ? 'loot' : tab === 'world' ? 'world' : null;
@@ -653,6 +655,51 @@ function paUnmountCurrent(host){
   def._body = null;
 }
 
+// ─── The map: where am I? ────────────────────────────────────────────────────
+// The Map tab opens on your own token, and keeps it in view when it moves —
+// the DM dragging it, or you. Only when it MOVES: pan away to look at
+// something and the map stays where you put it until your token goes
+// somewhere. "Me" in the bar brings you back.
+let paMapObs = null, paMapLast = null;
+function paMyToken(){
+  const pc = paPc(), B = panelDefs.battlemap;
+  if (!pc || !B || !Array.isArray(B._tokens)) return null;
+  return B._tokens.find(t => t.cid === pc.id) || B._tokens.find(t => t.isPC && t.label === pc.name) || null;
+}
+function paCenterOnMe(smooth){
+  const t = paMyToken(); if (!t) return false;
+  const host = document.getElementById('pa-screen');
+  const el = host && host.querySelector('.pa-mount .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+  const sc = host && host.querySelector('.pa-mount #map-scroll');
+  if (!el || !sc) return false;
+  const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
+  sc.scrollTo({ left: sc.scrollLeft + (r.left + r.width / 2) - (s.left + s.width / 2),
+                top: sc.scrollTop + (r.top + r.height / 2) - (s.top + s.height / 2), behavior: smooth ? 'smooth' : 'auto' });
+  paMapLast = t.x + ',' + t.y;
+  return true;
+}
+function paWatchMap(host){
+  if (paMapObs) paMapObs.disconnect();
+  paMapLast = null;
+  const box = host.querySelector('.pa-mount'); if (!box || typeof MutationObserver !== 'function') return;
+  let pend = null;
+  paMapObs = new MutationObserver(() => {
+    clearTimeout(pend);
+    pend = setTimeout(() => {
+      if (paTab !== 'map') return;
+      const t = paMyToken(); if (!t) return;
+      // Your token arrived after the map opened (the DM just placed it): the
+      // bar gets its Me button.
+      if (!document.querySelector('[data-pa-me]')){ document.querySelector('#pa-screen .pa-draw')?.remove(); paAddDrawBar(document.getElementById('pa-screen')); }
+      const k = t.x + ',' + t.y;
+      if (k !== paMapLast) paCenterOnMe(paMapLast != null);
+    }, 120);
+  });
+  paMapObs.observe(box, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
+  // Once the stage has its size (the map image sets it).
+  setTimeout(() => { if (paTab === 'map') paCenterOnMe(false); }, 60);
+}
+
 function paMountPanel(host, id){
   const def = panelDefs[id];
   const box = document.createElement('div');
@@ -661,7 +708,7 @@ function paMountPanel(host, id){
   host.appendChild(box);
   if (!def){ box.innerHTML = '<div class="pa-empty">Not available.</div>'; return; }
   try { def.mount(box); } catch(e){ box.innerHTML = '<div class="pa-empty">Could not load.</div>'; }
-  if (id === 'battlemap') paAddDrawBar(host);
+  if (id === 'battlemap'){ paAddDrawBar(host); paWatchMap(host); }
 }
 
 // ─── Drawing on the map ──────────────────────────────────────────────────────
@@ -682,7 +729,7 @@ function paAddDrawBar(host){
   const B = panelDefs.battlemap;
   const bar = document.createElement('div');
   bar.className = 'pa-draw';
-  bar.innerHTML = PA_DRAW.map(d =>
+  bar.innerHTML = (paMyToken() ? `<button class="pa-draw-b" data-pa-me="1">${typeof ICO === 'function' ? ICO('i-target') : ''}<span>Me</span></button>` : '') + PA_DRAW.map(d =>
     `<button class="pa-draw-b ${d.tool && B && B._tool === d.tool ? 'on' : ''}" data-pa-draw="${d.act}">
        ${typeof ICO === 'function' ? ICO(d.icon) : ''}<span>${d.label}</span>
      </button>`).join('');
@@ -722,10 +769,25 @@ function paRefreshMount(tab){
 // action used out of combat would be wrong. The pool lives in state.party, so
 // the DM's Turn View shows the same number a moment later.
 function paActivations(pc){
-  if (pc && typeof sktActivationsOf === 'function'){ try { return sktActivationsOf(pc) || []; } catch(e){ return []; } }
-  if (!pc || typeof sktDeriveActivations !== 'function') return [];
-  const text = (pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '';
-  try { return sktDeriveActivations(text) || []; } catch(e){ return []; }
+  let list = [];
+  if (pc && typeof sktActivationsOf === 'function'){ try { list = sktActivationsOf(pc) || []; } catch(e){ list = []; } }
+  else if (pc && typeof sktDeriveActivations === 'function'){
+    try { list = sktDeriveActivations((pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '') || []; } catch(e){ list = []; }
+  }
+  return list.concat(paPoolOnly(pc, list));
+}
+// A feature with uses to spend but nothing that spends them — a wizard's
+// Arcane Ward, a warlock's Steps of the Fey, a sorcerer's points — had its
+// pips under Resources and no button anywhere. Each gets one here, with the
+// feature's own text, spending one use.
+function paPoolOnly(pc, list){
+  if (!pc || !Array.isArray(pc.resources)) return [];
+  const used = new Set(list.map(a => a.resource || a.name));
+  const feats = (pc.sheet && pc.sheet.featureList) || [];
+  return pc.resources.filter(r => r && r.name && !used.has(r.name) && (r.max || 0) > 0).map(r => {
+    const f = feats.find(x => x.name === r.name);
+    return { name: r.name, action: '', resource: r.name, amount: 1, feature: r.name, desc: f && f.text ? String(f.text).slice(0, 900) : '', poolOnly: true };
+  });
 }
 function paPoolFor(pc, a){
   const name = a.resource || a.name;
@@ -881,6 +943,7 @@ function paYouScreen(){
       ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
       ${paSpellsHtml(pc)}
       ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
+      ${paChecksHtml(pc)}
       ${res ? `<div class="pa-sec"><h4>Resources</h4>${res}</div>` : ''}
       ${pc.hitDice && pc.hitDice.max ? `<div class="pa-sec pa-rest-row"><span>Hit dice <b>${Math.max(0, pc.hitDice.current ?? pc.hitDice.max)}/${pc.hitDice.max}</b> ${paEsc(pc.hitDice.dieType || 'd8')}</span>
         <button class="btn" data-pa-rest="open">💤 Short rest</button><button class="btn" data-pa-longrest="1">🛌 Long rest</button></div>` : `<div class="pa-sec pa-rest-row"><span></span><button class="btn" data-pa-longrest="1">🛌 Long rest</button></div>`}
@@ -1326,6 +1389,149 @@ function paHideRoll(){
   const box = document.getElementById('pa-roll'); if (box) box.innerHTML = '';
 }
 
+// ─── A d20 with the sheet's rules ────────────────────────────────────────────
+// The full sheet's own effects, so a check here and a check there agree:
+// conditions and exhaustion (csRollEffects), the dice a state adds (Bless's
+// d4), a halfling's Lucky and a rogue's Reliable Talent. `pick` is the
+// player's own advantage or disadvantage; both together cancel.
+function paRollD20(pc, mod, kind, pick){
+  const fx = typeof csRollEffects === 'function' ? csRollEffects(pc, kind) : { adv: [], dis: [], bonus: 0, autoFail: '' };
+  const up = pick === 'adv' || fx.adv.length > 0, down = pick === 'dis' || fx.dis.length > 0;
+  const mode = up && !down ? 'adv' : down && !up ? 'dis' : 'normal';
+  const sh = pc.sheet || {}, feats = sh.featureList || [];
+  const lucky = feats.some(f => f.name === 'Lucky' && f.from === 'species');
+  let rerolled = false;
+  const die = () => { const x = sktD(20); if (lucky && x === 1){ rerolled = true; return sktD(20); } return x; };
+  const a = die(), b = mode === 'normal' ? null : die();
+  let nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
+  const sk = /^check:/.test(kind) ? kind.slice(6) : '';
+  let reliable = null;
+  if (sk && feats.some(f => f.name === 'Reliable Talent' && !f.info) && (sh.skillProf || {})[sk] && nat < 10){ reliable = nat; nat = 10; }
+  const tags = typeof csRollTags === 'function' ? csRollTags(kind) : [kind];
+  const extra = (sh.rollDice || []).filter(x => (x.on || []).some(t => tags.includes(t))).map(x => ({ label: x.label, die: x.die, n: sktD(x.die) }));
+  const m = (+mod || 0) + (fx.bonus || 0);
+  const total = nat + m + extra.reduce((s, x) => s + x.n, 0);
+  const why = [extra.map(x => x.label + ' +' + x.n).join(', '),
+    fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '',
+    fx.bonus ? 'exhaustion ' + fx.bonus : '', rerolled ? 'Lucky: rerolled a 1' : '', reliable != null ? 'Reliable Talent: ' + reliable + ' counts as 10' : '']
+    .filter(Boolean).join(' · ');
+  return { a, b, nat, mode, mod: m, total, why, autoFail: fx.autoFail || '', crit: nat === 20, fumble: nat === 1 };
+}
+function paD20Html(label, r, extraHtml){
+  const dice = r.b == null ? 'd20 ' + r.a : '2d20 ' + r.a + ', ' + r.b + ' (' + r.mode + ')';
+  return `<div class="pa-roll-in${r.autoFail ? ' fumble' : r.crit ? ' crit' : r.fumble ? ' fumble' : ''}">
+    <span class="pa-roll-l">${paEsc(label)}</span>
+    <span class="pa-roll-hit">${r.autoFail ? 'Fails' : r.total}</span>
+    <span class="pa-roll-d">${paEsc(dice)} ${r.mod >= 0 ? '+ ' + r.mod : '− ' + Math.abs(r.mod)}</span>
+    ${r.why || r.autoFail ? `<span class="pa-roll-why">${paEsc(r.autoFail ? r.autoFail + ' — automatic failure' : r.why)}</span>` : ''}
+    ${extraHtml || ''}</div>`;
+}
+
+// ─── Checks and saves ────────────────────────────────────────────────────────
+// Any roll nobody asked for: "I want to look for traps", a save the DM
+// called out loud. Saves and ability checks always in view, the skills a tap
+// away. The bonus is the sheet's; the roll goes on the card and into the
+// character's recent rolls, where the DM's party card shows it.
+const PA_AB6 = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+const PA_SK = [['acrobatics', 'dex'], ['animal_handling', 'wis'], ['arcana', 'int'], ['athletics', 'str'], ['deception', 'cha'], ['history', 'int'],
+  ['insight', 'wis'], ['intimidation', 'cha'], ['investigation', 'int'], ['medicine', 'wis'], ['nature', 'int'], ['perception', 'wis'],
+  ['performance', 'cha'], ['persuasion', 'cha'], ['religion', 'int'], ['sleight_of_hand', 'dex'], ['stealth', 'dex'], ['survival', 'wis']];
+const paSkName = k => k.split('_').map(w => w === 'of' ? w : w[0].toUpperCase() + w.slice(1)).join(' ');
+let paRollMode = 'normal', paSkOpen = false;
+function paAbMod(pc, k){ const v = (pc.abilities || {})[k]; return typeof v === 'number' ? Math.floor((v - 10) / 2) : 0; }
+function paSaveMod(pc, k){
+  const sh = pc.sheet || {};
+  if (sh.saves && sh.saves[k] != null && !isNaN(parseInt(sh.saves[k], 10))) return parseInt(sh.saves[k], 10);
+  return paAbMod(pc, k) + ((sh.saveProf || []).includes(k) ? (sh.profBonus || 2) : 0);
+}
+function paSkillMod(pc, k, ab){
+  const v = typeof csSkillVal === 'function' ? csSkillVal(pc.sheet, k) : null;
+  return v != null ? +v : paAbMod(pc, ab);
+}
+function paChecksHtml(pc){
+  const sg = n => (n >= 0 ? '+' : '') + n;
+  const prof = (pc.sheet || {}).skillProf || {}, saveProf = (pc.sheet || {}).saveProf || [];
+  const seg = ['dis', 'normal', 'adv'].map(m => `<button class="${paRollMode === m ? 'on' : ''}" data-pa-rmode="${m}">${m === 'dis' ? 'Disadvantage' : m === 'adv' ? 'Advantage' : 'Normal'}</button>`).join('');
+  const abs = PA_AB6.map(k => `<div class="pa-ab"><span class="pa-ab-k">${k.toUpperCase()}</span>`
+    + `<button class="pa-ab-b" data-pa-chk="abcheck:${k}" aria-label="${PA_ABS[k.toUpperCase()]} check">${sg(paAbMod(pc, k))}</button>`
+    + `<button class="pa-ab-b pa-ab-s${saveProf.includes(k) ? ' prof' : ''}" data-pa-chk="save:${k}" aria-label="${PA_ABS[k.toUpperCase()]} save">save ${sg(paSaveMod(pc, k))}</button></div>`).join('');
+  const sks = paSkOpen ? `<div class="pa-sks">${PA_SK.map(([k, ab]) => `<button class="pa-sk" data-pa-chk="check:${k}">`
+    + `<span class="pa-sk-dot${prof[k] >= 2 ? ' exp' : prof[k] ? ' on' : ''}"></span><span class="pa-sk-n">${paSkName(k)}</span><b>${sg(paSkillMod(pc, k, ab))}</b></button>`).join('')}</div>` : '';
+  return `<div class="pa-sec pa-checks"><h4>Checks &amp; saves</h4>
+    <div class="pa-rmode" role="group" aria-label="Roll with">${seg}</div>
+    <div class="pa-abs">${abs}</div>
+    <button class="pa-sk-t" data-pa-sktoggle="1" aria-expanded="${paSkOpen}">${paSkOpen ? 'Hide skills' : 'Skills ▾'}</button>${sks}</div>`;
+}
+function paRollCheck(kind){
+  const pc = paPc(); if (!pc) return;
+  const [t, k] = kind.split(':');
+  const skill = t === 'check' ? PA_SK.find(x => x[0] === k) : null;
+  const mod = t === 'save' ? paSaveMod(pc, k) : t === 'abcheck' ? paAbMod(pc, k) : paSkillMod(pc, k, skill ? skill[1] : 'str');
+  const label = t === 'save' ? PA_ABS[k.toUpperCase()] + ' save' : t === 'abcheck' ? PA_ABS[k.toUpperCase()] + ' check' : paSkName(k);
+  const r = paRollD20(pc, mod, kind, paRollMode);
+  paRollMode = 'normal';
+  if (typeof sktKeepRoll === 'function') sktKeepRoll(pc, r.autoFail ? 'automatic failure' : String(r.total) + (r.mode !== 'normal' ? ' (' + r.mode + ')' : ''), { label, total: r.total });
+  paRenderScreen();
+  paShowRoll(paD20Html(label, r));
+}
+
+// ─── Concentration saves ─────────────────────────────────────────────────────
+// Hurt while concentrating: the damage code leaves a check on the character
+// (DC and spell; see combat.js and party.js) and this phone asks for the
+// roll — the DM's screen only ever toasted a reminder. Made it: the spell
+// holds. Missed: it ends, here and on the DM's tracker. Real dice: type it.
+const PA_CONC_FRESH = 10 * 60 * 1000;
+function paCheckConc(){
+  const pc = paPc(), cc = pc && pc.concCheck;
+  const cur = document.getElementById('pa-conc-save');
+  // A result on screen stays until OK, unless a new hit asks again.
+  if (cur && cur.dataset.done){ if (cc && pc.concentration && cc.id !== cur.dataset.id) cur.remove(); else return; }
+  if (!cc || !pc.concentration || Date.now() - (cc.at || 0) > PA_CONC_FRESH){ if (cur) cur.remove(); return; }
+  if (cur && cur.dataset.id === cc.id) return;
+  if (cur) cur.remove();
+  const mod = paSaveMod(pc, 'con') + (+(pc.sheet || {}).concBonus || 0);
+  const ov = document.createElement('div');
+  ov.id = 'pa-conc-save'; ov.className = 'pa-init'; ov.dataset.id = cc.id;
+  ov.innerHTML = `<div class="pa-init-card" role="dialog" aria-modal="true" aria-label="Concentration save">
+    <div class="pa-init-l">🌀 Concentration save</div>
+    <div class="pa-init-who">Hit while concentrating on <b>${paEsc(cc.spell || pc.concentration)}</b> · CON <b>${mod >= 0 ? '+' + mod : mod}</b> · beat <b>${cc.dc}</b></div>
+    <div class="pa-init-roll">
+      <button class="btn primary" data-pa-cs="roll">🎲 Roll</button>
+      <button class="btn" data-pa-cs="adv">🎲🎲 Adv</button>
+      <button class="btn" data-pa-cs="dis">🎲🎲 Dis</button>
+    </div>
+    <div class="pa-init-dice" id="pa-cs-out"></div>
+    <label class="pa-init-type">Or type your total <input id="pa-cs-val" type="number" inputmode="numeric" placeholder="e.g. 14"></label>
+    <button class="btn primary pa-init-send" data-pa-cs="send">Check</button>
+  </div>`;
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-pa-cs]'); if (!b) return;
+    const act = b.dataset.paCs;
+    if (act === 'ok'){ ov.remove(); return; }
+    let total = null, r = null;
+    if (act === 'send'){ const v = parseInt(ov.querySelector('#pa-cs-val').value, 10); if (isNaN(v)) return; total = v; }
+    else { r = paRollD20(paPc() || pc, mod, 'conc', act === 'roll' ? 'normal' : act); total = r.autoFail ? -99 : r.total; }
+    paResolveConc(cc.id, total >= cc.dc, r ? paD20Html('Concentration · DC ' + cc.dc, r) : '', total);
+  });
+  document.body.appendChild(ov);
+  try { navigator.vibrate && navigator.vibrate([90, 50, 90]); } catch(e){}
+}
+function paResolveConc(id, made, rollHtml, total){
+  const i = paMyIdx(); if (i < 0) return;
+  const pc = state.party[i]; if (!pc.concCheck || pc.concCheck.id !== id) return;
+  const spell = pc.concCheck.spell || pc.concentration;
+  state.party[i] = Object.assign({}, pc, { concCheck: null }, made ? {} : { concentration: null });
+  if (typeof sktKeepRoll === 'function') sktKeepRoll(state.party[i], (total > -99 ? total : 'fail') + ' — ' + (made ? 'keeps ' : 'loses ') + spell, { label: 'Concentration', total });
+  save();
+  try { panelDefs.combat && panelDefs.combat._render && panelDefs.combat._render(); } catch(e){}
+  const ov = document.getElementById('pa-conc-save');
+  if (ov) ov.dataset.done = '1';
+  if (ov) ov.querySelector('.pa-init-card').innerHTML = `<div class="pa-init-l">${made ? '🌀 ' + paEsc(spell) + ' holds' : '💨 ' + paEsc(spell) + ' ends'}</div>`
+    + (rollHtml || `<div class="pa-init-who">You rolled ${total}.</div>`)
+    + `<button class="btn primary pa-init-send" data-pa-cs="ok">OK</button>`;
+  paRender();
+}
+
 // ─── Your turn: action, bonus action, reaction ───────────────────────────────
 // The same three flags the DM's Turn View keeps on the combatant (and the
 // Combat Tracker resets at the start of each turn), so a tick here is a tick
@@ -1539,6 +1745,12 @@ function paRollDeathSave(){
 }
 
 function paOnClick(e){
+  const chk = e.target.closest('[data-pa-chk]');
+  if (chk){ paRollCheck(chk.dataset.paChk); return; }
+  const rm = e.target.closest('[data-pa-rmode]');
+  if (rm){ paRollMode = rm.dataset.paRmode; paRenderScreen(); return; }
+  if (e.target.closest('[data-pa-sktoggle]')){ paSkOpen = !paSkOpen; paRenderScreen(); return; }
+  if (e.target.closest('[data-pa-me]')){ paCenterOnMe(true); return; }
   if (e.target.closest('[data-pa-undo]')){ if (typeof sktUndo === 'function') sktUndo(); paHideRoll(); paRender(); return; }
   if (e.target.closest('#pa-roll')){ paHideRoll(); return; }
   const ec = e.target.closest('[data-pa-econ]');

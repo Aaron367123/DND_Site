@@ -653,7 +653,11 @@ function cbQuickBuild(){
       b.asi[s.key] = { type: 'asi', inc };
     });
     if ((R.edition === '2014' && sub && /variant/i.test(sub.name) || (R.edition === '2024' && sp.name === 'Human')) && !b.originFeat)
-      b.originFeat = (R.feats.find(f => f.name === 'Alert' && (R.edition === '2014' || f.category === 'O')) || {}).name || '';
+    { // One the background doesn't already give: a Criminal or Farmer human
+      // got Alert twice, and a feat that isn't repeatable counts once.
+      const owned = new Set([].concat(...((bg && bg.feats) || []).map(o => Object.keys(o))).map(k => String(k).split(/[|;]/)[0].trim().toLowerCase()));
+      b.originFeat = (['Alert', 'Tough', 'Lucky', 'Skilled', 'Savage Attacker'].map(n => R.feats.find(f => f.name === n && (R.edition === '2014' || f.category === 'O')))
+        .find(f => f && !owned.has(f.name.toLowerCase())) || {}).name || ''; }
     sktBuildChoices(b, R).forEach(c => {
       if (c.value) return;
       b.featureChoices = b.featureChoices || {};
