@@ -5914,3 +5914,48 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
     var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px),
     var(--c, 8px) 1.5px, calc(100% - var(--c, 8px)) 1.5px, calc(100% - 1.5px) var(--c, 8px), calc(100% - 1.5px) calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) calc(100% - 1.5px), var(--c, 8px) calc(100% - 1.5px), 1.5px calc(100% - var(--c, 8px)), 1.5px var(--c, 8px));
 }
+
+/* ── Frames in every window ──────────────────────────────────────────────────
+   The sheet's frames carried to the rest of the app: stat plaques (the
+   encounter budget, the purse, an NPC's numbers, the weather, the map's
+   settings tiles) and framed panels (combatants, the shop, bestiary folders,
+   library covers, the Turn View's blocks, the soundboard). Same mechanics as
+   the sheet: clipped to a notched outline, fill plus inner hairlines, the
+   outer rule drawn by ::before as an evenodd ring. --c sets the notch. */
+:is(.combatant-card, .enc-stat-box, .loot-coin, .loot-item, .npclib-stat, .shop-controls, .shop-display, .weather-stat,
+    .bestiary-folder, .adv-card, .notes-source-tile, .bm-set-tile, .tv-multi, .tv-act, .tv-targets, .tv-adjust, .sb-tile, .drawer-group) {
+  position:relative; isolation:isolate; border:none; border-radius:0;
+  clip-path: polygon(var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px));
+  background:
+    linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--c, 8px) + 2px) var(--h, 4px) / calc(100% - 2 * var(--c, 8px) - 4px) 1px no-repeat,
+    linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--c, 8px) + 2px) calc(100% - var(--h, 4px)) / calc(100% - 2 * var(--c, 8px) - 4px) 1px no-repeat,
+    var(--fx-fill2, var(--fx-fill));
+}
+:is(.combatant-card, .enc-stat-box, .loot-coin, .loot-item, .npclib-stat, .shop-controls, .shop-display, .weather-stat,
+    .bestiary-folder, .adv-card, .notes-source-tile, .bm-set-tile, .tv-multi, .tv-act, .tv-targets, .tv-adjust, .sb-tile, .drawer-group)::before {
+  content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--fx-ring, var(--fx-line));
+  clip-path: polygon(evenodd,
+    var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px),
+    var(--c, 8px) 1.5px, calc(100% - var(--c, 8px)) 1.5px, calc(100% - 1.5px) var(--c, 8px), calc(100% - 1.5px) calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) calc(100% - 1.5px), var(--c, 8px) calc(100% - 1.5px), 1.5px calc(100% - var(--c, 8px)), 1.5px var(--c, 8px));
+}
+/* Plaques: small notches, the label in the accent. */
+:is(.enc-stat-box, .loot-coin, .npclib-stat, .weather-stat, .notes-source-tile, .bm-set-tile) { --c:7px; --h:3px; }
+.loot-coin { --fx-fill2: color-mix(in srgb, var(--panel-3) 92%, var(--accent)); }
+.enc-stat-box .l, .loot-coin .lab, .loot-coin > div:first-child, .npclib-stat .lab, .weather-stat .lab { color:var(--accent); font-weight:700; letter-spacing:.06em; }
+/* Panels: bigger notches. */
+:is(.shop-controls, .shop-display, .bestiary-folder, .tv-targets, .drawer-group) { --c:12px; --h:5px; }
+:is(.combatant-card, .adv-card, .sb-tile, .tv-multi, .tv-act, .tv-adjust) { --c:9px; }
+.loot-item { --c:6px; --h:3px; }
+/* What a border used to say, said by the frame. */
+.combatant-card.active { --fx-ring: var(--accent); --fx-fill2: color-mix(in srgb, var(--panel-2) 85%, var(--accent)); }
+.bm-set-tile.active, .notes-source-tile.active, .notes-source-tile.on { --fx-ring: var(--accent); --fx-fill2: color-mix(in srgb, var(--panel-2) 82%, var(--accent)); }
+:is(.bm-set-tile, .notes-source-tile, .adv-card, .loot-item):hover { --fx-ring: var(--accent); }
+.bm-set-tile.disabled { --fx-ring: var(--border); }
+.loot-item.assigned {
+  border-left:none;
+  background:
+    linear-gradient(var(--accent), var(--accent)) 2px var(--c, 6px) / 3px calc(100% - 2 * var(--c, 6px)) no-repeat,
+    var(--fx-fill2, var(--fx-fill));
+}
+/* A cover fills its card: the rule goes over it, not behind. */
+.adv-card::before { z-index:3; }

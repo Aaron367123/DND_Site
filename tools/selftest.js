@@ -8838,6 +8838,21 @@
         await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
         ok('frames: the builder\'s summary boxes are framed', framed(document.querySelector('#cb-root .cb-big > div')));
         cbClose();
+        // Every window's stat boxes and panels.
+        const want = [['combat', '.combatant-card'], ['encounter', '.enc-stat-box'], ['loot', '.loot-coin'], ['loot', '.loot-item'], ['shop', '.shop-controls'],
+                      ['world', '.weather-stat'], ['bestiary', '.bestiary-folder'], ['library', '.adv-card'], ['notes', '.notes-source-tile'], ['turnview', '.tv-act']];
+        const plain = [], seen = [];
+        for (const [id, sel] of want){
+          try { openPanel(id); } catch(e){ continue; }
+          await sleep(350);
+          const el = document.querySelector('.window[data-panel="' + ((typeof sktPanelHost === 'function') ? sktPanelHost(id) : id) + '"] ' + sel);
+          if (el){ seen.push(sel); if (!framed(el)) plain.push(id + ' ' + sel); }
+          try { closePanel(id); } catch(e){}
+        }
+        ok('frames: every window\'s stat boxes and panels are framed', !plain.length && seen.length >= 6, 'plain: ' + plain.join(', ') + ' · checked ' + seen.join(' '));
+        document.getElementById('settings-btn').click(); await sleep(150);
+        ok('frames: and the Settings drawer\'s sections', framed(document.querySelector('#settings-drawer .drawer-group')));
+        document.getElementById('close-drawer')?.click(); document.getElementById('settings-drawer')?.classList.remove('open');
       } catch(e){ ok('round 68 ran to completion', false, e.message); }
       finally { if (typeof csClose === 'function' && CS) csClose(); if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
