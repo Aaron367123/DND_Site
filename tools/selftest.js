@@ -6574,6 +6574,8 @@
         w.sheet.spellSlots[3].expended = 2; w.sheet.spellSlots[1].expended = 1; save();
         openCharSheet('pc_r6b', { tab: 'spells' }); await sleep(300);
         document.querySelector('#cs-root [data-cs="recover"]').click(); await sleep(40);
+        // It opens the slot picker on the highest-first pick; Recover takes it.
+        document.querySelector('#cs-root [data-cs="recgo"]').click(); await sleep(40);
         ok('Arcane Recovery: three levels back for a 6th-level wizard, highest first', me('pc_r6b').sheet.spellSlots[3].expended === 1 && me('pc_r6b').sheet.spellSlots[1].expended === 1
            && me('pc_r6b').resources.find(r => r.name === 'Arcane Recovery').current === 0 && !document.querySelector('#cs-root [data-cs="recover"]'));
         csClose();
