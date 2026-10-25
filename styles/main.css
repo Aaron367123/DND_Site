@@ -5853,3 +5853,64 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
   #cs-root .cs-boxes > .cs-box { grid-column:span 2; }
   #cs-root .cs-boxes > .cs-box:nth-child(4), #cs-root .cs-boxes > .cs-box:nth-child(5) { grid-column:span 3; }
 }
+
+/* ── The same frames beyond the sheet ────────────────────────────────────────
+   The party card's hit points and AC / Init / Speed, the builder's summary,
+   the Turn View's HP and AC: one visual language for a stat wherever it
+   shows — notched corners and a double rule, AC as a shield. */
+:root {
+  --fx-line: color-mix(in srgb, var(--accent) 55%, var(--border));
+  --fx-hair: color-mix(in srgb, var(--accent) 22%, transparent);
+  --fx-fill: color-mix(in srgb, var(--panel-2) 95%, var(--accent));
+}
+:is(.char-hp-block, .char-stat, .cb-big > div, .cb-side .cb-ab, .tv-vital) {
+  position:relative; isolation:isolate; border:none; border-radius:0;
+  clip-path: polygon(var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px));
+  background:
+    linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--c, 8px) + 2px) var(--h, 4px) / calc(100% - 2 * var(--c, 8px) - 4px) 1px no-repeat,
+    linear-gradient(var(--fx-hair), var(--fx-hair)) calc(var(--c, 8px) + 2px) calc(100% - var(--h, 4px)) / calc(100% - 2 * var(--c, 8px) - 4px) 1px no-repeat,
+    var(--fx-fill);
+}
+:is(.char-hp-block, .char-stat, .cb-big > div, .cb-side .cb-ab, .tv-vital)::before {
+  content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--fx-line);
+  clip-path: polygon(evenodd,
+    var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px),
+    var(--c, 8px) var(--i, 1.5px), calc(100% - var(--c, 8px)) var(--i, 1.5px), calc(100% - var(--i, 1.5px)) var(--c, 8px), calc(100% - var(--i, 1.5px)) calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) calc(100% - var(--i, 1.5px)), var(--c, 8px) calc(100% - var(--i, 1.5px)), var(--i, 1.5px) calc(100% - var(--c, 8px)), var(--i, 1.5px) var(--c, 8px));
+}
+.char-hp-block { --c:12px; padding:10px 12px 11px; }
+.char-hp-block.has-wildshape { --fx-line: color-mix(in srgb, var(--success) 60%, var(--border)); }
+.char-stats-row { gap:6px; }
+.char-stat { --c:6px; padding:5px 4px 4px; }
+.char-stat:hover::before, .char-stat:focus-within::before { background:var(--accent); }
+.char-stat .l { color:var(--accent); font-weight:700; letter-spacing:.08em; }
+.cb-big { gap:6px; }
+.cb-big > div { --c:6px; padding:7px 2px 6px; }
+.cb-big span, .cb-side .cb-ab span { color:var(--accent); font-weight:700; letter-spacing:.06em; }
+.cb-side .cb-ab { --c:6px; padding:6px 0 5px; }
+.tv-vital { --c:8px; padding:6px 14px 7px; }
+.tv-vital .l { color:var(--accent); font-weight:700; }
+
+/* AC as a shield on the party card, the builder's summary and the Turn View. */
+.char-stats-row > .char-stat:first-child, .cb-big > div:first-child, .tv-vitals > .tv-vital:last-child {
+  clip-path: polygon(0 8%, 50% 0, 100% 8%, 100% 56%, 86% 79%, 50% 100%, 14% 79%, 0 56%);
+  background: radial-gradient(ellipse at 50% 35%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%), var(--fx-fill);
+  padding-bottom:12px;
+}
+.char-stats-row > .char-stat:first-child::before, .cb-big > div:first-child::before, .tv-vitals > .tv-vital:last-child::before {
+  clip-path: polygon(evenodd, 0 8%, 50% 0, 100% 8%, 100% 56%, 86% 79%, 50% 100%, 14% 79%, 0 56%,
+    1.5px calc(8% + 1px), 50% 1.5px, calc(100% - 1.5px) calc(8% + 1px), calc(100% - 1.5px) 56%, calc(86% - 1px) calc(79% - 1px), 50% calc(100% - 2.5px), calc(14% + 1px) calc(79% - 1px), 1.5px 56%);
+}
+/* Compact party rows are ~30px tall: smaller notches, and AC keeps a plaque
+   (a shield that short is a squashed pentagon). */
+.party-grid.compact .char-hp-block { --c:6px; --h:3px; }
+.party-grid.compact .char-stat { --c:4px; --h:2px; }
+.party-grid.compact .char-stats-row > .char-stat:first-child {
+  padding-bottom:4px;
+  clip-path: polygon(var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px));
+  background: var(--fx-fill);
+}
+.party-grid.compact .char-stats-row > .char-stat:first-child::before {
+  clip-path: polygon(evenodd,
+    var(--c, 8px) 0, calc(100% - var(--c, 8px)) 0, 100% var(--c, 8px), 100% calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) 100%, var(--c, 8px) 100%, 0 calc(100% - var(--c, 8px)), 0 var(--c, 8px),
+    var(--c, 8px) 1.5px, calc(100% - var(--c, 8px)) 1.5px, calc(100% - 1.5px) var(--c, 8px), calc(100% - 1.5px) calc(100% - var(--c, 8px)), calc(100% - var(--c, 8px)) calc(100% - 1.5px), var(--c, 8px) calc(100% - 1.5px), 1.5px calc(100% - var(--c, 8px)), 1.5px var(--c, 8px));
+}
