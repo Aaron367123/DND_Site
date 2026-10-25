@@ -344,10 +344,11 @@ function csSide(pc){
     + '<div class="cs-kv"><span>Passive Investigation</span><b>' + pas('investigation') + '</b></div>'
     + '<div class="cs-kv"><span>Passive Insight</span><b>' + pas('insight') + '</b></div>'
     + (sh.senses ? '<div class="cs-note">' + csE(sh.senses) + '</div>' : '');
-  const pr = sh.proficiencies || {};
+  const pr = Object.assign({}, csPdfProfs(sh.languages), sh.proficiencies || {});
+  const langs = csPdfProfs(sh.languages).languages || sh.languages;
   const line = (l, v) => v && v.length ? '<div class="cs-prof"><b>' + l + '</b> ' + csE(Array.isArray(v) ? v.map(_csTitle).join(', ') : v) + '</div>' : '';
-  h += '<h5>Proficiencies &amp; languages</h5>' + line('Armor', pr.armor) + line('Weapons', pr.weapons) + line('Tools', pr.tools) + line('Languages', sh.languages)
-    + (!pr.armor && !pr.weapons && !sh.languages ? '<div class="cb-dim">None recorded.</div>' : '');
+  h += '<h5>Proficiencies &amp; languages</h5>' + line('Armor', pr.armor) + line('Weapons', pr.weapons) + line('Tools', pr.tools) + line('Languages', langs)
+    + (!pr.armor && !pr.weapons && !langs ? '<div class="cb-dim">None recorded.</div>' : '');
   const def = [['Resistant', pc.resistances], ['Immune', pc.immunities], ['Vulnerable', pc.vulnerabilities]].filter(([, v]) => v && v.length);
   if (def.length) h += '<h5>Defenses</h5>' + def.map(([l, v]) => line(l, v)).join('');
   return h;
@@ -1708,6 +1709,16 @@ function csImpMods(pc){
 }
 // What the PDF says the character can wear ("=== ARMOR === Light Armor,
 // Medium Armor, Shields"), else what the class gives: a set of L/M/H/S.
+// "=== ARMOR === Light Armor, Shields === LANGUAGES === Common" (how a
+// D&D Beyond PDF's proficiency box comes in) → { armor, weapons, tools, languages }.
+function csPdfProfs(text){
+  const out = {}, t = String(text || '');
+  if (!/===\s*[A-Z]+\s*===/.test(t)) return out;
+  const re = /===\s*([A-Z ]+?)\s*===([\s\S]*?)(?====|$)/g; let m;
+  const key = { ARMOR: 'armor', WEAPONS: 'weapons', TOOLS: 'tools', LANGUAGES: 'languages' };
+  while ((m = re.exec(t))){ const k = key[m[1].trim()]; const v = m[2].replace(/\s+/g, ' ').trim(); if (k && v) out[k] = v; }
+  return out;
+}
 function csImpArmorProf(pc){
   const m = /=== ARMOR ===([\s\S]*?)(?:===|$)/.exec((pc.sheet && pc.sheet.languages) || '');
   if (m){

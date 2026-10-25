@@ -176,7 +176,7 @@ body.zoom-occluded .zoom-controls:focus-within{opacity:1}
 .search-detail .detail-back{background:transparent;border:none;color:var(--accent);font-size:var(--fs-sm);cursor:pointer;padding:0;font-family:inherit}
 .detail-title-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(212,165,116,.25);padding-bottom:5px;margin-bottom:6px}
 .detail-title{margin:0;font-size:var(--fs-2xl);font-weight:600;font-variant:small-caps;letter-spacing:.04em;line-height:1.15;color:var(--accent);font-family:Georgia,'Times New Roman',serif}
-.detail-source-badge{flex-shrink:0;font-size:var(--fs-xs);color:#a13531;font-weight:700;letter-spacing:.5px;white-space:nowrap;font-variant:small-caps}
+.detail-source-badge{flex-shrink:0;font-size:var(--fs-xs);color:var(--red-mid);font-weight:700;letter-spacing:.5px;white-space:nowrap;font-variant:small-caps}
 .search-detail .detail-meta{font-size:var(--fs-sm);color:var(--text-muted);font-style:italic;margin-bottom:10px}
 .detail-header{margin:14px 0 4px;font-size:var(--fs-lg);font-weight:600;font-variant:small-caps;letter-spacing:.05em;color:var(--accent);font-family:Georgia,'Times New Roman',serif}
 .detail-label{font-weight:600;color:var(--text)}
@@ -1570,6 +1570,10 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
   padding:1px 5px;border-radius:var(--r-md);min-width:24px;text-align:center;flex-shrink:0
 }
 .feat-block .feat-lvl.race{background:rgba(140,108,209,.22);color:#b6a3e8}
+/* One width per kind of badge, so the names after them start in a column:
+   BONUS / ACT / SPEC each sized to their own word left the names ragged. */
+.feat-block .feat-lvl{min-width:2.7em}
+.feat-block .feat-lvl.act{min-width:5.4em}
 .feat-block .feat-body{
   padding:6px 10px 8px 10px;border-top:1px dashed var(--border);
   font-size:var(--fs-sm);line-height:1.5;color:var(--text-muted)
@@ -3406,8 +3410,8 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .enc-search-result:hover{background:var(--panel-3)}
 .enc-search-result .enc-cr-badge{font-size:var(--fs-2xs);color:var(--text-muted)}
 .enc-search-result .enc-result-name{display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.enc-src-badge{font-size:var(--fs-2xs);font-weight:700;color:#a13531;letter-spacing:.04em;background:rgba(161,53,49,.1);border:1px solid rgba(161,53,49,.3);padding:1px 5px;border-radius:var(--r-sm);flex-shrink:0;font-variant:small-caps}
-.enc-monster-row .enc-src-badge{margin-left:6px;color:#e08a84;border-color:rgba(224,138,132,.35);background:rgba(224,138,132,.1)}
+.enc-src-badge{font-size:var(--fs-2xs);font-weight:700;color:var(--red-mid);letter-spacing:.04em;background:rgba(161,53,49,.1);border:1px solid rgba(161,53,49,.3);padding:1px 5px;border-radius:var(--r-sm);flex-shrink:0;font-variant:small-caps}
+.enc-monster-row .enc-src-badge{margin-left:6px}
 .enc-monster-row .enc-name{display:flex;align-items:center;min-width:0}
 .enc-monster-row .enc-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* The name before the book: the badge gives its room up first. */
@@ -5358,7 +5362,8 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-slot > span:first-child { min-width:110px; font-size:var(--fs-sm); }
 .cs-spell { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; background:var(--panel); margin:2px 0; }
 .cs-spell-n { flex:1; min-width:200px; display:flex; flex-wrap:wrap; align-items:baseline; gap:6px; background:none; border:none; color:var(--text); font:inherit; text-align:left; cursor:pointer; padding:0; }
-.cs-spell-c { display:inline-flex; gap:4px; align-items:center; }
+.cs-spell-c { display:inline-flex; gap:4px; align-items:center; margin-left:auto; }
+/* Cast on the right edge whether the controls fit beside the name or wrap under it. */
 .cs-spell .cs-feat-t { flex-basis:100%; }
 .cs-tag { font-style:normal; font-size:var(--fs-2xs); border:1px solid var(--text-muted); border-radius:3px; padding:0 3px; color:var(--text-muted); }
 .cs-from { font-size:var(--fs-2xs); color:var(--accent); }
@@ -5602,6 +5607,11 @@ button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
 #cb-root .cb-whylist { margin-top:8px; font-size:var(--fs-xs); color:var(--text-muted); }
 #cb-root .cb-whylist b { color:var(--text); }
 .cs-spfilter { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; }
+/* The filter pills stay on one line and swipe on a phone; wrapped, "Other" and
+   "Limited use" sat alone in a half-empty second row of the box. */
+.cs-spfilter .cb-seg { flex-wrap:nowrap; max-width:100%; overflow-x:auto; scrollbar-width:none; }
+.cs-spfilter .cb-seg::-webkit-scrollbar { display:none; }
+.cs-spfilter .cb-seg button { flex:0 0 auto; white-space:nowrap; }
 .cs-spfilter input { flex:1 1 160px; min-width:0; }
 .cs-itemn { flex:1; min-width:0; background:none; border:none; color:var(--text); font:inherit; text-align:left; padding:0; cursor:pointer; }
 .cs-itemt { padding:4px 8px 8px 34px; }
@@ -5927,6 +5937,11 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
   #cs-root .cs-boxes > .cs-box { grid-column:span 2; }
   /* Proficiency under AC; Inspiration's two halves under Initiative and Speed. */
   #cs-root .cs-boxes > .cs-box.cs-inspbox { grid-column:span 4; }
+  /* The five coins in one row, the total under them: at 70px each CP wrapped
+     onto a line of its own beside "Worth". */
+  #cs-root .cs-coins { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:6px; }
+  #cs-root .cs-coin input { width:100%; }
+  #cs-root .cs-coins > .cb-dim { grid-column:1 / -1; }
 }
 
 /* ── The same frames beyond the sheet ────────────────────────────────────────
