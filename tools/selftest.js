@@ -8681,6 +8681,36 @@
         try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
       }
     }
+    // -- Round 61: Turn View's stat block is readable; the phone toolbar sits in the title bar
+    {
+      try {
+        const T = panelDefs.turnview;
+        ok('turn view: a condition immunity reads "charmed", not "Name charmed"', T._plain([{ name: 'charmed' }]) === 'charmed' && T._plain({ index: 'x', name: 'Frightened', url: '/x' }) === 'Frightened' && /Darkvision/.test(T._plain({ darkvision: '60 ft.' })), T._plain([{ name: 'charmed' }]));
+        if (state.combatants.length && !document.body.classList.contains('player-mode')){
+          openPanel('turnview'); await sleep(300);
+          if (innerWidth >= 1200) Object.assign(T._body.closest('.window').style, { left: '50px', top: '0px', width: (innerWidth - 80) + 'px', height: '700px' });
+          T._render(); await sleep(80);
+          const B = T._body, tr = B.querySelector('.tv-trait'), dl = B.querySelector('.tv-passive');
+          ok('turn view: speed, senses and the rest are labelled rows, not one run-on line', !!dl && dl.tagName === 'DL' && dl.querySelectorAll('dt').length >= 2 && [...dl.querySelectorAll('dt')].some(d => /speed/i.test(d.textContent)), dl ? dl.textContent.slice(0, 80) : 'none');
+          if (tr){
+            const cs = getComputedStyle(tr), ch = parseFloat(cs.fontSize) * 0.55;
+            ok('turn view: trait text is body-sized (≥13px) in body colour', parseFloat(cs.fontSize) >= 13 && cs.color === getComputedStyle(B.querySelector('.tv-actor-name')).color, cs.fontSize + ' ' + cs.color);
+            ok('turn view: a trait line is a readable measure, not the window\'s width', tr.getBoundingClientRect().width <= parseFloat(cs.fontSize) * 0.62 * 80, Math.round(tr.getBoundingClientRect().width) + 'px');
+            ok('turn view: each trait\'s name sits on its own line', getComputedStyle(tr.querySelector('b')).display === 'block');
+          }
+          closePanel('turnview');
+        }
+        if (innerWidth < 760 && matchMedia('(pointer: coarse)').matches && !document.body.classList.contains('player-mode')){
+          openPanel('encounter'); await sleep(300);
+          const head = document.querySelector('.window[data-panel="encounter"] .window-head'), tb = document.getElementById('float-toolbar');
+          const h = head.getBoundingClientRect(), t = tb.getBoundingClientRect(), title = head.querySelector('.window-title').getBoundingClientRect();
+          ok('phone: the tools sit inside the title bar, not hanging below it', t.top >= h.top - 1 && t.bottom <= h.bottom + 1, Math.round(t.top) + '–' + Math.round(t.bottom) + ' vs bar ' + Math.round(h.top) + '–' + Math.round(h.bottom));
+          ok('phone: no floating pill (no shadow, no box of its own)', getComputedStyle(tb).boxShadow === 'none' && getComputedStyle(tb).backgroundColor === 'rgba(0, 0, 0, 0)');
+          ok('phone: the window title ends before the tools start', title.right <= t.left + 1, Math.round(title.right) + ' vs ' + Math.round(t.left));
+          closePanel('encounter');
+        }
+      } catch(e){ ok('round 61 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

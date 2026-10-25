@@ -340,6 +340,10 @@ registerPanel('turnview', {
     if (v == null) return '';
     if (Array.isArray(v)) return v.map(x => this._plain(x)).filter(Boolean).join(', ');
     if (typeof v === 'object'){
+      // A reference ({name:'charmed'}, or the SRD API's {index, name, url})
+      // is its name — keyed through, a condition immunity printed
+      // "Name charmed".
+      if (v.name != null && Object.keys(v).every(k => k === 'name' || k === 'index' || k === 'url')) return String(v.name).trim();
       return Object.keys(v).map(k => {
         const label = k.replace(/_/g, ' ').replace(/\b\w/g, m => m.toUpperCase());
         return label + ' ' + v[k];
@@ -1430,40 +1434,44 @@ registerPanel('turnview', {
       const w = raw && (typeof raw.speed === 'string' ? raw.speed : (raw.speed && raw.speed.walk));
       const sp = w == null || w === '' ? ''
                : (typeof w === 'number' ? w + ' ft' : String(w));
-      if (sp) bits.push('Speed ' + this._plain(sp));
-      if (raw){ const sen = this._plain(raw.senses); if (sen) bits.push(sen); }
-      if (ws.resistances && ws.resistances.length)  bits.push('Resists ' + ws.resistances.join(', '));
-      if (ws.immunities && ws.immunities.length)    bits.push('Immune ' + ws.immunities.join(', '));
-      bits.push(`Wild Shape — ${p.name} has ${p.hp} HP of their own`);
-      if (p.concentration) bits.push('Concentrating on ' + p.concentration);
+      if (sp) bits.push(['Speed', this._plain(sp)]);
+      if (raw){ const sen = this._plain(raw.senses); if (sen) bits.push(['Senses', sen]); }
+      if (ws.resistances && ws.resistances.length)  bits.push(['Resists', ws.resistances.join(', ')]);
+      if (ws.immunities && ws.immunities.length)    bits.push(['Immune', ws.immunities.join(', ')]);
+      bits.push(['Wild Shape', `${p.name} has ${p.hp} HP of their own`]);
+      if (p.concentration) bits.push(['Concentrating', p.concentration]);
       if (raw) this._rawList(raw, ['special_abilities', 'trait']).forEach(t => traits.push(t));
       (p.buffs || []).forEach(b => traits.push({ name: b.label || 'Buff', text: b.note || '' }));
     } else if (p){
-      if (p.spd) bits.push('Speed ' + p.spd + ' ft');
-      if (p.pp) bits.push('Passive Perception ' + p.pp);
-      if (p.rage) bits.push('Raging');
-      if (p.concentration) bits.push('Concentrating on ' + p.concentration);
+      if (p.spd) bits.push(['Speed', p.spd + ' ft']);
+      if (p.pp) bits.push(['Passive Perception', p.pp]);
+      if (p.rage) bits.push(['Rage', 'raging']);
+      if (p.concentration) bits.push(['Concentrating', p.concentration]);
       (p.buffs || []).forEach(b => traits.push({ name: b.label || 'Buff', text: b.note || '' }));
     } else {
       const entry = this._entryOf(c);
       if (entry){
         const raw = entry._raw || {};
-        if (entry.speed || raw.speed) bits.push('Speed ' + this._plain(entry.speed || raw.speed));
+        if (entry.speed || raw.speed) bits.push(['Speed', this._plain(entry.speed || raw.speed)]);
         // senses is an OBJECT here ({darkvision:'60 ft.', passive_perception:8})
         // and the damage lists are arrays, empty far more often than not.
         // String()-ing either gave "[object Object]" and a bare "Resists".
-        const sen = this._plain(raw.senses); if (sen) bits.push(sen);
-        const lang = this._plain(raw.languages); if (lang) bits.push(lang);
-        const res = this._plain(raw.damage_resistances); if (res) bits.push('Resists ' + res);
-        const imm = this._plain(raw.damage_immunities); if (imm) bits.push('Immune ' + imm);
-        const cim = this._plain(raw.condition_immunities); if (cim) bits.push('Immune to ' + cim);
+        const sen = this._plain(raw.senses); if (sen) bits.push(['Senses', sen]);
+        const lang = this._plain(raw.languages); if (lang) bits.push(['Languages', lang]);
+        const res = this._plain(raw.damage_resistances); if (res) bits.push(['Resists', res]);
+        const imm = this._plain(raw.damage_immunities); if (imm) bits.push(['Immune', imm]);
+        const cim = this._plain(raw.condition_immunities); if (cim) bits.push(['Can’t be', cim]);
         this._rawList(raw, ['special_abilities', 'trait']).forEach(t => traits.push(t));
       }
     }
     (c.buffs || []).forEach(b => { if (!traits.some(t => t.name === (b.label || 'Buff'))) traits.push({ name: b.label || 'Buff', text: b.note || '' }); });
-    const p1 = bits.length ? `<div class="tv-passive">${bits.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : '';
+    // Labelled rows, then each trait as its own short paragraph. It was one
+    // run-on line of passives ("Speed walk 30 ft.   Darkvision 120 ft. …") and
+    // the traits as 11px grey text the full width of the window — 180
+    // characters a line, with nothing to find the next trait by.
+    const p1 = bits.length ? `<dl class="tv-passive">${bits.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(String(v))}</dd></div>`).join('')}</dl>` : '';
     const p2 = traits.length ? `<div class="tv-traits-l">Traits</div>` + traits.map(t =>
-      `<div class="tv-trait"><b>${esc(t.name)}</b>${t.text ? ' — ' + esc(t.text) : ''}</div>`).join('') : '';
+      `<div class="tv-trait"><b>${esc(t.name)}</b>${t.text ? `<span>${esc(t.text)}</span>` : ''}</div>`).join('') : '';
     // A PC's class features are the Party panel's Features tab, which resolves
     // them from the same class data. Pointed at rather than reimplemented —
     // two renderers for one list is two things to keep in step.

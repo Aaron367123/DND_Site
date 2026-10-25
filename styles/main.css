@@ -514,6 +514,13 @@ body.player-mode .app{grid-template-rows:1fr;grid-template-columns:var(--dock-w)
   /* 44px is right for the bottom dock, oversized for a utility pill that has
      to share a 390px row. 36px matches the window controls beside it. */
   .float-toolbar .float-btn{width:36px; height:36px}
+  /* Part of the title bar, not a pill floating over it. As a pill (top 10px,
+     46px tall, a shadow) it hung 7px below the 49px bar onto the window's
+     own toolbar and sat on top of the header like a sticker. Now: flush at
+     the top, the bar's height, no box of its own — the title already stops
+     short of it (padding-right above). */
+  .float-toolbar{top:0; right:0; height:48px; padding:0 6px; gap:2px;
+    background:transparent; border:none; border-radius:0; box-shadow:none}
   /* Keep the title clear of the toolbar rather than running underneath it.
      --toolbar-w is measured and published by _updateToolbarOcclusion(), so
      this tracks the sync indicator's label growing and shrinking. */
@@ -3789,7 +3796,11 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
    right. Every rule below uses the shared tokens — this panel introduces no
    colours, sizes or radii of its own, because a panel that looks like a
    different app is exactly what four separate windows already felt like. */
-.tv-root { display:flex; flex-direction:column; height:100%; min-height:0; container:tvroot / inline-size; }
+.tv-root { display:flex; flex-direction:column; height:100%; min-height:0; container:tvroot / inline-size;
+  /* Its own type scale, a step up from the panels' (the sheet's): this is the
+     window read across the table mid-fight, and 11px stat-block text was
+     the smallest on the screen. */
+  --fs-2xs:11px; --fs-xs:12px; --fs-sm:13px; --fs-md:14px; --fs-lg:15px; }
 .tv-root-empty { justify-content:center; }
 
 /* Initiative strip. A horizontal ordered run because the order IS the
@@ -4026,11 +4037,18 @@ select.tv-in.wide { width:126px; }
    flexible region, the log inside it takes the surplus, and when there is none
    the whole region scrolls as ONE scroller rather than two nested boxes. */
 .tv-tail { flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
-.tv-traits { display:flex; flex-direction:column; gap:5px; flex:0 0 auto; }
-.tv-passive { font-size:var(--fs-sm); color:var(--text-muted); display:flex; flex-wrap:wrap; gap:2px 12px; }
-.tv-traits-l { font-size:var(--fs-2xs); color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; }
-.tv-trait { font-size:var(--fs-sm); color:var(--text-muted); line-height:1.45; }
-.tv-trait b { color:var(--text); font-weight:600; }
+.tv-traits { display:flex; flex-direction:column; gap:8px; flex:0 0 auto; }
+.tv-passive { margin:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:6px 16px; }
+.tv-passive > div { min-width:0; }
+.tv-passive dt { font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
+.tv-passive dd { margin:1px 0 0; font-size:var(--fs-md); color:var(--text); line-height:1.4; }
+.tv-traits-l { font-size:var(--fs-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em; font-weight:600;
+  padding-bottom:4px; border-bottom:1px solid var(--border); margin-top:4px; }
+/* One trait, one paragraph: the name on its own line, the text a readable
+   measure (about 75 characters) in body colour, space before the next. */
+.tv-trait { font-size:var(--fs-md); color:var(--text); line-height:1.55; max-width:75ch; padding:2px 0 4px; }
+.tv-trait b { display:block; color:var(--accent); font-weight:600; margin-bottom:1px; }
+.tv-trait span { opacity:.92; }
 .tv-log { border-top:1px solid var(--border); padding-top:8px; display:flex; flex-direction:column;
   gap:4px; flex:1 0 auto; min-height:0; }
 .tv-log-line { font-size:var(--fs-sm); color:var(--text-muted); }
