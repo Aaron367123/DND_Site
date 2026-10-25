@@ -421,7 +421,8 @@ registerPanel('loot',{
 
   // ── List rendering ───────────────────────────────────────────────────────────
   _assignSelect(item, idx){
-    const opts = ['<option value="">— Unassigned —</option>'];
+    // Nobody's is the party's: assigned is the character's own.
+    const opts = ['<option value="">— Party loot —</option>'];
     state.party.forEach(p => {
       opts.push(`<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`);
     });
@@ -433,7 +434,7 @@ registerPanel('loot',{
       });
       opts.push('</optgroup>');
     }
-    return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Assign to party member or custom group">${opts.join('')}</select>`;
+    return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Who has it — a character's is theirs (it shows in their inventory); nobody's is the party's">${opts.join('')}</select>`;
   },
   // ── Drag-to-reorder ──────────────────────────────────────────────────────
   // Wires HTML5 drag events on every visible item row so the user can drag a
@@ -693,7 +694,7 @@ registerPanel('loot',{
   // showing the count + total gp value.
   _renderMemberView(memberId){
     const member = memberId === '__unassigned__'
-      ? {name:'Group (shared loot)', icon:'📦'}
+      ? {name:'Party loot', icon:'📦'}
       : state.party.find(p => p.id === memberId);
     if (!member) return '<div class="empty-state">Member not found.</div>';
     const matched = [];
@@ -707,7 +708,7 @@ registerPanel('loot',{
       if (this._itemBelongsToMember(item, memberId)) matched.push({item, idx:i});
     });
     if (!matched.length){
-      return `<div class="empty-state">${memberId==='__unassigned__'?'No shared/group loot — all items are assigned.':'No items assigned to '+esc(member.name)+'.'}</div>`;
+      return `<div class="empty-state">${memberId==='__unassigned__'?'No party loot — everything has been claimed.':esc(member.name)+' hasn\u2019t claimed anything.'}</div>`;
     }
     return this._renderMemberSection(member, matched);
   },
@@ -827,7 +828,7 @@ registerPanel('loot',{
         <button class="loot-view-tab ${view==='all'?'active':''}" data-view="all" title="All items">All${this._loot.items.length?` <span class="loot-tab-count">${this._loot.items.length}</span>`:''}</button>
         ${state.party.length ? (() => {
           const cnt = this._loot.items.filter(it => state.party.some(p => this._itemBelongsToMember(it, p.id))).length;
-          return `<button class="loot-view-tab ${view==='party'?'active':''}" data-view="party" title="All party members, grouped by character"><span class="loot-tab-icon">${ICO('i-user')}</span><span class="loot-tab-name">Party</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          return `<button class="loot-view-tab ${view==='party'?'active':''}" data-view="party" title="What each character has claimed — theirs, and in their inventory"><span class="loot-tab-icon">${ICO('i-user')}</span><span class="loot-tab-name">Claimed</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         })() : ''}
         ${(this._loot.tabGroups||[]).map(g => {
           const cnt = this._itemsForTabGroup(g).length;
@@ -844,7 +845,7 @@ registerPanel('loot',{
           // "Group" tab = shared / unassigned loot (treats items pointing at
           // a deleted party member as unassigned too).
           const cnt = this._loot.items.filter(it => !this._isAssignedTo(it.assignedTo)).length;
-          return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Shared / group loot"><span class="loot-tab-icon">${ICO('i-chest')}</span><span class="loot-tab-name">Group</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
+          return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Nobody has claimed it — the party's"><span class="loot-tab-icon">${ICO('i-chest')}</span><span class="loot-tab-name">Party loot</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         })()}
       </div>
       <div class="loot-items">

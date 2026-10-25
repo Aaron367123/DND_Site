@@ -1555,9 +1555,9 @@ function csInventoryHtml(pc){
       + '<button class="btn" data-cs="coinadd">Add</button><button class="btn" data-cs="coinspend">Spend</button></div>');
   h += '<div class="cs-carry' + (csCarryNote(pref.encumbrance, lb, cap) ? ' over' : '') + '">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b>'
     + (pref.encumbrance === 'none' ? '' : ' of ' + cap + ' lb') + csCarryNote(pref.encumbrance, lb, cap)
-    + (lootLb ? ' <span class="cb-dim">(' + Math.round(lootLb * 10) / 10 + ' lb of it party loot)</span>' : '')
     + (items.some(m => m.reqAttune) ? ' · attuned ' + attuned + ' of ' + attMax : '') + '</div>';
   const gearType = m => { const st = m.stats || (m.base && CS.R && CS.R.items[m.base]); return st && /^(M|R|LA|MA|HA|S)(\||$)/.test(String(st.type)); };
+  const lootRows = csLootRows(pc);
   h += '<div class="cs-inv">' + (items.length ? items.map((m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
     + (gearType(m) ? '<label class="cs-eq" title="Equipped"><input type="checkbox" data-cs-equip="' + i + '"' + (m.equipped !== false ? ' checked' : '') + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
     + '<button class="cs-itemn" data-cs-open="it:' + i + '"><b>' + csE(m.name) + '</b></button>'
@@ -1570,8 +1570,8 @@ function csInventoryHtml(pc){
     + (!ro && !m.charges && csCatalogCharges(m) ? '<button class="btn small" data-cs-trackchg="' + i + '" title="Count this item\u2019s charges">Track charges</button>' : '')
     + (ro ? '' : '<button class="btn small" data-cs-del="' + i + '" aria-label="Remove ' + csE(m.name) + '">✕</button>') + '</div>'
     + (CS.open['it:' + i] ? '<div class="cs-feat-t cs-itemt">' + csItemText(m) + '</div>' : '')).join('')
-    : '<div class="cb-dim">Nothing carried.</div>') + '</div>';
-  h += csLootHtml(pc);
+    : (lootRows ? '' : '<div class="cb-dim">Nothing carried.</div>')) + lootRows + '</div>';
+  h += csPartyLootHtml(pc);
   if (!ro){
     const e = csGearFind(CS.q);
     const bases = e && e.kind === 'variant' && typeof sktMagicBases === 'function' ? sktMagicBases(CS.R, e) : null;
@@ -1674,14 +1674,14 @@ function csItemsEdit(label, fn, undoOpts){
   csEdit(label, p => { p.inventory = (p.inventory || []).map(x => Object.assign({}, x)); fn(p.inventory, p); }, undoOpts);
 }
 
-// ── The party's loot, in each character's inventory ─────────────────────────
-// What the Loot window has assigned to this character (or to a group they're
-// in) shows on their sheet's Inventory tab — it lived only in the window, so
-// a player looking at their own sheet never saw the locket they'd been given.
-// The Loot tracker stays the one record: these rows read it, Give back
-// unassigns there, and Take moves the item off the party's list into the
-// character's own inventory. Read from storage each time, so a change from
-// another device is here as soon as it syncs.
+// ── Claimed loot is the character's ─────────────────────────────────────────
+// Loot assigned to a character in the Loot tracker is theirs: it sits in
+// their sheet's inventory like anything else they carry, and counts toward
+// what they carry. Only what nobody has claimed is the party's loot. The
+// tracker stays the record for those items (the rows read it, so a change
+// from another device shows as soon as it syncs): − / + changes the count
+// there, ↩ hands it back to the party loot, and equipping a weapon or armour
+// moves it into the character's own gear, where it counts for AC and attacks.
 const CS_LOOT_KEY = 'skt-loot-v1';
 function csLootRead(){
   try { const L = JSON.parse(localStorage.getItem(CS_LOOT_KEY) || 'null'); if (L && Array.isArray(L.items)) return L; } catch(e){}
@@ -1714,22 +1714,63 @@ function csLootAsItem(it){
   return m;
 }
 const csLootLb = rows => rows.filter(r => r.mine).reduce((n, r) => n + (+r.it.weight || 0) * Math.max(1, +r.it.qty || 1), 0);
-function csLootHtml(pc){
-  const rows = csLootFor(pc); if (!rows.length) return '';
+// The party's loot: what nobody has claimed (assigned to no current
+// character and no group). Every character's Inventory tab lists it, so a
+// player can see what's in the pile and claim it for themselves.
+function csPartyLoot(){
+  const L = csLootRead(), groups = new Set((L.tabGroups || []).map(g => g.id)), pcs = new Set((state.party || []).map(p => p.id));
+  return (L.items || []).filter(it => !it.assignedTo || (!pcs.has(it.assignedTo) && !groups.has(it.assignedTo)));
+}
+function csPartyLootHtml(pc){
+  const items = csPartyLoot(); if (!items.length) return '';
   const ro = CS.readOnly;
-  return '<h5>From the party\u2019s loot <span class="cb-dim cs-h5sub">' + rows.length + (rows.length === 1 ? ' item' : ' items') + ' · kept in the Loot tracker</span></h5><div class="cs-inv cs-lootinv">'
-    + rows.map(({ it, mine, group }) => {
-      const k = 'lt:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
-      return '<div class="cs-item cs-lootitem"><span class="cs-eq cs-lootmark" title="From the party\u2019s loot">⛁</span>'
-        + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b>' + (group ? ' <span class="cs-from">shared · ' + csE(group) + '</span>' : '') + '</button>'
+  return '<h5>Party loot <span class="cb-dim cs-h5sub">' + items.length + (items.length === 1 ? ' item' : ' items') + ' nobody has claimed</span></h5><div class="cs-inv cs-partyloot">'
+    + items.map(it => {
+      const k = 'pl:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
+      return '<div class="cs-item cs-partylootitem"><span class="cs-eq"></span>'
+        + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b></button>'
         + '<span class="cs-qty">×' + q + '</span>'
         + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
-        + (ro ? '' : '<button class="btn small" data-cs-loottake="' + csE(it.id) + '" title="Move it into ' + csE(pc.name) + '\u2019s own inventory">Take</button>'
-          + (mine ? '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Back to the party\u2019s unassigned loot">Give back</button>' : ''))
+        + (ro ? '' : '<button class="btn small" data-cs-lootclaim="' + csE(it.id) + '" title="Make it ' + csE(pc.name) + '\u2019s">Claim</button>')
         + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
     }).join('') + '</div>';
 }
+// A weapon, armour or a shield: something the sheet equips.
+function csLootIsGear(it){
+  const m = csLootAsItem(it), st = m.stats || (m.base && CS.R && CS.R.items[m.base]);
+  return !!(st && /^(M|R|LA|MA|HA|S)(\||$)/.test(String(st.type)));
+}
+// Claimed loot as rows of the inventory list itself, after what's already
+// in the character's own gear.
+function csLootRows(pc){
+  const ro = CS.readOnly;
+  return csLootFor(pc).map(({ it, mine, group }) => {
+    const k = 'lt:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
+    return '<div class="cs-item cs-lootitem" data-loot="' + csE(it.id) + '">'
+      + (csLootIsGear(it) ? '<label class="cs-eq" title="Equip it"><input type="checkbox" data-cs-lootequip="' + csE(it.id) + '"' + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
+      + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b>' + (group ? ' <span class="cs-from">shared with ' + csE(group) + '</span>' : '') + '</button>'
+      + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':-1" aria-label="One fewer"' + (q <= 1 ? ' disabled' : '') + '>−</button>') + '×' + q
+      + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':1" aria-label="One more">+</button>') + '</span>'
+      + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
+      + (ro ? '' : '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Give it to the party loot (nobody\u2019s)">↩ To party loot</button>')
+      + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
+  }).join('');
+}
 function csLootClick(d, pc){
+  if (d.csLootclaim != null){
+    if (CS.readOnly) return true;
+    const id = d.csLootclaim, it = csPartyLoot().find(x => x.id === id); if (!it) return true;
+    const run = () => { const L = csLootRead(); const x = L.items.find(y => y.id === id); if (x){ x.assignedTo = pc.id; csLootWrite(L); } csRender(); };
+    if (typeof sktUndoable === 'function') sktUndoable(pc.name + ' claimed ' + it.name, run, { keys: [CS_LOOT_KEY] }); else run();
+    return true;
+  }
+  if (d.csLootqty != null){
+    if (CS.readOnly) return true;
+    const i = d.csLootqty.lastIndexOf(':'), id = d.csLootqty.slice(0, i), dn = +d.csLootqty.slice(i + 1);
+    const run = () => { const L = csLootRead(); const x = L.items.find(y => y.id === id); if (x){ x.qty = Math.max(1, (Math.max(1, +x.qty || 1)) + dn); csLootWrite(L); } csRender(); };
+    if (typeof sktUndoable === 'function') sktUndoable('Quantity', run, { keys: [CS_LOOT_KEY] }); else run();
+    return true;
+  }
   if (d.csLoottake == null && d.csLootback == null) return false;
   if (CS.readOnly) return true;
   const id = d.csLoottake != null ? d.csLoottake : d.csLootback;
@@ -1737,11 +1778,12 @@ function csLootClick(d, pc){
   const keys = { keys: ['skt-party-v1', 'skt-combat-v1', CS_LOOT_KEY] };
   if (d.csLootback != null){
     const run = () => { const L = csLootRead(); const x = L.items.find(y => y.id === id); if (x) x.assignedTo = null; csLootWrite(L); csRender(); };
-    if (typeof sktUndoable === 'function') sktUndoable('Gave back ' + it.name, run, { keys: [CS_LOOT_KEY] }); else run();
+    if (typeof sktUndoable === 'function') sktUndoable(it.name + ' to the party loot', run, { keys: [CS_LOOT_KEY] }); else run();
     return true;
   }
   const m = csLootAsItem(it);
-  csItemsEdit('Took ' + it.name + ' from the loot', l => {
+  if (d.csLootequip != null) m.equipped = true;
+  csItemsEdit((d.csLootequip != null ? 'Equipped ' : 'Took ') + it.name, l => {
     l.push(m);
     const L = csLootRead(); L.items = L.items.filter(y => y.id !== id); csLootWrite(L);
   }, keys);
@@ -1817,6 +1859,7 @@ function csInventoryClick(e, t, d, pc){
   return false;
 }
 function csInventoryChange(e, t, d, pc){
+  if (d.csLootequip != null){ if (t.checked) csLootClick({ csLoottake: d.csLootequip, csLootequip: d.csLootequip }, pc); return true; }
   if (d.csIn != null){ const i = +d.csIn, v = t.value; csItemsEdit(v ? 'Put in ' + v : 'Took out', l => { if (l[i]) { if (v) l[i].in = v; else delete l[i].in; } }); return true; }
   if (d.csEquip != null){ const i = +d.csEquip; csItemsEdit(t.checked ? 'Equipped' : 'Unequipped', l => { if (l[i]) l[i].equipped = t.checked; }); return true; }
   if (d.csAttune != null){

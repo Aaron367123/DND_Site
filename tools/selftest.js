@@ -8866,7 +8866,7 @@
       } catch(e){ ok('round 68 ran to completion', false, e.message); }
       finally { if (typeof csClose === 'function' && CS) csClose(); if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
-    // -- Round 69: each character's share of the party loot, on their sheet -----
+    // -- Round 69: claimed loot is the character's; the rest is the party's ----
     {
       const L0 = localStorage.getItem('skt-loot-v1'), p0 = localStorage.getItem('skt-party-v1');
       try {
@@ -8875,35 +8875,54 @@
         if (!L || !Array.isArray(L.items)) L = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
         L.tabGroups = (L.tabGroups || []).concat([{ id: 'grp_t', name: 'Front line', memberIds: [A.id, B && B.id].filter(Boolean) }]);
         L.items = (L.items || []).filter(x => !/^t_/.test(x.id)).concat([
-          { id: 't_pot', name: 'Potion of Climbing', qty: 1, value: '50 gp', weight: 0.5, assignedTo: A.id },
+          { id: 't_pot', name: 'Potion of Climbing', qty: 1, value: '75 gp', weight: 0.5, assignedTo: A.id },
           { id: 't_map', name: 'Old Map', qty: 2, value: '', weight: 1, assignedTo: A.id },
+          { id: 't_sword', name: 'Longsword', qty: 1, value: '15 gp', weight: 3, assignedTo: A.id },
           { id: 't_grp', name: 'Tent', qty: 1, value: '2 gp', weight: 20, assignedTo: 'grp_t' },
-          { id: 't_b', name: 'Lute', qty: 1, value: '35 gp', weight: 2, assignedTo: B ? B.id : 'nobody' }]);
+          { id: 't_b', name: 'Lute', qty: 1, value: '35 gp', weight: 2, assignedTo: B ? B.id : 'nobody' },
+          { id: 't_free', name: 'Silver Chalice', qty: 1, value: '25 gp', weight: 1, assignedTo: null }]);
         localStorage.setItem('skt-loot-v1', JSON.stringify(L)); if (panelDefs.loot) panelDefs.loot._loot = null;
         openCharSheet(A.id, { tab: 'inventory' }); await sleep(250);
+        for (let i = 0; i < 60 && !(CS.gear && CS.R); i++){ await sleep(100); }
+        csRender(); await sleep(30);
         const q = s => document.querySelector('#cs-root ' + s), qa = s => [...document.querySelectorAll('#cs-root ' + s)];
-        const names = () => qa('.cs-lootitem .cs-itemn b').map(b => b.textContent);
-        ok('loot: a character\'s sheet lists what the Loot tracker assigned them, and their group\'s', names().includes('Potion of Climbing') && names().includes('Old Map') && names().includes('Tent') && !names().includes('Lute'), names().join(', '));
-        const tentRow = qa('.cs-lootitem').find(r => /Tent/.test(r.textContent));
-        ok('loot: a group\'s item says it\'s shared, and has no Give back', /shared · Front line/.test(tentRow.textContent) && !tentRow.querySelector('[data-cs-lootback]'));
-        ok('loot: what they were given counts toward what they carry (not the group\'s)', /2\.5 lb of it party loot/.test(q('.cs-carry').textContent), q('.cs-carry').textContent);
-        q('[data-cs-lootback="t_map"]').click(); await sleep(40);
+        const mine = () => qa('.cs-inv:not(.cs-partyloot) .cs-lootitem .cs-itemn b').map(b => b.textContent);
+        const pile = () => qa('.cs-partyloot .cs-itemn b').map(b => b.textContent);
         const lootNow = () => JSON.parse(localStorage.getItem('skt-loot-v1')).items;
-        ok('loot: Give back unassigns it in the Loot tracker', lootNow().find(x => x.id === 't_map').assignedTo === null && !names().includes('Old Map'));
+        const carried = () => parseFloat((/Carrying\s*([\d.]+)/.exec(q('.cs-carry').textContent) || [])[1]);
+        ok('loot: what a character claimed is in their own inventory list', mine().includes('Potion of Climbing') && mine().includes('Old Map') && mine().includes('Tent') && !mine().includes('Lute')
+           && !!q('.cs-inv .cs-lootitem') && !/From the party/.test(q('.cs-pane').textContent), mine().join(', '));
+        ok('loot: a group\'s item says who it\'s shared with', /shared with Front line/.test(qa('.cs-lootitem').find(r => /Tent/.test(r.textContent)).textContent));
+        ok('loot: and every character sees the party loot nobody has claimed', pile().includes('Silver Chalice') && !pile().includes('Potion of Climbing') && !pile().includes('Tent'), pile().join(', '));
+        const c0 = carried();
+        q('[data-cs-lootback="t_map"]').click(); await sleep(40);
+        ok('loot: ↩ gives it to the party loot — off their list, into the pile', lootNow().find(x => x.id === 't_map').assignedTo === null && !mine().includes('Old Map') && pile().includes('Old Map'));
+        ok('loot: what they claimed counts toward what they carry', Math.abs((c0 - carried()) - 2) < 0.05, c0 + ' → ' + carried());
         sktUndo(); await sleep(40);
-        ok('loot: and Undo gives it to them again', lootNow().find(x => x.id === 't_map').assignedTo === A.id && names().includes('Old Map'));
+        ok('loot: Undo gives it back to them', lootNow().find(x => x.id === 't_map').assignedTo === A.id && mine().includes('Old Map'));
+        q('[data-cs-lootclaim="t_free"]').click(); await sleep(40);
+        ok('loot: Claim makes a party-loot item theirs', lootNow().find(x => x.id === 't_free').assignedTo === A.id && mine().includes('Silver Chalice') && !pile().includes('Silver Chalice'));
+        sktUndo(); await sleep(40);
+        q('[data-cs-lootqty="t_map:1"]').click(); await sleep(40);
+        ok('loot: + and − change the count in the Loot tracker', +lootNow().find(x => x.id === 't_map').qty === 3);
+        sktUndo(); await sleep(40);
         openPanel('loot'); await sleep(250);
-        q('[data-cs-loottake="t_pot"]').click(); await sleep(150);
+        const eq = q('[data-cs-lootequip="t_sword"]');
+        ok('loot: a weapon they claimed can be equipped', !!eq);
+        if (eq){ eq.checked = true; eq.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200); }
         const pc = () => state.party.find(p => p.id === A.id);
-        ok('loot: Take moves it off the party\'s list into their own inventory', !lootNow().some(x => x.id === 't_pot') && csItems(pc()).some(m => m.name === 'Potion of Climbing') && !names().includes('Potion of Climbing'));
-        ok('loot: and the Loot window, open beside it, drops it too', !panelDefs.loot._loot.items.some(x => x.id === 't_pot') && !/Potion of Climbing/.test(panelDefs.loot._body.innerHTML));
-        sktUndo(); await sleep(150);
-        ok('loot: Undo puts it back on the party\'s list and out of the inventory', lootNow().some(x => x.id === 't_pot') && !csItems(pc()).some(m => m.name === 'Potion of Climbing'));
-        ok('loot: the Loot window follows the Undo', !!panelDefs.loot._body && /Potion of Climbing/.test(panelDefs.loot._body.innerHTML));
+        ok('loot: equipping moves it into their own gear, equipped', !lootNow().some(x => x.id === 't_sword') && csItems(pc()).some(m => m.name === 'Longsword' && m.equipped !== false) && !mine().includes('Longsword'));
+        ok('loot: and the Loot window, open beside it, drops it', !panelDefs.loot._loot.items.some(x => x.id === 't_sword') && !/value="Longsword"/.test(panelDefs.loot._body.innerHTML));
+        sktUndo(); await sleep(200);
+        ok('loot: Undo puts it back in the Loot tracker and out of their gear', lootNow().some(x => x.id === 't_sword') && !csItems(pc()).some(m => m.name === 'Longsword' && m._fromLootTest));
+        ok('loot: the Loot window follows the Undo', !!panelDefs.loot._body && /value="Longsword"/.test(panelDefs.loot._body.innerHTML));
+        ok('loot: the Loot tracker calls the unclaimed pile Party loot, and the rest Claimed',
+           /Party loot/.test(panelDefs.loot._body.querySelector('[data-view="unassigned"]').textContent) && /Claimed/.test(panelDefs.loot._body.querySelector('[data-view="party"]').textContent)
+           && /Party loot/.test((panelDefs.loot._body.querySelector('.loot-assign option') || {}).textContent || ''));
         closePanel('loot');
         csClose();
-        if (B){ openCharSheet(A.id === B.id ? A.id : B.id, { tab: 'inventory' }); await sleep(150);
-          ok('loot: another character\'s sheet lists theirs, not the first one\'s', names().includes('Lute') && !names().includes('Old Map'));
+        if (B){ openCharSheet(B.id, { tab: 'inventory' }); await sleep(150);
+          ok('loot: another character\'s sheet has theirs, not the first one\'s, and the same party loot', mine().includes('Lute') && !mine().includes('Old Map') && pile().includes('Silver Chalice'));
           csClose(); }
       } catch(e){ ok('round 69 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
