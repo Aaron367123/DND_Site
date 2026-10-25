@@ -382,6 +382,10 @@ function paStartSearch(){
 }
 function paEndSearch(){ document.body.classList.remove('pa-searching'); }
 
+function paMoreWho(){
+  const pc = paPc(); if (!pc) return '';
+  return `<button class="pa-more-row" data-pa-swap="1">${typeof ICO === 'function' ? ICO('i-user') : ''}<span class="pa-more-text"><span class="pa-more-title">Playing ${paEsc(pc.name)}</span><span class="pa-more-sub">Change to a different character</span></span></button>`;
+}
 function paMoreScreen(){
   const camp = (typeof sktActiveCampaignName === 'function') ? sktActiveCampaignName() : '';
   const sync = document.getElementById('sync-status');
@@ -391,7 +395,7 @@ function paMoreScreen(){
     '<button class="pa-more-row" data-more="' + act + '">' + ico(icon)
     + '<span class="pa-more-text"><span class="pa-more-title">' + title + '</span>'
     + (sub ? '<span class="pa-more-sub">' + sub + '</span>' : '') + '</span></button>';
-  return '<div class="pa-card pa-more">'
+  return '<div class="pa-card pa-more">' + paMoreWho()
     + row('search', 'i-search', 'Search', 'Spells, monsters, items, rules')
     + row('settings', 'i-gear', 'Settings', 'Text size, theme and display')
     + '<div class="pa-more-row pa-more-static">' + ico('i-cloud')
@@ -603,8 +607,39 @@ function paHideTurnBanner(){
 }
 
 // ─── Screens ─────────────────────────────────────────────────────────────────
+// ─── You: the character sheet, open ──────────────────────────────────────────
+// The player's home screen is their full sheet — the same one the DM opens
+// from a party card, open in place with nothing to close. A player looks at
+// their own sheet nearly all evening; it was one tap away, behind a button at
+// the bottom of a summary screen that repeated half of it. What the phone
+// adds sits on top of it: the turn card in a fight, the roll card, the
+// concentration save, the reaction prompt.
+function paSheetHere(el){ return el.querySelector('.pa-sheet #cs-root'); }
+let paSheetStale = false;
+function paRenderSheet(el){
+  const pc = paPc();
+  if (!pc){ paUnmountCurrent(el); el.innerHTML = paPickerScreen(); return; }
+  const root = paSheetHere(el);
+  if (root && typeof CS !== 'undefined' && CS && CS.embed && CS.id === pc.id){
+    // Not while they're typing in it: a redraw from a sync would take the
+    // half-typed number and the focus with it. It catches up on blur.
+    const a = document.activeElement;
+    if (a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)){
+      if (!paSheetStale){ paSheetStale = true; a.addEventListener('blur', () => { paSheetStale = false; if (paTab === 'you') setTimeout(() => { try { csRender(); } catch(e){} }, 0); }, { once: true }); }
+      return;
+    }
+    csRender(); return;
+  }
+  paUnmountCurrent(el);
+  el.innerHTML = '<div class="pa-sheet"></div>';
+  if (typeof openCharSheet === 'function') openCharSheet(pc.id, { host: el.firstChild });
+  else el.innerHTML = paYouScreen();
+}
+
 function paRenderScreen(){
   const el = document.getElementById('pa-screen'); if (!el) return;
+  el.classList.toggle('pa-screen-sheet', paTab === 'you' && !!paPc());
+  if (paTab === 'you'){ paRenderSheet(el); return; }
   // Panels that are mounted into the screen keep their DOM between renders —
   // remounting the battle map on every HP tick would throw away its scroll,
   // its zoom and its canvases.
@@ -625,7 +660,6 @@ function paRenderScreen(){
   // map change was being applied and painted into nothing.
   paUnmountCurrent(el);
   el.innerHTML = '';
-  if (paTab === 'you')   { el.innerHTML = paYouScreen(); return; }
   if (paTab === 'more')  { el.innerHTML = paMoreScreen(); paWireMore(el); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
@@ -641,6 +675,7 @@ function paRenderScreen(){
 // The inverse of paMountPanel. Reads which panel is mounted off the DOM
 // rather than a variable, so it stays right even if a render is missed.
 function paUnmountCurrent(host){
+  if (host.querySelector('.pa-sheet') && typeof CS !== 'undefined' && CS && CS.embed && typeof csClose === 'function') csClose();
   const box = host.querySelector('.pa-mount');
   if (!box) return;
   if (box.dataset.paMount === 'map' && paMapObs){ paMapObs.disconnect(); paMapObs = null; }

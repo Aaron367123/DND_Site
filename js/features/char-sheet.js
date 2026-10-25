@@ -39,23 +39,27 @@ const CS_SKILLS = {
 };
 
 // ── Opening and closing ──────────────────────────────────────────────────────
+// opts.host: open IN that element rather than over the page — the player
+// app's You tab, where the sheet is the screen and there is nothing to close.
 function openCharSheet(id, opts){
   opts = opts || {};
   const pc = (state.party || []).find(p => p.id === id); if (!pc) return;
   document.getElementById('cs-root')?.remove();
+  const host = opts.host || null;
   // A player may change only their own character.
   const mine = typeof paMe === 'function' ? paMe().pcId === id : true;
   const isPlayer = document.body.classList.contains('player-mode');
   const narrow = window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
-  CS = { id, tab: opts.tab || (narrow ? 'abilities' : 'actions'), mode: 'normal', readOnly: isPlayer && !mine, log: [], R: null, open: {}, q: '' };
+  CS = { id, tab: opts.tab || (narrow ? 'abilities' : 'actions'), mode: 'normal', readOnly: isPlayer && !mine, log: [], R: null, open: {}, q: '', embed: !!host };
   const root = document.createElement('div');
-  root.id = 'cs-root'; root.className = 'cb cs';
-  root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Character sheet');
-  document.body.appendChild(root);
+  root.id = 'cs-root'; root.className = 'cb cs' + (host ? ' cs-embed' : '');
+  if (!host){ root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); }
+  root.setAttribute('aria-label', 'Character sheet');
+  (host || document.body).appendChild(root);
   root.addEventListener('click', csOnClick);
   root.addEventListener('change', csOnChange);
   root.addEventListener('input', csOnInput);
-  document.addEventListener('keydown', csOnKey);
+  if (!host) document.addEventListener('keydown', csOnKey);
   csRender();
   // The rules data, for spell details and for working a built character out
   // again. The sheet draws without it.
@@ -66,6 +70,10 @@ function csClose(){
   document.getElementById('cs-root')?.remove();
   document.removeEventListener('keydown', csOnKey);
   CS = null;
+  // In the player app the You tab IS a sheet, and there is one CS: a party-
+  // mate's sheet opened over it replaced it, and Level up / Edit close it to
+  // open the builder. Either way the player's own comes back after.
+  if (typeof paRender === 'function' && document.body.classList.contains('player-app')) setTimeout(paRender, 0);
 }
 function csOnKey(e){ if (e.key === 'Escape' && CS) csClose(); }
 function csPc(){ return CS ? (state.party || []).find(p => p.id === CS.id) || null : null; }
@@ -84,7 +92,8 @@ function csRender(){
   root.innerHTML = csHead(pc) + '<div class="cs-body"><aside class="cs-side" data-cs-scroll="side">' + csSide(pc) + '</aside>'
     + '<div class="cs-main" data-cs-scroll="main">' + (CS.customize && !CS.readOnly ? csCustomizeHtml(pc) : '')
     + (CS.textOut ? '<div class="cs-textout"><div class="cs-textout-h"><b>Copy this text</b><span class="cb-dim">The browser didn’t allow copying it for you.</span><button class="btn small" data-cs="closetext">Done</button></div>'
-      + '<textarea data-cs-textout rows="12" readonly>' + csE(CS.textOut) + '</textarea></div>' : '') + csTop(pc)
+      + '<textarea data-cs-textout rows="12" readonly>' + csE(CS.textOut) + '</textarea></div>' : '')
+    + (CS.embed && !CS.readOnly && typeof paEconHtml === 'function' ? paEconHtml() : '') + csTop(pc)
     + '<nav class="cs-tabs">' + CS_TABS.map(t => '<button class="cs-tab' + (t.phone ? ' cs-phone' : '') + (CS.tab === t.id ? ' on' : '') + '" data-cs-tab="' + t.id + '">' + t.label + '</button>').join('') + '</nav>'
     + '<div class="cs-pane">' + (CS_TAB_RENDER[CS.tab] || (() => ''))(pc) + '</div></div></div>';
   keep.forEach(([k, t]) => { const e = root.querySelector('[data-cs-scroll="' + k + '"]'); if (e) e.scrollTop = t; });
@@ -151,9 +160,9 @@ function csHead(pc){
       + '<button role="menuitem" data-cs="print"><b>PDF character sheet</b><small>Opens the print dialog — choose “Save as PDF”, or print it</small></button>'
       + '<button role="menuitem" data-cs="export"><b>Character file (.json)</b><small>To bring the character into another campaign</small></button>'
       + '<button role="menuitem" data-cs="copytext"><b>Copy as text</b><small>The numbers and lists, to paste into a chat or a note</small></button></div>' : '')
-    + '</span></div>'
+    + '</span>' + (CS.embed ? '<button class="btn" data-pa-swap="1" title="Play a different character">⇄ Change character</button>' : '') + '</div>'
     + '<button class="cs-headmore" data-cs="headmenu" aria-haspopup="true" aria-expanded="' + !!CS.headMenu + '" aria-label="Sheet menu">⋯</button>'
-    + '<button class="cb-x" data-cs="close" aria-label="Close">✕</button>'
+    + (CS.embed ? '' : '<button class="cb-x" data-cs="close" aria-label="Close">✕</button>')
     + (CS.headMenu ? csHeadMenuHtml(pc, ready) : '') + '</div>';
 }
 // The phone's sheet menu: everything the header's row of buttons does, as a
@@ -166,6 +175,7 @@ function csHeadMenuHtml(pc, ready){
     + (!ro && built && typeof openCharBuilder === 'function' ? item('levelup', '⬆', 'Level up' + (ready ? ' — ready' : ''), (pc.build.level || 1) >= 20 ? ' disabled' : '') + item('edit', '✎', 'Edit') : '')
     + (!ro && built ? item('customize', '⚙', 'Customize') : '')
     + item('print', '🖨', 'PDF / print') + item('export', '⤓', 'Character file') + item('copytext', '📋', 'Copy as text')
+    + (CS.embed ? '<button role="menuitem" data-pa-swap="1"><span class="cs-hm-i">⇄</span>Play a different character</button>' : '')
     + '</div>';
 }
 
@@ -180,7 +190,13 @@ function csTop(pc){
   // Hit points.
   h += '<div class="cs-hp"' + (sh.hpDetail ? ' title="Maximum: ' + csE(sh.hpDetail) + '"' : '') + '><div class="cs-hp-n"><b>' + hp + '</b><span>/ ' + max + '</span>'
     + (pc.tempHp > 0 ? '<i title="Temporary hit points">+' + pc.tempHp + ' temp</i>' : '') + '</div>'
-    + '<div class="cs-hpbar"><i style="width:' + pct + '%"></i></div>'
+    + (() => {
+      // A lowered maximum (a wraith's touch): the bar is measured against the
+      // normal maximum with the part taken striped, and it says so in words.
+      const g = typeof sktHpBarParts === 'function' ? sktHpBarParts(pc) : null, loss = typeof sktMaxHpLoss === 'function' ? sktMaxHpLoss(pc) : 0;
+      return '<div class="cs-hpbar"><i style="width:' + (g && g.loss ? g.pct : pct) + '%"></i>' + (g && g.loss ? '<b class="cs-hp-lost" style="width:' + g.lostPct + '%"></b>' : '') + '</div>'
+        + (loss ? '<div class="cs-hp-loss">Max HP lowered by ' + loss + ' until a long rest (normally ' + pc.hpMaxNormal + ')' + (pc.hpMaxNote ? ' — ' + csE(pc.hpMaxNote) : '') + '</div>' : '');
+    })()
     + (ro ? '' : '<div class="cs-hp-ctl"><input type="number" min="0" data-cs-amt value="' + (CS.amt || 5) + '" aria-label="Amount">'
       + '<button class="btn" data-cs-hp="-1">Damage</button><button class="btn" data-cs-hp="1">Heal</button><button class="btn" data-cs-hp="temp">Temp</button>'
       + '<select class="cb-sel" data-cs-dtype aria-label="Damage type"><option value="">type…</option>' + ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
@@ -199,15 +215,22 @@ function csTop(pc){
   h += csStatesHtml(pc);
   // Conditions, exhaustion, concentration, death saves.
   h += '<div class="cs-state">'
-    + conds.map(c => '<span class="cs-chip">' + csE(c) + (ro ? '' : '<button data-cs-cond="' + csE(c) + '" aria-label="Remove ' + csE(c) + '">×</button>') + '</span>').join('')
+    + conds.map(c => '<span class="cs-chip"><button class="cs-chip-n" data-cs-condinfo="' + csE(c) + '" aria-expanded="' + (CS.condOpen === c) + '" title="What ' + csE(c) + ' does">' + csE(c) + '</button>' + (ro ? '' : '<button data-cs-cond="' + csE(c) + '" aria-label="Remove ' + csE(c) + '">×</button>') + '</span>').join('')
     + (ro ? '' : '<select class="cb-sel cs-addcond" data-cs-addcond><option value="">+ Condition</option>' + CS_CONDITIONS.filter(c => !conds.includes(c)).map(c => '<option>' + c + '</option>').join('') + '</select>')
-    + '<span class="cs-exh">Exhaustion ' + (ro ? '' : '<button class="btn small" data-cs-exh="-1" aria-label="Less exhaustion">−</button>') + '<b>' + (+pc.exhaustion || 0) + '</b>' + (ro ? '' : '<button class="btn small" data-cs-exh="1" aria-label="More exhaustion">+</button>') + '</span>'
+    + '<span class="cs-exh">' + (+pc.exhaustion > 0 ? '<button class="cs-chip-n" data-cs-condinfo="Exhaustion" aria-expanded="' + (CS.condOpen === 'Exhaustion') + '" title="What exhaustion does">Exhaustion</button> ' : 'Exhaustion ') + (ro ? '' : '<button class="btn small" data-cs-exh="-1" aria-label="Less exhaustion">−</button>') + '<b>' + (+pc.exhaustion || 0) + '</b>' + (ro ? '' : '<button class="btn small" data-cs-exh="1" aria-label="More exhaustion">+</button>') + '</span>'
     + (csEffectLine(pc) ? '<span class="cs-fx">' + csE(csEffectLine(pc)) + '</span>' : '')
     + (pc.rage ? '<span class="cs-chip conc">Raging' + (ro ? '' : '<button data-cs="endrage" aria-label="End the rage">×</button>') + '</span>' : '')
     + (pc.wildshape && pc.wildshape.name ? '<span class="cs-chip conc">Wild Shape: ' + csE(pc.wildshape.name) + ' ' + (pc.wildshape.hp ?? '') + '/' + (pc.wildshape.hpMax ?? '') + ' HP' + (ro ? '' : '<button data-cs="endwild" aria-label="End Wild Shape">×</button>') + '</span>' : '')
     + (pc.hitDice && pc.hitDice.max ? '<span class="cs-hd">Hit dice <b>' + Math.max(0, pc.hitDice.current ?? pc.hitDice.max) + '/' + pc.hitDice.max + '</b> ' + csE((pc.sheet && pc.sheet.hitDiceByClass) || pc.hitDice.dieType || '') + '</span>' : '')
     + (pc.concentration ? '<span class="cs-chip conc">Concentrating: ' + csE(pc.concentration) + (ro ? '' : '<button data-cs="dropconc" aria-label="Drop concentration">×</button>') + '</span>' : '')
     + '</div>';
+  // "Prone" told you that you were prone; the rule is a tap on the chip.
+  const exhOpen = CS.condOpen === 'Exhaustion' && +pc.exhaustion > 0;
+  if (CS.condOpen && (conds.includes(CS.condOpen) || exhOpen)){
+    const d = typeof paConditionEntry === 'function' ? paConditionEntry(CS.condOpen) : null;
+    h += '<div class="cs-conddet"><div class="cs-conddet-h"><b>' + csE(CS.condOpen) + (exhOpen ? ' <span class="cb-dim">Level ' + (+pc.exhaustion) + ' of 6</span>' : '') + '</b><button class="cb-x" data-cs-condinfo="' + csE(CS.condOpen) + '" aria-label="Close">✕</button></div>'
+      + (d && typeof renderConditionFull === 'function' ? renderConditionFull(d) : '<p class="cb-dim">' + (typeof _5eLoaded !== 'undefined' && _5eLoaded ? 'No rules entry for this one.' : 'Loading the rules…') + '</p>') + '</div>';
+  }
   if (hp <= 0 && max > 0){
     const ds = hold.deathSaves || { success: 0, fail: 0 };
     const pips = (k) => [0, 1, 2].map(n => '<i class="' + ((ds[k] || 0) > n ? 'on' : '') + '"></i>').join('');
@@ -440,6 +463,8 @@ function csRollD20(label, mod, ev, kind){
                fx._lucky ? 'Lucky: rerolled a 1' : '',
                /^save:/.test(kind || '') ? ((pcNow.sheet || {}).saveMods || []).filter(m => m.abs.includes('all') || m.abs.includes(kind.slice(5))).map(m => 'check: ' + m.text.replace(/^Advantage on /, 'advantage on ') + ' (' + m.src + ')').join('; ') : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : ''].filter(Boolean).join('; ');
   const r = { kind: 'd20', label, mod: mod - fx.bonus, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod + extraSum, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail, kindTag: kind || null };
+  // A weapon attack is the Attack action (the player app's turn card).
+  if (CS.embed && /^attack(:str)?$/.test(kind || '') && typeof paMarkEcon === 'function' && paMarkEcon('action')) save();
   csLog(r);
   // The party card's own strip shows the DM the same roll.
   const pc = csPc();
@@ -481,7 +506,9 @@ function csRollDamage(label, expr, crit, opts){
 }
 function csLog(r){
   CS.log.unshift(r); CS.log = CS.log.slice(0, 8);
-  if (typeof showToast === 'function') showToast(csRollPlain(r));
+  // On the player's screen a result goes on the roll card above the tab bar.
+  if (CS.embed && typeof paShowRoll === 'function') paShowRoll(csRollCard(r));
+  else if (typeof showToast === 'function') showToast(csRollPlain(r));
   const pc = csPc();
   if (pc && !CS.readOnly) sktKeepRoll(pc, csRollPlain(r).replace(/^[^:]*: /, ''), r);
 }
@@ -495,6 +522,15 @@ function csRollPlain(r){
   return r.label + ': ' + r.total + ' (d20 ' + r.rolls.join(' / ') + (r.mod ? ' ' + csSigned(r.mod) : '') + (r.mode !== 'normal' ? ', ' + (r.mode === 'adv' ? 'advantage' : 'disadvantage') : '') + ')'
     + (r.crit ? ' — natural 20' : r.fumble ? ' — natural 1' : '') + (r.why ? ' [' + r.why + ']' : '');
 }
+function csRollCard(r){
+  const cls = r.crit ? ' crit' : r.fumble || r.autoFail ? ' fumble' : '';
+  if (r.kind === 'dmg') return '<div class="pa-roll-in' + cls + '"><span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-dmg">' + r.total
+    + '<i> ' + csE(r.type || '') + '</i></span><span class="pa-roll-d">' + csE(r.detail || '') + '</span></div>';
+  return '<div class="pa-roll-in' + cls + '"><span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-hit">' + (r.autoFail ? 'Fails' : r.total) + '</span>'
+    + '<span class="pa-roll-d">d20 ' + csE((r.rolls || []).join(' / ')) + (r.mod ? ' ' + csSigned(r.mod) : '') + (r.mode && r.mode !== 'normal' ? ' (' + (r.mode === 'adv' ? 'advantage' : 'disadvantage') + ')' : '') + '</span>'
+    + (r.crit ? '<span class="pa-roll-tag">nat 20</span>' : r.fumble ? '<span class="pa-roll-tag">nat 1</span>' : '')
+    + (r.why ? '<span class="pa-roll-why">' + csE(r.why) + '</span>' : '') + '</div>';
+}
 function csRollText(r){
   return '<b class="cs-last-n' + (r.crit ? ' crit' : r.fumble ? ' fumble' : '') + '">' + r.total + '</b> ' + csE(csRollPlain(r).replace(/^[^:]*: \d+ ?/, r.label + ' '));
 }
@@ -506,14 +542,22 @@ const CS_TAB_RENDER = {};
 CS_TAB_RENDER.abilities = pc => '<div class="cs-side-tab">' + csSide(pc) + '</div>';
 CS_TAB_RENDER.actions = pc => {
   const sh = pc.sheet || {}, ro = CS.readOnly;
-  const atks = (sh.attacks || []).filter(a => a && a.name);
+  // Two daggers are one row, "Dagger ×2": the sheet lists each weapon carried,
+  // and identical rows read like a mistake. The first one's index rolls.
+  const atks = [];
+  (sh.attacks || []).forEach((a, i) => {
+    if (!a || !a.name) return;
+    const k = [a.name, a.atkBonus || '', a.damage || '', a.versatile || ''].join('|').toLowerCase();
+    const same = atks.find(x => x.k === k);
+    if (same) same.n++; else atks.push(Object.assign({}, a, { k, i, n: 1 }));
+  });
   let h = '<div class="cs-asec" data-k="attack"><h4>Attacks' + (sh.attacksPerAction > 1 ? ' <span class="cb-dim">' + sh.attacksPerAction + ' per Attack action</span>' : '') + '</h4>';
   h += atks.length ? '<div class="cs-atks"><div class="cs-atk cs-atk-h"><span>Name</span><span>Hit / DC</span><span>Damage</span><span>Notes</span></div>'
-    + atks.map((a, i) => '<div class="cs-atk"><b>' + csE(a.name) + '</b>'
+    + atks.map(a => { const i = a.i; return '<div class="cs-atk"><b>' + csE(a.name) + (a.n > 1 ? ' <span class="cs-atk-x">×' + a.n + '</span>' : '') + '</b>'
       + (/^[+-]?\d+$/.test(String(a.atkBonus || '').trim()) ? '<button class="btn small" data-cs-atk="' + i + '">' + csE(a.atkBonus) + '</button>' : '<span>' + csE(a.atkBonus || '') + '</span>')
       + (a.damage ? '<span class="cs-dmgs"><button class="btn small" data-cs-dmg="' + i + '">' + csE(a.damage) + '</button>'
         + (a.versatile ? '<button class="btn small" data-cs-dmg2="' + i + '" title="Two-handed">' + csE(a.versatile) + '</button>' : '') + '</span>' : '<span></span>')
-      + '<span class="cb-dim">' + csE([a.mastery ? 'Mastery: ' + a.mastery : '', a.range ? a.range + ' ft' : '', (a.props || []).includes('A') ? csAmmoLeft(pc, a) : ''].filter(Boolean).join(' · ')) + '</span></div>').join('') + '</div>'
+      + '<span class="cb-dim">' + csE([a.mastery ? 'Mastery: ' + a.mastery : '', a.range ? a.range + ' ft' : '', (a.props || []).includes('A') ? csAmmoLeft(pc, a) : ''].filter(Boolean).join(' · ')) + '</span></div>'; }).join('') + '</div>'
     : '<div class="cb-dim">No attacks recorded.</div>';
   // Levelled spells that attack or call for a save, as D&D Beyond lists them.
   const spl = [...new Set(sh.spells || [])].map(n => csSpell(n)).filter(s => s && s.level > 0 && ((s.spellAttack || []).length || (s.savingThrow || []).length) && csSpellDamage(s, s.level));
@@ -829,7 +873,7 @@ function csOnClick(e){
     if (d.csHp === 'temp') return csEdit('Temp HP ' + n, p => { p.tempHp = Math.max(p.tempHp || 0, n); });
     const i = csIdx(), sign = +d.csHp, type = sign < 0 ? (CS.dtype || null) : null;
     // Hurt while concentrating: a CON save to keep it, DC 10 or half the damage.
-    if (sign < 0 && pc.concentration) CS.conc = { dc: Math.max(10, Math.floor(n / 2)), spell: pc.concentration };
+    if (sign < 0 && pc.concentration && !CS.embed) CS.conc = { dc: Math.max(10, Math.floor(n / 2)), spell: pc.concentration };
     const run = () => { panelDefs.party._applyHpDelta(i, sign * n, type); csCommit(); };
     if (typeof sktUndoable === 'function') return sktUndoable((sign < 0 ? 'Took ' : 'Healed ') + n, run);
     return run();
@@ -848,6 +892,7 @@ function csOnClick(e){
     if (typeof showToast === 'function') showToast(pc.name + ' keeps concentrating on ' + c.spell);
     return csRender();
   }
+  if (d.csCondinfo != null){ CS.condOpen = CS.condOpen === d.csCondinfo ? null : d.csCondinfo; return csRender(); }
   if (d.csCond) return csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), d.csCond));
   if (d.csExh) return csEdit('Exhaustion', p => { p.exhaustion = Math.max(0, Math.min(6, (+p.exhaustion || 0) + (+d.csExh))); });
   if (d.cs === 'death'){
@@ -871,6 +916,7 @@ function csOnClick(e){
     csEdit('Used ' + a.name, p => {
       const r = (p.resources || []).find(x => x.name === a.resource);
       if (r) r.current = Math.max(0, (r.current || 0) - (a.amount || 1));
+      if (CS.embed && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(a.action));
     });
     if (rage && panelDefs.party && panelDefs.party._setRage){ panelDefs.party._setRage(csIdx(), true); csRender(); }
     return;
@@ -1247,12 +1293,31 @@ function csRecoveryBudget(pc){
   const lvl = csClassLevel(pc, /Arcane/.test(r.name) ? 'wizard' : 'druid') || pc.level || 1;
   return { res: r, budget: Math.ceil(lvl / 2) };
 }
+const csRecUsed = pick => Object.keys(pick || {}).reduce((s, l) => s + l * pick[l], 0);
+function csRecSuggest(pc, budget){
+  const slots = (pc.sheet && pc.sheet.spellSlots) || {}, pick = {}; let left = budget;
+  Object.keys(slots).map(Number).filter(l => l >= 1 && l < 6).sort((a, b) => b - a).forEach(l => {
+    let n = 0; while (n < (slots[l].expended || 0) && left >= l){ n++; left -= l; }
+    if (n) pick[l] = n;
+  });
+  return pick;
+}
 function csSlotToolsHtml(pc, lvls, slots){
   let h = '';
   const rec = csRecoveryBudget(pc);
   const spent = lvls.filter(l => l < 6 && (slots[l].expended || 0) > 0);
-  if (rec && spent.length) h += '<div class="cs-slottool"><b>' + csE(rec.res.name) + '</b> <span class="cb-dim">get back slots worth up to ' + rec.budget + ' levels (none 6th or higher), once a day after a short rest</span>'
-    + '<button class="btn small" data-cs="recover">Recover slots</button></div>';
+  if (rec && spent.length && !CS.recPick) h += '<div class="cs-slottool"><b>' + csE(rec.res.name) + '</b> <span class="cb-dim">get back slots worth up to ' + rec.budget + ' levels (none 6th or higher), once a day after a short rest</span>'
+    + '<button class="btn small" data-cs="recover">Recover slots…</button></div>';
+  // Which slots: a 3rd, or a 2nd and a 1st. Starts on the highest-first pick.
+  if (rec && spent.length && CS.recPick){
+    const used = csRecUsed(CS.recPick), left = rec.budget - used;
+    h += '<div class="cs-slottool cs-rec"><div class="cs-rec-h"><b>' + csE(rec.res.name) + '</b> <span class="cb-dim">up to <b>' + rec.budget + '</b> levels · <b>' + left + '</b> left</span></div>'
+      + spent.map(l => { const n = CS.recPick[l] || 0, sp = slots[l].expended || 0;
+          return '<div class="cs-rec-row"><span>' + CS_ORD[l] + ' <i class="cb-dim">' + sp + ' spent</i></span>'
+            + '<button class="cs-rec-b" data-cs-recstep="' + l + ':-1" aria-label="One fewer"' + (n ? '' : ' disabled') + '>−</button><b>' + n + '</b>'
+            + '<button class="cs-rec-b" data-cs-recstep="' + l + ':1" aria-label="One more"' + (n < sp && left >= l ? '' : ' disabled') + '>+</button></div>'; }).join('')
+      + '<div class="cs-rec-f"><button class="btn small" data-cs="reccancel">Cancel</button><button class="btn small primary" data-cs="recgo"' + (used ? '' : ' disabled') + '>Recover ' + (used ? used + ' level' + (used === 1 ? '' : 's') : '') + '</button></div></div>';
+  }
   const sp = (pc.resources || []).find(x => x.name === 'Sorcery Points');
   if (sp){
     const toPts = lvls.filter(l => (slots[l].total - (slots[l].expended || 0)) > 0);
@@ -1327,15 +1392,28 @@ function csSpellsClick(e, t, d, pc){
   if (CS.readOnly) return false;
   if (d.cs === 'recover'){
     const rec = csRecoveryBudget(pc); if (!rec) return true;
+    CS.recPick = csRecSuggest(pc, rec.budget); csRender(); return true;
+  }
+  if (d.cs === 'reccancel'){ CS.recPick = null; csRender(); return true; }
+  if (d.csRecstep){
+    const rec = csRecoveryBudget(pc); if (!rec || !CS.recPick) return true;
+    const [l, dd] = d.csRecstep.split(':').map(Number), s = (pc.sheet.spellSlots || {})[l]; if (!s) return true;
+    const pick = Object.assign({}, CS.recPick), n = (pick[l] || 0) + dd;
+    if (n < 0 || n > (s.expended || 0) || (dd > 0 && csRecUsed(pick) + l > rec.budget)) return true;
+    if (n) pick[l] = n; else delete pick[l];
+    CS.recPick = pick; csRender(); return true;
+  }
+  if (d.cs === 'recgo'){
+    const rec = csRecoveryBudget(pc), pick = CS.recPick; if (!rec || !pick) return true;
+    const used = csRecUsed(pick); if (!used || used > rec.budget) return true;
+    CS.recPick = null;
     csEdit(rec.res.name, p => {
-      let left = rec.budget;
-      // Highest slots first: the most a day's recovery can give back.
-      Object.keys(p.sheet.spellSlots).map(Number).filter(l => l < 6).sort((a, b) => b - a).forEach(l => {
-        const s = p.sheet.spellSlots[l];
-        while ((s.expended || 0) > 0 && left >= l){ s.expended -= 1; left -= l; }
-      });
+      Object.keys(pick).forEach(l => { const s = p.sheet.spellSlots[l]; if (s && +l < 6) s.expended = Math.max(0, (s.expended || 0) - pick[l]); });
       const r = p.resources.find(x => x.name === rec.res.name); if (r) r.current = Math.max(0, (r.current || 0) - 1);
     });
+    const got = Object.keys(pick).map(Number).sort((a, b) => b - a).map(l => (pick[l] > 1 ? pick[l] + ' × ' : '') + CS_ORD[l]).join(', ');
+    if (CS.embed && typeof paShowRoll === 'function') paShowRoll('<div class="pa-roll-in"><span class="pa-roll-l">' + csE(rec.res.name) + '</span><span class="pa-roll-hit">' + used + '<i> levels back</i></span><span class="pa-roll-d">' + csE(got) + '</span></div>');
+    else if (typeof showToast === 'function') showToast(rec.res.name + ': ' + got + ' back');
     return true;
   }
   if (d.cs === 'font2pts' || d.cs === 'font2slot'){
@@ -1392,6 +1470,8 @@ function csSpellsClick(e, t, d, pc){
       }
       const tg = ((p.sheet || {}).states || []).find(x => x.spell === name && !x.conc);
       if (tg) p.active = Object.assign({}, p.active, { [tg.key]: true });
+      const t = s && [].concat(s.time || [])[0];
+      if (CS.embed && t && how !== 'ritual' && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(t.unit));
     });
     if (typeof showToast === 'function') showToast('Cast ' + name + (/^\d+$/.test(how) && +how > 0 ? ' (' + CS_ORD[+how] + ' slot)' : how === 'ritual' ? ' as a ritual' : how === 'free' ? ' (free use)' : how === 'arcanum' ? ' (Mystic Arcanum)' : ''));
     return true;

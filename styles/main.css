@@ -5701,3 +5701,25 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 .pa-rec-b:disabled { opacity:.35; cursor:default; }
 .pa-rec-n { min-width:20px; text-align:center; font-size:var(--fs-lg); font-variant-numeric:tabular-nums; }
 .pa-rec-go { margin-top:4px; min-height:44px; }
+/* The sheet as the player's home screen: in the screen, not over the page.
+   It scrolls itself (cs-body / cs-main), so the screen around it doesn't. */
+.pa-screen.pa-screen-sheet { overflow:hidden; display:flex; flex-direction:column; }
+.pa-sheet { flex:1; min-height:0; display:flex; flex-direction:column; }
+#cs-root.cs-embed { position:relative; inset:auto; z-index:auto; flex:1; min-height:0; }
+#cs-root.cs-embed .pa-econ { margin:10px 12px 0; }
+/* Arcane / Natural Recovery on the sheet: pick the slots */
+.cs-rec { display:flex; flex-direction:column; gap:6px; align-items:stretch; }
+.cs-rec-row { display:flex; align-items:center; gap:10px; padding:3px 0; border-bottom:1px solid var(--border); }
+.cs-rec-row > span { flex:1; }
+.cs-rec-row > b { min-width:18px; text-align:center; font-variant-numeric:tabular-nums; }
+.cs-rec-b { width:40px; height:36px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--panel-2); color:var(--text); font:inherit; font-size:var(--fs-lg); cursor:pointer; }
+.cs-rec-b:disabled { opacity:.35; cursor:default; }
+.cs-rec-f { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+/* Sheet: a lowered maximum, a condition's rule, a weapon carried twice */
+.cs-hpbar { position:relative; }
+.cs-hp-lost { position:absolute; right:0; top:0; bottom:0; background:repeating-linear-gradient(135deg, var(--danger) 0 4px, transparent 4px 8px); opacity:.7; }
+.cs-hp-loss { margin-top:6px; font-size:var(--fs-sm); color:var(--danger); }
+.cs-chip-n { background:none; border:none; padding:0; color:inherit; font:inherit; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+.cs-conddet { margin:8px 0; padding:10px 12px; border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:var(--r-md); background:var(--panel-2); font-size:var(--fs-md); line-height:1.5; }
+.cs-conddet-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+.cs-atk-x { font-weight:400; color:var(--text-muted); font-size:.9em; }

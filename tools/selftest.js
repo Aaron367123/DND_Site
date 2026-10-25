@@ -8797,6 +8797,25 @@
       } catch(e){ ok('round 63 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
+    // -- Round 67: two light weapons on one inventory line still give the off-hand attack
+    {
+      try {
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.build.cls = 'Barbarian'; CB.build.level = 5; cbQuickBuild();
+        const R = CB.R, b = JSON.parse(JSON.stringify(CB.build));
+        cbClose();
+        const names = bb => sktComputeCharacter(bb, R, null).sheet.attacks.map(a => a.name);
+        const kit = names(b);
+        const b2 = JSON.parse(JSON.stringify(b));
+        b2.items = sktKitItems(b2, R, null); b2.equipment = Object.assign({}, b2.equipment, { materialized: true });
+        const inv = names(b2);
+        ok('off-hand: the kit\'s four handaxes give a Handaxe (off-hand) attack', kit.includes('Handaxe (off-hand)'), kit.join(', '));
+        ok('off-hand: still there once the kit is an inventory ("Handaxe ×4" on one line)', inv.includes('Handaxe (off-hand)') && (b2.items.find(m => m.name === 'Handaxe') || {}).qty >= 2, inv.join(', '));
+        const b3 = JSON.parse(JSON.stringify(b2)); b3.items = b3.items.map(m => m.name === 'Handaxe' ? Object.assign({}, m, { qty: 1 }) : m);
+        ok('off-hand: and gone with only one light weapon left', !names(b3).includes('Handaxe (off-hand)'), names(b3).join(', '));
+      } catch(e){ ok('round 67 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -9538,7 +9557,7 @@
            css.indexOf('body.player-mode .float-toolbar{display:none !important}') >= 0);
       }
 
-      // ── A lowered maximum HP, on the player's own screen ──────────────────
+      // ── A lowered maximum HP, on the player's own sheet ───────────────────
       {
         const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
         const pi = (state.party || []).findIndex(p => p.hpMax > 10);
@@ -9547,11 +9566,11 @@
           if (p0){
             state.party[pi] = sktReduceMaxHp(state.party[pi], 6, 'Life Drain');
             if (typeof syncPartyToCombat === 'function') syncPartyToCombat(pi);
-            paSetPc(p0.id); paTab = 'you'; paRender();
-            const line = document.querySelector('.pa-hp-loss');
-            ok('player: a lowered max HP is explained on the You screen',
+            paSetPc(p0.id); paTab = 'you'; paRender(); await sleep(60);
+            const line = document.querySelector('#pa-screen #cs-root .cs-hp-loss');
+            ok('player: a lowered max HP is explained on their sheet',
                !!line && /lowered by 6/.test(line.textContent) && /long rest/.test(line.textContent) && /Life Drain/.test(line.textContent));
-            ok('player: and the bar shows the part that was taken', !!document.querySelector('.pa-hp-bar .pa-hp-lost'));
+            ok('player: and the bar shows the part that was taken', !!document.querySelector('#pa-screen #cs-root .cs-hpbar .cs-hp-lost'));
           }
         } catch(e){ ok('player: the max HP checks ran to completion', false, e.message); }
         finally {
@@ -9560,53 +9579,53 @@
           paRender();
         }
       }
-      // ── The player's own bookkeeping ──────────────────────────────────────
+      // ── The player's own bookkeeping, on their sheet ──────────────────────
       {
         const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        const q = sel => document.querySelector('#pa-screen #cs-root ' + sel), qa = sel => [...document.querySelectorAll('#pa-screen #cs-root ' + sel)];
         try {
           const i = state.party.findIndex(p => p.sheet && p.sheet.spellSlots && Object.keys(p.sheet.spellSlots).length && (p.resources || []).length);
           if (i >= 0){
             state.party[i] = { ...state.party[i], exhaustion: 2, hp: Math.max(1, (state.party[i].hpMax || 20) - 15), concentration: null,
               hitDice: { current: 3, max: 6, dieType: 'd8' } };
             save();
-            paSetPc(state.party[i].id); paTab = 'you'; paRender();
+            paSetPc(state.party[i].id); paTab = 'you'; paRender(); await sleep(60);
             const P = () => state.party[i];
+            q('[data-cs-tab="actions"]').click(); await sleep(30);
             const r0 = P().resources[0].current;
-            const lit = document.querySelector('[data-pa-res="0"]:not(.off)');
-            ok('player: a resource pip is a button', !!lit);
-            lit && lit.click(); await sleep(15);
-            ok('player: tapping a lit pip spends one, and only one', P().resources[0].current === r0 - 1);
-            document.querySelector('[data-pa-res="0"].off').click(); await sleep(15);
+            const lit = qa('[data-cs-res^="0:"].on').pop();
+            ok('player: a resource pip is a button', !!lit && lit.tagName === 'BUTTON');
+            lit && lit.click(); await sleep(20);
+            ok('player: tapping a lit pip spends one, and only one', P().resources[0].current === r0 - 1, P().resources[0].current + ' vs ' + r0);
+            q('[data-cs-res="0:' + (r0 - 1) + '"]').click(); await sleep(20);
             ok('player: tapping an empty pip gives one back', P().resources[0].current === r0);
+            q('[data-cs-tab="spells"]').click(); await sleep(30);
             const lvl = Object.keys(P().sheet.spellSlots).find(k => (P().sheet.spellSlots[k].total || 0) > (P().sheet.spellSlots[k].expended || 0));
-            const e0 = P().sheet.spellSlots[lvl].expended || 0;
-            document.querySelector('[data-pa-slot="' + lvl + '"]:not(.off)').click(); await sleep(15);
+            const e0 = P().sheet.spellSlots[lvl].expended || 0, left = P().sheet.spellSlots[lvl].total - e0;
+            q('[data-cs-slot="' + lvl + ':' + (left - 1) + '"]').click(); await sleep(20);
             ok('player: tapping a spell slot spends it', (P().sheet.spellSlots[lvl].expended || 0) === e0 + 1);
-            document.querySelector('[data-pa-slot="' + lvl + '"].off').click(); await sleep(15);
+            q('[data-cs-slot="' + lvl + ':' + (left - 1) + '"]').click(); await sleep(20);
             ok('player: and tapping it again gets it back', (P().sheet.spellSlots[lvl].expended || 0) === e0);
-            document.querySelector('[data-pa-rest="open"]').click(); await sleep(20);
+            q('[data-cs="short"]').click(); await sleep(20);
             const hp0 = P().hp;
-            document.querySelector('#pa-rest [data-rest="spend"]').click(); await sleep(20);
+            q('[data-cs="restdie"]').click(); await sleep(20);
             ok('player: a short rest spends a hit die and heals', P().hitDice.current === 2 && P().hp > hp0);
-            state.party[i] = { ...P(), concentration: 'Bless', resources: [...P().resources, { name: 'Probe (short rest)', current: 0, max: 1 }] };
-            document.querySelector('#pa-rest [data-rest="finish"]').click(); await sleep(20);
+            state.party[i] = { ...P(), concentration: 'Bless', resources: [...P().resources, { name: 'Probe (short rest)', current: 0, max: 1, recharge: 'short' }] };
+            q('[data-cs="restdone"]').click(); await sleep(30);
             const pr = P().resources.find(x => x.name === 'Probe (short rest)');
-            ok('player: finishing it refreshes short-rest resources and ends concentration', !!pr && pr.current === 1 && !P().concentration && !document.getElementById('pa-rest'));
-            paRender();
-            ok('player: a caster can set concentration', !!document.querySelector('[data-pa-conc="set"]'));
-            paSetConcentration('Hex'); await sleep(15);
-            ok('player: concentration shows and is on the character', P().concentration === 'Hex' && /Hex/.test((document.querySelector('.pa-conc') || {}).textContent || ''));
-            document.querySelector('[data-pa-conc="drop"]').click(); await sleep(15);
+            ok('player: finishing it refreshes short-rest resources and ends concentration', !!pr && pr.current === 1 && !P().concentration && !q('.cs-rest'));
+            state.party[i] = { ...P(), concentration: 'Hex' }; save(); paRender(); await sleep(20);
+            ok('player: concentration shows on their sheet', /Hex/.test((q('.cs-state') || {}).textContent || ''));
+            q('[data-cs="dropconc"]').click(); await sleep(20);
             ok('player: and can be dropped', !P().concentration);
-            paRender();
-            const ex = document.querySelector('[data-pa-cond="Exhaustion"]');
-            ok('player: exhaustion shows with its level', !!ex && /Exhaustion 2/.test(ex.textContent));
+            const ex = q('[data-cs-condinfo="Exhaustion"]');
+            ok('player: exhaustion shows, and is a button', !!ex && /2/.test((q('.cs-exh') || {}).textContent || ''));
             ex && ex.click(); await sleep(20);
-            ok('player: and tapping it explains it', /Level 2 of 6/.test((document.querySelector('.pa-conddet') || {}).textContent || ''));
+            ok('player: and tapping it explains it', /Level 2 of 6/.test((q('.cs-conddet') || {}).textContent || ''));
           }
         } catch(e){ ok('player: the bookkeeping checks ran to completion', false, e.message); }
         finally {
-          document.getElementById('pa-rest')?.remove(); paCondOpen = null;
+          if (CS) CS.condOpen = null;
           if (p0 != null) localStorage.setItem('skt-party-v1', p0); loadDomain('party');
           if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
           paTab = tab0; paRender();
@@ -9637,6 +9656,7 @@
       // -- Undo on a phone ---------------------------------------------------
       {
         const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab;
+        const q = sel => document.querySelector('#pa-screen #cs-root ' + sel), qa = sel => [...document.querySelectorAll('#pa-screen #cs-root ' + sel)];
         try {
           if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
           const mi = paMyIdx();
@@ -9646,8 +9666,8 @@
             paTab = 'you'; paRender(); await sleep(120);
             const hp = () => { const c = paCombatant(); return c ? c.hp : paPc().hp; };
             const before = hp();
-            document.getElementById('pa-hp-amt').value = '6';
-            document.querySelector('[data-pa-hp="-1"]').click(); await sleep(80);
+            q('[data-cs-amt]').value = '6';
+            q('[data-cs-hp="-1"]').click(); await sleep(80);
             ok('player: damage on a phone lands', hp() === before - 6, JSON.stringify({ before, now: hp() }));
             const act = [...document.querySelectorAll('.toast-item .toast-action')].pop();
             ok('player: with an Undo on the toast', !!act && act.textContent === 'Undo');
@@ -9669,6 +9689,7 @@
       {
         const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab;
         const stub = { pc: window.paCombatant, find: window._findCombatantForPartyMember, d: window.sktD, conf: window.showConfirm };
+        const q = sel => document.querySelector('#pa-screen #cs-root ' + sel), qa = sel => [...document.querySelectorAll('#pa-screen #cs-root ' + sel)];
         try {
           if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
           const mi = paMyIdx();
@@ -9676,9 +9697,9 @@
           const me = () => state.party[paMyIdx()];
           const set = (o) => { state.party[mi] = { ...state.party[mi], ...o }; save(); paTab = 'you'; paRender(); };
           const hit = (n, sign, type) => {
-            document.getElementById('pa-hp-amt').value = String(n);
-            if (type) document.getElementById('pa-hp-type').value = type;
-            document.querySelector('[data-pa-hp="' + sign + '"]').click();
+            q('[data-cs-amt]').value = String(n);
+            const sel = q('[data-cs-dtype]'); if (sel){ sel.value = type || ''; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+            q('[data-cs-hp="' + sign + '"]').click();
           };
           set({ hp: 20, hpMax: 30, tempHp: 5, resistances: ['fire'], deathSaves: undefined, stable: undefined, dead: undefined });
           await sleep(60);
@@ -9686,42 +9707,41 @@
           ok('phone: out of a fight, temporary hit points soak damage first', me().tempHp === 0 && me().hp === 18, JSON.stringify({ t: me().tempHp, hp: me().hp }));
           hit(10, -1, 'fire'); await sleep(60);
           ok('phone: and a resistance halves it', me().hp === 13, me().hp);
-          document.getElementById('pa-hp-amt').value = '8'; document.querySelector('[data-pa-temp]').click(); await sleep(40);
-          document.getElementById('pa-hp-amt').value = '3'; document.querySelector('[data-pa-temp]').click(); await sleep(40);
+          q('[data-cs-amt]').value = '8'; q('[data-cs-hp="temp"]').click(); await sleep(40);
+          q('[data-cs-amt]').value = '3'; q('[data-cs-hp="temp"]').click(); await sleep(40);
           ok('phone: temporary hit points can be set, and the higher stays', me().tempHp === 8, me().tempHp);
           set({ hp: 2, tempHp: 0 }); await sleep(40);
           hit(5, -1); await sleep(60);
-          ok('phone: dropping to 0 between fights starts death saves', me().hp === 0 && JSON.stringify(me().deathSaves) === '{"success":0,"fail":0}' && !!document.querySelector('[data-pa-death]'));
+          ok('phone: dropping to 0 between fights starts death saves', me().hp === 0 && JSON.stringify(me().deathSaves) === '{"success":0,"fail":0}' && !!q('[data-cs="death"]'));
           window.sktD = () => 15;
-          document.querySelector('[data-pa-death]').click(); await sleep(60);
+          q('[data-cs="death"]').click(); await sleep(60);
           ok('phone: and they can be rolled', (me().deathSaves || {}).success === 1);
           hit(3, -1); await sleep(60);
           ok('phone: a hit at 0 is a failed save', (me().deathSaves || {}).fail === 1);
-          document.querySelector('[data-pa-death]').click(); await sleep(40);
-          document.querySelector('[data-pa-death]').click(); await sleep(60);
-          ok('phone: three successes and they are stable', me().stable === true && !me().deathSaves && /Stable/.test(document.querySelector('.pa-death').textContent));
+          q('[data-cs="death"]').click(); await sleep(40);
+          q('[data-cs="death"]').click(); await sleep(60);
+          ok('phone: three successes and they are stable', me().stable === true && !me().deathSaves && /Stable/.test((q('.cs-death') || {}).textContent || ''));
           hit(4, 1); await sleep(60);
           ok('phone: healing ends it all', me().hp === 4 && !me().stable && !me().deathSaves);
           set({ hp: 0, deathSaves: { success: 0, fail: 0 } }); window.sktD = () => 1;
-          document.querySelector('[data-pa-death]').click(); await sleep(40);
-          document.querySelector('[data-pa-death]').click(); await sleep(60);
-          ok('phone: a natural 1 counts twice; three failures and they are dead', me().dead === true && /died/.test(document.querySelector('.pa-death').textContent));
+          q('[data-cs="death"]').click(); await sleep(40);
+          q('[data-cs="death"]').click(); await sleep(60);
+          ok('phone: a natural 1 counts twice; three failures and they are dead', me().dead === true && /Dead/.test((q('.cs-death') || {}).textContent || ''));
           set({ hp: 0, dead: undefined, deathSaves: { success: 0, fail: 0 } }); window.sktD = () => 20;
-          document.querySelector('[data-pa-death]').click(); await sleep(60);
+          q('[data-cs="death"]').click(); await sleep(60);
           ok('phone: a natural 20 wakes them at 1 HP', me().hp === 1 && !me().deathSaves);
           // Heroic Inspiration.
           set({ inspiration: true }); await sleep(40);
-          ok('phone: Heroic Inspiration shows', !!document.querySelector('[data-pa-insp]'));
-          document.querySelector('[data-pa-insp]').click(); await sleep(40);
-          ok('phone: and can be spent', me().inspiration === false && !document.querySelector('[data-pa-insp]'));
+          ok('phone: Heroic Inspiration shows', !!q('[data-cs="insp"].on'));
+          q('[data-cs="insp"]').click(); await sleep(40);
+          ok('phone: and can be spent', me().inspiration === false && !q('[data-cs="insp"].on'));
           // Long rest.
-          const slots = me().sheet && me().sheet.spellSlots;
           set({ hp: 3, tempHp: 4, exhaustion: 2 });
           window.showConfirm = () => Promise.resolve(true);
-          document.querySelector('[data-pa-longrest]').click(); await sleep(80);
+          q('[data-cs="long"]').click(); await sleep(80);
           ok('phone: a long rest from the phone', me().hp === me().hpMax && me().tempHp === 0 && me().exhaustion === 1);
           set({ hp: 0, dead: true });
-          document.querySelector('[data-pa-longrest]').click(); await sleep(80);
+          q('[data-cs="long"]').click(); await sleep(80);
           ok('phone: a long rest does not raise the dead', me().hp === 0 && me().dead === true);
         } catch(e){ ok('phone: the between-fights checks ran to completion', false, e.message); }
         finally {
@@ -9735,88 +9755,85 @@
         }
       }
 
-      // -- The phone's attack buttons: every damage term, and the roll is kept ----
+      // -- The sheet's attack buttons: every damage term, and the roll is kept ----
       {
         const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab, d0 = window.sktD;
+        const q = sel => document.querySelector('#pa-screen #cs-root ' + sel), qa = sel => [...document.querySelectorAll('#pa-screen #cs-root ' + sel)];
         try {
           if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
           const mi = paMyIdx();
           state.party[mi] = { ...state.party[mi], sheet: { ...(state.party[mi].sheet || {}), attacks: [{ name: 'Flame Blade', atkBonus: '+5', damage: '2d6+1d4+3 fire' }] }, rolls: [] };
           save(); paTab = 'you'; paRender(); await sleep(60);
+          q('[data-cs-tab="actions"]').click(); await sleep(30);
           window.sktD = () => 4;
-          document.querySelector('[data-pa-atk="0"]').click(); await sleep(40);
-          ok('phone: an attack rolls every damage term', /\b15\b/.test(document.querySelector('.pa-roll-dmg').textContent), document.querySelector('.pa-roll-dmg').textContent);
-          ok('phone: and the roll is kept for the DM to see', (state.party[mi].rolls || [])[0] && state.party[mi].rolls[0].label === 'Flame Blade' && state.party[mi].rolls[0].from === 'player');
+          q('[data-cs-dmg="0"]').click(); await sleep(40);
+          ok('phone: a weapon\'s damage rolls every term, on the roll card', /\b15\b/.test((document.querySelector('#pa-roll .pa-roll-dmg') || {}).textContent || ''), (document.querySelector('#pa-roll') || {}).textContent);
+          ok('phone: and the roll is kept for the DM to see', (state.party[mi].rolls || [])[0] && /Flame Blade/.test(state.party[mi].rolls[0].label) && state.party[mi].rolls[0].from === 'player');
         } catch(e){ ok('phone: the attack checks ran to completion', false, e.message); }
         finally {
-          window.sktD = d0;
+          window.sktD = d0; paHideRoll();
           if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
           paTab = tab0; paRender();
         }
       }
 
-      // -- The phone's turn: the roll card, action economy, spells on the home screen
+      // -- The player's turn on their sheet: the turn card and the roll card ---
       {
         const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab, d0 = window.sktD;
         const cb0 = JSON.stringify(state.combatants || []), act0 = state.activeCombatantId, sh0 = state.sharedPanels;
+        const q = sel => document.querySelector('#pa-screen #cs-root ' + sel), qa = sel => [...document.querySelectorAll('#pa-screen #cs-root ' + sel)];
         try {
           if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
           const mi = paMyIdx(), me = () => state.party[mi];
           state.party[mi] = { ...me(), concentration: null, rolls: [],
             sheet: { ...(me().sheet || {}), attacks: [{ name: 'Mace', atkBonus: '+4', damage: '1d6+2 bludgeoning' }],
                      spells: ['Healing Word', 'Bless', 'Sacred Flame'], spellSlots: { 1: { total: 2, expended: 0 } }, spellSaveDc: 13, spellAtkBonus: '+5', profBonus: 2 } };
-          // In the fight, and it's this character's turn.
           state.sharedPanels = [...new Set([...(state.sharedPanels || []), 'combat'])];
           state.combatants = [{ id: me().id, name: me().name, isPC: true, hp: me().hp, hpMax: me().hpMax, initiative: 15, conditions: [] },
                               { id: 'ogre_t', name: 'Ogre', hp: 59, hpMax: 59, initiative: 8, conditions: [] }];
           state.activeCombatantId = me().id;
           save(); paTab = 'you'; paRender(); paHideTurnBanner(); await sleep(60);
-          // The rules data, for the spells
-          for (let i = 0; i < 60 && !document.querySelector('.pa-sp-w'); i++){ await sleep(150); paRenderScreen(); }
-          const econ = document.querySelector('.pa-econ.mine');
-          ok('phone: on your turn, Action / Bonus / Reaction to tick', !!econ && econ.querySelectorAll('[data-pa-econ]').length === 3);
+          const econ = q('.pa-econ.mine');
+          ok('phone: on your turn, Action / Bonus / Reaction on your sheet', !!econ && econ.querySelectorAll('[data-pa-econ]').length === 3);
           window.sktD = () => 4;
-          document.querySelector('[data-pa-atk="0"]').click(); await sleep(40);
+          q('[data-cs-tab="actions"]').click(); await sleep(30);
+          q('[data-cs-atk="0"]').click(); await sleep(40);
           const card = document.getElementById('pa-roll'), tabs = document.getElementById('pa-tabs');
-          ok('phone: a roll lands on a card above the tab bar, not down the screen', !!card.querySelector('.pa-roll-dmg') && !document.getElementById('pa-screen').contains(card)
+          ok('phone: a roll from the sheet lands on the card above the tab bar', !!card.querySelector('.pa-roll-hit') && !document.getElementById('pa-screen').contains(card)
              && getComputedStyle(card).position === 'fixed' && card.getBoundingClientRect().bottom <= tabs.getBoundingClientRect().top + 1,
              Math.round(card.getBoundingClientRect().bottom) + ' vs tabs ' + Math.round(tabs.getBoundingClientRect().top));
           paRender(); await sleep(20);
-          ok('phone: and a redraw (a sync, an HP change) doesn\'t wipe it', !!document.querySelector('#pa-roll .pa-roll-dmg'));
-          ok('phone: attacking marks the Action used', state.combatants[0].actionUsed === true && !!document.querySelector('[data-pa-econ="actionUsed"].used'));
+          ok('phone: and a redraw (a sync, an HP change) doesn\'t wipe it', !!document.querySelector('#pa-roll .pa-roll-hit'));
+          ok('phone: attacking marks the Action used', state.combatants[0].actionUsed === true && !!q('[data-pa-econ="actionUsed"].used'));
           document.querySelector('#pa-roll').click(); await sleep(20);
           ok('phone: tapping the card puts it away', !document.querySelector('#pa-roll .pa-roll-in'));
-          // Spells
-          const sec = document.querySelector('.pa-spells');
-          ok('phone: a caster\'s spells are on the home screen, with the slots', !!sec && /Healing Word/.test(sec.textContent) && /Bless/.test(sec.textContent) && sec.querySelectorAll('[data-pa-slot]').length === 2 && /DC\s*13/.test(sec.textContent));
-          document.querySelector('[data-pa-spell="Healing Word"]').click(); await sleep(30);
-          ok('phone: tapping a spell shows what it does', /regains?/i.test((document.querySelector('.pa-sp.on .pa-sp-det') || {}).textContent || ''));
-          document.querySelector('.pa-sp.on [data-pa-cast]').click(); await sleep(40);
-          ok('phone: casting spends the slot', me().sheet.spellSlots[1].expended === 1);
-          ok('phone: a bonus-action spell marks the bonus action', state.combatants[0].bonusUsed === true);
-          ok('phone: the healing is rolled on the card', /healed/.test((document.querySelector('#pa-roll') || {}).textContent || ''));
-          document.querySelector('[data-pa-undo]').click(); await sleep(40);
-          ok('phone: Undo on the card gives the slot back', me().sheet.spellSlots[1].expended === 0);
-          document.querySelector('[data-pa-cast^="Bless:"]').click(); await sleep(40);
+          q('[data-cs-tab="spells"]').click(); await sleep(30);
+          for (let i = 0; i < 80 && !q('[data-cs-cast^="Healing Word:"]'); i++){ await sleep(120); csRender(); }
+          q('[data-cs-cast="Healing Word:1"]').click(); await sleep(40);
+          ok('phone: casting from the sheet spends the slot', me().sheet.spellSlots[1].expended === 1);
+          ok('phone: and a bonus-action spell marks the bonus action', state.combatants[0].bonusUsed === true);
+          sktUndo(); await sleep(40);
+          ok('phone: Undo gives the slot back', state.party[mi].sheet.spellSlots[1].expended === 0);
+          q('[data-cs-cast^="Bless:"]').click(); await sleep(40);
           ok('phone: casting a concentration spell starts concentrating on it', me().concentration === 'Bless');
-          // Not your turn: just the reaction
           state.activeCombatantId = 'ogre_t'; paRender(); paHideTurnBanner(); await sleep(20);
-          const off = document.querySelector('.pa-econ');
+          const off = q('.pa-econ');
           ok('phone: off your turn, only the reaction', !!off && !off.classList.contains('mine') && off.querySelectorAll('[data-pa-econ]').length === 1);
-          document.querySelector('[data-pa-econ="reactionUsed"]').click(); await sleep(20);
+          q('[data-pa-econ="reactionUsed"]').click(); await sleep(20);
           ok('phone: and tapping it marks it used', state.combatants[0].reactionUsed === true);
         } catch(e){ ok('phone: the turn checks ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
         finally {
-          window.sktD = d0; paHideRoll(); paSpOpen = null;
+          window.sktD = d0; paHideRoll();
           state.combatants = JSON.parse(cb0); state.activeCombatantId = act0; state.sharedPanels = sh0;
           if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
           save(); paTab = tab0; paRender(); paHideTurnBanner();
         }
       }
 
-      // -- Arcane Recovery on the phone: the player picks the slots -----------
+      // -- Arcane Recovery on the sheet: the player picks the slots -----------
       {
         const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        const q = sel => document.querySelector('#pa-screen #cs-root ' + sel), qa = sel => [...document.querySelectorAll('#pa-screen #cs-root ' + sel)];
         try {
           let saved = null;
           await openCharBuilder({ onDone: r => { saved = r; } });
@@ -9826,31 +9843,31 @@
           const id = (saved || state.party.find(p => p.name === 'Recovering Wizard')).id, pi = () => state.party.findIndex(p => p.id === id), me = () => state.party[pi()];
           const sl = JSON.parse(JSON.stringify(me().sheet.spellSlots)); sl[1].expended = 3; sl[2].expended = 2; sl[3].expended = 1;
           state.party[pi()] = { ...me(), sheet: { ...me().sheet, spellSlots: sl } }; save();
-          paSetPc(id); paTab = 'you'; paRender(); await sleep(40);
-          paPickActivation(paActivations(me()).findIndex(a => a.name === 'Arcane Recovery')); await sleep(30);
-          const n = l => +((document.querySelector('[data-pa-recstep="' + l + ':1"]') || {}).previousElementSibling || {}).textContent;
-          ok('recovery: the panel lists the spent slots, 5th level or lower', !!document.querySelector('.pa-rec') && [1, 2, 3].every(l => document.querySelector('[data-pa-recstep="' + l + ':1"]')));
-          ok('recovery: it starts on the sheet\'s pick, highest first (a 3rd for a level-5 wizard)', n(3) === 1 && n(1) === 0 && n(2) === 0, [n(1), n(2), n(3)].join(','));
-          ok('recovery: nothing more fits the 3-level budget', [1, 2, 3].every(l => document.querySelector('[data-pa-recstep="' + l + ':1"]').disabled));
-          document.querySelector('[data-pa-recstep="3:-1"]').click(); await sleep(20);
-          document.querySelector('[data-pa-recstep="1:1"]').click(); await sleep(20);
-          document.querySelector('[data-pa-recstep="2:1"]').click(); await sleep(20);
-          ok('recovery: the player picks a 2nd and a 1st instead', n(1) === 1 && n(2) === 1 && n(3) === 0 && document.querySelector('[data-pa-recstep="1:1"]').disabled, [n(1), n(2), n(3)].join(','));
-          paRecStep(1, 1); await sleep(10);
+          paSetPc(id); paTab = 'you'; paRender(); await sleep(60);
+          q('[data-cs-tab="spells"]').click(); await sleep(30);
+          q('[data-cs="recover"]').click(); await sleep(30);
+          const n = l => +((q('[data-cs-recstep="' + l + ':1"]') || {}).previousElementSibling || {}).textContent;
+          ok('recovery: the sheet lists the spent slots, 5th level or lower', [1, 2, 3].every(l => q('[data-cs-recstep="' + l + ':1"]')));
+          ok('recovery: it starts on the highest-first pick (a 3rd for a level-5 wizard)', n(3) === 1 && n(1) === 0 && n(2) === 0, [n(1), n(2), n(3)].join(','));
+          ok('recovery: nothing more fits the 3-level budget', [1, 2, 3].every(l => q('[data-cs-recstep="' + l + ':1"]').disabled));
+          q('[data-cs-recstep="3:-1"]').click(); await sleep(20);
+          q('[data-cs-recstep="1:1"]').click(); await sleep(20);
+          q('[data-cs-recstep="2:1"]').click(); await sleep(20);
+          ok('recovery: the player picks a 2nd and a 1st instead', n(1) === 1 && n(2) === 1 && n(3) === 0 && q('[data-cs-recstep="1:1"]').disabled, [n(1), n(2), n(3)].join(','));
+          const b = q('[data-cs-recstep="1:1"]'); b.disabled = false; b.click(); await sleep(10);
           ok('recovery: and the budget holds even past the button', n(1) === 1);
-          document.querySelector('[data-pa-recgo]').click(); await sleep(40);
+          q('[data-cs="recgo"]').click(); await sleep(40);
           const s = me().sheet.spellSlots;
           ok('recovery: exactly those come back, and the use is spent', s[1].expended === 2 && s[2].expended === 1 && s[3].expended === 1
              && (me().resources.find(r => r.name === 'Arcane Recovery') || {}).current === 0, [s[1].expended, s[2].expended, s[3].expended].join(','));
-          ok('recovery: the card says what came back', /3\s*levels back/.test(document.getElementById('pa-roll').textContent) && /2nd, 1st/.test(document.getElementById('pa-roll').textContent));
-          document.querySelector('[data-pa-undo]').click(); await sleep(40);
+          ok('recovery: the card says what came back', /3\s*levels back/.test(document.getElementById('pa-roll').textContent) && /2nd level, 1st level/.test(document.getElementById('pa-roll').textContent));
+          sktUndo(); await sleep(40);
           ok('recovery: Undo puts it all back', me().sheet.spellSlots[1].expended === 3 && (me().resources.find(r => r.name === 'Arcane Recovery') || {}).current === 1);
-          state.party[pi()] = { ...me(), resources: me().resources.map(r => r.name === 'Arcane Recovery' ? { ...r, current: 0 } : r) }; save();
-          paPickActivation(paActivations(me()).findIndex(a => a.name === 'Arcane Recovery')); await sleep(30);
-          ok('recovery: once used, it says when it comes back', !document.querySelector('.pa-rec') && /long rest/i.test((document.querySelector('.pa-featdet') || {}).textContent || ''));
+          state.party[pi()] = { ...me(), resources: me().resources.map(r => r.name === 'Arcane Recovery' ? { ...r, current: 0 } : r) }; save(); paRender(); await sleep(30);
+          ok('recovery: once used, it isn\'t offered', !q('[data-cs="recover"]'));
         } catch(e){ ok('recovery checks ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
         finally {
-          paFeatOpen = null; paRecPick = null; paHideRoll();
+          if (CS) CS.recPick = null; paHideRoll();
           if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
           if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
           if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
@@ -9860,16 +9877,18 @@
 
       // -- A campaign night on the phone, every class ------------------------
       // A level-5 character of each class, made in the builder, picked on the
-      // phone and played: checks and saves (the number on the button is the
-      // number rolled), every attack, every feature, a cantrip, a slot spell,
-      // concentration and the save when hit, the turn card, going down and a
-      // death save, a short and a long rest, the map, the party, level up.
+      // phone and played on their own sheet: checks and saves (the number on
+      // the button is the number rolled), every attack and damage, every
+      // feature, a cantrip, a slot spell, concentration and the save when hit,
+      // the turn card, going down and a death save, a short and a long rest,
+      // the map, the party, level up.
       if (paIsPhone()){
         const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab, d0 = window.sktD, conf0 = window.showConfirm;
         const cb0 = JSON.stringify(state.combatants || []), act0 = state.activeCombatantId, sh0 = state.sharedPanels;
         const B0 = localStorage.getItem('skt-battlemap-v1');
         const errs = [], onErr = e => errs.push((e.message || '') + ' @' + String(e.filename || '').split('/').pop() + ':' + e.lineno);
         window.addEventListener('error', onErr);
+        const q = sel => document.querySelector('#pa-screen #cs-root ' + sel), qa = sel => [...document.querySelectorAll('#pa-screen #cs-root ' + sel)];
         try {
           window.showConfirm = () => Promise.resolve(true);
           const closeModals = () => { document.querySelectorAll('.modal-back, #pa-rest, #pa-roll-req, #pa-conc-save').forEach(m => m.remove()); };
@@ -9878,158 +9897,122 @@
           const R = await sktRulesLoad('2024');
           const classes = R.classes.filter(c => c.core !== false).map(c => c.name);
           ok('campaign night: all twelve classes to play', classes.length >= 12, classes.join(', '));
-      for (const cls of classes){
-        const bad = [], info = [];
-        const note = (cond, msg) => { if (!cond) bad.push(msg); };
-        try {
-          let saved = null;
-          await openCharBuilder(Object.assign({ onDone: rec => { saved = rec; } }, window.__ed ? { edition: window.__ed } : {}));
-          for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
-          CB.build.cls = cls; CB.build.level = +(window.__level || 5); CB.build.name = 'Test ' + cls; cbQuickBuild();
-          cbSave(); await sleep(80);
-          if (document.getElementById('cb-root')) { info.push('builder still open'); cbClose(); }
-          saved = saved || state.party.find(p => p.name === 'Test ' + cls);
-          if (!saved){ out.push(cls + ': BUILD FAILED'); continue; }
-          const id = saved.id;
-          paSetPc(id); paTab = 'you'; paRender(); await sleep(60);
-          const pc = () => state.party.find(p => p.id === id);
-          const scr = document.getElementById('pa-screen');
-          note(scr.textContent.includes('Test ' + cls), 'name not on the You screen');
-          note(/\d+\s*\/\s*\d+/.test((scr.querySelector('.pa-hp-row') || {}).textContent || ''), 'no HP');
-          info.push('HP ' + pc().hp + '/' + pc().hpMax + ' AC ' + pc().ac);
-          // Checks
-          window.sktD = () => 10;
-          for (const k of ['save:dex', 'save:wis', 'check:perception', 'check:stealth', 'abcheck:str']){
-            const b = scr.querySelector('[data-pa-chk="' + k + '"]');
-            if (!b && k.startsWith('check:')){ scr.querySelector('[data-pa-sktoggle]')?.click(); await sleep(20); }
-            const b2 = document.querySelector('[data-pa-chk="' + k + '"]');
-            if (!b2){ bad.push('no button for ' + k); continue; }
-            const shown = parseInt((b2.querySelector('b') || b2).textContent.replace(/save\s*/, ''), 10);
-            b2.click(); await sleep(20);
-            const tot = parseInt(((document.querySelector('#pa-roll .pa-roll-hit') || {}).textContent || ''), 10);
-            if (tot !== 10 + shown && !/advantage|disadvantage|exhaustion|Bless|Reliable/i.test(card())) bad.push(k + ': button says ' + shown + ' but rolled ' + tot + ' on a 10');
+          for (const cls of classes){
+            const bad = [];
+            const note = (cond, msg) => { if (!cond) bad.push(msg); };
+            try {
+              let saved = null;
+              await openCharBuilder({ onDone: rec => { saved = rec; } });
+              for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+              CB.build.cls = cls; CB.build.level = 5; CB.build.name = 'Test ' + cls; cbQuickBuild();
+              cbSave(); await sleep(80);
+              if (document.getElementById('cb-root')) cbClose();
+              saved = saved || state.party.find(p => p.name === 'Test ' + cls);
+              if (!saved){ bad.push('BUILD FAILED'); throw new Error('no character'); }
+              const id = saved.id, pc = () => state.party.find(p => p.id === id);
+              paSetPc(id); paTab = 'you'; paRender(); await sleep(80);
+              for (let i = 0; i < 60 && !(CS && CS.R); i++) await sleep(100);
+              note(CS && CS.embed && CS.id === id && (q('.cs-head') || {}).textContent.includes('Test ' + cls), 'their sheet is not the You tab');
+              note(/\d/.test((q('.cs-hp-n') || {}).textContent || ''), 'no HP');
+              // Checks and saves
+              q('[data-cs-tab="abilities"]').click(); await sleep(20);
+              window.sktD = () => 10;
+              for (const k of ['save:dex', 'save:wis', 'skill:perception', 'skill:stealth', 'ab:str']){
+                const b = q('[data-cs-roll="' + k + '"]'); if (!b){ bad.push('no button for ' + k); continue; }
+                const shown = parseInt((b.querySelector('b') || b).textContent, 10);
+                b.click(); await sleep(20);
+                const tot = parseInt(((document.querySelector('#pa-roll .pa-roll-hit') || {}).textContent || ''), 10);
+                if (tot !== 10 + shown && !/advantage|disadvantage|exhaustion|Bless|Reliable/i.test(card())) bad.push(k + ': button says ' + shown + ' but rolled ' + tot + ' on a 10');
+              }
+              // Attacks and damage
+              q('[data-cs-tab="actions"]').click(); await sleep(20);
+              for (const i of qa('[data-cs-atk]').map(x => x.dataset.csAtk)){ q('[data-cs-atk="' + i + '"]').click(); await sleep(10); if (!document.querySelector('#pa-roll .pa-roll-hit')) bad.push('attack ' + i + ' rolled nothing'); }
+              for (const i of qa('[data-cs-dmg]').map(x => x.dataset.csDmg)){ q('[data-cs-dmg="' + i + '"]').click(); await sleep(10); if (!document.querySelector('#pa-roll .pa-roll-dmg')) bad.push('damage ' + i + ' rolled nothing'); }
+              // Features
+              for (const nm of [...new Set(qa('[data-cs-use]:not([disabled])').map(x => x.dataset.csUse))]){
+                const a = (pc().sheet.activations || []).find(x => x.name === nm), r = a && (pc().resources || []).find(x => x.name === a.resource), before = r ? r.current : null;
+                const b = q('[data-cs-use="' + CSS.escape(nm) + '"]:not([disabled])'); if (!b) continue;
+                b.click(); await sleep(20); closeModals();
+                const r2 = a && (pc().resources || []).find(x => x.name === a.resource);
+                if (r && nm !== 'Bardic Inspiration' && r2 && r2.current !== Math.max(0, before - (a.amount || 1))) bad.push(nm + ' did not spend (' + before + '→' + r2.current + ')');
+              }
+              (pc().resources || []).forEach((r, i) => { if ((r.max || 0) > 0 && r.type !== 'toggle' && !q('[data-cs-res^="' + i + ':"]')) bad.push(r.name + ' has uses but no pips'); });
+              // Spells
+              if ((pc().sheet.spells || []).length){
+                q('[data-cs-tab="spells"]').click(); await sleep(30);
+                const casts = qa('[data-cs-cast]').map(x => x.dataset.csCast);
+                note(casts.length > 0, 'a caster with nothing to cast');
+                const can = casts.find(v => /:0$/.test(v));
+                if (can){ q('[data-cs-cast="' + CSS.escape(can) + '"]').click(); await sleep(20); }
+                const lv = casts.find(v => /:[1-9]$/.test(v));
+                if (lv){
+                  const l = lv.slice(-1), e0 = (pc().sheet.spellSlots[l] || {}).expended || 0;
+                  q('[data-cs-cast="' + CSS.escape(lv) + '"]').click(); await sleep(30);
+                  if (((pc().sheet.spellSlots[l] || {}).expended || 0) !== e0 + 1) bad.push('casting ' + lv + ' did not spend a slot');
+                  sktUndo(); await sleep(20);
+                }
+                const concName = (pc().sheet.spells || []).find(n => { const sp = csSpell(n); return sp && sp.concentration; });
+                if (concName){ const b = q('[data-cs-cast^="' + CSS.escape(concName) + ':"]'); if (b){ b.click(); await sleep(30); if (pc().concentration !== concName) bad.push('casting ' + concName + ' did not start concentration'); } }
+              }
+              paHideRoll();
+              // Into a fight; my turn
+              state.combatants = [{ id, name: pc().name, isPC: true, hp: pc().hp, hpMax: pc().hpMax, initiative: 15, conditions: [] },
+                                  { id: 'ogre_pt', name: 'Ogre', hp: 59, hpMax: 59, initiative: 8, conditions: [] }];
+              state.activeCombatantId = id; save(); paRender(); paHideTurnBanner(); await sleep(30);
+              note(!!q('.pa-econ.mine'), 'no turn card on my turn');
+              q('[data-cs-tab="actions"]').click(); await sleep(20);
+              const a0 = q('[data-cs-atk]'); if (a0){ a0.click(); await sleep(20); note(state.combatants[0].actionUsed === true, 'attacking did not use the action'); }
+              // Hit while concentrating
+              if (pc().concentration){
+                q('[data-cs-amt]').value = String(Math.max(1, Math.min(12, (state.combatants[0].hp || 2) - 1))); q('[data-cs-hp="-1"]').click(); await sleep(40);
+                const ov = document.getElementById('pa-conc-save');
+                note(!q('.cs-conc'), 'the sheet asked for the concentration save as well');
+                if (!ov) bad.push('no concentration save after damage');
+                else { const cc = pc().concCheck, mod = paSaveMod(pc(), 'con') + (+(pc().sheet || {}).concBonus || 0), made = 1 + mod >= cc.dc;
+                  window.sktD = () => 1; ov.querySelector('[data-pa-cs="roll"]').click(); await sleep(30);
+                  if (!!pc().concentration !== made) bad.push('a 1 + ' + mod + ' vs DC ' + cc.dc + ' should have ' + (made ? 'kept' : 'lost') + ' it');
+                  if (!(made ? /holds/ : /ends/).test(ov.textContent)) bad.push('concentration result not shown'); closeModals(); window.sktD = () => 10; }
+              }
+              // Down: death saves
+              q('[data-cs-amt]').value = String((state.combatants[0].hp || 0) + 2); q('[data-cs-hp="-1"]').click(); await sleep(40);
+              const death = q('[data-cs="death"]');
+              note(!!death, 'at 0 HP: no death save button');
+              if (death){ death.click(); await sleep(30); note(/Death save/.test(card()), 'death save not on the card'); }
+              // End the fight; rests
+              state.combatants = []; state.activeCombatantId = null; save(); paRender(); await sleep(30);
+              const pi = state.party.findIndex(p => p.id === id);
+              state.party[pi] = Object.assign({}, state.party[pi], { hp: Math.max(1, Math.floor(state.party[pi].hpMax / 2)) }); save(); paRender(); await sleep(20);
+              q('[data-cs="short"]').click(); await sleep(20); note(!!q('.cs-rest'), 'short rest did not open'); q('[data-cs="restcancel"]') && q('[data-cs="restcancel"]').click(); await sleep(20);
+              q('[data-cs="long"]').click(); await sleep(60);
+              note(pc().hp === pc().hpMax, 'long rest did not restore HP (' + pc().hp + '/' + pc().hpMax + ')');
+              Object.entries(pc().sheet.spellSlots || {}).forEach(([l, sv]) => { if (sv.expended) bad.push('long rest left level ' + l + ' slots spent'); });
+              (pc().resources || []).forEach(r => { if (r.current < r.max) bad.push('long rest left ' + r.name + ' at ' + r.current + '/' + r.max); });
+              // Map: a token for me
+              const B = panelDefs.battlemap;
+              paTab = 'map'; paRender(); await sleep(200);
+              B._tokens = (B._tokens || []).concat([{ id: 'tk_' + id, cid: id, label: pc().name, x: 225, y: 225, isPC: true, size: 1, color: '#446688' }]);
+              B._render(); await sleep(300);
+              note(!!document.querySelector('[data-pa-me]'), 'no Me button on the map');
+              note(!!document.querySelector('.map-token[data-tid="tk_' + id + '"]'), 'my token not drawn');
+              paTab = 'party'; paRender(); await sleep(30);
+              note(document.getElementById('pa-screen').textContent.includes('Test ' + cls), 'not on the Party tab');
+              paTab = 'you'; paRender(); await sleep(30);
+              const lu = q('[data-cs="levelup"]');
+              note(!!lu && !lu.disabled === (pc().level < 20), 'level-up button wrong for level ' + pc().level);
+              const featNames = ((pc().sheet || {}).featureList || []).filter(f => f.from === 'feat' || /^(Alert|Tough|Lucky|Skilled|Savage Attacker|Magic Initiate)$/.test(f.name)).map(f => f.name);
+              const dup = featNames.filter((n, i) => featNames.indexOf(n) !== i && !/Magic Initiate|Skilled/.test(n));
+              note(!dup.length, 'the same feat twice: ' + dup.join(', '));
+            } catch(e){ if (e.message !== 'no character') bad.push('THREW ' + e.message + ' ' + (e.stack || '').split('\n')[1]); }
+            closeModals(); paHideRoll();
+            ok('campaign night: a level-5 ' + cls + ' plays through on their sheet', !bad.length, bad.join(' ;; '));
           }
-          // Sheet agreement for saves
-          const sh = pc().sheet || {};
-          ['dex', 'wis'].forEach(k => { if (sh.saves && sh.saves[k] != null && paSaveMod(pc(), k) !== sh.saves[k]) bad.push('save ' + k + ' phone ' + paSaveMod(pc(), k) + ' vs sheet ' + sh.saves[k]); });
-          // Attacks
-          const atks = [...document.querySelectorAll('[data-pa-atk]')];
-          info.push(atks.length + ' attacks (' + (sh.attacks || []).map(a => a.name + ' ' + a.atkBonus + ' ' + a.damage).join('; ') + ')');
-          for (const a of atks){
-            const i = a.dataset.paAtk; document.querySelector('[data-pa-atk="' + i + '"]').click(); await sleep(15);
-            if (!/to hit/.test(card())) bad.push('attack ' + i + ' no to-hit on the card');
-            const atk = (sh.attacks || [])[+i];
-            if (atk && atk.damage && /\d*d\d+/.test(atk.damage) && !document.querySelector('#pa-roll .pa-roll-dmg')) bad.push('attack ' + atk.name + ' rolled no damage');
-          }
-          // Features
-          const feats = [...document.querySelectorAll('[data-pa-feat]')];
-          info.push(feats.length + ' features (' + paActivations(pc()).map(a => a.name).join(', ') + ')');
-          for (let fi = 0; fi < feats.length; fi++){
-            document.querySelector('[data-pa-feat="' + fi + '"]')?.click(); await sleep(15);
-            const det = document.querySelector('.pa-featdet');
-            if (!det) { bad.push('feature ' + fi + ' detail did not open'); continue; }
-            const use = det.querySelector('[data-pa-featuse]');
-            if (use){
-              const a = paActivations(pc())[fi], pool = a && paPoolFor(pc(), a), before = pool ? pool.current : null;
-              use.click(); await sleep(30); closeModals();
-              const pool2 = a && paPoolFor(pc(), a);
-              if (pool && a.name !== 'Bardic Inspiration' && pool2 && pool2.current !== Math.max(0, before - (a.amount || 1))) bad.push('feature ' + a.name + ' did not spend (' + before + '→' + (pool2 && pool2.current) + ')');
-            }
-            paFeatOpen = null; paRenderScreen(); await sleep(10);
-          }
-          // Spells
-          const sp = sh.spells || [];
-          const sec = document.querySelector('.pa-spells');
-          if (sp.length || (sh.spellSlots && Object.keys(sh.spellSlots).length)){
-            for (let i = 0; i < 40 && !document.querySelector('.pa-sp-w'); i++){ await sleep(100); paRenderScreen(); }
-            note(!!document.querySelector('.pa-spells'), 'caster without a Spells section');
-            const rows = [...document.querySelectorAll('.pa-sp')];
-            const casts = [...document.querySelectorAll('.pa-sp [data-pa-cast]')];
-            info.push(sp.length + ' spells, slots ' + JSON.stringify(Object.fromEntries(Object.entries(sh.spellSlots || {}).map(([l, s]) => [l, s.total]))) + ', ' + casts.length + ' castable');
-            const unknown = rows.filter(r => !r.querySelector('.pa-sp-w')).map(r => r.querySelector('b').textContent);
-            if (unknown.length) bad.push('spells with no rules data: ' + unknown.join(', '));
-            // a cantrip
-            const can = casts.find(b => /:0$/.test(b.dataset.paCast));
-            if (can){ const n = can.dataset.paCast; can.click(); await sleep(30); if (!/cantrip/.test(card())) bad.push('cantrip ' + n + ': card says ' + card().slice(0, 60)); }
-            // a levelled spell
-            const lv = casts.find(b => /:[1-9]$/.test(b.dataset.paCast));
-            if (lv){
-              const [n, l] = [lv.dataset.paCast.slice(0, lv.dataset.paCast.lastIndexOf(':')), lv.dataset.paCast.slice(-1)];
-              const before = (pc().sheet.spellSlots[l] || {}).expended || 0;
-              document.querySelector('[data-pa-cast="' + CSS.escape(lv.dataset.paCast) + '"]').click(); await sleep(30);
-              if (((pc().sheet.spellSlots[l] || {}).expended || 0) !== before + 1) bad.push('casting ' + n + ' did not spend a level ' + l + ' slot');
-              info.push('cast ' + n + ': ' + card().replace(/\s+/g, ' ').trim().slice(0, 90));
-              document.querySelector('[data-pa-undo]')?.click(); await sleep(20);
-            }
-            // a concentration spell
-            const concName = sp.find(n => { const s = paSpell(pc(), n); return s && s.concentration; });
-            if (concName){
-              const b = document.querySelector('[data-pa-cast^="' + CSS.escape(concName) + ':"]');
-              if (b){ b.click(); await sleep(30); if (pc().concentration !== concName) bad.push('casting ' + concName + ' did not start concentration'); }
-            }
-          } else if (sec) bad.push('non-caster shows a Spells section');
-          paHideRoll();
-          // Into a fight; my turn
-          state.combatants = [{ id, name: pc().name, isPC: true, hp: pc().hp, hpMax: pc().hpMax, initiative: 15, conditions: [] },
-                              { id: 'ogre_pt', name: 'Ogre', hp: 59, hpMax: 59, initiative: 8, conditions: [] }];
-          state.activeCombatantId = id; save(); paRender(); paHideTurnBanner(); await sleep(30);
-          note(!!document.querySelector('.pa-econ.mine'), 'no turn card on my turn');
-          if (document.querySelector('[data-pa-atk]')){ document.querySelector('[data-pa-atk]').click(); await sleep(20); note(state.combatants[0].actionUsed === true, 'attacking did not use the action'); }
-          // Hit while concentrating
-          if (pc().concentration){
-            // Enough to need a save, not enough to drop them (0 HP ends it outright).
-            document.getElementById('pa-hp-amt').value = String(Math.max(1, Math.min(12, (state.combatants[0].hp || 2) - 1))); paApplyHp(-1); await sleep(40);
-            const ov = document.getElementById('pa-conc-save');
-            if (!ov) bad.push('no concentration save after damage');
-            else { const cc = pc().concCheck, mod = paSaveMod(pc(), 'con') + (+(pc().sheet || {}).concBonus || 0), made = 1 + mod >= cc.dc;
-              window.sktD = () => 1; ov.querySelector('[data-pa-cs="roll"]').click(); await sleep(30);
-              if (!!pc().concentration !== made) bad.push('a 1 + ' + mod + ' vs DC ' + cc.dc + ' should have ' + (made ? 'kept' : 'lost') + ' it');
-              if (!(made ? /holds/ : /ends/).test(ov.textContent)) bad.push('concentration result not shown'); closeModals(); window.sktD = () => 10; }
-          }
-          // Down: death saves
-          document.getElementById('pa-hp-amt').value = String((state.combatants[0].hp || 0) + 2); paApplyHp(-1); await sleep(40);
-          const death = document.querySelector('[data-pa-death]');
-          note(!!death, 'at 0 HP: no death save button');
-          if (death){ death.click(); await sleep(30); note(/Death save/.test(card()), 'death save not on the card'); }
-          // End the fight; rests
-          state.combatants = []; state.activeCombatantId = null; save(); paRender(); await sleep(30);
-          const pi = state.party.findIndex(p => p.id === id);
-          state.party[pi] = Object.assign({}, state.party[pi], { hp: Math.max(1, Math.floor(state.party[pi].hpMax / 2)) }); save(); paRender();
-          if (document.querySelector('[data-pa-rest]')){ paOpenShortRest(); await sleep(40); note(!!document.getElementById('pa-rest'), 'short rest screen did not open'); closeModals(); }
-          paLongRest(); await sleep(60);
-          note(pc().hp === pc().hpMax, 'long rest did not restore HP (' + pc().hp + '/' + pc().hpMax + ')');
-          Object.entries(pc().sheet.spellSlots || {}).forEach(([l, s]) => { if (s.expended) bad.push('long rest left level ' + l + ' slots spent'); });
-          (pc().resources || []).forEach(r => { if (r.current < r.max) bad.push('long rest left ' + r.name + ' at ' + r.current + '/' + r.max); });
-          // Map: a token for me
-          const B = panelDefs.battlemap;
-          const tk0 = JSON.stringify(B._tokens || []);
-          paTab = 'map'; paRender(); await sleep(200);
-          B._tokens = (B._tokens || []).concat([{ id: 'tk_' + id, cid: id, label: pc().name, x: 225, y: 225, isPC: true, size: 1, color: '#446688' }]);
-          B._render(); await sleep(300);
-          note(!!document.querySelector('[data-pa-me]'), 'no Me button on the map');
-          note(!!document.querySelector('.map-token[data-tid="tk_' + id + '"]'), 'my token not drawn');
-          B._tokens = JSON.parse(tk0);
-          paTab = 'party'; paRender(); await sleep(30);
-          note(document.getElementById('pa-screen').textContent.includes('Test ' + cls), 'not on the Party tab');
-          paTab = 'you'; paRender(); await sleep(20);
-          note(!!document.querySelector('[data-pa-build="levelup"]') === (pc().level < 20), 'level-up button wrong for level ' + pc().level);
-          const featNames = ((pc().sheet || {}).featureList || []).filter(f => f.from === 'feat' || /^(Alert|Tough|Lucky|Skilled|Savage Attacker|Magic Initiate)$/.test(f.name)).map(f => f.name);
-          const dup = featNames.filter((n, i) => featNames.indexOf(n) !== i && !/Magic Initiate|Skilled/.test(n));
-          note(!dup.length, 'the same feat twice: ' + dup.join(', '));
-          (pc().resources || []).forEach(r => { if (!paActivations(pc()).some(a => (a.resource || a.name) === r.name)) bad.push(r.name + ' has uses but no button'); });
-          note(!!document.querySelector('[data-pa-sheet]'), 'no character sheet button');
-        } catch(e){ bad.push('THREW ' + e.message + ' ' + (e.stack || '').split('\n')[1]); }
-        closeModals(); paHideRoll();
-        ok('campaign night: a level-5 ' + cls + ' plays through the phone', !bad.length, bad.join(' ;; '));
-      }
           ok('campaign night: no script errors all evening', !errs.length, [...new Set(errs)].slice(0, 4).join(' | '));
         } catch(e){ ok('campaign night ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
         finally {
           window.removeEventListener('error', onErr);
-          window.sktD = d0; window.showConfirm = conf0; paHideRoll(); paSpOpen = null; paFeatOpen = null; paSkOpen = false;
+          window.sktD = d0; window.showConfirm = conf0; paHideRoll();
           document.querySelectorAll('#pa-rest, #pa-roll-req, #pa-conc-save').forEach(m => m.remove());
           if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
-          // The map's own auto-tokens followed the test fight; put its saved state back.
           if (B0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', B0); } finally { _remoteUpdate = false; }
             if (panelDefs.battlemap) panelDefs.battlemap._tokens = (JSON.parse(B0).tokens || []); }
           state.combatants = JSON.parse(cb0); state.activeCombatantId = act0; state.sharedPanels = sh0;
@@ -10068,32 +10051,43 @@
         }
       }
 
-      // -- The character sheet on a phone -------------------------------------
+      // -- The character sheet is the player's home screen --------------------
       {
         const tab0 = paTab;
         try {
           if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
-          paTab = 'you'; paRender(); await sleep(60);
-          const btn = document.querySelector('[data-pa-sheet]');
-          ok('phone: a Character sheet button', !!btn);
-          btn.click(); await sleep(150);
-          const root = document.getElementById('cs-root');
-          ok('phone: opens the player’s own sheet, editable', !!root && CS.id === paPc().id && !CS.readOnly && !!root.querySelector('[data-cs-hp="-1"]'));
+          paTab = 'you'; paRender(); await sleep(80);
+          const root = document.querySelector('#pa-screen #cs-root');
+          ok('phone: the You tab is the player\'s own sheet, open and editable', !!root && CS && CS.embed && CS.id === paPc().id && !CS.readOnly && !!root.querySelector('[data-cs-hp="-1"]'));
+          ok('phone: with nothing to close', !!root && !root.querySelector('[data-cs="close"]'));
           const w = root.getBoundingClientRect().width, sw = root.scrollWidth;
           ok('phone: it fits the screen', sw <= Math.ceil(w) + 1, sw + ' > ' + w);
-          csClose();
+          ok('phone: Change character is on the sheet', !!root.querySelector('[data-pa-swap]'));
+          if (paIsPhone()){ paTab = 'more'; paRender(); await sleep(30); ok('phone: and in More', !!document.querySelector('#pa-screen [data-pa-swap]')); paTab = 'you'; paRender(); await sleep(40); }
+          // A sync while they type: the number and the focus stay.
+          const amt = document.querySelector('#pa-screen #cs-root [data-cs-amt]');
+          amt.focus(); amt.value = '17'; paRender(); await sleep(20);
+          const amt2 = document.querySelector('#pa-screen #cs-root [data-cs-amt]');
+          ok('phone: a redraw while typing keeps the number and the focus', amt2 === document.activeElement && amt2.value === '17');
+          amt2.blur(); await sleep(40);
           const other = sktPlayerParty().find(p => p.id !== paPc().id);
           if (other){
             paOpenMates.add(other.id); paTab = 'party'; paRender(); await sleep(60);
             const mb = document.querySelector('[data-pa-sheet="' + other.id + '"]');
-            ok('phone: a party-mate’s card offers the whole sheet', !!mb);
+            ok('phone: a party-mate\'s card offers the whole sheet', !!mb);
             if (mb){ mb.click(); await sleep(100); } else openCharSheet(other.id);
             await sleep(100);
-            ok('phone: a party-mate’s sheet opens read-only', CS.readOnly && !document.querySelector('#cs-root [data-cs-hp]') && !document.querySelector('#cs-root [data-cs="long"]'));
-            csClose();
+            ok('phone: a party-mate\'s sheet opens read-only', CS.readOnly && !document.querySelector('#cs-root [data-cs-hp]') && !document.querySelector('#cs-root [data-cs="long"]'));
+            csClose(); await sleep(30);
+            // Over the You tab (as Level up / Edit do), and closed with no redraw
+            // asked for: the player's own sheet comes back by itself.
+            paTab = 'you'; paRender(); await sleep(40);
+            openCharSheet(other.id); await sleep(40);
+            csClose(); await sleep(80);
+            ok('phone: and afterwards their own sheet is back', !!(CS && CS.embed && CS.id === paPc().id && document.querySelector('#pa-screen #cs-root')));
           }
         } catch(e){ ok('phone: the sheet checks ran to completion', false, e.message); }
-        finally { if (typeof csClose === 'function') csClose(); paTab = tab0; paRender(); }
+        finally { paTab = tab0; paRender(); }
       }
 
       // -- The builder and the sheet fit a phone, every step and tab -----------
@@ -10336,7 +10330,7 @@
           const pc = state.party.find(p => p.name === 'Phoned');
           ok('player: creating it adds it to the party', !!pc);
           ok('player: and this phone becomes that character', !!pc && paMe().pcId === pc.id && paTab === 'you');
-          ok('player: with a Level up button on its own sheet', !!document.querySelector('[data-pa-build="levelup"]'));
+          ok('player: with a Level up button on its own sheet', !!document.querySelector('#pa-screen #cs-root [data-cs="levelup"]'));
           ok('player: its actions come from the builder, not from parsed text',
              Array.isArray(pc.sheet.activations) && pc.sheet.activations.every((a, i) => paActivations(pc)[i] === a));
         } catch(e){ ok('player: the build-your-own checks ran to completion', false, e.message); }
@@ -10364,8 +10358,10 @@
                               { name: 'Dagger', atkBonus: '+5', damage: '1d4+2 piercing' },
                               { name: 'Shortbow', atkBonus: '+5', damage: '1d6+2 piercing' }];
           paTab = 'you'; paRender(); await sleep(150);
-          const rows = [...document.querySelectorAll('.pa-atk .pa-atk-n')].map(e => e.textContent.replace(/\s+/g, ' ').trim());
-          ok('player: two identical daggers are one row, ×2', rows.length === 2 && rows[0] === 'Dagger ×2' && rows[1] === 'Shortbow', JSON.stringify(rows));
+          document.querySelector('#pa-screen #cs-root [data-cs-tab="actions"]').click(); await sleep(30);
+          const rows = [...document.querySelectorAll('#pa-screen #cs-root .cs-atks')][0] ? [...document.querySelectorAll('#pa-screen #cs-root .cs-atks')][0].querySelectorAll('.cs-atk:not(.cs-atk-h) > b') : [];
+          const rowsT = [...rows].map(e => e.textContent.replace(/\s+/g, ' ').trim());
+          ok('player: two identical daggers are one row, ×2', rowsT.length === 2 && rowsT[0] === 'Dagger ×2' && rowsT[1] === 'Shortbow', JSON.stringify(rowsT));
         } catch(e){ ok('player: the weapon-row check ran to completion', false, e.message); }
         finally {
           _remoteUpdate = true;
@@ -10492,24 +10488,25 @@
         try {
           if (cc){
             for (let i = 0; i < 50 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(200);
-            paSetPc(cc.id); paTab = 'you'; paRender();
-            const chip = document.querySelector('[data-pa-cond]');
-            ok('player: a condition is a button', !!chip && chip.tagName === 'BUTTON');
+            paSetPc(cc.id); paTab = 'you'; paRender(); await sleep(60);
+            const chip = document.querySelector('#pa-screen #cs-root .cs-state [data-cs-condinfo]');
+            ok('player: a condition on their sheet is a button', !!chip && chip.tagName === 'BUTTON');
             chip && chip.click(); await sleep(80);
-            const det = document.querySelector('.pa-conddet');
+            const det = document.querySelector('#pa-screen #cs-root .cs-conddet');
             ok('player: tapping it shows the rule text',
                !!det && det.textContent.replace(/\s+/g, ' ').length > 80, det ? det.textContent.slice(0, 80) : 'nothing opened');
-            document.querySelector('[data-pa-condclose]')?.click(); await sleep(50);
-            ok('player: and ✕ closes it', !document.querySelector('.pa-conddet'));
-            const heads = [...document.querySelectorAll('.pa-sec h4')].map(h => h.textContent.trim());
+            document.querySelector('#pa-screen #cs-root .cs-conddet [data-cs-condinfo]')?.click(); await sleep(50);
+            ok('player: and ✕ closes it', !document.querySelector('#pa-screen #cs-root .cs-conddet'));
             const pc = state.party.find(p => p.id === cc.id);
-            if (pc && pc.sheet && pc.sheet.spellSlots && Object.keys(pc.sheet.spellSlots).length)
-              ok('player: spell slots sit under Spells, beside the spells', heads.some(h => /^Spells/.test(h)) && !!document.querySelector('.pa-spells [data-pa-slot]'), heads.join(','));
+            if (pc && pc.sheet && pc.sheet.spellSlots && Object.keys(pc.sheet.spellSlots).length){
+              document.querySelector('#pa-screen #cs-root [data-cs-tab="spells"]').click(); await sleep(30);
+              ok('player: spell slots sit on the Spells tab, with the spells', !!document.querySelector('#pa-screen #cs-root [data-cs-slot]'));
+            }
           }
         } catch(e){
           ok('player: the condition checks ran to completion', false, e.message);
         } finally {
-          paCondOpen = null; paTab = tab0;
+          paCondOpen = null; if (CS) CS.condOpen = null; paTab = tab0;
           if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
           paRender();
         }

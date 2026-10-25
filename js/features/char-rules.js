@@ -2567,7 +2567,8 @@ function sktBuildEquipment(build, R){
     const st = m.stats || (m.base && R.items[m.base]);
     if (!st || m.equipped === false) return;
     const on = !m.reqAttune || _sktActiveItems(build).includes(m);
-    items.push(Object.assign({}, st, { _name: m.name,
+    // _qty: four handaxes are one inventory line, but four weapons.
+    items.push(Object.assign({}, st, { _name: m.name, _qty: Math.max(1, +m.qty || 1),
       _hit: on ? (m.bonusWeapon || 0) + (m.bonusWeaponAttack || 0) : 0,
       _dmg: on ? (m.bonusWeapon || 0) + (m.bonusWeaponDamage || 0) : 0,
       _ac: on ? (m.bonusAc || 0) : 0 }));
@@ -2695,8 +2696,11 @@ function sktBuildAttacks(ctx, gear, sc){
   // character has the Two-Weapon Fighting style).
   const lightMelee = out.filter(a => a.props && a.props.includes('L') && !a.spell && !/^(Unarmed|.*\(off-hand\))/.test(a.name)
     && (gear.weapons || []).some(w => (w._name || _sktTitle(w.name)) === a.name && String(w.type).split('|')[0] === 'M'));
-  const weaponsCarried = (gear.weapons || []).filter(w => (w.property || []).map(p => String(p).split('|')[0]).includes('L') && String(w.type).split('|')[0] === 'M');
-  if (lightMelee.length && weaponsCarried.length >= 2){
+  // Counted by quantity: once the kit became an inventory, "Handaxe ×4" was
+  // one line, and the off-hand attack vanished the first time a bolt was shot.
+  const weaponsCarried = (gear.weapons || []).filter(w => (w.property || []).map(p => String(p).split('|')[0]).includes('L') && String(w.type).split('|')[0] === 'M')
+    .reduce((n, w) => n + (w._qty || 1), 0);
+  if (lightMelee.length && weaponsCarried >= 2){
     const main = lightMelee[0], off = lightMelee[1] || lightMelee[0];
     const m2 = /^(\d*d\d+)([+-]\d+)?(.*)$/.exec(off.damage || '');
     if (m2){
