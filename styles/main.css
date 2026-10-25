@@ -5286,6 +5286,12 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-dot { width:9px; height:9px; border-radius:50%; border:1px solid var(--text-muted); flex:0 0 9px; }
 .cs-dot.on { background:var(--accent); border-color:var(--accent); }
 .cs-dot.exp { background:var(--accent); border-color:var(--accent); box-shadow:0 0 0 2px var(--panel), 0 0 0 3px var(--accent); }
+/* Half proficiency (Jack of All Trades): a half-filled dot. */
+.cs-dot.half { border-color:var(--accent); background:linear-gradient(90deg, var(--accent) 50%, transparent 50%); }
+.cs-mastery { background:none; border:none; padding:0; font:inherit; color:inherit; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+.cs-mastery b { color:var(--accent); font-weight:600; }
+.tv-mastery { font-size:var(--fs-2xs); font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--accent);
+  border:1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius:var(--r-sm); padding:0 4px; margin-left:4px; vertical-align:middle; }
 .cs-kv { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:2px 0; }
 .cs-kv input { width:110px; }
 .cs-prof { font-size:var(--fs-sm); margin:3px 0; }

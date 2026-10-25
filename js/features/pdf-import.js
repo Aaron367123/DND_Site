@@ -271,6 +271,15 @@ function _fromFields(f){
     if (v != null) saves[key] = v;
   });
 
+  // The proficiency marks beside each skill and save: AthleticsProf = "P"
+  // (proficient), "E" (expertise), "H" (half, Jack of All Trades).
+  const mark = v => { const s = String(v == null ? '' : v).trim().toUpperCase(); return s === 'E' ? 2 : s === 'P' ? 1 : s === 'H' ? 0.5 : 0; };
+  const skillProf = {}; let sawMarks = false;
+  skillDefs.forEach(([key]) => {
+    const fn = key.charAt(0).toUpperCase() + key.slice(1) + 'Prof';
+    if (fn in f){ sawMarks = true; const m = mark(f[fn]); if (m) skillProf[key.replace(/[A-Z]/g, c => '_' + c.toLowerCase())] = m; }
+  });
+  const saveProf = ['str', 'dex', 'con', 'int', 'wis', 'cha'].filter(k => mark(f[k.charAt(0).toUpperCase() + k.slice(1) + 'Prof']) >= 1);
   const profBonus = num('ProfBonus', 'Proficiency Bonus', 'ProficiencyBonus');
   // "Passive1" is this template's passive Perception (Passive2 = Insight,
   // Passive3 = Investigation). Confirmed on two real sheets: both equal
@@ -441,6 +450,7 @@ function _fromFields(f){
     spellSaveDc: _spellSaveDc, spellAtkBonus: _spellAtkBonus,
     spells: spellsUniq, bio,
   };
+  if (sawMarks){ sheet.skillProf = skillProf; sheet.saveProf = saveProf; }
 
   const def = _parseDefenses(get('Defenses', 'Defences', 'Resistances',
                                  'DamageResistances', 'Damage Resistances'));

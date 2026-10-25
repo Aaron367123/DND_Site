@@ -321,9 +321,32 @@ function _csConditions(pc){
   return [...new Set([...(pc.conditions || []), ...((co && co.conditions) || [])])];
 }
 
+// An imported character's proficiency marks, read off its numbers (the PDF's
+// own marks only came in with later imports): a skill PB over its ability is
+// proficient, 2×PB expertise, half PB Jack of All Trades. Saves first take off
+// what all six share (a paladin's aura, a cloak) so that doesn't read as
+// proficiency in everything.
+function csImpProfs(pc){
+  const sh = pc.sheet || {}, ab = pc.abilities || {}, pb = +sh.profBonus || 2;
+  const skillProf = {};
+  Object.keys(CS_SKILLS).forEach(k => {
+    const v = parseInt(csSkillVal(sh, k), 10); if (isNaN(v)) return;
+    const d = v - csMod(ab[CS_SKILLS[k][1]]);
+    const p = d >= 2 * pb ? 2 : d >= pb ? 1 : d > 0 && d >= Math.floor(pb / 2) ? 0.5 : 0;
+    if (p) skillProf[k] = p;
+  });
+  const base = (sh.invBase && sh.invBase.saves) || sh.saves || {}, diff = {};
+  Object.keys(CS_AB).forEach(k => { const v = parseInt(base[k], 10); if (!isNaN(v)) diff[k] = v - csMod(ab[k]); });
+  const all = Object.values(diff), common = all.length === 6 ? Math.max(0, Math.min(...all)) : 0;
+  const saveProf = Object.keys(diff).filter(k => diff[k] - common >= pb);
+  return { skillProf, saveProf };
+}
+
 // ── Down the side: abilities, saves, skills, senses, proficiencies ───────────
 function csSide(pc){
-  const sh = pc.sheet || {}, ab = pc.abilities || {};
+  const sh0 = pc.sheet || {}, ab = pc.abilities || {};
+  const ip = !pc.build && (!sh0.skillProf || !sh0.saveProf) ? csImpProfs(pc) : null;
+  const sh = ip ? Object.assign({}, sh0, { skillProf: sh0.skillProf || ip.skillProf, saveProf: sh0.saveProf || ip.saveProf }) : sh0;
   const pb = sh.profBonus || 2;
   const saveOf = k => sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0);
   const skillOf = k => { const v = csSkillVal(sh, k); return v != null ? v : csMod(ab[CS_SKILLS[k][1]]); };
@@ -336,7 +359,7 @@ function csSide(pc){
   h += '<h5>Skills</h5><div class="cs-list">' + Object.keys(CS_SKILLS).map(k => {
     const p = (sh.skillProf || {})[k] || 0;
     const disad = k === 'stealth' && sh.stealthDis;
-    return '<button class="cs-row" data-cs-roll="skill:' + k + '"><span class="cs-dot' + (p >= 2 ? ' exp' : p ? ' on' : '') + '" title="' + (p >= 2 ? 'Expertise' : p ? 'Proficient' : '') + '"></span>'
+    return '<button class="cs-row" data-cs-roll="skill:' + k + '"><span class="cs-dot' + (p >= 2 ? ' exp' : p >= 1 ? ' on' : p ? ' half' : '') + '" title="' + (p >= 2 ? 'Expertise' : p >= 1 ? 'Proficient' : p ? 'Half proficiency' : '') + '"></span>'
       + '<span>' + CS_SKILLS[k][0] + ' <i>' + CS_SKILLS[k][1].toUpperCase() + '</i>' + (disad ? ' <i class="cs-dis" title="Disadvantage from armour">D</i>' : '') + csAdvMark(pc, 'check:' + k) + '</span><b>' + csSigned(skillOf(k)) + '</b></button>';
   }).join('') + '</div>';
   const pas = k => 10 + skillOf(k);
@@ -454,6 +477,8 @@ function csRollEffects(pc, kind){
   ((pc.sheet || {}).rollAdv || []).forEach(x => { if ((x.on || []).some(t => tags.includes(t))) adv.push(x.label); });
   return { adv: [...new Set(adv)], dis: [...new Set(dis)], bonus, autoFail };
 }
+// A line for the next roll's card (a weapon's mastery), used once.
+function csTakeRollNote(){ const n = CS.rollNote; CS.rollNote = null; return n || ''; }
 function csRollD20(label, mod, ev, kind){
   const pick = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : CS.mode;
   const fx = kind ? csRollEffects(csPc() || {}, kind) : { adv: [], dis: [], bonus: 0, autoFail: '' };
@@ -476,7 +501,7 @@ function csRollD20(label, mod, ev, kind){
   const extraSum = extra.reduce((s, x) => s + x.n, 0);
   const why = [extra.map(x => x.label + ' d' + x.die + ': ' + x.n).join(', '), fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : '',
                fx._lucky ? 'Lucky: rerolled a 1' : '',
-               /^save:/.test(kind || '') ? ((pcNow.sheet || {}).saveMods || []).filter(m => m.abs.includes('all') || m.abs.includes(kind.slice(5))).map(m => 'check: ' + m.text.replace(/^Advantage on /, 'advantage on ') + ' (' + m.src + ')').join('; ') : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : ''].filter(Boolean).join('; ');
+               /^save:/.test(kind || '') ? ((pcNow.sheet || {}).saveMods || []).filter(m => m.abs.includes('all') || m.abs.includes(kind.slice(5))).map(m => 'check: ' + m.text.replace(/^Advantage on /, 'advantage on ') + ' (' + m.src + ')').join('; ') : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : '', csTakeRollNote()].filter(Boolean).join('; ');
   const r = { kind: 'd20', label, mod: mod - fx.bonus, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod + extraSum, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail, kindTag: kind || null };
   // A weapon attack is the Attack action (the player app's turn card).
   if (CS.embed && /^attack(:str)?$/.test(kind || '') && typeof paMarkEcon === 'function' && paMarkEcon('action')) save();
@@ -550,6 +575,13 @@ function csRollText(r){
   return '<b class="cs-last-n' + (r.crit ? ' crit' : r.fumble ? ' fumble' : '') + '">' + r.total + '</b> ' + csE(csRollPlain(r).replace(/^[^:]*: \d+ ?/, r.label + ' '));
 }
 
+// An attack row's notes: its mastery (tap for what it does), range, ammunition.
+function csAtkNotes(pc, a){
+  const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : a.mastery;
+  const rest = [a.range ? a.range + ' ft' : '', (a.props || []).includes('A') ? csAmmoLeft(pc, a) : ''].filter(Boolean).join(' · ');
+  return (ms ? '<button class="cs-mastery" data-cs-mastery="' + csE(ms) + '" title="' + csE(SKT_MASTERY_TEXT[ms] || '') + '">Mastery: <b>' + csE(ms) + '</b></button>' + (rest ? ' · ' : '') : '') + csE(rest);
+}
+
 // ── The tabs ─────────────────────────────────────────────────────────────────
 const CS_TAB_RENDER = {};
 
@@ -572,7 +604,7 @@ CS_TAB_RENDER.actions = pc => {
       + (/^[+-]?\d+$/.test(String(a.atkBonus || '').trim()) ? '<button class="btn small" data-cs-atk="' + i + '">' + csE(a.atkBonus) + '</button>' : '<span>' + csE(a.atkBonus || '') + '</span>')
       + (a.damage ? '<span class="cs-dmgs"><button class="btn small" data-cs-dmg="' + i + '">' + csE(a.damage) + '</button>'
         + (a.versatile ? '<button class="btn small" data-cs-dmg2="' + i + '" title="Two-handed">' + csE(a.versatile) + '</button>' : '') + '</span>' : '<span></span>')
-      + '<span class="cb-dim">' + csE([a.mastery ? 'Mastery: ' + a.mastery : '', a.range ? a.range + ' ft' : '', (a.props || []).includes('A') ? csAmmoLeft(pc, a) : ''].filter(Boolean).join(' · ')) + '</span></div>'; }).join('') + '</div>'
+      + '<span class="cb-dim">' + csAtkNotes(pc, a) + '</span></div>'; }).join('') + '</div>'
     : '<div class="cb-dim">No attacks recorded.</div>';
   // Levelled spells that attack or call for a save, as D&D Beyond lists them.
   const spl = [...new Set(sh.spells || [])].map(n => csSpell(n)).filter(s => s && s.level > 0 && ((s.spellAttack || []).length || (s.savingThrow || []).length) && csSpellDamage(s, s.level));
@@ -852,9 +884,16 @@ function csOnClick(e){
     r.rerolled = true;
     return csRender();
   }
+  if (d.csMastery){
+    const t = SKT_MASTERY_TEXT[d.csMastery] || '';
+    if (CS.embed && typeof paShowRoll === 'function') paShowRoll('<div class="pa-roll-in"><span class="pa-roll-l">' + csE(d.csMastery) + ' (weapon mastery)</span><span class="pa-roll-why">' + csE(t) + '</span></div>');
+    else if (typeof showToast === 'function') showToast(d.csMastery + ': ' + t);
+    return;
+  }
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
+    { const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : ''; CS.rollNote = ms ? ms + ': ' + (SKT_MASTERY_TEXT[ms] || '') : null; }
     const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, a.spell ? 'attack:spell' : a.str ? 'attack:str' : 'attack');
     // A Champion crits on a 19 (or 18).
     if (!a.spell && r.natural >= ((pc.sheet || {}).critRange || 20) && !r.crit){ r.crit = true; r.why = [r.why, 'critical on ' + pc.sheet.critRange + '+'].filter(Boolean).join('; '); }

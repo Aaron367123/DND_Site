@@ -9127,6 +9127,68 @@
         loadDomain('party');
       }
     }
+    // -- Round 73: imported characters show their proficiencies and masteries --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        // The importer reads the PDF's own marks: AthleticsProf = "P", "E", "H".
+        const parsed = _fromFields({ 'CharacterName': 'ZZ Marks', 'CLASS  LEVEL': 'Bard 6', 'STR': '10', 'DEX': '14', 'CON': '12', 'INT': '10', 'WIS': '10', 'CHA': '18',
+          'AthleticsProf': 'P', 'PersuasionProf': 'E', 'SleightOfHandProf': 'P', 'AnimalHandlingProf': 'H', 'StealthProf': '',
+          'StrProf': 'P', 'ConProf': 'P', 'DexProf': '' });
+        ok('pdf: the importer keeps the PDF\'s proficiency marks — P, E and H on skills, P on saves',
+           eqJ((parsed.sheet || {}).skillProf, { animal_handling: 0.5, athletics: 1, persuasion: 2, sleight_of_hand: 1 }) && eqJ(parsed.sheet.saveProf, ['str', 'con']),
+           JSON.stringify([(parsed.sheet || {}).skillProf, (parsed.sheet || {}).saveProf]));
+        const noMarks = _fromFields({ 'CharacterName': 'ZZ Old', 'CLASS  LEVEL': 'Bard 6', 'STR': '10' });
+        ok('pdf: a sheet without the mark fields stores none (so the sheet works them out)', !('skillProf' in (noMarks.sheet || {})));
+        // An imported bard without marks: read them off the numbers.
+        state.party = state.party.filter(x => x.id !== 'imp_marks');
+        state.party.push({ id: 'imp_marks', name: 'Imp Marks', cls: 'bard', level: 6, hp: 40, hpMax: 40, ac: 14, inventory: [],
+          abilities: { str: 8, dex: 14, con: 12, int: 10, wis: 10, cha: 18 },
+          sheet: { profBonus: 3, skills: { athletics: 2, persuasion: 10, perception: 1, stealth: 2, sleightOfHand: 5 },
+                   saves: { str: 0, dex: 6, con: 2, int: 1, wis: 1, cha: 8 }, attacks: [
+                     { name: 'Greatsword', atkBonus: '+8', damage: '2d6+5 Slashing' }, { name: 'Javelin', atkBonus: '+8', damage: '1d6+5 Piercing' }, { name: 'Flail', atkBonus: '+8', damage: '1d8+5 Bludgeoning' }],
+                   bio: { features: '* Weapon Mastery • PHB-2024 91 \n\n   | Greatsword (Graze) •  \nGraze. If your attack roll misses...\n\n   | Slow (Javelin): 1 Action \n' } } });
+        save();
+        openCharSheet('imp_marks', { tab: 'abilities' }); await sleep(250);
+        const dot = k => { const row = document.querySelector('#cs-root [data-cs-roll="skill:' + k + '"] .cs-dot'); return row ? row.className.replace('cs-dot', '').trim() : 'missing'; };
+        const sdot = k => { const row = document.querySelector('#cs-root [data-cs-roll="save:' + k + '"] .cs-dot'); return row ? row.className.replace('cs-dot', '').trim() : 'missing'; };
+        ok('imported: skills read off the numbers — +10 Persuasion (CHA +4) is expertise, +2 Athletics (STR −1) proficient, +1 Perception half, +2 Stealth (DEX +2) none',
+           dot('persuasion') === 'exp' && dot('athletics') === 'on' && dot('perception') === 'half' && dot('stealth') === '' && dot('sleight_of_hand') === 'on',
+           ['persuasion', 'athletics', 'perception', 'stealth', 'sleight_of_hand'].map(k => k + ':' + dot(k)).join(' '));
+        ok('imported: saves the same way — DEX and CHA', sdot('dex') === 'on' && sdot('cha') === 'on' && sdot('str') === '' && sdot('wis') === '',
+           ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(k => k + ':' + sdot(k)).join(' '));
+        csClose();
+        // An aura that adds +4 to every save isn't proficiency in all six.
+        { const pc = state.party.find(x => x.id === 'imp_marks'); pc.sheet = Object.assign({}, pc.sheet, { saves: { str: 4, dex: 10, con: 6, int: 5, wis: 5, cha: 12 } }); save(); }
+        openCharSheet('imp_marks', { tab: 'abilities' }); await sleep(250);
+        ok('imported: +4 on every save (an aura) doesn\'t mark them all proficient', sdot('dex') === 'on' && sdot('cha') === 'on' && sdot('str') === '' && sdot('con') === '',
+           ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(k => k + ':' + sdot(k)).join(' '));
+        csClose();
+        // Masteries from the features text, on the attack rows and the roll.
+        openCharSheet('imp_marks', { tab: 'actions' }); await sleep(250);
+        const rowOf = n => [...document.querySelectorAll('#cs-root .cs-atk')].find(x => x.querySelector('b') && x.querySelector('b').textContent.trim() === n);
+        const note = n => { const r = rowOf(n); return r ? (r.querySelector('.cs-mastery') || {}).textContent || '' : 'missing'; };
+        ok('imported: the masteries in the PDF show on their weapons — Greatsword Graze, Javelin Slow, Flail none',
+           note('Greatsword') === 'Mastery: Graze' && note('Javelin') === 'Mastery: Slow' && note('Flail') === '',
+           ['Greatsword', 'Javelin', 'Flail'].map(n => n + ':' + note(n)).join(' | '));
+        { const t0 = document.querySelectorAll('.toast').length; rowOf('Greatsword').querySelector('.cs-mastery').click(); await sleep(60);
+          const ts = [...document.querySelectorAll('.toast')].map(x => x.textContent).join(' | ');
+          ok('imported: tapping the mastery says what it does', /Graze: On a miss/.test(ts) || /Graze: On a miss/.test(document.body.innerText), ts.slice(0, 120)); }
+        const gs = rowOf('Greatsword'); gs.querySelector('[data-cs-atk]').click(); await sleep(60);
+        ok('imported: rolling the greatsword says what Graze does', /Graze: On a miss/.test(CS.log[0] && CS.log[0].why || ''), CS.log[0] && CS.log[0].why);
+        csRollD20('Stealth check', 2, null, 'check:stealth');
+        ok('imported: the reminder is used once — the next roll (a skill check) doesn\'t carry it', !/Graze/.test(CS.log[0] && CS.log[0].why || ''), CS.log[0] && CS.log[0].why);
+        rowOf('Flail').querySelector('[data-cs-atk]').click(); await sleep(60);
+        ok('imported: and the flail\'s roll doesn\'t carry it over', !/Graze/.test(CS.log[0] && CS.log[0].why || ''), CS.log[0] && CS.log[0].why);
+        csClose();
+      } catch(e){ ok('round 73 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

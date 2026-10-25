@@ -1462,6 +1462,41 @@ function sktDeclaredPools(featuresText){
 // "Bonus Action" does not fit a party card, and the Turn View had already
 // grown its own copy of this mapping. One function, so the two rows cannot
 // drift into abbreviating the same thing differently.
+// ── Weapon masteries (2024) ─────────────────────────────────────────────────
+// A built character keeps its picks on each attack row (a.mastery). An
+// imported one has them only in the PDF's feature text, in two forms:
+// "| Greatsword (Graze) •" under Weapon Mastery, and "| Slow (Javelin): 1
+// Action" in the actions list. Either gives weapon → mastery.
+const SKT_MASTERY_TEXT = {
+  Cleave: 'On a hit, one more attack against a creature within 5 ft of the first, once per turn; no ability modifier on its damage unless negative.',
+  Graze:  'On a miss, the target still takes damage equal to the ability modifier you attacked with.',
+  Nick:   'The Light weapon\u2019s extra attack is part of the Attack action instead of a Bonus Action, once per turn.',
+  Push:   'On a hit, push a Large or smaller creature up to 10 ft straight away from you.',
+  Sap:    'On a hit, the target has Disadvantage on its next attack roll before your next turn.',
+  Slow:   'On a hit that deals damage, the target\u2019s Speed drops by 10 ft until your next turn.',
+  Topple: 'On a hit, the target makes a CON save (DC 8 + the attack\u2019s ability modifier + proficiency) or falls Prone.',
+  Vex:    'On a hit that deals damage, Advantage on your next attack against it before the end of your next turn.',
+};
+const _sktMasteryCache = new Map();
+function sktImportedMasteries(pc){
+  const t = String((pc && pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '');
+  if (_sktMasteryCache.has(t)) return _sktMasteryCache.get(t);
+  const P = Object.keys(SKT_MASTERY_TEXT).join('|'), out = {};
+  for (const m of t.matchAll(new RegExp('\\|\\s*([^|\\n(\u2022]+?)\\s*\\((' + P + ')\\)\\s*\u2022', 'g'))) out[m[1].trim().toLowerCase()] = m[2];
+  for (const m of t.matchAll(new RegExp('\\|\\s*(' + P + ')\\s*\\(([^)\\n]+)\\)\\s*:', 'g'))){ const w = m[2].trim().toLowerCase(); if (!out[w]) out[w] = m[1]; }
+  _sktMasteryCache.set(t, out);
+  return out;
+}
+// The mastery an attack row uses ("Graze"), or ''.
+function sktMasteryOf(pc, a){
+  if (!a) return '';
+  if (a.mastery) return a.mastery;
+  if (!pc || pc.build) return '';
+  const m = sktImportedMasteries(pc);
+  const n = String(a.name || '').toLowerCase().replace(/^\+\d\s+/, '').replace(/\s*\+\d$/, '').replace(/\s*\(.*\)$/, '').trim();
+  return m[n] || (a.base && m[String(a.base).toLowerCase()]) || '';
+}
+
 function sktActionShort(action){
   const s = String(action || '').toLowerCase();
   return s === 'bonus action' ? 'BONUS' : s === 'reaction'      ? 'REACT'
