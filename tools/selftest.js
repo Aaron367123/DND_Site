@@ -8935,6 +8935,46 @@
         if (panelDefs.loot) panelDefs.loot._loot = null; loadDomain('party');
       }
     }
+    // -- Round 71: magic armour and weapons from the loot can be equipped ------
+    {
+      const L0 = localStorage.getItem('skt-loot-v1'), p0 = localStorage.getItem('skt-party-v1');
+      try {
+        let saved = null;
+        await openCharBuilder({ onDone: r => { saved = r; } }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.build.cls = 'Rogue'; CB.build.level = 3; CB.build.name = 'Loot Rogue'; cbQuickBuild(); cbSave(); await sleep(100);
+        if (document.getElementById('cb-root')) cbClose();
+        const id = (saved || state.party.find(p => p.name === 'Loot Rogue')).id, pc = () => state.party.find(p => p.id === id);
+        let L; try { L = JSON.parse(L0); } catch(e){ L = null; }
+        if (!L || !Array.isArray(L.items)) L = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
+        L.items = (L.items || []).filter(x => !/^t71_/.test(x.id)).concat([{ id: 't71_arm', name: '+1 Studded Leather Armor', qty: 1, value: '', assignedTo: id }]);
+        localStorage.setItem('skt-loot-v1', JSON.stringify(L)); if (panelDefs.loot) panelDefs.loot._loot = null;
+        openCharSheet(id, { tab: 'inventory' });
+        for (let i = 0; i < 80 && !(CS.R && CS.magic && CS.gear); i++) await sleep(100);
+        csRender(); await sleep(30);
+        const names = {};
+        ['+1 Studded Leather Armor', '+3 Shield', 'Longsword +1', 'Shield +2', 'Mithral Half Plate', 'Armor of Fire Resistance (Leather)'].forEach(n => { const m = csLootAsItem({ name: n, qty: 1 }); names[n] = m.base ? m.name + ' [' + m.base + ']' : '(none)'; });
+        ok('loot gear: magic armour, shields and weapons are known however they\'re written',
+           /\[studded leather armor\]/.test(names['+1 Studded Leather Armor']) && /\[shield\]/.test(names['+3 Shield']) && /^\+1 Longsword \[longsword\]/.test(names['Longsword +1'])
+           && /^\+2 Shield/.test(names['Shield +2']) && /\[half plate armor\]/.test(names['Mithral Half Plate']) && /Leather Armor of Fire Resistance \[leather armor\]/.test(names['Armor of Fire Resistance (Leather)']), JSON.stringify(names));
+        const box = document.querySelector('#cs-root [data-cs-lootequip="t71_arm"]');
+        ok('loot gear: +1 studded leather armour they claimed can be equipped', !!box);
+        const dex = Math.floor(((pc().abilities || {}).dex - 10) / 2);
+        if (box){ box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(250); }
+        const worn = csItems(pc()).find(m => m.name === '+1 Studded Leather Armor');
+        ok('loot gear: equipped, it\'s worn — AC is 12 + 1 + DEX', !!worn && worn.equipped !== false && pc().ac === 13 + dex, 'AC ' + pc().ac + ' vs ' + (13 + dex));
+        csClose();
+      } catch(e){ ok('round 71 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+        _remoteUpdate = true;
+        try {
+          if (L0 == null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', L0);
+          if (p0 != null) localStorage.setItem('skt-party-v1', p0);
+        } finally { _remoteUpdate = false; }
+        if (panelDefs.loot) panelDefs.loot._loot = null; loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

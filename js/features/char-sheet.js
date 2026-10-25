@@ -1700,13 +1700,63 @@ function csLootFor(pc){
     return g ? { it, group: g.name } : null;
   }).filter(Boolean);
 }
+// A magic variant by its full name. The catalogue keeps "+1 Armor" as a
+// prefix, a base and a suffix, so "+1 Studded Leather Armor" — what a DM
+// types into the Loot tracker — matched nothing, and the armour couldn't be
+// worn. Every variant with every base it allows, built once per edition.
+const _csVariantNames = {};
+function csVariantFind(name){
+  const R = CS && CS.R, magic = CS && CS.magic;
+  if (!R || !magic || typeof sktMagicBases !== 'function') return null;
+  const ed = R.edition || '2024';
+  let map = _csVariantNames[ed];
+  if (!map){
+    map = _csVariantNames[ed] = new Map();
+    magic.filter(e => e.kind === 'variant').forEach(e => {
+      let bases = [];
+      try { bases = sktMagicBases(R, e) || []; } catch(err){ bases = []; }
+      bases.forEach(k => {
+        const bi = R.items[k]; if (!bi) return;
+        const full = ((e.namePrefix || '') + bi.name + (e.nameSuffix || '')).trim().toLowerCase();
+        if (!full) return;
+        if (!map.has(full)) map.set(full, { e, base: k });
+        // "Mithral Half Plate" for "Mithral Half Plate Armor".
+        const short = full.replace(/ armor\b/, '');
+        if (short !== full && !map.has(short)) map.set(short, { e, base: k });
+      });
+    });
+  }
+  // The ways a name gets written at the table: as printed, "Longsword +1",
+  // "Armor of Resistance (Leather)".
+  const n = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const tries = [n];
+  const plus = /^(.*?)\s*(\+[1-3])$/.exec(n);
+  if (plus) tries.push(plus[2] + ' ' + plus[1]);
+  const par = /^(.*?)\s*\(([^)]+)\)$/.exec(n);
+  if (par){
+    const [, outer, inner] = par;
+    tries.push(outer.replace(/\b(armor|weapon|shield)\b/, inner + ' $1'), outer.replace(/\b(armor|weapon)\b/, inner), inner + ' ' + outer);
+  }
+  for (const t of tries){ const hit = map.get(t) || map.get(t.replace(/ armor\b/, '')); if (hit) return hit; }
+  return null;
+}
 // A loot entry as an inventory item: the catalogue's version where the name
 // matches one (its weight, its weapon or armour numbers, its text).
 function csLootAsItem(it){
   const g = csGearFind(it.name);
   let m = null;
-  if (g && (g.kind === 'item' || g.kind === 'variant') && typeof sktMagicMake === 'function' && CS.R){ try { m = sktMagicMake(CS.R, g, null); } catch(e){ m = null; } }
+  // A variant found by its exact name ("+3 Shield") still needs its base.
+  if (g && g.kind === 'variant' && typeof sktMagicMake === 'function'){
+    const v = csVariantFind(it.name);
+    if (v){ try { m = sktMagicMake(CS.R, v.e, v.base); } catch(e){ m = null; } }
+  }
+  if (!m && g && (g.kind === 'item' || g.kind === 'variant') && typeof sktMagicMake === 'function' && CS.R){ try { m = sktMagicMake(CS.R, g, null); } catch(e){ m = null; } }
   if (!m && g) m = { name: g.name, base: g.base || undefined, weight: g.weight || 0 };
+  if (!m && typeof sktMagicMake === 'function'){
+    const v = csVariantFind(it.name);
+    if (v){ try { m = sktMagicMake(CS.R, v.e, v.base); } catch(e){ m = null; } }
+  }
+  if (m && !m.base && !m.stats && g && /^S(\||$)/.test(String(g.type || '')) && CS.R && CS.R.items.shield) m.base = 'shield';
   if (!m) m = { name: it.name, weight: 0, custom: true };
   m.qty = Math.max(1, +it.qty || 1);
   if (it.weight != null && it.weight !== '' && !isNaN(+it.weight)) m.weight = +it.weight;
