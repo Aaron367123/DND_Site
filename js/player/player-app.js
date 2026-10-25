@@ -799,7 +799,86 @@ function paPoolFor(pc, a){
 let paFeatOpen = null;
 function paPickActivation(i){
   paFeatOpen = (paFeatOpen === i) ? null : i;
+  paRecPick = null;
   paRender();
+}
+
+// ─── Arcane Recovery / Natural Recovery: which slots ─────────────────────────
+// "Regain spent slots with a combined level up to half your wizard level,
+// none 6th or higher." The player picks which: a 3rd and a 1st, or three
+// 1sts. It starts filled in the way the full sheet would do it — the highest
+// slots first — so one tap of Recover still does the sensible thing.
+let paRecPick = null;                 // { level: count } while the panel is open
+const paIsRecovery = a => !!a && /^(Arcane|Natural) Recovery$/.test(a.resource || a.name);
+function paRecBudget(pc){
+  if (typeof csRecoveryBudget === 'function') return csRecoveryBudget(pc);
+  const r = (pc.resources || []).find(x => /^(Arcane|Natural) Recovery$/.test(x.name) && (x.current || 0) > 0);
+  return r ? { res: r, budget: Math.ceil((pc.level || 1) / 2) } : null;
+}
+function paRecSpent(pc){
+  const slots = (pc.sheet && pc.sheet.spellSlots) || {};
+  return Object.keys(slots).map(Number).filter(l => l >= 1 && l < 6 && (slots[l].expended || 0) > 0).sort((a, b) => a - b)
+    .map(l => ({ l, spent: slots[l].expended || 0, total: slots[l].total || 0 }));
+}
+function paRecSuggest(pc, budget){
+  const pick = {}; let left = budget;
+  paRecSpent(pc).slice().reverse().forEach(({ l, spent }) => {
+    let n = 0; while (n < spent && left >= l){ n++; left -= l; }
+    if (n) pick[l] = n;
+  });
+  return pick;
+}
+const paRecUsed = pick => Object.keys(pick || {}).reduce((s, l) => s + l * pick[l], 0);
+function paRecoveryHtml(pc, a){
+  const rec = paRecBudget(pc);
+  if (!rec) return `<span class="pa-dim">Used — it comes back after a long rest</span>`;
+  const spent = paRecSpent(pc);
+  if (!spent.length) return `<span class="pa-dim">No spent slots of 5th level or lower to get back</span>`;
+  if (!paRecPick) paRecPick = paRecSuggest(pc, rec.budget);
+  const used = paRecUsed(paRecPick), left = rec.budget - used;
+  const rows = spent.map(({ l, spent: sp }) => {
+    const n = paRecPick[l] || 0;
+    return `<div class="pa-rec-row"><span class="pa-rec-l">${PA_ORD[l]} level <i>${sp} spent</i></span>`
+      + `<button class="pa-rec-b" data-pa-recstep="${l}:-1" aria-label="One fewer ${PA_ORD[l]}"${n ? '' : ' disabled'}>−</button>`
+      + `<b class="pa-rec-n">${n}</b>`
+      + `<button class="pa-rec-b" data-pa-recstep="${l}:1" aria-label="One more ${PA_ORD[l]}"${n < sp && left >= l ? '' : ' disabled'}>+</button></div>`;
+  }).join('');
+  return `<div class="pa-rec">
+    <div class="pa-rec-h">Get back up to <b>${rec.budget}</b> levels of slots · <b>${left}</b> left</div>
+    ${rows}
+    <button class="btn primary pa-rec-go" data-pa-recgo="1"${used ? '' : ' disabled'}>Recover ${used ? used + ' level' + (used === 1 ? '' : 's') : ''}</button>
+  </div>`;
+}
+function paRecStep(l, d){
+  const pc = paPc(); if (!pc) return;
+  const rec = paRecBudget(pc); if (!rec) return;
+  const s = paRecSpent(pc).find(x => x.l === l); if (!s) return;
+  const pick = Object.assign({}, paRecPick || {}), n = (pick[l] || 0) + d;
+  if (n < 0 || n > s.spent) return;
+  if (d > 0 && paRecUsed(pick) + l > rec.budget) return;
+  if (n) pick[l] = n; else delete pick[l];
+  paRecPick = pick; paTick(); paRenderScreen();
+}
+function paRecover(){
+  const i = paMyIdx(); if (i < 0) return;
+  const pc = state.party[i], rec = paRecBudget(pc); if (!rec || !paRecPick) return;
+  const pick = paRecPick, used = paRecUsed(pick);
+  if (!used || used > rec.budget) return;
+  const slots = Object.assign({}, (pc.sheet && pc.sheet.spellSlots) || {});
+  for (const l of Object.keys(pick)){
+    const s = slots[l]; if (!s || (s.expended || 0) < pick[l] || +l >= 6) return;
+    slots[l] = Object.assign({}, s, { expended: (s.expended || 0) - pick[l] });
+  }
+  const resources = (pc.resources || []).map(r => r.name === rec.res.name ? Object.assign({}, r, { current: Math.max(0, (r.current || 0) - 1) }) : r);
+  const run = () => {
+    state.party[i] = Object.assign({}, pc, { resources, sheet: Object.assign({}, pc.sheet, { spellSlots: slots }) });
+    save(); paTick(); paRecPick = null; paFeatOpen = null; paRender();
+  };
+  const undo = typeof sktUndoable === 'function' && typeof sktUndo === 'function';
+  if (undo) sktUndoable(rec.res.name, run, { quiet: true }); else run();
+  const got = Object.keys(pick).map(Number).sort((a, b) => b - a).map(l => (pick[l] > 1 ? pick[l] + ' × ' : '') + PA_ORD[l]).join(', ');
+  paShowRoll(`<div class="pa-roll-in"><span class="pa-roll-l">${paEsc(rec.res.name)}</span><span class="pa-roll-hit">${used}<i> levels back</i></span>`
+    + `<span class="pa-roll-d">${paEsc(got)}</span>${undo ? '<button class="pa-roll-undo" data-pa-undo="1">Undo</button>' : ''}</div>`);
 }
 function paUseActivation(i){
   const pc = paPc(); if (!pc) return;
@@ -897,7 +976,7 @@ function paYouScreen(){
       <div class="pa-featdet-h"><b>${paEsc(a.name)}</b><span>${paEsc(meta)}</span>
         <button class="pa-featdet-x" data-pa-featclose="1" aria-label="Close">✕</button></div>
       ${a.desc ? `<p>${paEsc(a.desc)}</p>` : '<p class="pa-dim">The sheet doesn\'t describe this one.</p>'}
-      <div class="pa-featdet-f">${dry
+      <div class="pa-featdet-f">${paIsRecovery(a) ? paRecoveryHtml(pc, a) : dry
         ? `<span class="pa-dim">No ${paEsc(String(pool.name).toLowerCase())} left</span>`
         : `<button class="btn primary" data-pa-featuse="${paFeatOpen}">Use</button>`}</div>
     </div>`;
@@ -1786,7 +1865,10 @@ function paOnClick(e){
   if (feat){ paPickActivation(+feat.dataset.paFeat); return; }
   const featUse = e.target.closest('[data-pa-featuse]');
   if (featUse){ paUseActivation(+featUse.dataset.paFeatuse); return; }
-  if (e.target.closest('[data-pa-featclose]')){ paFeatOpen = null; paRender(); return; }
+  if (e.target.closest('[data-pa-featclose]')){ paFeatOpen = null; paRecPick = null; paRender(); return; }
+  const rs = e.target.closest('[data-pa-recstep]');
+  if (rs){ const [l, d] = rs.dataset.paRecstep.split(':').map(Number); paRecStep(l, d); return; }
+  if (e.target.closest('[data-pa-recgo]')){ paRecover(); return; }
   const rp = e.target.closest('[data-pa-res]');
   if (rp){ paTapResource(+rp.dataset.paRes, rp.classList.contains('off')); return; }
   const sp = e.target.closest('[data-pa-slot]');

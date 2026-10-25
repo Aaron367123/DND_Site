@@ -9814,6 +9814,50 @@
         }
       }
 
+      // -- Arcane Recovery on the phone: the player picks the slots -----------
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        try {
+          let saved = null;
+          await openCharBuilder({ onDone: r => { saved = r; } });
+          for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+          CB.build.cls = 'Wizard'; CB.build.level = 5; CB.build.name = 'Recovering Wizard'; cbQuickBuild(); cbSave(); await sleep(80);
+          if (document.getElementById('cb-root')) cbClose();
+          const id = (saved || state.party.find(p => p.name === 'Recovering Wizard')).id, pi = () => state.party.findIndex(p => p.id === id), me = () => state.party[pi()];
+          const sl = JSON.parse(JSON.stringify(me().sheet.spellSlots)); sl[1].expended = 3; sl[2].expended = 2; sl[3].expended = 1;
+          state.party[pi()] = { ...me(), sheet: { ...me().sheet, spellSlots: sl } }; save();
+          paSetPc(id); paTab = 'you'; paRender(); await sleep(40);
+          paPickActivation(paActivations(me()).findIndex(a => a.name === 'Arcane Recovery')); await sleep(30);
+          const n = l => +((document.querySelector('[data-pa-recstep="' + l + ':1"]') || {}).previousElementSibling || {}).textContent;
+          ok('recovery: the panel lists the spent slots, 5th level or lower', !!document.querySelector('.pa-rec') && [1, 2, 3].every(l => document.querySelector('[data-pa-recstep="' + l + ':1"]')));
+          ok('recovery: it starts on the sheet\'s pick, highest first (a 3rd for a level-5 wizard)', n(3) === 1 && n(1) === 0 && n(2) === 0, [n(1), n(2), n(3)].join(','));
+          ok('recovery: nothing more fits the 3-level budget', [1, 2, 3].every(l => document.querySelector('[data-pa-recstep="' + l + ':1"]').disabled));
+          document.querySelector('[data-pa-recstep="3:-1"]').click(); await sleep(20);
+          document.querySelector('[data-pa-recstep="1:1"]').click(); await sleep(20);
+          document.querySelector('[data-pa-recstep="2:1"]').click(); await sleep(20);
+          ok('recovery: the player picks a 2nd and a 1st instead', n(1) === 1 && n(2) === 1 && n(3) === 0 && document.querySelector('[data-pa-recstep="1:1"]').disabled, [n(1), n(2), n(3)].join(','));
+          paRecStep(1, 1); await sleep(10);
+          ok('recovery: and the budget holds even past the button', n(1) === 1);
+          document.querySelector('[data-pa-recgo]').click(); await sleep(40);
+          const s = me().sheet.spellSlots;
+          ok('recovery: exactly those come back, and the use is spent', s[1].expended === 2 && s[2].expended === 1 && s[3].expended === 1
+             && (me().resources.find(r => r.name === 'Arcane Recovery') || {}).current === 0, [s[1].expended, s[2].expended, s[3].expended].join(','));
+          ok('recovery: the card says what came back', /3\s*levels back/.test(document.getElementById('pa-roll').textContent) && /2nd, 1st/.test(document.getElementById('pa-roll').textContent));
+          document.querySelector('[data-pa-undo]').click(); await sleep(40);
+          ok('recovery: Undo puts it all back', me().sheet.spellSlots[1].expended === 3 && (me().resources.find(r => r.name === 'Arcane Recovery') || {}).current === 1);
+          state.party[pi()] = { ...me(), resources: me().resources.map(r => r.name === 'Arcane Recovery' ? { ...r, current: 0 } : r) }; save();
+          paPickActivation(paActivations(me()).findIndex(a => a.name === 'Arcane Recovery')); await sleep(30);
+          ok('recovery: once used, it says when it comes back', !document.querySelector('.pa-rec') && /long rest/i.test((document.querySelector('.pa-featdet') || {}).textContent || ''));
+        } catch(e){ ok('recovery checks ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+        finally {
+          paFeatOpen = null; paRecPick = null; paHideRoll();
+          if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+          if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paTab = tab0; paRender();
+        }
+      }
+
       // -- A campaign night on the phone, every class ------------------------
       // A level-5 character of each class, made in the builder, picked on the
       // phone and played: checks and saves (the number on the button is the

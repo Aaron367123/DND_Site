@@ -5689,3 +5689,15 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 .pa-sk-dot { width:8px; height:8px; border-radius:50%; border:1px solid var(--text-dim); flex-shrink:0; }
 .pa-sk-dot.on { background:var(--accent); border-color:var(--accent); }
 .pa-sk-dot.exp { background:var(--accent); border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+/* Arcane / Natural Recovery: pick the slots */
+.pa-rec { flex:1; display:flex; flex-direction:column; gap:6px; }
+.pa-rec-h { font-size:var(--fs-sm); color:var(--text-muted); }
+.pa-rec-h b { color:var(--text); }
+.pa-rec-row { display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px solid var(--border); }
+.pa-rec-l { flex:1; font-size:var(--fs-md); }
+.pa-rec-l i { font-style:normal; font-size:var(--fs-xs); color:var(--text-muted); margin-left:6px; }
+.pa-rec-b { width:44px; height:40px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--panel-2);
+  color:var(--text); font:inherit; font-size:var(--fs-xl); cursor:pointer; }
+.pa-rec-b:disabled { opacity:.35; cursor:default; }
+.pa-rec-n { min-width:20px; text-align:center; font-size:var(--fs-lg); font-variant-numeric:tabular-nums; }
+.pa-rec-go { margin-top:4px; min-height:44px; }
