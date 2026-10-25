@@ -8711,6 +8711,30 @@
         }
       } catch(e){ ok('round 61 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
+    // -- Round 62: the battle map's settings drawer stays where you scrolled it
+    {
+      const M = panelDefs.battlemap; let before = [];
+      try {
+        if (M && !document.body.classList.contains('player-mode')){
+          openPanel('battlemap'); await sleep(400);
+          M._settingsOpen = true; M._render(); await sleep(150);
+          // The tiles that were on, to switch back afterwards.
+          before = [...M._body.querySelectorAll('.bm-settings .bm-set-tile.active[data-bmset]')].map(t => t.dataset.bmset).filter(k => /^(fog-mode|fog-shape|grid-)/.test(k));
+          const moved = [];
+          for (const k of ['fog-mode-free', 'fog-shape-circle', 'grid-hex', 'grid-square', 'snap', 'snap', 'tok-names', 'tok-names']){
+            const a = M._body.querySelector('.bm-settings'), btn = a && a.querySelector('[data-bmset="' + k + '"]'); if (!btn) continue;
+            a.scrollTop = 0; a.scrollTop = Math.max(0, btn.getBoundingClientRect().top - a.getBoundingClientRect().top - 120); await sleep(20);
+            const y = a.scrollTop; if (y < 20) continue;
+            btn.click(); await sleep(80);
+            const y2 = M._body.querySelector('.bm-settings').scrollTop;
+            if (Math.abs(y2 - y) > 2) moved.push(k + ' ' + y + '→' + y2);
+          }
+          ok('battle map: choosing a setting leaves the drawer where it was scrolled', moved.length === 0, moved.join(', '));
+          for (const k of before) M._body.querySelector('.bm-settings [data-bmset="' + k + '"]')?.click();
+          M._settingsOpen = false; M._render(); closePanel('battlemap');
+        }
+      } catch(e){ ok('round 62 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -3681,7 +3681,12 @@ registerPanel('battlemap',{
     const b = this._body; if (!b) return;
     const aside = b.querySelector('.bm-settings');
     if (!aside){ this._render(); return; }
+    // Keep the drawer where it was. Replacing it reset scrollTop to 0, so
+    // every tile below the fold — brush mode, grid style, tokens — threw
+    // you back to MAP at the top after one click.
+    const y = aside.scrollTop;
     aside.outerHTML = this._renderSettingsSidebar();
+    const fresh = b.querySelector('.bm-settings'); if (fresh) fresh.scrollTop = y;
     this._wireSettingsSidebar();
   },
 
