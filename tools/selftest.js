@@ -9755,6 +9755,65 @@
         }
       }
 
+      // -- The phone's turn: the roll card, action economy, spells on the home screen
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab, d0 = window.sktD;
+        const cb0 = JSON.stringify(state.combatants || []), act0 = state.activeCombatantId, sh0 = state.sharedPanels;
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          const mi = paMyIdx(), me = () => state.party[mi];
+          state.party[mi] = { ...me(), concentration: null, rolls: [],
+            sheet: { ...(me().sheet || {}), attacks: [{ name: 'Mace', atkBonus: '+4', damage: '1d6+2 bludgeoning' }],
+                     spells: ['Healing Word', 'Bless', 'Sacred Flame'], spellSlots: { 1: { total: 2, expended: 0 } }, spellSaveDc: 13, spellAtkBonus: '+5', profBonus: 2 } };
+          // In the fight, and it's this character's turn.
+          state.sharedPanels = [...new Set([...(state.sharedPanels || []), 'combat'])];
+          state.combatants = [{ id: me().id, name: me().name, isPC: true, hp: me().hp, hpMax: me().hpMax, initiative: 15, conditions: [] },
+                              { id: 'ogre_t', name: 'Ogre', hp: 59, hpMax: 59, initiative: 8, conditions: [] }];
+          state.activeCombatantId = me().id;
+          save(); paTab = 'you'; paRender(); paHideTurnBanner(); await sleep(60);
+          // The rules data, for the spells
+          for (let i = 0; i < 60 && !document.querySelector('.pa-sp-w'); i++){ await sleep(150); paRenderScreen(); }
+          const econ = document.querySelector('.pa-econ.mine');
+          ok('phone: on your turn, Action / Bonus / Reaction to tick', !!econ && econ.querySelectorAll('[data-pa-econ]').length === 3);
+          window.sktD = () => 4;
+          document.querySelector('[data-pa-atk="0"]').click(); await sleep(40);
+          const card = document.getElementById('pa-roll'), tabs = document.getElementById('pa-tabs');
+          ok('phone: a roll lands on a card above the tab bar, not down the screen', !!card.querySelector('.pa-roll-dmg') && !document.getElementById('pa-screen').contains(card)
+             && getComputedStyle(card).position === 'fixed' && card.getBoundingClientRect().bottom <= tabs.getBoundingClientRect().top + 1,
+             Math.round(card.getBoundingClientRect().bottom) + ' vs tabs ' + Math.round(tabs.getBoundingClientRect().top));
+          paRender(); await sleep(20);
+          ok('phone: and a redraw (a sync, an HP change) doesn\'t wipe it', !!document.querySelector('#pa-roll .pa-roll-dmg'));
+          ok('phone: attacking marks the Action used', state.combatants[0].actionUsed === true && !!document.querySelector('[data-pa-econ="actionUsed"].used'));
+          document.querySelector('#pa-roll').click(); await sleep(20);
+          ok('phone: tapping the card puts it away', !document.querySelector('#pa-roll .pa-roll-in'));
+          // Spells
+          const sec = document.querySelector('.pa-spells');
+          ok('phone: a caster\'s spells are on the home screen, with the slots', !!sec && /Healing Word/.test(sec.textContent) && /Bless/.test(sec.textContent) && sec.querySelectorAll('[data-pa-slot]').length === 2 && /DC\s*13/.test(sec.textContent));
+          document.querySelector('[data-pa-spell="Healing Word"]').click(); await sleep(30);
+          ok('phone: tapping a spell shows what it does', /regains?/i.test((document.querySelector('.pa-sp.on .pa-sp-det') || {}).textContent || ''));
+          document.querySelector('.pa-sp.on [data-pa-cast]').click(); await sleep(40);
+          ok('phone: casting spends the slot', me().sheet.spellSlots[1].expended === 1);
+          ok('phone: a bonus-action spell marks the bonus action', state.combatants[0].bonusUsed === true);
+          ok('phone: the healing is rolled on the card', /healed/.test((document.querySelector('#pa-roll') || {}).textContent || ''));
+          document.querySelector('[data-pa-undo]').click(); await sleep(40);
+          ok('phone: Undo on the card gives the slot back', me().sheet.spellSlots[1].expended === 0);
+          document.querySelector('[data-pa-cast^="Bless:"]').click(); await sleep(40);
+          ok('phone: casting a concentration spell starts concentrating on it', me().concentration === 'Bless');
+          // Not your turn: just the reaction
+          state.activeCombatantId = 'ogre_t'; paRender(); paHideTurnBanner(); await sleep(20);
+          const off = document.querySelector('.pa-econ');
+          ok('phone: off your turn, only the reaction', !!off && !off.classList.contains('mine') && off.querySelectorAll('[data-pa-econ]').length === 1);
+          document.querySelector('[data-pa-econ="reactionUsed"]').click(); await sleep(20);
+          ok('phone: and tapping it marks it used', state.combatants[0].reactionUsed === true);
+        } catch(e){ ok('phone: the turn checks ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+        finally {
+          window.sktD = d0; paHideRoll(); paSpOpen = null;
+          state.combatants = JSON.parse(cb0); state.activeCombatantId = act0; state.sharedPanels = sh0;
+          if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
+          save(); paTab = tab0; paRender(); paHideTurnBanner();
+        }
+      }
+
       // -- The character sheet on a phone -------------------------------------
       {
         const tab0 = paTab;
@@ -10191,7 +10250,7 @@
             const heads = [...document.querySelectorAll('.pa-sec h4')].map(h => h.textContent.trim());
             const pc = state.party.find(p => p.id === cc.id);
             if (pc && pc.sheet && pc.sheet.spellSlots && Object.keys(pc.sheet.spellSlots).length)
-              ok('player: spell slots have their own heading', heads.includes('Spell slots'), heads.join(','));
+              ok('player: spell slots sit under Spells, beside the spells', heads.some(h => /^Spells/.test(h)) && !!document.querySelector('.pa-spells [data-pa-slot]'), heads.join(','));
           }
         } catch(e){
           ok('player: the condition checks ran to completion', false, e.message);

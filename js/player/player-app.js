@@ -146,6 +146,7 @@ function initPlayerApp(){
     <div class="pa-turn" id="pa-turn"></div>
     <div class="pa-prompt" id="pa-prompt" hidden></div>
     <main class="pa-screen" id="pa-screen"></main>
+    <div class="pa-roll" id="pa-roll" role="status" aria-live="polite"></div>
     <nav class="pa-tabs" id="pa-tabs"></nav>`;
   app.appendChild(shell);
 
@@ -743,25 +744,21 @@ function paUseActivation(i){
   const a = paActivations(pc)[i]; if (!a) return;
   // Bardic Inspiration goes to someone: ask who, and the grant spends the use.
   if (a.name === 'Bardic Inspiration' && typeof sktAskBardic === 'function'){
-    sktAskBardic({ from: pc.id, after: () => { paFeatOpen = null; paRender(); } });
+    sktAskBardic({ from: pc.id, after: () => { paFeatOpen = null; if (paMarkEcon('bonus')) save(); paRender(); } });
     return;
   }
   const pool = paPoolFor(pc, a);
   const n = a.amount || 1;
   const short = pool && pool.current < n;
   if (!short && pool) pool.current = Math.max(0, pool.current - n);
-  if (!short){ save(); paFeatOpen = null; }
+  if (!short){ paMarkEcon(paActKind(a.action)); save(); paFeatOpen = null; }
   paRender();
-  // After the re-render, or this writes into a box that is about to be
-  // replaced — the same order paRollAttack uses.
-  const box = document.getElementById('pa-roll');
-  if (!box) return;
-  box.innerHTML = short
+  paShowRoll(short
     ? `<div class="pa-roll-in fumble"><span class="pa-roll-l">${paEsc(a.name)}</span>
          <span class="pa-roll-d">no ${paEsc(String(pool.name).toLowerCase())} left</span></div>`
     : `<div class="pa-roll-in"><span class="pa-roll-l">${paEsc(a.name)}</span>
          <span class="pa-roll-d">${paEsc(a.action || '')}</span>
-         ${pool ? `<span class="pa-roll-hit">${pool.current}<i>/${pool.max} ${paEsc(pool.name)}</i></span>` : ''}</div>`;
+         ${pool ? `<span class="pa-roll-hit">${pool.current}<i>/${pool.max} ${paEsc(pool.name)}</i></span>` : ''}</div>`);
 }
 function paYouScreen(){
   const pc = paPc();
@@ -793,15 +790,6 @@ function paYouScreen(){
       <span class="pa-res-pips">${pips}</span>
       <span class="pa-res-c">${r.current}/${r.max}</span></div>`;
   }).join('');
-
-  const slots = pc.sheet && pc.sheet.spellSlots ? Object.keys(pc.sheet.spellSlots)
-    .map(n => parseInt(n)).filter(n => n >= 1).sort((a, b) => a - b).map(l => {
-      const s = pc.sheet.spellSlots[l], total = s.total || 0, left = total - (s.expended || 0);
-      let pips = '';
-      for (let i = 0; i < total; i++) pips += `<button class="pa-res-pip ${i < left ? '' : 'off'}" data-pa-slot="${l}" aria-label="${i < left ? 'Use a level ' + l + ' slot' : 'Get a level ' + l + ' slot back'}"></button>`;
-      return `<div class="pa-res"><span class="pa-res-n">Level ${l}</span>
-        <span class="pa-res-pips">${pips}</span><span class="pa-res-c">${left}/${total}</span></div>`;
-    }).join('') : '';
 
   // Two daggers are one row reading "Dagger ×2" — the sheet lists each
   // weapon carried, and identical rows read like a mistake.
@@ -886,16 +874,16 @@ function paYouScreen(){
         ${pc.inspiration ? '<button class="pa-insp" data-pa-insp="1" title="Spend it to give yourself advantage">✦ Heroic Inspiration — tap to spend</button>' : ''}
       </div>
 
+      ${paEconHtml()}
       ${conds ? `<div class="pa-conds">${conds}</div>${condDet}` : ''}
       ${paConcRow(pc)}
       ${down ? paDeathBlock(c || pc) : ''}
+      ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
+      ${paSpellsHtml(pc)}
+      ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
       ${res ? `<div class="pa-sec"><h4>Resources</h4>${res}</div>` : ''}
-      ${slots ? `<div class="pa-sec"><h4>Spell slots</h4>${slots}</div>` : ''}
       ${pc.hitDice && pc.hitDice.max ? `<div class="pa-sec pa-rest-row"><span>Hit dice <b>${Math.max(0, pc.hitDice.current ?? pc.hitDice.max)}/${pc.hitDice.max}</b> ${paEsc(pc.hitDice.dieType || 'd8')}</span>
         <button class="btn" data-pa-rest="open">💤 Short rest</button><button class="btn" data-pa-longrest="1">🛌 Long rest</button></div>` : `<div class="pa-sec pa-rest-row"><span></span><button class="btn" data-pa-longrest="1">🛌 Long rest</button></div>`}
-      ${atks ? `<div class="pa-sec"><h4>Attacks</h4><div class="pa-atks">${atks}</div></div>` : ''}
-      ${feats ? `<div class="pa-sec"><h4>Features</h4><div class="pa-feats">${feats}</div>${featDet}</div>` : ''}
-      <div class="pa-roll" id="pa-roll"></div>
       ${pc.build && (pc.build.level || 1) < 20 && typeof openCharBuilder === 'function'
         ? '<button class="btn pa-levelup" data-pa-build="levelup">⬆ Level up to ' + ((pc.build.level || 1) + 1) + '</button>' : ''}
       <button class="btn primary pa-sheet-t" data-pa-sheet="${paEsc(pc.id)}">📜 Character sheet</button>
@@ -1317,6 +1305,203 @@ function paLongRest(){
   else go();
 }
 
+// ─── The roll card ───────────────────────────────────────────────────────────
+// A result floats just above the tab bar, wherever the screen is scrolled.
+// It sat at the bottom of the You screen: tap an attack near the top and
+// the answer landed a screen and a half below, under Features — and any
+// redraw (an HP change from the DM, a sync) wiped it. It lives in the shell
+// now, outside every redraw; a tap or twelve seconds puts it away.
+let paRollTimer = null;
+function paShowRoll(html){
+  const box = document.getElementById('pa-roll'); if (!box) return;
+  const tabs = document.getElementById('pa-tabs');
+  const top = tabs && tabs.offsetParent ? tabs.getBoundingClientRect().top : innerHeight;
+  box.style.bottom = Math.max(10, innerHeight - top + 10) + 'px';
+  box.innerHTML = html;
+  clearTimeout(paRollTimer);
+  paRollTimer = setTimeout(paHideRoll, 12000);
+}
+function paHideRoll(){
+  clearTimeout(paRollTimer);
+  const box = document.getElementById('pa-roll'); if (box) box.innerHTML = '';
+}
+
+// ─── Your turn: action, bonus action, reaction ───────────────────────────────
+// The same three flags the DM's Turn View keeps on the combatant (and the
+// Combat Tracker resets at the start of each turn), so a tick here is a tick
+// there. Marked for you when you attack, cast or use a feature; tap one to
+// set it right by hand.
+function paIsMyTurn(){ const c = paCombatant(); return !!(c && state.activeCombatantId === c.id); }
+const PA_ECON = { action: 'actionUsed', bonus: 'bonusUsed', reaction: 'reactionUsed' };
+// "Bonus action", "1 bonus", "Reaction", "Action" — whatever the source says.
+function paActKind(t){
+  t = String(t || '').toLowerCase();
+  return /bonus/.test(t) ? 'bonus' : /reaction/.test(t) ? 'reaction' : /\baction\b/.test(t) ? 'action' : '';
+}
+// Only in a fight; the action and bonus action only on your own turn (a
+// reaction is any time). Returns whether anything changed.
+function paMarkEcon(kind){
+  const c = paCombatant(), k = PA_ECON[kind];
+  if (!c || !k || c[k]) return false;
+  if (kind !== 'reaction' && !paIsMyTurn()) return false;
+  c[k] = true;
+  return true;
+}
+function paEconHtml(){
+  const c = paCombatant();
+  if (!c || !paShared().has('combat') || !(state.combatants || []).length) return '';
+  const b = (k, label) => `<button class="pa-econ-b${c[k] ? ' used' : ''}" data-pa-econ="${k}" aria-pressed="${!!c[k]}">`
+    + `<span class="pa-econ-m" aria-hidden="true">${c[k] ? '✓' : ''}</span>${label}</button>`;
+  if (paIsMyTurn()) return `<div class="pa-econ mine"><div class="pa-econ-l">Your turn</div>
+    <div class="pa-econ-row">${b('actionUsed', 'Action')}${b('bonusUsed', 'Bonus')}${b('reactionUsed', 'Reaction')}</div></div>`;
+  return `<div class="pa-econ"><div class="pa-econ-row">${b('reactionUsed', c.reactionUsed ? 'Reaction used' : 'Reaction ready')}</div></div>`;
+}
+function paToggleEcon(k){
+  const c = paCombatant(); if (!c || !Object.values(PA_ECON).includes(k)) return;
+  c[k] = !c[k]; save(); paTick(); paRenderScreen();
+}
+
+// ─── Spells ──────────────────────────────────────────────────────────────────
+// A caster's spells on the home screen. They were only in the full sheet: to
+// cast Healing Word a bard opened the sheet, found the Spells tab, cast, and
+// closed it again. Here: the slots on top, the spells by level under them,
+// tap one to read it, cast at any level you have a slot for. Casting spends
+// the slot, starts concentration (ending the old one), marks the action or
+// bonus action, and rolls what there is to roll — the attack, the damage,
+// the healing — on the roll card.
+const PA_ORD = ['Cantrips', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
+const paRulesBy = {};
+let paSpLv = 'all', paSpOpen = null;
+function paRules(pc){
+  const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
+  const got = paRulesBy[ed];
+  if (got && got !== 'loading') return got;
+  if (!got && typeof sktRulesLoad === 'function'){
+    paRulesBy[ed] = 'loading';
+    sktRulesLoad(ed).then(R => { paRulesBy[ed] = R; if (paTab === 'you') paRenderScreen(); }, () => { delete paRulesBy[ed]; });
+  }
+  return null;
+}
+function paSpell(pc, name){
+  const own = pc.build && (pc.build.customSpells || []).find(s => s.name === name);
+  if (own) return { name: own.name, level: +own.level || 0, entries: [own.text || ''], concentration: !!own.concentration, ritual: !!own.ritual,
+    time: [{ number: 1, unit: own.time || 'action' }], custom: true, entriesDamage: own.damage || '' };
+  const R = paRules(pc);
+  return R && typeof sktRulesSpell === 'function' ? sktRulesSpell(R, name) : null;
+}
+const paSlotsLeft = (slots, l) => slots[l] ? (slots[l].total || 0) - (slots[l].expended || 0) : 0;
+function paSpellsHtml(pc){
+  const sh = pc.sheet || {}, slots = sh.spellSlots || {};
+  const names = [...new Set(sh.spells || [])];
+  const lvls = Object.keys(slots).map(Number).filter(l => l >= 1 && (slots[l].total || 0) > 0).sort((a, b) => a - b);
+  if (!names.length && !lvls.length) return '';
+  const slotRows = lvls.map(l => {
+    const s = slots[l], total = s.total || 0, left = paSlotsLeft(slots, l);
+    let pips = '';
+    for (let i = 0; i < total; i++) pips += `<button class="pa-res-pip ${i < left ? '' : 'off'}" data-pa-slot="${l}" aria-label="${i < left ? 'Use a level ' + l + ' slot' : 'Get a level ' + l + ' slot back'}"></button>`;
+    return `<div class="pa-res"><span class="pa-res-n">${PA_ORD[l]} level${s.pact ? ' (pact)' : ''}</span><span class="pa-res-pips">${pips}</span><span class="pa-res-c">${left}/${total}</span></div>`;
+  }).join('');
+  const atk = typeof csAtkText === 'function' ? csAtkText(sh.spellAtkBonus) : (sh.spellAtkBonus || '');
+  const stats = [sh.spellSaveDc ? `Save DC <b>${paEsc(sh.spellSaveDc)}</b>` : '', atk ? `Attack <b>${paEsc(atk)}</b>` : ''].filter(Boolean).join('<span class="pa-dot">·</span>');
+  const items = names.map(n => { const s = paSpell(pc, n); return { n, s, l: s ? (+s.level || 0) : null }; });
+  const known = [...new Set(items.map(x => x.l).filter(l => l != null))].sort((a, b) => a - b);
+  const filt = items.length > 6 && known.length > 1
+    ? `<div class="pa-splv">${['all'].concat(known).map(v => `<button class="${String(paSpLv) === String(v) ? 'on' : ''}" data-pa-splv="${v}">${v === 'all' ? 'All' : PA_ORD[v]}</button>`).join('')}</div>` : '';
+  const shown = items.filter(x => paSpLv === 'all' || x.l === +paSpLv);
+  const by = {};
+  shown.forEach(x => { const k = x.l == null ? 'x' : x.l; (by[k] = by[k] || []).push(x); });
+  const order = Object.keys(by).sort((a, b) => (a === 'x' ? 99 : +a) - (b === 'x' ? 99 : +b));
+  const rows = order.map(k => (order.length > 1 || paSpLv === 'all' ? `<div class="pa-sp-h">${k === 'x' ? 'Spells' : PA_ORD[k] === 'Cantrips' ? 'Cantrips' : PA_ORD[k] + ' level'}</div>` : '')
+    + by[k].sort((a, b) => a.n.localeCompare(b.n)).map(({ n, s, l }) => {
+      const avail = l ? lvls.filter(x => x >= l && paSlotsLeft(slots, x) > 0) : [];
+      const tags = (s && s.concentration ? '<i class="pa-sp-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="pa-sp-tag" title="Ritual">R</i>' : '');
+      const t = s && [].concat(s.time || [])[0];
+      // "Bonus action", "Reaction", "1 minute", "10 minutes".
+      const when = !t ? '' : /^(action|bonus|reaction)$/.test(t.unit) ? String(t.unit).replace('bonus', 'bonus action')
+                 : t.number + ' ' + t.unit + (t.number > 1 ? 's' : '');
+      const cast = l == null ? ''
+        : l === 0 ? `<button class="pa-sp-cast" data-pa-cast="${paEsc(n)}:0">Cast</button>`
+        : avail.length ? `<button class="pa-sp-cast" data-pa-cast="${paEsc(n)}:${avail[0]}">Cast${avail[0] > l ? ' ' + PA_ORD[avail[0]] : ''}</button>`
+        : (s && s.ritual ? `<button class="pa-sp-cast" data-pa-cast="${paEsc(n)}:ritual">Ritual</button>` : '<span class="pa-sp-none">no slots</span>');
+      const open = paSpOpen === n;
+      let det = '';
+      if (open){
+        const meta = s && typeof csSpellMeta === 'function' ? csSpellMeta(s) : '';
+        const text = s ? (typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '') : 'Loading the rules…';
+        const up = avail.length > 1 ? `<div class="pa-sp-up"><span>Cast at</span>${avail.map(x => `<button class="btn" data-pa-cast="${paEsc(n)}:${x}">${PA_ORD[x]}</button>`).join('')}</div>` : '';
+        const rit = l && s && s.ritual && avail.length ? `<button class="btn" data-pa-cast="${paEsc(n)}:ritual">As a ritual</button>` : '';
+        det = `<div class="pa-sp-det">${meta ? `<div class="pa-sp-meta">${paEsc(meta)}</div>` : ''}<p>${paEsc(text).replace(/\n/g, '<br>')}</p>${up}${rit}</div>`;
+      }
+      return `<div class="pa-sp${open ? ' on' : ''}"><button class="pa-sp-n" data-pa-spell="${paEsc(n)}" aria-expanded="${open}">`
+        + `<b>${paEsc(n)}</b>${tags}${when ? `<span class="pa-sp-w">${paEsc(when)}</span>` : ''}</button>${cast}${det}</div>`;
+    }).join('')).join('');
+  return `<div class="pa-sec pa-spells"><h4>Spells${stats ? `<span class="pa-sp-stats">${stats}</span>` : ''}</h4>${slotRows}${filt}${rows}</div>`;
+}
+// What a spell rolls when it's cast: an attack, a save the targets make, the
+// damage at the slot it was cast with, or the healing.
+function paCastRollHtml(pc, s, name, lv, how){
+  const sh = pc.sheet || {};
+  const bits = [];
+  const atkB = parseInt(sh.spellAtkBonus, 10) || 0;
+  const lvTxt = how === 'ritual' ? 'as a ritual' : lv > 0 ? PA_ORD[lv] + '-level slot' : 'cantrip';
+  let crit = false, cls = '';
+  if (s && (s.spellAttack || []).length){
+    const nat = sktD(20); crit = nat === 20;
+    cls = nat === 20 ? ' crit' : nat === 1 ? ' fumble' : '';
+    bits.push(`<span class="pa-roll-hit">${nat + atkB}<i> to hit</i></span><span class="pa-roll-d">d20 ${nat} ${atkB >= 0 ? '+ ' + atkB : '− ' + Math.abs(atkB)}</span>`);
+  } else if (s && (s.savingThrow || [])[0]){
+    bits.push(`<span class="pa-roll-hit">${paEsc(String(s.savingThrow[0]).slice(0, 3).toUpperCase())}<i> save · DC ${paEsc(sh.spellSaveDc || '?')}</i></span>`);
+  }
+  let expr = '';
+  if (s && lv === 0){
+    const row = (sh.attacks || []).find(a => a.name === name);
+    if (row && row.damage) expr = row.damage;
+    else if (s.scalingLevelDice && s.scalingLevelDice.scaling){
+      const sc = s.scalingLevelDice.scaling, k = Object.keys(sc).map(Number).filter(x => x <= (pc.level || 1)).sort((a, b) => b - a)[0];
+      if (k) expr = sc[k];
+    }
+  } else if (s && typeof csSpellDamage === 'function') expr = csSpellDamage(s, lv || s.level);
+  if (expr && typeof sktDamageRoll === 'function'){
+    const type = /[a-z]{3,}/i.test(expr) ? '' : ' ' + ((s.damageInflict || [])[0] || '');
+    const r = sktDamageRoll(expr + type, crit);
+    bits.push(`<span class="pa-roll-dmg">${r.total}<i> ${paEsc(r.type || '')}</i></span><span class="pa-roll-d">${paEsc(expr)}</span>`);
+  }
+  if (s && typeof csSpellHeal === 'function'){
+    const h = csSpellHeal(s, lv || s.level, atkB - (sh.profBonus || 0));
+    if (h && typeof sktDamageRoll === 'function'){ const r = sktDamageRoll(h, false); bits.push(`<span class="pa-roll-heal">${r.total}<i> healed</i></span><span class="pa-roll-d">${paEsc(h)}</span>`); }
+  }
+  return `<div class="pa-roll-in${cls}"><span class="pa-roll-l">${paEsc(name)} · ${paEsc(lvTxt)}</span>${bits.join('')}${crit ? '<span class="pa-roll-tag">crit</span>' : ''}</div>`;
+}
+function paCast(name, how){
+  const i = paMyIdx(); if (i < 0) return;
+  const pc = state.party[i], sh = pc.sheet || {};
+  const s = paSpell(pc, name);
+  const lv = /^\d+$/.test(how) ? +how : 0;
+  const slots = Object.assign({}, sh.spellSlots || {});
+  if (lv > 0){
+    if (paSlotsLeft(slots, lv) <= 0) return;
+    slots[lv] = Object.assign({}, slots[lv], { expended: (slots[lv].expended || 0) + 1 });
+  }
+  const was = pc.concentration;
+  const conc = s && s.concentration ? name : pc.concentration;
+  // A spell that turns on one of the sheet's states (Shield of Faith's AC…).
+  const tg = (sh.states || []).find(x => x.spell === name && !x.conc);
+  const t = s && [].concat(s.time || [])[0];
+  const run = () => {
+    state.party[i] = Object.assign({}, pc, { concentration: conc || null, sheet: Object.assign({}, sh, { spellSlots: slots }) },
+      tg ? { active: Object.assign({}, pc.active, { [tg.key]: true }) } : {});
+    if (t && how !== 'ritual') paMarkEcon(paActKind(t.unit));
+    save(); paTick(); paRender();
+  };
+  // Quietly: the roll card carries the Undo, rather than a toast on top of it.
+  const undo = typeof sktUndoable === 'function' && typeof sktUndo === 'function';
+  if (undo) sktUndoable('Cast ' + name, run, { quiet: true }); else run();
+  paShowRoll(paCastRollHtml(state.party[i], s, name, lv, how)
+    .replace(/<\/div>$/, (undo ? '<button class="pa-roll-undo" data-pa-undo="1">Undo</button>' : '') + '</div>'));
+  if (s && s.concentration && was && was !== name && typeof showToast === 'function') showToast('🌀 ' + was + ' ends');
+  try { panelDefs.combat && panelDefs.combat._render && panelDefs.combat._render(); } catch(e){}
+}
+
 function paRollAttack(i){
   const pc = paPc(); if (!pc) return;
   const a = (pc.sheet && pc.sheet.attacks || [])[i]; if (!a) return;
@@ -1330,31 +1515,40 @@ function paRollAttack(i){
     dmg = String(r.total); type = r.type;
   }
   if (typeof sktKeepRoll === 'function') sktKeepRoll(pc, total + ' to hit' + (dmg ? ', ' + dmg + ' ' + type : '') + (nat === 20 ? ' (crit)' : nat === 1 ? ' (nat 1)' : ''), { label: a.name, total });
-  const box = document.getElementById('pa-roll');
-  if (!box) return;
+  // Attacking is taking the Attack action, however many swings it gives.
+  if (paMarkEcon('action')) { save(); paRenderScreen(); }
   // Shown, not applied. The player reads it out; the DM decides whether it
   // hit. Applying a player's damage to a monster from here would be the
   // player running the DM's side of the table.
-  box.innerHTML = `<div class="pa-roll-in${nat === 20 ? ' crit' : nat === 1 ? ' fumble' : ''}">
+  paShowRoll(`<div class="pa-roll-in${nat === 20 ? ' crit' : nat === 1 ? ' fumble' : ''}">
     <span class="pa-roll-l">${paEsc(a.name)}</span>
     <span class="pa-roll-hit">${total}<i> to hit</i></span>
     <span class="pa-roll-d">d20 ${nat}${bonus ? (bonus > 0 ? ' + ' + bonus : ' − ' + Math.abs(bonus)) : ''}</span>
     ${dmg ? `<span class="pa-roll-dmg">${dmg}<i> ${paEsc(type)}</i></span>` : ''}
     ${nat === 20 ? '<span class="pa-roll-tag">crit</span>' : nat === 1 ? '<span class="pa-roll-tag">nat 1</span>' : ''}
-  </div>`;
+  </div>`);
 }
 
 function paRollDeathSave(){
   const pc = paPc(); if (!pc || typeof sktRollDeathSave !== 'function') return;
   const msg = sktRollDeathSave(pc).msg;
   save();
-  const box = document.getElementById('pa-roll');
-  if (box) box.innerHTML = `<div class="pa-roll-in"><span class="pa-roll-l">Death save</span>
-    <span class="pa-roll-hit">${paEsc(msg)}</span></div>`;
   paRender();
+  paShowRoll(`<div class="pa-roll-in"><span class="pa-roll-l">Death save</span>
+    <span class="pa-roll-hit">${paEsc(msg)}</span></div>`);
 }
 
 function paOnClick(e){
+  if (e.target.closest('[data-pa-undo]')){ if (typeof sktUndo === 'function') sktUndo(); paHideRoll(); paRender(); return; }
+  if (e.target.closest('#pa-roll')){ paHideRoll(); return; }
+  const ec = e.target.closest('[data-pa-econ]');
+  if (ec){ paToggleEcon(ec.dataset.paEcon); return; }
+  const cast = e.target.closest('[data-pa-cast]');
+  if (cast){ const v = cast.dataset.paCast, k = v.lastIndexOf(':'); paCast(v.slice(0, k), v.slice(k + 1)); return; }
+  const spn = e.target.closest('[data-pa-spell]');
+  if (spn){ paSpOpen = paSpOpen === spn.dataset.paSpell ? null : spn.dataset.paSpell; paRenderScreen(); return; }
+  const splv = e.target.closest('[data-pa-splv]');
+  if (splv){ paSpLv = splv.dataset.paSplv === 'all' ? 'all' : +splv.dataset.paSplv; paRenderScreen(); return; }
   const ho = e.target.closest('[data-pa-ho]');
   if (ho){ paShowHandout(ho.dataset.paHo, false); return; }
   const tab = e.target.closest('[data-pa-tab]');

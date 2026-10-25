@@ -5611,3 +5611,58 @@ body.tools-in-dock #search-wrap { position:fixed; top:56px; left:50%; transform:
 body.tools-in-dock #search-wrap.open { display:block; width:min(680px, calc(100vw - 120px)); }
 body.tools-in-dock #search-wrap .search-bar { font-size:var(--fs-xl); padding:10px 16px; border-radius:var(--r-md); box-shadow:var(--sh-4); }
 body.tools-in-dock #search-wrap .search-popup { left:0; right:0; width:auto; max-height:min(560px, calc(100vh - 140px)); }
+
+/* ── Player app: the flow of a turn ──────────────────────────────────────────
+   The roll card floats over the screen just above the tab bar (bottom is set
+   from the bar's position when it opens), so a result is where the thumb is. */
+body.player-app .pa-roll { position:fixed; left:50%; transform:translateX(-50%); width:min(520px, calc(100% - 20px));
+  z-index:60; bottom:76px; cursor:pointer; }
+body.player-app .pa-roll .pa-roll-in { box-shadow:var(--sh-4); background:var(--panel); padding:13px 15px; }
+.pa-roll-heal { font-size:var(--fs-2xl); font-weight:700; color:var(--success); font-variant-numeric:tabular-nums; }
+.pa-roll-heal i { font-size:var(--fs-sm); font-style:normal; color:var(--text-muted); font-weight:400; margin-left:3px; }
+/* Action / Bonus / Reaction. Lit = still yours to spend; a tick = used. */
+.pa-econ { display:flex; flex-direction:column; gap:6px; }
+.pa-econ.mine { padding:10px 12px; border:1px solid var(--accent); border-radius:var(--r-md);
+  background:color-mix(in srgb, var(--accent) 9%, transparent); }
+.pa-econ-l { font-size:var(--fs-xs); font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); }
+.pa-econ-row { display:flex; gap:8px; }
+.pa-econ-b { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px;
+  padding:6px 8px; border-radius:var(--r-md); border:1px solid var(--accent); background:var(--panel-2);
+  color:var(--text); font:inherit; font-size:var(--fs-md); font-weight:600; cursor:pointer; }
+.pa-econ-b.used { border-color:var(--border); background:transparent; color:var(--text-dim); font-weight:400; }
+.pa-econ-m { width:14px; color:var(--text-dim); }
+.pa-econ:not(.mine) .pa-econ-b { min-height:36px; font-size:var(--fs-sm); flex:0 0 auto; padding:4px 14px; }
+/* Spells */
+.pa-spells h4 { display:flex; align-items:baseline; gap:8px; }
+.pa-sp-stats { margin-left:auto; text-transform:none; letter-spacing:0; font-size:var(--fs-sm); color:var(--text-muted); font-weight:400; }
+.pa-sp-stats b { color:var(--text); }
+.pa-dot { margin:0 6px; color:var(--text-dim); }
+.pa-splv { display:flex; gap:6px; overflow-x:auto; padding:8px 0 2px; scrollbar-width:none; }
+.pa-splv button { flex:0 0 auto; min-height:34px; padding:4px 12px; border-radius:var(--r-pill); border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text-muted); font:inherit; font-size:var(--fs-sm); cursor:pointer; }
+.pa-splv button.on { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, transparent); }
+.pa-sp-h { margin:10px 0 2px; font-size:var(--fs-2xs); color:var(--text-dim); text-transform:uppercase; letter-spacing:.07em; }
+.pa-sp { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; border-bottom:1px solid var(--border); }
+.pa-sp-n { flex:1; min-width:0; display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; min-height:44px; padding:8px 0;
+  background:none; border:none; color:var(--text); font:inherit; text-align:left; cursor:pointer; }
+.pa-sp-n b { font-size:var(--fs-md); font-weight:600; }
+.pa-sp-w { font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+.pa-sp-tag { font-style:normal; font-size:var(--fs-2xs); font-weight:700; color:var(--text-muted); border:1px solid var(--border);
+  border-radius:4px; padding:0 4px; }
+.pa-sp-cast { min-height:36px; padding:4px 14px; border-radius:var(--r-md); border:1px solid var(--accent);
+  background:var(--panel-2); color:var(--accent); font:inherit; font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
+.pa-sp-none { font-size:var(--fs-xs); color:var(--text-dim); }
+.pa-sp-det { flex-basis:100%; padding:0 0 12px; }
+.pa-sp-meta { font-size:var(--fs-xs); color:var(--text-muted); margin-bottom:6px; }
+.pa-sp-det p { margin:0 0 10px; font-size:var(--fs-md); line-height:1.5; color:var(--text); }
+.pa-sp-up { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+.pa-sp-up span { font-size:var(--fs-sm); color:var(--text-muted); margin-right:2px; }
+.pa-sp-up .btn, .pa-sp-det > .btn { min-height:38px; }
+/* A long name takes two lines at most, at a size that leaves the screen for
+   the character's numbers. The damage type is a small picker, not a full-
+   width bar the size of a button. */
+body.player-app .pa-you-name { font-size:var(--fs-2xl); line-height:1.15; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-top:8px; padding:4px 28px 4px 10px;
+  font-size:var(--fs-sm); color:var(--text-muted); align-self:flex-start; }
+.pa-roll-undo { margin-left:auto; align-self:center; min-height:36px; padding:4px 14px; border-radius:var(--r-md);
+  border:1px solid var(--border); background:var(--panel-2); color:var(--text); font:inherit; font-size:var(--fs-sm); cursor:pointer; }
