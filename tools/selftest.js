@@ -4118,6 +4118,10 @@
           const r0 = reads;
           ok('refresh: a second return within ten seconds (focus + visibility) does nothing', _refreshAll(false, fakeDb) === false && reads === r0);
           ok('refresh: a forced one (a long absence, Resync) still runs', _refreshAll(true, fakeDb) === true);
+          // Let it land while the stub is still in place: it reads the fake
+          // server asynchronously, and applying its 'changed' for real after
+          // the restore below wiped the loot for every later check.
+          await sleep(60);
         } finally {
           window._applyRemoteKey = applyRK; SKT_SYNC_KEYS.forEach(k => { delete _lastServer[k]; }); _refreshLast = 0;
           // The fake server's 'changed' must not stay behind as the loot.
