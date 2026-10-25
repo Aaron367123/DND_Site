@@ -5963,3 +5963,16 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 .cs-lootinv .cs-lootitem { background:color-mix(in srgb, var(--accent) 6%, transparent); }
 .cs-lootmark { color:var(--accent); text-align:center; }
 #cs-root h5 .cs-h5sub { text-transform:none; letter-spacing:0; font-weight:400; margin-left:6px; }
+/* Inspiration: one box, two halves — Heroic on the left, Bardic on the right. */
+#cs-root .cs-inspbox { flex-direction:row; align-items:stretch; padding:5px; gap:0; }
+#cs-root .cs-insp-h { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  background:none; border:none; border-radius:var(--r-sm); color:var(--text); font:inherit; cursor:pointer; padding:4px 2px; }
+#cs-root .cs-insp-h + .cs-insp-h { border-left:1px solid var(--fx-line); border-radius:0 var(--r-sm) var(--r-sm) 0; }
+#cs-root .cs-insp-h span { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.1em; color:var(--accent); font-weight:700; }
+#cs-root .cs-insp-h b { font-size:20px; line-height:1.1; }
+#cs-root .cs-insp-h i { font-style:normal; font-size:var(--fs-2xs); color:var(--text-muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#cs-root .cs-insp-h.on { background:color-mix(in srgb, var(--accent) 16%, transparent); }
+#cs-root .cs-insp-h.on b { color:var(--accent); }
+#cs-root .cs-insp-h:disabled { cursor:default; }
+#cs-root .cs-insp-h:not(:disabled):hover, #cs-root .cs-insp-h:focus-visible { background:var(--fx-hair); outline:none; }
+#cs-root .cs-insp-h.on:not(:disabled):hover { background:color-mix(in srgb, var(--accent) 24%, transparent); }

@@ -10190,6 +10190,51 @@
         finally { paTab = tab0; paRender(); }
       }
 
+      // -- A tap on the sheet keeps your place; Inspiration and Bardic, one box --
+      {
+        const p0 = localStorage.getItem('skt-party-v1'), tab0 = paTab, d0 = window.sktD;
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          const mi = paMyIdx();
+          state.party[mi] = { ...state.party[mi], inspiration: false, bardicInspiration: 'd8', bardicFrom: 'Zindle' };
+          save(); paTab = 'you'; paRender(); await sleep(80);
+          const q = s => document.querySelector('#pa-screen #cs-root ' + s);
+          if (paIsPhone()){
+            const body = () => q('.cs-body');
+            body().scrollTop = body().scrollHeight; await sleep(30);
+            const y = body().scrollTop;
+            q('[data-cs-roll^="save:"]').click(); await sleep(60);
+            ok('phone: tapping a button on the sheet keeps the page where it was', y > 100 && Math.abs(body().scrollTop - y) <= 2, y + ' → ' + body().scrollTop);
+            // Abilities & Skills is long: from its bottom, its own tab brings
+            // you to its top (to the tab bar), not left where you were.
+            body().scrollTop = body().scrollHeight; await sleep(20);
+            q('[data-cs-tab="abilities"]').click(); await sleep(40);
+            // The tab bar is sticky, so measure where the tab's content starts:
+            // just under the bar, not scrolled away above it.
+            const paneTop = q('.cs-pane').getBoundingClientRect().top - body().getBoundingClientRect().top;
+            ok('phone: changing tab from deep down lands at the top of the new tab', paneTop >= 0 && paneTop <= 90, Math.round(paneTop) + 'px');
+            q('[data-cs-tab="abilities"]').click(); await sleep(30);
+            body().scrollTop = 0;
+          }
+          const box = q('.cs-inspbox');
+          ok('sheet: one box, Inspiration on one side and Bardic on the other', !!box && !!box.querySelector('[data-cs="insp"]') && !!box.querySelector('[data-cs="bardic"]'));
+          ok('sheet: the bardic side shows the die and who gave it', /d8/.test(box.querySelector('[data-cs="bardic"]').textContent) && /Zindle/.test(box.querySelector('[data-cs="bardic"]').textContent));
+          window.sktD = () => 6;
+          q('[data-cs="bardic"]').click(); await sleep(60);
+          ok('sheet: tapping it rolls the die and spends it', state.party[mi].bardicInspiration === false && /\+6/.test((document.getElementById('pa-roll') || {}).textContent || ''));
+          ok('sheet: without one, the bardic side is empty and does nothing', q('[data-cs="bardic"]').disabled && /—/.test(q('[data-cs="bardic"]').textContent));
+          sktUndo(); await sleep(60);
+          ok('sheet: Undo gives the die back', state.party[mi].bardicInspiration === 'd8');
+          q('[data-cs="insp"]').click(); await sleep(40);
+          ok('sheet: the inspiration side still toggles Heroic Inspiration on its own', state.party[mi].inspiration === true && state.party[mi].bardicInspiration === 'd8');
+        } catch(e){ ok('player: the place-and-bardic checks ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+        finally {
+          window.sktD = d0; if (typeof paHideRoll === 'function') paHideRoll();
+          if (p0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; } loadDomain('party'); }
+          paTab = tab0; paRender();
+        }
+      }
+
       // -- The builder and the sheet fit a phone, every step and tab -----------
       {
         const wide = [];

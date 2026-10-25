@@ -89,7 +89,9 @@ function csRender(){
   const keep = [...root.querySelectorAll('[data-cs-scroll]')].map(e => [e.dataset.csScroll, e.scrollTop]);
   root.style.setProperty('--cs-accent', pc.theme || '');
   root.classList.toggle('themed', !!pc.theme);
-  root.innerHTML = csHead(pc) + '<div class="cs-body"><aside class="cs-side" data-cs-scroll="side">' + csSide(pc) + '</aside>'
+  // cs-body is what scrolls on a phone (the side column is a tab there):
+  // without its own data-cs-scroll every tap's redraw sent you to the top.
+  root.innerHTML = csHead(pc) + '<div class="cs-body" data-cs-scroll="body"><aside class="cs-side" data-cs-scroll="side">' + csSide(pc) + '</aside>'
     + '<div class="cs-main" data-cs-scroll="main">' + (CS.customize && !CS.readOnly ? csCustomizeHtml(pc) : '')
     + (CS.textOut ? '<div class="cs-textout"><div class="cs-textout-h"><b>Copy this text</b><span class="cb-dim">The browser didn’t allow copying it for you.</span><button class="btn small" data-cs="closetext">Done</button></div>'
       + '<textarea data-cs-textout rows="12" readonly>' + csE(CS.textOut) + '</textarea></div>' : '')
@@ -179,6 +181,18 @@ function csHeadMenuHtml(pc, ready){
     + '</div>';
 }
 
+// Heroic Inspiration and a Bardic Inspiration die, side by side in one box.
+// The bardic half shows the die a bard gave this character (and who); tap it
+// to roll it and spend it. Without one it's empty — a bard grants it, from
+// their own card or sheet.
+function csInspHtml(pc, ro){
+  const bd = pc.bardicInspiration ? (typeof pc.bardicInspiration === 'string' ? pc.bardicInspiration : 'd6') : '';
+  return '<div class="cs-box cs-inspbox">'
+    + '<button class="cs-insp-h cs-insp' + (pc.inspiration ? ' on' : '') + '" data-cs="insp"' + (ro ? ' disabled' : '') + ' title="Heroic Inspiration' + (pc.inspiration ? ' — tap to spend it' : '') + '"><span>Inspiration</span><b>' + (pc.inspiration ? '✦' : '—') + '</b></button>'
+    + '<button class="cs-insp-h cs-bardic' + (bd ? ' on' : '') + '" data-cs="bardic"' + (ro || !bd ? ' disabled' : '') + ' title="' + (bd ? 'Bardic Inspiration ' + bd + (pc.bardicFrom ? ' from ' + csE(pc.bardicFrom) : '') + ' — tap to roll it and use it' : 'No Bardic Inspiration — a bard gives it') + '">'
+    + '<span>Bardic</span><b>' + (bd ? csE(bd) : '—') + '</b>' + (bd && pc.bardicFrom ? '<i>' + csE(pc.bardicFrom) + '</i>' : '') + '</button></div>';
+}
+
 // ── Across the top: hit points, defences, the day's state, rolls ─────────────
 function csTop(pc){
   const ro = CS.readOnly, sh = pc.sheet || {};
@@ -211,7 +225,7 @@ function csTop(pc){
     + box('Initiative' + csAdvMark(pc, 'init'), csSigned(pc.init ?? csMod((pc.abilities || {}).dex)), 'init')
     + box('Speed', csSpeed(pc) + ' ft', null, csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft normally' : '')
     + box('Proficiency', csSigned(sh.profBonus || 2))
-    + '<button class="cs-box cs-insp' + (pc.inspiration ? ' on' : '') + '" data-cs="insp"' + (ro ? ' disabled' : '') + ' title="Heroic Inspiration"><span>Inspiration</span><b>' + (pc.inspiration ? '✦' : '—') + '</b></button></div>';
+    + csInspHtml(pc, ro) + '</div>';
   h += csStatesHtml(pc);
   // Conditions, exhaustion, concentration, death saves.
   h += '<div class="cs-state">'
@@ -817,7 +831,17 @@ function csOnClick(e){
     return;
   }
   if (d.cs === 'closetext'){ CS.textOut = null; return csRender(); }
-  if (d.csTab){ CS.tab = d.csTab; return csRender(); }
+  if (d.csTab){
+    CS.tab = d.csTab; csRender();
+    // Measured from the tab's content, not the bar: the bar is sticky, so
+    // once scrolled past it reports where it's stuck, not where it sits.
+    const body = document.querySelector('#cs-root .cs-body'), tabs = document.querySelector('#cs-root .cs-tabs'), pane = document.querySelector('#cs-root .cs-pane');
+    if (body && tabs && pane && body.scrollHeight > body.clientHeight + 4){
+      const y = pane.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - tabs.offsetHeight;
+      if (body.scrollTop > y) body.scrollTop = Math.max(0, y);
+    }
+    return;
+  }
   if (d.csMode){ CS.mode = d.csMode; return csRender(); }
   if (d.cs === 'log'){ CS.showLog = !CS.showLog; return csRender(); }
   if (d.cs === 'reroll' && !CS.readOnly && pc.inspiration){
@@ -879,6 +903,18 @@ function csOnClick(e){
     return run();
   }
   if (d.cs === 'insp') return csEdit(pc.inspiration ? 'Spent Heroic Inspiration' : 'Heroic Inspiration', p => { p.inspiration = !p.inspiration; });
+  if (d.cs === 'bardic'){
+    const die = typeof pc.bardicInspiration === 'string' ? pc.bardicInspiration : (pc.bardicInspiration ? 'd6' : '');
+    if (!die) return;
+    const sides = parseInt(die.replace(/\D/g, ''), 10) || 6, n = csD(sides), from = pc.bardicFrom;
+    csEdit('Used Bardic Inspiration', p => { p.bardicInspiration = false; p.bardicFrom = null; });
+    const r = { kind: 'dmg', label: 'Bardic Inspiration', total: n, type: '', detail: die + (from ? ' from ' + from : '') + ' — add it to the roll', rolls: [n] };
+    CS.log.unshift(r); CS.log = CS.log.slice(0, 8);
+    if (CS.embed && typeof paShowRoll === 'function') paShowRoll('<div class="pa-roll-in crit"><span class="pa-roll-l">Bardic Inspiration</span><span class="pa-roll-hit">+' + n + '</span><span class="pa-roll-d">' + csE(r.detail) + '</span></div>');
+    else if (typeof showToast === 'function') showToast('🎵 Bardic Inspiration ' + die + ': +' + n + ' — add it to the roll');
+    const p2 = csPc(); if (p2 && typeof sktKeepRoll === 'function') sktKeepRoll(p2, '+' + n + ' (' + die + ')', { label: 'Bardic Inspiration', total: n });
+    return csRender();
+  }
   if (d.cs === 'dropconc'){ CS.conc = null; return csEdit('Dropped concentration', p => { p.concentration = null; }); }
   if (d.cs === 'concsave'){
     const c = CS.conc; if (!c) return;
