@@ -101,10 +101,38 @@ function cbMount(){
   root.id = 'cb-root'; root.className = 'cb';
   root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Character builder');
   document.body.appendChild(root);
-  root.addEventListener('click', cbOnClick);
-  root.addEventListener('change', cbOnChange);
-  root.addEventListener('input', cbOnInput);
+  root.addEventListener('click', cbAnchored(cbOnClick));
+  root.addEventListener('change', cbAnchored(cbOnChange));
+  root.addEventListener('input', cbAnchored(cbOnInput));
   document.addEventListener('keydown', cbOnKey);
+}
+
+// Every change redraws the step, and a redraw put you back where the old
+// scroll offset pointed — wrong whenever the change grew or shrank what was
+// above (Species' "Include other books" moved the checkbox 660px; a spell's
+// "i" jumped to the top every time). So the control you used stays at the
+// same spot on screen: found again after the redraw by its data-cb-*
+// attributes and the step scrolled by however far it moved. A step change
+// still starts at the top.
+function cbAnchorSel(el){
+  if (!el || !el.attributes) return null;
+  const a = [...el.attributes].filter(x => /^data-cb/.test(x.name));
+  if (!a.length) return null;
+  return el.tagName.toLowerCase() + a.map(x => '[' + x.name + '="' + CSS.escape(x.value) + '"]').join('');
+}
+function cbAnchored(fn){
+  return e => {
+    const sc = document.querySelector('#cb-root .cb-main');
+    const el = e.target && e.target.closest && e.target.closest('button, input, select, textarea');
+    const sel = sc && el && sc.contains(el) ? cbAnchorSel(el) : null;
+    const nth = sel ? [...sc.querySelectorAll(sel)].indexOf(el) : -1;
+    const top = sel ? el.getBoundingClientRect().top : 0, step = CB && CB.step;
+    fn(e);
+    if (!sel || !CB || CB.step !== step) return;
+    const sc2 = document.querySelector('#cb-root .cb-main'); if (!sc2) return;
+    const m = sc2.querySelectorAll(sel), el2 = m[Math.max(0, Math.min(nth, m.length - 1))];
+    if (el2 && el2 !== el) sc2.scrollTop += el2.getBoundingClientRect().top - top;
+  };
 }
 function cbClose(){
   document.getElementById('cb-root')?.remove();
@@ -970,8 +998,7 @@ function cbSpellFilterHtml(){
   return '<div class="cb-spfilter"><input data-cb-spq placeholder="Search spells…" value="' + cbEsc(CB.spQ || '') + '">'
     + '<select class="cb-sel" data-cb-spschool><option value="">Any school</option>' + Object.keys(schools).map(k => '<option value="' + k + '"' + (CB.spSchool === k ? ' selected' : '') + '>' + schools[k] + '</option>').join('') + '</select>'
     + '<label class="cb-inline"><input type="checkbox" data-cb-spritual' + (CB.spRitual ? ' checked' : '') + '> Ritual</label>'
-    + '<label class="cb-inline"><input type="checkbox" data-cb-spconc' + (CB.spConc ? ' checked' : '') + '> Concentration</label></div>'
-    + (CB.spInfo ? cbSpellInfoHtml(CB.spInfo) : '');
+    + '<label class="cb-inline"><input type="checkbox" data-cb-spconc' + (CB.spConc ? ' checked' : '') + '> Concentration</label></div>';
 }
 function cbSpellPass(name, chosen){
   if ((chosen || []).includes(name)) return true;
@@ -1016,10 +1043,13 @@ function cbSpellChecks(options, chosen, max, attr, valueOf){
   const vals = chosen;
   const full = max != null && vals.length >= max;
   if (!shown.length) return '<div class="cb-dim">No spells match.</div>';
+  // A spell's text opens right under it, across the list (it opened above
+  // the whole list, and the step scrolled up to it — away from your place).
   return '<div class="cb-checks">' + shown.map(n => {
     const v = valueOf(n), on = vals.includes(v);
     return '<label class="cb-check' + (on ? ' on' : '') + (!on && full ? ' dim' : '') + '"><input type="checkbox" data-' + attr + '="' + cbEsc(v) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + '>'
-      + '<span>' + cbEsc(n) + '</span><button class="cb-spi" data-cb-spinfo="' + cbEsc(n) + '" title="What it does" aria-label="About ' + cbEsc(n) + '">i</button></label>';
+      + '<span>' + cbEsc(n) + '</span><button class="cb-spi" data-cb-spinfo="' + cbEsc(n) + '" data-cb-spin="' + cbEsc(attr) + '" title="What it does" aria-label="About ' + cbEsc(n) + '">i</button></label>'
+      + (CB.spInfo === n && CB.spInfoIn === attr ? cbSpellInfoHtml(n) : '');
   }).join('') + '</div>';
 }
 CB_RENDER.spells = () => {
@@ -1395,7 +1425,7 @@ function cbOnClick(e){
   if (d.cbLineage) return cbSet(b => { if (b.speciesChoice.lineage !== d.cbLineage) delete b.speciesChoice.spells; b.speciesChoice.lineage = d.cbLineage; });
   if (d.cbSize) return cbSet(b => { b.size = d.cbSize; });
   if (d.cbSrcall) return cbSet(b => { if (d.cbSrcall === '1') delete b.books; else b.books = []; });
-  if (d.cbSpinfo != null){ e.preventDefault(); CB.spInfo = d.cbSpinfo || ''; return cbRender(); }
+  if (d.cbSpinfo != null){ e.preventDefault(); const same = CB.spInfo === d.cbSpinfo && CB.spInfoIn === (d.cbSpin || ''); CB.spInfo = same ? '' : (d.cbSpinfo || ''); CB.spInfoIn = d.cbSpin || ''; return cbRender(); }
   if (d.cbClsgold){
     const g = sktClassGold(sktRulesClass(CB.R, CB.build.cls)); if (!g) return;
     const roll = () => { let t = 0; for (let k = 0; k < g.n; k++) t += sktD(g.d); return t * g.mult; };

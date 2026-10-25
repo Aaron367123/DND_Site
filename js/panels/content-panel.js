@@ -526,13 +526,22 @@ const CONTENT_PANEL_SHARED = {
     });
     b.querySelector('[data-act="print"]')?.addEventListener('click', () => this._openPrintPicker(adv, file));
     b.querySelectorAll('.adv-chapter').forEach(btn => btn.addEventListener('click', () => {
+      // The chapter list stays where it was. The redraw rebuilt it at the
+      // top, so picking chapter 9 of 14 threw the list back to chapter 1 —
+      // and the chapter you'd just clicked out of sight.
+      const tocY = b.querySelector('.adv-toc-list')?.scrollTop || 0;
       this._currentChapterIdx = +btn.dataset.ci;
       this._bumpBookmark();
       this._render();
+      const toc = this._body?.querySelector('.adv-toc-list');
+      if (toc) toc.scrollTop = tocY;
       // Scroll the new chapter content to the top.
       const c = this._body?.querySelector('#adv-content');
       if (c) c.scrollTop = 0;
     }));
+    // Opening at a bookmarked chapter far down the list: bring it into view.
+    const toc = b.querySelector('.adv-toc-list'), on = toc && toc.querySelector('.adv-chapter.active');
+    if (on){ const y = on.getBoundingClientRect().top - toc.getBoundingClientRect().top; if (y + on.offsetHeight > toc.clientHeight) toc.scrollTop = y - toc.clientHeight / 3; }
 
     // Hover popovers for {@creature}, {@spell}, {@item}, {@condition}.
     this._wireAdvHover();

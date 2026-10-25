@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '21891637e3';
+const BUILD = 'b0f59f2c94';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=50352cdfb1',
+  'styles/main.css?v=9c1d4c443f',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=5ead9a4764',
   'js/core/theme.js?v=9db78fe46f',
@@ -65,7 +65,7 @@ const PRECACHE = [
   'js/panels/battlemap.js?v=7060eacf41',
   'js/panels/npc-library.js?v=956f8b34ed',
   'js/panels/bestiary.js?v=8b3658dc0a',
-  'js/panels/content-panel.js?v=235e0b5a0d',
+  'js/panels/content-panel.js?v=1a060dfd0b',
   'js/panels/adventures.js?v=ba56a82c30',
   'js/panels/books.js?v=bcff5b8492',
   'js/panels/library.js?v=d41e1e85e4',
@@ -89,7 +89,7 @@ const PRECACHE = [
   'js/features/char-effects.js?v=7db79e629f',
   'js/features/char-sheet.js?v=22a1a49c83',
   'js/features/char-print.js?v=7e55981c09',
-  'js/features/char-builder.js?v=e55ef14a79',
+  'js/features/char-builder.js?v=5f868dc37e',
   'js/features/pdf-import.js?v=06787122c5',
   'js/player/player-app.js?v=2e7e31f6c1',
   'js/ui/player-view.js?v=3c47cb84bd',

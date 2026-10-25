@@ -5380,6 +5380,7 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 #cb-root .cb-spfilter { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0 10px; }
 #cb-root .cb-spfilter input[data-cb-spq] { flex:1 1 200px; min-width:0; }
 #cb-root .cb-spfilter .cb-sel { width:auto; }
+#cb-root .cb-checks > .cb-spinfo { grid-column:1 / -1; margin:2px 0 6px; }
 #cb-root .cb-spinfo { position:relative; padding:10px 32px 10px 12px; border:1px solid var(--accent); border-radius:8px; margin:0 0 10px; max-height:260px; overflow:auto; }
 #cb-root .cb-spinfo .cb-x { position:absolute; top:4px; right:4px; }
 #cb-root .cb-spi { margin-left:4px; width:16px; height:16px; border-radius:50%; border:1px solid var(--text-muted); background:none; color:var(--text-muted); font-size:10px; line-height:14px; padding:0; cursor:pointer; font-style:italic; font-family:serif; }

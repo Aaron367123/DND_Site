@@ -8735,6 +8735,68 @@
         }
       } catch(e){ ok('round 62 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
     }
+    // -- Round 63: picking something deep in a list keeps your place (library, builder)
+    {
+      try {
+        // Library: a chapter far down an adventure's contents
+        const ad = panelDefs.adventures;
+        if (ad && !document.body.classList.contains('player-mode')){
+          openPanel('adventures'); await sleep(300);
+          if (ad._loadIndex) await ad._loadIndex();
+          const skt = (ad._adventures || []).find(a => /^skt$/i.test(a.id || '')) || (ad._adventures || [])[0];
+          if (skt){
+            await ad._loadAdventure(skt.id);
+            ad._currentAdvId = skt.id; ad._currentChapterIdx = 0; ad._render(); await sleep(60);
+            const w = ad._body.closest('.window'); if (innerWidth >= 760) Object.assign(w.style, { height: '320px' }); await sleep(60);
+            let toc = ad._body.querySelector('.adv-toc-list'), chs = toc ? [...toc.querySelectorAll('.adv-chapter')] : [];
+            if (toc && toc.scrollHeight > toc.clientHeight + 40 && chs.length > 4){
+              // Scrolled so a chapter near the end sits at the bottom edge —
+              // not at the very end, where every outcome looks the same.
+              const pick = chs[chs.length - 3];
+              toc.scrollTop = 0; toc.scrollTop = pick.getBoundingClientRect().top - toc.getBoundingClientRect().top - toc.clientHeight + pick.offsetHeight + 4; await sleep(20);
+              const y = toc.scrollTop, ci = pick.dataset.ci, top = pick.getBoundingClientRect().top;
+              pick.click(); await sleep(80);
+              toc = ad._body.querySelector('.adv-toc-list');
+              const on = toc.querySelector('.adv-chapter.active');
+              ok('library: picking a chapter far down the contents leaves the list where it was', Math.abs(toc.scrollTop - y) <= 2 && on && on.dataset.ci === ci && Math.abs(on.getBoundingClientRect().top - top) <= 2, y + ' → ' + toc.scrollTop);
+              // Reopening at that bookmarked chapter shows it in the list
+              ad._render(); await sleep(40); toc = ad._body.querySelector('.adv-toc-list');
+              const on2 = toc.querySelector('.adv-chapter.active'), tr = toc.getBoundingClientRect(), r2 = on2.getBoundingClientRect();
+              ok('library: opening at a chapter far down the list brings it into view', r2.top >= tr.top - 1 && r2.bottom <= tr.bottom + 1, Math.round(r2.top) + ' in ' + Math.round(tr.top) + '–' + Math.round(tr.bottom));
+            }
+            ad._currentAdvId = null; ad._currentChapterIdx = 0; ad._render();
+          }
+          closePanel('adventures');
+        }
+        // Builder: the control you use stays put; a spell's text opens under it
+        await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
+        CB.build.cls = 'Wizard'; CB.build.level = 5; cbQuickBuild();
+        CB.step = 'spells'; cbRender(); await sleep(60);
+        const main = () => document.querySelector('#cb-root .cb-main');
+        const drift = [];
+        for (const f of [0.5, 0.8, 0.3]){
+          const m = main(), bs = [...m.querySelectorAll('[data-cb-spinfo]:not([data-cb-spinfo=""])')], b = bs[Math.floor(bs.length * f)];
+          m.scrollTop = 0; m.scrollTop = b.getBoundingClientRect().top - m.getBoundingClientRect().top - m.clientHeight / 2; await sleep(20);
+          const top = b.getBoundingClientRect().top, name = b.dataset.cbSpinfo, inList = b.dataset.cbSpin;
+          b.click(); await sleep(60);
+          const b2 = main().querySelector('[data-cb-spinfo="' + CSS.escape(name) + '"][data-cb-spin="' + CSS.escape(inList) + '"]');
+          if (!b2 || Math.abs(b2.getBoundingClientRect().top - top) > 3) drift.push(name + ' moved ' + (b2 ? Math.round(b2.getBoundingClientRect().top - top) : 'gone'));
+          const next = b2 && b2.closest('.cb-check').nextElementSibling;
+          if (!next || !next.classList.contains('cb-spinfo')) drift.push(name + ': its text not under it');
+        }
+        ok('builder: a spell\'s "i" opens its text right under it, and the list doesn\'t move', drift.length === 0, drift.join(', '));
+        // A spell checkbox deep in the list
+        { const m = main(), cs = [...m.querySelectorAll('.cb-check input[type=checkbox]:not(:disabled)')], c = cs[Math.floor(cs.length * 0.7)];
+          m.scrollTop = 0; m.scrollTop = c.getBoundingClientRect().top - m.getBoundingClientRect().top - m.clientHeight / 2; await sleep(20);
+          const sel = cbAnchorSel(c), top = c.getBoundingClientRect().top;
+          c.click(); await sleep(60);
+          const c2 = main().querySelector(sel);
+          ok('builder: ticking a spell deep in the list leaves it where it was on screen', c2 && Math.abs(c2.getBoundingClientRect().top - top) <= 3, c2 ? Math.round(c2.getBoundingClientRect().top - top) + 'px' : 'gone');
+          c2 && c2.click(); }
+        cbClose();
+      } catch(e){ ok('round 63 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
