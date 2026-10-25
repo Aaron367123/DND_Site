@@ -8454,7 +8454,9 @@
         const px = s => parseFloat(getComputedStyle(q(s)).fontSize);
         ok('big: rows are 14px, not 12', px('.cs-row') >= 14 && px('.cs-row span:nth-child(2)') >= 14, px('.cs-row') + 'px');
         const b = q('.cs-row > b'), bs = getComputedStyle(b);
-        ok('big: each save and skill bonus sits in its own box', parseFloat(bs.fontSize) >= 15 && bs.borderTopStyle === 'solid' && b.getBoundingClientRect().width >= 40);
+        // Its box: a border, or the sheet's frame (an outline drawn by ::before).
+        const framed = bs.borderTopStyle === 'solid' || (getComputedStyle(b, '::before').content !== 'none' && bs.clipPath !== 'none');
+        ok('big: each save and skill bonus sits in its own box', parseFloat(bs.fontSize) >= 15 && framed && b.getBoundingClientRect().width >= 40);
         ok('big: ability modifiers at 24px', px('.cs-ab b') >= 24);
         ok('big: the rest of the app keeps its own sizes', parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fs-md')) === 12);
         csClose();
