@@ -5287,6 +5287,11 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-dot.on { background:var(--accent); border-color:var(--accent); }
 .cs-dot.exp { background:var(--accent); border-color:var(--accent); box-shadow:0 0 0 2px var(--panel), 0 0 0 3px var(--accent); }
 /* Half proficiency (Jack of All Trades): a half-filled dot. */
+.cb-convert { border:1px solid var(--accent); border-radius:var(--r-md); padding:10px 12px; margin:0 0 12px; background:color-mix(in srgb, var(--accent) 7%, transparent); font-size:var(--fs-sm); }
+.cb-convert ul { margin:6px 0 0; padding-left:18px; }
+.cb-convert-notes li { color:var(--warning, #d9a441); }
+.cb-convert-diff { margin-top:8px; }
+.cb-convert-ok { margin-top:8px; color:var(--success, #6b9e6b); font-weight:600; }
 .cs-dot.half { border-color:var(--accent); background:linear-gradient(90deg, var(--accent) 50%, transparent 50%); }
 .cs-mastery { background:none; border:none; padding:0; font:inherit; color:inherit; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
 .cs-mastery b { color:var(--accent); font-weight:600; }

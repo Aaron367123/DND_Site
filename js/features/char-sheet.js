@@ -156,6 +156,7 @@ function csHead(pc){
     + (ro ? '' : '<button class="btn" data-cs="short">💤 Short rest</button><button class="btn" data-cs="long">🛌 Long rest</button>')
     + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
     + (!ro && pc.build ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
+    + (!ro && !pc.build && !pc.foe && typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="convert" title="Fill in the builder\u2019s choices from this sheet, so it can be levelled and edited like one made there">⇪ Rebuild in the builder</button>' : '')
     + '<button class="btn" data-cs="print" title="Print the sheet, or save it as a PDF">🖨 Print</button>'
     + '<span class="cs-exwrap"><button class="btn" data-cs="exportmenu" aria-haspopup="true" aria-expanded="' + !!CS.exportOpen + '" title="Save or share the character">⤓ Export ▾</button>'
     + (CS.exportOpen ? '<div class="cs-exmenu" role="menu">'
@@ -176,6 +177,7 @@ function csHeadMenuHtml(pc, ready){
     + (ro ? '' : item('short', '💤', 'Short rest') + item('long', '🛌', 'Long rest'))
     + (!ro && built && typeof openCharBuilder === 'function' ? item('levelup', '⬆', 'Level up' + (ready ? ' — ready' : ''), (pc.build.level || 1) >= 20 ? ' disabled' : '') + item('edit', '✎', 'Edit') : '')
     + (!ro && built ? item('customize', '⚙', 'Customize') : '')
+    + (!ro && !built && !pc.foe && typeof openCharBuilder === 'function' ? item('convert', '⇪', 'Rebuild in the character builder') : '')
     + item('print', '🖨', 'PDF / print') + item('export', '⤓', 'Character file') + item('copytext', '📋', 'Copy as text')
     + (CS.embed ? '<button role="menuitem" data-pa-swap="1"><span class="cs-hm-i">⇄</span>Play a different character</button>' : '')
     + '</div>';
@@ -189,7 +191,7 @@ function csInspHtml(pc, ro){
   const bd = pc.bardicInspiration ? (typeof pc.bardicInspiration === 'string' ? pc.bardicInspiration : 'd6') : '';
   return '<div class="cs-box cs-inspbox">'
     + '<button class="cs-insp-h cs-insp' + (pc.inspiration ? ' on' : '') + '" data-cs="insp"' + (ro ? ' disabled' : '') + ' title="Heroic Inspiration' + (pc.inspiration ? ' — tap to spend it' : '') + '"><span>Inspiration</span><b>' + (pc.inspiration ? '✦' : '—') + '</b></button>'
-    + '<button class="cs-insp-h cs-bardic' + (bd ? ' on' : '') + '" data-cs="bardic"' + (ro || !bd ? ' disabled' : '') + ' title="' + (bd ? 'Bardic Inspiration ' + bd + (pc.bardicFrom ? ' from ' + csE(pc.bardicFrom) : '') + ' — tap to roll it and use it' : 'No Bardic Inspiration — a bard gives it') + '">'
+    + '<button class="cs-insp-h cs-bardic' + (bd ? ' on' : '') + '" data-cs="bardic"' + (ro ? ' disabled' : '') + ' title="' + (bd ? 'Bardic Inspiration ' + bd + (pc.bardicFrom ? ' from ' + csE(pc.bardicFrom) : '') + ' — tap to roll it and use it' : 'Tap when a bard inspires you') + '">'
     + '<span>Bardic</span><b>' + (bd ? csE(bd) : '—') + '</b>' + (bd && pc.bardicFrom ? '<i>' + csE(pc.bardicFrom) + '</i>' : '') + '</button></div>';
 }
 
@@ -945,7 +947,17 @@ function csOnClick(e){
   if (d.cs === 'insp') return csEdit(pc.inspiration ? 'Spent Heroic Inspiration' : 'Heroic Inspiration', p => { p.inspiration = !p.inspiration; });
   if (d.cs === 'bardic'){
     const die = typeof pc.bardicInspiration === 'string' ? pc.bardicInspiration : (pc.bardicInspiration ? 'd6' : '');
-    if (!die) return;
+    // None yet: mark it, as with Heroic Inspiration. A bard in the party with
+    // a use left gives it (that use comes off their pool, and it's their die);
+    // with none tracked, it's simply marked — their die if there is a bard.
+    if (!die){
+      if (CS.readOnly) return;
+      const bards = typeof sktBards === 'function' ? sktBards().filter(b => b.id !== pc.id) : [];
+      const ready = bards.filter(b => ((sktBardicPool(b) || {}).current || 0) > 0);
+      if (ready.length && typeof sktAskBardic === 'function') return sktAskBardic({ to: pc.id, after: () => csRender() });
+      const b0 = bards[0], d0 = b0 && typeof sktBardicDie === 'function' ? sktBardicDie(b0) : 'd6';
+      return csEdit('Bardic Inspiration ' + d0, p => { p.bardicInspiration = d0; p.bardicFrom = b0 ? b0.name : null; });
+    }
     const sides = parseInt(die.replace(/\D/g, ''), 10) || 6, n = csD(sides), from = pc.bardicFrom;
     csEdit('Used Bardic Inspiration', p => { p.bardicInspiration = false; p.bardicFrom = null; });
     const r = { kind: 'dmg', label: 'Bardic Inspiration', total: n, type: '', detail: die + (from ? ' from ' + from : '') + ' — add it to the roll', rolls: [n] };
@@ -1046,7 +1058,7 @@ function csOnClick(e){
     if (typeof showConfirm === 'function') return showConfirm('Hit points to full, half the hit dice, every slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
     return go();
   }
-  if (d.cs === 'levelup' || d.cs === 'edit'){
+  if (d.cs === 'levelup' || d.cs === 'edit' || d.cs === 'convert'){
     const i = csIdx(); csClose();
     return openCharBuilder({ idx: i, levelup: d.cs === 'levelup' });
   }

@@ -682,6 +682,13 @@ function sktProfChoices(build, R){
     const picked = (((build.profPicks || {})[f.name] || {})[spec.kind] || []).filter(x => spec.options.includes(x)).slice(0, count);
     out.push({ feature: f.name, kind: spec.kind, count, options: spec.options, picked });
   });
+  // The 2024 barbarian's Primal Knowledge (3rd level): one more skill from the
+  // barbarian's list.
+  if (R.edition === '2024') sktBuildFeatures(build, R).filter(f => f.from === 'class' && f.name === 'Primal Knowledge' && f.cls === 'barbarian').slice(0, 1).forEach(f => {
+    const bc = sktRulesClass(R, 'barbarian'), options = (bc && bc.skillChoice.from) || [];
+    const picked = (((build.profPicks || {})[f.name] || {}).skills || []).filter(x => options.includes(x)).slice(0, 1);
+    if (options.length) out.push({ feature: f.name, kind: 'skills', count: 1, options, picked });
+  });
   sktSubclassProfFeatures(build, R).forEach(({ feature, cls, g }) => g.choices.forEach(c => {
     if (c.kind !== 'skills' && c.kind !== 'weapons') return;
     const part = sktClassLevels(build, R).find(p => p.key === cls) || sktClassLevels(build, R)[0];
@@ -1872,6 +1879,9 @@ sktDefineEffect(['class:wizard:Arcane Recovery'], ctx => {
 });
 
 // ---- Subclasses that change the numbers
+// The Soulknife's Psychic Blades: a finesse, thrown blade of psychic energy
+// (1d6) with the better of STR and DEX, and a second as a bonus action (1d4).
+sktDefineEffect(['subclass:Psychic Blades'], ctx => { ctx.psychicBlades = true; });
 sktDefineEffect(['subclass:Draconic Resilience'], ctx => {
   ctx.hpPerLevel += 1;
   const v = ctx.edition === '2024' ? 10 + ctx.mod.dex + ctx.mod.cha : 13 + ctx.mod.dex;
@@ -2717,6 +2727,12 @@ function sktBuildAttacks(ctx, gear, sc){
   const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
   out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb), str: uab === m.str,
              damage: (ctx.martialArts ? ctx.martialArtsDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
+  if (ctx.psychicBlades){
+    const pab = Math.max(m.str, m.dex), pflat = (pab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
+    const row = (die, extra) => Object.assign({ name: 'Psychic Blades', atkBonus: sktSigned(pab + pb), str: pab === m.str && pab !== m.dex,
+      damage: die + sktSigned(pab + pflat) + ' psychic', props: ['F', 'T'], range: '60', mastery: ctx.edition === '2024' ? 'Vex' : '' }, extra || {});
+    out.push(row('1d6'), row('1d4', { name: 'Psychic Blades (bonus action)' }));
+  }
   // Attack cantrips the character knows.
   if (sc) (sc.cantripLists || [{ names: ctx.build.cantrips || [], attack: sc.attack, dc: sc.dc }]).forEach(list => list.names.forEach(n => {
     const s = sktRulesSpell(ctx.R, n); if (!s) return;

@@ -9237,6 +9237,86 @@
         if (panelDefs.loot) panelDefs.loot._loot = null; loadDomain('party');
       }
     }
+    // -- Round 75: an imported character rebuilt in the builder; Bardic marked --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const S = (o) => Object.assign({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, o);
+        // A 2024 fighter from a PDF: Soldier, Defense, Tough, two masteries.
+        state.party = state.party.filter(x => !/^imp_cv/.test(x.id));
+        state.party.push({ id: 'imp_cv1', name: 'Imp Fighter', cls: 'fighter', level: 6, race: 'Human', background: 'Soldier', subclass: 'Champion',
+          hp: 50, hpMax: 70, ac: 17, conditions: ['Poisoned'], feats: ['Defense', 'Tough', 'Weapon Mastery', '4: Weapon Mastery', 'Savage Attacker'],
+          abilities: { str: 20, dex: 13, con: 16, int: 8, wis: 12, cha: 10 }, inventory: [{ name: 'Rope', qty: 1, weight: 10 }],
+          sheet: { profBonus: 3, saves: S({ str: 8, dex: 1, con: 6, int: -1, wis: 1, cha: 0 }),
+            skills: { athletics: 8, perception: 4, insight: 4, intimidation: 3, survival: 4, acrobatics: 1, stealth: 1, history: -1 },
+            attacks: [{ name: 'Greatsword', atkBonus: '+8', damage: '2d6+5 Slashing' }, { name: 'Javelin', atkBonus: '+8', damage: '1d6+5 Piercing' }],
+            languages: '=== ARMOR === Heavy Armor, Light Armor, Medium Armor, Shields === LANGUAGES === Common, Giant, Goblin',
+            bio: { features: '* Fighting Style • PHB-2024 91 \n* Weapon Mastery • PHB-2024 91 \n\n   | Longsword (Sap) •  \n   | Slow (Javelin): 1 Action \n' } } });
+        save();
+        const conv = async id => { await openCharBuilder({ idx: state.party.findIndex(x => x.id === id) }); for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100); };
+        await conv('imp_cv1');
+        const todo = sktBuildTodo(CB.build, CB.R).filter(t => !t.soft).map(t => t.what);
+        ok('rebuild: a 2024 fighter from a PDF comes out the same — scores, AC, HP, saves, skills, attacks — with nothing left to choose',
+           CB.convertDiff.length === 0 && todo.length === 0, (CB.convertDiff || []).concat(todo).join(' | '));
+        ok('rebuild: its choices are read from the sheet — Soldier, Champion, Defense, its masteries (one on a longsword it doesn\'t carry), its languages',
+           CB.build.background === 'Soldier' && CB.build.subclass === 'Champion' && eqJ((CB.build.optional || {})['Fighting Style'], ['Defense'])
+           && ['longsword', 'javelin'].every(w => (CB.build.masteries || []).includes(w)) && ['Giant', 'Goblin'].every(l => (CB.build.languages || []).includes(l)),
+           JSON.stringify([CB.build.background, CB.build.subclass, CB.build.optional, CB.build.masteries, CB.build.languages]));
+        ok('rebuild: the review says where it came from and that it matches', /Rebuilt from Imp Fighter/.test(document.querySelector('#cb-root').innerText) && !!document.querySelector('#cb-root .cb-convert-ok'));
+        cbSave(); await sleep(150);
+        const f = () => state.party.find(x => x.id === 'imp_cv1');
+        ok('rebuild: saved, it\'s a builder character — the same AC and abilities, its hit points and conditions kept, its gear in the build',
+           !!f().build && f().ac === 17 && f().hpMax === 70 && f().hp === 50 && eqJ(f().conditions, ['Poisoned']) && f().abilities.str === 20
+           && !('inventory' in f()) && (f().build.items || []).some(x => x.name === 'Rope'),
+           JSON.stringify([!!f().build, f().ac, f().hpMax, f().hp, f().conditions, 'inventory' in f()]));
+        sktUndo(); await sleep(100);
+        ok('rebuild: and Undo puts the imported one back', !f().build && !!f().sheet.bio && (f().inventory || []).length === 1);
+        // A custom background (D&D Beyond's "Custom Background") and a Soulknife.
+        state.party.push({ id: 'imp_cv2', name: 'Imp Rogue', cls: 'rogue', level: 6, race: 'Human', background: 'Custom Background', subclass: 'Soulknife',
+          hp: 55, hpMax: 55, ac: 17, feats: ['Savage Attacker', 'Weapon Mastery'], abilities: { str: 8, dex: 19, con: 14, int: 12, wis: 10, cha: 15 },
+          sheet: { profBonus: 3, saves: S({ str: -1, dex: 7, con: 2, int: 4, wis: 0, cha: 2 }),
+            skills: { acrobatics: 10, arcana: 4, athletics: 2, investigation: 7, performance: 5, sleightOfHand: 10, stealth: 10, insight: 0, perception: 0 },
+            attacks: [{ name: 'Psychic Blades', atkBonus: '+7', damage: '1d6+4 Psychic' }],
+            bio: { features: '* Weapon Mastery • PHB-2024 129 \n\n   | Dagger (Nick) •  \n   | Shortsword (Vex) •  \n' } } });
+        save();
+        await conv('imp_cv2');
+        ok('rebuild: a custom background takes the skills nothing else explains, and Psychic Blades are an attack the builder now makes',
+           CB.build.background === SKT_CUSTOM_BG && CB.convertDiff.length === 0 && (CB.rec || sktComputeCharacter(CB.build, CB.R)).sheet.attacks.some(a => a.name === 'Psychic Blades' && a.atkBonus === '+7' && /^1d6\+4 psychic/.test(a.damage)),
+           (CB.convertDiff || []).join(' | ') + ' bg ' + CB.build.background);
+        cbClose();
+        // The builder itself: a 2024 barbarian's Primal Knowledge is a skill pick.
+        { await openCharBuilder({ edition: '2024' }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+          CB.build.cls = 'Barbarian'; CB.build.level = 3; cbQuickBuild();
+          const pk = ((CB.build.profPicks || {})['Primal Knowledge'] || {}).skills || [];
+          ok('builder: Primal Knowledge (2024 barbarian, 3rd level) gives one more barbarian skill', pk.length === 1 && sktComputeCharacter(CB.build, CB.R).sheet.skillProf[pk[0]] >= 1 && !sktBuildTodo(CB.build, CB.R).some(t => /Primal/.test(t.what)), JSON.stringify(pk));
+          CB.build.level = 2; ok('builder: and not before 3rd level', !sktProfChoices(CB.build, CB.R).some(c => c.feature === 'Primal Knowledge'));
+          cbClose(); }
+        // Bardic Inspiration: anyone marks it; a bard's use pays for it when there's one.
+        state.party.push({ id: 'imp_cv3', name: 'Imp Bard', cls: 'bard', level: 5, hp: 30, hpMax: 30, ac: 13, abilities: S({}),
+          resources: [{ name: 'Bardic Inspiration', current: 2, max: 3, die: 'd8' }], sheet: { profBonus: 3, saves: {}, attacks: [], bio: { features: '' } } });
+        // Only these two in the party: with two bards able to, it asks which.
+        state.party = state.party.filter(x => x.id === 'imp_cv1' || x.id === 'imp_cv3');
+        save();
+        openCharSheet('imp_cv1'); await sleep(200);
+        const bard = () => state.party.find(x => x.id === 'imp_cv3');
+        document.querySelector('#cs-root [data-cs="bardic"]').click(); await sleep(80);
+        ok('bardic: tapping an empty Bardic box takes one of the bard\'s uses and their die', f().bardicInspiration === 'd8' && f().bardicFrom === 'Imp Bard' && bard().resources[0].current === 1,
+           JSON.stringify([f().bardicInspiration, f().bardicFrom, bard().resources[0].current]));
+        document.querySelector('#cs-root [data-cs="bardic"]').click(); await sleep(80);
+        ok('bardic: tapping it again rolls it and uses it', !f().bardicInspiration);
+        bard().resources[0].current = 0; save(); csRender();
+        document.querySelector('#cs-root [data-cs="bardic"]').click(); await sleep(80);
+        ok('bardic: with no uses tracked it\'s simply marked, like Heroic Inspiration', f().bardicInspiration === 'd8' && bard().resources[0].current === 0);
+        csClose();
+      } catch(e){ ok('round 75 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -10543,7 +10623,7 @@
           window.sktD = () => 6;
           q('[data-cs="bardic"]').click(); await sleep(60);
           ok('sheet: tapping it rolls the die and spends it', state.party[mi].bardicInspiration === false && /\+6/.test((document.getElementById('pa-roll') || {}).textContent || ''));
-          ok('sheet: without one, the bardic side is empty and does nothing', q('[data-cs="bardic"]').disabled && /—/.test(q('[data-cs="bardic"]').textContent));
+          ok('sheet: without one, the bardic side is empty — and still tappable, to mark one', !q('[data-cs="bardic"]').disabled && /—/.test(q('[data-cs="bardic"]').textContent));
           sktUndo(); await sleep(60);
           ok('sheet: Undo gives the die back', state.party[mi].bardicInspiration === 'd8');
           q('[data-cs="insp"]').click(); await sleep(40);

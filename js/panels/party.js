@@ -2732,6 +2732,9 @@ registerPanel('party',{
             items.push({ label: '⬆ Level up to ' + ((c.build.level || 1) + 1), onClick: () => { const r = resolve(); if (r) openCharBuilder({ idx: r.idx, levelup: true }); } });
           items.push({ label: '✎ Edit in the character builder', onClick: () => { const r = resolve(); if (r) openCharBuilder({ idx: r.idx }); } });
         }
+        // Imported from a PDF: rebuild it in the builder, its choices filled in from the sheet.
+        else if (!c.foe && typeof openCharBuilder === 'function')
+          items.push({ label: '⇪ Rebuild in the character builder', onClick: () => { const r = resolve(); if (r) openCharBuilder({ idx: r.idx }); } });
         // A line to this player's phone and nobody else's.
         if (typeof sktWhisperTo === 'function' && !c.foe){
           items.push({ label: '\ud83d\udcac Whisper to ' + c.name + '\u2026',

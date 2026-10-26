@@ -40,17 +40,246 @@ function cbIsPlayer(){ return document.body.classList.contains('player-mode') ||
 async function openCharBuilder(opts){
   opts = opts || {};
   const prior = (opts.idx != null) ? state.party[opts.idx] : null;
+  // An imported character (a PDF) opened here is rebuilt: its choices are
+  // filled in from what the sheet says, so it can be levelled and edited
+  // like one made here. Its edition is the one its features are printed in.
+  const convert = !!(prior && !prior.build && !prior.foe);
   let build;
   if (prior && prior.build) build = JSON.parse(JSON.stringify(prior.build));
-  else build = sktBlankBuild(opts.edition || (state.settings && state.settings.builderEdition) || '2024');
+  else build = sktBlankBuild(convert ? cbImportEdition(prior) : (opts.edition || (state.settings && state.settings.builderEdition) || '2024'));
   const mode = prior ? (opts.levelup ? 'levelup' : 'edit') : 'create';
   if (mode === 'levelup') build.level = Math.min(20, (build.level || 1) + 1);
   const multi0 = JSON.parse(JSON.stringify(build.multi || []));
   CB = { build, R: null, step: mode === 'create' ? 'basics' : (mode === 'levelup' ? 'levels' : 'review'),
          mode, idx: opts.idx != null ? opts.idx : null, onDone: opts.onDone || null,
          fromLevel: prior && prior.build ? prior.build.level : null, loading: true, multi0, lvlTo: 'first' };
+  if (convert) CB.convertFrom = prior.id;
   cbMount();
   await cbLoad(build.edition);
+  if (CB && CB.convertFrom && CB.R && !CB.error){
+    try { cbFromImported(prior); } catch(e){ CB.error = 'Couldn\u2019t read ' + prior.name + '\u2019s sheet into the builder (' + e.message + ').'; }
+    cbRender();
+  }
+}
+
+// ── Rebuilding an imported character ────────────────────────────────────────
+// A PDF gives the results (scores, bonuses, a list of spells and feats); the
+// builder keeps the choices that make them. So: everything the sheet names is
+// set (class, subclass, species, background, the skills it's proficient in,
+// feats, fighting style, masteries, spells, gear), the builder's quick build
+// fills whatever is left the way it would for a new character, and the base
+// scores are worked backwards so every ability comes out as on the sheet.
+// The review lists anything that still differs from the PDF.
+function cbItemName(n){ const s = String(n || '').trim().toLowerCase(); return s.includes(',') ? s.split(',').map(x => x.trim()).reverse().join(' ') : s; }
+function cbImportEdition(pc){
+  const f = String((pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '');
+  if (/PHB-2024|XPHB|\b2024\b/.test(f)) return '2024';
+  if (/PHB-2014|\bPHB\s*\d/.test(f)) return '2014';
+  return (state.settings && state.settings.builderEdition) || '2024';
+}
+function cbFromImported(pc){
+  const R = CB.R, b = CB.build, sh = pc.sheet || {}, notes = [];
+  const lc = s => String(s || '').trim().toLowerCase();
+  const camel = k => String(k).replace(/_([a-z])/g, (m, c) => c.toUpperCase());
+  b.name = pc.name || ''; b.icon = pc.icon || '';
+  // Class and level: the first class of a multiclass leads.
+  const parts = (sh.classLevels && sh.classLevels.length ? sh.classLevels : [{ cls: pc.cls, level: pc.level }])
+    .map(p => ({ cls: R.classes.find(c => c.key === lc(p.cls) || lc(p.cls).startsWith(c.key)), level: parseInt(p.level, 10) || 1 })).filter(p => p.cls);
+  if (!parts.length) throw new Error('no class the rules know (' + (pc.cls || '?') + ')');
+  b.cls = parts[0].cls.name;
+  b.level = parts.length > 1 ? parts[0].level : Math.max(1, Math.min(20, parseInt(pc.level, 10) || parts[0].level));
+  b.multi = parts.slice(1).map(p => ({ cls: p.cls.name, level: p.level, skills: [], cantrips: [], spells: [], spellbook: [] }));
+  const cls = parts[0].cls;
+  if (pc.subclass){
+    const n = lc(pc.subclass);
+    const s = sktRulesSubclass(cls, pc.subclass) || cls.subclasses.find(x => lc(x.name).includes(n) || n.includes(lc(x.shortName)));
+    if (s){ b.subclass = s.shortName; if (s.core === false) b.allBooks = true; } else notes.push('Subclass “' + pc.subclass + '” isn’t in the rules here — pick one');
+  }
+  // Species and background, by name (a book beyond the handbook switches the others on).
+  const exact = (list, name) => { const n = lc(name); return n ? (list.find(x => lc(x.name) === n) || list.find(x => lc(x.name).replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, ''))) : null; };
+  const near = (list, name) => { const n = lc(name); return n ? list.filter(x => n.includes(lc(x.name))).sort((x, y) => y.name.length - x.name.length)[0] || null : null; };
+  let sp = exact(R.species, pc.race);
+  if (!sp && (sp = near(R.species, pc.race))) notes.push('“' + pc.race + '” isn’t in the ' + R.edition + ' rules — ' + sp.name + ' is the closest; check the species step');
+  if (sp){ b.species = sp.name; if (sp.core === false) b.allBooks = true; } else if (pc.race) notes.push('Species “' + pc.race + '” isn’t in the rules here — pick one');
+  // "Custom Background" (D&D Beyond's own): the builder's custom background,
+  // with the skills, abilities and origin feat filled in below.
+  const customBg = /custom/i.test(pc.background || '');
+  const bg = customBg ? null : exact(R.backgrounds, pc.background);
+  if (customBg){ b.background = SKT_CUSTOM_BG; b.customBg = { name: 'Custom background', skills: [], tools: [], languages: 0 }; }
+  else if (bg){ b.background = bg.name; if (bg.core === false) b.allBooks = true; }
+  else if (pc.background) notes.push('Background “' + pc.background + '” isn’t in the rules here — pick one');
+  b.details = Object.assign({}, b.details, { alignment: pc.alignment || '', backstory: (sh.bio || {}).backstory || '',
+    traits: (sh.bio || {}).traits || '', ideals: (sh.bio || {}).ideals || '', bonds: (sh.bio || {}).bonds || '', flaws: (sh.bio || {}).flaws || '' });
+  // Skills it's proficient in: what the background and species don't give
+  // are the class's picks (then a species pick), expertise where it has it.
+  const prof = sh.skillProf || (typeof csImpProfs === 'function' ? csImpProfs(pc).skillProf : {});
+  const want = Object.keys(prof).filter(k => prof[k] >= 1).map(camel), exp = Object.keys(prof).filter(k => prof[k] >= 2).map(camel);
+  // A feat's skill picks left unmade count as made by default when the rules
+  // work the character out: mark them empty so they aren't taken as given.
+  sktBuildFeatNames(b, R).forEach(n => { const f = sktRulesFeat(R, n); if (f && sktFeatChoices(R, b, n, null).choices.some(c => c.kind === 'skills' || c.kind === 'skillsTools')) b.featChoices[f.name] = Object.assign({ skills: [], tools: [] }, b.featChoices[f.name]); });
+  const granted = new Set(Object.keys(sktComputeCharacter(b, R).sheet.skillProf || {}));
+  const skp = sp ? cbSpeciesSkillChoice(sp, sktSpeciesSub(sp, b)) : null;
+  const sFrom = new Set(skp ? skp.from : []);
+  let left = want.filter(k => !granted.has(k));
+  // Expertise first (it needs the proficiency), then what nothing later can cover.
+  const rank = (k, later) => (exp.includes(k) ? 0 : 2) + (later(k) ? 1 : 0);
+  const take = (from, n, later) => { const got = left.filter(from).sort((x, y) => rank(x, later) - rank(y, later)).slice(0, n); left = left.filter(k => !got.includes(k)); return got; };
+  b.skills = take(k => cls.skillChoice.from.includes(k), cls.skillChoice.count, k => customBg || sFrom.has(k));
+  if (skp) b.speciesSkills = take(k => sFrom.has(k), skp.count, () => customBg);
+  if (customBg) b.customBg.skills = take(() => true, 2, () => false);
+  b.expertise = exp;
+  // Feats: a fighting style, an origin feat, then the rest into the ASI levels in order.
+  if (customBg && R.edition === '2024'){
+    const o = (pc.feats || []).map(x => sktRulesFeat(R, String((x && x.name) || x))).find(f => f && String(f.category || '').split(':')[0] === 'O');
+    if (o) b.customBg.feat = o.name;
+    b.customBg.abilities = SKT_ABS.slice().sort((x, y) => (+((pc.abilities || {})[y]) || 0) - (+((pc.abilities || {})[x]) || 0)).slice(0, 3);
+  }
+  const bgNow = sktBuildBackground(R, b);
+  const owned = new Set([].concat(...((bgNow && bgNow.feats) || []).map(o => Object.keys(o))).map(k => String(k).split(/[|;]/)[0].trim().toLowerCase()));
+  const feats = (pc.feats || []).map(x => String((x && x.name) || x)).filter(n => !/^\d+:/.test(n)).map(n => sktRulesFeat(R, n)).filter(Boolean)
+    .filter((f, i, a) => a.indexOf(f) === i && f.name !== 'Ability Score Improvement' && !owned.has(lc(f.name)));
+  const cat = f => String(f.category || '').split(':')[0];
+  const fs = feats.filter(f => cat(f) === 'FS');
+  if (fs.length){
+    const o = sktOptionalChoices(b, R).find(x => x.kind === 'feat' && (x.types || []).some(t => t.split(':')[0] === 'FS'));
+    if (o) b.optional[o.name] = fs.map(f => f.name).slice(0, o.count);
+  }
+  const origin = feats.filter(f => cat(f) === 'O');
+  if (origin.length) b.originFeat = origin[0].name;
+  const general = feats.filter(f => !fs.includes(f) && !(origin[0] === f));
+  sktAsiSlots(b, R).forEach((slot, i) => { if (general[i]) b.asi[slot.key] = { type: 'feat', feat: general[i].name }; });
+  // A feat that grants skills (the 2024 Noble's Skilled) takes the ones still
+  // unexplained; what it has to spare goes on tools, which move no numbers.
+  { const rec0 = sktComputeCharacter(b, R);
+    sktBuildFeatNames(b, R).forEach(n => { const f = sktRulesFeat(R, n); if (!f) return;
+      sktFeatChoices(R, b, n, rec0).choices.forEach(c => {
+        if (c.kind !== 'skills' && c.kind !== 'skillsTools') return;
+        const sk = c.kind === 'skillsTools' ? c.options.filter(o => o.startsWith('s:')).map(o => o.slice(2)) : c.options;
+        const got = left.filter(k => sk.includes(k)).slice(0, c.count);
+        left = left.filter(k => !got.includes(k));
+        const ch = Object.assign({}, b.featChoices[f.name], { skills: got });
+        if (c.kind === 'skillsTools' && got.length < c.count) ch.tools = c.options.filter(o => o.startsWith('t:')).map(o => o.slice(2)).slice(0, c.count - got.length);
+        // Skills only: ones it already has from elsewhere, which change nothing.
+        else if (got.length < c.count) ch.skills = got.concat(sk.filter(k => !got.includes(k) && rec0.sheet.skillProf && rec0.sheet.skillProf[k])).slice(0, c.count);
+        b.featChoices[f.name] = ch;
+      }); }); }
+  // A class feature that grants a skill (the 2024 barbarian's Primal Knowledge).
+  sktProfChoices(b, R).forEach(c => {
+    if (c.kind !== 'skills') return;
+    const got = left.filter(k => c.options.includes(k)).slice(0, c.count); if (!got.length) return;
+    left = left.filter(k => !got.includes(k));
+    b.profPicks = Object.assign({}, b.profPicks); b.profPicks[c.feature] = Object.assign({}, b.profPicks[c.feature], { skills: got });
+  });
+  // Weapon masteries, as the sheet lists them.
+  if (typeof sktImportedMasteries === 'function'){
+    const ms = Object.keys(sktImportedMasteries(pc)).filter(n => R.items[n] && R.items[n].mastery);
+    const mc = cbMasteryCount(); if (mc && ms.length) b.masteries = ms.slice(0, mc);
+  }
+  // Spells: the class's own; cantrips apart.
+  const always = new Set(sktBuildAlwaysPrepared(b, R).map(lc));
+  [...new Set(sh.spells || [])].forEach(n => {
+    const s = sktRulesSpell(R, n); if (!s || always.has(lc(s.name))) return;
+    if (!sktSpellOnList(s, cls.name, b)) return;
+    if (s.level === 0) b.cantrips.push(s.name); else b.spells.push(s.name);
+  });
+  // Gear: what it carries, the weapons it attacks with, the armour its AC is made of.
+  const items = (pc.inventory || []).map(x => { const m = Object.assign({}, x); delete m.pdf; return m; });
+  const has = n => items.some(m => lc(m.name) === lc(n) || lc(m.base) === lc(n));
+  (sh.attacks || []).forEach(a => { const k = R.items[lc(a.name)] ? lc(a.name) : cbItemName(a.name); const it = R.items[k]; if (it && /^(M|R)$/.test(String(it.type || '').split('|')[0]) && !has(k)) items.push({ name: typeof _sktTitle === 'function' ? _sktTitle(it.name) : it.name, base: k, qty: 1, weight: +it.weight || 0, equipped: true }); });
+  if (typeof csPdfGearItems === 'function' && typeof csGuessPdfGear === 'function'){
+    const decl = (pc.acGear && pc.acGear.decl) || csGuessPdfGear(pc, R);
+    csPdfGearItems(decl, R).forEach(m => { if (!has(m.base)) { delete m.pdf; items.push(m); } });
+  }
+  b.items = items; b.equipment = Object.assign({}, b.equipment, { materialized: true });
+  // Spells from feats and subclasses (Magic Initiate's two cantrips and a
+  // 1st-level spell): the ones on the PDF, from the list the feat's name gives.
+  { const mine = [...new Set(sh.spells || [])].map(n => (sktRulesSpell(R, n) || {}).name).filter(Boolean);
+    const named = (pc.feats || []).map(x => (/\(([^)]+)\)/.exec(String((x && x.name) || x)) || [])[1]).filter(Boolean).map(lc);
+    sktFeatSpells(b, R).forEach(g => {
+      if (!g.feat || g.feat === '@species' || g.block || !(g.blocks || []).length) return;
+      const bl = g.blocks.find(x => named.includes(lc(x.name)));
+      if (bl) b.featChoices[g.feat] = Object.assign({}, b.featChoices[g.feat], { spellList: bl.name });
+    });
+    sktFeatSpells(b, R).forEach(g => {
+      if (!g.feat || g.feat === '@species') return;
+      const ch = b.featChoices[g.feat] = Object.assign({}, b.featChoices[g.feat]); ch.spells = (ch.spells || []).slice();
+      g.choices.forEach(c => mine.filter(n => c.options.includes(n) && !ch.spells.includes(n)).slice(0, Math.max(0, c.count - c.picked.length)).forEach(n => ch.spells.push(n)));
+      if (!ch.spells.length) delete ch.spells;
+      // Not the class's own as well.
+      b.cantrips = b.cantrips.filter(n => !(ch.spells || []).includes(n)); b.spells = b.spells.filter(n => !(ch.spells || []).includes(n));
+    }); }
+  // Languages the PDF lists ("=== LANGUAGES === Common, Elvish"), those the
+  // character picks rather than gets.
+  { const raw = typeof csPdfProfs === 'function' ? (csPdfProfs(sh.languages).languages || (/===/.test(sh.languages || '') ? '' : sh.languages)) : sh.languages;
+    const list = String(raw || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean);
+    const known = new Set(String(sktComputeCharacter(b, R).sheet.languages || '').split(', ').map(lc));
+    const opts = sktLanguageOptions(R, Object.assign({}, b, { allBooks: true }));
+    const n = cbLanguageCount();
+    if (n) b.languages = list.map(x => opts.find(o => lc(o) === lc(x))).filter(x => x && !known.has(lc(x))).slice(0, n); }
+  // Feature options the features text names: "Primal Order … Warden".
+  { const text = String((sh.bio || {}).features || '');
+    sktBuildChoices(b, R).forEach(c => {
+      const at = text.search(new RegExp(_sktEsc(c.feature), 'i')); if (at < 0) return;
+      const win = text.slice(at, at + 2500);
+      const hit = (c.spec.options || []).map(o => ({ o, i: win.search(new RegExp('\\b' + _sktEsc(String(o.label || o.value)) + '\\b', 'i')) })).filter(x => x.i >= 0).sort((x, y) => x.i - y.i)[0];
+      if (hit){ b.featureChoices = Object.assign({}, b.featureChoices, { [c.feature]: hit.o.value }); }
+    }); }
+  // The rest, as for a new character.
+  b.abilities.method = 'manual';
+  cbQuickBuild();
+  // Too many spells for the slots it has now (or a spell list the PDF mixed): keep what fits.
+  const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
+  if (sc){ const s0 = (sc.classes ? sc.classes[0].sc : sc) || {};
+    if (s0.cantrips != null && b.cantrips.length > s0.cantrips) b.cantrips = b.cantrips.slice(0, s0.cantrips);
+    const w = s0.prepared || s0.known; if (w && b.spells.length > w) b.spells = b.spells.slice(0, w);
+    if (s0.spellbook && (b.spellbook || []).length < b.spells.length) b.spellbook = [...new Set((b.spellbook || []).concat(b.spells))]; }
+  // Base scores worked backwards: final − every increase the builder adds.
+  b.abilities.method = 'manual';
+  SKT_ABS.forEach(k => { b.abilities.base[k] = 10; });
+  const add = sktBuildAbilities(b, R);
+  SKT_ABS.forEach(k => { const f = parseInt((pc.abilities || {})[k], 10); if (!isNaN(f)) b.abilities.base[k] = f - (add[k] - 10); });
+  // Hit points: the average if that's what the sheet has, else its number.
+  b.hp = { method: 'average', rolls: {} };
+  if (sktComputeCharacter(b, R).hpMax !== +pc.hpMax && +pc.hpMax > 0) b.hp = { method: 'manual', manual: +pc.hpMax, rolls: {} };
+  CB.convertNotes = notes;
+  CB.convertDiff = cbImportDiff(pc, sktComputeCharacter(b, R, pc));
+}
+// At the top of the review: where this came from, and what to check.
+function cbConvertNote(){
+  const diff = CB.convertDiff || [], notes = CB.convertNotes || [];
+  return '<div class="cb-convert"><b>Rebuilt from ' + cbEsc(CB.build.name) + '\u2019s imported sheet.</b> '
+    + 'Every choice the builder needs is filled in from it; saving replaces the imported character with this one (Undo puts it back).'
+    + (notes.length ? '<ul class="cb-convert-notes">' + notes.map(n => '<li>' + cbEsc(n) + '</li>').join('') + '</ul>' : '')
+    + (diff.length ? '<div class="cb-convert-diff"><b>Not the same as the PDF</b> — change the choices behind these if the PDF is right:<ul>' + diff.map(n => '<li>' + cbEsc(n) + '</li>').join('') + '</ul></div>'
+                   : '<div class="cb-convert-ok">✓ Scores, AC, hit points, saves, skills and attacks all match the PDF.</div>')
+    + '</div>';
+}
+// What the rebuilt character works out to that the PDF doesn't say.
+function cbImportDiff(pc, rec){
+  const out = [], sh = pc.sheet || {}, rs = rec.sheet || {};
+  const num = v => parseInt(v, 10);
+  // Scores, AC, HP and DCs as numbers; bonuses signed.
+  const cmp = (label, a, b) => {
+    if (isNaN(num(a)) || isNaN(num(b)) || num(a) === num(b)) return;
+    const f = v => /score|^AC$|HP|DC/.test(label) ? String(v) : sktSigned(v);
+    out.push(label + ': PDF ' + f(num(a)) + ', builder ' + f(num(b)));
+  };
+  SKT_ABS.forEach(k => cmp(k.toUpperCase() + ' score', (pc.abilities || {})[k], (rec.abilities || {})[k]));
+  cmp('AC', pc.ac, rec.ac);
+  cmp('Max HP', pc.hpMax, rec.hpMax);
+  SKT_ABS.forEach(k => cmp(k.toUpperCase() + ' save', (sh.saves || {})[k], (rs.saves || {})[k]));
+  Object.keys(sh.skills || {}).forEach(k => { const key = String(k).replace(/_([a-z])/g, (m, c) => c.toUpperCase()); cmp((SKT_SKILL_LABEL && SKT_SKILL_LABEL[key]) || k, sh.skills[k], (rs.skills || {})[key]); });
+  cmp('Spell save DC', sh.spellSaveDc, rs.spellSaveDc);
+  const seen = new Set();
+  const elsewhere = new Set([].concat(rs.spells || [], rs.cantrips || [], (rs.featureList || []).map(f => f.name), (rs.activations || []).map(a => a.name)).map(x => String(x).toLowerCase()));
+  (sh.attacks || []).forEach(a => {
+    const n = String(a.name).toLowerCase(); if (seen.has(n)) return; seen.add(n);
+    const m = (rs.attacks || []).find(x => { const xn = String(x.name).toLowerCase(); return xn === n || xn === cbItemName(a.name); });
+    if (!m && elsewhere.has(n)) return;
+    if (m) cmp(a.name + ' to hit', a.atkBonus, m.atkBonus);
+    else out.push(a.name + ': an attack on the PDF the builder doesn\u2019t list (add the weapon on the equipment step, or it\u2019s a feature the builder doesn\u2019t know)');
+  });
+  return out;
 }
 
 async function cbLoad(edition){
@@ -1318,6 +1547,7 @@ CB_RENDER.review = () => {
   const res = (rec.resources || []).filter(r => r.type === 'pool').map(r => cbEsc(r.name) + ' ' + r.max + (r.recharge === 'short' ? ' (short rest)' : r.recharge === 'short-one' ? ' (1 back on a short rest)' : '')).join(' · ');
   const todo = sktBuildTodo(b, CB.R).filter(t => !t.soft);
   return '<h3>Review</h3>'
+    + (CB.convertFrom ? cbConvertNote() : '')
     + (todo.length ? '<div class="cb-warn">Still to choose: ' + cbEsc(todo.map(t => t.what).join(', ')) + '</div>' : '')
     + '<div class="cb-note cb-review-who">' + cbEsc([sh.size, (sh.details || {}).alignment, typeof rec.gold === 'number' ? rec.gold + ' gp' : ''].filter(Boolean).join(' · ')) + '</div>'
     + '<div class="cb-review">'
@@ -1750,13 +1980,16 @@ function cbSave(){
   const go = () => {
     const prior = CB.idx != null ? state.party[CB.idx] : null;
     const rec = sktComputeCharacter(CB.build, CB.R, prior);
-    const label = CB.mode === 'create' ? 'Created ' + rec.name : CB.mode === 'levelup' ? rec.name + ' is now level ' + rec.level : 'Saved ' + rec.name;
+    const label = CB.convertFrom ? 'Rebuilt ' + rec.name + ' in the character builder' : CB.mode === 'create' ? 'Created ' + rec.name : CB.mode === 'levelup' ? rec.name + ' is now level ' + rec.level : 'Saved ' + rec.name;
     let idx = CB.idx;
     const apply = () => {
       if (prior){
         // Keep everything the builder does not own: conditions, notes,
         // death saves, a portrait, which combatant it is.
         state.party[idx] = Object.assign({}, prior, rec, { id: prior.id, portrait: prior.portrait });
+        // Rebuilt from an import: its gear is in the build now, and the PDF's
+        // AC breakdown and inventory bookkeeping mean nothing to a built one.
+        if (CB.convertFrom){ ['inventory', 'acGear', 'invResist'].forEach(k => { delete state.party[idx][k]; }); }
       } else {
         rec.id = (typeof uid === 'function') ? uid() : 'pc_' + Date.now().toString(36);
         state.party.push(rec); idx = state.party.length - 1;
