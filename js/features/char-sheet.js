@@ -1262,6 +1262,9 @@ function csSpellDamage(s, slot){
     if (st && bm && st[2] === bm[2]) expr = (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3];
     else if (st) expr += ' + ' + (up * +st[1]) + 'd' + st[2];
   }
+  // A bonus to one school's spell damage (the Evoker's Empowered Evocation).
+  { const pc = typeof csPc === 'function' && CS ? csPc() : null, sd = pc && pc.sheet && pc.sheet.schoolDamage;
+    if (sd && sd[s.school]) expr += (sd[s.school] > 0 ? '+' : '') + sd[s.school]; }
   return expr;
 }
 // A healing spell's dice at a slot level: {@dice} where the text says hit

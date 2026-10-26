@@ -9558,6 +9558,50 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 80: passive features read from their text ---------------------
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, extra) => {
+          CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: L, subclass: sub, species: 'Human', background: 'Soldier', originFeat: 'Tough', name: 'T', sources: SKT_ALL_SOURCES }, extra || {});
+          cbQuickBuild(); return sktComputeCharacter(CB.build, R);
+        };
+        const pick = (feat, v) => { CB.build.featureChoices = Object.assign({}, CB.build.featureChoices, { [feat]: v }); return sktComputeCharacter(CB.build, R); };
+        const md = (r, k) => Math.floor((r.abilities[k] - 10) / 2);
+        const xd = (r, label) => (r.sheet.extraDamage || []).find(x => x.label === label) || {};
+        let r = mk('Barbarian', 'Zealot', 6);
+        ok('passive: Divine Fury only while raging (the Rage state adds it), and still reads as applied', !xd(r, 'Divine Fury').dice && (r.sheet.featureList || []).some(f => f.name === 'Divine Fury' && f.mech), JSON.stringify(r.sheet.extraDamage));
+        r = mk('Ranger', 'Hunter', 6);
+        ok('passive: Colossus Slayer — an extra 1d8', xd(r, "Hunter's Prey").dice === '1d8', JSON.stringify(r.sheet.extraDamage));
+        r = mk('Ranger', 'Fey Wanderer', 3); const fw3 = xd(r, 'Dreadful Strikes').dice;
+        r = mk('Ranger', 'Fey Wanderer', 11);
+        ok('passive: Dreadful Strikes — 1d4 psychic, 1d6 from 11th level', fw3 === '1d4 psychic' && xd(r, 'Dreadful Strikes').dice === '1d6 psychic', fw3 + ' / ' + xd(r, 'Dreadful Strikes').dice);
+        r = mk('Paladin', 'Watchers', 7);
+        ok('passive: Aura of the Sentinel — initiative + proficiency bonus', r.init === md(r, 'dex') + r.sheet.profBonus, r.init + ' pb ' + r.sheet.profBonus);
+        r = mk('Cleric', 'War', 8); r = pick('Blessed Strikes', 'Divine Strike');
+        ok('choice: Divine Strike — 1d8 on the Extra damage list', xd(r, 'Divine Strike').dice === '1d8 radiant', JSON.stringify(r.sheet.extraDamage));
+        r = mk('Cleric', 'War', 14); r = pick('Blessed Strikes', 'Divine Strike');
+        ok('choice: Divine Strike — 2d8 from 14th level', xd(r, 'Divine Strike').dice === '2d8 radiant');
+        r = pick('Blessed Strikes', 'Potent Spellcasting');
+        const sf = (r.sheet.attacks || []).find(a => a.name === 'Sacred Flame');
+        ok('choice: Potent Spellcasting — WIS on cantrip damage, and no Divine Strike', !!sf && sf.damage.startsWith('3d8' + sktSigned(md(r, 'wis'))) && !xd(r, 'Divine Strike').dice, sf && sf.damage);
+        r = mk('Druid', 'Moon', 7); r = pick('Elemental Fury', 'Primal Strike');
+        ok('choice: Primal Strike — 1d8 on the Extra damage list', xd(r, 'Primal Strike').dice === '1d8 fire', JSON.stringify(r.sheet.extraDamage));
+        r = mk('Wizard', 'Evoker', 10);
+        ok('passive: Empowered Evocation — INT on evocation damage', (r.sheet.schoolDamage || {}).V === md(r, 'int'), JSON.stringify(r.sheet.schoolDamage));
+        r = mk('Wizard', 'Evoker', 3);
+        ok('passive: no Empowered Evocation before 10th level', !(r.sheet.schoolDamage || {}).V);
+        // A feature listed under several headings counts as applied in each.
+        r = mk('Cleric', 'Tempest', 8); let fl = (r.sheet.featureList || []).filter(f => f.name === 'Blessed Strikes');
+        ok('features: an older domain’s Blessed Strikes reads as applied, as the class’s does', fl.length === 2 && fl.every(f => f.mech), JSON.stringify(fl.map(f => f.from + ':' + f.mech)));
+        r = mk('Barbarian', 'Berserker', 17); fl = (r.sheet.featureList || []).filter(f => f.name === 'Improved Brutal Strike');
+        ok('features: Improved Brutal Strike reads as applied at 13th and 17th level', fl.length === 2 && fl.every(f => f.mech), JSON.stringify(fl.map(f => f.level + ':' + f.mech)));
+      } catch(e){ ok('round 80 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

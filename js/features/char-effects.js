@@ -210,7 +210,7 @@
     ],
     apply(ctx, v){
       if (v === 'Potent Spellcasting') ctx.cantripDamageBonus += ctx.mod.wis;
-      else note(ctx, 'Divine Strike: once per turn, +' + (ctx.level >= 14 ? '2d8' : '1d8') + ' radiant or necrotic damage on a weapon hit.');
+      else ctx.extraDamage.push({ label: 'Divine Strike', dice: (ctx.level >= 14 ? '2d8' : '1d8') + ' radiant', note: 'once per turn, a weapon hit (radiant or necrotic)' });
     },
   });
   def('2024:class:cleric:Improved Blessed Strikes', () => {});    // folded into Blessed Strikes
@@ -243,7 +243,7 @@
     ],
     apply(ctx, v){
       if (v === 'Potent Spellcasting') ctx.cantripDamageBonus += ctx.mod.wis;
-      else note(ctx, 'Primal Strike: once per turn, +' + (ctx.level >= 15 ? '2d8' : '1d8') + ' cold, fire, lightning or thunder damage on a weapon or beast-form hit.');
+      else ctx.extraDamage.push({ label: 'Primal Strike', dice: (ctx.level >= 15 ? '2d8' : '1d8') + ' fire', note: 'once per turn, a weapon or beast-form hit (cold, fire, lightning or thunder)' });
     },
   });
   def('2024:class:druid:Improved Elemental Fury', () => {});      // folded into Elemental Fury

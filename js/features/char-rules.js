@@ -1688,6 +1688,58 @@ function sktActivationFromText(text, name, ctx){
   return { name, action: action || 'Special', resource: resource || undefined, amount: resource ? amount : undefined, dice: dice || undefined,
            desc: desc.length > 300 ? desc.slice(0, 297).replace(/\s\S*$/, '') + '…' : desc };
 }
+// Passive bonuses read from a feature's text, beside the actions:
+//  • extra damage on a hit ("an extra 1d8 damage", "1d6 radiant damage",
+//    growing "to 2d8 at 14th level") → the Actions tab's Extra damage list;
+//  • a bonus to Initiative equal to a modifier or the proficiency bonus;
+//  • advantage on named ability checks: always (applied to the roll), or under
+//    a condition (a reminder on the Features tab).
+// Each returns whether it applied anything.
+const _SKT_SKILL_WORDS = { 'animal handling': 'animal_handling', 'sleight of hand': 'sleight_of_hand' };
+function sktPassiveFromText(text, name, ctx){
+  const t = String(text || '').replace(/\{@\w+ ([^|}]+)[^}]*\}/g, '$1').replace(/\s+/g, ' ');
+  const sents = t.split(/(?<=[.!?])\s+/).filter(s => !/\|/.test(s));
+  let did = false;
+  // Extra damage.
+  if (!ctx.extraDamage.some(x => x.label === name)){
+    for (const s of sents){
+      const m = /\b(?:an? )?(?:extra|additional) (\d+d\d+)(?: ?\+ ?[^ ]+)?(?: (acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder))? damage/i.exec(s)
+        || /\b(?:takes?|deals?|deal) (?:an? )?(?:extra|additional) (\d+d\d+)(?: (acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder))?/i.exec(s);
+      if (!m) continue;
+      let dice = m[1];
+      const L = ctx.level || 1;
+      // "to 2d8 at 14th level" (2014) or "to 1d6 when you reach Ranger level 11" (2024).
+      (t.match(/(\d+d\d+) (?:at|when you reach) (?:\d+(?:st|nd|rd|th) level|[A-Za-z]+ level \d+)/gi) || []).forEach(x => { const q = /(\d+d\d+) \D*?(\d+)/i.exec(x); if (q && L >= +q[2]) dice = q[1]; });
+      const when = s.length > 170 ? s.slice(0, 167).replace(/\s\S*$/, '') + '…' : s;
+      ctx.extraDamage.push({ label: name, dice: dice + (m[2] ? ' ' + m[2].toLowerCase() : ''), note: when });
+      did = true; break;
+    }
+  }
+  // Initiative: "a bonus to your Initiative equal to your Wisdom modifier".
+  for (const s of sents){
+    const m = /bonus to (?:your )?Initiative(?: rolls)? equal to (?:your )?(Proficiency Bonus|(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) modifier)/i.exec(s);
+    // "When you roll Initiative" is when it applies, not a condition on it.
+    if (!m || (/\b(while|when|if|until)\b/i.test(s.slice(0, m.index)) && !/roll (?:for )?initiative/i.test(s.slice(0, m.index)))) continue;
+    ctx.initBonus += /proficiency/i.test(m[1]) ? ctx.pb : ctx.mod[m[2].slice(0, 3).toLowerCase()] || 0;
+    did = true; break;
+  }
+  // Advantage on ability checks.
+  for (const s of sents){
+    const m = /(?<!dis)advantage on ([^.]*?)checks?\b([^.;]*)/i.exec(s); if (!m) continue;
+    if (/saving throw|attack roll/i.test(m[1])) continue;
+    const words = m[1].toLowerCase();
+    const tags = [];
+    Object.keys(SKT_SKILL_LABEL || {}).forEach(k => { const lab = String(SKT_SKILL_LABEL[k]).toLowerCase(); if (words.includes(lab)) tags.push('check:' + (_SKT_SKILL_WORDS[lab] || k.replace(/[A-Z]/g, c => '_' + c.toLowerCase()))); });
+    if (!tags.length) (words.match(/\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\b/g) || []).forEach(a => { if (!/\(/.test(words)) tags.push('ab:' + a.slice(0, 3)); });
+    if (!tags.length) continue;
+    const pre = s.slice(0, m.index), post = m[2].trim();
+    const always = !/\b(while|when|whenever|if|until|for 1 minute|for the next|the first|target)\b/i.test(pre) && !post;
+    if (always) ctx.rollAdv.push({ on: [...new Set(tags)], label: name });
+    else _fxNote(ctx, name + ': ' + (s.length > 200 ? s.slice(0, 197).replace(/\s\S*$/, '') + '…' : s));
+    did = true; break;
+  }
+  return did;
+}
 // Darkvision 60 ft, or 60 ft more if the character has it already (the 2024 way).
 function _fxDarkvision60(ctx){ ctx.senses.darkvision = ctx.senses.darkvision ? ctx.senses.darkvision + 60 : 60; }
 function sktDefineEffect(keys, fn){ (Array.isArray(keys) ? keys : [keys]).forEach(k => { SKT_FEATURE_EFFECTS[k] = fn; }); }
@@ -2002,20 +2054,17 @@ sktDefineEffect(['class:wizard:Arcane Recovery'], ctx => {
 // The Soulknife's Psychic Blades: a finesse, thrown blade of psychic energy
 // (1d6) with the better of STR and DEX, and a second as a bonus action (1d4).
 sktDefineEffect(['subclass:Psychic Blades'], ctx => { ctx.psychicBlades = true; });
-sktDefineExtra(['subclass:fighter:Psionic Power', 'subclass:rogue:Psionic Power'], ctx => {
-  // 2024: the subclass table's die and number; 2014 (Tasha's): twice the proficiency bonus.
-  const n = _fxCol(ctx, 'Number'), sz = _fxCol(ctx, 'Die Size');
-  const L = ctx.level || 3;
-  const count = typeof n === 'number' && n > 0 ? n : 2 * ctx.pb;
-  const die = (typeof sz === 'string' && /d\d+/i.test(sz)) ? sz.toLowerCase().match(/d\d+/)[0] : L >= 17 ? 'd12' : L >= 11 ? 'd10' : L >= 5 ? 'd8' : 'd6';
-  const have = ctx.resources.find(r => r.name === 'Psionic Energy');
-  if (have) Object.assign(have, { max: count, current: count, die, recharge: 'short-one' });
-  else _fxPool(ctx, 'Psionic Energy', count, 'short-one', { die });
-});
 sktDefineExtra(['subclass:warlock:Healing Light'], ctx => { _fxPool(ctx, 'Healing Light', 1 + (ctx.level || 1), 'long', { die: 'd6' }); });
 sktDefineExtra(['subclass:wizard:Portent'], ctx => { _fxPool(ctx, 'Portent', (ctx.level || 1) >= 14 ? 3 : 2, 'long', { die: 'd20' });
   _fxAction(ctx, { name: 'Portent', action: 'Special', resource: 'Portent', amount: 1, dice: '1d20', feature: 'Portent', auto: true,
     desc: 'After a long rest, roll the dice and record them; replace any D20 Test you can see (yours or another creature’s) with one of them, before the roll.' }); });
+// The 2014 domains' Potent Spellcasting, and the Evoker's Empowered Evocation.
+sktDefineExtra(['subclass:cleric:Potent Spellcasting'], ctx => { ctx.cantripDamageBonus += ctx.mod.wis; });
+sktDefineExtra(['subclass:wizard:Empowered Evocation'], ctx => { ctx.schoolDamage.V = (ctx.schoolDamage.V || 0) + ctx.mod.int; });
+// The Rage state adds Divine Fury's damage while raging.
+sktDefineExtra(['subclass:barbarian:Divine Fury'], () => {});
+// The Battle Master's dice grow in Combat Superiority itself.
+sktDefineExtra(['subclass:fighter:Improved Combat Superiority', 'subclass:fighter:Ultimate Combat Superiority'], () => {});
 sktDefineExtra(['subclass:ranger:Dread Ambusher'], ctx => { ctx.initBonus += ctx.mod.wis; _fxNote(ctx, 'Dread Ambusher: Initiative + WIS.'); });
 sktDefineExtra(['subclass:ranger:Umbral Sight'], ctx => { _fxDarkvision60(ctx); });
 sktDefineExtra(['subclass:monk:Darkvision'], ctx => { _fxDarkvision60(ctx); });
@@ -2180,7 +2229,7 @@ function sktComputeCharacter(build, R, prior){
     acBonus: [], acFloor: null, speedMult: 1, spellDcBonus: 0, spellAtkBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0,
     shillelagh: null, rollAdv: [], rollDice: [], extraDamage: [], concBonus: 0, saveMods: [],
     // Other ways of moving a feature gives: 'walk' (equal to the speed) or feet.
-    moveExtra: {}, bardicUnarmed: null,
+    moveExtra: {}, bardicUnarmed: null, applied: new Set(), schoolDamage: {},
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
   _sktActiveItems(build).forEach(m => (m.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); }));
@@ -2319,6 +2368,8 @@ function sktComputeCharacter(build, R, prior){
         const a = sktActivationFromText(f.text, f.name, ctx);
         if (a) _fxAction(ctx, Object.assign(a, { feature: f.name, auto: true }));
       }
+      // And what it adds without being used: damage on a hit, initiative, advantage on checks.
+      if (!fx && !f.info && (f.from === 'class' || f.from === 'subclass') && sktPassiveFromText(f.text, f.name, ctx)) ctx.applied.add(f.name);
     } finally { [ctx.level, ctx.cls, ctx.sub] = was; }
   });
   // Primal Champion and the like raise a score after everything else.
@@ -2503,9 +2554,12 @@ function sktComputeCharacter(build, R, prior){
     return { ...r, current: Math.max(0, r.max - spent) };
   });
 
-  // Applied also when it became an action on the Actions tab, or a reminder on a save.
+  // Applied also when it became an action on the Actions tab, or a reminder on a
+  // save; and wherever the same feature is listed again (Blessed Strikes under
+  // each domain).
+  const appliedName = new Set(features.filter(f => f.mech).map(f => f.name));
   const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, text: f.text, info: f.info || undefined,
-    mech: f.mech || (!f.info && (ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name))) }));
+    mech: f.mech || (!f.info && (appliedName.has(f.name) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
   const subName = sub ? sub.shortName : '';
   const speciesLabel = species ? (subrace ? subrace.name + ' ' + species.name : species.name) : '';
   const moveSrc = (subrace && subrace.speed && typeof subrace.speed === 'object') ? subrace.speed : species && species.speed;
@@ -2600,6 +2654,7 @@ function sktComputeCharacter(build, R, prior){
       attacks, attacksPerAction: ctx.attacksPerAction, critRange: ctx.critRange,
       states: states.map(x => ({ key: x.s.key, label: x.s.label, on: x.on, conc: x.conc, spell: x.s.spell || '', resource: x.s.resource || '',
         desc: typeof x.s.desc === 'function' ? x.s.desc(ctx, x.value) : (x.s.desc || ''), options: x.s.options && x.s.options(ctx).length ? x.s.options(ctx) : null, value: x.value })),
+      schoolDamage: Object.keys(ctx.schoolDamage).length ? ctx.schoolDamage : undefined,
       stateSig: sktStateSig(prior), saveMods: ctx.saveMods, rollAdv: ctx.rollAdv, rollDice: ctx.rollDice, extraDamage: ctx.extraDamage, concBonus: ctx.concBonus,
       // A half-orc's Savage Attacks adds a weapon die on a melee crit, as does Brutal Critical.
       critExtraDice: (ctx.critExtraDice || 0) + (features.some(f => f.from === 'species' && f.name === 'Savage Attacks') ? 1 : 0),
