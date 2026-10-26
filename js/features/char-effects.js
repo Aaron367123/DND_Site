@@ -437,7 +437,10 @@
   def('subclass:barbarian:Demiurgic Colossus', ctx => note(ctx, 'Demiurgic Colossus: when you rage, +10 ft reach and Large or Huge; Elemental Cleaver deals 2d6.'));
   def('subclass:barbarian:Power of the Wilds', ctx => note(ctx, 'Power of the Wilds: when you rage, pick Falcon (fly speed without armour), Lion (enemies near you have disadvantage against others) or Ram (knock Large or smaller prone).'));
   def('subclass:barbarian:Vitality of the Tree', ctx => note(ctx, 'Vitality of the Tree: entering your rage gives ' + ctx.classLevel('barbarian') + ' temporary hit points; each turn while raging, an ally within 10 ft gains ' + ctx.rageDamage + 'd6.'));
+  def('subclass:barbarian:Bestial Soul', ctx => note(ctx, 'Bestial Soul: Form of the Beast weapons are magical; after each rest, pick a swim speed (and water breathing), a climb speed, or a jump.'));
   // Bard
+  def('subclass:bard:Combat Inspiration', ctx => note(ctx, 'Combat Inspiration: a creature with your Bardic Inspiration can add the die to a weapon' + (new24(ctx) ? ' hit’s' : '') + ' damage, or use its reaction to add it to AC against an attack.'));
+  def('subclass:bard:Blade Flourish', ctx => note(ctx, 'Blade Flourish: taking the Attack action gives +10 ft speed this turn; one flourish per turn on a hit.'));
   def('subclass:bard:Master\'s Flourish', ctx => note(ctx, 'Master’s Flourish: a Blade Flourish can roll a d6 instead of spending Bardic Inspiration.'));
   def('subclass:bard:Mote of Potential', ctx => note(ctx, 'Mote of Potential: a Bardic Inspiration die you give adds an effect — a check rolls it twice, an attack bursts for thunder, a save gives temporary hit points.'));
   def('subclass:bard:Unfailing Inspiration', ctx => note(ctx, 'Unfailing Inspiration: a creature that adds your Bardic Inspiration die and still fails keeps the die.'));
@@ -454,6 +457,20 @@
   });
   def('subclass:druid:Improved Circle Forms', ctx => note(ctx, 'Improved Circle Forms: in Wild Shape, attacks can deal radiant damage, and Constitution saves add ' + signed(ctx.mod.wis) + ' (WIS).'));
   def('subclass:druid:Hearth of Moonlight and Shadow', ctx => note(ctx, 'Hearth of Moonlight and Shadow: during a rest, a 30 ft sphere gives +5 to Stealth and Perception and hides its firelight.'));
+  def('2024:subclass:cleric:Divine Strike', () => {});   // the class's Blessed Strikes decides
+  def('2014:subclass:cleric:Blessed Strikes', ctx => ctx.extraDamage.push({ label: 'Blessed Strikes', dice: '1d8 radiant',
+    note: 'once per turn, when your cantrip or weapon attack damages a creature (Tasha’s option in place of Divine Strike or Potent Spellcasting)' }));
+  def('subclass:cleric:Order\'s Wrath', ctx => note(ctx, 'Order’s Wrath: a creature you hit with Divine Strike is cursed; the next ally to hit it adds 2d8 psychic.'));
+  def('subclass:cleric:Improved Warding Flare', ctx => {
+    const r = ctx.resources.find(x => x.name === 'Warding Flare'); if (r) r.recharge = 'short';
+    note(ctx, 'Improved Warding Flare: uses come back on a short rest; the creature you protect gains 2d6' + signed(ctx.mod.wis) + ' temporary hit points.');
+  });
+  def('subclass:cleric:Protective Bond', ctx => note(ctx, 'Protective Bond: when a creature under your Emboldening Bond is about to take damage, another bonded creature within 30 ft can use its reaction to teleport beside it and take the damage.'));
+  // Druid (Starry Form)
+  def('subclass:druid:Chalice', ctx => note(ctx, 'Chalice: in Starry Form, a spell slot healing spell also heals you or a creature within 30 ft for ' + (ctx.level >= 10 ? '2d8' : '1d8') + signed(ctx.mod.wis) + '.'));
+  def('subclass:druid:Twinkling Constellations', ctx => note(ctx, 'Twinkling Constellations: Archer and Chalice roll 2d8, the Dragon gives a 20 ft fly speed (hover), and you can change constellation each turn.'));
+  def('subclass:cleric:Stormborn', ctx => note(ctx, 'Stormborn: a fly speed equal to your walking speed when not underground or indoors.'));
+  def('subclass:druid:Stormborn', ctx => note(ctx, 'Stormborn: while Wrath of the Sea is active, a fly speed equal to your speed and resistance to cold, lightning and thunder.'));
   // Fighter
   def('subclass:fighter:Additional Superiority Die', () => {});   // Combat Superiority counts it
   def('subclass:fighter:Improved Combat Superiority', () => {});  // and grows the die
@@ -467,6 +484,14 @@
     act(ctx, { name: 'Psionic Strike', action: 'Free', resource: 'Psionic Energy', amount: 1, dice, feature: 'Psionic Strike',
       desc: 'Once per turn, after hitting a target within 30 ft with a weapon, spend a Psionic Energy die for force damage.' });
   });
+  def('subclass:fighter:Know Your Enemy', ctx => {
+    if (!new24(ctx)) return note(ctx, 'Know Your Enemy: after a minute observing a creature, learn how it compares to you in two traits (a score, AC, hit points or levels).');
+    pool(ctx, 'Know Your Enemy', 1, 'long');
+    act(ctx, { name: 'Know Your Enemy', action: 'Bonus Action', resource: 'Know Your Enemy', amount: 1, feature: 'Know Your Enemy',
+      desc: 'Learn a creature’s immunities, resistances and vulnerabilities within 30 ft. A Superiority Die restores the use.' });
+  });
+  def('subclass:fighter:Great Stature', ctx => note(ctx, 'Great Stature: Giant’s Might adds 1d8 damage.'));
+  def('subclass:fighter:Runic Juggernaut', ctx => note(ctx, 'Runic Juggernaut: Giant’s Might adds 1d10 damage, and you can grow to Huge with +5 ft reach.'));
   def('subclass:fighter:Rapid Strike', ctx => note(ctx, 'Rapid Strike: once per turn, give up advantage on an attack to make an extra weapon attack against that target.'));
   def('subclass:fighter:Team Tactics', ctx => note(ctx, 'Team Tactics: allies you restore with Group Recovery have advantage on D20 tests until your next turn.'));
   // Monk
@@ -475,9 +500,38 @@
     if (new24(ctx)) pool(ctx, 'Flurry of Healing and Harm', abm(ctx, 'wis'), 'long');
     note(ctx, 'Flurry of Healing and Harm: Flurry of Blows can trade strikes for Hand of Healing, and add Hand of Harm to one, without spending ' + (new24(ctx) ? 'Focus Points (' + abm(ctx, 'wis') + ' times per long rest).' : 'ki.'));
   });
+  def('subclass:monk:Drunken Technique', ctx => note(ctx, 'Drunken Technique: Flurry of Blows also Disengages and gives +10 ft speed this turn.'));
+  def('subclass:monk:Stride of the Elements', ctx => note(ctx, 'Stride of the Elements: while Elemental Attunement is active, fly and swim speeds equal to your speed.'));
+  def('subclass:monk:Elemental Epitome', ctx => note(ctx, 'Elemental Epitome: while Elemental Attunement is active, resistance to acid, cold, fire, lightning or thunder (switch each turn), and Step of the Wind adds 20 ft and damages creatures you pass.'));
+  def('subclass:warlock:Genie\'s Vessel', ctx => note(ctx, 'Genie’s Vessel: your warlock focus; AC ' + (8 + ctx.pb + ctx.mod.cha) + ', ' + (ctx.level + ctx.pb) + ' hit points, immune to poison and psychic.'));
   // Paladin
+  def('subclass:paladin:Control Undead', ctx => act(ctx, { name: 'Control Undead', action: 'Action', resource: 'Channel Divinity', amount: 1, feature: 'Control Undead',
+    desc: 'An undead within 30 ft (below CR ' + ctx.level + ') makes a Wisdom save or obeys you for 24 hours.' }));
+  def('subclass:paladin:Dreadful Aspect', ctx => act(ctx, { name: 'Dreadful Aspect', action: 'Action', resource: 'Channel Divinity', amount: 1, feature: 'Dreadful Aspect',
+    desc: 'Creatures of your choice within 30 ft that see you make a Wisdom save or are frightened for 1 minute.' }));
+  def('subclass:paladin:Dread Lord', ctx => {
+    pool(ctx, 'Dread Lord', 1, 'long');
+    act(ctx, { name: 'Dread Lord', action: 'Action', resource: 'Dread Lord', amount: 1, feature: 'Dread Lord',
+      desc: 'For 1 minute, a 30 ft aura of gloom: frightened enemies starting their turn in it take 4d10 psychic, and attacks by sight against you and allies in it have disadvantage.' });
+  });
+  def('subclass:paladin:Protective Spirit', ctx => note(ctx, 'Protective Spirit: ending your turn in combat below half your hit points, regain 1d6+' + Math.floor(ctx.level / 2) + '.'));
   def('subclass:paladin:Aura of Hate', ctx => note(ctx, 'Aura of Hate: you, and fiends and undead within ' + (ctx.level >= 18 ? 30 : 10) + ' ft, add ' + signed(abm(ctx, 'cha')) + ' to melee weapon damage.'));
+  // Ranger
+  def('subclass:ranger:Stalker\'s Flurry', ctx => note(ctx, new24(ctx)
+    ? 'Stalker’s Flurry: Dreadful Strike deals 2d8, and can add Sudden Strike (another attack nearby) or Mass Fear (frighten around the target).'
+    : 'Stalker’s Flurry: once per turn, a weapon miss lets you make another weapon attack.'));
+  def('subclass:ranger:Supernatural Defense', ctx => note(ctx, 'Supernatural Defense: add 1d6 to saves your Slayer’s Prey target forces, and to checks to escape its grapple.'));
+  def('subclass:ranger:Gathered Swarm', ctx => ctx.extraDamage.push({ label: 'Gathered Swarm', dice: (ctx.level >= 11 ? '1d8' : '1d6') + ' piercing',
+    note: 'once per turn after a hit — or push the target 15 ft, or move yourself 5 ft' }));
+  def('subclass:ranger:Mighty Swarm', () => {});   // Gathered Swarm grows to 1d8
+  def('subclass:ranger:Hunter\'s Rime', ctx => note(ctx, 'Hunter’s Rime: casting Hunter’s Mark gives 1d10+' + ctx.level + ' temporary hit points, and the marked creature can’t Disengage.'));
   // Rogue
+  def('subclass:rogue:Supreme Sneak', ctx => note(ctx, new24(ctx)
+    ? 'Supreme Sneak: Cunning Strike option Stealth Attack (1d6) — the attack doesn’t end your invisibility from Hide if you end the turn behind cover.'
+    : 'Supreme Sneak: advantage on Stealth if you move no more than half your speed that turn.'));
+  def('subclass:rogue:Eye for Weakness', ctx => note(ctx, 'Eye for Weakness: Sneak Attack deals 3d6 more against a creature your Insightful Fighting applies to.'));
+  def('subclass:rogue:Envenom Weapons', ctx => note(ctx, 'Envenom Weapons: the Poison Cunning Strike also deals 2d6 poison, ignoring resistance, on each failed save.'));
+  def('subclass:rogue:Strike Fear', ctx => note(ctx, 'Strike Fear: Cunning Strike option Terrify (1d6) — a Wisdom save or frightened for 1 minute, and you have advantage against it.'));
   def('subclass:rogue:Assassinate', ctx => {
     if (new24(ctx)) ctx.rollAdv.push({ on: ['init'], label: 'Assassinate' });
     note(ctx, new24(ctx)
@@ -499,6 +553,9 @@
     pool(ctx, 'Tides of Chaos', 1, 'long');
     note(ctx, 'Tides of Chaos: advantage on one ' + (new24(ctx) ? 'D20 test' : 'attack, check or save') + '; it comes back after a Wild Magic Surge' + (new24(ctx) ? ' from a sorcerer spell.' : ' the DM calls for.'));
   });
+  def('subclass:sorcerer:Bolstering Flames', ctx => note(ctx, 'Bolstering Flames (Spellfire Burst): you or a creature within 30 ft gains 1d4' + signed(ctx.mod.cha) + (ctx.level >= 14 ? '+' + ctx.level : '') + ' temporary hit points.'));
+  def('subclass:sorcerer:Radiant Fire', ctx => note(ctx, 'Radiant Fire (Spellfire Burst): a creature within 30 ft takes ' + (ctx.level >= 14 ? '1d8' : '1d4') + ' fire or radiant damage.'));
+  def('subclass:sorcerer:Honed Spellfire', () => {});   // Bolstering Flames and Radiant Fire grow
   def('subclass:sorcerer:Psionic Sorcery', ctx => note(ctx, 'Psionic Sorcery: cast your Psionic Spells with sorcery points equal to the spell’s level, needing no verbal, somatic or (unconsumed) material components.'));
   def('subclass:sorcerer:Eyes of the Dark', ctx => {
     ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, 120);
@@ -508,6 +565,7 @@
   def('subclass:wizard:Temporal Awareness', ctx => { ctx.initBonus += ctx.mod.int; });
   def('subclass:wizard:Improved Abjuration', ctx => note(ctx, 'Improved Abjuration: ability checks your abjuration spells call for (Counterspell, Dispel Magic) add +' + ctx.pb + '.'));
   def('subclass:wizard:Undead Thralls', ctx => note(ctx, 'Undead Thralls: Animate Dead raises one extra; undead you make have +' + ctx.level + ' hit points and add +' + ctx.pb + ' to weapon damage.'));
+  def('subclass:wizard:Overchannel', ctx => note(ctx, 'Overchannel: a level 1–5 wizard damage spell deals maximum damage; using it again before a long rest costs 2d12 necrotic per spell level (then 3d12, 4d12…).'));
   def('subclass:wizard:Durable Magic', ctx => note(ctx, 'Durable Magic: while concentrating on a spell, +2 AC and +2 to all saves.'));
   def('subclass:wizard:Song of Victory', ctx => new24(ctx)
     ? act(ctx, { name: 'Song of Victory', action: 'Bonus Action', feature: 'Song of Victory', desc: 'After casting a spell with a casting time of an action, make one weapon attack.' })
@@ -516,6 +574,9 @@
   def('subclass:artificer:Alchemical Savant', ctx => note(ctx, 'Alchemical Savant: a spell cast through alchemist’s supplies adds ' + signed(abm(ctx, 'int')) + ' to one healing roll or acid, fire, ' + (new24(ctx) ? '' : 'necrotic ') + 'or poison damage roll.'));
   def('subclass:artificer:Arcane Firearm', ctx => note(ctx, 'Arcane Firearm: artificer spells cast through it add 1d8 to one damage roll.'));
   def('subclass:artificer:Guided Precision', ctx => note(ctx, 'Guided Precision: once per turn, a Cartographer spell or a hit on a creature in your Faerie Fire adds ' + signed(ctx.mod.int) + ' damage; damage can’t break your concentration on Faerie Fire.'));
+  def('subclass:artificer:Improved Defender', ctx => note(ctx, 'Improved Defender: Arcane Jolt deals or heals 4d6; your steel defender’s Deflect Attack deals 1d4' + signed(ctx.mod.int) + ' force' + (new24(ctx) ? '.' : ', and it gains +2 AC.')));
+  def('subclass:artificer:Adventurer\'s Atlas', ctx => note(ctx, 'Adventurer’s Atlas: after a long rest, give magical maps to up to ' + Math.max(2, 1 + ctx.mod.int) + ' creatures; holders see each other on them.'));
+  def('subclass:artificer:Thunder Gauntlets', ctx => note(ctx, 'Thunder Gauntlets: empty gauntlets are simple melee weapons dealing 1d8 thunder (INT to hit and damage); a creature hit has disadvantage against others until your next turn.'));
   def('subclass:artificer:Improved Armorer', ctx => note(ctx, 'Improved Armorer: an extra Armor plan and item for Replicate Magic Item, and +1 to attack and damage with your armour’s special weapon.'));
 
   // ── On/off states: the sheet's toggles ─────────────────────────────────

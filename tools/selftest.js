@@ -9667,6 +9667,57 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 82: more subclass features, and the older domains under 2024 ----
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, ed) => {
+          CB.build = Object.assign(sktBlankBuild(ed || '2024'), { cls, level: L, subclass: sub, species: 'Human', background: 'Soldier', originFeat: 'Tough', name: 'T', sources: SKT_ALL_SOURCES }, ed === '2014' ? { allBooks: true } : {});
+          cbQuickBuild(); return sktComputeCharacter(CB.build, ed === '2014' ? R14 : R);
+        };
+        const again = ed => sktComputeCharacter(CB.build, ed === '2014' ? R14 : R);
+        const md = (r, k) => Math.floor((r.abilities[k] - 10) / 2);
+        const xd = (r, label) => (r.sheet.extraDamage || []).find(x => x.label === label) || {};
+        const nt = (r, head) => (r.sheet.notes || []).find(n => n.startsWith(head + ':') || n.startsWith(head + ' (')) || '';
+        const act = (r, n) => (r.sheet.activations || []).find(a => a.name === n) || {};
+        const pool = (r, n) => r.resources.find(x => x.name === n) || {};
+        const applied = (r, n) => (r.sheet.featureList || []).some(f => f.name === n && f.mech);
+        // An older domain in a 2024 build: Blessed Strikes decides, once.
+        let r = mk('Cleric', 'Arcana', 8); CB.build.cantrips = ['Sacred Flame'];
+        const flat = rr => { const c = (rr.sheet.attacks || []).find(a => a.name === 'Sacred Flame'); return c ? +((/^\d+d\d+([+-]\d+)?/.exec(c.damage) || [])[1] || 0) : null; };
+        CB.build.featureChoices = Object.assign({}, CB.build.featureChoices, { 'Blessed Strikes': 'Divine Strike' }); const ds = again();
+        CB.build.featureChoices['Blessed Strikes'] = 'Potent Spellcasting'; const ps = again();
+        ok('2024 with an older domain: Potent Spellcasting adds WIS to cantrips once, not twice', flat(ds) === 0 && flat(ps) === md(ps, 'wis') && !xd(ps, 'Divine Strike').dice, flat(ds) + ' → ' + flat(ps));
+        r = mk('Cleric', 'Forge', 8);
+        ok('2024 with an older domain: its Divine Strike reads as applied (Blessed Strikes covers it)', applied(r, 'Divine Strike'));
+        r = mk('Cleric', 'Arcana', 8, '2014'); CB.build.cantrips = ['Sacred Flame']; r = again('2014');
+        ok('2014: the older domain\'s own Potent Spellcasting still adds WIS', flat(r) === md(r, 'wis'), flat(r));
+        r = mk('Cleric', 'Forge', 8, '2014');
+        ok('2014: Tasha\'s Blessed Strikes — 1d8 radiant on the Extra damage list', xd(r, 'Blessed Strikes').dice === '1d8 radiant', JSON.stringify(r.sheet.extraDamage));
+        // Numbers.
+        r = mk('Ranger', 'Swarmkeeper', 3); const sw3 = xd(r, 'Gathered Swarm').dice; r = mk('Ranger', 'Swarmkeeper', 11);
+        ok('subclass: Gathered Swarm — 1d6 piercing, 1d8 from 11th level', sw3 === '1d6 piercing' && xd(r, 'Gathered Swarm').dice === '1d8 piercing', sw3 + ' / ' + xd(r, 'Gathered Swarm').dice);
+        r = mk('Paladin', 'Oathbreaker', 20, '2014');
+        ok('subclass: Oathbreaker — Control Undead and Dreadful Aspect spend Channel Divinity; Dread Lord is once a long rest',
+           act(r, 'Control Undead').resource === 'Channel Divinity' && act(r, 'Dreadful Aspect').resource === 'Channel Divinity' && pool(r, 'Dread Lord').max === 1 && act(r, 'Dread Lord').action === 'Action');
+        r = mk('Fighter', 'Battle Master', 7);
+        ok('subclass: 2024 Know Your Enemy — a bonus action once a long rest', act(r, 'Know Your Enemy').action === 'Bonus Action' && pool(r, 'Know Your Enemy').max === 1);
+        r = mk('Fighter', 'Battle Master', 7, '2014');
+        ok('subclass: 2014 Know Your Enemy — a reminder, not an action', !act(r, 'Know Your Enemy').name && !!nt(r, 'Know Your Enemy'));
+        r = mk('Cleric', 'Light', 6);
+        ok('subclass: Improved Warding Flare — Warding Flare comes back on a short rest', pool(r, 'Warding Flare').recharge === 'short', JSON.stringify(pool(r, 'Warding Flare')));
+        r = mk('Warlock', 'Genie', 5, '2014');
+        ok('subclass: Genie\'s Vessel — AC is the spell save DC, hit points level + proficiency', nt(r, 'Genie’s Vessel').includes('AC ' + (8 + r.sheet.profBonus + md(r, 'cha')) + ', 8 hit points'), nt(r, 'Genie’s Vessel'));
+        r = mk('Paladin', 'Redemption', 15, '2014');
+        ok('subclass: Protective Spirit — 1d6 + half the paladin level', nt(r, 'Protective Spirit').includes('1d6+7'), nt(r, 'Protective Spirit'));
+        r = mk('Sorcerer', 'Spellfire', 14);
+        ok('subclass: Spellfire Burst at 14th — Bolstering Flames adds the sorcerer level, Radiant Fire 1d8', nt(r, 'Bolstering Flames').includes('+14 temporary') && nt(r, 'Radiant Fire').includes('1d8'), nt(r, 'Bolstering Flames'));
+      } catch(e){ ok('round 82 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

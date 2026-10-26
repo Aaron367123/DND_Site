@@ -2060,7 +2060,7 @@ sktDefineExtra(['subclass:wizard:Portent'], ctx => { _fxPool(ctx, 'Portent', (ct
   _fxAction(ctx, { name: 'Portent', action: 'Special', resource: 'Portent', amount: 1, dice: '1d20', feature: 'Portent', auto: true,
     desc: 'After a long rest, roll the dice and record them; replace any D20 Test you can see (yours or another creature’s) with one of them, before the roll.' }); });
 // The 2014 domains' Potent Spellcasting, and the Evoker's Empowered Evocation.
-sktDefineExtra(['subclass:cleric:Potent Spellcasting'], ctx => { ctx.cantripDamageBonus += ctx.mod.wis; });
+sktDefineExtra(['subclass:cleric:Potent Spellcasting'], ctx => { if (ctx.edition === '2014') ctx.cantripDamageBonus += ctx.mod.wis; });
 sktDefineExtra(['subclass:wizard:Empowered Evocation'], ctx => { ctx.schoolDamage.V = (ctx.schoolDamage.V || 0) + ctx.mod.int; });
 // The Rage state adds Divine Fury's damage while raging.
 sktDefineExtra(['subclass:barbarian:Divine Fury'], () => {});
