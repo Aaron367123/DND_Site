@@ -10065,6 +10065,17 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 89: names and notes as D&D Beyond has them ----------------------
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        const fl = b => sktBuildFeatures(Object.assign(sktBlankBuild('2024'), b), R);
+        ok('names: the Path of the Giant\'s 3rd-level feature is Giant’s Power', fl({ cls: 'Barbarian', subclass: 'Giant', level: 3 }).some(f => f.name === 'Giant’s Power')
+           && !fl({ cls: 'Barbarian', subclass: 'Giant', level: 3 }).some(f => f.name === 'Giant Power'));
+        const champ = l => sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', subclass: 'Champion', level: l, species: 'Human', name: 'T' }), R);
+        ok('notes: 2024 Remarkable Athlete — the move after a critical hit', (champ(3).sheet.notes || []).some(n => /^Remarkable Athlete: right after you score a critical hit/.test(n)), JSON.stringify(champ(3).sheet.notes));
+      } catch(e){ ok('round 89 threw', false, e.message); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

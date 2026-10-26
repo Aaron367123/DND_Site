@@ -300,7 +300,7 @@ async function _sktRulesBuild(edition, read){
                   && (sc.source !== csrc || f.source === csrc)
                   // The copy's own entries repeat the 2014 ones, moved.
                   && !(sc._levels && f.classSource === csrc && f._copy))
-        .map(f => ({ name: f.name, level: sc._levels && f.classSource !== csrc ? sc._levels.get(f.level) : f.level, entries: f.entries || [] }))
+        .map(f => ({ name: _SKT_FEATURE_NAME[f.name + '|' + f.source] || f.name, level: sc._levels && f.classSource !== csrc ? sc._levels.get(f.level) : f.level, entries: f.entries || [] }))
         .filter(f => f.level),
     })).map(sc => _sktOptionFeatures(sc));
     R.classes.push({
@@ -1105,6 +1105,8 @@ function sktAbilityBreakdown(build, R){
 // The features a build has, in level order: class, subclass, species,
 // background, feats and optional features. Each carries where it came from,
 // its text, and whether this file applies it mechanically.
+// Features the data names differently from the book (and D&D Beyond).
+const _SKT_FEATURE_NAME = { 'Giant Power|BGG': 'Giant’s Power' };
 function sktBuildFeatures(build, R){
   const parts = sktClassLevels(build, R);
   const tag = (f, p) => (f.from === 'class' || f.from === 'subclass') ? Object.assign(f, { cls: p.key, clsLevel: p.level }) : f;
@@ -2200,7 +2202,10 @@ sktDefineEffect(['subclass:Draconic Resilience'], ctx => {
 });
 sktDefineEffect(['subclass:Remarkable Athlete'], ctx => {
   if (ctx.edition === '2014') ctx.remarkableAthlete = true;
-  else ctx.rollAdv.push({ on: ['init', 'skill:athletics'], label: 'Remarkable Athlete' });
+  else {
+    ctx.rollAdv.push({ on: ['init', 'skill:athletics'], label: 'Remarkable Athlete' });
+    _fxNote(ctx, 'Remarkable Athlete: right after you score a critical hit, you can move up to half your Speed without provoking opportunity attacks.');
+  }
 });
 sktDefineEffect(['subclass:Improved Critical'], ctx => { ctx.critRange = Math.min(ctx.critRange, 19); });
 sktDefineEffect(['subclass:Superior Critical'], ctx => { ctx.critRange = Math.min(ctx.critRange, 18); });
