@@ -163,9 +163,17 @@ function cbFromImported(pc){
     if (o) b.optional[o.name] = fs.map(f => f.name).slice(0, o.count);
   }
   const origin = feats.filter(f => cat(f) === 'O');
-  if (origin.length) b.originFeat = origin[0].name;
-  const general = feats.filter(f => !fs.includes(f) && !(origin[0] === f));
-  sktAsiSlots(b, R).forEach((slot, i) => { if (general[i]) b.asi[slot.key] = { type: 'feat', feat: general[i].name }; });
+  // The species' feat slot (2024 Human's Versatile, 2014 Variant Human), if it has one.
+  const spNow = sktRulesSpecies(R, b.species), subNow = spNow && sktSpeciesSub(spNow, b);
+  const speciesSlot = !!spNow && ((R.edition === '2014' && ((subNow && /variant/i.test(subNow.name)) || cbSpeciesGivesFeat(spNow, subNow))) || (R.edition === '2024' && spNow.name === 'Human'));
+  if (origin.length && speciesSlot) b.originFeat = origin[0].name;
+  const general = feats.filter(f => !fs.includes(f) && !(speciesSlot && origin[0] === f));
+  const slots = sktAsiSlots(b, R);
+  // General feats into the ASI levels; origin and campaign feats that fit no slot are kept as other feats.
+  const intoSlots = general.filter(f => R.edition === '2014' || cat(f) === 'G' || cat(f) === 'EB').slice(0, slots.length);
+  slots.forEach((slot, i) => { if (intoSlots[i]) b.asi[slot.key] = { type: 'feat', feat: intoSlots[i].name }; });
+  const spare = general.filter(f => !intoSlots.includes(f));
+  if (spare.length){ b.extraFeats = spare.map(f => f.name); notes.push(spare.map(f => f.name).join(', ') + ' fit' + (spare.length === 1 ? 's' : '') + ' no feat slot here — kept under Other feats (Feats & levels step)'); }
   // A feat that grants skills (the 2024 Noble's Skilled) takes the ones still
   // unexplained; what it has to spare goes on tools, which move no numbers.
   { const rec0 = sktComputeCharacter(b, R);
@@ -989,7 +997,7 @@ function cbQuickBuild(){
       b.skills = (b.skills || []).concat(bySkill(cls.skillChoice.from.filter(k => !granted.has(k) && !(b.skills || []).includes(k)))).slice(0, cls.skillChoice.count);
     const skp = cbSpeciesSkillChoice(sp, sub);
     if (skp && (b.speciesSkills || []).length < skp.count)
-      b.speciesSkills = bySkill(skp.from.filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k))).slice(0, skp.count);
+      b.speciesSkills = bySkill(skp.from.filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k) && !(b.skills || []).includes(k))).slice(0, skp.count);
     const ex = cbExpertiseCount();
     if (ex && (b.expertise || []).length < ex) b.expertise = bySkill(Object.keys(rec.sheet.skillProf || {})).slice(0, ex);
     const lc = cbLanguageCount();
@@ -1087,9 +1095,11 @@ function cbQuickBuild(){
     sktBuildFeatNames(b, R).forEach(n => {
       const fc = sktFeatChoices(R, b, n, rec), f = sktRulesFeat(R, n); if (!f) return;
       const ch = b.featChoices[f.name] = Object.assign({}, b.featChoices[f.name]);
+      const held = new Set(Object.keys(sktComputeCharacter(b, R).sheet.skillProf || {}));
+      const fresh = list => bySkill(list).sort((x, y) => held.has(x) - held.has(y));
       fc.choices.forEach(c => {
-        if (c.kind === 'skillsTools'){ if ((ch.skills || []).length + (ch.tools || []).length < c.count) ch.skills = bySkill(c.options.filter(o => o.startsWith('s:')).map(o => o.slice(2))).slice(0, c.count); }
-        else if ((ch[c.kind] || []).length < c.count) ch[c.kind] = (c.kind === 'skills' ? bySkill(c.options) : c.options).slice(0, c.count);
+        if (c.kind === 'skillsTools'){ if ((ch.skills || []).length + (ch.tools || []).length < c.count) ch.skills = fresh(c.options.filter(o => o.startsWith('s:')).map(o => o.slice(2))).slice(0, c.count); }
+        else if ((ch[c.kind] || []).length < c.count) ch[c.kind] = (c.kind === 'skills' ? fresh(c.options) : c.options).slice(0, c.count);
       });
       const ac2 = cbFeatAbilityChoice(f);
       if (ac2 && !Object.keys(ch.inc || {}).length){ const k = order.find(x => ac2.from.includes(x)); if (k) ch.inc = { [k]: ac2.amount }; }
@@ -1324,6 +1334,25 @@ CB_RENDER.levels = () => {
     }
     html += '</div>';
   });
+  // Other feats: outside the slots (a DM's gift, a campaign's bonus feat), as D&D Beyond's Manage Feats.
+  { const xs = b.extraFeats || [], taken = new Set(sktBuildFeatNames(b, R));
+    html += '<div class="cb-asi"><h4>Other feats</h4><div class="cb-dim">Feats outside the usual slots — one your DM granted, or a campaign’s bonus feat.</div>';
+    xs.forEach((n, i) => {
+      const f = sktRulesFeat(R, n);
+      html += '<div class="cb-row"><b>' + cbEsc(n) + '</b> <button class="btn small" data-cb-xfeatdel="' + i + '">Remove</button></div>';
+      if (f){
+        const ch = cbFeatAbilityChoice(f);
+        if (ch){
+          const cur = Object.keys((b.featChoices[f.name] || {}).inc || {})[0] || '';
+          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(f.name) + ':' + ch.amount + '"><option value="">—</option>'
+            + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
+        }
+        html += cbFeatChoicesHtml(f.name);
+      }
+    });
+    html += '<select class="cb-sel" data-cb-xfeatadd><option value="">Add a feat…</option>'
+      + R.feats.filter(f => (f.repeatable || !taken.has(f.name)) && sktBookOk(b, f)).map(f => '<option value="' + cbEsc(f.name) + '">' + cbEsc(f.name) + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '') + '</option>').join('')
+      + '</select></div>'; }
   // Optional features: invocations, metamagic, fighting styles, pact boons.
   sktOptionalChoices(b, R).forEach(o => {
     const have = (b.optional[o.name] || []);
@@ -1838,6 +1867,7 @@ function cbOnClick(e){
   if (d.cbSuggestroll){ const list = (cbCharacteristics() || {})[d.cbSuggestroll] || []; if (list.length) cbAddCharacteristic(d.cbSuggestroll, sktD(list.length) - 1); return; }
   if (d.cbSpmode) return cbSet(b => { if ((b.speciesChoice.asiMode || '21') !== d.cbSpmode){ b.speciesChoice.asiMode = d.cbSpmode; b.speciesAsi = {}; } });
   if (d.cbBg) return cbSet(b => { if (b.background !== d.cbBg){ b.background = d.cbBg; b.bgAsi = {}; b.bgSkills = []; } });
+  if ('cbXfeatdel' in d) return cbSet(b => { b.extraFeats = (b.extraFeats || []).filter((x, i) => i !== +d.cbXfeatdel); });
   if (d.cbBgmode) return cbSet(b => {
     b.bgAsiMode = d.cbBgmode; b.bgAsi = {};
     if (d.cbBgmode === '111'){
@@ -1885,6 +1915,7 @@ function cbOnChange(e){
   if (d.cbCbg && d.cbCbg !== 'name') return cbSet(b => { b.customBg = Object.assign({}, b.customBg, { [d.cbCbg]: d.cbCbg === 'languages' ? +v : v });
     if (d.cbCbg === 'languages') b.customBg.tools = (b.customBg.tools || []).slice(0, 2 - (+v || 0)); });
   if (d.cbCbgskill) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.skills = (b.customBg.skills || []).slice(); cbToggle(b.customBg.skills, d.cbCbgskill, 2); });
+  if ('cbXfeatadd' in d){ if (!v) return; return cbSet(b => { b.extraFeats = (b.extraFeats || []).concat([v]); }); }
   if (d.cbBgadab) return cbSet(b => { b.bgAdapt = Object.assign({}, b.bgAdapt); b.bgAdapt.abilities = (b.bgAdapt.abilities || []).slice(); cbToggle(b.bgAdapt.abilities, d.cbBgadab, 3); b.bgAsi = {}; });
   if (d.cbBgadfeat) return cbSet(b => { b.bgAdapt = Object.assign({}, b.bgAdapt, { feat: v }); });
   if (d.cbCbgab) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.abilities = (b.customBg.abilities || []).slice(); cbToggle(b.customBg.abilities, d.cbCbgab, 3); b.bgAsi = {}; });

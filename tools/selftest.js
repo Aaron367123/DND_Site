@@ -9998,6 +9998,44 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 88: other feats, rebuilt feats that fit no slot, skills not picked twice --
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.R = R;
+        // Other feats count like any feat, and the builder adds and removes them.
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', level: 4, species: 'Human', background: 'Soldier', name: 'T', sources: SKT_ALL_SOURCES, extraFeats: ['Aberrant Dragonmark'] });
+        cbQuickBuild();
+        ok('other feats: an extra feat is one of the character\'s feats', sktBuildFeatNames(CB.build, R).includes('Aberrant Dragonmark'));
+        CB.step = 'levels'; cbRender();
+        const addSel = document.querySelector('#cb-root [data-cb-xfeatadd]');
+        if (addSel){ addSel.value = 'Lucky'; addSel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60); }
+        ok('other feats: the Feats step adds one', (CB.build.extraFeats || []).includes('Lucky'), JSON.stringify(CB.build.extraFeats));
+        const del = document.querySelector('#cb-root [data-cb-xfeatdel="0"]'); if (del){ del.click(); await sleep(60); }
+        ok('other feats: and removes one', JSON.stringify(CB.build.extraFeats) === '["Lucky"]', JSON.stringify(CB.build.extraFeats));
+        cbClose();
+        // Rebuilding a sheet with a feat that fits no slot keeps it, with a note.
+        { const pc = { id: 'imp-x', name: 'Imp Druid', cls: 'druid', level: 6, race: 'Half-Elf', background: 'Sage', feats: ['Alert', 'Aberrant Dragonmark', 'Durable', 'Magic Initiate (Wizard)'],
+                       abilities: { str: 10, dex: 12, con: 16, int: 13, wis: 18, cha: 8 }, hpMax: 45, ac: 13, sheet: { skills: {}, saves: {} } };
+          state.party.push(pc);
+          await openCharBuilder({ idx: state.party.indexOf(pc) }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+          ok('rebuild: a feat that fits no slot (Aberrant Dragonmark) is kept under Other feats, with a note, and a Half-Elf gets no species feat',
+             (CB.build.extraFeats || []).includes('Aberrant Dragonmark') && (CB.convertNotes || []).some(n => /Aberrant Dragonmark fits? no feat slot/.test(n)) && !CB.build.originFeat
+             && (CB.build.extraFeats || []).includes('Alert') && Object.values(CB.build.asi || {}).some(x => x && x.feat === 'Durable'), JSON.stringify([CB.build.extraFeats, CB.build.originFeat, CB.build.asi, CB.convertNotes]));
+          cbClose(); state.party = state.party.filter(x => x.id !== 'imp-x'); }
+        // Quick build doesn't pick a skill the character already has.
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100); CB.R = R;
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Bard', level: 1, species: 'Human', background: 'Charlatan', name: 'T', sources: SKT_ALL_SOURCES });
+        cbQuickBuild();
+        const bgSk = ['deception', 'sleightOfHand'], fsk = ((CB.build.featChoices || {}).Skilled || {}).skills || [];
+        ok('skills: a Human bard\'s species skill isn\'t one of its class skills', !(CB.build.speciesSkills || []).some(k => CB.build.skills.includes(k)), JSON.stringify([CB.build.skills, CB.build.speciesSkills]));
+        ok('skills: the Skilled feat picks skills the character doesn\'t already have', fsk.length === 3 && !fsk.some(k => CB.build.skills.includes(k) || (CB.build.speciesSkills || []).includes(k) || bgSk.includes(k)), JSON.stringify(fsk));
+      } catch(e){ ok('round 88 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

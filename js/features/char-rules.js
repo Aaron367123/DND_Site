@@ -987,6 +987,7 @@ function sktBlankBuild(edition){
     languages: [], tools: [],
     asi: {},               // level → { type:'asi', inc:{ab:n} } | { type:'feat', feat, choice }
     originFeat: '',        // 2024 Human's extra origin feat; 2014 Variant Human's feat
+    extraFeats: [],        // feats outside the slots: a DM's gift, a campaign's bonus feat
     featChoices: {},       // feat name → { ability, skills, spells … }
     featureChoices: {},    // feature name → chosen option (Divine Order → 'Protector')
     optional: {},          // 'Eldritch Invocations' → [names], 'Fighting Style' → [name] …
@@ -1210,6 +1211,7 @@ function sktBuildFeatNames(build, R){
     const p = build.asi[lvl];
     if (slots.has(String(lvl)) && p && p.type === 'feat' && p.feat) out.push(p.feat);
   });
+  (build.extraFeats || []).forEach(n => { if (n) out.push(n); });
   return out;
 }
 // Subclass features that are a pick made when building, as D&D Beyond asks
