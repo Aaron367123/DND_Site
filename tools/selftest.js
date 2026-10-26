@@ -9595,7 +9595,7 @@
         ok('passive: no Empowered Evocation before 10th level', !(r.sheet.schoolDamage || {}).V);
         // A feature listed under several headings counts as applied in each.
         r = mk('Cleric', 'Tempest', 8); let fl = (r.sheet.featureList || []).filter(f => f.name === 'Blessed Strikes');
-        ok('features: an older domain’s Blessed Strikes reads as applied, as the class’s does', fl.length === 2 && fl.every(f => f.mech), JSON.stringify(fl.map(f => f.from + ':' + f.mech)));
+        ok('features: an older domain on a 2024 cleric drops its own Blessed Strikes — the class’s is the one, applied', fl.length === 1 && fl[0].from === 'class' && fl[0].mech, JSON.stringify(fl.map(f => f.from + ':' + f.mech)));
         r = mk('Barbarian', 'Berserker', 17); fl = (r.sheet.featureList || []).filter(f => f.name === 'Improved Brutal Strike');
         ok('features: Improved Brutal Strike reads as applied at 13th and 17th level', fl.length === 2 && fl.every(f => f.mech), JSON.stringify(fl.map(f => f.level + ':' + f.mech)));
       } catch(e){ ok('round 80 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
@@ -9649,7 +9649,7 @@
         ok('subclass: 2024 Assassinate — advantage on initiative, and Sneak Attack adds the rogue level', (r.sheet.rollAdv || []).some(x => x.label === 'Assassinate' && x.on.includes('init')) && /deals 3 extra/.test(nt(r, 'Assassinate')));
         r = mk('Rogue', 'Assassin', 3, '2014');
         ok('subclass: 2014 Assassinate — no initiative advantage', !(r.sheet.rollAdv || []).some(x => x.label === 'Assassinate'));
-        r = mk('Wizard', 'Chronurgy', 2);
+        r = mk('Wizard', 'Chronurgy', 3);
         ok('subclass: Temporal Awareness — initiative + INT', r.init === md(r, 'dex') + md(r, 'int'), r.init);
         r = mk('Rogue', 'Soulknife', 9);
         ok('subclass: Homing Strikes and Psi-Bolstered Knack — spend a Psionic Energy die', act(r, 'Homing Strikes').resource === 'Psionic Energy' && act(r, 'Psi-Bolstered Knack').dice === '1d8');
@@ -9691,7 +9691,15 @@
         CB.build.featureChoices['Blessed Strikes'] = 'Potent Spellcasting'; const ps = again();
         ok('2024 with an older domain: Potent Spellcasting adds WIS to cantrips once, not twice', flat(ds) === 0 && flat(ps) === md(ps, 'wis') && !xd(ps, 'Divine Strike').dice, flat(ds) + ' → ' + flat(ps));
         r = mk('Cleric', 'Forge', 8);
-        ok('2024 with an older domain: its Divine Strike reads as applied (Blessed Strikes covers it)', applied(r, 'Divine Strike'));
+        ok('2024 with an older domain: its own Divine Strike is gone (Blessed Strikes covers it), as on D&D Beyond', !(r.sheet.featureList || []).some(f => f.name === 'Divine Strike' && f.from === 'subclass'));
+        // An older subclass's features come at the 2024 class's subclass levels.
+        { const lv = n => ((r.sheet.featureList || []).find(f => f.name === n && f.from === 'subclass') || {}).level;
+          ok('2024 with an older domain: its 1st- and 2nd-level features at 3rd, once each', lv('Blessing of the Forge') === 3 && lv("Channel Divinity: Artisan's Blessing") === 3
+             && (r.sheet.featureList || []).filter(f => f.name === "Channel Divinity: Artisan's Blessing").length === 1 && (r.sheet.featureList || []).filter(f => f.name === 'Forge Domain').length === 1,
+             JSON.stringify((r.sheet.featureList || []).filter(f => f.from === 'subclass').map(f => f.level + ':' + f.name))); }
+        { const two = sktBuildFeatures(Object.assign(sktBlankBuild('2024'), { cls: 'Warlock', subclass: 'Hexblade', level: 2 }), CB.R).filter(f => f.from === 'subclass');
+          const three = sktBuildFeatures(Object.assign(sktBlankBuild('2024'), { cls: 'Warlock', subclass: 'Hexblade', level: 3 }), CB.R).filter(f => f.from === 'subclass');
+          ok('2024 with an older patron: nothing from it before 3rd level, its 1st-level features at 3rd', !two.length && three.some(f => f.name === "Hexblade's Curse" && f.level === 3), JSON.stringify([two.length, three.map(f => f.level + ':' + f.name)])); }
         r = mk('Cleric', 'Arcana', 8, '2014'); CB.build.cantrips = ['Sacred Flame']; r = again('2014');
         ok('2014: the older domain\'s own Potent Spellcasting still adds WIS', flat(r) === md(r, 'wis'), flat(r));
         r = mk('Cleric', 'Forge', 8, '2014');

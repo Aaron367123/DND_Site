@@ -263,7 +263,23 @@ async function _sktRulesBuild(edition, read){
       delete out._copy;
       return out;
     };
-    const subclasses = (file.subclass || []).filter(sc => sc.classSource === csrc).map(sc => resolve(sc)).map(sc => ({
+    // Its features come at the 2024 class's subclass levels, by the copy's
+    // own list: a 2014 domain's 1st- and 2nd-level features at 3rd, Divine
+    // Strike (8th) dropped for Blessed Strikes — as D&D Beyond has them.
+    // Old level → new level; a level not in the map is dropped.
+    const legacyLevels = raw => {
+      if (!raw._copy || !Array.isArray(raw.subclassFeatures)) return null;
+      const map = new Map();
+      raw.subclassFeatures.forEach(ref => {
+        const [name, , rsrc, , , lvl] = String(typeof ref === 'string' ? ref : ref.subclassFeature).split('|');
+        const level = +lvl;
+        const own = rsrc === csrc && (file.subclassFeature || []).find(f => f.name === name && f.classSource === csrc
+          && f.subclassShortName === raw.shortName && f.subclassSource === raw.source && f.level === level);
+        map.set(own && own._copy ? +own._copy.level : level, level);
+      });
+      return map;
+    };
+    const subclasses = (file.subclass || []).filter(sc => sc.classSource === csrc).map(raw => Object.assign(resolve(raw), { _levels: legacyLevels(raw) })).map(sc => ({
       name: sc.name, shortName: sc.shortName, source: sc.source,
       core: sc.source === csrc,
       additionalSpells: sc.additionalSpells || null,
@@ -281,8 +297,11 @@ async function _sktRulesBuild(edition, read){
       // subclass ("Maneuver Options" is Tasha's).
       features: (file.subclassFeature || [])
         .filter(f => f.subclassShortName === sc.shortName && f.subclassSource === sc.source
-                  && (sc.source !== csrc || f.source === csrc))
-        .map(f => ({ name: f.name, level: f.level, entries: f.entries || [] })),
+                  && (sc.source !== csrc || f.source === csrc)
+                  // The copy's own entries repeat the 2014 ones, moved.
+                  && !(sc._levels && f.classSource === csrc && f._copy))
+        .map(f => ({ name: f.name, level: sc._levels && f.classSource !== csrc ? sc._levels.get(f.level) : f.level, entries: f.entries || [] }))
+        .filter(f => f.level),
     })).map(sc => _sktOptionFeatures(sc));
     R.classes.push({
       name: cls.name, key: cls.name.toLowerCase(), source: cls.source, core: csrc === src,
