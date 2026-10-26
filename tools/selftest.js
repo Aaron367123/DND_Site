@@ -9189,6 +9189,45 @@
         loadDomain('party');
       }
     }
+    // -- Round 74: anything a character carries can be thrown away -------------
+    {
+      const L0 = localStorage.getItem('skt-loot-v1'), p0 = localStorage.getItem('skt-party-v1');
+      try {
+        state.party = state.party.filter(x => x.id !== 'imp_del');
+        state.party.push({ id: 'imp_del', name: 'Imp Del', cls: 'rogue', level: 3, hp: 20, hpMax: 20, ac: 13, abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 10, cha: 10 },
+          inventory: [{ name: 'Rope', qty: 1, weight: 10 }, { name: 'Torch', qty: 3, weight: 1 }], sheet: { profBonus: 2, saves: {}, attacks: [], bio: { features: '' } } });
+        save();
+        let L; try { L = JSON.parse(L0); } catch(e){ L = null; }
+        if (!L || !Array.isArray(L.items)) L = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
+        L.items = (L.items || []).filter(x => !/^t74_/.test(x.id)).concat([{ id: 't74_pot', name: 'Potion of Climbing', qty: 1, value: '', assignedTo: 'imp_del' }]);
+        localStorage.setItem('skt-loot-v1', JSON.stringify(L)); if (panelDefs.loot) panelDefs.loot._loot = null;
+        openCharSheet('imp_del', { tab: 'inventory' }); await sleep(250);
+        const inLoot = () => (JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').items || []).some(x => x.id === 't74_pot');
+        const del = document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]');
+        ok('inventory: claimed loot has a remove button', !!del);
+        if (del) del.click(); await sleep(60);
+        ok('inventory: removing it takes it off the sheet and out of the loot tracker', !inLoot() && !document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]'));
+        sktUndo(); await sleep(80);
+        ok('inventory: and Undo brings it back', inLoot() && !!document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]'));
+        const pc = () => state.party.find(x => x.id === 'imp_del');
+        const i = (pc().inventory || []).findIndex(x => x.name === 'Rope');
+        const own = document.querySelector('#cs-root [data-cs-del="' + i + '"]');
+        ok('inventory: their own gear has one too', !!own);
+        if (own) own.click(); await sleep(60);
+        ok('inventory: removing the rope leaves the torches', !(pc().inventory || []).some(x => x.name === 'Rope') && (pc().inventory || []).some(x => x.name === 'Torch'),
+           JSON.stringify((pc().inventory || []).map(x => x.name)));
+        csClose();
+      } catch(e){ ok('round 74 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        _remoteUpdate = true;
+        try {
+          if (L0 == null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', L0);
+          if (p0 != null) localStorage.setItem('skt-party-v1', p0);
+        } finally { _remoteUpdate = false; }
+        if (panelDefs.loot) panelDefs.loot._loot = null; loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -2060,7 +2060,8 @@ function csLootRows(pc){
       + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':-1" aria-label="One fewer"' + (q <= 1 ? ' disabled' : '') + '>−</button>') + '×' + q
       + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':1" aria-label="One more">+</button>') + '</span>'
       + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
-      + (ro ? '' : '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Give it to the party loot (nobody\u2019s)">↩ To party loot</button>')
+      + (ro ? '' : '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Give it to the party loot (nobody\u2019s)">↩ To party loot</button>'
+        + '<button class="btn small" data-cs-lootdel="' + csE(it.id) + '" aria-label="Remove ' + csE(it.name) + '" title="Used up, sold or lost: remove it">✕</button>')
       + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
   }).join('');
 }
@@ -2070,6 +2071,13 @@ function csLootClick(d, pc){
     const id = d.csLootclaim, it = csPartyLoot().find(x => x.id === id); if (!it) return true;
     const run = () => { const L = csLootRead(); const x = L.items.find(y => y.id === id); if (x){ x.assignedTo = pc.id; csLootWrite(L); } csRender(); };
     if (typeof sktUndoable === 'function') sktUndoable(pc.name + ' claimed ' + it.name, run, { keys: [CS_LOOT_KEY] }); else run();
+    return true;
+  }
+  if (d.csLootdel != null){
+    if (CS.readOnly) return true;
+    const id = d.csLootdel, it = (csLootRead().items || []).find(x => x.id === id); if (!it) return true;
+    const run = () => { const L = csLootRead(); L.items = L.items.filter(y => y.id !== id); csLootWrite(L); csRender(); };
+    if (typeof sktUndoable === 'function') sktUndoable('Removed ' + it.name, run, { keys: [CS_LOOT_KEY] }); else run();
     return true;
   }
   if (d.csLootqty != null){

@@ -5399,9 +5399,12 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
   .cs-item .cs-itemn { flex:1 1 calc(100% - 40px); overflow-wrap:anywhere; }
   .cs-item .cs-itemn + * { margin-left:28px; }
   .cs-item > :last-child:not(.cs-itemn):not(.cs-eq) { margin-left:auto; }
+  /* The value takes the slack, so the buttons after it line up on the right. */
+  .cs-item .cs-wt { flex:1 1 auto; text-align:left; }
   /* The party's pile has only a count and Claim: one line while the name fits. */
   .cs-partylootitem .cs-itemn { flex:1 1 120px; }
   .cs-partylootitem .cs-itemn + * { margin-left:0; }
+  .cs-partylootitem .cs-wt { flex:0 0 auto; text-align:right; }
 }
 .cs-add { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
 .cs-add input { flex:1 1 200px; min-width:0; }
