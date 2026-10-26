@@ -1014,8 +1014,12 @@ function cbQuickBuild(){
     sktOptionalChoices(b, R).forEach(o => {
       const have = (b.optional[o.name] || []);
       if (have.length >= o.count) return;
-      const pool = o.kind === 'feat' ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && f.core !== false)
-                                     : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && x.core !== false && cbQuickPrereqOk(x, b));
+      // The handbook's first, then whatever the sources switched on allow
+      // (an Arcane Archer's shots are Xanathar's, not the handbook's).
+      const okBook = x => x.core !== false || sktBookOk(b, x);
+      const byCore = (x, y) => (x.core === false) - (y.core === false);
+      const pool = (o.kind === 'feat' ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && okBook(f))
+                                      : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && okBook(x) && cbQuickPrereqOk(x, b))).sort(byCore);
       b.optional[o.name] = have.concat(pool.map(x => x.name).filter(n => !have.includes(n))).slice(0, o.count);
     });
     const mc = cbMasteryCount();

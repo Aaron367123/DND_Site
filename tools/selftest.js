@@ -9499,6 +9499,65 @@
         loadDomain('party');
       }
     }
+    // -- Round 79: subclass features that change the numbers, and abilities read as actions --
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, extra) => {
+          CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: L, subclass: sub, species: 'Human', background: 'Soldier', originFeat: 'Tough', name: 'T', sources: SKT_ALL_SOURCES }, extra || {});
+          cbQuickBuild(); return sktComputeCharacter(CB.build, R);
+        };
+        const md = (r, k) => Math.floor((r.abilities[k] - 10) / 2);
+        let r = mk('Ranger', 'Gloom Stalker', 3);
+        ok('subclass: Gloom Stalker — initiative + WIS (Dread Ambusher) and darkvision 60 (Umbral Sight)', r.init === md(r, 'dex') + md(r, 'wis') && /Darkvision 60/.test(r.sheet.senses), r.init + ' ' + r.sheet.senses);
+        r = mk('Monk', 'Shadow', 3); ok('subclass: Shadow monk — darkvision 60', /Darkvision 60/.test(r.sheet.senses), r.sheet.senses);
+        r = mk('Paladin', 'Devotion', 7); ok('subclass: Devotion paladin — immune to being charmed (Aura of Devotion)', (r.immunities || []).includes('charmed'));
+        r = mk('Rogue', 'Thief', 3); ok('subclass: Thief — a climb speed equal to their speed (Second-Story Work)', r.speeds.climb === r.speeds.walk, JSON.stringify(r.speeds));
+        r = mk('Rogue', 'Thief', 13); ok('subclass: Thief — attunes to four magic items (Use Magic Device)', r.sheet.attuneMax === 4, r.sheet.attuneMax);
+        r = mk('Druid', 'Sea', 6); ok('subclass: Circle of the Sea — a swim speed (Aquatic Affinity)', r.speeds.swim === r.speeds.walk, JSON.stringify(r.speeds));
+        r = mk('Bard', 'Valor', 6); ok('subclass: Valor bard — two attacks (Extra Attack)', r.sheet.attacksPerAction === 2);
+        r = mk('Bard', 'Dance', 3, { items: [], equipment: { materialized: true } });
+        const us = (r.sheet.attacks || []).find(a => a.name === 'Unarmed Strike');
+        ok('subclass: Dance bard without armour — AC 10 + DEX + CHA, unarmed strikes with DEX for the Bardic Inspiration die',
+           r.ac === 10 + md(r, 'dex') + md(r, 'cha') && us && us.atkBonus === sktSigned(Math.max(md(r, 'str'), md(r, 'dex')) + r.sheet.profBonus) && /^1d6[+-]/.test(us.damage), r.ac + ' ' + JSON.stringify(us));
+        r = mk('Barbarian', 'Wild Heart', 6);
+        ok('subclass: Wild Heart — Aspect of the Wilds is asked, and the owl gives darkvision', sktBuildChoices(CB.build, R).some(c => c.feature === 'Aspect of the Wilds') && /Darkvision 60/.test(r.sheet.senses));
+        CB.build.featureChoices = Object.assign({}, CB.build.featureChoices, { 'Aspect of the Wilds': 'Panther' });
+        r = sktComputeCharacter(CB.build, R); ok('subclass: Wild Heart panther — a climb speed instead', r.speeds.climb === r.speeds.walk && !/Darkvision/.test(r.sheet.senses || ''));
+        r = mk('Warlock', 'Fiend', 10); CB.build.featureChoices = Object.assign({}, CB.build.featureChoices, { 'Fiendish Resilience': 'fire' }); r = sktComputeCharacter(CB.build, R);
+        ok('subclass: Fiend — Fiendish Resilience asks for a damage type and resists it', (r.resistances || []).includes('fire'));
+        // Choices from the older books fill in (they were empty lists).
+        mk('Fighter', 'Arcane Archer', 3); ok('subclass: Arcane Archer — its Arcane Shots are offered and quick build picks two', ((CB.build.optional || {})['Arcane Shots'] || []).length === 2 && !sktBuildTodo(CB.build, R).some(t => !t.soft));
+        // Abilities read as actions.
+        r = mk('Bard', 'Lore', 3);
+        const cw = (r.sheet.activations || []).find(a => a.name === 'Cutting Words');
+        ok('actions: Cutting Words — a reaction that spends a Bardic Inspiration and rolls its die', cw && cw.action === 'Reaction' && cw.resource === 'Bardic Inspiration' && cw.dice === '1d6', JSON.stringify(cw));
+        r = mk('Warlock', 'Celestial', 3);
+        ok('actions: Healing Light — a pool of d6s (1 + level) and a bonus action that spends them',
+           (r.resources.find(x => x.name === 'Healing Light') || {}).max === 4 && ((r.sheet.activations || []).find(a => a.name === 'Healing Light') || {}).action === 'Bonus Action');
+        r = mk('Fighter', 'Psi Warrior', 5);
+        ok('actions: Psi Warrior — Psionic Energy dice from the table (6d8 at 5th), Protective Field spends one', ((r.resources.find(x => x.name === 'Psionic Energy') || {}).max === 6) && ((r.sheet.activations || []).find(a => a.name === 'Protective Field') || {}).resource === 'Psionic Energy',
+           JSON.stringify(r.resources.find(x => /Psionic/.test(x.name))));
+        r = mk('Barbarian', 'Berserker', 3);
+        ok('actions: Frenzy (a bonus while raging) isn\'t made an action that spends a Rage', !(r.sheet.activations || []).some(a => a.name === 'Frenzy'));
+        // The sheet rolls an ability's dice.
+        let saved = null; CB.onDone = rec => { saved = rec; };
+        mk('Bard', 'Lore', 3); CB.build.name = 'Cutter'; cbSave(); await sleep(150);
+        if (document.getElementById('cb-root')) cbClose();
+        const pc = saved || state.party.find(x => x.name === 'Cutter');
+        openCharSheet(pc.id, { tab: 'actions' }); await sleep(200);
+        const btn = document.querySelector('#cs-root [data-cs-actroll="Cutting Words"]');
+        ok('sheet: an ability with dice has a roll button', !!btn);
+        if (btn){ btn.click(); await sleep(40); }
+        ok('sheet: and rolling it logs Cutting Words', /Cutting Words/.test((CS.log[0] || {}).label || ''), JSON.stringify(CS.log[0] && CS.log[0].label));
+        csClose(); state.party = state.party.filter(x => x.id !== pc.id); save();
+      } catch(e){ ok('round 79 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

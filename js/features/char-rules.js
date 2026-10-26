@@ -383,7 +383,7 @@ async function _sktRulesBuild(edition, read){
   const classOwn = new Set();
   R.classes.filter(c => c.core === false).forEach(c => [c].concat(c.subclasses).forEach(x =>
     (x.optionalfeatureProgression || []).forEach(p => (p.featureType || []).forEach(t => classOwn.add(c.source + '|' + t)))));
-  sp(optional.optionalfeature).forEach(o => {
+  sp(optional.optionalfeature, { legacy: edition === '2024' }).forEach(o => {
     R.optional.push({ name: o.name, source: o.source,
                       core: o.source === src || (o.featureType || []).some(t => classOwn.has(o.source + '|' + t)),
                       featureType: o.featureType || [], prerequisite: o.prerequisite || null,
@@ -1086,7 +1086,8 @@ function _sktBuildFeaturesOne(build, R){
     out.push({
       name: f.name, from, level: level || 0, info: isInfo,
       text: sktRulesText(f.entries),
-      mech: !isInfo && (!!sktFeatureEffect(f.name, from, R.edition, cls && cls.key)
+      mech: !isInfo && (!!sktFeatureEffect(f.name, from, R.edition, cls && cls.key) || !!sktFeatureExtra(f.name, from, cls && cls.key)
+                        || ((from === 'class' || from === 'subclass') && (/ Spells$|^Spellcasting$/.test(f.name) || (() => { const g = sktPassiveGrants(sktRulesText(f.entries)); return !!(g.resist.length || g.immune.length || g.darkvision || g.speed); })()))
                         || !!sktFeatureChoice(f.name, from, R.edition, cls && cls.key) || !!f.optionSpec
                         || (from === 'subclass' && sktProfGrants(sktRulesText(f.entries)).any)
                         || (/^(class|subclass|species|feat)$/.test(from) && !/^Channel Divinity:/.test(f.name)
@@ -1633,6 +1634,62 @@ function _sktStates(ctx, prior){
   });
   return out;
 }
+// Extras: a subclass feature's numbers that sit beside the generic handling
+// rather than replacing it (Dread Ambusher keeps its counted uses and adds
+// WIS to initiative). Keys: 'from:Name' or 'from:class:Name'.
+const SKT_FEATURE_EXTRAS = {};
+function sktDefineExtra(keys, fn){ (Array.isArray(keys) ? keys : [keys]).forEach(k => { SKT_FEATURE_EXTRAS[k] = fn; }); }
+function sktFeatureExtra(name, from, clsKey){ return SKT_FEATURE_EXTRAS[from + ':' + (clsKey || '') + ':' + name] || SKT_FEATURE_EXTRAS[from + ':' + name] || null; }
+// An ability used in play, read from its text, as D&D Beyond lists it on the
+// Actions tab: how it's used (action, bonus action, reaction, Magic action),
+// what it spends (its own uses, or the class's dice and points), the dice it
+// rolls, and the sentences that say what it does. Null when the text gives no
+// way to use it.
+const SKT_RESOURCE_WORDS = [[/superiority di(?:c?e)/i, ['Superiority Dice']], [/psionic energy di(?:c?e)/i, ['Psionic Energy', 'Psionic Energy Dice']], [/focus points?|ki points?/i, ['Focus Points']],
+  [/sorcery points?/i, ['Sorcery Points']], [/bardic inspiration/i, ['Bardic Inspiration']], [/wild shape/i, ['Wild Shape']], [/lay on hands/i, ['Lay on Hands']],
+  [/channel divinity/i, ['Channel Divinity']], [/\brages?\b/i, ['Rage']], [/luck points?/i, ['Luck Points']], [/healing light|dice from the pool|pool of d6s/i, ['Healing Light']]];
+const SKT_NUM_WORDS = { one: 1, a: 1, an: 1, two: 2, three: 3, four: 4, five: 5 };
+function sktActivationFromText(text, name, ctx){
+  const t = String(text || '').replace(/\s+/g, ' ').trim(); if (!t) return null;
+  const sents = t.split(/(?<=[.!?])\s+/);
+  const timing = s => /\breaction\b/i.test(s) ? 'Reaction' : /bonus action/i.test(s) ? 'Bonus Action' : /magic action/i.test(s) ? 'Magic'
+    : /\b(as an action|use your action|take an action|an action to|use an action)\b/i.test(s) ? 'Action' : null;
+  // The sentence that says how it's used: the character's own action, not another creature's.
+  let action = null, at = -1;
+  for (let i = 0; i < sents.length; i++){
+    const s = sents[i];
+    if (/\|/.test(s) || !/\byou\b/i.test(s) || /\b(it|the creature|the target|they) (?:can|must) (?:use|take)\b/i.test(s)) continue;
+    const k = timing(s); if (k){ action = k; at = i; break; }
+  }
+  // What it spends: a cost named in the text, else its own counted uses.
+  let resource = null, amount = 1;
+  // Spending is "expend" or "spend": "use Reckless Attack while your Rage is active" spends nothing.
+  const costRe = /\b(?:expend|spend)s?\s+(?:(one|a|an|two|three|four|five|\d+)\s+)?(?:use of (?:your |a |the )?|of your )?([A-Za-z' ]{2,40}?)(?=[ ,.;:]|$)/gi;
+  // Its own counted uses first: a die spent to get a use back isn't the cost.
+  if (ctx.resources.some(r => r.name === name)) resource = name;
+  let m;
+  while (!resource && (m = costRe.exec(t))){
+    // What follows "expend one use of your" names the resource ("Bardic Inspiration die", "Focus Point to…").
+    const near = t.slice(m.index, m.index + 70);
+    const hit = SKT_RESOURCE_WORDS.find(([re]) => re.test(near));
+    const nm = hit && hit[1].find(n => ctx.resources.some(r => r.name === n));
+    if (nm){ resource = nm; amount = m[1] ? (SKT_NUM_WORDS[m[1].toLowerCase()] || parseInt(m[1], 10) || 1) : 1; }
+  }
+  if (!action && !resource) return null;
+  // The dice: a die the resource rolls (a Superiority Die), else the first written.
+  const pool = resource && ctx.resources.find(r => r.name === resource);
+  const scope = at >= 0 ? sents.slice(at, at + 3).join(' ') : t;
+  let dice = null;
+  if (pool && pool.die && /\broll (?:the |a |that |one )?(?:die|dice|superiority die|psionic energy die|bardic inspiration die)\b|\bdie\b.*\b(?:roll|add)/i.test(scope)) dice = String(pool.die).replace(/^1?d/, '1d');
+  if (!dice){ const d = /\b(\d+d\d+)(?:\s*\+\s*(\d+))?\b/.exec(scope) || /\b(\d+d\d+)\b/.exec(t); if (d) dice = d[1] + (d[2] ? '+' + d[2] : ''); }
+  // "You can then…", "In addition, …": the sentence before says what this follows.
+  const back = at > 0 && /^(?:you can then|then|in addition|additionally|also|this|it|when you do|if you do)\b/i.test(sents[at]) ? 1 : 0;
+  const desc = (at >= 0 ? sents.slice(at - back, at + 2) : sents.filter(s => !/\|/.test(s)).slice(0, 2)).join(' ');
+  return { name, action: action || 'Special', resource: resource || undefined, amount: resource ? amount : undefined, dice: dice || undefined,
+           desc: desc.length > 300 ? desc.slice(0, 297).replace(/\s\S*$/, '') + '…' : desc };
+}
+// Darkvision 60 ft, or 60 ft more if the character has it already (the 2024 way).
+function _fxDarkvision60(ctx){ ctx.senses.darkvision = ctx.senses.darkvision ? ctx.senses.darkvision + 60 : 60; }
 function sktDefineEffect(keys, fn){ (Array.isArray(keys) ? keys : [keys]).forEach(k => { SKT_FEATURE_EFFECTS[k] = fn; }); }
 
 // Features that are a CHOICE — a 2024 cleric's Divine Order, a druid's
@@ -1764,6 +1821,8 @@ function sktSaveAdvantages(text){
   return out;
 }
 function _sktSaveAdv(ctx, a, src){
+  // Once per feature: one with its own effect isn't reminded twice.
+  if (ctx.rollAdv.some(x => x.label === src) || ctx.saveMods.some(x => x.src === src)) return;
   const names = a.abs.map(k => SKT_AB_NAME[k] || k);
   if (a.death) ctx.rollAdv.push({ on: ['death'], label: src });
   else if (a.conc) ctx.rollAdv.push({ on: ['conc'], label: src });
@@ -1943,6 +2002,53 @@ sktDefineEffect(['class:wizard:Arcane Recovery'], ctx => {
 // The Soulknife's Psychic Blades: a finesse, thrown blade of psychic energy
 // (1d6) with the better of STR and DEX, and a second as a bonus action (1d4).
 sktDefineEffect(['subclass:Psychic Blades'], ctx => { ctx.psychicBlades = true; });
+sktDefineExtra(['subclass:fighter:Psionic Power', 'subclass:rogue:Psionic Power'], ctx => {
+  // 2024: the subclass table's die and number; 2014 (Tasha's): twice the proficiency bonus.
+  const n = _fxCol(ctx, 'Number'), sz = _fxCol(ctx, 'Die Size');
+  const L = ctx.level || 3;
+  const count = typeof n === 'number' && n > 0 ? n : 2 * ctx.pb;
+  const die = (typeof sz === 'string' && /d\d+/i.test(sz)) ? sz.toLowerCase().match(/d\d+/)[0] : L >= 17 ? 'd12' : L >= 11 ? 'd10' : L >= 5 ? 'd8' : 'd6';
+  const have = ctx.resources.find(r => r.name === 'Psionic Energy');
+  if (have) Object.assign(have, { max: count, current: count, die, recharge: 'short-one' });
+  else _fxPool(ctx, 'Psionic Energy', count, 'short-one', { die });
+});
+sktDefineExtra(['subclass:warlock:Healing Light'], ctx => { _fxPool(ctx, 'Healing Light', 1 + (ctx.level || 1), 'long', { die: 'd6' }); });
+sktDefineExtra(['subclass:wizard:Portent'], ctx => { _fxPool(ctx, 'Portent', (ctx.level || 1) >= 14 ? 3 : 2, 'long', { die: 'd20' });
+  _fxAction(ctx, { name: 'Portent', action: 'Special', resource: 'Portent', amount: 1, dice: '1d20', feature: 'Portent', auto: true,
+    desc: 'After a long rest, roll the dice and record them; replace any D20 Test you can see (yours or another creature’s) with one of them, before the roll.' }); });
+sktDefineExtra(['subclass:ranger:Dread Ambusher'], ctx => { ctx.initBonus += ctx.mod.wis; _fxNote(ctx, 'Dread Ambusher: Initiative + WIS.'); });
+sktDefineExtra(['subclass:ranger:Umbral Sight'], ctx => { _fxDarkvision60(ctx); });
+sktDefineExtra(['subclass:monk:Darkvision'], ctx => { _fxDarkvision60(ctx); });
+sktDefineExtra(['subclass:paladin:Aura of Devotion'], ctx => { ctx.immune.add('charmed'); });
+sktDefineExtra(['subclass:rogue:Second-Story Work'], ctx => { ctx.moveExtra.climb = 'walk'; });
+sktDefineExtra(['subclass:druid:Aquatic Affinity'], ctx => { ctx.moveExtra.swim = 'walk'; });
+// The 2024 Thief attunes to four magic items (and a 2014 Thief ignores class requirements).
+sktDefineExtra(['2024:subclass:rogue:Use Magic Device', 'subclass:rogue:Use Magic Device'], ctx => { if (ctx.edition === '2024') ctx.attuneMax = Math.max(ctx.attuneMax || 3, 4); });
+// A subclass's own Extra Attack (Valor and Swords bards, the Bladesinger, the
+// Battle Smith and Armorer).
+sktDefineExtra(['subclass:Extra Attack'], ctx => { ctx.attacksPerAction = Math.max(ctx.attacksPerAction, 2); });
+// The College of Dance's Dazzling Footwork, without armour or a shield.
+sktDefineExtra(['subclass:bard:Unarmored Defense'], ctx => {
+  ctx.acOptions.push({ label: 'Unarmored Defense', value: 10 + ctx.mod.dex + ctx.mod.cha, noArmor: true, shieldOk: false });
+});
+sktDefineExtra(['subclass:bard:Bardic Damage'], ctx => {
+  const L = ctx.level || 1;
+  ctx.bardicUnarmed = L >= 15 ? 'd12' : L >= 10 ? 'd10' : L >= 5 ? 'd8' : 'd6';
+});
+// Choices a subclass asks for.
+sktDefineChoice(['subclass:barbarian:Aspect of the Wilds'], {
+  label: 'Aspect of the Wilds',
+  options: [{ value: 'Owl', label: 'Owl', desc: 'Darkvision 60 ft (or 60 ft more).' },
+            { value: 'Panther', label: 'Panther', desc: 'A climb speed equal to your speed.' },
+            { value: 'Salmon', label: 'Salmon', desc: 'A swim speed equal to your speed.' }],
+  apply(ctx, v){ if (v === 'Owl') _fxDarkvision60(ctx); if (v === 'Panther') ctx.moveExtra.climb = 'walk'; if (v === 'Salmon') ctx.moveExtra.swim = 'walk'; },
+});
+sktDefineChoice(['subclass:warlock:Fiendish Resilience'], {
+  label: 'Fiendish Resilience',
+  options: ['acid', 'bludgeoning', 'cold', 'fire', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
+    .map(t => ({ value: t, label: t[0].toUpperCase() + t.slice(1), desc: 'Resistance to ' + t + ' damage until you choose again after a rest.' })),
+  apply(ctx, v){ ctx.resist.add(v); },
+});
 sktDefineEffect(['subclass:Draconic Resilience'], ctx => {
   ctx.hpPerLevel += 1;
   const v = ctx.edition === '2024' ? 10 + ctx.mod.dex + ctx.mod.cha : 13 + ctx.mod.dex;
@@ -2073,6 +2179,8 @@ function sktComputeCharacter(build, R, prior){
     // What an on/off state changes (SKT_STATES).
     acBonus: [], acFloor: null, speedMult: 1, spellDcBonus: 0, spellAtkBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0,
     shillelagh: null, rollAdv: [], rollDice: [], extraDamage: [], concBonus: 0, saveMods: [],
+    // Other ways of moving a feature gives: 'walk' (equal to the speed) or feet.
+    moveExtra: {}, bardicUnarmed: null,
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
   _sktActiveItems(build).forEach(m => (m.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); }));
@@ -2200,10 +2308,17 @@ function sktComputeCharacter(build, R, prior){
         _fxAction(ctx, { name: f.name.replace(/^Channel Divinity:\s*/, ''), action, resource: 'Channel Divinity', amount: 1, feature: f.name, desc: first });
       }
       // Advantage on saves a trait or feat gives (Dwarven Resilience…).
-      if ((f.from === 'species' || f.from === 'feat' || ((f.from === 'class' || f.from === 'subclass') && SKT_SAVE_ADV_FEATURES.test(f.name)))
+      if ((f.from === 'species' || f.from === 'feat' || f.from === 'class' || f.from === 'subclass')
           && !SKT_STATES.some(s => s.key === f.name)) sktSaveAdvantages(f.text).forEach(a => _sktSaveAdv(ctx, a, f.name));
       const v = ch && (build.featureChoices || {})[f.name];
       if (ch && v && ch.apply){ try { ch.apply(ctx, v); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
+      const xf = !f.info && sktFeatureExtra(f.name, f.from, key);
+      if (xf){ try { xf(ctx); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
+      // An ability used in play, read from its text (beside whatever else it does).
+      if (!fx && !f.info && (f.from === 'class' || f.from === 'subclass') && !ctx.actions.some(a => a.name === f.name || a.feature === f.name)){
+        const a = sktActivationFromText(f.text, f.name, ctx);
+        if (a) _fxAction(ctx, Object.assign(a, { feature: f.name, auto: true }));
+      }
     } finally { [ctx.level, ctx.cls, ctx.sub] = was; }
   });
   // Primal Champion and the like raise a score after everything else.
@@ -2388,7 +2503,9 @@ function sktComputeCharacter(build, R, prior){
     return { ...r, current: Math.max(0, r.max - spent) };
   });
 
-  const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, mech: f.mech, text: f.text }));
+  // Applied also when it became an action on the Actions tab, or a reminder on a save.
+  const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, text: f.text, info: f.info || undefined,
+    mech: f.mech || (!f.info && (ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name))) }));
   const subName = sub ? sub.shortName : '';
   const speciesLabel = species ? (subrace ? subrace.name + ' ' + species.name : species.name) : '';
   const moveSrc = (subrace && subrace.speed && typeof subrace.speed === 'object') ? subrace.speed : species && species.speed;
@@ -2443,6 +2560,7 @@ function sktComputeCharacter(build, R, prior){
   // Every way of moving: the species' (a fly or swim speed), then the sheet's.
   const speeds = { walk: speed };
   if (moveSrc && typeof moveSrc === 'object') ['fly', 'swim', 'climb', 'burrow'].forEach(k => { if (moveSrc[k]) speeds[k] = moveSrc[k] === true ? speed : (typeof moveSrc[k] === 'object' ? +moveSrc[k].number || 0 : +moveSrc[k] || 0); });
+  Object.keys(ctx.moveExtra || {}).forEach(k => { const v = ctx.moveExtra[k] === 'walk' ? speed : +ctx.moveExtra[k] || 0; if (v) speeds[k] = Math.max(speeds[k] || 0, v); });
   ['walk', 'fly', 'swim', 'climb', 'burrow'].forEach(k => { const v = setNum((ov.speedSet || {})[k]); if (v != null){ if (v > 0) speeds[k] = v; else if (k !== 'walk') delete speeds[k]; } });
   speed = speeds.walk;
   const speedShow = speeds[ov.speedShow] ? ov.speedShow : 'walk';
@@ -2812,10 +2930,12 @@ function sktBuildAttacks(ctx, gear, sc){
   }
   // Unarmed strike: 1 + Strength, or a martial arts die with the better of
   // Strength and Dexterity.
-  const uab = ctx.martialArts ? Math.max(m.str, m.dex) : m.str;
+  const dance = ctx.bardicUnarmed && !(gear && (gear.armor || gear.shield));
+  const uab = ctx.martialArts || dance ? Math.max(m.str, m.dex) : m.str;
   const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
+  const uDie = ctx.martialArts && dance ? (_sktDieAvg(ctx.bardicUnarmed) > _sktDieAvg(ctx.martialArtsDie) ? ctx.bardicUnarmed : ctx.martialArtsDie) : ctx.martialArts ? ctx.martialArtsDie : dance ? '1' + ctx.bardicUnarmed : null;
   out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb), str: uab === m.str,
-             damage: (ctx.martialArts ? ctx.martialArtsDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
+             damage: (uDie ? uDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
   if (ctx.psychicBlades){
     const pab = Math.max(m.str, m.dex), pflat = (pab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
     const row = (die, extra) => Object.assign({ name: 'Psychic Blades', atkBonus: sktSigned(pab + pb), str: pab === m.str && pab !== m.dex,

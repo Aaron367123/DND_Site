@@ -685,6 +685,7 @@ function csActHtml(pc, a){
   const r = a.resource ? (pc.resources || []).find(x => x.name === a.resource) : null;
   const can = !CS.readOnly && r && (r.current || 0) >= (a.amount || 1);
   return '<div class="cs-act"><div class="cs-act-h"><b>' + csE(a.name) + '</b>'
+    + (a.dice ? '<button class="btn small" data-cs-actroll="' + csE(a.name) + '" title="Roll ' + csE(a.dice) + '">🎲 ' + csE(a.dice) + '</button>' : '')
     + (r ? '<span class="cb-dim">' + (a.amount || 1) + ' ' + csE(r.name) + ' · ' + (r.current || 0) + ' left</span>'
          + '<button class="btn small" data-cs-use="' + csE(a.name) + '"' + (can ? '' : ' disabled') + '>Use</button>' : '')
     + '</div>' + (a.desc ? '<div class="cs-act-d">' + csE(a.desc) + '</div>' : '') + '</div>';
@@ -1004,6 +1005,11 @@ function csOnClick(e){
       // Tap a lit pip to spend down to it; an unlit one to get it back.
       r.current = n < (r.current || 0) ? n : n + 1;
     }, CS_QUIET);
+  }
+  if (d.csActroll){
+    const a = (pc.sheet.activations || []).find(x => x.name === d.csActroll); if (!a || !a.dice) return;
+    csRollDamage(a.name, a.dice, false);
+    return csRender();
   }
   if (d.csUse){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csUse); if (!a) return;
