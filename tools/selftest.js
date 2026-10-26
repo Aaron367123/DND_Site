@@ -9201,14 +9201,23 @@
         if (!L || !Array.isArray(L.items)) L = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
         L.items = (L.items || []).filter(x => !/^t74_/.test(x.id)).concat([{ id: 't74_pot', name: 'Potion of Climbing', qty: 1, value: '', assignedTo: 'imp_del' }]);
         localStorage.setItem('skt-loot-v1', JSON.stringify(L)); if (panelDefs.loot) panelDefs.loot._loot = null;
+        // The Loot window open beside the sheet, as the DM has it.
+        openPanel('loot'); await sleep(300);
+        const inWindow = () => !!panelDefs.loot._body && [...panelDefs.loot._body.querySelectorAll('.loot-name-input')].some(x => x.value === 'Potion of Climbing');
+        ok('inventory: (the Loot window lists the potion to begin with)', inWindow());
         openCharSheet('imp_del', { tab: 'inventory' }); await sleep(250);
         const inLoot = () => (JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').items || []).some(x => x.id === 't74_pot');
         const del = document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]');
         ok('inventory: claimed loot has a remove button', !!del);
         if (del) del.click(); await sleep(60);
         ok('inventory: removing it takes it off the sheet and out of the loot tracker', !inLoot() && !document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]'));
+        ok('inventory: and out of the open Loot window, there and then', !inWindow());
         sktUndo(); await sleep(80);
-        ok('inventory: and Undo brings it back', inLoot() && !!document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]'));
+        ok('inventory: and Undo brings it back — on the sheet and in the Loot window', inLoot() && !!document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]') && inWindow());
+        // A player deleting it on their phone: the DM's Loot window hears it through sync.
+        { const R = JSON.parse(localStorage.getItem('skt-loot-v1')); R.items = R.items.filter(x => x.id !== 't74_pot');
+          _applyRemoteKey('skt-loot-v1', JSON.stringify(R)); await sleep(120); }
+        ok('inventory: a delete made on another device leaves the DM\'s open Loot window too', !inWindow() && !inLoot() && !document.querySelector('#cs-root [data-cs-lootdel="t74_pot"]'));
         const pc = () => state.party.find(x => x.id === 'imp_del');
         const i = (pc().inventory || []).findIndex(x => x.name === 'Rope');
         const own = document.querySelector('#cs-root [data-cs-del="' + i + '"]');
@@ -9216,7 +9225,7 @@
         if (own) own.click(); await sleep(60);
         ok('inventory: removing the rope leaves the torches', !(pc().inventory || []).some(x => x.name === 'Rope') && (pc().inventory || []).some(x => x.name === 'Torch'),
            JSON.stringify((pc().inventory || []).map(x => x.name)));
-        csClose();
+        csClose(); closePanel('loot');
       } catch(e){ ok('round 74 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         if (typeof csClose === 'function' && CS) csClose();
