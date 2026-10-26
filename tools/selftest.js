@@ -9984,6 +9984,15 @@
             const panel = document.querySelector('#cs-root .cs-custom');
             ok('customize: an imported sheet opens Customize with its colour and a Rebuild button', !!btn && !!panel && !!panel.querySelector('[data-cs-theme]') && !!panel.querySelector('[data-cs="convert"]'));
             csClose(); } }
+        // Rebuilding a 2024 Human with a custom background: the sheet's one origin feat is the Human's.
+        { const pc = { id: 'imp-h', name: 'Imp Human', cls: 'rogue', level: 3, race: 'Human', background: 'Custom Background', feats: ['Savage Attacker'],
+                       abilities: { str: 8, dex: 17, con: 14, int: 12, wis: 10, cha: 15 }, hpMax: 24, ac: 14, sheet: { skills: {}, saves: {} } };
+          state.party.push(pc);
+          if (document.getElementById('cb-root')) cbClose();
+          await openCharBuilder({ idx: state.party.indexOf(pc) }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+          ok('rebuild: a 2024 Human’s one origin feat goes to Versatile, not the custom background too', CB.build.originFeat === 'Savage Attacker' && !CB.build.customBg.feat
+             && sktBuildFeatNames(CB.build, CB.R).join() === 'Savage Attacker', JSON.stringify([CB.build.originFeat, CB.build.customBg, sktBuildFeatNames(CB.build, CB.R)]));
+          cbClose(); state.party = state.party.filter(x => x.id !== 'imp-h'); }
       } catch(e){ ok('round 87 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();

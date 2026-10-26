@@ -143,7 +143,12 @@ function cbFromImported(pc){
   b.expertise = exp;
   // Feats: a fighting style, an origin feat, then the rest into the ASI levels in order.
   if (customBg && R.edition === '2024'){
-    const o = (pc.feats || []).map(x => sktRulesFeat(R, String((x && x.name) || x))).find(f => f && String(f.category || '').split(':')[0] === 'O');
+    // A 2024 Human's Versatile takes the sheet's origin feat first; a custom
+    // background gets one only if the sheet has a second (D&D Beyond's custom
+    // background has none of its own).
+    const origins = (pc.feats || []).map(x => sktRulesFeat(R, String((x && x.name) || x))).filter(f => f && String(f.category || '').split(':')[0] === 'O');
+    const speciesTakes = !!(sktRulesSpecies(R, b.species) || {}).feats || b.species === 'Human';
+    const o = origins[speciesTakes ? 1 : 0];
     if (o) b.customBg.feat = o.name;
     b.customBg.abilities = SKT_ABS.slice().sort((x, y) => (+((pc.abilities || {})[y]) || 0) - (+((pc.abilities || {})[x]) || 0)).slice(0, 3);
   }
@@ -885,7 +890,7 @@ function cbCustomBgHtml(){
   h += '<h4>Two skills</h4>' + cbChecks(Object.keys(SKT_SKILLS).map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), c.skills || [], 2, 'cb-cbgskill');
   if (R.edition === '2024'){
     h += '<h4>Three abilities</h4><div class="cb-dim">The ones your background increases.</div>' + cbChecks(SKT_ABS.map(k => ({ value: k, label: cbAbLabel(k) })), c.abilities || [], 3, 'cb-cbgab');
-    h += '<label class="cb-f">Origin feat<select class="cb-sel" data-cb-cbg="feat"><option value="">Choose…</option>'
+    h += '<label class="cb-f">Origin feat (optional)<select class="cb-sel" data-cb-cbg="feat"><option value="">None</option>'
       + R.feats.filter(f => f.category === 'O' && sktBookOk(b, f)).map(f => '<option' + (c.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select></label>';
     h += '<h4>A tool</h4>' + cbChecks(ARTS, c.tools || [], 1, 'cb-cbgtool');
   } else {
