@@ -1088,7 +1088,7 @@ function _sktBuildFeaturesOne(build, R){
       name: f.name, from, level: level || 0, info: isInfo,
       text: sktRulesText(f.entries),
       mech: !isInfo && (!!sktFeatureEffect(f.name, from, R.edition, cls && cls.key) || !!sktFeatureExtra(f.name, from, cls && cls.key)
-                        || ((from === 'class' || from === 'subclass') && (/ Spells$|^Spellcasting$/.test(f.name) || (() => { const g = sktPassiveGrants(sktRulesText(f.entries)); return !!(g.resist.length || g.immune.length || g.darkvision || g.speed); })()))
+                        || ((from === 'class' || from === 'subclass') && (/ Spells$|^Spellcasting$/.test(f.name) || !!sktPassiveGrants(sktRulesText(f.entries)).any))
                         || !!sktFeatureChoice(f.name, from, R.edition, cls && cls.key) || !!f.optionSpec
                         || (from === 'subclass' && sktProfGrants(sktRulesText(f.entries)).any)
                         || (/^(class|subclass|species|feat)$/.test(from) && !/^Channel Divinity:/.test(f.name)
@@ -1542,7 +1542,7 @@ function _sktSpellGrant(R, build, name, spec, ch, hint){
     const options = it.from ? it.from.map(n => (sktRulesSpell(R, n) || { name: _sktTitle(n) }).name) : sktSpellsMatching(R, it.choose, build).map(s => s.name);
     const mine = picked.filter(n => options.includes(n) && !used.has(n)).slice(0, it.count);
     mine.forEach(n => { used.add(n); spells.push(n); if (it.daily) daily.push(n); });
-    choices.push({ filter: it.choose, count: it.count, options, picked: mine, daily: it.daily });
+    choices.push({ filter: it.choose, count: it.count, options, picked: mine, daily: it.daily, minLevel: it.minLevel || 0 });
   });
   const missing = (block ? 0 : 1) + (abilityChoices && !ability ? 1 : 0) + choices.reduce((n, c) => n + Math.max(0, c.count - c.picked.length), 0);
   return { feat: name, blocks, block, listFixed: blocks.length === 1 || !!hint, ability, abilityChoices, choices, spells, daily, missing };
@@ -1804,25 +1804,42 @@ function sktUsesFromText(text, ctx, name){
 // Night), a faster walk (Superior Mobility). Only where nothing in the same
 // sentence makes it conditional ("while raging", "until the end of your
 // turn", "when you…").
+const _SKT_DT = 'acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder';
+const _SKT_CT = 'blinded|charmed|deafened|frightened|grappled|paralyzed|petrified|poisoned|prone|restrained|stunned';
+// "fire", "lightning and thunder", "bludgeoning, piercing, and slashing".
+const _sktList = words => '((?:' + words + ')(?:(?:,? and |,? or |, )(?:' + words + '))*)';
+const _sktSplit = s => s.toLowerCase().split(/,? and |,? or |, /);
 function sktPassiveGrants(text){
-  const out = { resist: [], immune: [], darkvision: 0, speed: 0 };
+  const out = { resist: [], immune: [], darkvision: 0, speed: 0, conditions: [], moves: {} };
   // Benefits listed under a condition ("While your Bladesong is active, you
   // gain the following benefits") are the condition's, not lasting.
   if (/\bwhile (?:the|your|you're|you are|raging|it is)[^.]*(?:following benefits|benefits:)/i.test(String(text || ''))) return Object.assign(out, { any: false });
+  // So are benefits for a while, in a form, or one of a choice ("While in this
+  // form, you gain the benefits below", "choose one of the following benefits").
+  const lead = /[^.|]*\b(?:following benefits?|benefits below)\b[^.|]*/i.exec(String(text || ''));
+  if (lead && /\b(while|when|whenever|until|for \d+ (?:minute|hour)s?|choose|of your choice|transform|this form|is active)\b/i.test(lead[0])) return Object.assign(out, { any: false });
   String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).forEach(s => {
     const lasting = (m) => {
       const before = s.slice(0, m.index), after = s.slice(m.index + m[0].length, m.index + m[0].length + 20);
-      return !/\b(while|when|whenever|until|if|during|as long as|for the duration|for 1 (minute|hour)|each time|once)\b/i.test(before)
+      return !/\b(while|when|whenever|until|if|during|as long as|for the duration|for 1 (minute|hour)|each time|once|as an? (bonus )?action|as a reaction|to gain|to use)\b/i.test(before)
         && !/^\W*(while|until|when|for|if|during)\b/i.test(after) && !/lasts until|until the end/i.test(s.slice(m.index));
     };
     let m;
-    const res = /you (?:gain|have) resistance to (acid|cold|fire|force|lightning|necrotic|poison|psychic|radiant|thunder) damage/i;
-    if ((m = res.exec(s)) && lasting(m)) out.resist.push(m[1].toLowerCase());
-    if ((m = /(?:you (?:gain|have) )?immunity to (acid|cold|fire|force|lightning|necrotic|poison|psychic|radiant|thunder) damage/i.exec(s)) && lasting(m)) out.immune.push(m[1].toLowerCase());
+    // Not the 2014 "...damage from nonmagical attacks", which magic gets through.
+    const res = new RegExp('you (?:also )?(?:gain|have) resistance to ' + _sktList(_SKT_DT) + ' damage(?! from| that| dealt)', 'i');
+    if ((m = res.exec(s)) && lasting(m)) out.resist.push(..._sktSplit(m[1]));
+    if ((m = new RegExp('(?:you (?:also )?(?:gain|have) )?immunity to ' + _sktList(_SKT_DT) + ' damage', 'i').exec(s)) && lasting(m)) out.immune.push(..._sktSplit(m[1]));
+    // Conditions: "Immunity to the Charmed and Frightened conditions", "you can't be blinded, deafened, or poisoned".
+    if ((m = new RegExp('immun(?:ity|e) to the ' + _sktList(_SKT_CT) + ' conditions?', 'i').exec(s)) && lasting(m)) out.conditions.push(..._sktSplit(m[1]));
+    if ((m = new RegExp('you can(?:\'|’|no)t be ' + _sktList(_SKT_CT), 'i').exec(s)) && lasting(m)
+        && !/^ (by|while|until)\b/i.test(s.slice(m.index + m[0].length))) out.conditions.push(..._sktSplit(m[1]));
     if ((m = /you have darkvision out to a range of (\d+) feet/i.exec(s)) && lasting(m)) out.darkvision = Math.max(out.darkvision, +m[1]);
     if ((m = /your (?:walking )?speed increases by (\d+) feet/i.exec(s)) && lasting(m)) out.speed += +m[1];
+    // "a swimming speed of 40 feet", "a climbing speed and a swimming speed equal to your walking speed".
+    const mv = /you (?:gain|have) an? (swim|fly|climb|burrow)(?:ming|ing)? speed(?: and an? (swim|fly|climb|burrow)(?:ming|ing)? speed)? (?:of (\d+) feet|equal to your (?:walking )?speed)/i;
+    if ((m = mv.exec(s)) && lasting(m)) [m[1], m[2]].filter(Boolean).forEach(k => { out.moves[k.toLowerCase()] = m[3] ? +m[3] : 'walk'; });
   });
-  out.any = out.resist.length || out.immune.length || out.darkvision || out.speed;
+  out.any = out.resist.length || out.immune.length || out.darkvision || out.speed || out.conditions.length || Object.keys(out.moves).length;
   return out;
 }
 
@@ -2057,6 +2074,7 @@ sktDefineEffect(['class:wizard:Arcane Recovery'], ctx => {
 // (1d6) with the better of STR and DEX, and a second as a bonus action (1d4).
 sktDefineEffect(['subclass:Psychic Blades'], ctx => { ctx.psychicBlades = true; });
 sktDefineExtra(['subclass:warlock:Healing Light'], ctx => { _fxPool(ctx, 'Healing Light', 1 + (ctx.level || 1), 'long', { die: 'd6' }); });
+sktDefineExtra(['subclass:wizard:Greater Portent'], () => {});   // Portent's third die
 sktDefineExtra(['subclass:wizard:Portent'], ctx => { _fxPool(ctx, 'Portent', (ctx.level || 1) >= 14 ? 3 : 2, 'long', { die: 'd20' });
   _fxAction(ctx, { name: 'Portent', action: 'Special', resource: 'Portent', amount: 1, dice: '1d20', feature: 'Portent', auto: true,
     desc: 'After a long rest, roll the dice and record them; replace any D20 Test you can see (yours or another creature’s) with one of them, before the roll.' }); });
@@ -2358,6 +2376,8 @@ function sktComputeCharacter(build, R, prior){
         g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r));
         if (g.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, g.darkvision);
         if (g.speed) ctx.speedBonus += g.speed;
+        g.conditions.forEach(c => ctx.immune.add(c));
+        Object.keys(g.moves).forEach(k => { ctx.moveExtra[k] = g.moves[k]; });
       }
       if (!fx && !ch && !f.info && /^(class|subclass|species|feat)$/.test(f.from) && !/^Channel Divinity:/.test(f.name)
           && !((f.from === 'species' || f.from === 'feat') && /\bcast\b/i.test(f.text || ''))){
@@ -2584,8 +2604,10 @@ function sktComputeCharacter(build, R, prior){
   // Speaker") is applied when the spells it names are the character's.
   const words = t => ' ' + String(t || '').toLowerCase().replace(/[^a-z']+/g, ' ') + ' ';
   const granted = sktBuildAlwaysPrepared(build, R).map(n => words(n));
-  const givesSpell = f => f.from === 'subclass' && /\b(learn|know|cast|gain)\b/i.test(f.text || '')
-    && granted.some(n => words(f.text).includes(n));
+  // Or one at the level of a spell choice that's been made (Bonus Cantrip).
+  const pickedAt = new Set([].concat(...sktSubclassSpellGrants(build, R).map(g => g.choices.filter(c => c.picked.length).map(c => Math.max(c.minLevel || 1, (cls && cls.subclassLevel) || 1)))));
+  const givesSpell = f => f.from === 'subclass' && ((/\b(learn|know|cast|gain)\b/i.test(f.text || '') && granted.some(n => words(f.text).includes(n)))
+    || (/\b(cantrips?|spells?)\b/i.test(f.text || '') && pickedAt.has(f.level)));
   // Named for the pool's last word ("Arcane Shots" → shot): the feature that
   // opens it (Rune Carver), or one that grows it (Additional Rune Known) —
   // not another feature at that level (Master of Runes).

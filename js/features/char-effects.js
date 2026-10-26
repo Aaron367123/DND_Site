@@ -579,6 +579,176 @@
   def('subclass:artificer:Thunder Gauntlets', ctx => note(ctx, 'Thunder Gauntlets: empty gauntlets are simple melee weapons dealing 1d8 thunder (INT to hit and damage); a creature hit has disadvantage against others until your next turn.'));
   def('subclass:artificer:Improved Armorer', ctx => note(ctx, 'Improved Armorer: an extra Armor plan and item for Replicate Magic Item, and +1 to attack and damage with your armour’s special weapon.'));
 
+  // ── Subclass features, continued ───────────────────────────────────────
+  const half = ctx => Math.floor(ctx.level / 2);
+  const dc = (ctx, k) => 8 + ctx.pb + ctx.mod[k];
+  const n = (keys, fn) => def(keys, fn);
+  // Barbarian
+  n('subclass:barbarian:Spiked Retribution', ctx => note(ctx, 'Spiked Retribution: while raging in spiked armour, a creature within 5 ft that hits you with a melee attack takes 3 piercing.'));
+  n('subclass:barbarian:Vengeful Ancestors', ctx => note(ctx, 'Vengeful Ancestors: damage your Spirit Shield prevents is dealt back to the attacker as force.'));
+  n('subclass:barbarian:Shielding Storm', ctx => note(ctx, 'Shielding Storm: creatures of your choice in your Storm Aura share your Storm Soul resistance.'));
+  n('subclass:barbarian:Controlled Surge', ctx => note(ctx, 'Controlled Surge: roll twice on the Wild Magic table and choose; doubles let you pick any effect.'));
+  n('subclass:barbarian:Battering Roots', ctx => note(ctx, 'Battering Roots: on your turn, +10 ft reach with Heavy or Versatile melee weapons, and a hit can add Push or Topple to the weapon’s mastery.'));
+  n('subclass:barbarian:Warrior of the Gods', ctx => {
+    if (!new24(ctx)) return note(ctx, 'Warrior of the Gods: spells that only bring you back to life need no material components.');
+    const d = ctx.level >= 17 ? 7 : ctx.level >= 12 ? 6 : ctx.level >= 6 ? 5 : 4;
+    pool(ctx, 'Warrior of the Gods', d, 'long', { die: 'd12' });
+    act(ctx, { name: 'Warrior of the Gods', action: 'Bonus Action', resource: 'Warrior of the Gods', amount: 1, dice: '1d12', feature: 'Warrior of the Gods',
+      desc: 'Spend any number of the pool’s d12s and regain that many hit points.' });
+  });
+  // Bard
+  n(['subclass:bard:Additional Magical Secrets', 'subclass:bard:Magical Discoveries'], () => {});   // picked with the spells (sktMagicalSecrets)
+  n('subclass:bard:Creative Crescendo', ctx => note(ctx, 'Creative Crescendo: Performance of Creation makes up to ' + Math.max(2, ctx.mod.cha) + ' items at once.'));
+  n('subclass:bard:Silver Tongue', ctx => note(ctx, 'Silver Tongue: a d20 of 9 or lower on Persuasion or Deception counts as a 10.'));
+  n('subclass:bard:Mystical Connection', ctx => note(ctx, 'Mystical Connection: roll twice on the Spirit Tales table and choose; doubles let you pick any tale.'));
+  n('subclass:bard:Dazzling Footwork', () => {});   // its parts are listed on their own
+  n('subclass:bard:Leading Evasion', ctx => note(ctx, 'Leading Evasion: Evasion on Dexterity saves for half damage, shared with creatures within 5 ft making the same save.'));
+  // Cleric
+  n('subclass:cleric:Blessed Healer', ctx => note(ctx, 'Blessed Healer: healing another creature with a spell slot heals you 2 + the slot’s level.'));
+  n('subclass:cleric:Improved Flare', ctx => note(ctx, 'Improved Flare: Warding Flare also protects a creature within 30 ft that’s attacked.'));
+  n(['subclass:cleric:Thunderbolt Strike', 'subclass:cleric:Resounding Strike'], ctx => note(ctx, 'Thunderbolt Strike: your lightning or thunder damage can push a Large or smaller creature 10 ft.'));
+  n('subclass:cleric:Improved Duplicity', ctx => note(ctx, new24(ctx)
+    ? 'Improved Duplicity: attacks against creatures within 5 ft of your illusion have advantage; when it ends, someone beside it regains ' + ctx.level + ' hit points.'
+    : 'Improved Duplicity: Invoke Duplicity makes up to four duplicates; a bonus action moves any of them 30 ft.'));
+  n('subclass:cleric:Reaper', ctx => note(ctx, 'Reaper: a necromancy cantrip from any list; single-target necromancy cantrips can hit two creatures within 5 ft of each other.'));
+  n('subclass:cleric:Improved Reaper', ctx => note(ctx, 'Improved Reaper: single-target necromancy spells of 1st–5th level can target a second creature.'));
+  n('subclass:cleric:Spell Breaker', ctx => note(ctx, 'Spell Breaker: healing an ally with a spell slot can also end a spell on it of that level or lower.'));
+  n('subclass:cleric:Arcane Mastery', ctx => note(ctx, 'Arcane Mastery: one wizard spell each of 6th–9th level joins your domain spells, always prepared.'));
+  n('subclass:cleric:Avatar of Battle', ctx => new24(ctx) ? ['bludgeoning', 'piercing', 'slashing'].forEach(t => ctx.resist.add(t))
+    : note(ctx, 'Avatar of Battle: resistance to bludgeoning, piercing and slashing from nonmagical attacks.'));
+  n('subclass:cleric:Saint of Forge and Fire', ctx => { ctx.immune.add('fire');
+    note(ctx, 'Saint of Forge and Fire: immune to fire; in heavy armour, resistance to nonmagical bludgeoning, piercing and slashing.'); });
+  n('subclass:cleric:Keeper of Souls', ctx => note(ctx, 'Keeper of Souls: once a round, when an enemy dies within 60 ft, you or a creature there regains hit points equal to its Hit Dice.'));
+  n('subclass:cleric:Expansive Bond', ctx => note(ctx, 'Expansive Bond: Emboldening and Protective Bond reach 60 ft, and the creature taking the damage resists it.'));
+  n('subclass:cleric:Twilight Shroud', ctx => note(ctx, 'Twilight Shroud: you and allies have half cover inside your Twilight Sanctuary.'));
+  // Druid
+  n('subclass:druid:Mighty Summoner', ctx => note(ctx, 'Mighty Summoner: beasts and fey you conjure have +2 hit points per Hit Die, and magical natural weapons.'));
+  n('subclass:druid:Guardian Spirit', ctx => note(ctx, 'Guardian Spirit: your summoned beasts and fey ending their turn in your Spirit Totem aura regain ' + half(ctx) + ' hit points.'));
+  n('subclass:druid:Dragon', ctx => note(ctx, 'Dragon (Starry Form): a d20 of 9 or lower on Intelligence or Wisdom checks, or concentration saves, counts as a 10.'));
+  n('subclass:druid:Full of Stars', ctx => note(ctx, 'Full of Stars: in Starry Form, resistance to bludgeoning, piercing and slashing.'));
+  n('subclass:druid:Enhanced Bond', ctx => note(ctx, 'Enhanced Bond: while your wildfire spirit is summoned, a fire or healing spell adds 1d8 to one roll, and can come from the spirit’s space.'));
+  n('subclass:druid:Nature\'s Ward', ctx => {
+    if (!new24(ctx)){ ctx.immune.add('poison'); ctx.immune.add('poisoned');
+      return note(ctx, 'Nature’s Ward: immune to poison and disease; elementals and fey can’t charm or frighten you.'); }
+    ctx.immune.add('poisoned');
+    const land = String(ctx.build.subclassPick || ''), t = /arid/i.test(land) ? 'fire' : /polar/i.test(land) ? 'cold' : /temperate/i.test(land) ? 'lightning' : /tropical/i.test(land) ? 'poison' : '';
+    if (t) ctx.resist.add(t);
+  });
+  n('subclass:druid:Nature\'s Sanctuary', ctx => new24(ctx)
+    ? act(ctx, { name: 'Nature\'s Sanctuary', action: 'Magic', resource: 'Wild Shape', amount: 1, feature: 'Nature\'s Sanctuary',
+        desc: 'A 15 ft cube of spectral trees within 120 ft for 1 minute: you and allies in it have half cover and your Nature’s Ward resistance. A bonus action moves it 60 ft.' })
+    : note(ctx, 'Nature’s Sanctuary: a beast or plant attacking you makes a DC ' + dc(ctx, 'wis') + ' Wisdom save or must pick another target.'));
+  n('2014:subclass:druid:Primal Strike', ctx => note(ctx, 'Primal Strike: your beast-form attacks count as magical.'));
+  n('2024:class:druid:Primal Strike', () => {});   // Elemental Fury decides
+  // Fighter
+  n('subclass:fighter:Heroic Warrior', ctx => note(ctx, 'Heroic Warrior: in combat, start your turn with Heroic Inspiration if you don’t have it.'));
+  n('subclass:fighter:Survivor', ctx => {
+    if (new24(ctx)) ctx.rollAdv.push({ on: ['death'], label: 'Survivor' });
+    note(ctx, 'Survivor: at the start of your turn while ' + (new24(ctx) ? 'bloodied' : 'at half hit points or less') + ' (and above 0), regain ' + (5 + ctx.mod.con) + ' hit points' + (new24(ctx) ? '; death saves of 18–20 count as a 20.' : '.'));
+  });
+  n('subclass:fighter:War Magic', ctx => note(ctx, new24(ctx) ? 'War Magic: replace one attack of the Attack action with a wizard cantrip.' : 'War Magic: after casting a cantrip with your action, make a weapon attack as a bonus action.'));
+  n('subclass:fighter:Improved War Magic', ctx => note(ctx, new24(ctx) ? 'Improved War Magic: replace two attacks with a level 1 or 2 wizard spell.' : 'Improved War Magic: after casting a spell with your action, make a weapon attack as a bonus action.'));
+  n('subclass:fighter:Rallying Cry', ctx => note(ctx, 'Rallying Cry: Second Wind also heals up to three allies within 60 ft for ' + ctx.level + ' hit points each.'));
+  n('subclass:fighter:Bulwark', ctx => note(ctx, 'Bulwark: when Indomitable rerolls an Intelligence, Wisdom or Charisma save, an ally within 60 ft who failed the same save rerolls too.'));
+  n('subclass:fighter:Magic Arrow', ctx => note(ctx, 'Magic Arrow: arrows you fire from a shortbow or longbow are magical.'));
+  n('subclass:fighter:Ever-Ready Shot', ctx => note(ctx, 'Ever-Ready Shot: roll initiative with no Arcane Shots left and regain one.'));
+  n('subclass:fighter:Hold the Line', ctx => note(ctx, 'Hold the Line: creatures moving 5 ft within your reach provoke opportunity attacks, and a hit stops them.'));
+  n('subclass:fighter:Ferocious Charger', ctx => note(ctx, 'Ferocious Charger: once per turn, after moving 10 ft straight, a hit forces a DC ' + dc(ctx, 'str') + ' Strength save or the target is knocked prone.'));
+  n('subclass:fighter:Tireless Spirit', ctx => note(ctx, 'Tireless Spirit: roll initiative with no Fighting Spirit left and regain one use.'));
+  n('subclass:fighter:Telekinetic Adept', () => {});   // Psi-Powered Leap and Telekinetic Thrust are listed on their own
+  n('subclass:fighter:Telekinetic Thrust', ctx => note(ctx, 'Telekinetic Thrust: a target of your Psionic Strike makes a DC ' + dc(ctx, 'int') + ' Strength save or is knocked prone or moved 10 ft.'));
+  n('subclass:fighter:Master of Runes', ctx => note(ctx, 'Master of Runes: each rune you know can be invoked twice between short rests.'));
+  // Monk
+  n('subclass:monk:Shadow Arts', ctx => new24(ctx) ? null : act(ctx, { name: 'Shadow Arts', action: 'Action', resource: 'Focus Points', amount: 2, feature: 'Shadow Arts',
+    desc: 'Cast Darkness, Darkvision, Pass without Trace or Silence without material components.' }));
+  n('subclass:monk:Open Hand Technique', ctx => note(ctx, 'Open Hand Technique: a Flurry of Blows hit can topple (DC ' + dc(ctx, 'wis') + ' Dexterity), push 15 ft (Strength), or stop reactions' + (new24(ctx) ? ' (Addle: no opportunity attacks).' : '.')));
+  n('subclass:monk:Touch of Death', ctx => note(ctx, 'Touch of Death: reducing a creature within 5 ft to 0 hit points gives ' + Math.max(1, ctx.mod.wis + ctx.level) + ' temporary hit points.'));
+  n('subclass:monk:Tipsy Sway', () => {});   // Leap to Your Feet and Redirect Attack are listed on their own
+  n('subclass:monk:Leap to Your Feet', ctx => note(ctx, 'Leap to Your Feet: standing up from prone costs only 5 ft of movement.'));
+  n('subclass:monk:Intoxicated Frenzy', ctx => note(ctx, 'Intoxicated Frenzy: Flurry of Blows can make up to three more attacks, each against a different creature.'));
+  n('subclass:monk:Unerring Accuracy', ctx => note(ctx, 'Unerring Accuracy: once per turn, reroll a missed monk-weapon attack.'));
+  n('subclass:monk:Physician\'s Touch', ctx => note(ctx, 'Physician’s Touch: Hand of Healing can also end blinded, deafened, paralyzed, poisoned or stunned' + (new24(ctx) ? '' : ' or a disease') + '; Hand of Harm can poison until the end of your next turn.'));
+  n('subclass:monk:Forms of Your Astral Self', () => {});   // how it looks
+  // Paladin
+  n('subclass:paladin:Smite of Protection', ctx => note(ctx, 'Smite of Protection: after a Divine Smite, you and allies in your Aura of Protection have half cover until your next turn.'));
+  n('subclass:paladin:Aura of Warding', ctx => {
+    if (new24(ctx)){ ['necrotic', 'psychic', 'radiant'].forEach(t => ctx.resist.add(t)); return note(ctx, 'Aura of Warding: you and allies in your Aura of Protection resist necrotic, psychic and radiant damage.'); }
+    note(ctx, 'Aura of Warding: you and friendly creatures within ' + (ctx.level >= 18 ? 30 : 10) + ' ft resist damage from spells.');
+  });
+  n('subclass:paladin:Supernatural Resistance', ctx => note(ctx, 'Supernatural Resistance: resistance to bludgeoning, piercing and slashing from nonmagical weapons.'));
+  n('subclass:paladin:Aura of Conquest', ctx => note(ctx, 'Aura of Conquest: creatures frightened of you have speed 0 within ' + (ctx.level >= 18 ? 30 : 10) + ' ft and take ' + half(ctx) + ' psychic when they start their turn there.'));
+  n('subclass:paladin:Scornful Rebuke', ctx => note(ctx, 'Scornful Rebuke: a creature that hits you takes ' + abm(ctx, 'cha') + ' psychic damage.'));
+  n('subclass:paladin:Emissary of Redemption', ctx => note(ctx, 'Emissary of Redemption: resistance to all damage from other creatures, and attackers take half the damage as radiant — until you harm them.'));
+  n('subclass:paladin:Purity of Spirit', ctx => note(ctx, 'Purity of Spirit: always under Protection from Evil and Good.'));
+  n('subclass:paladin:Elemental Smite', () => {});   // its four effects are listed on their own
+  n('subclass:paladin:Dao\'s Crush', ctx => note(ctx, 'Dao’s Crush (Elemental Smite): your smite’s target is grappled and restrained (escape DC ' + dc(ctx, 'cha') + ').'));
+  n('subclass:paladin:Djinni\'s Escape', ctx => note(ctx, 'Djinni’s Escape (Elemental Smite): teleport 30 ft and turn semi-incorporeal until the end of your next turn — resistance to bludgeoning, piercing and slashing.'));
+  n('subclass:paladin:Marid\'s Surge', ctx => note(ctx, 'Marid’s Surge (Elemental Smite): the target and creatures you choose within 10 ft make a DC ' + dc(ctx, 'cha') + ' Strength save or are pushed 15 ft and knocked prone.'));
+  // Ranger
+  n('subclass:ranger:Hunter\'s Lore', ctx => note(ctx, 'Hunter’s Lore: you know the immunities, resistances and vulnerabilities of a creature marked by your Hunter’s Mark.'));
+  n('subclass:ranger:Superior Hunter\'s Prey', ctx => note(ctx, 'Superior Hunter’s Prey: once per turn, Hunter’s Mark’s extra damage can also hit another creature within 30 ft of the first.'));
+  n('subclass:ranger:Distant Strike', ctx => note(ctx, 'Distant Strike: teleport 10 ft before each attack; attacking two creatures gives a third attack.'));
+  n('subclass:ranger:Bestial Fury', ctx => note(ctx, new24(ctx) ? 'Bestial Fury: your beast uses Beast’s Strike twice, and its first hit each turn on your Hunter’s Mark target adds the mark’s damage.' : 'Bestial Fury: your beast makes two attacks (or Multiattack) when commanded to Attack.'));
+  n('subclass:ranger:Escape the Horde', ctx => note(ctx, 'Escape the Horde: opportunity attacks against you have disadvantage.'));
+  n('subclass:ranger:Evasion', ctx => note(ctx, 'Evasion: no damage on a successful Dexterity save for half, half on a failure.'));
+  n('subclass:ranger:Fey Reinforcements', ctx => {
+    pool(ctx, 'Fey Reinforcements', 1, 'long');
+    note(ctx, 'Fey Reinforcements: Summon Fey without a material component, once a long rest without a slot, and optionally without concentration (1 minute).');
+  });
+  // Rogue
+  n('subclass:rogue:Infiltration Expertise', ctx => note(ctx, new24(ctx) ? 'Infiltration Expertise: mimic speech or handwriting after an hour’s study; Steady Aim doesn’t stop you moving.' : 'Infiltration Expertise: spend 7 days and 25 gp to build a false identity others believe.'));
+  n('subclass:rogue:Death Strike', ctx => note(ctx, 'Death Strike: ' + (new24(ctx) ? 'a Sneak Attack hit in the first round' : 'a hit on a surprised creature') + ' forces a DC ' + dc(ctx, 'dex') + ' Constitution save or the damage is doubled.'));
+  n('subclass:rogue:Thief\'s Reflexes', ctx => note(ctx, 'Thief’s Reflexes: two turns in the first round of combat — at your initiative and at initiative −10.'));
+  n('subclass:rogue:Ear for Deceit', ctx => note(ctx, 'Ear for Deceit: an Insight roll of 7 or lower to spot a lie counts as an 8.'));
+  n('subclass:rogue:Insightful Manipulator', ctx => note(ctx, 'Insightful Manipulator: after a minute observing a creature, learn how it compares to you in two traits (Intelligence, Wisdom, Charisma or class levels).'));
+  n('subclass:rogue:Soul of Deceit', ctx => note(ctx, 'Soul of Deceit: your thoughts can’t be read unless you allow it, and magic can’t tell whether you’re lying.'));
+  n('subclass:rogue:Fancy Footwork', ctx => note(ctx, 'Fancy Footwork: a creature you make a melee attack against can’t make opportunity attacks against you this turn.'));
+  n('subclass:rogue:Whispers of the Dead', ctx => note(ctx, 'Whispers of the Dead: after each rest, gain one skill or tool proficiency you lack until you choose another.'));
+  n('subclass:rogue:Death\'s Friend', ctx => note(ctx, 'Death’s Friend: Wails from the Grave hits both creatures, and a long rest gives you a soul trinket if you have none.'));
+  n('subclass:rogue:Dread Allegiance', ctx => note(ctx, 'Dread Allegiance: pick Bane, Bhaal or Myrkul after each long rest — a damage resistance and a cantrip (INT).'));
+  n('subclass:rogue:Aura of Malevolence', ctx => note(ctx, 'Aura of Malevolence: teleporting with Bloodthirst deals ' + ctx.mod.int + ' damage of your Dread Allegiance type, ignoring resistance, to creatures within 10 ft of either space.'));
+  n('subclass:rogue:Dread Incarnate', ctx => note(ctx, 'Dread Incarnate: a short rest restores one Bloodthirst use, and Sneak Attack dice treat 1s and 2s as 3s.'));
+  // Sorcerer
+  n('subclass:sorcerer:Controlled Chaos', ctx => note(ctx, 'Controlled Chaos: roll twice on the Wild Magic Surge table and choose.'));
+  n('subclass:sorcerer:Spell Bombardment', ctx => note(ctx, 'Spell Bombardment: once per turn, a spell damage die that rolls its maximum is rolled again and added.'));
+  n('subclass:sorcerer:Heart of Fire', ctx => note(ctx, 'Heart of Fire: casting a fire spell of 1st level or higher deals ' + Math.max(1, half(ctx)) + ' fire to creatures you choose within 10 ft.'));
+  n('subclass:sorcerer:Moon Fire', ctx => note(ctx, 'Moon Fire: Sacred Flame can target two creatures within 5 ft of each other.'));
+  // Warlock
+  n('subclass:warlock:Dark One\'s Blessing', ctx => note(ctx, 'Dark One’s Blessing: reducing an enemy to 0 hit points' + (new24(ctx) ? ' (or an ally doing so within 10 ft)' : '') + ' gives ' + Math.max(1, ctx.mod.cha + ctx.level) + ' temporary hit points.'));
+  n('subclass:warlock:Undying Nature', ctx => note(ctx, 'Undying Nature: no need for food, water, sleep or air, and you age slowly.'));
+  n('subclass:warlock:Celestial Resilience', ctx => note(ctx, 'Celestial Resilience: after a rest' + (new24(ctx) ? ' or Magical Cunning' : '') + ', you gain ' + (ctx.level + ctx.mod.cha) + ' temporary hit points and up to five creatures gain ' + (half(ctx) + ctx.mod.cha) + '.'));
+  n('subclass:warlock:Master of Hexes', ctx => note(ctx, 'Master of Hexes: when your Hexblade’s Curse target dies, move the curse to a creature within 30 ft.'));
+  n('subclass:warlock:Genie\'s Wrath', ctx => {
+    const k = String(ctx.build.subclassPick || ''), t = /dao/i.test(k) ? 'bludgeoning' : /djinn/i.test(k) ? 'thunder' : /efreet/i.test(k) ? 'fire' : /marid/i.test(k) ? 'cold' : '';
+    ctx.extraDamage.push({ label: 'Genie\'s Wrath', dice: String(ctx.pb) + (t ? ' ' + t : ''), note: 'once on each of your turns, an attack roll hit' });
+  });
+  n('subclass:warlock:Grave Touched', ctx => note(ctx, 'Grave Touched: no need to eat, drink or breathe; once per turn a hit can deal necrotic instead (an extra die in Form of Dread).'));
+  n('subclass:warlock:Awakened Mind', ctx => new24(ctx)
+    ? act(ctx, { name: 'Awakened Mind', action: 'Bonus Action', feature: 'Awakened Mind', desc: 'Telepathy with a creature within 30 ft, for ' + ctx.level + ' minutes, up to ' + Math.max(1, ctx.mod.cha) + ' mile' + (Math.max(1, ctx.mod.cha) === 1 ? '' : 's') + ' apart.' })
+    : note(ctx, 'Awakened Mind: speak telepathically to a creature you can see within 30 ft.'));
+  // Wizard
+  n(['subclass:wizard:Abjuration Savant', 'subclass:wizard:Conjuration Savant', 'subclass:wizard:Divination Savant', 'subclass:wizard:Enchantment Savant', 'subclass:wizard:Evocation Savant',
+     'subclass:wizard:Illusion Savant', 'subclass:wizard:Necromancy Savant', 'subclass:wizard:Transmutation Savant'], ctx => note(ctx, new24(ctx)
+    ? 'Savant: two spells of your school (level 2 or lower) free in your spellbook, and one more free each time you gain a new spell level.'
+    : 'Savant: copying spells of your school into your spellbook takes half the gold and time.'));
+  n('subclass:wizard:Focused Conjuration', ctx => note(ctx, 'Focused Conjuration: damage can’t break your concentration on a conjuration spell.'));
+  n('subclass:wizard:Durable Summons', ctx => note(ctx, 'Durable Summons: creatures you summon with conjuration have 30 temporary hit points.'));
+  n('subclass:wizard:Expert Divination', ctx => note(ctx, 'Expert Divination: casting a divination spell of 2nd level or higher regains a lower slot (up to 5th).'));
+  n('subclass:wizard:Split Enchantment', ctx => note(ctx, 'Split Enchantment: a single-target enchantment spell of 1st level or higher can target a second creature.'));
+  n('subclass:wizard:Potent Cantrip', ctx => note(ctx, 'Potent Cantrip: a creature that ' + (new24(ctx) ? 'you miss or that saves against your cantrip' : 'saves against your cantrip') + ' still takes half its damage.'));
+  n('subclass:wizard:Grim Harvest', ctx => note(ctx, 'Grim Harvest: killing with a spell of 1st level or higher heals twice its level (three times for necromancy).'));
+  n('subclass:wizard:Minor Alchemy', ctx => note(ctx, 'Minor Alchemy: spend 10 minutes to turn a nonmagical object of wood, stone, iron, copper or silver into another of those for an hour.'));
+  n('subclass:wizard:Power Surge', ctx => {
+    pool(ctx, 'Power Surge', abm(ctx, 'int'), 'long');
+    note(ctx, 'Power Surge: once per turn, spend a surge for +' + half(ctx) + ' force damage with a wizard spell; gain one by countering or dispelling a spell (resets to one after a long rest).');
+  });
+  n('subclass:wizard:Deflecting Shroud', ctx => note(ctx, 'Deflecting Shroud: Arcane Deflection also deals ' + half(ctx) + ' force to up to three creatures within 60 ft.'));
+  n('subclass:wizard:Gravity Well', ctx => note(ctx, 'Gravity Well: a creature your spell hits (or that fails its save, or is willing) can be moved 5 ft.'));
+  n('subclass:wizard:Bladesinger Styles', () => {});   // flavour
+  // Artificer
+  n('subclass:artificer:Armor Modifications', ctx => note(ctx, 'Armor Modifications: your Arcane Armor counts as four items for infusions (chest, boots, helmet, weapon), and you can infuse two more items if they’re armour parts.'));
+  n('subclass:artificer:Perfected Armor', ctx => note(ctx, 'Perfected Armor: your armour model’s weapon hits harder and gains a new power (see the model).'));
+
   // ── On/off states: the sheet's toggles ─────────────────────────────────
   // Each one changes numbers while it's on, the way D&D Beyond's do. A
   // spell's is offered when the character has the spell; turning on a

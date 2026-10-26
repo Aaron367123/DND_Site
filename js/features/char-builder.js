@@ -1058,7 +1058,10 @@ function cbQuickBuild(){
       const ch = key ? (b.featChoices[key] = Object.assign({}, b.featChoices[key])) : (b.speciesChoice = Object.assign({}, b.speciesChoice));
       if (!g.block && g.blocks.length) ch.spellList = g.blocks[0].name;
       if (g.abilityChoices && !g.ability) ch.spellAbility = order.find(k => g.abilityChoices.includes(k)) || g.abilityChoices[0];
-      g.choices.forEach(c => { if (c.picked.length < c.count){ ch.spells = (ch.spells || []).concat(c.options.filter(n => !(ch.spells || []).includes(n)).slice(0, c.count - c.picked.length)); } });
+      // Spells the character doesn't have yet first (a Savant's free spells add to the book).
+      const known = new Set([].concat(b.cantrips || [], b.spells || [], b.spellbook || []));
+      g.choices.forEach(c => { if (c.picked.length < c.count){ const free = c.options.filter(n => !(ch.spells || []).includes(n));
+        ch.spells = (ch.spells || []).concat(free.filter(n => !known.has(n)).concat(free.filter(n => known.has(n))).slice(0, c.count - c.picked.length)); } });
     });
     sktBuildFeatNames(b, R).forEach(n => {
       const fc = sktFeatChoices(R, b, n, rec), f = sktRulesFeat(R, n); if (!f) return;

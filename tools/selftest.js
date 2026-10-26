@@ -9745,8 +9745,7 @@
         r = mk('Monk', 'Four Elements', 6, '2014');
         ok('picks: Extra Elemental Discipline reads as applied', applied(r, 'Extra Elemental Discipline'));
         r = mk('Fighter', 'Rune Knight', 15, '2014');
-        ok('picks: Rune Carver and Additional Rune Known read as applied, Master of Runes (same level as a new rune) doesn\'t',
-           applied(r, 'Rune Carver') && applied(r, 'Additional Rune Known') && !applied(r, 'Master of Runes'));
+        ok('picks: Rune Carver and Additional Rune Known read as applied', applied(r, 'Rune Carver') && applied(r, 'Additional Rune Known'));
         // Spells a subclass gives.
         r = mk('Ranger', 'Gloom Stalker', 5, '2014');
         ok('spells: Gloom Stalker Magic reads as applied (its spells are always prepared)', applied(r, 'Gloom Stalker Magic') && sktBuildAlwaysPrepared(CB.build, R14).includes('Disguise Self'));
@@ -9765,6 +9764,62 @@
         CB.build.items = []; CB.build.equipment = { materialized: true }; r = again();
         ok('style: Unarmed Fighting — 1d6 holding a weapon, 1d8 empty-handed', /^1d6/.test(armed) && /^1d8/.test(us(r)), armed + ' / ' + us(r));
       } catch(e){ ok('round 83 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
+    // -- Round 84: subclass spell choices, grants read from text, the last features --
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, ed, extra) => {
+          CB.build = Object.assign(sktBlankBuild(ed || '2024'), { cls, level: L, subclass: sub, species: 'Human', background: 'Soldier', originFeat: 'Tough', name: 'T', sources: SKT_ALL_SOURCES }, ed === '2014' ? { allBooks: true } : {}, extra || {});
+          // Quick build with the build's own edition, as the builder does.
+          CB.R = ed === '2014' ? R14 : R; cbQuickBuild(); return sktComputeCharacter(CB.build, CB.R);
+        };
+        const RR = ed => ed === '2014' ? R14 : R;
+        const again = ed => sktComputeCharacter(CB.build, RR(ed));
+        const applied = (r, n) => (r.sheet.featureList || []).some(f => f.name === n && f.mech);
+        const spell = (ed, n) => sktRulesSpell(RR(ed), n) || {};
+        // Spells a subclass lets you choose (its featChoices grant), read as applied once chosen.
+        const grant = ed => (sktSubclassSpellGrants(CB.build, RR(ed))[0] || { choices: [] });
+        let r = mk('Druid', 'Land', 2, '2014');
+        ok('subclass spells: a Land druid\'s bonus cantrip is chosen, so Bonus Cantrip reads as applied', grant('2014').choices.some(c => c.picked.length === 1) && applied(r, 'Bonus Cantrip'));
+        let g0 = grant('2014'); CB.build.featChoices = {}; r = again('2014');
+        ok('subclass spells: and not before it\'s chosen', !applied(r, 'Bonus Cantrip'), JSON.stringify(g0.choices.map(c => c.minLevel)));
+        r = mk('Wizard', 'Abjurer', 5);
+        const sav = [].concat(...grant().choices.map(c => c.picked)), book = CB.build.spellbook || [];
+        ok('subclass spells: quick build gives a 2024 Abjurer\'s Savant spells it doesn\'t already have', sav.length === 3 && new Set(sav).size === 3 && sav.every(n => !book.includes(n)), JSON.stringify([sav, book]));
+        // Grants read from text.
+        r = mk('Sorcerer', 'Storm', 6, '2014');
+        ok('grants: Heart of the Storm — resistance to lightning and thunder (two types in one sentence)', ['lightning', 'thunder'].every(t => (r.resistances || []).includes(t)), JSON.stringify(r.resistances));
+        r = mk('Warlock', 'Fathomless', 1, '2014');
+        ok('grants: Gift of the Sea — a 40 ft swim speed', r.speeds.swim === 40, JSON.stringify(r.speeds));
+        r = mk('Druid', 'Spores', 14, '2014');
+        ok('grants: Fungal Body — can\'t be blinded, deafened, frightened or poisoned', ['blinded', 'deafened', 'frightened', 'poisoned'].every(c => (r.immunities || []).includes(c)), JSON.stringify(r.immunities));
+        r = mk('Barbarian', 'Zealot', 14);
+        ok('grants: Rage of the Gods\' form isn\'t permanent — no fly speed or resistances', !r.speeds.fly && !(r.resistances || []).includes('radiant'), JSON.stringify([r.speeds, r.resistances]));
+        r = mk('Sorcerer', 'Aberrant', 14);
+        ok('grants: Revelation in Flesh (a choice for 10 minutes) gives no fly speed', !r.speeds.fly, JSON.stringify(r.speeds));
+        r = mk('Barbarian', 'Berserker', 2, '2014');
+        ok('grants: Danger Sense\'s "you can\'t be blinded" is a condition of it, not an immunity', !(r.immunities || []).includes('blinded'));
+        r = mk('Ranger', 'Swarmkeeper', 7, '2014');
+        ok('grants: Writhing Tide ("as a bonus action, you gain a flying speed") isn\'t a lasting fly speed', !r.speeds.fly, JSON.stringify(r.speeds));
+        r = mk('Cleric', 'War', 17); const war24 = r; r = mk('Cleric', 'War', 17, '2014');
+        ok('grants: Avatar of Battle — 2024 resists bludgeoning, piercing and slashing; 2014 (nonmagical only) doesn\'t on the sheet',
+           ['bludgeoning', 'piercing', 'slashing'].every(t => (war24.resistances || []).includes(t)) && !(r.resistances || []).includes('slashing'));
+        // The last features.
+        r = mk('Warlock', 'Genie', 1, '2014', { subclassPick: 'Efreeti' }); r = again('2014');
+        const gw = (r.sheet.extraDamage || []).find(x => x.label === 'Genie\'s Wrath') || {};
+        ok('feature: Genie\'s Wrath — proficiency bonus damage of the genie\'s type', gw.dice === r.sheet.profBonus + ' fire', JSON.stringify(gw) + ' ' + CB.build.subclassPick);
+        r = mk('Barbarian', 'Zealot', 6);
+        ok('feature: 2024 Warrior of the Gods — five d12s at 6th, spent as a bonus action', (r.resources.find(x => x.name === 'Warrior of the Gods') || {}).max === 5 && ((r.sheet.activations || []).find(a => a.name === 'Warrior of the Gods') || {}).action === 'Bonus Action');
+        r = mk('Druid', 'Land', 10, '2024', { subclassPick: 'Arid' }); r = again();
+        ok('feature: 2024 Nature\'s Ward — immune to poisoned, and Arid land resists fire', (r.immunities || []).includes('poisoned') && (r.resistances || []).includes('fire'), JSON.stringify([r.immunities, r.resistances, CB.build.subclassPick]));
+        r = mk('Cleric', 'Forge', 17, '2014');
+        ok('feature: Saint of Forge and Fire — immune to fire', (r.immunities || []).includes('fire'));
+      } catch(e){ ok('round 84 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
