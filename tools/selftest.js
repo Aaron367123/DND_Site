@@ -5672,7 +5672,8 @@
         ok('books: one of each name — reprints and repeats dropped', [R14.species, R14.backgrounds, R14.feats, R14.spells, R24.species, R24.backgrounds, R24.feats, R24.spells].every(uniq));
         ok('books 2014: the newer printing of a reprint (Multiverse Aasimar, not Volo’s)', (sktRulesSpecies(R14, 'Aasimar') || {}).source === 'MPMM');
         ok('books 2024: its own Aasimar, and older species the 2024 rules allow', (sktRulesSpecies(R24, 'Aasimar') || {}).source === 'XPHB' && (sktRulesSpecies(R24, 'Tabaxi') || {}).core === false);
-        ok('books 2024: no 2014 handbook background', !R24.backgrounds.some(b => b.source === 'PHB'));
+        ok('books 2024: a 2014 handbook background is legacy (not core, asks for the 2024 parts), and a reprinted one is the 2024 printing',
+           R24.backgrounds.filter(b => b.source === 'PHB').every(b => !b.core && sktBgNeedsAdapt(R24, b)) && (sktRulesBackground(R24, 'Acolyte') || {}).source === 'XPHB');
         ok('books 2024: an older spell renamed in the 2024 book is offered by its 2024 name; the 2014 one only with Legacy content on',
            !!sktRulesSpell(R24, 'Befuddlement') && !!sktRulesSpell(R24, 'Summon Dragon') && !sktSpellOnList(sktRulesSpell(R24, 'Summon Draconic Spirit') || { core: false, superseded: true, classesAll: [] }, 'Wizard', { edition: '2024', sources: { expanded2014: true } })
            && !sktSpellOnList(sktRulesSpell(R24, 'Feeblemind'), 'Wizard', { edition: '2024' }) && sktSpellOnList(sktRulesSpell(R24, 'Feeblemind'), 'Wizard', { edition: '2024', legacy: true })
@@ -9939,6 +9940,44 @@
         r = mk('Human', '2024', { cls: 'Sorcerer', subclass: 'Wild Magic', level: 6 });
         ok('readers: a Wild Magic Surge table\'s +2 AC isn\'t on the sheet', !/Surge/.test(r.sheet.acDetail), r.sheet.acDetail);
       } catch(e){ ok('round 86 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
+    // -- Round 87: 2014 backgrounds in 2024 builds; Savant spells in the book --
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.R = R;
+        const legacy = R.backgrounds.filter(b => sktBgNeedsAdapt(R, b));
+        ok('backgrounds: 2014 backgrounds can be chosen in a 2024 build (with the 2014 books on), and the 2024 Acolyte is still the 2024 one',
+           legacy.some(b => b.name === 'Folk Hero') && Array.isArray(sktRulesBackground(R, 'Acolyte').ability), legacy.length);
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', level: 1, species: 'Human', background: 'Folk Hero', name: 'T', sources: SKT_ALL_SOURCES });
+        ok('backgrounds: a 2014 background asks for three abilities and an origin feat', sktBuildTodo(CB.build, R).some(t => /three abilities and an origin feat for Folk Hero/.test(t.what)));
+        CB.build.bgAdapt = { abilities: ['str', 'con', 'wis'], feat: 'Alert' }; CB.build.bgAsi = { str: 2, con: 1 };
+        let r = sktComputeCharacter(CB.build, R);
+        const base = sktComputeCharacter(Object.assign({}, CB.build, { bgAsi: {} }), R);
+        ok('backgrounds: then it raises them and grants the feat', r.abilities.str === base.abilities.str + 2 && r.abilities.con === base.abilities.con + 1 && sktBuildFeatNames(CB.build, R).includes('Alert')
+           && !sktBuildTodo(CB.build, R).some(t => /abilities.*Folk Hero/.test(t.what)), JSON.stringify([r.abilities.str, base.abilities.str]));
+        CB.build.bgAdapt = {}; CB.build.bgAsi = {}; cbQuickBuild();
+        ok('backgrounds: quick build answers them', (CB.build.bgAdapt.abilities || []).length === 3 && !!CB.build.bgAdapt.feat && Object.keys(CB.build.bgAsi).length > 0, JSON.stringify(CB.build.bgAdapt));
+        CB.step = 'background'; cbRender();
+        ok('backgrounds: the Background step shows the questions', !!document.querySelector('#cb-root [data-cb-bgadab]') && !!document.querySelector('#cb-root [data-cb-bgadfeat]'));
+        { const box = document.querySelector('#cb-root [data-cb-bgadab]:checked'), was = (CB.build.bgAdapt.abilities || []).length;
+          if (box){ box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(50); }
+          ok('backgrounds: unticking an ability takes it off', !!box && (CB.build.bgAdapt.abilities || []).length === was - 1, JSON.stringify(CB.build.bgAdapt)); }
+        const own = legacy.find(b => (b.feats || []).length);
+        if (own){
+          CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', level: 1, species: 'Human', background: own.name, name: 'T', sources: SKT_ALL_SOURCES, bgAdapt: { abilities: ['str', 'dex', 'con'] } });
+          ok('backgrounds: one that grants its own feat (' + own.name + ') keeps it and doesn\'t ask for another', !sktBuildTodo(CB.build, R).some(t => /origin feat for/.test(t.what)) && sktBuildFeatNames(CB.build, R).length > 0);
+        }
+        // Savant spells go in the spellbook.
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 5, subclass: 'Abjurer', species: 'Human', background: 'Sage', name: 'T', sources: SKT_ALL_SOURCES });
+        cbQuickBuild(); r = sktComputeCharacter(CB.build, R);
+        const sav = [].concat(...sktSubclassSpellGrants(CB.build, R)[0].choices.map(c => c.picked)).filter(n => (sktRulesSpell(R, n) || {}).level > 0);
+        ok('Savant: a 2024 Abjurer\'s free spells are written in the spellbook, not prepared', sav.length >= 2 && sav.every(n => r.sheet.spellbook.includes(n) && !r.sheet.spells.includes(n)), JSON.stringify(sav));
+      } catch(e){ ok('round 87 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }

@@ -839,6 +839,15 @@ CB_RENDER.background = () => {
     + cbCards([{ value: SKT_CUSTOM_BG, label: 'Custom background', sub: 'your own' }], b.background, 'cb-bg') + cbBooksToggle();
   if (b.background === SKT_CUSTOM_BG) html += cbCustomBgHtml();
   if (!bg) return html;
+  if (bg.adapted){
+    const a = b.bgAdapt || {}, ownFeat = ((sktRulesBackground(R, b.background) || {}).feats || []).length > 0;
+    html += '<div class="cb-custombg"><div class="cb-dim">' + cbEsc(bg.name) + ' is a 2014 background. The 2024 rules give every background three abilities to increase'
+      + (ownFeat ? '' : ' and an origin feat') + ' — choose them here.</div>'
+      + '<h4>Three abilities</h4>' + cbChecks(SKT_ABS.map(k => ({ value: k, label: cbAbLabel(k) })), a.abilities || [], 3, 'cb-bgadab');
+    if (!ownFeat) html += '<label class="cb-f">Origin feat<select class="cb-sel" data-cb-bgadfeat="1"><option value="">Choose…</option>'
+      + R.feats.filter(f => f.category === 'O' && sktBookOk(b, f)).map(f => '<option' + (a.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select></label>';
+    html += '</div>';
+  }
   if (R.edition === '2024' && Array.isArray(bg.ability)){
     const from = ((bg.ability[0] || {}).choose || {}).weighted ? bg.ability[0].choose.weighted.from : SKT_ABS;
     const mode = b.bgAsiMode || '21';
@@ -941,6 +950,13 @@ function cbQuickBuild(){
   const pristine = SKT_ABS.every(k => (b.abilities.base[k] || 10) === 10) || (b.abilities.method === 'array' && !Object.keys(b.abilities.assign || {}).length)
     || (b.abilities.method === 'array' && SKT_ABS.every((k, i) => b.abilities.base[k] === SKT_STANDARD_ARRAY[i]));
   if (pristine) cbSuggestScores(b);
+  // A 2014 background in a 2024 build: the class's three best abilities and an origin feat.
+  { const bg0 = sktRulesBackground(R, b.background);
+    if (sktBgNeedsAdapt(R, bg0)){
+      const a = b.bgAdapt = Object.assign({}, b.bgAdapt);
+      if ((a.abilities || []).length < 3) a.abilities = order.slice(0, 3);
+      if (!a.feat){ const f = R.feats.find(x => x.category === 'O' && /^(Alert|Tough|Lucky|Skilled)$/.test(x.name) && sktBookOk(b, x)) || R.feats.find(x => x.category === 'O' && sktBookOk(b, x)); if (f) a.feat = f.name; }
+    } }
   const bg = sktBuildBackground(R, b);
   if (R.edition === '2024' && bg && Array.isArray(bg.ability) && !Object.keys(b.bgAsi || {}).length){
     const from = ((bg.ability[0] || {}).choose || {}).weighted ? bg.ability[0].choose.weighted.from : SKT_ABS;
@@ -1864,6 +1880,8 @@ function cbOnChange(e){
   if (d.cbCbg && d.cbCbg !== 'name') return cbSet(b => { b.customBg = Object.assign({}, b.customBg, { [d.cbCbg]: d.cbCbg === 'languages' ? +v : v });
     if (d.cbCbg === 'languages') b.customBg.tools = (b.customBg.tools || []).slice(0, 2 - (+v || 0)); });
   if (d.cbCbgskill) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.skills = (b.customBg.skills || []).slice(); cbToggle(b.customBg.skills, d.cbCbgskill, 2); });
+  if (d.cbBgadab) return cbSet(b => { b.bgAdapt = Object.assign({}, b.bgAdapt); b.bgAdapt.abilities = (b.bgAdapt.abilities || []).slice(); cbToggle(b.bgAdapt.abilities, d.cbBgadab, 3); b.bgAsi = {}; });
+  if (d.cbBgadfeat) return cbSet(b => { b.bgAdapt = Object.assign({}, b.bgAdapt, { feat: v }); });
   if (d.cbCbgab) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.abilities = (b.customBg.abilities || []).slice(); cbToggle(b.customBg.abilities, d.cbCbgab, 3); b.bgAsi = {}; });
   if (d.cbCbgtool){ const c = CB.build.customBg || {}; const max = CB.R.edition === '2024' ? 1 : 2 - (+c.languages || 0);
     return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.tools = (b.customBg.tools || []).slice(); cbToggle(b.customBg.tools, d.cbCbgtool, max); }); }

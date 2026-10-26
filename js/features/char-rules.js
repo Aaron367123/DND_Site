@@ -355,7 +355,8 @@ async function _sktRulesBuild(edition, read){
     });
   });
 
-  sp(backgrounds.background).forEach(b => {
+  // 2014 backgrounds in a 2024 build too (with the 2014 books on): they ask for the 2024 parts (sktBgNeedsAdapt).
+  sp(backgrounds.background, { legacy: edition === '2024' }).forEach(b => {
     R.backgrounds.push({
       name: b.name, source: b.source, core: b.source === src,
       ability: b.ability || null, feats: b.feats || null,
@@ -513,7 +514,19 @@ function sktRulesBackground(R, name){ return R.backgrounds.find(b => b.name === 
 // one, so everything that reads a background reads this too.
 const SKT_CUSTOM_BG = '(Custom)';
 function sktBuildBackground(R, build){
-  if (!build || build.background !== SKT_CUSTOM_BG) return sktRulesBackground(R, build && build.background);
+  if (!build || build.background !== SKT_CUSTOM_BG){
+    const bg = sktRulesBackground(R, build && build.background);
+    // A 2014 background in a 2024 build: three abilities and an origin feat,
+    // chosen as for a custom background (build.bgAdapt).
+    if (bg && sktBgNeedsAdapt(R, bg)){
+      const a = build.bgAdapt || {};
+      return Object.assign({}, bg, { adapted: true,
+        ability: (a.abilities || []).length === 3 ? [{ choose: { weighted: { from: a.abilities, weights: [2, 1] } } }] : null,
+        // One that already grants a feat (Astral Drifter) keeps it.
+        feats: (bg.feats || []).length ? bg.feats : a.feat ? [{ [String(a.feat).toLowerCase()]: true }] : null });
+    }
+    return bg;
+  }
   const c = build.customBg || {};
   const from = c.feature && sktRulesBackground(R, c.feature);
   const kit = c.equipment && sktRulesBackground(R, c.equipment);
@@ -529,6 +542,8 @@ function sktBuildBackground(R, build){
     characteristics: from ? from.characteristics : null,
   };
 }
+// A background without the 2024 parts (no ability increases), used in a 2024 build.
+function sktBgNeedsAdapt(R, bg){ return R.edition === '2024' && !!bg && !bg.custom && !Array.isArray(bg.ability); }
 function sktRulesFeat(R, name){
   const n = String(name || '').toLowerCase().split(';')[0].trim();
   return R.feats.find(f => f.name.toLowerCase() === n) || null;
@@ -1598,6 +1613,7 @@ function sktSubclassSpellGrants(build, R){
     if (!b) return null;
     const only = {}; ['known', 'prepared', 'innate'].forEach(k => { if (b[k]) only[k] = onlyChoose(b[k]); });
     const g = _sktSpellGrant(R, view, sub.name, [only], (build.featChoices || {})[sub.name] || {}, '');
+    g.cls = cls.key;
     return g.choices.length ? g : null;
   }).filter(Boolean);
 }
@@ -2474,8 +2490,10 @@ function sktComputeCharacter(build, R, prior){
       + (spGrant.daily.length ? ' — ' + spGrant.daily.join(', ') + ' once per long rest without a spell slot' : ''));
   }
   const featSpells = sktFeatSpells(build, R).filter(g => g.spells.length);
+  // A wizard subclass's chosen spells (2024 Savant) are written in the spellbook, not prepared.
+  const toBook = [];
   featSpells.forEach(g => {
-    g.spells.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
+    g.spells.forEach(s => { if (g.cls === 'wizard' && ((sktRulesSpell(R, s) || {}).level || 0) > 0){ toBook.push(s); return; } if (!spellNames.includes(s)) spellNames.push(s); });
     const ab = g.ability ? ' (' + (SKT_AB_NAME[g.ability] || g.ability) + ')' : '';
     _fxNote(ctx, g.feat + ab + ': ' + g.spells.join(', ')
       + (g.daily.length ? ' — ' + g.daily.join(', ') + ' once per long rest without a spell slot' : ''));
@@ -2613,6 +2631,7 @@ function sktComputeCharacter(build, R, prior){
   const bookOf = o => (o.spellbook && o.spellbook.length) ? o.spellbook.slice() : (o.spells || []).slice();
   const spellbook = wizPart ? bookOf(wizPart.primary ? build : (wizPart.entry || {}))
     : (sc && sc.spellbook) ? bookOf(build) : null;
+  if (spellbook) toBook.forEach(s => { if (!spellbook.includes(s)) spellbook.push(s); });
 
   // Resources keep what has been SPENT across a recompute: levelling up
   // mid-adventure does not hand back a used Rage, and a full pool that grows
@@ -3187,6 +3206,9 @@ function sktBuildTodo(build, R){
   const cls = sktRulesClass(R, build.cls);
   const L = build.level || 1;
   if (!build.name) todo.push({ step: 'basics', what: 'a name' });
+  { const bg0 = sktRulesBackground(R, build.background), a = build.bgAdapt || {};
+    const needFeat = !(bg0 && (bg0.feats || []).length);
+    if (sktBgNeedsAdapt(R, bg0) && ((a.abilities || []).length < 3 || (needFeat && !a.feat))) todo.push({ step: 'background', what: 'three abilities' + (needFeat ? ' and an origin feat' : '') + ' for ' + bg0.name + ' (a 2014 background)' }); }
   if (!build.species) todo.push({ step: 'species', what: 'a species' });
   if (!cls) { todo.push({ step: 'class', what: 'a class' }); return todo; }
   if (!build.background) todo.push({ step: 'background', what: 'a background' });
@@ -3437,7 +3459,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
                      sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
-                     sktBuildBackground, SKT_CUSTOM_BG, SKT_ABILITY_ORDER, sktAbilityBreakdown,
+                     sktBuildBackground, sktBgNeedsAdapt, SKT_CUSTOM_BG, SKT_ABILITY_ORDER, sktAbilityBreakdown,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,
                      SKT_SKILLS, SKT_ABS, SKT_FEATURE_EFFECTS };
