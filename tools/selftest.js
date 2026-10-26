@@ -9434,6 +9434,14 @@
         const box = [...document.querySelectorAll('#cs-root .cs-box')].find(b => /Fly/.test(b.textContent));
         ok('customize: a fly speed of 40 shown on the sheet\'s speed box, the walking one in its tooltip', pc().speeds.fly === 40 && pc().speedShow === 'fly' && !!box && /40 ft/.test(box.textContent) && /Walk/.test(box.title || ''),
            JSON.stringify([pc().speeds, pc().speedShow, box && box.textContent]));
+        // Settings → Character sheet: the score on top instead of the modifier.
+        { let ab0 = null; try { ab0 = localStorage.getItem('skt-ab-display-v1'); } catch(e){}
+          const top = () => (document.querySelector('#cs-root .cs-ab b') || {}).textContent;
+          try { localStorage.setItem('skt-ab-display-v1', 'mod'); } catch(e){} csRender();
+          const modTop = top();
+          try { localStorage.setItem('skt-ab-display-v1', 'score'); } catch(e){} csRender();
+          ok('settings: the ability boxes show the modifier on top, or the score (D&D Beyond\'s display preference)', /^[+-]\d+$/.test(modTop || '') && top() === String(pc().abilities.str), modTop + ' / ' + top());
+          try { if (ab0 == null) localStorage.removeItem('skt-ab-display-v1'); else localStorage.setItem('skt-ab-display-v1', ab0); } catch(e){} }
         csClose();
       } catch(e){ ok('round 77 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {

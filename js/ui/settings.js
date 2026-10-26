@@ -133,6 +133,16 @@ function initSettings(){
     { id:'show-zoom-controls',  key:'zoomControls' },
     { id:'show-window-focus',   key:'windowFocus' },
   ];
+  // The sheet's ability boxes: modifier or score on top (D&D Beyond's
+  // preference). This device only, so a player's phone keeps its own.
+  const abd = document.getElementById('ab-display');
+  if (abd){
+    try { abd.value = localStorage.getItem('skt-ab-display-v1') === 'score' ? 'score' : 'mod'; } catch(e){}
+    abd.addEventListener('change', () => {
+      try { localStorage.setItem('skt-ab-display-v1', abd.value); } catch(e){}
+      if (typeof CS !== 'undefined' && CS && typeof csRender === 'function') csRender();
+    });
+  }
   visControls.forEach(({id, key}) => {
     const cb = document.getElementById(id);
     if (!cb) return;

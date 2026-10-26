@@ -360,8 +360,10 @@ function csSide(pc){
   const saveOf = k => sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0);
   const skillOf = k => { const v = csSkillVal(sh, k); return v != null ? v : csMod(ab[CS_SKILLS[k][1]]); };
   const why = pc.build && CS.R && typeof sktAbilityBreakdown === 'function' ? sktAbilityBreakdown(pc.build, CS.R) : {};
-  let h = '<div class="cs-abs">' + Object.keys(CS_AB).map(k => '<button class="cs-ab" data-cs-roll="ab:' + k + '" title="' + CS_AB[k] + ' check' + (why[k] ? ' — ' + csE(why[k]) : '') + '">'
-    + '<span>' + k.toUpperCase() + '</span><b>' + csSigned(csMod(ab[k])) + '</b><i>' + (ab[k] ?? '—') + '</i></button>').join('') + '</div>';
+  // Modifier on top, or the score (Settings → Character sheet), as D&D Beyond offers.
+  let scoreTop = false; try { scoreTop = localStorage.getItem('skt-ab-display-v1') === 'score'; } catch(e){}
+  let h = '<div class="cs-abs' + (scoreTop ? ' cs-abs-score' : '') + '">' + Object.keys(CS_AB).map(k => '<button class="cs-ab" data-cs-roll="ab:' + k + '" title="' + CS_AB[k] + ' check' + (why[k] ? ' — ' + csE(why[k]) : '') + '">'
+    + '<span>' + k.toUpperCase() + '</span>' + (scoreTop ? '<b>' + (ab[k] ?? '—') + '</b><i>' + csSigned(csMod(ab[k])) + '</i>' : '<b>' + csSigned(csMod(ab[k])) + '</b><i>' + (ab[k] ?? '—') + '</i>') + '</button>').join('') + '</div>';
   h += '<h5>Saving throws</h5><div class="cs-list">' + Object.keys(CS_AB).map(k => '<button class="cs-row" data-cs-roll="save:' + k + '">'
     + '<span class="cs-dot' + ((sh.saveProf || []).includes(k) ? ' on' : '') + '"></span><span>' + CS_AB[k] + csAdvMark(pc, 'save:' + k) + '</span><b>' + csSigned(saveOf(k)) + '</b></button>').join('') + '</div>'
     + ((sh.saveMods || []).length ? '<div class="cs-savemods"><b>Saving throw modifiers</b>' + sh.saveMods.map(m => '<div>' + csE(m.text) + ' <i>— ' + csE(m.src) + '</i></div>').join('') + '</div>' : '');
