@@ -10031,6 +10031,15 @@
         const bgSk = ['deception', 'sleightOfHand'], fsk = ((CB.build.featChoices || {}).Skilled || {}).skills || [];
         ok('skills: a Human bard\'s species skill isn\'t one of its class skills', !(CB.build.speciesSkills || []).some(k => CB.build.skills.includes(k)), JSON.stringify([CB.build.skills, CB.build.speciesSkills]));
         ok('skills: the Skilled feat picks skills the character doesn\'t already have', fsk.length === 3 && !fsk.some(k => CB.build.skills.includes(k) || (CB.build.speciesSkills || []).includes(k) || bgSk.includes(k)), JSON.stringify(fsk));
+        // Quick build's spells: the common picks, not alphabetical; two damage cantrips, then useful ones.
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Cleric', level: 5, species: 'Human', name: 'T', sources: SKT_ALL_SOURCES }); cbQuickBuild();
+        ok('spells: a quick-built cleric has Sacred Flame and Spirit Guardians', CB.build.cantrips.includes('Sacred Flame') && CB.build.spells.includes('Spirit Guardians'), JSON.stringify([CB.build.cantrips, CB.build.spells]));
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 5, species: 'Human', name: 'T', sources: SKT_ALL_SOURCES }); cbQuickBuild();
+        const dmgC = ['Fire Bolt', 'Toll the Dead', 'Mind Sliver', 'Ray of Frost', 'Shocking Grasp', 'Chill Touch', 'Sorcerous Burst', 'Starry Wisp'];
+        ok('spells: a quick-built wizard writes Shield, Magic Missile and Fireball, and takes two damage cantrips, not four',
+           ['Shield', 'Magic Missile', 'Fireball'].every(n => CB.build.spellbook.includes(n)) && CB.build.cantrips.filter(n => dmgC.includes(n)).length === 2, JSON.stringify([CB.build.cantrips, CB.build.spellbook]));
+        CB.step = 'review'; cbRender();
+        ok('builder: the last step’s footer is marked, so phones can make room for the Create buttons', !!document.querySelector('#cb-root .cb-foot.last .cb-foot-todo.done'));
       } catch(e){ ok('round 88 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();

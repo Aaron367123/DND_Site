@@ -5087,7 +5087,10 @@ select.cb-sel{padding-right:28px}
   .cb-abrow{grid-template-columns:1.1fr 1.8fr .6fr .6fr .6fr;gap:4px}
   .cb-cards{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
   .cb-checks{grid-template-columns:1fr 1fr}
-  .cb-foot .btn{padding:10px 14px}
+  .cb-foot .btn{padding:10px 14px;white-space:nowrap}
+  /* The last step's two Create buttons: the "Everything chosen" note gives them the room. */
+  .cb-foot.last .cb-foot-todo.done{display:none}
+  .cb-foot.last .btn.primary{flex:1}
 }
 .feat-note{font-size:var(--fs-sm);color:var(--text-muted);padding:4px 0;border-top:1px solid var(--border)}
 

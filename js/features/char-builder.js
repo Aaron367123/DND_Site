@@ -522,9 +522,9 @@ function cbShell(main, side){
     + '<div class="cb-progress" title="' + pct + '% chosen"><i style="width:' + pct + '%"></i></div>'
     + '<div class="cb-body"><div class="cb-main">' + main + '</div>'
     + (side ? '<aside class="cb-side">' + side + '</aside>' : '') + '</div>'
-    + '<div class="cb-foot">'
+    + '<div class="cb-foot' + (last ? ' last' : '') + '">'
     +   '<button class="btn" data-cb="back"' + (at <= 0 ? ' disabled' : '') + '>‹ Back</button>'
-    +   '<span class="cb-foot-todo">' + (blocking.length ? blocking.length + ' still to choose' : 'Everything chosen') + '</span>'
+    +   '<span class="cb-foot-todo' + (blocking.length ? '' : ' done') + '">' + (blocking.length ? blocking.length + ' still to choose' : 'Everything chosen') + '</span>'
     +   (last ? (CB.mode === 'create' && typeof openCharSheet === 'function' ? '<button class="btn" data-cb="save">Create</button><button class="btn primary" data-cb="savesheet">Create and open the sheet</button>'
                   : '<button class="btn primary" data-cb="save">' + (CB.mode === 'create' ? 'Create character' : 'Save changes') + '</button>')
              : '<button class="btn primary" data-cb="next">Next ›</button>')
@@ -941,6 +941,36 @@ function cbQuickPrereqOk(x, b){
 // Quick Build: every choice still open gets a sensible answer — the class's
 // best scores, the skills its abilities favour, the first options where
 // there is no better guide. Nothing already chosen changes.
+// Quick build's spell picks: the ones players commonly take, damage cantrips
+// first (a cleric gets Sacred Flame, not Mending), then the rest of the class
+// list with the core book's first. Picks were alphabetical before.
+const CB_SPELL_PREF = ['Eldritch Blast', 'Fire Bolt', 'Sacred Flame', 'Toll the Dead', 'Vicious Mockery', 'Starry Wisp', 'Sorcerous Burst', 'Produce Flame', 'Shillelagh', 'Mind Sliver', 'Ray of Frost', 'Thorn Whip',
+  'Guidance', 'Minor Illusion', 'Prestidigitation', 'Mage Hand', 'Light', 'Thaumaturgy', 'Druidcraft', 'Message', 'Spare the Dying', 'Shocking Grasp', 'Chill Touch', 'Elementalism', 'Mending', 'Resistance',
+  'Shield', 'Magic Missile', 'Healing Word', 'Cure Wounds', 'Bless', 'Guiding Bolt', 'Sleep', 'Detect Magic', 'Faerie Fire', 'Hex', 'Hunter\'s Mark', 'Thunderwave', 'Command', 'Silvery Barbs', 'Divine Smite',
+  'Absorb Elements', 'Find Familiar', 'Mage Armor', 'Entangle', 'Goodberry', 'Dissonant Whispers', 'Tasha\'s Hideous Laughter', 'Shield of Faith', 'Protection from Evil and Good', 'Feather Fall', 'Burning Hands',
+  'Chromatic Orb', 'Heroism', 'Sanctuary', 'Charm Person', 'Disguise Self', 'Hellish Rebuke', 'Armor of Agathys', 'Searing Smite', 'Ensnaring Strike', 'Inflict Wounds', 'Speak with Animals', 'Fog Cloud', 'Longstrider', 'Comprehend Languages', 'Identify',
+  'Misty Step', 'Spiritual Weapon', 'Hold Person', 'Scorching Ray', 'Shatter', 'Web', 'Invisibility', 'Lesser Restoration', 'Aid', 'Pass without Trace', 'Moonbeam', 'Silence', 'Suggestion', 'Mirror Image',
+  'Spike Growth', 'Heat Metal', 'Prayer of Healing', 'Flaming Sphere', 'Darkness', 'Blur', 'Find Steed', 'Enhance Ability', 'Barkskin', 'Detect Thoughts', 'See Invisibility',
+  'Fireball', 'Counterspell', 'Spirit Guardians', 'Hypnotic Pattern', 'Haste', 'Revivify', 'Fly', 'Dispel Magic', 'Lightning Bolt', 'Mass Healing Word', 'Call Lightning', 'Conjure Animals', 'Slow',
+  'Beacon of Hope', 'Hunger of Hadar', 'Summon Fey', 'Bestow Curse', 'Animate Dead', 'Speak with Dead', 'Leomund\'s Tiny Hut', 'Plant Growth', 'Remove Curse', 'Sending', 'Tongues',
+  'Polymorph', 'Banishment', 'Greater Invisibility', 'Wall of Fire', 'Dimension Door', 'Guardian of Faith', 'Death Ward', 'Freedom of Movement', 'Conjure Woodland Beings', 'Ice Storm', 'Fire Shield', 'Stoneskin', 'Phantasmal Killer', 'Blight', 'Confusion', 'Divination', 'Arcane Eye',
+  'Wall of Force', 'Synaptic Static', 'Cone of Cold', 'Greater Restoration', 'Mass Cure Wounds', 'Animate Objects', 'Hold Monster', 'Raise Dead', 'Telekinesis', 'Flame Strike', 'Bigby\'s Hand', 'Scrying', 'Dominate Person', 'Insect Plague', 'Steel Wind Strike', 'Teleportation Circle', 'Tree Stride', 'Holy Weapon',
+  'Heal', 'Disintegrate', 'Chain Lightning', 'Mass Suggestion', 'Globe of Invulnerability', 'Heroes\' Feast', 'Sunbeam', 'True Seeing', 'Blade Barrier', 'Harm', 'Otto\'s Irresistible Dance', 'Wall of Ice', 'Contingency', 'Wind Walk',
+  'Forcecage', 'Plane Shift', 'Teleport', 'Regenerate', 'Fire Storm', 'Finger of Death', 'Reverse Gravity', 'Resurrection', 'Simulacrum', 'Etherealness', 'Prismatic Spray',
+  'Maze', 'Feeblemind', 'Befuddlement', 'Sunburst', 'Holy Aura', 'Dominate Monster', 'Earthquake', 'Incendiary Cloud', 'Mind Blank', 'Animal Shapes', 'Clone',
+  'Wish', 'Mass Heal', 'Foresight', 'Meteor Swarm', 'True Polymorph', 'Power Word Kill', 'Time Stop', 'Gate', 'True Resurrection', 'Shapechange', 'Psychic Scream'];
+const CB_SPELL_RANK = new Map(CB_SPELL_PREF.map((n, i) => [n.toLowerCase(), i]));
+const CB_DAMAGE_CANTRIPS = new Set(CB_SPELL_PREF.slice(0, 12).map(n => n.toLowerCase()));
+// Cantrips: two that deal damage, then the useful others, then the rest.
+function cbCantripPref(R, names){
+  const all = cbBySpellPref(R, names), dmg = all.filter(n => CB_DAMAGE_CANTRIPS.has(n.toLowerCase()));
+  const lead = dmg.slice(0, 2);
+  return lead.concat(all.filter(n => !lead.includes(n) && !CB_DAMAGE_CANTRIPS.has(n.toLowerCase())), dmg.slice(2));
+}
+function cbBySpellPref(R, names){
+  const rank = n => { const r = CB_SPELL_RANK.get(String(n).toLowerCase()); if (r != null) return r; const s = sktRulesSpell(R, n); return 10000 + (s && s.core ? 0 : 5000); };
+  return names.slice().sort((x, y) => rank(x) - rank(y) || String(x).localeCompare(String(y)));
+}
 function cbQuickBuild(){
   const b = CB.build, R = CB.R;
   const pickCore = list => list.filter(x => x.core !== false)[0];
@@ -1065,9 +1095,9 @@ function cbQuickBuild(){
       const s = x.sc, v = x.view || b, lst = x.primary ? b : x.entry;
       if (!lst) return;
       const always = sktBuildAlwaysPrepared(v, R);
-      if ((lst.cantrips || []).length < s.cantrips) lst.cantrips = (lst.cantrips || []).concat(sktSpellOptions(R, v, 0).map(o => o.name).filter(n => !(lst.cantrips || []).includes(n))).slice(0, s.cantrips);
+      if ((lst.cantrips || []).length < s.cantrips) lst.cantrips = (lst.cantrips || []).concat(cbCantripPref(R, sktSpellOptions(R, v, 0).map(o => o.name)).filter(n => !(lst.cantrips || []).includes(n))).slice(0, s.cantrips);
       const pool = [], byLv = [];
-      for (let lv = 1; lv <= s.maxSpellLevel; lv++) byLv[lv] = sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n));
+      for (let lv = 1; lv <= s.maxSpellLevel; lv++) byLv[lv] = cbBySpellPref(R, sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n)));
       for (let i = 0; byLv.some(l => l && l.length > i); i++) for (let lv = s.maxSpellLevel; lv >= 1; lv--) if (byLv[lv] && byLv[lv][i]) pool.push(byLv[lv][i]);
       if (s.spellbook && (lst.spellbook || []).length < s.spellbook) lst.spellbook = (lst.spellbook || []).concat(pool.filter(n => !(lst.spellbook || []).includes(n))).slice(0, s.spellbook);
       const want = s.prepared || s.known, src = s.spellbook ? lst.spellbook : pool;
@@ -1087,9 +1117,11 @@ function cbQuickBuild(){
       const ch = key ? (b.featChoices[key] = Object.assign({}, b.featChoices[key])) : (b.speciesChoice = Object.assign({}, b.speciesChoice));
       if (!g.block && g.blocks.length) ch.spellList = g.blocks[0].name;
       if (g.abilityChoices && !g.ability) ch.spellAbility = order.find(k => g.abilityChoices.includes(k)) || g.abilityChoices[0];
-      // Spells the character doesn't have yet first (a Savant's free spells add to the book).
-      const known = new Set([].concat(b.cantrips || [], b.spells || [], b.spellbook || []));
-      g.choices.forEach(c => { if (c.picked.length < c.count){ const free = c.options.filter(n => !(ch.spells || []).includes(n));
+      // Spells the character doesn't have yet first — not another grant's either (a Savant's
+      // free spells add to the book) — the common picks before the rest.
+      const known = new Set([].concat(b.cantrips || [], b.spells || [], b.spellbook || [], ...Object.values(b.featChoices || {}).map(x => (x && x.spells) || []), (b.speciesChoice || {}).spells || []));
+      g.choices.forEach(c => { if (c.picked.length < c.count){ const cantrip = c.options.every(n => ((sktRulesSpell(R, n) || {}).level || 0) === 0);
+        const free = (cantrip ? cbCantripPref(R, c.options) : cbBySpellPref(R, c.options)).filter(n => !(ch.spells || []).includes(n));
         ch.spells = (ch.spells || []).concat(free.filter(n => !known.has(n)).concat(free.filter(n => known.has(n))).slice(0, c.count - c.picked.length)); } });
     });
     sktBuildFeatNames(b, R).forEach(n => {
