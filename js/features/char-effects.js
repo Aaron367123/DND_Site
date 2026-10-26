@@ -418,6 +418,106 @@
   def('2024:class:wizard:Scholar', () => {});                       // an expertise pick in the builder
   def('2024:class:wizard:Memorize Spell', ctx => note(ctx, 'Memorize Spell: after a short rest, swap one prepared spell for another from your spellbook.'));
 
+  // ── Subclass features: reminders with the character's numbers ──────────
+  // The 2024 books' version of a feature, when the older one reads differently.
+  const new24 = ctx => ['XPHB', 'EFA', 'FRHoF'].includes((ctx.sub || {}).source);
+  const psiDie = ctx => (ctx.resources.find(r => r.name === 'Psionic Energy') || {}).die || (ctx.level >= 17 ? 'd12' : ctx.level >= 11 ? 'd10' : ctx.level >= 5 ? 'd8' : 'd6');
+  // Barbarian (Mindless Rage and the 2024 Frenzy also act through the Rage toggle).
+  def('subclass:barbarian:Frenzy', ctx => note(ctx, new24(ctx)
+    ? 'Frenzy: with Reckless Attack while raging, the first target you hit each turn with a Strength attack takes an extra ' + ctx.rageDamage + 'd6.'
+    : 'Frenzy: when you rage you can frenzy — a melee weapon attack as a bonus action each turn, and a level of exhaustion when the rage ends.'));
+  def('subclass:barbarian:Mindless Rage', ctx => note(ctx, 'Mindless Rage: immune to being charmed or frightened while raging.'));
+  def('subclass:barbarian:Reckless Abandon', ctx => note(ctx, 'Reckless Abandon: Reckless Attack while raging gives ' + abm(ctx, 'con') + ' temporary hit points.'));
+  def('subclass:barbarian:Ancestral Protectors', ctx => note(ctx, 'Ancestral Protectors: while raging, the first creature you hit each turn has disadvantage on attacks against anyone but you, and its hits on others are resisted.'));
+  def('subclass:barbarian:Fanatical Focus', ctx => note(ctx, new24(ctx)
+    ? 'Fanatical Focus: once per rage, reroll a failed save with +' + ctx.rageDamage + '.'
+    : 'Fanatical Focus: once per rage, reroll a failed save.'));
+  def('subclass:barbarian:Rage beyond Death', ctx => note(ctx, 'Rage beyond Death: while raging, 0 hit points doesn’t knock you out, and failed death saves can’t kill you until the rage ends.'));
+  def('subclass:barbarian:Giant\'s Havoc', ctx => note(ctx, 'Giant’s Havoc: while raging, +5 ft reach, Large if smaller, and +' + ctx.rageDamage + ' (Rage Damage) on Strength thrown-weapon hits.'));
+  def('subclass:barbarian:Demiurgic Colossus', ctx => note(ctx, 'Demiurgic Colossus: when you rage, +10 ft reach and Large or Huge; Elemental Cleaver deals 2d6.'));
+  def('subclass:barbarian:Power of the Wilds', ctx => note(ctx, 'Power of the Wilds: when you rage, pick Falcon (fly speed without armour), Lion (enemies near you have disadvantage against others) or Ram (knock Large or smaller prone).'));
+  def('subclass:barbarian:Vitality of the Tree', ctx => note(ctx, 'Vitality of the Tree: entering your rage gives ' + ctx.classLevel('barbarian') + ' temporary hit points; each turn while raging, an ally within 10 ft gains ' + ctx.rageDamage + 'd6.'));
+  // Bard
+  def('subclass:bard:Master\'s Flourish', ctx => note(ctx, 'Master’s Flourish: a Blade Flourish can roll a d6 instead of spending Bardic Inspiration.'));
+  def('subclass:bard:Mote of Potential', ctx => note(ctx, 'Mote of Potential: a Bardic Inspiration die you give adds an effect — a check rolls it twice, an attack bursts for thunder, a save gives temporary hit points.'));
+  def('subclass:bard:Unfailing Inspiration', ctx => note(ctx, 'Unfailing Inspiration: a creature that adds your Bardic Inspiration die and still fails keeps the die.'));
+  def('subclass:bard:Spiritual Focus', ctx => note(ctx, 'Spiritual Focus: a candle, crystal ball, skull, spirit board or tarokka deck is your bard focus' + (ctx.level >= 6 ? '; damage or healing spells cast through it add 1d6 to one roll.' : '.')));
+  // Cleric
+  def('subclass:cleric:Inescapable Destruction', ctx => note(ctx, 'Inescapable Destruction: necrotic damage from your cleric spells and Channel Divinity ignores resistance.'));
+  def('subclass:cleric:Supreme Healing', ctx => note(ctx, 'Supreme Healing: healing dice from your spells' + (new24(ctx) ? ' and Channel Divinity' : '') + ' always roll their highest number.'));
+  // Druid
+  def('subclass:druid:Circle Forms', ctx => {
+    const L = ctx.level, cr = Math.floor(L / 3);
+    note(ctx, new24(ctx)
+      ? 'Circle Forms: Wild Shape into a beast of CR ' + cr + ' or lower; in the form your AC is at least ' + (13 + ctx.mod.wis) + ' and you gain ' + 3 * L + ' temporary hit points.'
+      : 'Circle Forms: Wild Shape as a bonus action, into a beast of CR ' + Math.max(1, cr) + ' or lower.');
+  });
+  def('subclass:druid:Improved Circle Forms', ctx => note(ctx, 'Improved Circle Forms: in Wild Shape, attacks can deal radiant damage, and Constitution saves add ' + signed(ctx.mod.wis) + ' (WIS).'));
+  def('subclass:druid:Hearth of Moonlight and Shadow', ctx => note(ctx, 'Hearth of Moonlight and Shadow: during a rest, a 30 ft sphere gives +5 to Stealth and Perception and hides its firelight.'));
+  // Fighter
+  def('subclass:fighter:Additional Superiority Die', () => {});   // Combat Superiority counts it
+  def('subclass:fighter:Improved Combat Superiority', () => {});  // and grows the die
+  def('subclass:fighter:Relentless', ctx => note(ctx, new24(ctx)
+    ? 'Relentless: once per turn, a maneuver can use a d8 instead of a Superiority Die.'
+    : 'Relentless: rolling initiative with no superiority dice left gives one back.'));
+  def('subclass:fighter:Eldritch Strike', ctx => note(ctx, 'Eldritch Strike: a creature you hit with a weapon has disadvantage on its next save against your spells before the end of your next turn.'));
+  def('subclass:fighter:Psionic Strike', ctx => {
+    const dice = '1' + psiDie(ctx) + signed(ctx.mod.int);
+    ctx.extraDamage.push({ label: 'Psionic Strike', dice: dice + ' force', note: 'once per turn after a weapon hit within 30 ft, spend a Psionic Energy die' });
+    act(ctx, { name: 'Psionic Strike', action: 'Free', resource: 'Psionic Energy', amount: 1, dice, feature: 'Psionic Strike',
+      desc: 'Once per turn, after hitting a target within 30 ft with a weapon, spend a Psionic Energy die for force damage.' });
+  });
+  def('subclass:fighter:Rapid Strike', ctx => note(ctx, 'Rapid Strike: once per turn, give up advantage on an attack to make an extra weapon attack against that target.'));
+  def('subclass:fighter:Team Tactics', ctx => note(ctx, 'Team Tactics: allies you restore with Group Recovery have advantage on D20 tests until your next turn.'));
+  // Monk
+  def('subclass:monk:Agile Parry', ctx => note(ctx, 'Agile Parry: after an unarmed strike in the Attack action, holding a melee kensei weapon gives +2 AC until your next turn.'));
+  def('subclass:monk:Flurry of Healing and Harm', ctx => {
+    if (new24(ctx)) pool(ctx, 'Flurry of Healing and Harm', abm(ctx, 'wis'), 'long');
+    note(ctx, 'Flurry of Healing and Harm: Flurry of Blows can trade strikes for Hand of Healing, and add Hand of Harm to one, without spending ' + (new24(ctx) ? 'Focus Points (' + abm(ctx, 'wis') + ' times per long rest).' : 'ki.'));
+  });
+  // Paladin
+  def('subclass:paladin:Aura of Hate', ctx => note(ctx, 'Aura of Hate: you, and fiends and undead within ' + (ctx.level >= 18 ? 30 : 10) + ' ft, add ' + signed(abm(ctx, 'cha')) + ' to melee weapon damage.'));
+  // Rogue
+  def('subclass:rogue:Assassinate', ctx => {
+    if (new24(ctx)) ctx.rollAdv.push({ on: ['init'], label: 'Assassinate' });
+    note(ctx, new24(ctx)
+      ? 'Assassinate: in the first round, advantage against creatures that haven’t acted, and a Sneak Attack hit deals ' + ctx.level + ' extra damage.'
+      : 'Assassinate: advantage on attacks against creatures that haven’t acted yet; hits against surprised creatures are critical.');
+  });
+  def('subclass:rogue:Ambush Master', ctx => {
+    ctx.rollAdv.push({ on: ['init'], label: 'Ambush Master' });
+    note(ctx, 'Ambush Master: the first creature you hit in the first round is attacked with advantage until your next turn.');
+  });
+  def('subclass:rogue:Magical Ambush', ctx => note(ctx, 'Magical Ambush: a creature has disadvantage on saves against your spell when you cast it while ' + (new24(ctx) ? 'invisible.' : 'hidden from it.')));
+  def('subclass:rogue:Psi-Bolstered Knack', ctx => act(ctx, { name: 'Psi-Bolstered Knack', action: 'Free', resource: 'Psionic Energy', amount: 1, dice: '1' + psiDie(ctx), feature: 'Psi-Bolstered Knack',
+    desc: 'After failing a check with a skill or tool you’re proficient in, add a Psionic Energy die; it’s spent only if the check then succeeds.' }));
+  def('subclass:rogue:Homing Strikes', ctx => act(ctx, { name: 'Homing Strikes', action: 'Free', resource: 'Psionic Energy', amount: 1, dice: '1' + psiDie(ctx), feature: 'Homing Strikes',
+    desc: 'After missing with Psychic Blades, add a Psionic Energy die to the attack; it’s spent only if the attack then hits.' }));
+  def('subclass:rogue:Soul Blades', () => {});   // its powers are listed on their own
+  // Sorcerer
+  def('subclass:sorcerer:Tides of Chaos', ctx => {
+    pool(ctx, 'Tides of Chaos', 1, 'long');
+    note(ctx, 'Tides of Chaos: advantage on one ' + (new24(ctx) ? 'D20 test' : 'attack, check or save') + '; it comes back after a Wild Magic Surge' + (new24(ctx) ? ' from a sorcerer spell.' : ' the DM calls for.'));
+  });
+  def('subclass:sorcerer:Psionic Sorcery', ctx => note(ctx, 'Psionic Sorcery: cast your Psionic Spells with sorcery points equal to the spell’s level, needing no verbal, somatic or (unconsumed) material components.'));
+  def('subclass:sorcerer:Eyes of the Dark', ctx => {
+    ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, 120);
+    if (ctx.level >= 3) note(ctx, 'Eyes of the Dark: cast Darkness for 2 sorcery points and see through it.');
+  });
+  // Wizard
+  def('subclass:wizard:Temporal Awareness', ctx => { ctx.initBonus += ctx.mod.int; });
+  def('subclass:wizard:Improved Abjuration', ctx => note(ctx, 'Improved Abjuration: ability checks your abjuration spells call for (Counterspell, Dispel Magic) add +' + ctx.pb + '.'));
+  def('subclass:wizard:Undead Thralls', ctx => note(ctx, 'Undead Thralls: Animate Dead raises one extra; undead you make have +' + ctx.level + ' hit points and add +' + ctx.pb + ' to weapon damage.'));
+  def('subclass:wizard:Durable Magic', ctx => note(ctx, 'Durable Magic: while concentrating on a spell, +2 AC and +2 to all saves.'));
+  def('subclass:wizard:Song of Victory', ctx => new24(ctx)
+    ? act(ctx, { name: 'Song of Victory', action: 'Bonus Action', feature: 'Song of Victory', desc: 'After casting a spell with a casting time of an action, make one weapon attack.' })
+    : note(ctx, 'Song of Victory: while Bladesong is active, melee weapon attacks deal ' + signed(abm(ctx, 'int')) + ' damage.'));
+  // Artificer
+  def('subclass:artificer:Alchemical Savant', ctx => note(ctx, 'Alchemical Savant: a spell cast through alchemist’s supplies adds ' + signed(abm(ctx, 'int')) + ' to one healing roll or acid, fire, ' + (new24(ctx) ? '' : 'necrotic ') + 'or poison damage roll.'));
+  def('subclass:artificer:Arcane Firearm', ctx => note(ctx, 'Arcane Firearm: artificer spells cast through it add 1d8 to one damage roll.'));
+  def('subclass:artificer:Guided Precision', ctx => note(ctx, 'Guided Precision: once per turn, a Cartographer spell or a hit on a creature in your Faerie Fire adds ' + signed(ctx.mod.int) + ' damage; damage can’t break your concentration on Faerie Fire.'));
+  def('subclass:artificer:Improved Armorer', ctx => note(ctx, 'Improved Armorer: an extra Armor plan and item for Replicate Magic Item, and +1 to attack and damage with your armour’s special weapon.'));
+
   // ── On/off states: the sheet's toggles ─────────────────────────────────
   // Each one changes numbers while it's on, the way D&D Beyond's do. A
   // spell's is offered when the character has the spell; turning on a
@@ -438,6 +538,8 @@
       if (ctx.edition === '2014' && (ctx.build.featureChoices || {})['Totem Spirit'] === 'Bear') DMG.filter(t => t !== 'psychic').forEach(t => ctx.resist.add(t));
       if (v === 'Bear') DMG.filter(t => !['force', 'necrotic', 'psychic', 'radiant'].includes(t)).forEach(t => ctx.resist.add(t));
       ctx.rollAdv.push({ on: ['ab:str', 'save:str'], label: 'Rage' });
+      if (has(ctx, 'Mindless Rage')) ['charmed', 'frightened'].forEach(c => ctx.immune.add(c));
+      if (has(ctx, 'Frenzy') && ctx.edition === '2024') ctx.extraDamage.push({ label: 'Frenzy', dice: ctx.rageDamage + 'd6', note: 'with Reckless Attack, the first target you hit each turn with a Strength attack' });
       if (has(ctx, 'Divine Fury')) ctx.extraDamage.push({ label: 'Divine Fury', dice: '1d6+' + Math.floor(ctx.classLevel('barbarian') / 2) + ' radiant', note: 'the first creature you hit each turn while raging' });
     } });
   // Until the start of your next turn: the combat tracker turns it off then.

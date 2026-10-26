@@ -9602,6 +9602,71 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 81: subclass features with the character's numbers -------------
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, ed) => {
+          CB.build = Object.assign(sktBlankBuild(ed || '2024'), { cls, level: L, subclass: sub, species: 'Human', background: 'Soldier', originFeat: 'Tough', name: 'T', sources: SKT_ALL_SOURCES }, ed === '2014' ? { allBooks: true } : {});
+          cbQuickBuild(); return sktComputeCharacter(CB.build, ed === '2014' ? R14 : R);
+        };
+        const md = (r, k) => Math.floor((r.abilities[k] - 10) / 2);
+        const xd = (r, label) => (r.sheet.extraDamage || []).find(x => x.label === label) || {};
+        const nt = (r, head) => (r.sheet.notes || []).find(n => n.startsWith(head + ':')) || '';
+        const act = (r, n) => (r.sheet.activations || []).find(a => a.name === n) || {};
+        const applied = (r, n) => (r.sheet.featureList || []).some(f => f.name === n && f.mech);
+        // Rage carries Mindless Rage and the 2024 Frenzy.
+        let r = mk('Barbarian', 'Berserker', 6);
+        const calm = r, mad = sktComputeCharacter(CB.build, R, { rage: true });
+        ok('subclass: Mindless Rage — immune to charmed and frightened only while raging',
+           !(calm.immunities || []).includes('charmed') && ['charmed', 'frightened'].every(c => (mad.immunities || []).includes(c)) && applied(calm, 'Mindless Rage'), JSON.stringify(mad.immunities));
+        ok('subclass: 2024 Frenzy — Rage Damage d6s on the Extra damage list while raging', !xd(calm, 'Frenzy').dice && xd(mad, 'Frenzy').dice === '2d6', JSON.stringify(mad.sheet.extraDamage));
+        r = mk('Barbarian', 'Berserker', 6, '2014');
+        ok('subclass: 2014 Frenzy — the bonus-action attack, no extra damage', /bonus action/.test(nt(r, 'Frenzy')) && !xd(sktComputeCharacter(CB.build, R14, { rage: true }), 'Frenzy').dice);
+        r = mk('Barbarian', 'Zealot', 6);
+        ok('subclass: 2024 Fanatical Focus — the reroll adds the Rage Damage', /\+2\.$/.test(nt(r, 'Fanatical Focus')), nt(r, 'Fanatical Focus'));
+        // Druid: Circle Forms with this druid's numbers.
+        r = mk('Druid', 'Moon', 10);
+        ok('subclass: 2024 Circle Forms — CR 3 at 10th level, AC 13 + WIS, 30 temporary hit points', nt(r, 'Circle Forms').includes('CR 3 ') && nt(r, 'Circle Forms').includes('at least ' + (13 + md(r, 'wis'))) && nt(r, 'Circle Forms').includes('30 temporary'), nt(r, 'Circle Forms'));
+        // A 2024 character on an older book's subclass gets that book's version.
+        r = mk('Wizard', 'Bladesinging', 14);
+        ok('subclass: the older Bladesinging in a 2024 build — Song of Victory adds INT while Bladesong is active, not the 2024 bonus-action attack',
+           nt(r, 'Song of Victory').includes(sktSigned(Math.max(1, md(r, 'int')))) && !act(r, 'Song of Victory').name, nt(r, 'Song of Victory'));
+        r = mk('Druid', 'Moon', 2, '2014');
+        ok('subclass: 2014 Circle Forms — CR 1 at 2nd level', nt(r, 'Circle Forms').includes('CR 1 '), nt(r, 'Circle Forms'));
+        // Fighter.
+        r = mk('Fighter', 'Psi Warrior', 5);
+        ok('subclass: Psionic Strike — a Psionic Energy die + INT force on Extra damage, and an action that spends the die',
+           xd(r, 'Psionic Strike').dice === '1d8' + sktSigned(md(r, 'int')) + ' force' && act(r, 'Psionic Strike').resource === 'Psionic Energy', JSON.stringify(xd(r, 'Psionic Strike')));
+        r = mk('Fighter', 'Battle Master', 10, '2014');
+        ok('subclass: 2014 Battle Master — five d10 superiority dice, and the die features read as applied',
+           (r.resources.find(x => x.name === 'Superiority Dice') || {}).max === 5 && (r.resources.find(x => x.name === 'Superiority Dice') || {}).die === 'd10'
+           && applied(r, 'Additional Superiority Die') && applied(r, 'Improved Combat Superiority (d10)'));
+        // Rogue and wizard: initiative.
+        r = mk('Rogue', 'Assassin', 3);
+        ok('subclass: 2024 Assassinate — advantage on initiative, and Sneak Attack adds the rogue level', (r.sheet.rollAdv || []).some(x => x.label === 'Assassinate' && x.on.includes('init')) && /deals 3 extra/.test(nt(r, 'Assassinate')));
+        r = mk('Rogue', 'Assassin', 3, '2014');
+        ok('subclass: 2014 Assassinate — no initiative advantage', !(r.sheet.rollAdv || []).some(x => x.label === 'Assassinate'));
+        r = mk('Wizard', 'Chronurgy', 2);
+        ok('subclass: Temporal Awareness — initiative + INT', r.init === md(r, 'dex') + md(r, 'int'), r.init);
+        r = mk('Rogue', 'Soulknife', 9);
+        ok('subclass: Homing Strikes and Psi-Bolstered Knack — spend a Psionic Energy die', act(r, 'Homing Strikes').resource === 'Psionic Energy' && act(r, 'Psi-Bolstered Knack').dice === '1d8');
+        // Senses and pools.
+        r = mk('Sorcerer', 'Shadow', 3, '2014');
+        ok('subclass: Eyes of the Dark — darkvision 120', /Darkvision 120/.test(r.sheet.senses), r.sheet.senses);
+        r = mk('Sorcerer', 'Wild Magic', 3);
+        ok('subclass: Tides of Chaos — one use a long rest', (r.resources.find(x => x.name === 'Tides of Chaos') || {}).max === 1);
+        r = mk('Monk', 'Mercy', 11);
+        ok('subclass: 2024 Flurry of Healing and Harm — WIS uses a long rest', (r.resources.find(x => x.name === 'Flurry of Healing and Harm') || {}).max === Math.max(1, md(r, 'wis')));
+        // Flavour isn't a rule to apply.
+        r = mk('Paladin', 'Devotion', 3, '2014');
+        ok('features: an oath’s tenets are information, not a rule left undone', (r.sheet.featureList || []).filter(f => /^Tenets of/.test(f.name)).every(f => f.info));
+      } catch(e){ ok('round 81 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

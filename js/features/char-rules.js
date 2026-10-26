@@ -1163,6 +1163,7 @@ function _sktIsHeader(name, from, sub){
   if (from === 'class' && (/Subclass$/.test(n) || /^Subclass Feature$/i.test(n) || /^Proficiencies$/i.test(n)
                            || / Options$/.test(n) || /improvements?$/i.test(n))) return true;
   if (from === 'subclass' && sub && (n === sub.shortName || n === sub.name || /Options$/.test(n))) return true;
+  if (from === 'subclass' && /^(Tenets of |Restriction\b)/.test(n)) return true;
   if (from === 'species' && /^(Ability Score Increase|Age|Alignment|Size|Speed|Languages|Creature Type|Subrace)$/i.test(n)) return true;
   return false;
 }
