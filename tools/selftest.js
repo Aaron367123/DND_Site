@@ -9718,6 +9718,57 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 83: picks, granted spells and fighting styles ----------------
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, ed, extra) => {
+          CB.build = Object.assign(sktBlankBuild(ed || '2024'), { cls, level: L, subclass: sub, species: 'Human', background: 'Soldier', originFeat: 'Tough', name: 'T', sources: SKT_ALL_SOURCES }, ed === '2014' ? { allBooks: true } : {}, extra || {});
+          cbQuickBuild(); return sktComputeCharacter(CB.build, ed === '2014' ? R14 : R);
+        };
+        const again = ed => sktComputeCharacter(CB.build, ed === '2014' ? R14 : R);
+        const applied = (r, n) => (r.sheet.featureList || []).some(f => f.name === n && f.mech);
+        const style = (ed, name) => { CB.build.optional = Object.assign({}, CB.build.optional, { 'Fighting Style': [name] }); return again(ed); };
+        // The 2024 Champion's second Fighting Style, from the subclass.
+        let r = mk('Fighter', 'Champion', 7);
+        const fs = (CB.build.optional || {})['Fighting Style'] || [];
+        ok('picks: a 2024 Champion at 7th has two Fighting Styles, and quick build doesn\'t give it the paladin\'s Blessed Warrior',
+           sktOptionalChoices(CB.build, R).find(o => o.name === 'Fighting Style').count === 2 && fs.length === 2 && !fs.includes('Blessed Warrior'), JSON.stringify(fs));
+        ok('picks: so Additional Fighting Style reads as applied', applied(r, 'Additional Fighting Style'));
+        r = mk('Paladin', 'Devotion', 2);
+        ok('picks: a paladin can still take Blessed Warrior', sktOptionalChoices(CB.build, R).find(o => o.name === 'Fighting Style').types.includes('FS:P'));
+        r = mk('Fighter', 'Battle Master', 7, '2014');
+        ok('picks: Maneuvers and Additional Maneuvers read as applied once maneuvers are chosen', applied(r, 'Maneuvers') && applied(r, 'Additional Maneuvers'));
+        CB.build.optional = Object.assign({}, CB.build.optional, { Maneuvers: [] }); r = again('2014');
+        ok('picks: and not before', !applied(r, 'Maneuvers') && !applied(r, 'Additional Maneuvers'));
+        r = mk('Monk', 'Four Elements', 6, '2014');
+        ok('picks: Extra Elemental Discipline reads as applied', applied(r, 'Extra Elemental Discipline'));
+        r = mk('Fighter', 'Rune Knight', 15, '2014');
+        ok('picks: Rune Carver and Additional Rune Known read as applied, Master of Runes (same level as a new rune) doesn\'t',
+           applied(r, 'Rune Carver') && applied(r, 'Additional Rune Known') && !applied(r, 'Master of Runes'));
+        // Spells a subclass gives.
+        r = mk('Ranger', 'Gloom Stalker', 5, '2014');
+        ok('spells: Gloom Stalker Magic reads as applied (its spells are always prepared)', applied(r, 'Gloom Stalker Magic') && sktBuildAlwaysPrepared(CB.build, R14).includes('Disguise Self'));
+        r = mk('Barbarian', 'Wild Heart', 3);
+        ok('spells: Animal Speaker\'s rituals are granted, so it reads as applied', ['Beast Sense', 'Speak with Animals'].every(n => sktBuildAlwaysPrepared(CB.build, R).includes(n)) && applied(r, 'Animal Speaker'),
+           JSON.stringify(sktBuildAlwaysPrepared(CB.build, R)));
+        // Fighting styles.
+        r = mk('Fighter', 'Champion', 3); r = style('2024', 'Blind Fighting');
+        ok('style: Blind Fighting — blindsight 10 ft', /Blindsight 10/.test(r.sheet.senses), r.sheet.senses);
+        r = style('2024', 'Interception');
+        const ic = (r.sheet.activations || []).find(a => a.name === 'Interception') || {};
+        ok('style: Interception — a reaction reducing damage by 1d10 + proficiency', ic.action === 'Reaction' && ic.dice === '1d10' + sktSigned(r.sheet.profBonus), JSON.stringify(ic));
+        r = style('2024', 'Unarmed Fighting');
+        const us = (rr) => ((rr.sheet.attacks || []).find(a => a.name === 'Unarmed Strike') || {}).damage || '';
+        const armed = us(r);
+        CB.build.items = []; CB.build.equipment = { materialized: true }; r = again();
+        ok('style: Unarmed Fighting — 1d6 holding a weapon, 1d8 empty-handed', /^1d6/.test(armed) && /^1d8/.test(us(r)), armed + ' / ' + us(r));
+      } catch(e){ ok('round 83 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

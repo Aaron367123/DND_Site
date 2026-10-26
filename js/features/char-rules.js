@@ -274,6 +274,7 @@ async function _sktRulesBuild(edition, read){
       preparedSpellsProgression: sc.preparedSpellsProgression || null,
       subclassTableGroups: sc.subclassTableGroups || null,
       optionalfeatureProgression: sc.optionalfeatureProgression || null,
+      featProgression: sc.featProgression || null,
       // Matched on the subclass alone, not the class version: a 2014
       // subclass offered for the 2024 class keeps its features filed
       // under the 2014 class. Core-book features only for a core
@@ -2156,6 +2157,19 @@ sktDefineEffect(['feat:Defense', 'optional:Defense'], ctx => { ctx.armoredAcBonu
 sktDefineEffect(['feat:Archery', 'optional:Archery'], ctx => { ctx.rangedAttackBonus += 2; });
 sktDefineEffect(['feat:Dueling', 'optional:Dueling'], ctx => { ctx.duelingBonus = 2; });
 sktDefineEffect(['feat:Two-Weapon Fighting', 'optional:Two-Weapon Fighting'], ctx => { ctx.twoWeaponMod = true; });
+sktDefineEffect(['feat:Blind Fighting', 'optional:Blind Fighting'], ctx => { ctx.senses.blindsight = Math.max(ctx.senses.blindsight || 0, 10); });
+sktDefineEffect(['feat:Interception', 'optional:Interception'], ctx => _fxAction(ctx, { name: 'Interception', action: 'Reaction', feature: 'Interception', dice: '1d10' + sktSigned(ctx.pb),
+  desc: 'When a creature you can see hits another creature within 5 ft of you, reduce the damage by 1d10' + sktSigned(ctx.pb) + ' (needs a shield or a simple or martial weapon).' }));
+sktDefineEffect(['feat:Protection', 'optional:Protection'], ctx => _fxAction(ctx, { name: 'Protection', action: 'Reaction', feature: 'Protection',
+  desc: 'With a shield, when a creature you can see attacks a target within 5 ft of you, impose disadvantage' + (ctx.edition === '2024' ? ' on that attack and on attacks against the target until your next turn.' : ' on the attack.') }));
+sktDefineEffect(['feat:Thrown Weapon Fighting', 'optional:Thrown Weapon Fighting'], ctx => _fxNote(ctx, 'Thrown Weapon Fighting: draw a thrown weapon as part of the attack, and +2 damage when you throw it.'));
+sktDefineEffect(['feat:Unarmed Fighting', 'optional:Unarmed Fighting'], ctx => { ctx.unarmedFighting = true;
+  _fxNote(ctx, 'Unarmed Fighting: unarmed strikes deal 1d6 (1d8 with no weapon or shield in hand); a creature you grapple takes 1d4 bludgeoning at the start of your turn.'); });
+sktDefineEffect(['feat:Blessed Warrior', 'optional:Blessed Warrior', 'feat:Druidic Warrior', 'optional:Druidic Warrior'], () => {});   // two cantrips, from the data
+sktDefineEffect(['optional:Superior Technique'], ctx => {
+  if (!ctx.resources.some(r => r.name === 'Superiority Dice')) _fxPool(ctx, 'Superiority Dice', 1, 'short', { die: 'd6' });
+  _fxNote(ctx, 'Superior Technique: one maneuver, fuelled by a d6 superiority die (back on a short rest).');
+});
 sktDefineEffect(['feat:Great Weapon Fighting', 'optional:Great Weapon Fighting'], ctx => (ctx.gwf = true) && _fxNote(ctx, 'Great Weapon Fighting: with a two-handed or versatile weapon held in two hands, treat 1s and 2s on damage dice as 3s (2024) or reroll them (2014).'));
 // Eldritch Invocations that change numbers.
 sktDefineEffect(['optional:Agonizing Blast'], ctx => { ctx.agonizingBlast = true; });
@@ -2559,8 +2573,27 @@ function sktComputeCharacter(build, R, prior){
   // save; and wherever the same feature is listed again (Blessed Strikes under
   // each domain).
   const appliedName = new Set(features.filter(f => f.mech).map(f => f.name));
+  const pools = [];
+  parts.forEach(p => { const c = sktRulesClass(R, p.cls), s = c && sktRulesSubclass(c, p.subclass);
+    [c, s].forEach(src => [...(src && src.optionalfeatureProgression || []), ...(src && src.featProgression || [])].forEach(g => {
+      const lv = Array.isArray(g.progression) ? g.progression.map((n, i) => n > (g.progression[i - 1] || 0) ? i + 1 : 0).filter(Boolean) : Object.keys(g.progression || {}).map(Number);
+      pools.push({ name: g.name, levels: new Set(lv), from: src === s ? 'subclass' : 'class' });
+    })); });
+  const picked = n => ((build.optional || {})[n] || []).length > 0;
+  // A subclass feature that gives spells ("Gloom Stalker Magic", "Animal
+  // Speaker") is applied when the spells it names are the character's.
+  const words = t => ' ' + String(t || '').toLowerCase().replace(/[^a-z']+/g, ' ') + ' ';
+  const granted = sktBuildAlwaysPrepared(build, R).map(n => words(n));
+  const givesSpell = f => f.from === 'subclass' && /\b(learn|know|cast|gain)\b/i.test(f.text || '')
+    && granted.some(n => words(f.text).includes(n));
+  // Named for the pool's last word ("Arcane Shots" → shot): the feature that
+  // opens it (Rune Carver), or one that grows it (Additional Rune Known) —
+  // not another feature at that level (Master of Runes).
+  const poolFeature = f => pools.some(p => picked(p.name) && (f.name === p.name
+    || (p.from === f.from && f.name.toLowerCase().includes(p.name.split(' ').pop().replace(/s$/, '').toLowerCase())
+        && (f.level === Math.min(...p.levels) || (p.levels.has(f.level) && /^(Additional|Extra)\b/.test(f.name))))));
   const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, text: f.text, info: f.info || undefined,
-    mech: f.mech || (!f.info && (appliedName.has(f.name) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
+    mech: f.mech || (!f.info && (appliedName.has(f.name) || poolFeature(f) || givesSpell(f) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
   const subName = sub ? sub.shortName : '';
   const speciesLabel = species ? (subrace ? subrace.name + ' ' + species.name : species.name) : '';
   const moveSrc = (subrace && subrace.speed && typeof subrace.speed === 'object') ? subrace.speed : species && species.speed;
@@ -2772,8 +2805,10 @@ function _sktAlwaysPreparedOne(build, R){
         const by = block && block[kind]; if (!by) return;
         Object.keys(by).forEach(lv => {
           if (+String(lv).replace(/\D/g, '') > (build.level || 1)) return;
-          (Array.isArray(by[lv]) ? by[lv] : []).forEach(s => {
-            if (typeof s !== 'string') return;
+          // A list, or one split by how it's cast ({ ritual: [...] }, { daily: { 1: [...] } }).
+          const flat = v => Array.isArray(v) ? v.flatMap(flat) : v && typeof v === 'object'
+            ? Object.keys(v).filter(k => k !== 'choose' && k !== 'all').flatMap(k => flat(v[k])) : typeof v === 'string' ? [v] : [];
+          flat(by[lv]).forEach(s => {
             // The spell's own name, not a title-cased guess at it: "Shield
             // of Faith", which the spell picker can then recognise and not
             // charge a pick for.
@@ -2989,7 +3024,12 @@ function sktBuildAttacks(ctx, gear, sc){
   const dance = ctx.bardicUnarmed && !(gear && (gear.armor || gear.shield));
   const uab = ctx.martialArts || dance ? Math.max(m.str, m.dex) : m.str;
   const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
-  const uDie = ctx.martialArts && dance ? (_sktDieAvg(ctx.bardicUnarmed) > _sktDieAvg(ctx.martialArtsDie) ? ctx.bardicUnarmed : ctx.martialArtsDie) : ctx.martialArts ? ctx.martialArtsDie : dance ? '1' + ctx.bardicUnarmed : null;
+  let uDie = ctx.martialArts && dance ? (_sktDieAvg(ctx.bardicUnarmed) > _sktDieAvg(ctx.martialArtsDie) ? ctx.bardicUnarmed : ctx.martialArtsDie) : ctx.martialArts ? ctx.martialArtsDie : dance ? '1' + ctx.bardicUnarmed : null;
+  // Unarmed Fighting: a d6, or a d8 with no weapon or shield in hand.
+  if (ctx.unarmedFighting){
+    const ud = gear && (gear.shield || (gear.weapons || []).length) ? '1d6' : '1d8';
+    if (!uDie || _sktDieAvg(ud) > _sktDieAvg(uDie)) uDie = ud;
+  }
   out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb), str: uab === m.str,
              damage: (uDie ? uDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
   if (ctx.psychicBlades){
@@ -3292,11 +3332,11 @@ function _sktOptionalOne(build, R){
     const n = read(p.progression);
     if (n > 0) out.push({ name: p.name, count: n, types: p.featureType || [], kind: 'optional' });
   }));
-  (cls && cls.featProgression || []).forEach(p => {
+  [cls, sub].forEach(src => (src && src.featProgression || []).forEach(p => {
     if (!(p.category || []).some(c => /^FS/.test(c))) return;
     const n = read(p.progression);
     if (n > 0) out.push({ name: p.name, count: n, types: p.category, kind: 'feat' });
-  });
+  }));
   return out;
 }
 
