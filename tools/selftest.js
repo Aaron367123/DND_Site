@@ -9888,6 +9888,61 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 86: species traits, Mark spells, background features ----------
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (species, ed, extra) => {
+          CB.build = Object.assign(sktBlankBuild(ed || '2024'), { cls: 'Fighter', level: 4, subclass: 'Champion', species, background: ed === '2014' ? 'Acolyte' : 'Soldier', name: 'T', sources: SKT_ALL_SOURCES }, ed === '2014' ? { allBooks: true } : {}, extra || {});
+          CB.R = ed === '2014' ? R14 : R; cbQuickBuild(); return sktComputeCharacter(CB.build, CB.R);
+        };
+        const again = () => sktComputeCharacter(CB.build, CB.R);
+        const bare = () => { CB.build.items = []; CB.build.equipment = { materialized: true }; return again(); };
+        const md = (r, k) => Math.floor((r.abilities[k] - 10) / 2);
+        const atk = (r, n) => (r.sheet.attacks || []).find(a => a.name === n) || {};
+        const applied = (r, n) => (r.sheet.featureList || []).some(f => f.name === n && f.mech);
+        let r = mk('Aasimar');
+        ok('species: Celestial Resistance resists necrotic and radiant, and reads as applied', ['necrotic', 'radiant'].every(t => (r.resistances || []).includes(t)) && applied(r, 'Celestial Resistance'));
+        r = mk('Tabaxi');
+        ok('species: Tabaxi Cat\'s Claws — their own attack row, 1d6 + STR slashing', atk(r, 'Cat\'s Claws').damage === '1d6' + sktSigned(md(r, 'str')) + ' slashing' && atk(r, 'Cat\'s Claws').atkBonus === sktSigned(md(r, 'str') + r.sheet.profBonus), JSON.stringify(atk(r, 'Cat\'s Claws')));
+        r = mk('Dhampir');
+        ok('species: the 2024 Dhampir\'s bite adds Constitution to damage (Strength to hit)', atk(r, 'Vampiric Bite').damage === '1d4' + sktSigned(md(r, 'con')) + ' piercing' && atk(r, 'Vampiric Bite').atkBonus === sktSigned(md(r, 'str') + r.sheet.profBonus), JSON.stringify(atk(r, 'Vampiric Bite')));
+        r = mk('Dhampir', '2014');
+        ok('species: the 2014 Dhampir\'s bite uses Constitution to hit and for damage', atk(r, 'Vampiric Bite').damage === '1d4' + sktSigned(md(r, 'con')) + ' piercing' && atk(r, 'Vampiric Bite').atkBonus === sktSigned(md(r, 'con') + r.sheet.profBonus), JSON.stringify(atk(r, 'Vampiric Bite')));
+        r = mk('Lizardfolk'); r = bare();
+        ok('species: Lizardfolk Natural Armor — AC 13 + DEX without armour', r.ac === 13 + md(r, 'dex'), r.ac + ' ' + r.sheet.acDetail);
+        r = mk('Tortle'); r = bare();
+        ok('species: Tortle — AC 17 from the shell, and Shell Defense\'s +4 isn\'t always on', r.ac === 17, r.ac + ' ' + r.sheet.acDetail);
+        r = mk('Warforged');
+        ok('species: Warforged Integrated Protection — +1 AC', /Integrated Protection 1/.test(r.sheet.acDetail), r.sheet.acDetail);
+        r = mk('Harengon');
+        ok('species: Harengon Hare-Trigger — initiative + proficiency bonus', r.init === md(r, 'dex') + r.sheet.profBonus, r.init);
+        r = mk('Hobgoblin');
+        ok('species: Hobgoblin Fey Gift — a bonus-action Help, proficiency bonus times a long rest', (r.resources.find(x => x.name === 'Fey Gift') || {}).max === r.sheet.profBonus);
+        r = mk('Kor', '2014');
+        ok('species: Kor — "you also have a climbing speed of 30 feet"', r.speeds.climb === 30, JSON.stringify(r.speeds));
+        r = mk('Human', '2014', { subspecies: 'Variant; Mark of Finding' });
+        ok('species: Hunter\'s Intuition adds a d4 to Perception and Survival', (r.sheet.rollDice || []).some(x => x.die === 4 && x.on.includes('skill:perception')), JSON.stringify(r.sheet.rollDice));
+        // Spells of the Mark: a list to choose from, not spells you have.
+        CB.build = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 5, species: 'Dwarf', subspecies: 'Mark of Warding', name: 'T', allBooks: true, sources: SKT_ALL_SOURCES });
+        CB.R = R14; cbQuickBuild(); r = again();
+        const g = sktSpeciesSpellGrant(R14, CB.build);
+        ok('Mark spells: the Mark of Warding gives Alarm and Mage Armor, not its whole list', g.spells.length === 2 && g.spells.includes('Mage Armor') && !r.sheet.spells.includes('Antilife Shell'), JSON.stringify(g.spells));
+        ok('Mark spells: its list joins the wizard\'s options (Armor of Agathys at 1st)', sktSpellOptions(R14, CB.build, 1).some(s => s.name === 'Armor of Agathys') && applied(r, 'Spells of the Mark'));
+        // Background features are information.
+        r = mk('Human', '2014');
+        ok('backgrounds: a 2014 background\'s feature is information', (r.sheet.featureList || []).filter(f => f.from === 'background').every(f => f.info) && (r.sheet.featureList || []).some(f => f.from === 'background'));
+        // Natural weapons and AC bonuses read only where they're lasting.
+        r = mk('Human', '2024', { cls: 'Barbarian', subclass: 'Beast', level: 6 });
+        ok('readers: Form of the Beast (a rage\'s weapon) isn\'t a permanent attack row', !atk(r, 'Form of the Beast').name);
+        r = mk('Human', '2024', { cls: 'Sorcerer', subclass: 'Wild Magic', level: 6 });
+        ok('readers: a Wild Magic Surge table\'s +2 AC isn\'t on the sheet', !/Surge/.test(r.sheet.acDetail), r.sheet.acDetail);
+      } catch(e){ ok('round 86 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

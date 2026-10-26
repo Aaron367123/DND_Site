@@ -1513,7 +1513,7 @@ function paRollD20(pc, mod, kind, pick){
   const up = pick === 'adv' || fx.adv.length > 0, down = pick === 'dis' || fx.dis.length > 0;
   const mode = up && !down ? 'adv' : down && !up ? 'dis' : 'normal';
   const sh = pc.sheet || {}, feats = sh.featureList || [];
-  const lucky = feats.some(f => f.name === 'Lucky' && f.from === 'species');
+  const lucky = feats.some(f => (f.name === 'Lucky' || f.name === 'Luck') && f.from === 'species');
   let rerolled = false;
   const die = () => { const x = sktD(20); if (lucky && x === 1){ rerolled = true; return sktD(20); } return x; };
   const a = die(), b = mode === 'normal' ? null : die();

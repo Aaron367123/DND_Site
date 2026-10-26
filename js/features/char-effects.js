@@ -886,6 +886,55 @@
   ['Aberrant', 'Detection', 'Finding', 'Healing', 'Hospitality', 'Making', 'Passage', 'Scribing', 'Shadow', 'Storm'].forEach(k => fn(k === 'Aberrant' ? 'Greater Aberrant Mark' : 'Greater Mark of ' + k,
     ctx => note(ctx, (k === 'Aberrant' ? 'Greater Aberrant Mark' : 'Greater Mark of ' + k) + ': your mark’s intuition die is a d6, and its spell is stronger (see the feat).')));
 
+  // ── Species traits ─────────────────────────────────────────────────────
+  const sn = (names, fn2) => def([].concat(names).map(x => 'species:' + x), fn2);
+  const spName = ctx => String(ctx.build.species || '');
+  // Chosen with the species (the ancestry's damage type drives breath and resistance).
+  sn(['Draconic Ancestry', 'Chromatic Ancestry', 'Gem Ancestry', 'Metallic Ancestry', 'Draconic Resistance', 'Elf Culture', 'Ancestral Legacy', 'Fleet of Foot'], () => {});
+  sn('Savage Attacks', () => {});   // the extra critical die, on the attack rows
+  sn(['Powerful Build', 'Equine Build', 'Little Giant'], ctx => note(ctx, 'Powerful Build: you count as one size larger for carrying, pushing, dragging and lifting' + (/Goliath/.test(spName(ctx)) && ctx.edition === '2024' ? ', and have advantage on checks to end being grappled.' : '.')));
+  sn('Halfling Nimbleness', ctx => note(ctx, 'Halfling Nimbleness: move through the space of any larger creature.'));
+  sn(['Naturally Stealthy', 'Mask of the Wild'], ctx => note(ctx, 'Naturally Stealthy: you can hide behind cover others couldn’t use (a larger creature, or light natural cover).'));
+  sn('Luck', ctx => note(ctx, 'Luck: reroll a 1 on a D20 Test and use the new roll.'));
+  sn('Resourceful', ctx => note(ctx, 'Resourceful: you gain Heroic Inspiration after each long rest.'));
+  sn('Severed from Dreams', ctx => note(ctx, 'Severed from Dreams: dream magic can’t reach you' + (ctx.edition === '2024' ? '; after a long rest, gain proficiency in one skill until the next.' : '.')));
+  sn('Fey Gift', ctx => {
+    if (!/Hobgoblin/.test(spName(ctx))) return note(ctx, 'Fey Gift: you know a cantrip (Friends, or one you swap in after a long rest).');
+    pool(ctx, 'Fey Gift', ctx.pb, 'long');
+    act(ctx, { name: 'Fey Gift', action: 'Bonus Action', resource: 'Fey Gift', amount: 1, feature: 'Fey Gift', desc: 'Take the Help action' + (ctx.level >= 3 ? ', adding Hospitality (temporary hit points), Passage (+10 ft speed) or Spite (disadvantage on an attack).' : '.') });
+  });
+  sn('Unpredictable Movement', ctx => note(ctx, 'Unpredictable Movement: when you roll initiative, move up to half your speed.'));
+  sn(['Sentry\'s Rest', 'Sleepless'], ctx => note(ctx, 'Sentry’s Rest: you don’t sleep; a long rest is six hours of motionless, aware inactivity.'));
+  sn('Tireless', ctx => note(ctx, 'Tireless: no exhaustion from hunger, thirst or suffocation.'));
+  sn(['Gift of the Aetherborn', 'Drain Life'], ctx => note(ctx, 'Drain Life: a melee touch drains life for 1d6 necrotic and heals you that much (once per short rest).'));
+  sn('Healing Machine', ctx => note(ctx, 'Healing Machine: Mending lets you spend a Hit Die to heal; Cure Wounds and similar spells work on you.'));
+  sn('Long-Limbed', ctx => note(ctx, 'Long-Limbed: +5 ft reach on melee attacks on your turn.'));
+  sn(['Psionic Mind', 'Limited Telepathy'], ctx => note(ctx, 'Telepathy: send messages to a creature you can see within 30 ft.'));
+  sn('Thri-kreen Telepathy', ctx => note(ctx, 'Thri-kreen Telepathy: speak telepathically to willing creatures within 120 ft.'));
+  sn(['Unending Breath', 'Hold Breath'], ctx => note(ctx, 'Hold Breath: you can hold your breath a long time (see the trait).'));
+  sn(['Amphibious', 'Limited Amphibiousness'], ctx => note(ctx, 'Amphibious: you breathe air and water.'));
+  sn('Poison Immunity', ctx => { ctx.immune.add('poison'); ctx.immune.add('poisoned'); });
+  sn('Poisonous Skin', ctx => note(ctx, 'Poisonous Skin: a creature touching or grappling you makes a DC 12 Constitution save or is poisoned; poisoned weapons last a turn.'));
+  sn(['Standing Leap', 'Mirthful Leaps'], ctx => note(ctx, 'Leaping: your jumps go farther (see the trait).'));
+  sn('Water Dependency', ctx => note(ctx, 'Water Dependency: an hour immersed in water each day, or a level of exhaustion.'));
+  sn('Hunter\'s Intuition', ctx => ctx.rollDice.push({ on: ['skill:perception', 'skill:survival'], die: 4, label: 'Hunter’s Intuition' }));
+  sn('Expert Duplication', ctx => note(ctx, 'Expert Duplication: advantage on checks to copy writing or craftwork exactly.'));
+  sn('Khenra Twins', ctx => note(ctx, 'Khenra Twins: with your twin in sight, reroll 1s on d20s; without a twin, you can’t be frightened.'));
+  sn('Climbing', () => {});   // the climb speed, from the text
+  sn('Trunk', ctx => note(ctx, 'Trunk: a prehensile trunk with 5 ft reach that lifts five times your Strength in pounds, and works as a snorkel.'));
+  sn('Amorphous', ctx => note(ctx, 'Amorphous: squeeze through a 1-inch gap with nothing carried, and advantage on checks to grapple or escape.'));
+  sn(['Friend of the Sea', 'Emissary of the Sea', 'Speak with Small Beasts'], ctx => note(ctx, 'Animal speech: communicate simple ideas with certain beasts (see the trait).'));
+  sn('Feline Agility', ctx => act(ctx, { name: 'Feline Agility', action: 'Free', feature: 'Feline Agility', desc: 'Double your speed until the end of the turn; you can do it again after a turn of not moving.' }));
+  sn('Secondary Arms', ctx => note(ctx, 'Secondary Arms: two smaller arms that handle objects and light weapons.'));
+  sn('Blood Thirst', ctx => act(ctx, { name: 'Blood Thirst', action: 'Action', feature: 'Blood Thirst', dice: '1d6', desc: 'Bite a willing, grappled, incapacitated or restrained creature: 1 piercing and 1d6 necrotic, and you heal that much.' }));
+  sn('Black Blood Healing', ctx => note(ctx, 'Black Blood Healing: reroll 1s and 2s on Hit Dice you spend.'));
+  sn('Sunlight Sensitivity', ctx => note(ctx, 'Sunlight Sensitivity: disadvantage on attacks and sight-based Perception in direct sunlight.'));
+  sn('Deathless Nature', ctx => {
+    if (!/Reborn/.test(spName(ctx))) return note(ctx, 'Deathless Nature: you don’t need to breathe.');
+    ctx.resist.add('poison'); ctx.rollAdv.push({ on: ['death'], label: 'Deathless Nature' });
+    note(ctx, 'Deathless Nature: advantage on saves against disease and poison; no need to eat, drink, breathe or sleep.');
+  });
+
   // ── On/off states: the sheet's toggles ─────────────────────────────────
   // Each one changes numbers while it's on, the way D&D Beyond's do. A
   // spell's is offered when the character has the spell; turning on a

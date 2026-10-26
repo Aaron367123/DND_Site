@@ -1133,7 +1133,8 @@ function _sktBuildFeaturesOne(build, R){
   }
   const bg = sktBuildBackground(R, build);
   if (bg) _sktTraits(bg.entries).filter(t => /^Feature:/i.test(t.name) || R.edition === '2014')
-    .filter(t => /^Feature:/i.test(t.name)).forEach(t => push(t, 'background', 1));
+    // A background's feature is a story benefit the DM rules on: nothing for the sheet to count.
+    .filter(t => /^Feature:/i.test(t.name)).forEach(t => push(t, 'background', 1, true));
   sktBuildFeatNames(build, R).forEach(n => { const f = sktRulesFeat(R, n); if (f) push(f, 'feat', 1); });
   Object.keys(build.optional || {}).forEach(group => (build.optional[group] || []).forEach(n => {
     const o = R.optional.find(x => x.name === n) || sktRulesFeat(R, n);
@@ -1165,7 +1166,7 @@ function _sktIsHeader(name, from, sub){
                            || / Options$/.test(n) || /improvements?$/i.test(n))) return true;
   if (from === 'subclass' && sub && (n === sub.shortName || n === sub.name || /Options$/.test(n))) return true;
   if (from === 'subclass' && /^(Tenets of |Restriction\b)/.test(n)) return true;
-  if (from === 'species' && /^(Ability Score Increase|Age|Alignment|Size|Speed|Languages|Creature Type|Subrace)$/i.test(n)) return true;
+  if (from === 'species' && /^(Ability Score Increase|Age|Alignment|Size|Speed|Languages?|Creature Type|Subrace)$/i.test(n)) return true;
   return false;
 }
 
@@ -1418,7 +1419,10 @@ function sktSpellOptions(R, build, level){
   let listName = cls.name;
   // Eldritch Knight and Arcane Trickster cast from the wizard list.
   if (!cls.casterProgression && sub && sub.casterProgression) listName = 'Wizard';
-  const extra = sktExpandedSpells(sub, build);
+  const extra0 = sktExpandedSpells(sub, build);
+  // And a species', feat's or option's expanded list (Spells of the Mark).
+  const more = new Set([].concat(((sktSpeciesSpellGrant(R, build) || {}).expanded || []), ...sktFeatSpells(build, R).map(g => g.expanded || [])).map(n => n.toLowerCase()));
+  const extra = s => extra0(s) || more.has(s.name.toLowerCase());
   const lists = [listName].concat(cls.key === 'bard' && R.edition === '2024' && (build.level || 1) >= 10 ? ['Cleric', 'Druid', 'Wizard'] : []);
   return R.spells.filter(s => s.level === level && (lists.some(l => sktSpellOnList(s, l, build)) || extra(s)))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -1531,8 +1535,9 @@ function _sktSpellGrant(R, build, name, spec, ch, hint){
   }
   const picked = Array.isArray(ch.spells) ? ch.spells : [];
   const used = new Set();
-  const choices = [], spells = [], daily = [];
+  const choices = [], spells = [], daily = [], expanded = [];
   if (block) block.items.forEach(it => {
+    if (it.kind === 'expanded'){ if (it.fixed) expanded.push((sktRulesSpell(R, it.fixed) || { name: _sktTitle(it.fixed) }).name); return; }
     if (it.fixed){
       const sp = sktRulesSpell(R, it.fixed);
       const n = sp ? sp.name : _sktTitle(it.fixed);
@@ -1545,7 +1550,7 @@ function _sktSpellGrant(R, build, name, spec, ch, hint){
     choices.push({ filter: it.choose, count: it.count, options, picked: mine, daily: it.daily, minLevel: it.minLevel || 0 });
   });
   const missing = (block ? 0 : 1) + (abilityChoices && !ability ? 1 : 0) + choices.reduce((n, c) => n + Math.max(0, c.count - c.picked.length), 0);
-  return { feat: name, blocks, block, listFixed: blocks.length === 1 || !!hint, ability, abilityChoices, choices, spells, daily, missing };
+  return { feat: name, blocks, block, listFixed: blocks.length === 1 || !!hint, ability, abilityChoices, choices, spells, daily, expanded, missing };
 }
 function sktFeatSpellGrant(R, build, featName){
   const f = sktRulesFeat(R, featName);
@@ -1724,6 +1729,31 @@ function sktPassiveFromText(text, name, ctx){
       did = true; break;
     }
   }
+  // Natural weapons (Talons, Hooves, Bite, Claws): their own attack row.
+  // Not a rage's (Form of the Beast picks its weapon when you rage).
+  if (/unarmed strikes?|natural (?:melee )?weapons?/i.test(t) && !/\brag(?:e|ing)\b/i.test(t) && !(ctx.naturalAttacks || []).some(x => x.name === name)){
+    const nw = /(\d+d\d+)(?: (?:\+|plus) your (Strength|Constitution|Dexterity) modifier)? (slashing|piercing|bludgeoning)/i.exec(t)
+      || /(slashing|piercing|bludgeoning) damage equal to (\d+d\d+)(?: (?:\+|plus) your (Strength|Constitution|Dexterity) modifier)?/i.exec(t);
+    if (nw){
+      const byType = /^\d/.test(nw[1]);
+      // "You add your Constitution modifier, instead of your Strength modifier, to the attack and damage rolls" (a 2014 Dhampir).
+      const inst = /add your (Constitution|Dexterity) modifier, instead of your Strength modifier, to the attack and damage/i.exec(t);
+      const ab = inst ? inst[1] : byType ? nw[2] : nw[3];
+      ctx.naturalAttacks.push({ name, die: byType ? nw[1] : nw[2], ab: ab ? ab.slice(0, 3).toLowerCase() : null, hit: inst ? inst[1].slice(0, 3).toLowerCase() : 'str', type: (byType ? nw[3] : nw[1]).toLowerCase() });
+      did = true;
+    }
+  }
+  // Natural armour: "base AC is 13 + Dexterity modifier", "a base AC of 17", "+1 bonus to Armor Class".
+  { const a = /(?:AC|Armor Class) (?:is|of|as|equals?) (\d+) \+ (?:your )?(Dexterity|Constitution) modifier/i.exec(t);
+    if (a){ ctx.acOptions.push({ label: name, value: +a[1] + ctx.mod[a[2].slice(0, 3).toLowerCase()], noArmor: true, shieldOk: true }); did = true; }
+    const f2 = !a && /base AC of (\d+) \(your Dexterity modifier doesn(?:'|’)t affect/i.exec(t);
+    if (f2){ ctx.acOptions.push({ label: name, value: +f2[1], noArmor: true, shieldOk: true }); did = true; }
+    // A flat bonus only from a species trait, and not one for a while (Shell Defense) or on a table (Wild Surge).
+    const bs = ctx.from === 'species' && !a && !f2 && sents.find(s => /\+\d bonus to (?:your )?(?:Armor Class|AC)\b/i.test(s));
+    const b = bs && !/\b(while|when|if|until|as an? (?:bonus )?action)\b/i.test(bs) && /\+(\d) bonus to/i.exec(bs);
+    if (b){ ctx.acBonus.push({ label: name, value: +b[1] }); did = true; } }
+  // "You can add your proficiency bonus to your initiative rolls" (Hare-Trigger).
+  if (/add your proficiency bonus to your initiative/i.test(t)){ ctx.initBonus += ctx.pb; did = true; }
   // Initiative: "a bonus to your Initiative equal to your Wisdom modifier".
   for (const s of sents){
     const m = /bonus to (?:your )?Initiative(?: rolls)? equal to (?:your )?(Proficiency Bonus|(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) modifier)/i.exec(s);
@@ -1843,7 +1873,7 @@ function sktPassiveGrants(text){
     if ((m = /you have darkvision out to a range of (\d+) feet/i.exec(s)) && lasting(m)) out.darkvision = Math.max(out.darkvision, +m[1]);
     if ((m = /your (?:walking )?speed increases by (\d+) feet/i.exec(s)) && lasting(m)) out.speed += +m[1];
     // "a swimming speed of 40 feet", "a climbing speed and a swimming speed equal to your walking speed".
-    const mv = /you (?:gain|have) an? (swim|fly|climb|burrow)(?:ming|ing)? speed(?: and an? (swim|fly|climb|burrow)(?:ming|ing)? speed)? (?:of (\d+) feet|equal to your (?:walking )?speed)/i;
+    const mv = /you (?:also )?(?:gain|have) an? (swim|fly|climb|burrow)(?:ming|ing)? speed(?: and an? (swim|fly|climb|burrow)(?:ming|ing)? speed)? (?:of (\d+) feet|equal to your (?:walking )?speed)/i;
     if ((m = mv.exec(s)) && lasting(m)) [m[1], m[2]].filter(Boolean).forEach(k => { out.moves[k.toLowerCase()] = m[3] ? +m[3] : 'walk'; });
   });
   out.any = out.resist.length || out.immune.length || out.darkvision || out.speed || out.conditions.length || Object.keys(out.moves).length;
@@ -2255,7 +2285,7 @@ function sktComputeCharacter(build, R, prior){
   const ctx = {
     build, R, edition: R.edition, cls, sub, level: L, pb, abilities,
     mod: {}, acOptions: [], armoredAcBonus: 0, acUnlessHeavy: 0, mediumDexCap: 2,
-    hpPerLevel: 0, hpFlat: 0, unarmedMinDie: null, speedBonus: 0, speedBonusUnlessHeavy: 0, speedBonusUnarmored: 0,
+    hpPerLevel: 0, hpFlat: 0, unarmedMinDie: null, naturalAttacks: [], speedBonus: 0, speedBonusUnlessHeavy: 0, speedBonusUnarmored: 0,
     initBonus: 0, saveBonusAll: _sktItemSum(build, 'bonusSavingThrow'), passiveBonus: { perception: 0, investigation: 0, insight: 0 },
     saveProf: new Set((cls && cls.saves) || []), skillProf: new Set(), expertise: new Set(build.expertise || []),
     armorProf: new Set(), weaponProf: new Set(), weaponPropRules: [], toolProf: new Set(), languages: new Set(),
@@ -2380,6 +2410,7 @@ function sktComputeCharacter(build, R, prior){
       // Species traits and feats too, except a once-a-day spell, which the
       // sheet already casts for free.
       const read = /^(class|subclass|optional|feat|species)$/.test(f.from);
+      ctx.from = f.from;
       if (!fx && !ch && !f.info && read){
         const g = sktPassiveGrants(f.text);
         g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r));
@@ -2387,11 +2418,12 @@ function sktComputeCharacter(build, R, prior){
         if (g.speed) ctx.speedBonus += g.speed;
         g.conditions.forEach(c => ctx.immune.add(c));
         Object.keys(g.moves).forEach(k => { ctx.moveExtra[k] = g.moves[k]; });
+        if (g.any) ctx.applied.add(f.name);
       }
       if (!fx && !ch && !f.info && /^(class|subclass|species|feat|optional)$/.test(f.from) && !/^Channel Divinity:/.test(f.name)
           && !((f.from === 'species' || f.from === 'feat') && /\bcast\b/i.test(f.text || ''))){
         const u = sktUsesFromText(f.text, ctx, f.name);
-        if (u) _fxPool(ctx, f.name, u.max, u.recharge, { auto: true });
+        if (u){ _fxPool(ctx, f.name, u.max, u.recharge, { auto: true }); ctx.applied.add(f.name); }
       }
       if (!fx && (f.from === 'class' || f.from === 'subclass') && f.name !== 'Channel Divinity'
           && (/^Channel Divinity:/.test(f.name) || /(?:using|use|expend (?:a|one) use of) (?:your )?Channel Divinity|as a Channel Divinity option/i.test(f.text || ''))){
@@ -2635,8 +2667,14 @@ function sktComputeCharacter(build, R, prior){
     const any = fc.choices.length || Object.values(fc.fixed).some(v => v.length);
     return !!any && !sktFeatChoicesMissing(R, build, f.name);
   };
+  const spData = species ? [species, subrace].filter(Boolean) : [];
+  const spGives = spData.some(x => ['skills', 'tools', 'weapons', 'armor'].some(k => (x[k] || []).length)) || (build.speciesSkills || []).length;
+  const speciesDone = f => f.from === 'species' && ((/proficien/i.test(f.text || '') && spGives)
+    || (/spell list/i.test(f.text || '') && spGr && spGr.expanded.length)
+    || (/\b(cantrip|spell)\b/i.test(f.text || '') && spGr && spGr.spells.length && !spGr.missing)
+    || (/\bfeat\b/i.test(f.text || '') && /^(Feat|Versatile|Variant Feature)/.test(f.name) && !!build.originFeat));
   const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, text: f.text, info: f.info || undefined,
-    mech: f.mech || (!f.info && (appliedName.has(f.name) || poolFeature(f) || featPicked(f) || givesSpell(f) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
+    mech: f.mech || (!f.info && (appliedName.has(f.name) || poolFeature(f) || featPicked(f) || speciesDone(f) || givesSpell(f) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
   const subName = sub ? sub.shortName : '';
   const speciesLabel = species ? (subrace ? subrace.name + ' ' + species.name : species.name) : '';
   const moveSrc = (subrace && subrace.speed && typeof subrace.speed === 'object') ? subrace.speed : species && species.speed;
@@ -3078,6 +3116,10 @@ function sktBuildAttacks(ctx, gear, sc){
   }
   out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb), str: uab === m.str,
              damage: (uDie ? uDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
+  // A species' natural weapons, each an unarmed strike of its own.
+  (ctx.naturalAttacks || []).forEach(n => { const k = n.ab || 'str';
+    out.push({ name: n.name, atkBonus: sktSigned(m[n.hit || 'str'] + pb), str: (n.hit || 'str') === 'str',
+      damage: n.die + (n.ab ? sktSigned(m[k] + (k === 'str' ? (ctx.rageOn || 0) : 0) + ctx.damageBonusAll) : '') + ' ' + n.type }); });
   if (ctx.psychicBlades){
     const pab = Math.max(m.str, m.dex), pflat = (pab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
     const row = (die, extra) => Object.assign({ name: 'Psychic Blades', atkBonus: sktSigned(pab + pb), str: pab === m.str && pab !== m.dex,

@@ -498,7 +498,8 @@ function csRollD20(label, mod, ev, kind){
   const pcNow = csPc() || {};
   const has = n => ((pcNow.sheet || {}).featureList || []).some(f => f.name === n && !f.info);
   // Halfling Lucky: a 1 on the d20 is rolled again (and the new roll kept).
-  const lucky = has('Lucky') && ((pcNow.sheet || {}).featureList || []).some(f => f.name === 'Lucky' && f.from === 'species');
+  // (2024 halflings call it Luck.)
+  const lucky = ((pcNow.sheet || {}).featureList || []).some(f => (f.name === 'Lucky' || f.name === 'Luck') && f.from === 'species');
   const die = () => { const x = csD(20); return lucky && x === 1 ? (fx._lucky = true, csD(20)) : x; };
   const a = die(), b = mode === 'normal' ? null : die();
   let nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
