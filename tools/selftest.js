@@ -10040,6 +10040,18 @@
            ['Shield', 'Magic Missile', 'Fireball'].every(n => CB.build.spellbook.includes(n)) && CB.build.cantrips.filter(n => dmgC.includes(n)).length === 2, JSON.stringify([CB.build.cantrips, CB.build.spellbook]));
         CB.step = 'review'; cbRender();
         ok('builder: the last step’s footer is marked, so phones can make room for the Create buttons', !!document.querySelector('#cb-root .cb-foot.last .cb-foot-todo.done'));
+        // A spell on an imported sheet with a mark after its name ("[R]") opens its text; one the rules lack says so.
+        { if (document.getElementById('cb-root')) cbClose();
+          const pc = { id: 'imp-sp', name: 'Imp Caster', cls: 'druid', level: 3, race: 'Human', background: 'Sage', abilities: { str: 10, dex: 12, con: 14, int: 10, wis: 16, cha: 8 },
+                       hpMax: 20, ac: 12, sheet: { skills: {}, saves: {}, spells: ['Detect Magic [R]', 'Made-Up Homebrew Spell'] } };
+          state.party.push(pc); openCharSheet('imp-sp', { tab: 'spells' }); for (let i = 0; i < 40 && !(CS && CS.R); i++) await sleep(100); csRender(); await sleep(100);
+          const find = n => [...document.querySelectorAll('#cs-root [data-cs-open^="sp:"]')].find(x => x.getAttribute('data-cs-open') === 'sp:' + n);
+          const open = async n => { const btn = find(n); if (btn){ btn.click(); await sleep(80); } const now = find(n);
+            return (now && now.closest('.cs-spell') && (now.closest('.cs-spell').querySelector('.cs-feat-t') || {}).innerText) || ''; };
+          const t1 = await open('Detect Magic [R]'), t2 = await open('Made-Up Homebrew Spell');
+          ok('spells: "Detect Magic [R]" on an imported sheet opens its rules text', /magic(al effects)? within 30 feet/i.test(t1), t1.slice(0, 80));
+          ok('spells: a spell the rules lack says so, instead of loading forever', /isn.t in the rules data/.test(t2), t2.slice(0, 80));
+          csClose(); state.party = state.party.filter(x => x.id !== 'imp-sp'); }
       } catch(e){ ok('round 88 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();

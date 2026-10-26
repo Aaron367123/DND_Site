@@ -1370,7 +1370,8 @@ function csSpellsHtml(pc){
       return '<div class="cs-spell"><button class="cs-spell-n" data-cs-open="sp:' + csE(n) + '"><b>' + csE(n) + '</b>' + tags
         + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span>' + (from[n] ? '<span class="cs-from">' + csE(from[n]) + '</span>' : '') + '</button>'
         + '<span class="cs-spell-c">' + info + cast + '</span>'
-        + (open ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>') : 'Loading the rules…') + '</div>' : '') + '</div>';
+        + (open ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>')
+          : CS.R ? 'This spell isn’t in the rules data here (a newer book, or homebrew).' : 'Loading the rules…') + '</div>' : '') + '</div>';
     }).join('');
   });
   if (!ro) h += csSlotToolsHtml(pc, lvls, slots);

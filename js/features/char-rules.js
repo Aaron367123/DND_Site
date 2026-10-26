@@ -549,7 +549,8 @@ function sktRulesFeat(R, name){
   return R.feats.find(f => f.name.toLowerCase() === n) || null;
 }
 function sktRulesSpell(R, name){
-  const n = String(name || '').toLowerCase().split('|')[0].replace(/#.*$/, '').trim();
+  // A sheet's marks after the name — "Detect Magic [R]", "Bless (C)", "Shield*" — aren't part of it.
+  const n = String(name || '').toLowerCase().split('|')[0].replace(/#.*$/, '').replace(/(\s*([\[(](?:r|c|ritual|concentration|r, ?c|c, ?r)[\])]|[*†]))+\s*$/i, '').trim();
   return R.spells.find(s => s.name.toLowerCase() === n) || null;
 }
 
