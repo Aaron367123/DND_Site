@@ -109,6 +109,9 @@ function csCommit(){
   if (typeof paRender === 'function' && document.body.classList.contains('player-mode')) { try { paRender(); } catch(e){} }
   csRender();
 }
+// For a toggle or a − / + : pressing it again is the undo, so no toast
+// offers one (Ctrl+Z still works).
+const CS_QUIET = { quiet: true };
 function csEdit(label, fn, undoOpts){
   if (CS.readOnly) return;
   const run = () => { const pc = csPc(); if (pc) fn(pc); csCommit(); };
@@ -944,7 +947,7 @@ function csOnClick(e){
     if (typeof sktUndoable === 'function') return sktUndoable((sign < 0 ? 'Took ' : 'Healed ') + n, run);
     return run();
   }
-  if (d.cs === 'insp') return csEdit(pc.inspiration ? 'Spent Heroic Inspiration' : 'Heroic Inspiration', p => { p.inspiration = !p.inspiration; });
+  if (d.cs === 'insp') return csEdit(pc.inspiration ? 'Spent Heroic Inspiration' : 'Heroic Inspiration', p => { p.inspiration = !p.inspiration; }, CS_QUIET);
   if (d.cs === 'bardic'){
     const die = typeof pc.bardicInspiration === 'string' ? pc.bardicInspiration : (pc.bardicInspiration ? 'd6' : '');
     // None yet: mark it, as with Heroic Inspiration. A bard in the party with
@@ -981,8 +984,8 @@ function csOnClick(e){
     return csRender();
   }
   if (d.csCondinfo != null){ CS.condOpen = CS.condOpen === d.csCondinfo ? null : d.csCondinfo; return csRender(); }
-  if (d.csCond) return csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), d.csCond));
-  if (d.csExh) return csEdit('Exhaustion', p => { p.exhaustion = Math.max(0, Math.min(6, (+p.exhaustion || 0) + (+d.csExh))); });
+  if (d.csCond) return csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), d.csCond), CS_QUIET);
+  if (d.csExh) return csEdit('Exhaustion', p => { p.exhaustion = Math.max(0, Math.min(6, (+p.exhaustion || 0) + (+d.csExh))); }, CS_QUIET);
   if (d.cs === 'death'){
     const r = sktRollDeathSave(pc);
     csLog({ kind: 'd20', label: 'Death save', mod: 0, rolls: [r.nat], natural: r.nat, total: r.nat, mode: 'normal', crit: r.nat === 20, fumble: r.nat === 1 });
@@ -994,7 +997,7 @@ function csOnClick(e){
       const r = p.resources[i]; if (!r) return;
       // Tap a lit pip to spend down to it; an unlit one to get it back.
       r.current = n < (r.current || 0) ? n : n + 1;
-    });
+    }, CS_QUIET);
   }
   if (d.csUse){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csUse); if (!a) return;
@@ -1077,7 +1080,7 @@ function csOnClick(e){
   }
   if (d.csDeltrk != null) return csRebuild('Removed a tracker', b => { b.customResources = (b.customResources || []).filter((x, i) => i !== +d.csDeltrk); });
   if (d.csDelact != null) return csRebuild('Removed an action', b => { b.customActions = (b.customActions || []).filter((x, i) => i !== +d.csDelact); });
-  if (d.cs === 'notheme') return csEdit('Sheet colour', p => { delete p.theme; });
+  if (d.cs === 'notheme') return csEdit('Sheet colour', p => { delete p.theme; }, CS_QUIET);
   if (d.cs === 'addsummon'){
     const sel = document.querySelector('#cs-root [data-cs-sumsel="' + CSS.escape(d.csSumfor || '') + '"]');
     const pc = csPc(), m = sel && pc && csCompanionMonster(pc, sel.value); if (!m) return true;
@@ -1101,7 +1104,7 @@ function csOnClick(e){
   if (d.csExhp){
     const [i, sg] = d.csExhp.split(':').map(Number);
     const n = Math.abs(parseInt((document.querySelector('#cs-root [data-cs-amt]') || {}).value, 10) || 1);
-    return csEdit('Companion HP', p => { const x = p.extras[i]; if (x) x.hp = Math.max(0, Math.min(x.hpMax || 0, (x.hp || 0) + sg * n)); });
+    return csEdit('Companion HP', p => { const x = p.extras[i]; if (x) x.hp = Math.max(0, Math.min(x.hpMax || 0, (x.hp || 0) + sg * n)); }, CS_QUIET);
   }
   if (d.csExdel != null) return csEdit('Removed a companion', p => { p.extras = (p.extras || []).filter((x, i) => i !== +d.csExdel); });
   if (d.cs === 'addxp'){
@@ -1165,10 +1168,10 @@ function csOnChange(e){
   if (!CS) return;
   const t = e.target, d = t.dataset, pc = csPc(); if (!pc) return;
   if ('csDtype' in d){ CS.dtype = t.value; return; }
-  if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; });
+  if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; }, CS_QUIET);
   if (CS.readOnly) return;
-  if ('csAddcond' in d){ if (t.value) csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), t.value)); return; }
-  if ('csStateopt' in d) return csEdit(d.csStateopt + ': ' + t.value, p => { p.active = Object.assign({}, p.active, { [d.csStateopt + ':opt']: t.value }); });
+  if ('csAddcond' in d){ if (t.value) csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), t.value), CS_QUIET); return; }
+  if ('csStateopt' in d) return csEdit(d.csStateopt + ': ' + t.value, p => { p.active = Object.assign({}, p.active, { [d.csStateopt + ':opt']: t.value }); }, CS_QUIET);
   if (typeof csSpellsChange === 'function' && csSpellsChange(e, t, d, pc)) return;
   if (typeof csInventoryChange === 'function' && csInventoryChange(e, t, d, pc)) return;
 }
@@ -1531,7 +1534,7 @@ function csSpellsClick(e, t, d, pc){
       // A lit pip spends down to it; an unlit one gives it back.
       const nowLeft = n < left ? n : n + 1;
       s.expended = Math.max(0, Math.min(s.total, s.total - nowLeft));
-    });
+    }, CS_QUIET);
     return true;
   }
   if (d.csCast){
@@ -2096,7 +2099,7 @@ function csLootClick(d, pc){
     if (CS.readOnly) return true;
     const i = d.csLootqty.lastIndexOf(':'), id = d.csLootqty.slice(0, i), dn = +d.csLootqty.slice(i + 1);
     const run = () => { const L = csLootRead(); const x = L.items.find(y => y.id === id); if (x){ x.qty = Math.max(1, (Math.max(1, +x.qty || 1)) + dn); csLootWrite(L); } csRender(); };
-    if (typeof sktUndoable === 'function') sktUndoable('Quantity', run, { keys: [CS_LOOT_KEY] }); else run();
+    if (typeof sktUndoable === 'function') sktUndoable('Quantity', run, { keys: [CS_LOOT_KEY], quiet: true }); else run();
     return true;
   }
   if (d.csLoottake == null && d.csLootback == null) return false;
@@ -2138,7 +2141,7 @@ function csInventoryClick(e, t, d, pc){
     if (c) csItemsEdit('Charges for ' + it.name, items => { if (items[i]) Object.assign(items[i], c); });
     return true;
   }
-  if (d.csQty){ const [i, n] = d.csQty.split(':').map(Number); csItemsEdit('Quantity', l => { if (l[i]) l[i].qty = Math.max(1, (l[i].qty || 1) + n); }); return true; }
+  if (d.csQty){ const [i, n] = d.csQty.split(':').map(Number); csItemsEdit('Quantity', l => { if (l[i]) l[i].qty = Math.max(1, (l[i].qty || 1) + n); }, CS_QUIET); return true; }
   if (d.csDel != null){ csItemsEdit('Removed an item', l => { l.splice(+d.csDel, 1); }); return true; }
   if (d.cs === 'additem' || d.cs === 'buyitem'){
     const g = csGearFind(CS.q); if (!g) return true;
@@ -2212,7 +2215,7 @@ function csInventoryChange(e, t, d, pc){
       const kind = m => { const k = csGearType(m, CS.R); return /^(LA|MA|HA)$/.test(k) ? 'armor' : k === 'S' ? 'shield' : ''; };
       const k = kind(l[i]);
       if (t.checked && k) l.forEach((m, j) => { if (j !== i && kind(m) === k) m.equipped = false; });
-    });
+    }, CS_QUIET);
     return true;
   }
   if (d.csAttune != null){
@@ -2221,12 +2224,12 @@ function csInventoryChange(e, t, d, pc){
       if (!l[i]) return;
       if (t.checked && l.filter(x => x.reqAttune && x.attuned).length >= 3) return;
       l[i].attuned = t.checked;
-    });
+    }, CS_QUIET);
     return true;
   }
   if (d.csCoin){
     const v = Math.max(0, parseInt(t.value, 10) || 0);
-    csEdit('Coins', p => { if (d.csCoin === 'gp') p.gold = v; else p.coins = Object.assign({}, p.coins, { [d.csCoin]: v }); });
+    csEdit('Coins', p => { if (d.csCoin === 'gp') p.gold = v; else p.coins = Object.assign({}, p.coins, { [d.csCoin]: v }); }, CS_QUIET);
     return true;
   }
   if ('csQ' in d){ CS.q = t.value; CS.qBase = ''; csRender(); return true; }

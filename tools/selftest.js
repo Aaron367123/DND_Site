@@ -9317,6 +9317,62 @@
         loadDomain('party');
       }
     }
+    // -- Round 76: toggles undo themselves (no Undo toast); either edition -------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        state.party = state.party.filter(x => !/^imp_tg/.test(x.id));
+        state.party.push({ id: 'imp_tg1', name: 'Imp Toggle', cls: 'fighter', level: 3, hp: 20, hpMax: 20, ac: 16, abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 10 },
+          inventory: [{ name: 'Longsword', base: 'longsword', qty: 1, weight: 3 }], resources: [{ name: 'Second Wind', current: 2, max: 2, type: 'pool' }],
+          sheet: { profBonus: 2, saves: {}, attacks: [], bio: { features: '' } } });
+        save();
+        openCharSheet('imp_tg1', { tab: 'inventory' }); for (let i = 0; i < 80 && !(CS.R && CS.gear && CS.magic); i++) await sleep(100); csRender(); await sleep(30);
+        document.querySelectorAll('.toast-item').forEach(x => x.remove());
+        const undoToasts = () => [...document.querySelectorAll('.toast-item .toast-action')].filter(b => /undo/i.test(b.textContent)).length;
+        const q = sel => document.querySelector('#cs-root ' + sel);
+        q('[data-cs="insp"]').click(); await sleep(40);
+        q('[data-cs-qty="0:1"]').click(); await sleep(40);
+        { const eq = q('[data-cs-equip="0"]'); eq.checked = false; eq.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); }
+        q('[data-cs-exh="1"]').click(); await sleep(40);
+        q('[data-cs-tab="actions"]').click(); await sleep(40);
+        const pip = q('[data-cs-res^="0:"]'); if (pip) pip.click(); await sleep(40);
+        q('[data-cs-tab="inventory"]').click(); await sleep(40);
+        const pc = () => state.party.find(x => x.id === 'imp_tg1');
+        ok('toasts: a toggle or a − / + (inspiration, quantity, equip, exhaustion, a pip) changes it with no Undo toast',
+           undoToasts() === 0 && pc().inspiration === true && pc().inventory[0].qty === 2 && pc().inventory[0].equipped === false && pc().exhaustion === 1 && pc().resources[0].current < 2,
+           undoToasts() + ' undo toasts; ' + JSON.stringify([pc().inspiration, pc().inventory[0].qty, pc().inventory[0].equipped, pc().exhaustion, pc().resources[0].current]));
+        sktUndo(); await sleep(60);
+        ok('toasts: they\'re still undoable (Ctrl+Z)', pc().resources[0].current === 2);
+        document.querySelectorAll('.toast-item').forEach(x => x.remove());
+        q('[data-cs-del="0"]').click(); await sleep(40);
+        ok('toasts: removing an item — no button brings it back — still offers Undo', undoToasts() === 1);
+        csClose();
+        // A Half-Elf from a 2024 PDF: the Khoravar, and the 2014 book on request.
+        state.party.push({ id: 'imp_tg2', name: 'Imp Halfelf', cls: 'bard', level: 3, race: 'Half-Elf', background: 'Entertainer', hp: 20, hpMax: 20, ac: 12,
+          abilities: { str: 8, dex: 14, con: 12, int: 10, wis: 10, cha: 16 }, feats: [],
+          sheet: { profBonus: 2, saves: {}, skills: {}, attacks: [], bio: { features: '* Bardic Inspiration • PHB-2024 59 \n' } } });
+        save();
+        await openCharBuilder({ idx: state.party.findIndex(x => x.id === 'imp_tg2') });
+        for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100);
+        ok('rebuild: a Half-Elf on a 2024 sheet is the Khoravar, and the review says so', CB.build.edition === '2024' && CB.build.species === 'Khoravar' && (CB.convertNotes || []).some(n => /Khoravar/.test(n)),
+           CB.build.species + ' ' + (CB.convertNotes || []).join(';'));
+        CB.convertDiff = null; await cbSwitchEdition('2014');
+        for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100);
+        ok('rebuild: switching to the 2014 rules rebuilds it from the sheet in that book — the Half-Elf, its class and background kept, not cleared',
+           CB.build.edition === '2014' && CB.build.species === 'Half-Elf' && CB.build.cls === 'Bard' && CB.build.background === 'Entertainer',
+           JSON.stringify([CB.build.edition, CB.build.species, CB.build.cls, CB.build.background]));
+        cbClose();
+        if (state.settings) state.settings.builderEdition = '2024';
+      } catch(e){ ok('round 76 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+        if (state.settings) state.settings.builderEdition = '2024';
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

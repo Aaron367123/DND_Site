@@ -3658,6 +3658,32 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 body.player-app #toast-host:has(.sticky){bottom:calc(72px + env(safe-area-inset-bottom, 0px))}
 .toast-action{background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--r-sm);padding:3px 10px;font-size:var(--fs-sm);font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:.02em}
 .toast-action:hover{filter:brightness(1.1)}
+/* Toasts in the app's own frame: a plaque with pointed ends (the sheet's
+   Initiative and Speed boxes), a rule in the accent with hairlines inside it,
+   an ornament at the start, and the action as a notched chip. The shadow sits
+   on the host: a clipped element can't cast its own. */
+#toast-host{filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+.toast-item{--p:14px; position:relative; isolation:isolate; border:none; border-radius:0; box-shadow:none;
+  padding:9px calc(var(--p) + 8px) 9px calc(var(--p) + 22px); min-height:38px; font-weight:500; letter-spacing:.01em;
+  clip-path:polygon(var(--p) 0, calc(100% - var(--p)) 0, 100% 50%, calc(100% - var(--p)) 100%, var(--p) 100%, 0 50%);
+  background:
+    linear-gradient(var(--fx-hair, rgba(212,165,116,.18)), var(--fx-hair, rgba(212,165,116,.18))) calc(var(--p) + 2px) 4px / calc(100% - 2 * var(--p) - 4px) 1px no-repeat,
+    linear-gradient(var(--fx-hair, rgba(212,165,116,.18)), var(--fx-hair, rgba(212,165,116,.18))) calc(var(--p) + 2px) calc(100% - 4px) / calc(100% - 2 * var(--p) - 4px) 1px no-repeat,
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 88%, var(--accent)), var(--panel));}
+.toast-item::before{content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--accent);
+  clip-path:polygon(evenodd, var(--p) 0, calc(100% - var(--p)) 0, 100% 50%, calc(100% - var(--p)) 100%, var(--p) 100%, 0 50%,
+    calc(var(--p) + .6px) 1.5px, calc(100% - var(--p) - .6px) 1.5px, calc(100% - 1.7px) 50%, calc(100% - var(--p) - .6px) calc(100% - 1.5px), calc(var(--p) + .6px) calc(100% - 1.5px), 1.7px 50%);}
+.toast-item::after{content:'\2726'; position:absolute; left:calc(var(--p) + 4px); top:50%; transform:translateY(-50%); color:var(--accent); font-size:12px; line-height:1;}
+.toast-item.sticky{font-weight:600; --p:16px}
+.toast-item.sticky::before{background:linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #fff), var(--accent))}
+.toast-item.has-action{padding-right:calc(var(--p) + 4px)}
+/* The phone: above the tab bar, never on it, and wide enough that a line of
+   news is a line. */
+body.player-app #toast-host{bottom:calc(72px + env(safe-area-inset-bottom, 0px)); width:calc(100vw - 20px)}
+body.player-app .toast-item{max-width:100%}
+@media (max-width: 768px){ #toast-host{width:calc(100vw - 20px)} .toast-item{max-width:100%} }
+.toast-action{--n:5px; border-radius:0; padding:4px 12px; text-transform:uppercase; letter-spacing:.08em; font-size:var(--fs-2xs); font-weight:800;
+  clip-path:polygon(var(--n) 0, calc(100% - var(--n)) 0, 100% var(--n), 100% calc(100% - var(--n)), calc(100% - var(--n)) 100%, var(--n) 100%, 0 calc(100% - var(--n)), 0 var(--n));}
 /* Keyboard-shortcut help overlay (triggered by `?`). Two-column grid of
    shortcut groups for quick scanning. */
 .help-modal{width:560px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;padding:18px 20px}

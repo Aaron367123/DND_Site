@@ -539,7 +539,7 @@ function showToast(msg, opts){
     victim.remove();
   }
   const t = document.createElement('div');
-  t.className = 'toast-item' + (opts && opts.sticky ? ' sticky' : '');
+  t.className = 'toast-item' + (opts && opts.sticky ? ' sticky' : '') + (opts && opts.action ? ' has-action' : '');
   const safeMsg = typeof msg === 'string' ? msg : String(msg ?? '');
   let timeoutMs = 1800;
   if (opts && opts.action && typeof opts.action.run === 'function'){

@@ -1916,7 +1916,7 @@ function paOnClick(e){
   if (e.target.closest('[data-pa-insp]')){
     const pc = paPc(); if (!pc) return;
     const run = () => { pc.inspiration = false; save(); paRender(); };
-    if (typeof sktUndoable === 'function') sktUndoable('Spent Heroic Inspiration', run); else run();
+    if (typeof sktUndoable === 'function') sktUndoable('Spent Heroic Inspiration', run, { quiet: true }); else run();
     return;
   }
   const cond = e.target.closest('[data-pa-cond]');

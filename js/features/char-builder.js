@@ -70,6 +70,7 @@ async function openCharBuilder(opts){
 // fills whatever is left the way it would for a new character, and the base
 // scores are worked backwards so every ability comes out as on the sheet.
 // The review lists anything that still differs from the PDF.
+const SKT_SPECIES_REPRINT = { 'half-elf': 'Khoravar', 'half elf': 'Khoravar' };
 function cbItemName(n){ const s = String(n || '').trim().toLowerCase(); return s.includes(',') ? s.split(',').map(x => x.trim()).reverse().join(' ') : s; }
 function cbImportEdition(pc){
   const f = String((pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '');
@@ -99,6 +100,12 @@ function cbFromImported(pc){
   const exact = (list, name) => { const n = lc(name); return n ? (list.find(x => lc(x.name) === n) || list.find(x => lc(x.name).replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, ''))) : null; };
   const near = (list, name) => { const n = lc(name); return n ? list.filter(x => n.includes(lc(x.name))).sort((x, y) => y.name.length - x.name.length)[0] || null : null; };
   let sp = exact(R.species, pc.race);
+  // A species the newer books reprinted under another name: the 2014 Half-Elf
+  // is Eberron's Khoravar in the 2024 era (the data's own reprint note).
+  if (!sp && R.edition === '2024' && SKT_SPECIES_REPRINT[lc(pc.race)]){
+    sp = exact(R.species, SKT_SPECIES_REPRINT[lc(pc.race)]);
+    if (sp) notes.push('“' + pc.race + '” is the ' + sp.name + ' in the 2024 books — switch the rules to 2014 on the Basics step to keep the old one');
+  }
   if (!sp && (sp = near(R.species, pc.race))) notes.push('“' + pc.race + '” isn’t in the ' + R.edition + ' rules — ' + sp.name + ' is the closest; check the species step');
   if (sp){ b.species = sp.name; if (sp.core === false) b.allBooks = true; } else if (pc.race) notes.push('Species “' + pc.race + '” isn’t in the rules here — pick one');
   // "Custom Background" (D&D Beyond's own): the builder's custom background,
@@ -710,6 +717,8 @@ function cbSpeciesSkillChoice(sp, sub){
   // 2024 Human: Skillful (one skill); 2024 Elf: Keen Senses (one of three).
   if (CB.R.edition === '2024' && sp.name === 'Human') return { from: Object.keys(SKT_SKILLS), count: 1 };
   if (CB.R.edition === '2024' && sp.name === 'Elf') return { from: ['insight', 'perception', 'survival'], count: 1 };
+  // Eberron's Khoravar (the 2024 half-elf): Skill Versatility, one skill (or tool).
+  if (sp.name === 'Khoravar' && (sp.entries || []).some(e => e && e.name === 'Skill Versatility')) return { from: Object.keys(SKT_SKILLS), count: 1 };
   return null;
 }
 
@@ -1971,6 +1980,14 @@ async function cbSwitchEdition(ed){
   CB.build = Object.assign(sktBlankBuild(ed), keep);
   if (state.settings){ state.settings.builderEdition = ed; save(); }
   await cbLoad(ed);
+  // Rebuilding an imported character: the choices come from its sheet again,
+  // in the other book, rather than being cleared.
+  const from = CB && CB.convertFrom && state.party.find(p => p.id === CB.convertFrom);
+  if (from && CB.R && !CB.error){
+    CB.build = sktBlankBuild(ed);
+    try { cbFromImported(from); } catch(e){ CB.error = 'Couldn\u2019t read ' + from.name + '\u2019s sheet into the builder (' + e.message + ').'; }
+    cbRender();
+  }
 }
 
 // ── Saving ───────────────────────────────────────────────────────────────────

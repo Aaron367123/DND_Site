@@ -5427,7 +5427,7 @@ registerPanel('battlemap',{
           const k = idxOf(); if (k < 0) return;
           const nm = state.combatants[k].name;
           const act = () => C._toggleCondAtIdx(k, d.name);
-          if (typeof sktUndoable === 'function') sktUndoable(nm + ' \u2014 ' + d.name + (have.has(d.name) ? ' removed' : ' added'), act);
+          if (typeof sktUndoable === 'function') sktUndoable(nm + ' \u2014 ' + d.name + (have.has(d.name) ? ' removed' : ' added'), act, { quiet: true });
           else act();
           paintHp(); this._renderTokens();
         }}));
