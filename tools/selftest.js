@@ -9977,6 +9977,13 @@
         cbQuickBuild(); r = sktComputeCharacter(CB.build, R);
         const sav = [].concat(...sktSubclassSpellGrants(CB.build, R)[0].choices.map(c => c.picked)).filter(n => (sktRulesSpell(R, n) || {}).level > 0);
         ok('Savant: a 2024 Abjurer\'s free spells are written in the spellbook, not prepared', sav.length >= 2 && sav.every(n => r.sheet.spellbook.includes(n) && !r.sheet.spells.includes(n)), JSON.stringify(sav));
+        // Customize on an imported sheet: its colour, and the way to the rest.
+        { const imp = state.party.find(x => !x.build && !x.foe);
+          if (imp){ if (document.getElementById('cb-root')) cbClose(); openCharSheet(imp.id); await sleep(200);
+            const btn = document.querySelector('#cs-root [data-cs="customize"]'); if (btn){ btn.click(); await sleep(80); }
+            const panel = document.querySelector('#cs-root .cs-custom');
+            ok('customize: an imported sheet opens Customize with its colour and a Rebuild button', !!btn && !!panel && !!panel.querySelector('[data-cs-theme]') && !!panel.querySelector('[data-cs="convert"]'));
+            csClose(); } }
       } catch(e){ ok('round 87 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();

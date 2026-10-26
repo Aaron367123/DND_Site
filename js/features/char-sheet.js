@@ -158,7 +158,7 @@ function csHead(pc){
     + '<div class="cs-headbtns">'
     + (ro ? '' : '<button class="btn" data-cs="short">💤 Short rest</button><button class="btn" data-cs="long">🛌 Long rest</button>')
     + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
-    + (!ro && pc.build ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
+    + (!ro && !pc.foe ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
     + (!ro && !pc.build && !pc.foe && typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="convert" title="Fill in the builder\u2019s choices from this sheet, so it can be levelled and edited like one made there">⇪ Rebuild in the builder</button>' : '')
     + '<button class="btn" data-cs="print" title="Print the sheet, or save it as a PDF">🖨 Print</button>'
     + '<span class="cs-exwrap"><button class="btn" data-cs="exportmenu" aria-haspopup="true" aria-expanded="' + !!CS.exportOpen + '" title="Save or share the character">⤓ Export ▾</button>'
@@ -179,7 +179,7 @@ function csHeadMenuHtml(pc, ready){
   return '<div class="cs-headmenu" role="menu">'
     + (ro ? '' : item('short', '💤', 'Short rest') + item('long', '🛌', 'Long rest'))
     + (!ro && built && typeof openCharBuilder === 'function' ? item('levelup', '⬆', 'Level up' + (ready ? ' — ready' : ''), (pc.build.level || 1) >= 20 ? ' disabled' : '') + item('edit', '✎', 'Edit') : '')
-    + (!ro && built ? item('customize', '⚙', 'Customize') : '')
+    + (!ro && !pc.foe ? item('customize', '⚙', 'Customize') : '')
     + (!ro && !built && !pc.foe && typeof openCharBuilder === 'function' ? item('convert', '⇪', 'Rebuild in the character builder') : '')
     + item('print', '🖨', 'PDF / print') + item('export', '⤓', 'Character file') + item('copytext', '📋', 'Copy as text')
     + (CS.embed ? '<button role="menuitem" data-pa-swap="1"><span class="cs-hm-i">⇄</span>Play a different character</button>' : '')
@@ -2264,6 +2264,12 @@ const CS_OV = [['ac', 'Armor Class'], ['init', 'Initiative'], ['speed', 'Speed (
                ['spellAttack', 'Spell attack'], ['spellDc', 'Spell save DC'], ['passive', 'Passive Perception']];
 function csCustomizeOpen(){ CS.customize = !CS.customize; csRender(); }
 function csCustomizeHtml(pc){
+  // An imported sheet has no rules working its numbers out to add to: its
+  // colour can change, and rebuilding it in the builder opens the rest.
+  if (!pc.build) return '<div class="cs-custom"><h4>Customize <button class="btn small" data-cs="customize">Done</button></h4>'
+    + '<label class="cs-kv"><span>Sheet colour</span><input type="color" data-cs-theme value="' + csE(pc.theme || '#c8a26b') + '"><button class="btn small" data-cs="notheme">Default</button></label>'
+    + '<div class="cb-dim">Bonuses, numbers set outright and proficiency levels work on what the rules calculate. This sheet was imported, so its numbers are fixed as they came in — rebuild it in the character builder (it keeps your choices, items and hit points) to customize it.</div>'
+    + (typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="convert">⇪ Rebuild in the builder</button>' : '') + '</div>';
   const o = (pc.build && pc.build.overrides) || {};
   const num = (k, v) => '<input type="number" step="1" data-cs-ov="' + k + '" value="' + (v || 0) + '">';
   return '<div class="cs-custom"><h4>Customize <button class="btn small" data-cs="customize">Done</button></h4>'
