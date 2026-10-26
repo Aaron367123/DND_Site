@@ -9824,6 +9824,70 @@
         if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
       }
     }
+    // -- Round 85: picked options and feats ----------------------------------
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, ed, extra) => {
+          CB.build = Object.assign(sktBlankBuild(ed || '2024'), { cls, level: L, subclass: sub, species: 'Human', background: 'Soldier', originFeat: 'Tough', name: 'T', sources: SKT_ALL_SOURCES }, ed === '2014' ? { allBooks: true } : {}, extra || {});
+          CB.R = ed === '2014' ? R14 : R; cbQuickBuild(); return sktComputeCharacter(CB.build, CB.R);
+        };
+        const again = () => sktComputeCharacter(CB.build, CB.R);
+        const md = (r, k) => Math.floor((r.abilities[k] - 10) / 2);
+        const act = (r, n) => (r.sheet.activations || []).find(a => a.name === n) || {};
+        const pool = (r, n) => r.resources.find(x => x.name === n) || {};
+        const applied = (r, n) => (r.sheet.featureList || []).some(f => f.name === n && f.mech);
+        const pick = (group, names) => { const o = sktOptionalChoices(CB.build, CB.R).find(x => x.name === group); CB.build.optional = Object.assign({}, CB.build.optional, { [group]: names }); return again(); };
+        // Options become actions that spend their pool.
+        let r = mk('Fighter', 'Battle Master', 3); r = pick('Maneuvers', ['Trip Attack', 'Riposte', 'Precision Attack']);
+        ok('options: Trip Attack spends a Superiority Die and rolls it (1d8 at 3rd); Riposte is a reaction',
+           act(r, 'Trip Attack').resource === 'Superiority Dice' && act(r, 'Trip Attack').dice === '1d8' && act(r, 'Riposte').action === 'Reaction', JSON.stringify([act(r, 'Trip Attack'), act(r, 'Riposte').action]));
+        r = mk('Sorcerer', 'Draconic', 3); const mmGroup = sktOptionalChoices(CB.build, R).find(o => (o.types || []).includes('MM')).name; r = pick(mmGroup, ['Quickened Spell', 'Twinned Spell']);
+        ok('options: Quickened Spell is a bonus action costing 2 sorcery points', act(r, 'Quickened Spell').action === 'Bonus Action' && act(r, 'Quickened Spell').resource === 'Sorcery Points' && act(r, 'Quickened Spell').amount === 2, JSON.stringify(act(r, 'Quickened Spell')));
+        r = mk('Monk', 'Four Elements', 6, '2014'); r = pick('Elemental Disciplines', ['Elemental Attunement', 'Fangs of the Fire Snake', 'Water Whip']);
+        ok('options: Water Whip spends 2 ki (Focus Points) and rolls 3d10', act(r, 'Water Whip').resource === 'Focus Points' && act(r, 'Water Whip').amount === 2 && act(r, 'Water Whip').dice === '3d10', JSON.stringify(act(r, 'Water Whip')));
+        r = mk('Fighter', 'Arcane Archer', 3, '2014'); r = pick('Arcane Shots', ['Grasping Arrow', 'Piercing Arrow']);
+        ok('options: Grasping Arrow spends an Arcane Shot use for 2d6 poison, with the save DC, and isn\'t always-on extra damage',
+           act(r, 'Grasping Arrow').resource === 'Arcane Shot' && act(r, 'Grasping Arrow').dice === '2d6 poison' && /save DC \d+/.test(act(r, 'Grasping Arrow').desc) && !(r.sheet.extraDamage || []).some(x => x.label === 'Grasping Arrow'), JSON.stringify(act(r, 'Grasping Arrow')));
+        r = mk('Fighter', 'Arcane Archer', 18, '2014'); r = pick('Arcane Shots', ['Grasping Arrow']);
+        ok('options: and 4d6 at 18th level', act(r, 'Grasping Arrow').dice === '4d6 poison');
+        r = mk('Fighter', 'Rune Knight', 3, '2014'); r = pick('Runes', ['Fire Rune', 'Stone Rune']);
+        ok('options: each rune is invoked once a short rest', pool(r, 'Fire Rune').max === 1 && pool(r, 'Fire Rune').recharge === 'short' && act(r, 'Stone Rune').resource === 'Stone Rune');
+        r = mk('Fighter', 'Rune Knight', 15, '2014'); r = pick('Runes', ['Fire Rune']);
+        ok('options: twice with Master of Runes at 15th', pool(r, 'Fire Rune').max === 2);
+        // Invocations.
+        r = mk('Warlock', 'Fiend', 12, '2014'); const ei = sktOptionalChoices(CB.build, R14).find(o => (o.types || []).includes('EI')).name;
+        r = pick(ei, ['Armor of Shadows', 'Tomb of Levistus', 'Thirsting Blade', 'Witch Sight', 'Beguiling Influence', 'Eldritch Smite']);
+        ok('invocations: Armor of Shadows gives Mage Armor', r.sheet.spells.includes('Mage Armor'));
+        ok('invocations: Tomb of Levistus is a reaction once a short rest', pool(r, 'Tomb of Levistus').max === 1 && act(r, 'Tomb of Levistus').action === 'Reaction');
+        ok('invocations: Thirsting Blade two attacks, Witch Sight truesight 30, Beguiling Influence Deception and Persuasion',
+           r.sheet.attacksPerAction === 2 && /Truesight 30/.test(r.sheet.senses) && r.sheet.skills.deception >= md(r, 'cha') + r.sheet.profBonus && r.sheet.skills.persuasion >= md(r, 'cha') + r.sheet.profBonus, JSON.stringify([r.sheet.attacksPerAction, r.sheet.senses]));
+        ok('invocations: Eldritch Smite is an action, not a flat 1d8 on every hit', act(r, 'Eldritch Smite').name && !(r.sheet.extraDamage || []).some(x => x.label === 'Eldritch Smite'));
+        r = mk('Artificer', '', 3); const plans = sktOptionalChoices(CB.build, R).find(o => (o.types || []).includes('EFA:Plan'));
+        if (plans){ r = again(); ok('options: a 2024 Artificer\'s magic item plans are information (the item does the work)', (r.sheet.featureList || []).filter(f => f.from === 'optional').every(f => f.info)); }
+        // A failing effect doesn't hide: features see their class level.
+        r = mk('Barbarian', 'World Tree', 3);
+        ok('features: an effect can read the class level while features apply (no "Could not apply")', !(r.sheet.notes || []).some(n => /^Could not apply/.test(n)) && (r.sheet.notes || []).some(n => /Vitality of the Tree: entering your rage gives 3 /.test(n)));
+        // Feats.
+        const feat = (ed, name, cls) => { r = mk(cls || 'Fighter', '', 4, ed, { asi: { 4: { type: 'feat', feat: name } } }); return r; };
+        r = feat('2024', 'Tavern Brawler'); CB.build.items = []; CB.build.equipment = { materialized: true }; r = again();
+        ok('feats: Tavern Brawler — unarmed strikes roll 1d4', /^1d4/.test(((r.sheet.attacks || []).find(a => a.name === 'Unarmed Strike') || {}).damage || ''));
+        r = feat('2024', 'Boon of Fortitude'); const fort = r.hpMax; CB.build.asi = {}; r = again();
+        ok('feats: Boon of Fortitude — 40 more hit points', fort - r.hpMax === 40, fort + ' vs ' + r.hpMax);
+        r = feat('2014', 'Dragon Hide'); CB.build.items = []; CB.build.equipment = { materialized: true }; r = again();
+        ok('feats: Dragon Hide — AC 13 + DEX without armour', r.ac === 13 + md(r, 'dex'), r.ac);
+        r = feat('2024', 'Athlete'); ok('feats: 2024 Athlete — a climb speed', r.speeds.climb === r.speeds.walk);
+        r = feat('2024', 'Boon of Truesight'); ok('feats: Boon of Truesight — truesight 60', /Truesight 60/.test(r.sheet.senses));
+        r = feat('2014', 'Skill Expert'); ok('feats: Skill Expert reads as applied once its skills are picked', applied(r, 'Skill Expert'));
+        CB.build.featChoices = {}; r = again(); ok('feats: and not before', !applied(r, 'Skill Expert'));
+        r = feat('2014', 'Martial Adept');
+        ok('feats: Martial Adept — its maneuvers are picked and spend superiority dice', applied(r, 'Martial Adept') && (r.sheet.activations || []).some(a => a.resource === 'Superiority Dice'));
+      } catch(e){ ok('round 85 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

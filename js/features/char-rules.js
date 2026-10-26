@@ -388,7 +388,7 @@ async function _sktRulesBuild(edition, read){
     R.optional.push({ name: o.name, source: o.source,
                       core: o.source === src || (o.featureType || []).some(t => classOwn.has(o.source + '|' + t)),
                       featureType: o.featureType || [], prerequisite: o.prerequisite || null,
-                      entries: o.entries || [] });
+                      additionalSpells: o.additionalSpells || null, entries: o.entries || [] });
   });
 
   // The 2024 Artificer's magic item plans. The book prints them as tables in
@@ -1137,7 +1137,7 @@ function _sktBuildFeaturesOne(build, R){
   sktBuildFeatNames(build, R).forEach(n => { const f = sktRulesFeat(R, n); if (f) push(f, 'feat', 1); });
   Object.keys(build.optional || {}).forEach(group => (build.optional[group] || []).forEach(n => {
     const o = R.optional.find(x => x.name === n) || sktRulesFeat(R, n);
-    if (o) push(o, 'optional', 1);
+    if (o) push(o, 'optional', 1, (o.featureType || []).includes('EFA:Plan'));
   }));
   return out;
 }
@@ -1571,7 +1571,14 @@ function sktSpeciesSpellGrant(R, build){
   return g;
 }
 function sktFeatSpells(build, R){
-  return sktBuildFeatNames(build, R).map(n => sktFeatSpellGrant(R, build, n)).filter(Boolean).concat(sktSubclassSpellGrants(build, R));
+  return sktBuildFeatNames(build, R).map(n => sktFeatSpellGrant(R, build, n)).filter(Boolean).concat(sktSubclassSpellGrants(build, R), sktOptionalSpellGrants(build, R));
+}
+// Spells a picked option gives: an invocation's at-will spell (Armor of
+// Shadows, Mask of Many Faces), a 2024 Blessed Warrior's cantrips.
+function sktOptionalSpellGrants(build, R){
+  const names = [...new Set([].concat(...Object.values(build.optional || {})))];
+  return names.map(n => R.optional.find(x => x.name === n) || sktRulesFeat(R, n)).filter(o => o && Array.isArray(o.additionalSpells) && o.additionalSpells.length)
+    .map(o => _sktSpellGrant(R, build, o.name, o.additionalSpells, (build.featChoices || {})[o.name] || {}, ''));
 }
 // Spells a subclass lets the character pick: the Arcana Domain's wizard
 // cantrips, a Nature cleric's druid cantrip, the Lore bard's Additional
@@ -2248,7 +2255,7 @@ function sktComputeCharacter(build, R, prior){
   const ctx = {
     build, R, edition: R.edition, cls, sub, level: L, pb, abilities,
     mod: {}, acOptions: [], armoredAcBonus: 0, acUnlessHeavy: 0, mediumDexCap: 2,
-    hpPerLevel: 0, speedBonus: 0, speedBonusUnlessHeavy: 0, speedBonusUnarmored: 0,
+    hpPerLevel: 0, hpFlat: 0, unarmedMinDie: null, speedBonus: 0, speedBonusUnlessHeavy: 0, speedBonusUnarmored: 0,
     initBonus: 0, saveBonusAll: _sktItemSum(build, 'bonusSavingThrow'), passiveBonus: { perception: 0, investigation: 0, insight: 0 },
     saveProf: new Set((cls && cls.saves) || []), skillProf: new Set(), expertise: new Set(build.expertise || []),
     armorProf: new Set(), weaponProf: new Set(), weaponPropRules: [], toolProf: new Set(), languages: new Set(),
@@ -2359,6 +2366,7 @@ function sktComputeCharacter(build, R, prior){
   // barbarian, whatever else the character is).
   const partOf = {};
   parts.forEach(p => { const c = sktRulesClass(R, p.cls); if (c) partOf[c.key] = { level: p.level, cls: c, sub: sktRulesSubclass(c, p.subclass) }; });
+  ctx.classLevel = key => (parts.find(p => p.key === key) || {}).level || 0;
   features.forEach(f => {
     if (f.info) return;
     const p = f.cls && partOf[f.cls];
@@ -2371,7 +2379,8 @@ function sktComputeCharacter(build, R, prior){
       const ch = sktFeatureChoice(f.name, f.from, R.edition, key) || f.optionSpec;
       // Species traits and feats too, except a once-a-day spell, which the
       // sheet already casts for free.
-      if (!fx && !ch && !f.info && (f.from === 'class' || f.from === 'subclass')){
+      const read = /^(class|subclass|optional|feat|species)$/.test(f.from);
+      if (!fx && !ch && !f.info && read){
         const g = sktPassiveGrants(f.text);
         g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r));
         if (g.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, g.darkvision);
@@ -2379,7 +2388,7 @@ function sktComputeCharacter(build, R, prior){
         g.conditions.forEach(c => ctx.immune.add(c));
         Object.keys(g.moves).forEach(k => { ctx.moveExtra[k] = g.moves[k]; });
       }
-      if (!fx && !ch && !f.info && /^(class|subclass|species|feat)$/.test(f.from) && !/^Channel Divinity:/.test(f.name)
+      if (!fx && !ch && !f.info && /^(class|subclass|species|feat|optional)$/.test(f.from) && !/^Channel Divinity:/.test(f.name)
           && !((f.from === 'species' || f.from === 'feat') && /\bcast\b/i.test(f.text || ''))){
         const u = sktUsesFromText(f.text, ctx, f.name);
         if (u) _fxPool(ctx, f.name, u.max, u.recharge, { auto: true });
@@ -2399,12 +2408,12 @@ function sktComputeCharacter(build, R, prior){
       const xf = !f.info && sktFeatureExtra(f.name, f.from, key);
       if (xf){ try { xf(ctx); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
       // An ability used in play, read from its text (beside whatever else it does).
-      if (!fx && !f.info && (f.from === 'class' || f.from === 'subclass') && !ctx.actions.some(a => a.name === f.name || a.feature === f.name)){
+      if (!fx && !f.info && read && !ctx.actions.some(a => a.name === f.name || a.feature === f.name)){
         const a = sktActivationFromText(f.text, f.name, ctx);
         if (a) _fxAction(ctx, Object.assign(a, { feature: f.name, auto: true }));
       }
       // And what it adds without being used: damage on a hit, initiative, advantage on checks.
-      if (!fx && !f.info && (f.from === 'class' || f.from === 'subclass') && sktPassiveFromText(f.text, f.name, ctx)) ctx.applied.add(f.name);
+      if (!fx && !f.info && read && sktPassiveFromText(f.text, f.name, ctx)) ctx.applied.add(f.name);
     } finally { [ctx.level, ctx.cls, ctx.sub] = was; }
   });
   // Primal Champion and the like raise a score after everything else.
@@ -2443,7 +2452,6 @@ function sktComputeCharacter(build, R, prior){
   // numbers below.
   ctx.knows = new Set(spellNames);
   ctx.featureNames = new Set(features.filter(f => !f.info).map(f => f.name));
-  ctx.classLevel = key => (parts.find(p => p.key === key) || {}).level || 0;
   const states = _sktStates(ctx, prior);
   states.forEach(x => { if (x.on && x.s.apply){ try { x.s.apply(ctx, x.value); } catch(e){ ctx.notes.push('Could not apply ' + x.s.label + ': ' + e.message); } } });
 
@@ -2483,6 +2491,8 @@ function sktComputeCharacter(build, R, prior){
   if (parts[0].level > 1) hpBits.push((cls ? cls.name : 'Class') + ' levels 2–' + parts[0].level + ': ' + (build.hp && build.hp.method === 'rolled' ? 'rolled' : (parts[0].level - 1) + ' × ' + (Math.floor(hd / 2) + 1)) + ' ' + conS + ' each');
   parts.slice(1).forEach(p => { const h2 = (sktRulesClass(R, p.cls) || {}).hd || 8; hpBits.push(_sktTitle(p.cls) + ' ' + p.level + ' × ' + (Math.floor(h2 / 2) + 1) + ' ' + conS); });
   if (ctx.hpPerLevel) hpBits.push('+' + ctx.hpPerLevel + ' a level (' + L + ')');
+  // A flat bonus (Boon of Fortitude's 40).
+  if (ctx.hpFlat){ hpMax += ctx.hpFlat; hpBits.push('+' + ctx.hpFlat); }
   let hpDetail = hpBits.join(' · ') + ' = ' + hpMax;
   // The table's own number (D&D Beyond's "Manual" hit points).
   if (build.hp && build.hp.method === 'manual' && +build.hp.manual > 0){ hpMax = Math.floor(+build.hp.manual); hpDetail = 'Entered by hand: ' + hpMax; }
@@ -2603,19 +2613,30 @@ function sktComputeCharacter(build, R, prior){
   // A subclass feature that gives spells ("Gloom Stalker Magic", "Animal
   // Speaker") is applied when the spells it names are the character's.
   const words = t => ' ' + String(t || '').toLowerCase().replace(/[^a-z']+/g, ' ') + ' ';
-  const granted = sktBuildAlwaysPrepared(build, R).map(n => words(n));
+  const grants = sktFeatSpells(build, R), spGr = sktSpeciesSpellGrant(R, build);
+  const granted = sktBuildAlwaysPrepared(build, R).concat(...grants.map(g => g.spells), (spGr && spGr.spells) || []).map(n => words(n));
+  const grantedBy = new Set(grants.filter(g => g.spells.length && !g.missing).map(g => g.feat));
   // Or one at the level of a spell choice that's been made (Bonus Cantrip).
   const pickedAt = new Set([].concat(...sktSubclassSpellGrants(build, R).map(g => g.choices.filter(c => c.picked.length).map(c => Math.max(c.minLevel || 1, (cls && cls.subclassLevel) || 1)))));
-  const givesSpell = f => f.from === 'subclass' && ((/\b(learn|know|cast|gain)\b/i.test(f.text || '') && granted.some(n => words(f.text).includes(n)))
-    || (/\b(cantrips?|spells?)\b/i.test(f.text || '') && pickedAt.has(f.level)));
+  const givesSpell = f => ((f.from === 'feat' || f.from === 'optional') && grantedBy.has(f.name))
+    || (/^(subclass|feat|optional|species)$/.test(f.from) && /\b(learn|know|cast|gain)\b/i.test(f.text || '') && granted.some(n => words(f.text).includes(n)))
+    || (f.from === 'subclass' && /\b(cantrips?|spells?)\b/i.test(f.text || '') && pickedAt.has(f.level));
   // Named for the pool's last word ("Arcane Shots" → shot): the feature that
   // opens it (Rune Carver), or one that grows it (Additional Rune Known) —
   // not another feature at that level (Master of Runes).
   const poolFeature = f => pools.some(p => picked(p.name) && (f.name === p.name
     || (p.from === f.from && f.name.toLowerCase().includes(p.name.split(' ').pop().replace(/s$/, '').toLowerCase())
         && (f.level === Math.min(...p.levels) || (p.levels.has(f.level) && /^(Additional|Extra)\b/.test(f.name))))));
+  const featPicked = f => {
+    if (f.from !== 'feat') return false;
+    const ft = sktRulesFeat(R, f.name); if (!ft) return false;
+    if ((ft.optionalProgression || []).some(p => picked(p.name))) return true;
+    const fc = sktFeatChoices(R, build, f.name);
+    const any = fc.choices.length || Object.values(fc.fixed).some(v => v.length);
+    return !!any && !sktFeatChoicesMissing(R, build, f.name);
+  };
   const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, text: f.text, info: f.info || undefined,
-    mech: f.mech || (!f.info && (appliedName.has(f.name) || poolFeature(f) || givesSpell(f) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
+    mech: f.mech || (!f.info && (appliedName.has(f.name) || poolFeature(f) || featPicked(f) || givesSpell(f) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
   const subName = sub ? sub.shortName : '';
   const speciesLabel = species ? (subrace ? subrace.name + ' ' + species.name : species.name) : '';
   const moveSrc = (subrace && subrace.speed && typeof subrace.speed === 'object') ? subrace.speed : species && species.speed;
@@ -2731,7 +2752,8 @@ function sktComputeCharacter(build, R, prior){
       acDetail: acSet != null ? 'Set on the sheet: ' + ac : acParts.join(' + ') + (add('ac') ? ' + custom ' + add('ac') : '') + ' = ' + ac,
       hpDetail: hpSet != null && hpSet > 0 ? 'Set on the sheet: ' + hpMax : hpDetail + (add('hpMax') ? ' ' + (add('hpMax') > 0 ? '+' : '') + add('hpMax') + ' custom' : ''),
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
-               ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].concat(extraSenses).filter(Boolean).join(', '),
+               ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : '',
+               ctx.senses.truesight ? 'Truesight ' + ctx.senses.truesight + ' ft.' : ''].concat(extraSenses).filter(Boolean).join(', '),
       bio: { features: featureList.map(f => '* ' + f.name + '\n' + f.text).join('\n\n') },
     },
   };
@@ -3047,6 +3069,8 @@ function sktBuildAttacks(ctx, gear, sc){
   const uab = ctx.martialArts || dance ? Math.max(m.str, m.dex) : m.str;
   const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
   let uDie = ctx.martialArts && dance ? (_sktDieAvg(ctx.bardicUnarmed) > _sktDieAvg(ctx.martialArtsDie) ? ctx.bardicUnarmed : ctx.martialArtsDie) : ctx.martialArts ? ctx.martialArtsDie : dance ? '1' + ctx.bardicUnarmed : null;
+  // A bigger unarmed die from a feat (Tavern Brawler's d4).
+  if (ctx.unarmedMinDie && (!uDie || _sktDieAvg(ctx.unarmedMinDie) > _sktDieAvg(uDie))) uDie = ctx.unarmedMinDie;
   // Unarmed Fighting: a d6, or a d8 with no weapon or shield in hand.
   if (ctx.unarmedFighting){
     const ud = gear && (gear.shield || (gear.weapons || []).length) ? '1d6' : '1d8';

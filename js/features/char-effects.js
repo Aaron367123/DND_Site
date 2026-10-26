@@ -749,6 +749,143 @@
   n('subclass:artificer:Armor Modifications', ctx => note(ctx, 'Armor Modifications: your Arcane Armor counts as four items for infusions (chest, boots, helmet, weapon), and you can infuse two more items if they’re armour parts.'));
   n('subclass:artificer:Perfected Armor', ctx => note(ctx, 'Perfected Armor: your armour model’s weapon hits harder and gains a new power (see the model).'));
 
+  // ── Options: arcane shots, runes, invocations ─────────────────────────
+  // Arcane Shot options spend an Arcane Shot use; their dice grow at 18th level.
+  const optText = (ctx, name) => { const o = (ctx.R && ctx.R.optional || []).find(x => x.name === name); return o ? sktRulesText(o.entries) : ''; };
+  ['Banishing Arrow', 'Beguiling Arrow', 'Bursting Arrow', 'Enfeebling Arrow', 'Grasping Arrow', 'Piercing Arrow', 'Seeking Arrow', 'Shadow Arrow'].forEach(nm => def('optional:' + nm, ctx => {
+    const t = optText(ctx, nm).replace(/\s+/g, ' '), L = ctx.classLevel('fighter') || ctx.level;
+    let dice = (/(\d+d\d+)/.exec(t) || [])[1] || null;
+    const up = /increases? to (\d+d\d+) (?:when you reach|at) 18th level/i.exec(t); if (up && L >= 18) dice = up[1];
+    const type = (/\d+d\d+ (acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)/i.exec(t) || [])[1];
+    act(ctx, { name: nm, action: 'Free', resource: ctx.resources.some(r => r.name === 'Arcane Shot') ? 'Arcane Shot' : undefined, amount: 1, feature: nm,
+      dice: dice ? dice + (type ? ' ' + type.toLowerCase() : '') : undefined,
+      desc: 'Arcane Shot (save DC ' + (8 + ctx.pb + ctx.mod.int) + '): ' + t.split(/(?<=\.)\s+/).slice(0, 2).join(' ') });
+  }));
+  // A rune is invoked once between rests (twice with Master of Runes).
+  ['Cloud Rune', 'Fire Rune', 'Frost Rune', 'Hill Rune', 'Stone Rune', 'Storm Rune'].forEach(nm => def('optional:' + nm, ctx => {
+    const t = optText(ctx, nm), L = ctx.classLevel('fighter') || ctx.level;
+    pool(ctx, nm, L >= 15 ? 2 : 1, 'short');
+    const a = sktActivationFromText(t, nm, ctx) || { action: 'Free', desc: t.split(/(?<=\.)\s+/).slice(0, 2).join(' ') };
+    act(ctx, Object.assign(a, { name: nm, resource: nm, amount: 1, feature: nm }));
+  }));
+  // Invocations.
+  const lvW = ctx => ctx.classLevel('warlock') || ctx.level;
+  def('optional:Eldritch Spear', ctx => note(ctx, 'Eldritch Spear: your chosen damage cantrip reaches ' + (ctx.edition === '2024' ? 30 * lvW(ctx) + ' ft farther' : '300 ft') + '.'));
+  def('optional:Repelling Blast', ctx => note(ctx, 'Repelling Blast: a hit with your chosen cantrip pushes a Large or smaller creature up to 10 ft.'));
+  def('optional:Grasp of Hadar', ctx => note(ctx, 'Grasp of Hadar: once per turn, an Eldritch Blast hit pulls the creature up to 10 ft toward you.'));
+  def('optional:Lance of Lethargy', ctx => note(ctx, 'Lance of Lethargy: once per turn, an Eldritch Blast hit reduces the creature’s speed by 10 ft until your next turn.'));
+  def('optional:Thirsting Blade', ctx => { ctx.attacksPerAction = Math.max(ctx.attacksPerAction, 2); });
+  def('optional:Devouring Blade', ctx => { ctx.attacksPerAction = Math.max(ctx.attacksPerAction, 3); });
+  def('optional:Lifedrinker', ctx => { if (ctx.edition === '2014') ctx.extraDamage.push({ label: 'Lifedrinker', dice: String(abm(ctx, 'cha')) + ' necrotic', note: 'every hit with your pact weapon' }); });
+  def('optional:Eldritch Mind', ctx => ctx.rollAdv.push({ on: ['conc'], label: 'Eldritch Mind' }));
+  def('optional:Witch Sight', ctx => { ctx.senses.truesight = Math.max(ctx.senses.truesight || 0, 30); });
+  def('optional:Beguiling Influence', ctx => { ctx.skillProf.add('deception'); ctx.skillProf.add('persuasion'); });
+  def('optional:Eyes of the Rune Keeper', ctx => note(ctx, 'Eyes of the Rune Keeper: you can read all writing.'));
+  def('optional:Gift of the Ever-Living Ones', ctx => note(ctx, 'Gift of the Ever-Living Ones: with your familiar within 100 ft, healing dice you roll always count as their highest.'));
+  def('optional:Improved Pact Weapon', ctx => note(ctx, 'Improved Pact Weapon: your pact weapon is a spellcasting focus with +1 to attack and damage (unless already magical), and can be a shortbow, longbow or crossbow.'));
+  def('optional:Voice of the Chain Master', ctx => note(ctx, 'Voice of the Chain Master: speak through your familiar and perceive through its senses at any distance on the same plane.'));
+  def('optional:Aspect of the Moon', ctx => note(ctx, 'Aspect of the Moon: you don’t need sleep and can’t be magically put to sleep; light activity counts as rest.'));
+  def(['optional:Book of Ancient Secrets', 'optional:Pact of the Tome'], ctx => note(ctx, (ctx.edition === '2024' ? 'Pact of the Tome: a Book of Shadows with three cantrips and two level 1 rituals, always prepared, and your warlock focus.'
+    : 'Book of Ancient Secrets / Pact of the Tome: rituals and cantrips written in your Book of Shadows, cast from the book.')));
+  def('optional:Lessons of the First Ones', ctx => note(ctx, 'Lessons of the First Ones: you gain an origin feat of your choice (add it on the sheet).'));
+  // 2014 infusions: what the infused item does.
+  const inf = (nm, text) => def('optional:' + nm, ctx => note(ctx, nm + ' (infusion): ' + (typeof text === 'function' ? text(ctx) : text)));
+  const plus = ctx => (ctx.classLevel('artificer') || ctx.level) >= 10 ? 2 : 1;
+  inf('Enhanced Arcane Focus', ctx => 'a rod, staff or wand gives +' + plus(ctx) + ' to spell attacks and ignores half cover.');
+  inf('Enhanced Defense', ctx => 'armour or a shield gives +' + plus(ctx) + ' AC.');
+  inf('Enhanced Weapon', ctx => 'a weapon gives +' + plus(ctx) + ' to attack and damage.');
+  inf('Repeating Shot', 'a +1 ammunition weapon that makes its own ammunition and ignores loading.');
+  inf('Returning Weapon', 'a +1 thrown weapon that flies back to your hand.');
+  inf('Radiant Weapon', 'a +1 weapon that sheds light; a reaction blinds an attacker (CON save), four times a day.');
+  inf('Repulsion Shield', 'a +1 shield; a reaction pushes a melee attacker 15 ft, four times a day.');
+  inf('Resistant Armor', 'armour giving resistance to one damage type.');
+  inf('Arcane Propulsion Armor', 'armour that adds 5 ft of walking speed and gauntlets that are force weapons (1d8, thrown 20/60).');
+  inf('Armor of Magical Strength', 'armour with six charges: add INT to a Strength check or save, or a reaction to avoid being knocked prone.');
+  inf('Boots of the Winding Path', 'boots that teleport you back to a space you left this turn, within 15 ft, as a bonus action.');
+  inf('Helm of Awareness', 'advantage on initiative, and you can’t be surprised.');
+  inf('Mind Sharpener', 'armour or robes with four charges: turn a failed concentration save into a success.');
+  inf('Spell-Refueling Ring', 'once a day, regain a spell slot of 3rd level or lower.');
+  inf('Replicate Magic Item', 'make one of the common or uncommon magic items your level allows.');
+  def('optional:Eldritch Smite', ctx => act(ctx, { name: 'Eldritch Smite', action: 'Free', feature: 'Eldritch Smite',
+    desc: 'Once per turn after a pact-weapon hit, expend a Pact Magic slot: 1d8 force plus 1d8 per slot level, and knock a Huge or smaller target prone.' }));
+
+  // ── Feats ──────────────────────────────────────────────────────────────
+  const e24 = ctx => ctx.edition === '2024';
+  const fn = (name, fn2) => def('feat:' + name, fn2);
+  fn('Athlete', ctx => { if (e24(ctx)) ctx.moveExtra.climb = 'walk';
+    note(ctx, 'Athlete: standing from prone costs 5 ft, running jumps need only 5 ft' + (e24(ctx) ? '.' : ', and climbing costs no extra movement.')); });
+  fn('Charger', ctx => note(ctx, e24(ctx) ? 'Charger: Dash adds 10 ft; once per turn, after moving 10 ft straight, a melee hit adds 1d8 damage or pushes the target 10 ft.'
+    : 'Charger: after a Dash, a bonus-action melee attack (+5 damage after 10 ft in a line) or shove (10 ft).'));
+  fn('Chef', ctx => {
+    if (e24(ctx)) pool(ctx, 'Bolstering Treats', ctx.pb, 'long');
+    note(ctx, 'Chef: on a short rest, food for ' + (4 + ctx.pb) + ' creatures that heals an extra 1d8 when they spend Hit Dice; an hour’s cooking makes ' + ctx.pb + ' treats giving ' + ctx.pb + ' temporary hit points.');
+  });
+  fn('Crossbow Expert', ctx => note(ctx, 'Crossbow Expert: ignore loading, no disadvantage within 5 ft of an enemy' + (e24(ctx) ? ', and add your modifier to a light crossbow’s extra attack.' : ', and a bonus-action hand crossbow attack after attacking with a one-handed weapon.')));
+  fn('Crusher', ctx => note(ctx, 'Crusher: once per turn a bludgeoning hit moves the target 5 ft; a bludgeoning critical gives attacks against it advantage until your next turn.'));
+  fn('Piercer', ctx => note(ctx, 'Piercer: once per turn reroll one piercing damage die; a piercing critical rolls one more die.'));
+  fn('Slasher', ctx => note(ctx, 'Slasher: once per turn a slashing hit cuts the target’s speed by 10 ft; a slashing critical gives it disadvantage on attacks until your next turn.'));
+  fn('Dragon Fear', ctx => note(ctx, 'Dragon Fear: spend a Breath Weapon use to roar — creatures within 30 ft make a DC ' + (8 + ctx.pb + ctx.mod.cha) + ' Wisdom save or are frightened for a minute.'));
+  fn('Dragon Hide', ctx => { ctx.acOptions.push({ label: 'Dragon Hide', value: 13 + ctx.mod.dex, noArmor: true, shieldOk: true });
+    note(ctx, 'Dragon Hide: retractable claws for unarmed strikes, 1d4' + sktSigned(ctx.mod.str) + ' slashing.'); });
+  fn('Dwarven Fortitude', ctx => note(ctx, 'Dwarven Fortitude: when you Dodge, spend a Hit Die to heal (roll' + sktSigned(ctx.mod.con) + ').'));
+  fn('Elven Accuracy', ctx => note(ctx, 'Elven Accuracy: with advantage on a Dexterity, Intelligence, Wisdom or Charisma attack, reroll one of the dice.'));
+  fn('Flames of Phlegethos', ctx => note(ctx, 'Flames of Phlegethos: reroll 1s on fire spell damage; casting a fire spell wreathes you in flames that deal 1d4 fire to creatures that hit you in melee.'));
+  fn('Grappler', ctx => note(ctx, 'Grappler: advantage on attacks against a creature you’re grappling' + (e24(ctx) ? '; an Unarmed Strike can damage and grapple at once (once a turn), and dragging it costs no extra movement.' : '; an action can pin it (both restrained).')));
+  fn('Gunner', ctx => note(ctx, 'Gunner: proficiency with firearms, ignore loading, and no disadvantage on ranged attacks within 5 ft of an enemy.'));
+  fn('Healer', ctx => act(ctx, { name: 'Healer', action: 'Action', feature: 'Healer',
+    desc: e24(ctx) ? 'Spend a Healer’s Kit use: the creature spends a Hit Die, you roll it, and it regains that plus ' + ctx.pb + '. You reroll 1s on healing dice.'
+                   : 'Spend a healer’s kit use: a creature regains 1d6 + 4 + its Hit Dice count (once per rest each); stabilising also restores 1 hit point.' }));
+  fn('Heavy Armor Master', ctx => note(ctx, 'Heavy Armor Master: in heavy armour, bludgeoning, piercing and slashing damage ' + (e24(ctx) ? 'from an attack is reduced by ' + ctx.pb : 'from nonmagical attacks is reduced by 3') + '.'));
+  fn('Inspiring Leader', ctx => note(ctx, 'Inspiring Leader: ' + (e24(ctx) ? 'after a rest, up to six allies gain ' : 'a 10-minute speech gives up to six creatures ') + ctx.level + ' + ' + (e24(ctx) ? 'your Wisdom or Charisma modifier' : 'CHA (' + ctx.mod.cha + ')') + ' temporary hit points.'));
+  fn('Keen Mind', ctx => note(ctx, e24(ctx) ? 'Keen Mind: the Study action as a bonus action.' : 'Keen Mind: you always know north and the hours to sunrise or sunset, and recall anything from the past month.'));
+  fn('Linguist', ctx => note(ctx, 'Linguist: you write ciphers others can’t break without a DC ' + (ctx.abilities.int + ctx.pb) + ' Intelligence check or magic.'));
+  fn('Mounted Combatant', ctx => note(ctx, 'Mounted Combatant: while mounted, advantage against smaller unmounted creatures near your mount; you can protect your mount from attacks and area damage.'));
+  fn('Musician', ctx => note(ctx, 'Musician: after a rest, a song gives Heroic Inspiration to ' + ctx.pb + ' allies.'));
+  fn('Sentinel', ctx => note(ctx, e24(ctx) ? 'Sentinel: make an opportunity attack when a creature within 5 ft Disengages or hits someone else; your opportunity attack hits stop its movement.'
+    : 'Sentinel: opportunity attack hits stop movement, Disengage doesn’t avoid them, and a reaction attack when a creature within 5 ft attacks someone else.'));
+  fn('Sharpshooter', ctx => note(ctx, 'Sharpshooter: ranged weapon attacks ignore half and three-quarters cover and long-range disadvantage' + (e24(ctx) ? ', and no disadvantage within 5 ft of an enemy.' : '; take −5 to hit for +10 damage.')));
+  fn('Skulker', ctx => { if (e24(ctx)) ctx.senses.blindsight = Math.max(ctx.senses.blindsight || 0, 10);
+    note(ctx, e24(ctx) ? 'Skulker: advantage on Stealth to Hide in combat, and a missed attack while hidden doesn’t reveal you.' : 'Skulker: hide when lightly obscured, a missed ranged attack doesn’t reveal you, and dim light doesn’t hinder Perception.'); });
+  fn('Spell Sniper', ctx => note(ctx, e24(ctx) ? 'Spell Sniper: spell attacks ignore cover, have no disadvantage within 5 ft of an enemy, and reach 60 ft farther.' : 'Spell Sniper: spell attack range doubles and ignores cover.'));
+  fn('Tavern Brawler', ctx => { ctx.unarmedMinDie = '1d4';
+    note(ctx, 'Tavern Brawler: unarmed strikes deal 1d4' + (e24(ctx) ? ' (reroll 1s), you’re proficient with improvised weapons, and once a turn a hit can push 5 ft.' : '; proficient with improvised weapons, and a bonus-action grapple after a hit.')); });
+  fn('Weapon Master', ctx => { if (e24(ctx)) note(ctx, 'Weapon Master: use the mastery property of one weapon kind you choose after each long rest.'); });
+  fn('Martial Weapon Training', () => {});   // proficiencies, from the data
+  fn('Crafter', ctx => note(ctx, 'Crafter: 20% off nonmagical gear, and after a long rest craft one item from the Fast Crafting table with your tools.'));
+  fn('Revenant Blade', ctx => note(ctx, 'Revenant Blade: a double-bladed scimitar held in two hands gives +1 AC and counts as finesse.'));
+  fn('Bomber', ctx => note(ctx, 'Bomber: throw vials and flasks 40 ft as an attack, without long-range disadvantage for thrown weapons.'));
+  fn('Cohort of Chaos', ctx => note(ctx, 'Cohort of Chaos: rolling a 1 or 20 on an attack or save triggers a Chaotic Flare (d4 table).'));
+  // Boons (epic).
+  fn('Boon of Combat Prowess', ctx => note(ctx, 'Boon of Combat Prowess: once per round, turn a missed attack into a hit.'));
+  fn('Boon of Fate', ctx => { pool(ctx, 'Boon of Fate', 1, 'short');
+    act(ctx, { name: 'Boon of Fate', action: 'Free', resource: 'Boon of Fate', amount: 1, dice: '2d4', feature: 'Boon of Fate', desc: 'When a creature within 60 ft succeeds or fails a D20 Test, add or subtract 2d4. Back on initiative or a rest.' }); });
+  fn('Boon of Fortitude', ctx => { ctx.hpFlat += 40; note(ctx, 'Boon of Fortitude: once a turn, regaining hit points adds ' + ctx.mod.con + ' more.'); });
+  fn('Boon of Irresistible Offense', ctx => note(ctx, 'Boon of Irresistible Offense: your bludgeoning, piercing and slashing damage ignores resistance; a natural 20 adds damage equal to the raised score.'));
+  fn('Boon of Skill', ctx => { Object.keys(SKT_SKILLS).forEach(k => ctx.skillProf.add(k)); note(ctx, 'Boon of Skill: proficiency in every skill, and expertise in one (choose on the sheet).'); });
+  fn('Boon of Spell Recall', ctx => note(ctx, 'Boon of Spell Recall: casting with a level 1–4 slot, roll 1d4; a match with the slot level keeps the slot.'));
+  fn('Boon of Truesight', ctx => { ctx.senses.truesight = Math.max(ctx.senses.truesight || 0, 60); });
+  fn('Boon of Bloodshed', ctx => note(ctx, 'Boon of Bloodshed: advantage on your next attack after an enemy you see drops to 0; while bloodied, once a turn add ' + ctx.pb + ' damage.'));
+  fn('Boon of Bountiful Health', ctx => note(ctx, 'Boon of Bountiful Health: +5 to temporary hit points you gain, and Hit Dice you spend always roll their highest.'));
+  fn('Boon of Communication', ctx => note(ctx, 'Boon of Communication: understand any spoken, signed or written language, telepathy 120 ft, and hostile creatures don’t impose disadvantage on influence checks.'));
+  fn('Boon of Desperate Resilience', ctx => note(ctx, 'Boon of Desperate Resilience: while bloodied, resistance to every damage type but force.'));
+  fn('Boon of Fortune\'s Favor', ctx => note(ctx, 'Boon of Fortune’s Favor: once per round, reroll a failed saving throw.'));
+  fn('Boon of Poison Mastery', ctx => { ctx.immune.add('poison'); ctx.immune.add('poisoned'); note(ctx, 'Boon of Poison Mastery: once per turn, poison damage dice you roll count as their highest.'); });
+  fn('Boon of the Furious Storm', ctx => { ctx.resist.add('lightning'); ctx.resist.add('thunder');
+    note(ctx, 'Boon of the Furious Storm: immune to lightning and thunder while bloodied; creatures have disadvantage on saves against your lightning and thunder spells.'); });
+  fn('Boon of Blazing Dawn', ctx => { ctx.immune.add('radiant'); note(ctx, 'Boon of Blazing Dawn: weapon hits can deal radiant damage, and radiant hits can flare bright light.'); });
+  // Faction and setting feats.
+  fn('Harper Agent', ctx => note(ctx, 'Harper Agent: you know Thieves’ Cant, and the Help action can distract an enemy 30 ft away.'));
+  fn('Harper Teamwork', ctx => note(ctx, 'Harper Teamwork: helping an ally’s attack also gives the enemy disadvantage on its next save; ending frightened or paralyzed on yourself can free an ally too.'));
+  fn('Lords\' Alliance Agent', ctx => note(ctx, 'Lords’ Alliance Agent: once per turn a critical hit gives an ally within 30 ft Heroic Inspiration; advantage on your next attack against an enemy that hurts an ally beside you.'));
+  fn('Zhentarim Ruffian', ctx => note(ctx, 'Zhentarim Ruffian: roll opportunity attack damage twice and pick; spend Heroic Inspiration on initiative to give the party advantage.'));
+  fn('Zhentarim Tactics', ctx => note(ctx, 'Zhentarim Tactics: an opportunity attack against a creature that hits you in melee; expertise in one proficient skill each long rest.'));
+  fn('Order\'s Resilience', ctx => note(ctx, 'Order’s Resilience: stand from prone for 5 ft; you and an ally beside each other have advantage on Strength saves.'));
+  fn('Street Justice', ctx => note(ctx, 'Street Justice: allies have advantage against a creature you’re grappling; bindings you tie are +' + ctx.pb + ' harder to escape; hostility doesn’t hinder your Intimidation.'));
+  fn('Spellfire Adept', ctx => note(ctx, 'Spellfire Adept: once a turn, spend up to two Hit Dice to add to a radiant spell’s damage; your radiant damage ignores resistance.'));
+  fn('Potent Dragonmark', ctx => note(ctx, 'Potent Dragonmark: your mark’s spells are always prepared, with one extra level ' + Math.min(5, Math.ceil(ctx.level / 2)) + ' slot for them (back on a short rest).'));
+  ['Aberrant', 'Detection', 'Finding', 'Healing', 'Hospitality', 'Making', 'Passage', 'Scribing', 'Shadow', 'Storm'].forEach(k => fn(k === 'Aberrant' ? 'Greater Aberrant Mark' : 'Greater Mark of ' + k,
+    ctx => note(ctx, (k === 'Aberrant' ? 'Greater Aberrant Mark' : 'Greater Mark of ' + k) + ': your mark’s intuition die is a d6, and its spell is stronger (see the feat).')));
+
   // ── On/off states: the sheet's toggles ─────────────────────────────────
   // Each one changes numbers while it's on, the way D&D Beyond's do. A
   // spell's is offered when the character has the spell; turning on a
