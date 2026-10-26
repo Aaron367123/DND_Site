@@ -228,7 +228,10 @@ function csTop(pc){
     + ' <button class="btn primary" data-cs="concsave">Roll it</button><button class="btn" data-cs="dropconc">Drop it</button></div>';
   h += '<div class="cs-boxes">' + box('AC', pc.ac ?? '—', null, sh.acDetail || sh.acSource || '')
     + box('Initiative' + csAdvMark(pc, 'init'), csSigned(pc.init ?? csMod((pc.abilities || {}).dex)), 'init')
-    + box('Speed', csSpeed(pc) + ' ft', null, csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft normally' : '')
+    + (() => { const mode = pc.speeds && pc.speeds[pc.speedShow] != null ? pc.speedShow : 'walk';
+        const all = pc.speeds ? Object.keys(CS_MOVES).filter(k => pc.speeds[k] != null).map(k => CS_MOVES[k] + ' ' + csSpeed(pc, k) + ' ft').join(', ') : '';
+        return box(mode === 'walk' ? 'Speed' : CS_MOVES[mode], csSpeed(pc, mode) + ' ft', null,
+          [all.includes(',') ? all : '', csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft walking normally' : ''].filter(Boolean).join(' · ')); })()
     + box('Proficiency', csSigned(sh.profBonus || 2))
     + csInspHtml(pc, ro) + '</div>';
   h += csStatesHtml(pc);
@@ -283,8 +286,9 @@ function csStatesHtml(pc){
   }).join('') + (on.length ? '<div class="cs-stdesc">' + on.map(s => '<span><b>' + csE(s.label) + (s.options ? ' (' + csE(s.value) + ')' : '') + ':</b> ' + csE(s.desc) + '</span>').join('') + '</div>' : '') + '</div>';
 }
 // Exhaustion slows: 5 ft a level in 2024; halved at 2 and nothing at 5 in 2014.
-function csSpeed(pc){
-  const s = pc.spd ?? 30, exh = +pc.exhaustion || 0;
+const CS_MOVES = { walk: 'Walk', fly: 'Fly', swim: 'Swim', climb: 'Climb', burrow: 'Burrow' };
+function csSpeed(pc, mode){
+  const s = mode && mode !== 'walk' && pc.speeds && pc.speeds[mode] != null ? +pc.speeds[mode] : (pc.spd ?? 30), exh = +pc.exhaustion || 0;
   const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
   if (!exh) return s;
   if (ed === '2024') return Math.max(0, s - 5 * exh);
@@ -2256,13 +2260,36 @@ function csCustomizeHtml(pc){
     + '<label class="cs-kv"><span>Encumbrance</span><select class="cb-sel" data-cs-ovpref="encumbrance">'
     +   [['', 'Standard: up to 15 × STR'], ['variant', 'Variant: slowed at 5 × and 10 × STR'], ['none', 'Don’t track it']].map(([v, l]) => '<option value="' + v + '"' + ((o.encumbrance || '') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>'
     + '<label class="cb-inline"><input type="checkbox" data-cs-ovpref="coinWeight"' + (o.coinWeight === false ? '' : ' checked') + '> Coins have weight (50 to a pound)</label>'
-    + '<div class="cs-ovgrid">' + CS_OV.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span>' + num(k, o[k]) + '</label>').join('')
-    + Object.keys(CS_AB).map(k => '<label class="cs-kv"><span>' + CS_AB[k] + ' save</span>' + num('save:' + k, (o.saves || {})[k]) + '</label>').join('')
-    + Object.keys(CS_SKILLS).map(k => '<label class="cs-kv"><span>' + CS_SKILLS[k][0] + '</span>' + num('skill:' + k, (o.skills || {})[k]) + '</label>').join('')
-    + '</div><h5>Also</h5><div class="cb-dim">Comma-separated: what the rules don’t know about — a language learned in play, a curse’s vulnerability.</div>'
+    + '<h5>Bonuses</h5><div class="cs-ovgrid">' + CS_OV.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span>' + num(k, o[k]) + '</label>').join('') + '</div>'
+    + csOverridesHtml(pc, o, num)
+    + '<h5>Also</h5><div class="cb-dim">Comma-separated: what the rules don’t know about — a language learned in play, a curse’s vulnerability.</div>'
     + '<div class="cs-ovlists">' + CS_OV_LISTS.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span><input data-cs-ovlist="' + k + '" value="' + csE(o[k] || '') + '" maxlength="200"></label>').join('') + '</div></div>';
 }
 
+// D&D Beyond's overrides: a number set outright (empty: the rules' answer), a
+// proficiency level chosen, an ability's bonus or score, every speed.
+function csOverridesHtml(pc, o, num){
+  const sh = pc.sheet || {};
+  const setIn = (attr, v, ph) => '<input type="number" step="1" ' + attr + ' value="' + (v == null || v === '' ? '' : csE(v)) + '" placeholder="' + csE(ph == null ? '—' : ph) + '" aria-label="Set to">';
+  const sel = (attr, v, opts) => '<select class="cb-sel" ' + attr + '>' + opts.map(([val, l]) => '<option value="' + val + '"' + (String(v == null ? '' : v) === val ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>';
+  const row = (label, cells) => '<div class="cs-ovrow"><span>' + label + '</span>' + cells.join('') + '</div>';
+  const head = cols => '<div class="cs-ovrow cs-ovhead"><span></span>' + cols.map(c => '<i>' + c + '</i>').join('') + '</div>';
+  const skillVal = k => { const v = typeof csSkillVal === 'function' ? csSkillVal(sh, k) : null; return v == null ? '' : csSigned(v); };
+  return '<h5>Set outright</h5><div class="cb-dim">Replaces what the rules work out; empty uses the rules.</div><div class="cs-ovgrid">'
+    + [['acSet', 'Armor Class', pc.ac], ['initSet', 'Initiative', csSigned(pc.init || 0)], ['hpMaxSet', 'Hit point maximum', pc.hpMax]]
+      .map(([k, l, ph]) => '<label class="cs-kv"><span>' + l + '</span>' + setIn('data-cs-ovset="' + k + '"', o[k], ph) + '</label>').join('') + '</div>'
+    + '<h5>Ability scores</h5><div class="cs-ovtable">' + head(['Bonus', 'Set to'])
+    + Object.keys(CS_AB).map(k => row(CS_AB[k], [setIn('data-cs-ovmap="abBonus:' + k + '"', (o.abBonus || {})[k], '0'), setIn('data-cs-ovmap="abScore:' + k + '"', (o.abScore || {})[k], (pc.abilities || {})[k])])).join('') + '</div>'
+    + '<h5>Saving throws</h5><div class="cs-ovtable cs-ov3">' + head(['Proficient', 'Bonus', 'Set to'])
+    + Object.keys(CS_AB).map(k => row(CS_AB[k], [sel('data-cs-ovprof="save:' + k + '"', (o.saveProf || {})[k] == null ? '' : ((o.saveProf || {})[k] ? '1' : '0'), [['', 'Rules'], ['1', 'Yes'], ['0', 'No']]),
+      num('save:' + k, (o.saves || {})[k]), setIn('data-cs-ovmap="saveSet:' + k + '"', (o.saveSet || {})[k], csSigned((sh.saves || {})[k] || 0))])).join('') + '</div>'
+    + '<h5>Skills</h5><div class="cs-ovtable cs-ov3">' + head(['Proficiency', 'Bonus', 'Set to'])
+    + Object.keys(CS_SKILLS).map(k => row(CS_SKILLS[k][0], [sel('data-cs-ovprof="skill:' + k + '"', (o.skillProf || {})[k], [['', 'Rules'], ['0', 'None'], ['0.5', 'Half'], ['1', 'Proficient'], ['2', 'Expertise']]),
+      num('skill:' + k, (o.skills || {})[k]), setIn('data-cs-ovmap="skillSet:' + k + '"', (o.skillSet || {})[k], skillVal(k))])).join('') + '</div>'
+    + '<h5>Speeds</h5><div class="cs-ovtable">' + head(['Set to (ft)'])
+    + Object.keys(CS_MOVES).map(k => row(CS_MOVES[k], [setIn('data-cs-ovmap="speedSet:' + k + '"', (o.speedSet || {})[k], pc.speeds && pc.speeds[k] != null ? pc.speeds[k] : (k === 'walk' ? pc.spd : '—'))])).join('') + '</div>'
+    + '<label class="cs-kv"><span>Speed shown on the sheet</span>' + sel('data-cs-ovpref="speedShow"', o.speedShow || '', Object.keys(CS_MOVES).map(k => [k === 'walk' ? '' : k, CS_MOVES[k]])) + '</label>';
+}
 function csSpellsChange(e, t, d, pc){
   if (d.csOvpref){
     const v = t.type === 'checkbox' ? (t.checked ? undefined : false) : (t.value || undefined);
@@ -2272,6 +2299,19 @@ function csSpellsChange(e, t, d, pc){
   if (d.csOvlist){
     const v = t.value;
     csRebuild('Custom ' + d.csOvlist, b => { b.overrides = Object.assign({}, b.overrides, { [d.csOvlist]: v }); });
+    return true;
+  }
+  if (d.csOvset || d.csOvmap || d.csOvprof){
+    const raw = t.value;
+    csRebuild('Customized', b => {
+      const o = b.overrides = Object.assign({}, b.overrides);
+      if (d.csOvset){ const n = parseInt(raw, 10); if (isNaN(n)) delete o[d.csOvset]; else o[d.csOvset] = n; return; }
+      const [map, key] = (d.csOvmap || '').split(':');
+      if (d.csOvmap){ const m = o[map] = Object.assign({}, o[map]); const n = parseInt(raw, 10); if (isNaN(n)) delete m[key]; else m[key] = n; return; }
+      const [kind, k] = d.csOvprof.split(':'), name = kind === 'save' ? 'saveProf' : 'skillProf';
+      const m = o[name] = Object.assign({}, o[name]);
+      if (raw === '') delete m[k]; else m[k] = kind === 'save' ? raw === '1' : +raw;
+    }, CS_QUIET);
     return true;
   }
   if (d.csOv){

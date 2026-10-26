@@ -5452,6 +5452,13 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-custom { padding:10px; border:1px solid var(--accent); border-radius:10px; margin-bottom:10px; }
 .cs-ovgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:4px 16px; }
 .cs-ovgrid input { width:70px; }
+/* Customize's overrides: a row per ability, save, skill or speed. */
+.cs-ovtable { display:flex; flex-direction:column; gap:2px; margin-bottom:6px; }
+.cs-ovrow { display:grid; grid-template-columns:minmax(0,1fr) 70px 70px; gap:6px; align-items:center; font-size:var(--fs-sm); }
+.cs-ov3 .cs-ovrow { grid-template-columns:minmax(0,1fr) 108px 64px 64px; }
+.cs-ovtable:not(.cs-ov3) .cs-ovrow:has(> :nth-child(2):last-child) { grid-template-columns:minmax(0,1fr) 90px; }
+.cs-ovhead i { font-style:normal; font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+.cs-ovrow input, .cs-ovrow select { width:100%; min-width:0; }
 .cs-legacy .sheet-empty { color:var(--text-muted); }
 .cs-tab.cs-phone { display:none; }
 @media (max-width: 760px){

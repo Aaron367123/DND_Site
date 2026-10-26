@@ -9397,6 +9397,53 @@
         loadDomain('party');
       }
     }
+    // -- Round 77: Customize overrides, as D&D Beyond's --------------------------
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        let saved = null;
+        await openCharBuilder({ onDone: rec => { saved = rec; } }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.build.cls = 'Fighter'; CB.build.level = 5; CB.build.name = 'Custom Fighter'; cbQuickBuild(); cbSave(); await sleep(150);
+        if (document.getElementById('cb-root')) cbClose();
+        const id = (saved || state.party.find(x => x.name === 'Custom Fighter')).id, pc = () => state.party.find(x => x.id === id);
+        const before = JSON.parse(JSON.stringify({ ac: pc().ac, str: pc().abilities.str, ath: pc().sheet.skills.athletics, stealth: pc().sheet.skills.stealth, wisSave: pc().sheet.saves.wis, init: pc().init }));
+        openCharSheet(id); for (let i = 0; i < 80 && !CS.R; i++) await sleep(100);
+        document.querySelector('#cs-root [data-cs="customize"]').click(); await sleep(60);
+        const setv = async (sel, v) => { const el = document.querySelector('#cs-root ' + sel); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); for (let i = 0; i < 20; i++) await sleep(25); };
+        ok('customize: the panel has D&D Beyond\'s overrides — set AC / initiative / HP, ability bonus and score, save and skill proficiency and value, every speed',
+           ['[data-cs-ovset="acSet"]', '[data-cs-ovset="hpMaxSet"]', '[data-cs-ovmap="abScore:str"]', '[data-cs-ovmap="abBonus:str"]', '[data-cs-ovprof="skill:stealth"]', '[data-cs-ovprof="save:wis"]', '[data-cs-ovmap="skillSet:arcana"]', '[data-cs-ovmap="speedSet:fly"]', '[data-cs-ovpref="speedShow"]']
+             .every(sel => !!document.querySelector('#cs-root ' + sel)));
+        await setv('[data-cs-ovmap="abBonus:str"]', '2');
+        ok('customize: an ability bonus raises the score, and what follows it (Athletics) by the modifier\'s change',
+           pc().abilities.str === before.str + 2 && pc().sheet.skills.athletics === before.ath + (Math.floor((before.str + 2 - 10) / 2) - Math.floor((before.str - 10) / 2)),
+           JSON.stringify([pc().abilities.str, pc().sheet.skills.athletics, before]));
+        await setv('[data-cs-ovmap="abScore:str"]', '10');
+        ok('customize: an ability set outright wins over the bonus', pc().abilities.str === 10);
+        await setv('[data-cs-ovmap="abScore:str"]', ''); await setv('[data-cs-ovmap="abBonus:str"]', '');
+        ok('customize: emptied, the score is the rules\' again', pc().abilities.str === before.str);
+        await setv('[data-cs-ovprof="skill:stealth"]', '2');
+        ok('customize: Stealth set to expertise adds twice the proficiency bonus over none', pc().sheet.skills.stealth === before.stealth + 2 * pc().sheet.profBonus && pc().sheet.skillProf.stealth === 2,
+           pc().sheet.skills.stealth + ' vs ' + before.stealth);
+        await setv('[data-cs-ovprof="save:wis"]', '1');
+        ok('customize: a WIS save made proficient', pc().sheet.saves.wis === before.wisSave + pc().sheet.profBonus && pc().sheet.saveProf.includes('wis'));
+        await setv('[data-cs-ovset="acSet"]', '21');
+        ok('customize: AC set outright, and the sheet says so', pc().ac === 21 && /Set on the sheet/.test(pc().sheet.acDetail));
+        await setv('[data-cs-ovset="acSet"]', '');
+        ok('customize: emptied, AC is the rules\' again', pc().ac === before.ac);
+        await setv('[data-cs-ovmap="speedSet:fly"]', '40'); await setv('[data-cs-ovpref="speedShow"]', 'fly');
+        const box = [...document.querySelectorAll('#cs-root .cs-box')].find(b => /Fly/.test(b.textContent));
+        ok('customize: a fly speed of 40 shown on the sheet\'s speed box, the walking one in its tooltip', pc().speeds.fly === 40 && pc().speedShow === 'fly' && !!box && /40 ft/.test(box.textContent) && /Walk/.test(box.title || ''),
+           JSON.stringify([pc().speeds, pc().speedShow, box && box.textContent]));
+        csClose();
+      } catch(e){ ok('round 77 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (typeof csClose === 'function' && CS) csClose();
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

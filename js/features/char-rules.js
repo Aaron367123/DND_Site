@@ -1047,6 +1047,13 @@ function sktBuildAbilities(build, R, trace){
     Object.keys(a.static || {}).forEach(k => { if (k in out && (+a.static[k] || 0) > out[k]){ note(m.name + ' (sets ' + a.static[k] + ')', k, (+a.static[k] || 0) - out[k]); out[k] = +a.static[k]; } });
     SKT_ABS.forEach(k => { if (typeof a[k] === 'number'){ const v = Math.min(20, out[k] + a[k]); note(m.name, k, v - out[k]); out[k] = v; } });
   });
+  // The sheet's Customize, as on D&D Beyond: a bonus on top, or the score set
+  // outright — last, so every modifier, save, skill and attack follows it.
+  const ovr = build.overrides || {};
+  SKT_ABS.forEach(k => {
+    const b2 = +((ovr.abBonus || {})[k]) || 0; if (b2){ note('Custom bonus', k, b2); out[k] += b2; }
+    const set = parseInt((ovr.abScore || {})[k], 10); if (set > 0 && set !== out[k]){ note('Set on the sheet', k, set - out[k]); out[k] = set; }
+  });
   return out;
 }
 
@@ -2411,6 +2418,34 @@ function sktComputeCharacter(build, R, prior){
   SKT_ABS.forEach(k => { saves[k] += add('saveAll') + (+(ov.saves || {})[k] || 0); });
   Object.keys(ov.skills || {}).forEach(k => { if (k in skills) skills[k] += +ov.skills[k] || 0; });
   passive += add('passive') + (+(ov.skills || {}).perception || 0);
+  // A proficiency level chosen on the sheet (none, half, proficient, expertise)
+  // in place of the rules', and a save's proficiency the same way.
+  const pbPart = l => l >= 2 ? 2 * pb : l >= 1 ? pb : l > 0 ? Math.floor(pb / 2) : 0;
+  Object.keys(ov.skillProf || {}).forEach(k => {
+    if (!(k in skills) || ov.skillProf[k] === '' || ov.skillProf[k] == null) return;
+    const want = +ov.skillProf[k] || 0, had = +skillProfOut[k] || 0, d = pbPart(want) - pbPart(had);
+    skills[k] += d; if (k === 'perception') passive += d;
+    if (want) skillProfOut[k] = want; else delete skillProfOut[k];
+  });
+  Object.keys(ov.saveProf || {}).forEach(k => {
+    if (!(k in saves) || ov.saveProf[k] === '' || ov.saveProf[k] == null) return;
+    const want = !!ov.saveProf[k], had = ctx.saveProf.has(k);
+    if (want !== had){ saves[k] += want ? pb : -pb; if (want) ctx.saveProf.add(k); else ctx.saveProf.delete(k); }
+  });
+  // Numbers set outright: the rules' answer replaced, as D&D Beyond's overrides do.
+  const setNum = v => { const n = parseInt(v, 10); return isNaN(n) ? null : n; };
+  Object.keys(ov.skillSet || {}).forEach(k => { const v = setNum(ov.skillSet[k]); if (v != null && k in skills){ skills[k] = v; if (k === 'perception') passive = 10 + v + add('passive'); } });
+  Object.keys(ov.saveSet || {}).forEach(k => { const v = setNum(ov.saveSet[k]); if (v != null && k in saves) saves[k] = v; });
+  const acSet = setNum(ov.acSet), initSet = setNum(ov.initSet), hpSet = setNum(ov.hpMaxSet);
+  if (acSet != null) ac = acSet;
+  if (initSet != null) init = initSet;
+  if (hpSet != null && hpSet > 0) hpMax = hpSet;
+  // Every way of moving: the species' (a fly or swim speed), then the sheet's.
+  const speeds = { walk: speed };
+  if (moveSrc && typeof moveSrc === 'object') ['fly', 'swim', 'climb', 'burrow'].forEach(k => { if (moveSrc[k]) speeds[k] = moveSrc[k] === true ? speed : (typeof moveSrc[k] === 'object' ? +moveSrc[k].number || 0 : +moveSrc[k] || 0); });
+  ['walk', 'fly', 'swim', 'climb', 'burrow'].forEach(k => { const v = setNum((ov.speedSet || {})[k]); if (v != null){ if (v > 0) speeds[k] = v; else if (k !== 'walk') delete speeds[k]; } });
+  speed = speeds.walk;
+  const speedShow = speeds[ov.speedShow] ? ov.speedShow : 'walk';
   const hpWas = typeof prior.hp === 'number' && typeof prior.hpMax === 'number' ? prior.hp + (hpMax - prior.hpMax) : hpMax;
 
   return {
@@ -2418,7 +2453,7 @@ function sktComputeCharacter(build, R, prior){
     cls: cls ? cls.key : '', subclass: subName, level: L,
     race: speciesLabel, background: build.background || '',
     icon: build.icon || prior.icon || _SKT_CLASS_ICON[cls && cls.key] || '⚔',
-    hp: Math.max(0, Math.min(hpMax, hpWas)), hpMax, ac, init, spd: speed, pp: passive,
+    hp: Math.max(0, Math.min(hpMax, hpWas)), hpMax, ac, init, spd: speed, pp: passive, speeds, speedShow,
     // Starting gold from the kit (a class's gold option, a background's
     // pouch). Kept once the character exists — what they have spent since
     // is theirs, not the kit's.
@@ -2464,8 +2499,8 @@ function sktComputeCharacter(build, R, prior){
       equipment: gear.list.concat((build.items || []).map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '') + (m.reqAttune ? (m.attuned ? ' (attuned)' : ' (not attuned)') : ''))),
       stealthDis: !!(armor && armor.stealth),
       acSource: best ? best.label + (shield ? ' + ' + (shield._name || 'Shield') : '') : '',
-      acDetail: acParts.join(' + ') + (add('ac') ? ' + custom ' + add('ac') : '') + ' = ' + ac,
-      hpDetail: hpDetail + (add('hpMax') ? ' ' + (add('hpMax') > 0 ? '+' : '') + add('hpMax') + ' custom' : ''),
+      acDetail: acSet != null ? 'Set on the sheet: ' + ac : acParts.join(' + ') + (add('ac') ? ' + custom ' + add('ac') : '') + ' = ' + ac,
+      hpDetail: hpSet != null && hpSet > 0 ? 'Set on the sheet: ' + hpMax : hpDetail + (add('hpMax') ? ' ' + (add('hpMax') > 0 ? '+' : '') + add('hpMax') + ' custom' : ''),
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
                ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : ''].concat(extraSenses).filter(Boolean).join(', '),
       bio: { features: featureList.map(f => '* ' + f.name + '\n' + f.text).join('\n\n') },
