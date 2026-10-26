@@ -5013,6 +5013,14 @@ select.cb-sel{padding-right:28px}
 .cb-check i{color:var(--text-dim);font-style:normal;font-size:var(--fs-2xs)}
 .cb-check.on i{color:var(--text-muted)}
 .cb-inline{display:flex;align-items:center;gap:6px;margin:8px 0;font-size:var(--fs-sm);color:var(--text-muted)}
+/* D&D Beyond's source categories: a switch each, with what it holds. */
+.cb-sources{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px;margin:6px 0}
+.cb-src{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--panel-2);cursor:pointer}
+.cb-src.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--panel-2))}
+.cb-src input{margin-top:2px;width:16px;height:16px;flex:0 0 16px}
+.cb-src span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cb-src b{font-size:var(--fs-sm)}
+.cb-src i{font-style:normal;font-size:var(--fs-2xs);color:var(--text-muted);line-height:1.35}
 .cb-counter{display:inline-block;font-size:var(--fs-xs);border:1px solid var(--warning);color:var(--warning);border-radius:999px;padding:1px 8px;margin:2px 0 6px}
 .cb-counter.ok{border-color:var(--success);color:var(--success)}
 .cb-counter.over{border-color:var(--danger);color:var(--danger)}

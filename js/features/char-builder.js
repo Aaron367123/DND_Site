@@ -54,6 +54,7 @@ async function openCharBuilder(opts){
          mode, idx: opts.idx != null ? opts.idx : null, onDone: opts.onDone || null,
          fromLevel: prior && prior.build ? prior.build.level : null, loading: true, multi0, lvlTo: 'first' };
   if (convert) CB.convertFrom = prior.id;
+  if (mode === 'create' && build.edition === '2024' && !build.sources) build.sources = Object.assign({}, SKT_ALL_SOURCES);
   cbMount();
   await cbLoad(build.edition);
   if (CB && CB.convertFrom && CB.R && !CB.error){
@@ -81,6 +82,7 @@ function cbImportEdition(pc){
 function cbFromImported(pc){
   const R = CB.R, b = CB.build, sh = pc.sheet || {}, notes = [];
   const lc = s => String(s || '').trim().toLowerCase();
+  if (R.edition === '2024') b.sources = Object.assign({}, SKT_ALL_SOURCES); else b.allBooks = true;
   const camel = k => String(k).replace(/_([a-z])/g, (m, c) => c.toUpperCase());
   b.name = pc.name || ''; b.icon = pc.icon || '';
   // Class and level: the first class of a multiclass leads.
@@ -94,7 +96,7 @@ function cbFromImported(pc){
   if (pc.subclass){
     const n = lc(pc.subclass);
     const s = sktRulesSubclass(cls, pc.subclass) || cls.subclasses.find(x => lc(x.name).includes(n) || n.includes(lc(x.shortName)));
-    if (s){ b.subclass = s.shortName; if (sktIsLegacy(b, s)) b.legacy = true; else if (s.core === false) b.allBooks = true; } else notes.push('Subclass “' + pc.subclass + '” isn’t in the rules here — pick one');
+    if (s){ b.subclass = s.shortName; } else notes.push('Subclass “' + pc.subclass + '” isn’t in the rules here — pick one');
   }
   // Species and background, by name (a book beyond the handbook switches the others on).
   const exact = (list, name) => { const n = lc(name); return n ? (list.find(x => lc(x.name) === n) || list.find(x => lc(x.name).replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, ''))) : null; };
@@ -107,14 +109,14 @@ function cbFromImported(pc){
     if (sp) notes.push('“' + pc.race + '” is the ' + sp.name + ' in the 2024 books — switch the rules to 2014 on the Basics step to keep the old one');
   }
   if (!sp && (sp = near(R.species, pc.race))) notes.push('“' + pc.race + '” isn’t in the ' + R.edition + ' rules — ' + sp.name + ' is the closest; check the species step');
-  if (sp){ b.species = sp.name; if (sktIsLegacy(b, sp)){ b.legacy = true; notes.push('Legacy content is on: the ' + sp.name + ' is a 2014 species (D&D Beyond’s Legacy setting)'); } else if (sp.core === false) b.allBooks = true; }
+  if (sp){ b.species = sp.name; if (sktIsLegacy(b, sp)) notes.push('The ' + sp.name + ' is Legacy content (the 2014 version, since reprinted' + (R.edition === '2024' && SKT_SPECIES_REPRINT[lc(sp.name)] ? ' as the ' + SKT_SPECIES_REPRINT[lc(sp.name)] : '') + '); kept, as on the sheet'); }
   else if (pc.race) notes.push('Species “' + pc.race + '” isn’t in the rules here — pick one');
   // "Custom Background" (D&D Beyond's own): the builder's custom background,
   // with the skills, abilities and origin feat filled in below.
   const customBg = /custom/i.test(pc.background || '');
   const bg = customBg ? null : exact(R.backgrounds, pc.background);
   if (customBg){ b.background = SKT_CUSTOM_BG; b.customBg = { name: 'Custom background', skills: [], tools: [], languages: 0 }; }
-  else if (bg){ b.background = bg.name; if (bg.core === false) b.allBooks = true; }
+  else if (bg){ b.background = bg.name; }
   else if (pc.background) notes.push('Background “' + pc.background + '” isn’t in the rules here — pick one');
   b.details = Object.assign({}, b.details, { alignment: pc.alignment || '', backstory: (sh.bio || {}).backstory || '',
     traits: (sh.bio || {}).traits || '', ideals: (sh.bio || {}).ideals || '', bonds: (sh.bio || {}).bonds || '', flaws: (sh.bio || {}).flaws || '' });
@@ -146,7 +148,6 @@ function cbFromImported(pc){
   const owned = new Set([].concat(...((bgNow && bgNow.feats) || []).map(o => Object.keys(o))).map(k => String(k).split(/[|;]/)[0].trim().toLowerCase()));
   const feats = (pc.feats || []).map(x => String((x && x.name) || x)).filter(n => !/^\d+:/.test(n)).map(n => sktRulesFeat(R, n)).filter(Boolean)
     .filter((f, i, a) => a.indexOf(f) === i && f.name !== 'Ability Score Improvement' && !owned.has(lc(f.name)));
-  if (feats.some(f => sktIsLegacy(b, f))) b.legacy = true;
   const cat = f => String(f.category || '').split(':')[0];
   const fs = feats.filter(f => cat(f) === 'FS');
   if (fs.length){
@@ -295,8 +296,8 @@ async function cbLoad(edition){
   CB.loading = true; cbRender();
   try { CB.R = await sktRulesLoad(edition); }
   catch(e){ CB.error = 'The rules data did not load (' + e.message + '). Check the connection and try again.'; }
-  if (CB.R && !CB.build.allBooks && cbUsesOtherBooks(CB.build, CB.R)) CB.build.allBooks = true;
-  if (CB.R && !CB.build.legacy && cbUsesLegacy(CB.build, CB.R)) CB.build.legacy = true;
+  if (CB.R && CB.build.edition === '2014' && !CB.build.allBooks && cbUsesOtherBooks(CB.build, CB.R)) CB.build.allBooks = true;
+  if (CB.R && CB.build.edition !== '2014') cbEnsureSources(CB.build, CB.R);
   CB.loading = false;
   cbRender();
 }
@@ -310,6 +311,17 @@ function cbUsesOtherBooks(b, R){
   return off(sub) || off(sp) || off(sp && sktSpeciesSub(sp, b)) || off(bg)
     || sktBuildFeatNames(b, R).some(n => off(sktRulesFeat(R, n)))
     || [].concat(b.cantrips || [], b.spells || [], b.spellbook || []).some(n => off(sktRulesSpell(R, n)));
+}
+// A build's sources switched on for everything it already uses: nothing
+// chosen disappears when the categories are worked out.
+function cbEnsureSources(b, R){
+  const S = sktSources(b), cls = sktRulesClass(R, b.cls);
+  const used = [sktRulesSubclass(cls, b.subclass), sktRulesSpecies(R, b.species), sktBuildBackground(R, b)]
+    .concat(sktBuildFeatNames(b, R).map(n => sktRulesFeat(R, n)), [].concat(b.cantrips || [], b.spells || [], b.spellbook || []).map(n => sktRulesSpell(R, n)))
+    .filter(x => x && x.source);
+  let changed = !b.sources;
+  used.forEach(x => { const c = sktSourceCat(x.source); if (!S[c]){ S[c] = true; changed = true; } if (x.superseded && !S.legacy){ S.legacy = true; changed = true; } });
+  if (changed){ b.sources = S; delete b.allBooks; delete b.legacy; }
 }
 // Whether anything chosen is legacy (2014) content.
 function cbUsesLegacy(b, R){
@@ -325,16 +337,26 @@ function cbBookCards(list, selected, attr, sub){
   const core = list.filter(x => x.core !== false);
   const more = list.filter(x => x.core === false && (sktBookOk(b, x) || x.name === selected));
   const card = x => ({ value: x.name, label: x.name, sub: [sub ? sub(x) : '', x.core === false ? (sktIsLegacy(b, x) ? 'Legacy · ' : '') + x.source : ''].filter(Boolean).join(' · ') });
+  // (Legacy entries are the older version of something reprinted under a new name.)
   return cbCards(core.map(card), selected, attr)
     + (more.length ? '<h4 class="cb-books-h">Other books</h4>' + cbCards(more.map(card), selected, attr) : '');
+}
+// D&D Beyond's content categories, each a switch (Core Rules always on).
+function cbSourcesHtml(){
+  const S = sktSources(CB.build);
+  return '<div class="cb-sources">' + SKT_SOURCE_CATS.map(([k, l, d]) => '<label class="cb-src' + (S[k] ? ' on' : '') + '"><input type="checkbox" data-cb-srccat="' + k + '"'
+    + (S[k] ? ' checked' : '') + (k === 'core' ? ' disabled' : '') + '><span><b>' + cbEsc(l) + '</b><i>' + cbEsc(d) + '</i></span></label>').join('') + '</div>';
 }
 function cbBooksToggle(){
   return '<label class="cb-inline"><input type="checkbox" data-cb-allbooks' + (CB.build.allBooks ? ' checked' : '') + '> Include other books</label>';
 }
 // Which other books, one by one.
 function cbBookListHtml(){
-  const b = CB.build; if (!b.allBooks || !CB.R) return '';
-  const books = sktOtherBooks(CB.R);
+  const b = CB.build; if (!CB.R || !sktExtraSources(b)) return '';
+  const S = sktSources(b);
+  // The books in the expanded categories that are on (the 2014 core books come whole).
+  const books = sktOtherBooks(CB.R).filter(x => b.edition === '2014' || (S[sktSourceCat(x.source)] && /^expanded/.test(sktSourceCat(x.source))));
+  if (!books.length) return '';
   const on = src => !Array.isArray(b.books) || b.books.includes(src);
   return '<details class="cb-books"' + (Array.isArray(b.books) ? ' open' : '') + '><summary>Choose the books (' + (Array.isArray(b.books) ? b.books.length : books.length) + ' of ' + books.length + ')</summary>'
     + '<div class="cb-dim"><button class="btn small" data-cb-srcall="1">All</button> <button class="btn small" data-cb-srcall="0">None</button></div>'
@@ -420,7 +442,7 @@ function cbShell(main, side){
   const last = at === vis.length - 1;
   const blocking = todo.filter(t => !t.soft);
   return '<div class="cb-head"><b class="cb-title">' + title + '</b>'
-    + '<span class="cb-ed">' + (CB.build.edition === '2014' ? '2014 rules' : CB.build.legacy ? '2024 rules + legacy' : '2024 rules') + '</span>'
+    + '<span class="cb-ed">' + (CB.build.edition === '2014' ? '2014 rules' : '2024 rules') + '</span>'
     + '<button class="cb-x" data-cb="close" aria-label="Close">✕</button></div>'
     + '<nav class="cb-steps">' + steps + '</nav>'
     + '<div class="cb-body"><div class="cb-main">' + main + '</div>'
@@ -526,11 +548,10 @@ CB_RENDER.basics = () => {
     + (b.edition === '2014'
       ? '<div class="cb-note">Built on the 2014 rules throughout. <button class="btn small" data-cb-ed="2024">Use the 2024 rules</button></div>'
         + '<div class="cb-dim">The 2024 rules can still use 2014 options with Legacy content on' + (CB.convertFrom ? '; the sheet is read again' : ' — the name and level are kept, other choices are cleared') + '.</div>'
-      : '<label class="cb-inline cb-legacy"><input type="checkbox" data-cb-legacy' + (b.legacy ? ' checked' : '') + '> Legacy content</label>'
-        + '<div class="cb-dim">The 2024 rules, as D&D Beyond plays them. Legacy content adds the 2014 options beside them — the Half-Elf, 2014 feats, subclasses and spells; where a 2024 version exists, that one is used.</div>')
+      : '<div class="cb-dim">The 2024 rules, as D&D Beyond plays them.</div>')
     + '</div>'
-    + '<div class="cb-f">Books' + cbBooksToggle() + cbBookListHtml()
-    +   '<div class="cb-dim">Species, backgrounds, feats, spells and subclasses from the other ' + (b.edition === '2014' ? '2014-era books — Xanathar’s, Tasha’s, Monsters of the Multiverse, the setting books' : '2024-era books — Heroes of Faerûn, Eberron, and older species and spells the 2024 rules allow') + '. Their own rules show as text where the sheet can’t apply them.</div></div>'
+    + (b.edition === '2014' ? '<div class="cb-f">Books' + cbBooksToggle() + cbBookListHtml() : '<div class="cb-f">Sources' + cbSourcesHtml() + cbBookListHtml())
+    +   '<div class="cb-dim">' + (b.edition === '2014' ? 'Species, backgrounds, feats, spells and subclasses from the other 2014-era books — Xanathar’s, Tasha’s, Monsters of the Multiverse, the setting books. ' : 'As on D&D Beyond, all are on for a new character; switch off what your table doesn’t use. ') + 'Rules the sheet can’t apply show as text.</div></div>'
     + '<div class="cb-f">Portrait<div class="cb-icons">' + (/^data:image|^img\/|^https?:/.test(String(b.icon || '')) ? '<span class="cb-portrait on">' + renderIcon(b.icon, b.name) + '</span>' : '')
     +   '<button class="cb-upload" data-cb="upload" title="Upload a picture">📷 Upload</button>'
     +   icons.map(i => '<button class="' + (b.icon === i ? 'on' : '') + '" data-cb-icon="' + i + '">' + i + '</button>').join('') + '</div></div>'
@@ -1736,6 +1757,7 @@ function cbOnChange(e){
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
   if ('cbLegacy' in d) return cbSet(b => { b.legacy = t.checked; });
+  if (d.cbSrccat && d.cbSrccat !== 'core') return cbSet(b => { b.sources = Object.assign(sktSources(b), { [d.cbSrccat]: t.checked }); delete b.allBooks; delete b.legacy; });
   if ('cbHpmanual' in d) return cbSet(b => { b.hp = Object.assign({}, b.hp, { manual: Math.max(1, parseInt(v, 10) || 1) }); });
   if (d.cbCbg && d.cbCbg !== 'name') return cbSet(b => { b.customBg = Object.assign({}, b.customBg, { [d.cbCbg]: d.cbCbg === 'languages' ? +v : v });
     if (d.cbCbg === 'languages') b.customBg.tools = (b.customBg.tools || []).slice(0, 2 - (+v || 0)); });
@@ -1991,6 +2013,7 @@ function cbRefreshSteps(){
 async function cbSwitchEdition(ed){
   const keep = { name: CB.build.name, level: CB.build.level, icon: CB.build.icon,
                  allBooks: !!CB.build.allBooks, items: (CB.build.items || []).slice() };
+  if (ed === '2024') keep.sources = Object.assign({}, SKT_ALL_SOURCES);
   CB.build = Object.assign(sktBlankBuild(ed), keep);
   if (state.settings){ state.settings.builderEdition = ed; save(); }
   await cbLoad(ed);

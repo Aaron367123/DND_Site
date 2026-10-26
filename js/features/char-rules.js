@@ -54,9 +54,35 @@ const SKT_BOOK_CLASSES = ['artificer'];
 // Books written for the 2024 rules. Everything else in the data is a 2014
 // book (Xanathar's, Tasha's, Monsters of the Multiverse, the setting books).
 const SKT_2024_ERA = new Set(['XPHB', 'XDMG', 'XMM', 'ABH', 'FRHoF', 'LFL', 'EFA']);
-// What D&D Beyond marks Legacy: the 2014 core books. Xanathar's, Tasha's and
-// the rest stay ordinary "other books".
+// D&D Beyond's content categories (Manage → Character Settings → Sources),
+// all on for a new character there: Core Rules (the 2024 core books), Expanded
+// Rules (the other 2024-era books), 2014 Core Rules, 2014 Expanded Rules
+// (Xanathar's, Tasha's, Bigby's…), and Legacy — the older version of
+// something that has a newer one beside it (the Half-Elf, now the Khoravar;
+// Feeblemind, now Befuddlement).
+const SKT_CORE_2024 = new Set(['XPHB', 'XDMG', 'XMM']);
 const SKT_LEGACY_SRC = new Set(['PHB', 'DMG', 'MM']);
+const SKT_SOURCE_CATS = [
+  ['core', 'Core Rules', 'The 2024 Player’s Handbook, Dungeon Master’s Guide and Monster Manual'],
+  ['expanded', 'Expanded Rules', 'The other 2024-era books — Heroes of Faerûn, Eberron: Forge of the Artificer, Lorwyn…'],
+  ['core2014', '2014 Core Rules', 'The 2014 Player’s Handbook, Dungeon Master’s Guide and Monster Manual'],
+  ['expanded2014', '2014 Expanded Rules', 'Xanathar’s, Tasha’s, Monsters of the Multiverse, Bigby’s and the other books of that era'],
+  ['legacy', 'Legacy', 'The older version of something reprinted under a new name — the Half-Elf beside the Khoravar, Feeblemind beside Befuddlement'],
+];
+function sktSourceCat(src){ return SKT_CORE_2024.has(src) ? 'core' : SKT_2024_ERA.has(src) ? 'expanded' : SKT_LEGACY_SRC.has(src) ? 'core2014' : 'expanded2014'; }
+// The categories a build has on. One saved before them: "other books" was the
+// two expanded ones, the Legacy switch the 2014 core and legacy ones.
+function sktSources(build){
+  if (build && build.sources) return Object.assign({}, build.sources, { core: true });
+  const ab = !!(build && build.allBooks), lg = !!(build && build.legacy);
+  return { core: true, expanded: ab, expanded2014: ab, core2014: lg, legacy: lg };
+}
+const SKT_ALL_SOURCES = { core: true, expanded: true, core2014: true, expanded2014: true, legacy: true };
+// Whether anything beyond the 2024 handbook is on (then every book's class lists count).
+function sktExtraSources(build){
+  if (build && build.edition === '2014') return !!build.allBooks;
+  const S = sktSources(build); return !!(S.expanded || S.core2014 || S.expanded2014);
+}
 const SKT_POINT_BUY = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
 const SKT_STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 // Where each class wants its best scores, highest first: the order the
@@ -165,11 +191,13 @@ function _sktEraPicker(edition, src){
         return out;
       });
     const have = new Set(cand.map(x => (x.name + '|' + x.source).toLowerCase()));
-    const kept = cand.filter(x => (opts.legacy && SKT_LEGACY_SRC.has(x.source)) || !(x.reprintedAs || []).some(r => {
+    const superseded = x => (x.reprintedAs || []).some(r => {
       const [n, s2] = String(typeof r === 'string' ? r : (r && r.uid) || '').split('|');
       return have.has((n + '|' + (s2 || '')).toLowerCase());
-    }));
-    const rank = x => x.source === src ? 0 : SKT_2024_ERA.has(x.source) === (edition === '2024') ? 1 : 2;
+    });
+    const kept = cand.filter(x => (opts.legacy && !era(x.source)) || !superseded(x))
+      .map(x => superseded(x) ? Object.assign({}, x, { _superseded: true }) : x);
+    const rank = x => (x.source === src ? 0 : SKT_2024_ERA.has(x.source) === (edition === '2024') ? 1 : 2) * 2 + (x._superseded ? 1 : 0);
     kept.sort((a, b) => rank(a) - rank(b));
     const seen = new Set();
     return kept.filter(x => !seen.has(x.name) && seen.add(x.name));
@@ -299,7 +327,7 @@ async function _sktRulesBuild(edition, read){
     const byLineage = edition === '2024' && Array.isArray(r.additionalSpells) && r.additionalSpells.length > 1;
     if (byLineage) versions.forEach(v => { v.additionalSpells = null; v.overrides = v.overrides.filter(k => k !== 'additionalSpells'); });
     R.species.push({
-      name: r.name, source: r.source, core: r.source === src,
+      name: r.name, source: r.source, core: r.source === src, superseded: !!r._superseded,
       ability: r.ability || null, lineage: !!r.lineage, speed: r.speed, size: r.size || ['M'],
       darkvision: r.darkvision || 0, resist: r.resist || [],
       languages: r.languageProficiencies || [], skills: r.skillProficiencies || [],
@@ -337,8 +365,8 @@ async function _sktRulesBuild(edition, read){
   });
 
   sp(feats.feat, { legacy: edition === '2024' }).forEach(f => {
-    R.feats.push({ name: f.name, source: f.source, core: f.source === src,
-                   category: f.category || (edition === '2024' && SKT_LEGACY_SRC.has(f.source) ? 'G' : ''), prerequisite: f.prerequisite || null,
+    R.feats.push({ name: f.name, source: f.source, core: f.source === src, superseded: !!f._superseded,
+                   category: f.category || (edition === '2024' && !SKT_2024_ERA.has(f.source) ? 'G' : ''), prerequisite: f.prerequisite || null,
                    ability: f.ability || null, skills: f.skillProficiencies || null,
                    saves: f.savingThrowProficiencies || null, resist: f.resist || null,
                    additionalSpells: f.additionalSpells || null,
@@ -414,7 +442,7 @@ async function _sktRulesBuild(edition, read){
   sp(allSpells, { legacy: edition === '2024' }).forEach(s => {
     const core = s.source === src;
     const classesAll = listsFor(s, ['class', 'classVariant']);
-    R.spells.push({ name: s.name, level: s.level, school: s.school, source: s.source, core,
+    R.spells.push({ name: s.name, level: s.level, school: s.school, source: s.source, core, superseded: !!s._superseded,
                     classes: core ? listsFor(s, ['class']) : [], classesAll,
                     time: s.time, range: s.range, duration: s.duration, components: s.components || null,
                     higher: s.entriesHigherLevel || null,
@@ -833,16 +861,22 @@ function sktLanguageOptions(R, build){
 // switch as before. A character built on the 2014 rules is all legacy, so
 // nothing there is held back by it.
 function sktIsLegacy(build, x){
-  return !!(x && x.source && build && build.edition !== '2014' && SKT_LEGACY_SRC.has(x.source));
+  return !!(x && x.superseded && (!build || build.edition !== '2014'));
 }
 function sktBookOk(build, x){
   if (!x) return true;
-  const legacy = sktIsLegacy(build, x);
-  if (legacy && !build.legacy) return false;
-  if (x.core !== false) return true;
-  if (legacy && x.source === 'PHB') return true;
-  if (!build || !build.allBooks) return false;
-  return !Array.isArray(build.books) || build.books.includes(x.source);
+  if (build && build.edition === '2014'){
+    if (x.core !== false) return true;
+    if (!build.allBooks) return false;
+    return !Array.isArray(build.books) || build.books.includes(x.source);
+  }
+  const S = sktSources(build), cat = x.source ? sktSourceCat(x.source) : 'core';
+  // A superseded version is the Legacy switch's alone, whichever book it's from.
+  if (x.superseded) return !!S.legacy;
+  if (x.core !== false || cat === 'core') return true;
+  if (!S[cat]) return false;
+  // The book-by-book list narrows the expanded categories.
+  return cat === 'core2014' || !Array.isArray(build.books) || build.books.includes(x.source);
 }
 // The other books this edition's data holds, with how much each brings.
 function sktOtherBooks(R){
@@ -1411,9 +1445,9 @@ function sktExpandedSpells(sub, build){
 // Whether a spell is on a class's list for this character: the handbook's
 // lists, or every book's with "other books" on.
 function sktSpellOnList(s, listName, build){
-  if (build && build.allBooks) return sktBookOk(build, s) && s.classesAll.includes(listName);
-  // Legacy content on: the 2014 handbook's spells too, on their own lists.
-  if (!s.core && build && build.legacy && sktBookOk(build, s)) return s.classesAll.includes(listName);
+  if (sktExtraSources(build)) return sktBookOk(build, s) && s.classesAll.includes(listName);
+  // Only the 2024 core, but a legacy spell switched on: its own lists.
+  if (!s.core && sktBookOk(build, s)) return s.classesAll.includes(listName);
   return s.core && s.classes.includes(listName);
 }
 
@@ -1431,7 +1465,7 @@ function sktSpellsMatching(R, filter, build){
   return R.spells.filter(s => {
     if (f.level != null && !many(f.level).includes(String(s.level))) return false;
     if (!sktBookOk(build, s)) return false;
-    if (f.class && !many(f.class).some(c => (build && (build.allBooks || (build.legacy && !s.core)) ? s.classesAll : s.classes).map(x => x.toLowerCase()).includes(c))) return false;
+    if (f.class && !many(f.class).some(c => (build && (sktExtraSources(build) || !s.core) ? s.classesAll : s.classes).map(x => x.toLowerCase()).includes(c))) return false;
     if (f.school && !many(f.school).includes(String(s.school).toLowerCase())) return false;
     if (/ritual/i.test(f['components & miscellaneous'] || '') && !s.ritual) return false;
     return true;
@@ -2478,7 +2512,7 @@ function sktMagicalSecrets(build, R){
   const view = sktClassView(build, R, p);
   const sc = _sktSpellcastingOne(view, R, sktBuildAbilities(build, R));
   const max = (sc && sc.maxSpellLevel) || 0;
-  const options = R.spells.filter(s => s.level <= max && (build.allBooks || (build.legacy && !s.core) ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
+  const options = R.spells.filter(s => s.level <= max && (sktExtraSources(build) || !s.core ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
   return { count: n, options, picked: (build.secrets || []).filter(x => options.includes(x)).slice(0, n) };
 }
 
