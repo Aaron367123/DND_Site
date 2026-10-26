@@ -54,6 +54,9 @@ const SKT_BOOK_CLASSES = ['artificer'];
 // Books written for the 2024 rules. Everything else in the data is a 2014
 // book (Xanathar's, Tasha's, Monsters of the Multiverse, the setting books).
 const SKT_2024_ERA = new Set(['XPHB', 'XDMG', 'XMM', 'ABH', 'FRHoF', 'LFL', 'EFA']);
+// What D&D Beyond marks Legacy: the 2014 core books. Xanathar's, Tasha's and
+// the rest stay ordinary "other books".
+const SKT_LEGACY_SRC = new Set(['PHB', 'DMG', 'MM']);
 const SKT_POINT_BUY = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
 const SKT_STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 // Where each class wants its best scores, highest first: the order the
@@ -162,7 +165,7 @@ function _sktEraPicker(edition, src){
         return out;
       });
     const have = new Set(cand.map(x => (x.name + '|' + x.source).toLowerCase()));
-    const kept = cand.filter(x => !(x.reprintedAs || []).some(r => {
+    const kept = cand.filter(x => (opts.legacy && SKT_LEGACY_SRC.has(x.source)) || !(x.reprintedAs || []).some(r => {
       const [n, s2] = String(typeof r === 'string' ? r : (r && r.uid) || '').split('|');
       return have.has((n + '|' + (s2 || '')).toLowerCase());
     }));
@@ -333,9 +336,9 @@ async function _sktRulesBuild(edition, read){
     });
   });
 
-  sp(feats.feat).forEach(f => {
+  sp(feats.feat, { legacy: edition === '2024' }).forEach(f => {
     R.feats.push({ name: f.name, source: f.source, core: f.source === src,
-                   category: f.category || '', prerequisite: f.prerequisite || null,
+                   category: f.category || (edition === '2024' && SKT_LEGACY_SRC.has(f.source) ? 'G' : ''), prerequisite: f.prerequisite || null,
                    ability: f.ability || null, skills: f.skillProficiencies || null,
                    saves: f.savingThrowProficiencies || null, resist: f.resist || null,
                    additionalSpells: f.additionalSpells || null,
@@ -404,7 +407,9 @@ async function _sktRulesBuild(edition, read){
     // The handbook's classes by its own printing; a class the handbook
     // doesn't have (the Artificer) by whichever book prints it, so a feat
     // like Artificer Initiate still has a list to choose from.
-    return [...new Set([].concat(...keys.map(k => e[k] || [])).filter(c => c.source === src || !SKT_CORE_CLASSES.includes(String(c.name).toLowerCase())).map(c => c.name))];
+    // A legacy spell (the 2014 handbook's) keeps that handbook's class lists.
+    const legacyLists = edition === '2024' && SKT_LEGACY_SRC.has(s.source);
+    return [...new Set([].concat(...keys.map(k => e[k] || [])).filter(c => c.source === src || (legacyLists && c.source === 'PHB') || !SKT_CORE_CLASSES.includes(String(c.name).toLowerCase())).map(c => c.name))];
   };
   sp(allSpells, { legacy: edition === '2024' }).forEach(s => {
     const core = s.source === src;
@@ -822,8 +827,20 @@ function sktCoinText(cp){
 function sktLanguageOptions(R, build){
   return (R.languages || []).filter(l => l.type !== 'secret' && !/^(Druidic|Thieves' Cant)$/.test(l.name) && (l.core !== false || sktBookOk(build, l))).map(l => l.name);
 }
+// D&D Beyond's model: the 2024 rules, and a "Legacy content" switch that
+// adds the 2014 core books' options beside them (the Half-Elf, a 2014 feat,
+// subclass or spell). Other books, of either era, are the "other books"
+// switch as before. A character built on the 2014 rules is all legacy, so
+// nothing there is held back by it.
+function sktIsLegacy(build, x){
+  return !!(x && x.source && build && build.edition !== '2014' && SKT_LEGACY_SRC.has(x.source));
+}
 function sktBookOk(build, x){
-  if (!x || x.core !== false) return true;
+  if (!x) return true;
+  const legacy = sktIsLegacy(build, x);
+  if (legacy && !build.legacy) return false;
+  if (x.core !== false) return true;
+  if (legacy && x.source === 'PHB') return true;
   if (!build || !build.allBooks) return false;
   return !Array.isArray(build.books) || build.books.includes(x.source);
 }
@@ -1394,7 +1411,10 @@ function sktExpandedSpells(sub, build){
 // Whether a spell is on a class's list for this character: the handbook's
 // lists, or every book's with "other books" on.
 function sktSpellOnList(s, listName, build){
-  return (build && build.allBooks) ? (sktBookOk(build, s) && s.classesAll.includes(listName)) : (s.core && s.classes.includes(listName));
+  if (build && build.allBooks) return sktBookOk(build, s) && s.classesAll.includes(listName);
+  // Legacy content on: the 2014 handbook's spells too, on their own lists.
+  if (!s.core && build && build.legacy && sktBookOk(build, s)) return s.classesAll.includes(listName);
+  return s.core && s.classes.includes(listName);
 }
 
 // ── Spells a feat grants ─────────────────────────────────────────────────────
@@ -1411,7 +1431,7 @@ function sktSpellsMatching(R, filter, build){
   return R.spells.filter(s => {
     if (f.level != null && !many(f.level).includes(String(s.level))) return false;
     if (!sktBookOk(build, s)) return false;
-    if (f.class && !many(f.class).some(c => (build && build.allBooks ? s.classesAll : s.classes).map(x => x.toLowerCase()).includes(c))) return false;
+    if (f.class && !many(f.class).some(c => (build && (build.allBooks || (build.legacy && !s.core)) ? s.classesAll : s.classes).map(x => x.toLowerCase()).includes(c))) return false;
     if (f.school && !many(f.school).includes(String(s.school).toLowerCase())) return false;
     if (/ritual/i.test(f['components & miscellaneous'] || '') && !s.ritual) return false;
     return true;
@@ -2458,7 +2478,7 @@ function sktMagicalSecrets(build, R){
   const view = sktClassView(build, R, p);
   const sc = _sktSpellcastingOne(view, R, sktBuildAbilities(build, R));
   const max = (sc && sc.maxSpellLevel) || 0;
-  const options = R.spells.filter(s => s.level <= max && (build.allBooks ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
+  const options = R.spells.filter(s => s.level <= max && (build.allBooks || (build.legacy && !s.core) ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
   return { count: n, options, picked: (build.secrets || []).filter(x => options.includes(x)).slice(0, n) };
 }
 

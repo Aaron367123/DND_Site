@@ -5509,10 +5509,20 @@
         ok('builder: levelling up keeps the damage taken', up.level === 2 && up.hp === up.hpMax - 7, JSON.stringify({ hp: up.hp, max: up.hpMax }));
         ok('builder: and what was spent stays spent', (up.resources.find(r => r.name === 'Second Wind') || {}).current === 1);
         ok('builder: the same character, not a new one', up.id === made.id && state.party.length === n0 + 1);
-        // The 2014 rules from the same builder.
-        await openCharBuilder({}); await sleep(100);
-        click('[data-cb-ed="2014"]'); await sleep(800);
-        ok('builder: switching to the 2014 rules loads them', CB.build.edition === '2014' && CB.R && CB.R.edition === '2014');
+        // D&D Beyond's model: the 2024 rules with a Legacy switch; no edition to pick.
+        await openCharBuilder({}); for (let k = 0; k < 80 && !CB.R; k++) await sleep(100);
+        ok('builder: a new character is on the 2024 rules, with a Legacy content switch and no edition choice', CB.build.edition === '2024' && !!q('[data-cb-legacy]') && !q('[data-cb-ed="2014"]'));
+        click('[data-cb-step="species"]'); await sleep(30);
+        const hasHalfElf = () => !!root().querySelector('[data-cb-species="Half-Elf"]');
+        const off = hasHalfElf();
+        click('[data-cb-step="basics"]'); await sleep(30);
+        { const box = q('[data-cb-legacy]'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60); }
+        click('[data-cb-step="species"]'); await sleep(30);
+        ok('builder: with Legacy content on, the 2014 Half-Elf is offered (and not without)', !off && hasHalfElf() && CB.build.legacy === true);
+        cbClose();
+        // A character built on the 2014 rules throughout still works.
+        await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 80 && !CB.R; k++) await sleep(100);
+        ok('builder: the 2014 rules still load for a character built on them', CB.build.edition === '2014' && CB.R && CB.R.edition === '2014');
         click('[data-cb-step="species"]'); await sleep(30); click('[data-cb-species="Half-Elf"]'); await sleep(30);
         ok('builder 2014: a half-elf is offered two +1s and two skills',
            root().querySelectorAll('[data-cb-spasi]').length === 5 && root().querySelectorAll('[data-cb-spskill]').length === 18);
@@ -5662,9 +5672,11 @@
         ok('books 2014: the newer printing of a reprint (Multiverse Aasimar, not Volo’s)', (sktRulesSpecies(R14, 'Aasimar') || {}).source === 'MPMM');
         ok('books 2024: its own Aasimar, and older species the 2024 rules allow', (sktRulesSpecies(R24, 'Aasimar') || {}).source === 'XPHB' && (sktRulesSpecies(R24, 'Tabaxi') || {}).core === false);
         ok('books 2024: no 2014 handbook background', !R24.backgrounds.some(b => b.source === 'PHB'));
-        ok('books 2024: an older spell renamed in the 2024 book appears once, by its 2024 name',
-           !sktRulesSpell(R24, 'Feeblemind') && !!sktRulesSpell(R24, 'Befuddlement') && !sktRulesSpell(R24, 'Summon Draconic Spirit') && !!sktRulesSpell(R24, 'Summon Dragon')
+        ok('books 2024: an older spell renamed in the 2024 book is offered by its 2024 name; the 2014 one only with Legacy content on',
+           !!sktRulesSpell(R24, 'Befuddlement') && !!sktRulesSpell(R24, 'Summon Dragon') && !sktRulesSpell(R24, 'Summon Draconic Spirit')
+           && !sktSpellOnList(sktRulesSpell(R24, 'Feeblemind'), 'Wizard', { edition: '2024' }) && sktSpellOnList(sktRulesSpell(R24, 'Feeblemind'), 'Wizard', { edition: '2024', legacy: true })
            && !!sktRulesSpell(R14, 'Feeblemind') && !sktRulesSpell(R14, 'Befuddlement'));
+        ok('books 2024: Legacy content is the 2014 core books only — Xanathar’s and Bigby’s aren’t legacy', sktIsLegacy({ edition: '2024' }, { source: 'PHB' }) && !sktIsLegacy({ edition: '2024' }, { source: 'XGE' }) && !sktIsLegacy({ edition: '2024' }, { source: 'BGG' }) && !sktIsLegacy({ edition: '2014' }, { source: 'PHB' }));
         ok('books 2014: where two books print a species, Multiverse’s', (sktRulesSpecies(R14, 'Hobgoblin') || {}).source === 'MPMM' && (sktRulesSpecies(R14, 'Triton') || {}).source === 'MPMM');
         const wz14 = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 1 });
         const can = (R, b) => sktSpellOptions(R, b, 0).map(s => s.name);
@@ -9354,13 +9366,20 @@
         save();
         await openCharBuilder({ idx: state.party.findIndex(x => x.id === 'imp_tg2') });
         for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100);
-        ok('rebuild: a Half-Elf on a 2024 sheet is the Khoravar, and the review says so', CB.build.edition === '2024' && CB.build.species === 'Khoravar' && (CB.convertNotes || []).some(n => /Khoravar/.test(n)),
+        ok('rebuild: a Half-Elf on a 2024 sheet stays a Half-Elf, with Legacy content switched on (as D&D Beyond has it), and the review says so',
+           CB.build.edition === '2024' && CB.build.species === 'Half-Elf' && CB.build.legacy === true && (CB.convertNotes || []).some(n => /Legacy/.test(n)),
            CB.build.species + ' ' + (CB.convertNotes || []).join(';'));
-        CB.convertDiff = null; await cbSwitchEdition('2014');
+        cbClose();
+        // A sheet from the 2014 rules: built on them, and moved to 2024 on request without losing it.
+        { const pc = state.party.find(x => x.id === 'imp_tg2'); pc.sheet = Object.assign({}, pc.sheet, { bio: { features: '* Bardic Inspiration • PHB 53 \n' } }); save(); }
+        await openCharBuilder({ idx: state.party.findIndex(x => x.id === 'imp_tg2') });
         for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100);
-        ok('rebuild: switching to the 2014 rules rebuilds it from the sheet in that book — the Half-Elf, its class and background kept, not cleared',
-           CB.build.edition === '2014' && CB.build.species === 'Half-Elf' && CB.build.cls === 'Bard' && CB.build.background === 'Entertainer',
-           JSON.stringify([CB.build.edition, CB.build.species, CB.build.cls, CB.build.background]));
+        const ed14 = CB.build.edition;
+        CB.convertDiff = null; await cbSwitchEdition('2024');
+        for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100);
+        ok('rebuild: a 2014 sheet is built on the 2014 rules; "Use the 2024 rules" rebuilds it from the sheet — Half-Elf (legacy), class and background kept',
+           ed14 === '2014' && CB.build.edition === '2024' && CB.build.species === 'Half-Elf' && CB.build.legacy === true && CB.build.cls === 'Bard' && CB.build.background === 'Entertainer',
+           JSON.stringify([ed14, CB.build.edition, CB.build.species, CB.build.legacy, CB.build.cls, CB.build.background]));
         cbClose();
         if (state.settings) state.settings.builderEdition = '2024';
       } catch(e){ ok('round 76 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
