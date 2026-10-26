@@ -5728,7 +5728,7 @@
         ok('builder: the handbook’s nine species without it', qa('[data-cb-species]').length === 9 && !q('[data-cb-species="Tabaxi"]'));
         tick('[data-cb-allbooks]'); await sleep(30);
         ok('builder: with it, the rest under “Other books”, each naming its book',
-           CB.build.allBooks && qa('[data-cb-species]').length > 60 && /Other books/.test(q('.cb-books-h').textContent) && /MPMM/.test(q('[data-cb-species="Tabaxi"]').textContent));
+           CB.build.allBooks && qa('[data-cb-species]').length > 60 && /other books/i.test((q('.cb-books-h') || q('details.cb-more > summary')).textContent) && /MPMM/.test(q('[data-cb-species="Tabaxi"]').textContent));
         click('[data-cb-species="Tabaxi"]'); await sleep(30);
         set('[data-cb-spflex="2"]', 'dex'); await sleep(20); set('[data-cb-spflex="1"]', 'cha'); await sleep(20);
         ok('builder: +2 and +1 where you want them', JSON.stringify(CB.build.speciesAsi) === '{"dex":2,"cha":1}', JSON.stringify(CB.build.speciesAsi));
@@ -9452,6 +9452,53 @@
         loadDomain('party');
       }
     }
+    // -- Round 78: making a character — the start screen, quick build, finding things --
+    {
+      const p0 = localStorage.getItem('skt-party-v1');
+      try {
+        const root = () => document.getElementById('cb-root'), q = sel => root().querySelector(sel);
+        const click = async sel => { const el = q(sel); if (el) el.click(); await sleep(40); return !!el; };
+        await openCharBuilder({ welcome: true }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100); await sleep(30);
+        ok('create: "Build one" opens on a start screen — step by step, or a quick build — with no steps yet',
+           !!q('[data-cb="start-steps"]') && !!q('[data-cb="start-quick"]') && !q('.cb-steps'));
+        await click('[data-cb="start-quick"]');
+        ok('create: the quick build asks for a name, a class (with what each is like), a species and a background',
+           !!q('[data-cb-in="name"]') && root().querySelectorAll('[data-cb-qcls]').length >= 12 && !!q('[data-cb-qsp]') && !!q('[data-cb-qbg]')
+           && /rage/i.test((q('[data-cb-qcls="Barbarian"]') || {}).textContent || '') && q('[data-cb="start-build"]').disabled);
+        await click('[data-cb-qcls="Wizard"]');
+        { const sp = q('[data-cb-qsp]'); sp.value = 'Elf'; sp.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30); }
+        { const nm = q('[data-cb-in="name"]'); nm.value = 'Quick Wiz'; nm.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30); }
+        await click('[data-cb="start-build"]');
+        ok('create: Build it — a wizard elf, everything chosen, on the review', CB.step === 'review' && CB.build.cls === 'Wizard' && CB.build.species === 'Elf' && CB.build.name === 'Quick Wiz'
+           && !sktBuildTodo(CB.build, CB.R).some(t => !t.soft) && !!q('.cb-steps'), JSON.stringify([CB.step, CB.build.cls, CB.build.species, sktBuildTodo(CB.build, CB.R).map(t => t.what)]));
+        cbClose();
+        await openCharBuilder({ welcome: true }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100); await sleep(30);
+        await click('[data-cb="start-steps"]');
+        const set = q('details.cb-settings');
+        ok('create: step by step starts on who the character is; the campaign\'s rules and sources are folded under Campaign settings',
+           CB.step === 'basics' && !!set && !set.open && !!set.querySelector('[data-cb-srccat="legacy"]') && /every source/.test(set.querySelector('summary').textContent));
+        CB.build.cls = 'Wizard'; CB.build.species = ''; CB.step = 'species'; cbRender(); await sleep(30);
+        const find = q('[data-cb-find]');
+        ok('create: a long list has a search box, and the other books folded away', !!find && !!q('details.cb-more') && !q('details.cb-more').open);
+        find.value = 'gob'; find.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
+        const shown = [...root().querySelectorAll('.cb-cards .cb-card')].filter(c => c.style.display !== 'none');
+        ok('create: searching shows only what matches, opening the other books to show it', shown.length >= 1 && shown.every(c => /gob/i.test(c.textContent)) && q('details.cb-more').open,
+           shown.map(c => c.querySelector('b').textContent).join(', '));
+        CB.build.species = 'Elf'; CB.build.background = 'Sage'; CB.step = 'skills'; cbRender(); await sleep(30);
+        const heads = [...root().querySelectorAll('.cb-sub-h')].map(h => h.textContent);
+        const otherLang = [...root().querySelectorAll('details.cb-more')].find(d => /other books/i.test(d.querySelector('summary').textContent));
+        ok('create: languages come as Standard, then Rare, with the other books\' folded', heads[0] === 'Standard' && heads.includes('Rare') && !!otherLang && !otherLang.open,
+           JSON.stringify(heads));
+        ok('create: the steps tick off — Class done (✓), Skills still to choose (a count)', /✓/.test((q('[data-cb-step="class"]') || {}).textContent || '') && !!q('[data-cb-step="skills"] .cb-step-n') && !!q('.cb-progress i'));
+        cbClose();
+      } catch(e){ ok('round 78 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
+      finally {
+        if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose();
+        _remoteUpdate = true;
+        try { if (p0 != null) localStorage.setItem('skt-party-v1', p0); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -10998,7 +11045,8 @@
           const btn = document.querySelector('[data-pa-build="new"]');
           ok('player: the character picker offers to build one', !!btn);
           btn.click(); await sleep(400);
-          ok('player: the builder opens over the phone', !!document.getElementById('cb-root'));
+          ok('player: the builder opens over the phone, on the start screen', !!document.getElementById('cb-root') && !!document.querySelector('#cb-root [data-cb="start-steps"]'));
+          CB.welcome = false;
           // Fill it in directly — the DM-side checks drive every control.
           Object.assign(CB.build, { name: 'Phoned', species: 'Human', cls: 'Rogue', background: 'Criminal',
             skills: ['acrobatics', 'perception', 'insight', 'investigation'], speciesSkills: ['athletics'],

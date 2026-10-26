@@ -1885,7 +1885,7 @@ function paOnClick(e){
   const bld = e.target.closest('[data-pa-build]');
   if (bld && typeof openCharBuilder === 'function'){
     if (bld.dataset.paBuild === 'new'){
-      openCharBuilder({ onDone: rec => { if (rec && rec.id){ paSetPc(rec.id); paTab = 'you'; paRender(); } } });
+      openCharBuilder({ welcome: true, onDone: rec => { if (rec && rec.id){ paSetPc(rec.id); paTab = 'you'; paRender(); } } });
     } else {
       const i = paMyIdx();
       if (i >= 0) openCharBuilder({ idx: i, levelup: true, onDone: () => paRender() });

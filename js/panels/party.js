@@ -77,7 +77,7 @@ registerPanel('party',{
       + '<span><b>' + title + '</b><span>' + sub + '</span></span></button>';
     back.innerHTML = '<div class="modal add-char" role="dialog" aria-modal="true" aria-label="Add a character">'
       + '<h3>' + (opts.foe ? 'Add a rival' : 'Add a character') + '</h3>'
-      + (opts.foe ? '' : opt('build', '🧙', 'Build one', 'Step by step, 2014 or 2024 rules — the sheet fills itself in'))
+      + (opts.foe ? '' : opt('build', '🧙', 'Build one', 'Step by step or a quick build, as on D&D Beyond — the sheet fills itself in'))
       + opt('pdf', '📄', 'Import a D&D Beyond PDF', 'Read a character sheet exported from D&D Beyond')
       + opt('blank', '✎', 'Start blank', 'An empty card to fill in by hand')
       + '<div class="modal-actions"><button class="btn" data-add="cancel">Cancel</button></div></div>';
@@ -87,7 +87,7 @@ registerPanel('party',{
     back.addEventListener('click', e => {
       const b = e.target.closest('[data-add]'); if (!b) return;
       const k = b.dataset.add; close();
-      if (k === 'build' && typeof openCharBuilder === 'function') openCharBuilder({});
+      if (k === 'build' && typeof openCharBuilder === 'function') openCharBuilder({ welcome: true });
       else if (k === 'pdf') this._importPdf();
       else if (k === 'blank'){ this._addBlank(!!opts.foe); if (opts.fromManage) this._openManageParty(); }
       else if (k === 'cancel' && opts.fromManage) this._openManageParty();

@@ -54,6 +54,9 @@ async function openCharBuilder(opts){
          mode, idx: opts.idx != null ? opts.idx : null, onDone: opts.onDone || null,
          fromLevel: prior && prior.build ? prior.build.level : null, loading: true, multi0, lvlTo: 'first' };
   if (convert) CB.convertFrom = prior.id;
+  // From the app's "Build one" buttons: a start screen first (D&D Beyond's
+  // Standard / Quickbuilder choice), rather than straight into Basics.
+  if (mode === 'create' && opts.welcome) CB.welcome = true;
   if (mode === 'create' && build.edition === '2024' && !build.sources) build.sources = Object.assign({}, SKT_ALL_SOURCES);
   cbMount();
   await cbLoad(build.edition);
@@ -332,14 +335,19 @@ function cbUsesLegacy(b, R){
 }
 // Cards for one list: the handbook's, then (with other books on) the rest
 // under their own heading, each naming its book.
-function cbBookCards(list, selected, attr, sub){
+function cbBookCards(list, selected, attr, sub, blurb){
   const b = CB.build;
   const core = list.filter(x => x.core !== false);
   const more = list.filter(x => x.core === false && (sktBookOk(b, x) || x.name === selected));
-  const card = x => ({ value: x.name, label: x.name, sub: [sub ? sub(x) : '', x.core === false ? (sktIsLegacy(b, x) ? 'Legacy · ' : '') + x.source : ''].filter(Boolean).join(' · ') });
+  const card = x => ({ value: x.name, label: x.name, blurb: blurb ? blurb(x) : '', sub: [sub ? sub(x) : '', x.core === false ? (sktIsLegacy(b, x) ? 'Legacy · ' : '') + x.source : ''].filter(Boolean).join(' · ') });
   // (Legacy entries are the older version of something reprinted under a new name.)
-  return cbCards(core.map(card), selected, attr)
-    + (more.length ? '<h4 class="cb-books-h">Other books</h4>' + cbCards(more.map(card), selected, attr) : '');
+  const many = core.length + more.length > 16;
+  const inMore = more.some(x => x.name === selected);
+  return (many ? '<input class="cb-find" data-cb-find placeholder="Search ' + (core.length + more.length) + '…" aria-label="Search">' : '')
+    + cbCards(core.map(card), selected, attr)
+    + (more.length ? (more.length > 8
+        ? '<details class="cb-more"' + (inMore ? ' open' : '') + '><summary>More from other books <i>' + more.length + '</i></summary>' + cbCards(more.map(card), selected, attr) + '</details>'
+        : '<h4 class="cb-books-h">Other books</h4>' + cbCards(more.map(card), selected, attr)) : '');
 }
 // D&D Beyond's content categories, each a switch (Core Rules always on).
 function cbSourcesHtml(){
@@ -348,6 +356,8 @@ function cbSourcesHtml(){
     + (S[k] ? ' checked' : '') + (k === 'core' ? ' disabled' : '') + '><span><b>' + cbEsc(l) + '</b><i>' + cbEsc(d) + '</i></span></label>').join('') + '</div>';
 }
 function cbBooksToggle(){
+  // The 2024 rules use the Sources switches (Basics → Campaign settings) instead.
+  if (CB.build.edition !== '2014') return '';
   return '<label class="cb-inline"><input type="checkbox" data-cb-allbooks' + (CB.build.allBooks ? ' checked' : '') + '> Include other books</label>';
 }
 // Which other books, one by one.
@@ -423,19 +433,70 @@ function cbRender(){
   if (CB.loading || !CB.R){ root.innerHTML = cbShell('<div class="cb-msg">Loading the ' + CB.build.edition + ' rules…</div>', ''); return; }
   const rec = sktComputeCharacter(CB.build, CB.R, CB.idx != null ? state.party[CB.idx] : null);
   CB.rec = rec;
+  if (CB.welcome){ root.innerHTML = cbWelcomeShell(CB.welcome === 'quick' ? cbQuickFormHtml() : cbWelcomeHtml()); return; }
   const main = (CB_RENDER[CB.step] || CB_RENDER.basics)();
   root.innerHTML = cbShell(main, cbSide(rec));
   const sc = root.querySelector('.cb-main'); if (sc && CB.scrollTop != null){ sc.scrollTop = CB.scrollTop; CB.scrollTop = null; }
 }
 
+// ── The start screen ─────────────────────────────────────────────────────────
+function cbWelcomeShell(main){
+  return '<div class="cb-head"><b class="cb-title">New character</b><span class="cb-ed">2024 rules</span>'
+    + '<button class="cb-x" data-cb="close" aria-label="Close">✕</button></div>'
+    + '<div class="cb-body"><div class="cb-main cb-welcome">' + main + '</div></div>';
+}
+function cbWelcomeHtml(){
+  const card = (act, icon, title, text, primary) => '<button class="cb-start' + (primary ? ' primary' : '') + '" data-cb="' + act + '"><span class="cb-start-ico">' + icon + '</span><b>' + title + '</b><i>' + text + '</i></button>';
+  return '<div class="cb-welcome-in"><h2>Make a character</h2><p class="cb-dim">How would you like to start? You can change anything afterwards.</p>'
+    + '<div class="cb-starts">'
+    + card('start-steps', '🧭', 'Step by step', 'Choose a class, species and background, then scores, skills, spells and gear — with the sheet filling in beside you.', true)
+    + card('start-quick', '⚡', 'Quick build', 'Pick a class, a species and a background. Everything else is chosen for you, ready to play.')
+    + (typeof panelDefs !== 'undefined' && panelDefs.party && panelDefs.party._importPdf && !cbIsPlayer() ? card('start-pdf', '📄', 'Import from D&D Beyond', 'Read a character sheet exported as a PDF; rebuild it here afterwards if you like.') : '')
+    + '</div></div>';
+}
+// The Quickbuilder: four choices, then the review.
+function cbQuickFormHtml(){
+  const b = CB.build, R = CB.R;
+  const classes = R.classes.filter(c => c.core !== false);
+  const species = R.species.filter(s => s.core !== false).map(s => s.name);
+  const bgs = R.backgrounds.filter(x => x.core !== false).map(x => x.name);
+  const opt = (list, cur) => '<option value="">Choose for me</option>' + list.map(n => '<option' + (n === cur ? ' selected' : '') + '>' + cbEsc(n) + '</option>').join('');
+  return '<div class="cb-welcome-in"><button class="btn small" data-cb="start-back">‹ Start</button><h2>Quick build</h2>'
+    + '<label class="cb-f">Name<input data-cb-in="name" value="' + cbEsc(b.name) + '" placeholder="Character name" maxlength="60"></label>'
+    + '<div class="cb-f">Class' + cbCards(classes.map(cbClassCard), b.cls, 'cb-qcls') + '</div>'
+    + '<div class="cb-row"><label class="cb-f cb-grow">Species<select class="cb-sel" data-cb-qsp>' + opt(species, b.species) + '</select></label>'
+    + '<label class="cb-f cb-grow">Background<select class="cb-sel" data-cb-qbg>' + opt(bgs, b.background) + '</select></label></div>'
+    + '<div class="cb-quick-go"><button class="btn primary" data-cb="start-build"' + (b.cls ? '' : ' disabled') + '>⚡ Build ' + cbEsc(b.name || 'it') + '</button>'
+    + '<span class="cb-dim">' + (b.cls ? 'Scores, skills, spells and gear will be chosen to suit a ' + cbEsc(b.cls) + '.' : 'Choose a class first.') + '</span></div></div>';
+}
+// A class card: its icon, what it's like to play, its die and best ability.
+const CB_CLASS_BLURB = {
+  barbarian: 'A rage-fuelled warrior who shrugs off blows', bard: 'A performer whose words and music work magic',
+  cleric: 'A divine spellcaster: healer, protector or smiter', druid: 'Nature’s spellcaster, able to take animal shapes',
+  fighter: 'A weapon and armour expert, simple and sturdy', monk: 'A fast unarmed striker powered by inner focus',
+  paladin: 'An armoured holy warrior with healing and smites', ranger: 'A hunter and tracker with a touch of nature magic',
+  rogue: 'A sneaky skill expert who strikes where it hurts', sorcerer: 'Born with magic, and able to bend spells to their will',
+  warlock: 'A pact-bound caster with eldritch power', wizard: 'A scholar with the biggest book of spells',
+  artificer: 'An inventor who builds magic into gear',
+};
+function cbClassCard(c){
+  const prim = [].concat(...(c.primaryAbility || []).map(o => Object.keys(o).filter(k => o[k] === true))).map(k => k.toUpperCase());
+  return { value: c.name, label: c.name, icon: (typeof _SKT_CLASS_ICON !== 'undefined' && _SKT_CLASS_ICON[c.key]) || '⚔', blurb: CB_CLASS_BLURB[c.key] || '',
+    sub: 'd' + c.hd + (prim.length ? ' · ' + [...new Set(prim)].join(' or ') : '') + ' · saves ' + c.saves.map(s => s.toUpperCase()).join('/') + (c.core === false ? ' · ' + (((CB && CB.R && CB.R.bookNames) || {})[c.source] || c.source) : '') };
+}
+
 function cbShell(main, side){
   const todo = CB && CB.R ? sktBuildTodo(CB.build, CB.R) : [];
   const count = id => todo.filter(t => t.step === id && !t.soft).length;
-  const steps = cbVisibleSteps().map(s => {
-    const n = count(s.id);
-    return '<button class="cb-step' + (CB.step === s.id ? ' on' : '') + '" data-cb-step="' + s.id + '">' + cbEsc(s.label)
+  const vis0 = cbVisibleSteps();
+  const steps = vis0.map((s, i) => {
+    const n = count(s.id), done = !n && s.id !== 'review' && s.id !== 'details';
+    return '<button class="cb-step' + (CB.step === s.id ? ' on' : '') + (done ? ' done' : '') + '" data-cb-step="' + s.id + '">'
+      + '<span class="cb-step-i">' + (n ? '' : done ? '✓' : i + 1) + '</span>' + cbEsc(s.label)
       + (n ? '<span class="cb-step-n" title="' + n + ' still to choose">' + n + '</span>' : '') + '</button>';
   }).join('');
+  const need = vis0.filter(s => s.id !== 'review' && s.id !== 'details');
+  const pct = need.length ? Math.round(100 * need.filter(s => !count(s.id)).length / need.length) : 100;
   const title = CB.mode === 'levelup' ? 'Level up — ' + cbEsc(CB.build.name || 'character') + ' to level ' + CB.build.level
               : CB.mode === 'edit' ? 'Edit ' + cbEsc(CB.build.name || 'character') : 'New character';
   const vis = cbVisibleSteps(), at = vis.findIndex(s => s.id === CB.step);
@@ -445,6 +506,7 @@ function cbShell(main, side){
     + '<span class="cb-ed">' + (CB.build.edition === '2014' ? '2014 rules' : '2024 rules') + '</span>'
     + '<button class="cb-x" data-cb="close" aria-label="Close">✕</button></div>'
     + '<nav class="cb-steps">' + steps + '</nav>'
+    + '<div class="cb-progress" title="' + pct + '% chosen"><i style="width:' + pct + '%"></i></div>'
     + '<div class="cb-body"><div class="cb-main">' + main + '</div>'
     + (side ? '<aside class="cb-side">' + side + '</aside>' : '') + '</div>'
     + '<div class="cb-foot">'
@@ -504,8 +566,9 @@ function cbSide(rec){
 function cbCards(items, selected, attr, extra){
   return '<div class="cb-cards">' + items.map(it => {
     const on = selected === it.value;
-    return '<button class="cb-card' + (on ? ' on' : '') + '" data-' + attr + '="' + cbEsc(it.value) + '">'
-      + '<b>' + cbEsc(it.label) + '</b>' + (it.sub ? '<span>' + cbEsc(it.sub) + '</span>' : '') + '</button>';
+    return '<button class="cb-card' + (on ? ' on' : '') + (it.icon ? ' has-ico' : '') + '" data-' + attr + '="' + cbEsc(it.value) + '">'
+      + (it.icon ? '<span class="cb-card-ico">' + cbEsc(it.icon) + '</span>' : '')
+      + '<b>' + cbEsc(it.label) + '</b>' + (it.blurb ? '<em>' + cbEsc(it.blurb) + '</em>' : '') + (it.sub ? '<span>' + cbEsc(it.sub) + '</span>' : '') + '</button>';
   }).join('') + '</div>' + (extra || '');
 }
 // A checklist with a limit. `locked` are shown ticked and cannot be changed
@@ -544,6 +607,10 @@ CB_RENDER.basics = () => {
     + '<div class="cb-quick"><button class="btn primary" data-cb="quick">⚡ Quick build</button><span class="cb-dim">Fills in every choice you haven’t made — scores, skills, spells, gear — with sensible picks for the class. Change anything after.</span></div>'
     + '<div class="cb-row"><label class="cb-f cb-grow">Name<input data-cb-in="name" value="' + cbEsc(b.name) + '" placeholder="Character name" maxlength="60"></label>'
     + '<label class="cb-f">Level<input type="number" min="1" max="20" data-cb-in="level" value="' + (b.level || 1) + '"' + (CB.mode === 'levelup' ? ' disabled' : '') + '></label></div>'
+    + '<div class="cb-f">Portrait<div class="cb-icons">' + (/^data:image|^img\/|^https?:/.test(String(b.icon || '')) ? '<span class="cb-portrait on">' + renderIcon(b.icon, b.name) + '</span>' : '')
+    +   '<button class="cb-upload" data-cb="upload" title="Upload a picture">📷 Upload</button>'
+    +   icons.map(i => '<button class="' + (b.icon === i ? 'on' : '') + '" data-cb-icon="' + i + '">' + i + '</button>').join('') + '</div></div>'
+    + '<details class="cb-settings"' + (CB.settingsOpen ? ' open' : '') + '><summary data-cb="settings"><b>Campaign settings</b><span>' + cbEsc(cbSettingsSummary()) + '</span></summary>'
     + '<div class="cb-f">Rules'
     + (b.edition === '2014'
       ? '<div class="cb-note">Built on the 2014 rules throughout. <button class="btn small" data-cb-ed="2024">Use the 2024 rules</button></div>'
@@ -552,18 +619,23 @@ CB_RENDER.basics = () => {
     + '</div>'
     + (b.edition === '2014' ? '<div class="cb-f">Books' + cbBooksToggle() + cbBookListHtml() : '<div class="cb-f">Sources' + cbSourcesHtml() + cbBookListHtml())
     +   '<div class="cb-dim">' + (b.edition === '2014' ? 'Species, backgrounds, feats, spells and subclasses from the other 2014-era books — Xanathar’s, Tasha’s, Monsters of the Multiverse, the setting books. ' : 'As on D&D Beyond, all are on for a new character; switch off what your table doesn’t use. ') + 'Rules the sheet can’t apply show as text.</div></div>'
-    + '<div class="cb-f">Portrait<div class="cb-icons">' + (/^data:image|^img\/|^https?:/.test(String(b.icon || '')) ? '<span class="cb-portrait on">' + renderIcon(b.icon, b.name) + '</span>' : '')
-    +   '<button class="cb-upload" data-cb="upload" title="Upload a picture">📷 Upload</button>'
-    +   icons.map(i => '<button class="' + (b.icon === i ? 'on' : '') + '" data-cb-icon="' + i + '">' + i + '</button>').join('') + '</div></div>'
     + '<label class="cb-f">Levelling<select class="cb-sel" data-cb-advance><option value="milestone"' + (b.advancement !== 'xp' ? ' selected' : '') + '>Milestone — the DM says when</option>'
-    +   '<option value="xp"' + (b.advancement === 'xp' ? ' selected' : '') + '>Experience points</option></select></label>';
+    +   '<option value="xp"' + (b.advancement === 'xp' ? ' selected' : '') + '>Experience points</option></select></label>'
+    + '</details>';
 };
+// "2024 rules · every source · milestone": the folded settings in a line.
+function cbSettingsSummary(){
+  const b = CB.build, S = sktSources(b);
+  const on = SKT_SOURCE_CATS.filter(([k]) => S[k]).length;
+  return [b.edition === '2014' ? '2014 rules' : '2024 rules',
+    b.edition === '2014' ? (b.allBooks ? 'other books on' : 'the handbook') : on === SKT_SOURCE_CATS.length ? 'every source' : on + ' of ' + SKT_SOURCE_CATS.length + ' sources',
+    b.advancement === 'xp' ? 'experience points' : 'milestone'].join(' · ');
+}
 
 CB_RENDER.class = () => {
   const b = CB.build, R = CB.R;
   const cls = sktRulesClass(R, b.cls);
-  const cards = R.classes.map(c => ({ value: c.name, label: c.name,
-    sub: 'd' + c.hd + ' · saves ' + c.saves.map(s => s.toUpperCase()).join('/') + (c.core === false ? ' · ' + ((R.bookNames || {})[c.source] || c.source) : '') }));
+  const cards = R.classes.map(cbClassCard);
   let html = '<h3>Class</h3>' + cbCards(cards, cls && cls.name, 'cb-cls');
   if (cls){
     const lvl1 = cls.features.filter(f => f.level === 1 && !/Proficiencies/.test(f.name)).map(f => f.name).join(', ');
@@ -666,7 +738,8 @@ CB_RENDER.species = () => {
   const b = CB.build, R = CB.R;
   const sp = sktRulesSpecies(R, b.species);
   let html = '<h3>Species</h3>' + cbBookCards(R.species, b.species, 'cb-species',
-    s => (typeof s.speed === 'number' ? s.speed : (s.speed && s.speed.walk) || 30) + ' ft' + (s.darkvision ? ' · darkvision' : '')) + cbBooksToggle();
+    s => (typeof s.speed === 'number' ? s.speed : (s.speed && s.speed.walk) || 30) + ' ft' + (s.darkvision ? ' · darkvision' : ''),
+    s => (s.entries || []).filter(e => e && e.name && !/^(Age|Size|Speed|Languages?|Creature Type|Alignment|Darkvision|Ability Score Increase)$/i.test(e.name)).map(e => e.name).slice(0, 3).join(' · ')) + cbBooksToggle();
   if (!sp) return html;
   const subs = sp.subraces.filter(s => sktBookOk(b, s) || s.name === b.subspecies);
   if (subs.length){
@@ -760,7 +833,9 @@ CB_RENDER.background = () => {
   const b = CB.build, R = CB.R;
   const bg = sktBuildBackground(R, b);
   const skillsOf = x => (x.skills || []).flatMap(o => Object.keys(o).filter(k => o[k] === true).map(k => SKT_SKILL_LABEL[sktSkillKey(k)] || k));
-  let html = '<h3>Background</h3>' + cbBookCards(R.backgrounds, b.background, 'cb-bg', x => skillsOf(x).join(', '))
+  const featOf = x => [].concat(...((x.feats || []).map(o => Object.keys(o)))).map(k => _sktTitle(String(k).split(/[|;]/)[0])).join(', ');
+  const abOf = x => { const w = Array.isArray(x.ability) && ((x.ability[0] || {}).choose || {}).weighted; return w ? w.from.map(k => k.toUpperCase()).join('/') : ''; };
+  let html = '<h3>Background</h3>' + cbBookCards(R.backgrounds, b.background, 'cb-bg', x => skillsOf(x).join(', '), x => [featOf(x), abOf(x)].filter(Boolean).join(' · '))
     + cbCards([{ value: SKT_CUSTOM_BG, label: 'Custom background', sub: 'your own' }], b.background, 'cb-bg') + cbBooksToggle();
   if (b.background === SKT_CUSTOM_BG) html += cbCustomBgHtml();
   if (!bg) return html;
@@ -1054,7 +1129,15 @@ CB_RENDER.skills = () => {
   if (langCount){
     const known = (rec.sheet.languages || '').split(', ').filter(Boolean).filter(l => !(b.languages || []).includes(l));
     html += '<h4>Languages</h4><div class="cb-dim">Already known: ' + cbEsc(known.join(', ') || '—') + '. Choose ' + langCount + ' more.</div>'
-      + cbChecks([...new Set(sktLanguageOptions(R, b).concat(b.languages || []))].filter(n => !known.includes(n)), b.languages || [], langCount, 'cb-lang');
+      + (() => {
+        const all = [...new Set(sktLanguageOptions(R, b).concat(b.languages || []))].filter(n => !known.includes(n));
+        const L = n => (R.languages || []).find(l => l.name === n) || {};
+        const std = all.filter(n => L(n).core !== false && L(n).type === 'standard'), rare = all.filter(n => L(n).core !== false && L(n).type !== 'standard'), other = all.filter(n => L(n).core === false);
+        const pick = (list, label, fold) => !list.length ? '' : fold
+          ? '<details class="cb-more"' + (list.some(n => (b.languages || []).includes(n)) ? ' open' : '') + '><summary>' + label + ' <i>' + list.length + '</i></summary>' + cbChecks(list, b.languages || [], langCount, 'cb-lang') + '</details>'
+          : '<h5 class="cb-sub-h">' + label + '</h5>' + cbChecks(list, b.languages || [], langCount, 'cb-lang');
+        return pick(std, 'Standard', false) + pick(rare, 'Rare', false) + pick(other, 'From other books', true);
+      })();
   }
   // Skills and weapons a subclass feature lets the player choose.
   sktProfChoices(b, R).forEach(c => {
@@ -1619,9 +1702,18 @@ function cbToggle(list, v, max){
 
 function cbOnClick(e){
   if (!CB) return;
-  const t = e.target.closest('button, [data-cb-step]'); if (!t) return;
+  const t = e.target.closest('button, [data-cb-step], summary[data-cb]'); if (!t) return;
   const d = t.dataset;
   if (d.cb === 'close') return cbAskClose();
+  // The folded Campaign settings keep their state through a redraw.
+  if (d.cb === 'settings'){ CB.settingsOpen = !t.parentElement.open; return; }
+  // The start screen.
+  if (d.cb === 'start-steps'){ CB.welcome = false; CB.step = 'basics'; cbRender(); return; }
+  if (d.cb === 'start-quick'){ CB.welcome = 'quick'; cbRender(); return; }
+  if (d.cb === 'start-back'){ CB.welcome = true; cbRender(); return; }
+  if (d.cb === 'start-pdf'){ cbClose(); if (panelDefs.party && panelDefs.party._importPdf) panelDefs.party._importPdf(); return; }
+  if (d.cbQcls){ CB.build.cls = d.cbQcls; cbRender(); return; }
+  if (d.cb === 'start-build'){ if (!CB.build.cls) return; CB.welcome = false; cbQuickBuild(); CB.step = 'review'; CB.scrollTop = 0; cbRender(); return; }
   if (d.cbStep){ CB.step = d.cbStep; CB.scrollTop = 0; cbRender(); return; }
   const vis = cbVisibleSteps(), at = vis.findIndex(s => s.id === CB.step);
   if (d.cb === 'next'){ CB.step = vis[Math.min(vis.length - 1, at + 1)].id; CB.scrollTop = 0; cbRender(); return; }
@@ -1751,6 +1843,8 @@ function cbOnClick(e){
 }
 
 function cbOnChange(e){
+  if (CB && e.target && 'cbQsp' in e.target.dataset){ CB.build.species = e.target.value; CB.build.subspecies = ''; return; }
+  if (CB && e.target && 'cbQbg' in e.target.dataset){ CB.build.background = e.target.value; return; }
   if (!CB) return;
   const t = e.target, d = t.dataset;
   const v = t.value;
@@ -1980,6 +2074,14 @@ function cbOnChange(e){
 function cbOnInput(e){
   if (!CB) return;
   const t = e.target, d = t.dataset;
+  // Search a long list as you type: cards that don't match step aside, and
+  // the other books open so a match there shows.
+  if ('cbFind' in d){
+    const q = t.value.trim().toLowerCase(), main = t.closest('.cb-main');
+    (main ? main.querySelectorAll('.cb-cards .cb-card') : []).forEach(c => { c.style.display = !q || c.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+    if (q && main) main.querySelectorAll('details.cb-more').forEach(x => { x.open = true; });
+    return;
+  }
   if (d.cbIn === 'name'){ CB.build.name = t.value; cbRefreshSide(); return; }
   if (d.cbCbg === 'name'){ CB.build.customBg = Object.assign({}, CB.build.customBg, { name: t.value }); return; }
   if ('cbSpq' in d){
