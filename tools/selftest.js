@@ -10076,6 +10076,36 @@
         ok('notes: 2024 Remarkable Athlete — the move after a critical hit', (champ(3).sheet.notes || []).some(n => /^Remarkable Athlete: right after you score a critical hit/.test(n)), JSON.stringify(champ(3).sheet.notes));
       } catch(e){ ok('round 89 threw', false, e.message); }
     }
+    // -- Round 90: what D&D Beyond lets you use, used from the sheet -----------
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (c, s, L, more) => sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'T', cls: c, subclass: s || '', level: L, species: 'Human', background: 'Soldier' }, more || {}), R);
+        const act = (r, n) => (r.sheet.activations || []).find(a => a.name === n) || {};
+        const res = (r, n) => (r.resources || []).find(x => x.name === n) || {};
+        let r = mk('Barbarian', 'Berserker', 15);
+        ok('Persistent Rage: a once-a-day refill of Rage, used from the sheet', res(r, 'Persistent Rage').max === 1 && act(r, 'Persistent Rage').resource === 'Persistent Rage', JSON.stringify(r.resources));
+        ok('Brutal Strike: on the Extra damage list, 1d10 at 9th', ((r.sheet.extraDamage || []).find(x => x.label === 'Brutal Strike') || {}).dice === '1d10');
+        ok('Brutal Strike: 2d10 at 17th', ((mk('Barbarian', 'Berserker', 17).sheet.extraDamage || []).find(x => x.label === 'Brutal Strike') || {}).dice === '2d10');
+        ok('Brutal Strike: not before 9th', !(mk('Barbarian', 'Berserker', 8).sheet.extraDamage || []).some(x => x.label === 'Brutal Strike'));
+        ok('2014 Persistent Rage: no refill', !res(sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'T', cls: 'Barbarian', level: 15, species: 'Human' }), await sktRulesLoad('2014')), 'Persistent Rage').max);
+        r = mk('Bard', 'Lore', 5);
+        ok('Font of Inspiration: regain Bardic Inspiration with a spell slot', !!act(r, 'Regain Bardic Inspiration').name && !act(mk('Bard', '', 4), 'Regain Bardic Inspiration').name);
+        r = mk('Druid', 'Moon', 20);
+        ok('Wild Resurgence: regain Wild Shape, and a once-a-day spell slot', !!act(r, 'Regain Wild Shape').name && res(r, 'Wild Resurgence').max === 1 && act(r, 'Wild Resurgence: Spell Slot').resource === 'Wild Resurgence');
+        ok('Archdruid: Nature Magician once a day, and Evergreen Wild Shape', res(r, 'Nature Magician').max === 1 && !!act(r, 'Evergreen Wild Shape').name);
+        r = mk('Paladin', 'Devotion', 10);
+        ok('Aura of Courage: the paladin is immune to Frightened', (r.immunities || []).includes('frightened') && !(mk('Paladin', 'Devotion', 9).immunities || []).includes('frightened'), JSON.stringify(r.immunities));
+        ok('2024 Channel Divinity: Divine Sense spends a use', act(mk('Paladin', 'Devotion', 3), 'Divine Sense').resource === 'Channel Divinity');
+        r = mk('Ranger', 'Hunter', 6);
+        ok('Roving: climb and swim speeds equal to walking', r.speeds.climb === r.spd && r.speeds.swim === r.spd && r.spd === 40, JSON.stringify(r.speeds));
+        r = mk('Ranger', 'Hunter', 6, { equipment: { materialized: true }, items: [{ name: 'Plate Armor', base: 'plate armor', equipped: true }] });
+        ok('Roving: no climb or swim in heavy armor', !r.speeds.climb && !r.speeds.swim, JSON.stringify(r.speeds));
+        r = mk('Sorcerer', 'Draconic', 5);
+        ok('Font of Magic: create spell slots up to the level allowed, and convert a slot to points', act(r, 'Create Spell Slot (level 3)').amount === 5 && !act(r, 'Create Spell Slot (level 4)').name && !!act(r, 'Convert Spell Slot').name,
+           (r.sheet.activations || []).map(a => a.name).join(', '));
+      } catch(e){ ok('round 90 threw', false, e.message); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

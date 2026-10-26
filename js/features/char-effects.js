@@ -155,13 +155,21 @@
     note(ctx, 'Brutal Critical: a critical hit with a melee weapon rolls ' + n + ' extra weapon damage ' + (n === 1 ? 'die' : 'dice') + '.');
   });
   both(['class:barbarian:Relentless Rage'], ctx => note(ctx, 'Relentless Rage: dropping to 0 HP while raging, make a DC 10 Constitution save (DC +5 each time) to drop to 1 HP instead.'));
-  both(['class:barbarian:Persistent Rage'], ctx => note(ctx, 'Persistent Rage: your rage only ends early if you fall unconscious or choose to end it.'));
+  def('2014:class:barbarian:Persistent Rage', ctx => note(ctx, 'Persistent Rage: your rage only ends early if you fall unconscious or choose to end it.'));
+  def('2024:class:barbarian:Persistent Rage', ctx => {
+    pool(ctx, 'Persistent Rage', 1, 'long');
+    act(ctx, { name: 'Persistent Rage', action: 'Free', resource: 'Persistent Rage', amount: 1, feature: 'Persistent Rage',
+      desc: 'When you roll initiative, regain all expended uses of Rage (once per long rest).' });
+    note(ctx, 'Persistent Rage: your rage lasts 10 minutes without being extended; it ends early only if you’re Unconscious or put on heavy armor.');
+  });
   both(['class:barbarian:Indomitable Might'], ctx => note(ctx, 'Indomitable Might: a Strength check or Strength save that totals less than your Strength score (' + ctx.abilities.str + ') counts as that score.'));
   def('2024:class:barbarian:Primal Knowledge', ctx => note(ctx, 'Primal Knowledge: while raging, Acrobatics, Intimidation, Perception, Stealth and Survival checks can use Strength.'));
   def('2024:class:barbarian:Instinctive Pounce', ctx => note(ctx, 'Instinctive Pounce: when you enter your rage, move up to half your speed.'));
   def('2024:class:barbarian:Brutal Strike', ctx => {
     const d = ctx.level >= 17 ? '2d10' : '1d10';
     note(ctx, 'Brutal Strike: give up advantage from Reckless Attack on one attack to add ' + d + ' damage and a Brutal Strike effect' + (ctx.level >= 17 ? ' (two effects)' : '') + '.');
+    ctx.extraDamage.push({ label: 'Brutal Strike', dice: d, note: 'with Reckless Attack, give up advantage on one Strength attack; on a hit, the weapon’s damage type, and Forceful Blow or Hamstring Blow'
+      + (ctx.level >= 13 ? ', Staggering Blow or Sundering Blow' : '') + (ctx.level >= 17 ? ' (two of them)' : '') });
   });
   def('2024:class:barbarian:Improved Brutal Strike', () => {});   // folded into Brutal Strike's text
 
@@ -170,7 +178,9 @@
     const d = ctx.level >= 17 ? 'd12' : ctx.level >= 13 ? 'd10' : ctx.level >= 9 ? 'd8' : 'd6';
     note(ctx, 'Song of Rest: during a short rest, allies who spend Hit Dice regain an extra 1' + d + ' hit points.');
   });
-  both(['class:bard:Font of Inspiration'], () => {});              // Bardic Inspiration's recharge
+  def('2014:class:bard:Font of Inspiration', () => {});            // Bardic Inspiration's recharge
+  def('2024:class:bard:Font of Inspiration', ctx => act(ctx, { name: 'Regain Bardic Inspiration', action: 'Free', feature: 'Font of Inspiration',
+    desc: 'Expend a spell slot to regain one expended use of Bardic Inspiration (no action).' }));
   both(['class:bard:Countercharm'], ctx => act(ctx, { name: 'Countercharm', action: ctx.edition === '2024' ? 'Reaction' : 'Action', feature: 'Countercharm',
     desc: ctx.edition === '2024' ? 'When a creature within 30 feet fails a save against Charmed or Frightened, it can reroll with advantage.'
                                  : 'Until the end of your next turn, you and allies within 30 feet have advantage on saves against being Charmed or Frightened.' }));
@@ -220,7 +230,13 @@
   both(['class:druid:Timeless Body'], ctx => note(ctx, 'Timeless Body: you age one year for every ten that pass.'));
   both(['class:druid:Beast Spells'], ctx => note(ctx, 'Beast Spells: cast spells in Wild Shape (not ones with costly or consumed material components).'));
   def('2014:class:druid:Archdruid', ctx => note(ctx, 'Archdruid: Wild Shape is unlimited, and you ignore verbal, somatic and non-costly material components.'));
-  def('2024:class:druid:Archdruid', ctx => note(ctx, 'Archdruid: regain a Wild Shape use on initiative if you have none; turn unused Wild Shape into a spell slot; you age slowly.'));
+  def('2024:class:druid:Archdruid', ctx => {
+    act(ctx, { name: 'Evergreen Wild Shape', action: 'Free', feature: 'Archdruid', desc: 'When you roll initiative with no Wild Shape uses left, regain one.' });
+    pool(ctx, 'Nature Magician', 1, 'long');
+    act(ctx, { name: 'Nature Magician', action: 'Free', resource: 'Nature Magician', amount: 1, feature: 'Archdruid',
+      desc: 'Turn unused Wild Shape uses into one spell slot, two slot levels per use (once per long rest).' });
+    note(ctx, 'Archdruid: you age only one year for every ten that pass.');
+  });
   choice('2024:class:druid:Primal Order', {
     label: 'Primal Order',
     options: [
@@ -234,7 +250,12 @@
   });
   def('2024:class:druid:Wild Companion', ctx => act(ctx, { name: 'Wild Companion', action: 'Magic', resource: 'Wild Shape', amount: 1, feature: 'Wild Companion',
     desc: 'Spend a Wild Shape use (or a spell slot) to cast Find Familiar without components; the familiar is a Fey.' }));
-  def('2024:class:druid:Wild Resurgence', ctx => note(ctx, 'Wild Resurgence: with no Wild Shape uses left, spend a spell slot for one; once per long rest, a Wild Shape use can become a 1st-level slot.'));
+  def('2024:class:druid:Wild Resurgence', ctx => {
+    act(ctx, { name: 'Regain Wild Shape', action: 'Free', feature: 'Wild Resurgence', desc: 'With no Wild Shape uses left, expend a spell slot to regain one (once on each of your turns).' });
+    pool(ctx, 'Wild Resurgence', 1, 'long');
+    act(ctx, { name: 'Wild Resurgence: Spell Slot', action: 'Free', resource: 'Wild Resurgence', amount: 1, feature: 'Wild Resurgence',
+      desc: 'Expend a Wild Shape use to gain a level 1 spell slot (once per long rest).' });
+  });
   choice('2024:class:druid:Elemental Fury', {
     label: 'Elemental Fury',
     options: [
@@ -317,7 +338,7 @@
       desc: 'Cast Divine Smite once per long rest without a slot (or with a slot any time): +2d8 radiant, +1d8 per slot level above 1st.' });
   }
   def('2014:class:paladin:Divine Health', ctx => note(ctx, 'Divine Health: immune to disease.'));
-  both(['class:paladin:Aura of Courage'], ctx => note(ctx, 'Aura of Courage: you and allies within ' + (ctx.level >= 18 ? 30 : 10) + ' feet can’t be Frightened while you are conscious.'));
+  both(['class:paladin:Aura of Courage'], ctx => { ctx.immune.add('frightened'); note(ctx, 'Aura of Courage: you and allies within ' + (ctx.level >= 18 ? 30 : 10) + ' feet can’t be Frightened while you are conscious.'); });
   def('2014:class:paladin:Improved Divine Smite', ctx => note(ctx, 'Improved Divine Smite: every melee weapon hit deals an extra 1d8 radiant damage.'));
   def('2024:class:paladin:Radiant Strikes', ctx => note(ctx, 'Radiant Strikes: every melee weapon or unarmed strike hit deals an extra 1d8 radiant damage.'));
   def('2014:class:paladin:Cleansing Touch', ctx => {
@@ -349,7 +370,7 @@
   });
   both(['class:ranger:Foe Slayer'], ctx => note(ctx, ctx.edition === '2024' ? 'Foe Slayer: Hunter’s Mark’s damage die becomes a d10.' : 'Foe Slayer: once per turn, add ' + signed(ctx.mod.wis) + ' to an attack or damage roll against a favored enemy.'));
   def('2024:class:ranger:Deft Explorer', ctx => note(ctx, 'Deft Explorer: expertise in one skill and two extra languages (chosen in the builder).'));
-  def('2024:class:ranger:Roving', ctx => { ctx.speedBonusUnlessHeavy += 10; note(ctx, 'Roving: climb and swim speeds equal to your speed while not in heavy armor.'); });
+  def('2024:class:ranger:Roving', ctx => { ctx.speedBonusUnlessHeavy += 10; Object.assign(ctx.moveUnlessHeavy, { climb: 'walk', swim: 'walk' }); });
   def('2024:class:ranger:Tireless', ctx => {
     pool(ctx, 'Tireless', abm(ctx, 'wis'), 'long');
     act(ctx, { name: 'Tireless', action: 'Magic', resource: 'Tireless', amount: 1, feature: 'Tireless', desc: 'Gain 1d8 + ' + ctx.mod.wis + ' temporary hit points. A short rest also lowers Exhaustion by 1.' });

@@ -2104,6 +2104,8 @@ sktDefineEffect(['class:paladin:Aura of Protection'], ctx => {
 });
 sktDefineEffect(['class:paladin:Channel Divinity'], ctx => {
   _fxPool(ctx, 'Channel Divinity', _fxCol(ctx, 'Channel Divinity') || (ctx.level >= 11 ? 3 : 2), ctx.edition === '2024' ? 'short-one' : 'short');
+  if (ctx.edition === '2024') _fxAction(ctx, { name: 'Divine Sense', action: 'Bonus Action', resource: 'Channel Divinity', amount: 1, feature: 'Channel Divinity',
+    desc: 'For 10 minutes, sense the location of any Celestial, Fiend or Undead within 60 feet, and any place consecrated or desecrated there.' });
 });
 // A 2014 paladin's Channel Divinity comes with the oath: once per short rest.
 sktDefineEffect(['2014:subclass:paladin:Channel Divinity'], ctx => { _fxPool(ctx, 'Channel Divinity', 1, 'short'); });
@@ -2130,6 +2132,13 @@ sktDefineEffect(['2024:class:rogue:Slippery Mind'], ctx => { ctx.saveProf.add('w
 sktDefineEffect(['2014:class:sorcerer:Font of Magic', '2024:class:sorcerer:Font of Magic'], ctx => {
   const n = _fxCol(ctx, 'Sorcery Points') || ctx.level;
   _fxPool(ctx, 'Sorcery Points', typeof n === 'number' ? n : ctx.level, 'long');
+  // Points into a slot (5th level at most, from the sorcerer level that slot needs), and a slot into points.
+  [[1, 2, 2], [2, 3, 3], [3, 5, 5], [4, 6, 7], [5, 7, 9]].forEach(([lv, cost, min]) => {
+    if (ctx.level >= min) _fxAction(ctx, { name: 'Create Spell Slot (level ' + lv + ')', action: 'Bonus Action', resource: 'Sorcery Points', amount: cost, feature: 'Font of Magic',
+      desc: 'Spend ' + cost + ' Sorcery Points for a level ' + lv + ' spell slot; it vanishes when you finish a long rest.' });
+  });
+  _fxAction(ctx, { name: 'Convert Spell Slot', action: ctx.edition === '2024' ? 'Free' : 'Bonus Action', feature: 'Font of Magic',
+    desc: 'Expend a spell slot to gain Sorcery Points equal to its level.' });
 });
 sktDefineEffect(['2024:class:sorcerer:Innate Sorcery'], ctx => {
   _fxPool(ctx, 'Innate Sorcery', 2, 'long');
@@ -2342,7 +2351,7 @@ function sktComputeCharacter(build, R, prior){
     acBonus: [], acFloor: null, speedMult: 1, spellDcBonus: 0, spellAtkBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0,
     shillelagh: null, rollAdv: [], rollDice: [], extraDamage: [], concBonus: 0, saveMods: [],
     // Other ways of moving a feature gives: 'walk' (equal to the speed) or feet.
-    moveExtra: {}, bardicUnarmed: null, applied: new Set(), schoolDamage: {},
+    moveExtra: {}, moveUnlessHeavy: {}, bardicUnarmed: null, applied: new Set(), schoolDamage: {},
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
   _sktActiveItems(build).forEach(m => (m.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); }));
@@ -2776,6 +2785,8 @@ function sktComputeCharacter(build, R, prior){
   const speeds = { walk: speed };
   if (moveSrc && typeof moveSrc === 'object') ['fly', 'swim', 'climb', 'burrow'].forEach(k => { if (moveSrc[k]) speeds[k] = moveSrc[k] === true ? speed : (typeof moveSrc[k] === 'object' ? +moveSrc[k].number || 0 : +moveSrc[k] || 0); });
   Object.keys(ctx.moveExtra || {}).forEach(k => { const v = ctx.moveExtra[k] === 'walk' ? speed : +ctx.moveExtra[k] || 0; if (v) speeds[k] = Math.max(speeds[k] || 0, v); });
+  // Roving's climb and swim: not in heavy armour.
+  if (!heavy) Object.keys(ctx.moveUnlessHeavy || {}).forEach(k => { const v = ctx.moveUnlessHeavy[k] === 'walk' ? speed : +ctx.moveUnlessHeavy[k] || 0; if (v) speeds[k] = Math.max(speeds[k] || 0, v); });
   ['walk', 'fly', 'swim', 'climb', 'burrow'].forEach(k => { const v = setNum((ov.speedSet || {})[k]); if (v != null){ if (v > 0) speeds[k] = v; else if (k !== 'walk') delete speeds[k]; } });
   speed = speeds.walk;
   const speedShow = speeds[ov.speedShow] ? ov.speedShow : 'walk';
