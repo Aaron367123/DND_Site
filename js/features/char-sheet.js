@@ -615,15 +615,15 @@ CS_TAB_RENDER.actions = pc => {
   h += atks.length ? '<div class="cs-atks"><div class="cs-atk cs-atk-h"><span>Name</span><span>Hit / DC</span><span>Damage</span><span>Notes</span></div>'
     + atks.map(a => { const i = a.i; return '<div class="cs-atk"><b>' + csE(a.name) + (a.n > 1 ? ' <span class="cs-atk-x">×' + a.n + '</span>' : '') + '</b>'
       + (/^[+-]?\d+$/.test(String(a.atkBonus || '').trim()) ? '<button class="btn small" data-cs-atk="' + i + '">' + csE(a.atkBonus) + '</button>' : '<span>' + csE(a.atkBonus || '') + '</span>')
-      + (a.damage ? '<span class="cs-dmgs"><button class="btn small" data-cs-dmg="' + i + '">' + csE(a.damage) + '</button>'
-        + (a.versatile ? '<button class="btn small" data-cs-dmg2="' + i + '" title="Two-handed">' + csE(a.versatile) + '</button>' : '') + '</span>' : '<span></span>')
+      + (a.damage ? '<span class="cs-dmgs"><button class="btn small" data-cs-dmg="' + i + '">' + csDmgHtml(a.damage) + '</button>'
+        + (a.versatile ? '<button class="btn small" data-cs-dmg2="' + i + '" title="Two-handed">' + csDmgHtml(a.versatile) + '</button>' : '') + '</span>' : '<span></span>')
       + '<span class="cb-dim">' + csAtkNotes(pc, a) + '</span></div>'; }).join('') + '</div>'
     : '<div class="cb-dim">No attacks recorded.</div>';
   // Levelled spells that attack or call for a save, as D&D Beyond lists them.
   const spl = [...new Set(sh.spells || [])].map(n => csSpell(n)).filter(s => s && s.level > 0 && ((s.spellAttack || []).length || (s.savingThrow || []).length) && csSpellDamage(s, s.level));
   if (spl.length) h += '<h4>Spells</h4><div class="cs-atks">' + spl.map(s => '<div class="cs-atk"><b>' + csE(s.name) + ' <span class="cb-dim">' + CS_ORD[s.level] + '</span></b>'
     + ((s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '<span>DC ' + (sh.spellSaveDc || '?') + ' ' + csE(String(s.savingThrow[0]).slice(0, 3).toUpperCase()) + '</span>')
-    + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csE(csSpellDamage(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
+    + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csDmgHtml(csSpellDamage(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
   h += csExtraDamageHtml(pc) + '</div>';
   const acts = sh.activations || [];
   // A 2024 Magic action is an action.
@@ -1290,6 +1290,9 @@ function csSpellMeta(s){
 }
 // A spell's damage at a slot level: the first {@damage} in its text, plus
 // the {@scaledamage} step for each level above its own.
+// Damage text with each damage type in its colour, as the books show them.
+const CS_DTYPES = /\b(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)\b/gi;
+function csDmgHtml(t){ return csE(t).replace(CS_DTYPES, m => '<span class="dt dt-' + m.toLowerCase() + '">' + m + '</span>'); }
 function csSpellDamage(s, slot){
   if (!s) return '';
   if (s.custom) return s.entriesDamage || '';
@@ -1401,12 +1404,12 @@ function csSpellsHtml(pc){
           + (s && s.ritual ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>' : '');
       const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
       const atk = l && s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
-      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csE(csSpellDamage(s, avail[0] || l)) + '</button>' : '';
+      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csDmgHtml(csSpellDamage(s, avail[0] || l)) + '</button>' : '';
       const cantripAtk = !l ? (sh.attacks || []).find(a => a.name === n) : null;
       const scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
       const heal = l && csSpellHeal(s, avail[0] || l, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(n) + '">Heal ' + csE(csSpellHeal(s, avail[0] || l, scMod)) + '</button>' : '';
       const info = [sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '', atk, dmg, heal,
-                    cantripAtk ? '<button class="btn small" data-cs-dmg="' + (sh.attacks || []).indexOf(cantripAtk) + '">' + csE(cantripAtk.damage) + '</button>' : ''].join('');
+                    cantripAtk ? '<button class="btn small" data-cs-dmg="' + (sh.attacks || []).indexOf(cantripAtk) + '">' + csDmgHtml(cantripAtk.damage) + '</button>' : ''].join('');
       return '<div class="cs-spell"><button class="cs-spell-n" data-cs-open="sp:' + csE(n) + '"><b>' + csE(n) + '</b>' + tags
         + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span>' + (from[n] ? '<span class="cs-from">' + csE(from[n]) + '</span>' : '') + '</button>'
         + '<span class="cs-spell-c">' + info + cast + '</span>'

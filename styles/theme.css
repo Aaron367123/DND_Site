@@ -185,3 +185,13 @@ body.player-mode { background-image: var(--grain), var(--mottle); background-siz
 .feat-block .feat-body { color: var(--ink); opacity: 1; }
 .feat-block .feat-body strong, .feat-block .feat-body b { color: var(--rubric); }
 .feat-block .feat-body .feat-from { color: var(--ink-soft); }
+/* Damage types in their colours, as the books and D&D Beyond show them. */
+.dt { font-weight: 700; }
+.dt-acid { color: #9ccc3c; } .dt-cold { color: #74c5ee; } .dt-fire { color: #ff8a3d; } .dt-force { color: #d58cf0; }
+.dt-lightning { color: #7ea6ff; } .dt-necrotic { color: #8fd18c; } .dt-poison { color: #6fcf6f; } .dt-psychic { color: #f08ad0; }
+.dt-radiant { color: #ffd466; } .dt-thunder { color: #b39ddb; }
+.dt-bludgeoning, .dt-piercing, .dt-slashing { color: #d9cbb4; }
+[data-theme-tone="light"] .dt-acid { color: #5a7d10; } [data-theme-tone="light"] .dt-cold { color: #1f6f99; } [data-theme-tone="light"] .dt-fire { color: #b8450a; }
+[data-theme-tone="light"] .dt-force { color: #7b2f9b; } [data-theme-tone="light"] .dt-lightning { color: #2c4fb0; } [data-theme-tone="light"] .dt-necrotic { color: #2f6f2c; }
+[data-theme-tone="light"] .dt-poison { color: #2b7a2b; } [data-theme-tone="light"] .dt-psychic { color: #a3237a; } [data-theme-tone="light"] .dt-radiant { color: #8a6400; }
+[data-theme-tone="light"] .dt-thunder { color: #5a3f99; } [data-theme-tone="light"] .dt-bludgeoning, [data-theme-tone="light"] .dt-piercing, [data-theme-tone="light"] .dt-slashing { color: #5e4a33; }
