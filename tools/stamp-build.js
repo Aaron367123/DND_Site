@@ -49,7 +49,51 @@ const hash = buf => crypto.createHash('sha1')
   .update(stripCR(Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf))))
   .digest('hex').slice(0, 10);
 
+// A hash of everything under data/: the contents, not the dates. Data used
+// to be refreshed only by hand-bumping DATA_STAMP, and the 5etools 2.39
+// update went out without the bump — every device that had opened the site
+// kept serving the old books list and search index from its cache. Now the
+// stamp follows the data by itself.
+function dataHash(){
+  const dir = path.join(ROOT, 'data');
+  if (!fs.existsSync(dir)) return '';
+  const files = [];
+  (function walk(d){ fs.readdirSync(d, { withFileTypes: true }).forEach(e => {
+    const p = path.join(d, e.name);
+    if (e.isDirectory()) walk(p); else if (/\.json$/i.test(e.name)) files.push(p);
+  }); })(dir);
+  files.sort();
+  // Each file's hash is remembered by its size and time (a local, untracked
+  // file), so only files that changed are read again — 106 MB took 6 s.
+  const cacheFile = path.join(ROOT, 'tools', '.stamp-data-cache.json');
+  let cache = {}; try { cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8')) || {}; } catch(e){}
+  const next = {};
+  const h = crypto.createHash('sha1');
+  files.forEach(f => {
+    const rel = path.relative(dir, f).split(path.sep).join('/'), st = fs.statSync(f), key = st.size + ':' + st.mtimeMs;
+    const fh = cache[rel] && cache[rel].k === key ? cache[rel].h : hash(fs.readFileSync(f));
+    next[rel] = { k: key, h: fh };
+    h.update(rel); h.update(fh);
+  });
+  try { fs.writeFileSync(cacheFile, JSON.stringify(next)); } catch(e){}
+  return h.digest('hex').slice(0, 10);
+}
+
 function main(){
+  // data/'s hash into data-loader.js first: that file is itself a stamped
+  // asset, so its ?v= has to be taken after the change.
+  const DATA_HASH = dataHash();
+  let loaderNow = fs.readFileSync(LOADER, 'utf8');
+  const hashRe = /const DATA_HASH\s*=\s*'[^']*';/;
+  if (!hashRe.test(loaderNow)){
+    console.error('[stamp] could not find DATA_HASH in js/content/data-loader.js');
+    process.exitCode = 1;
+    return;
+  }
+  const loaderStamped = loaderNow.replace(hashRe, "const DATA_HASH    = '" + DATA_HASH + "';");
+  const loaderChanged = loaderStamped !== loaderNow;
+  if (loaderChanged && !CHECK_ONLY) fs.writeFileSync(LOADER, loaderStamped);
+
   let html = fs.readFileSync(HTML, 'utf8');
   const original = html;
 
@@ -104,7 +148,9 @@ function main(){
     process.exitCode = 1;
     return;
   }
-  const DATA_STAMP = stampMatch[1];
+  // The service worker's bucket changes with either: the hand-bumped stamp
+  // (a converter change) or the data itself.
+  const DATA_STAMP = stampMatch[1] + '.' + DATA_HASH;
 
   let sw = fs.readFileSync(SW, 'utf8');
   const swBefore = sw;
@@ -119,7 +165,7 @@ function main(){
   const swChanged   = sw !== swBefore;
 
   if (CHECK_ONLY){
-    if (htmlChanged || swChanged){
+    if (htmlChanged || swChanged || loaderChanged){
       console.error('[stamp] OUT OF DATE — run: node tools/stamp-build.js');
       process.exitCode = 1;
     } else {
@@ -131,8 +177,8 @@ function main(){
   if (htmlChanged) fs.writeFileSync(HTML, html);
   if (swChanged)   fs.writeFileSync(SW, sw);
 
-  console.log('[stamp] build ' + BUILD + ' · ' + assets.length + ' assets · '
-    + (htmlChanged || swChanged ? 'updated' : 'no changes'));
+  console.log('[stamp] build ' + BUILD + ' · ' + assets.length + ' assets · data ' + DATA_HASH + ' · '
+    + (htmlChanged || swChanged || loaderChanged ? 'updated' : 'no changes'));
 }
 
 main();

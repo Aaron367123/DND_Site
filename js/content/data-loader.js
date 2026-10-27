@@ -826,9 +826,14 @@ function _normSearchIdx(s) {
 // before this still carries raw "{@recharge 5}" in every recharge ability.
 // 20260927a — itemSub/itemSpell bodies and monster spellcasting blocks now
 // survive conversion; every index cached before this is missing them.
-const DATA_STAMP   = '20260927a';
+// 20261027a — 5etools 2.39 (Ravenloft: The Horrors Within, Arcana Unleashed…).
+const DATA_STAMP   = '20261027a';
+// A hash of data/'s contents, stamped by tools/stamp-build.js — so a data
+// refresh renews every device's cache (here and in sw.js) without anyone
+// remembering to bump DATA_STAMP. DATA_STAMP stays for converter changes.
+const DATA_HASH    = 'f9766c7c18';
 const INDEX_SCHEMA = 2;                 // bumped when _n/_h/facets were added
-const CACHE_KEY    = DATA_STAMP + '#' + INDEX_SCHEMA;
+const CACHE_KEY    = DATA_STAMP + '.' + DATA_HASH + '#' + INDEX_SCHEMA;
 const _IDB_NAME    = 'skt-5edata';
 const _IDB_STORE   = 'index';
 

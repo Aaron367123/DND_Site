@@ -10284,6 +10284,13 @@
            && JSON.stringify(sktDocData({ bookData: [{ id: 'Y', data: [{ name: 'B1' }] }] }).data) === '[{"name":"B1"}]' && sktDocData({ data: [1] }).data[0] === 1);
         if (panelDefs.adventures && panelDefs.adventures._loadAdventure){ const j = await panelDefs.adventures._loadAdventure('SKT');
           ok('adventures: Storm King’s Thunder opens, chapters and all', Array.isArray(j && j.data) && j.data.length > 5, j ? Object.keys(j).join(',') : 'none'); }
+        // A data refresh renews every device's cache by itself: the index cache
+        // and the service worker's bucket both carry a hash of data/.
+        ok('data: the caches are keyed to a hash of data/, so a refresh reaches every device', typeof DATA_HASH === 'string' && /^[0-9a-f]{10}$/.test(DATA_HASH) && CACHE_KEY.includes(DATA_HASH));
+        { const sw = await fetch('sw.js', { cache: 'no-store' }).then(r => r.text());
+          ok('data: and the service worker’s data bucket too', sw.includes("DATA_STAMP  = '" + DATA_STAMP + '.' + DATA_HASH + "'")); }
+        if (panelDefs.books){ panelDefs.books._adventures = null; await panelDefs.books._loadIndex();
+          ok('books: Arcana Unleashed and Ravenloft: The Horrors Within are on the shelf', ['AU', 'RHW'].every(id => (panelDefs.books._adventures || []).some(b => b.id === id))); }
       } catch(e){ ok('round 95 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Round 96: the new books' rules on the sheet ------------------------

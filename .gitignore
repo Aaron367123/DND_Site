@@ -32,3 +32,6 @@ tools/shots/
 # Windows: a stray "nul" file gets created by shell redirections that treat
 # it as the null device. Never content.
 nul
+
+# tools/stamp-build.js remembers data/ file hashes here
+tools/.stamp-data-cache.json
