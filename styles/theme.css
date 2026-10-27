@@ -1,0 +1,43 @@
+/* ============================================================
+   THEME — the look of a D&D book and table, over main.css
+   ============================================================
+   Loaded after main.css. Everything here reads the theme's colour
+   variables (js/core/theme.js), so every colour preset and the light
+   Parchment tone keep working. Fonts: Cinzel (carved capitals, for names
+   and headings) and Alegreya (a book face, for rules text), both from
+   Google Fonts under the Open Font License; Georgia stands in offline. */
+
+:root {
+  --font-display: 'Cinzel', Georgia, 'Times New Roman', serif;
+  --font-book: 'Alegreya', Georgia, 'Times New Roman', serif;
+}
+
+/* ── 1. Lettering ─────────────────────────────────────────── */
+/* Window titles, character names, section headings and the sheet's
+   labels in carved capitals. Body text, numbers and buttons stay in the
+   plain face, so nothing gets harder to read. */
+.window-title > span:last-child,
+.char-name, .card-name, .card-name-input,
+.cs-who .cb-title, .cb-head .cb-title,
+.cb-main h3, .cb-main h4, #cb-root .cb-card b,
+.detail-title, .detail-header,
+.modal h3, .pa-pick-h, .pa-pick-n {
+  font-family: var(--font-display);
+  letter-spacing: .03em;
+}
+.window-title > span:last-child { font-weight: 600; letter-spacing: .06em; }
+.char-name, .card-name, .card-name-input { font-weight: 700; }
+.cs-who .cb-title { font-weight: 700; letter-spacing: .05em; }
+.cb-main h3 { font-weight: 700; letter-spacing: .06em; }
+.detail-title { font-variant: normal; font-weight: 700; }
+.detail-header { font-variant: normal; font-weight: 600; letter-spacing: .06em; }
+.pa-pick-h { font-weight: 700; }
+.pa-pick-n { font-weight: 600; }
+/* Section headings and small labels: small capitals, a little spaced. */
+#cs-root h5, #cs-root h4, .cs-tab, .cs-box > span, .cs-insp-h > span, .cs-ab > span, .cs-boxh b, .pa-sec h4, .cb-main h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.cs-tab { font-size: var(--fs-sm); }
+#cs-root h4 .cb-dim, #cs-root h5 .cs-h5sub { font-family: inherit; letter-spacing: 0; }
