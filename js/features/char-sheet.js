@@ -1674,7 +1674,7 @@ function csInventoryHtml(pc){
     + (items.some(m => m.reqAttune) ? ' · attuned ' + attuned + ' of ' + attMax : '') + '</div>';
   const gearType = m => { const st = m.stats || (m.base && CS.R && CS.R.items[m.base]); return st && /^(M|R|LA|MA|HA|S)(\||$)/.test(String(st.type)); };
   const lootRows = csLootRows(pc);
-  h += '<div class="cs-inv">' + (items.length ? items.map((m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
+  const row = (m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
     + (gearType(m) ? '<label class="cs-eq" title="Equipped"><input type="checkbox" data-cs-equip="' + i + '"' + (m.equipped !== false ? ' checked' : '') + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
     + '<button class="cs-itemn" data-cs-open="it:' + i + '"><b>' + csE(m.name) + '</b></button>'
     + (m.reqAttune ? '<label class="cs-att"><input type="checkbox" data-cs-attune="' + i + '"' + (m.attuned ? ' checked' : '') + (ro || (!m.attuned && attuned >= 3) ? ' disabled' : '') + '> attuned</label>' : '')
@@ -1685,9 +1685,26 @@ function csInventoryHtml(pc){
     + '<span class="cb-dim cs-wt">' + (m.weight ? (csItemWeight(items, m) ? Math.round(csItemWeight(items, m) * 10) / 10 + ' lb' : 'weightless') : '') + '</span>'
     + (!ro && !m.charges && csCatalogCharges(m) ? '<button class="btn small" data-cs-trackchg="' + i + '" title="Count this item\u2019s charges">Track charges</button>' : '')
     + (ro ? '' : '<button class="btn small" data-cs-del="' + i + '" aria-label="Remove ' + csE(m.name) + '">✕</button>') + '</div>'
-    + (CS.open['it:' + i] ? '<div class="cs-feat-t cs-itemt">' + csItemText(m) + '</div>' : '')).join('')
+    + (CS.open['it:' + i] ? '<div class="cs-feat-t cs-itemt">' + csItemText(m) + (m.notes ? '<div class="cs-itemnotes">' + csE(m.notes) + '</div>' : '') + (ro ? '' : csItemEditHtml(m, i)) + '</div>' : '');
+  // As D&D Beyond lays it out: what's carried loose, then each container with
+  // what's in it and its load against what it holds.
+  const loose = items.map((m, i) => [m, i]).filter(([m]) => !m.in || !boxes.some(x => x.name === m.in));
+  const r1 = n => Math.round(n * 10) / 10;
+  const boxSec = x => {
+    const inside = items.map((m, i) => [m, i]).filter(([m]) => m.in === x.name && m !== x);
+    const cap = csBoxCapacity(x), wt = inside.reduce((n, [m]) => n + (+m.weight || 0) * (m.qty || 1), 0), cnt = inside.reduce((n, [m]) => n + (m.qty || 1), 0);
+    const load = cap && cap.lb ? ' · ' + r1(wt) + ' / ' + cap.lb + ' lb' : cap && cap.count ? ' · ' + cnt + ' / ' + cap.count + ' ' + cap.of : wt ? ' · ' + r1(wt) + ' lb' : '';
+    const over = !!cap && (cap.lb ? wt > cap.lb : cnt > cap.count);
+    const shut = !!(CS.boxShut || {})[x.name];
+    return '<div class="cs-boxh' + (over ? ' over' : '') + '" data-cs-box="' + csE(x.name) + '"><button class="cs-linkbtn" data-cs-boxshut="' + csE(x.name) + '" aria-label="' + (shut ? 'Show' : 'Hide') + ' contents">' + (shut ? '▸' : '▾') + '</button>'
+      + '<b>' + csE(x.name) + '</b><span class="cb-dim">' + inside.length + ' item' + (inside.length === 1 ? '' : 's') + load + (over ? ' — too full' : '') + (CS_WEIGHTLESS.test(x.name) ? ' · contents weigh nothing' : '') + '</span></div>'
+      + (shut ? '' : inside.length ? inside.map(([m, i]) => row(m, i)).join('') : '<div class="cb-dim cs-boxempty">Empty' + (CS.readOnly ? '' : ' — choose “' + csE(x.name) + '” beside an item to put it in') + '.</div>');
+  };
+  h += '<div class="cs-inv">' + (items.length ? (boxes.length ? '<div class="cs-boxh"><b>Equipment</b></div>' : '') + loose.map(([m, i]) => row(m, i)).join('') + boxes.map(boxSec).join('')
     : (lootRows ? '' : '<div class="cb-dim">Nothing carried.</div>')) + lootRows + '</div>';
   h += csPartyLootHtml(pc);
+  h += '<h5>Other possessions</h5>' + (ro ? (pc.possessions ? '<div class="cs-note">' + csE(pc.possessions).replace(/\n/g, '<br>') + '</div>' : '<div class="cb-dim">None.</div>')
+    : '<textarea class="cs-possess" data-cs-possess rows="2" maxlength="2000" placeholder="Treasure, property, holdings — anything not in the list.">' + csE(pc.possessions || '') + '</textarea>');
   if (!ro){
     const e = csGearFind(CS.q);
     const bases = e && e.kind === 'variant' && typeof sktMagicBases === 'function' ? sktMagicBases(CS.R, e) : null;
@@ -1703,6 +1720,13 @@ function csInventoryHtml(pc){
       + '<button class="btn" data-cs="addcustom">Add</button></div>';
   }
   return h;
+}
+// D&D Beyond's item Customize: rename it, note it, its weight and value.
+function csItemEditHtml(m, i){
+  return '<div class="cs-itemedit"><label>Name <input data-cs-itemedit="' + i + ':name" value="' + csE(m.name || '') + '" maxlength="60"></label>'
+    + '<label>Notes <input data-cs-itemedit="' + i + ':notes" value="' + csE(m.notes || '') + '" maxlength="200" placeholder="Engraved, borrowed, cursed…"></label>'
+    + '<label>Weight (lb each) <input type="number" min="0" step="0.1" data-cs-itemedit="' + i + ':weight" value="' + (m.weight || 0) + '"></label>'
+    + '<label>Value (gp each) <input type="number" min="0" step="0.01" data-cs-itemedit="' + i + ':gp" value="' + (m.value ? Math.round(m.value) / 100 : 0) + '"></label></div>';
 }
 function csGearEntries(){ return [].concat(CS.magic || [], CS.gear || []); }
 // An item's description: from the item data where it has one, else what
@@ -1737,6 +1761,10 @@ function csCarryNote(rule, lb, cap){
   return lb > cap ? ' — over the limit: speed drops to 5 ft' : '';
 }
 const CS_WEIGHTLESS = /bag of holding|portable hole|handy haversack|heward/i;
+// What a container holds, from the rules: a weight, or a count of ammunition.
+const CS_BOX_CAP = [[/bag of holding/i, { lb: 500 }], [/handy haversack/i, { lb: 120 }], [/portable hole|component pouch/i, null], [/backpack/i, { lb: 30 }],
+  [/\bsack\b/i, { lb: 30 }], [/\bchest\b/i, { lb: 300 }], [/\bpouch\b/i, { lb: 6 }], [/\bbasket\b/i, { lb: 40 }], [/quiver/i, { count: 20, of: 'arrows' }], [/bolt case/i, { count: 20, of: 'bolts' }]];
+function csBoxCapacity(x){ const hit = CS_BOX_CAP.find(([re]) => re.test(x.name)); return hit ? hit[1] : null; }
 function csItemWeight(items, m){
   const box = m.in && items.find(x => x.name === m.in);
   return box && CS_WEIGHTLESS.test(box.name) ? 0 : (+m.weight || 0) * (m.qty || 1);
@@ -2166,6 +2194,7 @@ function csLootClick(d, pc){
 }
 function csInventoryClick(e, t, d, pc){
   if (csLootClick(d, pc)) return true;
+  if (d.csBoxshut != null){ CS.boxShut = Object.assign({}, CS.boxShut, { [d.csBoxshut]: !(CS.boxShut || {})[d.csBoxshut] }); csRender(); return true; }
   if (CS.readOnly) return false;
   if (d.cs === 'pdfgearedit'){ CS.pdfGearEdit = true; csRender(); return true; }
   if (d.cs === 'pdfgear'){
@@ -2244,6 +2273,18 @@ function csInventoryClick(e, t, d, pc){
 }
 function csInventoryChange(e, t, d, pc){
   if (d.csLootequip != null){ if (t.checked) csLootClick({ csLoottake: d.csLootequip, csLootequip: d.csLootequip }, pc); return true; }
+  if (d.csPossess != null){ const v = t.value.slice(0, 2000); csEdit('Other possessions', p => { if (v.trim()) p.possessions = v; else delete p.possessions; }, CS_QUIET); return true; }
+  if (d.csItemedit){
+    const [i, k] = d.csItemedit.split(':'), raw = t.value;
+    csItemsEdit('Item ' + k, l => {
+      const m = l[+i]; if (!m) return;
+      if (k === 'name'){ const was = m.name, now = raw.trim().slice(0, 60); if (!now) return; m.name = now; l.forEach(x => { if (x.in === was) x.in = now; }); }
+      else if (k === 'notes'){ if (raw.trim()) m.notes = raw.slice(0, 200); else delete m.notes; }
+      else if (k === 'weight') m.weight = Math.max(0, +raw || 0);
+      else if (k === 'gp') m.value = Math.max(0, Math.round((+raw || 0) * 100));
+    }, CS_QUIET);
+    return true;
+  }
   if (d.csIn != null){ const i = +d.csIn, v = t.value; csItemsEdit(v ? 'Put in ' + v : 'Took out', l => { if (l[i]) { if (v) l[i].in = v; else delete l[i].in; } }); return true; }
   if (d.csEquip != null){
     const i = +d.csEquip;

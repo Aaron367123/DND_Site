@@ -10147,6 +10147,51 @@
           csClose(); state.party = state.party.filter(p => p.id !== 'pc_cskill_imp'); save(); }
       } catch(e){ ok('round 91 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 92: containers, item editing, other possessions --------------
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'Packer', cls: 'Fighter', level: 3, species: 'Human', background: 'Soldier', equipment: { materialized: true },
+          items: [{ name: 'Longsword', base: 'longsword', equipped: true, weight: 3 }, { name: 'Backpack', weight: 5 }, { name: 'Quiver', weight: 1 }, { name: 'Sack', weight: 0.5 },
+            { name: 'Bedroll', weight: 7, in: 'Backpack' }, { name: 'Rations (1 day)', weight: 2, qty: 10, in: 'Backpack' }, { name: 'Rope (50 feet)', weight: 10, in: 'Backpack' },
+            { name: 'Torch', weight: 1, qty: 5, in: 'Backpack' }, { name: 'Arrows', weight: 0.05, qty: 20, in: 'Quiver' }] });
+        const rec = sktComputeCharacter(b, R); rec.id = 'pc_box'; state.party.push(rec); save();
+        openCharSheet('pc_box'); await sleep(300); CS.tab = 'inventory'; csRender(); await sleep(60);
+        const q = s => document.querySelector('#cs-root ' + s), qa = s => [...document.querySelectorAll('#cs-root ' + s)];
+        const hd = n => q('.cs-boxh[data-cs-box="' + n + '"]');
+        ok('containers: a section for each, after what is carried loose', qa('.cs-boxh').map(x => x.querySelector('b').textContent).join(',') === 'Equipment,Backpack,Quiver,Sack', qa('.cs-boxh').map(x => x.textContent).join(' | '));
+        ok('containers: a backpack’s load against its 30 lb, flagged too full', /4 items · 42 \/ 30 lb — too full/.test(hd('Backpack').textContent) && hd('Backpack').classList.contains('over'), hd('Backpack').textContent);
+        ok('containers: a quiver counts its arrows', /20 \/ 20 arrows/.test(hd('Quiver').textContent) && !hd('Quiver').classList.contains('over'), hd('Quiver').textContent);
+        ok('containers: an empty one says how to fill it', !!(hd('Sack').nextElementSibling && hd('Sack').nextElementSibling.classList.contains('cs-boxempty')));
+        const inBack = () => { const out = []; let el = hd('Backpack').nextElementSibling; while (el && !el.classList.contains('cs-boxh')){ if (el.classList.contains('cs-item')) out.push(el.querySelector('b').textContent); el = el.nextElementSibling; } return out; };
+        ok('containers: its contents listed under it', inBack().join(',') === 'Bedroll,Rations (1 day),Rope (50 feet),Torch', inBack().join(','));
+        { const loose = []; let el = qa('.cs-boxh')[0].nextElementSibling; while (el && !el.classList.contains('cs-boxh')){ if (el.classList.contains('cs-item')) loose.push(el.querySelector('b').textContent); el = el.nextElementSibling; }
+          ok('containers: what is packed isn’t listed again loose', loose.join(',') === 'Longsword,Backpack,Quiver,Sack', loose.join(',')); }
+        hd('Backpack').querySelector('[data-cs-boxshut]').click(); await sleep(40);
+        ok('containers: its contents can be hidden', inBack().length === 0 && !!(CS.boxShut || {}).Backpack);
+        hd('Backpack').querySelector('[data-cs-boxshut]').click(); await sleep(40);
+        // Item editing: rename the backpack (its contents follow), a note, a weight, a value.
+        const idx = n => csItems(state.party.find(p => p.id === 'pc_box')).findIndex(m => m.name === n);
+        CS.open['it:' + idx('Backpack')] = true; csRender(); await sleep(40);
+        const edit = (n, k, v) => { const el = q('[data-cs-itemedit="' + idx(n) + ':' + k + '"]'); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+        edit('Backpack', 'name', 'Explorer\u2019s Pack'); await sleep(80);
+        let items = csItems(state.party.find(p => p.id === 'pc_box'));
+        ok('item editing: renamed, and what was in it is still in it', idx('Explorer\u2019s Pack') >= 0 && items.filter(m => m.in === 'Explorer\u2019s Pack').length === 4, JSON.stringify(items.map(m => [m.name, m.in])));
+        CS.open['it:' + idx('Bedroll')] = true; csRender(); await sleep(40);
+        edit('Bedroll', 'notes', 'Smells of smoke'); await sleep(60);
+        edit('Bedroll', 'weight', '3'); await sleep(60);
+        edit('Bedroll', 'gp', '2.5'); await sleep(60);
+        items = csItems(state.party.find(p => p.id === 'pc_box'));
+        const bed = items.find(m => m.name === 'Bedroll');
+        ok('item editing: notes, weight and value saved', bed.notes === 'Smells of smoke' && bed.weight === 3 && bed.value === 250, JSON.stringify(bed));
+        CS.open['it:' + idx('Bedroll')] = true; csRender(); await sleep(40);
+        ok('item editing: the note shows with the item', /Smells of smoke/.test((q('.cs-itemnotes') || {}).textContent || ''));
+        // Other possessions.
+        const ta = q('[data-cs-possess]'); ta.value = 'A farm outside Triboar'; ta.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
+        ok('other possessions: saved with the character', state.party.find(p => p.id === 'pc_box').possessions === 'A farm outside Triboar');
+        csClose(); state.party = state.party.filter(p => p.id !== 'pc_box'); save();
+      } catch(e){ ok('round 92 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

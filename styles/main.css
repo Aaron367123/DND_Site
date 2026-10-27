@@ -5431,6 +5431,17 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-inv { display:flex; flex-direction:column; gap:2px; }
 .cs-item { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; background:var(--panel); }
 .cs-item.off { opacity:.65; }
+.cs-boxh { display:flex; align-items:baseline; gap:8px; margin:10px 0 2px; padding-bottom:3px; border-bottom:1px solid var(--border); font-size:var(--fs-sm); text-transform:uppercase; letter-spacing:.04em; }
+.cs-boxh:first-child { margin-top:0; }
+.cs-boxh .cs-linkbtn { font-size:15px; line-height:1; padding:0 2px; }
+.cs-boxh .cb-dim { text-transform:none; letter-spacing:0; }
+.cs-boxh.over .cb-dim { color:var(--danger); }
+.cs-boxempty { padding:4px 6px; font-size:var(--fs-sm); }
+.cs-itemnotes { margin-top:4px; font-style:italic; }
+.cs-itemedit { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:6px; margin-top:8px; font-size:var(--fs-sm); }
+.cs-itemedit label { display:flex; flex-direction:column; gap:2px; }
+.cs-itemedit input { width:100%; min-width:0; }
+.cs-possess { width:100%; box-sizing:border-box; resize:vertical; }
 .cs-item b { flex:1; min-width:0; }
 .cs-eq { width:20px; flex:0 0 20px; }
 .cs-att { font-size:var(--fs-xs); display:inline-flex; gap:3px; align-items:center; }
