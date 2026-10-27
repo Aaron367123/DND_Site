@@ -79,7 +79,7 @@ function paHpText(c){
 // ─── Shell ───────────────────────────────────────────────────────────────────
 // Tabs are gated by what the DM has shared, except "You", which is yours.
 const PA_TABS = [
-  { id:'you',   label:'You',   icon:'i-heart',  always:true },
+  { id:'you',   label:'You',   icon:'i-shield', always:true },
   { id:'map',   label:'Map',   icon:'i-map',    needs:'battlemap' },
   { id:'party', label:'Party', icon:'i-user',   needs:'party' },
   // Always there: every player keeps their own notes here. What the DM has

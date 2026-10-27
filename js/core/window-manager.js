@@ -33,10 +33,10 @@ function _nextZ(){
 // entry with no sprite (or a floating window created ad hoc) renders that
 // instead of a blank.
 const PANEL_ICON = {
-  combat:'i-combat', turnview:'i-turn', party:'i-heart', shop:'i-coins',
+  combat:'i-combat', turnview:'i-turn', party:'i-shield', shop:'i-coins',
   notes:'i-note', battlemap:'i-map', npclib:'i-user', bestiary:'i-paw',
   library:'i-books', loot:'i-chest',
-  encounter:'i-bolt', soundboard:'i-speaker', world:'i-cloud',
+  encounter:'i-skull', soundboard:'i-speaker', world:'i-cloud',
 };
 // Icon markup for a panel: sprite when we have one, the panel's own emoji when
 // we don't. Both callers go through here so they can't drift apart.

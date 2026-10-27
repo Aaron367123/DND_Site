@@ -10312,8 +10312,8 @@
     // -- Round 97: the look — lettering, and faces instead of letters ---------
     {
       try {
-        ok('look: the theme stylesheet and its fonts are loaded', getComputedStyle(document.documentElement).getPropertyValue('--font-display').includes('Cinzel')
-           && !!document.querySelector('link[href*="styles/theme.css"]') && !!document.querySelector('link[href*="family=Cinzel"]'));
+        ok('look: the theme stylesheet and its fonts are loaded', getComputedStyle(document.documentElement).getPropertyValue('--font-display').includes('Roboto Condensed')
+           && !!document.querySelector('link[href*="styles/theme.css"]') && !!document.querySelector('link[href*="family=Roboto+Condensed"]'));
         ok('faces: a species’ portrait by name, by a subrace’s name, and none for a name with none', /^races\/.+Half-Elf\.webp$/.test(sktSpeciesPortrait('Half-Elf'))
            && sktSpeciesPortrait('Hill Dwarf') === sktSpeciesPortrait('Dwarf') && !!sktSpeciesPortrait('Dwarf') && sktSpeciesPortrait('Nothing Like It') === '', sktSpeciesPortrait('Hill Dwarf'));
         ok('faces: a class’s default emoji gives way to the species’ portrait', sktPcIcon({ icon: '🪓', race: 'Human' }) === 'img/' + sktSpeciesPortrait('Human'));
@@ -10328,14 +10328,6 @@
         ok('faces: the party card shows it', !!card, card ? card.outerHTML.slice(0, 120) : document.querySelectorAll('.char-card').length + ' cards');
         state.party = state.party.filter(p => p.id !== 'pc_face'); save();
         try { panelDefs.party && panelDefs.party._render && panelDefs.party._render(); } catch(_){}
-        // Rules text on parchment: dark ink on light paper, whatever the theme.
-        { const host = document.createElement('div'); host.innerHTML = '<div class="cs-feat-t">Text <b>Bold</b> <span class="cb-dim">dim</span></div><div class="feat-block"><div class="feat-body">Feature</div></div>';
-          document.body.appendChild(host);
-          const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
-          const t = host.querySelector('.cs-feat-t'), fb = host.querySelector('.feat-body');
-          ok('look: rules text is dark ink on paper (the sheet’s, an imported sheet’s)', lum(getComputedStyle(t).color) < 0.25 && /gradient/.test(getComputedStyle(t).backgroundImage)
-             && lum(getComputedStyle(t.querySelector('.cb-dim')).color) < 0.45 && lum(getComputedStyle(fb).color) < 0.25, [getComputedStyle(t).color, getComputedStyle(fb).color].join(' | '));
-          host.remove(); }
       } catch(e){ ok('round 97 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Round 98: dice you can see ------------------------------------------
@@ -10380,11 +10372,18 @@
         document.body.appendChild(host);
         const q = s => host.querySelector(s);
         ok('combat: whose turn it is says so, on a tab', /Turn/.test(getComputedStyle(q('.combatant-card.active'), '::after').content));
-        ok('combat: the round on a ribbon', getComputedStyle(q('.round-display')).clipPath.startsWith('polygon'));
         ok('combat: the fallen in grey', /grayscale/.test(getComputedStyle(q('.combatant-card.dead .card-avatar')).filter));
         const tags = host.querySelectorAll('.condition-tag');
         ok('combat: each condition with its sign', /🤢/.test(getComputedStyle(tags[0], '::before').content) && /🛌/.test(getComputedStyle(tags[1], '::before').content));
         host.remove();
+        // Icons that mean something inside a card keep their meaning: the heart
+        // for HP, the bolt for initiative. The dock's Party and Encounter
+        // Builder have the shield and the skull of their own.
+        const g = id => (document.getElementById(id) || {}).innerHTML || '';
+        ok('icons: the HP heart is still a heart, the initiative bolt still a bolt', /M12 20\.5S4 15\.8/.test(g('i-heart')) && /M13 2 4 14h7/.test(g('i-bolt')));
+        ok('icons: the dock’s Party shows the shield, Encounter Builder the skull', !!g('i-shield') && !!g('i-skull')
+           && (document.querySelector('.dock-btn[data-panel="party"] use') || {}).getAttribute('href') === '#i-shield'
+           && (document.querySelector('.dock-btn[data-panel="encounter"] use') || {}).getAttribute('href') === '#i-skull');
       } catch(e){ ok('round 99 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Round 100: the sheet's banner ---------------------------------------

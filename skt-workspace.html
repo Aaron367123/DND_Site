@@ -66,8 +66,8 @@
 <link rel="stylesheet" href="styles/main.css?v=ecb7ded7fa">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,600;0,700;1,400&amp;family=Cinzel:wght@500;600;700&amp;display=swap">
-<link rel="stylesheet" href="styles/theme.css?v=506505be97">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="styles/theme.css?v=973e3f11b2">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -84,14 +84,17 @@
      All 24x24, 2px stroke, round caps, so they sit on a common optical weight.
      Drawn for the table where a plain one would do: an hourglass for a turn,
      a shield for the party, a skull for an encounter, a treasure map, a hooded
-     adventurer, a quill, the moon, a lute, a DM's screen. Search, settings,
-     help and close stay plain — never mistaken for anything else.
+     adventurer, a quill, the moon, a lute. Icons that also mean something
+     inside a card (the heart for HP, the bolt for initiative, the monitor for
+     a window) stay as they were; search, settings, help and close stay plain.
      aria-hidden throughout; every control that uses one keeps its title. -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><defs>
   <g id="i-combat"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5 18 3h3v3l-3.5 3.5M5 14l6 6M7 17l-4 4M3 19l2 2"/></g>
   <g id="i-turn"><path d="M6 3h12M6 21h12"/><path d="M7.5 3c0 4.6 4.5 5.8 4.5 9s-4.5 4.4-4.5 9M16.5 3c0 4.6-4.5 5.8-4.5 9s4.5 4.4 4.5 9"/><path d="M9.6 18.6h4.8"/></g>
   <g id="i-target"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></g>
-  <g id="i-heart"><path d="M12 3 4.5 5.6v5.9c0 4.7 3.2 8 7.5 9.5 4.3-1.5 7.5-4.8 7.5-9.5V5.6z"/><path d="M12 15.4s-3.2-1.9-3.2-4.1a1.7 1.7 0 0 1 3.2-.8 1.7 1.7 0 0 1 3.2.8c0 2.2-3.2 4.1-3.2 4.1z"/></g>
+  <g id="i-shield"><path d="M12 3 4.5 5.6v5.9c0 4.7 3.2 8 7.5 9.5 4.3-1.5 7.5-4.8 7.5-9.5V5.6z"/><path d="M12 15.4s-3.2-1.9-3.2-4.1a1.7 1.7 0 0 1 3.2-.8 1.7 1.7 0 0 1 3.2.8c0 2.2-3.2 4.1-3.2 4.1z"/></g>
+  <g id="i-skull"><path d="M12 3a7.2 7.2 0 0 0-7.2 7.2v3.4l2.2 1.6V19h2.6v-1.8h1.4V19h2v-1.8h1.4V19H17v-3.8l2.2-1.6v-3.4A7.2 7.2 0 0 0 12 3z"/><circle cx="9.2" cy="11.2" r="1.7"/><circle cx="14.8" cy="11.2" r="1.7"/><path d="m12 13.6-.9 1.7h1.8z"/></g>
+  <g id="i-heart"><path d="M12 20.5S4 15.8 4 10.5A4.5 4.5 0 0 1 12 7.6 4.5 4.5 0 0 1 20 10.5c0 5.3-8 10-8 10z"/></g>
   <g id="i-coins"><path d="M3 6c0-1.7 4-3 9-3s9 1.3 9 3-4 3-9 3-9-1.3-9-3z"/><path d="M21 6v6c0 1.7-4 3-9 3s-9-1.3-9-3V6"/><path d="M21 12v6c0 1.7-4 3-9 3s-9-1.3-9-3v-6"/></g>
   <g id="i-note"><path d="M20 3.5c-7.5.4-12.6 5.6-14.3 13.3L5 20.5"/><path d="M20 3.5c-.6 6.8-5.4 11.3-12.4 12.6"/><path d="m15.4 6.3-3.2 1.1M17.4 9.2l-3.6.6M12.5 9.6l-2.7 1.6"/><path d="M4 21h7"/></g>
   <g id="i-map"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/><path d="m16.8 9.6 2.4 2.4M19.2 9.6l-2.4 2.4"/><path d="M5.2 15.5c1.3-.4 2.2-1.2 2.6-2.4" stroke-dasharray="1.2 1.6"/></g>
@@ -101,13 +104,13 @@
   <g id="i-books"><path d="M4 4h4v16H4zM10 4h4v16h-4z"/><path d="m16.4 5.3 3.4 1L17 21l-3.4-1"/></g>
   <g id="i-dice"><path d="m12 2 8.5 5v10L12 22l-8.5-5V7z"/><path d="M3.5 7 12 12l8.5-5M12 12v10"/></g>
   <g id="i-chest"><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="m3 9 2-4h14l2 4M10 13h4v3h-4z"/></g>
-  <g id="i-bolt"><path d="M12 3a7.2 7.2 0 0 0-7.2 7.2v3.4l2.2 1.6V19h2.6v-1.8h1.4V19h2v-1.8h1.4V19H17v-3.8l2.2-1.6v-3.4A7.2 7.2 0 0 0 12 3z"/><circle cx="9.2" cy="11.2" r="1.7"/><circle cx="14.8" cy="11.2" r="1.7"/><path d="m12 13.6-.9 1.7h1.8z"/></g>
+  <g id="i-bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></g>
   <g id="i-speaker"><path d="M10.8 9.6C7.1 8.2 3.3 10.9 3.3 15c0 3.4 2.7 6 6 6 4.1 0 6.8-3.8 5.4-7.5z"/><circle cx="8.9" cy="15.4" r="1.5"/><path d="m12.3 11.7 6.9-6.9"/><path d="m17.5 3.1 3.4 3.4"/><path d="M6.2 18.6l2-2"/></g>
   <g id="i-cloud"><path d="M18.6 15.2A7.6 7.6 0 1 1 10.1 5a6 6 0 0 0 8.5 10.2z"/><path d="m17.2 3.2.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z"/></g>
   <g id="i-clock"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g>
   <g id="i-refresh"><path d="M20.5 12a8.5 8.5 0 1 1-2.8-6.3"/><path d="M20.5 4v5h-5"/></g>
   <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></g>
-  <g id="i-monitor"><path d="M3 7.2 8 5.5v13L3 20.2zM8 5.5h8v13H8zM16 5.5l5 1.7v13l-5-1.7z"/><path d="M10.4 9.5h3.2M10.4 12.3h3.2M10.4 15.1h2"/></g>
+  <g id="i-monitor"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8.5 21h7M12 17v4"/></g>
   <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.4c-.7.3-1 .9-1 1.6v.4"/><circle cx="12" cy="17" r="1"/></g>
   <!-- A hub with eight rays and nothing joining them is a sun, and at the
        16-18px this renders at that is exactly what the Settings button looked
@@ -212,8 +215,8 @@
     <div class="dock-divider" data-group="Combat"><span class="dock-group-label">Combat</span></div>
     <button class="dock-btn" data-panel="combat" data-label="Combat Tracker" title="Combat Tracker"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-combat"/></svg><span class="dock-label">Combat Tracker</span></button>
     <button class="dock-btn" data-panel="turnview" data-label="Turn View" title="Turn View — run one creature's turn on one surface"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-turn"/></svg><span class="dock-label">Turn View</span></button>
-    <button class="dock-btn" data-panel="party" data-label="Party Tracker"  title="Party Tracker"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-heart"/></svg><span class="dock-label">Party Tracker</span></button>
-    <button class="dock-btn" data-panel="encounter" data-label="Encounter Builder"  title="Encounter Builder"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bolt"/></svg><span class="dock-label">Encounter Builder</span></button>
+    <button class="dock-btn" data-panel="party" data-label="Party Tracker"  title="Party Tracker"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg><span class="dock-label">Party Tracker</span></button>
+    <button class="dock-btn" data-panel="encounter" data-label="Encounter Builder"  title="Encounter Builder"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-skull"/></svg><span class="dock-label">Encounter Builder</span></button>
     <div class="dock-divider" data-group="Map &amp; world"><span class="dock-group-label">Map &amp; world</span></div>
     <button class="dock-btn" data-panel="battlemap" data-label="Battle Map"  title="Battle Map"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-map"/></svg><span class="dock-label">Battle Map</span></button>
     <button class="dock-btn" data-panel="world" data-label="World" title="World — the date, the time and the weather"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cloud"/></svg><span class="dock-label">World</span></button>
@@ -482,7 +485,7 @@
 <script defer src="js/core/undo.js?v=63ed223198"></script>
 <script defer src="js/features/roll-requests.js?v=bceb453f6d"></script>
 <script defer src="js/features/monster-picker.js?v=7030540ec7"></script>
-<script defer src="js/core/window-manager.js?v=cca9e98e31"></script>
+<script defer src="js/core/window-manager.js?v=7092739ad3"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
 <script defer src="js/panels/combat.js?v=d145760198"></script>
 <script defer src="js/panels/attacks.js?v=57acabc3ca"></script>
@@ -531,7 +534,7 @@
 <script defer src="js/features/char-print.js?v=7e55981c09"></script>
 <script defer src="js/features/char-builder.js?v=61ba4f670a"></script>
 <script defer src="js/features/pdf-import.js?v=cefe36cb0b"></script>
-<script defer src="js/player/player-app.js?v=6805b8f791"></script>
+<script defer src="js/player/player-app.js?v=feff7cce29"></script>
 <script defer src="js/ui/player-view.js?v=3c47cb84bd"></script>
 <script defer src="js/sync/realtime.js?v=c790dc2750"></script>
 <script defer src="js/sync/presence.js?v=50e9bead2e"></script>
