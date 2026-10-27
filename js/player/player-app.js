@@ -1317,6 +1317,11 @@ function paPickerScreen(){
   // any other and this phone becomes that character.
   const build = typeof openCharBuilder === 'function'
     ? '<button class="btn primary pa-build" data-pa-build="new">🧙 Build a new character</button>' : '';
+  if (!list.length && typeof sktAwaitingSync !== 'undefined' && sktAwaitingSync){
+    return `<div class="pa-card pa-connecting">${typeof emptyState === 'function' ? emptyState({
+      icon:'i-turn', title:'Connecting to your table…',
+      hint:'The party appears here in a moment.' }) : 'Connecting…'}</div>`;
+  }
   if (!list.length){
     return `<div class="pa-card">${typeof emptyState === 'function' ? emptyState({
       icon:'i-heart', title:'No party yet',

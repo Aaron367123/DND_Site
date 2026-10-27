@@ -198,7 +198,9 @@ registerPanel('party',{
     } else {
       b.style.removeProperty('--party-card-w');
     }
-    b.innerHTML = this._renderHead() + '<div class="'+gridCls+'">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>';
+    b.innerHTML = this._renderHead() + ((!state.party.length && typeof sktAwaitingSync !== 'undefined' && sktAwaitingSync)
+      ? emptyState({ icon: 'i-turn', title: 'Connecting to your table…', hint: 'The party appears here in a moment.' })
+      : '<div class="'+gridCls+'">' + state.party.map((c,i)=>this._card(c,i)).join('') + '</div>');
     this._wire();
   },
 

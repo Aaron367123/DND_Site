@@ -1565,11 +1565,21 @@ function _attachKeyListener(k){
 // Entity-key subtree listener. The realtime protocol only sends changed
 // children over the wire for a subtree value listener, so receive traffic
 // is already incremental — we just reassemble locally.
+// Whether this page will talk to Firebase at all (state.js asks, at load).
+function sktSyncExpected(){
+  try { return !_syncDisabled() && firebaseConfig.apiKey !== 'REPLACE_ME'; } catch(e){ return false; }
+}
+
 function _attachEntityListener(k){
     const spec = _ENTITY_KEYS[k];
     _fbDb.ref(_baseOf(spec)).off();   // drop any revoked listener before re-adding
     _fbDb.ref(_baseOf(spec)).on('value', snap => {
+      // The table has answered: whatever the party is, this device knows it.
+      // Cleared before applying, so the redraw that applying does shows it.
+      const firstParty = k === 'skt-party-v1' && typeof sktAwaitingSync !== 'undefined' && sktAwaitingSync;
+      if (firstParty) sktAwaitingSync = false;
       if (snap.exists()){ _applyEntitySnapshot(k, snap.val()); return; }
+      if (firstParty){ sktAwaitingSync = true; sktSyncArrived(); }
       // v2 subtree absent — first client on the new layout. Seed from local
       // if we have data; otherwise fall back to the old whole-key node
       // (written by pre-step-2 clients) and re-push it in v2 form.

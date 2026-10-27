@@ -10477,6 +10477,29 @@
         _dirtyKeys.clear(); dirty0.forEach(k => _dirtyKeys.add(k));
       }
     }
+    // -- Round 103: a new device waits for the table, not on the demo party ----
+    {
+      const party0 = localStorage.getItem('skt-party-v1'), st0 = JSON.stringify(state.party), exp0 = window.sktSyncExpected;
+      try {
+        window.sktSyncExpected = () => true;
+        localStorage.removeItem('skt-party-v1');
+        load();
+        ok('new device: no demo characters while it waits for the table', state.party.length === 0 && sktAwaitingSync === true, state.party.map(p => p.name).join(','));
+        openPanel('party'); panelDefs.party._render(); await sleep(50);
+        const body = document.querySelector('.window[data-panel="party"] .window-body');
+        ok('new device: the party window says it is connecting', /Connecting to your table/.test(body ? body.textContent : ''));
+        ok('new device: and so does the phone’s picker', /Connecting to your table/.test(paPickerScreen()));
+        sktSyncArrived();
+        ok('new device: once the table answers, the wait is over', sktAwaitingSync === false && !/Connecting to your table/.test(document.querySelector('.window[data-panel="party"] .window-body').textContent));
+        window.sktSyncExpected = () => false; localStorage.removeItem('skt-party-v1'); state.party = JSON.parse(JSON.stringify(DEFAULT_PARTY)); load();   // as a fresh page starts
+        ok('new device: with sync off it still opens on the sample party', state.party.length > 0 && sktAwaitingSync === false);
+      } catch(e){ ok('round 103 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktSyncExpected = exp0; sktAwaitingSync = false;
+        if (party0 == null) localStorage.removeItem('skt-party-v1'); else localStorage.setItem('skt-party-v1', party0);
+        state.party = JSON.parse(st0); loadDomain('party'); panelDefs.party._render();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

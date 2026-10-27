@@ -272,6 +272,18 @@ function saveLayout(){
   // workspaces.js has initialised, and in the player view where it never does.
   if (typeof wsCommitLayout === 'function') wsCommitLayout();
 }
+// True while a device that syncs, and has never held a party, waits for the
+// table's first answer. It used to show the app's five demo characters for
+// those seconds — the DM's real names, but the wrong numbers — on every new
+// phone. Cleared by realtime.js when the party arrives (or turns out to be
+// empty), and after a timeout so an offline device isn't left waiting.
+let sktAwaitingSync = false;
+function sktSyncArrived(){
+  if (!sktAwaitingSync) return;
+  sktAwaitingSync = false;
+  try { if (typeof panelDefs !== 'undefined' && panelDefs.party && panelDefs.party._body) panelDefs.party._render(); } catch(e){}
+  try { if (typeof paRender === 'function' && document.body.classList.contains('player-app')) paRender(); } catch(e){}
+}
 function load(){
   try{
     const hasSplit=[PARTY_KEY,COMBAT_KEY,SHOP_KEY,SETTINGS_KEY].some(k=>localStorage.getItem(k)!=null);
@@ -290,6 +302,9 @@ function load(){
       save(); // seed the split keys (and, via the sync layer, Firebase)
     }else{
       loadDomain('party');loadDomain('combat');loadDomain('shop');loadDomain('settings');loadDomain('prompt');
+      if(localStorage.getItem(PARTY_KEY)==null&&typeof sktSyncExpected==='function'&&sktSyncExpected()){
+        state.party=[];sktAwaitingSync=true;setTimeout(sktSyncArrived,15000);
+      }
       // The combined blob was kept as a rollback snapshot of the one-time
       // split above. That split is long done; the copy only grew stale and
       // sat in every browser's storage (21 KB in a live campaign). Gone once
