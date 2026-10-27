@@ -10192,6 +10192,46 @@
         csClose(); state.party = state.party.filter(p => p.id !== 'pc_box'); save();
       } catch(e){ ok('round 92 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 93: Wild Shape from the sheet; the 2024 long rest -------------
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        const rec = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Shifter', cls: 'Druid', level: 4, species: 'Human' }), R);
+        rec.id = 'pc_ws'; state.party.push(rec); save();
+        openCharSheet('pc_ws'); await sleep(300); CS.tab = 'extras'; csRender(); await sleep(40);
+        const q = s => document.querySelector('#cs-root ' + s);
+        const P = panelDefs.party, idx = () => state.party.findIndex(p => p.id === 'pc_ws');
+        ok('wild shape: the druid’s sheet offers a beast form, with the uses left', !!q('[data-cs="wildshape"]') && /2 of 2 uses left/.test(q('[data-cs="wildshape"]').parentElement.textContent), (q('[data-cs="wildshape"]') || {}).outerHTML);
+        // The picker's callback, as a pick would run it.
+        let cb = null; const real = P._editWildShape; P._editWildShape = (i, f) => { cb = f; };
+        q('[data-cs="wildshape"]').click(); await sleep(30); P._editWildShape = real;
+        const wolf = (typeof _5eData !== 'undefined' ? _5eData : []).find(d => d.cat === 'monster' && d.name === 'Wolf') || { name: 'Wolf', _slug: 'wolf', _raw: { hit_points: 11, armor_class: 13 } };
+        P._applyWildShape(idx(), wolf); if (cb) cb(wolf); await sleep(40);
+        const pc = state.party[idx()];
+        ok('wild shape: picking a beast takes its form and spends a use', pc.wildshape && pc.wildshape.name === 'Wolf' && (pc.resources.find(r => r.name === 'Wild Shape') || {}).current === 1, JSON.stringify([pc.wildshape, pc.resources]));
+        ok('wild shape: the sheet shows the form, and a way back', /In the form of Wolf/.test(q('.cs-pane').textContent) && !!q('.cs-pane [data-cs="endwild"]'));
+        q('.cs-pane [data-cs="endwild"]').click(); await sleep(40);
+        ok('wild shape: and back to the druid', !state.party[idx()].wildshape);
+        // The real picker: pick a Wolf from the list; the sheet's callback spends a use.
+        { for (let i = 0; i < 60 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+          const before = (state.party[idx()].resources.find(r => r.name === 'Wild Shape') || {}).current;
+          q('[data-cs="wildshape"]').click(); await sleep(80);
+          const srch = document.querySelector('#ws-pick-search'); if (srch){ srch.value = 'Wolf'; srch.dispatchEvent(new Event('input', { bubbles: true })); await sleep(40); }
+          const rowEl = [...document.querySelectorAll('#ws-pick-list .bestiary-pick-row')].find(r => /^Wolf$/.test((r.querySelector('.bestiary-pick-name') || {}).textContent || ''));
+          if (rowEl) rowEl.click(); await sleep(80);
+          const now = state.party[idx()];
+          ok('wild shape: the beast picker, from the sheet, takes the form and spends a use', !!rowEl && now.wildshape && now.wildshape.name === 'Wolf' && (now.resources.find(r => r.name === 'Wild Shape') || {}).current === before - 1, JSON.stringify([!!rowEl, now.wildshape && now.wildshape.name, before]));
+          document.querySelectorAll('.modal-backdrop').forEach(m => m.remove()); }
+        ok('wild shape: the CR limit — 1/2 at 4th, a Moon druid’s a third of the level', P._wildShapeCrCap({ subclass: '' }, 4) === 0.5 && P._wildShapeCrCap({ subclass: 'Moon' }, 9) === 3 && P._wildShapeCrCap({ subclass: 'Moon', rules: '2014' }, 4) === 1 && P._wildShapeCrCap({}, 8) === 1);
+        csClose();
+        // Long rest: 2024 gives every Hit Point Die back, 2014 half.
+        const a = state.party[idx()]; a.hitDice = { current: 0, max: 4, dieType: 'd8' }; P._longRestOne(a, idx());
+        ok('long rest: 2024 — every hit die back', a.hitDice.current === 4, JSON.stringify(a.hitDice));
+        const old = { id: 'pc_ws14', name: 'Old', rules: '2014', hp: 1, hpMax: 20, hitDice: { current: 0, max: 5, dieType: 'd8' }, sheet: {} }; state.party.push(old); P._longRestOne(old, state.party.length - 1);
+        ok('long rest: 2014 — half, rounded down', old.hitDice.current === 2, JSON.stringify(old.hitDice));
+        state.party = state.party.filter(p => p.id !== 'pc_ws' && p.id !== 'pc_ws14'); save();
+      } catch(e){ ok('round 93 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -833,6 +833,12 @@ CS_TAB_RENDER.extras = pc => {
       if (forms.length) h += '<h5>' + csE(c.label) + '</h5><div class="cs-add"><select class="cb-sel" data-cs-sumsel="' + csE(c.label) + '">' + forms.map(n => '<option>' + csE(n) + '</option>').join('') + '</select>'
         + '<button class="btn" data-cs="addsummon" data-cs-sumfor="' + csE(c.label) + '">Add</button></div>';
     });
+    // Wild Shape: take a form from the sheet (a use spent), as D&D Beyond's druid does.
+    if (feats.has('Wild Shape') || /druid/i.test(pc.cls || '')){
+      const ws = pc.wildshape && pc.wildshape.name ? pc.wildshape : null, use = (pc.resources || []).find(r => r.name === 'Wild Shape');
+      h += '<h5>Wild Shape</h5><div class="cs-add">' + (ws ? '<span>In the form of <b>' + csE(ws.name) + '</b> — ' + (ws.hp ?? 0) + ' / ' + (ws.hpMax ?? 0) + ' HP</span><button class="btn" data-cs="endwild">Return to your form</button>'
+        : '<button class="btn" data-cs="wildshape"' + (use && use.current <= 0 ? ' disabled title="No Wild Shape uses left"' : '') + '>🐺 Take a beast form</button>' + (use ? '<span class="cb-dim">' + use.current + ' of ' + use.max + ' uses left</span>' : '')) + '</div>';
+    }
     const names = typeof _5eData !== 'undefined' && Array.isArray(_5eData) ? [...new Set(_5eData.filter(d => d.cat === 'monster').map(d => d.name))].sort() : [];
     h += '<h5>Add a creature</h5><div class="cs-add"><input data-cs-exq list="cs-mon-dl" placeholder="Owl, Riding Horse, Wolf…"><button class="btn" data-cs="addextra">Add</button></div>'
       + '<datalist id="cs-mon-dl">' + names.map(n => '<option value="' + csE(n) + '">').join('') + '</datalist>';
@@ -1056,6 +1062,17 @@ function csOnClick(e){
   }
   if (d.cs === 'endrage'){ if (panelDefs.party && panelDefs.party._setRage) panelDefs.party._setRage(csIdx(), false); return csRender(); }
   if (d.cs === 'endwild') return csEdit('Wild Shape ends', p => { p.wildshape = null; });
+  if (d.cs === 'wildshape' && !CS.readOnly){
+    const P = typeof panelDefs !== 'undefined' && panelDefs.party;
+    if (!P || typeof P._editWildShape !== 'function') return;
+    P._editWildShape(csIdx(), () => {
+      // The form taken spends a use.
+      const p = state.party[csIdx()], r = p && (p.resources || []).find(x => x.name === 'Wild Shape');
+      if (r && r.current > 0){ r.current -= 1; save(); }
+      csRender();
+    });
+    return;
+  }
   if (d.cs === 'short'){ CS.resting = { healed: 0, rolls: [] }; return csRender(); }
   if (d.cs === 'restdie'){
     const P = panelDefs.party, i = csIdx();
@@ -1072,7 +1089,7 @@ function csOnClick(e){
   if (d.cs === 'restcancel'){ CS.resting = null; return csRender(); }
   if (d.cs === 'long'){
     const go = () => csEdit(pc.name + ' took a long rest', () => panelDefs.party._longRestOne(state.party[csIdx()], csIdx()));
-    if (typeof showConfirm === 'function') return showConfirm('Hit points to full, half the hit dice, every slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
+    if (typeof showConfirm === 'function') return showConfirm('Hit points to full, ' + (((pc.build && pc.build.edition) || pc.rules || '2024') === '2024' ? 'every hit die' : 'half the hit dice') + ', every slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
     return go();
   }
   if (d.cs === 'levelup' || d.cs === 'edit' || d.cs === 'convert'){

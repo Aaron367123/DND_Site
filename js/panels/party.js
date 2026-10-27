@@ -995,7 +995,7 @@ registerPanel('party',{
   // restrictions removed at lv4), lv4 → CR 1/2, lv8 → CR 1. We show every
   // beast regardless and add a chip badge for "above your CR" — Circle of
   // the Moon and homebrew vary, so the DM gets the final call.
-  _editWildShape(i){
+  _editWildShape(i, onPick){
     const c = state.party[i]; if (!c) return;
     if (typeof _5eData === 'undefined' || !_5eLoaded){
       showToast('5e bestiary still loading — try again in a moment');
@@ -1032,10 +1032,7 @@ registerPanel('party',{
     if (!all.length){ showToast('No beasts in the loaded data'); return; }
 
     const druidLvl = parseInt(c.level || c.sheet?.level || 1, 10) || 1;
-    // CR cap by druid level (vanilla 5e — Circle of the Moon doubles this).
-    const crCap = druidLvl >= 8 ? 1
-                : druidLvl >= 4 ? 0.5
-                : 0.25;
+    const crCap = this._wildShapeCrCap(c, druidLvl);
 
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
@@ -1111,6 +1108,7 @@ registerPanel('party',{
       const d = all.find(x => x._slug === row.dataset.slug); if (!d) return;
       this._applyWildShape(i, d);
       close();
+      if (typeof onPick === 'function') onPick(d);
     });
     setTimeout(() => backdrop.querySelector('#ws-pick-search').focus(), 30);
   },
@@ -1142,6 +1140,14 @@ registerPanel('party',{
       this._DMG_TYPES.forEach(t => { if (s.includes(t)) out.add(t); });
     });
     return [...out];
+  },
+
+  // The highest CR a druid can shape into: 1/4 from 2nd level, 1/2 from 4th,
+  // 1 from 8th; a Circle of the Moon druid a third of their level (at least 1).
+  _wildShapeCrCap(c, lvl){
+    const moon = /moon/i.test(String(c.subclass || (c.build && c.build.subclass) || ''));
+    if (moon) return (c.rules || (c.build && c.build.edition)) === '2014' && lvl < 6 ? 1 : Math.max(1, Math.floor(lvl / 3));
+    return lvl >= 8 ? 1 : lvl >= 4 ? 0.5 : 0.25;
   },
 
   _applyWildShape(i, beast){
@@ -1674,8 +1680,9 @@ registerPanel('party',{
       // general rule is to round down when you divide, so a level 5 character
       // regains 2, not 3. This rounded up and quietly handed every
       // odd-levelled character a spare die every night.
+      // The 2024 rules give every die back.
       if (c.hitDice && c.hitDice.max){
-        const back = Math.max(1, Math.floor(c.hitDice.max / 2));
+        const back = ((c.build && c.build.edition) || c.rules || '2024') === '2024' ? c.hitDice.max : Math.max(1, Math.floor(c.hitDice.max / 2));
         c.hitDice.current = Math.min(c.hitDice.max, (c.hitDice.current || 0) + back);
       }
       // Spell slots: clear all expended counters.
