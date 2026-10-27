@@ -56,13 +56,15 @@ function init(){
     if (back){
       back.title = 'Back to DM view';
       back.classList.add('is-back-to-dm');
+      // replace(), not href: the player view and the DM view are one app's two
+      // faces, and the phone's Back button shouldn't walk from one to the other.
       back.addEventListener('click', () => {
         try {
           const u = new URL(window.location.href);
           u.search = ''; u.hash = '';
-          window.location.href = u.toString();
+          window.location.replace(u.toString());
         } catch(e){
-          window.location.href = window.location.origin + window.location.pathname;
+          window.location.replace(window.location.origin + window.location.pathname);
         }
       });
     }
@@ -180,7 +182,8 @@ function init(){
     // trip with only the URL bar to escape by.
     const phone = (window.matchMedia && matchMedia('(max-width: 767px)').matches)
       || (window.matchMedia && matchMedia('(pointer: coarse)').matches && window.innerWidth < 900);
-    if (phone){ window.location.href = url; return; }
+    // replace(): Back from the player view must not land on the DM view.
+    if (phone){ window.location.replace(url); return; }
 
     const target = 'skt-player-' + Date.now();
     const w = standalone

@@ -153,6 +153,7 @@ function initPlayerApp(){
   shell.addEventListener('click', paOnClick);
   shell.addEventListener('change', paOnChange);
   paInitMore();
+  paInitBack();
   paRender();
   paOnHandouts();
   paOnRollRequest();
@@ -374,6 +375,37 @@ function paInitMore(){
       if (row) row.innerHTML = sync.innerHTML;
     }).observe(sync, { childList: true, subtree: true, characterData: true, attributes: true });
   }
+}
+// ─── The phone's Back button ─────────────────────────────────────────────────
+// Back used to leave the player view for whatever page came before it — the
+// DM view, on a phone that switched over. Now one extra history entry sits on
+// top while the app is open, and Back first undoes what's on screen: a
+// handout, the devices list, search, an open feature, then the tabs visited
+// (and the You tab); only with nothing left does it leave. A roll or a save
+// waiting for an answer keeps the phone where it is.
+let paTabTrail = [];
+function paInitBack(){
+  if (paInitBack.done) return; paInitBack.done = true;
+  try { history.replaceState({ pa: 'base' }, ''); history.pushState({ pa: 'guard' }, ''); } catch(e){ return; }
+  window.addEventListener('popstate', () => {
+    if (!document.body.classList.contains('player-app')) return;
+    if (paBackStep()){ try { history.pushState({ pa: 'guard' }, ''); } catch(e){} return; }
+    history.back();
+  });
+}
+// One step back inside the app; false when there's nothing left to undo.
+function paBackStep(){
+  const btn = document.querySelector('#pa-handout .pa-ho-close, #pa-devices [data-dev="close"]');
+  if (btn){ btn.click(); return true; }
+  if (document.getElementById('pa-roll-req') || document.getElementById('pa-conc-save') || document.getElementById('pa-rest')) return true;
+  if (document.body.classList.contains('pa-searching')){ const d = document.getElementById('pa-search-close'); if (d) d.click(); else paEndSearch(); return true; }
+  if (paFeatOpen != null){ paFeatOpen = null; paRender(); return true; }
+  while (paTabTrail.length){
+    const t = paTabTrail.pop();
+    if (t !== paTab && paVisibleTabs().some(x => x.id === t)){ paTab = t; paRender(); return true; }
+  }
+  if (paTab !== 'you'){ paTab = 'you'; paRender(); return true; }
+  return false;
 }
 function paStartSearch(){
   document.body.classList.add('pa-searching');
@@ -1914,7 +1946,7 @@ function paOnClick(e){
   const ho = e.target.closest('[data-pa-ho]');
   if (ho){ paShowHandout(ho.dataset.paHo, false); return; }
   const tab = e.target.closest('[data-pa-tab]');
-  if (tab){ paTab = tab.dataset.paTab; paRender(); return; }
+  if (tab){ if (tab.dataset.paTab !== paTab){ paTabTrail.push(paTab); paTabTrail = paTabTrail.slice(-12); } paTab = tab.dataset.paTab; paRender(); return; }
   const pick = e.target.closest('[data-pa-pick]');
   if (pick){ paSetPc(pick.dataset.paPick); paRender(); return; }
   if (e.target.closest('[data-pa-swap]')){ paSetPc(null); paRender(); return; }

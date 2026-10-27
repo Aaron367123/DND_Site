@@ -11171,6 +11171,38 @@
           paRender();
         }
       }
+      // ── The phone's Back button steps back inside the app ─────────────────
+      {
+        const tab0 = paTab, backWas = history.back; let left = 0;
+        try {
+          history.back = () => { left++; };
+          const tabsOn = paVisibleTabs().map(t => t.id);
+          const two = tabsOn.filter(t => t !== 'you').slice(0, 2);
+          paTab = 'you'; paTabTrail = []; paRender(); await sleep(20);
+          for (const t of two){ const el = document.querySelector('#pa-tabs [data-pa-tab="' + t + '"]'); if (el){ el.click(); await sleep(30); } }
+          const pop = async () => { window.dispatchEvent(new PopStateEvent('popstate', { state: { pa: 'base' } })); await sleep(30); };
+          if (two.length === 2){
+            await pop();
+            ok('back: the previous tab first', paTab === two[0], paTab);
+          }
+          await pop();
+          ok('back: then the You tab', paTab === 'you', paTab);
+          // A handout on screen: Back closes it, and stays in the app.
+          const ov = document.createElement('div'); ov.id = 'pa-handout'; ov.innerHTML = '<button class="pa-ho-close">Close</button>';
+          ov.querySelector('button').addEventListener('click', () => ov.remove()); document.body.appendChild(ov);
+          await pop();
+          ok('back: closes a handout first', !document.getElementById('pa-handout') && left === 0 && paTab === 'you');
+          // A roll waiting for an answer: Back keeps the phone where it is.
+          const rr = document.createElement('div'); rr.id = 'pa-roll-req'; document.body.appendChild(rr);
+          await pop();
+          ok('back: stays put while a roll waits for an answer', left === 0 && !!document.getElementById('pa-roll-req'));
+          rr.remove();
+          // Nothing left to undo: now it leaves.
+          await pop();
+          ok('back: with nothing left, it leaves the app', left === 1, left + ' leaves');
+        } catch(e){ ok('back: the checks ran to completion', false, e.message); }
+        finally { history.back = backWas; paTab = tab0; paRender(); }
+      }
       // ── No flicker: the sheet isn't rebuilt for someone else's change ─────
       {
         const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab, party0 = JSON.stringify(state.party);
