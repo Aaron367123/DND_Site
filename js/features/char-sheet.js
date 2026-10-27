@@ -143,7 +143,7 @@ function csClassLine(pc){
 }
 function _csTitle(s){ s = String(s || ''); return s ? s.replace(/\b\w/g, c => c.toUpperCase()) : ''; }
 function csHead(pc){
-  const icon = typeof renderIcon === 'function' ? renderIcon(pc.icon, pc.name) : csE(String(pc.name || '?').charAt(0));
+  const icon = typeof renderIcon === 'function' ? renderIcon(typeof sktPcIcon === 'function' ? sktPcIcon(pc) : pc.icon, pc.name) : csE(String(pc.name || '?').charAt(0));
   const ro = CS.readOnly;
   const xpOn = pc.build && pc.build.advancement === 'xp';
   const lvl = pc.level || 1, xp = +pc.xp || 0, next = CS_XP[Math.min(19, lvl)];

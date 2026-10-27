@@ -1020,7 +1020,7 @@ function paYouScreen(){
   return `
     <div class="pa-card pa-you">
       <div class="pa-you-head">
-        <div class="pa-avatar">${paEsc(String(pc.name || '?').trim().charAt(0).toUpperCase())}</div>
+        <div class="pa-avatar">${paFace(pc)}</div>
         <div class="pa-you-id">
           <div class="pa-you-name">${paEsc(pc.name)}</div>
           <div class="pa-you-sub">${paEsc([pc.cls, pc.subclass, pc.level ? 'level ' + pc.level : ''].filter(Boolean).join(' · ') || 'Your character')}</div>
@@ -1280,7 +1280,7 @@ function paPickerScreen(){
       whose turn it is, your HP, your reactions.</p>
     <div class="pa-pick">${list.map(p => `
       <button class="pa-pick-b" data-pa-pick="${paEsc(p.id)}">
-        <span class="pa-avatar sm">${paEsc(String(p.name || '?').trim().charAt(0).toUpperCase())}</span>
+        <span class="pa-avatar sm">${paFace(p)}</span>
         <span class="pa-pick-n">${paEsc(p.name)}</span>
         <span class="pa-pick-s">${paEsc([p.cls, p.level ? 'lvl ' + p.level : ''].filter(Boolean).join(' · '))}</span>
       </button>`).join('')}</div>
@@ -1561,6 +1561,12 @@ function paSaveMod(pc, k){
 function paSkillMod(pc, k, ab){
   const v = typeof csSkillVal === 'function' ? csSkillVal(pc.sheet, k) : null;
   return v != null ? +v : paAbMod(pc, ab);
+}
+// A character's face on the phone: their picture or their species' portrait,
+// else the first letter of their name.
+function paFace(pc){
+  const ic = typeof sktPcIcon === 'function' ? sktPcIcon(pc) : '';
+  return /^(data:image\/|img\/|https?:\/\/)/.test(ic) && typeof renderIcon === 'function' ? renderIcon(ic, pc.name) : paEsc(String(pc.name || '?').trim().charAt(0).toUpperCase());
 }
 function paChecksHtml(pc){
   const sg = n => (n >= 0 ? '+' : '') + n;

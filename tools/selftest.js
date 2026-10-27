@@ -10309,6 +10309,27 @@
         ok('Reborn: Strange Endurance — the resistance chosen', (r.resistances || []).includes('cold') && !(r.resistances || []).includes('necrotic'), JSON.stringify(r.resistances));
       } catch(e){ ok('round 96 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 97: the look — lettering, and faces instead of letters ---------
+    {
+      try {
+        ok('look: the theme stylesheet and its fonts are loaded', getComputedStyle(document.documentElement).getPropertyValue('--font-display').includes('Cinzel')
+           && !!document.querySelector('link[href*="styles/theme.css"]') && !!document.querySelector('link[href*="family=Cinzel"]'));
+        ok('faces: a species’ portrait by name, by a subrace’s name, and none for a name with none', /^races\/.+Half-Elf\.webp$/.test(sktSpeciesPortrait('Half-Elf'))
+           && sktSpeciesPortrait('Hill Dwarf') === sktSpeciesPortrait('Dwarf') && !!sktSpeciesPortrait('Dwarf') && sktSpeciesPortrait('Nothing Like It') === '', sktSpeciesPortrait('Hill Dwarf'));
+        ok('faces: a class’s default emoji gives way to the species’ portrait', sktPcIcon({ icon: '🪓', race: 'Human' }) === 'img/' + sktSpeciesPortrait('Human'));
+        ok('faces: an uploaded picture and an emoji the player picked stay', sktPcIcon({ icon: 'data:image/png;base64,AAAA', race: 'Human' }) === 'data:image/png;base64,AAAA' && sktPcIcon({ icon: '🐉', race: 'Human' }) === '🐉');
+        ok('faces: no portrait for the species — the icon they have', sktPcIcon({ icon: '🎵', race: 'Nothing Like It' }) === '🎵' && sktPcIcon({ race: 'Nothing Like It' }) === '⚔');
+        const html = renderIcon('img/' + sktSpeciesPortrait('Human'), 'X'), f = sktPortraitFocus(sktSpeciesPortrait('Human'));
+        ok('faces: drawn from the thumbnail, the full picture behind it, framed on the face', /icon-face/.test(html) && html.includes(assetThumbUrl('img/' + sktSpeciesPortrait('Human'))) && html.includes('data-fb=')
+           && !!f && html.includes('object-position:' + f.x + '% ' + f.y + '%'), html.slice(0, 220));
+        state.party.push({ id: 'pc_face', name: 'Facey', race: 'Dwarf', icon: '⚔', cls: 'fighter', level: 1, hp: 10, hpMax: 10, ac: 15 }); save();
+        try { openPanel('party'); await sleep(200); panelDefs.party._render(); await sleep(50); } catch(_){}
+        const card = document.querySelector('.char-card [data-act="icon-btn"] img.icon-face');
+        ok('faces: the party card shows it', !!card, card ? card.outerHTML.slice(0, 120) : document.querySelectorAll('.char-card').length + ' cards');
+        state.party = state.party.filter(p => p.id !== 'pc_face'); save();
+        try { panelDefs.party && panelDefs.party._render && panelDefs.party._render(); } catch(_){}
+      } catch(e){ ok('round 97 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

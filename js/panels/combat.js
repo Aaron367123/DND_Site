@@ -615,7 +615,7 @@ registerPanel('combat',{
     const dead = c.hp <= 0;
     const isPC = c.isPC;
     const portrait = c.portrait
-      || (isPC ? (state.party.find(p=>p.id===c.id)?.icon || '⚔')
+      || (isPC ? (state.party.find(p=>p.id===c.id) ? sktPcIcon(state.party.find(p=>p.id===c.id)) : '⚔')
                : (CLASS_ICONS[c.cls] || CLASS_ICONS.enemy));
     // Tri-state reveal for monsters in player view: show / conceal / hide.
     // DM tab always shows real values regardless of the setting.

@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""
+make-species-portraits.py — each species' portrait, and where its face is.
+
+A character without a picture of their own shows their species' face (party
+cards, the combat tracker, the player's phone, the sheet). The art pack's
+species pictures are listed in data/fluff-races.json. This picks one per
+species name — a picture taller than it is wide (one figure, not a scene),
+a 2024-era book's if it has one, else the largest — and finds the head in
+it, so a small round avatar shows a face rather than a shoulder or a staff.
+
+Finding the head: the art has transparent backgrounds. Near the top of the
+figure, the widest solid shape is the head (staffs and blades are thin), so
+the column where the opaque pixels are densest over the figure's top fifth,
+smoothed across a head's width, gives its x; the first row there that is
+solid across that width, plus a little, gives its y. A picture with no
+transparency falls back to the top centre.
+
+Writes js/generated/species-portraits.js: name -> [path, x%, y%].
+
+USAGE
+    pip install Pillow
+    python tools/make-species-portraits.py      (then node tools/stamp-build.js)
+"""
+import json
+import os
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMG = os.path.join(ROOT, 'img')
+
+
+def load(name):
+    with open(os.path.join(ROOT, 'data', name), encoding='utf-8') as fh:
+        return json.load(fh)
+
+
+def pick_portraits():
+    books = load('books.json').get('book', [])
+    era24 = {b['id'] for b in books if str(b.get('published', '')) >= '2024-09-17'}
+    by_name = {}
+    for x in load('fluff-races.json').get('raceFluff', []):
+        for im in x.get('images') or []:
+            p = (im.get('href') or {}).get('path')
+            w, h = im.get('width'), im.get('height')
+            if p and w and h:
+                by_name.setdefault(x['name'], []).append((p, x['source'], int(w), int(h)))
+    out = {}
+    for name in sorted(by_name):
+        tall = [s for s in by_name[name] if s[3] >= s[2] * 1.05]
+        if not tall:
+            continue
+        # A cut-out figure (transparent background) before a framed picture,
+        # then a 2024-era book's, then the largest.
+        tall.sort(key=lambda s: (not cut_out(s[0]), s[1] not in era24, -s[2] * s[3]))
+        out[name] = tall[0][0]
+    return out
+
+
+def cut_out(path):
+    """Whether the picture's corners are transparent (a figure, not a scene)."""
+    from PIL import Image
+    try:
+        im = Image.open(os.path.join(IMG, path.replace('/', os.sep))).convert('RGBA')
+    except Exception:                                    # noqa: BLE001
+        return False
+    w, h = im.size
+    a = im.getchannel('A')
+    return sum(a.getpixel(c) < 40 for c in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]) >= 3
+
+
+def find_face(path):
+    """(x%, y%) of the head in the picture."""
+    from PIL import Image
+    try:
+        im = Image.open(os.path.join(IMG, path.replace('/', os.sep))).convert('RGBA')
+    except Exception:                                    # noqa: BLE001
+        return (50, 12)
+    im.thumbnail((240, 240))
+    w, h = im.size
+    a = im.getchannel('A').load()
+    solid = [[a[x, y] > 60 for x in range(w)] for y in range(h)]
+    rows = [y for y in range(h) if any(solid[y])]
+    if not rows or len(rows) > h * 0.995 and all(all(r) for r in solid[:3]):
+        return (50, 12)                                  # no transparency
+    top, bottom = rows[0], rows[-1]
+    fig = bottom - top + 1
+    band = range(top, min(h, top + max(4, fig // 3)))
+    col = [sum(solid[y][x] for y in band) for x in range(w)]
+    win = max(3, w // 8)
+    sm = [sum(col[max(0, x - win // 2):x + win // 2 + 1]) for x in range(w)]
+    hx = max(range(w), key=lambda x: sm[x])
+    lo, hi = max(0, hx - win // 2), min(w, hx + win // 2 + 1)
+    hy = next((y for y in range(top, bottom) if sum(solid[y][lo:hi]) >= (hi - lo) * 0.45), top)
+    hy = min(bottom, hy + int(fig * 0.05))
+    return (round(100 * hx / w), round(100 * hy / h))
+
+
+# Pictures where wings, a weapon, fire or scenery sit above the head, so the
+# guess lands on them: the face set by eye (x%, y%), for the picture named.
+FACES = {
+    'Aarakocra': (61, 26), 'Aasimar': (47, 34), 'Bugbear': (45, 20), 'Dhampir': (55, 33),
+    'Dragonborn (Ravenite)': (45, 8), 'Fairy': (60, 22), 'Goblin': (58, 30), 'Hobgoblin': (45, 18),
+    'Human (Ixalan)': (28, 22), 'Human (Keldon)': (48, 5), 'Kenku': (56, 31), 'Kobold': (63, 31),
+    'Merfolk': (38, 30), 'Naga': (76, 36), 'Reborn': (39, 11), 'Sea Elf': (40, 33), 'Tabaxi': (62, 27),
+    'Tiefling': (45, 18), 'Tortle': (25, 40),
+}
+
+
+def main():
+    portraits = pick_portraits()
+    out = {}
+    for name, path in portraits.items():
+        fx, fy = FACES.get(name) or find_face(path)
+        out[name] = [path, fx, fy]
+    dst = os.path.join(ROOT, 'js', 'generated', 'species-portraits.js')
+    with open(dst, 'w', encoding='utf-8', newline='\n') as fh:
+        fh.write('// GENERATED by tools/make-species-portraits.py — do not hand-edit.\n'
+                 '// Each species\' portrait (a one-figure picture from the art pack) and\n'
+                 '// where its face is (x%, y%), for the faces of characters without a\n'
+                 '// picture of their own.\n'
+                 'window.SKT_SPECIES_PORTRAITS = ' + json.dumps(out, ensure_ascii=False, separators=(',', ':')) + ';\n')
+    print('[portraits] %d species · wrote %s' % (len(out), os.path.relpath(dst, ROOT)))
+
+
+if __name__ == '__main__':
+    main()

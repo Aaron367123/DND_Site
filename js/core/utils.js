@@ -245,9 +245,44 @@ function bestiaryPortraitPath(p) {
 //   - paths starting with img/ or http(s)/ → <img>
 //   - raw <svg…           → inlined SVG
 //   - everything else     → plain text (emoji, single char)
+// A character's face: their own picture; else their species' portrait (the
+// art pack's, js/generated/species-portraits.js) in place of a class's
+// default emoji; else the icon they have (one they picked keeps).
+const SKT_DEFAULT_ICONS = new Set(['', '⚔', '🪓', '🎵', '✨', '🌿', '👊', '🛡', '🏹', '🗡', '🔥', '👁', '📘']);
+// (Each entry is [path, x%, y%] — where the face is, tools/make-species-portraits.py.)
+function sktSpeciesPortrait(race) {
+  const m = window.SKT_SPECIES_PORTRAITS || {}, r = String(race || '').trim();
+  const path = e => Array.isArray(e) ? e[0] : (e || '');
+  if (!r) return '';
+  if (m[r]) return path(m[r]);
+  const bare = r.replace(/\s*\(.*\)\s*$/, '').replace(/^(variant|custom)\s+/i, '');
+  if (m[bare]) return path(m[bare]);
+  // "Hill Dwarf", "Wood Elf", "Elf; Drow": the species' own name in it.
+  const key = Object.keys(m).filter(k => !/[()]/.test(k) && new RegExp('(^|[\\s;])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[\\s;])', 'i').test(bare)).sort((a, b) => b.length - a.length)[0];
+  return key ? path(m[key]) : '';
+}
+// Where a species portrait's face is: { x, y } in percent, or null.
+function sktPortraitFocus(imgPath) {
+  const p = String(imgPath || '').replace(/^img\//, '');
+  if (!window._sktFocus) { window._sktFocus = {}; Object.values(window.SKT_SPECIES_PORTRAITS || {}).forEach(e => { if (Array.isArray(e)) window._sktFocus[e[0]] = { x: e[1], y: e[2] }; }); }
+  return window._sktFocus[p] || null;
+}
+function sktPcIcon(pc) {
+  const ic = pc && pc.icon ? String(pc.icon) : '';
+  if (/^(data:image\/|img\/|https?:\/\/)/.test(ic) || (ic && !SKT_DEFAULT_ICONS.has(ic))) return ic;
+  const face = sktSpeciesPortrait((pc && pc.build && pc.build.species) || (pc && pc.race));
+  return face ? 'img/' + face : (ic || '⚔');
+}
+
 function renderIcon(icon, alt) {
   if (!icon) return '⚔';
   const s = String(icon);
+  // A species portrait: the thumbnail, the full picture if there's none, the face framed.
+  if (/^img\/races\//.test(s)) {
+    const full = assetUrl(s), small = assetThumbUrl(s), f = sktPortraitFocus(s);
+    const pos = f ? ` style="object-position:${f.x}% ${f.y}%;transform-origin:${f.x}% ${f.y}%"` : '';
+    return `<img class="icon-img icon-face" src="${esc(small)}" data-fb="${esc(full)}"${pos} alt="${esc(alt||'')}" loading="lazy" decoding="async" onerror=""if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
+  }
   if (s.startsWith('data:image/') || s.startsWith('img/') || /^https?:\/\//.test(s)) {
     // Repair the path on the way out. combat.js and battlemap.js PERSIST the
     // portrait on the combatant/token and sync it, so state saved before the

@@ -219,7 +219,7 @@ registerPanel('party',{
   },
 
   _card(c,i){
-    const icon=c.icon||'⚔';
+    const icon=sktPcIcon(c);
     const hp=this._hpBarStyle(c);
     const hpPct=hp.pct, hpColor=hp.color;
     const resources=c.resources||[];
@@ -2009,7 +2009,7 @@ registerPanel('party',{
         return `<td class="mp-cell"><input class="mp-input" type="${col.type}" data-i="${i}" data-k="${col.key}" value="${esc(String(v))}"></td>`;
       }).join('');
       return `<tr>
-        <td class="mp-cell mp-cell-icon">${renderIcon(c.icon||'⚔', c.name)}</td>
+        <td class="mp-cell mp-cell-icon">${renderIcon(sktPcIcon(c), c.name)}</td>
         ${cells}
         <td class="mp-cell mp-cell-details"><button class="btn icon-btn" data-act="mp-details" data-i="${i}" title="Edit class, level, race, abilities, hit dice">${ICO('i-pencil')}</button></td>
         <td class="mp-cell mp-cell-del"><button class="btn icon-btn danger" data-act="mp-del" data-i="${i}" title="Remove character">${ICO('i-trash')}</button></td>

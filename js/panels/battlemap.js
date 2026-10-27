@@ -2618,7 +2618,7 @@ registerPanel('battlemap',{
       const onMap=this._tokens.find(t=>t.label===p.name&&t.isPC);
       if(onMap)return '';
       // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.
-      const iconHtml = renderIcon(p.icon||'⚔', p.name);
+      const iconHtml = renderIcon(sktPcIcon(p), p.name);
       return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at the centre of your current view, or drag onto the map for precise placement" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:4px;cursor:grab">'
         +'<span class="map-party-icon">'+iconHtml+'</span>'
         +'<span>'+esc(p.name)+'</span>'
@@ -5473,7 +5473,7 @@ registerPanel('battlemap',{
         // Pull the icon from the matching party member so tokens carry the
         // same glyph the user picked in the Party Tracker.
         const partyMatch = state.party.find(p => p.name === name);
-        const icon = (c.icon || (partyMatch && partyMatch.icon) || '⚔');
+        const icon = (c.icon || (partyMatch && sktPcIcon(partyMatch)) || '⚔');
         const portrait = c.portrait || (partyMatch && partyMatch.portrait) || null;
         this._tokens.push({id:uid(),label:name,x,y,isPC:true,color:'#696969',size:1,dead:(c.hp||0)<=0,icon,portrait});
         placed++;

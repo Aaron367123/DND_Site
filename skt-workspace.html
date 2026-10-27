@@ -67,7 +67,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,600;0,700;1,400&amp;family=Cinzel:wght@500;600;700&amp;display=swap">
-<link rel="stylesheet" href="styles/theme.css?v=437d98b601">
+<link rel="stylesheet" href="styles/theme.css?v=3a6226fb83">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -467,9 +467,10 @@
 <!-- 1d. Which bestiary art lacks a token crop (generated; read by utils'
      bestiaryPortraitPath). Must load before anything renders a portrait. -->
 <script defer src="js/generated/token-index.js?v=1c9cc1c826"></script>
+<script defer src="js/generated/species-portraits.js?v=56581792b0"></script>
 <!-- 2. Pure utilities (no deps) -->
 <script defer src="js/core/campaign.js?v=171a617f55"></script>
-<script defer src="js/core/utils.js?v=61213fa2f4"></script>
+<script defer src="js/core/utils.js?v=a5ba575278"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/core/state.js?v=df662bfc03"></script>
 <!-- 4. Window manager (depends on state) -->
@@ -478,21 +479,21 @@
 <script defer src="js/features/monster-picker.js?v=7030540ec7"></script>
 <script defer src="js/core/window-manager.js?v=cca9e98e31"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=79ad2ca625"></script>
+<script defer src="js/panels/combat.js?v=d145760198"></script>
 <script defer src="js/panels/attacks.js?v=57acabc3ca"></script>
 <!-- Turn View reads combat, attacks and battlemap through panelDefs at call
      time, so load order only has to put it among the panels. -->
 <script defer src="js/generated/reactions.js?v=0e74ab8786"></script>
 <script defer src="js/generated/rules.js?v=8efb8beae9"></script>
 <script defer src="js/panels/turnview.js?v=17e22f002d"></script>
-<script defer src="js/panels/party.js?v=043f677573"></script>
+<script defer src="js/panels/party.js?v=76e06725e1"></script>
 <script defer src="js/panels/shop.js?v=d1096bf206"></script>
 <script defer src="js/sync/notes-sync.js?v=7ee89969f6"></script>
 <script defer src="js/sync/dropbox-config.js?v=ccf8533d50"></script>
 <script defer src="js/sync/dropbox-sync.js?v=c4897e8ffa"></script>
 <script defer src="js/panels/notes.js?v=b4f7d337a6"></script>
 <script defer src="js/panels/handouts.js?v=92072fbc59"></script>
-<script defer src="js/panels/battlemap.js?v=5b2d8ef54a"></script>
+<script defer src="js/panels/battlemap.js?v=c3a0f8cb27"></script>
 <script defer src="js/panels/npc-library.js?v=956f8b34ed"></script>
 <script defer src="js/panels/bestiary.js?v=8b3658dc0a"></script>
 <!-- Behaviour shared by the Adventures and Books panels. Must load BEFORE
@@ -521,11 +522,11 @@
 <script defer src="js/ui/command-palette.js?v=8aded06220"></script>
 <script defer src="js/features/char-rules.js?v=648981675d"></script>
 <script defer src="js/features/char-effects.js?v=6561f6c385"></script>
-<script defer src="js/features/char-sheet.js?v=4b135428c0"></script>
+<script defer src="js/features/char-sheet.js?v=117317a190"></script>
 <script defer src="js/features/char-print.js?v=7e55981c09"></script>
 <script defer src="js/features/char-builder.js?v=61ba4f670a"></script>
 <script defer src="js/features/pdf-import.js?v=cefe36cb0b"></script>
-<script defer src="js/player/player-app.js?v=990767482f"></script>
+<script defer src="js/player/player-app.js?v=5443de2cec"></script>
 <script defer src="js/ui/player-view.js?v=3c47cb84bd"></script>
 <script defer src="js/sync/realtime.js?v=c790dc2750"></script>
 <script defer src="js/sync/presence.js?v=50e9bead2e"></script>
