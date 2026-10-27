@@ -329,7 +329,7 @@ body.player-mode { background-image: var(--grain), var(--mottle); background-siz
 .cs-hero .cs-sub { text-shadow: 0 1px 4px rgba(0,0,0,.85); }
 .cs-hero .cs-avatar { box-shadow: 0 0 0 2px var(--hero, var(--accent)), 0 3px 10px rgba(0,0,0,.6); border-radius: 50%; }
 @media (max-width: 760px) {
-  .cs-head.cs-hero { min-height: 76px; align-items: center; }
+  .cs-head.cs-hero { align-items: center; }
   .cs-hero-art { left: auto; right: -8%; width: 62%; top: -20%; bottom: -80%; opacity: .75;
     -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.6) 35%, #000 70%); mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.6) 35%, #000 70%); }
 }
