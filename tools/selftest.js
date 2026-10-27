@@ -10106,6 +10106,47 @@
            (r.sheet.activations || []).map(a => a.name).join(', '));
       } catch(e){ ok('round 90 threw', false, e.message); }
     }
+    // -- Round 91: circle spells; custom skills on the sheet ------------------
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (c, L, more) => sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'T', cls: c, level: L, species: 'Human', sources: SKT_ALL_SOURCES }, more || {}), R);
+        const names = r => (r.sheet.activations || []).map(a => a.name);
+        let r = mk('Wizard', 5);
+        const opts = ['Augment', 'Distribute', 'Expand', 'Prolong', 'Safeguard', 'Supplant'];
+        ok('circle spells: a 2024 caster can lead one, with all six options', names(r).includes('Initiate a Circle Spell') && opts.every(o => names(r).includes('Circle Spell: ' + o)), names(r).join(', '));
+        ok('circle spells: Safeguard counts the spellcasting modifier', /cubes — \d+ plus one per secondary caster/.test(((r.sheet.activations || []).find(a => a.name === 'Circle Spell: Safeguard') || {}).desc || ''));
+        ok('circle spells: not for a fighter with no spells', !names(mk('Fighter', 5)).includes('Initiate a Circle Spell'));
+        ok('circle spells: not with the expanded books off (they’re Heroes of Faerûn)', !names(mk('Wizard', 5, { sources: { core: true } })).includes('Initiate a Circle Spell'));
+        ok('circle spells: not in 2014', !names(sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'T', cls: 'Wizard', level: 5, species: 'Human', allBooks: true }), await sktRulesLoad('2014'))).includes('Initiate a Circle Spell'));
+        // Custom skills: added from Customize, shown with the skills, rolled.
+        const rec = mk('Rogue', 5); rec.id = 'pc_cskill'; rec.abilities = Object.assign({}, rec.abilities, { int: 14 }); state.party.push(rec); save();
+        openCharSheet('pc_cskill'); await sleep(300);
+        const q = s => document.querySelector('#cs-root ' + s);
+        CS.customize = true; csRender(); await sleep(30);
+        q('[data-cs="cskilladd"]').click(); await sleep(60);
+        const row = q('[data-cs-cskill-i="0"]');
+        const set = (k, v) => { const el = row.querySelector('[data-cs-cskill="' + k + '"]'); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+        set('name', 'Cooking');
+        { const r2 = q('[data-cs-cskill-i="0"]'); const el = r2.querySelector('[data-cs-cskill="prof"]'); el.value = '2'; el.dispatchEvent(new Event('change', { bubbles: true })); }
+        await sleep(60);
+        const pc = state.party.find(p => p.id === 'pc_cskill'), want = 2 + 2 * ((pc.sheet || {}).profBonus || 2);
+        ok('custom skills: added from Customize, named, with expertise', JSON.stringify((pc.customSkills || []).map(s => [s.name, s.ab, s.prof])) === '[["Cooking","int",2]]', JSON.stringify(pc.customSkills));
+        CS.customize = false; CS.tab = 'abilities'; csRender(); await sleep(30);
+        const srow = q('[data-cs-roll="cskill:0"]');
+        ok('custom skills: listed with the skills, INT + twice proficiency', !!srow && /Cooking/.test(srow.textContent) && srow.querySelector('b').textContent === csSigned(want), srow ? srow.textContent : 'no row');
+        srow.click(); await sleep(60);
+        ok('custom skills: a click rolls it, with its bonus', (CS.log[0] || {}).label === 'Cooking' && CS.log[0].mod === want, JSON.stringify(CS.log[0]));
+        CS.customize = true; csRender(); await sleep(30); q('[data-cs-cskilldel="0"]').click(); await sleep(60);
+        ok('custom skills: and removed', !(state.party.find(p => p.id === 'pc_cskill').customSkills || []).length);
+        csClose(); state.party = state.party.filter(p => p.id !== 'pc_cskill'); save();
+        // An imported sheet's Customize: custom skills inside it, the page whole.
+        { const imp = { id: 'pc_cskill_imp', name: 'Imp', cls: 'fighter', level: 3, race: 'Human', abilities: { str: 15, dex: 12, con: 14, int: 10, wis: 10, cha: 8 }, hpMax: 28, ac: 16, sheet: { skills: {}, saves: {}, profBonus: 2 } };
+          state.party.push(imp); save(); openCharSheet('pc_cskill_imp'); await sleep(200); CS.customize = true; csRender(); await sleep(30);
+          ok('custom skills: on an imported sheet too, inside Customize, the tabs still in the main column', !!q('.cs-custom [data-cs="cskilladd"]') && !!q('.cs-main > .cs-pane') && !!q('.cs-main > .cs-tabs'));
+          csClose(); state.party = state.party.filter(p => p.id !== 'pc_cskill_imp'); save(); }
+      } catch(e){ ok('round 91 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

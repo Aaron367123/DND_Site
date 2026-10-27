@@ -372,7 +372,8 @@ function csSide(pc){
     const disad = k === 'stealth' && sh.stealthDis;
     return '<button class="cs-row" data-cs-roll="skill:' + k + '"><span class="cs-dot' + (p >= 2 ? ' exp' : p >= 1 ? ' on' : p ? ' half' : '') + '" title="' + (p >= 2 ? 'Expertise' : p >= 1 ? 'Proficient' : p ? 'Half proficiency' : '') + '"></span>'
       + '<span>' + CS_SKILLS[k][0] + ' <i>' + CS_SKILLS[k][1].toUpperCase() + '</i>' + (disad ? ' <i class="cs-dis" title="Disadvantage from armour">D</i>' : '') + csAdvMark(pc, 'check:' + k) + '</span><b>' + csSigned(skillOf(k)) + '</b></button>';
-  }).join('') + '</div>';
+  }).join('') + (pc.customSkills || []).map((s, i) => '<button class="cs-row" data-cs-roll="cskill:' + i + '"><span class="cs-dot' + (s.prof >= 2 ? ' exp' : s.prof >= 1 ? ' on' : s.prof ? ' half' : '') + '"></span>'
+      + '<span>' + csE(s.name || 'Custom skill') + ' <i>' + String(s.ab || 'str').toUpperCase() + '</i> <i class="cb-dim" title="A custom skill">custom</i></span><b>' + csSigned(csCustomSkillVal(pc, s)) + '</b></button>').join('') + '</div>';
   const pas = k => 10 + skillOf(k);
   h += '<h5>Senses</h5><div class="cs-kv"><span>Passive Perception</span><b>' + (sh.passivePerception || pas('perception')) + '</b></div>'
     + '<div class="cs-kv"><span>Passive Investigation</span><b>' + pas('investigation') + '</b></div>'
@@ -1094,6 +1095,8 @@ function csOnClick(e){
   if (d.csDeltrk != null) return csRebuild('Removed a tracker', b => { b.customResources = (b.customResources || []).filter((x, i) => i !== +d.csDeltrk); });
   if (d.csDelact != null) return csRebuild('Removed an action', b => { b.customActions = (b.customActions || []).filter((x, i) => i !== +d.csDelact); });
   if (d.cs === 'notheme') return csEdit('Sheet colour', p => { delete p.theme; }, CS_QUIET);
+  if (d.cs === 'cskilladd') return csEdit('Added a custom skill', p => { p.customSkills = (p.customSkills || []).concat([{ name: 'New skill', ab: 'int', prof: 1, bonus: 0 }]); });
+  if ('csCskilldel' in d) return csEdit('Removed a custom skill', p => { p.customSkills = (p.customSkills || []).filter((x, i) => i !== +d.csCskilldel); });
   if (d.cs === 'addsummon'){
     const sel = document.querySelector('#cs-root [data-cs-sumsel="' + CSS.escape(d.csSumfor || '') + '"]');
     const pc = csPc(), m = sel && pc && csCompanionMonster(pc, sel.value); if (!m) return true;
@@ -1159,6 +1162,20 @@ function csSpendAmmo(pc, a){
   if (at < 0){ if (typeof showToast === 'function') showToast('No ammunition for the ' + a.name + ' in the inventory'); return; }
   csItemsEdit('Used ammunition', l => { const x = l[at]; if (!x) return; x.qty = (x.qty || 1) - 1; if (x.qty <= 0) l.splice(at, 1); });
 }
+// A custom skill (D&D Beyond's "Custom Skills"): an ability, a proficiency
+// level and a bonus.
+function csCustomSkillVal(pc, s){
+  const pb = (pc.sheet || {}).profBonus || 2;
+  return csMod((pc.abilities || {})[s.ab || 'str']) + Math.floor((+s.prof || 0) * pb) + (parseInt(s.bonus, 10) || 0);
+}
+function csCustomSkillsHtml(pc){
+  const ab = v => '<select class="cb-sel" data-cs-cskill="ab" aria-label="Ability">' + Object.keys(CS_AB).map(k => '<option value="' + k + '"' + (v === k ? ' selected' : '') + '>' + k.toUpperCase() + '</option>').join('') + '</select>';
+  const pr = v => '<select class="cb-sel" data-cs-cskill="prof" aria-label="Proficiency">' + [['0', 'None'], ['0.5', 'Half'], ['1', 'Proficient'], ['2', 'Expertise']].map(([x, l]) => '<option value="' + x + '"' + (String(+v || 0) === x ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>';
+  return '<h5>Custom skills</h5><div class="cb-dim">A skill the rules don’t have — a craft, a homebrew skill. It rolls like any other.</div>'
+    + (pc.customSkills || []).map((s, i) => '<div class="cs-ovrow cs-cskill" data-cs-cskill-i="' + i + '"><input data-cs-cskill="name" value="' + csE(s.name || '') + '" maxlength="40" aria-label="Skill name">'
+      + ab(s.ab) + pr(s.prof) + '<input type="number" step="1" data-cs-cskill="bonus" value="' + (parseInt(s.bonus, 10) || 0) + '" aria-label="Bonus"><button class="btn small" data-cs-cskilldel="' + i + '" aria-label="Remove">✕</button></div>').join('')
+    + '<button class="btn small" data-cs="cskilladd">+ Custom skill</button>';
+}
 function csRollFor(pc, what, e){
   const sh = pc.sheet || {}, ab = pc.abilities || {}, pb = sh.profBonus || 2;
   const [kind, k] = what.split(':');
@@ -1175,6 +1192,7 @@ function csRollFor(pc, what, e){
   else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]), e, 'abcheck:' + k);
   else if (kind === 'save') csRollD20(CS_AB[k] + ' save', sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0), e, 'save:' + k);
   else if (kind === 'skill') csRollD20(CS_SKILLS[k][0], csSkillVal(sh, k) != null ? csSkillVal(sh, k) : csMod(ab[CS_SKILLS[k][1]]), e, 'check:' + k);
+  else if (kind === 'cskill'){ const s = (pc.customSkills || [])[+k]; if (s) csRollD20(s.name || 'Custom skill', csCustomSkillVal(pc, s), e, 'abcheck:' + (s.ab || 'str')); }
   csRender();
 }
 function csOnChange(e){
@@ -1182,6 +1200,11 @@ function csOnChange(e){
   const t = e.target, d = t.dataset, pc = csPc(); if (!pc) return;
   if ('csDtype' in d){ CS.dtype = t.value; return; }
   if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; }, CS_QUIET);
+  if ('csCskill' in d && !CS.readOnly){
+    const i = +((t.closest('[data-cs-cskill-i]') || {}).dataset || {}).csCskillI, k = d.csCskill;
+    const v = k === 'name' ? t.value.slice(0, 40) : k === 'ab' ? t.value : k === 'prof' ? +t.value : (parseInt(t.value, 10) || 0);
+    return csEdit('Custom skill', p => { const l = (p.customSkills || []).slice(); if (!l[i]) return; l[i] = Object.assign({}, l[i], { [k]: v }); p.customSkills = l; }, CS_QUIET);
+  }
   if (CS.readOnly) return;
   if ('csAddcond' in d){ if (t.value) csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), t.value), CS_QUIET); return; }
   if ('csStateopt' in d) return csEdit(d.csStateopt + ': ' + t.value, p => { p.active = Object.assign({}, p.active, { [d.csStateopt + ':opt']: t.value }); }, CS_QUIET);
@@ -2270,7 +2293,7 @@ function csCustomizeHtml(pc){
   if (!pc.build) return '<div class="cs-custom"><h4>Customize <button class="btn small" data-cs="customize">Done</button></h4>'
     + '<label class="cs-kv"><span>Sheet colour</span><input type="color" data-cs-theme value="' + csE(pc.theme || '#c8a26b') + '"><button class="btn small" data-cs="notheme">Default</button></label>'
     + '<div class="cb-dim">Bonuses, numbers set outright and proficiency levels work on what the rules calculate. This sheet was imported, so its numbers are fixed as they came in — rebuild it in the character builder (it keeps your choices, items and hit points) to customize it.</div>'
-    + (typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="convert">⇪ Rebuild in the builder</button>' : '') + '</div>';
+    + (typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="convert">⇪ Rebuild in the builder</button>' : '') + csCustomSkillsHtml(pc) + '</div>';
   const o = (pc.build && pc.build.overrides) || {};
   const num = (k, v) => '<input type="number" step="1" data-cs-ov="' + k + '" value="' + (v || 0) + '">';
   return '<div class="cs-custom"><h4>Customize <button class="btn small" data-cs="customize">Done</button></h4>'
@@ -2282,7 +2305,7 @@ function csCustomizeHtml(pc){
     + '<h5>Bonuses</h5><div class="cs-ovgrid">' + CS_OV.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span>' + num(k, o[k]) + '</label>').join('') + '</div>'
     + csOverridesHtml(pc, o, num)
     + '<h5>Also</h5><div class="cb-dim">Comma-separated: what the rules don’t know about — a language learned in play, a curse’s vulnerability.</div>'
-    + '<div class="cs-ovlists">' + CS_OV_LISTS.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span><input data-cs-ovlist="' + k + '" value="' + csE(o[k] || '') + '" maxlength="200"></label>').join('') + '</div></div>';
+    + '<div class="cs-ovlists">' + CS_OV_LISTS.map(([k, l]) => '<label class="cs-kv"><span>' + l + '</span><input data-cs-ovlist="' + k + '" value="' + csE(o[k] || '') + '" maxlength="200"></label>').join('') + '</div>' + csCustomSkillsHtml(pc) + '</div>';
 }
 
 // D&D Beyond's overrides: a number set outright (empty: the rules' answer), a

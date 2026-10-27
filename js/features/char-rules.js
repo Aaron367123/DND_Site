@@ -1986,6 +1986,20 @@ function _fxPool(ctx, name, max, recharge, extra){
   if (at >= 0) ctx.resources[at] = r; else ctx.resources.push(r);
 }
 function _fxAction(ctx, a){ if (!ctx.actions.some(x => x.name === a.name)) ctx.actions.push(a); }
+// Circle Magic (Heroes of Faerûn): you lead the casting, other spellcasters
+// help as secondary casters, and one option changes the spell.
+function _sktCircleSpells(ctx, sc){
+  const mod = ctx.mod[sc.ability] || 0;
+  const opt = (name, desc) => _fxAction(ctx, { name: 'Circle Spell: ' + name, action: 'Special', feature: 'Circle Magic', desc });
+  _fxAction(ctx, { name: 'Initiate a Circle Spell', action: 'Magic', feature: 'Circle Magic',
+    desc: 'Begin casting a spell as a Circle spell, with other spellcasters helping as secondary casters. Choose one Circle option below and meet its requirements; keep Concentration until the casting is done.' });
+  opt('Augment', 'A spell with a range of 5 feet or more: +1,000 feet of range for each secondary caster, up to +1 mile.');
+  opt('Distribute', 'A Concentration spell: you and every secondary caster share the Concentration; the spell lasts while any of you keeps it.');
+  opt('Expand', 'An area spell: one dimension of the area grows 10 feet for each secondary caster. Each secondary caster expends a spell slot (not if the spell fails).');
+  opt('Prolong', 'A spell lasting 1 minute or more: +1 hour with 1–3 secondary casters, +8 hours with 4–6, +24 hours with 7 or more. Each expends a spell slot (not if the spell fails).');
+  opt('Safeguard', 'An area spell: leave a safe zone of joined 5-foot cubes — ' + (mod > 0 ? mod + ' plus ' : '') + 'one per secondary caster, at least one — that the spell doesn’t affect, moving with the area.');
+  opt('Supplant', 'A spell that consumes a Material component with a cost: that cost drops 50 GP per secondary caster. Each expends a slot of the spell’s level or higher (not if the spell fails).');
+}
 function _fxNote(ctx, text){ if (!ctx.notes.includes(text)) ctx.notes.push(text); }
 function _fxCol(ctx, label){ return sktClassColumn(ctx.cls, label, ctx.level, ctx.sub); }
 
@@ -2656,6 +2670,8 @@ function sktComputeCharacter(build, R, prior){
   });
   if (sc && sc.pact && spellSlots[sc.pact.level] && spellSlots[sc.pact.level].total === sc.pact.count) spellSlots[sc.pact.level].pact = true;
   else if (sc && sc.pact) _fxNote(ctx, 'Pact Magic: ' + sc.pact.count + ' of the level ' + sc.pact.level + ' slots come back on a short rest.');
+  // Heroes of Faerûn's Circle Magic: any 2024 caster can lead a Circle spell.
+  if (sc && R.edition === '2024' && Object.keys(sc.slots || {}).length && sktBookOk(build, { source: 'FRHoF', core: false })) _sktCircleSpells(ctx, sc);
   if (sc && sc.classes) sc.classes.slice(1).forEach(x => _fxNote(ctx, _sktTitle(x.cls) + ' spells: ' + (SKT_AB_NAME[x.sc.ability] || x.sc.ability) + ', save DC ' + x.sc.dc + ', attack ' + sktSigned(x.sc.attack) + '.'));
 
   // Attacks: weapons carried, an unarmed strike, and attack cantrips.
