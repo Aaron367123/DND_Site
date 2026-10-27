@@ -10286,6 +10286,29 @@
           ok('adventures: Storm King’s Thunder opens, chapters and all', Array.isArray(j && j.data) && j.data.length > 5, j ? Object.keys(j).join(',') : 'none'); }
       } catch(e){ ok('round 95 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 96: the new books' rules on the sheet ------------------------
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (more) => sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'T', species: 'Human', sources: SKT_ALL_SOURCES }, more), R);
+        const act = (r, n) => (r.sheet.activations || []).find(a => a.name === n) || {};
+        let r = mk({ cls: 'Ranger', subclass: 'Hollow Warden', level: 7, abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 10, wis: 16, cha: 8 } } });
+        ok('Hungering Might: Wisdom on Constitution saves', r.sheet.saves.con === Math.floor((14 - 10) / 2) + 3, JSON.stringify(r.sheet.saves));
+        r = mk({ cls: 'Bard', subclass: 'Spirits', level: 3 });
+        ok('Channeler: Guidance, and the playing cards', sktBuildAlwaysPrepared(r.build, R).includes('Guidance') && r.sheet.proficiencies.tools.includes('playing card set'), JSON.stringify([sktBuildAlwaysPrepared(r.build, R), r.sheet.proficiencies.tools]));
+        r = mk({ cls: 'Fighter', subclass: 'Arcane Archer', level: 10, optional: { 'Arcane Shots': ['Beguiling Shot', 'Banishing Shot'] } });
+        ok('2024 Arcane Shots: their Arcane Shot Die, a d8 at 10th — two rolls for Beguiling Shot', act(r, 'Beguiling Shot').dice === '2d8 psychic' && act(r, 'Banishing Shot').dice === '1d8 psychic', JSON.stringify([act(r, 'Beguiling Shot').dice, act(r, 'Banishing Shot').dice]));
+        ok('2024 Arcane Shots: a d12 at 18th', act(mk({ cls: 'Fighter', subclass: 'Arcane Archer', level: 18, optional: { 'Arcane Shots': ['Beguiling Shot'] } }), 'Beguiling Shot').dice === '2d12 psychic');
+        r = mk({ cls: 'Fighter', level: 1, optional: { 'Fighting Style': ['Arcane Warrior'] } });
+        ok('Arcane Warrior: two wizard cantrips to choose', sktFeatSpells(r.build, R).some(g => (g.choices || []).some(c => c.count === 2 && c.options.includes('Fire Bolt'))));
+        r = mk({ cls: 'Wizard', level: 4, asi: { 4: { type: 'feat', feat: 'Boon of Erupting Spellpower' } } });
+        ok('Boon of Erupting Spellpower: once between rests', act(r, 'Spell Overload').resource === 'Erupting Spellpower' && ((r.resources || []).find(x => x.name === 'Erupting Spellpower') || {}).max === 1);
+        r = mk({ cls: 'Fighter', level: 1, species: 'Lupin' });
+        ok('Lupin: Feral Pounce’s unarmed strikes are slashing', /slashing$/.test(((r.sheet.attacks || []).find(a => a.name === 'Unarmed Strike') || {}).damage || ''));
+        r = mk({ cls: 'Fighter', level: 1, species: 'Reborn', featureChoices: { 'Strange Endurance': 'Cold' } });
+        ok('Reborn: Strange Endurance — the resistance chosen', (r.resistances || []).includes('cold') && !(r.resistances || []).includes('necrotic'), JSON.stringify(r.resistances));
+      } catch(e){ ok('round 96 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

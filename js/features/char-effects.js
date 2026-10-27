@@ -604,6 +604,36 @@
   const half = ctx => Math.floor(ctx.level / 2);
   const dc = (ctx, k) => 8 + ctx.pb + ctx.mod[k];
   const n = (keys, fn) => def(keys, fn);
+  // Ravenloft: The Horrors Within and Arcana Unleashed (5etools 2.39).
+  def('feat:Boon of Erupting Spellpower', ctx => { pool(ctx, 'Erupting Spellpower', 1, 'short');
+    act(ctx, { name: 'Spell Overload', action: 'Free', resource: 'Erupting Spellpower', amount: 1, feature: 'Boon of Erupting Spellpower',
+      desc: 'Casting a damaging spell with a slot: treat 1s and 2s on its damage dice as 3s, and every creature it damages is knocked Prone. Back on initiative or a short or long rest.' }); });
+  def('feat:Boon of the Iron Mind', ctx => note(ctx, 'Boon of the Iron Mind: damage never breaks your Concentration — only another Concentration effect, being Petrified or Unconscious, or dying.'));
+  def('feat:Otherworldly Familiar', ctx => note(ctx, 'Otherworldly Familiar: when you cast Find Familiar, it can gain resistance (necrotic, poison, psychic, radiant or thunder) and move through creatures and objects as difficult terrain, among other powers.'));
+  def('feat:Soothing Familiar', ctx => note(ctx, 'Soothing Familiar: allies within 5 feet of your familiar (within 120 feet of you) treat 1s and 2s on healing dice as 3s.'));
+  def(['feat:Arcane Warrior', 'optional:Arcane Warrior'], () => {}); // its two cantrips: the feat text's spell choice
+  def('species:Feral Pounce', ctx => { ctx.unarmedType = 'slashing';
+    note(ctx, 'Feral Pounce: once per turn, an Unarmed Strike hit during the Attack action can both deal damage and Shove.'); });
+  def('species:Everlasting', ctx => note(ctx, 'Everlasting: no exhaustion from thirst, hunger or suffocation; you don’t sleep, can’t be magically put to sleep, and a long rest takes 4 motionless hours.'));
+  choice('species:Strange Endurance', {
+    label: 'Strange Endurance', options: ['Cold', 'Necrotic', 'Poison'].map(v => ({ value: v, label: v, desc: 'Resistance to ' + v.toLowerCase() + ' damage.' })),
+    apply(ctx, v){ ctx.resist.add(String(v || 'Necrotic').toLowerCase()); },
+  });
+  n('subclass:bard:Channeler', ctx => { ctx.toolProf.add('playing card set');
+    note(ctx, 'Channeler: Guidance has a 60-foot range; playing cards, a crystal or orb, a candle or an ink pen can be your bard spellcasting focus.'); });
+  n('subclass:fighter:Indomitable Teleport', ctx => note(ctx, 'Indomitable Teleport: when you succeed on a save with Indomitable, teleport up to 60 feet to a space you can see.'));
+  n('subclass:monk:Mystic Fighting Style', ctx => note(ctx, 'Mystic Fighting Style: when you take the Attack action, one Unarmed Strike can be a sorcerer cantrip with a casting time of an action.'));
+  n('subclass:monk:Focused Strike', ctx => note(ctx, 'Focused Strike: a creature you use Stunning Strike on, save or not, has disadvantage on saves against your spells until the start of your next turn.'));
+  n('subclass:ranger:Hungering Might', ctx => { ctx.saveBonus.con = (ctx.saveBonus.con || 0) + Math.max(1, ctx.mod.wis);
+    note(ctx, 'Hungering Might: once per turn, hitting with an attack roll while transformed by Wrath of the Wild and Bloodied, regain 1d10' + sktSigned(ctx.mod.wis) + ' HP.'); });
+  n('subclass:ranger:Rot and Violence', ctx => note(ctx, 'Rot and Violence: in Wrath of the Wild, a creature failing its save against your Unnerving Aura can’t regain HP or take reactions until the start of your next turn; a weapon hit can add Sap or Slow on top of its own mastery.'));
+  n('subclass:warlock:Superior Dread', ctx => note(ctx, 'Superior Dread: in your Form of Dread, resistance to bludgeoning, piercing and slashing damage, a fly speed equal to your speed (hover, through creatures and objects as difficult terrain; 1d10 force if you end a turn inside one), and warlock Conjuration and Necromancy spells need no V, S or cheap M components.'));
+  n('subclass:warlock:Vestige Power', ctx => note(ctx, 'Vestige Power: your Vestige Companion regains Divine Power after a short or long rest or when you use Magical Cunning; within 30 feet of it you share its damage resistances.'));
+  n('subclass:wizard:Distant Transposition', ctx => note(ctx, 'Distant Transposition: Benign Transposition reaches 60 feet, and a level 3+ spell slot restores a use (no action).'));
+  n('subclass:wizard:Grave Power', ctx => note(ctx, 'Grave Power: holding your spellbook, Arcane Recovery also removes a level of Exhaustion, and your wizard spells and features ignore resistance to necrotic damage.'));
+  n('subclass:artificer:Strange Modifications', ctx => note(ctx, 'Strange Modifications: each Reanimated Companion you create gets ' + (ctx.level >= 9 ? 'two options' : 'an option') + ' — Arcane Conduit (cast from its space; +' + Math.max(0, ctx.mod.int) + ' INT to one damage roll of an Evocation or Necromancy artificer spell within 120 ft) or Ferocity (Dreadful Swipe d6)' + (ctx.level >= 9 ? ', or Bloated or Gaunt' : '') + '.'));
+  n('subclass:artificer:Improved Reanimation', ctx => note(ctx, 'Improved Reanimation: your companion’s Death Burst deals 4d4, and its necrotic damage ignores resistance.'));
+  n('subclass:artificer:Macabre Modifications', () => {});         // folded into Strange Modifications
   // Barbarian
   n('subclass:barbarian:Spiked Retribution', ctx => note(ctx, 'Spiked Retribution: while raging in spiked armour, a creature within 5 ft that hits you with a melee attack takes 3 piercing.'));
   n('subclass:barbarian:Vengeful Ancestors', ctx => note(ctx, 'Vengeful Ancestors: damage your Spirit Shield prevents is dealt back to the attacker as force.'));
@@ -780,6 +810,17 @@
     const type = (/\d+d\d+ (acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)/i.exec(t) || [])[1];
     act(ctx, { name: nm, action: 'Free', resource: ctx.resources.some(r => r.name === 'Arcane Shot') ? 'Arcane Shot' : undefined, amount: 1, feature: nm,
       dice: dice ? dice + (type ? ' ' + type.toLowerCase() : '') : undefined,
+      desc: 'Arcane Shot (save DC ' + (8 + ctx.pb + ctx.mod.int) + '): ' + t.split(/(?<=\.)\s+/).slice(0, 2).join(' ') });
+  }));
+  // The 2024 Arcane Archer's shots (Arcana Unleashed): rolls of an Arcane
+  // Shot Die — a d6, a d8 at 10th level, d10 at 15th, d12 at 18th.
+  ['Banishing Shot', 'Beguiling Shot', 'Bursting Shot', 'Enfeebling Shot', 'Grasping Shot', 'Piercing Shot', 'Seeking Shot', 'Shadow Shot'].forEach(nm => def('optional:' + nm, ctx => {
+    const t = optText(ctx, nm).replace(/\s+/g, ' '), L = ctx.classLevel('fighter') || ctx.level;
+    const die = L >= 18 ? 12 : L >= 15 ? 10 : L >= 10 ? 8 : 6;
+    const rolls = { one: 1, two: 2, three: 3, four: 4 }[((/(one|two|three|four) rolls? of your Arcane Shot Die/i.exec(t) || [])[1] || '').toLowerCase()] || 0;
+    const type = (/(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder) damage equal to/i.exec(t) || [])[1];
+    act(ctx, { name: nm, action: 'Free', resource: ctx.resources.some(r => r.name === 'Arcane Shot') ? 'Arcane Shot' : undefined, amount: 1, feature: nm,
+      dice: rolls ? rolls + 'd' + die + (type ? ' ' + type.toLowerCase() : '') : undefined,
       desc: 'Arcane Shot (save DC ' + (8 + ctx.pb + ctx.mod.int) + '): ' + t.split(/(?<=\.)\s+/).slice(0, 2).join(' ') });
   }));
   // A rune is invoked once between rests (twice with Master of Runes).

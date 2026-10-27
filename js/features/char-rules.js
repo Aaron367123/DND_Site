@@ -2388,7 +2388,7 @@ function sktComputeCharacter(build, R, prior){
     build, R, edition: R.edition, cls, sub, level: L, pb, abilities,
     mod: {}, acOptions: [], armoredAcBonus: 0, acUnlessHeavy: 0, mediumDexCap: 2,
     hpPerLevel: 0, hpFlat: 0, unarmedMinDie: null, naturalAttacks: [], speedBonus: 0, speedBonusUnlessHeavy: 0, speedBonusUnarmored: 0,
-    initBonus: 0, saveBonusAll: _sktItemSum(build, 'bonusSavingThrow'), passiveBonus: { perception: 0, investigation: 0, insight: 0 },
+    initBonus: 0, saveBonusAll: _sktItemSum(build, 'bonusSavingThrow'), saveBonus: {}, passiveBonus: { perception: 0, investigation: 0, insight: 0 },
     saveProf: new Set((cls && cls.saves) || []), skillProf: new Set(), expertise: new Set(build.expertise || []),
     armorProf: new Set(), weaponProf: new Set(), weaponPropRules: [], toolProf: new Set(), languages: new Set(),
     resources: [], actions: [], notes: [], attacksPerAction: 1, critRange: 20,
@@ -2593,7 +2593,7 @@ function sktComputeCharacter(build, R, prior){
 
   // Saving throws and skills, as the modifiers the sheet stores.
   const saves = {};
-  SKT_ABS.forEach(k => { saves[k] = ctx.mod[k] + (ctx.saveProf.has(k) ? pb : 0) + ctx.saveBonusAll; });
+  SKT_ABS.forEach(k => { saves[k] = ctx.mod[k] + (ctx.saveProf.has(k) ? pb : 0) + ctx.saveBonusAll + (ctx.saveBonus[k] || 0); });
   const skills = {}, skillProfOut = {};
   Object.keys(SKT_SKILLS).forEach(sk => {
     const ab = SKT_SKILLS[sk];
@@ -2987,6 +2987,8 @@ function sktBuildAlwaysPrepared(build, R){
   if (parts.length === 1) return _sktAlwaysPreparedOne(build, R);
   return [...new Set([].concat(...parts.map(p => _sktAlwaysPreparedOne(sktClassView(build, R, p), R))))];
 }
+// The 2024 College of Spirits' Channeler: Guidance, in its text but not its spell list.
+const _SKT_SUB_GRANTS = { 'Spirits|RHW': [{ known: { 3: ['guidance|xphb'] } }] };
 function _sktAlwaysPreparedOne(build, R){
   const cls = sktRulesClass(R, build.cls), sub = sktRulesSubclass(cls, build.subclass);
   const out = [];
@@ -3010,7 +3012,7 @@ function _sktAlwaysPreparedOne(build, R){
       });
     });
   };
-  if (sub) take(sktSubclassBlocks(sub, build));
+  if (sub) take(sktSubclassBlocks(sub, build).concat(_SKT_SUB_GRANTS[sub.shortName + '|' + sub.source] || []));
   return [...new Set(out)];
 }
 
@@ -3224,7 +3226,7 @@ function sktBuildAttacks(ctx, gear, sc){
     if (!uDie || _sktDieAvg(ud) > _sktDieAvg(uDie)) uDie = ud;
   }
   out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb), str: uab === m.str,
-             damage: (uDie ? uDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' bludgeoning' });
+             damage: (uDie ? uDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' ' + (ctx.unarmedType || 'bludgeoning') });
   // A species' natural weapons, each an unarmed strike of its own.
   (ctx.naturalAttacks || []).forEach(n => { const k = n.ab || 'str';
     out.push({ name: n.name, atkBonus: sktSigned(m[n.hit || 'str'] + pb), str: (n.hit || 'str') === 'str',
