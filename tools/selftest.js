@@ -10232,6 +10232,40 @@
         state.party = state.party.filter(p => p.id !== 'pc_ws' && p.id !== 'pc_ws14'); save();
       } catch(e){ ok('round 93 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 94: species pictures in the builder ---------------------------
+    {
+      try {
+        const m = await sktSpeciesImages();
+        ok('species art: each species its own picture', m.get('Dwarf', 'XPHB') === 'races/XPHB/Dwarf.webp' && m.get('Dwarf', 'PHB') === 'races/PHB/Dwarf.webp', m.get('Dwarf', 'XPHB') + ' / ' + m.get('Dwarf', 'PHB'));
+        ok('species art: a copied entry takes the picture it copies', !!m.get('Aasimar (Fallen)', 'VGM'));
+        ok('species art: none of its own — one of the same name from another book', !!m.get('Orc', 'ERLW') && m.get('Orc', 'ERLW') === m.get('Orc', 'NOPE'));
+        ok('species art: nothing for a name with no art', m.get('Not A Species', 'XPHB') === '');
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({ edition: '2024' }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100); CB.R = R;
+        CB.build = Object.assign(sktBlankBuild('2024'), { name: 'T', cls: 'Fighter', species: 'Dwarf' });
+        CB.step = 'species'; cbRender(); for (let i = 0; i < 40 && !CB.spImg; i++) await sleep(50); await sleep(50);
+        const q = s => document.querySelector('#cb-root ' + s);
+        // The HTML as written, before any picture has loaded.
+        const box = document.createElement('div'); box.innerHTML = CB_RENDER.species();
+        const card = box.querySelector('[data-cb-species="Dwarf"]'), img = card && card.querySelector('.cb-card-img img');
+        ok('species cards: a picture on each, the thumbnail first and the full picture to fall back on',
+           box.querySelectorAll('.cb-card.has-img').length === box.querySelectorAll('[data-cb-species]').length
+           && !!img && img.getAttribute('src') === assetThumbUrl('races/XPHB/Dwarf.webp') && img.dataset.fb === assetUrl('races/XPHB/Dwarf.webp') && img.getAttribute('loading') === 'lazy', img ? img.outerHTML.slice(0, 200) : 'no img');
+        const hero = box.querySelector('.cb-sp-hero img');
+        ok('species: the one chosen shown bigger, the full picture', !!hero && hero.getAttribute('src') === assetUrl('races/XPHB/Dwarf.webp') && !hero.dataset.fb);
+        // No thumbnail: the full picture. Neither: no picture, and the card back to plain.
+        { const base = ASSET_CONFIG.imgBase; ASSET_CONFIG.imgBase = '';
+          const host = document.createElement('div'); host.innerHTML = '<button class="cb-card has-img"><span class="cb-card-img">' + cbArtImg('races/NOPE/none.webp', '') + '</span><b>X</b></button>';
+          document.body.appendChild(host); ASSET_CONFIG.imgBase = base;
+          const im = host.querySelector('img'), tried = [im.getAttribute('src')];
+          new MutationObserver(() => tried.push(im.getAttribute('src'))).observe(im, { attributes: true, attributeFilter: ['src'] });
+          for (let i = 0; i < 60 && host.querySelector('.cb-card-img'); i++) await sleep(50);
+          ok('species cards: a missing thumbnail falls back to the full picture, then to a plain card',
+             tried.length === 2 && /thumbs\/races\/NOPE/.test(tried[0]) && /^img\/races\/NOPE/.test(tried[1]) && !host.querySelector('.cb-card-img') && !host.querySelector('.has-img'), JSON.stringify(tried));
+          host.remove(); }
+        cbClose();
+      } catch(e){ ok('round 94 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

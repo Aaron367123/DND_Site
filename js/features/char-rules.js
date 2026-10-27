@@ -162,6 +162,23 @@ function sktRulesReader(base){
   return p => fetch(base + p).then(r => { if (!r.ok) throw new Error(p + ': ' + r.status); return r.json(); });
 }
 
+// Species art from the art pack (fluff-races.json), loaded once, when the
+// builder first shows species. get(name, source) → an img/ path, or '' — the
+// species' own picture, else one of the same name from another book.
+let _sktSpImg = null;
+function sktSpeciesImages(read){
+  if (_sktSpImg && !read) return _sktSpImg;
+  const job = (read || sktRulesReader())('fluff-races.json').then(j => {
+    const list = j.raceFluff || [], by = new Map(list.map(x => [x.name + '|' + x.source, x]));
+    const path = x => { for (let d = 0; x && d < 5; d++){ const im = (x.images || [])[0], p = im && im.href && im.href.path; if (p) return p; x = x._copy && by.get(x._copy.name + '|' + x._copy.source); } return ''; };
+    const own = new Map(), byName = new Map();
+    list.forEach(x => { const p = path(x); if (!p) return; own.set(x.name + '|' + x.source, p); if (!byName.has(x.name)) byName.set(x.name, p); });
+    return { get: (name, source) => own.get(name + '|' + source) || byName.get(name) || '' };
+  }).catch(() => ({ get: () => '' }));
+  if (!read) _sktSpImg = job;
+  return job;
+}
+
 async function sktRulesLoad(edition, read){
   edition = edition === '2014' ? '2014' : '2024';
   if (_sktRulesCache[edition] && !read) return _sktRulesCache[edition];

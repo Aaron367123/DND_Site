@@ -348,11 +348,11 @@ function cbUsesLegacy(b, R){
 }
 // Cards for one list: the handbook's, then (with other books on) the rest
 // under their own heading, each naming its book.
-function cbBookCards(list, selected, attr, sub, blurb){
+function cbBookCards(list, selected, attr, sub, blurb, img){
   const b = CB.build;
   const core = list.filter(x => x.core !== false);
   const more = list.filter(x => x.core === false && (sktBookOk(b, x) || x.name === selected));
-  const card = x => ({ value: x.name, label: x.name, blurb: blurb ? blurb(x) : '', sub: [sub ? sub(x) : '', x.core === false ? (sktIsLegacy(b, x) ? 'Legacy · ' : '') + x.source : ''].filter(Boolean).join(' · ') });
+  const card = x => ({ value: x.name, label: x.name, blurb: blurb ? blurb(x) : '', img: img ? img(x) : '', sub: [sub ? sub(x) : '', x.core === false ? (sktIsLegacy(b, x) ? 'Legacy · ' : '') + x.source : ''].filter(Boolean).join(' · ') });
   // (Legacy entries are the older version of something reprinted under a new name.)
   const many = core.length + more.length > 16;
   const inMore = more.some(x => x.name === selected);
@@ -576,11 +576,19 @@ function cbSide(rec){
 }
 
 // ── Small UI pieces ──────────────────────────────────────────────────────────
+// A picture from the art pack: the thumbnail, the full image if there's no
+// thumbnail yet, nothing if neither loads.
+function cbArtImg(path, alt, full){
+  const big = assetUrl(path), small = full ? big : assetThumbUrl(path);
+  return '<img src="' + cbEsc(small) + '"' + (small !== big ? ' data-fb="' + cbEsc(big) + '"' : '') + ' alt="' + cbEsc(alt || '') + '" loading="lazy" decoding="async"'
+    + ' onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute(\'data-fb\')}else{this.closest(\'.has-img\')&&this.closest(\'.has-img\').classList.remove(\'has-img\');this.parentNode.remove()}">';
+}
 function cbCards(items, selected, attr, extra){
   return '<div class="cb-cards">' + items.map(it => {
     const on = selected === it.value;
-    return '<button class="cb-card' + (on ? ' on' : '') + (it.icon ? ' has-ico' : '') + '" data-' + attr + '="' + cbEsc(it.value) + '">'
+    return '<button class="cb-card' + (on ? ' on' : '') + (it.icon ? ' has-ico' : '') + (it.img ? ' has-img' : '') + '" data-' + attr + '="' + cbEsc(it.value) + '">'
       + (it.icon ? '<span class="cb-card-ico">' + cbEsc(it.icon) + '</span>' : '')
+      + (it.img ? '<span class="cb-card-img">' + cbArtImg(it.img, '') + '</span>' : '')
       + '<b>' + cbEsc(it.label) + '</b>' + (it.blurb ? '<em>' + cbEsc(it.blurb) + '</em>' : '') + (it.sub ? '<span>' + cbEsc(it.sub) + '</span>' : '') + '</button>';
   }).join('') + '</div>' + (extra || '');
 }
@@ -750,13 +758,24 @@ function cbFitLevels(b){
 CB_RENDER.species = () => {
   const b = CB.build, R = CB.R;
   const sp = sktRulesSpecies(R, b.species);
+  // Each species' picture, as D&D Beyond shows them (loaded once).
+  if (!CB.spImg && !CB.spImgLoading && typeof sktSpeciesImages === 'function'){
+    CB.spImgLoading = true;
+    sktSpeciesImages().then(m => { if (!CB) return; CB.spImg = m; if (CB.step === 'species') cbRender(); });
+  }
+  const pic = (name, source) => CB.spImg ? CB.spImg.get(name, source) : '';
   let html = '<h3>Species</h3>' + cbBookCards(R.species, b.species, 'cb-species',
     s => (typeof s.speed === 'number' ? s.speed : (s.speed && s.speed.walk) || 30) + ' ft' + (s.darkvision ? ' · darkvision' : ''),
-    s => (s.entries || []).filter(e => e && e.name && !/^(Age|Size|Speed|Languages?|Creature Type|Alignment|Darkvision|Ability Score Increase)$/i.test(e.name)).map(e => e.name).slice(0, 3).join(' · ')) + cbBooksToggle();
+    s => (s.entries || []).filter(e => e && e.name && !/^(Age|Size|Speed|Languages?|Creature Type|Alignment|Darkvision|Ability Score Increase)$/i.test(e.name)).map(e => e.name).slice(0, 3).join(' · '),
+    s => pic(s.name, s.source)) + cbBooksToggle();
   if (!sp) return html;
+  const hero = pic(sp.name, sp.source);
+  if (hero) html += '<figure class="cb-sp-hero has-img">' + cbArtImg(hero, sp.name, true) + '<figcaption>' + cbEsc(sp.name) + '</figcaption></figure>';
   const subs = sp.subraces.filter(s => sktBookOk(b, s) || s.name === b.subspecies);
   if (subs.length){
-    html += '<h4>' + (R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>' + cbCards(subs.map(s => ({ value: s.name, label: s.name, sub: s.core === false ? s.source : '' })), b.subspecies, 'cb-subspecies');
+    // A subrace's own picture where the art pack has one ("Elf (High)").
+    const subPic = s => { const p = CB.spImg ? CB.spImg.get(sp.name + ' (' + s.name + ')', s.source) : ''; return p && p !== hero ? p : ''; };
+    html += '<h4>' + (R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>' + cbCards(subs.map(s => ({ value: s.name, label: s.name, sub: s.core === false ? s.source : '', img: subPic(s) })), b.subspecies, 'cb-subspecies');
   }
   // 2024 lineages that live in additionalSpells (Elf, Gnome, Tiefling).
   const lineages = (R.edition === '2024' && Array.isArray(sp.additionalSpells) && sp.additionalSpells.length > 1)
