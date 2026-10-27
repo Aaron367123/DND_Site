@@ -10408,6 +10408,27 @@
         csClose(); state.party = state.party.filter(p => p.id !== 'pc_hero'); save();
       } catch(e){ ok('round 100 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 101: the sheet header's menus are on screen ---------------------
+    {
+      try {
+        state.party.push({ id: 'pc_menu', name: 'Menued', race: 'Dwarf', icon: '⚔', cls: 'barbarian', level: 3, hp: 30, hpMax: 30, ac: 14, sheet: {} }); save();
+        openCharSheet('pc_menu'); await sleep(300);
+        const onTop = el => { if (!el) return 'missing'; for (const it of [el, ...el.querySelectorAll('[role="menuitem"]')]){ const r = it.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); if (!el.contains(t)) return 'covered by ' + (t && (t.className || t.tagName)); } return 'visible'; };
+        const ex = document.querySelector('#cs-root [data-cs="exportmenu"]');
+        if (ex && getComputedStyle(ex).display !== 'none' && ex.offsetParent){
+          ex.click(); await sleep(60);
+          const v = onTop(document.querySelector('#cs-root .cs-exmenu'));
+          ok('sheet: the Export menu drops down on screen (the banner header used to clip it)', v === 'visible', v);
+        }
+        const hm = document.querySelector('#cs-root .cs-headmore');
+        if (hm && getComputedStyle(hm).display !== 'none'){
+          hm.click(); await sleep(60);
+          const v = onTop(document.querySelector('#cs-root .cs-headmenu'));
+          ok('sheet: the ⋯ menu drops down on screen', v === 'visible', v);
+        }
+        csClose(); state.party = state.party.filter(p => p.id !== 'pc_menu'); save();
+      } catch(e){ ok('round 101 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -11170,6 +11191,31 @@
           paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
           paRender();
         }
+      }
+      // ── The sheet's ⋯ menu shows, and Change character lands on the picker ─
+      // Both broke with the banner: the header clipped the menu away, then the
+      // HP box painted over it — the menu "opened" with nothing on screen.
+      {
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        const onTop = el => { if (!el) return 'missing'; for (const it of [el, ...el.querySelectorAll('[role="menuitem"]')]){ const r = it.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); if (!el.contains(t)) return 'covered by ' + (t && (t.className || t.tagName)); } return 'visible'; };
+        try {
+          if ((state.party || []).length){
+            paSetPc(state.party[0].id); paTab = 'you'; paRender(); await sleep(80);
+            const more = document.querySelector('#pa-screen .cs-headmore');
+            if (more && getComputedStyle(more).display !== 'none'){
+              more.click(); await sleep(40);
+              const m = onTop(document.querySelector('#pa-screen .cs-headmenu'));
+              ok('phone: the sheet’s ⋯ menu is on screen, not hidden behind the sheet', m === 'visible', m);
+              const sw = document.querySelector('#pa-screen .cs-headmenu [data-pa-swap]');
+              if (sw){ sw.click(); await sleep(40); ok('phone: the menu’s Play a different character shows the picker', !paPc() && !!document.querySelector('#pa-screen [data-pa-pick]')); }
+            }
+            paSetPc(state.party[0].id); paTab = 'more'; paRender(); await sleep(40);
+            const ch = document.querySelector('#pa-screen [data-pa-swap]');
+            if (ch){ ch.click(); await sleep(40);
+              ok('player: Change character from More goes straight to the picker', paTab === 'you' && !!document.querySelector('#pa-screen [data-pa-pick]'), paTab); }
+          }
+        } catch(e){ ok('player: the menu checks ran to completion', false, e.message); }
+        finally { paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0); paRender(); }
       }
       // ── The phone's Back button steps back inside the app ─────────────────
       {

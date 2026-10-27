@@ -1949,7 +1949,9 @@ function paOnClick(e){
   if (tab){ if (tab.dataset.paTab !== paTab){ paTabTrail.push(paTab); paTabTrail = paTabTrail.slice(-12); } paTab = tab.dataset.paTab; paRender(); return; }
   const pick = e.target.closest('[data-pa-pick]');
   if (pick){ paSetPc(pick.dataset.paPick); paRender(); return; }
-  if (e.target.closest('[data-pa-swap]')){ paSetPc(null); paRender(); return; }
+  // The picker lives on the You tab: from More (or anywhere) go there, or
+  // "Change character" just emptied the current tab and showed nothing.
+  if (e.target.closest('[data-pa-swap]')){ paSetPc(null); if (paTab !== 'you'){ paTabTrail.push(paTab); paTab = 'you'; } paRender(); return; }
   const bld = e.target.closest('[data-pa-build]');
   if (bld && typeof openCharBuilder === 'function'){
     if (bld.dataset.paBuild === 'new'){

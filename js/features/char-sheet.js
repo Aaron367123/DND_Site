@@ -152,8 +152,10 @@ function csHeroArt(pc){
   if (!/^(data:image\/|img\/|https?:\/\/)/.test(ic)) return '';
   const url = typeof assetUrl === 'function' ? assetUrl(ic) : ic;
   const f = typeof sktPortraitFocus === 'function' ? sktPortraitFocus(ic) : null;
-  return '<div class="cs-hero-art" aria-hidden="true" style="background-image:url(\'' + String(url).replace(/'/g, '%27') + '\');background-position:'
-    + (f ? f.x + '% ' + Math.max(0, f.y - 6) + '%' : '50% 15%') + '"></div>';
+  // In a clipping box of its own: clipping the whole header instead hid the
+  // phone's ⋯ menu, which opens below it.
+  return '<div class="cs-hero-clip" aria-hidden="true"><div class="cs-hero-art" style="background-image:url(\'' + String(url).replace(/'/g, '%27') + '\');background-position:'
+    + (f ? f.x + '% ' + Math.max(0, f.y - 6) + '%' : '50% 15%') + '"></div></div>';
 }
 function csHead(pc){
   const icon = typeof renderIcon === 'function' ? renderIcon(typeof sktPcIcon === 'function' ? sktPcIcon(pc) : pc.icon, pc.name) : csE(String(pc.name || '?').charAt(0));

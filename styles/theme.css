@@ -251,13 +251,18 @@ body.player-mode { background-image: var(--grain), var(--mottle); background-siz
 .pa-hero .pa-swap { position: relative; align-self: flex-start; background: rgba(0,0,0,.35); }
 @media (min-width: 761px) { .pa-you-head.pa-hero { margin: -18px -18px 4px; } }
 /* The character sheet's header, the same banner. */
+/* Not overflow: hidden — the phone's ⋯ menu hangs below the header. The art
+   is clipped by .cs-hero-clip instead. And a z-index, not just isolation: an
+   isolated header is a layer at the bottom, and the HP box after it (its own
+   layer, for the frame) painted over the open menu. */
 .cs-head.cs-hero {
-  position: relative; isolation: isolate; overflow: hidden;
+  position: relative; isolation: isolate; z-index: 4;
   background: var(--grain), linear-gradient(100deg, color-mix(in srgb, var(--hero, var(--accent)) 38%, var(--panel)) 0%, color-mix(in srgb, var(--hero, var(--accent)) 10%, var(--panel)) 40%, var(--panel) 75%);
   border-bottom: 2px solid color-mix(in srgb, var(--hero, var(--accent)) 75%, transparent);
 }
+.cs-hero-clip { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 .cs-hero-art {
-  position: absolute; z-index: -1; left: 0; top: -30%; bottom: -60%; width: min(440px, 45%); pointer-events: none;
+  position: absolute; left: 0; top: -30%; bottom: -60%; width: min(440px, 45%); pointer-events: none;
   background-size: cover; background-repeat: no-repeat; opacity: .32;
   -webkit-mask-image: linear-gradient(90deg, rgba(0,0,0,.2) 0%, #000 25%, rgba(0,0,0,.6) 60%, transparent 100%); mask-image: linear-gradient(90deg, rgba(0,0,0,.2) 0%, #000 25%, rgba(0,0,0,.6) 60%, transparent 100%);
 }
