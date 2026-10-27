@@ -128,3 +128,60 @@ body.player-mode { background-image: var(--grain), var(--mottle); background-siz
     radial-gradient(ellipse at 25% 15%, color-mix(in srgb, var(--accent) 8%, var(--bg)), var(--bg) 65%);
 }
 [data-theme-tone="light"] .window { box-shadow: 0 10px 26px rgba(80,55,25,.22), 0 2px 6px rgba(80,55,25,.15); }
+
+/* ── 4. Rules text on parchment ───────────────────────────── */
+/* Spells, features, items and monsters read as a page of a book: cream
+   paper, the book face, and the red rules of a Monster Manual stat block.
+   The same in every colour theme — paper is paper. */
+:root {
+  --paper: #f3e7cc; --paper-2: #e9d8b2; --ink: #2b1e12; --ink-soft: #5e4a33;
+  --rubric: #8a2414;            /* the red of headings and rules */
+  --paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .45  0 0 0 0 .3  0 0 0 0 .12  0 0 0 .16 0'/></filter><rect width='100%' height='100%' filter='url(%23p)'/></svg>");
+}
+.cs-feat-t, .cb-ft > div, .feat-body, .search-detail {
+  font-variant-numeric: lining-nums;
+  background: var(--paper-grain), radial-gradient(ellipse at 50% 0%, var(--paper), var(--paper-2));
+  color: var(--ink);
+  font-family: var(--font-book);
+  font-size: 15.5px; line-height: 1.45;
+  border-radius: 3px;
+  box-shadow: inset 0 0 28px rgba(120, 80, 30, .28), 0 2px 10px rgba(0, 0, 0, .35);
+}
+.cs-feat-t, .cb-ft > div, .feat-body { padding: 10px 14px; margin: 6px 0; border-top: 2px solid var(--rubric); border-bottom: 2px solid var(--rubric); }
+.search-detail { padding: 12px 16px 14px; border-top: 4px solid var(--rubric); border-bottom: 4px solid var(--rubric); }
+/* Ink, not the screen's colours, on the paper. */
+.cs-feat-t *, .cb-ft > div *, .feat-body *, .search-detail * { color: inherit; }
+.cs-feat-t b, .cs-feat-t strong, .cb-ft > div b, .feat-body b, .feat-body strong, .search-detail b, .search-detail strong,
+.search-detail .detail-label, .search-detail .detail-statrow strong { color: var(--rubric); font-weight: 700; }
+.cs-feat-t .cb-dim, .cb-ft > div .cb-dim, .search-detail .detail-meta, .search-detail .cb-dim,
+.search-detail .detail-source-foot, .search-detail .ability .ab-name, .search-detail .ability .ab-mod,
+.search-detail .stat-block .lab, .search-detail .detail-table caption { color: var(--ink-soft); }
+.search-detail .detail-title, .search-detail .detail-header { color: var(--rubric); }
+.search-detail .detail-title-row { border-bottom: 2px solid var(--rubric); }
+.search-detail .detail-source-badge { color: var(--ink-soft); }
+/* A stat block's sections, ruled off with tapering red lines. */
+.search-detail .detail-statblock, .search-detail .ability-grid, .search-detail .detail-stats { border: 0; }
+.search-detail .detail-statblock::after, .search-detail .ability-grid::after {
+  content: ''; display: block; height: 2px; margin-top: 8px;
+  background: linear-gradient(90deg, var(--rubric), rgba(138, 36, 20, 0));
+}
+.search-detail .ability-grid, .search-detail .stat-block { background: rgba(255, 250, 235, .45); }
+.search-detail .action-block, .search-detail .detail-actions, .search-detail .detail-source-foot { border-top-color: rgba(138, 36, 20, .35); }
+.search-detail .detail-table th { color: var(--rubric); border-bottom-color: rgba(138, 36, 20, .45); }
+.search-detail .detail-table td { border-bottom-color: rgba(90, 60, 30, .18); }
+.search-detail .detail-table tbody tr:hover { background: rgba(138, 36, 20, .06); }
+.search-detail .detail-inset { background: rgba(255, 250, 235, .5); border-color: rgba(138, 36, 20, .3); }
+.search-detail .detail-quote { border-left-color: var(--rubric); color: var(--ink-soft); }
+.search-detail .detail-img { background: transparent; border: 0; }
+/* Links and roll buttons in the text: rubric red, underlined. */
+.cs-feat-t a, .search-detail a, .search-detail .roll-link, .search-detail [data-roll] { color: var(--rubric); text-decoration: underline; text-decoration-color: rgba(138, 36, 20, .4); }
+/* Fields on the paper (an item's name and notes) are light, not dark. */
+.cs-feat-t input, .cs-feat-t select, .search-detail input, .search-detail select {
+  background: rgba(255, 252, 242, .85); color: var(--ink); border-color: rgba(90, 60, 30, .35); font-family: inherit;
+}
+.search-detail .btn { background: rgba(255, 250, 235, .7); color: var(--ink); border-color: rgba(90, 60, 30, .35); }
+.search-detail .btn.primary { background: var(--rubric); color: #fff4e0; border-color: var(--rubric); }
+/* The imported sheet's feature text: its own rule set it pale — ink here. */
+.feat-block .feat-body { color: var(--ink); opacity: 1; }
+.feat-block .feat-body strong, .feat-block .feat-body b { color: var(--rubric); }
+.feat-block .feat-body .feat-from { color: var(--ink-soft); }

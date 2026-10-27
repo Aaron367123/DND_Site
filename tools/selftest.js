@@ -10328,6 +10328,14 @@
         ok('faces: the party card shows it', !!card, card ? card.outerHTML.slice(0, 120) : document.querySelectorAll('.char-card').length + ' cards');
         state.party = state.party.filter(p => p.id !== 'pc_face'); save();
         try { panelDefs.party && panelDefs.party._render && panelDefs.party._render(); } catch(_){}
+        // Rules text on parchment: dark ink on light paper, whatever the theme.
+        { const host = document.createElement('div'); host.innerHTML = '<div class="cs-feat-t">Text <b>Bold</b> <span class="cb-dim">dim</span></div><div class="feat-block"><div class="feat-body">Feature</div></div>';
+          document.body.appendChild(host);
+          const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
+          const t = host.querySelector('.cs-feat-t'), fb = host.querySelector('.feat-body');
+          ok('look: rules text is dark ink on paper (the sheet’s, an imported sheet’s)', lum(getComputedStyle(t).color) < 0.25 && /gradient/.test(getComputedStyle(t).backgroundImage)
+             && lum(getComputedStyle(t.querySelector('.cb-dim')).color) < 0.45 && lum(getComputedStyle(fb).color) < 0.25, [getComputedStyle(t).color, getComputedStyle(fb).color].join(' | '));
+          host.remove(); }
       } catch(e){ ok('round 97 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Class features: represented, not just text ------------------------
