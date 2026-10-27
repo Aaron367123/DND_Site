@@ -195,3 +195,53 @@ body.player-mode { background-image: var(--grain), var(--mottle); background-siz
 [data-theme-tone="light"] .dt-force { color: #7b2f9b; } [data-theme-tone="light"] .dt-lightning { color: #2c4fb0; } [data-theme-tone="light"] .dt-necrotic { color: #2f6f2c; }
 [data-theme-tone="light"] .dt-poison { color: #2b7a2b; } [data-theme-tone="light"] .dt-psychic { color: #a3237a; } [data-theme-tone="light"] .dt-radiant { color: #8a6400; }
 [data-theme-tone="light"] .dt-thunder { color: #5a3f99; } [data-theme-tone="light"] .dt-bludgeoning, [data-theme-tone="light"] .dt-piercing, [data-theme-tone="light"] .dt-slashing { color: #5e4a33; }
+
+/* ── 5. Dice you can see (js/ui/dice-fx.js) ───────────────── */
+.dfx-die { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 58px; height: 58px; }
+.dfx-die svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 3px 5px rgba(0,0,0,.55)); }
+.dfx-face { fill: color-mix(in srgb, var(--accent) 30%, #2a2018); stroke: var(--accent); stroke-width: 3; stroke-linejoin: round; }
+.dfx-edge { fill: none; stroke: color-mix(in srgb, var(--accent) 55%, transparent); stroke-width: 1.6; stroke-linejoin: round; }
+.dfx-inner { fill: color-mix(in srgb, var(--accent) 16%, transparent); }
+.dfx-n { position: relative; font-family: var(--font-display); font-weight: 700; font-size: 20px; color: #fff4dc; text-shadow: 0 1px 3px rgba(0,0,0,.8); font-variant-numeric: lining-nums tabular-nums; }
+.dfx-d4 .dfx-n { margin-top: 14px; font-size: 17px; }
+.dfx-rolling svg { animation: dfx-tumble .62s cubic-bezier(.3,.7,.4,1); }
+.dfx-rolling .dfx-n { opacity: .75; }
+.dfx-landed { animation: dfx-land .35s ease-out; }
+@keyframes dfx-tumble { 0% { transform: rotate(-260deg) scale(.4); } 60% { transform: rotate(25deg) scale(1.12); } 100% { transform: rotate(0) scale(1); } }
+@keyframes dfx-land { 0% { transform: scale(1.18); } 100% { transform: scale(1); } }
+/* A natural 20: gold, glowing, with rays. A natural 1: red, cracked, shaken. */
+.dfx-die.crit .dfx-face { fill: #6b4a12; stroke: #ffd36a; }
+.dfx-die.crit .dfx-edge { stroke: rgba(255, 211, 106, .7); }
+.dfx-die.crit.dfx-landed::before { content: ''; position: absolute; inset: -22px; border-radius: 50%; pointer-events: none;
+  background: repeating-conic-gradient(rgba(255, 214, 102, .55) 0 6deg, transparent 6deg 24deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 38%, #000 42%, transparent 70%); mask-image: radial-gradient(circle, transparent 38%, #000 42%, transparent 70%);
+  animation: dfx-rays 1.6s ease-out forwards; }
+.dfx-die.crit .dfx-n { color: #fff3c4; text-shadow: 0 0 10px rgba(255, 200, 80, .9), 0 1px 3px #000; }
+@keyframes dfx-rays { 0% { transform: scale(.5) rotate(0); opacity: 0; } 25% { opacity: 1; } 100% { transform: scale(1.25) rotate(40deg); opacity: 0; } }
+.dfx-die.fumble .dfx-face { fill: #4a1410; stroke: #e0574b; }
+.dfx-die.fumble .dfx-edge { stroke: rgba(224, 87, 75, .6); }
+.dfx-die.fumble.dfx-landed { animation: dfx-shake .45s ease-in-out; }
+.dfx-die.fumble.dfx-landed::after { content: ''; position: absolute; inset: 8px; pointer-events: none;
+  background: linear-gradient(115deg, transparent 46%, rgba(20,0,0,.85) 47%, rgba(20,0,0,.85) 49%, transparent 50%),
+              linear-gradient(35deg, transparent 58%, rgba(20,0,0,.75) 59%, rgba(20,0,0,.75) 60.5%, transparent 61.5%); }
+@keyframes dfx-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-5px) rotate(-4deg); } 40% { transform: translateX(5px) rotate(4deg); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+/* The desktop tray. */
+#skt-dice { position: fixed; right: 18px; bottom: 64px; z-index: 10002; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.dfx { display: flex; align-items: center; gap: 12px; min-width: 230px; max-width: 360px; padding: 10px 14px 10px 10px; border-radius: 6px;
+  background: var(--grain), linear-gradient(180deg, color-mix(in srgb, var(--panel) 88%, var(--accent)), var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: 0 10px 28px rgba(0,0,0,.55);
+  animation: dfx-in .25s ease-out; transition: opacity .35s, transform .35s; }
+.dfx.dfx-out { opacity: 0; transform: translateX(20px); }
+.dfx.crit { border-color: #ffd36a; box-shadow: 0 0 0 1px rgba(255,211,106,.4), 0 10px 30px rgba(0,0,0,.55), 0 0 26px rgba(255,190,60,.35); }
+.dfx.fumble { border-color: #e0574b; }
+@keyframes dfx-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.dfx-txt { display: flex; flex-direction: column; min-width: 0; }
+.dfx-label { font-family: var(--font-display); font-weight: 700; letter-spacing: .05em; font-size: var(--fs-sm); color: var(--text-muted); }
+.dfx-total { font-size: 28px; font-weight: 800; line-height: 1.05; color: var(--text); font-variant-numeric: tabular-nums; }
+.dfx-total i { font-size: var(--fs-sm); font-style: normal; font-weight: 600; color: var(--text-muted); }
+.dfx.crit .dfx-total { color: #ffd36a; } .dfx.fumble .dfx-total { color: #ff8a7d; }
+.dfx-detail, .dfx-why { font-size: var(--fs-xs); color: var(--text-dim); }
+/* On the phone, the die leads the roll card. */
+.pa-roll-in .dfx-die { width: 50px; height: 50px; align-self: center; }
+.pa-roll-in .dfx-n { font-size: 18px; }
+@media (prefers-reduced-motion: reduce) { .dfx-die, .dfx-die svg, .dfx, .dfx-die::before { animation: none !important; } }

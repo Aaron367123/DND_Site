@@ -1495,6 +1495,7 @@ function paShowRoll(html){
   const top = tabs && tabs.offsetParent ? tabs.getBoundingClientRect().top : innerHeight;
   box.style.bottom = Math.max(10, innerHeight - top + 10) + 'px';
   box.innerHTML = html;
+  if (typeof sktDiceAnimate === 'function') sktDiceAnimate(box);
   clearTimeout(paRollTimer);
   paRollTimer = setTimeout(paHideRoll, 12000);
 }
@@ -1534,6 +1535,7 @@ function paRollD20(pc, mod, kind, pick){
 function paD20Html(label, r, extraHtml){
   const dice = r.b == null ? 'd20 ' + r.a : '2d20 ' + r.a + ', ' + r.b + ' (' + r.mode + ')';
   return `<div class="pa-roll-in${r.autoFail ? ' fumble' : r.crit ? ' crit' : r.fumble ? ' fumble' : ''}">
+    ${typeof sktDieHtml === 'function' ? sktDieHtml(20, r.nat, r.crit ? 'crit' : r.fumble ? 'fumble' : '') : ''}
     <span class="pa-roll-l">${paEsc(label)}</span>
     <span class="pa-roll-hit">${r.autoFail ? 'Fails' : r.total}</span>
     <span class="pa-roll-d">${paEsc(dice)} ${r.mod >= 0 ? '+ ' + r.mod : '− ' + Math.abs(r.mod)}</span>

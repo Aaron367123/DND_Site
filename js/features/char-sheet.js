@@ -561,7 +561,8 @@ function csLog(r){
   CS.log.unshift(r); CS.log = CS.log.slice(0, 8);
   // On the player's screen a result goes on the roll card above the tab bar.
   if (CS.embed && typeof paShowRoll === 'function') paShowRoll(csRollCard(r));
-  else if (typeof showToast === 'function') showToast(csRollPlain(r));
+  // The die in the tray (js/ui/dice-fx.js); the line of text where there's no tray.
+  else if (!(typeof sktDiceFx === 'function' && sktDiceFx(r)) && typeof showToast === 'function') showToast(csRollPlain(r));
   const pc = csPc();
   if (pc && !CS.readOnly) sktKeepRoll(pc, csRollPlain(r).replace(/^[^:]*: /, ''), r);
 }
@@ -577,9 +578,10 @@ function csRollPlain(r){
 }
 function csRollCard(r){
   const cls = r.crit ? ' crit' : r.fumble || r.autoFail ? ' fumble' : '';
-  if (r.kind === 'dmg') return '<div class="pa-roll-in' + cls + '"><span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-dmg">' + r.total
+  const die = typeof sktDieHtml === 'function' ? (r.kind === 'dmg' ? sktDieHtml(sktDieSides(r), r.total) : sktDieHtml(20, r.natural != null ? r.natural : (r.rolls || [])[0], cls.trim())) : '';
+  if (r.kind === 'dmg') return '<div class="pa-roll-in' + cls + '">' + die + '<span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-dmg">' + r.total
     + '<i> ' + csE(r.type || '') + '</i></span><span class="pa-roll-d">' + csE(r.detail || '') + '</span></div>';
-  return '<div class="pa-roll-in' + cls + '"><span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-hit">' + (r.autoFail ? 'Fails' : r.total) + '</span>'
+  return '<div class="pa-roll-in' + cls + '">' + die + '<span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-hit">' + (r.autoFail ? 'Fails' : r.total) + '</span>'
     + '<span class="pa-roll-d">d20 ' + csE((r.rolls || []).join(' / ')) + (r.mod ? ' ' + csSigned(r.mod) : '') + (r.mode && r.mode !== 'normal' ? ' (' + (r.mode === 'adv' ? 'advantage' : 'disadvantage') + ')' : '') + '</span>'
     + (r.crit ? '<span class="pa-roll-tag">nat 20</span>' : r.fumble ? '<span class="pa-roll-tag">nat 1</span>' : '')
     + (r.why ? '<span class="pa-roll-why">' + csE(r.why) + '</span>' : '') + '</div>';

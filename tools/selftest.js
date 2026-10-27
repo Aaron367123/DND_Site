@@ -10338,6 +10338,39 @@
           host.remove(); }
       } catch(e){ ok('round 97 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 98: dice you can see ------------------------------------------
+    {
+      try {
+        ok('dice: a die of the right shape — a d20, a d6, a d4', /dfx-d20/.test(sktDieHtml(20, 7)) && /<rect/.test(sktDieHtml(6, 3)) && /dfx-d4/.test(sktDieHtml(4, 2)) && /data-final="7"/.test(sktDieHtml(20, 7)));
+        ok('dice: a damage roll’s die from its dice', sktDieSides({ kind: 'dmg', detail: '1d12 (8) + 3' }) === 12 && sktDieSides({ kind: 'dmg', detail: '2d6 (3, 4)' }) === 6 && sktDieSides({ kind: 'd20' }) === 20);
+        document.getElementById('skt-dice') && document.getElementById('skt-dice').remove();
+        // Motion on, whatever this browser prefers, so the die tumbles.
+        const mmWas = window.matchMedia; window.matchMedia = q => /reduced-motion/.test(q) ? { matches: false } : mmWas.call(window, q);
+        sktDiceFx({ kind: 'd20', label: 'Greataxe attack', rolls: [20], natural: 20, mod: 6, total: 26, mode: 'normal', crit: true });
+        window.matchMedia = mmWas;
+        const tray = document.getElementById('skt-dice'), card = tray && tray.lastElementChild;
+        ok('dice: the tray shows the roll — a natural 20 in gold, its total and what was rolled', !!card && card.classList.contains('crit') && /26/.test(card.querySelector('.dfx-total').textContent)
+           && /natural 20/.test(card.textContent) && !!card.querySelector('.dfx-die.crit'), card ? card.textContent : 'no tray');
+        await sleep(800);
+        ok('dice: it tumbles and lands on the number rolled', card.querySelector('.dfx-n').textContent === '20' && card.querySelector('.dfx-die').classList.contains('dfx-landed'));
+        for (let i = 0; i < 4; i++) sktDiceFx({ kind: 'd20', label: 'R' + i, rolls: [5], natural: 5, mod: 0, total: 5, mode: 'normal' });
+        ok('dice: three at most at once', tray.children.length <= 3);
+        tray.remove();
+        // The sheet's rolls go to the tray, not a line of text.
+        const R = await sktRulesLoad('2024');
+        const rec = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Roller', cls: 'Fighter', level: 3, species: 'Human' }), R); rec.id = 'pc_roll'; state.party.push(rec); save();
+        openCharSheet('pc_roll'); await sleep(300);
+        const toastWas = window.showToast; let toasted = 0; window.showToast = () => { toasted++; };
+        document.querySelector('#cs-root [data-cs-roll="save:str"]').click(); await sleep(60);
+        window.showToast = toastWas;
+        ok('dice: a roll on the sheet tumbles a die in the tray', !!document.querySelector('#skt-dice .dfx .dfx-die') && toasted === 0, 'toasts ' + toasted);
+        const cardHtml = csRollCard({ kind: 'd20', label: 'X', rolls: [1], natural: 1, mod: 2, total: 3, mode: 'normal', fumble: true });
+        ok('dice: the phone’s roll card leads with the die, a natural 1 cracked red', /dfx-die dfx-d20 fumble/.test(cardHtml) && /data-final="1"/.test(cardHtml));
+        ok('dice: and a damage card with its own die', /dfx-die dfx-d12/.test(csRollCard({ kind: 'dmg', label: 'Axe', total: 9, detail: '1d12 (6) + 3', type: 'slashing' })));
+        csClose(); state.party = state.party.filter(p => p.id !== 'pc_roll'); save();
+        document.getElementById('skt-dice') && document.getElementById('skt-dice').remove();
+      } catch(e){ ok('round 98 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
