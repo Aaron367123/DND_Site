@@ -10429,6 +10429,54 @@
         csClose(); state.party = state.party.filter(p => p.id !== 'pc_menu'); save();
       } catch(e){ ok('round 101 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 102: two devices pushing the same whole key at once ------------
+    // Two players answered a roll request at the same moment and one answer
+    // was lost every time (measured with two real browsers on Firebase). The
+    // push was a plain set(), last writer wins. Here the other phone's write
+    // reaches the server first AND arrives on this device mid-push, which is
+    // what happened on the real phones.
+    {
+      const K = 'skt-rollreq-v1';
+      const fb0 = _fbDb, last0 = _lastServer[K], jw0 = _justWrote[K], ls0 = localStorage.getItem(K), dirty0 = new Set(_dirtyKeys), pr0 = localStorage.getItem('skt-prompt-v1'), lastP0 = _lastServer['skt-prompt-v1'];
+      const rawSet = (k, v) => { _remoteUpdate = true; try { localStorage.setItem(k, v); } finally { _remoteUpdate = false; } };
+      try {
+        const R = { id: 'rr_race', askedAt: Date.now(), kind: 'check', ab: 'WIS', skill: 'perception', pcs: ['zoey', 'namroc'], answers: {}, closed: false };
+        const base = JSON.stringify(R);
+        const theirs = JSON.stringify(Object.assign({}, R, { answers: { namroc: { v: 14, rid: 'rr_race', at: 1 } } }));
+        const mine = JSON.stringify(Object.assign({}, R, { answers: { zoey: { v: 9, rid: 'rr_race', at: 2 } } }));
+        let server = base, cache = base;
+        _fbDb = { ref(path){ return {
+          set(v){ server = v; cache = v; return Promise.resolve(); },
+          transaction(fn){
+            // Their write lands first, and its event reaches us mid-push.
+            server = theirs; _applyRemoteKey(K, theirs);
+            let out = fn(cache);                    // first pass: stale cache
+            if (cache !== server) out = fn(server); // the SDK re-runs on the real value
+            if (out === undefined) return Promise.resolve({ committed: false });
+            server = out; cache = out;
+            return Promise.resolve({ committed: true, snapshot: { val: () => out } });
+          },
+          on(){}, off(){}, once(){ return Promise.resolve({ exists: () => true, val: () => server }); } }; } };
+        _lastServer[K] = base; delete _justWrote[K]; rawSet(K, mine); _dirtyKeys.clear(); _dirtyKeys.add(K);
+        await _flushDirtyKeys(); await sleep(30);
+        const srv = JSON.parse(server).answers || {}, loc = JSON.parse(localStorage.getItem(K)).answers || {};
+        ok('sync: two players answering a roll at once — the server keeps both answers', !!srv.zoey && !!srv.namroc, Object.keys(srv).join('+'));
+        ok('sync: and this device shows both, not the other phone’s copy', !!loc.zoey && !!loc.namroc, Object.keys(loc).join('+'));
+        // A reaction prompt is one question and one answer: still a plain replace.
+        let setCalls = 0; const fbT = _fbDb; _fbDb = { ref(){ return { set(v){ setCalls++; return Promise.resolve(); }, transaction(){ throw new Error('atomic key used a transaction'); } }; } };
+        _lastServer['skt-prompt-v1'] = 'null'; rawSet('skt-prompt-v1', JSON.stringify({ id: 'p_x', answer: null })); _dirtyKeys.clear(); _dirtyKeys.add('skt-prompt-v1');
+        await _flushDirtyKeys();
+        ok('sync: an atomic key (the reaction prompt) is still written whole', setCalls === 1);
+        _fbDb = fbT;
+      } catch(e){ ok('round 102 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        _fbDb = fb0; _lastServer[K] = last0; if (jw0) _justWrote[K] = jw0; else delete _justWrote[K];
+        delete _justWrote['skt-prompt-v1']; _lastServer['skt-prompt-v1'] = lastP0;
+        if (pr0 == null) localStorage.removeItem('skt-prompt-v1'); else rawSet('skt-prompt-v1', pr0);
+        if (ls0 == null) localStorage.removeItem(K); else rawSet(K, ls0);
+        _dirtyKeys.clear(); dirty0.forEach(k => _dirtyKeys.add(k));
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

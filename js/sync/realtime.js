@@ -779,6 +779,40 @@ const _MAX_RETRIES = 4;
 // view, so there was nothing to express it against.
 const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2', 'skt-handouts-v1']);
 
+// Push one whole key; resolves to the value the server ended up holding.
+//
+// A plain set() was last-writer-wins. The three-way merge below only runs
+// when another device's update lands while ours is still unsent, so two
+// devices that had BOTH already pushed simply overwrote each other — two
+// players answering the same roll request at the same moment lost one answer
+// every time (measured: 3 of 3, two real browsers on Firebase). A transaction
+// merges at write time instead: Firebase hands us what the server holds, and
+// if someone changed it since our base we merge their change with ours, the
+// same merge that runs on receive. Atomic keys keep a plain set — merging
+// them field by field is the wrong answer (see _ATOMIC_KEYS).
+function _pushWholeKey(k, val){
+  const ref = _fbDb.ref(_wholePath(k));
+  if (val == null || _ATOMIC_KEYS.has(k) || typeof ref.transaction !== 'function'){
+    return ref.set(val != null ? val : null).then(() => val);
+  }
+  // The base is what the server held when we made our change — taken now,
+  // not read on each pass. Another device's write arriving mid-push moves
+  // _lastServer onto THEIR value, and a retry that compared against it saw
+  // "unchanged since base" and wrote our stale copy over their answer.
+  const base = _lastServer[k];
+  return ref.transaction(cur => {
+    if (cur != null && typeof cur !== 'string'){ try { cur = JSON.stringify(cur); } catch(e){ return val; } }
+    // Null on the first pass is the SDK's empty cache, not the server: write
+    // ours, and Firebase re-runs this with the real value if it differs.
+    if (cur == null || cur === val || cur === base) return val;
+    return _mergeJsonStr(base, val, cur);
+  }, null, false).then(r => {
+    if (!r || !r.committed) throw new Error('transaction not committed');
+    const v = r.snapshot ? r.snapshot.val() : val;
+    return v == null ? null : (typeof v === 'string' ? v : JSON.stringify(v));
+  });
+}
+
 function _flushDirtyKeys() {
   if (!_fbDb || _dirtyKeys.size === 0) return Promise.resolve([]);
   const keys = Array.from(_dirtyKeys);
@@ -809,10 +843,25 @@ function _flushDirtyKeys() {
     const norm = val != null ? val : '__null__';
     if (!_justWrote[k]) _justWrote[k] = new Map();
     _justWrote[k].set(norm, (_justWrote[k].get(norm) || 0) + 1);
-    return _fbDb.ref(_wholePath(k)).set(val != null ? val : null).then(() => {
+    return _pushWholeKey(k, val).then(committed => {
       // Success — clear retry counter so a future failure starts fresh.
       delete _retryCounts[k];
-      _lastServer[k] = val;   // the server now holds this; base for next merge
+      _lastServer[k] = committed;   // the server now holds this; base for next merge
+      // The server took a merge of ours and someone else's, not our bytes —
+      // or took ours while another device's write, landing mid-push, had
+      // already replaced our copy on this screen (and our echo would then be
+      // swallowed as our own, leaving this device on their value). Either
+      // way: drop the echo we were expecting and show what the server holds.
+      // Firebase raises no event when a merge equals what the node had.
+      if (committed !== val || localStorage.getItem(k) !== committed){
+        const pend = _justWrote[k];
+        if (pend){
+          const c = pend.get(norm) || 0;
+          if (c > 1) pend.set(norm, c - 1);
+          else { pend.delete(norm); if (pend.size === 0) delete _justWrote[k]; }
+        }
+        if (localStorage.getItem(k) !== committed) _applyRemoteKey(k, committed);
+      }
       return true;
     }).catch((err) => {
       // The push never landed, so no echo is coming for it — take the entry
