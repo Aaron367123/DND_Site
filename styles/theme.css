@@ -41,3 +41,9 @@
 }
 .cs-tab { font-size: var(--fs-sm); }
 #cs-root h4 .cb-dim, #cs-root h5 .cs-h5sub { font-family: inherit; letter-spacing: 0; }
+/* Wider letters: a card's title wraps rather than widening the card. */
+#cb-root .cb-cards > * { min-width: 0; }
+#cb-root .cb-card b { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  #cb-root .cb-card b { font-size: var(--fs-md); letter-spacing: .01em; }
+}
