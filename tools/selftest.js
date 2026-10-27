@@ -10239,7 +10239,11 @@
         ok('species art: each species its own picture', m.get('Dwarf', 'XPHB') === 'races/XPHB/Dwarf.webp' && m.get('Dwarf', 'PHB') === 'races/PHB/Dwarf.webp', m.get('Dwarf', 'XPHB') + ' / ' + m.get('Dwarf', 'PHB'));
         ok('species art: a copied entry takes the picture it copies', !!m.get('Aasimar (Fallen)', 'VGM'));
         ok('species art: none of its own — one of the same name from another book', !!m.get('Orc', 'ERLW') && m.get('Orc', 'ERLW') === m.get('Orc', 'NOPE'));
-        ok('species art: nothing for a name with no art', m.get('Not A Species', 'XPHB') === '');
+        ok('species art: nothing for a name with no art', m.get('Not A Species', 'XPHB') === '' && m.portrait('Not A Species', 'XPHB') === '');
+        ok('species art: a card’s portrait — the 2014 one-figure picture for the 2024 Dwarf, whose book has a wide scene', m.portrait('Dwarf', 'XPHB') === 'races/PHB/Dwarf.webp', m.portrait('Dwarf', 'XPHB'));
+        ok('species art: its own book’s portrait where it has one (the 2024 Tiefling)', /XPHB\/157-05-028\.armored-tiefling/.test(m.portrait('Tiefling', 'XPHB')), m.portrait('Tiefling', 'XPHB'));
+        ok('species art: the largest portrait from another book (Aasimar: Monsters of the Multiverse over Volo’s)', m.portrait('Aasimar', 'XPHB') === 'races/MPMM/Aasimar.webp', m.portrait('Aasimar', 'XPHB'));
+        ok('species art: no portrait anywhere — its own picture', m.portrait('Lupin', 'RHW') === m.get('Lupin', 'RHW') && !!m.get('Lupin', 'RHW'), m.portrait('Lupin', 'RHW'));
         const R = await sktRulesLoad('2024');
         await openCharBuilder({ edition: '2024' }); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100); CB.R = R;
         CB.build = Object.assign(sktBlankBuild('2024'), { name: 'T', cls: 'Fighter', species: 'Dwarf' });
@@ -10250,9 +10254,9 @@
         const card = box.querySelector('[data-cb-species="Dwarf"]'), img = card && card.querySelector('.cb-card-img img');
         ok('species cards: a picture on each, the thumbnail first and the full picture to fall back on',
            box.querySelectorAll('.cb-card.has-img').length === box.querySelectorAll('[data-cb-species]').length
-           && !!img && img.getAttribute('src') === assetThumbUrl('races/XPHB/Dwarf.webp') && img.dataset.fb === assetUrl('races/XPHB/Dwarf.webp') && img.getAttribute('loading') === 'lazy', img ? img.outerHTML.slice(0, 200) : 'no img');
+           && !!img && img.getAttribute('src') === assetThumbUrl('races/PHB/Dwarf.webp') && img.dataset.fb === assetUrl('races/PHB/Dwarf.webp') && img.getAttribute('loading') === 'lazy', img ? img.outerHTML.slice(0, 200) : 'no img');
         const hero = box.querySelector('.cb-sp-hero img');
-        ok('species: the one chosen shown bigger, the full picture', !!hero && hero.getAttribute('src') === assetUrl('races/XPHB/Dwarf.webp') && !hero.dataset.fb);
+        ok('species: the one chosen shown bigger — its own book’s art, the full picture', !!hero && hero.getAttribute('src') === assetUrl('races/XPHB/Dwarf.webp') && !hero.dataset.fb);
         // No thumbnail: the full picture. Neither: no picture, and the card back to plain.
         { const base = ASSET_CONFIG.imgBase; ASSET_CONFIG.imgBase = '';
           const host = document.createElement('div'); host.innerHTML = '<button class="cb-card has-img"><span class="cb-card-img">' + cbArtImg('races/NOPE/none.webp', '') + '</span><b>X</b></button>';
@@ -10265,6 +10269,22 @@
           host.remove(); }
         cbClose();
       } catch(e){ ok('round 94 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 95: 5etools 2.39 — newer books are 2024 rules; the new file format --
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        ok('books since the 2024 Player’s Handbook count as 2024 rules (Ravenloft: The Horrors Within, Arcana Unleashed)', SKT_2024_ERA.has('RHW') && SKT_2024_ERA.has('AU') && !SKT_2024_ERA.has('VRGR') && !SKT_2024_ERA.has('CoS'));
+        const cleric = sktRulesClass(R, 'Cleric'), rogue = sktRulesClass(R, 'Rogue');
+        ok('2024 builds: the 2024 Grave Domain and Phantom, not the older ones', (sktRulesSubclass(cleric, 'Grave') || {}).source === 'RHW' && (sktRulesSubclass(rogue, 'Phantom') || {}).source === 'RHW');
+        ok('2024 builds: the new species (Dhampir, Hexblood, Reborn, Lupin)', ['Dhampir', 'Hexblood', 'Reborn', 'Lupin'].every(n => (sktRulesSpecies(R, n) || {}).source === 'RHW'));
+        const R14 = await sktRulesLoad('2014');
+        ok('2014 builds: the older Grave Domain still', (sktRulesSubclass(sktRulesClass(R14, 'Cleric'), 'Grave') || {}).source === 'XGE');
+        ok('adventure files: the 2.29+ wrapper unwrapped', JSON.stringify(sktDocData({ adventureData: [{ id: 'X', data: [{ name: 'Ch1' }] }] }).data) === '[{"name":"Ch1"}]'
+           && JSON.stringify(sktDocData({ bookData: [{ id: 'Y', data: [{ name: 'B1' }] }] }).data) === '[{"name":"B1"}]' && sktDocData({ data: [1] }).data[0] === 1);
+        if (panelDefs.adventures && panelDefs.adventures._loadAdventure){ const j = await panelDefs.adventures._loadAdventure('SKT');
+          ok('adventures: Storm King’s Thunder opens, chapters and all', Array.isArray(j && j.data) && j.data.length > 5, j ? Object.keys(j).join(',') : 'none'); }
+      } catch(e){ ok('round 95 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Class features: represented, not just text ------------------------
     {

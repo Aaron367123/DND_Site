@@ -441,7 +441,7 @@
 
   // ── Subclass features: reminders with the character's numbers ──────────
   // The 2024 books' version of a feature, when the older one reads differently.
-  const new24 = ctx => ['XPHB', 'EFA', 'FRHoF'].includes((ctx.sub || {}).source);
+  const new24 = ctx => SKT_2024_ERA.has((ctx.sub || {}).source);
   const psiDie = ctx => (ctx.resources.find(r => r.name === 'Psionic Energy') || {}).die || (ctx.level >= 17 ? 'd12' : ctx.level >= 11 ? 'd10' : ctx.level >= 5 ? 'd8' : 'd6');
   // Barbarian (Mindless Rage and the 2024 Frenzy also act through the Rage toggle).
   def('subclass:barbarian:Frenzy', ctx => note(ctx, new24(ctx)

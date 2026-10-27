@@ -170,7 +170,7 @@ registerPanel('books', {
     try {
       const res = await fetch('data/book/book-' + key + '.json');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const j = await res.json();
+      const j = sktDocData(await res.json());
       this._advCache[key] = j;
       return j;
     } catch(_){

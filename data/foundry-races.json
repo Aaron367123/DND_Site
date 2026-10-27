@@ -36,6 +36,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -69,6 +71,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -102,6 +106,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -135,6 +141,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -168,6 +176,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -201,6 +211,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -234,6 +246,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -267,6 +281,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -300,6 +316,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -333,6 +351,8 @@
 					"title": "Breath"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -394,6 +414,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -1209,13 +1231,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1223,10 +1260,21 @@
 							"units": "ft",
 							"type": "line"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"acid"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1246,13 +1294,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1260,10 +1323,21 @@
 							"units": "ft",
 							"type": "line"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"lightning"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1283,13 +1357,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1297,10 +1386,21 @@
 							"units": "ft",
 							"type": "line"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"poison"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1320,13 +1420,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1334,10 +1449,21 @@
 							"units": "ft",
 							"type": "line"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"fire"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1357,13 +1483,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1371,10 +1512,21 @@
 							"units": "ft",
 							"type": "line"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"cold"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1394,13 +1546,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1408,10 +1575,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"fire"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1431,13 +1609,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1445,10 +1638,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"lightning"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1468,13 +1672,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1482,10 +1701,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"acid"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1505,13 +1735,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1519,10 +1764,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"fire"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1542,13 +1798,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1556,10 +1827,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"cold"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1579,13 +1861,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1593,10 +1890,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"force"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1616,13 +1924,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1630,10 +1953,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"radiant"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1653,13 +1987,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1667,10 +2016,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"psychic"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1690,13 +2050,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1704,10 +2079,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"thunder"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -1727,13 +2113,28 @@
 			"raceSource": "FTD",
 			"system": {
 				"range.units": "self",
-				"duration.units": "instantaneous"
+				"duration.units": "instantaneous",
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
 			},
 			"activities": [
 				{
-					"type": "utility",
+					"type": "save",
 					"activation": {
-						"type": "special"
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
 					},
 					"target": {
 						"template": {
@@ -1741,10 +2142,21 @@
 							"units": "ft",
 							"type": "cone"
 						}
-					}
-				},
-				{
-					"type": "save",
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(floor((@details.level+1)/6)+1)d10"
+								},
+								"types": [
+									"necrotic"
+								]
+							}
+						]
+					},
 					"save": {
 						"ability": [
 							"dex"
@@ -2242,6 +2654,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2349,6 +2763,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2456,6 +2872,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2563,6 +2981,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2670,6 +3090,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2777,6 +3199,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2884,6 +3308,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2991,6 +3417,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3098,6 +3526,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3205,6 +3635,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3415,6 +3847,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3454,6 +3888,140 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
+			"migrationVersion": 3
+		},
+		{
+			"name": "Eerie Token",
+			"source": "RHW",
+			"raceName": "Hexblood",
+			"raceSource": "RHW",
+			"activities": [
+				{
+					"name": "Distant Message",
+					"type": "utility",
+					"img": "systems/dnd5e/icons/svg/trait-languages.svg",
+					"activation": {
+						"type": "action"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1",
+							"special": "holding the Magical Token"
+						}
+					},
+					"range": {
+						"units": "mi",
+						"value": "10"
+					},
+					"visibility": {
+						"requireMagic": true
+					}
+				},
+				{
+					"name": "Remote Viewing",
+					"type": "utility",
+					"activation": {
+						"type": "action"
+					},
+					"duration": {
+						"units": "minute",
+						"value": "1"
+					},
+					"target": {
+						"affects": {
+							"type": "object",
+							"count": "1",
+							"special": "the Magical Token"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "10"
+					},
+					"visibility": {
+						"requireMagic": true
+					},
+					"effects": [
+						{
+							"foundryId": "eerieToken"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "eerieToken",
+					"name": "Token Created",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "name",
+							"value": "{} (Created)",
+							"mode": "OVERRIDE"
+						},
+						{
+							"key": "activities[enchant].name",
+							"value": "Destroy Token",
+							"mode": "OVERRIDE"
+						},
+						{
+							"key": "activities[enchant].activation.type",
+							"value": "longRest",
+							"mode": "OVERRIDE"
+						},
+						{
+							"key": "activities[enchant].consumption.targets",
+							"value": null,
+							"mode": "OVERRIDE"
+						}
+					]
+				},
+				{
+					"foundryId": "eerieToken",
+					"name": "Remote Viewing (Incapacitated)",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 60,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"incapacitated"
+					],
+					"showIcon": 2
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Escaped Death",
+			"source": "RHW",
+			"raceName": "Reborn",
+			"raceSource": "RHW",
+			"effects": [
+				{
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.death.roll.mode",
+							"value": 1,
+							"mode": "ADD"
+						}
+					]
+				}
+			],
 			"migrationVersion": 3
 		},
 		{
@@ -3484,6 +4052,8 @@
 					"description": "You have Advantage on Intelligence, Wisdom, and Charisma saving throws."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3668,6 +4238,113 @@
 			"migrationVersion": 3
 		},
 		{
+			"name": "Howl",
+			"source": "RHW",
+			"raceName": "Lupin",
+			"raceSource": "RHW",
+			"system": {
+				"uses.max": "@prof"
+			},
+			"activities": [
+				{
+					"type": "save",
+					"activation": {
+						"type": "bonus"
+					},
+					"duration": {
+						"units": "round",
+						"value": "1"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"template": {
+							"stationary": true,
+							"units": "ft",
+							"type": "radius",
+							"size": "15"
+						},
+						"affects": {
+							"choice": true,
+							"type": "creature"
+						}
+					},
+					"damage": {
+						"onSave": "none"
+					},
+					"save": {
+						"ability": [
+							"wis"
+						],
+						"dc": {
+							"calculation": "con"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "howl"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "howl",
+					"name": "Attack and Save Disadvantage",
+					"duration": {
+						"value": 1,
+						"units": "rounds",
+						"expiry": "turnStart"
+					},
+					"changes": [
+						{
+							"key": "system.abilities.str.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.dex.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.con.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.int.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.wis.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.cha.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"",
+						"Howl",
+						"",
+						"{@i Disadvantage on attack rolls is not automated.}"
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
 			"name": "Integrated Protection",
 			"source": "ERLW",
 			"raceName": "Warforged",
@@ -3683,6 +4360,43 @@
 							"value": "+ 1"
 						}
 					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Knowledge from a Past Life",
+			"source": "RHW",
+			"raceName": "Reborn",
+			"raceSource": "RHW",
+			"system": {
+				"uses.max": "@prof"
+			},
+			"activities": [
+				{
+					"name": "Past Aids Present",
+					"type": "utility",
+					"activation": {
+						"type": "special",
+						"condition": "you fail an ability check"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"roll": {
+						"name": "D20 Bonus",
+						"formula": "1d6"
+					}
 				}
 			],
 			"migrationVersion": 3
@@ -3744,6 +4458,8 @@
 					"description": "For the duration, you have Advantage on Strength checks, and your Speed increases by 10 feet. Once you use this trait, you can't use it again until you finish a Long Rest."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3763,6 +4479,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3922,6 +4640,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3977,6 +4697,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4081,6 +4803,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		}
 	]

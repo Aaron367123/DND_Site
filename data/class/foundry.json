@@ -196,6 +196,8 @@
 					"title": "Rages"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -225,6 +227,8 @@
 					"title": "Inspiration Die"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -268,6 +272,8 @@
 					"title": "Divine Strike"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -347,6 +353,8 @@
 					"title": "Elemental Fury"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -405,6 +413,8 @@
 					"title": "Second Wind"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -531,6 +541,8 @@
 					"title": "Focus Points"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -570,6 +582,8 @@
 					"title": "Channel Divinity Uses"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -619,6 +633,8 @@
 					"title": "Hunter's Mark Damage"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -675,6 +691,8 @@
 					"title": "Sneak Attack"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -749,6 +767,8 @@
 					"title": "Sorcery Points"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		}
 	],
@@ -1121,6 +1141,8 @@
 					"title": "Lands Aid Damage"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -1397,6 +1419,47 @@
 						}
 					},
 					"title": "Psionic Power"
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "College of Spirits",
+			"shortName": "Spirits",
+			"source": "RHW",
+			"className": "Bard",
+			"classSource": "XPHB",
+			"identifier": "college-spirits",
+			"migrationVersion": 3
+		},
+		{
+			"name": "Arcane Archer",
+			"shortName": "Arcane Archer",
+			"source": "AU",
+			"className": "Fighter",
+			"classSource": "XPHB",
+			"advancement": [
+				{
+					"type": "ScaleValue",
+					"title": "Arcane Shot Die",
+					"configuration": {
+						"identifier": "arcane-shot",
+						"type": "dice",
+						"scale": {
+							"3": {
+								"faces": 6
+							},
+							"10": {
+								"faces": 8
+							},
+							"15": {
+								"faces": 10
+							},
+							"18": {
+								"faces": 12
+							}
+						}
+					}
 				}
 			],
 			"migrationVersion": 3
@@ -1954,6 +2017,61 @@
 			"migrationVersion": 3
 		},
 		{
+			"name": "Primal Awareness",
+			"source": "TCE",
+			"className": "Ranger",
+			"classSource": "PHB",
+			"level": 3,
+			"entryData": {
+				"additionalSpells": [
+					{
+						"name": "Primeval Awareness"
+					},
+					{
+						"name": "Primal Awareness",
+						"prepared": {
+							"3": {
+								"daily": {
+									"1": [
+										"speak with animals"
+									]
+								}
+							},
+							"5": {
+								"daily": {
+									"1": [
+										"beast sense"
+									]
+								}
+							},
+							"9": {
+								"daily": {
+									"1": [
+										"speak with plants"
+									]
+								}
+							},
+							"13": {
+								"daily": {
+									"1": [
+										"locate creature"
+									]
+								}
+							},
+							"17": {
+								"daily": {
+									"1": [
+										"commune with nature"
+									]
+								}
+							}
+						}
+					}
+				]
+			},
+			"migrationVersion": 3
+		},
+		{
 			"name": "Favored Enemy and Natural Explorer improvements",
 			"source": "PHB",
 			"className": "Ranger",
@@ -1966,6 +2084,58 @@
 					}
 				]
 			},
+			"migrationVersion": 3
+		},
+		{
+			"name": "Nature's Veil",
+			"source": "TCE",
+			"className": "Ranger",
+			"classSource": "PHB",
+			"level": 10,
+			"system": {
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
+			},
+			"activities": [
+				{
+					"type": "utility",
+					"activation": {
+						"type": "bonus",
+						"value": 1
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "naturesVeil"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "naturesVeil",
+					"statuses": [
+						"invisible"
+					]
+				}
+			],
 			"migrationVersion": 3
 		},
 		{
@@ -2450,6 +2620,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2471,6 +2643,8 @@
 					"description": "You have Advantage on Dexterity saving throws unless you have the &Reference[Incapacitated] condition."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2488,6 +2662,8 @@
 					"changes": []
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2543,6 +2719,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2563,6 +2741,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2583,6 +2763,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2652,6 +2834,8 @@
 					"description": "Hit by a hamstring blow, this character's Speed has been reduced by 15 feet until the start of the attacker's next turn."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2660,6 +2844,14 @@
 			"className": "Barbarian",
 			"classSource": "XPHB",
 			"level": 11,
+			"system": {
+				"uses.recovery": [
+					{
+						"period": "sr",
+						"type": "recoverAll"
+					}
+				]
+			},
 			"activities": [
 				{
 					"type": "save",
@@ -2715,6 +2907,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2781,6 +2975,8 @@
 					"description": "Hit by a sundering blow, the next attack roll made by another creature against the target gains a +5 bonus to the roll."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2828,6 +3024,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2837,6 +3035,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2897,6 +3097,8 @@
 					"description": "You have received Bardic Inspiration. Once within the next hour when you fail a D20 Test, you can roll the Bardic Inspiration die and add the number rolled to the d20, potentially turning the failure into a success. A Bardic Inspiration die is expended when it's rolled."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2912,6 +3114,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2932,6 +3136,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -2975,6 +3181,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3003,6 +3211,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3018,6 +3228,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3027,6 +3239,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3047,6 +3261,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3093,6 +3309,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3115,6 +3333,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3249,6 +3469,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3319,6 +3541,8 @@
 					"description": "For that duration, it tries to move as far from you as it can on its turns. This effect ends early on the creature if it takes any damage, if you have the Incapacitated condition, or if you die."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3401,6 +3625,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3465,6 +3691,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3490,6 +3718,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3530,6 +3760,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3539,6 +3771,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3567,6 +3801,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3582,6 +3818,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3622,6 +3860,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3642,6 +3882,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3723,6 +3965,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3814,6 +4058,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3897,6 +4143,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3937,6 +4185,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -3946,6 +4196,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4025,6 +4277,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4068,6 +4322,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4100,6 +4356,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4134,6 +4392,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4162,6 +4422,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4193,6 +4455,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4202,6 +4466,8 @@
 			"classSource": "XPHB",
 			"level": 13,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4211,6 +4477,8 @@
 			"classSource": "XPHB",
 			"level": 17,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4220,6 +4488,8 @@
 			"classSource": "XPHB",
 			"level": 17,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4229,6 +4499,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4239,7 +4511,7 @@
 			"level": 1,
 			"activities": [
 				{
-					"name": "Master Simple Weapon",
+					"name": "Master Simple Weapon/Unarmed Strike",
 					"type": "enchant",
 					"activation": {
 						"type": ""
@@ -4352,6 +4624,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4409,6 +4683,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4430,6 +4706,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4509,6 +4787,8 @@
 					"description": "Your movement doesn't provoke Opportunity Attacks for the rest of the current turn."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4517,6 +4797,15 @@
 			"className": "Monk",
 			"classSource": "XPHB",
 			"level": 2,
+			"system": {
+				"uses.max": "@scale.monk.focus",
+				"uses.recovery": [
+					{
+						"period": "sr",
+						"type": "recoverAll"
+					}
+				]
+			},
 			"activities": [
 				{
 					"name": "Step of the Wind",
@@ -4549,6 +4838,19 @@
 					]
 				}
 			],
+			"effects": [
+				{
+					"foundryId": "stepOfTheWind",
+					"name": "Disengaged",
+					"duration": {
+						"value": 1,
+						"units": "turns",
+						"expiry": "turnStart"
+					}
+				}
+			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4569,6 +4871,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4621,6 +4925,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4710,6 +5016,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4744,6 +5052,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4819,6 +5129,8 @@
 					"description": "The target's Speed is halved until the start of your next turn, and the next attack roll made against the target before then has Advantage"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4864,6 +5176,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -4919,6 +5233,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5018,6 +5334,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5048,6 +5366,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5158,6 +5478,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5167,6 +5489,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5240,6 +5564,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5251,6 +5577,8 @@
 			"entries": [
 				"You gain a {@filter Fighting Style feat|feats|category=FS} of your choice. Instead of choosing one of those feats, you can choose the {@feat Blessed Warrior|XPHB} Fighting Style."
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5287,6 +5615,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5309,6 +5639,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5362,6 +5694,8 @@
 					"description": "You know the location of any creature of those types within 60 feet of yourself, and you know its creature type. Within the same radius, you also detect the presence of any place or object that has been consecrated or desecrated, as with the Hallow spell."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5383,6 +5717,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5451,6 +5787,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5490,6 +5828,8 @@
 					"description": "You and your allies have Immunity to the Frightened condition while in your Aura of Protection."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5510,6 +5850,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5548,6 +5890,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5557,6 +5901,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5574,6 +5920,29 @@
 					}
 				]
 			},
+			"activities": [
+				{
+					"type": "cast",
+					"activation": {
+						"type": "bonus"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"spell": {
+						"uuid": "@spell[hunter's mark|xphb]",
+						"spellbook": true,
+						"level": 1
+					}
+				}
+			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5594,6 +5963,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5605,6 +5976,8 @@
 			"entries": [
 				"You gain a {@filter Fighting Style feat|feats|category=FS} of your choice. Instead of choosing one of those feats, you can choose the {@feat Druidic Warrior|XPHB} Fighting Style."
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5625,6 +5998,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5640,6 +6015,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5712,6 +6089,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5761,6 +6140,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5781,6 +6162,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5790,6 +6173,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5821,6 +6206,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5836,6 +6223,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5895,6 +6284,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5910,6 +6301,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5960,6 +6353,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -5982,6 +6377,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6040,6 +6437,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6093,6 +6492,8 @@
 					"description": "On a failed save, the target has the Poisoned condition for 1 minute."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6143,6 +6544,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6161,6 +6564,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6179,6 +6584,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6194,6 +6601,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6214,6 +6623,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6264,6 +6675,8 @@
 					"description": "On its next turn, the target can do only one of the following: move or take an action or a Bonus Action."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6317,6 +6730,8 @@
 					"description": "The target has the Unconscious condition for 1 minute or until it takes any damage. The Unconscious target repeats the save at the end of each of its turns, ending the effect on itself on a success."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6370,6 +6785,8 @@
 					"description": "The target has the Blinded condition until the end of its next turn"
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6386,6 +6803,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6395,6 +6814,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6421,6 +6842,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6473,6 +6896,8 @@
 					"description": "The spell save DC of your Sorcerer spells increases by 1. You have Advantage on the attack rolls of Sorcerer spells you cast."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6558,6 +6983,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"subEntities": {
 				"classFeature": [
 					{
@@ -6586,6 +7013,8 @@
 			"classSource": "XPHB",
 			"level": 2,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6620,6 +7049,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6658,6 +7089,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6667,6 +7100,8 @@
 			"classSource": "XPHB",
 			"level": 10,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6676,6 +7111,8 @@
 			"classSource": "XPHB",
 			"level": 17,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6685,6 +7122,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6694,6 +7133,8 @@
 			"classSource": "XPHB",
 			"level": 1,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6725,6 +7166,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6734,6 +7177,8 @@
 			"classSource": "XPHB",
 			"level": 13,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6743,6 +7188,8 @@
 			"classSource": "XPHB",
 			"level": 15,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6752,6 +7199,8 @@
 			"classSource": "XPHB",
 			"level": 17,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6761,6 +7210,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6796,6 +7247,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6826,6 +7279,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6872,6 +7327,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6881,6 +7338,8 @@
 			"classSource": "XPHB",
 			"level": 19,
 			"isIgnored": true,
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -6976,6 +7435,8 @@
 					"description": "Choose two level 3 spells in your spellbook as your signature spells. You always have these spells prepared, and you can cast each of them once at level 3 without expending a spell slot. When you do so, you can't cast them in this way again until you finish a Short or Long Rest. To cast either spell at a higher level, you must expend a spell slot."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		}
 	],
@@ -7079,6 +7540,51 @@
 			"migrationVersion": 3
 		},
 		{
+			"name": "Steel Defender",
+			"source": "EFA",
+			"className": "Artificer",
+			"classSource": "EFA",
+			"subclassShortName": "Battle Smith",
+			"subclassSource": "EFA",
+			"level": 3,
+			"activities": [
+				{
+					"type": "summon",
+					"activation": {
+						"type": "action",
+						"condition": "Whenever you finish a Long Rest"
+					},
+					"target": {
+						"affects": {
+							"type": "space",
+							"special": "Unoccupied"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "5"
+					},
+					"profiles": [
+						{
+							"name": "Steel Defender",
+							"uuid": "@creature[steel defender|efa]"
+						}
+					],
+					"bonuses": {
+						"ac": "@abilities.int.mod",
+						"hd": "@classes.artificer.levels",
+						"hp": "@classes.artificer.levels * (@summon.attributes.hd.denomination * 0.5 + 1)",
+						"attackDamage": "@abilities.int.mod"
+					},
+					"match": {
+						"attacks": true,
+						"proficiency": true
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
 			"name": "Tools of the Trade",
 			"source": "EFA",
 			"className": "Artificer",
@@ -7117,6 +7623,197 @@
 					}
 				]
 			},
+			"migrationVersion": 3
+		},
+		{
+			"name": "Reanimated Companion",
+			"source": "RHW",
+			"className": "Artificer",
+			"classSource": "EFA",
+			"subclassShortName": "Reanimator",
+			"subclassSource": "RHW",
+			"level": 3,
+			"activities": [
+				{
+					"foundryId": "reanimatedCompan",
+					"name": "Create Companion",
+					"type": "summon",
+					"activation": {
+						"type": "action",
+						"condition": "using a type of Artisan's Tools with which you have proficiency"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "space",
+							"count": "1",
+							"special": "unoccupied"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "5"
+					},
+					"visibility": {
+						"requireMagic": true,
+						"identifier": "artificer"
+					},
+					"profiles": [
+						{
+							"uuid": "@creature[reanimated companion|rhw]"
+						}
+					],
+					"bonuses": {
+						"ac": "@abilities.int.mod",
+						"hd": "@classes.artificer.levels",
+						"hp": "5 * @classes.artificer.levels",
+						"attackDamage": "@abilities.int.mod"
+					},
+					"match": {
+						"attacks": true,
+						"disposition": true,
+						"proficiency": true,
+						"saves": true,
+						"ability": "int"
+					},
+					"effects": [
+						{
+							"foundryId": "reanimatedCompan",
+							"level": {
+								"min": 9
+							}
+						}
+					]
+				},
+				{
+					"name": "Create with Spell Slot",
+					"type": "forward",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true
+						},
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "1",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"requireMagic": true,
+						"identifier": "artificer"
+					},
+					"activity": {
+						"foundryId": "reanimatedCompan"
+					}
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "reanimatedCompan",
+					"name": "Death Burst Improvement",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "flags.world.dbDice",
+							"value": 4,
+							"mode": "UPGRADE"
+						}
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Improved Reanimation|Artificer|EFA|Reanimator|RHW|9}"
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Refined Reanimation",
+			"source": "RHW",
+			"className": "Artificer",
+			"classSource": "EFA",
+			"subclassShortName": "Reanimator",
+			"subclassSource": "RHW",
+			"level": 15,
+			"activities": [
+				{
+					"type": "cast",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "activityUses"
+							}
+						]
+					},
+					"uses": {
+						"recovery": [
+							{
+								"period": "lr"
+							}
+						],
+						"max": "1"
+					},
+					"spell": {
+						"uuid": "@spell[raise dead|xphb]",
+						"properties": [
+							"material"
+						],
+						"spellbook": true,
+						"level": 5
+					}
+				},
+				{
+					"name": "Life Transfer",
+					"type": "heal",
+					"activation": {
+						"type": "reaction",
+						"condition": "you or your companion takes damage"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true
+						}
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"range": {
+						"units": "any"
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"scaling": {
+							"number": 1
+						},
+						"bonus": "@scaling"
+					}
+				}
+			],
 			"migrationVersion": 3
 		},
 		{
@@ -7753,17 +8450,37 @@
 			"subclassShortName": "Life",
 			"subclassSource": "PHB",
 			"level": 1,
-			"effects": [
+			"activities": [
 				{
-					"name": "Bonus Healing",
-					"transfer": true,
-					"changes": [
-						{
-							"key": "system.bonuses.heal.damage",
-							"mode": "ADD",
-							"value": "+ @item.level + 2"
+					"type": "heal",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "9"
 						}
-					]
+					},
+					"target": {
+						"affects": {
+							"count": "1",
+							"type": "creature",
+							"special": "Creature you cast a healing spell on"
+						}
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "@scaling + 2"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
 				}
 			],
 			"migrationVersion": 3
@@ -10059,6 +10776,74 @@
 			"migrationVersion": 3
 		},
 		{
+			"name": "Writhing Tide",
+			"source": "TCE",
+			"className": "Ranger",
+			"classSource": "PHB",
+			"subclassShortName": "Swarmkeeper",
+			"subclassSource": "TCE",
+			"level": 7,
+			"system": {
+				"uses.max": "@prof",
+				"uses.recovery": [
+					{
+						"period": "lr",
+						"type": "recoverAll"
+					}
+				]
+			},
+			"activities": [
+				{
+					"type": "utility",
+					"activation": {
+						"type": "bonus",
+						"value": 1
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "writhingTide"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "writhingTide",
+					"duration": {
+						"seconds": 60
+					},
+					"changes": [
+						{
+							"key": "system.attributes.movement.fly",
+							"mode": "OVERRIDE",
+							"value": 10,
+							"priority": 20
+						},
+						{
+							"key": "system.attributes.movement.hover",
+							"value": "yes",
+							"priority": 20,
+							"mode": "CUSTOM"
+						}
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
 			"name": "Umbral Sight",
 			"source": "XGE",
 			"className": "Ranger",
@@ -11628,17 +12413,6 @@
 			"migrationVersion": 3
 		},
 		{
-			"name": "Steel Defender",
-			"source": "TCE",
-			"className": "Artificer",
-			"classSource": "TCE",
-			"subclassShortName": "Battle Smith",
-			"subclassSource": "TCE",
-			"level": 3,
-			"system": {},
-			"migrationVersion": 3
-		},
-		{
 			"name": "Tool Proficiency",
 			"source": "TCE",
 			"className": "Artificer",
@@ -11705,6 +12479,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -11733,6 +12509,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -11760,6 +12538,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -11850,6 +12630,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -12055,9 +12837,7 @@
 					"name": "Falcon",
 					"type": "utility",
 					"img": "systems/dnd5e/icons/svg/abilities/charisma.svg",
-					"description": {
-						"chatFlavor": "You gain a Fly Speed equal to your Speed if you aren't wearing any armor."
-					},
+					"descriptionChat": "You gain a Fly Speed equal to your Speed if you aren't wearing any armor.",
 					"activation": {
 						"type": ""
 					}
@@ -12711,6 +13491,180 @@
 			"migrationVersion": 3
 		},
 		{
+			"name": "Channeler",
+			"source": "RHW",
+			"className": "Bard",
+			"classSource": "XPHB",
+			"subclassShortName": "Spirits",
+			"subclassSource": "RHW",
+			"level": 3,
+			"activities": [
+				{
+					"type": "cast",
+					"activation": {
+						"type": "action"
+					},
+					"range": {
+						"units": "ft",
+						"value": "60"
+					},
+					"spell": {
+						"uuid": "@spell[guidance|xphb]",
+						"spellbook": true
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Spirits from Beyond",
+			"source": "RHW",
+			"className": "Bard",
+			"classSource": "XPHB",
+			"subclassShortName": "Spirits",
+			"subclassSource": "RHW",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Passive Channeling",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"roll": {
+						"name": "Bardic Inspiration",
+						"formula": "1@scale.bard.inspiration.die"
+					}
+				},
+				{
+					"name": "Controlled Channeling",
+					"type": "utility",
+					"activation": {
+						"type": "bonus"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Bardic Inspiration"
+									}
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"roll": {
+						"name": "Highest Number",
+						"formula": "@scale.bard.inspiration.faces"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Empowered Channeling",
+			"source": "RHW",
+			"className": "Bard",
+			"classSource": "XPHB",
+			"subclassShortName": "Spirits",
+			"subclassSource": "RHW",
+			"level": 6,
+			"activities": [
+				{
+					"name": "Power from Beyond",
+					"type": "utility",
+					"img": "systems/dnd5e/icons/svg/scale-value.svg",
+					"activation": {
+						"type": "special",
+						"condition": "once per turn"
+					},
+					"target": {
+						"affects": {
+							"type": "any"
+						}
+					},
+					"range": {
+						"units": "spec"
+					},
+					"roll": {
+						"name": "Roll Bonus",
+						"formula": "1d6"
+					}
+				},
+				{
+					"name": "Modify Spell",
+					"type": "utility",
+					"img": "systems/dnd5e/icons/svg/statuses/cover-half.svg",
+					"activation": {
+						"type": "special",
+						"condition": "when you cast Spirit Guardians"
+					},
+					"duration": {
+						"units": "minute",
+						"value": "10"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "ally"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "15"
+					},
+					"visibility": {
+						"requireMagic": true
+					},
+					"effects": [
+						{
+							"foundryId": "empoweredChannel"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "empoweredChannel",
+					"name": "Half Cover (Spirit Guardians)",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 600,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"coverHalf"
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Empowered Channeling|Bard|XPHB|Spirits|RHW|6}"
+					],
+					"showIcon": 2
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
 			"name": "Bardic Damage",
 			"source": "XPHB",
 			"className": "Bard",
@@ -13214,6 +14168,8 @@
 					}
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -13261,6 +14217,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -13301,6 +14259,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -13324,6 +14284,515 @@
 					}
 				]
 			},
+			"migrationVersion": 3
+		},
+		{
+			"name": "Fortifying Spell",
+			"source": "AU",
+			"className": "Cleric",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcana",
+			"subclassSource": "AU",
+			"level": 3,
+			"identifier": "modify-magic",
+			"activities": [
+				{
+					"name": "Fortifying Spell",
+					"type": "heal",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Channel Divinity"
+									}
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"healing": {
+						"types": [
+							"temphp"
+						],
+						"scaling": {
+							"number": 1
+						},
+						"number": 2,
+						"denomination": 8,
+						"bonus": "@classes.cleric.levels"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Tenacious Spell",
+			"source": "AU",
+			"className": "Cleric",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcana",
+			"subclassSource": "AU",
+			"level": 3,
+			"identifier": "modify-magic",
+			"activities": [
+				{
+					"name": "Tenacious Spell",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Channel Divinity"
+									}
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"roll": {
+						"name": "Reduce Save",
+						"formula": "1d6"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Dispelling Recovery",
+			"source": "AU",
+			"className": "Cleric",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcana",
+			"subclassSource": "AU",
+			"level": 6,
+			"activities": [
+				{
+					"type": "cast",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"spell": {
+						"uuid": "@spell[dispel magic|xphb]",
+						"level": 3
+					}
+				},
+				{
+					"name": "Restore Use with Channel Divinity",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Channel Divinity"
+									}
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "-1"
+							}
+						]
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Circle of Mortality",
+			"source": "RHW",
+			"className": "Cleric",
+			"classSource": "XPHB",
+			"subclassShortName": "Grave",
+			"subclassSource": "RHW",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Pull of Death",
+					"type": "damage",
+					"activation": {
+						"type": "special",
+						"condition": "damaging a target missing any Hit Points"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "any"
+					},
+					"damage": {
+						"critical": {
+							"allow": true
+						},
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "@scale.circle-of-mortality.death-die"
+								},
+								"types": [
+									"necrotic"
+								]
+							}
+						]
+					}
+				},
+				{
+					"name": "Return to Life",
+					"type": "cast",
+					"activation": {
+						"type": "bonus"
+					},
+					"spell": {
+						"uuid": "@spell[spare the dying|xphb]",
+						"spellbook": true
+					}
+				}
+			],
+			"advancement": [
+				{
+					"type": "ScaleValue",
+					"title": "Pull of Death Die",
+					"configuration": {
+						"identifier": "death-die",
+						"type": "dice",
+						"scale": {
+							"3": {
+								"number": 1,
+								"faces": 4
+							},
+							"11": {
+								"number": 1,
+								"faces": 6
+							}
+						}
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Path to the Grave",
+			"source": "RHW",
+			"className": "Cleric",
+			"classSource": "XPHB",
+			"subclassShortName": "Grave",
+			"subclassSource": "RHW",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Curse",
+					"type": "utility",
+					"img": "systems/dnd5e/icons/svg/statuses/cursed.svg",
+					"activation": {
+						"type": "bonus"
+					},
+					"duration": {
+						"units": "round",
+						"value": "1"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Channel Divinity"
+									}
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1",
+							"special": "visible"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "30"
+					},
+					"effects": [
+						{
+							"foundryId": "pathToTheGrave"
+						}
+					]
+				},
+				{
+					"name": "End Curse Early",
+					"type": "damage",
+					"activation": {
+						"type": "",
+						"condition": "you or an ally hits the cursed target"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1",
+							"special": "the cursed creature"
+						}
+					},
+					"range": {
+						"units": "any"
+					},
+					"damage": {
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "@classes.cleric.levels"
+								},
+								"types": [
+									"necrotic",
+									"radiant"
+								]
+							}
+						]
+					}
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "pathToTheGrave",
+					"name": "Cursed (Path to the Grave)",
+					"duration": {
+						"value": 1,
+						"units": "rounds",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"cursed"
+					],
+					"changes": [
+						{
+							"key": "system.abilities.str.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.dex.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.con.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.int.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.wis.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.abilities.cha.save.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.attributes.death.roll.mode",
+							"value": -1,
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Path to the Grave|Cleric|XPHB|Grave|RHW|3}",
+						"{@i Disadvantage on attack rolls is not automated.}"
+					],
+					"showIcon": 2
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Sentinel at Death's Door",
+			"source": "RHW",
+			"className": "Cleric",
+			"classSource": "XPHB",
+			"subclassShortName": "Grave",
+			"subclassSource": "RHW",
+			"level": 6,
+			"system": {
+				"uses.max": "max(@abilities.wis.mod, 1)"
+			},
+			"activities": [
+				{
+					"type": "utility",
+					"activation": {
+						"type": "reaction",
+						"condition": "you or a Bloodied target within range is hit with an attack"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "60"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Divine Reaper",
+			"source": "RHW",
+			"className": "Cleric",
+			"classSource": "XPHB",
+			"subclassShortName": "Grave",
+			"subclassSource": "RHW",
+			"level": 17,
+			"activities": [
+				{
+					"name": "Enhanced Necromancy",
+					"type": "utility",
+					"activation": {
+						"type": "special"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Channel Divinity"
+									}
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "any"
+					}
+				},
+				{
+					"name": "Keeper of Souls",
+					"type": "heal",
+					"activation": {
+						"type": "special",
+						"condition": "an enemy dies within range"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1",
+							"special": "visible"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "60"
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "2*@classes.cleric.levels"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				},
+				{
+					"name": "Restore Keeper of Souls",
+					"type": "utility",
+					"img": "systems/dnd5e/icons/svg/facilities/change.svg",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "4"
+						},
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "6",
+								"scaling": {
+									"mode": "level"
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "-1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					}
+				}
+			],
 			"migrationVersion": 3
 		},
 		{
@@ -13367,6 +14836,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -13423,6 +14894,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -13464,6 +14937,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -14141,6 +15616,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -14207,6 +15684,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -14294,6 +15773,8 @@
 					"poison"
 				]
 			},
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -14428,6 +15909,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -15165,35 +16648,85 @@
 					},
 					"effects": [
 						{
-							"foundryId": "dragon"
+							"foundryId": "dragon",
+							"level": {
+								"max": 9
+							}
+						},
+						{
+							"foundryId": "dragon1",
+							"level": {
+								"min": 10
+							}
 						}
 					]
 				}
 			],
 			"effects": [
 				{
+					"foundryId": "dragon1",
+					"name": "Dragon Form (Twinkling)",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 600,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"changes": [
+						{
+							"key": "system.abilities.int.check.roll.min",
+							"value": 10,
+							"mode": "UPGRADE"
+						},
+						{
+							"key": "system.abilities.wis.check.roll.min",
+							"value": 10,
+							"mode": "UPGRADE"
+						},
+						{
+							"key": "system.attributes.concentration.roll.min",
+							"value": 10,
+							"mode": "UPGRADE"
+						},
+						{
+							"key": "system.attributes.movement.fly",
+							"value": 20,
+							"mode": "OVERRIDE"
+						},
+						{
+							"key": "system.attributes.movement.hover",
+							"value": true,
+							"mode": "OVERRIDE"
+						}
+					],
+					"description": "A constellation of a wise dragon appears on you. When you make an Intelligence or a Wisdom check or a Constitution saving throw to maintain Concentration, you can treat a roll of 9 or lower on the d20 as a 10. You have a Fly Speed of 20 feet and can hover."
+				},
+				{
 					"foundryId": "dragon",
 					"name": "Dragon Form",
 					"disabled": true,
 					"transfer": true,
 					"duration": {
-						"seconds": 600
+						"value": 600,
+						"units": "seconds",
+						"expiry": "turnStart"
 					},
 					"changes": [
 						{
 							"key": "system.abilities.int.check.roll.min",
-							"mode": "UPGRADE",
-							"value": 10
+							"value": 10,
+							"mode": "UPGRADE"
 						},
 						{
 							"key": "system.abilities.wis.check.roll.min",
-							"mode": "UPGRADE",
-							"value": 10
+							"value": 10,
+							"mode": "UPGRADE"
 						},
 						{
 							"key": "system.attributes.concentration.roll.min",
-							"mode": "UPGRADE",
-							"value": 10
+							"value": 10,
+							"mode": "UPGRADE"
 						}
 					],
 					"description": "A constellation of a wise dragon appears on you. When you make an Intelligence or a Wisdom check or a Constitution saving throw to maintain Concentration, you can treat a roll of 9 or lower on the d20 as a 10."
@@ -15388,6 +16921,230 @@
 			"migrationVersion": 3
 		},
 		{
+			"name": "Arcane Shot",
+			"source": "AU",
+			"className": "Fighter",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcane Archer",
+			"subclassSource": "AU",
+			"level": 3,
+			"system": {
+				"uses.max": "max(@abilities.int.mod,1)"
+			},
+			"migrationVersion": 3
+		},
+		{
+			"name": "Curving Shot",
+			"source": "AU",
+			"className": "Fighter",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcane Archer",
+			"subclassSource": "AU",
+			"level": 7,
+			"activities": [
+				{
+					"type": "utility",
+					"activation": {
+						"type": "bonus"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Magical Ammunition",
+			"source": "AU",
+			"className": "Fighter",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcane Archer",
+			"subclassSource": "AU",
+			"level": 7,
+			"activities": [
+				{
+					"name": "Restore Use with Second Wind",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "-1"
+							},
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"prop": "classFeature",
+									"uid": "second wind|fighter|xphb|1"
+								}
+							}
+						]
+					}
+				},
+				{
+					"name": "Darkening Ammunition",
+					"type": "utility",
+					"description": "Magical shadows fill a 15-foot Emanation originating from the ammunition for 1 minute. Nonmagical flames in the Emanation are extinguished, and creatures in the Emanation have a \u22125 penalty to Wisdom (Perception) checks and Passive Perception.",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"template": {
+							"stationary": true,
+							"units": "ft",
+							"type": "radius",
+							"size": "15"
+						},
+						"affects": {
+							"type": "object",
+							"count": "1"
+						}
+					}
+				},
+				{
+					"name": "Unlocking Ammunition",
+					"type": "utility",
+					"description": "A burst of magic fills a 15-foot Emanation originating from the ammunition. The ammunition also emits a loud knocking sound, audible up to 300 feet away. Any object in the Emanation that is held shut by a nonmagical lock or that is stuck or barred becomes unlocked, unstuck, or unbarred. If such an object has multiple locks, only one of them is unlocked.",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"template": {
+							"stationary": true,
+							"units": "ft",
+							"type": "radius",
+							"size": "15"
+						},
+						"affects": {
+							"type": "object",
+							"count": "1"
+						}
+					}
+				},
+				{
+					"name": "Vine Ammunition",
+					"type": "utility",
+					"description": "A 120-foot-long vine grows from the ammunition. You and other creatures can then climb it. The vine withers away after 10 minutes.",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "object",
+							"count": "1"
+						}
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Ever-Ready Shot",
+			"source": "AU",
+			"className": "Fighter",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcane Archer",
+			"subclassSource": "AU",
+			"level": 10,
+			"activities": [
+				{
+					"type": "utility",
+					"activation": {
+						"type": "encounter"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "-1",
+								"target": {
+									"prop": "subclassFeature",
+									"uid": "arcane shot|fighter|xphb|arcane archer|au|3"
+								}
+							}
+						]
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Indomitable Teleport",
+			"source": "AU",
+			"className": "Fighter",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcane Archer",
+			"subclassSource": "AU",
+			"level": 15,
+			"activities": [
+				{
+					"type": "teleport",
+					"activation": {
+						"type": "",
+						"condition": "Succeed on Indomitable saving throw"
+					},
+					"target": {
+						"affects": {
+							"type": "space",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "60"
+					},
+					"teleport": {
+						"units": "ft"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Masterful Shots",
+			"source": "AU",
+			"className": "Fighter",
+			"classSource": "XPHB",
+			"subclassShortName": "Arcane Archer",
+			"subclassSource": "AU",
+			"level": 18,
+			"activities": [
+				{
+					"type": "utility",
+					"activation": {
+						"type": "reaction"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
 			"name": "Combat Superiority",
 			"source": "XPHB",
 			"className": "Fighter",
@@ -15541,6 +17298,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -15563,6 +17322,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -15585,6 +17346,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -15644,6 +17407,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -15959,6 +17724,10 @@
 					"activation": {
 						"type": "bonus"
 					},
+					"duration": {
+						"units": "turn",
+						"value": "1"
+					},
 					"consumption": {
 						"targets": [
 							{
@@ -15980,13 +17749,22 @@
 						"affects": {
 							"type": "self"
 						}
-					}
+					},
+					"effects": [
+						{
+							"foundryId": "psiPoweredLeap"
+						}
+					]
 				},
 				{
 					"name": "Psi-Powered Leap Using Psionic Energy",
 					"type": "utility",
 					"activation": {
 						"type": "bonus"
+					},
+					"duration": {
+						"units": "turn",
+						"value": "1"
 					},
 					"consumption": {
 						"targets": [
@@ -16004,7 +17782,31 @@
 						"affects": {
 							"type": "self"
 						}
-					}
+					},
+					"effects": [
+						{
+							"foundryId": "psiPoweredLeap"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "psiPoweredLeap",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 1,
+						"units": "turns",
+						"expiry": "turnStart"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.movement.fly",
+							"value": "2 * @attributes.movement.speed",
+							"mode": "OVERRIDE"
+						}
+					]
 				}
 			],
 			"migrationVersion": 3
@@ -16035,9 +17837,7 @@
 						"onSave": "none"
 					},
 					"save": {
-						"ability": [
-							"str"
-						],
+						"ability": "str",
 						"dc": {
 							"calculation": "int"
 						}
@@ -16052,9 +17852,14 @@
 			"effects": [
 				{
 					"foundryId": "telekineticThrus",
+					"name": "Prone",
+					"duration": {
+						"units": "seconds"
+					},
 					"statuses": [
 						"prone"
-					]
+					],
+					"showIcon": 2
 				}
 			],
 			"migrationVersion": 3
@@ -16166,6 +17971,362 @@
 					},
 					"statuses": [
 						"coverHalf"
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Mystic Focus",
+			"source": "AU",
+			"className": "Monk",
+			"classSource": "XPHB",
+			"subclassShortName": "Mystic Arts",
+			"subclassSource": "AU",
+			"level": 6,
+			"activities": [
+				{
+					"name": "Spell Slot to Focus Points",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "1"
+							},
+							{
+								"type": "itemUses",
+								"value": "-1",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 6,
+							"max": 6
+						},
+						"identifier": "monk"
+					}
+				},
+				{
+					"name": "Spell Slot to Focus Points",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "2"
+						},
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "1",
+								"scaling": {
+									"mode": "level"
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "-1",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								},
+								"scaling": {
+									"mode": "amount"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 7,
+							"max": 12
+						},
+						"identifier": "monk"
+					}
+				},
+				{
+					"name": "Spell Slot to Focus Points",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "3"
+						},
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "1",
+								"scaling": {
+									"mode": "level"
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "-1",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								},
+								"scaling": {
+									"mode": "amount"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 13,
+							"max": 18
+						},
+						"identifier": "monk"
+					}
+				},
+				{
+					"name": "Spell Slot to Focus Points",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "4"
+						},
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "1",
+								"scaling": {
+									"mode": "level"
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "-1",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								},
+								"scaling": {
+									"mode": "amount"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 19
+						},
+						"identifier": "monk"
+					}
+				},
+				{
+					"name": "Focus Points to Spell Slots",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "2",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								}
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "1"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 6,
+							"max": 6
+						},
+						"identifier": "monk"
+					}
+				},
+				{
+					"name": "Focus Points to Spell Slots",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "2"
+						},
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1 + @scaling + floor(@scaling / 3)",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								}
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "1",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 7,
+							"max": 12
+						},
+						"identifier": "monk"
+					}
+				},
+				{
+					"name": "Focus Points to Spell Slots",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "3"
+						},
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1 + @scaling + floor(@scaling / 3)",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								}
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "1",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 13,
+							"max": 18
+						},
+						"identifier": "monk"
+					}
+				},
+				{
+					"name": "Focus Points to Spell Slots",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you finish a Short Rest or use Uncanny Metabolism"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "4"
+						},
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1 + @scaling + floor(@scaling / 3)",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								}
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "1",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 19
+						},
+						"identifier": "monk"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Focused Strike",
+			"source": "AU",
+			"className": "Monk",
+			"classSource": "XPHB",
+			"subclassShortName": "Mystic Arts",
+			"subclassSource": "AU",
+			"level": 11,
+			"activities": [
+				{
+					"name": "Focused Strike",
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you use your Stunning Strike"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "focusedStrike"
+						}
 					]
 				}
 			],
@@ -16976,6 +19137,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -17028,6 +19191,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -17119,6 +19284,50 @@
 					"foundryId": "quiveringPalm",
 					"name": "Lethal Vibrations",
 					"description": "Imperceptible, lethal, vibrations have been set up in this creature's body."
+				}
+			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
+			"migrationVersion": 3
+		},
+		{
+			"name": "Darkness",
+			"source": "XPHB",
+			"className": "Monk",
+			"classSource": "XPHB",
+			"subclassShortName": "Shadow",
+			"subclassSource": "XPHB",
+			"level": 3,
+			"activities": [
+				{
+					"type": "cast",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Focus Point"
+									}
+								}
+							}
+						]
+					},
+					"spell": {
+						"uuid": "@spell[darkness|xphb]",
+						"properties": [
+							"vocal",
+							"somatic",
+							"material"
+						],
+						"spellbook": true,
+						"ability": "wis",
+						"level": 2
+					}
 				}
 			],
 			"migrationVersion": 3
@@ -17610,6 +19819,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -17681,6 +19892,8 @@
 				}
 			],
 			"effects": [],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -18186,6 +20399,390 @@
 					},
 					"statuses": [
 						"frightened"
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Wrath of the Wild",
+			"source": "RHW",
+			"className": "Ranger",
+			"classSource": "XPHB",
+			"subclassShortName": "Hollow Warden",
+			"subclassSource": "RHW",
+			"level": 3,
+			"activities": [
+				{
+					"foundryId": "wrathOfTheWild",
+					"name": "Unnerving Aura",
+					"type": "save",
+					"activation": {
+						"type": "turnStart",
+						"condition": "and when you first transform"
+					},
+					"duration": {
+						"units": "round",
+						"value": "1"
+					},
+					"target": {
+						"template": {
+							"units": "ft",
+							"type": "radius",
+							"size": "10"
+						},
+						"affects": {
+							"choice": true,
+							"type": "creature"
+						}
+					},
+					"damage": {
+						"onSave": "none"
+					},
+					"save": {
+						"ability": [
+							"wis"
+						],
+						"dc": {
+							"calculation": "spellcasting"
+						}
+					},
+					"visibility": {
+						"identifier": "ranger"
+					},
+					"effects": [
+						{
+							"foundryId": "wrathOfTheWild",
+							"level": {
+								"max": 10
+							}
+						},
+						{
+							"foundryId": "wrathOfTheWild1",
+							"level": {
+								"min": 11
+							}
+						}
+					]
+				},
+				{
+					"name": "Transform Self",
+					"type": "enchant",
+					"activation": {
+						"type": "bonus"
+					},
+					"duration": {
+						"units": "minute",
+						"value": "1"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Favored Enemy"
+									}
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"enchant": {
+						"self": true
+					},
+					"effects": [
+						{
+							"foundryId": "wrathOfTheWild2",
+							"riders": {
+								"activity": [
+									{
+										"foundryId": "wrathOfTheWild"
+									},
+									{
+										"foundryId": "wrathOfTheWild1"
+									}
+								],
+								"effect": [
+									{
+										"foundryId": "wrathOfTheWild3"
+									}
+								]
+							}
+						}
+					]
+				},
+				{
+					"foundryId": "wrathOfTheWild1",
+					"name": "Hungering Might",
+					"type": "heal",
+					"activation": {
+						"type": "special",
+						"condition": "once per turn when you hit a creature with an attack roll while transformed"
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "(1d10+@abilities.wis.mod)*@statuses.bloodied"
+						},
+						"scaling": {
+							"number": 1
+						}
+					},
+					"visibility": {
+						"level": {
+							"min": 7
+						},
+						"identifier": "ranger"
+					}
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "wrathOfTheWild3",
+					"name": "Ancient Armor",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.ac.bonus",
+							"value": "@scale.wrath-of-the-wild.ac",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "wrathOfTheWild",
+					"name": "Frightened",
+					"duration": {
+						"value": 1,
+						"units": "rounds",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"frightened"
+					],
+					"showIcon": 2
+				},
+				{
+					"foundryId": "wrathOfTheWild2",
+					"name": "Ghastly Form",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 60,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"changes": [
+						{
+							"key": "activities[enchant].name",
+							"value": "End Transformation",
+							"mode": "OVERRIDE"
+						},
+						{
+							"key": "activities[enchant].consumption.targets",
+							"value": [],
+							"mode": "OVERRIDE"
+						},
+						{
+							"key": "activities[enchant].activation.type",
+							"value": "",
+							"mode": "OVERRIDE"
+						},
+						{
+							"key": "name",
+							"value": "{} (Active)",
+							"mode": "OVERRIDE"
+						}
+					]
+				},
+				{
+					"foundryId": "wrathOfTheWild1",
+					"name": "Frightened (Menacing Aura)",
+					"duration": {
+						"value": 1,
+						"units": "rounds",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"frightened"
+					],
+					"descriptionEntries": [
+						"{@b Menacing Aura.} When a creature fails its saving throw against your Unnerving Aura, it also can't regain Hit Points or take Reactions until the start of your next turn."
+					],
+					"showIcon": 2
+				}
+			],
+			"advancement": [
+				{
+					"type": "ScaleValue",
+					"title": "Ancient Armor",
+					"configuration": {
+						"identifier": "ac",
+						"type": "number",
+						"scale": {
+							"3": {
+								"value": 1
+							},
+							"11": {
+								"value": 2
+							}
+						}
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Hungering Might",
+			"source": "RHW",
+			"className": "Ranger",
+			"classSource": "XPHB",
+			"subclassShortName": "Hollow Warden",
+			"subclassSource": "RHW",
+			"level": 7,
+			"effects": [
+				{
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.abilities.con.bonuses.save",
+							"value": "max(1, @abilities.wis.mod)",
+							"mode": "ADD"
+						}
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Ancient Might",
+			"source": "RHW",
+			"className": "Ranger",
+			"classSource": "XPHB",
+			"subclassShortName": "Hollow Warden",
+			"subclassSource": "RHW",
+			"level": 15,
+			"activities": [
+				{
+					"name": "Persistent Wrath",
+					"type": "heal",
+					"activation": {
+						"type": "special",
+						"condition": "reduced to 0 HP but not killed outright while transformed"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "2 * @classes.ranger.levels - @attributes.hp.value"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				},
+				{
+					"name": "Restore Use",
+					"type": "utility",
+					"img": "systems/dnd5e/icons/svg/facilities/change.svg",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "6"
+						},
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "-1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "4",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					}
+				}
+			],
+			"effects": [
+				{
+					"name": "Ominous Strikes",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.bonuses.mwak.damage",
+							"value": "@abilities.wis.mod",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.bonuses.rwak.damage",
+							"value": "@abilities.wis.mod",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.bonuses.msak.damage",
+							"value": "@abilities.wis.mod",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.bonuses.rsak.damage",
+							"value": "@abilities.wis.mod",
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"{@b Ominous Strikes.} When you hit a creature that has the &Reference[Frightened apply=false] condition with an attack roll, that attack deals extra damage equal to your Wisdom modifier."
 					]
 				}
 			],
@@ -18807,6 +21404,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -18848,6 +21447,8 @@
 					"description": "This creature has Disadvantage on all other attack rolls against you this turn."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -18890,6 +21491,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -19140,6 +21743,275 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
+			"migrationVersion": 3
+		},
+		{
+			"name": "Wails from the Grave",
+			"source": "RHW",
+			"className": "Rogue",
+			"classSource": "XPHB",
+			"subclassShortName": "Phantom",
+			"subclassSource": "RHW",
+			"level": 3,
+			"system": {
+				"uses.max": "max(1, @abilities.dex.mod)"
+			},
+			"activities": [
+				{
+					"type": "damage",
+					"activation": {
+						"type": "special",
+						"condition": "you deal Sneak Attack damage on your turn"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1",
+							"special": "visible"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "30"
+					},
+					"damage": {
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(ceil(@scale.rogue.sneak-attack.number / 2))d@scale.rogue.sneak-attack.faces"
+								},
+								"types": [
+									"necrotic"
+								]
+							}
+						]
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Tokens of the Departed",
+			"source": "RHW",
+			"className": "Rogue",
+			"classSource": "XPHB",
+			"subclassShortName": "Phantom",
+			"subclassSource": "RHW",
+			"level": 9,
+			"identifier": "tokens-departed",
+			"activities": [
+				{
+					"name": "Claim Departed Spirit",
+					"type": "utility",
+					"activation": {
+						"type": "reaction",
+						"condition": "when a visible target in range dies"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "-1",
+								"target": {
+									"consumes": {
+										"name": "Soul Trinket"
+									}
+								}
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1",
+							"special": "visible"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "30"
+					}
+				}
+			],
+			"advancement": [
+				{
+					"type": "ScaleValue",
+					"title": "Maximum Trinkets",
+					"configuration": {
+						"identifier": "max",
+						"type": "number",
+						"scale": {
+							"9": {
+								"value": 2
+							},
+							"13": {
+								"value": 3
+							},
+							"17": {
+								"value": 4
+							}
+						}
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Voice of Death",
+			"source": "RHW",
+			"className": "Rogue",
+			"classSource": "XPHB",
+			"subclassShortName": "Phantom",
+			"subclassSource": "RHW",
+			"level": 9,
+			"activities": [
+				{
+					"type": "cast",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "object",
+							"count": "1",
+							"special": "a corpse or a soul trinket"
+						}
+					},
+					"spell": {
+						"uuid": "@spell[speak with dead|xphb]",
+						"properties": [
+							"vocal",
+							"somatic",
+							"material"
+						],
+						"spellbook": true,
+						"ability": "dex",
+						"level": 3
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Ghost Walk",
+			"source": "RHW",
+			"className": "Rogue",
+			"classSource": "XPHB",
+			"subclassShortName": "Phantom",
+			"subclassSource": "RHW",
+			"level": 13,
+			"activities": [
+				{
+					"name": "Restore Use",
+					"type": "utility",
+					"img": "icons/commodities/treasure/stone-cracked-lightning-blue.webp",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Soul Trinket"
+									}
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "-1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					}
+				},
+				{
+					"name": "Assume Spectral Form",
+					"type": "utility",
+					"img": "icons/magic/death/skull-energy-light-white.webp",
+					"activation": {
+						"type": "bonus"
+					},
+					"duration": {
+						"units": "minute",
+						"value": "10"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "ghostWalk"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "ghostWalk",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 600,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"transformed"
+					],
+					"changes": [
+						{
+							"key": "system.attributes.movement.fly",
+							"value": 10,
+							"mode": "UPGRADE"
+						},
+						{
+							"key": "system.attributes.movement.hover",
+							"value": true,
+							"mode": "OVERRIDE"
+						}
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Ghost Walk|Rogue|XPHB|Phantom|RHW|13}",
+						"{@i Hazy Form and Incorporeal Movement is not automated.}"
+					],
+					"showIcon": 2
+				}
+			],
 			"migrationVersion": 3
 		},
 		{
@@ -19319,7 +22191,7 @@
 					"type": "save",
 					"activation": {
 						"type": "",
-						"condition": "When you deal Sneak Attack damage"
+						"condition": "When you use the Poison option of your Cunning Strike"
 					},
 					"target": {
 						"affects": {
@@ -19929,6 +22801,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -19951,6 +22825,365 @@
 						}
 					],
 					"description": "The Use Magic Device feature allows you to attune to up to four magic items at once."
+				}
+			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
+			"migrationVersion": 3
+		},
+		{
+			"name": "Power of Shadow",
+			"source": "RHW",
+			"className": "Sorcerer",
+			"classSource": "XPHB",
+			"subclassShortName": "Shadow",
+			"subclassSource": "RHW",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Strength of the Grave",
+					"type": "save",
+					"activation": {
+						"type": "special",
+						"condition": "if you would drop to 0 HP but not die outright"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true
+						}
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"damage": {
+						"onSave": "half"
+					},
+					"save": {
+						"ability": [
+							"cha"
+						],
+						"dc": {
+							"formula": "5 + @scaling"
+						}
+					}
+				},
+				{
+					"name": "Heal on Success",
+					"type": "heal",
+					"activation": {
+						"type": "special",
+						"condition": "after success on this save"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "@abilities.cha.mod + @classes.sorcerer.levels - @attributes.hp.value"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				}
+			],
+			"effects": [
+				{
+					"name": "Eyes of the Dark",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.senses.ranges.darkvision",
+							"value": 120,
+							"mode": "UPGRADE"
+						},
+						{
+							"key": "system.attributes.senses.ranges.blindsight",
+							"value": 10,
+							"mode": "UPGRADE"
+						}
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Power of Shadow|Sorcerer|XPHB|Shadow|RHW|3}"
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Beasts of Ill Omen",
+			"source": "RHW",
+			"className": "Sorcerer",
+			"classSource": "XPHB",
+			"subclassShortName": "Shadow",
+			"subclassSource": "RHW",
+			"level": 6,
+			"activities": [
+				{
+					"type": "cast",
+					"activation": {
+						"type": "bonus"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "3",
+								"target": {
+									"consumes": {
+										"name": "Sorcery Point"
+									}
+								}
+							}
+						]
+					},
+					"spell": {
+						"uuid": "@spell[summon beast|xphb]",
+						"properties": [
+							"material"
+						],
+						"level": 2
+					}
+				},
+				{
+					"name": "Modified Summon",
+					"type": "cast",
+					"activation": {
+						"type": "bonus"
+					},
+					"duration": {
+						"units": "minute",
+						"value": "1"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "3",
+								"target": {
+									"consumes": {
+										"name": "Sorcery Point"
+									}
+								}
+							}
+						]
+					},
+					"spell": {
+						"uuid": "@spell[summon beast|xphb]",
+						"properties": [
+							"material",
+							"concentration"
+						],
+						"level": 2
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Shadow Walk",
+			"source": "RHW",
+			"className": "Sorcerer",
+			"classSource": "XPHB",
+			"subclassShortName": "Shadow",
+			"subclassSource": "RHW",
+			"level": 14,
+			"activities": [
+				{
+					"name": "Teleport",
+					"type": "utility",
+					"activation": {
+						"type": "bonus",
+						"condition": "while in Dim Light or Darkness"
+					},
+					"target": {
+						"affects": {
+							"type": "space",
+							"count": "1",
+							"special": "unoccupied, visible, and also in Dim Light or Darkness"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "120"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Umbral Form",
+			"source": "RHW",
+			"className": "Sorcerer",
+			"classSource": "XPHB",
+			"subclassShortName": "Shadow",
+			"subclassSource": "RHW",
+			"level": 18,
+			"activities": [
+				{
+					"name": "Innate Sorcery with Umbral Form",
+					"type": "utility",
+					"img": "icons/magic/control/silhouette-hold-change-blue.webp",
+					"activation": {
+						"type": "bonus"
+					},
+					"duration": {
+						"units": "minute",
+						"value": "1"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1",
+								"target": {
+									"consumes": {
+										"name": "Innate Sorcery"
+									}
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					}
+				},
+				{
+					"name": "Restore Use",
+					"type": "utility",
+					"img": "systems/dnd5e/icons/svg/facilities/change.svg",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "6",
+								"target": {
+									"consumes": {
+										"name": "Sorcery Point"
+									}
+								}
+							},
+							{
+								"type": "itemUses",
+								"value": "-1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					}
+				}
+			],
+			"effects": [
+				{
+					"name": "Innate Sorcery (Umbral Form)",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 60,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"transformed"
+					],
+					"changes": [
+						{
+							"key": "system.bonuses.spell.dc",
+							"value": 1,
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "bludgeoning",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "piercing",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "slashing",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "acid",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "cold",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "fire",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "lightning",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "necrotic",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "poison",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "psychic",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "thunder",
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"{@classFeature Innate Sorcery|Sorcerer|XPHB|1}",
+						"{@subclassFeature Umbral Form|Sorcerer|XPHB|Shadow|RHW|18}"
+					],
+					"showIcon": 2
 				}
 			],
 			"migrationVersion": 3
@@ -20516,6 +23749,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -20643,6 +23878,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -20727,6 +23964,8 @@
 					"description": "he wings last for 1 hour or until you dismiss them (no action required). For the duration, you have a Fly Speed of 60 feet."
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -20754,6 +23993,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -20788,6 +24029,550 @@
 					"roll": {
 						"name": "Bonus/Penalty",
 						"formula": "1d4"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Vestige Companion",
+			"source": "AU",
+			"className": "Warlock",
+			"classSource": "XPHB",
+			"subclassShortName": "Vestige",
+			"subclassSource": "AU",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Vestige Companion",
+					"type": "summon",
+					"activation": {
+						"type": "minute",
+						"value": 1
+					},
+					"profiles": [
+						{
+							"uuid": "@creature[vestige companion (celestial)|au]"
+						},
+						{
+							"uuid": "@creature[vestige companion (fiend)|au]"
+						},
+						{
+							"uuid": "@creature[vestige companion (undead)|au]"
+						}
+					],
+					"bonuses": {
+						"ac": "@abilities.cha.mod",
+						"hd": "@classes.warlock.levels",
+						"hp": "@classes.warlock.levels * 4",
+						"attackDamage": "@abilities.cha.mod",
+						"healing": "@abilities.cha.mod"
+					},
+					"match": {
+						"attacks": true,
+						"disposition": true,
+						"proficiency": true,
+						"saves": true,
+						"ability": "cha"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Vestige Power",
+			"source": "AU",
+			"className": "Warlock",
+			"classSource": "XPHB",
+			"subclassShortName": "Vestige",
+			"subclassSource": "AU",
+			"level": 6,
+			"activities": [
+				{
+					"type": "utility",
+					"activation": {
+						"type": "shortRest"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Vestige Recovery",
+			"source": "AU",
+			"className": "Warlock",
+			"classSource": "XPHB",
+			"subclassShortName": "Vestige",
+			"subclassSource": "AU",
+			"level": 10,
+			"activities": [
+				{
+					"type": "heal",
+					"activation": {
+						"type": "reaction"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "attribute",
+								"value": "1",
+								"target": "spells.pact.value"
+							},
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "4 + (4 * @classes.warlock.levels)"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				},
+				{
+					"type": "teleport",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "30"
+					},
+					"teleport": {
+						"units": "ft"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Semblance of Life",
+			"source": "AU",
+			"className": "Warlock",
+			"classSource": "XPHB",
+			"subclassShortName": "Vestige",
+			"subclassSource": "AU",
+			"level": 14,
+			"activities": [
+				{
+					"name": "Summon Celestial",
+					"type": "summon",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"profiles": [
+						{
+							"uuid": "@creature[celestial spirit (defender)|xphb]"
+						},
+						{
+							"uuid": "@creature[celestial spirit (avenger)|xphb]"
+						}
+					],
+					"bonuses": {
+						"ac": "min(floor(@classes.warlock.levels / 2), 9)",
+						"hp": "10 * (min(floor(@classes.warlock.levels / 2), 9) - 5)",
+						"attackDamage": "min(floor(@classes.warlock.levels / 2), 9)"
+					},
+					"match": {
+						"attacks": true,
+						"disposition": true,
+						"proficiency": true,
+						"ability": "cha"
+					}
+				},
+				{
+					"name": "Summon Fiend",
+					"type": "summon",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"profiles": [
+						{
+							"name": "Demon",
+							"uuid": "@creature[fiendish spirit (demon)|xphb]"
+						},
+						{
+							"name": "Devil",
+							"uuid": "@creature[fiendish spirit (devil)|xphb]"
+						},
+						{
+							"name": "Yugoloth",
+							"uuid": "@creature[fiendish spirit (yugoloth)|xphb]"
+						}
+					],
+					"bonuses": {
+						"ac": "min(floor(@classes.warlock.levels / 2), 9)",
+						"hp": "15 * (min(floor(@classes.warlock.levels / 2), 9) - 6)",
+						"attackDamage": "min(floor(@classes.warlock.levels / 2), 9)",
+						"saveDamage": "min(floor(@classes.warlock.levels / 2), 9)"
+					},
+					"match": {
+						"attacks": true,
+						"proficiency": true,
+						"saves": true,
+						"disposition": true,
+						"ability": "cha"
+					}
+				},
+				{
+					"name": "Summon Undead",
+					"type": "summon",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"profiles": [
+						{
+							"uuid": "@creature[undead spirit (ghostly)|xphb]"
+						},
+						{
+							"uuid": "@creature[undead spirit (skeletal)|xphb]"
+						},
+						{
+							"uuid": "@creature[undead spirit (putrid)|xphb]"
+						}
+					],
+					"bonuses": {
+						"ac": "min(floor(@classes.warlock.levels / 2), 9)",
+						"hp": "10 * (min(floor(@classes.warlock.levels / 2), 9) - 3)",
+						"attackDamage": "min(floor(@classes.warlock.levels / 2), 9)"
+					},
+					"match": {
+						"proficiency": true,
+						"attacks": true,
+						"saves": true,
+						"disposition": true,
+						"ability": "cha"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Form of Dread",
+			"source": "RHW",
+			"className": "Warlock",
+			"classSource": "XPHB",
+			"subclassShortName": "Undead",
+			"subclassSource": "RHW",
+			"level": 3,
+			"system": {
+				"uses.max": "max(@abilities.cha.mod, 1)"
+			},
+			"activities": [
+				{
+					"name": "Assume Avatar",
+					"type": "heal",
+					"activation": {
+						"type": "bonus"
+					},
+					"duration": {
+						"units": "minute",
+						"value": "1"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"healing": {
+						"types": [
+							"temphp"
+						],
+						"scaling": {
+							"number": 1
+						},
+						"number": 1,
+						"denomination": 10,
+						"bonus": "@classes.warlock.levels"
+					},
+					"visibility": {
+						"identifier": "warlock"
+					},
+					"effects": [
+						{
+							"foundryId": "formOfDread",
+							"level": {
+								"max": 9
+							}
+						},
+						{
+							"foundryId": "formOfDread1",
+							"level": {
+								"min": 10
+							}
+						}
+					]
+				},
+				{
+					"name": "Frightful Avatar",
+					"type": "save",
+					"descriptionChat": "Once per turn while transformed",
+					"activation": {
+						"type": "special",
+						"condition": "when you hit a creature with an attack roll while transformed"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "any"
+					},
+					"damage": {
+						"onSave": "none"
+					},
+					"save": {
+						"ability": [
+							"wis"
+						],
+						"dc": {
+							"calculation": "spellcasting"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "formOfDread2"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "formOfDread2",
+					"name": "Frightened",
+					"duration": {
+						"value": 1,
+						"units": "turns",
+						"expiry": "turnStart"
+					},
+					"statuses": [
+						"frightened"
+					],
+					"description": "On a failed save, the target has the Frightened condition until the end of your next turn.",
+					"showIcon": 2
+				},
+				{
+					"foundryId": "formOfDread",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 60,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"changes": [
+						{
+							"key": "system.traits.ci.value",
+							"value": "frightened",
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Form of Dread|Warlock|XPHB|Undead|RHW|3}"
+					]
+				},
+				{
+					"foundryId": "formOfDread1",
+					"name": "Form of Dread (Necrotic Husk)",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 60,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"changes": [
+						{
+							"key": "system.traits.ci.value",
+							"value": "frightened",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.di.value",
+							"value": "necrotic",
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Form of Dread|Warlock|XPHB|Undead|RHW|3}",
+						"{@b Necrotic Resilience.} While using your Form of Dread, you have Immunity to Necrotic damage."
+					]
+				},
+				{
+					"name": "Form of Superior Dread",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"value": 60,
+						"units": "seconds",
+						"expiry": "turnStart"
+					},
+					"changes": [
+						{
+							"key": "system.traits.ci.value",
+							"value": "frightened",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.di.value",
+							"value": "necrotic",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "bludgeoning",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "piercing",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.traits.dr.value",
+							"value": "slashing",
+							"mode": "ADD"
+						},
+						{
+							"key": "system.attributes.movement.fly",
+							"value": "@attributes.movement.speed",
+							"mode": "UPGRADE"
+						},
+						{
+							"key": "system.attributes.movement.hover",
+							"value": true,
+							"mode": "OVERRIDE"
+						}
+					],
+					"descriptionEntries": [
+						"{@subclassFeature Form of Dread|Warlock|XPHB|Undead|RHW|3}",
+						"{@b Necrotic Resilience.} While using your Form of Dread, you have Immunity to Necrotic damage.",
+						"{@subclassFeature Superior Dread|Warlock|XPHB|Undead|RHW|14}"
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Necrotic Husk",
+			"source": "RHW",
+			"className": "Warlock",
+			"classSource": "XPHB",
+			"subclassShortName": "Undead",
+			"subclassSource": "RHW",
+			"level": 10,
+			"activities": [
+				{
+					"name": "Unholy Resuscitation",
+					"type": "save",
+					"activation": {
+						"type": "special",
+						"condition": "you drop to 0 HP and do not die outright"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "attribute",
+								"value": "-1",
+								"target": "attributes.exhaustion"
+							},
+							{
+								"type": "attribute",
+								"value": "@attributes.hp.value - 2 * @classes.warlock.levels",
+								"target": "attributes.hp.value"
+							},
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"template": {
+							"stationary": true,
+							"units": "ft",
+							"type": "radius",
+							"size": "30"
+						},
+						"affects": {
+							"choice": true,
+							"type": "creature"
+						}
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"number": 2,
+								"denomination": 10,
+								"bonus": "@abilities.cha.mod",
+								"types": [
+									"necrotic"
+								]
+							}
+						]
+					},
+					"save": {
+						"ability": [
+							"con"
+						],
+						"dc": {
+							"calculation": "spellcasting"
+						}
 					}
 				}
 			],
@@ -21312,6 +25097,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -21353,6 +25140,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -21509,6 +25298,8 @@
 					]
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -21583,6 +25374,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -21787,6 +25580,1828 @@
 						"custom": {
 							"enabled": true,
 							"formula": "@classes.warlock.levels + @abilities.cha.mod"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Benign Transposition",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Conjurer",
+			"subclassSource": "AU",
+			"level": 3,
+			"system": {
+				"uses.max": "max(@abilities.int.mod,1)"
+			},
+			"activities": [
+				{
+					"type": "teleport",
+					"activation": {
+						"type": "bonus"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "space",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "30"
+					},
+					"visibility": {
+						"level": {
+							"min": 1,
+							"max": 5
+						},
+						"identifier": "wizard"
+					},
+					"teleport": {
+						"units": "ft"
+					}
+				},
+				{
+					"type": "teleport",
+					"activation": {
+						"type": "bonus"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"count": "1",
+							"type": "space"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "60"
+					},
+					"visibility": {
+						"level": {
+							"min": 6
+						},
+						"identifier": "wizard"
+					},
+					"teleport": {
+						"units": "ft"
+					}
+				},
+				{
+					"name": "Restore Use",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "7"
+						},
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "-1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "3",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 6
+						},
+						"identifier": "wizard"
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Durable Summons",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Conjurer",
+			"subclassSource": "AU",
+			"level": 6,
+			"activities": [
+				{
+					"type": "heal",
+					"activation": {
+						"type": "",
+						"condition": "When you cast a Conjuration spell to summon or create a creature"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"healing": {
+						"types": [
+							"temphp"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "(2 * @classes.wizard.levels)"
+						},
+						"scaling": {
+							"number": 1
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "durableSummons"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "durableSummons",
+					"duration": {
+						"units": "seconds"
+					},
+					"description": "While it has Temporary Hit Points, the creature has Resistance to every damage type except Force, Necrotic, Psychic, and Radiant."
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Splintered Summons",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Conjurer",
+			"subclassSource": "AU",
+			"level": 14,
+			"activities": [
+				{
+					"name": "Restore Use",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "5"
+						},
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "-1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "5",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					}
+				},
+				{
+					"type": "utility",
+					"activation": {
+						"type": "",
+						"condition": "When you use a spell slot to cast a Conjuration spell that summons a spirit whose stat block is included in the spell description"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "2"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "splinteredSummon"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "splinteredSummon",
+					"name": "Splintered Summon",
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.hp.max",
+							"value": 0.5,
+							"priority": 30,
+							"mode": "MULTIPLY"
+						}
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Hypnotic Presence",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Enchanter",
+			"subclassSource": "AU",
+			"level": 3,
+			"system": {
+				"uses.max": "max(@abilities.int.mod,1)"
+			},
+			"activities": [
+				{
+					"type": "save",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "10"
+					},
+					"damage": {
+						"onSave": "none"
+					},
+					"save": {
+						"ability": [
+							"wis"
+						],
+						"dc": {
+							"calculation": "spellcasting"
+						},
+						"visible": true
+					},
+					"effects": [
+						{
+							"foundryId": "hypnoticPresence"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "hypnoticPresence",
+					"duration": {
+						"value": 60,
+						"units": "seconds"
+					},
+					"statuses": [
+						"charmed",
+						"incapacitated"
+					],
+					"changes": [
+						{
+							"key": "system.attributes.movement.multiplier",
+							"value": 0,
+							"mode": "OVERRIDE"
+						}
+					],
+					"description": "The target has the Charmed condition for 1 minute or until the target is more than 10 feet away from you, the target can neither see nor hear you, or the target takes damage. While Charmed, the target has the Incapacitated condition and a Speed of 0."
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Split Enchantment",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Enchanter",
+			"subclassSource": "AU",
+			"level": 6,
+			"system": {
+				"uses.max": "@abilities.int.mod"
+			},
+			"activities": [
+				{
+					"name": "Cast Spell: 1st → 2nd Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "2"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "1"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 6
+						}
+					}
+				},
+				{
+					"name": "Cast Spell: 2nd → 3rd Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "3"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "2"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 6
+						}
+					}
+				},
+				{
+					"name": "Cast Spell: 3rd → 4th Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "4"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "3"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 7
+						}
+					}
+				},
+				{
+					"name": "Cast Spell: 4th → 5th Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "5"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "4"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 9
+						}
+					}
+				},
+				{
+					"name": "Cast Spell: 5th → 6th Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "6"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "5"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 11
+						}
+					}
+				},
+				{
+					"name": "Cast Spell: 6th → 7th Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "7"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "6"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 13
+						}
+					}
+				},
+				{
+					"name": "Cast Spell: 7th → 8th Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "8"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "7"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 15
+						}
+					}
+				},
+				{
+					"name": "Cast Spell: 8th → 9th Level",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							},
+							{
+								"type": "spellSlots",
+								"value": "-1",
+								"target": "9"
+							},
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "8"
+							}
+						]
+					},
+					"visibility": {
+						"level": {
+							"min": 17
+						}
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Instinctive Charm",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Enchanter",
+			"subclassSource": "AU",
+			"level": 10,
+			"activities": [
+				{
+					"type": "save",
+					"activation": {
+						"type": "reaction"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "30"
+					},
+					"damage": {
+						"onSave": "half"
+					},
+					"save": {
+						"ability": [
+							"wis"
+						],
+						"dc": {
+							"calculation": "spellcasting"
+						},
+						"visible": true
+					}
+				},
+				{
+					"name": "Restore Use",
+					"type": "utility",
+					"activation": {
+						"type": "special",
+						"condition": "Cast an Enchantment spell with a spell slot"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "-1"
+							}
+						]
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Alter Memories",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Enchanter",
+			"subclassSource": "AU",
+			"level": 14,
+			"activities": [
+				{
+					"type": "save",
+					"activation": {
+						"type": "action"
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"damage": {
+						"onSave": "half"
+					},
+					"save": {
+						"ability": [
+							"int"
+						],
+						"dc": {
+							"calculation": "spellcasting"
+						},
+						"visible": true
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Necromancy Spellbook",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Necromancer",
+			"subclassSource": "AU",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Undead Vitality",
+					"type": "heal",
+					"activation": {
+						"type": "",
+						"condition": "When you cast a Necromancy spell using a spell slot"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "9"
+						}
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1",
+							"special": "Undead you can see"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "60"
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "@scaling + @classes.wizard.levels"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				},
+				{
+					"name": "Summon Undead Familiar",
+					"type": "summon",
+					"activation": {
+						"type": "hour",
+						"value": 1
+					},
+					"consumption": {
+						"scaling": {
+							"max": "8"
+						}
+					},
+					"profiles": [
+						{
+							"uuid": "@creature[skeleton|xmm]"
+						},
+						{
+							"uuid": "@creature[zombie|xmm]"
+						}
+					],
+					"creatureTypes": [
+						"beast",
+						"undead"
+					],
+					"match": {
+						"disposition": true
+					}
+				}
+			],
+			"effects": [
+				{
+					"name": "Undead Familiar",
+					"type": "enchantment",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "activities[summon].creatureTypes",
+							"value": "undead",
+							"mode": "ADD"
+						}
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Undead Thralls",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Necromancer",
+			"subclassSource": "AU",
+			"level": 6,
+			"activities": [
+				{
+					"name": "Spell Improvements",
+					"type": "enchant",
+					"activation": {
+						"type": ""
+					},
+					"restrictions": {
+						"type": "spell"
+					},
+					"effects": [
+						{
+							"foundryId": "undeadThralls"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "undeadThralls",
+					"name": "Undead Thralls (Other Spells)",
+					"type": "enchantment",
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "activities[summon].bonuses.hp",
+							"value": "@abilities.int.mod + floor(@classes.wizard.levels / 2)",
+							"mode": "ADD"
+						},
+						{
+							"key": "activities[summon].bonuses.attackDamage",
+							"value": "max(@abilities.int.mod,1)[necrotic]",
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"This enchantment implements the improvements from {@i Undead Fortitude} and {@i Withering Strike}."
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Harvest Undead",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Necromancer",
+			"subclassSource": "AU",
+			"level": 10,
+			"activities": [
+				{
+					"type": "heal",
+					"activation": {
+						"type": "reaction"
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"range": {
+						"special": "Undead that you can see"
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "@classes.wizard.levels"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Death's Master",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Necromancer",
+			"subclassSource": "AU",
+			"level": 14,
+			"activities": [
+				{
+					"name": "Bolster Undead",
+					"type": "heal",
+					"activation": {
+						"type": "bonus"
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"special": "Undead you have created or summoned with a Necromancy spell"
+						}
+					},
+					"range": {
+						"units": "ft",
+						"value": "60"
+					},
+					"healing": {
+						"types": [
+							"temphp"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "@classes.wizard.levels"
+						},
+						"scaling": {
+							"number": 1
+						}
+					}
+				},
+				{
+					"name": "Extinguish Undead",
+					"type": "save",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true
+						}
+					},
+					"target": {
+						"template": {
+							"units": "ft",
+							"type": "radius",
+							"size": "10"
+						},
+						"affects": {
+							"type": "creature",
+							"special": "Can see"
+						}
+					},
+					"damage": {
+						"onSave": "half",
+						"parts": [
+							{
+								"custom": {
+									"enabled": true,
+									"formula": "(ceil(max(@scaling,1) / 2))d6"
+								},
+								"denomination": 6,
+								"types": [
+									"necrotic"
+								]
+							}
+						]
+					},
+					"save": {
+						"ability": [
+							"dex"
+						],
+						"dc": {
+							"calculation": "spellcasting"
+						},
+						"visible": true
+					},
+					"effects": [
+						{
+							"foundryId": "deathsMaster"
+						}
+					]
+				},
+				{
+					"name": "Expend Reaction/Slot",
+					"type": "utility",
+					"activation": {
+						"type": "reaction"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "4"
+						},
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "5",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					}
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "deathsMaster",
+					"name": "Extinguished",
+					"duration": {
+						"units": "seconds",
+						"expiry": "targetStart"
+					},
+					"description": "The creature cannot take Reactions until the start of its next turn."
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Transmuter's Stone",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Transmuter",
+			"subclassSource": "AU",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Darkvision Benefit",
+					"type": "enchant",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "object",
+							"count": "1"
+						}
+					},
+					"restrictions": {
+						"allowMagical": true,
+						"categories": [
+							"trinket"
+						],
+						"type": "equipment"
+					},
+					"effects": [
+						{
+							"foundryId": "transmutersStone",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSton1"
+									}
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Resistance Benefit",
+					"type": "enchant",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "object"
+						}
+					},
+					"restrictions": {
+						"allowMagical": true,
+						"categories": [
+							"trinket"
+						],
+						"type": "equipment"
+					},
+					"effects": [
+						{
+							"foundryId": "transmutersSton2",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSton3"
+									}
+								]
+							}
+						},
+						{
+							"foundryId": "transmutersSton4",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSton5"
+									}
+								]
+							}
+						},
+						{
+							"foundryId": "transmutersSton6",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSton7"
+									}
+								]
+							}
+						},
+						{
+							"foundryId": "transmutersSton8",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSton9"
+									}
+								]
+							}
+						},
+						{
+							"foundryId": "transmutersSto10",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSto11"
+									}
+								]
+							}
+						},
+						{
+							"foundryId": "transmutersSto12",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSto13"
+									}
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Speed Benefit",
+					"type": "enchant",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "object",
+							"count": "1"
+						}
+					},
+					"restrictions": {
+						"allowMagical": true,
+						"categories": [
+							"trinket"
+						],
+						"type": "equipment"
+					},
+					"effects": [
+						{
+							"foundryId": "transmutersSto14",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSto15"
+									}
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Mighty Build Benefit",
+					"type": "enchant",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "object",
+							"count": "1"
+						}
+					},
+					"visibility": {
+						"level": {
+							"min": 10
+						},
+						"identifier": "wizard"
+					},
+					"restrictions": {
+						"allowMagical": true,
+						"categories": [
+							"trinket"
+						],
+						"type": "equipment"
+					},
+					"effects": [
+						{
+							"foundryId": "transmutersSto16",
+							"level": {
+								"min": 10
+							}
+						}
+					]
+				},
+				{
+					"name": "Tremorsense Benefit",
+					"type": "enchant",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "object",
+							"count": "1"
+						}
+					},
+					"visibility": {
+						"level": {
+							"min": 10
+						},
+						"identifier": "wizard"
+					},
+					"restrictions": {
+						"allowMagical": true,
+						"categories": [
+							"trinket"
+						],
+						"type": "equipment"
+					},
+					"effects": [
+						{
+							"foundryId": "transmutersSto17",
+							"riders": {
+								"effect": [
+									{
+										"foundryId": "transmutersSto18"
+									}
+								]
+							},
+							"level": {
+								"min": 10
+							}
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "transmutersSton1",
+					"name": "Darkvision Benefit",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.senses.darkvision",
+							"value": 60,
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersStone",
+					"name": "Darkvision Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Darkvision.</strong></em></span> The bearer gains Darkvision with a range of 60 feet or increases the range of its Darkvision by 60 feet.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton3",
+					"name": "Acid Resistance",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.traits.dr.value",
+							"value": "acid",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton5",
+					"name": "Cold Resistance",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.traits.dr.value",
+							"value": "cold",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton7",
+					"name": "Fire Resistance",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.traits.dr.value",
+							"value": "fire",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton9",
+					"name": "Lightning Resistance",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.traits.dr.value",
+							"value": "lightning",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto11",
+					"name": "Poison Resistance",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.traits.dr.value",
+							"value": "poison",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto13",
+					"name": "Thunder Resistance",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.traits.dr.value",
+							"value": "thunder",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton2",
+					"name": "Acid Resistance Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Resistance.</strong></em></span> The bearer gains Resistance to Acid damage.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton4",
+					"name": "Cold Resistance Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Resistance.</strong></em></span> The bearer gains Resistance to Cold damage.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton6",
+					"name": "Fire Resistance Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Resistance.</strong></em></span> The bearer gains Resistance to Fire damage.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSton8",
+					"name": "Lightning Resistance Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Resistance.</strong></em></span> The bearer gains Resistance to Lightning damage.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto10",
+					"name": "Poison Resistance Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Resistance.</strong></em></span> The bearer gains Resistance to Poison damage.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto12",
+					"name": "Thunder Resistance Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Resistance.</strong></em></span> The bearer gains Resistance to Thunder damage.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto14",
+					"name": "Speed Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Speed.</strong></em></span> The bearer's Speed increases by 10 feet.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto15",
+					"name": "Speed Benefit",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.movement.bonus",
+							"value": 10,
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto16",
+					"name": "Mighty Build Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong>Mighty Build.</strong></em></span> The bearer has Advantage on Strength saving throws. The bearer also counts as one size larger when determining its carrying capacity.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"name": "Mighty Build Benefit",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.abilities.str.save.roll.mode",
+							"value": 1,
+							"mode": "ADD"
+						},
+						{
+							"key": "flags.dnd5e.powerfulBuild",
+							"value": true,
+							"mode": "OVERRIDE"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto17",
+					"name": "Tremorsense Benefit",
+					"type": "enchantment",
+					"disabled": true,
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.description.value",
+							"value": "<p><span class=\"inline-h4\"><em><strong style=\"\">Tremorsense.</strong></em></span> The bearer gains Tremorsense with a range of 30 feet.</p>",
+							"mode": "ADD"
+						}
+					]
+				},
+				{
+					"foundryId": "transmutersSto18",
+					"name": "Tremorsense Benefit",
+					"transfer": true,
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.senses.tremorsense",
+							"value": 30,
+							"mode": "UPGRADE"
+						}
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Wondrous Alteration",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Transmuter",
+			"subclassSource": "AU",
+			"level": 3,
+			"activities": [
+				{
+					"name": "Change Appearance",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "wondrousAlterati"
+						}
+					]
+				},
+				{
+					"name": "Aquatic Adaptation",
+					"type": "utility",
+					"activation": {
+						"type": "bonus"
+					}
+				},
+				{
+					"name": "Natural Weapons",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"effects": [
+						{
+							"foundryId": "wondrousAlterat1"
+						}
+					]
+				}
+			],
+			"effects": [
+				{
+					"foundryId": "wondrousAlterat1",
+					"duration": {
+						"value": 1,
+						"units": "hours"
+					},
+					"changes": [
+						{
+							"key": "system.attributes.concentration.roll.mode",
+							"value": 1,
+							"mode": "ADD"
+						}
+					],
+					"descriptionEntries": [
+						"While under the effects of the {@i Alter Self} spell's {@b Natural Weapons} option."
+					]
+				},
+				{
+					"foundryId": "wondrousAlterati",
+					"name": "Deception Advantage",
+					"duration": {
+						"units": "seconds"
+					},
+					"changes": [
+						{
+							"key": "system.skills.dec.roll.mode",
+							"value": 1,
+							"mode": "ADD"
+						}
+					]
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Empowered Transmutation",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Transmuter",
+			"subclassSource": "AU",
+			"level": 6,
+			"system": {
+				"uses.max": "max(@abilities.int.mod,1)"
+			},
+			"activities": [
+				{
+					"name": "Expend Use",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Shape-Shifter",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Transmuter",
+			"subclassSource": "AU",
+			"level": 10,
+			"activities": [
+				{
+					"name": "Target Self",
+					"type": "transform",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"targets": [
+							{
+								"type": "itemUses",
+								"value": "1"
+							}
+						]
+					},
+					"target": {
+						"affects": {
+							"type": "self"
+						}
+					},
+					"profiles": [
+						{
+							"name": "Creature into Creature",
+							"types": [
+								"beast"
+							]
+						}
+					],
+					"transform": {
+						"customize": true,
+						"mode": "cr",
+						"preset": "polymorph"
+					},
+					"settings": {
+						"effects": [
+							"origin",
+							"otherOrigin",
+							"spell"
+						],
+						"keep": [
+							"mental",
+							"saves",
+							"skills",
+							"gearProf",
+							"languages",
+							"feats",
+							"spells",
+							"type",
+							"hp"
+						],
+						"tempFormula": "@source.attributes.hp.max",
+						"preset": "polymorph",
+						"transformTokens": true
+					}
+				}
+			],
+			"migrationVersion": 3
+		},
+		{
+			"name": "Master Transmuter",
+			"source": "AU",
+			"className": "Wizard",
+			"classSource": "XPHB",
+			"subclassShortName": "Transmuter",
+			"subclassSource": "AU",
+			"level": 14,
+			"activities": [
+				{
+					"name": "Restore Life",
+					"type": "cast",
+					"activation": {
+						"type": "action"
+					},
+					"spell": {
+						"uuid": "@spell[raise dead|xphb]",
+						"properties": [
+							"material"
+						],
+						"spellbook": true,
+						"level": 5
+					}
+				},
+				{
+					"name": "Expend Spell Slot",
+					"type": "utility",
+					"activation": {
+						"type": ""
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true,
+							"max": "3"
+						},
+						"targets": [
+							{
+								"type": "spellSlots",
+								"value": "1",
+								"target": "7",
+								"scaling": {
+									"mode": "level"
+								}
+							}
+						]
+					}
+				},
+				{
+					"name": "Panacea",
+					"type": "heal",
+					"activation": {
+						"type": "action"
+					},
+					"consumption": {
+						"scaling": {
+							"allowed": true
+						}
+					},
+					"target": {
+						"affects": {
+							"type": "creature",
+							"count": "1"
+						}
+					},
+					"range": {
+						"units": "touch"
+					},
+					"healing": {
+						"types": [
+							"healing"
+						],
+						"custom": {
+							"enabled": true,
+							"formula": "@scaling"
 						},
 						"scaling": {
 							"number": 1
@@ -22197,6 +27812,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{
@@ -22261,6 +27878,8 @@
 					}
 				}
 			],
+			"ignoreSrdActivities": true,
+			"ignoreSrdEffects": true,
 			"migrationVersion": 3
 		},
 		{

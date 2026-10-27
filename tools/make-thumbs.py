@@ -17,7 +17,7 @@ Only images the *grid* UIs actually show:
              filter the picker itself uses (extractMaps in battlemap.js), so
              the thumbnail set matches what gets rendered — no more, no less.
   * covers/ -> adventure + book cover cards.
-  * species -> the first image of each entry in data/fluff-races.json, for
+  * species -> every image of each entry in data/fluff-races.json, for
                the character builder's species cards.
 Bestiary tokens are skipped: ~150 KB average is already thumbnail-sized.
 
@@ -90,8 +90,8 @@ def collect_map_paths():
 
 
 def collect_species():
-    """Species art the character builder shows on its cards: the first image
-    of every entry in data/fluff-races.json."""
+    """Species art the character builder shows: every image of every entry
+    in data/fluff-races.json (a card uses the portrait, not always the first)."""
     found = set()
     try:
         with open(os.path.join(ROOT, 'data', 'fluff-races.json'), encoding='utf-8') as fh:
@@ -100,10 +100,10 @@ def collect_species():
         print('  ! skipped fluff-races.json (%s)' % e)
         return found
     for x in data.get('raceFluff', []):
-        imgs = x.get('images') or []
-        p = imgs and (imgs[0].get('href') or {}).get('path')
-        if p:
-            found.add(p)
+        for im in x.get('images') or []:
+            p = (im.get('href') or {}).get('path')
+            if p:
+                found.add(p)
     return found
 
 

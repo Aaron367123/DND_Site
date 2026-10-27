@@ -165,6 +165,17 @@ function _getMe() {
 //   • Persisted state (_bgMapPath, starred maps in skt-battlemap-v1, synced
 //     to Firebase) stores prefix-less paths and must keep working untouched.
 // So: accept either form, normalize, and never rewrite what gets SAVED.
+// An adventure or book file's contents. 5etools 2.29+ wraps them —
+// {"adventureData":[{id, source, data}]} / {"bookData":[…]} — where older
+// files had {"data": […]} at the top; either way the chapters come back as .data.
+function sktDocData(j) {
+  if (j && !Array.isArray(j.data)) {
+    const w = (j.adventureData || j.bookData || [])[0];
+    if (w && Array.isArray(w.data)) return Object.assign({}, j, { data: w.data });
+  }
+  return j;
+}
+
 function assetUrl(path) {
   if (!path) return '';
   const s = String(path);

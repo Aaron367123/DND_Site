@@ -618,7 +618,7 @@
 				{
 					"name": "Blizzard Veil",
 					"entries": [
-						"Auril creates a magical blizzard in a 30-foot-radius sphere centered on herself. The area within the sphere is heavily obscured, and the sphere moves with Auril. The effect lasts until Auril drops to 0 hit points in this form, until she chooses to end the effect (no action required), or until her {@status concentration} is broken (as if {@status concentration||concentrating} on a spell)."
+						"Auril creates a magical blizzard in a 30-foot-radius sphere centered on herself. The area within the sphere is {@quickref Vision and Light||2||heavily obscured}, and the sphere moves with Auril. The effect lasts until Auril drops to 0 hit points in this form, until she chooses to end the effect (no action required), or until her {@status concentration} is broken (as if {@status concentration||concentrating} on a spell)."
 					]
 				}
 			],
@@ -2301,7 +2301,7 @@
 				{
 					"name": "Change Shape",
 					"entries": [
-						"The druid magically polymorphs into a beast form\u2014fox, mountain goat, owl, or wolf\u2014or back into its humanoid form. Any equipment it is wearing or carrying is absorbed or borne by the beast form (the druid's choice). It reverts to its humanoid form when it dies. The druid's statistics are the same in each form, except where noted in this stat block."
+						"The druid magically polymorphs into a beast form\u2014{@creature fox|IDRotF}, {@creature mountain goat|IDRotF}, {@creature owl}, or {@creature wolf}\u2014or back into its humanoid form. Any equipment it is wearing or carrying is absorbed or borne by the beast form (the druid's choice). It reverts to its humanoid form when it dies. The druid's statistics are the same in each form, except where noted in this stat block."
 					]
 				}
 			],
@@ -3369,7 +3369,7 @@
 				{
 					"name": "Bite (Bear or Hybrid Form Only)",
 					"entries": [
-						"{@atk mw} {@hit 8} to hit, reach 5 ft., one creature. {@h}16 ({@damage 2d10 + 5}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 15} Constitution saving throw or be cursed with werebear lycanthropy, as described in the Monster Manual."
+						"{@atk mw} {@hit 8} to hit, reach 5 ft., one creature. {@h}16 ({@damage 2d10 + 5}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 15} Constitution saving throw or be cursed with werebear {@variantrule Player Characters as Lycanthropes|MM|lycanthropy}, as described in the Monster Manual."
 					]
 				},
 				{
@@ -3554,6 +3554,47 @@
 			"hasToken": true,
 			"hasFluff": true,
 			"hasFluffImages": true
+		},
+		{
+			"name": "Gromin'gorn",
+			"isNpc": true,
+			"isNamedCreature": true,
+			"source": "IDRotF",
+			"page": 140,
+			"_copy": {
+				"name": "Frost Giant",
+				"source": "MM",
+				"_mod": {
+					"action": [
+						{
+							"mode": "replaceArr",
+							"replace": "Multiattack",
+							"items": {
+								"name": "Multiattack",
+								"entries": [
+									"Gromin'gorn makes two Anvil Chain attacks."
+								]
+							}
+						},
+						{
+							"mode": "replaceArr",
+							"replace": "Greataxe",
+							"items": {
+								"name": "Anvil Chain",
+								"entries": [
+									"{@atk mw} {@hit 9} to hit, reach 10 ft., one target. {@h}25 ({@damage 3d12 + 6}) bludgeoning damage."
+								]
+							}
+						}
+					]
+				}
+			},
+			"tokenCredit": "Adam Barker",
+			"tokenCustom": true,
+			"damageTags": [
+				"B"
+			],
+			"hasToken": true
 		},
 		{
 			"name": "Gunvald Halraggson",
@@ -3773,14 +3814,6 @@
 							"with": "Hengar",
 							"flags": "i"
 						}
-					],
-					"_": [
-						{
-							"mode": "addSkills",
-							"skills": {
-								"survival": 1
-							}
-						}
 					]
 				}
 			},
@@ -3794,7 +3827,16 @@
 				"N",
 				"G"
 			],
+			"skill": {
+				"survival": "+5"
+			},
+			"languages": [
+				"Common"
+			],
 			"tokenCustom": true,
+			"languageTags": [
+				"C"
+			],
 			"hasToken": true,
 			"hasFluff": true
 		},
@@ -4518,13 +4560,16 @@
 				"L",
 				"E"
 			],
+			"languages": [
+				"Common",
+				"Infernal"
+			],
 			"senseTags": [
 				"D"
 			],
 			"languageTags": [
 				"C",
-				"I",
-				"X"
+				"I"
 			],
 			"damageTagsSpell": [
 				"F",
@@ -4632,10 +4677,15 @@
 					}
 				}
 			},
+			"alignment": [
+				"L",
+				"E"
+			],
 			"languages": [
 				"Common",
 				"Infernal"
 			],
+			"tokenCredit": "Anon",
 			"tokenCustom": true,
 			"languageTags": [
 				"C",
@@ -5660,18 +5710,30 @@
 							"replace": "gladiator",
 							"with": "chieftain"
 						}
-					],
-					"_": [
-						{
-							"mode": "addSkills",
-							"skills": {
-								"survival": 1
-							}
-						}
 					]
 				}
 			},
+			"ac": [
+				{
+					"ac": 16,
+					"from": [
+						"{@item hide armor|PHB}",
+						"{@item shield|PHB}"
+					]
+				}
+			],
+			"skill": {
+				"athletics": "+10",
+				"intimidation": "+5",
+				"survival": "+5"
+			},
+			"languages": [
+				"Common"
+			],
 			"tokenCustom": true,
+			"languageTags": [
+				"C"
+			],
 			"hasToken": true,
 			"hasFluff": true
 		},
@@ -5689,18 +5751,30 @@
 							"replace": "gladiator",
 							"with": "great warrior"
 						}
-					],
-					"_": [
-						{
-							"mode": "addSkills",
-							"skills": {
-								"survival": 1
-							}
-						}
 					]
 				}
 			},
+			"ac": [
+				{
+					"ac": 16,
+					"from": [
+						"{@item hide armor|PHB}",
+						"{@item shield|PHB}"
+					]
+				}
+			],
+			"skill": {
+				"athletics": "+10",
+				"intimidation": "+5",
+				"survival": "+5"
+			},
+			"languages": [
+				"Common"
+			],
 			"tokenCustom": true,
+			"languageTags": [
+				"C"
+			],
 			"hasToken": true,
 			"hasFluff": true
 		},
@@ -5959,7 +6033,7 @@
 				{
 					"name": "Ice Dagger",
 					"entries": [
-						"{@atk rw} {@hit 5} to hit, reach 5 ft. or range 20/60 ft., one target. {@h}5 ({@damage 1d4 + 3}) piercing damage plus 5 ({@damage 2d4}) cold damage."
+						"{@atk mw,rw} {@hit 5} to hit, reach 5 ft. or range 20/60 ft., one target. {@h}5 ({@damage 1d4 + 3}) piercing damage plus 5 ({@damage 2d4}) cold damage."
 					]
 				}
 			],

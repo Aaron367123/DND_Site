@@ -104,7 +104,7 @@ registerPanel('adventures', {
       // A 404/500 body is HTML — res.json() would throw anyway, but check
       // explicitly so a served-but-failed response never counts as content.
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const j = await res.json();
+      const j = sktDocData(await res.json());
       this._advCache[key] = j;
       return j;
     } catch(_){

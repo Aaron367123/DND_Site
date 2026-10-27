@@ -292,6 +292,18 @@
 					]
 				},
 				"If the dragon dies, the populations of aquatic life near the lair return to normal levels over the course of {@dice 1d10} days. The existing abundance of amethysts remains, but new crystals and geodes form at a normal rate."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Amethyst Dragon)",
+					"source": "FTD",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -363,6 +375,35 @@
 					]
 				},
 				"If the dragon turtle dies, these effects fade over the course of {@dice 1d10} days."
+			]
+		},
+		{
+			"name": "Ankhtepot",
+			"source": "RHW",
+			"regionalEffects": [
+				"Har'Akir is altered by Ankhtepot's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Blistering Sun",
+							"entry": "Any outdoor area of {@variantrule Bright Light|XPHB} in Har'Akir is an area of {@hazard extreme heat|XDMG} (see the {@book Dungeon Master's Guide|XDMG})."
+						},
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in his domain, Ankhtepot can close or open the borders to Har'Akir at will. While the borders are closed, whirling sands fill the Mists surrounding Har'Akir. A creature that enters the Mists for the first time on a turn or starts its turn there takes {@damage 2d6} Slashing damage."
+						},
+						{
+							"type": "item",
+							"name": "Control Undead",
+							"entry": "Undead of CR 5 or lower in Har'Akir have the {@condition Charmed|XPHB} condition and obey Ankhtepot's orders."
+						}
+					]
+				},
+				"If Ankhtepot dies, these effects end immediately."
 			]
 		},
 		{
@@ -626,6 +667,35 @@
 					]
 				},
 				"If Aurnozci dies, these effects fade over the course of {@dice 1d10} days."
+			]
+		},
+		{
+			"name": "Azalin Rex",
+			"source": "RHW",
+			"regionalEffects": [
+				"Darkon is altered by Azalin's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in his domain, Azalin can close or open the borders to Darkon at will. While the borders are closed, undead terrors fill the Mists surrounding Darkon. Whenever a creature enters the Mists, one {@variantrule Hostile [Attitude]|XPHB|Hostile} {@creature Zombie Clot|RHW} appears in a random unoccupied space within 30 feet of that creature."
+						},
+						{
+							"type": "item",
+							"name": "Lord of the Dead",
+							"entry": "While in his domain, Azalin can cast {@spell Clairvoyance|XPHB}, requiring no spell components and using the same spellcasting ability as his Spellcasting action. When Azalin casts this spell in this way, he can place the sensor in any Undead in Darkon with an Intelligence of 6 or less, even if it is beyond 1 mile of Azalin. In addition, Azalin can speak through the Undead he placed the sensor in."
+						},
+						{
+							"type": "item",
+							"name": "No Secrets",
+							"entry": "Whenever a creature in Darkon casts a spell using a level 5+ spell slot, Azalin becomes aware of that creature's name and location. A {@spell Nondetection|XPHB} spell blocks this effect."
+						}
+					]
+				},
+				"If Azalin dies, these effects end immediately."
 			]
 		},
 		{
@@ -1210,6 +1280,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Black Dragon||adult} or {@creature Ancient Black Dragon||ancient}) black dragon can use one or more of the following additional lair actions while in its lair:",
 						{
@@ -1233,8 +1304,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -1251,6 +1321,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Any of these effects might appear in the area around a black dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -1274,8 +1345,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Black Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -1330,6 +1412,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Blue Dragon||adult} or {@creature Ancient Blue Dragon||ancient}) blue dragon can use one or both of the following additional lair actions while in its lair:",
 						{
@@ -1348,8 +1431,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -1366,6 +1448,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Any of these effects might appear in the area around a blue dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -1389,8 +1472,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Blue Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -1444,6 +1538,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Brass Dragon||adult} or {@creature Ancient Brass Dragon||ancient}) brass dragon can use one or more of the following additional lair actions while in its lair:",
 						{
@@ -1453,7 +1548,7 @@
 								{
 									"type": "item",
 									"name": "Animate Statues",
-									"entry": "The dragon chooses up to three statues in the lair that it can see. Each of these statues briefly animates and attacks one creature within 5 feet of it, with a +7 bonus to hit and dealing 10 ({@damage 3d6}) bludgeoning damage on a hit."
+									"entry": "The dragon chooses up to three statues in the lair that it can see. Each of these statues briefly animates and attacks one creature within 5 feet of it, with a {@hit 7} bonus to hit and dealing 10 ({@damage 3d6}) bludgeoning damage on a hit."
 								},
 								{
 									"type": "item",
@@ -1467,8 +1562,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -1485,6 +1579,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Any of these effects might appear in the area around a brass dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -1503,8 +1598,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Brass Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -1558,6 +1664,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Bronze Dragon||adult} or {@creature Ancient Bronze Dragon||ancient}) bronze dragon can use one or more of the following additional lair actions while in its lair:",
 						{
@@ -1581,8 +1688,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -1599,6 +1705,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Any of these effects might appear in the area around a bronze dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -1622,8 +1729,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Bronze Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -1672,6 +1790,35 @@
 			]
 		},
 		{
+			"name": "Chakuna",
+			"source": "RHW",
+			"regionalEffects": [
+				"Valachan is altered by Chakuna's presence, creating the following effects.",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in her domain, Chakuna can close or open the borders to Valachan at will. While the borders are closed, shadowy beasts skulk or soar amid the Mists surrounding Valachan. A creature that enters the Mists for the first time on a turn or starts its turn there takes {@damage 1d10} Piercing damage."
+						},
+						{
+							"type": "item",
+							"name": "Heightened Senses",
+							"entry": "Beasts and Monstrosities have {@variantrule Advantage|XPHB} on Wisdom checks."
+						},
+						{
+							"type": "item",
+							"name": "Whispering Shadows",
+							"entry": "Humanoids subtract {@dice 1d8} from any ability checks they make when they take the {@action Hide|XPHB} action."
+						}
+					]
+				},
+				"If Chakuna dies, these effects end immediately."
+			]
+		},
+		{
 			"name": "Copper Dragon",
 			"source": "MM",
 			"page": 112,
@@ -1692,6 +1839,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Copper Dragon||adult} or {@creature Ancient Copper Dragon||ancient}) copper dragon can use one or both of the following additional lair actions while in its lair:",
 						{
@@ -1710,8 +1858,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -1728,6 +1875,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Either of these effects might appear in the area around a copper dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -1746,8 +1894,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Copper Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -1870,6 +2029,47 @@
 					]
 				},
 				"If the dragon dies, the animal population near the lair returns to normal levels over the course of {@dice 1d10} days. The increased Hit Die recovery ends immediately. The existing abundance of quartz crystals remains, but new crystals form at a normal rate."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Crystal Dragon)",
+					"source": "FTD",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Cthulhu",
+			"source": "RHW",
+			"regionalEffects": [
+				"Innsmouth is altered by Cthulhu's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Choking Depths",
+							"entry": "A creature can {@hazard Suffocation|XPHB|hold its breath} for only 30 seconds while in the domain."
+						},
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in its domain, Cthulhu can close or open the borders of Innsmouth at will. While the borders are closed, those who enter the Mists surrounding Innsmouth become lost at sea amid inky fog for {@dice 3d4} days before arriving once more at Innsmouth."
+						},
+						{
+							"type": "item",
+							"name": "Something in the Air",
+							"entry": "Creatures other than Cthulhu and its allies have {@variantrule Disadvantage|XPHB} on saving throws to avoid or end the {@condition Frightened|XPHB} condition."
+						}
+					]
+				},
+				"If Cthulhu dies, these effects end immediately."
 			]
 		},
 		{
@@ -2044,6 +2244,18 @@
 					]
 				},
 				"If the dragon dies, these effects fade over the course of {@dice 1d10} days."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Deep Dragon)",
+					"source": "FTD",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -2415,6 +2627,35 @@
 			]
 		},
 		{
+			"name": "Ebonbane",
+			"source": "RHW",
+			"regionalEffects": [
+				"The Shadowlands is altered by {@i Ebonbane}'s presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in its domain, Ebonbane can close or open the borders of the Shadowlands at will. While the borders are closed, whirling blades of magic fly through the Mists surrounding the Shadowlands. A creature that enters the Mists for the first time on a turn or starts its turn there must succeed on a {@dc 15} Dexterity saving throw or take {@damage 3d10} Force damage. A creature makes this save only once per turn."
+						},
+						{
+							"type": "item",
+							"name": "Haunted Woods",
+							"entry": "The forest within 1 mile of Ebonbane's lair is wreathed in a powerful illusion. Whenever a creature other than Ebonbane or the sword's allies finishes a Short or Long Rest in that area, it must succeed on a {@dc 15} Intelligence saving throw, or it is lost in the forest, always finding itself at the location it started in until it finishes a Short or Long Rest."
+						},
+						{
+							"type": "item",
+							"name": "Turning Weapons",
+							"entry": "While in its lair, Ebonbane can transform nonmagical {@item Greatsword|XPHB|Greatswords} and {@item Longsword|XPHB|Longswords} within 1 mile of the lair into {@creature Animated Flying Sword|XMM|Animated Flying Swords} by completing a 24-hour ritual."
+						}
+					]
+				},
+				"If {@i Ebonbane} is destroyed, these effects end immediately."
+			]
+		},
+		{
 			"name": "Elder Brain",
 			"source": "MPMM",
 			"page": 120,
@@ -2425,22 +2666,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Force Wall",
 							"type": "item",
+							"name": "Force Wall",
 							"entries": [
 								"The elder brain casts {@spell wall of force}."
 							]
 						},
 						{
-							"name": "Psionic Anchor",
 							"type": "item",
+							"name": "Psionic Anchor",
 							"entries": [
 								"The elder brain targets one creature it can sense within 120 feet of it and anchors it by sheer force of will. The target must make a {@dc 18} Charisma saving throw. On a failed save, its speed is reduced to 0, and it can't teleport. It can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success."
 							]
 						},
 						{
-							"name": "Psychic Inspiration",
 							"type": "item",
+							"name": "Psychic Inspiration",
 							"entries": [
 								"The elder brain targets one friendly creature it can sense within 120 feet of it. The target has a flash of inspiration and gains advantage on one attack roll, ability check, or saving throw it makes before the end of its next turn."
 							]
@@ -2455,22 +2696,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Paranoia",
 							"type": "item",
+							"name": "Paranoia",
 							"entries": [
 								"Creatures within 5 miles of an elder brain feel as if they are being followed, even when they're not."
 							]
 						},
 						{
-							"name": "Psychic Whispers",
 							"type": "item",
+							"name": "Psychic Whispers",
 							"entries": [
 								"Any creature with which the elder brain has formed a psychic link hears faint, incomprehensible whispers in the deepest recesses of its mind. This psychic detritus consists of the elder brain's stray thoughts commingled with those of other creatures to which it is linked."
 							]
 						},
 						{
-							"name": "Telepathic Eavesdropping",
 							"type": "item",
+							"name": "Telepathic Eavesdropping",
 							"entries": [
 								"The elder brain can overhear any telepathic conversation within 5 miles of it. The creature that initiated the telepathic conversation makes a {@dc 18} Wisdom saving throw when telepathic contact is first established. If the save is successful, the creature is aware that something is eavesdropping. The nature of the eavesdropper isn't revealed."
 							]
@@ -2565,6 +2806,18 @@
 					]
 				},
 				"If the dragon dies, the population of giant lizards near the lair returns to normal levels over the course of {@dice 1d10} days. Rocks immediately stop moving of their own accord. The existing abundance of crystals and emeralds remains, but new ones form at a normal rate."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Emerald Dragon)",
+					"source": "FTD",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -2630,6 +2883,16 @@
 						"Blinding magical light springs from Fazrian's eyes until initiative count 20 on the next round. If a creature starts its turn within 120 feet of the planetar and the two of them can see each other, Fazrian can force the creature to make a {@dc 20} Constitution saving throw. On a failed save, the creature is {@condition blinded}. The blindness lasts until the creature receives a {@spell lesser restoration} spell or similar magic."
 					]
 				}
+			],
+			"regionalEffects": [
+				"The Terminus Level has been warped by {@creature Fazrian|WDMM}'s presence, which creates the following magical effects that end when the planetar dies:",
+				{
+					"type": "list",
+					"items": [
+						"A faint breeze bears the scent of roses mixed with sulfur. Characters who try to track the breeze to its source are led toward {@creature Fazrian|WDMM} in {@adventure area 23b|WDMM|21|23b. Hall of Final Judgment}. Warm blood oozes from the walls and drips from the ceiling, starting and stopping for no apparent reason. (The blood might attract ravenous, blood-drinking creatures such as {@creature Stirge||stirges} or {@creature vampire spawn}.)",
+						"The song of an unholy choir echoes through an area whenever a fight breaks out, then fades away when combat ends."
+					]
+				}
 			]
 		},
 		{
@@ -2690,22 +2953,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Conjure Walls and Doors",
 							"type": "item",
+							"name": "Conjure Walls and Doors",
 							"entries": [
 								"Fraz-Urb'luu causes up to five doors within the lair to become walls and an equal number of doors to appear on walls where there previously were none."
 							]
 						},
 						{
-							"name": "Psychic Anguish",
 							"type": "item",
+							"name": "Psychic Anguish",
 							"entries": [
 								"Fraz-Urb'luu creates a wave of anguish. Each creature he can see within the lair must succeed on a {@dc 23} Wisdom saving throw or take 33 ({@damage 6d10}) psychic damage."
 							]
 						},
 						{
-							"name": "Simulacrum",
 							"type": "item",
+							"name": "Simulacrum",
 							"entries": [
 								"Fraz-Urb'luu chooses one Humanoid within the lair and instantly creates a simulacrum of that creature (as if created with the {@spell simulacrum} spell). This simulacrum obeys Fraz-Urb'luu's commands and is destroyed on the next initiative count 20."
 							]
@@ -2720,22 +2983,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Beguiling Realm",
 							"type": "item",
+							"name": "Beguiling Realm",
 							"entries": [
 								"Within 6 miles of the lair, all Charisma ({@skill Persuasion}) and Wisdom ({@skill Insight}) checks have disadvantage, and all Charisma ({@skill Deception}) and Charisma ({@skill Performance}) checks have advantage."
 							]
 						},
 						{
-							"name": "Nostalgic Pangs",
 							"type": "item",
+							"name": "Nostalgic Pangs",
 							"entries": [
 								"Sapient creatures within 1 mile of the lair frequently see hallucinations of long-dead friends and comrades that vanish after only a brief glimpse."
 							]
 						},
 						{
-							"name": "Twisted Paths",
 							"type": "item",
+							"name": "Twisted Paths",
 							"entries": [
 								"Roads and paths within 6 miles of the lair twist and turn back on themselves, making navigation in the area exceedingly difficult."
 							]
@@ -2894,22 +3157,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Banish",
 							"type": "item",
+							"name": "Banish",
 							"entries": [
 								"Geryon casts the banishment spell."
 							]
 						},
 						{
-							"name": "Chill Blast",
 							"type": "item",
+							"name": "Chill Blast",
 							"entries": [
 								"Geryon causes a blast of cold to burst from the ground at a point he can see within 120 feet of him. The cold fills a cube, 10 feet on each side, centered on that point. Each creature in that area must succeed on a {@dc 21} Constitution saving throw or take 28 ({@damage 8d6}) cold damage."
 							]
 						},
 						{
-							"name": "Hateful Restraints",
 							"type": "item",
+							"name": "Hateful Restraints",
 							"entries": [
 								"Geryon targets one creature he can see within 60 feet of him. The target must succeed on a {@dc 21} Wisdom saving throw or become {@condition restrained} for 1 minute. The target can end the effect on itself if it deals any damage to one or more of its allies."
 							]
@@ -2924,22 +3187,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Chilling Wind",
 							"type": "item",
+							"name": "Chilling Wind",
 							"entries": [
 								"Freezing strong winds howl around the area within 1 mile of the lair."
 							]
 						},
 						{
-							"name": "Enervating Screams",
 							"type": "item",
+							"name": "Enervating Screams",
 							"entries": [
 								"Howls and screams fill the air within 1 mile of the lair. Any creature that finishes a short or long rest in this area must succeed on a {@dc 21} Wisdom saving throw or derive no benefit from the rest."
 							]
 						},
 						{
-							"name": "Hellish Doorways",
 							"type": "item",
+							"name": "Hellish Doorways",
 							"entries": [
 								"Sapient creatures within 1 mile of the lair frequently see shimmering portals leading to places they consider safe. Passing through a portal always deposits a traveler somewhere in Stygia."
 							]
@@ -2988,22 +3251,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Create Object",
 							"type": "item",
+							"name": "Create Object",
 							"entries": [
 								"The anarch casts the creation spell (as a 9th-level spell) using the unformed substance of Limbo instead of shadow material. If used in Limbo, the object remains until the anarch's {@status concentration} is broken, regardless of its composition. If the anarch moves more than 120 feet from the object, the anarch's {@status concentration} breaks."
 							]
 						},
 						{
-							"name": "Move Object",
 							"type": "item",
+							"name": "Move Object",
 							"entries": [
 								"The anarch can magically move an object it can see within 150 feet of it by making a Wisdom check with advantage. The DC depends on the object's size: {@dc 5} for Tiny, {@dc 10} for Small, {@dc 15} for Medium, {@dc 20} for Large, and {@dc 25} for Huge or larger."
 							]
 						},
 						{
-							"name": "Psionic Bolt",
 							"type": "item",
+							"name": "Psionic Bolt",
 							"entries": [
 								"The anarch casts the lightning bolt spell (at 5th level), but the anarch can change the damage type from lightning to cold, fire, psychic, radiant, or thunder. If the spell deals damage other than fire or lightning, it doesn't ignite flammable objects."
 							]
@@ -3018,15 +3281,15 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Form Substance",
 							"type": "item",
+							"name": "Form Substance",
 							"entries": [
 								"In Limbo, the anarch can spend 10 minutes stabilizing a 5-mile area centered on it, causing the unformed substance to take whatever inanimate form the anarch chooses. During that process, the anarch determines the shape and composition of the forms created."
 							]
 						},
 						{
-							"name": "Stabilize Object",
 							"type": "item",
+							"name": "Stabilize Object",
 							"entries": [
 								"The anarch stabilizes any object created in Limbo and brought to the Material Plane for as long as the anarch remains within 1 mile of it (no action required)."
 							]
@@ -3131,6 +3394,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Action",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Gold Dragon||adult} or {@creature Ancient Gold Dragon||ancient}) gold dragon can use the following additional lair action while in its lair:",
 						{
@@ -3144,8 +3408,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -3162,6 +3425,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Any of these effects might appear in the area around a gold dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -3185,8 +3449,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Gold Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -3230,15 +3505,15 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Command",
 							"type": "item",
+							"name": "Command",
 							"entries": [
 								"Graz'zt casts the command spell on every creature of his choice in the lair. He needn't see each one, but he must be aware that an individual is in the lair to target that creature. He issues the same command to all the targets."
 							]
 						},
 						{
-							"name": "Conjure Mirrors",
 							"type": "item",
+							"name": "Conjure Mirrors",
 							"entries": [
 								"Smooth surfaces within the lair become as reflective as a polished mirror. Until a different lair action is used, creatures within the lair have disadvantage on Dexterity ({@skill Stealth}) checks made to hide."
 							]
@@ -3253,22 +3528,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Agitated Beasts",
 							"type": "item",
+							"name": "Agitated Beasts",
 							"entries": [
 								"Wild beasts within 6 miles of the lair break into frequent conflicts and coupling, mirroring the behavior that occurs during their mating seasons."
 							]
 						},
 						{
-							"name": "Beguiling Realm",
 							"type": "item",
+							"name": "Beguiling Realm",
 							"entries": [
 								"Within 6 miles of the lair, all Wisdom ({@skill Insight}) checks have disadvantage, and all Charisma ({@skill Deception}) and Charisma ({@skill Persuasion}) checks have advantage."
 							]
 						},
 						{
-							"name": "Mirrors Everywhere",
 							"type": "item",
+							"name": "Mirrors Everywhere",
 							"entries": [
 								"Flat surfaces within 1 mile of the lair that are made of stone or metal become highly reflective, as though polished to a shine. These surfaces become supernaturally mirrorlike."
 							]
@@ -3400,6 +3675,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Green Dragon||adult} or {@creature Ancient Green Dragon||ancient}) green dragon can use one or both of the following additional lair actions while in its lair:",
 						{
@@ -3414,12 +3690,11 @@
 								{
 									"type": "item",
 									"name": "Lashing Root",
-									"entry": "One large root or branch that is part of the lair makes a melee attack roll against a creature within 10 feet of it. It has a +7 bonus to hit and deals 10 ({@damage 3d6}) bludgeoning damage on a hit. If the target is a Medium or smaller creature, it must succeed on a {@dc 15} Strength saving throw or be knocked {@condition prone}."
+									"entry": "One large root or branch that is part of the lair makes a melee attack roll against a creature within 10 feet of it. It has a {@hit 7} bonus to hit and deals 10 ({@damage 3d6}) bludgeoning damage on a hit. If the target is a Medium or smaller creature, it must succeed on a {@dc 15} Strength saving throw or be knocked {@condition prone}."
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -3442,6 +3717,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Either or both of these effects might appear in the area around a green dragon's lair, in addition to or instead of those described in the {@i Monster Manual}:",
 						{
@@ -3460,8 +3736,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Green Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -3587,6 +3874,64 @@
 			]
 		},
 		{
+			"name": "Harkon Lukas",
+			"source": "RHW",
+			"regionalEffects": [
+				"Kartakass is altered by Harkon's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Beast Spies",
+							"entry": "From dawn until dusk, Tiny Beasts in the domain magically gain the ability to understand Common and can communicate telepathically with other Beasts and Monstrosities."
+						},
+						{
+							"type": "item",
+							"name": "Children of the Night",
+							"entry": "Harkon exerts influence over the animals of his domain. From dusk until dawn, Medium or smaller Beasts within 1 miles of Harkon have the {@condition Charmed|XPHB} condition. If Harkon pleases, these animals become {@variantrule Hostile [Attitude]|XPHB|Hostile} to creatures other than Harkon and his allies."
+						},
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in his domain, Harkon can close or open the borders to Kartakass at will. While the borders are closed, a strange melody fills the Mists surrounding Kartakass. A creature that enters the Mists for the first time on a turn or starts its turn in them must succeed on a {@dc 15} Wisdom saving throw, or it has the {@condition Unconscious|XPHB} condition for {@dice 1d6} hours, then awakes within sight of the town of Harmonia in Kartakass. A creature makes this save only once per turn."
+						}
+					]
+				},
+				"If Harkon dies, these effects end immediately."
+			]
+		},
+		{
+			"name": "Hazlik",
+			"source": "RHW",
+			"regionalEffects": [
+				"Hazlan is altered by Hazlik's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in his domain, Hazlik can close or open the borders to Hazlan at will. While the borders are closed, the Mists surrounding Hazlan are filled with monstrous magical experiments. A creature that enters the Mists for the first time on a turn or starts its turn there must succeed on a {@dc 15} Dexterity saving throw or take 5 ({@dice 1d10}) Force damage and have the {@condition Restrained|XPHB} condition until the start of its next turn. A creature makes this save only once per turn."
+						},
+						{
+							"type": "item",
+							"name": "Frayed Magic",
+							"entry": "Whenever a creature (excluding Hazlik and his allies) casts a spell using a level 5+ spell slot, it rolls on the {@table Wild Magic Surge|XPHB|Wild Magic Surge table} in the {@book Player's Handbook|XPHB} to create a magical effect."
+						},
+						{
+							"type": "item",
+							"name": "Magic Nightmares",
+							"entry": "While in his lair, Veneficus, Hazlik can cast {@spell Clairvoyance|XPHB}, requiring no spell components and using the same spellcasting ability as his Spellcasting action. When the spell is cast this way, its range is all of Hazlan, Hazlik can see but can't hear through the sensor, and the sensor can appear only on an Eye of Hazlik."
+						}
+					]
+				},
+				"If Hazlik dies, these effects end immediately. The effects resume if Hazlik gains a new body (see his Darklord Restoration trait)."
+			]
+		},
+		{
 			"name": "Hierophant Medusa",
 			"source": "BMT",
 			"lairActions": [
@@ -3643,7 +3988,7 @@
 				{
 					"type": "list",
 					"items": [
-						"Hythonia briefly animates creatures that have been {@condition petrified} by her gaze. Each statue attacks one creature within 5 feet of it, with a +11 bonus to hit and dealing 10 ({@damage 3d6}) bludgeoning damage on a hit. If a Medium or smaller creature takes this damage, it is also {@condition grappled} (escape {@dc 15}).",
+						"Hythonia briefly animates creatures that have been {@condition petrified} by her gaze. Each statue attacks one creature within 5 feet of it, with a {@hit 11} bonus to hit and dealing 10 ({@damage 3d6}) bludgeoning damage on a hit. If a Medium or smaller creature takes this damage, it is also {@condition grappled} (escape {@dc 15}).",
 						"Hythonia causes spectral snakes to erupt from a point she can see within 150 feet of her. Each creature within 20 feet of that point must succeed on a {@dc 19} Constitution saving throw or take 5 ({@damage 2d4}) piercing damage and become {@condition poisoned} until the end of its next turn. While {@condition poisoned} in this way, the creature has disadvantage on Intelligence checks and Intelligence saving throws, and it behaves as if under the effect of the {@spell confusion} spell."
 					]
 				}
@@ -3714,6 +4059,40 @@
 					]
 				},
 				"If Imix is destroyed or banished back to his home plane, the regional effects fade over the next {@dice 1d10} days."
+			]
+		},
+		{
+			"name": "Ivana Boritsi and Ivan Boritsi",
+			"source": "RHW",
+			"regionalEffects": [
+				"Borca is altered by Ivana's and Ivan's presences, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in their domain, Ivana or Ivan can close or open the borders to Borca at will. While the borders are closed, the Mists surrounding Borca are filled with briar vines (Ivana) or barbed wire (Ivan). The Mists become {@variantrule Difficult Terrain|XPHB}, and whenever a creature moves into or within the Mists, it takes {@damage 2d4} Piercing damage for every 5 feet it travels. Once Ivana or Ivan closes or opens the borders, neither Darklord can do so again until the next dawn."
+						},
+						{
+							"type": "item",
+							"name": "Ivana's Whispers (Ivana Only)",
+							"entry": "Ivana can encode a message of 25 words or fewer into flowers in Borca at dawn. Until the next dawn, the first time a creature smells a flower, it hears the message in its mind, understanding the meaning of the message."
+						},
+						{
+							"type": "item",
+							"name": "Mystery Letters (Ivan Only)",
+							"entry": "Whenever Ivan writes a letter and addresses it to a creature in Borca whose name he knows and that he's seen before, the letter appears near that creature at the next dawn. The letter appears in an unobserved but obvious space, such as a bedside table or among gear."
+						},
+						{
+							"type": "item",
+							"name": "Spies",
+							"entry": "While in Borca, Ivana and Ivan can cast {@spell Clairvoyance|XPHB}, requiring no Material components and using Intelligence as the spellcasting ability. To cast the spell, there must be a Large or bigger plant (Ivana) or a Tiny doll or similar toy (Ivan) within range from which the sensor appears."
+						}
+					]
+				},
+				"If a Darklord of Borca dies, that Darklord's effects end immediately. Those effects resume if that Darklord gains a new body (see {@creature Ivana Boritsi|RHW|Ivana's} and {@creature Ivan Dilisnya|RHW|Ivan's} Darklord Restoration traits)."
 			]
 		},
 		{
@@ -4191,6 +4570,35 @@
 			]
 		},
 		{
+			"name": "Lord Soth of Sithicus",
+			"source": "RHW",
+			"regionalEffects": [
+				"Sithicus is altered by Lord Soth's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in his domain, Lord Soth can close or open the borders to Sithicus. While the borders are closed, purple flames fill the Mists surrounding Sithicus. A creature that enters the Mists for the first time on a turn or starts its turn there takes 5 ({@dice 1d10}) Fire damage plus 5 ({@dice 1d10}) Necrotic damage."
+						},
+						{
+							"type": "item",
+							"name": "Fearless Soldiers",
+							"entry": "Undead allies of Lord Soth have Immunity to the {@condition Frightened|XPHB} condition."
+						},
+						{
+							"type": "item",
+							"name": "Guilt of Sithicus",
+							"entry": "Few sleep soundly in Sithicus. Whenever a creature other than Lord Soth and his allies finishes a Long Rest in the domain, the creature must succeed on a {@dc 10} Constitution saving throw or gain 1 {@condition Exhaustion|XPHB} level."
+						}
+					]
+				},
+				"If Lord Soth dies, these effects end immediately."
+			]
+		},
+		{
 			"name": "Lunar Dragon",
 			"source": "BAM",
 			"regionalEffects": [
@@ -4223,6 +4631,18 @@
 					]
 				},
 				"If the dragon dies, the moaning stops, the moon devils dissipate, and the black frost disappears over the course of {@dice 1d10} days, allowing plant life in the area to recover."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Lunar Dragon)",
+					"source": "BAM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -4418,22 +4838,22 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Gale",
 							"type": "item",
+							"name": "Gale",
 							"entries": [
 								"The air within 60 feet of the vessel is filled with wind. Until initiative count 20 on the next round, that area is {@quickref difficult terrain||3}, and when a Medium or smaller creature flies into that area or starts its turn flying there, it must succeed on a {@dc 13} Strength saving throw or be knocked {@condition prone}."
 							]
 						},
 						{
-							"name": "Propel",
 							"type": "item",
+							"name": "Propel",
 							"entries": [
 								"A strong wind propels the vessel, increasing its speed by 30 feet until initiative count 20 on the next round."
 							]
 						},
 						{
-							"name": "Repair",
 							"type": "item",
+							"name": "Repair",
 							"entries": [
 								"The vessel regains 22 ({@dice 4d10}) hit points."
 							]
@@ -4448,15 +4868,15 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Unerring",
 							"type": "item",
+							"name": "Unerring",
 							"entries": [
 								"The vessel always stays on course to the destination the merrenoloth names."
 							]
 						},
 						{
-							"name": "Unsinkable",
 							"type": "item",
+							"name": "Unsinkable",
 							"entries": [
 								"The vessel doesn't sink even if its hull is breached."
 							]
@@ -4541,6 +4961,18 @@
 					]
 				},
 				"If the dragon dies, any portals near the lair close immediately."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Moonstone Dragon)",
+					"source": "FTD",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -4554,15 +4986,15 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Cast a Spell",
 							"type": "item",
+							"name": "Cast a Spell",
 							"entries": [
 								"The morkoth casts {@spell darkness}, {@spell dispel magic}, or {@spell misty step}, using Intelligence as its spellcasting ability and without expending a spell slot."
 							]
 						},
 						{
-							"name": "Hypnotize",
 							"type": "item",
+							"name": "Hypnotize",
 							"entries": [
 								"The morkoth uses its Hypnosis action, originating at a point within 120 feet of itself. It doesn't need to see the effect's point of origin."
 							]
@@ -4577,29 +5009,29 @@
 					"style": "list-hang-notitle",
 					"items": [
 						{
-							"name": "Alter Water",
 							"type": "item",
+							"name": "Alter Water",
 							"entries": [
 								"With a thought (no action required), the morkoth can initiate a change in the water within its lair that takes effect 1 minute later. The water can be as breathable and clear as air, or it can be normal water (ranging in clarity from murky to clear)."
 							]
 						},
 						{
-							"name": "Locate Creatures and Objects",
 							"type": "item",
+							"name": "Locate Creatures and Objects",
 							"entries": [
 								"The morkoth is aware of any new arrival, whether an object or a creature, on its island or in its sanctum. As an action, the morkoth can locate any one creature or object on the island. Visitors to the island feel as though they are being watched, even when they aren't."
 							]
 						},
 						{
-							"name": "Lost Possessions",
 							"type": "item",
+							"name": "Lost Possessions",
 							"entries": [
 								"Each time a creature that has been on the island for less than a year finishes a short or long rest, it must make a {@dc 10} Intelligence saving throw. On a failure, the creature has misplaced one possession (chosen by the player, if the creature is that player's character). The possession remains nearby but concealed for a short time, so it can be recovered with a successful {@dc 15} Wisdom ({@skill Perception}) check. An object that is misplaced but not recovered ends up in the morkoth's lair 1 hour later. If the creature later goes to the morkoth's lair, its lost possessions stand out in its perception and are easily recovered."
 							]
 						},
 						{
-							"name": "Supernatural Lure",
 							"type": "item",
+							"name": "Supernatural Lure",
 							"entries": [
 								"Entrances to the morkoth's lair have an enchantment that the morkoth can activate or suppress at any time while it's in its lair and not {@condition incapacitated}. Any creature within 30 feet of such an entrance and able to see it must make a {@dc 15} Wisdom saving throw. On a failed save, the creature feels an intense urge to use its movement on each of its turns to enter the lair and to move toward the morkoth's location (the target doesn't realize it's heading toward a creature). The target moves toward the morkoth by the most direct route. As soon as it can see the morkoth, the target can repeat the saving throw, ending the effect on itself on a success. It can also repeat the saving throw at the end of each of its turns and every time it takes damage."
 							]
@@ -4635,6 +5067,35 @@
 					]
 				},
 				"If the morkoth dies, these regional effects end immediately."
+			]
+		},
+		{
+			"name": "Mother Lorinda",
+			"source": "RHW",
+			"regionalEffects": [
+				"Tepest is altered by Lorinda's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in her domain, Mother Lorinda can close or open the borders to Tepest at will. While the borders are closed, a violent storm fills the Mists surrounding Tepest. A creature that enters the Mists for the first time on a turn or starts its turn there must succeed on a {@dc 15} Strength saving throw or take {@damage 2d8} Lightning damage and be pushed up to 30 feet straight toward Tepest. A creature makes this save only once per turn."
+						},
+						{
+							"type": "item",
+							"name": "Mother's Watchers",
+							"entry": "Creatures that have sacrificed an eye to Mother can take a {@action Magic|XPHB} action and pray to her. When they do so, Lorinda can perceive through the creature's senses as well as her own until the end of the creature's next turn. When perceiving through a creature's senses, Lorinda benefits from any special senses it has."
+						},
+						{
+							"type": "item",
+							"name": "Sun and Storms",
+							"entry": "While in Tepest, Lorinda can cast {@spell Control Weather|XPHB}, requiring no Material components and using the same spellcasting ability as Spellcasting. When casting the spell this way, Lorinda can control the weather within 5 miles of herself, regardless of whether she is inside or outside."
+						}
+					]
+				},
+				"If Lorinda dies, these effects end immediately."
 			]
 		},
 		{
@@ -4712,7 +5173,7 @@
 						{
 							"type": "item",
 							"name": "Earthen Fist",
-							"entry": "A medium fist of packed earth rises from the floor in an unoccupied space that Murgaxor can see within 30 feet of him. The fist attacks when one creature of his choice is within 4 feet of the fist. The fist has a +11 bonus to hit, and on a hit, the target takes 13 ({@damage 3d8}) bludgeoning damage and is grappled (escape {@dc 15}). The fist disappears if the attack roll misses or if the grapple ends. When the fist disappears, this lair action recharges, allowing Murgaxor to use it again."
+							"entry": "A medium fist of packed earth rises from the floor in an unoccupied space that Murgaxor can see within 30 feet of him. The fist attacks when one creature of his choice is within 4 feet of the fist. The fist has a {@hit 11} bonus to hit, and on a hit, the target takes 13 ({@damage 3d8}) bludgeoning damage and is grappled (escape {@dc 15}). The fist disappears if the attack roll misses or if the grapple ends. When the fist disappears, this lair action recharges, allowing Murgaxor to use it again."
 						},
 						{
 							"type": "item",
@@ -5098,6 +5559,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Red Dragon||adult} or {@creature Ancient Red Dragon||ancient}) red dragon can use one or both of the following additional lair actions while in its lair:",
 						{
@@ -5116,8 +5578,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -5134,6 +5595,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Any of these effects might appear in the area around a red dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -5157,8 +5619,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Red Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -5250,6 +5723,35 @@
 			]
 		},
 		{
+			"name": "Saidra d'Honaire",
+			"source": "RHW",
+			"regionalEffects": [
+				"Dementlieu is altered by Saidra's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in her domain, Saidra can close or open the borders to Dementlieu at will. While the borders are closed, the countryside called Chateaufaux appears in the Mists surrounding Dementlieu. Creatures in the Mists get lost amid mazelike hedgerows and fogbanks, only to reappear on the outskirts of Port-a-Lucine {@dice 2d6} hours later."
+						},
+						{
+							"type": "item",
+							"name": "Empowered Actors",
+							"entry": "Humanoids add {@dice 1d8} to Charisma ({@skill Deception|XPHB} or {@skill Performance|XPHB}) checks made while wearing a mask."
+						},
+						{
+							"type": "item",
+							"name": "Invitation",
+							"entry": "At dawn, Saidra can choose a creature whose name she knows or that she's seen before. A simple mask and an invitation to the next Grand Masquerade appear to that creature. The letter and mask appear in an unobserved but obvious space, such as a bedside table or among gear."
+						}
+					]
+				},
+				"If {@creature Saidra d'Honaire|RHW|Saidra} dies, these effects end immediately. The effects resume if Saidra gains a new body (see her Darklord Restoration trait)."
+			]
+		},
+		{
 			"name": "Sapphire Dragon",
 			"source": "FTD",
 			"page": 215,
@@ -5306,6 +5808,18 @@
 					]
 				},
 				"If the dragon dies, the population of giant spiders in the region returns to normal levels over the course of {@dice 1d10} days. The enhancement of telepathic abilities ends immediately. The existing abundance of crystals and sapphires remains, but new ones form at a normal rate."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Sapphire Dragon)",
+					"source": "FTD",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -5331,6 +5845,18 @@
 						"{@creature Giant spider||Giant spiders} are attracted to the area within 6 miles of the lair and settle there in large numbers.",
 						"Natural stone within 6 miles of the lair grows plentiful crystal formations and sapphire gemstone veins, particularly underground.",
 						"Natural stone within 6 miles of the lair becomes a conduit for the dragon's psionic presence. As an action, the dragon can cast the {@spell clairvoyance} spell, requiring no components, targeting any natural stone formation in that region."
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Sapphire Dragon)",
+					"source": "SADS",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
 					]
 				}
 			]
@@ -5680,6 +6206,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Action",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult Silver Dragon||adult} or {@creature Ancient Silver Dragon||ancient}) silver dragon can use the following additional lair action while in its lair:",
 						{
@@ -5693,8 +6220,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -5708,6 +6234,18 @@
 					]
 				},
 				"If the dragon dies, changed weather reverts to normal, as described in the spell, and the other effects fade in {@dice 1d10} days."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Silver Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -5758,6 +6296,18 @@
 							"type": "item",
 							"name": "Stellar Incineration.",
 							"entry": "Any creature that enters the star or starts its turn inside it takes 132 ({@damage 24d10}) radiant damage."
+						}
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Solar Dragon)",
+					"source": "BAM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
 						}
 					]
 				}
@@ -5861,6 +6411,34 @@
 					]
 				},
 				"If Ssendam dies, the effects fade over the course of {@dice 1d10} days."
+			]
+		},
+		{
+			"name": "Star Spawn Emissary",
+			"source": "RHW",
+			"regionalEffects": [
+				"The region containing a star spawn emissary's lair becomes twisted by its presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Cosmic Transformation",
+							"entries": [
+								"When a creature in the lair shape-shifts to its true form, creatures in a 10- foot Emanation originating from the shape-shifter take 10 ({@dice 3d6}) Force damage."
+							]
+						},
+						{
+							"type": "item",
+							"name": "Terrifying Topography",
+							"entries": [
+								"Terrain in the lair is transformed into a mockery of flesh with unsettling features like thick veins, lolling tongues, and pulsating orifices. Creatures of the emissary's choice within 1 mile of the lair have Disadvantage on saving throws to avoid or end the Frightened condition while in that area."
+							]
+						}
+					]
+				},
+				"If the star spawn emissary dies or moves its lair elsewhere, these effects end immediately."
 			]
 		},
 		{
@@ -5973,6 +6551,63 @@
 						"Strahd targets one Medium or smaller creature that casts a shadow. The target's shadow must be visible to Strahd and within 30 feet of him. If the target fails a {@dc 17} Charisma saving throw, its shadow detaches from it and becomes a {@creature shadow} that obeys Strahd's commands, acting on initiative count 20. A {@spell greater restoration} spell or a {@spell remove curse} spell cast on the target restores its natural shadow, but only if its undead shadow has been destroyed."
 					]
 				}
+			]
+		},
+		{
+			"name": "Strahd von Zarovich",
+			"source": "RHW",
+			"regionalEffects": [
+				"Barovia is altered by Strahd's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in his domain, Strahd can close or open the borders to Barovia at will. While the borders are closed, noxious fog suffuses the Mists surrounding Barovia. A creature that enters the Mists for the first time on a turn or starts its turn there must succeed on a {@dc 20} Constitution saving throw or gain 1 {@condition Exhaustion|XPHB} level. A creature makes this save only once per turn."
+						},
+						{
+							"type": "item",
+							"name": "Dreadful Darkness",
+							"entry": "While in an area of {@variantrule Darkness|XPHB}, creatures other than Strahd and creatures of his choice have {@variantrule Disadvantage|XPHB} on saving throws to end or avoid the {@condition Frightened|XPHB} condition."
+						},
+						{
+							"type": "item",
+							"name": "Jealous Heart",
+							"entry": "When a character receives {@variantrule Heroic Inspiration|XPHB} but already has it, that character can't give it to another character in the group."
+						}
+					]
+				},
+				"If Strahd dies, these effects end immediately."
+			]
+		},
+		{
+			"name": "Szass Tam",
+			"source": "AUD",
+			"regionalEffects": [
+				"Szass Tam extends his presence into the region he inhabits, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Soul Siphon",
+							"entries": [
+								"Whenever a Humanoid dies within the lair, its soul is immediately consumed by Szass Tam. A Humanoid whose soul is consumed in this way can be brought back to life only by a {@spell True Resurrection|XPHB} or {@spell Wish|XPHB} spell."
+							]
+						},
+						{
+							"type": "item",
+							"name": "Whispers of Necromancy",
+							"entries": [
+								"Whenever a creature within 1 mile of the lair casts a Necromancy spell, Szass Tam knows the spell and the identity of the creature that cast it."
+							]
+						}
+					]
+				},
+				"If Szass Tam is destroyed or moves his lair elsewhere, these effects end immediately. These effects resume if Szass Tam gains a new body (see his Spirit Jar trait)."
 			]
 		},
 		{
@@ -6099,6 +6734,18 @@
 					]
 				},
 				"If the dragon dies, these effects fade over the course of {@dice 1d10} days."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Time Dragon)",
+					"source": "MPP",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -6158,6 +6805,18 @@
 					]
 				},
 				"If the dragon dies, the population of giant squid in the region returns to normal levels over the course of {@dice 1d10} days. The existing abundance of crystals and topazes remains, but new ones form at a normal rate."
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (Topaz Dragon)",
+					"source": "FTD",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
+				}
 			]
 		},
 		{
@@ -6350,6 +7009,30 @@
 			]
 		},
 		{
+			"name": "Viktra Mordenheim",
+			"source": "RHW",
+			"regionalEffects": [
+				"Lamordia is altered by Viktra's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Air of Obsession",
+							"entry": "When a creature fails a Constitution saving throw to maintain {@status Concentration|XPHB}, that creature takes 3 ({@dice 1d6}) Psychic damage."
+						},
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in her domain, Viktra can close or open the borders to Lamordia. While the borders are closed, lightning storms roll through the Mists surrounding Lamordia. A creature that enters the Mists for the first time on a turn or starts its turn there makes a {@dc 15} Dexterity saving throw, taking {@damage 4d6} Lightning damage on a failed save and half as much on a successful one. A creature makes this save only once per turn."
+						}
+					]
+				},
+				"If Viktra dies, these effects end immediately."
+			]
+		},
+		{
 			"name": "Villain",
 			"source": "BMT",
 			"lairActions": [
@@ -6398,6 +7081,35 @@
 			]
 		},
 		{
+			"name": "Vladeska Drakov",
+			"source": "RHW",
+			"regionalEffects": [
+				"Falkovnia is altered by Drakov's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Authoritarian Regime",
+							"entry": "Drakov's allies have {@variantrule Advantage|XPHB} on Wisdom saving throws."
+						},
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "Drakov can't close or open the borders of her domain. Falkovnia's borders are usually closed, but they open one week every month starting on the night of the new moon."
+						},
+						{
+							"type": "item",
+							"name": "Endless War",
+							"entry": "Whenever a creature other than Drakov or her allies finishes a Long Rest in the domain, roll {@dice 1d20}. On a 1, the creature doesn't remove any {@condition Exhaustion|XPHB} levels as a result of finishing that rest, and the creature gains 1 Exhaustion level."
+						}
+					]
+				},
+				"If Drakov dies, these effects end immediately."
+			]
+		},
+		{
 			"name": "White Dragon",
 			"source": "MM",
 			"page": 101,
@@ -6419,6 +7131,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Lair Actions",
+					"source": "FTD",
 					"entries": [
 						"At your discretion, a legendary ({@creature Adult White Dragon||adult} or {@creature Ancient White Dragon||ancient}) white dragon can use one or both of the following additional lair actions while in its lair:",
 						{
@@ -6437,8 +7150,7 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
 				}
 			],
 			"regionalEffects": [
@@ -6456,6 +7168,7 @@
 				{
 					"type": "entries",
 					"name": "Additional Regional Effects",
+					"source": "FTD",
 					"entries": [
 						"Any of these effects might appear in the area around a white dragon's lair, in addition to or instead of the effects described in the {@i Monster Manual}:",
 						{
@@ -6474,8 +7187,19 @@
 								}
 							]
 						}
-					],
-					"source": "FTD"
+					]
+				}
+			],
+			"_versions": [
+				{
+					"name": "Shadow Dragon (White Dragon)",
+					"source": "MM",
+					"_templates": [
+						{
+							"name": "Shadow Dragon",
+							"source": "FTD"
+						}
+					]
 				}
 			]
 		},
@@ -6506,6 +7230,35 @@
 					]
 				},
 				"If the dragon dies or moves its lair elsewhere, these effects end immediately."
+			]
+		},
+		{
+			"name": "Wilfred Godefroy",
+			"source": "RHW",
+			"regionalEffects": [
+				"Mordent is altered by Lord Godefroy's presence, creating the following effects:",
+				{
+					"type": "list",
+					"style": "list-hang-notitle",
+					"items": [
+						{
+							"type": "item",
+							"name": "Closing the Borders",
+							"entry": "While in his domain, Lord Godefroy can close or open the borders to Mordent. While the borders are closed, the groans and whispers of the dead fill the Mists surrounding Mordent. Creatures in the Mists have the {@condition Deafened|XPHB} condition."
+						},
+						{
+							"type": "item",
+							"name": "Ears Everywhere",
+							"entry": "While in his domain, Lord Godefroy can cast {@spell Sending|XPHB}, requiring no Material components and using Charisma as the spellcasting ability. When casting the spell in this way, Lord Godefroy can target any Undead creature in Mordent, in addition to the usual targets."
+						},
+						{
+							"type": "item",
+							"name": "Spectral Serfs",
+							"entry": "A Humanoid that dies in Mordent rises 7 days later as a {@creature Specter|XMM} under Lord Godefroy's control, unless the Humanoid is restored to life."
+						}
+					]
+				},
+				"If Wilfred dies, these effects end immediately."
 			]
 		},
 		{
@@ -6809,7 +7562,7 @@
 							"type": "item",
 							"name": "Pyres",
 							"entries": [
-								"Once every 60 feet within 1 mile of the lair, 10-foot-high gouts of flame rise from the ground. Any creature or object that touches the flame takes 7 ({@damage 2d6} fire damage, though it can take this damage no more than once per round."
+								"Once every 60 feet within 1 mile of the lair, 10-foot-high gouts of flame rise from the ground. Any creature or object that touches the flame takes 7 ({@damage 2d6}) fire damage, though it can take this damage no more than once per round."
 							]
 						},
 						{

@@ -461,6 +461,7 @@
 				"CoS",
 				"CRCotN",
 				"DSotDQ",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -479,6 +480,7 @@
 				"TftYP-TFoF",
 				"TftYP-TSC",
 				"ToA",
+				"ToR",
 				"WDH"
 			],
 			"reprintedAs": [
@@ -526,7 +528,7 @@
 					"name": "Spellcasting",
 					"type": "spellcasting",
 					"headerEntries": [
-						"The acolyte is a 1st-level spellcaster. Its spellcasting ability is Wisdom (spell save {@dc 12}, {@hit 4} to hit with spell attacks). The acolyte has following cleric spells prepared:"
+						"The acolyte is a 1st-level spellcaster. Its spellcasting ability is Wisdom (spell save {@dc 12}, {@hit 4} to hit with spell attacks). The acolyte has the following cleric spells prepared:"
 					],
 					"spells": {
 						"0": {
@@ -603,7 +605,6 @@
 				"CoA",
 				"DSotDQ",
 				"GoS",
-				"HotDQ",
 				"KftGV",
 				"PotA",
 				"QftIS",
@@ -2953,8 +2954,8 @@
 				"LRDT",
 				"MOT",
 				"OotA",
-				"RoT",
 				"TftYP",
+				"TftYP-AtG",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -3861,6 +3862,7 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-WPM",
 				"ToA",
 				"VEoR",
 				"WBtW",
@@ -7396,6 +7398,7 @@
 				"CM",
 				"CoS",
 				"EGW",
+				"FS",
 				"GoS",
 				"IDRotF",
 				"KftGV",
@@ -7409,6 +7412,7 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-TFoF",
 				"ToA",
 				"VEoR",
 				"WBtW",
@@ -7708,6 +7712,7 @@
 				"CM",
 				"GoS",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA",
 				"WDH"
 			],
@@ -8009,8 +8014,8 @@
 					"entries": [
 						"Some yugoloths have an action option that allows them to summon other yugoloths.",
 						{
-							"name": "Summon Yugoloth (1/Day)",
 							"type": "entries",
+							"name": "Summon Yugoloth (1/Day)",
 							"entries": [
 								"The yugoloth attempts a magical summoning.",
 								"An arcanaloth has a {@chance 40|40 percent|40% summoning chance} chance of summoning one arcanaloth.",
@@ -8377,7 +8382,6 @@
 				"CRCotN",
 				"EGW",
 				"GoS",
-				"HotDQ",
 				"IDRotF",
 				"IMR",
 				"JttRC",
@@ -8391,6 +8395,7 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA",
 				"ToFW",
 				"VEoR",
@@ -8919,6 +8924,7 @@
 				"CoS",
 				"KftGV",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"TTP",
 				"WBtW"
@@ -9283,8 +9289,10 @@
 				"DC",
 				"DIP",
 				"DSotDQ",
+				"EFR",
 				"EGW",
 				"ERLW",
+				"FS",
 				"GoS",
 				"HotDQ",
 				"IDRotF",
@@ -9303,6 +9311,7 @@
 				"SLW",
 				"TLK",
 				"ToA",
+				"ToR",
 				"WDH",
 				"WDMM"
 			],
@@ -9442,6 +9451,7 @@
 				"TLK",
 				"ToA",
 				"ToFW",
+				"ToR",
 				"WDH",
 				"WDMM"
 			],
@@ -10174,7 +10184,7 @@
 				{
 					"name": "Petrifying Gaze",
 					"entries": [
-						"If a creature starts its turn within 30 feet of the basilisk and the two of them can see each other, the basilisk can force the creature to make a {@dc 12} Constitution saving throw if the basilisk isn't {@condition incapacitated}. On a failed save, the creature magically begins to turn to stone and is {@condition restrained}. It must repeat the saving throw at the end of its next turn. On a success, the effect ends. On a failure, the creature is {@condition petrified} until freed by the  {@spell greater restoration} spell or other magic.",
+						"If a creature starts its turn within 30 feet of the basilisk and the two of them can see each other, the basilisk can force the creature to make a {@dc 12} Constitution saving throw if the basilisk isn't {@condition incapacitated}. On a failed save, the creature magically begins to turn to stone and is {@condition restrained}. It must repeat the saving throw at the end of its next turn. On a success, the effect ends. On a failure, the creature is {@condition petrified} until freed by the {@spell greater restoration} spell or other magic.",
 						"A creature that isn't {@status surprised} can avert its eyes to avoid the saving throw at the start of its turn. If it does so, it can't see the basilisk until the start of its next turn, when it can avert its eyes again. If it looks at the basilisk in the meantime, it must immediately make the save.",
 						"If the basilisk sees its reflection within 30 feet of it in bright light, it mistakes itself for a rival and targets itself with its gaze."
 					]
@@ -10506,6 +10516,7 @@
 				"PaBTSO",
 				"QftIS",
 				"TftYP",
+				"TftYP-DiT",
 				"ToFW",
 				"VEoR",
 				"WDMM"
@@ -10785,7 +10796,7 @@
 								{
 									"type": "itemSub",
 									"name": "8. Petrification Ray",
-									"entry": "The targeted creature must make a {@dc 16} Dexterity saving throw. On a failed save, the creature begins to turn to stone and is {@condition restrained}. It must repeat the saving throw at the end of its next turn. On a success, the effect ends. On a failure, the creature is {@condition petrified} until freed by the  {@spell greater restoration} spell or other magic."
+									"entry": "The targeted creature must make a {@dc 16} Dexterity saving throw. On a failed save, the creature begins to turn to stone and is {@condition restrained}. It must repeat the saving throw at the end of its next turn. On a success, the effect ends. On a failure, the creature is {@condition petrified} until freed by the {@spell greater restoration} spell or other magic."
 								},
 								{
 									"type": "itemSub",
@@ -10824,6 +10835,8 @@
 				{
 					"type": "inset",
 					"name": "Variant Abilities",
+					"source": "VGM",
+					"page": 12,
 					"entries": [
 						"When a beholder's dream-imagination runs wild, the result can be an offspring that has an unusual or unique set of abilities. Rather than the standard powers of a beholder's central eye and eyestalks, the creature has one or more variant abilities\u2014guaranteed to surprise any enemies who thought they knew what they were getting themselves into.",
 						"This section provides several alternative spell effects for a beholder's eye. Each of these effects is designed to be of the same power level as the one it replaces, enabling you to create a custom beholder without altering the monster's challenge rating. As another option, you can switch any of the damaging eye rays in the {@book Monster Manual|MM} to an effect with a different damage type, such as replacing the enervation ray with a combustion ray that deals fire damage instead of necrotic damage.",
@@ -10890,8 +10903,6 @@
 							]
 						}
 					],
-					"source": "VGM",
-					"page": 12,
 					"_version": {
 						"name": "Beholder (Variant Abilities)",
 						"addAs": "trait"
@@ -11344,6 +11355,7 @@
 			"srd": true,
 			"referenceSources": [
 				"TftYP",
+				"TftYP-DiT",
 				"VEoR"
 			],
 			"reprintedAs": [
@@ -11557,6 +11569,9 @@
 				"SCC-HfMT",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-WPM",
 				"ToFW",
 				"WDH",
 				"WDMM"
@@ -12450,15 +12465,15 @@
 					"entries": [
 						"Some bone devils have the following action options.",
 						{
-							"name": "Multiattack",
 							"type": "entries",
+							"name": "Multiattack",
 							"entries": [
 								"The devil makes two attacks: one with its hooked polearm and one with its sting."
 							]
 						},
 						{
-							"name": "Hooked Polearm",
 							"type": "entries",
+							"name": "Hooked Polearm",
 							"entries": [
 								"{@atk mw} {@hit 8} to hit, reach 10 ft., one target. {@h}17 ({@damage 2d12 + 4}) piercing damage. If the target is a Huge or smaller creature, it is {@condition grappled} (escape {@dc 14}). Until this grapple ends, the devil can't use its polearm on another target."
 							]
@@ -13276,6 +13291,7 @@
 				"RtG",
 				"SKT",
 				"TftYP",
+				"TftYP-TFoF",
 				"WBtW",
 				"WDMM"
 			],
@@ -13376,6 +13392,7 @@
 			"basicRules": true,
 			"referenceSources": [
 				"CRCotN",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -13392,6 +13409,9 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TSC",
+				"TftYP-WPM",
 				"WBtW",
 				"WDH",
 				"WDMM"
@@ -13518,7 +13538,8 @@
 			"referenceSources": [
 				"CRCotN",
 				"NRH-AT",
-				"TftYP"
+				"TftYP",
+				"TftYP-AtG"
 			],
 			"size": [
 				"M"
@@ -13765,6 +13786,7 @@
 				"HotDQ",
 				"OoW",
 				"SCC-ARiR",
+				"US",
 				"WBtW",
 				"WDMM"
 			],
@@ -14037,6 +14059,8 @@
 				{
 					"type": "variant",
 					"name": "Demonic Cambions",
+					"source": "MTF",
+					"page": 32,
 					"entries": [
 						"Few demons consort with mortals, and those with the charm or desire to usually grant their cambion children the Fiendish Charm ability. Cultists of Baphomet and Orcus can also use foul rituals to infuse their master's strength into a young or unborn child, yielding a cult champion who can wield special abilities; a cambion linked to Orcus replaces Fiendish Charm with Spawn of the Grave, and one linked to Baphomet replaces it with Horned One's Call.",
 						{
@@ -14054,13 +14078,13 @@
 								"In addition, this cambion can use its Innate Spellcasting ability to cast {@spell animate dead} three times per day."
 							]
 						}
-					],
-					"source": "MTF",
-					"page": 32
+					]
 				},
 				{
 					"type": "variant",
 					"name": "Infernal Cambions",
+					"source": "MTF",
+					"page": 21,
 					"entries": [
 						"Some devils grant a unique ability to their spawn that replaces the cambion's Fiendish Charm trait; Zariel and Geryon have a penchant for spawning cambions to serve as war leaders among their followers. The two of them grant the Fury of the Nine ability in place of Fiendish Charm.",
 						{
@@ -14070,9 +14094,7 @@
 								"As a bonus action, the cambion chooses another creature that can see or hear it within 120 feet. That creature gains advantage on all attack rolls and saving throws for the next minute or until the cambion uses this ability again."
 							]
 						}
-					],
-					"source": "MTF",
-					"page": 21
+					]
 				}
 			],
 			"environment": [
@@ -14279,6 +14301,7 @@
 				"OoW",
 				"QftIS",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA",
 				"TTP",
 				"WDH",
@@ -14493,6 +14516,7 @@
 			"referenceSources": [
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -14603,6 +14627,7 @@
 				"QftIS",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"WBtW"
 			],
 			"reprintedAs": [
@@ -14960,7 +14985,7 @@
 				{
 					"name": "Drone",
 					"entries": [
-						"The chasme produces a horrid droning sound to which demons are immune. Any other creature that starts its turn with in 30 feet of the chasme must succeed on a {@dc 12} Constitution saving throw or fall {@condition unconscious} for 10 minutes. A creature that can't hear the drone automatically succeeds on the save. The effect on the creature ends if it takes damage or if another creature takes an action to splash it with {@item Holy Water (Flask)|PHB|holy water}. If a creature's saving throw is successful or the effect ends for it, it is immune to the drone for the next 24 hours."
+						"The chasme produces a horrid droning sound to which demons are immune. Any other creature that starts its turn within 30 feet of the chasme must succeed on a {@dc 12} Constitution saving throw or fall {@condition unconscious} for 10 minutes. A creature that can't hear the drone automatically succeeds on the save. The effect on the creature ends if it takes damage or if another creature takes an action to splash it with {@item Holy Water (Flask)|PHB|holy water}. If a creature's saving throw is successful or the effect ends for it, it is immune to the drone for the next 24 hours."
 					]
 				},
 				{
@@ -14980,7 +15005,7 @@
 				{
 					"name": "Proboscis",
 					"entries": [
-						"{@atk mw} {@hit 5} to hit, reach 5 ft., one creature. {@h}16 ({@damage 4d6 + 2}) piercing damage plus 24 ({@damage 7d6}) necrotic damage, and the target's hit point maximum is reduced by an amount equal to the necrotic damage taken. If this effect reduces a creature's hit point maximum to 0, the creature dies. This reduction to a creature's hit point maximum lasts until the creature finishes a long rest or until it is affected by a spell like  {@spell greater restoration}."
+						"{@atk mw} {@hit 5} to hit, reach 5 ft., one creature. {@h}16 ({@damage 4d6 + 2}) piercing damage plus 24 ({@damage 7d6}) necrotic damage, and the target's hit point maximum is reduced by an amount equal to the necrotic damage taken. If this effect reduces a creature's hit point maximum to 0, the creature dies. This reduction to a creature's hit point maximum lasts until the creature finishes a long rest or until it is affected by a spell like {@spell greater restoration}."
 					]
 				}
 			],
@@ -15049,6 +15074,7 @@
 				"SDW",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -15323,6 +15349,7 @@
 				"RoT",
 				"SCC-ARiR",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"WDMM"
 			],
@@ -15429,7 +15456,7 @@
 				{
 					"name": "Slam",
 					"entries": [
-						"{@atk mw} {@hit 8} to hit, reach 5 ft., one target. {@h}16 ({@damage 2d10 + 5}) bludgeoning damage. If the target is a creature, it must succeed on a {@dc 15} Constitution saving throw or have its hit point maximum reduced by an amount equal to the damage taken. The target dies if this attack reduces its hit point maximum to 0. The reduction lasts until removed by the  {@spell greater restoration} spell or other magic."
+						"{@atk mw} {@hit 8} to hit, reach 5 ft., one target. {@h}16 ({@damage 2d10 + 5}) bludgeoning damage. If the target is a creature, it must succeed on a {@dc 15} Constitution saving throw or have its hit point maximum reduced by an amount equal to the damage taken. The target dies if this attack reduces its hit point maximum to 0. The reduction lasts until removed by the {@spell greater restoration} spell or other magic."
 					]
 				},
 				{
@@ -15542,7 +15569,7 @@
 				{
 					"name": "Damage Transfer",
 					"entries": [
-						"While attached to a creature, the cloaker takes only half the damage dealt to it (rounded down). and that creature takes the other half."
+						"While attached to a creature, the cloaker takes only half the damage dealt to it (rounded down), and that creature takes the other half."
 					]
 				},
 				{
@@ -15646,6 +15673,7 @@
 				"SatO",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -15766,18 +15794,20 @@
 				{
 					"type": "variant",
 					"name": "New Giant Options",
+					"source": "SKT",
+					"page": 245,
 					"entries": [
 						"Some adult cloud giants have the magical ability to create barriers of gale-force wind around themselves that can deflect incoming missiles. Others like to fling enemies through the air. These abilities are represented by the following action options.",
 						{
-							"name": "Fling",
 							"type": "entries",
+							"name": "Fling",
 							"entries": [
 								"The giant tries to throw a Small or Medium creature within 10 feet of it. The target must succeed on a {@dc 20} Dexterity saving throw or be hurled up to 60 feet horizontally in a direction of the giant's choice and land {@condition prone}, taking 4 ({@damage 1d8}) bludgeoning damage for every 10 feet it was thrown."
 							]
 						},
 						{
-							"name": "Wind Aura",
 							"type": "entries",
+							"name": "Wind Aura",
 							"entries": [
 								"A magical aura of wind surrounds the giant. The aura is a 10-foot-radius sphere that lasts as long as the giant maintains {@status concentration} on it (as if {@status concentration||concentrating} on a spell). While the aura is in effect, the giant gains a +2 bonus to its AC against ranged weapon attacks, and all open flames within the aura are extinguished unless they are magical."
 							]
@@ -15786,9 +15816,7 @@
 					"_version": {
 						"name": "Cloud Giant (Optional Actions)",
 						"addHeadersAs": "action"
-					},
-					"source": "SKT",
-					"page": 245
+					}
 				}
 			],
 			"environment": [
@@ -15853,6 +15881,7 @@
 				"OoW",
 				"SCC-CK",
 				"TftYP",
+				"TftYP-DiT",
 				"WBtW"
 			],
 			"reprintedAs": [
@@ -15937,10 +15966,13 @@
 				"CoS",
 				"CRCotN",
 				"DC",
+				"DD",
 				"DIP",
 				"DSotDQ",
+				"EFR",
 				"EGW",
 				"ERLW",
+				"FS",
 				"GoS",
 				"GotSF",
 				"HFStCM",
@@ -15967,8 +15999,14 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"TftYP-THSoT",
+				"TftYP-TSC",
 				"ToA",
 				"ToFW",
+				"ToR",
 				"VEoR",
 				"WBtW",
 				"WDH",
@@ -16062,6 +16100,7 @@
 			"basicRules": true,
 			"referenceSources": [
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"WDMM"
 			],
@@ -16360,6 +16399,7 @@
 				"PSX",
 				"SKT",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"VEoR",
 				"WDMM"
@@ -16760,6 +16800,7 @@
 				"SCC-TMM",
 				"SLW",
 				"ToA",
+				"US",
 				"WBtW"
 			],
 			"reprintedAs": [
@@ -16853,8 +16894,8 @@
 				"DC",
 				"DIP",
 				"EGW",
+				"FS",
 				"GoS",
-				"HotDQ",
 				"IDRotF",
 				"IMR",
 				"JttRC",
@@ -16872,6 +16913,7 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"ToFW",
 				"VEoR",
@@ -17052,8 +17094,10 @@
 				"CM",
 				"CoS",
 				"DC",
+				"DD",
 				"DIP",
 				"EGW",
+				"FS",
 				"GoS",
 				"HftT",
 				"HotDQ",
@@ -17073,6 +17117,7 @@
 				"RoT",
 				"SKT",
 				"SLW",
+				"US",
 				"VEoR",
 				"VNotEE",
 				"WDH",
@@ -18376,7 +18421,7 @@
 								{
 									"type": "itemSub",
 									"name": "8. Petrification Ray",
-									"entry": "The targeted creature must make a {@dc 17} Dexterity saving throw. On a failed save, the creature begins to turn to stone and is {@condition restrained}. It must repeat the saving throw at the end of its next turn. On a success, the effect ends. On a failure, the creature is {@condition petrified} until freed by the  {@spell greater restoration} spell or other magic."
+									"entry": "The targeted creature must make a {@dc 17} Dexterity saving throw. On a failed save, the creature begins to turn to stone and is {@condition restrained}. It must repeat the saving throw at the end of its next turn. On a success, the effect ends. On a failure, the creature is {@condition petrified} until freed by the {@spell greater restoration} spell or other magic."
 								},
 								{
 									"type": "itemSub",
@@ -18695,6 +18740,8 @@
 				"IDRotF",
 				"JttRC",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-ToH",
 				"ToFW",
 				"WDMM"
 			],
@@ -18835,7 +18882,7 @@
 				{
 					"name": "Energy Drain (Costs 2 Actions)",
 					"entries": [
-						"Each creature with in 30 feet of the demilich must make a {@dc 15} Constitution saving throw. On a failed save, the creature's hit point maximum is magically reduced by 10 ({@dice 3d6}). If a creature's hit point maximum is reduced to 0 by this effect, the creature dies. A creature's hit point maximum can be restored with the  {@spell greater restoration} spell or similar magic."
+						"Each creature within 30 feet of the demilich must make a {@dc 15} Constitution saving throw. On a failed save, the creature's hit point maximum is magically reduced by 10 ({@dice 3d6}). If a creature's hit point maximum is reduced to 0 by this effect, the creature dies. A creature's hit point maximum can be restored with the {@spell greater restoration} spell or similar magic."
 					]
 				},
 				{
@@ -19139,6 +19186,8 @@
 				"QftIS",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TFoF",
 				"ToFW"
 			],
 			"reprintedAs": [
@@ -19240,6 +19289,7 @@
 				"QftIS",
 				"SatO",
 				"TftYP",
+				"TftYP-DiT",
 				"WBtW",
 				"WDH",
 				"WDMM"
@@ -19620,6 +19670,7 @@
 				"SatO",
 				"SKT",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"ToFW",
 				"WDH",
@@ -20354,16 +20405,20 @@
 				"CM",
 				"CRCotN",
 				"DC",
+				"DD",
 				"DIP",
 				"EGW",
 				"OotA",
 				"PaBTSO",
 				"TftYP",
+				"TftYP-AtG",
+				"US",
 				"WDH",
 				"WDMM"
 			],
 			"reprintedAs": [
-				"Priest Acolyte|XMM"
+				"Priest Acolyte|XMM",
+				"Drow of Lolth|FRAiF"
 			],
 			"size": [
 				"M"
@@ -20576,11 +20631,13 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-AtG",
 				"WDH",
 				"WDMM"
 			],
 			"reprintedAs": [
-				"Gladiator|XMM"
+				"Gladiator|XMM",
+				"Drow Elite Warrior of Lolth|FRAiF"
 			],
 			"size": [
 				"M"
@@ -20821,6 +20878,7 @@
 				"PotA",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA",
 				"VEoR",
 				"WBtW",
@@ -20828,7 +20886,8 @@
 				"WDMM"
 			],
 			"reprintedAs": [
-				"Bandit Deceiver|XMM"
+				"Bandit Deceiver|XMM",
+				"Drow Mage of Lolth|FRAiF"
 			],
 			"size": [
 				"M"
@@ -21045,10 +21104,12 @@
 				"GoS",
 				"OotA",
 				"TftYP",
+				"TftYP-AtG",
 				"WDMM"
 			],
 			"reprintedAs": [
-				"Fiend Cultist|XMM"
+				"Fiend Cultist|XMM",
+				"Drow Priestess of Lolth|FRAiF"
 			],
 			"size": [
 				"M"
@@ -21324,6 +21385,7 @@
 				"CoA",
 				"CoS",
 				"CRCotN",
+				"DD",
 				"DIP",
 				"EGW",
 				"GoS",
@@ -21343,6 +21405,7 @@
 				"TftYP-DiT",
 				"TftYP-TSC",
 				"ToA",
+				"ToR",
 				"VEoR",
 				"WBtW",
 				"WDH"
@@ -21672,6 +21735,7 @@
 			"referenceSources": [
 				"BGDIA",
 				"CoA",
+				"DD",
 				"EGW",
 				"IDRotF",
 				"KftGV",
@@ -21681,6 +21745,7 @@
 				"QftIS",
 				"RtG",
 				"TftYP",
+				"TftYP-TFoF",
 				"WDH",
 				"WDMM"
 			],
@@ -22363,6 +22428,9 @@
 				"SatO",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-ToH",
+				"TftYP-WPM",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -22779,6 +22847,7 @@
 				"QftIS",
 				"SatO",
 				"TftYP",
+				"TftYP-AtG",
 				"ToFW",
 				"WDMM"
 			],
@@ -23390,6 +23459,7 @@
 				"SCC-HfMT",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"ToFW",
 				"VEoR",
 				"WDMM"
@@ -24339,6 +24409,7 @@
 			"referenceSources": [
 				"BMT",
 				"EGW",
+				"FS",
 				"WBtW",
 				"WDH",
 				"WDMM"
@@ -24686,6 +24757,7 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"WBtW",
 				"WDMM"
@@ -24834,6 +24906,7 @@
 				"SatO",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -24909,6 +24982,8 @@
 				{
 					"type": "variant",
 					"name": "New Giant Options",
+					"source": "SKT",
+					"page": 245,
 					"entries": [
 						"Some adult fire giants are trained to lay siege to strongholds and break through enemy lines. These abilities are represented by the following traits.",
 						{
@@ -24929,9 +25004,7 @@
 					"_version": {
 						"name": "Fire Giant (Optional Actions)",
 						"addHeadersAs": "action"
-					},
-					"source": "SKT",
-					"page": 245
+					}
 				}
 			],
 			"environment": [
@@ -24983,6 +25056,7 @@
 				"PotA",
 				"SCC-CK",
 				"TftYP",
+				"TftYP-TSC",
 				"ToA"
 			],
 			"reprintedAs": [
@@ -25322,6 +25396,7 @@
 				"CoS",
 				"DIP",
 				"EGW",
+				"FS",
 				"GoS",
 				"IDRotF",
 				"MOT",
@@ -25329,6 +25404,8 @@
 				"RtG",
 				"SDW",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-WPM",
 				"ToA",
 				"ToFW",
 				"WDH",
@@ -25704,6 +25781,7 @@
 				"CM",
 				"CoS",
 				"EGW",
+				"FS",
 				"GoS",
 				"IDRotF",
 				"KftGV",
@@ -25713,6 +25791,7 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-ToH",
 				"ToA",
 				"VEoR",
 				"WDH",
@@ -26043,10 +26122,10 @@
 				"CoA",
 				"EGW",
 				"IDRotF",
-				"RoT",
 				"SatO",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA"
 			],
 			"reprintedAs": [
@@ -26122,11 +26201,13 @@
 				{
 					"type": "variant",
 					"name": "New Giant Options",
+					"source": "SKT",
+					"page": 246,
 					"entries": [
 						"Some adult frost giants are skilled hunters who construct and hurl nets weighted down with fragments of metal or bone. This ability is represented by the following action option.",
 						{
-							"name": "Weighted Net",
 							"type": "entries",
+							"name": "Weighted Net",
 							"entries": [
 								"{@atk rw} {@hit 5} to hit, ranged 20/60 ft., one Small, Medium, or Large creature. {@h}The target is {@condition restrained} until it escapes the net. Any creature can use its action to make a {@dc 17} Strength check to free itself or another creature in the net, ending the effect on a success. Dealing 15 slashing damage to the net (AC 12) destroys the net and frees the target."
 							]
@@ -26135,9 +26216,7 @@
 					"_version": {
 						"name": "Frost Giant (Optional Actions)",
 						"addHeadersAs": "action"
-					},
-					"source": "SKT",
-					"page": 246
+					}
 				}
 			],
 			"environment": [
@@ -26338,6 +26417,8 @@
 				"SCC-HfMT",
 				"SKT",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-WPM",
 				"ToA",
 				"WDH",
 				"WDMM"
@@ -26469,6 +26550,7 @@
 				"OotA",
 				"QftIS",
 				"TftYP",
+				"TftYP-THSoT",
 				"WDH",
 				"WDMM"
 			],
@@ -26589,6 +26671,7 @@
 				"OotA",
 				"QftIS",
 				"TftYP",
+				"TftYP-DiT",
 				"WBtW",
 				"WDMM"
 			],
@@ -26866,6 +26949,10 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"TftYP-ToH",
+				"TftYP-TSC",
 				"ToFW",
 				"TTP",
 				"VEoR",
@@ -26973,7 +27060,7 @@
 				{
 					"name": "Horrifying Visage",
 					"entries": [
-						"Each non-undead creature within 60 feet of the ghost that can see it must succeed on a {@dc 13} Wisdom saving throw or be {@condition frightened} for 1 minute. If the save fails by 5 or more, the target also ages {@dice 1d4 × 10} years. A {@condition frightened} target can repeat the saving throw at the end of each of its turns, ending the {@condition frightened} condition on itself on a success. If a target's saving throw is successful or the effect ends for it, the target is immune to this ghost's Horrifying Visage for the next 24 hours. The aging effect can be reversed with a  {@spell greater restoration} spell, but only within 24 hours of it occurring."
+						"Each non-undead creature within 60 feet of the ghost that can see it must succeed on a {@dc 13} Wisdom saving throw or be {@condition frightened} for 1 minute. If the save fails by 5 or more, the target also ages {@dice 1d4 × 10} years. A {@condition frightened} target can repeat the saving throw at the end of each of its turns, ending the {@condition frightened} condition on itself on a success. If a target's saving throw is successful or the effect ends for it, the target is immune to this ghost's Horrifying Visage for the next 24 hours. The aging effect can be reversed with a {@spell greater restoration} spell, but only within 24 hours of it occurring."
 					]
 				},
 				{
@@ -27056,6 +27143,8 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-WPM",
 				"ToA",
 				"VEoR",
 				"WBtW",
@@ -27541,6 +27630,7 @@
 				"QftIS",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
 				"WDMM",
 				"XMtS"
 			],
@@ -27632,6 +27722,7 @@
 				"SLW",
 				"TftYP-THSoT",
 				"ToA",
+				"US",
 				"WBtW"
 			],
 			"reprintedAs": [
@@ -27722,11 +27813,15 @@
 				"CM",
 				"DIP",
 				"EGW",
+				"FS",
 				"GoS",
 				"MOT",
 				"PotA",
 				"SKT",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-WPM",
+				"ToR",
 				"TTP",
 				"VEoR",
 				"WDMM",
@@ -28155,6 +28250,8 @@
 				"PSX",
 				"QftIS",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-THSoT",
 				"WDH",
 				"WDMM"
 			],
@@ -28244,6 +28341,7 @@
 			"referenceSources": [
 				"DitLCoT",
 				"EGW",
+				"FS",
 				"GoS",
 				"HftT",
 				"HotDQ",
@@ -28251,6 +28349,8 @@
 				"QftIS",
 				"SCC-CK",
 				"TftYP",
+				"TftYP-THSoT",
+				"TftYP-TSC",
 				"ToA",
 				"WBtW",
 				"WDMM"
@@ -28456,7 +28556,8 @@
 			"referenceSources": [
 				"BGDIA",
 				"GoS",
-				"TftYP"
+				"TftYP",
+				"TftYP-THSoT"
 			],
 			"reprintedAs": [
 				"Giant Hyena|XMM"
@@ -28542,6 +28643,8 @@
 				"PSA",
 				"QftIS",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TFoF",
 				"ToA",
 				"TTP",
 				"VEoR",
@@ -28679,6 +28782,7 @@
 				"CRCotN",
 				"DSotDQ",
 				"EGW",
+				"FS",
 				"GoS",
 				"MOT",
 				"OotA",
@@ -28754,7 +28858,7 @@
 				{
 					"name": "Ink Cloud (Recharges after a Short or Long Rest)",
 					"entries": [
-						"A 20-foot-radius cloud of ink extends all around the octopus if it is underwater. The area is heavily obscured for 1 minute, although a significant current can disperse the ink. After releasing the ink, the octopus can use the {@action Dash} action as a bonus action."
+						"A 20-foot-radius cloud of ink extends all around the octopus if it is underwater. The area is {@quickref Vision and Light||2||heavily obscured} for 1 minute, although a significant current can disperse the ink. After releasing the ink, the octopus can use the {@action Dash} action as a bonus action."
 					]
 				}
 			],
@@ -29011,6 +29115,7 @@
 				"SCC-CK",
 				"SKT",
 				"TftYP",
+				"TftYP-TSC",
 				"WBtW",
 				"WDMM"
 			],
@@ -29145,6 +29250,7 @@
 				"SCC-CK",
 				"SCC-HfMT",
 				"TftYP",
+				"TftYP-WPM",
 				"ToA"
 			],
 			"reprintedAs": [
@@ -29460,7 +29566,10 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-THSoT",
 				"ToA",
+				"US",
 				"VEoR",
 				"WDH",
 				"WDMM"
@@ -29588,10 +29697,12 @@
 			"basicRules": true,
 			"referenceSources": [
 				"EGW",
+				"FS",
 				"GoS",
 				"KftGV",
 				"QftIS",
 				"TCE",
+				"US",
 				"WBtW",
 				"WDMM"
 			],
@@ -29891,7 +30002,8 @@
 			"referenceSources": [
 				"GoS",
 				"QftIS",
-				"TftYP"
+				"TftYP",
+				"TftYP-AtG"
 			],
 			"reprintedAs": [
 				"Giant Weasel|XMM"
@@ -29981,6 +30093,7 @@
 				"PSX",
 				"TCE",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"WBtW"
 			],
@@ -30106,6 +30219,8 @@
 				"QftIS",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-THSoT",
 				"WDH",
 				"WDMM"
 			],
@@ -30737,6 +30852,8 @@
 				"GoS",
 				"SatO",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-ToH",
 				"VEoR",
 				"WDMM"
 			],
@@ -31087,6 +31204,7 @@
 			"referenceSources": [
 				"BGDIA",
 				"BMT",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -31096,6 +31214,8 @@
 				"PotA",
 				"SatO",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
 				"ToFW"
 			],
 			"reprintedAs": [
@@ -31585,6 +31705,7 @@
 				"BMT",
 				"CRCotN",
 				"DSotDQ",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -31601,7 +31722,9 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-TSC",
 				"ToA",
+				"US",
 				"WBtW",
 				"WDH",
 				"WDMM"
@@ -32107,6 +32230,8 @@
 				"RoT",
 				"SCC-ARiR",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
 				"WBtW",
 				"WDMM"
 			],
@@ -32176,7 +32301,7 @@
 				{
 					"name": "Petrifying Breath {@recharge 5}",
 					"entries": [
-						"The gorgon exhales petrifying gas in a 30-foot cone. Each creature in that area must succeed on a {@dc 13} Constitution saving throw. On a failed save, a target begins to turn to stone and is {@condition restrained}. The {@condition restrained} target must repeat the saving throw at the end of its next turn. On a success, the effect ends on the target. On a failure, the target is {@condition petrified} until freed by the  {@spell greater restoration} spell or other magic."
+						"The gorgon exhales petrifying gas in a 30-foot cone. Each creature in that area must succeed on a {@dc 13} Constitution saving throw. On a failed save, a target begins to turn to stone and is {@condition restrained}. The {@condition restrained} target must repeat the saving throw at the end of its next turn. On a success, the effect ends on the target. On a failure, the target is {@condition petrified} until freed by the {@spell greater restoration} spell or other magic."
 					]
 				}
 			],
@@ -32404,6 +32529,10 @@
 				"PaBTSO",
 				"SCC-CK",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"TftYP-WPM",
 				"VNotEE",
 				"WDH",
 				"WDMM"
@@ -33115,6 +33244,9 @@
 							"headerEntries": [
 								"While all three members of a hag coven are within 30 feet of one another, they can each cast the following spells from the wizard's spell list but must share the spell slots among themselves:"
 							],
+							"footerEntries": [
+								"For casting these spells, each hag is a 12th-level spellcaster that uses Intelligence as her spellcasting ability. The spell save DC is 12 + the hag's Intelligence modifier, and the spell attack bonus is 4 + the hag's Intelligence modifier."
+							],
 							"spells": {
 								"1": {
 									"slots": 4,
@@ -33158,10 +33290,7 @@
 										"{@spell eyebite}"
 									]
 								}
-							},
-							"footerEntries": [
-								"For casting these spells, each hag is a 12th-level spellcaster that uses Intelligence as her spellcasting ability. The spell save DC is 12 + the hag's Intelligence modifier, and the spell attack bonus is 4 + the hag's Intelligence modifier."
-							]
+							}
 						},
 						{
 							"type": "entries",
@@ -33522,6 +33651,7 @@
 				"QftIS",
 				"RtG",
 				"TftYP",
+				"TftYP-DiT",
 				"VEoR",
 				"WDH",
 				"WDMM"
@@ -33652,6 +33782,8 @@
 				"PotA",
 				"QftIS",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-TFoF",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -34134,8 +34266,10 @@
 				"CoS",
 				"CRCotN",
 				"DC",
+				"DD",
 				"DIP",
 				"DSotDQ",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -34157,6 +34291,7 @@
 				"TftYP-TSC",
 				"ToA",
 				"ToFW",
+				"US",
 				"WDH",
 				"XMtS"
 			],
@@ -34459,7 +34594,8 @@
 				"LLK",
 				"MOT",
 				"QftIS",
-				"TftYP"
+				"TftYP",
+				"TftYP-WPM"
 			],
 			"reprintedAs": [
 				"Sphinx of Lore|XMM"
@@ -34685,6 +34821,7 @@
 			"referenceSources": [
 				"BGDIA",
 				"DSotDQ",
+				"EFR",
 				"ERLW",
 				"IDRotF",
 				"PotA",
@@ -34793,7 +34930,6 @@
 			"srd": true,
 			"referenceSources": [
 				"GoS",
-				"HotDQ",
 				"IMR",
 				"RoT",
 				"SLW"
@@ -34934,13 +35070,15 @@
 				"CoA",
 				"DIP",
 				"DoSI",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
 				"IDRotF",
 				"MOT",
 				"PotA",
-				"SKT"
+				"SKT",
+				"US"
 			],
 			"reprintedAs": [
 				"Harpy|XMM"
@@ -35146,6 +35284,7 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-AtG",
 				"WDH",
 				"WDMM"
 			],
@@ -35278,6 +35417,8 @@
 				"SCC-TMM",
 				"SKT",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-THSoT",
 				"VEoR",
 				"WDH",
 				"WDMM"
@@ -35290,7 +35431,7 @@
 			],
 			"type": "construct",
 			"alignment": [
-				"U"
+				"N"
 			],
 			"ac": [
 				{
@@ -35426,6 +35567,8 @@
 				"PotA",
 				"QftIS",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-ToH",
 				"VEoR",
 				"WBtW",
 				"WDMM"
@@ -35599,7 +35742,8 @@
 				"RoT",
 				"SatO",
 				"SKT",
-				"TftYP"
+				"TftYP",
+				"TftYP-AtG"
 			],
 			"reprintedAs": [
 				"Hill Giant|XMM"
@@ -35665,11 +35809,13 @@
 				{
 					"type": "variant",
 					"name": "New Giant Options",
+					"source": "SKT",
+					"page": 246,
 					"entries": [
 						"Some adult hill giants like to hurl themselves bodily at smaller foes and crush them beneath their bulk. This ability is represented by the following action option.",
 						{
-							"name": "Squash",
 							"type": "entries",
+							"name": "Squash",
 							"entries": [
 								"{@atk mw} {@hit 8} to hit, reach 5 ft., one Medium or Smaller creature. {@h}26 ({@damage 6d6 + 5}) bludgeoning damage, the giant lands {@condition prone} in the target's space, and the target is {@condition grappled} (escape {@dc 15}). Until this grapple ends, the target is {@condition prone}. The grapple ends early if the giant stands up."
 							]
@@ -35678,9 +35824,7 @@
 					"_version": {
 						"name": "Hill Giant (Optional Actions)",
 						"addHeadersAs": "action"
-					},
-					"source": "SKT",
-					"page": 246
+					}
 				}
 			],
 			"environment": [
@@ -35723,6 +35867,7 @@
 			"srd": true,
 			"basicRules": true,
 			"referenceSources": [
+				"DD",
 				"EGW",
 				"ERLW",
 				"OoW",
@@ -35837,6 +35982,8 @@
 				"RMBRE",
 				"SKT",
 				"TftYP",
+				"TftYP-TSC",
+				"US",
 				"WBtW",
 				"WDMM"
 			],
@@ -36354,6 +36501,7 @@
 				"PotA",
 				"QftIS",
 				"TftYP",
+				"TftYP-DiT",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -36647,7 +36795,9 @@
 				"SatO",
 				"SKT",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
+				"ToR",
 				"XMtS"
 			],
 			"reprintedAs": [
@@ -36754,6 +36904,7 @@
 				"SCC-ARiR",
 				"SLW",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA",
 				"WDMM"
 			],
@@ -37166,11 +37317,13 @@
 			"referenceSources": [
 				"CM",
 				"EGW",
+				"FS",
 				"IDRotF",
 				"KftGV",
 				"PotA",
 				"SKT",
-				"TftYP"
+				"TftYP",
+				"TftYP-TSC"
 			],
 			"reprintedAs": [
 				"Ice Mephit|XMM"
@@ -37452,8 +37605,8 @@
 					"entries": [
 						"Imps can be found in the service to mortal spellcasters, acting as advisors, spies, and familiars. An imp urges its master to acts of evil, knowing the mortal's soul is a prize the imp might ultimately claim. Imps display an unusual loyalty to their masters, and an imp can be quite dangerous if its master is threatened. Some such imps have the following trait.",
 						{
-							"name": "Familiar",
 							"type": "entries",
+							"name": "Familiar",
 							"entries": [
 								"The imp can enter into a contract to serve another creature as a familiar, forming a telepathic bond with its willing master. While the two are bonded, the master can sense what the imp senses as long as they are within 1 mile of each other. While the imp is within 10 feet of its master, the master shares the imp's Magic Resistance trait. If its master violates the terms of the contract, the imp can end its service as a familiar, ending the telepathic bond."
 							]
@@ -37827,6 +37980,7 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-WPM",
 				"ToA",
 				"VEoR",
 				"WBtW",
@@ -38363,6 +38517,7 @@
 			"referenceSources": [
 				"BGDIA",
 				"CM",
+				"EFR",
 				"ERLW",
 				"JttRC",
 				"LLK",
@@ -38608,6 +38763,9 @@
 				"SatO",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-WPM",
 				"ToA",
 				"ToFW",
 				"WBtW",
@@ -38741,7 +38899,9 @@
 			"referenceSources": [
 				"BGDIA",
 				"CoA",
+				"DD",
 				"DoSI",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -38751,6 +38911,8 @@
 				"RoT",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TSC",
 				"TLK",
 				"ToA",
 				"WDH",
@@ -39027,7 +39189,7 @@
 				{
 					"name": "Ink Cloud (Costs 3 Actions)",
 					"entries": [
-						"While underwater, the kraken expels an ink cloud in a 60-foot radius. The cloud spreads around corners, and that area is heavily obscured to creatures other than the kraken. Each creature other than the kraken that ends its turn there must succeed on a {@dc 23} Constitution saving throw, taking 16 ({@damage 3d10}) poison damage on a failed save, or half as much damage on a successful one. A strong current disperses the cloud, which otherwise disappears at the end of the kraken's next turn."
+						"While underwater, the kraken expels an ink cloud in a 60-foot radius. The cloud spreads around corners, and that area is {@quickref Vision and Light||2||heavily obscured} to creatures other than the kraken. Each creature other than the kraken that ends its turn there must succeed on a {@dc 23} Constitution saving throw, taking 16 ({@damage 3d10}) poison damage on a failed save, or half as much damage on a successful one. A strong current disperses the cloud, which otherwise disappears at the end of the kraken's next turn."
 					]
 				}
 			],
@@ -39108,6 +39270,7 @@
 				"RtG",
 				"SatO",
 				"TftYP",
+				"TftYP-DiT",
 				"WDH",
 				"WDMM"
 			],
@@ -40365,6 +40528,7 @@
 			"referenceSources": [
 				"KftGV",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA"
 			],
 			"reprintedAs": [
@@ -40844,6 +41008,7 @@
 				"TCE",
 				"ToA",
 				"ToFW",
+				"US",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -40978,7 +41143,8 @@
 				"IMR",
 				"PotA",
 				"SCC-TMM",
-				"ToA"
+				"ToA",
+				"US"
 			],
 			"reprintedAs": [
 				"Lizardfolk Geomancer|XMM"
@@ -41168,6 +41334,7 @@
 				"DSotDQ",
 				"EGW",
 				"ERLW",
+				"FS",
 				"GoS",
 				"HotDQ",
 				"IDRotF",
@@ -41191,6 +41358,7 @@
 				"TCE",
 				"ToA",
 				"ToFW",
+				"ToR",
 				"VEoR",
 				"WBtW",
 				"WDH",
@@ -41767,6 +41935,7 @@
 				"OotA",
 				"PSI",
 				"TftYP",
+				"TftYP-DiT",
 				"WBtW"
 			],
 			"reprintedAs": [
@@ -41875,6 +42044,8 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-WPM",
 				"WDH",
 				"WDMM"
 			],
@@ -42474,7 +42645,9 @@
 				"QftIS",
 				"SKT",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToFW",
+				"US",
 				"WDH"
 			],
 			"reprintedAs": [
@@ -42622,7 +42795,7 @@
 				{
 					"name": "Petrifying Gaze",
 					"entries": [
-						"When a creature that can see the medusa's eyes starts its turn within 30 feet of the medusa, the medusa can force it to make a {@dc 14} Constitution saving throw if the medusa isn't {@condition incapacitated} and can see the creature. If the saving throw fails by 5 or more, the creature is instantly {@condition petrified}. Otherwise, a creature that fails the save begins to turn to stone and is {@condition restrained}. The {@condition restrained} creature must repeat the saving throw at the end of its next turn, becoming {@condition petrified} on a failure or ending the effect on a success. The petrification lasts until the creature is freed by the  {@spell greater restoration} spell or other magic.",
+						"When a creature that can see the medusa's eyes starts its turn within 30 feet of the medusa, the medusa can force it to make a {@dc 14} Constitution saving throw if the medusa isn't {@condition incapacitated} and can see the creature. If the saving throw fails by 5 or more, the creature is instantly {@condition petrified}. Otherwise, a creature that fails the save begins to turn to stone and is {@condition restrained}. The {@condition restrained} creature must repeat the saving throw at the end of its next turn, becoming {@condition petrified} on a failure or ending the effect on a success. The petrification lasts until the creature is freed by the {@spell greater restoration} spell or other magic.",
 						"Unless {@status surprised}, a creature can avert its eyes to avoid the saving throw at the start of its turn. If the creature does so, it can't see the medusa until the start of its next turn, when it can avert its eyes again. If the creature looks at the medusa in the meantime, it must immediately make the save.",
 						"If the medusa sees itself reflected on a polished surface within 30 feet of it and in an area of bright light, the medusa is, due to its curse, affected by its own gaze."
 					]
@@ -42812,6 +42985,7 @@
 				"RoT",
 				"SKT",
 				"TftYP",
+				"TftYP-DiT",
 				"WBtW",
 				"WDH"
 			],
@@ -43075,8 +43249,8 @@
 					"entries": [
 						"Some yugoloths have an action option that allows them to summon other yugoloths.",
 						{
-							"name": "Summon Yugoloth (1/Day)",
 							"type": "entries",
+							"name": "Summon Yugoloth (1/Day)",
 							"entries": [
 								"The yugoloth attempts a magical summoning.",
 								"A mezzoloth has a {@chance 30|30 percent|30% summoning chance} chance of summoning one mezzoloth.",
@@ -43309,6 +43483,9 @@
 				"SjA",
 				"TCE",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-ToH",
+				"TftYP-TSC",
 				"ToFW",
 				"WDH",
 				"WDMM"
@@ -44862,6 +45039,8 @@
 				{
 					"type": "variant",
 					"name": "Zuggtomoy's Empowerment",
+					"source": "OotA",
+					"page": 228,
 					"entries": [
 						"Myconids that embrace {@creature Zuggtmoy|MTF} can develop new, more destructive kinds of spores. Myconid adults can have two of the following spore effects.",
 						{
@@ -44875,7 +45054,7 @@
 							"type": "entries",
 							"name": "Infestation Spores (1/Day)",
 							"entries": [
-								"The myconid releases spores that burst out in a cloud that fills a 10-foot-radius sphere centered on it, and the cloud lingers for 1 minute. Any flesh-and-blood creature in the cloud when it appears, or that enters it later, must make a {@dc 11} Constitution saving throw. The save DC is 8 + the myconid's Constitution modifier + the myconid's proficiency bonus. On a successful save, the creature can't be infected by these spores for 24 hours. On a failed save, the creature is infected with a disease called the spores of Zuggtmoy) and also gains a random form of indefinite madness (determined by rolling on the Madness of {@creature Zuggtmoy|MTF} table) that lasts until the creature is cured of the disease or dies. While infected in this way, the creature can't be reinfected, and it must repeat the saving throw at the end of every 24 hours, ending the infection on a success. On a failure, the infected creature's body is slowly taken over by fungal growth, and after three such failed saves, the creature dies and is reanimated as a spore servant if it's a humanoid or a Large or smaller beast."
+								"The myconid releases spores that burst out in a cloud that fills a 10-foot-radius sphere centered on it, and the cloud lingers for 1 minute. Any flesh-and-blood creature in the cloud when it appears, or that enters it later, must make a {@dc 11} Constitution saving throw. The save DC is 8 + the myconid's Constitution modifier + the myconid's proficiency bonus. On a successful save, the creature can't be infected by these spores for 24 hours. On a failed save, the creature is infected with a disease called the spores of Zuggtmoy and also gains a random form of indefinite madness (determined by rolling on the Madness of {@creature Zuggtmoy|MTF} table) that lasts until the creature is cured of the disease or dies. While infected in this way, the creature can't be reinfected, and it must repeat the saving throw at the end of every 24 hours, ending the infection on a success. On a failure, the infected creature's body is slowly taken over by fungal growth, and after three such failed saves, the creature dies and is reanimated as a spore servant if it's a humanoid or a Large or smaller beast."
 							]
 						},
 						{
@@ -44889,9 +45068,7 @@
 					"_version": {
 						"name": "Myconid Adult (Additional Spore Effects)",
 						"addHeadersAs": "action"
-					},
-					"source": "OotA",
-					"page": 228
+					}
 				}
 			],
 			"environment": [
@@ -45033,6 +45210,8 @@
 				{
 					"type": "variant",
 					"name": "Zuggtomoy's Empowerment",
+					"source": "OotA",
+					"page": 228,
 					"entries": [
 						"Myconids that embrace {@creature Zuggtmoy|MTF} can develop new, more destructive kinds of spores. Myconid sovereigns have all these spore effects.",
 						{
@@ -45046,7 +45225,7 @@
 							"type": "entries",
 							"name": "Infestation Spores (1/Day)",
 							"entries": [
-								"The myconid releases spores that burst out in a cloud that fills a 10-foot-radius sphere centered on it, and the cloud lingers for 1 minute. Any flesh-and-blood creature in the cloud when it appears, or that enters it later, must make a {@dc 12} Constitution saving throw. The save DC is 8 + the myconid's Constitution modifier + the myconid's proficiency bonus. On a successful save, the creature can't be infected by these spores for 24 hours. On a failed save, the creature is infected with a disease called the spores of Zuggtmoy) and also gains a random form of indefinite madness (determined by rolling on the Madness of {@creature Zuggtmoy|MTF} table) that lasts until the creature is cured of the disease or dies. While infected in this way, the creature can't be reinfected, and it must repeat the saving throw at the end of every 24 hours, ending the infection on a success. On a failure, the infected creature's body is slowly taken over by fungal growth, and after three such failed saves, the creature dies and is reanimated as a spore servant if it's a humanoid or a Large or smaller beast."
+								"The myconid releases spores that burst out in a cloud that fills a 10-foot-radius sphere centered on it, and the cloud lingers for 1 minute. Any flesh-and-blood creature in the cloud when it appears, or that enters it later, must make a {@dc 12} Constitution saving throw. The save DC is 8 + the myconid's Constitution modifier + the myconid's proficiency bonus. On a successful save, the creature can't be infected by these spores for 24 hours. On a failed save, the creature is infected with a disease called the spores of Zuggtmoy and also gains a random form of indefinite madness (determined by rolling on the Madness of {@creature Zuggtmoy|MTF} table) that lasts until the creature is cured of the disease or dies. While infected in this way, the creature can't be reinfected, and it must repeat the saving throw at the end of every 24 hours, ending the infection on a success. On a failure, the infected creature's body is slowly taken over by fungal growth, and after three such failed saves, the creature dies and is reanimated as a spore servant if it's a humanoid or a Large or smaller beast."
 							]
 						},
 						{
@@ -45060,9 +45239,7 @@
 					"_version": {
 						"name": "Myconid Sovereign (Additional Spore Effects)",
 						"addHeadersAs": "action"
-					},
-					"source": "OotA",
-					"page": 228
+					}
 				}
 			],
 			"environment": [
@@ -45209,6 +45386,7 @@
 				"OotA",
 				"QftIS",
 				"TftYP",
+				"TftYP-ToH",
 				"ToA",
 				"VEoR",
 				"WDMM"
@@ -45603,8 +45781,20 @@
 					"name": "Night Hag Items",
 					"entries": [
 						"A night hag carries two very rare magic items that she must craft for herself. If either object is lost, the night hag will go to great lengths to retrieve it, as creating a new tool takes time and effort.",
-						"Heartstone: This lustrous black gem allows a night hag to become ethereal while it is in her possession. The touch of a heartstone also cures any disease. Crafting a heartstone takes 30 days.",
-						"Soul Bag: When an evil humanoid dies as a result of a night hag's Nightmare Haunting, the hag catches the soul in this black sack made of stitched flesh. A soul bag can hold only one evil soul at a time, and only the night hag who crafted the bag can catch a soul with it. Crafting a soul bag takes 7 days and a humanoid sacrifice (whose flesh is used to make the bag)."
+						{
+							"type": "entries",
+							"name": "Heartstone",
+							"entries": [
+								"This lustrous black gem allows a night hag to become ethereal while it is in her possession. The touch of a {@item heartstone|MM} also cures any disease. Crafting a heartstone takes 30 days."
+							]
+						},
+						{
+							"type": "entries",
+							"name": "Soul Bag",
+							"entries": [
+								"When an evil humanoid dies as a result of a night hag's Nightmare Haunting, the hag catches the soul in this black sack made of stitched flesh. A {@item soul bag|MM} can hold only one evil soul at a time, and only the night hag who crafted the bag can catch a soul with it. Crafting a soul bag takes 7 days and a humanoid sacrifice (whose flesh is used to make the bag)."
+							]
+						}
 					]
 				}
 			],
@@ -45630,7 +45820,7 @@
 				{
 					"name": "Nightmare Haunting (1/Day)",
 					"entries": [
-						"While on the Ethereal Plane, the hag magically touches a sleeping humanoid on the Material Plane. A {@spell protection from evil and good} spell cast on the target prevents this contact, as does a magic circle. As long as the contact persists, the target has dreadful visions. If these visions last for at least 1 hour, the target gains no benefit from its rest, and its hit point maximum is reduced by 5 ({@dice 1d10}). If this effect reduces the target's hit point maximum to 0, the target dies, and if the target was evil, its soul is trapped in the hag's soul bag. The reduction to the target's hit point maximum lasts until removed by the  {@spell greater restoration} spell or similar magic."
+						"While on the Ethereal Plane, the hag magically touches a sleeping humanoid on the Material Plane. A {@spell protection from evil and good} spell cast on the target prevents this contact, as does a magic circle. As long as the contact persists, the target has dreadful visions. If these visions last for at least 1 hour, the target gains no benefit from its rest, and its hit point maximum is reduced by 5 ({@dice 1d10}). If this effect reduces the target's hit point maximum to 0, the target dies, and if the target was evil, its soul is trapped in the hag's soul bag. The reduction to the target's hit point maximum lasts until removed by the {@spell greater restoration} spell or similar magic."
 					]
 				}
 			],
@@ -45650,6 +45840,9 @@
 							"name": "Shared Spellcasting (Coven Only)",
 							"headerEntries": [
 								"While all three members of a hag coven are within 30 feet of one another, they can each cast the following spells from the wizard's spell list but must share the spell slots among themselves:"
+							],
+							"footerEntries": [
+								"For casting these spells, each hag is a 12th-level spellcaster that uses Intelligence as her spellcasting ability. The spell save DC is 12 + the hag's Intelligence modifier, and the spell attack bonus is 4 + the hag's Intelligence modifier."
 							],
 							"spells": {
 								"1": {
@@ -45694,10 +45887,7 @@
 										"{@spell eyebite}"
 									]
 								}
-							},
-							"footerEntries": [
-								"For casting these spells, each hag is a 12th-level spellcaster that uses Intelligence as her spellcasting ability. The spell save DC is 12 + the hag's Intelligence modifier, and the spell attack bonus is 4 + the hag's Intelligence modifier."
-							]
+							}
 						},
 						{
 							"type": "entries",
@@ -45954,6 +46144,7 @@
 				"DC",
 				"DIP",
 				"DSotDQ",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -45973,6 +46164,9 @@
 				"SatO",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TFoF",
+				"TftYP-TSC",
 				"ToA",
 				"ToFW",
 				"VEoR",
@@ -46364,8 +46558,8 @@
 					"entries": [
 						"Some yugoloths have an action option that allows them to summon other yugoloths.",
 						{
-							"name": "Summon Yugoloth (1/Day)",
 							"type": "entries",
+							"name": "Summon Yugoloth (1/Day)",
 							"entries": [
 								"The yugoloth chooses what to summon and attempts a magical summoning.",
 								"A nycaloth has a {@chance 50|50 percent|50% summoning chance} chance of summoning {@dice 1d4} {@creature mezzoloth||mezzoloths} or one nycaloth.",
@@ -46444,6 +46638,8 @@
 				"SCC-CK",
 				"SCC-HfMT",
 				"TftYP",
+				"TftYP-THSoT",
+				"TftYP-ToH",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -46628,7 +46824,7 @@
 				{
 					"name": "Ink Cloud (Recharges after a Short or Long Rest)",
 					"entries": [
-						"A 5-foot-radius cloud of ink extends all around the octopus if it is underwater. The area is heavily obscured for 1 minute, although a significant current can disperse the ink. After releasing the ink, the octopus can use the {@action Dash} action as a bonus action."
+						"A 5-foot-radius cloud of ink extends all around the octopus if it is underwater. The area is {@quickref Vision and Light||2||heavily obscured} for 1 minute, although a significant current can disperse the ink. After releasing the ink, the octopus can use the {@action Dash} action as a bonus action."
 					]
 				}
 			],
@@ -46694,6 +46890,10 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TFoF",
+				"TftYP-WPM",
+				"US",
 				"WDH",
 				"WDMM"
 			],
@@ -46807,6 +47007,7 @@
 				"RtG",
 				"SDW",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"VEoR",
 				"WDMM"
@@ -46917,6 +47118,9 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-THSoT",
+				"TftYP-WPM",
 				"ToFW",
 				"WBtW",
 				"WDMM"
@@ -47106,7 +47310,11 @@
 				"RMBRE",
 				"SKT",
 				"TftYP",
-				"ToA"
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"ToA",
+				"US"
 			],
 			"reprintedAs": [
 				"Tough|XMM"
@@ -47236,7 +47444,8 @@
 				"OotA",
 				"PotA",
 				"SKT",
-				"TftYP"
+				"TftYP",
+				"TftYP-TFoF"
 			],
 			"reprintedAs": [
 				"Cultist Fanatic|XMM"
@@ -47495,7 +47704,7 @@
 				{
 					"name": "Battle Cry (1/Day)",
 					"entries": [
-						"Each creature of the war chief's choice that is within 30 feet of it, can hear it, and not already affected by Battle Cry gain advantage on attack rolls until the start of the war chief's next turn. The war chief can then make one attack as a bonus action."
+						"Each creature of the war chief's choice that is within 30 feet of it, can hear it, and not already affected by Battle Cry gains advantage on attack rolls until the start of the war chief's next turn. The war chief can then make one attack as a bonus action."
 					]
 				}
 			],
@@ -47553,6 +47762,8 @@
 				"PotA",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TFoF",
 				"WDH",
 				"WDMM"
 			],
@@ -47695,6 +47906,7 @@
 				"SCC-HfMT",
 				"SKT",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"ToFW",
 				"WDMM"
@@ -47937,6 +48149,7 @@
 				"SDW",
 				"SKT",
 				"TftYP",
+				"TftYP-DiT",
 				"WBtW",
 				"WDH",
 				"WDMM"
@@ -48049,6 +48262,7 @@
 			"basicRules": true,
 			"referenceSources": [
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"WDH"
 			],
@@ -48394,6 +48608,7 @@
 				"PotA",
 				"SCC-ARiR",
 				"TftYP",
+				"TftYP-DiT",
 				"WBtW"
 			],
 			"reprintedAs": [
@@ -48650,6 +48865,7 @@
 				"PotA",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"ToFW",
 				"WDMM"
 			],
@@ -49407,6 +49623,8 @@
 				"OoW",
 				"QftIS",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-ToH",
 				"ToA",
 				"TTP"
 			],
@@ -49835,8 +50053,12 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"TftYP-TSC",
 				"ToA",
 				"ToFW",
+				"US",
 				"VEoR",
 				"WDH",
 				"WDMM",
@@ -50078,8 +50300,8 @@
 					"entries": [
 						"Some pseudodragons are willing to serve spellcasters as a familiar. Such pseudodragons have the following trait.",
 						{
-							"name": "Familiar",
 							"type": "entries",
+							"name": "Familiar",
 							"entries": [
 								"The pseudodragon can serve another creature as a familiar, forming a magic, telepathic bond with that willing companion. While the two are bonded, the companion can sense what the pseudodragon senses as long as they are within 1 mile of each other. While the pseudodragon is within 10 feet of its companion, the companion shares the pseudodragon's Magic Resistance trait. At any time and for any reason, the pseudodragon can end its service as a familiar, ending the telepathic bond."
 							]
@@ -50872,6 +51094,8 @@
 				"PSI",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-TSC",
 				"VEoR",
 				"WBtW",
 				"WDMM"
@@ -50944,7 +51168,7 @@
 				{
 					"name": "Shapechanger",
 					"entries": [
-						"The quasit can use its action to polymorph into a beast form that resembles a bat (speed 10 feet fly 40 ft.), a centipede (40 ft., climb 40 ft.), or a toad (40 ft., swim 40 ft.), or back into its true form. Its statistics are the same in each form, except for the speed changes noted. Any equipment it is wearing or carrying isn't transformed. It reverts to its true form if it dies."
+						"The quasit can use its action to polymorph into a beast form that resembles a bat (speed 10 ft. fly 40 ft.), a centipede (40 ft., climb 40 ft.), or a toad (40 ft., swim 40 ft.), or back into its true form. Its statistics are the same in each form, except for the speed changes noted. Any equipment it is wearing or carrying isn't transformed. It reverts to its true form if it dies."
 					]
 				},
 				{
@@ -50981,8 +51205,8 @@
 					"entries": [
 						"Mortal spellcasters interested in extraplanar familiars find quasits easy to summon and eager to serve. The quasit plays the part of the obsequious servant. It serves its master well, but it goads the mortal to greater and greater acts of chaos and evil. Such quasits have the following trait.",
 						{
-							"name": "Familiar",
 							"type": "entries",
+							"name": "Familiar",
 							"entries": [
 								"The quasit can serve another creature as a familiar, forming a telepathic bond with its willing master. While the two are bonded, the master can sense what the quasit senses as long as they are within 1 mile of each other. While the quasit is within 10 feet of its master, the master shares the quasit's Magic Resistance trait. At any time and for any reason, the quasit can end its service as a familiar, ending the telepathic bond."
 							]
@@ -51134,6 +51358,7 @@
 				"GoS",
 				"TCE",
 				"TftYP",
+				"TftYP-AtG",
 				"VEoR",
 				"WDH",
 				"WDMM"
@@ -51306,6 +51531,7 @@
 				"QftIS",
 				"SKT",
 				"TftYP",
+				"TftYP-TFoF",
 				"ToA",
 				"TTP",
 				"WDH",
@@ -51827,11 +52053,13 @@
 			"basicRules": true,
 			"referenceSources": [
 				"CRCotN",
+				"DD",
 				"EGW",
 				"GoS",
 				"JttRC",
 				"RtG",
 				"ToA",
+				"ToR",
 				"TTP"
 			],
 			"reprintedAs": [
@@ -51934,6 +52162,7 @@
 				"PaBTSO",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -52511,6 +52740,9 @@
 				"QftIS",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TFoF",
+				"TftYP-THSoT",
 				"ToFW",
 				"WDMM"
 			],
@@ -52648,6 +52880,7 @@
 				"CoS",
 				"DIP",
 				"EGW",
+				"FS",
 				"GoS",
 				"HotDQ",
 				"KftGV",
@@ -52983,7 +53216,9 @@
 				"GoS",
 				"SatO",
 				"SDW",
-				"TftYP"
+				"TftYP",
+				"TftYP-DiT",
+				"ToR"
 			],
 			"reprintedAs": [
 				"Sahuagin Warrior|XMM"
@@ -53123,6 +53358,7 @@
 				"JttRC",
 				"SatO",
 				"TftYP",
+				"TftYP-DiT",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -53268,7 +53504,8 @@
 				"BGDIA",
 				"GoS",
 				"SDW",
-				"TftYP"
+				"TftYP",
+				"TftYP-DiT"
 			],
 			"reprintedAs": [
 				"Sahuagin Priest|XMM"
@@ -53455,6 +53692,7 @@
 				"PotA",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA"
 			],
 			"reprintedAs": [
@@ -53687,7 +53925,7 @@
 							"type": "entries",
 							"name": "Panpipes",
 							"entries": [
-								"The satyr plays its pipes and chooses one of the following magical effects: a charming melody, a frightening strain, or a gentle lullaby. Any creature within 60 feet of the satyr that can hear the pipes must succeed on a {@dc 13} Wisdom saving throw or be affected as described below. Other satyrs and creature that can't be {@condition charmed} are unaffected",
+								"The satyr plays its pipes and chooses one of the following magical effects: a charming melody, a frightening strain, or a gentle lullaby. Any creature within 60 feet of the satyr that can hear the pipes must succeed on a {@dc 13} Wisdom saving throw or be affected as described below. Other satyrs and creatures that can't be {@condition charmed} are unaffected.",
 								"An affected creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success. If a creature's saving throw is successful or the effect ends for it, the creature is immune to these panpipes for the next 24 hours.",
 								{
 									"type": "variantSub",
@@ -53991,6 +54229,7 @@
 				"DIP",
 				"DSotDQ",
 				"EGW",
+				"FS",
 				"GoS",
 				"HotDQ",
 				"IDRotF",
@@ -54007,7 +54246,10 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-THSoT",
+				"TftYP-TSC",
 				"ToA",
+				"ToR",
 				"VNotEE",
 				"WBtW",
 				"WDMM",
@@ -54146,6 +54388,7 @@
 				"SatO",
 				"SLW",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"TTP",
 				"WDMM"
@@ -54249,6 +54492,9 @@
 							"headerEntries": [
 								"While all three members of a hag coven are within 30 feet of one another, they can each cast the following spells from the wizard's spell list but must share the spell slots among themselves:"
 							],
+							"footerEntries": [
+								"For casting these spells, each hag is a 12th-level spellcaster that uses Intelligence as her spellcasting ability. The spell save DC is 12 + the hag's Intelligence modifier, and the spell attack bonus is 4 + the hag's Intelligence modifier."
+							],
 							"spells": {
 								"1": {
 									"slots": 4,
@@ -54292,10 +54538,7 @@
 										"{@spell eyebite}"
 									]
 								}
-							},
-							"footerEntries": [
-								"For casting these spells, each hag is a 12th-level spellcaster that uses Intelligence as her spellcasting ability. The spell save DC is 12 + the hag's Intelligence modifier, and the spell attack bonus is 4 + the hag's Intelligence modifier."
-							]
+							}
 						},
 						{
 							"type": "entries",
@@ -54499,6 +54742,9 @@
 				"SjA",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-TSC",
+				"TftYP-WPM",
 				"TTP",
 				"VEoR",
 				"VNotEE",
@@ -54809,6 +55055,7 @@
 				"QftIS",
 				"SCC-TMM",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"VEoR",
 				"WBtW",
@@ -55416,6 +55663,9 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"TftYP-TSC",
 				"ToA",
 				"ToFW",
 				"VEoR",
@@ -55701,7 +55951,7 @@
 				{
 					"name": "Death Burst",
 					"entries": [
-						"When the mephit dies, it leaves behind a cloud of smoke that fills a 5-foot-radius sphere centered on its space. The sphere is heavily obscured. Wind disperses the cloud, which otherwise lasts for 1 minute."
+						"When the mephit dies, it leaves behind a cloud of smoke that fills a 5-foot-radius sphere centered on its space. The sphere is {@quickref Vision and Light||2||heavily obscured}. Wind disperses the cloud, which otherwise lasts for 1 minute."
 					]
 				}
 			],
@@ -56221,6 +56471,7 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"ToFW",
 				"VEoR",
@@ -56633,6 +56884,7 @@
 				"OotA",
 				"PaBTSO",
 				"TftYP",
+				"TftYP-DiT",
 				"VEoR",
 				"WDMM"
 			],
@@ -56815,6 +57067,7 @@
 				"BGDIA",
 				"BMT",
 				"CM",
+				"EFR",
 				"ERLW",
 				"GoS",
 				"IMR",
@@ -56951,6 +57204,7 @@
 				"CoS",
 				"CRCotN",
 				"DIP",
+				"EFR",
 				"EGW",
 				"ERLW",
 				"GoS",
@@ -57098,6 +57352,7 @@
 				"SCC-CK",
 				"SKT",
 				"TftYP",
+				"TftYP-TSC",
 				"ToA",
 				"ToFW"
 			],
@@ -57259,8 +57514,10 @@
 				"RMBRE",
 				"SCC-CK",
 				"TftYP",
+				"TftYP-TFoF",
 				"ToA",
 				"TTP",
+				"US",
 				"WDH",
 				"WDMM"
 			],
@@ -57350,6 +57607,8 @@
 				"QftIS",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -57440,18 +57699,20 @@
 				{
 					"type": "variant",
 					"name": "New Giant Options",
+					"source": "SKT",
+					"page": 246,
 					"entries": [
 						"Some adult stone giants like to grab enemies and fling them through the air. They can also roll boulders across the ground, striking multiple enemies in a line. These abilities are represented by the following action options.",
 						{
-							"name": "Fling",
 							"type": "entries",
+							"name": "Fling",
 							"entries": [
 								"The giant tries to throw a Small or Medium creature within 10 feet of it. The target must succeed on a {@dc 17} Dexterity saving throw or be hurled up to 60 feet horizontally in a direction of the giant's choice and land {@condition prone}, taking 3 ({@damage 1d6}) bludgeoning damage for every 10 feet it was thrown."
 							]
 						},
 						{
-							"name": "Rolling Rock",
 							"type": "entries",
+							"name": "Rolling Rock",
 							"entries": [
 								"The giant sends a rock tumbling along the ground in a 30-foot line that is 5 feet wide. Each creature in that line must make a {@dc 17} Dexterity saving throw, taking 22 ({@damage 3d10 + 6}) bludgeoning damage and falling {@condition prone} on a failed save"
 							]
@@ -57460,9 +57721,7 @@
 					"_version": {
 						"name": "Stone Giant (Optional Actions)",
 						"addHeadersAs": "action"
-					},
-					"source": "SKT",
-					"page": 246
+					}
 				}
 			],
 			"environment": [
@@ -57686,7 +57945,8 @@
 				"MOT",
 				"SatO",
 				"SKT",
-				"TftYP"
+				"TftYP",
+				"TftYP-AtG"
 			],
 			"reprintedAs": [
 				"Storm Giant|XMM"
@@ -57806,6 +58066,8 @@
 				{
 					"type": "variant",
 					"name": "New Giant Options",
+					"source": "SKT",
+					"page": 246,
 					"entries": [
 						"Some adult storm giants can channel thunderous power through their bodies and release it with a deafening stomp. This ability is represented by the following action option.",
 						{
@@ -57819,9 +58081,7 @@
 					"_version": {
 						"name": "Storm Giant (Optional Actions)",
 						"addHeadersAs": "action"
-					},
-					"source": "SKT",
-					"page": 246
+					}
 				}
 			],
 			"environment": [
@@ -57888,13 +58148,14 @@
 				"CRCotN",
 				"EGW",
 				"ERLW",
-				"HotDQ",
 				"OotA",
 				"RoT",
 				"SatO",
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-TFoF",
 				"ToA"
 			],
 			"reprintedAs": [
@@ -58059,12 +58320,14 @@
 				"CoS",
 				"DitLCoT",
 				"EGW",
+				"FS",
 				"HotDQ",
 				"LLK",
 				"OotA",
 				"PotA",
 				"QftIS",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"WBtW",
 				"WDH",
@@ -58388,7 +58651,6 @@
 				"BGDIA",
 				"EGW",
 				"GoS",
-				"HotDQ",
 				"IMR",
 				"LoX",
 				"NRH-AWoL",
@@ -58398,6 +58660,7 @@
 				"PSX",
 				"SKT",
 				"ToA",
+				"US",
 				"WDMM"
 			],
 			"reprintedAs": [
@@ -58506,6 +58769,7 @@
 				"CoS",
 				"DIP",
 				"EGW",
+				"FS",
 				"JttRC",
 				"MOT",
 				"OoW",
@@ -58514,7 +58778,10 @@
 				"SCC-CK",
 				"SDW",
 				"TftYP",
+				"TftYP-THSoT",
+				"TftYP-ToH",
 				"ToA",
+				"US",
 				"VEoR"
 			],
 			"reprintedAs": [
@@ -58745,6 +59012,8 @@
 				"HotDQ",
 				"TCE",
 				"TftYP",
+				"TftYP-THSoT",
+				"TftYP-TSC",
 				"WDH",
 				"WDMM"
 			],
@@ -58858,7 +59127,8 @@
 				"OoW",
 				"RoT",
 				"SDW",
-				"TCE"
+				"TCE",
+				"US"
 			],
 			"reprintedAs": [
 				"Swarm of Ravens|XMM"
@@ -59500,22 +59770,22 @@
 					"entries": [
 						"Some thri-kreen employ special martial weapons. A gythka is a two-handed polearm with a blade at each end. A chatkcha is a flat, triangular wedge with three serrated blades (a light thrown weapon). A thri-kreen armed with a gythka and chatkchas gains the following action options:",
 						{
-							"name": "Weapons Multiattack",
 							"type": "entries",
+							"name": "Weapons Multiattack",
 							"entries": [
 								"The thri-kreen makes two gythka attacks or two chatkcha attacks."
 							]
 						},
 						{
-							"name": "Gythka",
 							"type": "entries",
+							"name": "Gythka",
 							"entries": [
 								"{@atk mw} {@hit 3} to hit, reach 5 ft., one target. {@h}5 ({@damage 1d8 + 1}) slashing damage."
 							]
 						},
 						{
-							"name": "Chatkcha",
 							"type": "entries",
+							"name": "Chatkcha",
 							"entries": [
 								"{@atk rw} {@hit 4} to hit, range 30/120 ft., one target. {@h}5 ({@damage 1d6 + 2}) slashing damage."
 							]
@@ -59528,6 +59798,7 @@
 							"headerEntries": [
 								"The thri-kreen's innate spellcasting ability is Wisdom. The thri-kreen can innately cast the following spells, requiring no components:"
 							],
+							"ability": "wis",
 							"will": [
 								"{@spell mage hand} (the hand is {@condition invisible})"
 							],
@@ -59539,8 +59810,7 @@
 									"{@spell blur}",
 									"{@spell magic weapon}"
 								]
-							},
-							"ability": "wis"
+							}
 						}
 					]
 				}
@@ -59652,6 +59922,7 @@
 				"CRCotN",
 				"DIP",
 				"EGW",
+				"FS",
 				"GoS",
 				"IDRotF",
 				"JttRC",
@@ -59667,6 +59938,7 @@
 				"TCE",
 				"ToA",
 				"ToFW",
+				"ToR",
 				"WDH",
 				"WDMM"
 			],
@@ -59792,6 +60064,7 @@
 				"MOT",
 				"OoW",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA",
 				"WDH"
 			],
@@ -60051,7 +60324,9 @@
 				"RoT",
 				"SKT",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
+				"ToR",
 				"TTP"
 			],
 			"reprintedAs": [
@@ -60399,6 +60674,10 @@
 				"QftIS",
 				"SatO",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"TftYP-ToH",
 				"WDH",
 				"WDMM"
 			],
@@ -60559,6 +60838,10 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-ToH",
+				"TftYP-TSC",
 				"ToA",
 				"WDH",
 				"WDMM"
@@ -60844,6 +61127,7 @@
 				"PSI",
 				"RMBRE",
 				"TftYP",
+				"TftYP-TSC",
 				"WBtW"
 			],
 			"reprintedAs": [
@@ -61206,8 +61490,8 @@
 					"entries": [
 						"Some yugoloths have an action option that allows them to summon other yugoloths.",
 						{
-							"name": "Summon Yugoloth (1/Day)",
 							"type": "entries",
+							"name": "Summon Yugoloth (1/Day)",
 							"entries": [
 								"The yugoloth chooses what to summon and attempts a magical summoning.",
 								"An ultroloth has a {@chance 50|50 percent|50% summoning chance} chance of summoning {@dice 1d6} {@creature mezzoloth||mezzoloths}, {@dice 1d4} {@creature nycaloth||nycaloths}, or one ultroloth.",
@@ -61645,6 +61929,9 @@
 				"SKT",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-THSoT",
+				"TftYP-WPM",
 				"ToFW",
 				"VEoR",
 				"WDMM"
@@ -61897,10 +62184,11 @@
 				"OoW",
 				"PotA",
 				"QftIS",
-				"RoT",
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-THSoT",
 				"VEoR",
 				"WDMM"
 			],
@@ -62643,10 +62931,13 @@
 				"CoS",
 				"CRCotN",
 				"DC",
+				"DD",
 				"DIP",
 				"DSotDQ",
+				"EFR",
 				"EGW",
 				"ERLW",
+				"FS",
 				"GoS",
 				"HotDQ",
 				"IDRotF",
@@ -62666,8 +62957,14 @@
 				"SKT",
 				"SLW",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-TFoF",
+				"TftYP-TSC",
+				"TftYP-WPM",
 				"ToA",
 				"ToFW",
+				"ToR",
+				"US",
 				"VEoR",
 				"WDH",
 				"WDMM"
@@ -62792,7 +63089,8 @@
 				"DIP",
 				"EGW",
 				"GoS",
-				"PSI"
+				"PSI",
+				"US"
 			],
 			"reprintedAs": [
 				"Vine Blight|XMM"
@@ -63021,6 +63319,8 @@
 				"SCC-ARiR",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-ToH",
 				"VEoR",
 				"WDMM",
 				"XMtS"
@@ -63290,7 +63590,6 @@
 				"CRCotN",
 				"DSotDQ",
 				"EGW",
-				"HotDQ",
 				"PotA",
 				"RoT",
 				"SKT",
@@ -63776,6 +64075,7 @@
 				"SCC-HfMT",
 				"SLW",
 				"TftYP",
+				"TftYP-THSoT",
 				"ToA",
 				"VEoR",
 				"VNotEE",
@@ -63978,6 +64278,7 @@
 			"srd": true,
 			"referenceSources": [
 				"EGW",
+				"FS",
 				"GoS",
 				"KftGV"
 			],
@@ -64070,7 +64371,7 @@
 				{
 					"name": "Bite (Bear or Hybrid Form Only)",
 					"entries": [
-						"{@atk mw} {@hit 7} to hit, reach 5 ft., one target. {@h}15 ({@damage 2d10 + 4}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 14} Constitution saving throw or be cursed with werebear lycanthropy."
+						"{@atk mw} {@hit 7} to hit, reach 5 ft., one target. {@h}15 ({@damage 2d10 + 4}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 14} Constitution saving throw or be cursed with werebear {@variantrule Player Characters as Lycanthropes|MM|lycanthropy}."
 					]
 				},
 				{
@@ -64255,7 +64556,7 @@
 				{
 					"name": "Tusks (Boar or Hybrid Form Only)",
 					"entries": [
-						"{@atk mw} {@hit 5} to hit, reach 5 ft., one target. {@h}10 ({@damage 2d6 + 3}) slashing damage. If the target is a humanoid, it must succeed on a {@dc 12} Constitution saving throw or be cursed with wereboar lycanthropy."
+						"{@atk mw} {@hit 5} to hit, reach 5 ft., one target. {@h}10 ({@damage 2d6 + 3}) slashing damage. If the target is a humanoid, it must succeed on a {@dc 12} Constitution saving throw or be cursed with wereboar {@variantrule Player Characters as Lycanthropes|MM|lycanthropy}."
 					]
 				}
 			],
@@ -64332,6 +64633,7 @@
 				"QftIS",
 				"SatO",
 				"TftYP",
+				"TftYP-AtG",
 				"WDH",
 				"WDMM"
 			],
@@ -64415,7 +64717,7 @@
 				{
 					"name": "Bite (Rat or Hybrid Form Only)",
 					"entries": [
-						"{@atk mw} {@hit 4} to hit, reach 5 ft., one target. {@h}4 ({@damage 1d4 + 2}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 11} Constitution saving throw or be cursed with wererat lycanthropy."
+						"{@atk mw} {@hit 4} to hit, reach 5 ft., one target. {@h}4 ({@damage 1d4 + 2}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 11} Constitution saving throw or be cursed with wererat {@variantrule Player Characters as Lycanthropes|MM|lycanthropy}."
 					]
 				},
 				{
@@ -64587,7 +64889,7 @@
 				{
 					"name": "Bite (Tiger or Hybrid Form Only)",
 					"entries": [
-						"{@atk mw} {@hit 5} to hit, reach 5 ft., one target. {@h}8 ({@damage 1d10 + 3}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 13} Constitution saving throw or be cursed with weretiger lycanthropy."
+						"{@atk mw} {@hit 5} to hit, reach 5 ft., one target. {@h}8 ({@damage 1d10 + 3}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 13} Constitution saving throw or be cursed with weretiger {@variantrule Player Characters as Lycanthropes|MM|lycanthropy}."
 					]
 				},
 				{
@@ -64783,7 +65085,7 @@
 				{
 					"name": "Bite (Wolf or Hybrid Form Only)",
 					"entries": [
-						"{@atk mw} {@hit 4} to hit, reach 5 ft., one target. {@h}6 ({@damage 1d8 + 2}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 12} Constitution saving throw or be cursed with werewolf lycanthropy."
+						"{@atk mw} {@hit 4} to hit, reach 5 ft., one target. {@h}6 ({@damage 1d8 + 2}) piercing damage. If the target is a humanoid, it must succeed on a {@dc 12} Constitution saving throw or be cursed with werewolf {@variantrule Player Characters as Lycanthropes|MM|lycanthropy}."
 					]
 				},
 				{
@@ -65061,6 +65363,7 @@
 				"DIP",
 				"DSotDQ",
 				"EGW",
+				"FS",
 				"GoS",
 				"HotDQ",
 				"IDRotF",
@@ -65075,6 +65378,12 @@
 				"SDW",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
+				"TftYP-TFoF",
+				"TftYP-THSoT",
+				"TftYP-ToH",
+				"TftYP-WPM",
 				"ToA",
 				"TTP",
 				"VEoR",
@@ -65248,6 +65557,8 @@
 				"QftIS",
 				"SatO",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-THSoT",
 				"ToA",
 				"VEoR",
 				"WBtW",
@@ -65532,6 +65843,7 @@
 				"KftGV",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
 				"ToA"
 			],
 			"reprintedAs": [
@@ -65664,7 +65976,9 @@
 				"CM",
 				"CoA",
 				"CoS",
+				"DD",
 				"EGW",
+				"FS",
 				"GoS",
 				"HftT",
 				"HotDQ",
@@ -65775,6 +66089,7 @@
 			"referenceSources": [
 				"BMT",
 				"CM",
+				"EFR",
 				"ERLW",
 				"IDRotF",
 				"PotA",
@@ -65910,6 +66225,7 @@
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
 				"ToA",
 				"VEoR",
 				"WDMM"
@@ -66314,6 +66630,8 @@
 				"LoX",
 				"SKT",
 				"TftYP",
+				"TftYP-AtG",
+				"TftYP-DiT",
 				"ToFW"
 			],
 			"reprintedAs": [
@@ -66680,8 +66998,8 @@
 				"BGDIA",
 				"GoS",
 				"LK",
-				"RoT",
-				"TftYP"
+				"TftYP",
+				"TftYP-TFoF"
 			],
 			"reprintedAs": [
 				"Young Black Dragon|XMM"
@@ -68115,7 +68433,6 @@
 				"OoW",
 				"PaBTSO",
 				"RMBRE",
-				"RoT",
 				"SKT",
 				"WDMM"
 			],
@@ -69147,8 +69464,8 @@
 				"DIP",
 				"IDRotF",
 				"LK",
-				"RoT",
 				"TftYP",
+				"TftYP-AtG",
 				"ToFW"
 			],
 			"reprintedAs": [
@@ -69767,7 +70084,6 @@
 			"page": 309,
 			"referenceSources": [
 				"HotDQ",
-				"RoT",
 				"SKT",
 				"ToA"
 			],
@@ -69946,7 +70262,6 @@
 			"referenceSources": [
 				"CM",
 				"HotDQ",
-				"RoT",
 				"SKT",
 				"TftYP-DiT",
 				"ToA"
@@ -70337,6 +70652,7 @@
 				"DSotDQ",
 				"EGW",
 				"ERLW",
+				"FS",
 				"GoS",
 				"HftT",
 				"JttRC",
@@ -70350,13 +70666,14 @@
 				"PSI",
 				"QftIS",
 				"RMBRE",
-				"RoT",
 				"RtG",
 				"SatO",
 				"SDW",
 				"SLW",
 				"TCE",
 				"TftYP",
+				"TftYP-DiT",
+				"TftYP-THSoT",
 				"ToA",
 				"ToFW",
 				"VEoR",

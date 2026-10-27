@@ -764,17 +764,18 @@ CB_RENDER.species = () => {
     sktSpeciesImages().then(m => { if (!CB) return; CB.spImg = m; if (CB.step === 'species') cbRender(); });
   }
   const pic = (name, source) => CB.spImg ? CB.spImg.get(name, source) : '';
+  const face = (name, source) => CB.spImg ? CB.spImg.portrait(name, source) : '';
   let html = '<h3>Species</h3>' + cbBookCards(R.species, b.species, 'cb-species',
     s => (typeof s.speed === 'number' ? s.speed : (s.speed && s.speed.walk) || 30) + ' ft' + (s.darkvision ? ' · darkvision' : ''),
     s => (s.entries || []).filter(e => e && e.name && !/^(Age|Size|Speed|Languages?|Creature Type|Alignment|Darkvision|Ability Score Increase)$/i.test(e.name)).map(e => e.name).slice(0, 3).join(' · '),
-    s => pic(s.name, s.source)) + cbBooksToggle();
+    s => face(s.name, s.source)) + cbBooksToggle();
   if (!sp) return html;
   const hero = pic(sp.name, sp.source);
   if (hero) html += '<figure class="cb-sp-hero has-img">' + cbArtImg(hero, sp.name, true) + '<figcaption>' + cbEsc(sp.name) + '</figcaption></figure>';
   const subs = sp.subraces.filter(s => sktBookOk(b, s) || s.name === b.subspecies);
   if (subs.length){
     // A subrace's own picture where the art pack has one ("Elf (High)").
-    const subPic = s => { const p = CB.spImg ? CB.spImg.get(sp.name + ' (' + s.name + ')', s.source) : ''; return p && p !== hero ? p : ''; };
+    const subPic = s => { const p = CB.spImg ? CB.spImg.portrait(sp.name + ' (' + s.name + ')', s.source) : ''; return p && p !== hero && p !== face(sp.name, sp.source) ? p : ''; };
     html += '<h4>' + (R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>' + cbCards(subs.map(s => ({ value: s.name, label: s.name, sub: s.core === false ? s.source : '', img: subPic(s) })), b.subspecies, 'cb-subspecies');
   }
   // 2024 lineages that live in additionalSpells (Elf, Gnome, Tiefling).

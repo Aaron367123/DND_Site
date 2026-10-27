@@ -1617,7 +1617,6 @@
 			"source": "ToA",
 			"page": 216,
 			"referenceSources": [
-				"IDRotF",
 				"TTP"
 			],
 			"size": [
@@ -3702,7 +3701,8 @@
 			"languageTags": [
 				"C"
 			],
-			"hasToken": true
+			"hasToken": true,
+			"hasFluff": true
 		},
 		{
 			"name": "Nanny Pu'pu",

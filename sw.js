@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '95af842f58';
+const BUILD = '020048de2e';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=1654f7bfdb',
@@ -44,7 +44,7 @@ const PRECACHE = [
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=e043a461be',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=ee4b5ebca3',
+  'js/core/utils.js?v=61213fa2f4',
   'js/core/state.js?v=df662bfc03',
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=bceb453f6d',
@@ -52,7 +52,7 @@ const PRECACHE = [
   'js/core/window-manager.js?v=cca9e98e31',
   'js/panels/combat.js?v=79ad2ca625',
   'js/panels/attacks.js?v=57acabc3ca',
-  'js/generated/reactions.js?v=faa668dc18',
+  'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=17e22f002d',
   'js/panels/party.js?v=043f677573',
@@ -66,8 +66,8 @@ const PRECACHE = [
   'js/panels/npc-library.js?v=956f8b34ed',
   'js/panels/bestiary.js?v=8b3658dc0a',
   'js/panels/content-panel.js?v=1a060dfd0b',
-  'js/panels/adventures.js?v=ba56a82c30',
-  'js/panels/books.js?v=bcff5b8492',
+  'js/panels/adventures.js?v=0870abbb59',
+  'js/panels/books.js?v=a1261d751d',
   'js/panels/library.js?v=d41e1e85e4',
   'js/panels/npc-generator.js?v=ed65139e77',
   'js/panels/loot.js?v=f9f47b1d3e',
@@ -85,11 +85,11 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=07664d648a',
   'js/ui/command-palette.js?v=8aded06220',
-  'js/features/char-rules.js?v=ffdb338853',
-  'js/features/char-effects.js?v=f2abf19b9f',
+  'js/features/char-rules.js?v=c9f2bf7976',
+  'js/features/char-effects.js?v=bcae587b05',
   'js/features/char-sheet.js?v=4b135428c0',
   'js/features/char-print.js?v=7e55981c09',
-  'js/features/char-builder.js?v=81dbd70e5d',
+  'js/features/char-builder.js?v=61ba4f670a',
   'js/features/pdf-import.js?v=cefe36cb0b',
   'js/player/player-app.js?v=990767482f',
   'js/ui/player-view.js?v=3c47cb84bd',

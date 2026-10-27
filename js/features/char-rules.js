@@ -54,6 +54,10 @@ const SKT_BOOK_CLASSES = ['artificer'];
 // Books written for the 2024 rules. Everything else in the data is a 2014
 // book (Xanathar's, Tasha's, Monsters of the Multiverse, the setting books).
 const SKT_2024_ERA = new Set(['XPHB', 'XDMG', 'XMM', 'ABH', 'FRHoF', 'LFL', 'EFA']);
+// And every book or adventure printed since the 2024 Player's Handbook — it's
+// written for those rules (Ravenloft: The Horrors Within, Arcana Unleashed…).
+// Added from books.json and adventures.json when the rules load.
+const SKT_2024_SINCE = '2024-09-17';
 // D&D Beyond's content categories (Manage → Character Settings → Sources),
 // all on for a new character there: Core Rules (the 2024 core books), Expanded
 // Rules (the other 2024-era books), 2014 Core Rules, 2014 Expanded Rules
@@ -165,16 +169,29 @@ function sktRulesReader(base){
 // Species art from the art pack (fluff-races.json), loaded once, when the
 // builder first shows species. get(name, source) → an img/ path, or '' — the
 // species' own picture, else one of the same name from another book.
+// portrait(name, source): a picture taller than it is wide, one figure — the
+// 2024 books' art is mostly wide scenes — its own book's if it has one, else
+// the largest from another book, else get()'s.
 let _sktSpImg = null;
 function sktSpeciesImages(read){
   if (_sktSpImg && !read) return _sktSpImg;
   const job = (read || sktRulesReader())('fluff-races.json').then(j => {
     const list = j.raceFluff || [], by = new Map(list.map(x => [x.name + '|' + x.source, x]));
     const path = x => { for (let d = 0; x && d < 5; d++){ const im = (x.images || [])[0], p = im && im.href && im.href.path; if (p) return p; x = x._copy && by.get(x._copy.name + '|' + x._copy.source); } return ''; };
-    const own = new Map(), byName = new Map();
-    list.forEach(x => { const p = path(x); if (!p) return; own.set(x.name + '|' + x.source, p); if (!byName.has(x.name)) byName.set(x.name, p); });
-    return { get: (name, source) => own.get(name + '|' + source) || byName.get(name) || '' };
-  }).catch(() => ({ get: () => '' }));
+    const own = new Map(), byName = new Map(), shapes = new Map();
+    list.forEach(x => {
+      const p = path(x); if (!p) return; own.set(x.name + '|' + x.source, p); if (!byName.has(x.name)) byName.set(x.name, p);
+      (x.images || []).forEach(im => { const ip = im && im.href && im.href.path; if (ip && im.width && im.height) (shapes.get(x.name) || shapes.set(x.name, []).get(x.name)).push({ path: ip, source: x.source, w: +im.width, h: +im.height }); });
+    });
+    const get = (name, source) => own.get(name + '|' + source) || byName.get(name) || '';
+    const portrait = (name, source) => {
+      const tall = (shapes.get(name) || []).filter(s => s.h >= s.w * 1.05);
+      const mine = tall.filter(s => s.source === source).sort((a, b) => b.w * b.h - a.w * a.h)[0];
+      const best = mine || tall.sort((a, b) => b.w * b.h - a.w * a.h)[0];
+      return best ? best.path : get(name, source);
+    };
+    return { get, portrait };
+  }).catch(() => ({ get: () => '', portrait: () => '' }));
   if (!read) _sktSpImg = job;
   return job;
 }
@@ -231,6 +248,8 @@ async function _sktRulesBuild(edition, read){
     read('spells/sources.json'), read('languages.json').catch(() => ({ language: [] })),
     read('books.json').catch(() => ({ book: [] })),
   ]);
+  const adventures = await read('adventures.json').catch(() => ({ adventure: [] }));
+  (books.book || []).concat(adventures.adventure || []).forEach(b => { if (b && b.id && String(b.published || '') >= SKT_2024_SINCE) SKT_2024_ERA.add(b.id); });
   // Every book's spells: the core book's always, the others for "other books".
   const spellFiles = await Promise.all(Object.keys(spellIndex).map(k =>
     read('spells/' + spellIndex[k]).catch(() => (k === src ? Promise.reject(new Error('spells ' + k)) : { spell: [] }))));
