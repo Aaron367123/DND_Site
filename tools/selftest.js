@@ -10371,6 +10371,22 @@
         document.getElementById('skt-dice') && document.getElementById('skt-dice').remove();
       } catch(e){ ok('round 98 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 99: the combat tracker's look ---------------------------------
+    {
+      try {
+        const host = document.createElement('div');
+        host.innerHTML = '<div class="combat-controls"><span class="round-display">Round 2</span></div><div class="combatant-list"><div class="combatant-card active npc"></div>'
+          + '<div class="combatant-card dead pc"><div class="card-avatar"></div></div><span class="condition-tag" data-cond="Poisoned">Poisoned ×</span><span class="condition-tag" data-cond="Prone">Prone ×</span></div>';
+        document.body.appendChild(host);
+        const q = s => host.querySelector(s);
+        ok('combat: whose turn it is says so, on a tab', /Turn/.test(getComputedStyle(q('.combatant-card.active'), '::after').content));
+        ok('combat: the round on a ribbon', getComputedStyle(q('.round-display')).clipPath.startsWith('polygon'));
+        ok('combat: the fallen in grey', /grayscale/.test(getComputedStyle(q('.combatant-card.dead .card-avatar')).filter));
+        const tags = host.querySelectorAll('.condition-tag');
+        ok('combat: each condition with its sign', /🤢/.test(getComputedStyle(tags[0], '::before').content) && /🛌/.test(getComputedStyle(tags[1], '::before').content));
+        host.remove();
+      } catch(e){ ok('round 99 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
