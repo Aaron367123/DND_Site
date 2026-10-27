@@ -55,3 +55,76 @@
 .pa-avatar .icon-img { width: 100%; height: 100%; }
 .char-icon-btn, .map-party-icon { overflow: hidden; border-radius: 50%; }
 .char-icon-btn .icon-img, .map-party-icon .icon-img { width: 100%; height: 100%; }
+
+/* ── 3. Texture: a table, not a screen ────────────────────── */
+/* Fine grain and broad mottling, drawn by the browser (SVG noise, no image
+   files), over the theme's own colours; a vignette darkens the edges. */
+:root {
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .92  0 0 0 0 .8  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  --mottle: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='700' height='700'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='.008' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -.9 .5'/></filter><rect width='100%' height='100%' filter='url(%23m)'/></svg>");
+  --gilt: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.workspace {
+  background-image:
+    radial-gradient(ellipse at 50% 45%, transparent 35%, rgba(0,0,0,.5) 100%),
+    var(--grain), var(--mottle),
+    radial-gradient(ellipse at 25% 15%, color-mix(in srgb, var(--accent) 7%, var(--bg)), var(--bg) 65%);
+  /* The mottling stretched over the whole table: tiled, its edges show. */
+  background-size: 100% 100%, 240px 240px, cover, 100% 100%;
+  background-repeat: no-repeat, repeat, no-repeat, no-repeat;
+  background-attachment: local, local, local, local;
+  background-color: var(--bg);
+}
+.workspace-canvas { background-color: transparent; }
+/* The dock: a strip of dark leather with a gilt edge. */
+.panel-dock {
+  background: var(--grain), linear-gradient(90deg, color-mix(in srgb, var(--panel) 92%, #000), var(--panel));
+  border-right: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  box-shadow: inset -1px 0 0 rgba(0,0,0,.4), 2px 0 12px rgba(0,0,0,.35);
+}
+/* Windows: leather panels, a gilt rule under the title, a mark in each corner. */
+.window {
+  background: var(--grain), linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, var(--accent)), var(--panel) 120px);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+}
+.window.focused { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); }
+.window::after {
+  content: ''; position: absolute; inset: 3px; pointer-events: none; z-index: 5;
+  background:
+    linear-gradient(var(--gilt), var(--gilt)) top left / 12px 1px no-repeat,
+    linear-gradient(var(--gilt), var(--gilt)) top left / 1px 12px no-repeat,
+    linear-gradient(var(--gilt), var(--gilt)) top right / 12px 1px no-repeat,
+    linear-gradient(var(--gilt), var(--gilt)) top right / 1px 12px no-repeat,
+    linear-gradient(var(--gilt), var(--gilt)) bottom left / 12px 1px no-repeat,
+    linear-gradient(var(--gilt), var(--gilt)) bottom left / 1px 12px no-repeat,
+    linear-gradient(var(--gilt), var(--gilt)) bottom right / 12px 1px no-repeat,
+    linear-gradient(var(--gilt), var(--gilt)) bottom right / 1px 12px no-repeat;
+  opacity: .55;
+}
+.window.focused::after { opacity: .9; }
+.window-head {
+  position: relative;
+  background: var(--grain), linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 85%, var(--accent)), var(--panel-2));
+  border-bottom-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+.window-head::after {
+  content: ''; position: absolute; left: 8%; right: 8%; bottom: -1px; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: .55;
+}
+/* The builder and the sheet, full screen: the same table under them. */
+.cb { background-image: var(--grain), var(--mottle), radial-gradient(ellipse at 30% 0%, color-mix(in srgb, var(--accent) 6%, var(--bg)), var(--bg) 70%);
+  background-size: 240px 240px, cover, 100% 100%; background-repeat: repeat, no-repeat, no-repeat; background-color: var(--bg); }
+.modal { background: var(--grain), linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, var(--accent)), var(--panel)); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+/* The player's phone: the same grain behind everything. */
+body.player-mode { background-image: var(--grain), var(--mottle); background-size: 240px 240px, cover; background-repeat: repeat, no-repeat; background-attachment: fixed; background-color: var(--bg); }
+/* The sheet's tab strip stays put as you scroll: see-through, over the grain. */
+.cs-tabs { background: color-mix(in srgb, var(--bg) 78%, transparent) !important; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+/* Light (Parchment) tone: a warm, soft vignette, not a black one. */
+[data-theme-tone="light"] .workspace {
+  background-image:
+    radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(90,60,30,.22) 100%),
+    var(--grain), var(--mottle),
+    radial-gradient(ellipse at 25% 15%, color-mix(in srgb, var(--accent) 8%, var(--bg)), var(--bg) 65%);
+}
+[data-theme-tone="light"] .window { box-shadow: 0 10px 26px rgba(80,55,25,.22), 0 2px 6px rgba(80,55,25,.15); }
