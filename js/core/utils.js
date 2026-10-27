@@ -281,7 +281,9 @@ function renderIcon(icon, alt) {
   if (/^img\/races\//.test(s)) {
     const full = assetUrl(s), small = assetThumbUrl(s), f = sktPortraitFocus(s);
     const pos = f ? ` style="object-position:${f.x}% ${f.y}%;transform-origin:${f.x}% ${f.y}%"` : '';
-    return `<img class="icon-img icon-face" src="${esc(small)}" data-fb="${esc(full)}"${pos} alt="${esc(alt||'')}" loading="lazy" decoding="async" onerror=""if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
+    // Loaded at once, not lazily: panels redraw on every synced change, and a
+    // lazy picture blanks for a frame each time it's rebuilt — a flicker.
+    return `<img class="icon-img icon-face" src="${esc(small)}" data-fb="${esc(full)}"${pos} alt="${esc(alt||'')}" onerror=""if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
   }
   if (s.startsWith('data:image/') || s.startsWith('img/') || /^https?:\/\//.test(s)) {
     // Repair the path on the way out. combat.js and battlemap.js PERSIST the

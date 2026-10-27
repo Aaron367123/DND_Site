@@ -616,11 +616,26 @@ function paHideTurnBanner(){
 // concentration save, the reaction prompt.
 function paSheetHere(el){ return el.querySelector('.pa-sheet #cs-root'); }
 let paSheetStale = false;
+// What the phone's sheet shows, in one string: this character, their place in
+// the fight and whose turn it is (the action bar reads it), the settings, and
+// whether the rules and item data have loaded.
+// Every change anywhere at the table — another player's HP, a roll, the DM
+// moving the turn — calls paRender; the sheet is only rebuilt when this
+// differs. Rebuilding it for each of those made the phone flicker all fight.
+let paSheetSig = '';
+function paSheetSigOf(pc){
+  const c = (state.combatants || []).find(x => x.id === pc.id);
+  return [JSON.stringify(pc), c ? JSON.stringify(c) : '', String(state.activeCombatantId), String(state.combatRound), JSON.stringify(state.settings || {}),
+          typeof _5eLoaded !== 'undefined' && _5eLoaded ? 1 : 0, CS && CS.R ? 1 : 0, CS && CS.gear ? 1 : 0, CS && CS.magic ? 1 : 0].join('\u0001');
+}
 function paRenderSheet(el){
   const pc = paPc();
   if (!pc){ paUnmountCurrent(el); el.innerHTML = paPickerScreen(); return; }
   const root = paSheetHere(el);
   if (root && typeof CS !== 'undefined' && CS && CS.embed && CS.id === pc.id){
+    const sig = paSheetSigOf(pc);
+    if (sig === paSheetSig) return;
+    paSheetSig = sig;
     // Not while they're typing in it: a redraw from a sync would take the
     // half-typed number and the focus with it. It catches up on blur.
     const a = document.activeElement;
@@ -632,6 +647,7 @@ function paRenderSheet(el){
   }
   paUnmountCurrent(el);
   el.innerHTML = '<div class="pa-sheet"></div>';
+  paSheetSig = '';
   if (typeof openCharSheet === 'function') openCharSheet(pc.id, { host: el.firstChild });
   else el.innerHTML = paYouScreen();
 }

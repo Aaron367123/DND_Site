@@ -81,6 +81,7 @@ function parseArgs(argv){
     else if (k === '--eval-file') a.evalFile = argv[++i];
     else if (k === '--seed')   a.seed   = argv[++i];
     else if (k === '--state')  a.state  = argv[++i];
+    else if (k === '--cpu')    a.cpu    = parseFloat(argv[++i]) || 1;
     else if (k === '--ready')  a.ready  = argv[++i];
     else if (k === '--tour')   a.tour   = true;
     else if (k === '--full')   a.full   = true;
@@ -102,10 +103,11 @@ function usage(){
   console.log('       [--size WxH] [--touch|--no-touch] [--url URL] [--player]');
   console.log('       [--out FILE] [--full] [--wait MS] [--eval JS] [--seed JS] [--tour]');
   console.log('');
-  console.log('       [--state BACKUP.json] [--pdf FILE] [--media print]');
+  console.log('       [--state BACKUP.json] [--pdf FILE] [--media print] [--cpu N]');
   console.log('');
   console.log('  --state F  load a Settings → Export backup as the starting state');
   console.log('  --seed JS  runs BEFORE page scripts (use for localStorage setup)');
+  console.log('  --cpu N    slow the CPU N times, as a phone is');
   console.log('  --eval JS  runs AFTER load (use to open panels, click things)');
   console.log('  --eval-file F  same, read from a file (no command-line size cap)');
   console.log('  --ready JS poll until truthy before shooting (default: workspace built)');
@@ -311,6 +313,9 @@ function findChrome(){
     });
     // maxTouchPoints must be 1..16 — sending 0 to turn touch OFF is an error,
     // so the field is omitted entirely in that case.
+    // --cpu N: run N times slower, as Chrome's phone testing does — what a
+    // fast desktop hides (a costly paint) shows at a phone's speed.
+    if (a.cpu > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: a.cpu });
     await cdp.send('Emulation.setTouchEmulationEnabled',
       dev.touch ? { enabled: true, maxTouchPoints: 5 } : { enabled: false });
     if (dev.touch){

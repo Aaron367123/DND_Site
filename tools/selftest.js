@@ -11164,6 +11164,32 @@
           paRender();
         }
       }
+      // ── No flicker: the sheet isn't rebuilt for someone else's change ─────
+      {
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab, party0 = JSON.stringify(state.party);
+        try {
+          if ((state.party || []).length >= 2){
+            const meId = state.party[0].id, otherId = state.party[1].id;
+            paSetPc(meId); paTab = 'you'; paRender(); await sleep(80);
+            // The rules and item data loading is a change of its own; let it land first.
+            for (let i = 0; i < 80 && !(CS && CS.R && CS.gear); i++){ await sleep(100); paRender(); }
+            paRender(); await sleep(30);
+            let n = 0; const real = window.csRender; window.csRender = function(){ n++; return real.apply(this, arguments); };
+            const face0 = document.querySelector('#pa-screen #cs-root .cs-avatar');
+            try {
+              for (let k = 0; k < 3; k++){ const o = state.party.find(x => x.id === otherId); o.hp = Math.max(0, (o.hp || 5) - 1); paRender(); }
+              ok('phone: another character’s change doesn’t rebuild your sheet (it flickered all fight)', n === 0 && document.querySelector('#pa-screen #cs-root .cs-avatar') === face0, n + ' rebuilds');
+              const mine = state.party.find(x => x.id === meId); mine.hp = Math.max(0, (mine.hp || 5) - 1); paRender();
+              ok('phone: your own change still does', n === 1, n + ' rebuilds');
+            } finally { window.csRender = real; }
+          }
+        } catch(e){ ok('phone: the no-flicker checks ran to completion', false, e.message); }
+        finally {
+          state.party = JSON.parse(party0);
+          paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paRender();
+        }
+      }
       // ── The player's own bookkeeping, on their sheet ──────────────────────
       {
         const p0 = localStorage.getItem('skt-party-v1'), me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
