@@ -142,13 +142,26 @@ function csClassLine(pc){
   return [pc.race || sh.race || '', cl].filter(Boolean).join(' · ');
 }
 function _csTitle(s){ s = String(s || ''); return s ? s.replace(/\b\w/g, c => c.toUpperCase()) : ''; }
+// The header as a banner: the class's colour, the character's picture (their
+// own, or their species' portrait) large behind their name.
+function csHeroColor(pc){
+  return (typeof panelDefs !== 'undefined' && panelDefs.party && typeof panelDefs.party._classColor === 'function') ? panelDefs.party._classColor(pc) : 'var(--accent)';
+}
+function csHeroArt(pc){
+  const ic = typeof sktPcIcon === 'function' ? sktPcIcon(pc) : '';
+  if (!/^(data:image\/|img\/|https?:\/\/)/.test(ic)) return '';
+  const url = typeof assetUrl === 'function' ? assetUrl(ic) : ic;
+  const f = typeof sktPortraitFocus === 'function' ? sktPortraitFocus(ic) : null;
+  return '<div class="cs-hero-art" aria-hidden="true" style="background-image:url(\'' + String(url).replace(/'/g, '%27') + '\');background-position:'
+    + (f ? f.x + '% ' + Math.max(0, f.y - 6) + '%' : '50% 15%') + '"></div>';
+}
 function csHead(pc){
   const icon = typeof renderIcon === 'function' ? renderIcon(typeof sktPcIcon === 'function' ? sktPcIcon(pc) : pc.icon, pc.name) : csE(String(pc.name || '?').charAt(0));
   const ro = CS.readOnly;
   const xpOn = pc.build && pc.build.advancement === 'xp';
   const lvl = pc.level || 1, xp = +pc.xp || 0, next = CS_XP[Math.min(19, lvl)];
   const ready = xpOn && lvl < 20 && xp >= next;
-  return '<div class="cb-head cs-head">' + (ro ? '<span class="cs-avatar">' + icon + '</span>' : '<button class="cs-avatar" data-cs="portrait" title="Change the portrait">' + icon + '</button>')
+  return '<div class="cb-head cs-head cs-hero" style="--hero:' + csHeroColor(pc) + '">' + csHeroArt(pc) + (ro ? '<span class="cs-avatar">' + icon + '</span>' : '<button class="cs-avatar" data-cs="portrait" title="Change the portrait">' + icon + '</button>')
     + '<div class="cs-who"><b class="cb-title">' + csE(pc.name) + '</b><span class="cs-sub">' + csE(csClassLine(pc)) + '</span>'
     + (xpOn ? '<span class="cs-xp' + (ready ? ' ready' : '') + '">XP ' + xp.toLocaleString() + (lvl < 20 ? ' / ' + next.toLocaleString() : '')
       + '<i class="cs-xpbar"><i style="width:' + (lvl < 20 ? Math.min(100, Math.round(100 * (xp - CS_XP[lvl - 1]) / Math.max(1, next - CS_XP[lvl - 1]))) : 100) + '%"></i></i>'

@@ -1019,7 +1019,7 @@ function paYouScreen(){
 
   return `
     <div class="pa-card pa-you">
-      <div class="pa-you-head">
+      <div class="pa-you-head pa-hero" style="--hero:${paHeroColor(pc)}">${paHeroArt(pc)}
         <div class="pa-avatar">${paFace(pc)}</div>
         <div class="pa-you-id">
           <div class="pa-you-name">${paEsc(pc.name)}</div>
@@ -1569,6 +1569,18 @@ function paSkillMod(pc, k, ab){
 function paFace(pc){
   const ic = typeof sktPcIcon === 'function' ? sktPcIcon(pc) : '';
   return /^(data:image\/|img\/|https?:\/\/)/.test(ic) && typeof renderIcon === 'function' ? renderIcon(ic, pc.name) : paEsc(String(pc.name || '?').trim().charAt(0).toUpperCase());
+}
+// The You screen's banner: the class's colour across it, the character's
+// picture (their own, or their species' portrait) large behind their name.
+function paHeroColor(pc){
+  return (typeof panelDefs !== 'undefined' && panelDefs.party && typeof panelDefs.party._classColor === 'function') ? panelDefs.party._classColor(pc) : 'var(--accent)';
+}
+function paHeroArt(pc){
+  const ic = typeof sktPcIcon === 'function' ? sktPcIcon(pc) : '';
+  if (!/^(data:image\/|img\/|https?:\/\/)/.test(ic)) return '';
+  const url = typeof assetUrl === 'function' ? assetUrl(ic) : ic;
+  const f = typeof sktPortraitFocus === 'function' ? sktPortraitFocus(ic) : null;
+  return `<div class="pa-hero-art" aria-hidden="true" style="background-image:url('${String(url).replace(/'/g, '%27')}');background-position:${f ? f.x + '% ' + Math.max(0, f.y - 6) + '%' : '50% 15%'}"></div>`;
 }
 function paChecksHtml(pc){
   const sg = n => (n >= 0 ? '+' : '') + n;

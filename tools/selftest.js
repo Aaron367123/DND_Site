@@ -10387,6 +10387,21 @@
         host.remove();
       } catch(e){ ok('round 99 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 100: the sheet's banner ---------------------------------------
+    {
+      try {
+        state.party.push({ id: 'pc_hero', name: 'Bannered', race: 'Dwarf', icon: '⚔', cls: 'barbarian', level: 3, hp: 30, hpMax: 30, ac: 14, sheet: {} }); save();
+        openCharSheet('pc_hero'); await sleep(300);
+        const head = document.querySelector('#cs-root .cs-head.cs-hero'), art = head && head.querySelector('.cs-hero-art');
+        ok('banner: the sheet’s header in the class’s colour, the portrait behind the name', !!head && /#c25450/i.test(head.getAttribute('style') || '')
+           && !!art && art.style.backgroundImage.includes(sktSpeciesPortrait('Dwarf').split('/').pop()), head ? head.outerHTML.slice(0, 200) : 'no header');
+        csClose();
+        state.party.find(p => p.id === 'pc_hero').race = 'Nothing Like It'; save();
+        openCharSheet('pc_hero'); await sleep(200);
+        ok('banner: no picture — no art, the colour still', !document.querySelector('#cs-root .cs-hero-art') && !!document.querySelector('#cs-root .cs-head.cs-hero'));
+        csClose(); state.party = state.party.filter(p => p.id !== 'pc_hero'); save();
+      } catch(e){ ok('round 100 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -293,3 +293,43 @@ body.player-mode { background-image: var(--grain), var(--mottle); background-siz
 .condition-tag[data-cond^="Concentrat" i]::before { content: '🔮'; }
 .condition-tag[data-cond^="Bless" i]::before { content: '✨'; }
 .condition-tag[data-cond^="Rag" i]::before { content: '🔥'; }
+
+/* ── 8. The phone's hero banner ───────────────────────────── */
+/* The You screen opens on the character: their class's colour across the
+   top, their picture large behind their name. */
+.pa-you-head.pa-hero {
+  position: relative; overflow: hidden; isolation: isolate;
+  margin: -12px -12px 2px; padding: 22px 14px 18px; min-height: 118px; align-items: flex-end;
+  background: var(--grain), linear-gradient(115deg, color-mix(in srgb, var(--hero, var(--accent)) 45%, var(--panel)) 0%, color-mix(in srgb, var(--hero, var(--accent)) 14%, var(--panel)) 55%, var(--panel) 100%);
+  border-bottom: 2px solid var(--hero, var(--accent));
+}
+.pa-hero-art {
+  position: absolute; z-index: -1; right: -6%; top: -4%; bottom: -4%; width: 66%;
+  background-size: cover; background-repeat: no-repeat; opacity: .9;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.55) 30%, #000 60%), linear-gradient(0deg, transparent 0%, #000 30%);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.55) 30%, #000 60%), linear-gradient(0deg, transparent 0%, #000 30%); mask-composite: intersect;
+}
+.pa-hero .pa-avatar { box-shadow: 0 0 0 2px var(--hero, var(--accent)), 0 4px 14px rgba(0,0,0,.6); border-color: var(--hero, var(--accent)); }
+.pa-hero .pa-you-name { font-family: var(--font-display); font-weight: 700; letter-spacing: .04em; text-shadow: 0 2px 8px rgba(0,0,0,.75); }
+.pa-hero .pa-you-sub { color: color-mix(in srgb, var(--text) 85%, var(--hero, var(--accent))); text-shadow: 0 1px 4px rgba(0,0,0,.8); text-transform: capitalize; }
+.pa-hero .pa-swap { position: relative; align-self: flex-start; background: rgba(0,0,0,.35); }
+@media (min-width: 761px) { .pa-you-head.pa-hero { margin: -18px -18px 4px; } }
+/* The character sheet's header, the same banner. */
+.cs-head.cs-hero {
+  position: relative; isolation: isolate; overflow: hidden;
+  background: var(--grain), linear-gradient(100deg, color-mix(in srgb, var(--hero, var(--accent)) 38%, var(--panel)) 0%, color-mix(in srgb, var(--hero, var(--accent)) 10%, var(--panel)) 40%, var(--panel) 75%);
+  border-bottom: 2px solid color-mix(in srgb, var(--hero, var(--accent)) 75%, transparent);
+}
+.cs-hero-art {
+  position: absolute; z-index: -1; left: 0; top: -30%; bottom: -60%; width: min(440px, 45%); pointer-events: none;
+  background-size: cover; background-repeat: no-repeat; opacity: .32;
+  -webkit-mask-image: linear-gradient(90deg, rgba(0,0,0,.2) 0%, #000 25%, rgba(0,0,0,.6) 60%, transparent 100%); mask-image: linear-gradient(90deg, rgba(0,0,0,.2) 0%, #000 25%, rgba(0,0,0,.6) 60%, transparent 100%);
+}
+.cs-hero .cb-title { text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+.cs-hero .cs-sub { text-shadow: 0 1px 4px rgba(0,0,0,.85); }
+.cs-hero .cs-avatar { box-shadow: 0 0 0 2px var(--hero, var(--accent)), 0 3px 10px rgba(0,0,0,.6); border-radius: 50%; }
+@media (max-width: 760px) {
+  .cs-head.cs-hero { min-height: 76px; align-items: center; }
+  .cs-hero-art { left: auto; right: -8%; width: 62%; top: -20%; bottom: -80%; opacity: .75;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.6) 35%, #000 70%); mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.6) 35%, #000 70%); }
+}
