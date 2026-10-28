@@ -36,7 +36,7 @@ const PANEL_ICON = {
   combat:'i-combat', turnview:'i-turn', party:'i-shield', shop:'i-coins',
   notes:'i-note', battlemap:'i-map', npclib:'i-user', bestiary:'i-paw',
   library:'i-books', loot:'i-chest',
-  encounter:'i-skull', soundboard:'i-speaker', world:'i-cloud', gamelog:'i-dice', messages:'i-chat', quests:'i-flag', factions:'i-crest',
+  encounter:'i-skull', soundboard:'i-speaker', world:'i-cloud', gamelog:'i-dice', messages:'i-chat', quests:'i-flag', factions:'i-crest', homebrew:'i-flask',
 };
 // Icon markup for a panel: sprite when we have one, the panel's own emoji when
 // we don't. Both callers go through here so they can't drift apart.

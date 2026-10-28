@@ -139,6 +139,7 @@ const LABELS = {
   'skt-handouts-v1':          'Handouts',
   'skt-quests-v1':            'Quests',
   'skt-factions-v1':          'Factions',
+  'skt-homebrew-v1':          'Homebrew',
   'skt-messages-v1':          'Messages',
 };
 

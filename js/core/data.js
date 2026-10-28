@@ -46,6 +46,7 @@ const DEFAULT_LAYOUT = {
   messages:   {x:700, y:80, w:560, h:460, open:false, minimized:false, z:9},
   quests:     {x:640, y:60, w:480, h:560, open:false, minimized:false, z:9},
   factions:   {x:680, y:70, w:480, h:560, open:false, minimized:false, z:9},
+  homebrew:   {x:560, y:40, w:640, h:620, open:false, minimized:false, z:9},
   // 500, not 380. A party card measures 414px tall and the grid is 210px
   // columns, so at 380 the window showed roughly half a card — the
   // STATS/SKILLS/SPELLS/FEATURES tabs and the temp-HP field were cut off, and

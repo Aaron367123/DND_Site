@@ -11027,6 +11027,70 @@
         F._open = null;
       }
     }
+    // -- Round 117: homebrew, everywhere ------------------------------------------
+    {
+      const h0 = localStorage.getItem('skt-homebrew-v1'), H = panelDefs.homebrew;
+      try {
+        for (let k = 0; k < 80 && !_5eLoaded; k++) await sleep(250);
+        localStorage.setItem('skt-homebrew-v1', '{}'); sktHomebrewApply();
+        ok('homebrew: it syncs, and only the DM writes it', SKT_SYNC_KEYS.includes('skt-homebrew-v1') && _DM_ONLY_KEYS.has('skt-homebrew-v1'));
+        H._kind = 'monster'; H._edit = null; H._q = '';
+        openPanel('homebrew'); await sleep(150);
+        const w = document.querySelector('.window[data-panel="homebrew"]');
+        const set = (sel, v) => { const i = w.querySelector(sel); i.value = v; i.dispatchEvent(new Event(i.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
+        // A monster, started from the book's Goblin.
+        set('[data-hb-q]', 'goblin'); await sleep(30);
+        const from = [...w.querySelectorAll('[data-hb-from]')].find(x => x.querySelector('b').textContent === 'Goblin');
+        ok('homebrew: "start from" finds the books\u2019 own', !!from);
+        from.click(); await sleep(30);
+        ok('homebrew: starting from one copies its stat block', /\(homebrew\)/.test(w.querySelector('[data-hb-f="name"]').value) && w.querySelectorAll('[data-hb-row^="actions:"]').length >= 2);
+        set('[data-hb-f="name"]', 'Krusk the Chief'); set('[data-hb-f="hp"]', '33'); set('[data-hb-f="cr"]', '2');
+        w.querySelector('[data-hb-save]').click(); await sleep(30);
+        const mon = _5eData.find(r => r.cat === 'monster' && r.name === 'Krusk the Chief');
+        ok('homebrew: a monster joins the catalogue, marked Homebrew, with its actions', !!mon && mon._source === 'Homebrew' && mon.hp === 33 && /CR 2/.test(mon.meta) && mon._raw.actions.length >= 2);
+        ok('homebrew: and search finds it', getSearchPool().some(r => r.name === 'Krusk the Chief'));
+        // An item.
+        w.querySelector('[data-hb-kind="item"]').click(); await sleep(10);
+        w.querySelector('[data-hb-new]').click(); await sleep(10);
+        set('[data-hb-f="name"]', 'Barrow-Blade'); set('[data-hb-f="kind"]', 'M'); set('[data-hb-f="rarity"]', 'rare'); w.querySelector('[data-hb-f="attune"]').click();
+        set('[data-hb-f="dmg1"]', '1d8'); set('[data-hb-f="dmgType"]', 'S'); set('[data-hb-f="value"]', '1500'); set('[data-hb-f="text"]', 'It glows near undead.');
+        w.querySelector('[data-hb-save]').click(); await sleep(30);
+        const it = _5eData.find(r => r.cat === 'item' && r.name === 'Barrow-Blade');
+        ok('homebrew: an item joins the catalogue with its rarity, attunement and price', !!it && /Rare · Attunement/.test(it.meta) && it._raw.value_cp === 150000 && it._raw.dmg1 === '1d8');
+        const magic = await sktMagicLoad('2024');
+        ok('homebrew: a magic item is in the sheet\u2019s magic item list', magic.some(m => m.name === 'Barrow-Blade'));
+        // A spell, for druids and wizards.
+        w.querySelector('[data-hb-kind="spell"]').click(); await sleep(10);
+        w.querySelector('[data-hb-new]').click(); await sleep(10);
+        set('[data-hb-f="name"]', 'Hedge Warding'); set('[data-hb-f="text"]', 'The target has a +1 bonus to AC.'); set('[data-hb-f="durKind"]', 'minute'); set('[data-hb-f="durAmt"]', '10');
+        w.querySelector('[data-hb-f="conc"]').click(); w.querySelector('[data-hb-class="Druid"]').click();
+        w.querySelector('[data-hb-save]').click(); await sleep(30);
+        const R = await sktRulesLoad('2024');
+        const on = c => { const x = sktBlankBuild('2024'); x.cls = c; x.level = 3; return sktSpellOptions(R, x, 1).some(s => s.name === 'Hedge Warding'); };
+        ok('homebrew: a spell is on the lists of the classes it\u2019s given to, and no others', on('wizard') && on('druid') && !on('cleric'));
+        const sp = _5eData.find(r => r.cat === 'spell' && r.name === 'Hedge Warding');
+        ok('homebrew: and in the catalogue, with its duration and concentration', !!sp && /Concentration, up to 10 minutes/.test(sp._raw.duration));
+        // Editing an existing one spreads at once, without a second copy.
+        H._kind = 'monster'; H._edit = null; H._render(); await sleep(10);
+        w.querySelector('[data-hb-open]').click(); await sleep(10);
+        set('[data-hb-f="hp"]', '40'); await sleep(10);
+        ok('homebrew: an edit spreads at once, one copy only', _5eData.filter(r => r.name === 'Krusk the Chief').length === 1 && _5eData.find(r => r.name === 'Krusk the Chief').hp === 40);
+        // A stale homebrew row from a cached index is dropped.
+        _5eData.push({ cat: 'monster', name: 'Old Stale Brew', _source: 'Homebrew', _raw: {} }); sktHomebrewApply();
+        ok('homebrew: rows left over from before are dropped', !_5eData.some(r => r.name === 'Old Stale Brew'));
+        // Delete asks, then it's gone from everywhere.
+        w.querySelector('[data-hb-del]').click(); await sleep(60);
+        const yes = document.getElementById('conf-ok'); ok('homebrew: delete asks first', !!yes);
+        if (yes){ yes.click(); await sleep(40); }
+        ok('homebrew: and then it\u2019s gone from the catalogue', !_5eData.some(r => r.name === 'Krusk the Chief') && !getSearchPool().some(r => r.name === 'Krusk the Chief'));
+        closePanel('homebrew');
+      } catch(e){ ok('round 117 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (h0 == null) localStorage.removeItem('skt-homebrew-v1'); else localStorage.setItem('skt-homebrew-v1', h0);
+        H._edit = null; H._q = ''; H._kind = 'monster';
+        try { sktHomebrewApply(); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

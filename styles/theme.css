@@ -567,3 +567,40 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .fac-pc-t { font-weight: 600; flex: 1; }
 .fac-pc-s { font-size: var(--fs-sm); }
 .pa-factions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── 23. Homebrew ─────────────────────────────────────────── */
+.window-body:has(> .hb) { display: flex; flex-direction: column; }
+.hb { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+.hb-tabs { padding: 0; margin: 0 0 2px; }
+.hb-tabs small { color: var(--text-muted); font-weight: 400; }
+.hb-from { flex: 1; min-width: 180px; }
+.hb-results { display: flex; flex-direction: column; gap: 2px; }
+.hb-results:empty { display: none; }
+.hb-results, .hb-list { overflow-y: auto; min-height: 0; }
+.hb-results { max-height: 40%; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px; }
+.hb-list { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.hb-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.hb-row:hover { border-color: var(--accent); }
+.hb-row small { color: var(--text-muted); font-size: var(--fs-xs); }
+.hb-form { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 10px; align-content: start; padding-right: 4px; }
+.hb-f { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hb-f > span { font-size: var(--fs-xs); color: var(--text-muted); }
+.hb-wide { grid-column: 1 / -1; }
+.hb-chk { flex-direction: row; align-items: center; gap: 6px; font-size: var(--fs-sm); align-self: end; padding-bottom: 6px; }
+.hb-grid5, .hb-grid6 { display: grid; gap: 6px; }
+.hb-grid5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.hb-grid6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.hb-grid5 label, .hb-grid6 label { display: flex; flex-direction: column; gap: 2px; }
+.hb-grid5 small, .hb-grid6 small { font-size: var(--fs-2xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.hb-block { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 6px; margin-bottom: 6px; }
+.hb-block textarea { grid-column: 1 / 2; resize: vertical; }
+.hb-block .btn { grid-row: 1; grid-column: 2; }
+.hb-checks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-sm); }
+.hb-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 8px; }
+.hb-note { flex: 1; color: var(--text-muted); font-size: var(--fs-xs); }
+@media (max-width: 520px) { .hb-grid6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hb-grid5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* ── 24. The newer windows: room at the edges ─────────────── */
+/* Game Log, Messages, Quests, Factions and Homebrew drew right to the
+   window's border; the older windows pad their own toolbars and lists. */
+.window-body > .glog, .window-body > .msg, .window-body > .qst, .window-body > .fac, .window-body > .hb { padding: 10px 12px; box-sizing: border-box; }

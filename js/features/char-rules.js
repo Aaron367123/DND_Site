@@ -201,7 +201,7 @@ async function sktRulesLoad(edition, read){
   if (_sktRulesCache[edition] && !read) return _sktRulesCache[edition];
   read = read || sktRulesReader();
   const job = _sktRulesBuild(edition, read);
-  if (read === undefined || !_sktRulesCache[edition]){ _sktRulesCache[edition] = job; job.then(R => { _sktRulesReady[edition] = R; }, () => {}); }
+  if (read === undefined || !_sktRulesCache[edition]){ _sktRulesCache[edition] = job; job.then(R => { _sktRulesReady[edition] = R; if (typeof sktHomebrewIntoRules === 'function') sktHomebrewIntoRules(R); }, () => {}); }
   return job;
 }
 
@@ -3408,8 +3408,10 @@ async function sktMagicLoad(edition, read){
     // Picked as one list: the 2024 book reprints some items as variants
     // (Dwarven Plate, Moonblade), and the reprint should replace the item.
     const flat = (mv.magicvariant || []).map(v => Object.assign({}, v.inherits || {}, { name: String(v.name).replace(/\s*\(\*\)$/, ''), requires: v.requires || [], excludes: v.excludes || null, _variant: true }));
-    return pick(magic.concat(flat), { legacy: edition === '2024' }).map(i => _sktMagicEntry(i, i._variant ? 'variant' : 'item'))
+    const list = pick(magic.concat(flat), { legacy: edition === '2024' }).map(i => _sktMagicEntry(i, i._variant ? 'variant' : 'item'))
       .sort((a, b) => a.name.localeCompare(b.name));
+    // The DM's homebrew magic items (js/panels/homebrew.js).
+    return typeof sktHomebrewIntoMagic === 'function' ? sktHomebrewIntoMagic(list) : list;
   })();
   if (!read) _sktMagicCache[edition] = job;
   return job;

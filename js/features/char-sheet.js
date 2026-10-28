@@ -1443,6 +1443,8 @@ function csSpell(name){
   if (typeof _5eData !== 'undefined' && Array.isArray(_5eData)){
     const n = String(name || '').toLowerCase();
     const d = _5eData.find(x => x.cat === 'spell' && String(x.name).toLowerCase() === n);
+    // Homebrew (js/panels/homebrew.js) carries the books' own shape.
+    if (d && d._raw && d._raw._src){ const h = d._raw._src; return Object.assign({}, h, { concentration: [].concat(h.duration || []).some(x => x && x.concentration), ritual: !!(h.meta && h.meta.ritual), higher: h.entriesHigherLevel || null }); }
     if (d && d._raw) return { name: d.name, level: d._raw.level, entries: d._raw.entries, time: d._raw.time, range: d._raw.range,
       duration: [].concat(d._raw.duration || []), components: d._raw.components, concentration: [].concat(d._raw.duration || []).some(x => x && x.concentration),
       ritual: !!(d._raw.meta && d._raw.meta.ritual), spellAttack: d._raw.spellAttack, savingThrow: d._raw.savingThrow };

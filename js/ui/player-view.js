@@ -107,6 +107,7 @@ function initPlayerView(){
       else if (e.key === 'skt-handouts-v1' && typeof paOnHandouts === 'function') paOnHandouts();
       else if (e.key === 'skt-quests-v1' && typeof paOnQuests === 'function') paOnQuests();
       else if (e.key === 'skt-factions-v1' && typeof paOnFactions === 'function') paOnFactions();
+      else if (e.key === 'skt-homebrew-v1' && typeof sktHomebrewApply === 'function') sktHomebrewApply();
       else if (e.key === 'skt-messages-v1' && typeof sktMsgChanged === 'function') sktMsgChanged(false);
       else if (e.key === 'skt-gamelog-v1' && typeof paOnGameLog === 'function') paOnGameLog();
     } catch(err){ console.warn('[player view] relay', e.key, err); }
