@@ -4680,8 +4680,11 @@
           if (/drawings$/.test(p)) sent.push(...JSON.parse(u[p]));
           else if (/drawings\/[^/]+$/.test(p)) sent.push(JSON.parse(u[p]));
         }));
-        ok('sync: and both are sent on, neither erasing the other',
-           sent.some(d => d.c === '#00ff00') && sent.some(d => d.c !== '#00ff00' && d.p && d.p.length >= 10), sent.length + ' sent');
+        // Theirs is already on the server: what matters is that ours goes and
+        // nothing of theirs is removed (as one string, both went).
+        const erased = pushes.some(u => Object.keys(u).some(p => /drawings/.test(p) && (u[p] === null || (/drawings$/.test(p) && !/00ff00/.test(u[p])))));
+        ok('sync: and this stroke is sent on without erasing theirs',
+           sent.some(d => d.c !== '#00ff00' && d.p && d.p.length >= 10) && !erased, sent.length + ' sent');
 
         // Erasing is a gesture too: an update mid-erase would bring back what
         // was just rubbed out.
