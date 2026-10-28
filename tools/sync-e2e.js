@@ -46,11 +46,16 @@ async function launch(name, { player, w, h, mobile, keys, seed }){
   const ws = new WebSocket(list.find(t => t.type === 'page').webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', () => rej(new Error('cdp'))); });
   const cdp = new CDP(ws), errors = [], dbx = [];
-  await cdp.send('Page.enable'); await cdp.send('Runtime.enable'); await cdp.send('Network.enable');
+  await cdp.send('Page.enable'); await cdp.send('Runtime.enable');
   cdp.handlers.set('Runtime.exceptionThrown', p => { const d = p.exceptionDetails; errors.push((d.exception && d.exception.description || d.text || '').split('\n').slice(0, 2).join(' | ')); });
   cdp.handlers.set('Runtime.consoleAPICalled', p => { if (p.type === 'error') errors.push('console: ' + (p.args || []).map(a => a.value !== undefined ? a.value : a.description).join(' ').slice(0, 220)); });
-  cdp.handlers.set('Network.requestWillBeSent', p => { if (/dropbox(api)?.com/i.test(p.request.url)) dbx.push(p.request.url); });
-  await cdp.send('Network.setBlockedURLs', { urls: ['*dropboxapi.com*', '*://*.dropbox.com/*', '*://dropbox.com/*'] });
+  // Dropbox's hosts are refused outright. Through Fetch with URL patterns,
+  // not the Network domain: Network reports EVERY request in full, and an
+  // uploaded map is a multi-megabyte data: URL — Chrome stalled pushing that
+  // to us and the page looked frozen. Fetch only ever sees the matches.
+  const BLOCK = ['*dropboxapi.com*', '*://*.dropbox.com/*', '*://dropbox.com/*'].concat([]);
+  cdp.handlers.set('Fetch.requestPaused', p => { if (/dropbox/i.test(p.request.url)) dbx.push(p.request.url); cdp.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'BlockedByClient' }).catch(() => {}); });
+  await cdp.send('Fetch.enable', { patterns: BLOCK.map(urlPattern => ({ urlPattern })) });
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: mobile ? 2 : 1, mobile: !!mobile });
   if (mobile){ await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }); }
   const camp = JSON.stringify([{ id: CAMPAIGN, name: 'Stress test', created: Date.now() }]);
@@ -89,7 +94,7 @@ async function launch(name, { player, w, h, mobile, keys, seed }){
       }
     },
     async tap(x, y, touch){ await dev.drag([[x, y]], touch); },
-    async offline(on){ await cdp.send('Network.emulateNetworkConditions', { offline: !!on, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); },
+    async offline(on){ if (on) await cdp.send('Network.enable'); await cdp.send('Network.emulateNetworkConditions', { offline: !!on, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); if (!on) await cdp.send('Network.disable'); },
     async shot(file){ const r = await cdp.send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(file, Buffer.from(r.data, 'base64')); },
     close(){ try { ws.close(); } catch(e){} try { proc.kill(); } catch(e){} setTimeout(() => { try { fs.rmSync(profile, { recursive: true, force: true }); } catch(e){} }, 800); },
   };

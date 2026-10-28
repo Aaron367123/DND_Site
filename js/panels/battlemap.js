@@ -339,6 +339,12 @@ registerPanel('battlemap',{
   // Natural dimensions of the loaded image — derived from the Image object,
   // not persisted (re-read on next load).
   _bgMapNaturalW: 0,
+  // An uploaded map's ORIGINAL size. What other devices fetch is a shrunk
+  // copy (it has to fit in Firebase), and sizing the map by that copy gave
+  // them a smaller grid than the DM's — tokens and drawings, which are stored
+  // in map pixels, landed in the wrong places on every phone. The copy is
+  // drawn at this size instead, so the geometry is the same everywhere.
+  _bgMapSize: null,
   _bgMapNaturalH: 0,
   // Picker caches — survive panel re-renders, populated lazily.
   _adventures: null,
@@ -369,6 +375,7 @@ registerPanel('battlemap',{
         this._showGrid = this._gridType !== 'none';
         this._cellHighlight = !!d.cellHighlight;
         this._bgMapScale = d.bgMapScale || 1;
+        this._bgMapSize = d.bgMapSize || null;
         this._snapToGrid = !!d.snapToGrid;
         this._gridOffsetX = d.gridOffsetX || 0;
         this._gridOffsetY = d.gridOffsetY || 0;
@@ -515,7 +522,7 @@ registerPanel('battlemap',{
     this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){
       // Fog sets and freehand strokes grow without bound on large maps — this
       // is a realistic place to hit the quota, and silently dropping the write
@@ -845,8 +852,10 @@ registerPanel('battlemap',{
       if (seq !== this._bgLoadSeq) return;
       this._bgFailedUrl = null;
       _mapBgImage = img;
-      this._bgMapNaturalW = img.naturalWidth;
-      this._bgMapNaturalH = img.naturalHeight;
+      // A shared upload is a shrunk copy: lay it out at the original's size.
+      const orig = this._isSharedUpload(this._bgMapPath) && this._bgMapSize && this._bgMapSize.w > 0 ? this._bgMapSize : null;
+      this._bgMapNaturalW = orig ? orig.w : img.naturalWidth;
+      this._bgMapNaturalH = orig ? orig.h : img.naturalHeight;
       // Pick the cell count / view scale for the new art…
       if (autoFit) this._fitMapToView();   // also runs _fitGridToBg internally
       else         this._fitGridToBg();
@@ -972,6 +981,7 @@ registerPanel('battlemap',{
     // the database the next time the map loads would be a wasted 1–3 MB.
     this._blobRemember(id, data);
     this._bgMapPath = 'sktblob:' + id;
+    this._bgMapSize = { w: img.naturalWidth, h: img.naturalHeight };
     this._saveMap();
     showToast('Map shared — the players have it now');
     // Only a throwaway upload goes: _retireBlob keeps anything a saved map
@@ -1610,6 +1620,7 @@ registerPanel('battlemap',{
     return {
       bgMapPath:    this._bgMapPath || null,
       bgMapScale:   this._bgMapScale || 1,
+      bgMapSize:    this._bgMapSize || null,
       mapRotation:  this._mapRotation || 0,
       ftPerCell:    this._ftPerCell || 5,
       gridOffsetX:  this._gridOffsetX || 0,
@@ -1646,6 +1657,7 @@ registerPanel('battlemap',{
     if (!snap) return;
     this._bgMapPath    = snap.bgMapPath || null;
     this._bgMapScale   = snap.bgMapScale || 1;
+    this._bgMapSize    = snap.bgMapSize || null;
     this._mapRotation  = snap.mapRotation || 0;
     this._ftPerCell    = +snap.ftPerCell > 0 ? +snap.ftPerCell : 5;
     this._gridOffsetX  = snap.gridOffsetX || 0;
@@ -2328,6 +2340,7 @@ registerPanel('battlemap',{
       this._lastTokenScale = src.bgMapScale;
     }
     if (src.mapRotation != null) this._mapRotation = src.mapRotation;
+    if ('bgMapSize' in src) this._bgMapSize = src.bgMapSize || null;
     if (src.gridOpacity != null) this._gridOpacity = src.gridOpacity;
     if ('gridColor' in src) this._gridColor = src.gridColor || null;
     if (src.gridWidth   != null) this._gridWidth   = src.gridWidth;
@@ -2443,6 +2456,7 @@ registerPanel('battlemap',{
         gridOffsetX: this._gridOffsetX || 0,
         gridOffsetY: this._gridOffsetY || 0,
         bgMapScale: this._bgMapScale || 1,
+        bgMapSize: this._bgMapSize || null,
         mapRotation: this._mapRotation || 0,
         // Grid look is shared state — the DM dials in opacity/width and the
         // player view renders the same grid.
@@ -4088,6 +4102,7 @@ registerPanel('battlemap',{
           // Held here only until the shared copy lands. If it never does,
           // this is all there is and the map stays on this device.
           this._bgMapPath = null;
+          this._bgMapSize = null;
           // Bake token rescale + clear stale drawings/fog BEFORE clobbering
           // scale fields. See _resetMapScene comment for the full rationale.
           this._resetMapScene();

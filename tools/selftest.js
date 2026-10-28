@@ -10523,6 +10523,62 @@
       } catch(e){ ok('round 104 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.paPc = pa0; }
     }
+    // -- Round 105: a player's note shows in their colour on the DM's screen ---
+    {
+      const N = panelDefs.notes, pa0 = window.paPc, items0 = N && N._data ? JSON.stringify(N._data.items) : null, ls0 = localStorage.getItem('skt-notes-v2');
+      try {
+        if (!N._data) N._data = { items: [], authors: {} };
+        const pc = state.party.find(p => p.id === 'zoey') || state.party[0];
+        window.paPc = () => pc;
+        const note = { id: 'n_colour', type: 'file', name: 'Mine', parent: null, owner: pc.id, content: '', lineAuthors: [] };
+        N._data.items.push(note);
+        N._playerCommit('n_colour', 'One\nTwo');
+        ok('notes: a player’s lines are recorded as theirs', JSON.stringify(note.lineAuthors) === JSON.stringify([pc.id, pc.id]), JSON.stringify(note.lineAuthors));
+        const box = document.createElement('div'); box.innerHTML = N._renderColored(note);
+        const l = box.querySelector('.nl');
+        ok('notes: and the DM sees them with the character’s name and colour', !!l && l.getAttribute('title') === pc.name && /color-mix/.test(l.getAttribute('style') || ''), l ? l.outerHTML.slice(0, 160) : 'no line');
+        note.lineAuthors = [];
+        box.innerHTML = N._renderColored(note);
+        ok('notes: lines nobody claimed in a player’s note are the owner’s', box.querySelector('.nl') && box.querySelector('.nl').getAttribute('title') === pc.name);
+      } catch(e){ ok('round 105 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.paPc = pa0;
+        if (items0 != null) N._data.items = JSON.parse(items0);
+        if (ls0 == null) localStorage.removeItem('skt-notes-v2'); else localStorage.setItem('skt-notes-v2', ls0);
+      }
+    }
+    // -- Round 106: an uploaded map has the same size on every device ---------
+    // Other devices fetch a shrunk copy of an upload (it has to fit in
+    // Firebase). Sized by that copy, their grid was smaller than the DM's and
+    // every token and stroke, stored in map pixels, landed somewhere else.
+    {
+      const B = panelDefs.battlemap, img0 = _mapBgImage, st0 = { p: B._bgMapPath, s: B._bgMapSize, w: B._bgMapNaturalW, h: B._bgMapNaturalH, c: B._cols, r: B._rows };
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cv = document.createElement('canvas'); cv.width = 120; cv.height = 165;
+        const small = cv.toDataURL('image/png');
+        B._bgMapPath = 'sktblob:test'; B._bgMapSize = { w: 2400, h: 3300 };
+        const seq = ++B._bgLoadSeq; B._bgAttempt(small, false, seq, 0);
+        for (let i = 0; i < 30 && B._bgMapNaturalW !== 2400; i++) await sleep(50);
+        ok('map upload: the shared copy is laid out at the original’s size', B._bgMapNaturalW === 2400 && B._bgMapNaturalH === 3300, B._bgMapNaturalW + 'x' + B._bgMapNaturalH);
+        ok('map upload: so the grid matches the DM’s', B._cols === Math.max(8, Math.ceil(2400 / B._cellSize)), B._cols + ' cols');
+        // The size travels with the map's settings.
+        const d = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}'); B._saveMap();
+        ok('map upload: the original size is saved with the map', (JSON.parse(localStorage.getItem('skt-battlemap-v1')).bgMapSize || {}).w === 2400);
+        B._bgMapSize = null; B.applyMapState(Object.assign(JSON.parse(localStorage.getItem('skt-battlemap-v1')), { bgMapSize: { w: 1000, h: 800 } }), { source: 'test' });
+        ok('map upload: and arrives with it on another device', B._bgMapSize && B._bgMapSize.w === 1000);
+        ok('map upload: a saved map keeps it too', (B._snapshotMap().bgMapSize || {}).w === 1000);
+        // A map from the books is still sized by its own image.
+        B._bgMapPath = 'adventure/x.webp'; B._bgMapSize = { w: 2400, h: 3300 };
+        const seq2 = ++B._bgLoadSeq; B._bgAttempt(small, false, seq2, 0);
+        for (let i = 0; i < 30 && B._bgMapNaturalW !== 120; i++) await sleep(50);
+        ok('map upload: a book map is sized by its own image', B._bgMapNaturalW === 120, String(B._bgMapNaturalW));
+      } catch(e){ ok('round 106 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        _mapBgImage = img0; B._bgMapPath = st0.p; B._bgMapSize = st0.s; B._bgMapNaturalW = st0.w; B._bgMapNaturalH = st0.h; B._cols = st0.c; B._rows = st0.r;
+        B._saveMap(); try { B._render(); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -610,6 +610,9 @@ registerPanel('notes', {
     const pc = this._playerPc();
     const n = (this._data.items || []).find(i => i.id === id);
     if (!pc || !n || n.owner !== pc.id || n.content === text) return;
+    // Lines are the character's, by the character's id: the DM's screen
+    // colours them in that character's colour (see _lineAuthor).
+    n.lineAuthors = _notesUpdateLineAuthors(n.content || '', n.lineAuthors, text, pc.id);
     n.content = text;
     n.updated = Date.now();
     this._save();
@@ -1052,9 +1055,21 @@ registerPanel('notes', {
     setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
   },
 
+  // A character as an author: their name, and the colour they carry
+  // elsewhere — the sheet colour they picked, else their class's — eased
+  // toward the text colour so a dark one (the rogue's grey) stays readable.
+  // Players can't write the author legend (it's DM-only in sync), so their
+  // lines used to show on the DM's screen with no colour and no name.
+  _pcAuthor(id){
+    const pc = (state.party || []).find(p => p && p.id === id); if (!pc) return null;
+    const c = pc.theme || (panelDefs.party && typeof panelDefs.party._classColor === 'function' ? panelDefs.party._classColor(pc) : '');
+    return { name: pc.name, color: c ? 'color-mix(in srgb, ' + c + ' 72%, var(--text))' : '' };
+  },
   _renderColored(file){
     const lines = (file.content || '').split('\n');
     const authorsMap = this._data.authors || {};
+    // A player's note: lines nobody claimed are the owner's.
+    const ownerAuthor = file.owner ? this._pcAuthor(file.owner) : null;
     // Pre-scan to flag lines that are inside fenced code blocks OR part of a
     // GFM table. Code blocks: between matching ``` lines (inclusive of fences).
     // Tables: a run of 2+ contiguous `|`-led lines where line 2 is a separator
@@ -1087,7 +1102,7 @@ registerPanel('notes', {
     const splitCells = ln => ln.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|');
     return lines.map((line, i) => {
       const aId = file.lineAuthors && file.lineAuthors[i];
-      const author = aId && authorsMap[aId];
+      const author = aId ? (authorsMap[aId] || this._pcAuthor(aId)) : ownerAuthor;
       const color = author && author.color ? author.color : '';
       const tip = author && author.name ? ' title="'+esc(author.name)+'"' : '';
       const styleAttr = color ? ' style="color:'+esc(color)+'"' : '';
