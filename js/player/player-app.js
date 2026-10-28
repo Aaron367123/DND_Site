@@ -107,6 +107,7 @@ const PA_TABS = [
   // sync status, the campaign, and the way back to the DM view.
   // The game log: its own tab on a wide screen; on a phone, More → Game log.
   { id:'log',   label:'Log',   icon:'i-dice',   when: () => !paIsPhone() },
+  { id:'msg',   label:'Messages', icon:'i-chat', when: () => !paIsPhone() && !!paPc() },
   { id:'more',  label:'More',  icon:'i-dots',   always:true, phoneOnly:true },
 ];
 
@@ -451,6 +452,38 @@ function paOnGameLog(){
   const inp2 = el.querySelector('[data-glog-input]'); if (inp2){ inp2.value = v; if (f) inp2.focus(); }
   const l2 = el.querySelector('.pa-log-list'); if (l2 && !atBottom) l2.scrollTop = y;
 }
+// More → Message the DM (a tab of its own on a wide screen). The DM's reply
+// pops up wherever the player is (js/panels/messages.js).
+function paMsgScreen(asTab){
+  const pc = paPc();
+  if (!pc) return '<div class="pa-card"><p>Pick your character first.</p></div>';
+  return '<div class="pa-card pa-msg"><div class="pa-log-h">' + (asTab ? '' : '<button class="btn small" data-pa-logback>‹ More</button>') + '<h3>Message the DM</h3></div>'
+    + '<div class="msg-thread pa-msg-thread">' + (typeof sktMsgThreadHtml === 'function' ? sktMsgThreadHtml(pc.id, pc.id) : '') + '</div>'
+    + (typeof sktMsgComposeHtml === 'function' ? sktMsgComposeHtml('Only the DM sees this…') : '') + '</div>';
+}
+function paWireMsg(el){
+  el.querySelector('[data-pa-logback]')?.addEventListener('click', () => { paMoreSub = null; paRenderScreen(); });
+  if (typeof sktMsgWire === 'function') sktMsgWire(el, 'dm', () => paOnMessages([]));
+  const th = el.querySelector('.pa-msg-thread'); if (th) th.scrollTop = th.scrollHeight;
+  const pc = paPc(); if (pc && typeof sktMsgMarkRead === 'function') sktMsgMarkRead(pc.id);
+}
+function paMsgOpen(){ return paTab === 'msg' || (paTab === 'more' && paMoreSub === 'msg'); }
+// New messages (or one just sent): the DM's reply pops up unless the
+// conversation is already on screen; the screen redraws, keeping what's typed.
+function paOnMessages(fresh){
+  if (!document.body.classList.contains('player-app')) return;
+  if (fresh && fresh.length && !paMsgOpen()){
+    try { navigator.vibrate && navigator.vibrate([80, 50, 80]); } catch(e){}
+    if (typeof showToast === 'function') showToast('✉ The DM: ' + fresh[fresh.length - 1].text.slice(0, 90));
+  }
+  const el = document.getElementById('pa-screen');
+  if (el && (paMsgOpen() || (paTab === 'more' && !paMoreSub))){
+    const inp = el.querySelector('[data-msg-input]'), v = inp ? inp.value : '', f = inp && document.activeElement === inp;
+    paRenderScreen();
+    const i2 = el.querySelector('[data-msg-input]'); if (i2){ i2.value = v; if (f) i2.focus(); }
+  }
+  paRenderTabs(paVisibleTabs());
+}
 function paMoreScreen(){
   const camp = (typeof sktActiveCampaignName === 'function') ? sktActiveCampaignName() : '';
   const sync = document.getElementById('sync-status');
@@ -462,6 +495,7 @@ function paMoreScreen(){
     + (sub ? '<span class="pa-more-sub">' + sub + '</span>' : '') + '</span></button>';
   const lastRoll = typeof sktLogEntries === 'function' ? sktLogEntries().slice(-1)[0] : null;
   return '<div class="pa-card pa-more">' + paMoreWho()
+    + (paPc() ? row('msg', 'i-chat', 'Message the DM' + (typeof sktMsgUnread === 'function' && sktMsgUnread().length ? ' <span class="msg-dot">' + sktMsgUnread().length + '</span>' : ''), 'Only the DM sees it') : '')
     + row('log', 'i-dice', 'Game log', lastRoll ? paEsc((lastRoll.who || '') + ' — ' + (lastRoll.label || 'Roll') + ': ' + lastRoll.total) : 'Everyone’s rolls, and a dice roller')
     + row('search', 'i-search', 'Search', 'Spells, monsters, items, rules')
     + row('settings', 'i-gear', 'Settings', 'Text size, theme and display')
@@ -489,6 +523,7 @@ function paWireMore(el){
   el.querySelectorAll('[data-more]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.more;
     if (act === 'log'){ paMoreSub = 'log'; paRenderScreen(); }
+    else if (act === 'msg'){ paMoreSub = 'msg'; paRenderScreen(); paRenderTabs(paVisibleTabs()); }
     else if (act === 'search') paStartSearch();
     // Opened directly rather than by poking the hidden gear: the gear toggles
     // on mousedown, and a toggle would close a drawer that is already open.
@@ -579,9 +614,10 @@ function paAnswerPrompt(i){
 
 function paRenderTabs(tabs){
   const el = document.getElementById('pa-tabs'); if (!el) return;
+  const unread = (typeof sktMsgUnread === 'function' && !paMsgOpen()) ? sktMsgUnread().length : 0;
   el.innerHTML = tabs.map(t =>
     `<button class="pa-tab ${t.id === paTab ? 'on' : ''}" data-pa-tab="${t.id}">
-       ${typeof ICO === 'function' ? ICO(t.icon) : ''}<span>${t.label}</span>
+       ${typeof ICO === 'function' ? ICO(t.icon) : ''}<span>${t.label}</span>${unread && (t.id === 'msg' || (t.id === 'more' && !tabs.some(x => x.id === 'msg'))) ? '<i class="pa-tab-dot" aria-label="' + unread + ' new"></i>' : ''}
      </button>`).join('');
 }
 
@@ -746,6 +782,8 @@ function paRenderScreen(){
   el.innerHTML = '';
   if (paTab === 'more' && paMoreSub === 'log'){ el.innerHTML = paLogScreen(); paWireLog(el); return; }
   if (paTab === 'log')   { el.innerHTML = paLogScreen(true); paWireLog(el); return; }
+  if (paTab === 'more' && paMoreSub === 'msg'){ el.innerHTML = paMsgScreen(); paWireMsg(el); return; }
+  if (paTab === 'msg')   { el.innerHTML = paMsgScreen(true); paWireMsg(el); return; }
   if (paTab === 'more')  { el.innerHTML = paMoreScreen(); paWireMore(el); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }

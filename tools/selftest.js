@@ -10713,6 +10713,37 @@
       } catch(e){ ok('round 109 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._gridType = st0.g; B._ftPerCell = st0.ft; B._tool = st0.tool; B._snapToGrid = st0.snap; B._measureHide(); try { B._render(); } catch(e){} closePanel('battlemap'); }
     }
+    // -- Round 110: messages between a player and the DM -----------------------
+    {
+      const m0 = localStorage.getItem('skt-messages-v1'), r0 = localStorage.getItem('skt-messages-read-v1');
+      try {
+        localStorage.setItem('skt-messages-v1', '[]'); localStorage.setItem('skt-messages-read-v1', '{}');
+        const ps = (typeof sktPlayerParty === 'function' ? sktPlayerParty() : state.party).filter(p => !p.foe);
+        const a1 = ps[0], a2 = ps[1];
+        ok('messages: they sync', SKT_SYNC_KEYS.includes('skt-messages-v1') && !SKT_SYNC_KEYS.includes('skt-messages-read-v1'));
+        // A player writes (as their phone would), arriving here.
+        const inbound = [{ id: 'mx1', at: Date.now(), from: a1.id, name: a1.name, to: 'dm', text: 'I pocket the gem' }];
+        if (a2) inbound.push({ id: 'mx2', at: Date.now() + 1, from: a2.id, name: a2.name, to: 'dm', text: 'Is the door trapped?' });
+        localStorage.setItem('skt-messages-v1', JSON.stringify(inbound)); sktMsgChanged(false);
+        ok('messages: a player\u2019s message counts on the Messages button', ((document.querySelector('.dock-btn[data-panel="messages"] .dock-badge') || {}).textContent || '') === String(inbound.length));
+        ok('messages: each conversation holds only its own', sktMsgThread(a1.id).length === 1 && sktMsgThread(a1.id)[0].text === 'I pocket the gem');
+        panelDefs.messages._thread = a1.id;
+        openPanel('messages'); await sleep(150);
+        const w = document.querySelector('.window[data-panel="messages"]');
+        ok('messages: opening a conversation shows it and marks it read', /I pocket the gem/.test(w.querySelector('.msg-thread').textContent) && sktMsgUnread(a1.id).length === 0 && !w.querySelector('.msg-who.on .msg-dot'));
+        const i = w.querySelector('[data-msg-input]'); i.value = 'Roll Sleight of Hand';
+        w.querySelector('[data-msg-form]').requestSubmit(); await sleep(50);
+        const sent = sktMsgs().find(m => m.text === 'Roll Sleight of Hand');
+        ok('messages: the DM\u2019s reply goes to that character, from the DM', !!sent && sent.from === 'dm' && sent.to === a1.id);
+        if (a2) ok('messages: and not into anyone else\u2019s conversation', !sktMsgThread(a2.id).some(m => m.text === 'Roll Sleight of Hand'));
+        closePanel('messages');
+      } catch(e){ ok('round 110 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (m0 == null) localStorage.removeItem('skt-messages-v1'); else localStorage.setItem('skt-messages-v1', m0);
+        if (r0 == null) localStorage.removeItem('skt-messages-read-v1'); else localStorage.setItem('skt-messages-read-v1', r0);
+        try { sktMsgChanged(true); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -11586,6 +11617,42 @@
           }
         } catch(e){ ok('sheet: the swipe checks ran to completion', false, e.message); }
         finally { paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0); paRender(); }
+      }
+      // ── Message the DM ─────────────────────────────────────────────────────
+      {
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab, m0 = localStorage.getItem('skt-messages-v1'), r0 = localStorage.getItem('skt-messages-read-v1');
+        try {
+          if ((state.party || []).length){
+            const pc = state.party[0]; paSetPc(pc.id);
+            localStorage.setItem('skt-messages-v1', '[]'); localStorage.setItem('skt-messages-read-v1', '{}');
+            const onPhone = paVisibleTabs().some(t => t.id === 'more');
+            if (onPhone){ paTab = 'more'; paMoreSub = null; paRender(); await sleep(30); document.querySelector('#pa-screen [data-more="msg"]').click(); }
+            else { paTab = 'msg'; paRender(); }
+            await sleep(30);
+            const i = document.querySelector('#pa-screen [data-msg-input]');
+            ok('player messages: there\u2019s a place to write to the DM', !!i);
+            i.value = 'I pocket the gem'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(30);
+            const m = sktMsgs().find(x => x.text === 'I pocket the gem');
+            ok('player messages: Enter sends it, from this character to the DM', !!m && m.from === pc.id && m.to === 'dm' && /I pocket the gem/.test(document.querySelector('#pa-screen .pa-msg-thread').textContent));
+            // The DM answers while the player is elsewhere: a dot on More (or Messages).
+            paTab = 'you'; paMoreSub = null; paRender(); await sleep(20);
+            const list = sktMsgs().concat([{ id: 'mr1', at: Date.now() + 5, from: 'dm', name: 'DM', to: pc.id, text: 'Roll Sleight of Hand' }]);
+            localStorage.setItem('skt-messages-v1', JSON.stringify(list)); sktMsgChanged(false); await sleep(20);
+            ok('player messages: a reply from the DM puts a dot on the tab', !!document.querySelector('#pa-tabs .pa-tab-dot'));
+            if (onPhone){
+              paTab = 'more'; paMoreSub = 'msg'; paRender(); await sleep(20);
+              window.dispatchEvent(new PopStateEvent('popstate', { state: { pa: 'base' } })); await sleep(30);
+              ok('player messages: Back returns to More', paTab === 'more' && paMoreSub === null);
+            }
+          }
+        } catch(e){ ok('player messages: the checks ran to completion', false, e.message); }
+        finally {
+          paTab = tab0; paMoreSub = null;
+          if (m0 == null) localStorage.removeItem('skt-messages-v1'); else localStorage.setItem('skt-messages-v1', m0);
+          if (r0 == null) localStorage.removeItem('skt-messages-read-v1'); else localStorage.setItem('skt-messages-read-v1', r0);
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paRender();
+        }
       }
       // ── More → Game log ────────────────────────────────────────────────────
       {
