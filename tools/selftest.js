@@ -10985,6 +10985,48 @@
         state.party = JSON.parse(party0); save();
       }
     }
+    // -- Round 116: factions ------------------------------------------------------
+    {
+      const f0 = localStorage.getItem('skt-factions-v1'), F = panelDefs.factions;
+      try {
+        localStorage.setItem('skt-factions-v1', '[]'); F._open = null;
+        ok('factions: they sync, and only the DM writes them', SKT_SYNC_KEYS.includes('skt-factions-v1') && _DM_ONLY_KEYS.has('skt-factions-v1'));
+        openPanel('factions'); await sleep(150);
+        const w = document.querySelector('.window[data-panel="factions"]');
+        w.querySelector('[data-f-starters]').click(); await sleep(30);
+        ok('factions: one click adds the five Realms factions, hidden and neutral', sktFactions().length === 5 && sktFactions().every(f => !f.shown && f.standing === 0) && sktFactions().some(f => /Harpers/.test(f.name)) && !w.querySelector('[data-f-starters]'));
+        const h = sktFactions().find(f => /Harpers/.test(f.name));
+        F._open = h.id; F._render(); await sleep(20);
+        w.querySelector('[data-f-why]').value = 'Rescued their agent'; w.querySelector('[data-f-shift="1"]').click(); await sleep(10);
+        let hh = sktFactions().find(f => f.id === h.id);
+        ok('factions: a step up changes the standing and logs why, with the date', hh.standing === 1 && hh.log.length === 1 && hh.log[0].text === 'Rescued their agent' && hh.log[0].from === 0 && hh.log[0].to === 1 && /DR$/.test(hh.log[0].date));
+        w.querySelector('[data-f-shift="1"]').click(); await sleep(10);
+        sktFactionShift(h.id, 1, '');
+        ok('factions: Allied is the top, and ▲ stops there', sktFactions().find(f => f.id === h.id).standing === 2 && w.querySelector('[data-f-shift="1"]').disabled);
+        sktFactionUpdate(h.id, f => ({ log: f.log.slice(0, 2) }));
+        const nt = w.querySelector('[data-ff="notes"]'); nt.value = 'SECRET mole'; nt.dispatchEvent(new Event('input', { bubbles: true }));
+        ok('factions: hidden ones aren\u2019t the players\u2019', sktFactionsForPlayers().length === 0);
+        w.querySelector('[data-f-shown]').click(); await sleep(10);
+        const pv = sktFactionsForPlayers();
+        ok('factions: shown, the players get it without the DM\u2019s notes', pv.length === 1 && pv[0].standing === 2 && !('notes' in pv[0]) && !JSON.stringify(pv).includes('SECRET'));
+        // News for a phone: shown, and standing changes, each once.
+        localStorage.removeItem('skt-factions-seen-v1');
+        ok('factions: a device\u2019s first look announces nothing', sktFactionNews().length === 0);
+        sktFactionShift(h.id, -1, 'Broke a promise');
+        const z = sktFactions().find(f => /Zhentarim/.test(f.name)); sktFactionUpdate(z.id, { shown: true });
+        const news = sktFactionNews();
+        ok('factions: news says what was shown and what fell', news.includes('Standing with The Harpers fell to Friendly') && news.some(n => /The Zhentarim: Neutral/.test(n)) && sktFactionNews().length === 0, news);
+        // A history line can be taken back out.
+        F._render(); await sleep(10);
+        const del = w.querySelector('[data-f-logdel]'); del.click(); await sleep(10);
+        ok('factions: a history line can be removed', sktFactions().find(f => f.id === h.id).log.length === 2);
+        closePanel('factions');
+      } catch(e){ ok('round 116 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (f0 == null) localStorage.removeItem('skt-factions-v1'); else localStorage.setItem('skt-factions-v1', f0);
+        F._open = null;
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -11912,6 +11954,47 @@
         const st = m ? new URL(m.start_url) : null, q = new URLSearchParams(location.search);
         ok('home screen: a player link offers its own manifest, starting at that player view', !!m && st.searchParams.get('player') === '1' && st.searchParams.get('c') === q.get('c') && !st.searchParams.has('nosync') && st.origin === location.origin && m.display === 'standalone', m && m.start_url);
         ok('home screen: with an id of its own, apart from a DM install', !!m && /^skt-player-/.test(m.id) && m.icons.some(i => /apple-touch-icon\.png$/.test(i.src)));
+      }
+      // ── Factions ───────────────────────────────────────────────────────────
+      {
+        const tab0 = paTab, f0 = localStorage.getItem('skt-factions-v1'), s0 = localStorage.getItem('skt-factions-seen-v1');
+        try {
+          localStorage.setItem('skt-factions-v1', JSON.stringify([
+            { id: 'fa', name: 'The Harpers', summary: 'Spies against tyranny', notes: 'SECRET mole', standing: 2, shown: true, log: [{ id: 'l1', at: 1, from: 1, to: 2, text: 'Rescued their agent', date: '9 Frostwane 1492 DR' }] },
+            { id: 'fb', name: 'HIDDEN cult', standing: -2, shown: false, log: [] }]));
+          localStorage.removeItem('skt-factions-seen-v1');
+          const onPhone = paVisibleTabs().some(t => t.id === 'more');
+          if (onPhone){
+            paTab = 'more'; paMoreSub = null; paRender(); await sleep(30);
+            const row = document.querySelector('#pa-screen [data-more="factions"]');
+            ok('player factions: More has Factions, with the standing', !!row && /The Harpers: Allied/.test(row.textContent));
+            row.click();
+          } else {
+            paRender(); await sleep(20);
+            ok('player factions: a wide screen gets a Factions tab once one is shown', paVisibleTabs().some(t => t.id === 'factions'));
+            paTab = 'factions'; paRender();
+          }
+          await sleep(30);
+          const t = document.getElementById('pa-screen').textContent;
+          ok('player factions: shown ones with what happened; hidden ones and DM notes are not', /The Harpers/.test(t) && /Allied/.test(t) && /Rescued their agent/.test(t) && !/HIDDEN|SECRET/.test(t));
+          paOnFactions();   // first look: seeds, says nothing
+          const toasts = []; const st = showToast; showToast = function(m){ toasts.push(String(m)); };
+          try {
+            const l = JSON.parse(localStorage.getItem('skt-factions-v1')); l[0].standing = 1; localStorage.setItem('skt-factions-v1', JSON.stringify(l));
+            paOnFactions(); await sleep(20);
+          } finally { showToast = st; }
+          ok('player factions: a change of standing pops up', toasts.some(x => /Standing with The Harpers fell to Friendly/.test(x)), toasts);
+          if (onPhone){
+            window.dispatchEvent(new PopStateEvent('popstate', { state: { pa: 'base' } })); await sleep(30);
+            ok('player factions: Back returns to More', paTab === 'more' && paMoreSub === null);
+          }
+        } catch(e){ ok('player factions: the checks ran to completion', false, e.message); }
+        finally {
+          paTab = tab0; paMoreSub = null;
+          if (f0 == null) localStorage.removeItem('skt-factions-v1'); else localStorage.setItem('skt-factions-v1', f0);
+          if (s0 == null) localStorage.removeItem('skt-factions-seen-v1'); else localStorage.setItem('skt-factions-seen-v1', s0);
+          paRender();
+        }
       }
       // ── Message the DM ─────────────────────────────────────────────────────
       {

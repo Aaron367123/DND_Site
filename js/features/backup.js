@@ -138,6 +138,7 @@ const LABELS = {
   'skt-shared-panels-v1':     'Shared panels',
   'skt-handouts-v1':          'Handouts',
   'skt-quests-v1':            'Quests',
+  'skt-factions-v1':          'Factions',
   'skt-messages-v1':          'Messages',
 };
 

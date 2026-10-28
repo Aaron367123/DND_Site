@@ -34,13 +34,13 @@
  */
 'use strict';
 
-const BUILD = '6b5ccd7da7';
+const BUILD = '2e3a93d02e';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=ecb7ded7fa',
-  'styles/theme.css?v=61316a08fd',
+  'styles/theme.css?v=e1384c9b51',
   'js/core/errors.js?v=67c70f2e1d',
-  'js/core/data.js?v=a978a23f20',
+  'js/core/data.js?v=0a021990cc',
   'js/core/theme.js?v=9db78fe46f',
   'js/core/asset-config.js?v=9b018a4988',
   'js/generated/token-index.js?v=1c9cc1c826',
@@ -52,7 +52,7 @@ const PRECACHE = [
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
-  'js/core/window-manager.js?v=3bdff1994a',
+  'js/core/window-manager.js?v=9c8ffafad3',
   'js/panels/combat.js?v=489af12158',
   'js/panels/attacks.js?v=57acabc3ca',
   'js/generated/reactions.js?v=0e74ab8786',
@@ -68,6 +68,7 @@ const PRECACHE = [
   'js/panels/game-log.js?v=dd31f68d92',
   'js/panels/messages.js?v=987bdd8c06',
   'js/panels/quests.js?v=438ba6dd68',
+  'js/panels/factions.js?v=eba8fe7046',
   'js/panels/battlemap.js?v=0e993854b9',
   'js/panels/npc-library.js?v=0054c516dd',
   'js/panels/bestiary.js?v=8b3658dc0a',
@@ -84,7 +85,7 @@ const PRECACHE = [
   'js/panels/world.js?v=3363ff2d50',
   'js/content/data-loader.js?v=402a4b7f70',
   'js/content/search.js?v=ae293afe2c',
-  'js/features/backup.js?v=0dcefd06d1',
+  'js/features/backup.js?v=4e97f23d4e',
   'js/ui/qr.js?v=b696ff33f3',
   'js/ui/settings.js?v=08cf7f7c28',
   'js/ui/campaign-ui.js?v=87872361dd',
@@ -98,9 +99,9 @@ const PRECACHE = [
   'js/features/char-print.js?v=01fba592ae',
   'js/features/char-builder.js?v=61ba4f670a',
   'js/features/pdf-import.js?v=cefe36cb0b',
-  'js/player/player-app.js?v=735ee5ed04',
-  'js/ui/player-view.js?v=8b42e8b4d6',
-  'js/sync/realtime.js?v=e5f708fcdb',
+  'js/player/player-app.js?v=8f8ffeedc4',
+  'js/ui/player-view.js?v=ed0e77cf72',
+  'js/sync/realtime.js?v=96c29fe083',
   'js/sync/presence.js?v=50e9bead2e',
   'js/ui/tutorial.js?v=7427317caa',
   'js/ui/onboarding.js?v=af17803033',
