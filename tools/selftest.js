@@ -11397,6 +11397,30 @@
               ok('sheet: a scroll that drifts sideways stays on the tab', CS.tab === ids[0], CS.tab);
               await swipe(root.querySelector('.cs-tabs'), 300, 60);
               ok('sheet: a swipe on the tab row doesn’t change tab', CS.tab === ids[0], CS.tab);
+              // With motion on: the content follows the finger, a full swipe
+              // slides through to the next tab and leaves nothing behind, a
+              // short one springs back.
+              const rm0 = window.csReducedMotion;
+              try {
+                window.csReducedMotion = () => false;
+                CS.tab = ids[0]; csRender();
+                const pane = () => document.querySelector('#cs-root .cs-pane');
+                const el = pane(), r = el.getBoundingClientRect(), y = r.top + Math.min(r.height / 2, 40);
+                const tch = x => new Touch({ identifier: 9, target: el, clientX: x, clientY: y });
+                el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [tch(320)], changedTouches: [tch(320)] }));
+                for (const x of [300, 260, 220, 190]) el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [tch(x)], changedTouches: [tch(x)] }));
+                ok('sheet: mid-swipe the content follows the finger', /translate3d\(-130px/.test(el.style.transform), el.style.transform);
+                el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [tch(100)], changedTouches: [tch(100)] }));
+                el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [tch(100)] }));
+                await sleep(600);
+                ok('sheet: a full swipe slides through to the next tab, and tidies up', CS.tab === ids[1] && !pane().style.transform && !pane().style.opacity, CS.tab + ' ' + pane().style.transform);
+                const el2 = pane(), tch2 = x => new Touch({ identifier: 10, target: el2, clientX: x, clientY: y });
+                el2.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [tch2(320)], changedTouches: [tch2(320)] }));
+                for (const x of [305, 290, 280]) el2.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [tch2(x)], changedTouches: [tch2(x)] }));
+                el2.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [tch2(280)] }));
+                await sleep(400);
+                ok('sheet: a short swipe springs back and stays on the tab', CS.tab === ids[1] && !pane().style.transform, CS.tab + ' ' + pane().style.transform);
+              } finally { window.csReducedMotion = rm0; }
               // The tab row stays where it was when a tab is picked.
               const row = root.querySelector('.cs-tabs');
               if (row.scrollWidth > row.clientWidth + 10){

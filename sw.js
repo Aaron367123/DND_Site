@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = 'd3baa79d08';
+const BUILD = 'd727ce2dcc';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=ecb7ded7fa',
-  'styles/theme.css?v=0061bae693',
+  'styles/theme.css?v=730e4d18e5',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=5ead9a4764',
   'js/core/theme.js?v=9db78fe46f',
@@ -90,7 +90,7 @@ const PRECACHE = [
   'js/ui/command-palette.js?v=8aded06220',
   'js/features/char-rules.js?v=648981675d',
   'js/features/char-effects.js?v=6561f6c385',
-  'js/features/char-sheet.js?v=8251403ccd',
+  'js/features/char-sheet.js?v=809eab15f6',
   'js/features/char-print.js?v=7e55981c09',
   'js/features/char-builder.js?v=61ba4f670a',
   'js/features/pdf-import.js?v=cefe36cb0b',

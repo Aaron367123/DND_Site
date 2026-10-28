@@ -121,9 +121,31 @@ function csRender(){
 function csVisibleTabs(){
   return [...document.querySelectorAll('#cs-root .cs-tabs .cs-tab')].filter(b => b.offsetParent !== null).map(b => b.dataset.csTab);
 }
-// Go to a tab, keeping your place in the sheet when you can.
-function csGoTab(id){
+// Go to a tab, keeping your place in the sheet when you can. On a phone the
+// new tab slides in from the side it lies on (from = -1 left, 1 right), the
+// way a swipe brings it; `from` 0 means no slide.
+const CS_SLIDE_MS = 220;
+function csReducedMotion(){ return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); }
+function csNarrow(){ return !!(window.matchMedia && matchMedia('(max-width: 760px)').matches); }
+function csSlideIn(from, dist){
+  const pane = document.querySelector('#cs-root .cs-pane'); if (!pane || !from || csReducedMotion()) return;
+  pane.style.transition = 'none';
+  pane.style.transform = 'translate3d(' + (from * (dist || 48)) + 'px,0,0)';
+  pane.style.opacity = '0';
+  void pane.offsetWidth;
+  pane.style.transition = 'transform ' + CS_SLIDE_MS + 'ms cubic-bezier(.2,.8,.2,1), opacity ' + CS_SLIDE_MS + 'ms ease-out';
+  pane.style.transform = 'translate3d(0,0,0)';
+  pane.style.opacity = '1';
+  const done = () => { pane.style.transition = pane.style.transform = pane.style.opacity = ''; };
+  pane.addEventListener('transitionend', done, { once: true }); setTimeout(done, CS_SLIDE_MS + 80);
+}
+function csGoTab(id, from, dist){
+  if (from === undefined && csNarrow()){
+    const ids = csVisibleTabs(), a = ids.indexOf(CS.tab), b = ids.indexOf(id);
+    from = a >= 0 && b >= 0 && a !== b ? (b > a ? 1 : -1) : 0;
+  }
   CS.tab = id; csRender();
+  csSlideIn(from || 0, dist);
   // Measured from the tab's content, not the bar: the bar is sticky, so
   // once scrolled past it reports where it's stuck, not where it sits.
   const body = document.querySelector('#cs-root .cs-body'), tabs = document.querySelector('#cs-root .cs-tabs'), pane = document.querySelector('#cs-root .cs-pane');
@@ -163,23 +185,51 @@ function csSwipeInit(root){
     if (!g || e.touches.length !== 1) return;
     const dx = e.touches[0].clientX - g.x, dy = e.touches[0].clientY - g.y;
     if (!g.dir && Math.abs(dx) + Math.abs(dy) > 8) g.dir = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-    if (g.dir === 'y'){ s = null; return; }
+    if (g.dir === 'y'){ if (s && s.drag) settle(); s = null; return; }
     if (g.dir !== 'x' || !e.cancelable) return;
     const sc = g.sc;
     const atEnd = !sc || (dx > 0 ? sc.scrollLeft <= 0 : sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 1);
     if (atEnd) e.preventDefault();
+    // The tab's content follows the finger; past the first or last tab it
+    // gives a little and resists.
+    if (s && !csReducedMotion()){
+      const p = root.querySelector('.cs-pane'); if (!p) return;
+      const ids = csVisibleTabs(), i = ids.indexOf(CS.tab), has = !!ids[i + (dx < 0 ? 1 : -1)];
+      const x = has ? dx : dx * 0.25;
+      if (!s.drag){ s.drag = true; p.style.transition = 'none'; p.style.willChange = 'transform'; }
+      p.style.transform = 'translate3d(' + x + 'px,0,0)';
+      p.style.opacity = String(1 - Math.min(0.4, Math.abs(x) / (p.offsetWidth || 360) * 0.6));
+    }
   }, { passive: false });
+  // Back to where it was, smoothly.
+  const settle = () => {
+    const p = root.querySelector('.cs-pane'); if (!p) return;
+    p.style.transition = 'transform 180ms cubic-bezier(.2,.8,.2,1), opacity 180ms ease-out';
+    p.style.transform = 'translate3d(0,0,0)'; p.style.opacity = '1';
+    const done = () => { p.style.transition = p.style.transform = p.style.opacity = p.style.willChange = ''; };
+    p.addEventListener('transitionend', done, { once: true }); setTimeout(done, 260);
+  };
   root.addEventListener('touchend', e => {
     g = null;
     if (!s || !CS) return;
-    const c = e.changedTouches[0], dx = c.clientX - s.x, dy = c.clientY - s.y, dt = Date.now() - s.at; s = null;
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || dt > 800) return;
+    const c = e.changedTouches[0], dx = c.clientX - s.x, dy = c.clientY - s.y, dt = Math.max(1, Date.now() - s.at), dragged = s.drag; s = null;
     const ids = csVisibleTabs(), i = ids.indexOf(CS.tab);
     const next = ids[i + (dx < 0 ? 1 : -1)];
-    if (i < 0 || !next) return;
-    csGoTab(next);
+    const p = root.querySelector('.cs-pane'), w = (p && p.offsetWidth) || 360;
+    // Far enough (a quarter of the width), or a quick flick.
+    const go = i >= 0 && next && Math.abs(dx) >= Math.abs(dy) * 1.5
+      && (Math.abs(dx) > Math.min(90, w * 0.25) || (Math.abs(dx) > 40 && Math.abs(dx) / dt > 0.45));
+    if (!go){ if (dragged) settle(); return; }
+    const dir = dx < 0 ? 1 : -1;   // 1: the next tab comes in from the right
+    if (!dragged || csReducedMotion() || !p){ csGoTab(next, csReducedMotion() ? 0 : dir, w * 0.4); return; }
+    // Off the way it was going, then the next tab comes in from that side.
+    const rest = Math.max(80, Math.min(160, (w - Math.abs(dx)) / 2));
+    p.style.transition = 'transform ' + rest + 'ms ease-in, opacity ' + rest + 'ms ease-in';
+    p.style.transform = 'translate3d(' + (-dir * w) + 'px,0,0)'; p.style.opacity = '0';
+    let fired = false; const fire = () => { if (fired) return; fired = true; if (CS) csGoTab(next, dir, w * 0.35); };
+    p.addEventListener('transitionend', fire, { once: true }); setTimeout(fire, rest + 60);
   }, { passive: true });
-  root.addEventListener('touchcancel', () => { s = null; g = null; }, { passive: true });
+  root.addEventListener('touchcancel', () => { if (s && s.drag) settle(); s = null; g = null; }, { passive: true });
 }
 // Save, mirror to the combat card, redraw everything that shows this PC.
 function csCommit(){

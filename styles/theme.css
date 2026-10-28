@@ -285,3 +285,6 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
    sheet's tab row further than it goes handed the swipe up to the page, and
    Chrome took it as Back — past the app's own history, out of the app. */
 .cs-tabs, .pa-strip, .pa-splv, .cs-spfilter .cb-seg, .cb-seg { overscroll-behavior-x: contain; }
+/* The tab's content follows the finger during a swipe: clip it sideways so
+   the sheet never gains a horizontal scroll while it's off to one side. */
+@media (max-width: 760px) { #cs-root .cs-body { overflow-x: hidden; } }
