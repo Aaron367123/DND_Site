@@ -315,16 +315,28 @@ const _ENTITY_KEYS = {
       nodes.drawings   = JSON.stringify(d.drawings || []);
       const meta = {...d};
       delete meta.tokens; delete meta.fog; delete meta.fogStrokes; delete meta.drawings;
+      // The tokens' order is their stacking order: a monster dropped on a
+      // character sits on top. Without it, every other device rebuilt the
+      // list in Firebase's key order, so the DM and the phones stacked
+      // overlapping tokens differently. Kept in meta, which only the DM writes
+      // — the same as the only side that can create tokens.
+      meta.tokenOrder = tokIds;
       nodes.meta = JSON.stringify(meta);
       return nodes;
     },
     assemble(nodes){
       let meta = {}; try { meta = JSON.parse(nodes.meta || '{}') || {}; } catch(e){ _diag('battlemap meta', e); }
-      const tokens = [];
+      const byId = {};
       Object.keys(nodes).forEach(n => {
         if (!n.startsWith('tokens/')) return;
-        try { const t = JSON.parse(nodes[n]); if (t) tokens.push(t); } catch(e){ _diag('battlemap node ' + n, e); }
+        try { const t = JSON.parse(nodes[n]); if (t) byId[n.slice(7)] = t; } catch(e){ _diag('battlemap node ' + n, e); }
       });
+      // In the DM's order; anything it doesn't mention (an older client's
+      // write) after, as before.
+      const tokens = [], used = new Set();
+      (Array.isArray(meta.tokenOrder) ? meta.tokenOrder : []).forEach(id => { if (byId[id] && !used.has(id)){ tokens.push(byId[id]); used.add(id); } });
+      Object.keys(byId).forEach(id => { if (!used.has(id)) tokens.push(byId[id]); });
+      delete meta.tokenOrder;
       const parse = (n, fb) => { try { return nodes[n] != null ? JSON.parse(nodes[n]) : fb; } catch(e){ return fb; } };
       return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: parse('drawings', []) });
     },
@@ -382,10 +394,18 @@ const _ENTITY_KEYS = {
     // the server. A token id absent from `prev` would be a creation, which a
     // player isn't allowed to make — the panel-side merge drops unknown ids
     // for the same reason. `meta`, `fog` and `fogStrokes` are DM-only.
-    playerWritable(node, prev){
+    //
+    // One creation is allowed: the player's OWN character, when it isn't on
+    // the map yet. The phone offers "add yourself" and its token used to stay
+    // on that phone alone — the DM and the other players never saw it.
+    playerWritable(node, prev, next){
       if (node === 'drawings') return true;
-      if (node.indexOf('tokens/') === 0) return (node in prev);
-      return false;
+      if (node.indexOf('tokens/') !== 0) return false;
+      if (node in prev) return true;
+      const me = typeof paPc === 'function' ? paPc() : null;
+      let t = null; try { t = JSON.parse(next); } catch(e){}
+      if (!me || !t || !t.isPC || t.label !== me.name) return false;
+      return !Object.keys(prev).some(n => { if (n.indexOf('tokens/') !== 0) return false; try { const o = JSON.parse(prev[n]); return o && o.isPC && o.label === me.name; } catch(e){ return false; } });
     },
     // Don't apply under a gesture: a token drag, a pencil stroke or a fog
     // brush. Only the drag was covered, so an update landing mid-stroke

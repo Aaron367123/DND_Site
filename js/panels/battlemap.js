@@ -2614,7 +2614,12 @@ registerPanel('battlemap',{
     // Always allow dragging regardless of tool — move is always active
     b.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;position:relative';
 
+    // A player places only their own character: sync accepts no other new
+    // token from a phone, so a button for anyone else made a token that only
+    // that phone ever saw.
+    const _mine = _isPlayer && typeof paPc === 'function' ? paPc() : null;
     const partyBtns=state.party.map((p,pi)=>{
+      if (_isPlayer && (!_mine || _mine.id !== p.id)) return '';
       const onMap=this._tokens.find(t=>t.label===p.name&&t.isPC);
       if(onMap)return '';
       // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.

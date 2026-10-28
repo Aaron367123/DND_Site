@@ -10500,6 +10500,29 @@
         state.party = JSON.parse(st0); loadDomain('party'); panelDefs.party._render();
       }
     }
+    // -- Round 104: the map's tokens across devices ----------------------------
+    {
+      const spec = _ENTITY_KEYS['skt-battlemap-v1'], pa0 = window.paPc;
+      try {
+        // Stacking order: added last = on top. Firebase hands nodes back in key
+        // order, so ids that sort the other way used to come back reversed.
+        const map = { cols: 10, rows: 8, tokens: [{ id: 'zz_first', label: 'Ogre', isPC: false, x: 0, y: 0 }, { id: 'aa_second', label: 'Zoey', isPC: true, x: 0, y: 0 }], fog: null, fogStrokes: [], drawings: [] };
+        const nodes = spec.explode(JSON.stringify(map));
+        const sorted = {}; Object.keys(nodes).sort().forEach(k => sorted[k] = nodes[k]);   // as the server returns them
+        const back = JSON.parse(spec.assemble(sorted));
+        ok('map sync: tokens keep their stacking order on every device', back.tokens.map(t => t.id).join(',') === 'zz_first,aa_second', back.tokens.map(t => t.id).join(','));
+        ok('map sync: and the order is not left in the stored map', !('tokenOrder' in back));
+        // A player may add their own character, nothing else.
+        window.paPc = () => ({ id: 'zoey', name: 'Zoey' });
+        const prev = { 'tokens/t1': JSON.stringify({ id: 't1', label: 'Ogre', isPC: false }) };
+        ok('map sync: a player’s own token, added from the phone, reaches the table', spec.playerWritable('tokens/t2', prev, JSON.stringify({ id: 't2', label: 'Zoey', isPC: true })) === true);
+        ok('map sync: but not someone else’s', spec.playerWritable('tokens/t3', prev, JSON.stringify({ id: 't3', label: 'Namroc', isPC: true })) === false);
+        ok('map sync: nor a monster', spec.playerWritable('tokens/t4', prev, JSON.stringify({ id: 't4', label: 'Zoey', isPC: false })) === false);
+        ok('map sync: nor a second copy of their own', spec.playerWritable('tokens/t5', Object.assign({ 'tokens/t2': JSON.stringify({ id: 't2', label: 'Zoey', isPC: true }) }, prev), JSON.stringify({ id: 't5', label: 'Zoey', isPC: true })) === false);
+        ok('map sync: moving a token that exists is still allowed', spec.playerWritable('tokens/t1', prev, prev['tokens/t1']) === true);
+      } catch(e){ ok('round 104 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.paPc = pa0; }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
