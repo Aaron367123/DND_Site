@@ -16,12 +16,12 @@
 
 const DT_PHONE = '(max-width: 768px) and (pointer: coarse)';
 // [id, where, name when it has no title to take one from]
+// Switching campaign and the tutorial live in Settings instead (the top of
+// the drawer, and Help & about): rarely wanted, and the dock was too long.
 const DT_TOOLS = [
   ['float-search-btn', 'top', 'Search  ( / or Ctrl+K )'],
-  ['campaign-btn', 'bottom', 'Campaign'],
   ['sync-status', 'bottom', 'Sync'],
   ['player-view-btn', 'bottom', 'Player view'],
-  ['tutorial-btn', 'bottom', 'Help'],
   ['settings-btn', 'bottom', 'Settings'],
 ];
 let _dtOrder = null, _dtObs = null;

@@ -8525,16 +8525,15 @@
         const id = s => document.getElementById(s);
         ok('dock tools: nothing floats in the top-right corner', getComputedStyle(id('float-toolbar')).display === 'none' && document.body.classList.contains('tools-in-dock'));
         ok('dock tools: search at the top of the dock', id('dock-tools-top').contains(id('float-search-btn')));
-        ok('dock tools: campaign, sync, player view, help and settings at the bottom', ['campaign-btn', 'sync-status', 'player-view-btn', 'tutorial-btn', 'settings-btn'].every(k => id('dock-tools-bottom').contains(id(k))));
-        ok('dock tools: each one named, as the panel buttons are', ['float-search-btn', 'campaign-btn', 'sync-status', 'player-view-btn', 'tutorial-btn', 'settings-btn'].every(k => id(k).dataset.label && id(k).querySelector('.dt-label')));
-        ok('dock tools: the campaign button is named for the campaign, with an icon', id('campaign-btn').dataset.label === sktActiveCampaignName() && !!id('campaign-btn').querySelector('.dt-ico'));
+        ok('dock tools: sync, player view and settings at the bottom', ['sync-status', 'player-view-btn', 'settings-btn'].every(k => id('dock-tools-bottom').contains(id(k))));
+        ok('dock tools: campaign, help and reset layout aren\u2019t in the dock', !['campaign-btn', 'tutorial-btn', 'reset-layout-btn'].some(k => id(k) && id(k).closest('.panel-dock')) && !id('campaign-btn').getClientRects().length && !id('tutorial-btn').getClientRects().length);
+        ok('dock tools: they\u2019re in Settings: the campaign at the top, help and reset layout below', id('settings-drawer').contains(id('reset-layout-btn')) && id('settings-drawer').contains(id('open-tutorial-btn')) && getComputedStyle(id('drawer-campaign')).display === 'flex' && id('drawer-campaign-name').textContent === sktActiveCampaignName());
+        ok('dock tools: each one named, as the panel buttons are', ['float-search-btn', 'sync-status', 'player-view-btn', 'settings-btn'].every(k => id(k).dataset.label && id(k).querySelector('.dt-label')));
         _setSyncStatus('live'); await sleep(30);
         const live = id('sync-status').dataset.label;
         _setSyncStatus('offline'); await sleep(30);
         ok('dock tools: the sync button’s name follows the connection', live === 'Sync: Live' && id('sync-status').dataset.label === 'Sync: Offline', live + ' / ' + id('sync-status').dataset.label);
-        ok('dock tools: no native tooltip on top of the hover label', !id('settings-btn').hasAttribute('title') && !id('campaign-btn').hasAttribute('title') && !!id('settings-btn').getAttribute('aria-label'));
-        sktRefreshCampaignChip(); await sleep(30);   // it sets the chip's tooltip again
-        ok('dock tools: nor after the campaign chip is refreshed', !id('campaign-btn').hasAttribute('title') && /Campaign: /.test(id('campaign-btn').getAttribute('aria-label') || ''));
+        ok('dock tools: no native tooltip on top of the hover label', !id('settings-btn').hasAttribute('title') && !id('player-view-btn').hasAttribute('title') && !!id('settings-btn').getAttribute('aria-label'));
         // Who's connected opens beside the chip, not off the bottom of the screen.
         sktPresenceToggle(); await sleep(20);
         const pp = id('presence-pop').getBoundingClientRect(), chip = id('sync-status').getBoundingClientRect();
@@ -10806,6 +10805,15 @@
       ok('dock: no scrollbar beside the icons', !!dp && getComputedStyle(dp).scrollbarWidth === 'none');
       if (dp && innerHeight >= 900 && !document.body.classList.contains('dock-expanded'))
         ok('dock: on a screen 900px tall or more, every icon fits without scrolling', dp.scrollHeight <= dp.clientHeight + 1, { inner: innerHeight, need: dp.scrollHeight, have: dp.clientHeight });
+      // Reset layout lives in Settings now, and still asks first.
+      const rl = document.getElementById('reset-layout-btn');
+      ok('dock: reset layout is in Settings', !!rl && !!rl.closest('#settings-drawer'));
+      if (rl){
+        rl.click(); await sleep(60);
+        const no = document.getElementById('conf-cancel');
+        ok('dock: and it asks before putting the windows back', !!no);
+        if (no){ no.click(); await sleep(40); }
+      }
     }
     // -- Class features: represented, not just text ------------------------
     {

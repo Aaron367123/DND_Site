@@ -485,3 +485,9 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
   .panel-dock .dock-btn { height: 29px; }
   .dock-tools .dock-btn, .dock-tools-bottom .dock-btn { height: 29px; }
 }
+
+/* ── 19. Campaign and help live in Settings ───────────────── */
+/* On every screen now, as the phone already did: the campaign switcher at
+   the top of the Settings drawer, the tutorial under Help & about. (Their
+   old buttons stay behind in the hidden top-right toolbar, dock-tools.js.) */
+#settings-drawer .drawer-campaign { display: flex; }

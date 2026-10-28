@@ -67,7 +67,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&amp;display=swap">
-<link rel="stylesheet" href="styles/theme.css?v=1f4b098764">
+<link rel="stylesheet" href="styles/theme.css?v=442658d90e">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -238,7 +238,6 @@
     </div>
     <div class="dock-tools dock-tools-bottom" id="dock-tools-bottom"></div>
     <button class="dock-btn" id="dock-expand-btn" data-label="Show names" title="Show panel names" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sidebar"/></svg><span class="dock-label">Hide names</span></button>
-    <button class="dock-btn" id="reset-layout-btn" data-label="Reset layout" title="Reset layout"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg><span class="dock-label">Reset layout</span></button>
   </div>
 
   <!-- WORKSPACE -->
@@ -262,8 +261,8 @@
     </div>
     <button class="btn icon-btn" id="close-drawer">✕</button>
   </div>
-  <!-- Phone only (main.css): the top bar has no room for the campaign chip
-       on a 390px screen, so the switcher lives here instead. -->
+  <!-- Which campaign, and switching: here rather than in the dock or the
+       phone's top bar, which had no room for it. -->
   <div class="drawer-campaign" id="drawer-campaign">
     <span class="drawer-campaign-text"><span class="drawer-campaign-l">Campaign</span>
       <span class="drawer-campaign-name" id="drawer-campaign-name"></span></span>
@@ -346,10 +345,6 @@
         <input type="checkbox" id="show-sync-status" style="width:auto" checked>
       </div>
       <div class="drawer-row">
-        <label for="show-tutorial-btn">Tutorial button (❓)</label>
-        <input type="checkbox" id="show-tutorial-btn" style="width:auto" checked>
-      </div>
-      <div class="drawer-row">
         <label for="show-zoom-controls">Zoom controls</label>
         <input type="checkbox" id="show-zoom-controls" style="width:auto" checked>
       </div>
@@ -382,6 +377,12 @@
         <input type="checkbox" id="snap-windows" style="width:auto">
       </div>
       <p class="drawer-note">When dragging or resizing, edges snap to nearby windows within 8 px.</p>
+
+      <h4 class="drawer-subhead">Window layout</h4>
+      <div class="drawer-row">
+        <label for="reset-layout-btn">Put every window back where it started</label>
+        <button class="btn small" id="reset-layout-btn">Reset layout</button>
+      </div>
     </div>
   </details>
 
@@ -549,7 +550,7 @@
 <script defer src="js/ui/tutorial.js?v=7427317caa"></script>
 <script defer src="js/ui/onboarding.js?v=42199a671a"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->
-<script defer src="js/ui/dock-tools.js?v=966a634053"></script>
+<script defer src="js/ui/dock-tools.js?v=39406b40c4"></script>
 <script defer src="js/app.js?v=b5a88fcd4f"></script>
 </body>
 </html>
