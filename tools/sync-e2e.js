@@ -227,6 +227,17 @@ const window = {};
       return lat(await W(pl, "const tok = (JSON.parse(localStorage.getItem('skt-battlemap-v1')).tokens||[]).find(x => String(x.id) === '" + t.id + "'); return tok && tok.x === " + after[0] + " && tok.y === " + after[1]));
     });
 
+    await step('phone adds itself to the map → DM', async () => {
+      const zt = "return (JSON.parse(localStorage.getItem('skt-battlemap-v1')||'{}').tokens||[]).filter(t => t.isPC && t.label === 'Zoey').length";
+      await dm.ev("const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => !(t.isPC && t.label === 'Zoey')); B._saveMap(); return 1");
+      if (await W(pl, zt + ' === 0') == null) return { ok: false, why: 'phone never lost the token' };
+      await pl.ev("paTab = 'map'; paRender(); await new Promise(r=>setTimeout(r,1200)); return 1");
+      const offered = await pl.ev("return [...document.querySelectorAll('#pa-screen [data-mact=\"add-party\"]')].map(b => b.textContent.trim())");
+      if (offered.length !== 1 || !/Zoey/.test(offered[0])) return { ok: false, why: 'phone offered ' + JSON.stringify(offered) };
+      await pl.ev("document.querySelector('#pa-screen [data-mact=\"add-party\"]').click(); return 1");
+      return lat(await W(dm, zt + ' === 1'));
+    });
+
     // ── Handouts, roll requests, reactions ──────────────────────────────────
     await step('DM sends a handout → phone pops it up', async () => {
       await dm.ev("openPanel('handouts'); await new Promise(r=>setTimeout(r,300)); panelDefs.handouts.send({ title: 'Stress handout', text: 'A note from the DM', to: 'all' }); return 1");
