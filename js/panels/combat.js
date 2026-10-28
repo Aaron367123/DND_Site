@@ -1763,6 +1763,9 @@ registerPanel('combat',{
       const partyIdx = c.isPC ? state.party.findIndex(p => p.id === c.id) : -1;
       const partySlot = partyIdx >= 0 ? state.party[partyIdx] : null;
       const ws = (partySlot && partySlot.wildshape && partySlot.wildshape.name) ? partySlot.wildshape : null;
+      // A 2024 form keeps the druid's own hit points (with temporary ones
+      // on top): no beast pool to drain, though the beast's resistances apply.
+      const wsPool = ws && !ws.tempModel ? ws : null;
       if (dmgType){
         const t = dmgType.toLowerCase();
         // Qualifier-aware. A plain substring test made every entry
@@ -1866,8 +1869,8 @@ registerPanel('combat',{
       // Wild Shape: damage hits the BEAST pool first. Once beast HP ≤ 0,
       // form drops and overflow continues to druid HP / temp / death-save
       // territory. Mirrors party.js _applyHpDelta beast routing.
-      if (c.isPC && ws && remaining < 0){
-        const wsHp = ws.hp || 0;
+      if (c.isPC && wsPool && remaining < 0){
+        const wsHp = wsPool.hp || 0;
         if (wsHp > 0){
           const beastTook = Math.min(wsHp, -remaining);
           ws.hp = wsHp - beastTook;
@@ -2014,12 +2017,15 @@ registerPanel('combat',{
         const partyIdx = state.party.findIndex(p => p.id === c.id);
         const partySlot = partyIdx >= 0 ? state.party[partyIdx] : null;
         const ws = (partySlot && partySlot.wildshape && partySlot.wildshape.name) ? partySlot.wildshape : null;
-        if (ws){
+        // 2014: the beast's hit points take the healing, and what's past
+        // its maximum is lost (the druid's own hit points wait unchanged
+        // until the form drops). 2024: no beast pool, so it heals the druid.
+        if (ws && !ws.tempModel){
           const beastCap = ws.hpMax || ws.hp || 0;
           const beastBefore = ws.hp || 0;
           ws.hp = Math.min(beastCap, beastBefore + remainingHeal);
           const beastHealed = ws.hp - beastBefore;
-          remainingHeal -= beastHealed;
+          remainingHeal = 0;
           if (beastHealed > 0) logHealParts.push(beastHealed + ' ' + ws.name);
         }
       }

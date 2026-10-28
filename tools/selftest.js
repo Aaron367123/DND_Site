@@ -10854,6 +10854,76 @@
       } catch(e){ ok('round 113 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (navigator.clipboard && clip0) navigator.clipboard.writeText = clip0; document.getElementById('qr-backdrop')?.remove(); }
     }
+    // -- Round 114: Rage and Wild Shape follow their rules -----------------------
+    {
+      const P = panelDefs.party, party0 = JSON.stringify(state.party), toast0 = window.showToast, toasts = [];
+      try {
+        showToast = function(m){ toasts.push(String(m)); };
+        openPanel('party'); await sleep(150);
+        const B = { id: 'st-barb', name: 'Test Barbarian', cls: 'barbarian', hp: 30, hpMax: 30, resources: [{ name: 'Rage', current: 2, max: 2, recharge: 'long' }] };
+        const D = { id: 'st-druid', name: 'Test Druid', cls: 'druid', level: 4, hp: 15, hpMax: 20, abilities: { wis: 16 }, resources: [{ name: 'Wild Shape', current: 2, max: 2, recharge: 'short' }] };
+        state.party.push(B, D); P._render(); await sleep(30);
+        const bi = () => state.party.findIndex(p => p.id === 'st-barb'), di = () => state.party.findIndex(p => p.id === 'st-druid');
+        const b = () => state.party[bi()], d = () => state.party[di()], uses = (c, n) => c.resources.find(r => r.name === n).current;
+        // Rage from the party card spends a use, and stops at none.
+        document.querySelector('.window[data-panel="party"] [data-act="rage-on"][data-idx="' + bi() + '"]').click(); await sleep(20);
+        ok('rage: entering from the party card spends a use', b().rage === true && uses(b(), 'Rage') === 1 && b().rageRounds === 10);
+        P._setRage(bi(), false); P._setRage(bi(), true); P._setRage(bi(), false);
+        toasts.length = 0; P._setRage(bi(), true);
+        ok('rage: with none left it doesn\u2019t start, and says why', !b().rage && uses(b(), 'Rage') === 0 && /No rages left/.test(toasts.join()));
+        b().resources[0].current = 1; P._setRage(bi(), true, { paid: true });
+        ok('rage: a caller that already paid isn\u2019t charged twice', b().rage && uses(b(), 'Rage') === 1);
+        P._setRage(bi(), false); b().rules = '2024'; P._setRage(bi(), true);
+        ok('rage: a 2024 rage can run its full 10 minutes', b().rageRounds === 100);
+        P._setRage(bi(), false);
+        // 2014 Wild Shape: the beast's hit points; healing stays in the beast.
+        const wolf = _5eData.find(x => x.cat === 'monster' && x.name === 'Wolf' && /beast/i.test(x._raw.type || ''));
+        P._applyWildShape(di(), wolf); await sleep(10);
+        const bh = d().wildshape.hpMax;
+        ok('wild shape: a form spends a use and takes the beast\u2019s hit points (2014)', uses(d(), 'Wild Shape') === 1 && d().wildshape.hp === bh && !d().wildshape.tempModel);
+        P._applyHpDelta(di(), -5); P._applyHpDelta(di(), 50); await sleep(10);
+        ok('wild shape: healing fills the beast and leaves the druid\u2019s hit points alone (2014)', d().wildshape.hp === bh && d().hp === 15);
+        P._applyHpDelta(di(), -(bh + 3)); await sleep(10);
+        ok('wild shape: damage past the beast\u2019s hit points drops the form and carries over', !d().wildshape && d().hp === 12);
+        // None left: the picker doesn't open.
+        d().resources[0].current = 0; toasts.length = 0;
+        P._editWildShape(di()); await sleep(40);
+        ok('wild shape: with no uses left the picker doesn\u2019t open', !document.querySelector('.bestiary-pick-row') && /No Wild Shape uses left/.test(toasts.join()));
+        document.querySelectorAll('.modal-backdrop').forEach(x => x.remove());
+        // Flying and swimming forms are flagged before the druid may take them.
+        d().resources[0].current = 2; d().level = 2; P._editWildShape(di()); await sleep(60);
+        const row = n => [...document.querySelectorAll('.bestiary-pick-row')].find(x => (x.querySelector('.bestiary-pick-name') || {}).textContent === n);
+        const warn = r => r ? [...r.querySelectorAll('.ws-cr-warn')].map(x => x.title).join() : '';
+        ok('wild shape: a 2nd-level druid is warned off flying and swimming forms', /flying/.test(warn(row('Owl'))) && /swimming/.test(warn(row('Octopus'))));
+        document.querySelectorAll('.modal-backdrop').forEach(x => x.remove());
+        // 2024, Circle of the Moon: own hit points, temporary ones on top, AC 13 + WIS.
+        Object.assign(d(), { rules: '2024', subclass: 'Circle of the Moon', level: 6, tempHp: 0, hp: 20 });
+        P._applyWildShape(di(), wolf); await sleep(10);
+        ok('wild shape 2024: temporary hit points of 3 \u00d7 druid level (Moon), AC 13 + WIS', d().tempHp === 18 && d().wildshape.ac >= 16 && d().wildshape.tempModel === true);
+        P._applyHpDelta(di(), -10); await sleep(10);
+        ok('wild shape 2024: damage comes off the temporary hit points, the form stays', d().tempHp === 8 && d().hp === 20 && !!d().wildshape);
+        // The engine: unlimited at 20 (2014), and 2024 Rage's short rest.
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const mk = (ed, cls, L) => { const x = sktBlankBuild(ed); x.cls = cls; x.level = L; return x; };
+        const pool = (ed, cls, L, R, n) => sktComputeCharacter(mk(ed, cls, L), R, {}).resources.find(r => r.name === n);
+        ok('rage: unlimited at 20th level (2014), six at 19th', !pool('2014', 'barbarian', 20, R14, 'Rage') && pool('2014', 'barbarian', 19, R14, 'Rage').max === 6);
+        ok('rage: 2024 gives one use back on a short rest', pool('2024', 'barbarian', 5, R24, 'Rage').recharge === 'short-one' && pool('2014', 'barbarian', 5, R14, 'Rage').recharge === 'long');
+        ok('wild shape: unlimited for a 2014 Archdruid', !pool('2014', 'druid', 20, R14, 'Wild Shape') && pool('2014', 'druid', 19, R14, 'Wild Shape').max === 2);
+        // The sheet's Rage action spends exactly one use.
+        const built = sktComputeCharacter(mk('2014', 'barbarian', 3), R14, {}); built.id = 'st-built'; built.name = 'Built Barbarian';
+        state.party.push(built); save(); openCharSheet('st-built', { tab: 'actions' }); await sleep(250);
+        const ub = document.querySelector('[data-cs-use="Rage"]');
+        if (ub){ ub.click(); await sleep(60); }
+        const bb = state.party.find(p => p.id === 'st-built'), br = bb.resources.find(r => r.name === 'Rage');
+        ok('rage: the sheet\u2019s Rage button spends exactly one use', !!ub && bb.rage === true && br.current === br.max - 1, ub ? br.current + '/' + br.max : 'no Rage button');
+      } catch(e){ ok('round 114 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        showToast = toast0;
+        if (typeof csClose === 'function' && typeof CS !== 'undefined' && CS) csClose();
+        document.querySelectorAll('.modal-backdrop').forEach(x => x.remove());
+        state.party = JSON.parse(party0); save(); try { P._render(); } catch(e){} closePanel('party');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -283,7 +283,7 @@ registerPanel('party',{
     // who's in death-save territory without reading numbers.
     const downed = (c.hp != null) && c.hp <= 0;
     const raging = !!c.rage;
-    const wildshaped = !!(c.wildshape && c.wildshape.name);
+    const wildshaped = !!(c.wildshape && c.wildshape.name && !c.wildshape.tempModel);
     const classColor = this._classColor(c);
     return '<div class="char-card'+(inCombat?' in-combat':'')+(downed?' downed':'')+(raging?' raging':'')+(wildshaped?' wildshaped':'')+'" data-cidx="'+i+'" draggable="true" title="Drag to Combat Tracker to add to combat" style="--class-color:'+classColor+'">'
       // Class-color accent stripe — purely decorative, set via CSS using the
@@ -857,12 +857,43 @@ registerPanel('party',{
   // running, because that is the only place rounds exist — out of combat the
   // rage simply stays up until it's ended by hand, by a rest, or by dropping.
   // See combat._startRound, which ticks it alongside buff durations.
+  // 2024's Rage lasts until the end of your next turn and is kept going each
+  // turn (an attack, a save forced, or a bonus action), for up to 10 minutes,
+  // so its clock is the 10-minute cap: 100 rounds.
   RAGE_ROUNDS: 10,
+  RAGE_ROUNDS_2024: 100,
 
-  _setRage(i, on){
+  // Which rules a character plays by: the builder's edition, else what an
+  // import recorded, else 2014 (the campaign's book).
+  _rulesOf(c){ return (c && ((c.build && c.build.edition) || c.rules)) === '2024' ? '2024' : '2014'; },
+  // A class's own levels (a multiclass druid's Wild Shape goes by druid
+  // levels), else the character's level.
+  _classLevel(c, key){
+    const cl = c && c.sheet && c.sheet.classLevels;
+    const hit = Array.isArray(cl) ? cl.find(x => x && x.cls === key) : null;
+    return (hit && +hit.level) || parseInt(c && (c.level || (c.sheet && c.sheet.level)) || 1, 10) || 1;
+  },
+  // Spend one use of a pool the character has, or say there's none left.
+  // A character with no such pool (an import, or uses without limit) isn't
+  // stopped. Returns false when there was nothing to spend.
+  _spendUse(c, name, what){
+    const r = (c.resources || []).find(x => x.name === name);
+    if (!r) return true;
+    if ((+r.current || 0) <= 0){
+      if (typeof showToast === 'function') showToast('No ' + what + ' left — ' + (r.recharge === 'short' || r.recharge === 'short-one' ? 'a short rest brings ' + (r.recharge === 'short-one' ? 'one' : 'them') + ' back' : 'a long rest brings them back'));
+      return false;
+    }
+    r.current = (+r.current || 0) - 1;
+    return true;
+  },
+
+  // on: entering spends a use of Rage, unless the caller already has (the
+  // sheet's Actions spend it themselves): opts.paid.
+  _setRage(i, on, opts){
     const c = state.party[i]; if (!c) return;
+    if (on && !c.rage && !(opts && opts.paid) && !this._spendUse(c, 'Rage', 'rages')) return;
     const next = {...c, rage: !!on};
-    next.rageRounds = on ? this.RAGE_ROUNDS : null;
+    next.rageRounds = on ? (this._rulesOf(c) === '2024' ? this.RAGE_ROUNDS_2024 : this.RAGE_ROUNDS) : null;
     let dropped = null;
     if (on && c.concentration){ dropped = c.concentration; next.concentration = null; }
     state.party[i] = next;
@@ -888,16 +919,18 @@ registerPanel('party',{
     const parts = [];
     if (isBarb){
       // Rage damage bonus by level (5e RAW: +2 to lv8, +3 to lv15, +4 at 16+).
-      const lvl = parseInt(c.level || c.sheet?.level || 1, 10) || 1;
+      const lvl = this._classLevel(c, 'barbarian');
       const rageDmg = lvl >= 16 ? '+4' : lvl >= 9 ? '+3' : '+2';
       if (raging){
         // Rounds left, when a fight is running to count them. Absent out of
         // combat, where there is no round clock to count against.
         const left = c.rageRounds;
         const leftTxt = left != null ? ` <span class="rage-rounds">${left}</span>` : '';
-        parts.push(`<button class="form-pill rage-on" data-act="rage-off" data-idx="${i}" title="Rage active — Advantage on STR checks/saves · ${rageDmg} damage on melee STR attacks · Resistance to bludgeoning, piercing, slashing · Can't cast or concentrate${left != null ? ' · ' + left + ' round' + (left===1?'':'s') + ' left' : ' · Lasts 1 min (10 rounds)'}. Click to end rage.">💢 RAGING${leftTxt} <span class="form-pill-x">×</span></button>`);
+        const r24 = this._rulesOf(c) === '2024';
+        parts.push(`<button class="form-pill rage-on" data-act="rage-off" data-idx="${i}" title="Rage active — Advantage on STR checks/saves · ${rageDmg} damage on STR attacks · Resistance to bludgeoning, piercing, slashing · Can't cast or concentrate${r24 ? ' · Keep it going each turn by attacking, forcing a save or using a bonus action; up to 10 minutes' : ' · Ends early if your turn passes without attacking or taking damage'}${left != null ? ' · ' + left + ' round' + (left===1?'':'s') + ' left' : ''}. Click to end rage.">💢 RAGING${leftTxt} <span class="form-pill-x">×</span></button>`);
       } else {
-        parts.push(`<button class="form-pill rage-off" data-act="rage-on" data-idx="${i}" title="Enter rage — Advantage on STR · ${rageDmg} melee damage · Resist B/P/S · Lasts 1 minute">💢 Rage</button>`);
+        const rr = (c.resources || []).find(x => x.name === 'Rage');
+        parts.push(`<button class="form-pill rage-off${rr && (+rr.current || 0) <= 0 ? ' is-spent' : ''}" data-act="rage-on" data-idx="${i}" title="Enter rage${rr ? ' (' + (+rr.current || 0) + ' of ' + rr.max + ' left)' : ''} — Advantage on STR · ${rageDmg} damage · Resist B/P/S · ${this._rulesOf(c) === '2024' ? 'Up to 10 minutes' : 'Lasts 1 minute'}">💢 Rage</button>`);
       }
     }
     if (isDruid){
@@ -919,7 +952,7 @@ registerPanel('party',{
   _wildshapeOverlay(c, i){
     const ws = c.wildshape;
     if (!ws || !ws.name) return '';
-    const max = ws.hpMax || ws.hp || 1;
+    const max = ws.hpMax || ws.hp || 1, tempModel = !!ws.tempModel;
     const pct = Math.max(0, Math.min(100, Math.round((ws.hp / max) * 100)));
     const color = pct > 50 ? 'var(--success)' : pct > 25 ? 'var(--warning)' : 'var(--danger)';
     // Hydrate display-only fields from _5eData on demand. The snapshot only
@@ -939,7 +972,7 @@ registerPanel('party',{
         ].filter(Boolean).join(' · ')
       : '';
     const speed = raw
-      ? (typeof raw.speed === 'string' ? raw.speed : (raw.speed?.walk ? `${raw.speed.walk} ft` : ''))
+      ? (typeof raw.speed === 'string' ? raw.speed : (raw.speed?.walk ? String(raw.speed.walk).replace(/\s*ft\.?\s*$/i, '') + ' ft' : ''))
       : '';
     // raw.senses is an OBJECT like {darkvision:'60 ft.', passive_perception:13}
     // — flatten it to a readable string. Falls back to a plain string when
@@ -976,12 +1009,12 @@ registerPanel('party',{
         <span class="ws-icon">🐺</span>
         <span class="ws-name">${esc(ws.name)}${ws.cr!=null?` <span class="ws-cr">CR ${esc(String(ws.cr))}</span>`:''}</span>
         <span class="ws-stats">
-          <span title="Beast HP — damage from the strip drains here first">♥ ${ws.hp}/${ws.hpMax||ws.hp}</span>
+          ${tempModel ? `<span title="2024 Wild Shape: you keep your own hit points, with the temporary ones it gave you on top (shown with your HP above)">♥ your own HP + temp</span>` : `<span title="Beast HP — damage from the strip drains here first">♥ ${ws.hp}/${ws.hpMax||ws.hp}</span>`}
           ${ws.ac!=null ? `<span title="Beast AC">⛨ ${ws.ac}</span>` : ''}
           ${speed ? `<span title="Beast speed">⇒ ${esc(speed)}</span>` : ''}
         </span>
       </div>
-      <div class="ws-bar"><div class="ws-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      ${tempModel ? '' : `<div class="ws-bar"><div class="ws-bar-fill" style="width:${pct}%;background:${color}"></div></div>`}
       ${ab ? `<div class="ws-abilities">${esc(ab)}</div>` : ''}
       ${senses ? `<div class="ws-senses">${esc(senses)}</div>` : ''}
       ${dmgMods.length ? `<div class="ws-mods">${esc(dmgMods.join(' · '))}</div>` : ''}
@@ -1033,8 +1066,19 @@ registerPanel('party',{
       });
     if (!all.length){ showToast('No beasts in the loaded data'); return; }
 
-    const druidLvl = parseInt(c.level || c.sheet?.level || 1, 10) || 1;
+    const druidLvl = this._classLevel(c, 'druid');
     const crCap = this._wildShapeCrCap(c, druidLvl);
+    const ed = this._rulesOf(c);
+    // Each new form costs a use; with none left, say so instead of opening.
+    const wsr = (c.resources || []).find(x => x.name === 'Wild Shape');
+    if (wsr && (+wsr.current || 0) <= 0){
+      showToast('No Wild Shape uses left — ' + (ed === '2024' ? 'a short rest brings one back' : 'a short rest brings them back'));
+      return;
+    }
+    // Movement a form may not have yet: 2014, no flying or swimming before
+    // 4th level and no flying before 8th; 2024, no flying before 8th.
+    const noFly = druidLvl < 8, noSwim = ed === '2014' && druidLvl < 4;
+    const moves = raw => { const s = raw.speed; const t = typeof s === 'string' ? s : JSON.stringify(s || {}); return { fly: /fly/i.test(t), swim: /swim/i.test(t) }; };
 
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
@@ -1063,6 +1107,7 @@ registerPanel('party',{
             ? 1 / parseInt(crStr.split('/')[1])
             : NaN;
         const overCap = Number.isFinite(crNum) && crNum > crCap;
+        const mv = moves(raw), badMove = (noFly && mv.fly) ? 'a flying speed (not before 8th level)' : (noSwim && mv.swim) ? 'a swimming speed (not before 4th level)' : '';
         const hp = raw.hit_points || raw.hp || '?';
         const ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || raw.ac || '?';
         // Source badge — uses _formatSource so book codes like "MM" / "XMM"
@@ -1076,6 +1121,7 @@ registerPanel('party',{
             <span class="bestiary-pick-name">${esc(d.name)}</span>
             ${src ? `<span class="detail-source-badge" title="From ${esc(srcLabel)}">${esc(srcLabel)}</span>` : ''}
             ${overCap?'<span class="ws-cr-warn" title="Above your druid-level CR cap (vanilla 5e) — Circle of the Moon may override">⚠</span>':''}
+            ${!overCap && badMove ? `<span class="ws-cr-warn" title="This beast has ${badMove}">⚠</span>` : ''}
           </div>
           <span class="bestiary-pick-meta">CR ${esc(crStr)} · HP ${esc(String(hp))} · AC ${esc(String(ac))}</span>
         </div>`;
@@ -1085,7 +1131,7 @@ registerPanel('party',{
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="width:540px;max-width:92vw">
       <h3>🐺 Wild Shape — ${esc(c.name)}</h3>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-        <span style="font-size:var(--fs-sm);color:var(--text-muted)">Druid lv ${druidLvl} · CR cap ≤ ${crCap}</span>
+        <span style="font-size:var(--fs-sm);color:var(--text-muted)">Druid lv ${druidLvl} · CR cap ≤ ${crCap}${noFly ? ' · no flying' + (noSwim ? ' or swimming' : '') : ''}${wsr ? ' · ' + (+wsr.current || 0) + ' of ' + wsr.max + ' uses left' : ''}</span>
         <span style="flex:1"></span>
         ${cur.name ? `<button class="btn small" id="ws-revert" title="Drop the current form">↩ Revert (${esc(cur.name)})</button>` : ''}
       </div>
@@ -1152,11 +1198,27 @@ registerPanel('party',{
     return lvl >= 8 ? 1 : lvl >= 4 ? 0.5 : 0.25;
   },
 
-  _applyWildShape(i, beast){
+  // A new form spends a use of Wild Shape (opts.paid: the caller already did).
+  //
+  // 2014: you take the beast's hit points; damage comes off them first and
+  // what's left over carries to you when the form drops (_applyHpDelta).
+  // 2024: you keep your own hit points and gain temporary ones equal to your
+  // druid level, three times that for a Circle of the Moon druid, who also
+  // has AC 13 + Wisdom modifier if that's higher than the beast's.
+  _applyWildShape(i, beast, opts){
     const c = state.party[i]; if (!c || !beast) return;
+    if (!(opts && opts.paid) && !this._spendUse(c, 'Wild Shape', 'Wild Shape uses')) return;
     const raw = beast._raw || {};
-    const ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || 10;
-    const hp = parseInt(raw.hit_points || raw.hp || 1) || 1;
+    let ac = (Array.isArray(raw.armor_class) ? raw.armor_class[0]?.value : raw.armor_class) || 10;
+    let hp = parseInt(raw.hit_points || raw.hp || 1) || 1;
+    const r24 = this._rulesOf(c) === '2024';
+    const moon = /moon/i.test(String(c.subclass || (c.build && c.build.subclass) || ''));
+    let temp = 0;
+    if (r24){
+      temp = this._classLevel(c, 'druid') * (moon ? 3 : 1);
+      if (moon){ const wis = Math.floor(((+(c.abilities && c.abilities.wis) || 10) - 10) / 2); ac = Math.max(ac, 13 + wis); }
+      hp = 0;
+    }
     // Tiny snapshot — only the fields the damage handler needs at click
     // time. Display data (actions, traits, ability scores, senses, AC desc,
     // speed) is fetched fresh from _5eData at render time using the slug.
@@ -1173,7 +1235,10 @@ registerPanel('party',{
       vulnerabilities:this._damageTypesFrom(raw.damage_vulnerabilities),
       cr: raw.challenge_rating ?? null,
     };
+    if (r24) ws.tempModel = true;
     state.party[i] = {...c, wildshape: ws};
+    // Temporary hit points don't stack: keep whichever is more.
+    if (temp > (c.tempHp || 0)) state.party[i].tempHp = temp;
     // Concentration SURVIVES wild shape. This used to clear it, citing RAW;
     // the Sage Advice Compendium says the opposite — a druid can keep
     // concentrating on a spell while transformed, because Wild Shape forbids
@@ -1184,7 +1249,7 @@ registerPanel('party',{
     // to re-render now so the chip appears instantly instead of waiting for
     // the next unrelated render. Same for _endWildShape and rage toggles.
     panelDefs.combat?._render?.();
-    showToast(c.name + ' transforms into ' + ws.name);
+    showToast(c.name + ' transforms into ' + ws.name + (temp ? ' — ' + temp + ' temporary hit points' : ''));
   },
 
   // Drop wild shape — revert to druid form. Carry any HP overflow if the
@@ -1512,20 +1577,14 @@ registerPanel('party',{
       // Healing routes to the beast pool first while wildshape is active —
       // that's the body actually taking the spell. Druid HP is unchanged
       // unless overflow remains (rare; clamped to beast hpMax).
-      if (c.wildshape && c.wildshape.name){
+      // The 2014 rule: in beast form you have the beast's hit points, and
+      // you return to your own number when you change back, so healing past
+      // the beast's maximum is lost, not passed to the druid. (A 2024 form
+      // has no beast hit points; healing goes to the druid as normal.)
+      if (c.wildshape && c.wildshape.name && !c.wildshape.tempModel){
         const beastCap = c.wildshape.hpMax || c.wildshape.hp || 0;
         const before = c.wildshape.hp || 0;
         c.wildshape.hp = Math.min(beastCap, before + delta);
-        const beastHealed = c.wildshape.hp - before;
-        const overflow = delta - beastHealed;
-        if (overflow > 0){
-          // Spillover heals the druid too (matches "regaining hit points"
-          // affecting both pools in the spirit of the rule). Clamp to druid
-          // hpMax. Most tables won't see this trigger because beast HP
-          // refills to cap fast.
-          const cap = c.hpMax || c.hp || 0;
-          c.hp = Math.min(cap, (c.hp || 0) + overflow);
-        }
       } else {
         const cap = c.hpMax || c.hp || 0;
         // Heal up from 0, never from a negative. The clamp on the damage side

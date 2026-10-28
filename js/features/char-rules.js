@@ -2042,9 +2042,14 @@ function _fxCol(ctx, label){ return sktClassColumn(ctx.cls, label, ctx.level, ct
 // ---- Barbarian
 sktDefineEffect(['class:barbarian:Rage'], ctx => {
   const n = _fxCol(ctx, 'Rages');
-  _fxPool(ctx, 'Rage', typeof n === 'number' ? n : 2, 'long');
+  // A 2014 barbarian of 20th level rages without limit (the table says
+  // "Unlimited"): no pool to count down. The 2024 Rage gives one use back on
+  // a short rest, all of them on a long one.
+  const unlimited = typeof n === 'string' && /unlimited/i.test(n);
+  if (!unlimited) _fxPool(ctx, 'Rage', typeof n === 'number' ? n : 2, ctx.edition === '2024' ? 'short-one' : 'long');
+  else _fxNote(ctx, 'Rage: unlimited uses.');
   const dmg = _fxCol(ctx, 'Rage Damage') || 2;
-  _fxAction(ctx, { name: 'Rage', action: 'Bonus Action', resource: 'Rage', amount: 1, feature: 'Rage',
+  _fxAction(ctx, { name: 'Rage', action: 'Bonus Action', resource: unlimited ? undefined : 'Rage', amount: unlimited ? 0 : 1, feature: 'Rage',
                    desc: 'Advantage on Strength checks and saves, +' + dmg + ' damage on Strength attacks, resistance to bludgeoning, piercing and slashing damage.' });
   ctx.rageDamage = dmg;
 });
@@ -2091,9 +2096,11 @@ sktDefineEffect(['class:cleric:Channel Divinity', '2014:class:cleric:Channel Div
 // ---- Druid
 sktDefineEffect(['class:druid:Wild Shape'], ctx => {
   const n = _fxCol(ctx, 'Wild Shape') || 2;
-  _fxPool(ctx, 'Wild Shape', typeof n === 'number' ? n : 2, ctx.edition === '2024' ? 'short-one' : 'short');
-  _fxAction(ctx, { name: 'Wild Shape', action: ctx.edition === '2024' ? 'Bonus Action' : 'Action', resource: 'Wild Shape',
-                   amount: 1, feature: 'Wild Shape', desc: 'Transform into a beast you have seen.' });
+  // The 2014 Archdruid (20th level) uses Wild Shape without limit.
+  const unlimited = ctx.edition === '2014' && ctx.level >= 20;
+  if (!unlimited) _fxPool(ctx, 'Wild Shape', typeof n === 'number' ? n : 2, ctx.edition === '2024' ? 'short-one' : 'short');
+  _fxAction(ctx, { name: 'Wild Shape', action: ctx.edition === '2024' ? 'Bonus Action' : 'Action', resource: unlimited ? undefined : 'Wild Shape',
+                   amount: unlimited ? 0 : 1, feature: 'Wild Shape', desc: 'Transform into a beast you have seen.' });
 });
 
 // ---- Fighter

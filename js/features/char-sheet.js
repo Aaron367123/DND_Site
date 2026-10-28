@@ -1181,15 +1181,23 @@ function csOnClick(e){
   }
   if (d.csUse){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csUse); if (!a) return;
+    const pool = a.resource ? (pc.resources || []).find(x => x.name === a.resource) : null;
+    if (pool && (+pool.current || 0) < (a.amount || 1)){ if (typeof showToast === 'function') showToast('No ' + a.resource + ' left'); return; }
+    // Wild Shape is the form picker, which spends the use when a beast is
+    // chosen (party.js _applyWildShape), so backing out costs nothing.
+    if (/^Wild Shape$/i.test(a.name) && panelDefs.party && panelDefs.party._editWildShape){
+      panelDefs.party._editWildShape(csIdx(), () => csRender());
+      return;
+    }
     // Rage turns on what raging does (resistances, the damage bonus) via the
-    // party card's own switch.
+    // party card's own switch, told the use is already spent here.
     const rage = /^Rage$/i.test(a.name) && !pc.rage;
     csEdit('Used ' + a.name, p => {
       const r = (p.resources || []).find(x => x.name === a.resource);
       if (r) r.current = Math.max(0, (r.current || 0) - (a.amount || 1));
       if (CS.embed && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(a.action));
     });
-    if (rage && panelDefs.party && panelDefs.party._setRage){ panelDefs.party._setRage(csIdx(), true); csRender(); }
+    if (rage && panelDefs.party && panelDefs.party._setRage){ panelDefs.party._setRage(csIdx(), true, { paid: true }); csRender(); }
     return;
   }
   if (d.csState != null){
@@ -1203,7 +1211,7 @@ function csOnClick(e){
     // tracker counts its minute down).
     if (s.key === 'Rage'){
       if (!s.on) csEdit('Rage', spend);
-      if (P && P._setRage) P._setRage(i, !s.on); else csEdit(s.on ? 'Rage ends' : 'Rage', p => { p.rage = !s.on; });
+      if (P && P._setRage) P._setRage(i, !s.on, { paid: true }); else csEdit(s.on ? 'Rage ends' : 'Rage', p => { p.rage = !s.on; });
       return csRender();
     }
     return csEdit((s.on ? 'Ended ' : '') + s.label, p => {
@@ -1225,12 +1233,8 @@ function csOnClick(e){
   if (d.cs === 'wildshape' && !CS.readOnly){
     const P = typeof panelDefs !== 'undefined' && panelDefs.party;
     if (!P || typeof P._editWildShape !== 'function') return;
-    P._editWildShape(csIdx(), () => {
-      // The form taken spends a use.
-      const p = state.party[csIdx()], r = p && (p.resources || []).find(x => x.name === 'Wild Shape');
-      if (r && r.current > 0){ r.current -= 1; save(); }
-      csRender();
-    });
+    // The form taken spends a use (party.js _applyWildShape).
+    P._editWildShape(csIdx(), () => csRender());
     return;
   }
   if (d.cs === 'short'){ CS.resting = { healed: 0, rolls: [] }; return csRender(); }
