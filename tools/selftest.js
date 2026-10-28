@@ -10744,6 +10744,61 @@
         try { sktMsgChanged(true); } catch(e){}
       }
     }
+    // -- Round 111: quests, kept by the DM --------------------------------------
+    {
+      const q0 = localStorage.getItem('skt-quests-v1'), Q = panelDefs.quests;
+      try {
+        localStorage.setItem('skt-quests-v1', '[]');
+        ok('quests: they sync, and only the DM writes them', SKT_SYNC_KEYS.includes('skt-quests-v1') && _DM_ONLY_KEYS.has('skt-quests-v1'));
+        Q._view = 'active'; Q._open = null;
+        openPanel('quests'); await sleep(150);
+        const w = document.querySelector('.window[data-panel="quests"]');
+        w.querySelector('[data-q-new]').click(); await sleep(30);
+        const set = (sel, v) => { const i = w.querySelector(sel); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); };
+        ok('quests: a new one opens for editing, title focused', document.activeElement === w.querySelector('.qst-card.open [data-qf="title"]'));
+        set('.qst-card.open [data-qf="title"]', 'Rescue the duke'); set('[data-qf="giver"]', 'Duke Zalto'); set('[data-qf="notes"]', 'SECRET eloped'); set('[data-qf="summary"]', 'Last seen at sea');
+        let q = sktQuests()[0];
+        ok('quests: typing saves as it goes', !!q && q.title === 'Rescue the duke' && q.giver === 'Duke Zalto' && q.notes === 'SECRET eloped' && w.querySelector('.qst-card.open .qst-title').textContent === 'Rescue the duke');
+        ok('quests: a new quest starts hidden from the players', q.shown === false && sktQuestsForPlayers().length === 0);
+        w.querySelector('[data-qs-add]').click(); await sleep(20);
+        set('[data-qs-text]', 'Find the manifest');
+        const box = w.querySelector('[data-qs-done]'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(20);
+        q = sktQuests()[0];
+        ok('quests: steps are added, named and ticked', q.steps.length === 1 && q.steps[0].text === 'Find the manifest' && q.steps[0].done === true);
+        // A redraw (another screen's change arriving) keeps the cursor where it was.
+        const g = w.querySelector('[data-qf="giver"]'); g.focus(); g.setSelectionRange(4, 4);
+        sktQuestsChanged(); await sleep(10);
+        const g2 = document.activeElement;
+        ok('quests: a redraw while typing keeps the field and the cursor', g2 && g2.dataset.qf === 'giver' && g2.selectionStart === 4);
+        w.querySelector('[data-q-shown]').click(); await sleep(20);
+        const pv = sktQuestsForPlayers();
+        ok('quests: shown, the players get it without the DM\u2019s notes', pv.length === 1 && pv[0].title === 'Rescue the duke' && !('notes' in pv[0]) && !JSON.stringify(pv).includes('SECRET'));
+        ok('quests: the card says it\u2019s shown', /Shown/.test(w.querySelector('.qst-card.open .qst-vis').textContent));
+        w.querySelector('[data-q-status="done"]').click(); await sleep(20);
+        ok('quests: marking it done moves it to Finished', sktQuests()[0].status === 'done' && Q._view === 'past' && !!w.querySelector('.qst-card.open') && /Finished \(1\)/.test(w.querySelector('[data-q-view="past"]').textContent));
+        // News for a phone: shown, finished, steps ticked, each said once.
+        localStorage.removeItem('skt-quests-seen-v1');
+        ok('quests: a device\u2019s first look announces nothing', sktQuestNews().length === 0);
+        sktQuestUpdate(sktQuests()[0].id, { status: 'active' });
+        const qb = sktQuestAdd({ title: 'Clear the road', shown: true, steps: [{ id: 'x1', text: 'a', done: false }] });
+        let news = sktQuestNews();
+        ok('quests: news says what was shown and what came back', news.includes('New quest: Clear the road') && news.includes('Quest back on: Rescue the duke'), news);
+        sktQuestUpdate(qb.id, q => ({ steps: [{ id: 'x1', text: 'a', done: true }] }));
+        ok('quests: a ticked step is news, once', sktQuestNews().join() === 'Quest updated: Clear the road' && sktQuestNews().length === 0);
+        // Delete asks first.
+        Q._view = 'active'; Q._open = qb.id; Q._render(); await sleep(20);
+        w.querySelector('[data-q-del]').click(); await sleep(60);
+        const yes = [...document.querySelectorAll('.modal button, .confirm button, [role="dialog"] button')].find(x => /^Delete$/.test(x.textContent.trim()));
+        ok('quests: delete asks first', !!yes && sktQuests().some(x => x.id === qb.id));
+        if (yes){ yes.click(); await sleep(60); }
+        ok('quests: and then it\u2019s gone', !sktQuests().some(x => x.id === qb.id));
+        closePanel('quests');
+      } catch(e){ ok('round 111 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (q0 == null) localStorage.removeItem('skt-quests-v1'); else localStorage.setItem('skt-quests-v1', q0);
+        Q._open = null; Q._view = 'active';
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -11617,6 +11672,50 @@
           }
         } catch(e){ ok('sheet: the swipe checks ran to completion', false, e.message); }
         finally { paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0); paRender(); }
+      }
+      // ── Quests ─────────────────────────────────────────────────────────────
+      {
+        const tab0 = paTab, q0 = localStorage.getItem('skt-quests-v1'), s0 = localStorage.getItem('skt-quests-seen-v1');
+        try {
+          localStorage.setItem('skt-quests-v1', JSON.stringify([
+            { id: 'qa', title: 'Rescue the duke', giver: 'Duke Zalto', summary: 'Last seen at sea', notes: 'SECRET eloped', steps: [{ id: 's1', text: 'Find the manifest', done: true }], status: 'active', shown: true, at: 2 },
+            { id: 'qb', title: 'HIDDEN goblins', status: 'active', shown: false, at: 3 },
+            { id: 'qc', title: 'Deliver the letter', status: 'done', shown: true, at: 1 }]));
+          localStorage.removeItem('skt-quests-seen-v1');
+          const onPhone = paVisibleTabs().some(t => t.id === 'more');
+          if (onPhone){
+            paTab = 'more'; paMoreSub = null; paRender(); await sleep(30);
+            const row = document.querySelector('#pa-screen [data-more="quests"]');
+            ok('player quests: More has Quests, with what\u2019s on', !!row && /1 on/.test(row.textContent) && /Rescue the duke/.test(row.textContent));
+            row.click();
+          } else {
+            paRender(); await sleep(20);
+            ok('player quests: a wide screen gets a Quests tab once one is shown', paVisibleTabs().some(t => t.id === 'quests'));
+            paTab = 'quests'; paRender();
+          }
+          await sleep(30);
+          const sc = document.getElementById('pa-screen'), t = sc.textContent;
+          ok('player quests: shown quests are listed, hidden ones and DM notes are not', /Rescue the duke/.test(t) && /Duke Zalto/.test(t) && /Find the manifest/.test(t) && !/HIDDEN|SECRET/.test(t));
+          ok('player quests: finished ones are folded away', !!sc.querySelector('details.qst-past') && !sc.querySelector('details.qst-past').open && /Deliver the letter/.test(sc.querySelector('details.qst-past').textContent));
+          // The DM shows another: it pops up.
+          paOnQuests();   // first look on this device: seeds, says nothing
+          const toasts = []; const st = showToast; showToast = function(m){ toasts.push(String(m)); };
+          try {
+            const l = JSON.parse(localStorage.getItem('skt-quests-v1')); l.find(q => q.id === 'qb').shown = true; localStorage.setItem('skt-quests-v1', JSON.stringify(l));
+            paOnQuests(); await sleep(20);
+          } finally { showToast = st; }
+          ok('player quests: a newly shown quest pops up, and the list redraws', toasts.some(x => /New quest: HIDDEN goblins/.test(x)) && /HIDDEN goblins/.test(document.getElementById('pa-screen').textContent), toasts);
+          if (onPhone){
+            window.dispatchEvent(new PopStateEvent('popstate', { state: { pa: 'base' } })); await sleep(30);
+            ok('player quests: Back returns to More', paTab === 'more' && paMoreSub === null);
+          }
+        } catch(e){ ok('player quests: the checks ran to completion', false, e.message); }
+        finally {
+          paTab = tab0; paMoreSub = null;
+          if (q0 == null) localStorage.removeItem('skt-quests-v1'); else localStorage.setItem('skt-quests-v1', q0);
+          if (s0 == null) localStorage.removeItem('skt-quests-seen-v1'); else localStorage.setItem('skt-quests-seen-v1', s0);
+          paRender();
+        }
       }
       // ── Message the DM ─────────────────────────────────────────────────────
       {

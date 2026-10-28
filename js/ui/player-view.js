@@ -105,6 +105,9 @@ function initPlayerView(){
     try {
       if (e.key === 'skt-rollreq-v1' && typeof paOnRollRequest === 'function') paOnRollRequest();
       else if (e.key === 'skt-handouts-v1' && typeof paOnHandouts === 'function') paOnHandouts();
+      else if (e.key === 'skt-quests-v1' && typeof paOnQuests === 'function') paOnQuests();
+      else if (e.key === 'skt-messages-v1' && typeof sktMsgChanged === 'function') sktMsgChanged(false);
+      else if (e.key === 'skt-gamelog-v1' && typeof paOnGameLog === 'function') paOnGameLog();
     } catch(err){ console.warn('[player view] relay', e.key, err); }
   });
 }

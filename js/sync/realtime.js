@@ -65,6 +65,7 @@ const SKT_SYNC_KEYS = [
                       // once merge instead of one overwriting the other.
   'skt-gamelog-v1',   // the table's rolls, in order (js/panels/game-log.js)
   'skt-messages-v1',  // players ↔ DM, privately (js/panels/messages.js)
+  'skt-quests-v1',    // the party's quests, kept by the DM (js/panels/quests.js)
   'skt-adventures-hidden-v1', // same idea for hidden adventures (LMoP, SKT,
                               // ToA, …). Adventure IDs match `_source` tags
                               // on items / monsters from those modules.
@@ -799,7 +800,7 @@ const _MAX_RETRIES = 4;
 // with playerWritable; this is the same rule for the keys that sync whole,
 // and until now no whole key was both DM-authored and mounted in the player
 // view, so there was nothing to express it against.
-const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2', 'skt-handouts-v1']);
+const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2', 'skt-handouts-v1', 'skt-quests-v1']);
 
 // Push one whole key; resolves to the value the server ended up holding.
 //
@@ -1322,6 +1323,9 @@ function _applyRemoteKey(key, fbVal) {
   }
   if (key === 'skt-messages-v1' && typeof sktMsgChanged === 'function'){
     try { sktMsgChanged(false); } catch(e){ _diag('messages', e); }
+  }
+  if (key === 'skt-quests-v1' && typeof sktQuestsChanged === 'function'){
+    try { sktQuestsChanged(); } catch(e){ _diag('quests', e); }
   }
   // A handout reaching a phone pops up there (player-app.js).
   if (key === 'skt-handouts-v1' && typeof paOnHandouts === 'function'){

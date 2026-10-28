@@ -419,3 +419,53 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .pa-tab { position: relative; }
 .pa-tab-dot { position: absolute; top: 6px; right: calc(50% - 16px); width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
 @media (max-width: 520px) { .msg { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } .msg-list { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 6px; } }
+
+/* ── 17. Quests ───────────────────────────────────────────── */
+.qst { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+.qst-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.qst-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
+.qst-seg button { border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--fs-sm); padding: 4px 10px; cursor: pointer; }
+.qst-seg button + button { border-left: 1px solid var(--border); }
+.qst-seg button.on { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.qst-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.qst-card { border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel-2); }
+.qst-card.open { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.qst-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%; padding: 8px 10px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.qst-title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qst-meta { flex-basis: 100%; font-size: var(--fs-xs); color: var(--text-muted); }
+.qst-vis { display: inline-flex; align-items: center; gap: 3px; font-size: var(--fs-xs); color: var(--text-muted); }
+.qst-vis .ico { width: 14px; height: 14px; }
+.qst-vis.on { color: var(--accent); }
+.qst-chip { font-size: var(--fs-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 8px; border: 1px solid currentColor; }
+.qst-chip.done { color: var(--success, #6fbf73); }
+.qst-chip.failed { color: var(--danger); }
+.qst-ed { display: flex; flex-direction: column; gap: 8px; padding: 2px 10px 10px; }
+.qst-f { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.qst-f > span { font-size: var(--fs-xs); color: var(--text-muted); }
+.qst-f textarea { resize: vertical; }
+.qst-row { display: flex; gap: 8px; }
+.qst-steps { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.qst-step { display: flex; align-items: center; gap: 6px; width: 100%; }
+.qst-step .input { flex: 1; }
+.qst-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.qst-foot .btn.danger { margin-left: auto; }
+/* What the players see */
+.qst-pc { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel-2); display: flex; flex-direction: column; gap: 5px; }
+.qst-pc + .qst-pc { margin-top: 8px; }
+.qst-pc.st-done, .qst-pc.st-failed { opacity: .75; }
+.qst-pc-h { display: flex; align-items: center; gap: 8px; }
+.qst-pc-t { font-weight: 600; flex: 1; }
+.qst-pc-g, .qst-pc-r span { font-size: var(--fs-xs); color: var(--text-muted); }
+.qst-pc-s { font-size: var(--fs-sm); }
+.qst-pc-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-sm); }
+.qst-pc-steps li { padding-left: 22px; position: relative; }
+.qst-pc-steps li::before { content: ''; position: absolute; left: 2px; top: 3px; width: 11px; height: 11px; border: 1.5px solid var(--text-muted); border-radius: 3px; }
+.qst-pc-steps li.done { color: var(--text-muted); text-decoration: line-through; }
+.qst-pc-steps li.done::before { content: '¹3'; border-color: var(--accent); background: var(--accent); color: var(--bg); font-size: 9px; font-weight: 700; line-height: 11px; text-align: center; text-decoration: none; }
+.qst-pc-r { font-size: var(--fs-sm); }
+.qst-past { margin-top: 10px; }
+.qst-past > summary { cursor: pointer; color: var(--text-muted); font-size: var(--fs-sm); padding: 4px 0; }
+.qst-past > summary + .qst-pc { margin-top: 6px; }
+.pa-quests { display: flex; flex-direction: column; gap: 8px; }
+.pa-quests .qst-pc + .qst-pc { margin-top: 0; }
+@media (max-width: 520px) { .qst-row { flex-direction: column; } }

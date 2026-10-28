@@ -108,6 +108,7 @@ const PA_TABS = [
   // The game log: its own tab on a wide screen; on a phone, More → Game log.
   { id:'log',   label:'Log',   icon:'i-dice',   when: () => !paIsPhone() },
   { id:'msg',   label:'Messages', icon:'i-chat', when: () => !paIsPhone() && !!paPc() },
+  { id:'quests', label:'Quests', icon:'i-flag', when: () => !paIsPhone() && typeof sktQuestsForPlayers === 'function' && sktQuestsForPlayers().length > 0 },
   { id:'more',  label:'More',  icon:'i-dots',   always:true, phoneOnly:true },
 ];
 
@@ -452,6 +453,34 @@ function paOnGameLog(){
   const inp2 = el.querySelector('[data-glog-input]'); if (inp2){ inp2.value = v; if (f) inp2.focus(); }
   const l2 = el.querySelector('.pa-log-list'); if (l2 && !atBottom) l2.scrollTop = y;
 }
+// More → Quests (a tab of its own on a wide screen, once the DM has shown
+// one). Read-only: the DM keeps them (js/panels/quests.js).
+function paQuestScreen(asTab){
+  return '<div class="pa-card pa-quests"><div class="pa-log-h">' + (asTab ? '' : '<button class="btn small" data-pa-logback>‹ More</button>') + '<h3>Quests</h3></div>'
+    + (typeof sktQuestListHtml === 'function' ? sktQuestListHtml(sktQuestsForPlayers()) : '') + '</div>';
+}
+function paWireQuests(el){
+  el.querySelector('[data-pa-logback]')?.addEventListener('click', () => { paMoreSub = null; paRenderScreen(); });
+}
+// The DM showed a quest, finished one or ticked off a step: say so wherever
+// the player is, and redraw what shows quests.
+function paOnQuests(){
+  if (!document.body.classList.contains('player-app') || typeof sktQuestNews !== 'function') return;
+  const news = sktQuestNews();
+  if (news.length){
+    try { navigator.vibrate && navigator.vibrate(60); } catch(e){}
+    if (typeof showToast === 'function') news.slice(0, 3).forEach(n => showToast('⚑ ' + n));
+  }
+  const tabs = paVisibleTabs();
+  if (!tabs.some(t => t.id === paTab)){ paRender(); return; }
+  if (paTab === 'quests' || (paTab === 'more' && (paMoreSub === 'quests' || !paMoreSub))){
+    const el = document.getElementById('pa-screen'), y = el ? el.scrollTop : 0;
+    const open = el ? !!el.querySelector('.qst-past[open]') : false;
+    paRenderScreen();
+    if (el){ const d = el.querySelector('.qst-past'); if (d && open) d.open = true; el.scrollTop = y; }
+  }
+  paRenderTabs(tabs);
+}
 // More → Message the DM (a tab of its own on a wide screen). The DM's reply
 // pops up wherever the player is (js/panels/messages.js).
 function paMsgScreen(asTab){
@@ -496,6 +525,8 @@ function paMoreScreen(){
   const lastRoll = typeof sktLogEntries === 'function' ? sktLogEntries().slice(-1)[0] : null;
   return '<div class="pa-card pa-more">' + paMoreWho()
     + (paPc() ? row('msg', 'i-chat', 'Message the DM' + (typeof sktMsgUnread === 'function' && sktMsgUnread().length ? ' <span class="msg-dot">' + sktMsgUnread().length + '</span>' : ''), 'Only the DM sees it') : '')
+    + (() => { const qs = typeof sktQuestsForPlayers === 'function' ? sktQuestsForPlayers() : [], on = qs.filter(q => q.status === 'active');
+        return row('quests', 'i-flag', 'Quests', on.length ? paEsc(on.length + ' on · ' + (on[0].title || 'Untitled quest')) : qs.length ? 'None on right now' : 'None yet'); })()
     + row('log', 'i-dice', 'Game log', lastRoll ? paEsc((lastRoll.who || '') + ' — ' + (lastRoll.label || 'Roll') + ': ' + lastRoll.total) : 'Everyone’s rolls, and a dice roller')
     + row('search', 'i-search', 'Search', 'Spells, monsters, items, rules')
     + row('settings', 'i-gear', 'Settings', 'Text size, theme and display')
@@ -524,6 +555,7 @@ function paWireMore(el){
     const act = b.dataset.more;
     if (act === 'log'){ paMoreSub = 'log'; paRenderScreen(); }
     else if (act === 'msg'){ paMoreSub = 'msg'; paRenderScreen(); paRenderTabs(paVisibleTabs()); }
+    else if (act === 'quests'){ paMoreSub = 'quests'; paRenderScreen(); }
     else if (act === 'search') paStartSearch();
     // Opened directly rather than by poking the hidden gear: the gear toggles
     // on mousedown, and a toggle would close a drawer that is already open.
@@ -784,6 +816,8 @@ function paRenderScreen(){
   if (paTab === 'log')   { el.innerHTML = paLogScreen(true); paWireLog(el); return; }
   if (paTab === 'more' && paMoreSub === 'msg'){ el.innerHTML = paMsgScreen(); paWireMsg(el); return; }
   if (paTab === 'msg')   { el.innerHTML = paMsgScreen(true); paWireMsg(el); return; }
+  if (paTab === 'more' && paMoreSub === 'quests'){ el.innerHTML = paQuestScreen(); paWireQuests(el); return; }
+  if (paTab === 'quests'){ el.innerHTML = paQuestScreen(true); paWireQuests(el); return; }
   if (paTab === 'more')  { el.innerHTML = paMoreScreen(); paWireMore(el); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
