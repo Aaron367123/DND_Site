@@ -10938,6 +10938,53 @@
         state.party = JSON.parse(party0); save(); try { P._render(); } catch(e){} closePanel('party');
       }
     }
+    // -- Round 115: spell and item cards -----------------------------------------
+    {
+      const party0 = JSON.stringify(state.party), print0 = window.print;
+      try {
+        window.print = () => {};
+        const R = await sktRulesLoad('2024');
+        const bd = sktBlankBuild('2024'); bd.cls = 'wizard'; bd.level = 5;
+        bd.cantrips = ['Fire Bolt']; bd.spellbook = ['Magic Missile', 'Web', 'Fireball', 'Shield', 'Mage Armor', 'Detect Magic', 'Misty Step', 'Counterspell']; bd.spells = bd.spellbook.slice();
+        bd.items = [{ name: 'Wand of Magic Missiles', rarity: 'uncommon', charges: 7 }, { name: 'Cloak of Protection', rarity: 'uncommon', reqAttune: true, attuned: true, bonusAc: 1 }, { name: 'Rope, Hempen (50 feet)' }];
+        bd.customSpells = [{ name: 'Endless Lecture', level: 1, school: 'Enchantment', text: Array(40).fill('The caster speaks at length about the history of a minor duchy, its tariffs and its many disputed borders.').join(' ') }];
+        bd.spells.push('Endless Lecture');
+        const pc = sktComputeCharacter(bd, R, {}); pc.id = 'st-cards'; pc.name = 'Card Wizard'; state.party.push(pc); save();
+        openCharSheet('st-cards'); await sleep(300);
+        document.querySelector('[data-cs="exportmenu"]').click(); await sleep(30);
+        const mi = document.querySelector('.cs-exmenu [data-cs="cards"]');
+        ok('cards: the sheet\u2019s Export menu offers spell and item cards', !!mi);
+        mi.click(); await sleep(400);
+        const m = document.getElementById('cpc-pick');
+        const rows = m ? [...m.querySelectorAll('.cpc-row span')].map(x => x.textContent) : [];
+        ok('cards: the picker lists the spells and the magic items, not the rope', ['Fire Bolt', 'Magic Missile', 'Web', 'Fireball', 'Wand of Magic Missiles', 'Cloak of Protection'].every(n => rows.includes(n)) && !rows.some(n => /Rope/.test(n)), rows.join(', '));
+        m.querySelector('[data-cpc-none="item"]').click(); await sleep(10);
+        ok('cards: None clears a list, and the count follows', m.querySelectorAll('[data-cpc-item]:checked').length === 0 && /^Print \d+ cards?$/.test(m.querySelector('[data-cpc-print]').textContent));
+        m.querySelector('[data-cpc-all="item"]').click(); await sleep(10);
+        m.querySelector('[data-cpc-print]').click(); await sleep(300);
+        const box = document.getElementById('cs-print');
+        const cards = box ? [...box.querySelectorAll('.cpc')] : [];
+        const card = n => cards.find(c => c.querySelector('.cpc-h b').textContent.startsWith(n));
+        const fb = card('Fireball');
+        ok('cards: a spell card has its level, the four boxes, the material and the save DC', !!fb && /3rd level evocation/i.test(fb.querySelector('.cpc-h small').textContent) && fb.querySelectorAll('.cpc-facts > div').length === 4 && /bat guano/i.test(fb.querySelector('.cpc-body').textContent) && /save DC \d+/.test(fb.querySelector('.cpc-foot').textContent));
+        const wand = card('Wand of Magic Missiles');
+        ok('cards: an item card has its rarity and a box per charge', !!wand && /Uncommon/.test(wand.textContent) && wand.querySelectorAll('.cpc-charges .cp-box').length === 7);
+        ok('cards: nine to a page', cards.length > 9 && box.querySelectorAll('.cpc-page').length === Math.ceil(cards.length / 9) && [...box.querySelectorAll('.cpc-page')].every((pg, k, all) => pg.querySelectorAll('.cpc').length === (k < all.length - 1 ? 9 : cards.length - 9 * (all.length - 1))));
+        const lect = cards.filter(c => /^Endless Lecture/.test(c.querySelector('.cpc-h b').textContent));
+        ok('cards: text too long for one card carries on to a second, marked', lect.length >= 2 && /continued/.test(lect[1].querySelector('.cpc-h').textContent) && !/continued/.test(card('Magic Missile').querySelector('.cpc-h').textContent));
+        ok('cards: short text is set large, long text smaller', parseFloat(card('Magic Missile').querySelector('.cpc-body').style.fontSize) >= 9.5 && parseFloat(card('Web').querySelector('.cpc-body').style.fontSize) < parseFloat(card('Magic Missile').querySelector('.cpc-body').style.fontSize));
+        // What was measured fits.
+        const meas = document.createElement('div'); meas.className = 'cpc-measure'; document.body.appendChild(meas);
+        meas.innerHTML = card('Web').outerHTML; const wb = meas.querySelector('.cpc-body');
+        ok('cards: the text set on a card fits it', wb.scrollHeight <= wb.clientHeight + 1);
+        meas.remove();
+      } catch(e){ ok('round 115 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.print = print0; document.getElementById('cs-print')?.remove(); document.getElementById('cpc-pick')?.remove();
+        if (typeof csClose === 'function' && typeof CS !== 'undefined' && CS) csClose();
+        state.party = JSON.parse(party0); save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

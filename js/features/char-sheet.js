@@ -323,6 +323,7 @@ function csHead(pc){
     + '<span class="cs-exwrap"><button class="btn" data-cs="exportmenu" aria-haspopup="true" aria-expanded="' + !!CS.exportOpen + '" title="Save or share the character">⤓ Export ▾</button>'
     + (CS.exportOpen ? '<div class="cs-exmenu" role="menu">'
       + '<button role="menuitem" data-cs="print"><b>PDF character sheet</b><small>Opens the print dialog — choose “Save as PDF”, or print it</small></button>'
+      + '<button role="menuitem" data-cs="cards"><b>Spell and item cards</b><small>Playing-card size, nine to a page, to cut out</small></button>'
       + '<button role="menuitem" data-cs="export"><b>Character file (.json)</b><small>To bring the character into another campaign</small></button>'
       + '<button role="menuitem" data-cs="copytext"><b>Copy as text</b><small>The numbers and lists, to paste into a chat or a note</small></button></div>' : '')
     + '</span>' + (CS.embed ? '<button class="btn" data-pa-swap="1" title="Play a different character">⇄ Change character</button>' : '') + '</div>'
@@ -340,7 +341,7 @@ function csHeadMenuHtml(pc, ready){
     + (!ro && built && typeof openCharBuilder === 'function' ? item('levelup', '⬆', 'Level up' + (ready ? ' — ready' : ''), (pc.build.level || 1) >= 20 ? ' disabled' : '') + item('edit', '✎', 'Edit') : '')
     + (!ro && !pc.foe ? item('customize', '⚙', 'Customize') : '')
     + (!ro && !built && !pc.foe && typeof openCharBuilder === 'function' ? item('convert', '⇪', 'Rebuild in the character builder') : '')
-    + item('print', '🖨', 'PDF / print') + item('export', '⤓', 'Character file') + item('copytext', '📋', 'Copy as text')
+    + item('print', '🖨', 'PDF / print') + item('cards', '🂠', 'Spell and item cards') + item('export', '⤓', 'Character file') + item('copytext', '📋', 'Copy as text')
     + (CS.embed ? '<button role="menuitem" data-pa-swap="1"><span class="cs-hm-i">⇄</span>Play a different character</button>' : '')
     + '</div>';
 }
@@ -596,9 +597,14 @@ function csPrint(pc){
     // boxes to keep in pencil, nothing that's a button.
     html = csPrintSheet(pc);
   } finally { CS.readOnly = ro; }
+  return csPrintHtml(html);
+}
+// Put something on paper: it's the only thing the print stylesheet shows,
+// and it goes away when the dialog closes. cls: 'cs-print-cards' for cards.
+function csPrintHtml(html, cls){
   document.getElementById('cs-print')?.remove();
   const box = document.createElement('div');
-  box.id = 'cs-print'; box.className = 'cs cs-print'; box.innerHTML = html;
+  box.id = 'cs-print'; box.className = 'cs cs-print' + (cls ? ' ' + cls : ''); box.innerHTML = html;
   document.body.appendChild(box);
   const done = () => { box.remove(); window.removeEventListener('afterprint', done); };
   window.addEventListener('afterprint', done);
@@ -1028,6 +1034,7 @@ function csOnClick(e){
   const d = t.dataset, pc = csPc(); if (!pc) return;
   if (d.cs === 'close') return csClose();
   if (d.cs === 'print'){ if (CS.exportOpen){ CS.exportOpen = false; csRender(); } return csPrint(pc); }
+  if (d.cs === 'cards'){ if (CS.exportOpen || CS.headMenu){ CS.exportOpen = false; CS.headMenu = false; csRender(); } return csCardsPick(pc); }
   if (d.cs === 'portrait' && !CS.readOnly){
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
     inp.addEventListener('change', async ev => {

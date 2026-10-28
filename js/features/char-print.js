@@ -203,3 +203,151 @@ function csCharacterText(pc){
   out.push('Coins: ' + (purse || 'none'));
   return out.join('\n');
 }
+
+// ── Spell and item cards ─────────────────────────────────────────────────────
+// Playing-card size (2.5 × 3.5 in), nine to a page with cut lines, for the
+// table: a spell's casting time, range, components and duration across the
+// top, its text below, the character's save DC and attack bonus at the foot;
+// a magic item's rarity, attunement and charges to tick. Each card's text is
+// set as large as fits (measured, cpLayCards); text too long even at the
+// smallest size carries on to a second card, marked "continued".
+const CP_SCHOOL = { A: 'abjuration', C: 'conjuration', D: 'divination', E: 'enchantment', V: 'evocation', I: 'illusion', N: 'necromancy', T: 'transmutation' };
+const CP_SIZES = [10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6];   // px, largest first
+function cpLevelLine(s){
+  const school = (CP_SCHOOL[s.school] || String(s.school || '')).toLowerCase();
+  const lv = +s.level || 0;
+  const tags = [s.concentration ? 'concentration' : '', s.ritual ? 'ritual' : ''].filter(Boolean);
+  return (lv ? CP_ORD[lv] + (school ? ' ' + school : '') : (school ? _csTitle(school) + ' cantrip' : 'Cantrip')) + (tags.length ? ' · ' + tags.join(', ') : '');
+}
+// A spell's four boxes and its material component, in words.
+function cpSpellFacts(s){
+  const t = [].concat(s.time || [])[0], r = s.range || {}, du = [].concat(s.duration || [])[0] || {}, c = s.components || {};
+  const time = t ? t.number + ' ' + String(t.unit).replace('bonus', 'bonus action') + (t.number > 1 ? 's' : '') : '—';
+  const range = r.type === 'point' && r.distance ? (r.distance.amount ? r.distance.amount + ' ' + r.distance.type : _csTitle(r.distance.type))
+    : r.type && r.distance ? (r.distance.amount || '') + '-' + String(r.distance.type).replace(/s$/, '') + ' ' + r.type : r.type ? _csTitle(r.type) : '—';
+  const dur = du.type === 'timed' && du.duration ? (du.concentration ? 'Up to ' : '') + du.duration.amount + ' ' + du.duration.type + (du.duration.amount > 1 ? 's' : '')
+    : du.type === 'instant' ? 'Instantaneous' : du.type === 'permanent' ? 'Until dispelled' : _csTitle(du.type || '—');
+  const comp = [c.v ? 'V' : '', c.s ? 'S' : '', c.m ? 'M' : ''].filter(Boolean).join(', ') || '—';
+  const mat = c.m ? (typeof c.m === 'string' ? c.m : c.m.text || '') : '';
+  return { time, range, comp, dur, mat };
+}
+// Where to cut text in two for a second card: a paragraph or sentence end
+// near the middle.
+function cpHalve(text){
+  const t = String(text || ''), mid = Math.floor(t.length / 2);
+  const near = (i, j) => (i < 0 ? j : j < 0 ? i : Math.abs(i - mid) <= Math.abs(j - mid) ? i : j);
+  let cut = near(t.lastIndexOf('\n', mid), t.indexOf('\n', mid));
+  if (cut < t.length * 0.3 || cut > t.length * 0.7) cut = near(t.lastIndexOf('. ', mid) + 1, t.indexOf('. ', mid) + 1);
+  if (cut <= 0 || cut >= t.length) cut = t.lastIndexOf(' ', mid) > 0 ? t.lastIndexOf(' ', mid) : mid;
+  return [t.slice(0, cut).trim(), t.slice(cut).trim()];
+}
+function cpCardHtml(c){
+  return '<div class="cpc cpc-' + c.kind + '"><div class="cpc-h"><b>' + csE(c.title) + (c.cont ? ' <small>(continued)</small>' : '') + '</b>' + (c.sub ? '<small>' + csE(c.sub) + '</small>' : '') + '</div>'
+    + (c.facts || '') + '<div class="cpc-body"' + (c.size ? ' style="font-size:' + c.size + 'px"' : '') + '>' + cpText(c.body) + '</div><div class="cpc-foot">' + csE(c.foot) + '</div></div>';
+}
+// Measure each card at the print size, off screen: the largest text size
+// whose text fits; failing even the smallest, split it and try both halves.
+function cpLayCards(cards){
+  const host = document.createElement('div');
+  host.className = 'cpc-measure'; document.body.appendChild(host);
+  const out = [];
+  try {
+    const queue = cards.slice();
+    while (queue.length){
+      const c = queue.shift();
+      host.innerHTML = cpCardHtml(c);
+      const body = host.querySelector('.cpc-body');
+      let fit = 0;
+      for (const px of CP_SIZES){ body.style.fontSize = px + 'px'; if (body.scrollHeight <= body.clientHeight + 1){ fit = px; break; } }
+      if (fit || String(c.body).length < 80){ out.push(Object.assign({}, c, { size: fit || CP_SIZES[CP_SIZES.length - 1] })); continue; }
+      const [one, two] = cpHalve(c.body);
+      queue.unshift(Object.assign({}, c, { body: one }), Object.assign({}, c, { body: two, cont: true, sub: '', facts: '' }));
+    }
+  } finally { host.remove(); }
+  return out;
+}
+function cpSpellCards(pc, name){
+  const s = csSpell(name); if (!s) return [];
+  const f = cpSpellFacts(s), sh = pc.sheet || {};
+  const text = s.custom ? (s.entries || []).join('\n') : typeof sktRulesText === 'function' ? sktRulesText([].concat(s.entries || [])) : '';
+  const higher = s.custom ? '' : typeof sktRulesText === 'function' ? sktRulesText([].concat(s.higher || s.entriesHigherLevel || [])) : '';
+  const full = (f.mat ? '(' + f.mat + ')\n' : '') + text + (higher ? '\n' + higher : '');
+  const facts = '<div class="cpc-facts">' + [['Casting time', f.time], ['Range', f.range], ['Components', f.comp], ['Duration', f.dur]].map(([l, v]) => '<div><small>' + l + '</small>' + csE(v) + '</div>').join('') + '</div>';
+  const atk = sh.spellAtkBonus;
+  const foot = pc.name + (sh.spellSaveDc ? ' · save DC ' + sh.spellSaveDc + (atk != null && atk !== '' ? ' · ' + (/^[+-]/.test(String(atk)) ? atk : csSigned(atk)) + ' to hit' : '') : '');
+  return [{ kind: 'spell', title: s.name, sub: cpLevelLine(s), facts, body: full, foot }];
+}
+// The text of a carried item, plain: the magic item list, the rules' item,
+// or the search data.
+function cpItemInfo(m){
+  const n = String(m.name || '').toLowerCase();
+  const named = (CS.magic || []).find(x => String(x.name).toLowerCase() === n);
+  const bi = m.base && CS.R && CS.R.items ? CS.R.items[m.base] : null;
+  const d = typeof _5eData !== 'undefined' && Array.isArray(_5eData) ? _5eData.find(x => x.cat === 'item' && String(x.name).toLowerCase() === n) : null;
+  const raw = (d && d._raw) || {};
+  const rarity = m.rarity || (named && named.rarity) || raw.rarity || '';
+  const attune = m.reqAttune || (named && named.reqAttune) || raw.reqAttune;
+  const text = (named && named.text) || (m.custom && m.text) || (bi && bi.entries && typeof sktRulesText === 'function' ? sktRulesText(bi.entries) : '')
+    || (raw.entries && typeof sktRulesText === 'function' ? sktRulesText(raw.entries) : '');
+  return { rarity: /^(none|unknown)/i.test(rarity) ? '' : rarity, attune: !!attune, text };
+}
+// Which items get a card: the magic ones, and anything with charges or text
+// of your own (a plain sword is on the sheet already).
+function cpCardItems(pc){
+  return csItems(pc).filter(m => { const i = cpItemInfo(m); return !!(i.rarity || i.attune || +m.charges > 0 || m.bonusWeapon || m.bonusAc || (m.custom && i.text)); });
+}
+function cpItemCards(pc, m){
+  const i = cpItemInfo(m);
+  const sub = [i.rarity ? _csTitle(i.rarity) : 'Item', i.attune ? 'requires attunement' : ''].filter(Boolean).join(' · ');
+  const facts = +m.charges > 0 ? '<div class="cpc-charges"><small>Charges</small> ' + cpBoxes(m.charges) + '</div>' : '';
+  const body = i.text || (m.custom ? 'Your own item.' : '');
+  return [{ kind: 'item', title: m.name, sub, facts, body, foot: pc.name + (m.attuned ? ' · attuned' : '') }];
+}
+function csPrintCards(pc, picks){
+  const cards = [];
+  (picks.spells || []).forEach(n => cards.push(...cpSpellCards(pc, n)));
+  const items = cpCardItems(pc);
+  (picks.items || []).forEach(n => { const m = items.find(x => x.name === n); if (m) cards.push(...cpItemCards(pc, m)); });
+  const laid = cpLayCards(cards).map(cpCardHtml), pages = [];
+  for (let k = 0; k < laid.length; k += 9) pages.push('<section class="cpc-page">' + laid.slice(k, k + 9).join('') + '</section>');
+  return pages.join('');
+}
+// Choose the cards, then print. Everything is ticked to start.
+async function csCardsPick(pc){
+  const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
+  if (!CS.magic && typeof sktMagicLoad === 'function'){ try { CS.magic = await sktMagicLoad(ed); } catch(e){} }
+  const spells = ((pc.sheet || {}).spells || []).filter(n => csSpell(n)).map(n => ({ n, lv: +csSpell(n).level || 0 })).sort((a, b) => a.lv - b.lv || a.n.localeCompare(b.n));
+  const items = cpCardItems(pc);
+  const any = spells.length || items.length;
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop'; back.id = 'cpc-pick';
+  const row = (kind, n, sub) => '<label class="cpc-row"><input type="checkbox" checked data-cpc-' + kind + '="' + csE(n) + '"> <span>' + csE(n) + '</span>' + (sub ? ' <small>' + csE(sub) + '</small>' : '') + '</label>';
+  const list = (kind, title, rows) => '<div><div class="cpc-lh"><b>' + title + '</b><button class="btn small" data-cpc-all="' + kind + '">All</button><button class="btn small" data-cpc-none="' + kind + '">None</button></div>' + rows + '</div>';
+  back.innerHTML = '<div class="modal cpc-modal" role="dialog" aria-modal="true" aria-label="Spell and item cards"><h3>Spell and item cards</h3>'
+    + '<p class="cpc-note">Playing-card size, nine to a page. Print them, or choose “Save as PDF”.</p>'
+    + (any ? '<div class="cpc-lists">'
+      + (spells.length ? list('spell', 'Spells', spells.map(x => row('spell', x.n, x.lv ? CP_ORD[x.lv] : 'cantrip')).join('')) : '')
+      + (items.length ? list('item', 'Items', items.map(m => row('item', m.name, _csTitle(cpItemInfo(m).rarity))).join('')) : '')
+      + '</div>' : '<p class="cpc-note">No spells or magic items to make cards of yet.</p>')
+    + '<div class="modal-actions"><button class="btn" data-cpc-close>Cancel</button><button class="btn primary" data-cpc-print>Print</button></div></div>';
+  document.body.appendChild(back);
+  const btn = back.querySelector('[data-cpc-print]');
+  const count = () => { const n = back.querySelectorAll('input:checked').length; btn.textContent = n ? 'Print ' + n + ' card' + (n === 1 ? '' : 's') : 'Print'; btn.disabled = !n; };
+  count();
+  const close = () => back.remove();
+  back.addEventListener('change', count);
+  back.addEventListener('click', e => {
+    const t = e.target;
+    if (t === back || t.closest('[data-cpc-close]')) return close();
+    const k = t.dataset && (t.dataset.cpcAll || t.dataset.cpcNone);
+    if (k){ back.querySelectorAll('[data-cpc-' + k + ']').forEach(x => { x.checked = !!t.dataset.cpcAll; }); return count(); }
+    if (t.closest('[data-cpc-print]')){
+      const picks = { spells: [...back.querySelectorAll('[data-cpc-spell]:checked')].map(x => x.dataset.cpcSpell),
+                      items: [...back.querySelectorAll('[data-cpc-item]:checked')].map(x => x.dataset.cpcItem) };
+      close();
+      csPrintHtml(csPrintCards(pc, picks), 'cs-print-cards');
+    }
+  });
+  back.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  return back;
+}
