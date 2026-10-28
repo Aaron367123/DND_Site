@@ -325,3 +325,22 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
   #cs-root .cs-boxes > .cs-inspbox .cs-insp-h { flex-direction: row; justify-content: center; gap: 8px; padding: 5px 8px; }
   #cs-root .cs-boxes > .cs-inspbox .cs-insp-h b { font-size: 17px; }
 }
+
+/* ── 12. Hit points: compact, plain ───────────────────────── */
+/* Four lines before: the number, the bar, the buttons, and the damage type
+   on a line of its own. Now the number with the bar beside it, and one row
+   of controls. The same plain frame as the stat boxes. */
+#cs-root .cs-hp:nth-child(n) {
+  clip-path: none; border: 1px solid var(--fx-line); border-radius: 8px; background: var(--fx-fill);
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; row-gap: 6px; align-items: center; padding: 8px 10px;
+}
+#cs-root .cs-hp:nth-child(n)::before { content: none; }
+#cs-root .cs-hp > .cs-hp-loss, #cs-root .cs-hp > .cs-hp-ctl { grid-column: 1 / -1; }
+#cs-root .cs-hp-n b { font-size: 28px; line-height: 1; }
+#cs-root .cs-hp-n span { font-size: 15px; }
+#cs-root .cs-hpbar { margin: 0; }
+#cs-root .cs-hp-ctl { flex-wrap: nowrap; gap: 5px; }
+#cs-root .cs-hp-ctl input { width: 52px; min-width: 0; flex: 0 0 52px; }
+#cs-root .cs-hp-ctl .btn { padding: 4px 9px; min-height: 32px; flex: 0 0 auto; }
+#cs-root .cs-hp-ctl .cb-sel { flex: 0 1 150px; min-width: 0; width: auto; }
+#cs-root .cs-hp-ctl input, #cs-root .cs-hp-ctl .cb-sel { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }

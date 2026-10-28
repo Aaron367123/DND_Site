@@ -8856,8 +8856,12 @@
         const pc = state.party.find(p => !p.foe);
         openCharSheet(pc.id); await sleep(200);
         const r = document.getElementById('cs-root');
-        ok('frames: the sheet\'s ability scores, stat boxes and hit points are framed', framed(r.querySelector('.cs-ab')) && framed(r.querySelector('.cs-box')) && framed(r.querySelector('.cs-hp')));
-        ok('frames: AC is a shield on the sheet', shield(r.querySelector('.cs-boxes > .cs-box:first-child')), getComputedStyle(r.querySelector('.cs-boxes > .cs-box:first-child')).clipPath.slice(0, 60));
+        // The stat boxes and hit points were framed too (AC a shield, the rest
+        // hexagons) until Aaron asked for them plain: one border, no notched
+        // corners. The ability scores keep their plaques.
+        const plainBox = el => !!el && getComputedStyle(el).clipPath === 'none' && getComputedStyle(el, '::before').content === 'none' && parseFloat(getComputedStyle(el).borderTopWidth) > 0;
+        ok('frames: the sheet’s ability scores are framed; its stat boxes and hit points are plain boxes', framed(r.querySelector('.cs-ab')) && plainBox(r.querySelector('.cs-box')) && plainBox(r.querySelector('.cs-hp')));
+        ok('frames: the sheet’s AC is a plain box like its neighbours, not a shield', plainBox(r.querySelector('.cs-boxes > .cs-box:first-child')), getComputedStyle(r.querySelector('.cs-boxes > .cs-box:first-child')).clipPath.slice(0, 60));
         csClose();
         openPanel('party'); await sleep(250);
         const card = panelDefs.party._body.querySelector('.char-card');
