@@ -59,6 +59,7 @@ function openCharSheet(id, opts){
   root.addEventListener('click', csOnClick);
   root.addEventListener('change', csOnChange);
   root.addEventListener('input', csOnInput);
+  csSwipeInit(root);
   if (!host) document.addEventListener('keydown', csOnKey);
   csRender();
   // The rules data, for spell details and for working a built character out
@@ -87,6 +88,10 @@ function csRender(){
   const root = document.getElementById('cs-root'); if (!root || !CS) return;
   const pc = csPc(); if (!pc){ csClose(); return; }
   const keep = [...root.querySelectorAll('[data-cs-scroll]')].map(e => [e.dataset.csScroll, e.scrollTop]);
+  // The tab row scrolls sideways on a phone, and every redraw put it back at
+  // the start — pick Inventory and the row jumped to Abilities, the tab you
+  // were on out of sight.
+  const tabsX = root.querySelector('.cs-tabs')?.scrollLeft || 0;
   root.style.setProperty('--cs-accent', pc.theme || '');
   root.classList.toggle('themed', !!pc.theme);
   // cs-body is what scrolls on a phone (the side column is a tab there):
@@ -99,6 +104,82 @@ function csRender(){
     + '<nav class="cs-tabs">' + CS_TABS.map(t => '<button class="cs-tab' + (t.phone ? ' cs-phone' : '') + (CS.tab === t.id ? ' on' : '') + '" data-cs-tab="' + t.id + '">' + t.label + '</button>').join('') + '</nav>'
     + '<div class="cs-pane">' + (CS_TAB_RENDER[CS.tab] || (() => ''))(pc) + '</div></div></div>';
   keep.forEach(([k, t]) => { const e = root.querySelector('[data-cs-scroll="' + k + '"]'); if (e) e.scrollTop = t; });
+  const tabs = root.querySelector('.cs-tabs');
+  if (tabs){
+    tabs.scrollLeft = tabsX;
+    // …and the tab you're on is wholly in view.
+    const on = tabs.querySelector('.cs-tab.on');
+    if (on){
+      const l = on.offsetLeft - tabs.offsetLeft, r = l + on.offsetWidth;
+      if (l < tabs.scrollLeft + 8) tabs.scrollLeft = Math.max(0, l - 24);
+      else if (r > tabs.scrollLeft + tabs.clientWidth - 8) tabs.scrollLeft = r - tabs.clientWidth + 24;
+    }
+  }
+}
+// The sheet's tabs as shown here — on a phone Abilities is one of them, on a
+// wide screen it's the side column instead.
+function csVisibleTabs(){
+  return [...document.querySelectorAll('#cs-root .cs-tabs .cs-tab')].filter(b => b.offsetParent !== null).map(b => b.dataset.csTab);
+}
+// Go to a tab, keeping your place in the sheet when you can.
+function csGoTab(id){
+  CS.tab = id; csRender();
+  // Measured from the tab's content, not the bar: the bar is sticky, so
+  // once scrolled past it reports where it's stuck, not where it sits.
+  const body = document.querySelector('#cs-root .cs-body'), tabs = document.querySelector('#cs-root .cs-tabs'), pane = document.querySelector('#cs-root .cs-pane');
+  if (body && tabs && pane && body.scrollHeight > body.clientHeight + 4){
+    const y = pane.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - tabs.offsetHeight;
+    if (body.scrollTop > y) body.scrollTop = Math.max(0, y);
+  }
+}
+// Swipe left or right across the sheet to the next or previous tab. Only the
+// sheet's own tabs: the phone's You / Map / Party bar is buttons only. Not
+// from anything that scrolls sideways itself (the tab row, the spell levels)
+// or that takes typing, and only a clearly sideways, quick stroke — a scroll
+// that drifts a little must stay a scroll.
+function csSwipeInit(root){
+  let s = null, g = null;
+  // A text field counts only while you're typing in it (a sideways drag
+  // there moves the cursor). Otherwise a stroke that happens to start on one
+  // — easy on a phone, which snaps a touch to the nearest control — still
+  // turns the page.
+  const scroller = el => { for (let e = el; e && e !== root; e = e.parentElement){ if (e.matches && e.matches('input, textarea') && (e === document.activeElement || e.tagName === 'TEXTAREA')) return e; const ox = getComputedStyle(e).overflowX; if ((ox === 'auto' || ox === 'scroll') && e.scrollWidth > e.clientWidth + 2) return e; } return null; };
+  root.addEventListener('touchstart', e => {
+    s = null; g = null;
+    if (e.touches.length !== 1 || !CS) return;
+    const t = e.target; if (!t.closest || !t.closest('.cs-body')) return;
+    const sc = scroller(t);
+    // Every sideways stroke in the sheet is watched (g); only one that starts
+    // on plain content can turn the page (s).
+    g = { x: e.touches[0].clientX, y: e.touches[0].clientY, sc, dir: 0 };
+    if (sc || t.closest('select, [contenteditable="true"], .cs-tabs')) return;
+    s = { x: g.x, y: g.y, at: Date.now() };
+  }, { passive: true });
+  // Not passive: a sideways stroke the sheet owns, or one that runs past the
+  // end of a row or a text field, is stopped here. Left to the browser, phone
+  // Chrome reads it as Back — past the app's own history and out of the app.
+  // Vertical scrolling and a row's own sideways scrolling are untouched.
+  root.addEventListener('touchmove', e => {
+    if (!g || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - g.x, dy = e.touches[0].clientY - g.y;
+    if (!g.dir && Math.abs(dx) + Math.abs(dy) > 8) g.dir = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    if (g.dir === 'y'){ s = null; return; }
+    if (g.dir !== 'x' || !e.cancelable) return;
+    const sc = g.sc;
+    const atEnd = !sc || (dx > 0 ? sc.scrollLeft <= 0 : sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 1);
+    if (atEnd) e.preventDefault();
+  }, { passive: false });
+  root.addEventListener('touchend', e => {
+    g = null;
+    if (!s || !CS) return;
+    const c = e.changedTouches[0], dx = c.clientX - s.x, dy = c.clientY - s.y, dt = Date.now() - s.at; s = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || dt > 800) return;
+    const ids = csVisibleTabs(), i = ids.indexOf(CS.tab);
+    const next = ids[i + (dx < 0 ? 1 : -1)];
+    if (i < 0 || !next) return;
+    csGoTab(next);
+  }, { passive: true });
+  root.addEventListener('touchcancel', () => { s = null; g = null; }, { passive: true });
 }
 // Save, mirror to the combat card, redraw everything that shows this PC.
 function csCommit(){
@@ -902,14 +983,7 @@ function csOnClick(e){
   }
   if (d.cs === 'closetext'){ CS.textOut = null; return csRender(); }
   if (d.csTab){
-    CS.tab = d.csTab; csRender();
-    // Measured from the tab's content, not the bar: the bar is sticky, so
-    // once scrolled past it reports where it's stuck, not where it sits.
-    const body = document.querySelector('#cs-root .cs-body'), tabs = document.querySelector('#cs-root .cs-tabs'), pane = document.querySelector('#cs-root .cs-pane');
-    if (body && tabs && pane && body.scrollHeight > body.clientHeight + 4){
-      const y = pane.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - tabs.offsetHeight;
-      if (body.scrollTop > y) body.scrollTop = Math.max(0, y);
-    }
+    csGoTab(d.csTab);
     return;
   }
   if (d.csMode){ CS.mode = d.csMode; return csRender(); }

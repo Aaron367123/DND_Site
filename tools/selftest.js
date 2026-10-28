@@ -11367,6 +11367,53 @@
         } catch(e){ ok('player: the menu checks ran to completion', false, e.message); }
         finally { paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0); paRender(); }
       }
+      // ── The sheet: swipe between its tabs; the tab row keeps its place ─────
+      {
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab;
+        try {
+          if ((state.party || []).length && typeof Touch === 'function'){
+            paSetPc(state.party[0].id); paTab = 'you'; paRender(); await sleep(80);
+            const root = document.getElementById('cs-root');
+            const tabsOn = () => [...root.querySelectorAll('.cs-tabs .cs-tab')].filter(b => b.offsetParent !== null).map(b => b.dataset.csTab);
+            // A stroke through the given points, relative to the element's top.
+            const stroke = async (el, pts) => {
+              const r = el.getBoundingClientRect(), y = r.top + Math.min(r.height / 2, 40);
+              const tch = p => new Touch({ identifier: 7, target: el, clientX: p[0], clientY: y + p[1] });
+              el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [tch(pts[0])], changedTouches: [tch(pts[0])] }));
+              for (const p of pts.slice(1)) el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [tch(p)], changedTouches: [tch(p)] }));
+              el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [tch(pts[pts.length - 1])] }));
+              await sleep(30);
+            };
+            const swipe = (el, x0, x1) => stroke(el, [[x0, 0], [x0 + (x1 - x0) / 3, 2], [x0 + (x1 - x0) * 2 / 3, 3], [x1, 4]]);
+            const ids = tabsOn();
+            if (ids.length > 2){
+              CS.tab = ids[0]; csRender();
+              await swipe(root.querySelector('.cs-pane'), 300, 60);
+              ok('sheet: swiping left goes to the next tab', CS.tab === ids[1], CS.tab);
+              await swipe(root.querySelector('.cs-pane'), 60, 300);
+              ok('sheet: swiping right goes back', CS.tab === ids[0], CS.tab);
+              // Starts as a scroll, then drifts sideways: still a scroll.
+              await stroke(root.querySelector('.cs-pane'), [[300, 0], [300, -60], [220, -90], [90, -100]]);
+              ok('sheet: a scroll that drifts sideways stays on the tab', CS.tab === ids[0], CS.tab);
+              await swipe(root.querySelector('.cs-tabs'), 300, 60);
+              ok('sheet: a swipe on the tab row doesn’t change tab', CS.tab === ids[0], CS.tab);
+              // The tab row stays where it was when a tab is picked.
+              const row = root.querySelector('.cs-tabs');
+              if (row.scrollWidth > row.clientWidth + 10){
+                row.scrollLeft = row.scrollWidth; const x0 = row.scrollLeft;
+                // A tab already in view (the left-most wholly visible one): the
+                // row has no reason to move at all.
+                const rr = row.getBoundingClientRect();
+                const far = [...row.querySelectorAll('.cs-tab')].filter(b => b.offsetParent !== null).find(b => { const br = b.getBoundingClientRect(); return br.left >= rr.left + 30 && br.right <= rr.right - 30; });
+                far.click(); await sleep(30);
+                const row2 = document.querySelector('#cs-root .cs-tabs');
+                ok('sheet: picking a tab far along the row keeps the row where it was', row2.scrollLeft > 0 && Math.abs(row2.scrollLeft - x0) < 60, row2.scrollLeft + ' vs ' + x0);
+              }
+            }
+          }
+        } catch(e){ ok('sheet: the swipe checks ran to completion', false, e.message); }
+        finally { paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0); paRender(); }
+      }
       // ── The phone's Back button steps back inside the app ─────────────────
       {
         const tab0 = paTab, backWas = history.back; let left = 0;
