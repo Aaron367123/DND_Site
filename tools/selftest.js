@@ -10860,8 +10860,8 @@
       try {
         showToast = function(m){ toasts.push(String(m)); };
         openPanel('party'); await sleep(150);
-        const B = { id: 'st-barb', name: 'Test Barbarian', cls: 'barbarian', hp: 30, hpMax: 30, resources: [{ name: 'Rage', current: 2, max: 2, recharge: 'long' }] };
-        const D = { id: 'st-druid', name: 'Test Druid', cls: 'druid', level: 4, hp: 15, hpMax: 20, abilities: { wis: 16 }, resources: [{ name: 'Wild Shape', current: 2, max: 2, recharge: 'short' }] };
+        const B = { id: 'st-barb', name: 'Test Barbarian', cls: 'barbarian', rules: '2014', hp: 30, hpMax: 30, resources: [{ name: 'Rage', current: 2, max: 2, recharge: 'long' }] };
+        const D = { id: 'st-druid', name: 'Test Druid', cls: 'druid', rules: '2014', level: 4, hp: 15, hpMax: 20, abilities: { wis: 16 }, resources: [{ name: 'Wild Shape', current: 2, max: 2, recharge: 'short' }] };
         state.party.push(B, D); P._render(); await sleep(30);
         const bi = () => state.party.findIndex(p => p.id === 'st-barb'), di = () => state.party.findIndex(p => p.id === 'st-druid');
         const b = () => state.party[bi()], d = () => state.party[di()], uses = (c, n) => c.resources.find(r => r.name === n).current;
@@ -10902,6 +10902,20 @@
         ok('wild shape 2024: temporary hit points of 3 \u00d7 druid level (Moon), AC 13 + WIS', d().tempHp === 18 && d().wildshape.ac >= 16 && d().wildshape.tempModel === true);
         P._applyHpDelta(di(), -10); await sleep(10);
         ok('wild shape 2024: damage comes off the temporary hit points, the form stays', d().tempHp === 8 && d().hp === 20 && !!d().wildshape);
+        // A character imported with no edition plays by 2024, and its pools
+        // (no recharge written on them) still come back on a short rest.
+        const I = { id: 'st-imp', name: 'Imported', cls: 'fighter', level: 6, hp: 40, hpMax: 40, resources: [
+          { name: 'Rage', current: 0, max: 4 }, { name: 'Wild Shape', current: 0, max: 3 }, { name: 'Second Wind', current: 0, max: 3 },
+          { name: 'Action Surge', current: 0, max: 1 }, { name: 'Focus Points', current: 0, max: 6 }, { name: 'Bardic Inspiration', current: 0, max: 4 },
+          { name: 'Psychic Dice', current: 0, max: 6 }, { name: 'Breath', current: 0, max: 3 }] };
+        state.party.push(I);
+        ok('edition: a character imported without one plays by 2024', P._rulesOf(I) === '2024' && P._rulesOf({ rules: '2014' }) === '2014');
+        P._shortRestOne(I, state.party.indexOf(I));
+        const got = Object.fromEntries(I.resources.map(r => [r.name, r.current]));
+        ok('short rest: an imported 2024 character gets back what the rules give', got['Rage'] === 1 && got['Wild Shape'] === 1 && got['Second Wind'] === 1 && got['Action Surge'] === 1 && got['Focus Points'] === 6 && got['Bardic Inspiration'] === 4 && got['Psychic Dice'] === 1 && got['Breath'] === 0, JSON.stringify(got));
+        I.rules = '2014'; I.resources.forEach(r => { r.current = 0; }); P._shortRestOne(I, state.party.indexOf(I));
+        const g14 = Object.fromEntries(I.resources.map(r => [r.name, r.current]));
+        ok('short rest: and a 2014 one what the 2014 rules give', g14['Rage'] === 0 && g14['Wild Shape'] === 3 && g14['Second Wind'] === 3 && g14['Psychic Dice'] === 0, JSON.stringify(g14));
         // The engine: unlimited at 20 (2014), and 2024 Rage's short rest.
         const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
         const mk = (ed, cls, L) => { const x = sktBlankBuild(ed); x.cls = cls; x.level = L; return x; };

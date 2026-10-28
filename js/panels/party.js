@@ -864,8 +864,31 @@ registerPanel('party',{
   RAGE_ROUNDS_2024: 100,
 
   // Which rules a character plays by: the builder's edition, else what an
-  // import recorded, else 2014 (the campaign's book).
-  _rulesOf(c){ return (c && ((c.build && c.build.edition) || c.rules)) === '2024' ? '2024' : '2014'; },
+  // import recorded, else 2024 — as everywhere else (the sheet, hit dice on
+  // a long rest). The table plays the 2024 rules with legacy books allowed.
+  _rulesOf(c){ return (c && ((c.build && c.build.edition) || c.rules)) === '2014' ? '2014' : '2024'; },
+  // How a pool comes back. The builder writes it on each pool; an imported
+  // character's pools have no such field, and so got nothing back on a short
+  // rest at all — Rage, Wild Shape, Second Wind, Action Surge, Focus Points.
+  // For those, the feature's name and the edition say.
+  _RECHARGE_BY_NAME: [
+    [/^rage$/i,                                   { '2024': 'short-one', '2014': 'long' }],
+    [/^wild shape$/i,                             { '2024': 'short-one', '2014': 'short' }],
+    [/^second wind$/i,                            { '2024': 'short-one', '2014': 'short' }],
+    [/^channel divinity/i,                        { '2024': 'short-one', '2014': 'short' }],
+    [/^action surge$/i,                           'short'],
+    [/^(focus|ki)( points)?$/i,                   'short'],
+    [/^superiority dice$/i,                       'short'],
+    [/^(psychic dice|psionic (energy|power|dice))$/i, { '2024': 'short-one', '2014': 'long' }],
+    [/^bardic inspiration$/i,                     (c, self) => self._classLevel(c, 'bard') >= 5 ? 'short' : 'long'],
+  ],
+  _rechargeOf(c, r){
+    if (r.recharge) return r.recharge;
+    const hit = this._RECHARGE_BY_NAME.find(([re]) => re.test(String(r.name || '').trim()));
+    if (!hit) return /short\s*rest/i.test(r.name || '') ? 'short' : '';
+    const v = hit[1];
+    return typeof v === 'function' ? v(c, this) : typeof v === 'string' ? v : v[this._rulesOf(c)];
+  },
   // A class's own levels (a multiclass druid's Wild Shape goes by druid
   // levels), else the character's level.
   _classLevel(c, key){
@@ -880,7 +903,8 @@ registerPanel('party',{
     const r = (c.resources || []).find(x => x.name === name);
     if (!r) return true;
     if ((+r.current || 0) <= 0){
-      if (typeof showToast === 'function') showToast('No ' + what + ' left — ' + (r.recharge === 'short' || r.recharge === 'short-one' ? 'a short rest brings ' + (r.recharge === 'short-one' ? 'one' : 'them') + ' back' : 'a long rest brings them back'));
+      const rc = this._rechargeOf(c, r);
+      if (typeof showToast === 'function') showToast('No ' + what + ' left — ' + (rc === 'short' || rc === 'short-one' ? 'a short rest brings ' + (rc === 'short-one' ? 'one' : 'them') + ' back' : 'a long rest brings them back'));
       return false;
     }
     r.current = (+r.current || 0) - 1;
@@ -1072,7 +1096,7 @@ registerPanel('party',{
     // Each new form costs a use; with none left, say so instead of opening.
     const wsr = (c.resources || []).find(x => x.name === 'Wild Shape');
     if (wsr && (+wsr.current || 0) <= 0){
-      showToast('No Wild Shape uses left — ' + (ed === '2024' ? 'a short rest brings one back' : 'a short rest brings them back'));
+      showToast('No Wild Shape uses left — ' + (this._rechargeOf(c, wsr) === 'short-one' ? 'a short rest brings one back' : 'a short rest brings them back'));
       return;
     }
     // Movement a form may not have yet: 2014, no flying or swimming before
@@ -1847,12 +1871,13 @@ registerPanel('party',{
     // on each pool: recharge 'short' refills it (Action Surge, Focus Points,
     // a Battle Master's dice), 'short-one' gives back one use (2024 Channel
     // Divinity, Wild Shape, Second Wind). An imported character has no such
-    // field, so the old rule stays for it: a pool named "… (short rest)".
+    // field: the feature's name and the edition say (_rechargeOf), or a pool
+    // named "… (short rest)".
     if (Array.isArray(c.resources)){
       c.resources = c.resources.map(r => {
-        if (r.recharge === 'short') return {...r, current: r.max};
-        if (r.recharge === 'short-one') return {...r, current: Math.min(r.max, (r.current || 0) + 1)};
-        if (!r.recharge && /short\s*rest/i.test(r.name || '')) return {...r, current: r.max || r.current};
+        const rc = this._rechargeOf(c, r);
+        if (rc === 'short') return {...r, current: r.max ?? r.current};
+        if (rc === 'short-one') return {...r, current: Math.min(r.max, (r.current || 0) + 1)};
         return r;
       });
     }
