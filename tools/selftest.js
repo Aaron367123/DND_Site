@@ -10799,6 +10799,13 @@
         Q._open = null; Q._view = 'active';
       }
     }
+    // -- Round 112: the dock fits, with no scrollbar ---------------------------
+    {
+      const dp = document.querySelector('.dock-panels');
+      ok('dock: no scrollbar beside the icons', !!dp && getComputedStyle(dp).scrollbarWidth === 'none');
+      if (dp && innerHeight >= 900 && !document.body.classList.contains('dock-expanded'))
+        ok('dock: on a screen 900px tall or more, every icon fits without scrolling', dp.scrollHeight <= dp.clientHeight + 1, { inner: innerHeight, need: dp.scrollHeight, have: dp.clientHeight });
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

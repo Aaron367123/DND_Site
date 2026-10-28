@@ -469,3 +469,19 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .pa-quests { display: flex; flex-direction: column; gap: 8px; }
 .pa-quests .qst-pc + .qst-pc { margin-top: 0; }
 @media (max-width: 520px) { .qst-row { flex-direction: column; } }
+
+/* ── 18. The dock: fits without a scrollbar ───────────────── */
+/* No scrollbar beside the icons. On a very short screen the list still
+   scrolls (wheel or drag), and the fade at its foot says there's more. */
+.dock-panels { scrollbar-width: none; }
+.dock-panels::-webkit-scrollbar { display: none; }
+/* On a shorter screen the icons sit a little closer, so they all fit. */
+@media (max-height: 1100px) {
+  .panel-dock { gap: 2px; padding: 6px 0; }
+  .dock-panels { gap: 2px; }
+  body:not(.dock-expanded) .dock-divider { margin: 2px 0; }
+}
+@media (max-height: 960px) {
+  .panel-dock .dock-btn { height: 29px; }
+  .dock-tools .dock-btn, .dock-tools-bottom .dock-btn { height: 29px; }
+}
