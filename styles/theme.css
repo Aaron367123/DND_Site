@@ -80,27 +80,14 @@
   border-right: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   box-shadow: inset -1px 0 0 rgba(0,0,0,.4), 2px 0 12px rgba(0,0,0,.35);
 }
-/* Windows: leather panels, a gilt rule under the title, a mark in each corner. */
+/* Windows: leather panels and a gilt rule under the title. (No marks in the
+   corners: Aaron didn't like the little right angles there.) */
 .window {
   background: var(--grain), linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, var(--accent)), var(--panel) 120px);
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
   box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
 }
 .window.focused { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); }
-.window::after {
-  content: ''; position: absolute; inset: 3px; pointer-events: none; z-index: 5;
-  background:
-    linear-gradient(var(--gilt), var(--gilt)) top left / 12px 1px no-repeat,
-    linear-gradient(var(--gilt), var(--gilt)) top left / 1px 12px no-repeat,
-    linear-gradient(var(--gilt), var(--gilt)) top right / 12px 1px no-repeat,
-    linear-gradient(var(--gilt), var(--gilt)) top right / 1px 12px no-repeat,
-    linear-gradient(var(--gilt), var(--gilt)) bottom left / 12px 1px no-repeat,
-    linear-gradient(var(--gilt), var(--gilt)) bottom left / 1px 12px no-repeat,
-    linear-gradient(var(--gilt), var(--gilt)) bottom right / 12px 1px no-repeat,
-    linear-gradient(var(--gilt), var(--gilt)) bottom right / 1px 12px no-repeat;
-  opacity: .55;
-}
-.window.focused::after { opacity: .9; }
 .window-head {
   position: relative;
   background: var(--grain), linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 85%, var(--accent)), var(--panel-2));
