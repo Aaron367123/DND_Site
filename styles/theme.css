@@ -343,3 +343,40 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .npclib-notes a { color: var(--accent); }
 .npclib-notes table { border-collapse: collapse; margin: 4px 0; }
 .npclib-notes td, .npclib-notes th { border: 1px solid var(--border); padding: 2px 6px; }
+
+/* ── 14. The game log ─────────────────────────────────────── */
+.glog { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 8px; }
+.glog-roller { display: flex; flex-direction: column; gap: 6px; }
+.glog-form { display: flex; gap: 6px; }
+.glog-input { flex: 1; min-width: 0; }
+.glog-dice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.glog-die { padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel-2); color: var(--text); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.glog-die:hover { border-color: var(--accent); }
+.glog-hidden { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; font-size: var(--fs-xs); color: var(--text-muted); cursor: pointer; }
+.glog-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.glog-empty { padding: 18px 8px; color: var(--text-muted); font-size: var(--fs-sm); text-align: center; }
+.glog-gap { margin: 8px 0 2px; font-size: var(--fs-2xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; text-align: center; }
+.glog-e { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who at" "l t" "d t"; column-gap: 10px;
+  padding: 5px 8px; border-radius: var(--r-sm); border-left: 2px solid transparent; }
+.glog-e:nth-child(even) { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
+.glog-who { grid-area: who; font-weight: 600; font-size: var(--fs-sm); }
+.glog-who i { font-style: normal; font-size: 10px; }
+.glog-l { grid-area: l; font-size: var(--fs-sm); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glog-t { grid-area: t; align-self: center; font-size: 22px; line-height: 1; min-width: 2ch; text-align: right; }
+.glog-d { grid-area: d; font-size: var(--fs-xs); color: var(--text-muted); overflow-wrap: anywhere; }
+.glog-at { grid-area: at; font-size: var(--fs-2xs); color: var(--text-muted); text-align: right; }
+.glog-e.crit { border-left-color: var(--success, #4caf50); }
+.glog-e.crit .glog-t { color: var(--success, #4caf50); }
+.glog-e.fumble { border-left-color: var(--danger); }
+.glog-e.fumble .glog-t { color: var(--danger); }
+.glog-e.hidden { opacity: .8; }
+.glog-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-xs); color: var(--text-muted); }
+.dock-btn { position: relative; }
+.dock-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--bg);
+  font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; pointer-events: none; }
+/* On the phone: More → Game log fills the screen. */
+.pa-log { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+.pa-log-h { display: flex; align-items: center; gap: 10px; }
+.pa-log-h h3 { margin: 0; font-size: var(--fs-lg); }
+.pa-log-list { max-height: 62vh; }
+.pa-log .glog-input { font-size: 16px; }   /* 16px: iOS zooms into anything smaller */

@@ -10608,6 +10608,51 @@
       } catch(e){ ok('round 107 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (npcs0 == null) localStorage.removeItem('skt-npcs-v2'); else localStorage.setItem('skt-npcs-v2', npcs0); try { closePanel('npclib'); } catch(e){} }
     }
+    // -- Round 108: the game log and the quick roller ---------------------------
+    {
+      const pub0 = localStorage.getItem('skt-gamelog-v1'), priv0 = localStorage.getItem('skt-gamelog-private-v1'), party0 = JSON.stringify(state.party);
+      try {
+        localStorage.setItem('skt-gamelog-v1', '[]'); localStorage.setItem('skt-gamelog-private-v1', '[]');
+        // The parser.
+        const P = t => sktRollExpr(t);
+        const a = P('2d6+3'), b = P('1d20+5 Stealth'), c = P('2d20kh1'), d = P('4d6dl1'), e = P('1d8+1d6+2 fire');
+        ok('dice: 2d6+3 adds up', a && a.total >= 5 && a.total <= 15 && a.expr === '2d6 + 3', a && a.expr);
+        ok('dice: text after the dice is the label', b && b.label === 'Stealth' && b.d20 && b.total === b.natural + 5);
+        ok('dice: 2d20kh1 keeps the higher d20', c && c.natural === Math.max(...c.rolls) && c.total === c.natural);
+        ok('dice: 4d6dl1 drops the lowest', d && /4d6dl1/.test(d.expr) && d.total >= 3 && d.total <= 18);
+        ok('dice: several dice and a number', e && e.expr === '1d8 + 1d6 + 2' && e.label === 'fire' && e.total >= 4 && e.total <= 16);
+        ok('dice: plain words are not a roll', P('hello there') === null && P('') === null);
+        // Character rolls land in the log, through the one place every roll goes.
+        const pc = state.party.find(p => !p.foe);
+        sktKeepRoll(pc, '17 (d20 15 +2)', { label: 'Perception', total: 17 });
+        const l1 = JSON.parse(localStorage.getItem('skt-gamelog-v1'));
+        ok('log: a character\u2019s roll goes into the shared log', l1.length === 1 && l1[0].who === pc.name && l1[0].label === 'Perception' && l1[0].total === 17);
+        // The DM's quick rolls: public ones shared, hidden ones only here.
+        sktQuickRoll('1d20+3 Ogre attack', { hidden: false }); sktQuickRoll('1d20+6 Secret stealth', { hidden: true });
+        const pub = JSON.parse(localStorage.getItem('skt-gamelog-v1')), priv = JSON.parse(localStorage.getItem('skt-gamelog-private-v1'));
+        ok('log: a public quick roll is shared', pub.some(x => x.label === 'Ogre attack' && x.who === 'DM'));
+        ok('log: a hidden one stays on this device', !pub.some(x => x.label === 'Secret stealth') && priv.some(x => x.label === 'Secret stealth'));
+        ok('log: the game log syncs', SKT_SYNC_KEYS.includes('skt-gamelog-v1') && !SKT_SYNC_KEYS.includes('skt-gamelog-private-v1'));
+        // The window shows them all, in order; closed, its dock button counts new player rolls.
+        openPanel('gamelog'); await sleep(200);
+        const w = document.querySelector('.window[data-panel="gamelog"]');
+        const labels = [...w.querySelectorAll('.glog-l')].map(x => x.textContent);
+        ok('log: the window lists every roll, oldest first', labels.join('|') === 'Perception|Ogre attack|Secret stealth', labels.join('|'));
+        const inp = w.querySelector('[data-glog-input]'); inp.value = '2d4 Typed'; w.querySelector('[data-glog-form]').requestSubmit(); await sleep(50);
+        ok('log: typing a roll into the window rolls it', sktLogEntries().some(x => x.label === 'Typed') && inp.value === '');
+        closePanel('gamelog'); await sleep(30);
+        sktLogAdd({ who: pc.name, pcId: pc.id, from: 'player', label: 'Athletics', total: 9, text: '9' });
+        ok('log: closed, its dock button counts a new roll', ((document.querySelector('.dock-btn[data-panel="gamelog"] .dock-badge') || {}).textContent || '') === '1');
+        openPanel('gamelog'); await sleep(50);
+        ok('log: opening it clears the count', !document.querySelector('.dock-btn[data-panel="gamelog"] .dock-badge'));
+        closePanel('gamelog');
+      } catch(e){ ok('round 108 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (pub0 == null) localStorage.removeItem('skt-gamelog-v1'); else localStorage.setItem('skt-gamelog-v1', pub0);
+        if (priv0 == null) localStorage.removeItem('skt-gamelog-private-v1'); else localStorage.setItem('skt-gamelog-private-v1', priv0);
+        state.party = JSON.parse(party0); save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -11481,6 +11526,40 @@
           }
         } catch(e){ ok('sheet: the swipe checks ran to completion', false, e.message); }
         finally { paTab = tab0; if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0); paRender(); }
+      }
+      // ── More → Game log ────────────────────────────────────────────────────
+      {
+        const me0 = localStorage.getItem('skt-me-v1'), tab0 = paTab, pub0 = localStorage.getItem('skt-gamelog-v1');
+        try {
+          if ((state.party || []).length){
+            paSetPc(state.party[0].id);
+            localStorage.setItem('skt-gamelog-v1', JSON.stringify([{ id: 'g1', at: Date.now(), who: 'Namroc', pcId: 'namroc', from: 'player', label: 'Wisdom save', total: 15, text: '15 (d20 11 +4)' }]));
+            const onPhone = paVisibleTabs().some(t => t.id === 'more');
+            if (onPhone){
+              paTab = 'more'; paMoreSub = null; paRender(); await sleep(30);
+              const row = document.querySelector('#pa-screen [data-more="log"]');
+              ok('phone log: More shows the latest roll', !!row && /Namroc/.test(row.textContent) && /15/.test(row.textContent));
+              row.click(); await sleep(30);
+            } else {
+              ok('player log: a wide screen has a Log tab', paVisibleTabs().some(t => t.id === 'log'));
+              paTab = 'log'; paRender(); await sleep(30);
+            }
+            ok('phone log: it opens the table\u2019s rolls', /Wisdom save/.test(document.getElementById('pa-screen').textContent) && !!document.querySelector('#pa-screen [data-glog-input]'));
+            const inp = document.querySelector('#pa-screen [data-glog-input]'); inp.value = '1d6 Dagger';
+            document.querySelector('#pa-screen [data-glog-form]').requestSubmit(); await sleep(30); paHideRoll();
+            ok('phone log: a roll typed here goes in the log, under this character', sktLogEntries().some(x => x.label === 'Dagger' && x.who === state.party[0].name));
+            if (onPhone){
+              window.dispatchEvent(new PopStateEvent('popstate', { state: { pa: 'base' } })); await sleep(30);
+              ok('phone log: Back returns to More', paTab === 'more' && paMoreSub === null && !!document.querySelector('#pa-screen [data-more="log"]'));
+            }
+          }
+        } catch(e){ ok('phone log: the checks ran to completion', false, e.message); }
+        finally {
+          paTab = tab0; paMoreSub = null;
+          if (pub0 == null) localStorage.removeItem('skt-gamelog-v1'); else localStorage.setItem('skt-gamelog-v1', pub0);
+          if (me0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', me0);
+          paRender();
+        }
       }
       // ── The phone's Back button steps back inside the app ─────────────────
       {

@@ -726,9 +726,15 @@ function csLog(r){
   if (pc && !CS.readOnly) sktKeepRoll(pc, csRollPlain(r).replace(/^[^:]*: /, ''), r);
 }
 function sktKeepRoll(pc, text, r){
-  pc.rolls = [{ label: r.label, total: r.total, text, at: Date.now(),
-                from: document.body.classList.contains('player-mode') ? 'player' : 'dm' }].concat(pc.rolls || []).slice(0, 6);
+  const from = document.body.classList.contains('player-mode') ? 'player' : 'dm';
+  pc.rolls = [{ label: r.label, total: r.total, text, at: Date.now(), from }].concat(pc.rolls || []).slice(0, 6);
   save();
+  // And the table's log (js/panels/game-log.js), where everyone sees it.
+  if (typeof sktLogAdd === 'function'){
+    const t = String(text || '');
+    sktLogAdd({ who: pc.name, pcId: pc.id, from, kind: r.kind === 'dmg' ? 'damage' : 'roll', label: r.label, total: r.total, text: t,
+                crit: (r.crit || /natural 20|\(crit\)/.test(t)) || undefined, fumble: (r.fumble || /natural 1\b|nat 1\b/.test(t)) || undefined });
+  }
 }
 function csRollPlain(r){
   if (r.kind === 'dmg') return r.label + ': ' + r.total + (r.type ? ' ' + r.type : '') + (r.crit ? ' (crit)' : '') + ' — ' + r.detail;

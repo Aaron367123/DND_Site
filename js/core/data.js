@@ -42,6 +42,7 @@ const DEFAULT_PARTY = [
 // window-manager.js), not by hand-picking non-overlapping x/y here.
 const DEFAULT_LAYOUT = {
   combat:     {x:16,  y:16,  w:320, h:560, open:true,  minimized:false, z:1},
+  gamelog:    {x:1090, y:16, w:340, h:560, open:false, minimized:false, z:3},
   // 500, not 380. A party card measures 414px tall and the grid is 210px
   // columns, so at 380 the window showed roughly half a card — the
   // STATS/SKILLS/SPELLS/FEATURES tabs and the temp-HP field were cut off, and

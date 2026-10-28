@@ -1884,7 +1884,9 @@ registerPanel('party',{
       const seen = this._rollsSeen[c.id] || 0;
       const fresh = (c.rolls || []).filter(r => r.at > seen && r.from === 'player').reverse();
       if ((c.rolls || [])[0]) this._rollsSeen[c.id] = Math.max(seen, c.rolls[0].at || 0);
-      fresh.forEach(r => { if (typeof showToast === 'function') showToast('🎲 ' + c.name + ' — ' + r.label + ': ' + r.text); });
+      // The Game Log window, when open, already shows each one as it lands.
+      const logOpen = panelDefs.gamelog && panelDefs.gamelog._body;
+      if (!logOpen) fresh.forEach(r => { if (typeof showToast === 'function') showToast('🎲 ' + c.name + ' — ' + r.label + ': ' + r.text); });
     });
   },
 

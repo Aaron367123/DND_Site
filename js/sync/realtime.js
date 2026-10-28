@@ -63,6 +63,7 @@ const SKT_SYNC_KEYS = [
                       // short rest (js/features/roll-requests.js). Answers are
                       // one field per character, so two phones answering at
                       // once merge instead of one overwriting the other.
+  'skt-gamelog-v1',   // the table's rolls, in order (js/panels/game-log.js)
   'skt-adventures-hidden-v1', // same idea for hidden adventures (LMoP, SKT,
                               // ToA, …). Adventure IDs match `_source` tags
                               // on items / monsters from those modules.
@@ -1313,6 +1314,10 @@ function _applyRemoteKey(key, fbVal) {
   if (key === 'skt-rollreq-v1'){
     if (typeof paOnRollRequest === 'function'){ try { paOnRollRequest(); } catch(e){ _diag('roll request', e); } }
     if (typeof sktOnRollAnswers === 'function'){ try { sktOnRollAnswers(); } catch(e){ _diag('roll answers', e); } }
+  }
+  // The game log: the window, the dock badge and the phone's log screen.
+  if (key === 'skt-gamelog-v1' && typeof sktLogChanged === 'function'){
+    try { sktLogChanged(); } catch(e){ _diag('game log', e); }
   }
   // A handout reaching a phone pops up there (player-app.js).
   if (key === 'skt-handouts-v1' && typeof paOnHandouts === 'function'){

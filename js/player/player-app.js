@@ -105,6 +105,8 @@ const PA_TABS = [
   // Phones only. The floating toolbar is hidden on a phone (main.css), and
   // everything in it a player can use lives here instead: search, settings,
   // sync status, the campaign, and the way back to the DM view.
+  // The game log: its own tab on a wide screen; on a phone, More → Game log.
+  { id:'log',   label:'Log',   icon:'i-dice',   when: () => !paIsPhone() },
   { id:'more',  label:'More',  icon:'i-dots',   always:true, phoneOnly:true },
 ];
 
@@ -279,6 +281,11 @@ function paAnswerRoll(v, done){
   r.answers = r.answers || {};
   r.answers[me] = done ? { done: true, rid: r.id, at: Date.now() } : { v, rid: r.id, at: Date.now() };
   saveJson(typeof SKT_RR_KEY !== 'undefined' ? SKT_RR_KEY : 'skt-rollreq-v1', r, 'roll request');
+  if (!done && typeof sktLogAdd === 'function'){
+    const pc = paPc();
+    sktLogAdd({ who: pc ? pc.name : 'Player', pcId: me, from: 'player', kind: 'request',
+                label: typeof sktRollTitle === 'function' ? sktRollTitle(r) : 'Roll', total: v, text: String(v) + ' (asked for)' });
+  }
   if (r.kind === 'init'){
     const c = (state.combatants || []).find(x => x.id === me && x.isPC);
     if (c){ c.initiative = v; save(); }
@@ -400,6 +407,7 @@ function paBackStep(){
   if (document.getElementById('pa-roll-req') || document.getElementById('pa-conc-save') || document.getElementById('pa-rest')) return true;
   if (document.body.classList.contains('pa-searching')){ const d = document.getElementById('pa-search-close'); if (d) d.click(); else paEndSearch(); return true; }
   if (paFeatOpen != null){ paFeatOpen = null; paRender(); return true; }
+  if (paTab === 'more' && paMoreSub){ paMoreSub = null; paRenderScreen(); return true; }
   while (paTabTrail.length){
     const t = paTabTrail.pop();
     if (t !== paTab && paVisibleTabs().some(x => x.id === t)){ paTab = t; paRender(); return true; }
@@ -418,6 +426,31 @@ function paMoreWho(){
   const pc = paPc(); if (!pc) return '';
   return `<button class="pa-more-row" data-pa-swap="1">${typeof ICO === 'function' ? ICO('i-user') : ''}<span class="pa-more-text"><span class="pa-more-title">Playing ${paEsc(pc.name)}</span><span class="pa-more-sub">Change to a different character</span></span></button>`;
 }
+// More → Game log: everyone's rolls and a dice roller (js/panels/game-log.js).
+// A screen inside More rather than a tab of its own — the tab bar is full.
+let paMoreSub = null;
+function paLogScreen(asTab){
+  const entries = typeof sktLogEntries === 'function' ? sktLogEntries() : [];
+  return '<div class="pa-card pa-log"><div class="pa-log-h">' + (asTab ? '' : '<button class="btn small" data-pa-logback>‹ More</button>') + '<h3>Game log</h3></div>'
+    + (typeof sktLogRollerHtml === 'function' ? sktLogRollerHtml(false) : '')
+    + '<div class="glog-list pa-log-list" role="log" aria-live="polite">' + (typeof sktLogHtml === 'function' ? sktLogHtml(entries) : '') + '</div></div>';
+}
+function paWireLog(el){
+  el.querySelector('[data-pa-logback]')?.addEventListener('click', () => { paMoreSub = null; paRenderScreen(); });
+  if (typeof sktLogWireRoller === 'function') sktLogWireRoller(el);
+  const l = el.querySelector('.pa-log-list'); if (l) l.scrollTop = l.scrollHeight;
+}
+// A roll landed (here or from another device): redraw the log screen if it's
+// showing, keeping whatever is half-typed in the roller.
+function paOnGameLog(){
+  if (!document.body.classList.contains('player-app') || !(paTab === 'log' || (paTab === 'more' && paMoreSub === 'log'))) return;
+  const el = document.getElementById('pa-screen'); if (!el) return;
+  const inp = el.querySelector('[data-glog-input]'), v = inp ? inp.value : '', f = inp && document.activeElement === inp;
+  const l = el.querySelector('.pa-log-list'), atBottom = !l || l.scrollHeight - l.scrollTop - l.clientHeight < 40, y = l ? l.scrollTop : 0;
+  paRenderScreen();
+  const inp2 = el.querySelector('[data-glog-input]'); if (inp2){ inp2.value = v; if (f) inp2.focus(); }
+  const l2 = el.querySelector('.pa-log-list'); if (l2 && !atBottom) l2.scrollTop = y;
+}
 function paMoreScreen(){
   const camp = (typeof sktActiveCampaignName === 'function') ? sktActiveCampaignName() : '';
   const sync = document.getElementById('sync-status');
@@ -427,7 +460,9 @@ function paMoreScreen(){
     '<button class="pa-more-row" data-more="' + act + '">' + ico(icon)
     + '<span class="pa-more-text"><span class="pa-more-title">' + title + '</span>'
     + (sub ? '<span class="pa-more-sub">' + sub + '</span>' : '') + '</span></button>';
+  const lastRoll = typeof sktLogEntries === 'function' ? sktLogEntries().slice(-1)[0] : null;
   return '<div class="pa-card pa-more">' + paMoreWho()
+    + row('log', 'i-dice', 'Game log', lastRoll ? paEsc((lastRoll.who || '') + ' — ' + (lastRoll.label || 'Roll') + ': ' + lastRoll.total) : 'Everyone’s rolls, and a dice roller')
     + row('search', 'i-search', 'Search', 'Spells, monsters, items, rules')
     + row('settings', 'i-gear', 'Settings', 'Text size, theme and display')
     + '<div class="pa-more-row pa-more-static">' + ico('i-cloud')
@@ -453,7 +488,8 @@ function paMoreScreen(){
 function paWireMore(el){
   el.querySelectorAll('[data-more]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.more;
-    if (act === 'search') paStartSearch();
+    if (act === 'log'){ paMoreSub = 'log'; paRenderScreen(); }
+    else if (act === 'search') paStartSearch();
     // Opened directly rather than by poking the hidden gear: the gear toggles
     // on mousedown, and a toggle would close a drawer that is already open.
     else if (act === 'settings') document.getElementById('settings-drawer')?.classList.add('open');
@@ -708,6 +744,8 @@ function paRenderScreen(){
   // map change was being applied and painted into nothing.
   paUnmountCurrent(el);
   el.innerHTML = '';
+  if (paTab === 'more' && paMoreSub === 'log'){ el.innerHTML = paLogScreen(); paWireLog(el); return; }
+  if (paTab === 'log')   { el.innerHTML = paLogScreen(true); paWireLog(el); return; }
   if (paTab === 'more')  { el.innerHTML = paMoreScreen(); paWireMore(el); return; }
   if (paTab === 'party') { el.innerHTML = paPartyScreen(); return; }
   if (paTab === 'map')   { paMountPanel(el, 'battlemap'); return; }
@@ -1951,7 +1989,7 @@ function paOnClick(e){
   const ho = e.target.closest('[data-pa-ho]');
   if (ho){ paShowHandout(ho.dataset.paHo, false); return; }
   const tab = e.target.closest('[data-pa-tab]');
-  if (tab){ if (tab.dataset.paTab !== paTab){ paTabTrail.push(paTab); paTabTrail = paTabTrail.slice(-12); } paTab = tab.dataset.paTab; paRender(); return; }
+  if (tab){ if (tab.dataset.paTab !== paTab){ paTabTrail.push(paTab); paTabTrail = paTabTrail.slice(-12); } paTab = tab.dataset.paTab; paMoreSub = null; paRender(); return; }
   const pick = e.target.closest('[data-pa-pick]');
   if (pick){ paSetPc(pick.dataset.paPick); paRender(); return; }
   // The picker lives on the You tab: from More (or anywhere) go there, or
