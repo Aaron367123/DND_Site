@@ -11421,6 +11421,20 @@
                 await sleep(400);
                 ok('sheet: a short swipe springs back and stays on the tab', CS.tab === ids[1] && !pane().style.transform, CS.tab + ' ' + pane().style.transform);
               } finally { window.csReducedMotion = rm0; }
+              // A short tab doesn't pull the sheet up: scrolled so the tab row
+              // is at the top, every tab still fills the screen below it.
+              {
+                const body = () => document.querySelector('#cs-root .cs-body');
+                const lens = {}; for (const id of ids){ CS.tab = id; csRender(); lens[id] = document.querySelector('#cs-root .cs-pane').scrollHeight; }
+                const shortest = ids.slice().sort((x, y) => lens[x] - lens[y])[0], longest = ids.slice().sort((x, y) => lens[y] - lens[x])[0];
+                CS.tab = longest; csRender(); body().scrollTop = 99999;   // far down: the tab row is pinned at the top
+                const pinned = () => document.querySelector('#cs-root .cs-tabs').getBoundingClientRect().top - body().getBoundingClientRect().top;
+                const before = pinned();
+                csGoTab(shortest, 0); await sleep(30);
+                const b1 = body(), p1 = document.querySelector('#cs-root .cs-pane'), t1 = document.querySelector('#cs-root .cs-tabs');
+                ok('sheet: going to a short tab keeps the tab row at the top', pinned() <= Math.max(4, before + 4), pinned() + 'px down (was ' + before + ', ' + longest + ' → ' + shortest + ')');
+                ok('sheet: and its content fills the screen below the row, all of it swipeable', p1.offsetHeight >= b1.clientHeight - t1.offsetHeight - 8, p1.offsetHeight + ' vs ' + (b1.clientHeight - t1.offsetHeight));
+              }
               // The tab row stays where it was when a tab is picked.
               const row = root.querySelector('.cs-tabs');
               if (row.scrollWidth > row.clientWidth + 10){

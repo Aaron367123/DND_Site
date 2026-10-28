@@ -103,6 +103,7 @@ function csRender(){
     + (CS.embed && !CS.readOnly && typeof paEconHtml === 'function' ? paEconHtml() : '') + csTop(pc)
     + '<nav class="cs-tabs">' + CS_TABS.map(t => '<button class="cs-tab' + (t.phone ? ' cs-phone' : '') + (CS.tab === t.id ? ' on' : '') + '" data-cs-tab="' + t.id + '">' + t.label + '</button>').join('') + '</nav>'
     + '<div class="cs-pane">' + (CS_TAB_RENDER[CS.tab] || (() => ''))(pc) + '</div></div></div>';
+  csFitPane(root);   // before the scroll comes back, or a short tab cuts it short
   keep.forEach(([k, t]) => { const e = root.querySelector('[data-cs-scroll="' + k + '"]'); if (e) e.scrollTop = t; });
   const tabs = root.querySelector('.cs-tabs');
   if (tabs){
@@ -116,6 +117,18 @@ function csRender(){
     }
   }
 }
+// On a phone a tab's content is at least as tall as the screen below the tab
+// row. A short tab (Spells for a rogue) made the sheet shorter than where you
+// were: it snapped up, the tab row dropped to the bottom and the strip left
+// to swipe on was a sliver.
+function csFitPane(root){
+  root = root || document.getElementById('cs-root'); if (!root) return;
+  const pane = root.querySelector('.cs-pane'); if (!pane) return;
+  if (!csNarrow()){ pane.style.minHeight = ''; return; }
+  const body = root.querySelector('.cs-body'), tabs = root.querySelector('.cs-tabs');
+  if (body && tabs) pane.style.minHeight = Math.max(0, body.clientHeight - tabs.offsetHeight - 4) + 'px';
+}
+window.addEventListener('resize', () => { if (typeof CS !== 'undefined' && CS) csFitPane(); });
 // The sheet's tabs as shown here — on a phone Abilities is one of them, on a
 // wide screen it's the side column instead.
 function csVisibleTabs(){
