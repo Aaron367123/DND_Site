@@ -11433,7 +11433,8 @@
                 csGoTab(shortest, 0); await sleep(30);
                 const b1 = body(), p1 = document.querySelector('#cs-root .cs-pane'), t1 = document.querySelector('#cs-root .cs-tabs');
                 ok('sheet: going to a short tab keeps the tab row at the top', pinned() <= Math.max(4, before + 4), pinned() + 'px down (was ' + before + ', ' + longest + ' → ' + shortest + ')');
-                ok('sheet: and its content fills the screen below the row, all of it swipeable', p1.offsetHeight >= b1.clientHeight - t1.offsetHeight - 8, p1.offsetHeight + ' vs ' + (b1.clientHeight - t1.offsetHeight));
+                // The phone layout only — a wide sheet scrolls its content on its own.
+                if (csNarrow()) ok('sheet: and its content fills the screen below the row, all of it swipeable', p1.offsetHeight >= b1.clientHeight - t1.offsetHeight - 8, p1.offsetHeight + ' vs ' + (b1.clientHeight - t1.offsetHeight));
               }
               // The tab row stays where it was when a tab is picked.
               const row = root.querySelector('.cs-tabs');
