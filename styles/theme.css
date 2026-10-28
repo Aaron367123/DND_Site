@@ -288,3 +288,7 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 /* The tab's content follows the finger during a swipe: clip it sideways so
    the sheet never gains a horizontal scroll while it's off to one side. */
 @media (max-width: 760px) { #cs-root .cs-body { overflow-x: hidden; } }
+/* The sheet's tab row scrolls by finger; its scrollbar was just a grey bar
+   under the tabs. */
+.cs-tabs { scrollbar-width: none; }
+.cs-tabs::-webkit-scrollbar { display: none; }
