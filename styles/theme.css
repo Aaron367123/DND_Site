@@ -292,3 +292,14 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
    under the tabs. */
 .cs-tabs { scrollbar-width: none; }
 .cs-tabs::-webkit-scrollbar { display: none; }
+
+/* ── 10. Action / Bonus / Reaction, one slim row ──────────── */
+/* It was a framed box: "Your turn" on a line of its own over three 44px
+   buttons, 88px of the sheet before anything else. Now the label sits at
+   the start of a single row of shorter buttons. */
+.pa-econ.mine { flex-direction: row; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; }
+.pa-econ.mine .pa-econ-l { font-size: var(--fs-2xs); white-space: nowrap; line-height: 1.1; }
+.pa-econ-row { flex: 1; gap: 5px; min-width: 0; }
+.pa-econ-b { min-height: 34px; padding: 3px 6px; font-size: var(--fs-sm); gap: 4px; }
+.pa-econ:not(.mine) .pa-econ-b { min-height: 30px; padding: 2px 12px; font-size: var(--fs-xs); }
+#cs-root.cs-embed .pa-econ { margin: 0 0 8px; }
