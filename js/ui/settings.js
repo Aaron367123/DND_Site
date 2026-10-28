@@ -45,7 +45,6 @@ function applyFontScale(scale){
 // stay visible so the user can always return to this drawer.
 function applyUiHide(uiHide){
   const u = uiHide || {};
-  document.body.classList.toggle('hide-dock',          !!u.dock);
   document.body.classList.toggle('hide-player-view',   !!u.playerView);
   document.body.classList.toggle('hide-sync-status',   !!u.syncStatus);
   document.body.classList.toggle('hide-tutorial-btn',  !!u.tutorialBtn);
@@ -126,7 +125,6 @@ function initSettings(){
   // shows the OPPOSITE state to the user (checked = visible).
   const uiHide = state.settings.uiHide = state.settings.uiHide || {};
   const visControls = [
-    { id:'show-dock',           key:'dock' },
     { id:'show-player-view',    key:'playerView' },
     { id:'show-sync-status',    key:'syncStatus' },
     { id:'show-tutorial-btn',   key:'tutorialBtn' },
@@ -499,14 +497,8 @@ function initSettings(){
   document.getElementById('open-tutorial-btn')?.addEventListener('click', () => {
     if (typeof window.openTutorial === 'function') window.openTutorial(0);
   });
-  document.getElementById('open-changelog-btn')?.addEventListener('click', () => {
-    if (typeof window.openChangelog === 'function') window.openChangelog(false);
-  });
   document.getElementById('open-about-btn')?.addEventListener('click', () => {
     if (typeof window.openAbout === 'function') window.openAbout();
-  });
-  document.getElementById('open-demo-btn')?.addEventListener('click', () => {
-    if (typeof window.runDemoScenario === 'function') window.runDemoScenario();
   });
 
   // Rebuild the cached 5e index — escape hatch for a stale cache (e.g. data/
@@ -517,11 +509,39 @@ function initSettings(){
     window.SKT_REBUILD_INDEX();
   });
 
-  document.getElementById('reset-data-btn').addEventListener('click',()=>{
-    showModal('⚠ Reset Everything?',[],'Reset to Defaults').then(r=>{
-      if(r===null)return;
-      state.party=JSON.parse(JSON.stringify(DEFAULT_PARTY));state.combatants=[];state.combatRound=0;state.activeCombatantId=null;state.shop=null;state.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
-      save();applyFontScale(state.settings.fontScale??1);applyUiHide(state.settings.uiHide||{});initPanels();showToast('Reset to defaults');
-    });
-  });
+  // The player link: copied, or as a code a phone can scan (js/ui/qr.js).
+  document.getElementById('drawer-link-btn')?.addEventListener('click', () => sktCopyPlayerLink());
+  document.getElementById('drawer-qr-btn')?.addEventListener('click', () => sktShowPlayerQr());
 } // end initSettings
+
+// The link this campaign's players open, for this device to hand out.
+function _sktJoinLink(){ return typeof sktPlayerLink === 'function' ? sktPlayerLink() : location.origin + location.pathname + '?player=1'; }
+function sktCopyPlayerLink(){
+  const url = _sktJoinLink(), done = () => showToast('Player link copied — send it to your players');
+  const manual = () => { const ta = document.createElement('textarea'); ta.value = url; ta.style.cssText = 'position:fixed;top:-9999px'; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy') ? done() : prompt('Copy this link:', url); } catch(e){ prompt('Copy this link:', url); } ta.remove(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, manual); else manual();
+}
+// A big code to scan, the link under it, and a copy button.
+function sktShowPlayerQr(){
+  let url = _sktJoinLink();
+  let svg = typeof sktQrSvg === 'function' ? sktQrSvg(url, 260) : '';
+  if (!svg){   // too long for a code: the campaign's name is only a label, so leave it off
+    try { const u = new URL(url); u.searchParams.delete('cn'); url = u.toString(); svg = sktQrSvg(url, 260); } catch(e){}
+  }
+  const name = typeof sktActiveCampaignName === 'function' ? sktActiveCampaignName() : '';
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop'; back.id = 'qr-backdrop';
+  back.innerHTML = '<div class="modal qr-modal" role="dialog" aria-modal="true" aria-label="Player link QR code"><h3>Scan to join' + (name ? ' ' + esc(name) : '') + '</h3>'
+    + '<p class="qr-sub">Point a phone\u2019s camera at the code. It opens the player view for this campaign.</p>'
+    + '<div class="qr-box">' + (svg || '<p>That link is too long for a code — copy it instead.</p>') + '</div>'
+    + '<div class="qr-url">' + esc(url) + '</div>'
+    + '<div class="modal-actions"><button class="btn" data-qr-copy>Copy link</button><button class="btn primary" data-qr-close>Done</button></div></div>';
+  document.body.appendChild(back);
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape'){ e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  back.querySelector('[data-qr-close]').addEventListener('click', close);
+  back.querySelector('[data-qr-copy]').addEventListener('click', () => sktCopyPlayerLink());
+}

@@ -10815,6 +10815,41 @@
         if (no){ no.click(); await sleep(40); }
       }
     }
+    // -- Round 113: Settings, trimmed; the player link and its QR code ---------
+    {
+      const id = x => document.getElementById(x), clip0 = navigator.clipboard && navigator.clipboard.writeText;
+      try {
+        ok('settings: no combat demo, reset-to-defaults, changelog or hide-the-dock', !id('open-demo-btn') && !id('reset-data-btn') && !id('open-changelog-btn') && !id('show-dock') && typeof runDemoScenario === 'undefined' && typeof openChangelog === 'undefined');
+        // A browser that hid the dock before: it shows anyway (Settings is in it).
+        applyUiHide({ dock: true }); await sleep(10);
+        ok('settings: an old "hide the dock" choice can\u2019t hide Settings', !document.body.classList.contains('hide-dock') && id('settings-btn').getClientRects().length > 0);
+        applyUiHide(state.settings.uiHide || {});
+        const groups = [...document.querySelectorAll('#settings-drawer details.drawer-group')];
+        ok('settings: Data starts closed, the rest open', groups.length >= 4 && groups.every(g => g.open === !/Data/.test(g.querySelector('.drawer-group-title').textContent)));
+        ok('settings: the about box no longer offers a changelog', (openAbout(), await sleep(30), !document.querySelector('#onb-about-backdrop #about-open-changelog')));
+        document.getElementById('onb-about-backdrop')?.remove();
+        // Copy player link: this campaign's link.
+        let copied = null;
+        if (navigator.clipboard) navigator.clipboard.writeText = t => { copied = t; return Promise.resolve(); };
+        id('drawer-link-btn').click(); await sleep(30);
+        if (navigator.clipboard) ok('settings: Copy player link copies this campaign\u2019s player link', copied === sktPlayerLink() && /[?&]player=1/.test(copied) && /[?&]c=/.test(copied), copied);
+        // The QR code: a code for that link, the link under it, Escape closes.
+        id('drawer-qr-btn').click(); await sleep(30);
+        const qm = document.querySelector('#qr-backdrop .qr-modal');
+        const mat = sktQrMatrix(sktPlayerLink());
+        ok('settings: QR code shows a code for the player link', !!qm && !!qm.querySelector('svg.qr') && !!mat && qm.querySelector('svg.qr').getAttribute('viewBox') === '0 0 ' + (mat.length + 8) + ' ' + (mat.length + 8) && qm.querySelector('.qr-url').textContent === sktPlayerLink());
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(20);
+        ok('settings: Escape closes it', !document.getElementById('qr-backdrop'));
+        // The encoder itself: finders in three corners, sizes by length, and the
+        // standard's worked Reed-Solomon example (HELLO WORLD, 1-M).
+        const m1 = sktQrMatrix('hi'), big = sktQrMatrix('x'.repeat(200));
+        const finder = (m, x, y) => [0, 1, 2, 3, 4, 5, 6].every(i => m[y][x + i] && m[y + 6][x + i] && m[y + i][x] && m[y + i][x + 6]) && m[y + 3][x + 3] && !m[y + 1][x + 1];
+        ok('qr: version 1 for a short text, three finders', m1.length === 21 && finder(m1, 0, 0) && finder(m1, 14, 0) && finder(m1, 0, 14));
+        ok('qr: a longer text gets a bigger code; too long gets none', big.length === 57 && sktQrMatrix('x'.repeat(300)) === null);
+        ok('qr: Reed-Solomon matches the standard\u2019s example', JSON.stringify(_qrEcc([32,91,11,120,209,114,220,77,67,64,236,17,236,17,236,17], 10)) === '[196,35,39,119,235,215,231,226,93,23]');
+      } catch(e){ ok('round 113 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (navigator.clipboard && clip0) navigator.clipboard.writeText = clip0; document.getElementById('qr-backdrop')?.remove(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

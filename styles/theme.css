@@ -491,3 +491,15 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
    the top of the Settings drawer, the tutorial under Help & about. (Their
    old buttons stay behind in the hidden top-right toolbar, dock-tools.js.) */
 #settings-drawer .drawer-campaign { display: flex; }
+
+/* ── 20. Player link and its QR code ──────────────────────── */
+#settings-drawer .drawer-campaign { flex-direction: column; align-items: stretch; gap: 8px; }
+.drawer-campaign-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.drawer-campaign-link { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.drawer-campaign-link .drawer-campaign-l { margin-right: auto; }
+.qr-modal { width: 360px; max-width: 94vw; text-align: center; }
+.qr-modal h3 { margin: 0 0 4px; }
+.qr-sub { margin: 0 0 12px; color: var(--text-muted); font-size: var(--fs-sm); }
+.qr-box { display: flex; justify-content: center; }
+.qr-box svg { width: min(260px, 70vw); height: auto; border-radius: var(--r-sm); }
+.qr-url { margin: 10px 0 4px; font-size: var(--fs-xs); color: var(--text-muted); overflow-wrap: anywhere; user-select: all; }

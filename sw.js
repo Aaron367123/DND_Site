@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = '60ff5302c6';
+const BUILD = '730e579907';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=ecb7ded7fa',
-  'styles/theme.css?v=442658d90e',
+  'styles/theme.css?v=704746f2e3',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=a978a23f20',
   'js/core/theme.js?v=9db78fe46f',
@@ -85,7 +85,8 @@ const PRECACHE = [
   'js/content/data-loader.js?v=402a4b7f70',
   'js/content/search.js?v=ae293afe2c',
   'js/features/backup.js?v=0dcefd06d1',
-  'js/ui/settings.js?v=f3ad30d32e',
+  'js/ui/qr.js?v=b696ff33f3',
+  'js/ui/settings.js?v=08cf7f7c28',
   'js/ui/campaign-ui.js?v=87872361dd',
   'js/ui/context-menu.js?v=738247f1b2',
   'js/ui/zoom-pan.js?v=31a2882b02',
@@ -102,7 +103,7 @@ const PRECACHE = [
   'js/sync/realtime.js?v=e5f708fcdb',
   'js/sync/presence.js?v=50e9bead2e',
   'js/ui/tutorial.js?v=7427317caa',
-  'js/ui/onboarding.js?v=42199a671a',
+  'js/ui/onboarding.js?v=af17803033',
   'js/ui/dock-tools.js?v=39406b40c4',
   'js/app.js?v=b5a88fcd4f',
 ];
