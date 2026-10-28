@@ -380,3 +380,14 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .pa-log-h h3 { margin: 0; font-size: var(--fs-lg); }
 .pa-log-list { max-height: 62vh; }
 .pa-log .glog-input { font-size: 16px; }   /* 16px: iOS zooms into anything smaller */
+
+/* ── 15. Measuring on the map ─────────────────────────────── */
+.bm-measure { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 7; }
+.bm-measure svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.bm-measure-line { stroke: #fff; stroke-linecap: round; filter: drop-shadow(0 0 2px rgba(0,0,0,.9)); }
+.bm-measure-a, .bm-measure-b { fill: var(--accent); stroke: #000; stroke-width: 1px; }
+.bm-measure.over .bm-measure-line { stroke: #ff8a80; }
+.bm-measure-l { position: absolute; white-space: nowrap; padding: .15em .55em; border-radius: 1em; background: rgba(0,0,0,.78); color: #fff;
+  font-weight: 700; line-height: 1.3; border: 1px solid var(--accent); }
+.bm-measure-l.over { border-color: #ff8a80; color: #ffb4ab; }
+.bm-measure.fading { transition: opacity 1.2s ease 0.3s; opacity: 0; }

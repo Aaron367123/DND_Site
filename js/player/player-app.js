@@ -844,6 +844,7 @@ function paMountPanel(host, id){
 const PA_DRAW = [
   { act:'tool-draw',  icon:'i-pencil', label:'Draw',  tool:'draw'  },
   { act:'tool-erase', icon:'i-trash',  label:'Erase', tool:'erase' },
+  { act:'tool-ruler', icon:'i-ruler',  label:'Ruler', tool:'ruler' },
   { act:'undo',       icon:'i-undo',   label:'Undo'                },
 ];
 function paAddDrawBar(host){

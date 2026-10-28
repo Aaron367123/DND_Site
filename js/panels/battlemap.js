@@ -1845,6 +1845,86 @@ registerPanel('battlemap',{
     return (lum != null && lum > 128) ? '#000000' : '#ffffff';
   },
 
+  // ── Measuring ──────────────────────────────────────────────────────────
+  // Feet between two map points, the way the rest of the app counts them: on
+  // squares the larger of the two cell deltas (5e's "every square is 5 ft",
+  // diagonals included — the Turn View's reach and opportunity attacks use the
+  // same), on hexes the straight-line distance in hex steps.
+  _feetBetweenPts(x0, y0, x1, y1){
+    const ft = this._ftPerCell || 5;
+    if (this._gridType === 'hex'){
+      const u = this._tokenUnitScreen() || this._csScreen() || 50;
+      return Math.round(Math.hypot(x1 - x0, y1 - y0) / u) * ft;
+    }
+    const cs = this._csScreen() || 50;
+    return Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / cs) * ft;
+  },
+  // A token's walking speed in feet, when it's known: the character's, or the
+  // monster's stat block. Null when it isn't.
+  _tokenSpeed(t){
+    if (!t) return null;
+    const pc = (state.party || []).find(p => p && (p.id === t.cid || (t.isPC && p.name === t.label)));
+    if (pc){ const v = +(pc.speeds && pc.speeds.walk) || +pc.spd; return v > 0 ? v : null; }
+    const c = (state.combatants || []).find(x => x && x.id === t.cid);
+    const m = c && c._slug && typeof _5eData !== 'undefined' ? _5eData.find(r => r && r.cat === 'monster' && r._slug === c._slug) : null;
+    const v = m ? parseInt(String(m.speed || '').match(/\d+/) || '', 10) : NaN;
+    return v > 0 ? v : null;
+  },
+  // The measuring line: dashed, from (x0,y0) to (x1,y1) in stage pixels, the
+  // distance on a pill at the far end. Sized in screen pixels, so it reads
+  // the same at any zoom. `speed` adds "of N ft" and turns red past it.
+  _measureShow(x0, y0, x1, y1, speed){
+    const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
+    let m = stage.querySelector('.bm-measure');
+    if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
+    clearTimeout(this._measureT); m.classList.remove('fading');
+    const k = 1 / (this._screenScale() || 1);
+    const W = this._cols * this._csScreen(), H = this._rows * this._csScreen();
+    const svg = m.querySelector('svg'); svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    const ln = m.querySelector('line');
+    ln.setAttribute('x1', x0); ln.setAttribute('y1', y0); ln.setAttribute('x2', x1); ln.setAttribute('y2', y1);
+    ln.setAttribute('stroke-width', 2.5 * k); ln.setAttribute('stroke-dasharray', (8 * k) + ' ' + (5 * k));
+    [['.bm-measure-a', x0, y0], ['.bm-measure-b', x1, y1]].forEach(([sel, x, y]) => { const c = m.querySelector(sel); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 4 * k); });
+    const ft = this._feetBetweenPts(x0, y0, x1, y1);
+    const over = speed && ft > speed;
+    const l = m.querySelector('.bm-measure-l');
+    const unit = (this._ftPerCell || 5) >= 5280 ? ' mi' : ' ft';
+    const show = n => unit === ' mi' ? +(n / 5280).toFixed(1) : n;
+    l.textContent = show(ft) + (speed ? ' / ' + show(speed) : '') + unit;
+    l.classList.toggle('over', !!over);
+    l.style.left = x1 + 'px'; l.style.top = y1 + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
+    l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';
+    m.classList.toggle('over', !!over);
+    this._measureFt = ft;
+    if (this._tool === 'ruler') this._rulerLast = [x0, y0, x1, y1];
+    return ft;
+  },
+  _measureLinger(){ clearTimeout(this._measureT); const m = this._body?.querySelector('#map-stage .bm-measure'); if (m) m.classList.add('fading'); this._measureT = setTimeout(() => { if (this._tool !== 'ruler') this._measureHide(); }, 1500); },
+  _measureHide(){ this._body?.querySelector('#map-stage .bm-measure')?.remove(); this._measureFt = null; if (this._tool !== 'ruler') this._rulerLast = null; },
+  // Measure from (ax, ay) to wherever the pointer goes, until it's let go.
+  // Shared by a press on the map and a press on a token (with the ruler out,
+  // pressing a token measures from it instead of moving it).
+  _rulerDrag(ax, ay, touch){
+    const ref = this._body && (this._body.querySelector('#draw-canvas') || this._body.querySelector('#map-stage')); if (!ref) return;
+    this._measureShow(ax, ay, ax, ay);
+    const to = (cx, cy) => { const p = this._stagePoint(cx, cy, ref), b = this._rulerPoint(p.x, p.y); this._measureShow(ax, ay, b.x, b.y); };
+    if (touch){
+      const onMove = ev => { if (ev.touches.length !== 1) return; ev.preventDefault(); to(ev.touches[0].clientX, ev.touches[0].clientY); };
+      const onEnd = () => { document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); document.removeEventListener('touchcancel', onEnd); };
+      document.addEventListener('touchmove', onMove, { passive:false }); document.addEventListener('touchend', onEnd); document.addEventListener('touchcancel', onEnd);
+    } else {
+      const onMove = ev => to(ev.clientX, ev.clientY);
+      const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    }
+  },
+  // A ruler point snapped to the middle of its square when snap is on.
+  _rulerPoint(x, y){
+    if (!this._snapToGrid || this._gridType === 'hex') return { x, y };
+    const cs = this._csScreen() || 50;
+    return { x: (Math.floor(x / cs) + 0.5) * cs, y: (Math.floor(y / cs) + 0.5) * cs };
+  },
+
   _tokenUnit(){
     return (this._gridType === 'hex') ? this._cellSize * Math.sqrt(3) / 2 : this._cellSize;
   },
@@ -2667,6 +2747,7 @@ registerPanel('battlemap',{
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
       +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
       +(_mapBgImage?'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>':'')
@@ -2695,6 +2776,7 @@ registerPanel('battlemap',{
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Fog cluster — only the toggle is visible by default. When fog is on,
       // its sub-controls (paint mode, brush radius, hide/show all) appear.
@@ -2860,7 +2942,10 @@ registerPanel('battlemap',{
     this._sizeLayer(drawCanvas, W, H);
     // Draw canvas needs to receive clicks for the pencil AND for the eraser
     // (to remove strokes). Other tools/no-tool let clicks pass through.
-    drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase' || this._tool === 'area') ? 'auto' : 'none';
+    drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase' || this._tool === 'area' || this._tool === 'ruler') ? 'auto' : 'none';
+    // A redraw (another device moved a token) rebuilds the stage: the ruler's
+    // line comes back rather than vanishing under the player's finger.
+    if (this._tool === 'ruler' && this._rulerLast) setTimeout(() => { if (this._tool === 'ruler' && this._rulerLast) this._measureShow(...this._rulerLast); }, 0);
     this._drawAllStrokes();
     this._renderTokens();
     // Size the zoom wrappers to match the stage we just built. Must happen
@@ -2894,6 +2979,7 @@ registerPanel('battlemap',{
         const t=act.slice(5);
         // Toggle off if already active
         this._tool=this._tool===t?'':t;
+        if (this._tool !== 'ruler') this._measureHide();
         // Reset alignment-tool transient state when leaving the mode.
         if (this._tool !== 'align'){
           this._alignFirstClick = null;
@@ -3071,6 +3157,14 @@ registerPanel('battlemap',{
         this._areaPointerDown(x, y, e.clientX, e.clientY, false);
         return;
       }
+      // Ruler: drag to measure. The line stays until the next measurement or
+      // until the tool is put down; it's this screen's alone, nothing syncs.
+      if (this._tool === 'ruler'){
+        e.preventDefault(); e.stopPropagation();
+        const a = this._rulerPoint(x, y);
+        this._rulerDrag(a.x, a.y, false);
+        return;
+      }
       if (this._tool !== 'draw') return;
       e.preventDefault(); e.stopPropagation();
       _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
@@ -3150,6 +3244,12 @@ registerPanel('battlemap',{
       if (this._tool === 'area'){
         e.preventDefault(); e.stopPropagation();
         this._areaPointerDown(x, y, touch.clientX, touch.clientY, true);
+        return;
+      }
+      if (this._tool === 'ruler'){
+        e.preventDefault(); e.stopPropagation();
+        const a = this._rulerPoint(x, y);
+        this._rulerDrag(a.x, a.y, true);
         return;
       }
       if (this._tool !== 'draw') return;
@@ -5132,6 +5232,10 @@ registerPanel('battlemap',{
         if (e.button !== 0) return;
         e.stopPropagation();e.preventDefault();
 
+        // With the ruler out, a token is where a measurement starts, not
+        // something to move.
+        if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, false); return; }
+
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
           if(i>=0){
@@ -5178,6 +5282,7 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
+          this._measureShow(this._drag.startPx, this._drag.startPy, curPx, curPy, this._tokenSpeed(t));
           this._broadcastTokenTick(t.id, curPx, curPy);
         };
 
@@ -5185,6 +5290,7 @@ registerPanel('battlemap',{
           document.removeEventListener('mousemove',onMove);
           document.removeEventListener('mouseup',onUp);
           if (moved) this._broadcastTokenEnd();
+          if (moved && this._tool !== 'ruler') this._measureLinger();
           if(moved){
             let nx = curPx, ny = curPy;
             const wantSnap = ev && ev.shiftKey ? !this._snapToGrid : this._snapToGrid;
@@ -5231,6 +5337,8 @@ registerPanel('battlemap',{
         if (e.touches.length !== 1) return; // pinch / multi-touch handled at map level
         e.stopPropagation(); e.preventDefault();
         const touch = e.touches[0];
+
+        if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, true); return; }
 
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
@@ -5282,6 +5390,7 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
+          this._measureShow(this._drag.startPx, this._drag.startPy, curPx, curPy, this._tokenSpeed(t));
           this._broadcastTokenTick(t.id, curPx, curPy);
         };
         const onEnd = ev => {
@@ -5293,6 +5402,7 @@ registerPanel('battlemap',{
           // gesture interrupted by a call or a notification must still tell
           // everyone the drag is over, or the last tick sits there forever.
           if (moved) this._broadcastTokenEnd();
+          if (moved && this._tool !== 'ruler') this._measureLinger();
           // Same defer-clear as the mouse path — prevents the drag's "moved"
           // state from poisoning the next tap on the canvas.
           setTimeout(() => { this._drag = null; }, 0);

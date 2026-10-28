@@ -1144,6 +1144,25 @@ function _searchClearRecent(){
   try { localStorage.removeItem(_RECENT_KEY); } catch(e){}
 }
 
+// Search text that starts with dice ("2d6+3", "1d20+5 Stealth") offers to
+// roll it: a row on top of the results, and Enter rolls unless a result has
+// been picked with the arrow keys. The roll goes to the game log
+// (js/panels/game-log.js); the DM's stays private when "Only me" is on.
+function _searchDice(q){
+  q = String(q || '');
+  return /^\s*[+\-]?\s*\d*\s*d\s*\d/i.test(q) && typeof sktRollExpr === 'function' && sktRollExpr(q) ? q.trim() : null;
+}
+function _searchRollIt(q){
+  if (typeof sktQuickRoll !== 'function') return;
+  const dm = !document.body.classList.contains('player-mode');
+  sktQuickRoll(q, { hidden: dm && typeof sktLogHiddenPref === 'function' && sktLogHiddenPref() });
+  _searchSaveRecent(q);
+}
+function _searchDiceHtml(q){
+  const r = sktRollExpr(q);
+  return '<div class="search-result search-roll" data-search-roll><div class="res-name"><span>🎲 Roll <b>' + esc(r.expr) + '</b>' + (r.label ? ' — ' + esc(r.label) : '') + '</span>'
+    + '<span class="res-tag">Enter</span></div><div class="res-meta">Into the game log' + (!document.body.classList.contains('player-mode') && typeof sktLogHiddenPref === 'function' && sktLogHiddenPref() ? ', only you see it' : '') + '</div></div>';
+}
 function renderSearchResults(){
   const container=document.getElementById('search-results');
   if(state.searchState.detail){renderSearchDetail();return;}
@@ -1175,13 +1194,16 @@ function renderSearchResults(){
     });
     return;
   }
+  const dice = _searchDice(q);
+  const wireDice = () => container.querySelector('[data-search-roll]')?.addEventListener('click', e => { e.stopPropagation(); _searchRollIt(dice); });
   if(!results.length){
     const hint = !_5eLoaded ? ' <span style="font-size:var(--fs-sm);color:var(--text-dim)">(data still loading…)</span>' : '';
-    container.innerHTML=`<div class="search-empty">No results for "${esc(q)}"${hint}</div>`;
+    container.innerHTML = dice ? _searchDiceHtml(dice) : `<div class="search-empty">No results for "${esc(q)}"${hint}</div>`;
+    wireDice();
     return;
   }
 
-  container.innerHTML = results.map((r,i)=>`
+  container.innerHTML = (dice ? _searchDiceHtml(dice) : '') + results.map((r,i)=>`
     <div class="search-result ${i===state.searchState.focused?'focused':''} ${r._fuzzy?'fuzzy':''}" data-idx="${i}">
       <div class="res-name">
         <span>${_highlightMatch(r.name, q)}</span>
@@ -1196,7 +1218,8 @@ function renderSearchResults(){
     + (_lastTotal > results.length
         ? `<div class="search-more">Showing ${results.length} of ${_lastTotal} matches — keep typing to narrow it down.</div>`
         : '');
-  container.querySelectorAll('.search-result').forEach((el,i)=>el.addEventListener('click', e => {
+  wireDice();
+  container.querySelectorAll('.search-result:not(.search-roll)').forEach((el,i)=>el.addEventListener('click', e => {
     e.stopPropagation();
     state.searchState.detail=results[i];
     // Commit this query to the recent-searches list since the user just
@@ -1437,6 +1460,11 @@ function initSearch(){
     if(_searchInputTimer){
       clearTimeout(_searchInputTimer); _searchInputTimer = null;
       renderSearchResults();
+    }
+    // Dice typed and no result picked: Enter rolls them.
+    if(e.key==='Enter' && state.searchState.focused < 0 && !state.searchState.detail){
+      const d = _searchDice(state.searchState.query || inp.value);
+      if (d){ e.preventDefault(); _searchRollIt(d); return; }
     }
     const list=_lastResults;
     if(!list.length) return;

@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = '00ff5beaf5';
+const BUILD = '8bd8e37dd4';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=ecb7ded7fa',
-  'styles/theme.css?v=c763680f14',
+  'styles/theme.css?v=5f9efdb561',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=6b4031661c',
   'js/core/theme.js?v=9db78fe46f',
@@ -66,7 +66,7 @@ const PRECACHE = [
   'js/panels/notes.js?v=38dcf91409',
   'js/panels/handouts.js?v=92072fbc59',
   'js/panels/game-log.js?v=dd31f68d92',
-  'js/panels/battlemap.js?v=9a97a7553f',
+  'js/panels/battlemap.js?v=0e993854b9',
   'js/panels/npc-library.js?v=0054c516dd',
   'js/panels/bestiary.js?v=8b3658dc0a',
   'js/panels/content-panel.js?v=1a060dfd0b',
@@ -81,7 +81,7 @@ const PRECACHE = [
   'js/panels/timetracker.js?v=ba930bd7c6',
   'js/panels/world.js?v=3363ff2d50',
   'js/content/data-loader.js?v=402a4b7f70',
-  'js/content/search.js?v=0b5239207b',
+  'js/content/search.js?v=ae293afe2c',
   'js/features/backup.js?v=d1b9766012',
   'js/ui/settings.js?v=f3ad30d32e',
   'js/ui/campaign-ui.js?v=87872361dd',
@@ -95,7 +95,7 @@ const PRECACHE = [
   'js/features/char-print.js?v=7e55981c09',
   'js/features/char-builder.js?v=61ba4f670a',
   'js/features/pdf-import.js?v=cefe36cb0b',
-  'js/player/player-app.js?v=341bac32d1',
+  'js/player/player-app.js?v=0544b2bcbe',
   'js/ui/player-view.js?v=3c47cb84bd',
   'js/sync/realtime.js?v=3e60cb0f06',
   'js/sync/presence.js?v=50e9bead2e',

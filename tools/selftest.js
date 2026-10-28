@@ -10646,12 +10646,72 @@
         openPanel('gamelog'); await sleep(50);
         ok('log: opening it clears the count', !document.querySelector('.dock-btn[data-panel="gamelog"] .dock-badge'));
         closePanel('gamelog');
+        // Search: dice typed there offer the roll; Enter rolls it.
+        if (typeof openSearch === 'function'){
+          openSearch(); await sleep(100);
+          const si = document.getElementById('search-input');
+          const type = async v => { si.value = v; si.dispatchEvent(new Event('input', { bubbles: true })); await sleep(150); };
+          await type('3d6+1 Searchroll');
+          ok('search: dice typed in search offer to roll them', !!document.querySelector('[data-search-roll]'));
+          si.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(50);
+          ok('search: Enter rolls them into the log', sktLogEntries().some(x => x.label === 'Searchroll'));
+          await type('goblin');
+          ok('search: plain words don’t offer a roll', !document.querySelector('[data-search-roll]'));
+          if (typeof closeSearch === 'function') closeSearch();
+        }
       } catch(e){ ok('round 108 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         if (pub0 == null) localStorage.removeItem('skt-gamelog-v1'); else localStorage.setItem('skt-gamelog-v1', pub0);
         if (priv0 == null) localStorage.removeItem('skt-gamelog-private-v1'); else localStorage.setItem('skt-gamelog-private-v1', priv0);
         state.party = JSON.parse(party0); save();
       }
+    }
+    // -- Round 109: distance on the map ----------------------------------------
+    {
+      const B = panelDefs.battlemap;
+      const st0 = { g: B._gridType, ft: B._ftPerCell, tool: B._tool, snap: B._snapToGrid };
+      try {
+        openPanel('battlemap'); await sleep(300);
+        B._gridType = 'square'; B._ftPerCell = 5; B._tool = ''; B._render(); await sleep(50);
+        const cs = B._csScreen();
+        ok('measure: squares count 5 ft each, diagonals included', B._feetBetweenPts(0, 0, cs * 3, 0) === 15 && B._feetBetweenPts(0, 0, cs * 4, cs * 2) === 20 && B._feetBetweenPts(0, 0, cs * 2, cs * 2) === 10);
+        B._ftPerCell = 10;
+        ok('measure: in the map\u2019s own feet per square', B._feetBetweenPts(0, 0, cs * 3, 0) === 30);
+        B._ftPerCell = 5;
+        // A character's speed, from the party record.
+        const pcTok = B._tokens.find(t => t.isPC && (state.party || []).some(p => p.id === t.cid || p.name === t.label));
+        if (pcTok){
+          const pc = state.party.find(p => p.id === pcTok.cid || p.name === pcTok.label);
+          ok('measure: a character\u2019s token knows its speed', B._tokenSpeed(pcTok) === (+(pc.speeds && pc.speeds.walk) || +pc.spd || null));
+        }
+        // The readout: the distance, against the speed, red past it.
+        B._measureShow(0, 0, cs * 4, 0, 30);
+        let l = document.querySelector('#map-stage .bm-measure-l');
+        ok('measure: the readout says how far, out of the speed', !!l && l.textContent === '20 / 30 ft' && !l.classList.contains('over'), l && l.textContent);
+        B._measureShow(0, 0, cs * 8, 0, 30); l = document.querySelector('#map-stage .bm-measure-l');
+        ok('measure: past the speed it turns red', !!l && l.textContent === '40 / 30 ft' && l.classList.contains('over'));
+        B._measureHide();
+        ok('measure: and it goes away', !document.querySelector('#map-stage .bm-measure'));
+        // The ruler: a toolbar button, and it holds its line through a redraw.
+        const rb = document.querySelector('.window[data-panel="battlemap"] [data-mact="tool-ruler"]');
+        ok('ruler: the map toolbar has one', !!rb);
+        if (rb){
+          rb.click(); await sleep(50);
+          ok('ruler: it takes the map\u2019s pointer like the pencil does', B._tool === 'ruler' && getComputedStyle(document.querySelector('.window[data-panel="battlemap"] #draw-canvas')).pointerEvents === 'auto');
+          B._measureShow(cs, cs, cs * 5, cs); B._render(); await sleep(30);
+          ok('ruler: a redraw keeps the line', !!document.querySelector('#map-stage .bm-measure'));
+          document.querySelector('.window[data-panel="battlemap"] [data-mact="tool-ruler"]').click(); await sleep(30);
+          ok('ruler: putting it down clears the line', B._tool === '' && !document.querySelector('#map-stage .bm-measure'));
+          document.querySelector('.window[data-panel="battlemap"] [data-mact="tool-ruler"]').click(); await sleep(30);
+          ok('ruler: picked up again, it starts clean', B._tool === 'ruler' && !document.querySelector('#map-stage .bm-measure'));
+          document.querySelector('.window[data-panel="battlemap"] [data-mact="tool-ruler"]').click(); await sleep(30);
+        }
+        B._snapToGrid = true;
+        const sp = B._rulerPoint(cs * 1.2, cs * 2.9);
+        ok('ruler: with snap on, ends sit in the middle of their squares', Math.abs(sp.x - cs * 1.5) < 0.01 && Math.abs(sp.y - cs * 2.5) < 0.01);
+        ok('ruler: the phone\u2019s map bar has one too', typeof PA_DRAW !== 'undefined' && PA_DRAW.some(x => x.act === 'tool-ruler'));
+      } catch(e){ ok('round 109 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._gridType = st0.g; B._ftPerCell = st0.ft; B._tool = st0.tool; B._snapToGrid = st0.snap; B._measureHide(); try { B._render(); } catch(e){} closePanel('battlemap'); }
     }
     // -- Class features: represented, not just text ------------------------
     {
