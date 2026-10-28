@@ -12,38 +12,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script>
-/* A player's link, added to a phone's home screen, has to open as that
-   player view. Phones take the start page from the manifest, not the page
-   that was open (iOS does; the static manifest's start page is the DM view
-   of whichever campaign comes first), so on a player link the page offers a
-   manifest of its own whose start page IS the link: player view, this
-   campaign. Its own id keeps it apart from a DM install on Android. If a
-   browser won't read it, it falls back to the page that was open, which is
-   the player link too. */
-(function(){
-  try {
-    var q = new URLSearchParams(location.search);
-    if (q.get('player') !== '1') return;
-    var start = new URL(location.pathname, location.href);
-    ['player', 'c', 'cn'].forEach(function(k){ if (q.get(k) != null) start.searchParams.set(k, q.get(k)); });
-    var base = new URL('./', location.href).href, cn = q.get('cn') || '';
-    var m = {
-      id: 'skt-player-' + (q.get('c') || 'main'),
-      name: 'SKT DnD' + (cn ? ' — ' + cn : ''), short_name: 'SKT DnD',
-      start_url: start.href, scope: base, display: 'standalone',
-      theme_color: '#1a1a1a', background_color: '#1a1a1a',
-      icons: [
-        { src: base + 'apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
-        { src: base + 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-        { src: base + 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
-      ]
-    };
-    var link = document.querySelector('link[rel="manifest"]');
-    if (link) link.href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(m));
-  } catch(e){}
-})();
-</script>
-<script>
 /* Startup watchdog. Inline and first, so it runs even when a deferred script
    never arrives (every <script defer> waits for the one before it, so one
    hung download stops the whole app with no error anywhere). If the app has
@@ -95,6 +63,38 @@
     });
     (document.body || document.documentElement).appendChild(box);
   }, 12000);
+})();
+</script>
+<script>
+/* A player's link, added to a phone's home screen, has to open as that
+   player view. Phones take the start page from the manifest, not the page
+   that was open (iOS does; the static manifest's start page is the DM view
+   of whichever campaign comes first), so on a player link the page offers a
+   manifest of its own whose start page IS the link: player view, this
+   campaign. Its own id keeps it apart from a DM install on Android. If a
+   browser won't read it, it falls back to the page that was open, which is
+   the player link too. */
+(function(){
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('player') !== '1') return;
+    var start = new URL(location.pathname, location.href);
+    ['player', 'c', 'cn'].forEach(function(k){ if (q.get(k) != null) start.searchParams.set(k, q.get(k)); });
+    var base = new URL('./', location.href).href, cn = q.get('cn') || '';
+    var m = {
+      id: 'skt-player-' + (q.get('c') || 'main'),
+      name: 'SKT DnD' + (cn ? ' — ' + cn : ''), short_name: 'SKT DnD',
+      start_url: start.href, scope: base, display: 'standalone',
+      theme_color: '#1a1a1a', background_color: '#1a1a1a',
+      icons: [
+        { src: base + 'apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
+        { src: base + 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        { src: base + 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+      ]
+    };
+    var link = document.querySelector('link[rel="manifest"]');
+    if (link) link.href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(m));
+  } catch(e){}
 })();
 </script>
 <link rel="stylesheet" href="styles/main.css?v=ecb7ded7fa">
