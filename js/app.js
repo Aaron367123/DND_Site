@@ -81,6 +81,8 @@ function init(){
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>btn.addEventListener('click',()=>togglePanel(btn.dataset.panel)));
   // The top-right toolbar's tools into the dock, on a wide screen.
   if (typeof sktDockTools === 'function') sktDockTools();
+  // The windows used least, behind ⋯ More (js/ui/dock-more.js).
+  if (typeof initDockMore === 'function') initDockMore();
   initDockNames();
   initUndoKeys();
   if (typeof initPresence === 'function') initPresence();

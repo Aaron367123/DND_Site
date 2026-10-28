@@ -470,21 +470,18 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .pa-quests .qst-pc + .qst-pc { margin-top: 0; }
 @media (max-width: 520px) { .qst-row { flex-direction: column; } }
 
-/* ── 18. The dock: fits without a scrollbar ───────────────── */
+/* ── 18. The dock: full-size icons, no scrollbar ──────────── */
 /* No scrollbar beside the icons. On a very short screen the list still
    scrolls (wheel or drag), and the fade at its foot says there's more. */
 .dock-panels { scrollbar-width: none; }
 .dock-panels::-webkit-scrollbar { display: none; }
-/* On a shorter screen the icons sit a little closer, so they all fit. */
-@media (max-height: 1100px) {
-  .panel-dock { gap: 2px; padding: 6px 0; }
-  .dock-panels { gap: 2px; }
-  body:not(.dock-expanded) .dock-divider { margin: 2px 0; }
-}
-@media (max-height: 960px) {
-  .panel-dock .dock-btn { height: 29px; }
-  .dock-tools .dock-btn, .dock-tools-bottom .dock-btn { height: 29px; }
-}
+/* Full size on every screen: the windows used least wait behind More
+   (25, js/ui/dock-more.js) instead of the icons shrinking to fit. */
+body.tools-in-dock .panel-dock .dock-btn { width: 36px; height: 36px; }
+body.tools-in-dock.dock-expanded .panel-dock .dock-btn { width: auto; }
+body.tools-in-dock .panel-dock .dock-btn .ico { width: 20px; height: 20px; }
+body.tools-in-dock .panel-dock { gap: 2px; }
+body.tools-in-dock .dock-panels { gap: 2px; }
 
 /* ── 19. Campaign and help live in Settings ───────────────── */
 /* On every screen now, as the phone already did: the campaign switcher at
@@ -604,3 +601,20 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 /* Game Log, Messages, Quests, Factions and Homebrew drew right to the
    window's border; the older windows pad their own toolbars and lists. */
 .window-body > .glog, .window-body > .msg, .window-body > .qst, .window-body > .fac, .window-body > .hb { padding: 10px 12px; box-sizing: border-box; }
+
+/* ── 25. Dock: More ───────────────────────────────────────── */
+.dock-more { display: none; }
+body.tools-in-dock .dock-more { display: flex; }
+body.tools-in-dock .panel-dock .in-more { display: none !important; }
+.dock-more.has-news::after { content: ''; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
+.dock-pop { position: fixed; z-index: 9600; min-width: 200px; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: 0 8px 24px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 2px; }
+.dmp-row { display: flex; align-items: center; gap: 4px; }
+.dmp-open { flex: 1; display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); font: inherit; font-size: var(--fs-md); text-align: left; cursor: pointer; position: relative; }
+.dmp-open:hover { background: var(--panel-3); }
+.dmp-open.on { color: var(--accent); }
+.dmp-open .ico { width: 18px; height: 18px; flex: none; }
+.dmp-news { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-left: auto; }
+.dmp-pin { border: 1px solid transparent; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--fs-xs); padding: 4px 8px; border-radius: var(--r-sm); cursor: pointer; }
+.dmp-pin:hover { border-color: var(--border); color: var(--text); }
+.dmp-empty { padding: 8px; color: var(--text-muted); font-size: var(--fs-sm); }
+.dmp-hint { padding: 6px 8px 2px; border-top: 1px solid var(--border); margin-top: 4px; color: var(--text-muted); font-size: var(--fs-xs); }

@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = 'f4c6c00885';
+const BUILD = '2ee8ce5253';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=ecb7ded7fa',
-  'styles/theme.css?v=b2f1a3504b',
+  'styles/theme.css?v=40f535352e',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=f4b60a75c8',
   'js/core/theme.js?v=9db78fe46f',
@@ -52,7 +52,7 @@ const PRECACHE = [
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
-  'js/core/window-manager.js?v=ccf9e56505',
+  'js/core/window-manager.js?v=bf7448b3a4',
   'js/panels/combat.js?v=489af12158',
   'js/panels/attacks.js?v=57acabc3ca',
   'js/generated/reactions.js?v=0e74ab8786',
@@ -107,7 +107,8 @@ const PRECACHE = [
   'js/ui/tutorial.js?v=7427317caa',
   'js/ui/onboarding.js?v=af17803033',
   'js/ui/dock-tools.js?v=39406b40c4',
-  'js/app.js?v=51e09d9a4a',
+  'js/ui/dock-more.js?v=416a1415d3',
+  'js/app.js?v=b244273a99',
 ];
 
 const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build

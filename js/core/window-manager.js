@@ -504,6 +504,7 @@ function updateDock(){
   document.querySelectorAll('.dock-btn[data-panel]').forEach(btn=>{
     btn.classList.toggle('active',!!layout[btn.dataset.panel]?.open);
   });
+  if (typeof sktDockMoreRefresh === 'function') sktDockMoreRefresh();
 }
 
 // ============================================================

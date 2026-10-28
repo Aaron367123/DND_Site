@@ -11091,6 +11091,53 @@
         try { sktHomebrewApply(); } catch(e){}
       }
     }
+    // -- Round 118: the dock's More ------------------------------------------------
+    {
+      const k0 = localStorage.getItem('skt-dock-more-v1');
+      try {
+        localStorage.removeItem('skt-dock-more-v1'); sktDockMoreRefresh();
+        const dock = document.querySelector('.panel-dock .dock-panels'), more = document.getElementById('dock-more-btn');
+        const shown = id => { const b = dock.querySelector('.dock-btn[data-panel="' + id + '"]'); return !!b && b.getClientRects().length > 0; };
+        const cb = dock.querySelector('.dock-btn[data-panel="combat"]');
+        ok('dock: icons are full size', Math.round(cb.getBoundingClientRect().height) >= 36 && Math.round(cb.querySelector('.ico').getBoundingClientRect().width) >= 20);
+        ok('dock: the least-used windows wait behind More', !!more && more.getClientRects().length > 0 && !shown('homebrew') && !shown('library') && shown('combat') && shown('quests'));
+        more.click(); await sleep(30);
+        const pop = document.getElementById('dock-more-pop');
+        ok('dock: More lists them', !!pop && ['Homebrew', 'Library', 'Bestiary'].every(n => [...pop.querySelectorAll('.dmp-open span')].some(x => x.textContent === n)));
+        pop.querySelector('[data-dmp-open="library"]').click(); await sleep(150);
+        ok('dock: choosing one opens it, and More lights up while it\u2019s open', !!layout.library.open && !document.getElementById('dock-more-pop') && more.classList.contains('active'));
+        closePanel('library'); await sleep(20);
+        ok('dock: and goes dark when it closes', !more.classList.contains('active'));
+        // Pin to the dock, and back with a right-click.
+        more.click(); await sleep(20);
+        document.querySelector('#dock-more-pop [data-dmp-pin="bestiary"]').click(); await sleep(20);
+        ok('dock: Pin puts it back on the dock', shown('bestiary') && !sktDockMoreIds().includes('bestiary'));
+        document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); await sleep(10);
+        const bb = dock.querySelector('.dock-btn[data-panel="bestiary"]'), r = bb.getBoundingClientRect();
+        bb.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.right, clientY: r.top + 5 })); await sleep(20);
+        const mv = document.querySelector('#dock-ctx [data-dock-tomore]');
+        ok('dock: right-click offers Move to More', !!mv);
+        if (mv){ mv.click(); await sleep(20); }
+        ok('dock: and it moves there', !shown('bestiary') && sktDockMoreIds().includes('bestiary'));
+        // A whole group moved: its heading goes too.
+        sktDockMoreSet(sktDockMoreIds().concat(['loot', 'shop'])); await sleep(20);
+        const lootDiv = dock.querySelector('.dock-divider[data-group="Loot"]');
+        ok('dock: a heading with nothing left under it goes', !!lootDiv && lootDiv.getClientRects().length === 0);
+        const refIds = [...dock.querySelectorAll('.dock-divider[data-group="Reference"] ~ .dock-btn[data-panel]')].map(x => x.dataset.panel);
+        sktDockMoreSet([...new Set(sktDockMoreIds().concat(refIds))]); await sleep(20);
+        ok('dock: the last group’s heading goes too', dock.querySelector('.dock-divider[data-group="Reference"]').getClientRects().length === 0);
+        sktDockMoreSet(sktDockMoreIds().filter(x => !refIds.includes(x) || ['homebrew', 'library', 'bestiary', 'npclib'].includes(x)));
+        // News on a window behind More shows on More.
+        const hb = dock.querySelector('.dock-btn[data-panel="homebrew"]'); const badge = document.createElement('span'); badge.className = 'dock-badge'; badge.textContent = '1'; hb.appendChild(badge); await sleep(30);
+        ok('dock: news on a window behind More puts a dot on More', more.classList.contains('has-news'));
+        badge.remove(); await sleep(30);
+        ok('dock: and the dot goes with it', !more.classList.contains('has-news'));
+      } catch(e){ ok('round 118 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (k0 == null) localStorage.removeItem('skt-dock-more-v1'); else localStorage.setItem('skt-dock-more-v1', k0);
+        sktDockMoreClose(); sktDockCtxClose(); sktDockMoreRefresh();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
