@@ -106,6 +106,38 @@ function sanitizeHtml(html) {
   return tpl.innerHTML;
 }
 
+// Rich text pasted from somewhere else, made to look like it belongs here.
+// A paste from a web page or a document carries that page's look in inline
+// styles — its text colour, a white background, its font and size — so a
+// bit of D&D Beyond pasted into an NPC's notes sat there as a white block of
+// dark serif text. Keep what the text IS (bold, italics, links, lists,
+// tables, pictures); drop how the other page dressed it.
+function sktCleanPastedHtml(html){
+  var tpl = document.createElement('template');
+  tpl.innerHTML = sanitizeHtml(html || '');
+  Array.prototype.forEach.call(tpl.content.querySelectorAll('*'), function(el){ if (/^(meta|title|xml|o:p)$/i.test(el.tagName)) el.remove(); });
+  var all = tpl.content.querySelectorAll('*');
+  for (var i = 0; i < all.length; i++){
+    var el = all[i];
+    // Bold and italics written as styling (as web pages usually do) are
+    // kept as bold and italics.
+    var fw = el.style && el.style.fontWeight, fs = el.style && el.style.fontStyle;
+    var wrap = function(tag){ var w = document.createElement(tag); while (el.firstChild) w.appendChild(el.firstChild); el.appendChild(w); };
+    if (!/^(B|STRONG|H[1-6]|TH)$/.test(el.tagName) && (fw === 'bold' || fw === 'bolder' || +fw >= 600)) wrap('b');
+    if (!/^(I|EM)$/.test(el.tagName) && fs === 'italic') wrap('i');
+    ['style', 'class', 'id', 'color', 'face', 'size', 'bgcolor', 'background', 'align', 'dir', 'lang'].forEach(function(a){ el.removeAttribute(a); });
+    if (el.tagName === 'IMG'){ el.removeAttribute('width'); el.removeAttribute('height'); el.setAttribute('style', 'max-width:100%'); }
+  }
+  // <font> and bare <span>s are only ever there to carry the styling just
+  // removed: keep their text, lose the wrapper.
+  tpl.content.querySelectorAll('font, span').forEach(function(el){
+    if (el.attributes.length) return;
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.remove();
+  });
+  return tpl.innerHTML;
+}
+
 // Local-only per-browser identity used by the Notes panel for per-line author
 // coloring. Stored under skt-me-v1, intentionally NOT in SKT_SYNC_KEYS — same
 // pattern as skt-layout-v1 (each browser stays its own user).

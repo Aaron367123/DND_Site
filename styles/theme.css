@@ -331,3 +331,15 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 #cs-root .cs-hp-ctl .btn { padding: 4px 9px; min-height: 32px; flex: 0 0 auto; }
 #cs-root .cs-hp-ctl .cb-sel { flex: 0 1 150px; min-width: 0; width: auto; }
 #cs-root .cs-hp-ctl input, #cs-root .cs-hp-ctl .cb-sel { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+
+/* ── 13. NPC notes pasted from elsewhere ─────────────────── */
+/* Notes pasted before the paste was cleaned still carry the source page's
+   inline colours, backgrounds and fonts. Shown in ours; what's stored is
+   untouched. */
+.npclib-notes [style], .npclib-notes font {
+  color: inherit !important; background: none !important; font-family: inherit !important;
+  font-size: inherit !important; line-height: inherit !important;
+}
+.npclib-notes a { color: var(--accent); }
+.npclib-notes table { border-collapse: collapse; margin: 4px 0; }
+.npclib-notes td, .npclib-notes th { border: 1px solid var(--border); padding: 2px 6px; }

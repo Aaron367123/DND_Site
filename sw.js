@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = '5603006056';
+const BUILD = 'fd06c39d69';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=ecb7ded7fa',
-  'styles/theme.css?v=fe8f33d3fb',
+  'styles/theme.css?v=3c55052f69',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=5ead9a4764',
   'js/core/theme.js?v=9db78fe46f',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=1c9cc1c826',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=b8eb5214bc',
+  'js/core/utils.js?v=959142bb8e',
   'js/ui/dice-fx.js?v=a3c77a159d',
   'js/core/state.js?v=d4c96a7f2f',
   'js/core/undo.js?v=63ed223198',
@@ -66,7 +66,7 @@ const PRECACHE = [
   'js/panels/notes.js?v=38dcf91409',
   'js/panels/handouts.js?v=92072fbc59',
   'js/panels/battlemap.js?v=9a97a7553f',
-  'js/panels/npc-library.js?v=956f8b34ed',
+  'js/panels/npc-library.js?v=0054c516dd',
   'js/panels/bestiary.js?v=8b3658dc0a',
   'js/panels/content-panel.js?v=1a060dfd0b',
   'js/panels/adventures.js?v=0870abbb59',

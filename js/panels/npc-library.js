@@ -902,9 +902,17 @@ registerPanel('npclib', {
           });
           return;
         }
-        // Rich-text paste (e.g. copied from a web page) can smuggle in
-        // oversized data: URIs too. Let the default paste happen, then shrink
-        // anything over budget before it can be saved at full size.
+        // Rich text from elsewhere comes in looking like it belongs here (see
+        // sktCleanPastedHtml): the source's colours, background and fonts
+        // made pasted notes a white block of dark serif text.
+        const html = e.clipboardData && e.clipboardData.getData('text/html');
+        if (html && typeof sktCleanPastedHtml === 'function'){
+          e.preventDefault();
+          document.execCommand('insertHTML', false, sktCleanPastedHtml(html));
+          n.notes = notesEl.innerHTML; this._save();
+        }
+        // It can smuggle in oversized data: URIs too: shrink anything over
+        // budget before it can be saved at full size.
         setTimeout(() => this._shrinkNoteImages(notesEl, n), 0);
       });
       notesEl.addEventListener('input', () => { n.notes = notesEl.innerHTML; this._save(); });

@@ -10583,6 +10583,31 @@
         B._saveMap(); try { B._render(); } catch(e){}
       }
     }
+    // -- Round 107: NPC notes pasted from another page look like ours ---------
+    {
+      const html = '<meta charset="utf-8"><p style="color:rgb(36,36,36);background-color:rgb(255,255,255);font-family:Georgia,serif;font-size:18px"><span style="font-weight:700;color:rgb(146,38,16)">Hilda</span> was born in <a href="https://example.com/x" style="color:#1b9af0">Triboar</a> and <font face="Times" color="#000">distrusts giants</font>.</p><ul style="background:#fff"><li style="color:#222">Owes a favour</li></ul><table style="background:#f2f2f2"><tr><td style="color:#333">AC</td><td>12</td></tr></table>';
+      const npcs0 = localStorage.getItem('skt-npcs-v2');
+      try {
+        const out = sktCleanPastedHtml(html);
+        ok('notes paste: the other page\u2019s colours, backgrounds and fonts are dropped', !/style=|<font|<meta/i.test(out), out.slice(0, 120));
+        ok('notes paste: what the text is stays \u2014 bold, links, lists, tables', /<b>Hilda<\/b>/.test(out) && /<a href="https:\/\/example.com\/x">Triboar<\/a>/.test(out) && /<ul><li>Owes a favour<\/li><\/ul>/.test(out) && /<table>/.test(out), out.slice(0, 200));
+        openPanel('npclib'); await sleep(400);
+        const w = document.querySelector('.window[data-panel="' + ((typeof _wmHosted === 'function' && _wmHosted('npclib')) || 'npclib') + '"]');
+        const n = w && w.querySelector('.npclib-notes');
+        if (n){
+          n.innerHTML = ''; n.focus();
+          const dt = new DataTransfer(); dt.setData('text/html', html); dt.setData('text/plain', 'Hilda');
+          n.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+          await sleep(50);
+          ok('notes paste: pasting into an NPC\u2019s notes stores the clean version', /Hilda/.test(n.innerHTML) && !/style=|<font/i.test(n.innerHTML), n.innerHTML.slice(0, 120));
+          // A note pasted before this, styles and all, shown in our colours.
+          n.innerHTML = html;
+          const pEl = n.querySelector('p'), cs = getComputedStyle(pEl);
+          ok('notes paste: an older pasted note shows in the app\u2019s colours and font', cs.backgroundColor === 'rgba(0, 0, 0, 0)' && !/Georgia/.test(cs.fontFamily) && cs.color === getComputedStyle(n).color, cs.backgroundColor + ' ' + cs.fontFamily.slice(0, 20));
+        }
+      } catch(e){ ok('round 107 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (npcs0 == null) localStorage.removeItem('skt-npcs-v2'); else localStorage.setItem('skt-npcs-v2', npcs0); try { closePanel('npclib'); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
