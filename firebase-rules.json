@@ -29,7 +29,10 @@
           ".validate": "newData.isString() && newData.val().length < 500000"
         },
         "drawings": {
-          ".validate": "newData.isString() && newData.val().length < 1000000"
+          ".validate": "newData.hasChildren() || (newData.isString() && newData.val().length < 1000000 && !data.hasChildren())",
+          "$id": {
+            ".validate": "newData.isString() && newData.val().length < 200000"
+          }
         },
         "tokens": {
           "$id": {
@@ -100,7 +103,10 @@
               ".validate": "newData.isString() && newData.val().length < 500000"
             },
             "drawings": {
-              ".validate": "newData.isString() && newData.val().length < 1000000"
+              ".validate": "newData.hasChildren() || (newData.isString() && newData.val().length < 1000000 && !data.hasChildren())",
+              "$id": {
+                ".validate": "newData.isString() && newData.val().length < 200000"
+              }
             },
             "tokens": {
               "$id": {

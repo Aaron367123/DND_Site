@@ -138,7 +138,8 @@ const _PANELS_FOR_KEY = {
 //   skt/combat_v2/items/{id}      one combatant each
 //   skt/battlemap_v2/meta         grid/scale/rotation/… scalars
 //   skt/battlemap_v2/tokens/{id}  one token each
-//   skt/battlemap_v2/fog|fogStrokes|drawings
+//   skt/battlemap_v2/fog|fogStrokes
+//   skt/battlemap_v2/drawings/{id}  one pencil stroke or area each
 //
 // Locally NOTHING changes — panels still read/write the same localStorage
 // keys; explode() splits the stored JSON into nodes on push and assemble()
@@ -317,7 +318,7 @@ const _ENTITY_KEYS = {
       });
       nodes.fog        = JSON.stringify(d.fog ?? null);
       nodes.fogStrokes = JSON.stringify(d.fogStrokes || []);
-      nodes.drawings   = JSON.stringify(d.drawings || []);
+      Object.assign(nodes, _drawNodes(Array.isArray(d.drawings) ? d.drawings : []));
       const meta = {...d};
       delete meta.tokens; delete meta.fog; delete meta.fogStrokes; delete meta.drawings;
       // The tokens' order is their stacking order: a monster dropped on a
@@ -343,7 +344,28 @@ const _ENTITY_KEYS = {
       Object.keys(byId).forEach(id => { if (!used.has(id)) tokens.push(byId[id]); });
       delete meta.tokenOrder;
       const parse = (n, fb) => { try { return nodes[n] != null ? JSON.parse(nodes[n]) : fb; } catch(e){ return fb; } };
-      return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: parse('drawings', []) });
+      return JSON.stringify({ ...meta, tokens, fog: parse('fog', null), fogStrokes: parse('fogStrokes', []), drawings: _drawList(nodes) });
+    },
+    // Both sides of a merge in the format this device writes, so a server
+    // still holding the one-string drawings compares stroke for stroke with
+    // a device that writes them one by one (and the other way round).
+    normalize(nodes){
+      const legacy = nodes.drawings != null, per = Object.keys(nodes).some(_isDrawNode);
+      if (_drawPerStroke ? !legacy : !per) return nodes;
+      const out = {};
+      Object.keys(nodes).forEach(n => { if (n !== 'drawings' && !_isDrawNode(n)) out[n] = nodes[n]; });
+      return Object.assign(out, _drawNodes(_drawList(nodes)));
+    },
+    // Strokes one by one on the server means its rules allow it.
+    onServer(nodes){ if (!_drawPerStroke && Object.keys(nodes).some(_isDrawNode)) _drawPerStroke = true; },
+    // Rules from before strokes had their own entries refuse them: write the
+    // one string, as before, for the rest of this visit.
+    denied(err, paths){
+      if (!_drawPerStroke || !paths.some(p => p.indexOf('/drawings/') > 0)) return false;
+      if (!/permission.denied/i.test(String((err && (err.code || err.message)) || ''))) return false;
+      _drawPerStroke = false;
+      console.warn('[realtime] The database rules predate one entry per stroke; drawings sync as one string until they are republished (firebase-rules.json).');
+      return true;
     },
     postApply(){
       _reloadPanel('battlemap');
@@ -376,6 +398,9 @@ const _ENTITY_KEYS = {
     // was erased on purpose, and a plain union would resurrect it on the next
     // sync — the classic undo that will not stay undone.
     mergeNode(name, base, mine, theirs){
+      // Strokes with entries of their own need none of this: two strokes are
+      // two entries. It remains for fog strokes, and for drawings while the
+      // rules still want them as one string.
       if (name !== 'drawings' && name !== 'fogStrokes') return undefined;
       const arr = v => {
         try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; }
@@ -404,7 +429,7 @@ const _ENTITY_KEYS = {
     // the map yet. The phone offers "add yourself" and its token used to stay
     // on that phone alone — the DM and the other players never saw it.
     playerWritable(node, prev, next){
-      if (node === 'drawings') return true;
+      if (node === 'drawings' || _isDrawNode(node)) return true;
       if (node.indexOf('tokens/') !== 0) return false;
       if (node in prev) return true;
       const me = typeof paPc === 'function' ? paPc() : null;
@@ -412,6 +437,11 @@ const _ENTITY_KEYS = {
       if (!me || !t || !t.isPC || t.label !== me.name) return false;
       return !Object.keys(prev).some(n => { if (n.indexOf('tokens/') !== 0) return false; try { const o = JSON.parse(prev[n]); return o && o.isPC && o.label === me.name; } catch(e){ return false; } });
     },
+    // A player may rub out a stroke, as they always could when the strokes
+    // were one string they rewrote whole. Only a stroke's own entry: the old
+    // string, which a migrating phone leaves behind, is removed by the write
+    // that replaces it.
+    playerDeletable(node){ return _isDrawNode(node); },
     // Don't apply under a gesture: a token drag, a pencil stroke or a fog
     // brush. Only the drag was covered, so an update landing mid-stroke
     // replaced the drawings array the stroke was being appended to — the
@@ -498,6 +528,53 @@ const _ENTITY_KEYS = {
 };
 function _fbSafeId(id){ return String(id).replace(/[.#$\/\[\]]/g, '_'); }
 
+// ── Battle map drawings: one entry per stroke ───────────────────────────────
+// The strokes used to be one string, every stroke on the map, so finishing
+// any stroke re-sent all of them to every device: the 100th stroke cost a
+// hundred times the first, and the rules' 1 MB cap on that string (~800
+// strokes) refused the next one without a word. Now each stroke is an entry
+// of its own, drawings/<id>, the way tokens are, and costs the same whatever
+// else is on the map. Two people drawing at once are two entries, not a race
+// for one string.
+//
+// A stroke's id comes from the stroke itself, so every device names the same
+// stroke the same way without agreeing on anything: when it was begun (which
+// keeps the drawing order), and a hash of its points. Strokes from before
+// this carry no time; they are numbered in their order instead, ahead of
+// every timed one. An area (sphere, cone...) moves, so it keeps its own id.
+//
+// Rules from before this refuse the entries. Until they are republished a
+// device finds out on its first write (denied, above) and writes the one
+// string as before, so nothing breaks in between.
+let _drawPerStroke = true;
+function _isDrawNode(n){ return n.indexOf('drawings/') === 0; }
+function _hashFnv(s){ let h = 0x811c9dc5; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+function _drawNodeIds(list){
+  let old = 0;
+  return _entityNodeIds(list, s => {
+    if (s && s.k === 'tpl' && s.id) return 'a_' + s.id;
+    const j = JSON.stringify(s), at = s && +s.at > 0 ? Math.floor(+s.at) : 0;
+    const when = at ? at.toString(36).padStart(9, '0') : '00' + (old++).toString(36).padStart(7, '0');
+    return when + '_' + _hashStr(j) + _hashFnv(j);
+  });
+}
+// The nodes for a list of strokes, in whichever format this device writes.
+function _drawNodes(list){
+  if (!_drawPerStroke) return { drawings: JSON.stringify(list) };
+  const out = {}, ids = _drawNodeIds(list);
+  list.forEach((s, i) => { out['drawings/' + ids[i]] = JSON.stringify(s); });
+  return out;
+}
+// The list back from either format, in drawing order.
+function _drawList(nodes){
+  let out = [];
+  if (nodes.drawings != null){ try { const a = JSON.parse(nodes.drawings); if (Array.isArray(a)) out = a; } catch(e){ _diag('drawings', e); } }
+  Object.keys(nodes).filter(_isDrawNode).sort().forEach(n => {
+    try { const s = JSON.parse(nodes[n]); if (s) out.push(s); } catch(e){ _diag('drawing ' + n, e); }
+  });
+  return out;
+}
+
 // ── Player notes ────────────────────────────────────────────────────────────
 // Each character's notes live in the DM's notes tree, under one shared folder
 // with a folder per character, stamped with owner = that character's id.
@@ -539,6 +616,13 @@ function _entityNodeIds(list, idOf){
 const _entityCache = {};
 // Snapshots that arrived mid-gesture, newest per key (see _applyEntitySnapshot).
 const _heldSnaps = {};
+// What the server held when each write still in flight was sent. Firebase
+// shows a write here at once and, if the server refuses it, plays the old
+// state back BEFORE saying so: applied as news, that put the old state into
+// this device's storage, and the retry then sent the old state on, and the
+// refused change was lost. A snapshot identical to it has nothing new in it.
+const _entityPending = {};
+function _sameNodes(a, b){ const ka = Object.keys(a); return ka.length === Object.keys(b).length && ka.every(n => a[n] === b[n]); }
 let _holdTimer = null;
 function _retryHeldSnaps(){
   _holdTimer = null;
@@ -650,12 +734,22 @@ function _flushEntityKey(k){
     updates[_baseOf(spec) + '/' + n] = null;
     delete applied[n];
   });
+  // A node that turns into a folder of nodes, or back (the drawings moving to
+  // one entry per stroke): deleting the old one in the same update as writing
+  // the new is refused outright, since one path contains the other. The write
+  // replaces it anyway, so the deletion goes.
+  const upPaths = Object.keys(updates);
+  upPaths.forEach(p => {
+    if (updates[p] !== null) return;
+    if (upPaths.some(q => q !== p && updates[q] !== null && (q.indexOf(p + '/') === 0 || p.indexOf(q + '/') === 0))) delete updates[p];
+  });
   if (!Object.keys(updates).length && !txs.length) return Promise.resolve(true);
   // Optimistic cache update — the echo snapshot must match the cache so it
   // gets recognized and skipped. Rolled back on failure so a retry re-diffs.
   // A transaction that had to merge lands as a value different from this,
   // and the listener applies it like any other update.
   _entityCache[k] = applied;
+  _entityPending[k] = prev;
   const jobs = [];
   if (Object.keys(updates).length) jobs.push(_fbDb.ref().update(updates));
   txs.forEach(t => jobs.push(_fbDb.ref(_baseOf(spec) + '/' + t.n).transaction(cur => {
@@ -667,9 +761,13 @@ function _flushEntityKey(k){
   })));
   return Promise.all(jobs).then(() => {
     delete _retryCounts[k];
+    if (_entityPending[k] === prev) delete _entityPending[k];
     return true;
   }).catch(err => {
     _entityCache[k] = prev;
+    if (_entityPending[k] === prev) delete _entityPending[k];
+    // Refused for a format the rules don't know yet: say it the old way.
+    if (spec.denied && spec.denied(err, Object.keys(updates))) return _flushEntityKey(k);
     const n = (_retryCounts[k] || 0) + 1;
     _retryCounts[k] = n;
     if (n <= _MAX_RETRIES){
@@ -689,11 +787,13 @@ function _flushEntityKey(k){
 function _applyEntitySnapshot(k, snapVal){
   const spec = _ENTITY_KEYS[k];
   const serverNodes = _flattenEntitySnap(snapVal);
+  if (spec.onServer) spec.onServer(serverNodes);
   const prevCache = _entityCache[k] || {};
   const sNames = Object.keys(serverNodes);
   if (sNames.length === Object.keys(prevCache).length && sNames.every(n => serverNodes[n] === prevCache[n])){
     return; // echo of our own push, or no-op
   }
+  if (_entityPending[k] && _sameNodes(serverNodes, _entityPending[k])) return;   // a refused write played back
   // Per-key hold-off: don't apply while the user is mid-gesture (dragging a
   // token, drawing, painting fog) — replacing the map under a gesture loses
   // it. The snapshot used to be DROPPED here on the promise that "the next
@@ -713,12 +813,14 @@ function _applyEntitySnapshot(k, snapVal){
   // Entity-level merge: keep OUR locally-pending entity changes (dirty key,
   // not yet flushed), take the server's version of everything else. This is
   // the step-2 payoff — a peer's goblin damage and our token move both land.
-  let merged = {...serverNodes};
+  const norm = spec.normalize || (x => x);
+  let merged = norm({...serverNodes});
   if (_dirtyKeys.has(k)){
     try {
       const localNodes = spec.explode(localStorage.getItem(k) || 'null');
-      new Set([...Object.keys(localNodes), ...Object.keys(prevCache)]).forEach(n => {
-        const base = prevCache[n], mine = localNodes[n], theirs = serverNodes[n];
+      const baseNodes = norm(prevCache);
+      new Set([...Object.keys(localNodes), ...Object.keys(baseNodes)]).forEach(n => {
+        const base = baseNodes[n], mine = localNodes[n], theirs = merged[n];   // read before this n is written
         if (mine === base) return;                 // we did not touch this node
         // Both sides changed the same node. Taking ours wholesale is right
         // for a token — one object, one owner, last write wins — and wrong

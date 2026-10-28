@@ -331,7 +331,9 @@ registerPanel('battlemap',{
   _resizeObserver: null,
   // Whether the toolbar is hidden to maximize map space. Persisted in localStorage.
   _toolbarHidden: (function(){ try { return localStorage.getItem('skt-bm-toolbar-hidden') === '1'; } catch(e){ return false; } })(),
-  // Pencil annotations. Each entry is { c:color, s:size, p:[x1,y1,x2,y2,...] }
+  // Pencil annotations. Each entry is { c:color, s:size, p:[x1,y1,x2,y2,...], at }
+  // (at: when it was begun, which names its sync entry and keeps the order;
+  // strokes from before it existed have none)
   // — a flat int array keeps the JSON small for Firebase/localStorage.
   _drawings: [],
   _drawColor: '#ff4040',
@@ -3167,7 +3169,7 @@ registerPanel('battlemap',{
       }
       if (this._tool !== 'draw') return;
       e.preventDefault(); e.stopPropagation();
-      _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
+      _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y], at: Date.now() };
       this._drawings.push(_curStroke);
       // Live broadcast throttle — push a stroke-tick to player tabs at most
       // 10 fps. Keeps Firebase write traffic minimal while still feeling live.
@@ -3254,7 +3256,7 @@ registerPanel('battlemap',{
       }
       if (this._tool !== 'draw') return;
       e.preventDefault(); e.stopPropagation();
-      _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y] };
+      _curStroke = { c: this._drawColor, s: this._drawSize, p: [x, y], at: Date.now() };
       this._drawings.push(_curStroke);
       let _lastTick = 0;
       const tickIfDue = () => {

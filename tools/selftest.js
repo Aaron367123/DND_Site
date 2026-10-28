@@ -4673,8 +4673,13 @@
            after.drawings.some(d => d.c === '#00ff00') && after.drawings.some(d => d.c !== '#00ff00' && d.p && d.p.length >= 10)
            && after.tokens.find(t => t.id === tok.id).x === tx0 + 50, JSON.stringify(after.drawings.map(d => d.c)));
         await sleep(450);
-        const dk = u => Object.keys(u).find(p => /drawings$/.test(p));
-        const sent = (pushes.filter(dk).map(u => JSON.parse(u[dk(u)])).pop()) || [];
+        // Every stroke sent, in either format.
+        const sent = [];
+        pushes.forEach(u => Object.keys(u).forEach(p => {
+          if (u[p] == null) return;
+          if (/drawings$/.test(p)) sent.push(...JSON.parse(u[p]));
+          else if (/drawings\/[^/]+$/.test(p)) sent.push(JSON.parse(u[p]));
+        }));
         ok('sync: and both are sent on, neither erasing the other',
            sent.some(d => d.c === '#00ff00') && sent.some(d => d.c !== '#00ff00' && d.p && d.p.length >= 10), sent.length + ' sent');
 
@@ -11136,6 +11141,148 @@
       finally {
         if (k0 == null) localStorage.removeItem('skt-dock-more-v1'); else localStorage.setItem('skt-dock-more-v1', k0);
         sktDockMoreClose(); sktDockCtxClose(); sktDockMoreRefresh();
+      }
+    }
+    // -- Round 119: map drawings, one entry per stroke ---------------------------
+    // Against a stand-in for Firebase that keeps a real tree and enforces the
+    // two sets of rules: the old ones refuse a stroke entry, the new ones
+    // refuse the one string over entries. It also refuses an update holding
+    // a path and its parent, as Firebase does.
+    {
+      const K = 'skt-battlemap-v1', spec = _ENTITY_KEYS[K], base = _baseOf(spec);
+      const l0 = localStorage.getItem(K), c0 = _entityCache[K], db0 = _fbDb, m0 = _drawPerStroke;
+      let tree = {}, rules = 'new', sent = [], live = true;
+      const deny = () => Promise.reject({ code: 'PERMISSION_DENIED', message: 'PERMISSION_DENIED: Permission denied' });
+      const rel = p => p.slice(base.length + 1).split('/');
+      _fbDb = { ref: path => ({
+        update(u){
+          const ps = Object.keys(u);
+          if (ps.some(x => ps.some(y => y !== x && y.indexOf(x + '/') === 0))) throw new Error('Reference.update failed: ' + ps.join() + ' — one path is an ancestor of another');
+          // As Firebase does: the write shows at once, and a refusal plays the
+          // old state back before the promise says so.
+          const was = clone(tree);
+          let refused = false;
+          for (const x of ps){
+            const r = rel(x); if (r[0] !== 'drawings' || u[x] === null) continue;
+            if (rules === 'old' && r.length > 1) refused = true;
+            if (rules === 'new' && r.length === 1 && tree.drawings && typeof tree.drawings === 'object') refused = true;
+          }
+          ps.forEach(x => {
+            const r = rel(x);
+            if (r.length === 1){ if (u[x] === null) delete tree[r[0]]; else tree[r[0]] = u[x]; return; }
+            if (u[x] === null){ if (tree[r[0]] && typeof tree[r[0]] === 'object'){ delete tree[r[0]][r[1]]; if (!Object.keys(tree[r[0]]).length) delete tree[r[0]]; } return; }
+            if (!tree[r[0]] || typeof tree[r[0]] !== 'object') tree[r[0]] = {};
+            tree[r[0]][r[1]] = u[x];
+          });
+          if (live) _applyEntitySnapshot(K, clone(tree));
+          if (refused){ tree = was; if (live) _applyEntitySnapshot(K, clone(tree)); return deny(); }
+          sent.push(u); return Promise.resolve();
+        },
+        transaction(fn){ const r = rel(path); const cur = r.length > 1 ? (tree[r[0]] || {})[r[1]] : tree[r[0]]; const v = fn(cur);
+          if (v !== undefined){ if (r.length > 1) (tree[r[0]] = tree[r[0]] || {})[r[1]] = v; else tree[r[0]] = v; } return Promise.resolve({ committed: true }); },
+        set(){ return Promise.resolve(); }, remove(){ return Promise.resolve(); },
+        once(){ return Promise.resolve({ exists: () => false, val: () => null }); }, on(){}, off(){},
+      }) };
+      const setLocal = d => { _remoteUpdate = true; try { localStorage.setItem(K, JSON.stringify(d)); } finally { _remoteUpdate = false; } };
+      const local = () => JSON.parse(localStorage.getItem(K)).drawings;
+      const treeOf = nodes => { const t = {}; Object.keys(nodes).forEach(n => { const [x, y] = n.split('/'); if (y) (t[x] = t[x] || {})[y] = nodes[n]; else t[x] = nodes[n]; }); return t; };
+      const clone = o => JSON.parse(JSON.stringify(o));
+      const served = () => JSON.parse(spec.assemble(_flattenEntitySnap(clone(tree)))).drawings;
+      const sig = list => list.map(s => s.c).join(',');
+      const T = Date.now();
+      const st = (c, at) => ({ c, s: 4, p: [10, 10, 40, 30, 70, 20], ...(at ? { at } : {}) });
+      const old1 = st('#a00001'), old2 = st('#a00002');
+      // The map as it stood: two strokes from before, in the one string.
+      const start = (list, legacyServer) => {
+        const d = JSON.parse(l0 || '{}'); d.drawings = list; setLocal(d);
+        _drawPerStroke = !legacyServer;
+        const nodes = spec.explode(JSON.stringify(d));
+        _drawPerStroke = true;
+        tree = treeOf(nodes); _entityCache[K] = { ...nodes }; sent = [];
+        return d;
+      };
+      try {
+        closePanel('battlemap'); _dirtyKeys.clear();
+        // Moving over, with the new rules.
+        let d = start([old1, old2], true);
+        d.drawings = [old1, old2, st('#b00001', T)]; setLocal(d);
+        ok('drawings: the first write moves a map\u2019s strokes into entries of their own', await _flushEntityKey(K) === true
+           && tree.drawings && typeof tree.drawings === 'object' && Object.keys(tree.drawings).length === 3);
+        ok('drawings: in the order they were drawn, old strokes first', sig(served()) === '#a00001,#a00002,#b00001', sig(served()));
+        const same = (x, y) => Object.keys(x).length === Object.keys(y).length && Object.keys(x).every(n => x[n] === y[n]);
+        ok('drawings: and this device knows what the server holds', same(_entityCache[K], _flattenEntitySnap(clone(tree))));
+        // A stroke costs one small entry, whatever is on the map.
+        sent = []; d.drawings = d.drawings.concat([st('#b00002', T + 1)]); setLocal(d);
+        await _flushEntityKey(K);
+        const u1 = sent[0] || {}, k1 = Object.keys(u1);
+        ok('drawings: one more stroke sends that stroke and nothing else', sent.length === 1 && k1.length === 1 && /\/drawings\/[^/]+$/.test(k1[0]) && u1[k1[0]].length < 200, JSON.stringify(u1));
+        // Rubbing one out sends one removal.
+        sent = []; d.drawings = d.drawings.filter(s => s.c !== '#b00001'); setLocal(d);
+        await _flushEntityKey(K);
+        const u2 = sent[0] || {}, k2 = Object.keys(u2);
+        ok('drawings: rubbing one out removes its entry alone', k2.length === 1 && u2[k2[0]] === null && sig(served()) === '#a00001,#a00002,#b00002', JSON.stringify(u2));
+        // Two people drawing at once.
+        d.drawings = d.drawings.concat([st('#b00003', T + 3)]); setLocal(d); _dirtyKeys.add(K);
+        const other = st('#c00001', T - 5), on = spec.explode(JSON.stringify({ ...d, drawings: [other] }));
+        Object.keys(on).filter(n => n.indexOf('drawings/') === 0).forEach(n => { tree.drawings[n.slice(9)] = on[n]; });
+        _applyEntitySnapshot(K, clone(tree));
+        ok('drawings: two people drawing at once both keep their stroke', sig(local()) === '#a00001,#a00002,#c00001,#b00002,#b00003', sig(local()));
+        sent = []; await _flushEntityKey(K); _dirtyKeys.delete(K);
+        ok('drawings: and only this device\u2019s stroke is sent', sent.length === 1 && Object.keys(sent[0]).length === 1 && /b00003/.test(Object.values(sent[0])[0]));
+        ok('drawings: the server ends with all of them', sig(served()) === '#a00001,#a00002,#c00001,#b00002,#b00003', sig(served()));
+        // An area keeps its entry when it moves.
+        const area = { k: 'tpl', id: 'tpl_x1', shape: 'circle', x: 50, y: 50, ang: 0, ft: 20, c: '#0f0' };
+        d = JSON.parse(localStorage.getItem(K)); d.drawings.push(area); setLocal(d); await _flushEntityKey(K);
+        sent = []; area.x = 90; setLocal(d); await _flushEntityKey(K);
+        const u3 = sent[0] || {};
+        ok('drawings: a moved area rewrites its own entry', Object.keys(u3).length === 1 && u3[base + '/drawings/a_tpl_x1'] && JSON.parse(u3[base + '/drawings/a_tpl_x1']).x === 90, JSON.stringify(Object.keys(u3)));
+
+        // Moving over while another device still writes the one string.
+        d = start([old1, old2], true);
+        tree.drawings = JSON.stringify([old1, old2, st('#c00002', T + 5)]);
+        d.drawings = [old1, old2, st('#b00004', T + 6)]; setLocal(d); _dirtyKeys.add(K);
+        _applyEntitySnapshot(K, clone(tree));
+        ok('drawings: a stroke from a device on the old format is kept while moving over', sig(local()) === '#a00001,#a00002,#c00002,#b00004', sig(local()));
+        await _flushEntityKey(K); _dirtyKeys.delete(K);
+        ok('drawings: and moved over with the rest', typeof tree.drawings === 'object' && sig(served()) === '#a00001,#a00002,#c00002,#b00004', sig(served()));
+
+        // Rules not yet republished: refused, then written the old way.
+        rules = 'old';
+        d = start([old1, old2], true);
+        d.drawings = [old1, old2, st('#b00005', T + 7)]; setLocal(d);
+        const res = await _flushEntityKey(K);
+        ok('drawings: with the old rules, a stroke still reaches the table', res === true && typeof tree.drawings === 'string' && sig(served()) === '#a00001,#a00002,#b00005', typeof tree.drawings + ' ' + sig(served()));
+        ok('drawings: as the one string, for the rest of the visit', _drawPerStroke === false);
+        // And two devices on the old format still merge.
+        d.drawings = d.drawings.concat([st('#b00006', T + 9)]); setLocal(d); _dirtyKeys.add(K);
+        tree.drawings = JSON.stringify(JSON.parse(tree.drawings).concat([st('#c00003', T + 8)]));
+        _applyEntitySnapshot(K, clone(tree));
+        await _flushEntityKey(K); _dirtyKeys.delete(K);
+        ok('drawings: on the old format, two people drawing at once both keep their stroke', ['#b00006', '#c00003'].every(c => sig(served()).includes(c)), sig(served()));
+        // Once another device has moved the map over, so does this one.
+        rules = 'new';
+        _drawPerStroke = true; const nn = spec.explode(localStorage.getItem(K)); _drawPerStroke = false;
+        tree = treeOf(nn);
+        _applyEntitySnapshot(K, clone(tree));
+        ok('drawings: strokes in entries on the server switch this device back', _drawPerStroke === true);
+
+        // A player.
+        d = start([old1, st('#b00007', T + 10), st('#b00008', T + 11)], false);
+        document.body.classList.add('player-mode');
+        try {
+          d.cellSize = (d.cellSize || 40) + 7;
+          d.drawings = [old1, st('#b00008', T + 11), st('#d00001', T + 12)]; setLocal(d);
+          await _flushEntityKey(K);
+        } finally { document.body.classList.remove('player-mode'); }
+        const u4 = Object.assign({}, ...sent), k4 = Object.keys(u4);
+        ok('drawings: a player\u2019s stroke and rub-out reach the table', k4.some(x => /drawings\//.test(x) && /d00001/.test(u4[x] || '')) && k4.some(x => /drawings\//.test(x) && u4[x] === null) && !/b00007/.test(JSON.stringify(served())));
+        ok('drawings: and nothing of the DM\u2019s', !k4.some(x => /\/meta$/.test(x)));
+      } catch(e){ ok('round 119 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        _fbDb = db0; _drawPerStroke = m0; _dirtyKeys.delete(K);
+        if (c0 === undefined) delete _entityCache[K]; else _entityCache[K] = c0;
+        _remoteUpdate = true; try { if (l0 == null) localStorage.removeItem(K); else localStorage.setItem(K, l0); } finally { _remoteUpdate = false; }
+        document.body.classList.remove('player-mode');
       }
     }
     // -- Class features: represented, not just text ------------------------

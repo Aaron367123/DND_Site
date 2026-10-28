@@ -172,6 +172,8 @@ Out of the box the database runs in "test mode": anyone who finds the URL can re
 
 Order matters: deploy the current site code first and have every device reload it (so all clients are signing in), THEN publish the rules. A device still running old code when the rules land will show "Offline" until it reloads. To verify it worked: the app's console logs `[SKT] signed in anonymously (uid …)` and the Live pill stays green, while opening the database URL raw in a browser gets permission-denied.
 
+**Republishing after a rules change.** The same Rules tab, the same paste and Publish. The rules from October 2026 on let the battle map store each pencil stroke as its own entry. Until they are published the app keeps the drawings as one block, as before, so the site and the rules can be updated in either order; once they are, the next stroke on each map moves that map over by itself.
+
 ---
 
 ## Sharing with Friends (Real-Time Sync)

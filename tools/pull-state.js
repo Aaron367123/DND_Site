@@ -142,8 +142,11 @@ function assembleBattlemap(n){
     try { const t = JSON.parse(n[k]); if (t) tokens.push(t); } catch(e){}
   });
   const p = (k, fb) => { try { return n[k] != null ? JSON.parse(n[k]) : fb; } catch(e){ return fb; } };
+  // Drawings: one string (older), or one entry per stroke, in drawing order.
+  const drawings = p('drawings', []).concat(Object.keys(n).filter(k => k.startsWith('drawings/')).sort()
+    .map(k => { try { return JSON.parse(n[k]); } catch(e){ return null; } }).filter(Boolean));
   return JSON.stringify({ ...meta, tokens, fog: p('fog', null),
-                          fogStrokes: p('fogStrokes', []), drawings: p('drawings', []) });
+                          fogStrokes: p('fogStrokes', []), drawings });
 }
 
 function assembleNotes(n){
