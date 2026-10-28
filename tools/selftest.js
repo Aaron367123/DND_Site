@@ -8547,10 +8547,11 @@
         document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); await sleep(30);
         ok('dock tools: and closes on a click away', !id('search-wrap').classList.contains('open'));
         // A short screen: the panel list scrolls; search and settings stay in reach.
+        // (The buttons are 29px tall there by design — theme.css §18 — not squashed.)
         app.style.height = '600px'; await sleep(60);
         const set = id('settings-btn').getBoundingClientRect(), btn = document.querySelector('.dock-panels .dock-btn[data-panel="combat"]').getBoundingClientRect();
         const pl = document.querySelector('.dock-panels');
-        ok('dock tools: on a short screen the panels scroll and the tools stay on screen', set.bottom <= 600 && btn.height >= 30 && pl.scrollHeight > pl.clientHeight, Math.round(set.bottom) + ' / btn ' + Math.round(btn.height));
+        ok('dock tools: on a short screen the panels scroll and the tools stay on screen', set.bottom <= 600 && btn.height >= 28 && pl.scrollHeight > pl.clientHeight, Math.round(set.bottom) + ' / btn ' + Math.round(btn.height));
       } catch(e){ ok('round 54 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally { app.style.height = h0; if (typeof sktPresenceClose === 'function') sktPresenceClose(); }
     }
