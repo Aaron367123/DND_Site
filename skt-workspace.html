@@ -11,6 +11,8 @@
 <meta name="apple-mobile-web-app-title" content="SKT DnD">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
 <script>
 /* Startup watchdog. Inline and first, so it runs even when a deferred script
    never arrives (every <script defer> waits for the one before it, so one
@@ -87,9 +89,10 @@
       start_url: start.href, scope: base, display: 'standalone',
       theme_color: '#1a1a1a', background_color: '#1a1a1a',
       icons: [
-        { src: base + 'apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
-        { src: base + 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-        { src: base + 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+        { src: base + 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: base + 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: base + 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        { src: base + 'apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' }
       ]
     };
     var link = document.querySelector('link[rel="manifest"]');
@@ -581,6 +584,6 @@
 <script defer src="js/ui/onboarding.js?v=af17803033"></script>
 <!-- 7. Entry point (calls initPanels() + init()) -->
 <script defer src="js/ui/dock-tools.js?v=39406b40c4"></script>
-<script defer src="js/app.js?v=b5a88fcd4f"></script>
+<script defer src="js/app.js?v=51e09d9a4a"></script>
 </body>
 </html>

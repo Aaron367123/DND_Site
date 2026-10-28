@@ -342,8 +342,10 @@ function findChrome(){
     // `'serviceWorker' in navigator`, which stays true for an own property, so
     // removing the value just moved the failure to `.register` of undefined.
     // register() returns a promise that never settles, so no update path runs.
+    // It records what asked to register (window.__swRegs), so a test can see
+    // that a view sets up updates at all.
     seedParts.push(
-      "try{var _swStub={register:function(){return new Promise(function(){})},"
+      "try{var _swStub={register:function(u){(window.__swRegs=window.__swRegs||[]).push(String(u));return new Promise(function(){})},"
       + "getRegistration:function(){return Promise.resolve(undefined)},"
       + "getRegistrations:function(){return Promise.resolve([])},"
       + "addEventListener:function(){},removeEventListener:function(){},"

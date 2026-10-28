@@ -10846,6 +10846,8 @@
         const finder = (m, x, y) => [0, 1, 2, 3, 4, 5, 6].every(i => m[y][x + i] && m[y + 6][x + i] && m[y + i][x] && m[y + i][x + 6]) && m[y + 3][x + 3] && !m[y + 1][x + 1];
         ok('qr: version 1 for a short text, three finders', m1.length === 21 && finder(m1, 0, 0) && finder(m1, 14, 0) && finder(m1, 0, 14));
         ok('qr: a longer text gets a bigger code; too long gets none', big.length === 57 && sktQrMatrix('x'.repeat(300)) === null);
+        ok('updates: the DM view sets them up', (window.__swRegs || []).includes('sw.js'));
+        ok('home screen: an app icon in every size, and one for the browser tab', !!document.querySelector('link[rel="icon"][href="icon.svg"]') && await fetch('manifest.json').then(r => r.json()).then(m => ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'].every(f => m.icons.some(i => i.src === f))));
         const ml = document.querySelector('link[rel="manifest"]');
         ok('home screen: the DM page offers the usual manifest, an iPhone icon and a dark status bar', ml.getAttribute('href') === 'manifest.json' && !!document.querySelector('link[rel="apple-touch-icon"][href="apple-touch-icon.png"]') && (document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]') || {}).content === 'black');
         ok('qr: Reed-Solomon matches the standard\u2019s example', JSON.stringify(_qrEcc([32,91,11,120,209,114,220,77,67,64,236,17,236,17,236,17], 10)) === '[196,35,39,119,235,215,231,226,93,23]');
@@ -11770,6 +11772,8 @@
           paRender();
         }
       }
+      // ── A new version reaches the player's phone too ────────────────────
+      ok('player: it sets up updates, so "A new version is available" can reach a phone', (window.__swRegs || []).includes('sw.js'), window.__swRegs);
       // ── Added to a home screen, a player link opens as that player view ──
       {
         const ml = document.querySelector('link[rel="manifest"]'), href = ml.getAttribute('href') || '';

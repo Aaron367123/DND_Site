@@ -68,6 +68,10 @@ function init(){
         }
       });
     }
+    // A player's phone gets "A new version is available" too. It returned
+    // before this, so a phone left open at the table ran the old code (and
+    // synced old-shaped data) until someone thought to reload it.
+    initServiceWorker();
     window.__sktBooted = true; document.getElementById('skt-boot-stuck')?.remove();
     return;
   }
