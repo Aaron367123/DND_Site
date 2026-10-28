@@ -243,6 +243,20 @@ const window = {};
       return lat(await W(dm, zt + ' === 1'));
     });
 
+    await step('DM uploads a map (3000×4000) → phone draws it at the same size and grid', async () => {
+      const geo = 'const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(" ")';
+      const before = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");
+      await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,400)); const B = panelDefs.battlemap; B._openMapPicker(); for (let i = 0; i < 40 && !document.getElementById('mapsel-upload-input'); i++) await new Promise(r=>setTimeout(r,100));"
+        + " const c = document.createElement('canvas'); c.width = 3000; c.height = 4000; const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 3000, 4000); gr.addColorStop(0, '#2a5'); gr.addColorStop(1, '#a52'); g.fillStyle = gr; g.fillRect(0, 0, 3000, 4000); for (let i = 0; i < 400; i++){ g.fillStyle = 'hsl(' + (i * 37 % 360) + ',50%,50%)'; g.fillRect((i * 97) % 3000, (i * 131) % 4000, 60, 60); }"
+        + " const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9)); const dt = new DataTransfer(); dt.items.add(new File([blob], 'test-map.jpg', { type: 'image/jpeg' })); const inp = document.getElementById('mapsel-upload-input'); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return 1");
+      const shared = await W(dm, "return /^sktblob:/.test(panelDefs.battlemap._bgMapPath || '') && panelDefs.battlemap._bgMapPath !== " + JSON.stringify(before), 30000);
+      if (shared == null) return { ok: false, why: 'the DM never shared it' };
+      const d = await dm.ev(geo);
+      await pl.ev("paTab = 'map'; paRender(); return 1");
+      const t = await W(pl, "const B = panelDefs.battlemap; return !!B && [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(' ') === " + JSON.stringify(d), 30000);
+      return t == null ? { ok: false, why: 'DM ' + d + ' · phone ' + await pl.ev(geo) } : { ok: true, lat: t };
+    });
+
     // ── Handouts, roll requests, reactions ──────────────────────────────────
     await step('DM sends a handout → phone pops it up', async () => {
       await dm.ev("openPanel('handouts'); await new Promise(r=>setTimeout(r,300)); panelDefs.handouts.send({ title: 'Stress handout', text: 'A note from the DM', to: 'all' }); return 1");
