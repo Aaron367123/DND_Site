@@ -303,3 +303,25 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .pa-econ-b { min-height: 34px; padding: 3px 6px; font-size: var(--fs-sm); gap: 4px; }
 .pa-econ:not(.mine) .pa-econ-b { min-height: 30px; padding: 2px 12px; font-size: var(--fs-xs); }
 #cs-root.cs-embed .pa-econ { margin: 0 0 8px; }
+
+/* ── 11. AC, initiative, speed, proficiency: plain and compact ── */
+/* They were a shield and three hexagons with notched corners and a second
+   hairline inside — the little angles at every corner. Now plain boxes with
+   one thin border, and on a phone the four sit in one row with Inspiration
+   under them. */
+#cs-root .cs-boxes { gap: 6px; align-items: stretch; }
+#cs-root .cs-boxes > .cs-box:nth-child(n) {
+  clip-path: none; border: 1px solid var(--fx-line); border-radius: 8px; background: var(--fx-fill);
+  min-height: 0; width: auto; justify-self: stretch; justify-content: center; gap: 1px; padding: 6px 4px;
+}
+#cs-root .cs-boxes > .cs-box:nth-child(n)::before { content: none; }
+#cs-root .cs-boxes > .cs-box:nth-child(n) b { font-size: 21px; line-height: 1.1; }
+#cs-root .cs-boxes > .cs-box:nth-child(n) > span { margin-top: 0; font-size: var(--fs-2xs); letter-spacing: .06em; }
+#cs-root .cs-boxes > button.cs-box:hover, #cs-root .cs-boxes > button.cs-box:focus-visible { border-color: var(--accent); }
+@media (max-width: 760px) {
+  #cs-root .cs-boxes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #cs-root .cs-boxes > .cs-box:nth-child(n) { grid-column: auto; }
+  #cs-root .cs-boxes > .cs-box.cs-inspbox:nth-child(n) { grid-column: 1 / -1; padding: 2px; }
+  #cs-root .cs-boxes > .cs-inspbox .cs-insp-h { flex-direction: row; justify-content: center; gap: 8px; padding: 5px 8px; }
+  #cs-root .cs-boxes > .cs-inspbox .cs-insp-h b { font-size: 17px; }
+}
