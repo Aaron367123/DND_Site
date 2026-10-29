@@ -10442,7 +10442,7 @@
           + '<div class="combatant-card dead pc"><div class="card-avatar"></div></div><span class="condition-tag" data-cond="Poisoned">Poisoned ×</span><span class="condition-tag" data-cond="Prone">Prone ×</span></div>';
         document.body.appendChild(host);
         const q = s => host.querySelector(s);
-        ok('combat: whose turn it is says so, on a tab', /Turn/.test(getComputedStyle(q('.combatant-card.active'), '::after').content));
+        ok('combat: whose turn it is shows in the frame, with no tab on the card', !/Turn/.test(getComputedStyle(q('.combatant-card.active'), '::after').content) && getComputedStyle(q('.combatant-card.active')).getPropertyValue('--fx-ring').trim() !== '');
         ok('combat: the fallen in grey', /grayscale/.test(getComputedStyle(q('.combatant-card.dead .card-avatar')).filter));
         const tags = host.querySelectorAll('.condition-tag');
         ok('combat: each condition with its sign', /🤢/.test(getComputedStyle(tags[0], '::before').content) && /🛌/.test(getComputedStyle(tags[1], '::before').content));
