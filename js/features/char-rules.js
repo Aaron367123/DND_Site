@@ -2385,7 +2385,7 @@ function sktComputeCharacter(build, R, prior){
   prior = prior || {};
   const cls = sktRulesClass(R, build.cls), sub = sktRulesSubclass(cls, build.subclass);
   const L = Math.max(1, Math.min(20, +build.level || 1));
-  const pb = sktProfBonus(L);
+  const pb = sktProfBonus(L) + _sktItemSum(build, 'bonusProficiencyBonus');
   const species = sktRulesSpecies(R, build.species);
   const subrace = species && sktSpeciesSub(species, build);
   const bg = sktBuildBackground(R, build);
@@ -2412,6 +2412,11 @@ function sktComputeCharacter(build, R, prior){
   };
   SKT_ABS.forEach(k => { ctx.mod[k] = sktMod(abilities[k]); });
   _sktActiveItems(build).forEach(m => (m.resist || []).forEach(r => { if (typeof r === 'string') ctx.resist.add(r); }));
+  // Magic items: damage and condition immunities, a bonus to every ability
+  // check (a Stone of Good Luck), to concentration saves.
+  _sktActiveItems(build).forEach(m => [].concat(m.immune || [], m.conditionImmune || []).forEach(r => { if (typeof r === 'string') ctx.immune.add(r.toLowerCase()); }));
+  ctx.checkBonusAll = _sktItemSum(build, 'bonusAbilityCheck');
+  ctx.concBonus += _sktItemSum(build, 'bonusSavingThrowConcentration');
 
   // Proficiencies from the class, species, background and feats.
   ((cls && cls.armor) || []).forEach(a => ctx.armorProf.add(typeof a === 'string' ? sktRulesInline(a).toLowerCase() : 'shield'));
@@ -2609,7 +2614,7 @@ function sktComputeCharacter(build, R, prior){
     else if (ctx.skillProf.has(sk)){ bonus = pb; prof = 1; }
     else if (ctx.jackOfAllTrades) bonus = Math.floor(pb / 2);
     else if (ctx.remarkableAthlete && ['str', 'dex', 'con'].includes(ab)) bonus = Math.ceil(pb / 2);
-    skills[sk] = ctx.mod[ab] + bonus + (ctx.skillBonus[sk] || 0);
+    skills[sk] = ctx.mod[ab] + bonus + (ctx.skillBonus[sk] || 0) + (ctx.checkBonusAll || 0);
     if (prof) skillProfOut[sk] = prof;
   });
 
@@ -2692,7 +2697,7 @@ function sktComputeCharacter(build, R, prior){
   speed *= ctx.speedMult;
 
   // Initiative and passive perception.
-  let init = ctx.mod.dex + ctx.initBonus;
+  let init = ctx.mod.dex + ctx.initBonus + (ctx.checkBonusAll || 0);
   if (R.edition === '2014' && ctx.jackOfAllTrades) init += Math.floor(pb / 2);
   if (R.edition === '2014' && ctx.remarkableAthlete) init += Math.ceil(pb / 2);
   let passive = 10 + skills.perception + ctx.passiveBonus.perception;
@@ -2700,9 +2705,11 @@ function sktComputeCharacter(build, R, prior){
   // Spellcasting.
   const sc = sktBuildSpellcasting(build, R, abilities);
   if (sc){
-    // Items, and the sheet's custom bonuses.
-    const ba = _sktItemSum(build, 'bonusSpellAttack') + (+(build.overrides || {}).spellAttack || 0) + ctx.spellAtkBonus;
-    const bd = _sktItemSum(build, 'bonusSpellSaveDc') + (+(build.overrides || {}).spellDc || 0) + ctx.spellDcBonus;
+    // Items, the sheet's custom bonuses, and an item's better proficiency
+    // bonus (the spellcasting numbers are worked out from the level's).
+    const ipb = _sktItemSum(build, 'bonusProficiencyBonus');
+    const ba = _sktItemSum(build, 'bonusSpellAttack') + (+(build.overrides || {}).spellAttack || 0) + ctx.spellAtkBonus + ipb;
+    const bd = _sktItemSum(build, 'bonusSpellSaveDc') + (+(build.overrides || {}).spellDc || 0) + ctx.spellDcBonus + ipb;
     sc.attack += ba; sc.dc += bd;
     (sc.cantripLists || []).forEach(l => { l.attack += ba; l.dc += bd; });
   }
@@ -2846,6 +2853,8 @@ function sktComputeCharacter(build, R, prior){
   Object.keys(ctx.moveExtra || {}).forEach(k => { const v = ctx.moveExtra[k] === 'walk' ? speed : +ctx.moveExtra[k] || 0; if (v) speeds[k] = Math.max(speeds[k] || 0, v); });
   // Roving's climb and swim: not in heavy armour.
   if (!heavy) Object.keys(ctx.moveUnlessHeavy || {}).forEach(k => { const v = ctx.moveUnlessHeavy[k] === 'walk' ? speed : +ctx.moveUnlessHeavy[k] || 0; if (v) speeds[k] = Math.max(speeds[k] || 0, v); });
+  // Magic items' speeds, before the sheet's own settings.
+  Object.assign(speeds, sktItemSpeeds(speeds, _sktActiveItems(build)));
   ['walk', 'fly', 'swim', 'climb', 'burrow'].forEach(k => { const v = setNum((ov.speedSet || {})[k]); if (v != null){ if (v > 0) speeds[k] = v; else if (k !== 'walk') delete speeds[k]; } });
   speed = speeds.walk;
   const speedShow = speeds[ov.speedShow] ? ov.speedShow : 'walk';
@@ -2892,6 +2901,9 @@ function sktComputeCharacter(build, R, prior){
       greatWeaponFighting: !!ctx.gwf,
       // Magic items attuned at once: three, more for an artificer.
       attuneMax: ctx.attuneMax || 3,
+      // A bonus to every ability check, for the dice (skills and initiative
+      // already have it).
+      checkBonus: ctx.checkBonusAll || undefined,
       spellSlots, spellSaveDc: sc ? sc.dc : null, spellAtkBonus: sc ? sktSigned(sc.attack) : null,
       spellAbility: sc ? sc.ability : null,
       spells: spellNames, alwaysPrepared: always, arcanum,
@@ -3456,6 +3468,19 @@ function _sktItemSpells(a){
   }
   return out.length ? out : null;
 }
+// Speeds with the items': "becomes 30 feet, unless higher" (static), "a
+// flying speed equal to your walking speed" (equal), "+10 feet" (bonus).
+// Boots of Speed's doubling is switched on with a bonus action, so a
+// multiply isn't applied.
+function sktItemSpeeds(speeds, items){
+  const out = Object.assign({}, speeds);
+  (items || []).forEach(m => { const s = m && m.modifySpeed; if (!s || typeof s !== 'object') return;
+    Object.keys(s.static || {}).forEach(k => { const v = +s.static[k] || 0; if (v > (out[k] || 0)) out[k] = v; }); });
+  (items || []).forEach(m => { const s = m && m.modifySpeed; if (!s || typeof s !== 'object') return;
+    Object.keys(s.equal || {}).forEach(k => { const v = out[s.equal[k]] || 0; if (v > (out[k] || 0)) out[k] = v; });
+    Object.keys(s.bonus || {}).forEach(k => { const v = +s.bonus[k] || 0; if (k === '*') Object.keys(out).forEach(x => { if (out[x]) out[x] += v; }); else if (out[k]) out[k] += v; }); });
+  return out;
+}
 // What items that improve unarmed strikes add to them.
 function sktItemUnarmedBonus(items){
   return (items || []).filter(m => m && m.unarmed).reduce((n, m) => n + (+m.bonusWeapon || 0), 0);
@@ -3482,6 +3507,10 @@ function _sktMagicEntry(i, kind){
     spells: _sktItemSpells(i.attachedSpells),
     // A weapon bonus on something that isn't a weapon, for unarmed strikes.
     unarmed: !isGear && !i.baseItem && !!_sktBonus(i.bonusWeapon) && /unarmed strike/i.test(text),
+    immune: (i.immune || []).filter(r => typeof r === 'string'), conditionImmune: (i.conditionImmune || []).filter(r => typeof r === 'string'),
+    vulnerable: (i.vulnerable || []).filter(r => typeof r === 'string'), modifySpeed: i.modifySpeed || null,
+    bonusAbilityCheck: _sktBonus(i.bonusAbilityCheck), bonusProficiencyBonus: _sktBonus(i.bonusProficiencyBonus),
+    bonusSavingThrowConcentration: _sktBonus(i.bonusSavingThrowConcentration),
     text,
   };
 }
@@ -3521,6 +3550,9 @@ function sktMagicMake(R, e, baseKey){
   if (e.ability) out.ability = e.ability;
   if (e.resist && e.resist.length) out.resist = e.resist;
   if (e.attuneBy) out.attuneBy = e.attuneBy;
+  ['immune', 'conditionImmune', 'vulnerable'].forEach(k => { if (e[k] && e[k].length) out[k] = e[k]; });
+  if (e.modifySpeed) out.modifySpeed = e.modifySpeed;
+  ['bonusAbilityCheck', 'bonusProficiencyBonus', 'bonusSavingThrowConcentration'].forEach(k => { if (e[k]) out[k] = e[k]; });
   if (e.spells) out.spells = e.spells;
   if (e.unarmed) out.unarmed = true;
   if (e.unarmoredOnly) out.unarmoredOnly = true;

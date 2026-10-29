@@ -1389,7 +1389,7 @@ function csRollFor(pc, what, e){
       if (typeof showToast === 'function') showToast(pc.name + "'s initiative is " + r.total + ' on the Combat Tracker');
     }
   }
-  else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]), e, 'abcheck:' + k);
+  else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]) + (+sh.checkBonus || 0), e, 'abcheck:' + k);
   else if (kind === 'save') csRollD20(CS_AB[k] + ' save', sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0), e, 'save:' + k);
   else if (kind === 'skill') csRollD20(CS_SKILLS[k][0], csSkillVal(sh, k) != null ? csSkillVal(sh, k) : csMod(ab[CS_SKILLS[k][1]]), e, 'check:' + k);
   else if (kind === 'cskill'){ const s = (pc.customSkills || [])[+k]; if (s) csRollD20(s.name || 'Custom skill', csCustomSkillVal(pc, s), e, 'abcheck:' + (s.ab || 'str')); }
@@ -1878,7 +1878,7 @@ function csInventoryHtml(pc){
   const lootRows = csLootRows(pc);
   const row = (m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
     + (gearType(m) ? '<label class="cs-eq" title="Equipped"><input type="checkbox" data-cs-equip="' + i + '"' + (m.equipped !== false ? ' checked' : '') + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
-    + '<button class="cs-itemn" data-cs-open="it:' + i + '"><b>' + csE(m.name) + '</b>' + csItemSub(m) + '</button>'
+    + '<button class="cs-itemn" data-cs-open="it:' + i + '"><b>' + csE(m.name) + '</b>' + csItemSub(m, pc) + '</button>'
     + (m.reqAttune ? '<label class="cs-att"' + (!m.attuned && attuned >= attMax ? ' title="Already attuned to ' + attMax + ' items"' : '') + '><input type="checkbox" data-cs-attune="' + i + '"' + (m.attuned ? ' checked' : '') + (ro || (!m.attuned && attuned >= attMax) ? ' disabled' : '') + '> attuned</label>' : '')
     + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-qty="' + i + ':-1" aria-label="One fewer">−</button>') + '×' + (m.qty || 1)
     + (ro ? '' : '<button class="btn small" data-cs-qty="' + i + ':1" aria-label="One more">+</button>') + '</span>'
@@ -1960,18 +1960,47 @@ function csItemText(m){
 function csItemInfo(m){
   const n = String((m && m.name) || '').toLowerCase();
   const e = ((CS && CS.magic) || []).find(x => x.name.toLowerCase() === n) || {};
+  const charges = +m.charges || +e.charges || 0;
   return {
     rarity: m.rarity || e.rarity || '', reqAttune: !!(m.reqAttune || e.reqAttune), attuneBy: m.attuneBy || e.attuneBy || '',
-    spells: m.spells || e.spells || null, unarmed: !!(m.unarmed || e.unarmed), charges: +m.charges || +e.charges || 0,
+    spells: csItemSpellList(m.spells || e.spells || null, charges), unarmed: !!(m.unarmed || e.unarmed), charges,
     text: e.text || '',
   };
 }
-// "Rare · requires attunement by a bard", under an item's name.
-function csItemSub(m){
+// An item's spells as the sheet tracks them. A "shared" daily use with only
+// one spell in it is that spell's own (a Cape of the Mountebank's Dimension
+// Door). A charged item's spell listed "at will" costs a charge a spell level
+// (a Staff of Healing's Cure Wounds).
+function csItemSpellList(list, charges){
+  if (!list) return null;
+  return list.map(sp => {
+    if (sp.per === 'will' && charges){ const sx = csSpell(sp.n); return Object.assign({}, sp, { per: 'charges', k: Math.max(1, sx ? +sx.level || 0 : 1), perLevel: true }); }
+    if ((sp.per === 'day' || sp.per === 'rest') && !sp.each && list.filter(x => x.per === sp.per && x.k === sp.k && !x.each).length === 1) return Object.assign({}, sp, { each: true });
+    return sp;
+  });
+}
+// Who an item lets attune ("by a bard", "by a cleric or paladin", "by a
+// spellcaster"), against the character's classes: '' when they qualify or
+// the book names nobody, else what they'd need.
+const CS_CASTERS = ['artificer', 'bard', 'cleric', 'druid', 'paladin', 'ranger', 'sorcerer', 'warlock', 'wizard'];
+function csAttuneMiss(pc, by){
+  const t = String(by || '').toLowerCase(); if (!t || !pc) return '';
+  const cls = pc.build ? [pc.build.cls].concat((pc.build.multi || []).map(x => x.cls)).filter(Boolean).map(c => String(c).toLowerCase()) : csImpClasses(pc);
+  const named = ['artificer', 'barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'].filter(c => new RegExp('\\b' + c + 's?\\b').test(t));
+  const caster = /spellcaster/.test(t);
+  if (!named.length && !caster) return '';
+  if (named.some(c => cls.includes(c)) || (caster && cls.some(c => CS_CASTERS.includes(c)))) return '';
+  return t.replace(/^by an? /, '');
+}
+// "Rare · requires attunement by a bard", under an item's name, and a note
+// when the character isn't one.
+function csItemSub(m, pc){
   const i = csItemInfo(m);
   const r = /^(none|unknown)/i.test(i.rarity) ? '' : _csTitle(i.rarity);
   const a = i.reqAttune ? 'requires attunement' + (i.attuneBy ? ' ' + i.attuneBy : '') : '';
-  return r || a ? '<span class="cs-item-sub">' + csE([r, a].filter(Boolean).join(' · ')) + '</span>' : '';
+  const miss = i.reqAttune && pc ? csAttuneMiss(pc, i.attuneBy) : '';
+  return r || a ? '<span class="cs-item-sub">' + csE([r, a].filter(Boolean).join(' · '))
+    + (miss ? ' <b class="cs-item-warn">— ' + csE(pc.name) + ' isn’t a ' + csE(miss) + '</b>' : '') + '</span>' : '';
 }
 // The most a character can attune to: 3, more for an artificer.
 function csAttuneMax(pc){ return +((pc.sheet || {}).attuneMax) || 3; }
@@ -2042,7 +2071,7 @@ function csItemSpellRow(pc, m, info, sp){
   const can = !ro && (!u || u.left >= cost);
   const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
   const atk = s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
-  const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '')
+  const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '') + (sp.perLevel ? ', +1 a level higher' : '')
     : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/rest' + (sp.each ? '' : ', shared') : '';
   const ok = 'isp:' + m.name + ':' + nm;
   return '<div class="cs-spell cs-ispell"><button class="cs-spell-n" data-cs-open="' + csE(ok) + '"><b>' + csE(nm) + '</b>'
@@ -2069,7 +2098,8 @@ function csItemActionsHtml(pc){
       + (ab.kind ? '<span class="cs-mi-kind">' + csE(spells.length ? ab.kind + ' to cast' : ab.kind) + '</span>' : '')
       + (abUse ? csItemPips(pc, m, abUse) + '<span class="cb-dim">once a day</span>'
         + (ro ? '' : '<button class="btn small" data-cs-iuse="' + csE(m.name) + '"' + (abUse.left ? '' : ' disabled') + '>Use</button>') : '')
-      + (charges ? csItemPips(pc, m, charges) + '<span class="cb-dim">' + charges.left + '/' + charges.max + ' charges</span>' : '')
+      + (charges ? csItemPips(pc, m, charges) + '<span class="cb-dim">' + charges.left + '/' + charges.max + ' charges</span>'
+        + (!spells.length && !ro ? '<button class="btn small" data-cs-icharge="' + csE(m.name) + '"' + (charges.left ? '' : ' disabled') + '>Use</button>' : '') : '')
       + pools.map(k => { const u = csItemUses(pc, m, k), [per, n] = k.split(':'); return csItemPips(pc, m, u) + '<span class="cb-dim">' + n + '/' + per + '</span>'; }).join('')
       + (ab.xdmg ? '<button class="btn small" data-cs-xdmg="' + csE(m.name + '|' + ab.xdmg) + '" title="Roll the extra damage">' + ICO('i-dice') + ' ' + csE(ab.xdmg) + '</button>' : '')
       + '</div>'
@@ -2086,7 +2116,7 @@ function csItemSpellsHtml(pc){
 }
 // Spending and getting back an item's uses.
 function csItemClick(d, pc){
-  if (d.csIpip == null && d.csIcast == null && d.csIuse == null) return false;
+  if (d.csIpip == null && d.csIcast == null && d.csIuse == null && d.csIcharge == null) return false;
   if (CS.readOnly) return true;
   const store = p => p.build ? (p.build.items || []) : (p.inventory || []);
   const spend = (p, name, key, n) => {
@@ -2107,6 +2137,12 @@ function csItemClick(d, pc){
       const now = n < left ? n : n + 1;
       m.used = Object.assign({}, m.used, { [key]: Math.max(0, max - now) });
     }, CS_QUIET);
+    return true;
+  }
+  if (d.csIcharge != null){
+    const name = d.csIcharge;
+    csEdit('Used a charge of ' + name, p => { spend(p, name, 'c', 1); });
+    if (typeof showToast === 'function') showToast('Used a charge of ' + name);
     return true;
   }
   if (d.csIuse != null){
@@ -2352,45 +2388,219 @@ function csDeclarePdfGear(p, decl, R){
   p.inventory = inv;
   p.acGear = { pdfAc, decl: Object.assign({}, decl), misc: pdfAc - csGearAc(p, gear, R).ac };
 }
+// What a worn item does to the numbers, with what the catalogue knows filled
+// in under the character's copy (an item added before the sheet read a field).
+const CS_FX_KEYS = ['ability', 'bonusSavingThrow', 'bonusSpellAttack', 'bonusSpellSaveDc', 'bonusAbilityCheck', 'bonusProficiencyBonus',
+  'bonusSavingThrowConcentration', 'resist', 'immune', 'conditionImmune', 'vulnerable', 'modifySpeed', 'unarmed'];
+function csItemFx(m){
+  const n = String((m && m.name) || '').toLowerCase();
+  const e = ((CS && CS.magic) || []).find(x => x.name.toLowerCase() === n) || {};
+  const out = {};
+  CS_FX_KEYS.forEach(k => { const v = m[k] != null ? m[k] : e[k]; if (v != null && v !== '' && v !== 0) out[k] = v; });
+  return out;
+}
+// Ability scores with the items' changes: a score set to a number (never
+// lowered), then raised (to 20 at most) — as the builder does it.
+function csItemAbilities(base, fxs){
+  const out = Object.assign({}, base);
+  fxs.forEach(f => { const a = f.ability; if (!a || typeof a !== 'object') return;
+    Object.keys(a.static || {}).forEach(k => { if (k in out && (+a.static[k] || 0) > (+out[k] || 0)) out[k] = +a.static[k]; }); });
+  fxs.forEach(f => { const a = f.ability; if (!a || typeof a !== 'object') return;
+    ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(k => { if (typeof a[k] === 'number' && k in out) out[k] = Math.max(+out[k] || 0, Math.min(20, (+out[k] || 0) + a[k])); }); });
+  return out;
+}
+// Speeds with the items': "becomes 30 feet, unless higher", "a flying speed
+// equal to your walking speed", "a swimming speed of 60 feet". Boots of
+// Speed's doubling is switched on with a bonus action, so it isn't applied.
+function csItemSpeeds(walk, speeds, fxs){
+  return sktItemSpeeds(Object.assign({}, speeds || {}, { walk }), fxs);
+}
 // "1d8+3 Bludgeoning" with n more: "1d8+4 Bludgeoning"; "0 Bludgeoning", "1".
 function csAddFlat(dmg, n){
   const s = String(dmg || ''); if (!n) return s;
-  const m = /^(\s*\d*d\d+)\s*([+-]\s*\d+)?(.*)$/i.exec(s);
+  const m = /^(\s*\d*d\d+)(\s*[+-]\s*\d+)?(.*)$/i.exec(s);
   if (m){ const f = (parseInt(String(m[2] || '0').replace(/\s/g, ''), 10) || 0) + n; return m[1] + (f ? (f > 0 ? '+' : '') + f : '') + m[3]; }
   const p = /^(\s*)(-?\d+)(.*)$/.exec(s);
   return p ? p[1] + Math.max(0, +p[2] + n) + p[3] : s;
 }
+// Everything worn magic items change on an imported character, applied as a
+// difference on top of the PDF's numbers. What was applied last time comes
+// off first (p.invFx), so an edit made in between — a level, a new score, a
+// changed save — is kept, and taking an item off puts back exactly what the
+// PDF said.
+function csImpItemFx(p, worn){
+  const sh = p.sheet;
+  const SIX = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const num = v => { const n = parseInt(v, 10); return isNaN(n) ? null : n; };
+  const sign = n => (n >= 0 ? '+' : '') + n;
+  const mod = v => Math.floor(((+v || 10) - 10) / 2);
+  // The old way kept a copy of the PDF's saves and spell numbers: put them back.
+  if (sh.invBase){
+    if (sh.invBase.saves) sh.saves = Object.assign({}, sh.invBase.saves);
+    if (sh.invBase.dc != null && sh.invBase.dc !== '') sh.spellSaveDc = sh.invBase.dc;
+    if (sh.invBase.atk != null && sh.invBase.atk !== '') sh.spellAtkBonus = sh.invBase.atk;
+    delete sh.invBase;
+    if (p.invFx){ delete p.invFx.saves; delete p.invFx.dc; delete p.invFx.atk; }
+  }
+  const was = p.invFx || {};
+  const fxs = worn.map(csItemFx);
+  const sum = k => fxs.reduce((n, f) => n + (num(f[k]) || 0), 0);
+  // The PDF's scores, and its proficiency bonus.
+  const base = Object.assign({}, p.abilities || {});
+  Object.keys(was.ab || {}).forEach(k => { base[k] = (+base[k] || 10) - was.ab[k]; });
+  const pb0 = (num(sh.profBonus) != null ? num(sh.profBonus) : 2) - (was.pb || 0);
+  const now = csItemAbilities(base, fxs);
+  const fx = { ab: {}, saves: {}, skills: {} };
+  const dMod = {};
+  SIX.forEach(k => { if (base[k] == null) return; const d = (+now[k] || 0) - (+base[k] || 0); if (d) fx.ab[k] = d; dMod[k] = mod(now[k]) - mod(base[k]); });
+  p.abilities = Object.assign({}, p.abilities || {}, now);
+  const pbD = sum('bonusProficiencyBonus'), chk = sum('bonusAbilityCheck'), sv = sum('bonusSavingThrow');
+  if (pbD || was.pb){ sh.profBonus = pb0 + pbD; fx.pb = pbD; }
+  // Saving throws: the ability's change, the items' bonus, and a better
+  // proficiency bonus where the save is proficient.
+  if (sh.saves){
+    const s2 = Object.assign({}, sh.saves);
+    SIX.forEach(k => {
+      const v = num(s2[k]); if (v == null) return;
+      const b = v - ((was.saves || {})[k] || 0);
+      const prof = b - mod(base[k]) >= pb0;
+      const d = (dMod[k] || 0) + sv + (prof ? pbD : 0);
+      s2[k] = b + d; if (d) fx.saves[k] = d;
+    });
+    sh.saves = s2;
+  }
+  // Skills: the ability's change, a Stone of Good Luck's bonus, and the
+  // proficiency bonus's change times however proficient the PDF shows them.
+  const skAb = {}; Object.keys(CS_SKILLS).forEach(k => { skAb[k.replace(/_/g, '').toLowerCase()] = CS_SKILLS[k][1]; });
+  let percD = 0;
+  if (sh.skills){
+    const k2 = Object.assign({}, sh.skills);
+    Object.keys(k2).forEach(k => {
+      const v = num(k2[k]), ab = skAb[k.replace(/_/g, '').toLowerCase()]; if (v == null || !ab) return;
+      const b = v - ((was.skills || {})[k] || 0);
+      const mult = Math.max(0, Math.min(2, Math.round((b - mod(base[ab])) / (pb0 || 2) * 2) / 2));
+      const d = (dMod[ab] || 0) + chk + Math.floor(mult * (pb0 + pbD)) - Math.floor(mult * pb0);
+      k2[k] = b + d; if (d) fx.skills[k] = d;
+      if (ab === 'wis' && /^perception$/i.test(k)) percD = d;
+    });
+    sh.skills = k2;
+  } else percD = (dMod.wis || 0) + chk;
+  // Initiative (a Dexterity check) and passive Perception.
+  const initD = (dMod.dex || 0) + chk;
+  if (num(p.init) != null){ p.init = num(p.init) - (was.init || 0) + initD; if (initD) fx.init = initD; }
+  if (num(p.pp) != null){ p.pp = num(p.pp) - (was.pp || 0) + percD; if (percD) fx.pp = percD; }
+  if (num(sh.passivePerception) != null){ sh.passivePerception = num(sh.passivePerception) - (was.ppSheet || 0) + percD; if (percD) fx.ppSheet = percD; }
+  // Hit points: Constitution's change for every level, and the current
+  // hit points move with the maximum.
+  const lv = ((sh.classLevels || []).reduce((n, c) => n + (+c.level || 0), 0)) || +p.level || 1;
+  const hpD = (dMod.con || 0) * lv, hpWas = was.hpMax || 0;
+  if (num(p.hpMax) != null && hpD !== hpWas){
+    p.hpMax = num(p.hpMax) - hpWas + hpD;
+    if (num(p.hp) != null) p.hp = Math.max(0, Math.min(p.hpMax, num(p.hp) + hpD - hpWas));
+  }
+  if (hpD) fx.hpMax = hpD;
+  // Spellcasting: the casting ability's change, a better proficiency bonus,
+  // and a rod's or robe's bonus.
+  const cab = csSpellAbility(p);
+  const dcD = (dMod[cab] || 0) + pbD + sum('bonusSpellSaveDc'), atD = (dMod[cab] || 0) + pbD + sum('bonusSpellAttack');
+  if (num(sh.spellSaveDc) != null){ sh.spellSaveDc = num(sh.spellSaveDc) - (was.dc || 0) + dcD; if (dcD) fx.dc = dcD; }
+  if (num(sh.spellAtkBonus) != null){ sh.spellAtkBonus = sign(num(sh.spellAtkBonus) - (was.atk || 0) + atD); if (atD) fx.atk = atD; }
+  // Ability checks and concentration, for the dice.
+  if (chk) sh.checkBonus = chk; else delete sh.checkBonus;
+  const conc = sum('bonusSavingThrowConcentration'); if (conc) sh.concBonus = conc; else delete sh.concBonus;
+  // Speeds. Not a sum, so kept as what they were before the items and what
+  // the items made them; an edit since then becomes the new before.
+  const sj = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]]));
+  const spNow = Object.assign({}, p.speeds || {}, { walk: num(p.spd) || 0 });
+  const spBase = was.spd && sj(spNow) === sj(was.spd.to) ? was.spd.from : spNow;
+  const spTo = csItemSpeeds(spBase.walk, spBase, fxs);
+  if (sj(spTo) !== sj(spBase)){
+    fx.spd = { from: spBase, to: spTo };
+    p.spd = spTo.walk; const o = Object.assign({}, spTo); delete o.walk; if (Object.keys(o).length) p.speeds = Object.assign({ walk: spTo.walk }, o);
+  } else if (was.spd){ p.spd = spBase.walk; const o = Object.assign({}, spBase); delete o.walk; if (Object.keys(o).length) p.speeds = Object.assign({ walk: spBase.walk }, o); else delete p.speeds; }
+  // Resistances, immunities (damage and conditions) and vulnerabilities:
+  // the ones the items add come off again with them.
+  const listFx = (field, mark, keys) => {
+    const prev = p[mark] || [], baseL = (p[field] || []).filter(r => !prev.includes(r));
+    const add = [...new Set([].concat(...fxs.map(f => [].concat(...keys.map(k => f[k] || [])))).filter(r => typeof r === 'string').map(r => r.toLowerCase()))];
+    p[field] = [...new Set(baseL.concat(add))];
+    p[mark] = add.filter(r => !baseL.includes(r));
+    if (!p[mark].length) delete p[mark];
+  };
+  listFx('resistances', 'invResist', ['resist']);
+  listFx('immunities', 'invImmune', ['immune', 'conditionImmune']);
+  listFx('vulnerabilities', 'invVuln', ['vulnerable']);
+  const keep = Object.keys(fx).filter(k => fx[k] != null && (typeof fx[k] !== 'object' || Object.keys(fx[k]).length));
+  if (keep.length){ p.invFx = {}; keep.forEach(k => { p.invFx[k] = fx[k]; }); } else delete p.invFx;
+  return { dMod, pbD, pb0, base, fxs };
+}
+// Which ability an attack row from the PDF uses, read off its numbers: its
+// bonus less the proficiency bonus is that ability's modifier.
+function csImpRowAbility(row, base, pb, cab){
+  const v = parseInt(row.pdfAtk != null ? row.pdfAtk : row.atkBonus, 10); if (isNaN(v)) return '';
+  const mod = k => Math.floor(((+base[k] || 10) - 10) / 2);
+  const r = v - pb, hits = ['str', 'dex'].filter(k => mod(k) === r);
+  if (hits.length === 1) return hits[0];
+  if (hits.length === 2) return /\b(bow|crossbow|dart|sling|blowgun)\b/i.test(row.name || '') ? 'dex' : 'str';
+  if (cab && mod(cab) === r) return 'spell:' + cab;
+  return '';
+}
 function csImpRecalc(p, R){
   if (!p || p.build || !R) return;
   const worn = csImpWorn(p);
-  const kinds = worn.map(m => csGearType(m, R));
-  // The first time armour, a shield or a protection item is worn, the PDF's
-  // AC is broken down by the guess so it changes by the right amount.
-  if (!p.acGear && (kinds.some(t => /^(LA|MA|HA|S)$/.test(t)) || worn.some(m => m.bonusAc && !csGearStat(m, R)))) csDeclarePdfGear(p, csGuessPdfGear(p, R), R);
   const sh = p.sheet = Object.assign({}, p.sheet || {});
+  // Ability scores and everything they feed, first: AC and the weapons below
+  // read the new scores.
+  const F = csImpItemFx(p, worn);
+  const kinds = worn.map(m => csGearType(m, R));
+  // The first time armour, a shield or a protection item is worn — or an item
+  // changes a score AC is built from — the PDF's AC is broken down by the
+  // guess, so it changes by the right amount.
+  // Dexterity feeds every AC; Constitution a barbarian's unarmoured one, Wisdom a monk's.
+  const cl = csImpClasses(p);
+  const acAb = !!F.dMod.dex || (!!F.dMod.con && cl.includes('barbarian')) || (!!F.dMod.wis && cl.includes('monk'));
+  if (!p.acGear && (acAb || kinds.some(t => /^(LA|MA|HA|S)$/.test(t)) || worn.some(m => m.bonusAc && !csGearStat(m, R)))){
+    // Guessed from the PDF's own scores, not the new ones.
+    const ab1 = p.abilities; p.abilities = Object.assign({}, ab1, F.base);
+    csDeclarePdfGear(p, csGuessPdfGear(p, R), R);
+    p.abilities = ab1;
+  }
   if (p.acGear){
     const g = csGearAc(p, csImpWorn(p), R);
     p.ac = g.ac + (+p.acGear.misc || 0);
     sh.acDetail = g.parts.concat(p.acGear.misc ? ['other ' + (p.acGear.misc > 0 ? '+' : '') + p.acGear.misc] : []).join(' + ') + ' = ' + p.ac;
   }
-  // Weapons: a row for each one worn that the PDF doesn't already list.
+  // The PDF's attack rows: the ability's change and a better proficiency
+  // bonus, and an item that improves unarmed strikes (an Eldritch Claw
+  // Tattoo). The PDF's numbers are kept on the row the first time; an edit
+  // made since becomes the new PDF number.
   const base = (sh.attacks || []).filter(a => !a.fromInv);
-  // An item that improves unarmed strikes (an Eldritch Claw Tattoo): the PDF's
-  // numbers, kept on the row the first time, plus its bonus while it's in use.
-  const ub = typeof sktItemUnarmedBonus === 'function' ? sktItemUnarmedBonus(worn.map(m => Object.assign({}, m, { unarmed: csItemInfo(m).unarmed }))) : 0;
+  const ub = typeof sktItemUnarmedBonus === 'function' ? sktItemUnarmedBonus(worn.map(m => ({ bonusWeapon: m.bonusWeapon, unarmed: csItemFx(m).unarmed }))) : 0;
+  const cab = csSpellAbility(p);
   base.forEach((a, k) => {
-    if (!/^(unarmed strike|flurry of blows)\b/i.test(String(a.name || ''))) return;
-    if (!ub && a.pdfAtk == null) return;
-    const r = base[k] = Object.assign({}, a);
+    let r = Object.assign({}, a);
+    if (r.pdfAtk != null && r.fxAtk != null && (r.atkBonus !== r.fxAtk || r.damage !== r.fxDmg)){ delete r.pdfAtk; delete r.pdfDmg; }
+    const ab = csImpRowAbility(r, F.base, F.pb0, cab);
+    const spell = /^spell:/.test(ab), key = spell ? ab.slice(6) : ab;
+    const unarmed = /^(unarmed strike|flurry of blows)\b/i.test(String(r.name || ''));
+    const hitD = (key ? (F.dMod[key] || 0) : 0) + (ab ? F.pbD : 0) + (unarmed ? ub : 0);
+    const dmgD = (key && !spell ? (F.dMod[key] || 0) : 0) + (unarmed ? ub : 0);
+    if (!hitD && !dmgD){
+      if (r.pdfAtk != null){ r.atkBonus = r.pdfAtk; r.damage = r.pdfDmg; delete r.pdfAtk; delete r.pdfDmg; delete r.fxAtk; delete r.fxDmg; base[k] = r; }
+      return;
+    }
     if (r.pdfAtk == null){ r.pdfAtk = r.atkBonus || ''; r.pdfDmg = r.damage || ''; }
-    const v = (parseInt(r.pdfAtk, 10) || 0) + ub;
-    r.atkBonus = (v >= 0 ? '+' : '') + v;
-    r.damage = csAddFlat(r.pdfDmg, ub);
+    const v = parseInt(r.pdfAtk, 10);
+    r.atkBonus = isNaN(v) ? r.pdfAtk : (v + hitD >= 0 ? '+' : '') + (v + hitD);
+    r.damage = csAddFlat(r.pdfDmg, dmgD);
+    r.fxAtk = r.atkBonus; r.fxDmg = r.damage;
+    base[k] = r;
   });
+  // Weapons: a row for each one worn that the PDF doesn't already list.
   const have = new Set(base.map(a => String(a.name || '').toLowerCase()));
   const md = csImpMods(p), prof = +sh.profBonus || 2, DT = { A: 'acid', B: 'bludgeoning', C: 'cold', F: 'fire', O: 'force', L: 'lightning', N: 'necrotic', P: 'piercing', I: 'poison', Y: 'psychic', R: 'radiant', S: 'slashing', T: 'thunder' };
   const rows = [];
-  csImpWorn(p).forEach(m => {
+  worn.forEach(m => {
     const s = csGearStat(m, R), t = csGearType(m, R);
     if (!s || !/^(M|R)$/.test(t) || m.pdf || have.has(String(m.name || '').toLowerCase())) return;
     const props = (s.property || []).map(x => String(x).split('|')[0]);
@@ -2403,18 +2613,6 @@ function csImpRecalc(p, R){
     have.add(String(m.name || '').toLowerCase());
   });
   sh.attacks = base.concat(rows);
-  // Saves and spellcasting numbers: the PDF's, plus what's worn.
-  if (!sh.invBase) sh.invBase = { saves: sh.saves ? Object.assign({}, sh.saves) : null, dc: sh.spellSaveDc, atk: sh.spellAtkBonus };
-  const sum = k => csImpWorn(p).reduce((n, m) => n + (+m[k] || 0), 0);
-  const sv = sum('bonusSavingThrow'), dcB = sum('bonusSpellSaveDc'), atB = sum('bonusSpellAttack');
-  if (sh.invBase.saves){ sh.saves = {}; Object.keys(sh.invBase.saves).forEach(k => { const v = parseInt(sh.invBase.saves[k], 10); sh.saves[k] = isNaN(v) ? sh.invBase.saves[k] : v + sv; }); }
-  if (sh.invBase.dc != null && sh.invBase.dc !== '') sh.spellSaveDc = (+sh.invBase.dc || 0) + dcB;
-  if (sh.invBase.atk != null && sh.invBase.atk !== ''){ const v = (parseInt(sh.invBase.atk, 10) || 0) + atB; sh.spellAtkBonus = (v >= 0 ? '+' : '') + v; }
-  // An armour's resistance while it's worn.
-  const prev = p.invResist || [], baseRes = (p.resistances || []).filter(r => !prev.includes(r));
-  const now = [...new Set([].concat(...csImpWorn(p).map(m => m.resist || [])))];
-  p.resistances = [...new Set(baseRes.concat(now))];
-  p.invResist = now.filter(r => !baseRes.includes(r));
 }
 function csItemsEdit(label, fn, undoOpts){
   const pc = csPc(); if (!pc) return;
@@ -2558,7 +2756,7 @@ function csLootRows(pc){
     const mm = CS.magic ? csLootAsItem(it) : null, att = !!(mm && csItemInfo(mm).reqAttune);
     return '<div class="cs-item cs-lootitem" data-loot="' + csE(it.id) + '">'
       + (csLootIsGear(it) ? '<label class="cs-eq" title="Equip it"><input type="checkbox" data-cs-lootequip="' + csE(it.id) + '"' + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
-      + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b>' + (group ? ' <span class="cs-from">shared with ' + csE(group) + '</span>' : '') + (mm ? csItemSub(mm) : '') + '</button>'
+      + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b>' + (group ? ' <span class="cs-from">shared with ' + csE(group) + '</span>' : '') + (mm ? csItemSub(mm, pc) : '') + '</button>'
       + (att ? '<label class="cs-att"' + (full ? ' title="Already attuned to ' + csAttuneMax(pc) + ' items"' : '') + '><input type="checkbox" data-cs-lootattune="' + csE(it.id) + '"' + (ro || full ? ' disabled' : '') + '> attune</label>' : '')
       + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':-1" aria-label="One fewer"' + (q <= 1 ? ' disabled' : '') + '>−</button>') + '×' + q
       + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':1" aria-label="One more">+</button>') + '</span>'
@@ -2608,6 +2806,8 @@ function csLootClick(d, pc){
       csRender(); return true;
     }
     m.reqAttune = true; m.attuned = true;
+    const miss = csAttuneMiss(pc, csItemInfo(m).attuneBy);
+    if (miss && typeof showToast === 'function') showToast(it.name + ' is for a ' + miss + ' — attuned anyway; your DM decides');
   }
   csItemsEdit((d.csLootequip != null ? 'Equipped ' : d.csLootattune != null ? 'Attuned to ' : 'Took ') + it.name, l => {
     if (d.csLootequip != null){

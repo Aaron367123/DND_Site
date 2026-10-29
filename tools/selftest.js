@@ -11540,6 +11540,99 @@
         if (keepLoot === null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', keepLoot);
       }
     }
+    // -- Round 123: what attuned items change, on both kinds of character --
+    {
+      const keepParty = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024'), M = await sktMagicLoad('2024');
+        const make = n => { const e = M.find(x => x.name === n); const m = sktMagicMake(R, e, null); m.attuned = !!m.reqAttune; m.equipped = true; m.qty = 1; return m; };
+        // An imported character: open the sheet so the catalogue is there.
+        const zi = state.party.findIndex(p => /Zindle/.test(p.name));
+        openCharSheet(state.party[zi].id); await sleep(300);
+        const tab = n => { const t = [...document.querySelectorAll('#cs-root .cs-tab')].find(b => b.textContent.trim().startsWith(n)); t && t.click(); };
+        tab('Inventory'); for (let k = 0; k < 60 && !CS.magic; k++) await sleep(100);
+        const Z = () => state.party[zi];
+        // A PDF's worth of numbers, worked out from the fixture's scores: a
+        // level 6 bard, proficient in DEX and CHA saves, with Jack of All
+        // Trades, expertise in Performance, a dagger and a crossbow.
+        {
+          const p = Z(), md = k => Math.floor(((+p.abilities[k] || 10) - 10) / 2);
+          p.level = 6; p.inventory = []; delete p.acGear; delete p.invFx;
+          const sv = {}; ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(k => { sv[k] = md(k) + (k === 'dex' || k === 'cha' ? 3 : 0); });
+          p.sheet = Object.assign({}, p.sheet, { profBonus: 3, saves: sv, spellSaveDc: 8 + 3 + md('cha'), spellAtkBonus: '+' + (3 + md('cha')),
+            skills: { athletics: md('str') + 1, arcana: md('int') + 3, perception: md('wis') + 1, performance: md('cha') + 6, stealth: md('dex') + 1 },
+            attacks: [{ name: 'Dagger', atkBonus: '+' + (3 + md('dex')), damage: '1d4+' + md('dex') + ' Piercing' }, { name: 'Crossbow, Hand', atkBonus: '+' + (3 + md('dex')), damage: '1d6+' + md('dex') + ' Piercing' }] });
+          p.pp = 10 + p.sheet.skills.perception;
+        }
+        const wear = list => { const q = Z(); q.inventory = (q.inventory || []).filter(x => x.pdf).concat(list); csImpRecalc(q, CS.R); };
+        const snap = () => { const p = Z(); return JSON.stringify({ ab: p.abilities, sv: p.sheet.saves, sk: p.sheet.skills, init: p.init, pp: p.pp, hp: p.hp, hpMax: p.hpMax, ac: p.ac,
+          spd: p.spd, speeds: p.speeds || null, res: p.resistances || [], imm: p.immunities || [], dc: p.sheet.spellSaveDc, atk: p.sheet.spellAtkBonus, pb: p.sheet.profBonus,
+          attacks: (p.sheet.attacks || []).filter(a => !a.fromInv).map(a => a.atkBonus + ' ' + a.damage) }); };
+        wear([]);
+        const base = snap(), b0 = JSON.parse(base);
+        const sm = v => Math.floor((v - 10) / 2);
+        wear([make('Gauntlets of Ogre Power')]);
+        ok('imported: Gauntlets of Ogre Power set STR to 19, and its save and Athletics follow', Z().abilities.str === Math.max(19, b0.ab.str)
+          && Z().sheet.saves.str === b0.sv.str + sm(Math.max(19, b0.ab.str)) - sm(b0.ab.str), JSON.stringify([Z().abilities.str, Z().sheet.saves.str, b0.sv.str]));
+        wear([make('Amulet of Health')]);
+        const conD = sm(Math.max(19, b0.ab.con)) - sm(b0.ab.con), lv = +Z().level || 1;
+        ok('imported: an Amulet of Health raises max and current HP by the CON change a level', Z().hpMax === b0.hpMax + conD * lv && Z().hp === Math.min(b0.hp + conD * lv, Z().hpMax), Z().hpMax + ' vs ' + b0.hpMax);
+        wear([make('Cloak of Protection')]);
+        ok('imported: a Cloak of Protection, +1 AC and +1 to every save', Z().ac === b0.ac + 1 && ['str', 'dex', 'con', 'int', 'wis', 'cha'].every(k => Z().sheet.saves[k] === b0.sv[k] + 1), Z().ac + ' ' + b0.ac);
+        wear([make('Stone of Good Luck')]);
+        ok('imported: a Stone of Good Luck, +1 to skills, initiative, passive Perception, ability checks', Object.keys(b0.sk).every(k => Z().sheet.skills[k] === b0.sk[k] + 1)
+          && Z().init === b0.init + 1 && Z().sheet.checkBonus === 1);
+        wear([make('Ioun Stone, Mastery')]);
+        ok('imported: an Ioun Stone of Mastery, a better proficiency bonus for the spell DC and attacks', Z().sheet.profBonus === b0.pb + 1 && Z().sheet.spellSaveDc === b0.dc + 1
+          && Z().sheet.attacks.filter(a => !a.fromInv).every((a, i) => parseInt(a.atkBonus, 10) === parseInt(b0.attacks[i], 10) + 1), JSON.stringify(Z().sheet.attacks.map(a => a.atkBonus)));
+        wear([make('Cloak of the Manta Ray'), make('Periapt of Proof against Poison')]);
+        ok('imported: a swimming speed and a poison immunity while worn', (Z().speeds || {}).swim === 60 && (Z().immunities || []).includes('poison'));
+        wear(['Gauntlets of Ogre Power', 'Amulet of Health', 'Cloak of Protection', 'Stone of Good Luck', 'Ioun Stone, Mastery', 'Cloak of the Manta Ray', 'Periapt of Proof against Poison', 'Belt of Dwarvenkind'].map(make));
+        wear([]);
+        ok('imported: with everything taken off, every number is the PDF’s again', snap() === base);
+        // An edit made while an item is worn is kept when it comes off.
+        wear([make('Amulet of Health')]);
+        Z().hpMax += 7;
+        wear([]);
+        ok('imported: a level’s HP added while wearing the amulet stays after it comes off', Z().hpMax === b0.hpMax + 7, Z().hpMax + ' vs ' + (b0.hpMax + 7));
+        Z().hpMax -= 7;
+        // Saves the old way (a copy kept of the PDF's) come back exactly, not twice.
+        const q = Z(); q.sheet = Object.assign({}, q.sheet, { invBase: { saves: JSON.parse(base).sv, dc: b0.dc, atk: b0.atk } });
+        q.sheet.saves = Object.fromEntries(Object.entries(b0.sv).map(([k, v]) => [k, v + 1]));
+        wear([]);
+        ok('imported: saves kept the old way are put back, not counted twice', JSON.stringify(Z().sheet.saves) === JSON.stringify(b0.sv) && !Z().sheet.invBase);
+        // The damage keeps its space ("1d6+4 Bludgeoning", not "1d6+4Bludgeoning").
+        ok('damage: a bonus added to "1d6 Bludgeoning"', csAddFlat('1d6 Bludgeoning', 4) === '1d6+4 Bludgeoning' && csAddFlat('1d8+3 Bludgeoning', 1) === '1d8+4 Bludgeoning'
+          && csAddFlat('0 Bludgeoning', 1) === '1 Bludgeoning' && csAddFlat('1d6-1 bludgeoning', 1) === '1d6 bludgeoning');
+        // Charged items: Use spends a charge; a lone shared daily spell is its own.
+        wear([make('Ring of Evasion'), make('Cape of the Mountebank'), make('Staff of Healing')]);
+        tab('Actions'); await sleep(150);
+        const use = document.querySelector('#cs-root [data-cs-icharge="Ring of Evasion"]');
+        use && use.click(); await sleep(150);
+        ok('items: a charged ring’s Use spends a charge', !!use && (Z().inventory.find(m => m.name === 'Ring of Evasion').used || {}).c === 1);
+        const cape = [...document.querySelectorAll('#cs-root .cs-mi')].find(x => /Mountebank/.test(x.textContent));
+        ok('items: one spell a day is that spell’s own uses, not a shared pool', !!cape && !/shared/.test(cape.textContent) && cape.querySelectorAll('[data-cs-ipip]').length === 1);
+        const staff = [...document.querySelectorAll('#cs-root .cs-mi')].find(x => /Staff of Healing/.test(x.textContent));
+        ok('items: a staff’s “at will” spell costs its charges', !!staff && !/at will/.test(staff.textContent) && /1 charge, \+1 a level higher/.test(staff.textContent));
+        ok('attunement: an item for another class says so', csAttuneMiss({ build: { cls: 'Druid' } }, 'by a bard') === 'bard' && csAttuneMiss({ build: { cls: 'Bard' } }, 'by a bard') === ''
+          && csAttuneMiss({ build: { cls: 'Fighter' } }, 'by a spellcaster') === 'spellcaster' && csAttuneMiss({ build: { cls: 'Paladin' } }, 'by a cleric or paladin') === '');
+        csClose(); await sleep(100);
+        // A character made in the builder.
+        const mk = items => Object.assign(sktBlankBuild('2024'), { name: 'TW', species: 'Human', cls: 'Wizard', level: 5, background: 'Sage',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } }, skills: ['arcana', 'history'], items: items.map(make) });
+        const B0 = sktComputeCharacter(mk([]), R);
+        const Bi = sktComputeCharacter(mk(['Ioun Stone, Mastery']), R), Bg = sktComputeCharacter(mk(['Stone of Good Luck']), R);
+        const Bs = sktComputeCharacter(mk(['Cloak of the Manta Ray', 'Periapt of Proof against Poison', 'Amulet of Health']), R);
+        ok('builder: an Ioun Stone of Mastery raises proficiency, the spell DC and attack', Bi.sheet.profBonus === B0.sheet.profBonus + 1 && Bi.sheet.spellSaveDc === B0.sheet.spellSaveDc + 1
+          && parseInt(Bi.sheet.spellAtkBonus, 10) === parseInt(B0.sheet.spellAtkBonus, 10) + 1, [Bi.sheet.spellSaveDc, B0.sheet.spellSaveDc].join());
+        ok('builder: a Stone of Good Luck adds to skills, initiative and ability checks', Bg.init === B0.init + 1 && Bg.sheet.skills.arcana === B0.sheet.skills.arcana + 1 && Bg.sheet.checkBonus === 1);
+        ok('builder: an item’s swim speed, poison immunity and CON 19', (Bs.speeds || {}).swim === 60 && Bs.immunities.includes('poison') && Bs.abilities.con === 19 && Bs.hpMax === B0.hpMax + 10);
+      } catch(e){ ok('round 123 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { csClose(); } catch(e){}
+        state.party.splice(0, state.party.length, ...JSON.parse(keepParty)); save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
