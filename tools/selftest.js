@@ -11469,6 +11469,77 @@
         if (keepLog[1] === null) localStorage.removeItem(SKT_LOG_PRIVATE_KEY); else localStorage.setItem(SKT_LOG_PRIVATE_KEY, keepLog[1]);
       }
     }
+    // -- Round 122: magic items — attunement, their spells, their abilities -
+    {
+      const keepParty = JSON.stringify(state.party), keepLoot = localStorage.getItem('skt-loot-v1');
+      try {
+        const sp = _sktItemSpells({ daily: { '1e': ['fly|xphb', 'levitate'], '3': ['light'] }, charges: { '2': ['magic missile'] }, will: ['mage hand'] });
+        const byN = l => JSON.stringify((l || []).slice().sort((a, b) => a.n.localeCompare(b.n)));
+        ok('items: an item’s spells read from the data', byN(sp) === byN([{ n: 'mage hand', per: 'will' }, { n: 'fly', per: 'day', k: 1, each: true },
+          { n: 'levitate', per: 'day', k: 1, each: true }, { n: 'light', per: 'day', k: 3, each: false }, { n: 'magic missile', per: 'charges', k: 2 }]), JSON.stringify(sp));
+        const ed = state.settings && state.settings.edition === '2014' ? '2014' : '2024';
+        const magic = await sktMagicLoad(ed), R = await sktRulesLoad(ed);
+        const lyreE = magic.find(e => e.name === 'Instrument of the Bards, Cli Lyre'), clawE = magic.find(e => e.name === 'Eldritch Claw Tattoo');
+        const lyre = sktMagicMake(R, lyreE, null), claw = sktMagicMake(R, clawE, null);
+        ok('items: the lyre keeps its seven spells and who can attune', (lyre.spells || []).length === 7 && lyre.spells.every(s => s.per === 'day' && s.each) && lyre.attuneBy === 'by a bard', JSON.stringify(lyre));
+        ok('items: the tattoo improves unarmed strikes', claw.unarmed === true && claw.bonusWeapon === 1 && !lyre.unarmed);
+        // A character made in the builder: the tattoo's +1, only while attuned.
+        const mk = att => Object.assign(sktBlankBuild('2024'), { name: 'TM', species: 'Human', cls: 'Monk', level: 3, background: 'Sage',
+          abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 8, wis: 15, cha: 10 } }, skills: ['acrobatics', 'insight'],
+          items: [Object.assign({}, claw, { attuned: att })] });
+        const unarmed = att => (sktComputeCharacter(mk(att), R).sheet.attacks.find(a => a.name === 'Unarmed Strike') || {});
+        const on = unarmed(true), off = unarmed(false);
+        ok('builder: an attuned Eldritch Claw Tattoo adds 1 to unarmed hit and damage', (parseInt(on.atkBonus, 10) - parseInt(off.atkBonus, 10)) === 1
+          && /\+(\d+)/.exec(on.damage)[1] - /\+(\d+)/.exec(off.damage)[1] === 1, on.atkBonus + ' ' + on.damage + ' vs ' + off.atkBonus + ' ' + off.damage);
+        // An imported character, from the Loot tracker: attune, cast, rest, unattune.
+        const zi = state.party.findIndex(p => /Zindle/.test(p.name)), cb = state.party.findIndex(p => /Creambak/.test(p.name));
+        const Z = state.party[zi], C = state.party[cb];
+        Z.inventory = []; C.inventory = [];
+        C.sheet = Object.assign({}, C.sheet, { attacks: [{ name: 'Unarmed Strike', atkBonus: '+6', damage: '1d8+3 Bludgeoning' }] });
+        const L = JSON.parse(keepLoot || '{"items":[]}');
+        L.items = (L.items || []).concat([{ id: 'tlyre', name: 'Instrument of the Bards, Cli Lyre', qty: 1, value: '', assignedTo: Z.id },
+                                          { id: 'tclaw', name: 'Eldritch Claw Tattoo', qty: 1, value: '', assignedTo: C.id }]);
+        localStorage.setItem('skt-loot-v1', JSON.stringify(L));
+        const tab = n => { const t = [...document.querySelectorAll('#cs-root .cs-tab')].find(b => b.textContent.trim().startsWith(n)); t && t.click(); };
+        const attuneLoot = async () => { tab('Inventory'); for (let k = 0; k < 40 && !document.querySelector('#cs-root [data-cs-lootattune]'); k++) await sleep(100);
+          const box = document.querySelector('#cs-root [data-cs-lootattune]'); if (!box) return false;
+          box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300); return true; };
+        openCharSheet(Z.id); await sleep(400);
+        const sub = async () => { tab('Inventory'); for (let k = 0; k < 40 && !document.querySelector('#cs-root .cs-lootitem .cs-item-sub'); k++) await sleep(100);
+          return (document.querySelector('#cs-root .cs-lootitem .cs-item-sub') || {}).textContent || ''; };
+        ok('sheet: a loot item says it needs attuning, and by whom', /requires attunement by a bard/.test(await sub()));
+        ok('sheet: ticking Attune on a loot item makes it the character’s, attuned', await attuneLoot()
+          && (state.party[zi].inventory || []).some(m => /Cli Lyre/.test(m.name) && m.attuned) && !JSON.parse(localStorage.getItem('skt-loot-v1')).items.some(i => i.id === 'tlyre'));
+        tab('Actions'); await sleep(200);
+        const cast = () => document.querySelector('#cs-root [data-cs-icast^="Instrument of the Bards, Cli Lyre|Fly|"]');
+        ok('sheet: the lyre’s spells under Magic items, each with Cast', document.querySelectorAll('#cs-root .cs-asec[data-k="items"] [data-cs-icast]').length === 7);
+        cast().click(); await sleep(200);
+        const zl = () => state.party[zi].inventory.find(m => /Cli Lyre/.test(m.name));
+        ok('sheet: casting Fly from it spends that spell for the day', (zl().used || {})['sp:Fly'] === 1 && cast().disabled && state.party[zi].concentration === 'Fly');
+        tab('Spells'); await sleep(200);
+        ok('sheet: the Spells tab lists what items cast', [...document.querySelectorAll('#cs-root h4')].some(h => h.textContent === 'From magic items'));
+        panelDefs.party._longRestOne(state.party[zi], zi);
+        ok('long rest: the item’s uses come back', !zl().used);
+        csClose(); await sleep(150);
+        openCharSheet(C.id); await sleep(400);
+        await attuneLoot();
+        const ua = () => state.party[cb].sheet.attacks.find(a => a.name === 'Unarmed Strike') || {};
+        ok('sheet: an imported monk’s unarmed strike gets the tattoo’s +1', ua().atkBonus === '+7' && ua().damage === '1d8+4 Bludgeoning', ua().atkBonus + ' ' + ua().damage);
+        tab('Actions'); await sleep(200);
+        const sec = document.querySelector('#cs-root .cs-asec[data-k="items"]');
+        ok('sheet: the tattoo’s bonus action, once a day, with its 1d6 force', !!sec && /Bonus action/i.test(sec.textContent) && !!sec.querySelector('[data-cs-iuse]') && /1d6 force/.test(sec.textContent));
+        tab('Inventory'); await sleep(200);
+        const own = document.querySelector('#cs-root [data-cs-attune]');
+        own.checked = false; own.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300);
+        ok('sheet: ending attunement puts the PDF’s numbers back', ua().atkBonus === '+6' && ua().damage === '1d8+3 Bludgeoning', ua().atkBonus + ' ' + ua().damage);
+        csClose(); await sleep(100);
+      } catch(e){ ok('round 122 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { csClose(); } catch(e){}
+        state.party.splice(0, state.party.length, ...JSON.parse(keepParty)); save();
+        if (keepLoot === null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', keepLoot);
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

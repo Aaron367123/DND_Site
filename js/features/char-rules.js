@@ -3223,7 +3223,10 @@ function sktBuildAttacks(ctx, gear, sc){
   // Strength and Dexterity.
   const dance = ctx.bardicUnarmed && !(gear && (gear.armor || gear.shield));
   const uab = ctx.martialArts || dance ? Math.max(m.str, m.dex) : m.str;
-  const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
+  // A magic item that improves unarmed strikes (an Eldritch Claw Tattoo, Wraps
+  // of Unarmed Power) adds its bonus to the hit and the damage.
+  const uItem = sktItemUnarmedBonus(_sktActiveItems(ctx.build));
+  const uflat = (uab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll + uItem;
   let uDie = ctx.martialArts && dance ? (_sktDieAvg(ctx.bardicUnarmed) > _sktDieAvg(ctx.martialArtsDie) ? ctx.bardicUnarmed : ctx.martialArtsDie) : ctx.martialArts ? ctx.martialArtsDie : dance ? '1' + ctx.bardicUnarmed : null;
   // A bigger unarmed die from a feat (Tavern Brawler's d4).
   if (ctx.unarmedMinDie && (!uDie || _sktDieAvg(ctx.unarmedMinDie) > _sktDieAvg(uDie))) uDie = ctx.unarmedMinDie;
@@ -3232,7 +3235,7 @@ function sktBuildAttacks(ctx, gear, sc){
     const ud = gear && (gear.shield || (gear.weapons || []).length) ? '1d6' : '1d8';
     if (!uDie || _sktDieAvg(ud) > _sktDieAvg(uDie)) uDie = ud;
   }
-  out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb), str: uab === m.str,
+  out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb + uItem), str: uab === m.str,
              damage: (uDie ? uDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' ' + (ctx.unarmedType || 'bludgeoning') });
   // A species' natural weapons, each an unarmed strike of its own.
   (ctx.naturalAttacks || []).forEach(n => { const k = n.ab || 'str';
@@ -3432,6 +3435,31 @@ function _sktItemCopies(list){
   return list.map(i => resolve(i, 0));
 }
 function _sktBonus(v){ const n = parseInt(String(v == null ? '' : v).replace(/\s/g, ''), 10); return isNaN(n) ? 0 : n; }
+// An item's spells, from the data's attachedSpells — { daily: { '1e': [...] },
+// charges: { '3': [...] }, will: [...] } — as [{ n, per, k, each }]: per is
+// 'day', 'rest', 'charges', 'will' or 'item' (the old plain list); k the uses
+// a day, or the charges a cast costs; each, whether every spell has its own
+// uses ("1e") or the list shares them ("1").
+function _sktItemSpells(a){
+  if (!a) return null;
+  const nm = s => String(s).split('|')[0].replace(/#.*$/, '').trim();
+  const out = [];
+  if (Array.isArray(a)) a.filter(s => typeof s === 'string').forEach(s => out.push({ n: nm(s), per: 'item' }));
+  else if (typeof a === 'object'){
+    [].concat(a.will || []).filter(s => typeof s === 'string').forEach(s => out.push({ n: nm(s), per: 'will' }));
+    ['daily', 'rest'].forEach(per => Object.keys(a[per] || {}).forEach(key => {
+      const k = parseInt(key, 10) || 1, each = /e$/.test(key);
+      [].concat(a[per][key]).filter(s => typeof s === 'string').forEach(s => out.push({ n: nm(s), per: per === 'daily' ? 'day' : 'rest', k, each }));
+    }));
+    Object.keys(a.charges || {}).forEach(key => [].concat(a.charges[key]).filter(s => typeof s === 'string')
+      .forEach(s => out.push({ n: nm(s), per: 'charges', k: parseInt(key, 10) || 1 })));
+  }
+  return out.length ? out : null;
+}
+// What items that improve unarmed strikes add to them.
+function sktItemUnarmedBonus(items){
+  return (items || []).filter(m => m && m.unarmed).reduce((n, m) => n + (+m.bonusWeapon || 0), 0);
+}
 function _sktMagicEntry(i, kind){
   const t = String(i.type || '').split('|')[0];
   const isGear = /^(M|R|LA|MA|HA|S)$/.test(t);
@@ -3449,6 +3477,11 @@ function _sktMagicEntry(i, kind){
     ability: i.ability || null, resist: (i.resist || []).filter(r => typeof r === 'string'),
     unarmoredOnly: /wearing no armou?r/i.test(text), noShield: /no armou?r and (are )?(not )?(using|wielding) (a|no) shield|no shield/i.test(text),
     charges: +i.charges > 0 ? +i.charges : null, recharge: i.recharge || null, rechargeAmount: i.rechargeAmount ? sktRulesInline(String(i.rechargeAmount)) : null,
+    // "by a bard", "by a spellcaster": who can attune, as the book words it.
+    attuneBy: typeof i.reqAttune === 'string' ? i.reqAttune : '',
+    spells: _sktItemSpells(i.attachedSpells),
+    // A weapon bonus on something that isn't a weapon, for unarmed strikes.
+    unarmed: !isGear && !i.baseItem && !!_sktBonus(i.bonusWeapon) && /unarmed strike/i.test(text),
     text,
   };
 }
@@ -3487,6 +3520,9 @@ function sktMagicMake(R, e, baseKey){
     .forEach(k => { if (e[k]) out[k] = e[k]; });
   if (e.ability) out.ability = e.ability;
   if (e.resist && e.resist.length) out.resist = e.resist;
+  if (e.attuneBy) out.attuneBy = e.attuneBy;
+  if (e.spells) out.spells = e.spells;
+  if (e.unarmed) out.unarmed = true;
   if (e.unarmoredOnly) out.unarmoredOnly = true;
   if (e.noShield) out.noShield = true;
   if (e.charges){ out.charges = e.charges; out.recharge = e.recharge; if (e.rechargeAmount) out.rechargeAmount = e.rechargeAmount; }

@@ -757,3 +757,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .bestiary-card-stats .ico { margin-right: -1px; }
 /* The padlock on a hidden roll, sized to the name beside it. */
 .glog-lock .ico { width: 11px; height: 11px; vertical-align: -1px; opacity: .8; }
+
+/* ── 34. Magic items: attunement, spells, abilities ──────── */
+/* "Rare · requires attunement by a bard" under an item's name. */
+.cs-item-sub { display: block; font-size: var(--fs-2xs); color: var(--text-dim); font-weight: 400; margin-top: 1px; }
+/* The Actions tab's Magic items: each item a block, its spells under it. */
+.cs-actions[data-f="items"] .cs-asec[data-k="items"] { display: block; }
+.cs-mi + .cs-mi { margin-top: 6px; }
+.cs-mi .cs-act-h { flex-wrap: wrap; }
+.cs-mi .cs-itemn { flex: 0 1 auto; }
+.cs-mi-kind { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+.cs-mi .cs-ispell { margin-left: 12px; }
+.cs-ispell-from { font-size: var(--fs-xs); color: var(--text-muted); margin: 8px 0 2px; }

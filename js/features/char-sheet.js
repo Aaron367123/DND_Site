@@ -816,6 +816,9 @@ CS_TAB_RENDER.actions = pc => {
   });
   const other = acts.filter(a => !groups.some(([k]) => k === kind(a)));
   if (other.length) h += '<div class="cs-asec" data-k="other"><h4>Other</h4>' + other.map(a => csActHtml(pc, a)).join('') + '</div>';
+  if (csItems(pc).some(m => m.rarity || m.reqAttune)) csEnsureMagic();
+  const itemsH = csItemActionsHtml(pc);
+  h += itemsH;
   const res = pc.resources || [];
   if (res.length){
     h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(r.name) + '</b>'
@@ -838,7 +841,7 @@ CS_TAB_RENDER.actions = pc => {
       ? 'Attack · Cast a Spell · Dash · Disengage · Dodge · Help · Hide · Ready · Search · Use an Object · Grapple · Shove'
       : 'Attack · Dash · Disengage · Dodge · Help · Hide · Influence · Magic · Ready · Search · Study · Utilize') + '</div></details>';
   const f = CS.actF || 'all';
-  const pills = [['all', 'All'], ['attack', 'Attack'], ['action', 'Action'], ['bonus', 'Bonus action'], ['reaction', 'Reaction'], ['other', 'Other'], ['limited', 'Limited use']];
+  const pills = [['all', 'All'], ['attack', 'Attack'], ['action', 'Action'], ['bonus', 'Bonus action'], ['reaction', 'Reaction'], ['other', 'Other'], ['limited', 'Limited use']].concat(itemsH ? [['items', 'Magic items']] : []);
   return '<div class="cs-spfilter"><span class="cb-seg">' + pills.map(([k, l]) => '<button class="' + (f === k ? 'on' : '') + '" data-cs-actf="' + k + '">' + l + '</button>').join('') + '</span></div>'
     + '<div class="cs-actions" data-f="' + f + '">' + h + '</div>';
 };
@@ -868,7 +871,7 @@ function csActHtml(pc, a){
   const r = a.resource ? (pc.resources || []).find(x => x.name === a.resource) : null;
   const can = !CS.readOnly && r && (r.current || 0) >= (a.amount || 1);
   return '<div class="cs-act"><div class="cs-act-h"><b>' + csE(a.name) + '</b>'
-    + (a.dice ? '<button class="btn small" data-cs-actroll="' + csE(a.name) + '" title="Roll ' + csE(a.dice) + '">🎲 ' + csE(a.dice) + '</button>' : '')
+    + (a.dice ? '<button class="btn small" data-cs-actroll="' + csE(a.name) + '" title="Roll ' + csE(a.dice) + '">' + ICO('i-dice') + ' ' + csE(a.dice) + '</button>' : '')
     + (r ? '<span class="cb-dim">' + (a.amount || 1) + ' ' + csE(r.name) + ' · ' + (r.current || 0) + ' left</span>'
          + '<button class="btn small" data-cs-use="' + csE(a.name) + '"' + (can ? '' : ' disabled') + '>Use</button>' : '')
     + '</div>' + (a.desc ? '<div class="cs-act-d">' + csE(a.desc) + '</div>' : '') + '</div>';
@@ -1329,6 +1332,7 @@ function csOnClick(e){
     });
   }
   if (typeof csSpellsClick === 'function' && csSpellsClick(e, t, d, pc)) return;
+  if (typeof csItemClick === 'function' && csItemClick(d, pc)) return;
   if (typeof csInventoryClick === 'function' && csInventoryClick(e, t, d, pc)) return;
 }
 // A bow uses an arrow, a crossbow a bolt, a sling a bullet, a blowgun a needle.
@@ -1598,6 +1602,9 @@ function csSpellsHtml(pc){
           : CS.R ? 'This spell isn’t in the rules data here (a newer book, or homebrew).' : 'Loading the rules…') + '</div>' : '') + '</div>';
     }).join('');
   });
+  if (csItems(pc).some(m => m.rarity || m.reqAttune)) csEnsureMagic();
+  const fromItems = csItemSpellsHtml(pc);
+  if (fromItems) h = h.replace('<div class="cb-dim">No spells.</div>', '') + fromItems;
   if (!ro) h += csSlotToolsHtml(pc, lvls, slots);
   if (!ro && pc.build) h += csManageSpellsHtml(pc) + csCustomSpellHtml(pc);
   return h;
@@ -1848,13 +1855,7 @@ function csPdfGearHtml(pc){
 }
 function csInventoryHtml(pc){
   const ro = CS.readOnly;
-  if (!CS.gear && !CS.gearLoading && typeof sktGearLoad === 'function' && CS.R){
-    CS.gearLoading = true;
-    const ed = CS.R.edition;
-    Promise.all([sktGearLoad(ed), typeof sktMagicLoad === 'function' ? sktMagicLoad(ed) : []]).then(([g, m]) => {
-      if (!CS) return; CS.gear = g; CS.magic = m; CS.gearLoading = false; if (CS.tab === 'inventory') csRender();
-    }).catch(() => { if (CS) CS.gearLoading = false; });
-  }
+  csEnsureMagic();
   const items = csItems(pc), coins = csCoins(pc);
   const pref = (pc.build && pc.build.overrides) || {};
   const lootLb = csLootLb(csLootFor(pc));
@@ -1862,7 +1863,7 @@ function csInventoryHtml(pc){
   const boxes = items.filter(x => CS_CONTAINER.test(x.name));
   const str = (pc.abilities || {}).str || 10, size = ((pc.sheet || {}).size || 'Medium');
   const cap = str * 15 * (size === 'Tiny' ? 0.5 : size === 'Large' ? 2 : 1);
-  const attuned = items.filter(m => m.reqAttune && m.attuned).length, attMax = (pc.sheet || {}).attuneMax || 3;
+  const attuned = items.filter(m => m.reqAttune && m.attuned).length, attMax = csAttuneMax(pc);
   let h = '<div class="cs-coins">' + CS_COINS.map(([k]) => '<label class="cs-coin"><span>' + k.toUpperCase() + '</span>'
     + (ro ? '<b>' + (coins[k] || 0) + '</b>' : '<input type="number" min="0" data-cs-coin="' + k + '" value="' + (coins[k] || 0) + '">') + '</label>').join('')
     + '<span class="cb-dim">Worth ' + Math.round(CS_COINS.reduce((n, [k, v]) => n + (+coins[k] || 0) * v, 0) * 100) / 100 + ' gp</span></div>'
@@ -1877,8 +1878,8 @@ function csInventoryHtml(pc){
   const lootRows = csLootRows(pc);
   const row = (m, i) => '<div class="cs-item' + (m.equipped === false ? ' off' : '') + '">'
     + (gearType(m) ? '<label class="cs-eq" title="Equipped"><input type="checkbox" data-cs-equip="' + i + '"' + (m.equipped !== false ? ' checked' : '') + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
-    + '<button class="cs-itemn" data-cs-open="it:' + i + '"><b>' + csE(m.name) + '</b></button>'
-    + (m.reqAttune ? '<label class="cs-att"><input type="checkbox" data-cs-attune="' + i + '"' + (m.attuned ? ' checked' : '') + (ro || (!m.attuned && attuned >= 3) ? ' disabled' : '') + '> attuned</label>' : '')
+    + '<button class="cs-itemn" data-cs-open="it:' + i + '"><b>' + csE(m.name) + '</b>' + csItemSub(m) + '</button>'
+    + (m.reqAttune ? '<label class="cs-att"' + (!m.attuned && attuned >= attMax ? ' title="Already attuned to ' + attMax + ' items"' : '') + '><input type="checkbox" data-cs-attune="' + i + '"' + (m.attuned ? ' checked' : '') + (ro || (!m.attuned && attuned >= attMax) ? ' disabled' : '') + '> attuned</label>' : '')
     + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-qty="' + i + ':-1" aria-label="One fewer">−</button>') + '×' + (m.qty || 1)
     + (ro ? '' : '<button class="btn small" data-cs-qty="' + i + ':1" aria-label="One more">+</button>') + '</span>'
     + (boxes.length && !CS_CONTAINER.test(m.name) && !ro ? '<select class="cb-sel cs-in" data-cs-in="' + i + '" aria-label="Carried in"><option value="">carried</option>'
@@ -1946,6 +1947,199 @@ function csItemText(m){
   const text = named ? named.text : bi && bi.entries ? (typeof sktRulesText === 'function' ? sktRulesText(bi.entries) : '') : '';
   return '<div class="cb-dim">' + csE(facts.join(' · ')) + '</div>' + (text ? csE(text).replace(/\n/g, '<br>') : (m.custom ? '<i>Your own item.</i>' : ''));
 }
+// ── Magic items in use ───────────────────────────────────────────────────────
+// What an item does beyond its numbers, as D&D Beyond shows it: its spells
+// (an Instrument of the Bards' seven, once a day each) with a Cast button,
+// an ability it grants (an Eldritch Claw Tattoo's bonus action, once a day),
+// and the uses left. Only while it's in use: carried, worn if it's gear, and
+// attuned where it needs that. Uses are kept on the item ({ used: { key: n } })
+// and a long rest brings them back.
+
+// The catalogue's entry merged under what the character's copy says, so an
+// item added before the sheet knew about spells still has them.
+function csItemInfo(m){
+  const n = String((m && m.name) || '').toLowerCase();
+  const e = ((CS && CS.magic) || []).find(x => x.name.toLowerCase() === n) || {};
+  return {
+    rarity: m.rarity || e.rarity || '', reqAttune: !!(m.reqAttune || e.reqAttune), attuneBy: m.attuneBy || e.attuneBy || '',
+    spells: m.spells || e.spells || null, unarmed: !!(m.unarmed || e.unarmed), charges: +m.charges || +e.charges || 0,
+    text: e.text || '',
+  };
+}
+// "Rare · requires attunement by a bard", under an item's name.
+function csItemSub(m){
+  const i = csItemInfo(m);
+  const r = /^(none|unknown)/i.test(i.rarity) ? '' : _csTitle(i.rarity);
+  const a = i.reqAttune ? 'requires attunement' + (i.attuneBy ? ' ' + i.attuneBy : '') : '';
+  return r || a ? '<span class="cs-item-sub">' + csE([r, a].filter(Boolean).join(' · ')) + '</span>' : '';
+}
+// The most a character can attune to: 3, more for an artificer.
+function csAttuneMax(pc){ return +((pc.sheet || {}).attuneMax) || 3; }
+// The items in use, in attunement order up to the limit.
+function csActiveItems(pc){
+  const max = csAttuneMax(pc); let n = 0;
+  return csItems(pc).filter(m => {
+    if (!m || (!pc.build && m.equipped === false)) return false;
+    if (!m.reqAttune) return true;
+    if (!m.attuned || n >= max) return false;
+    n++; return true;
+  });
+}
+// How the item's ability is used, from its description: the kind of action,
+// and whether it's once a day.
+function csItemAbility(text){
+  const t = String(text || '');
+  const kind = /\b(as|use|take) a bonus action\b/i.test(t) ? 'Bonus action'
+    : /\b(as|use|take) (a|your) reaction\b/i.test(t) ? 'Reaction'
+    : /\b(as|use|take) an action\b|\bmagic action\b/i.test(t) ? 'Action' : '';
+  // The paragraph that says how, shown under the item; and extra damage it
+  // deals ("an extra 1d6 force damage"), for a roll button.
+  const how = kind === 'Bonus action' ? /bonus action/i : kind === 'Reaction' ? /reaction/i : /\b(as|use|take) an action\b|magic action/i;
+  const para = kind ? (t.split(/\n+/).find(x => how.test(x)) || '') : '';
+  const xd = /extra (\d+d\d+) (\w+) damage/i.exec(para);
+  return { kind, daily: /until the next dawn|once per day|once each day/i.test(t), para, xdmg: xd ? xd[1] + ' ' + xd[2] : '' };
+}
+// The items worth a place in Actions: spells, a usable ability, charges.
+function csItemActions(pc){
+  return csActiveItems(pc).map(m => {
+    const i = csItemInfo(m);
+    return { m, i, ab: csItemAbility(i.text) };
+  }).filter(x => x.i.spells || x.i.charges || (x.ab.kind && (x.i.rarity || x.i.reqAttune)));
+}
+const csSpellNm = n => { const s = csSpell(n); return s ? s.name : _csTitle(n); };
+// What one of an item's uses is: the item's charges ('c'), its once-a-day
+// ability ('ab'), one spell's own uses ('sp:Fly'), or a pool its spells
+// share ('day:3').
+function csItemUseMax(m, key){
+  const info = csItemInfo(m);
+  if (key === 'c') return info.charges;
+  if (key === 'ab') return 1;
+  if (key.startsWith('sp:')){ const sp = (info.spells || []).find(s => 'sp:' + csSpellNm(s.n) === key); return sp ? (sp.k || 1) : 1; }
+  return +key.split(':')[1] || 1;
+}
+// The uses left of one of those. Charges on a built character are its
+// Limited use pool (the builder makes one per charged item).
+function csItemUses(pc, m, key){
+  if (key === 'c' && pc.build){
+    const r = (pc.resources || []).find(x => x.name === m.name);
+    if (r) return { max: +r.max || 0, left: +r.current || 0, key };
+  }
+  const max = csItemUseMax(m, key), used = +((m.used || {})[key]) || 0;
+  return { max, left: Math.max(0, max - used), key };
+}
+function csItemPips(pc, m, u){
+  const ro = CS.readOnly;
+  return '<span class="cs-pips">' + Array.from({ length: Math.min(u.max, 20) }, (_, n) => '<button class="cs-pip' + (n < u.left ? ' on' : '') + '" data-cs-ipip="'
+    + csE(m.name + '|' + u.key + '|' + n) + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(m.name) + ' use ' + (n + 1) + '"></button>').join('') + '</span>';
+}
+// One of an item's spells: its level and timing, the save or attack at the
+// character's own numbers, its uses, and Cast.
+function csItemSpellRow(pc, m, info, sp){
+  const sh = pc.sheet || {}, ro = CS.readOnly, s = csSpell(sp.n), nm = csSpellNm(sp.n);
+  const key = sp.per === 'charges' ? 'c' : sp.per === 'will' || sp.per === 'item' ? '' : sp.each ? 'sp:' + nm : sp.per + ':' + sp.k;
+  const u = key ? csItemUses(pc, m, key) : null;
+  const cost = sp.per === 'charges' ? (sp.k || 1) : 1;
+  const can = !ro && (!u || u.left >= cost);
+  const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
+  const atk = s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
+  const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '')
+    : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/rest' + (sp.each ? '' : ', shared') : '';
+  const ok = 'isp:' + m.name + ':' + nm;
+  return '<div class="cs-spell cs-ispell"><button class="cs-spell-n" data-cs-open="' + csE(ok) + '"><b>' + csE(nm) + '</b>'
+    + (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '')
+    + '<span class="cb-dim">' + csE([s ? (+s.level ? CS_ORD[+s.level] : 'Cantrip') : '', s ? csSpellMeta(s) : ''].filter(Boolean).join(' · ')) + '</span></button>'
+    + '<span class="cs-spell-c">' + (sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '') + atk
+    + (u && sp.each ? csItemPips(pc, m, u) : '')
+    + '<span class="cb-dim">' + csE(per) + '</span>'
+    + (ro ? '' : '<button class="btn small" data-cs-icast="' + csE(m.name + '|' + nm + '|' + key + '|' + cost) + '"' + (can ? '' : ' disabled') + '>Cast</button>') + '</span>'
+    + (CS.open[ok] ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '') + '</div>';
+}
+// The Actions tab's "Magic items" section.
+function csItemActionsHtml(pc){
+  const list = csItemActions(pc); if (!list.length) return '';
+  const ro = CS.readOnly;
+  return '<div class="cs-asec" data-k="items"><h4>Magic items</h4>' + list.map(({ m, i, ab }) => {
+    const spells = i.spells || [];
+    // Spells that share their uses ("3/day" across the list) get one row of pips.
+    const pools = [...new Set(spells.filter(sp => (sp.per === 'day' || sp.per === 'rest') && !sp.each).map(sp => sp.per + ':' + sp.k))];
+    const charges = i.charges ? csItemUses(pc, m, 'c') : null;
+    const abUse = !spells.length && ab.daily ? csItemUses(pc, m, 'ab') : null;
+    const open = CS.open['ia:' + m.name];
+    return '<div class="cs-act cs-mi"><div class="cs-act-h"><button class="cs-itemn" data-cs-open="' + csE('ia:' + m.name) + '" title="What it does"><b>' + csE(m.name) + '</b></button>'
+      + (ab.kind ? '<span class="cs-mi-kind">' + csE(spells.length ? ab.kind + ' to cast' : ab.kind) + '</span>' : '')
+      + (abUse ? csItemPips(pc, m, abUse) + '<span class="cb-dim">once a day</span>'
+        + (ro ? '' : '<button class="btn small" data-cs-iuse="' + csE(m.name) + '"' + (abUse.left ? '' : ' disabled') + '>Use</button>') : '')
+      + (charges ? csItemPips(pc, m, charges) + '<span class="cb-dim">' + charges.left + '/' + charges.max + ' charges</span>' : '')
+      + pools.map(k => { const u = csItemUses(pc, m, k), [per, n] = k.split(':'); return csItemPips(pc, m, u) + '<span class="cb-dim">' + n + '/' + per + '</span>'; }).join('')
+      + (ab.xdmg ? '<button class="btn small" data-cs-xdmg="' + csE(m.name + '|' + ab.xdmg) + '" title="Roll the extra damage">' + ICO('i-dice') + ' ' + csE(ab.xdmg) + '</button>' : '')
+      + '</div>'
+      + (open && i.text ? '<div class="cs-act-d">' + csE(i.text).replace(/\n/g, '<br>') + '</div>'
+        : !spells.length && ab.para ? '<div class="cs-act-d">' + csE(ab.para) + ' <button class="cs-linkbtn" data-cs-open="' + csE('ia:' + m.name) + '">more</button></div>' : '')
+      + spells.map(sp => csItemSpellRow(pc, m, i, sp)).join('') + '</div>';
+  }).join('') + '</div>';
+}
+// The Spells tab's list of what items cast.
+function csItemSpellsHtml(pc){
+  const list = csItemActions(pc).filter(x => x.i.spells); if (!list.length) return '';
+  return '<h4>From magic items</h4>' + list.map(({ m, i }) => '<div class="cs-ispell-from">' + csE(m.name) + '</div>'
+    + i.spells.map(sp => csItemSpellRow(pc, m, i, sp)).join('')).join('');
+}
+// Spending and getting back an item's uses.
+function csItemClick(d, pc){
+  if (d.csIpip == null && d.csIcast == null && d.csIuse == null) return false;
+  if (CS.readOnly) return true;
+  const store = p => p.build ? (p.build.items || []) : (p.inventory || []);
+  const spend = (p, name, key, n) => {
+    if (key === 'c' && p.build){ const r = (p.resources || []).find(x => x.name === name); if (!r || (r.current || 0) < n) return false; r.current -= n; return true; }
+    const m = store(p).find(x => x.name === name); if (!m) return false;
+    const used = +((m.used || {})[key]) || 0;
+    if (used + n > csItemUseMax(m, key)) return false;
+    m.used = Object.assign({}, m.used, { [key]: used + n });
+    return true;
+  };
+  if (d.csIpip != null){
+    const parts = d.csIpip.split('|'), n = +parts.pop(), key = parts.pop(), name = parts.join('|');
+    csEdit('Item uses', p => {
+      if (key === 'c' && p.build){ const r = (p.resources || []).find(x => x.name === name); if (r){ r.current = n < (r.current || 0) ? n : n + 1; return; } }
+      const m = store(p).find(x => x.name === name); if (!m) return;
+      const max = csItemUseMax(m, key), left = max - (+((m.used || {})[key]) || 0);
+      // Tap a lit pip to spend down to it; an unlit one to get it back.
+      const now = n < left ? n : n + 1;
+      m.used = Object.assign({}, m.used, { [key]: Math.max(0, max - now) });
+    }, CS_QUIET);
+    return true;
+  }
+  if (d.csIuse != null){
+    const name = d.csIuse;
+    csEdit('Used ' + name, p => { spend(p, name, 'ab', 1); });
+    if (typeof showToast === 'function') showToast('Used ' + name);
+    return true;
+  }
+  const parts = d.csIcast.split('|'), cost = +parts.pop() || 1, key = parts.pop(), spell = parts.pop(), name = parts.join('|');
+  const s = csSpell(spell);
+  let ok = true;
+  csEdit('Cast ' + spell + ' from ' + name, p => {
+    if (key && !spend(p, name, key, cost)){ ok = false; return; }
+    if (s && s.concentration){
+      if (p.concentration && p.concentration !== s.name && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
+      p.concentration = s.name;
+    }
+  });
+  if (ok && typeof showToast === 'function') showToast('Cast ' + spell + ' from ' + name);
+  return true;
+}
+// The magic item list, fetched once (it's the biggest file there is). The
+// Inventory tab always needed it; Actions and Spells now do too, for an
+// item's description and spells.
+function csEnsureMagic(){
+  if (CS.gear || CS.gearLoading || typeof sktGearLoad !== 'function' || !CS.R) return;
+  CS.gearLoading = true;
+  const ed = CS.R.edition;
+  Promise.all([sktGearLoad(ed), typeof sktMagicLoad === 'function' ? sktMagicLoad(ed) : []]).then(([g, m]) => {
+    if (!CS) return; CS.gear = g; CS.magic = m; CS.gearLoading = false; csRender();
+  }).catch(() => { if (CS) CS.gearLoading = false; });
+}
+
 // Containers, and the magic ones whose contents weigh nothing.
 const CS_CONTAINER = /backpack|\bbag\b|bag of|pouch|sack|chest|haversack|portable hole|quiver|case|basket|barrel/i;
 // What the load does to the character under the chosen encumbrance rule.
@@ -2158,6 +2352,14 @@ function csDeclarePdfGear(p, decl, R){
   p.inventory = inv;
   p.acGear = { pdfAc, decl: Object.assign({}, decl), misc: pdfAc - csGearAc(p, gear, R).ac };
 }
+// "1d8+3 Bludgeoning" with n more: "1d8+4 Bludgeoning"; "0 Bludgeoning", "1".
+function csAddFlat(dmg, n){
+  const s = String(dmg || ''); if (!n) return s;
+  const m = /^(\s*\d*d\d+)\s*([+-]\s*\d+)?(.*)$/i.exec(s);
+  if (m){ const f = (parseInt(String(m[2] || '0').replace(/\s/g, ''), 10) || 0) + n; return m[1] + (f ? (f > 0 ? '+' : '') + f : '') + m[3]; }
+  const p = /^(\s*)(-?\d+)(.*)$/.exec(s);
+  return p ? p[1] + Math.max(0, +p[2] + n) + p[3] : s;
+}
 function csImpRecalc(p, R){
   if (!p || p.build || !R) return;
   const worn = csImpWorn(p);
@@ -2173,6 +2375,18 @@ function csImpRecalc(p, R){
   }
   // Weapons: a row for each one worn that the PDF doesn't already list.
   const base = (sh.attacks || []).filter(a => !a.fromInv);
+  // An item that improves unarmed strikes (an Eldritch Claw Tattoo): the PDF's
+  // numbers, kept on the row the first time, plus its bonus while it's in use.
+  const ub = typeof sktItemUnarmedBonus === 'function' ? sktItemUnarmedBonus(worn.map(m => Object.assign({}, m, { unarmed: csItemInfo(m).unarmed }))) : 0;
+  base.forEach((a, k) => {
+    if (!/^(unarmed strike|flurry of blows)\b/i.test(String(a.name || ''))) return;
+    if (!ub && a.pdfAtk == null) return;
+    const r = base[k] = Object.assign({}, a);
+    if (r.pdfAtk == null){ r.pdfAtk = r.atkBonus || ''; r.pdfDmg = r.damage || ''; }
+    const v = (parseInt(r.pdfAtk, 10) || 0) + ub;
+    r.atkBonus = (v >= 0 ? '+' : '') + v;
+    r.damage = csAddFlat(r.pdfDmg, ub);
+  });
   const have = new Set(base.map(a => String(a.name || '').toLowerCase()));
   const md = csImpMods(p), prof = +sh.profBonus || 2, DT = { A: 'acid', B: 'bludgeoning', C: 'cold', F: 'fire', O: 'force', L: 'lightning', N: 'necrotic', P: 'piercing', I: 'poison', Y: 'psychic', R: 'radiant', S: 'slashing', T: 'thunder' };
   const rows = [];
@@ -2336,11 +2550,16 @@ function csLootIsGear(it){
 // in the character's own gear.
 function csLootRows(pc){
   const ro = CS.readOnly;
+  const items = csItems(pc), full = items.filter(m => m.reqAttune && m.attuned).length >= csAttuneMax(pc);
   return csLootFor(pc).map(({ it, mine, group }) => {
     const k = 'lt:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
+    // A magic item that needs attuning: tick to attune, which makes it the
+    // character's own (as equipping armour does), where it can do something.
+    const mm = CS.magic ? csLootAsItem(it) : null, att = !!(mm && csItemInfo(mm).reqAttune);
     return '<div class="cs-item cs-lootitem" data-loot="' + csE(it.id) + '">'
       + (csLootIsGear(it) ? '<label class="cs-eq" title="Equip it"><input type="checkbox" data-cs-lootequip="' + csE(it.id) + '"' + (ro ? ' disabled' : '') + '></label>' : '<span class="cs-eq"></span>')
-      + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b>' + (group ? ' <span class="cs-from">shared with ' + csE(group) + '</span>' : '') + '</button>'
+      + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b>' + (group ? ' <span class="cs-from">shared with ' + csE(group) + '</span>' : '') + (mm ? csItemSub(mm) : '') + '</button>'
+      + (att ? '<label class="cs-att"' + (full ? ' title="Already attuned to ' + csAttuneMax(pc) + ' items"' : '') + '><input type="checkbox" data-cs-lootattune="' + csE(it.id) + '"' + (ro || full ? ' disabled' : '') + '> attune</label>' : '')
       + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':-1" aria-label="One fewer"' + (q <= 1 ? ' disabled' : '') + '>−</button>') + '×' + q
       + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':1" aria-label="One more">+</button>') + '</span>'
       + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
@@ -2371,9 +2590,9 @@ function csLootClick(d, pc){
     if (typeof sktUndoable === 'function') sktUndoable('Quantity', run, { keys: [CS_LOOT_KEY], quiet: true }); else run();
     return true;
   }
-  if (d.csLoottake == null && d.csLootback == null) return false;
+  if (d.csLoottake == null && d.csLootback == null && d.csLootattune == null) return false;
   if (CS.readOnly) return true;
-  const id = d.csLoottake != null ? d.csLoottake : d.csLootback;
+  const id = d.csLoottake != null ? d.csLoottake : d.csLootback != null ? d.csLootback : d.csLootattune;
   const L0 = csLootRead(), it = (L0.items || []).find(x => x.id === id); if (!it) return true;
   const keys = { keys: ['skt-party-v1', 'skt-combat-v1', CS_LOOT_KEY] };
   if (d.csLootback != null){
@@ -2383,7 +2602,14 @@ function csLootClick(d, pc){
   }
   const m = csLootAsItem(it);
   if (d.csLootequip != null) m.equipped = true;
-  csItemsEdit((d.csLootequip != null ? 'Equipped ' : 'Took ') + it.name, l => {
+  if (d.csLootattune != null){
+    if (csItems(pc).filter(x => x.reqAttune && x.attuned).length >= csAttuneMax(pc)){
+      if (typeof showToast === 'function') showToast('Already attuned to ' + csAttuneMax(pc) + ' items: end one first');
+      csRender(); return true;
+    }
+    m.reqAttune = true; m.attuned = true;
+  }
+  csItemsEdit((d.csLootequip != null ? 'Equipped ' : d.csLootattune != null ? 'Attuned to ' : 'Took ') + it.name, l => {
     if (d.csLootequip != null){
       const kind = x => { const k = csGearType(x, CS.R); return /^(LA|MA|HA)$/.test(k) ? 'armor' : k === 'S' ? 'shield' : ''; };
       const k = kind(m); if (k) l.forEach(x => { if (kind(x) === k) x.equipped = false; });
@@ -2474,6 +2700,7 @@ function csInventoryClick(e, t, d, pc){
 }
 function csInventoryChange(e, t, d, pc){
   if (d.csLootequip != null){ if (t.checked) csLootClick({ csLoottake: d.csLootequip, csLootequip: d.csLootequip }, pc); return true; }
+  if (d.csLootattune != null){ if (t.checked) csLootClick({ csLootattune: d.csLootattune }, pc); return true; }
   if (d.csPossess != null){ const v = t.value.slice(0, 2000); csEdit('Other possessions', p => { if (v.trim()) p.possessions = v; else delete p.possessions; }, CS_QUIET); return true; }
   if (d.csItemedit){
     const [i, k] = d.csItemedit.split(':'), raw = t.value;
@@ -2504,7 +2731,7 @@ function csInventoryChange(e, t, d, pc){
     const i = +d.csAttune;
     csItemsEdit(t.checked ? 'Attuned' : 'Ended attunement', l => {
       if (!l[i]) return;
-      if (t.checked && l.filter(x => x.reqAttune && x.attuned).length >= 3) return;
+      if (t.checked && l.filter(x => x.reqAttune && x.attuned).length >= csAttuneMax(pc)) return;
       l[i].attuned = t.checked;
     }, CS_QUIET);
     return true;

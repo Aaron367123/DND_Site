@@ -1769,6 +1769,9 @@ registerPanel('party',{
         const back = ((c.build && c.build.edition) || c.rules || '2024') === '2024' ? c.hitDice.max : Math.max(1, Math.floor(c.hitDice.max / 2));
         c.hitDice.current = Math.min(c.hitDice.max, (c.hitDice.current || 0) + back);
       }
+      // Magic items' uses: a lyre's spells, a tattoo's once a day, the charges
+      // an imported character's wand keeps on itself. They come back at dawn.
+      [c.inventory, c.build && c.build.items].forEach(list => (list || []).forEach(m => { if (m && m.used) delete m.used; }));
       // Spell slots: clear all expended counters.
       const slots = c.sheet?.spellSlots;
       if (slots){
