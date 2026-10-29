@@ -8884,7 +8884,6 @@
     {
       try {
         const framed = el => !!el && getComputedStyle(el).clipPath !== 'none' && getComputedStyle(el, '::before').content !== 'none';
-        const shield = el => !!el && /50% 0/.test(getComputedStyle(el).clipPath.replace(/px/g, '')) || (!!el && /polygon\(0(px)? 7%|polygon\(0(px)? 8%/.test(getComputedStyle(el).clipPath));
         const pc = state.party.find(p => !p.foe);
         openCharSheet(pc.id); await sleep(200);
         const r = document.getElementById('cs-root');
@@ -8897,7 +8896,9 @@
         csClose();
         openPanel('party'); await sleep(250);
         const card = panelDefs.party._body.querySelector('.char-card');
-        ok('frames: the party card\'s hit points and stats are framed, AC a shield', framed(card.querySelector('.char-hp-block')) && framed(card.querySelector('.char-stat')) && shield(card.querySelector('.char-stats-row > .char-stat:first-child')));
+        // The party card's went plain too (2026-10-28, "feels like a school
+        // project"): the card keeps its frame, what's inside it doesn't.
+        ok('frames: the party card’s hit points and stats are plain boxes, AC too', plainBox(card.querySelector('.char-hp-block')) && plainBox(card.querySelector('.char-stat')) && plainBox(card.querySelector('.char-stats-row > .char-stat:first-child')));
         closePanel('party');
         await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
         ok('frames: the builder\'s summary boxes are framed', framed(document.querySelector('#cb-root .cb-big > div')));
