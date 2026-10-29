@@ -8910,6 +8910,16 @@
         const empPad = emp.firstElementChild ? parseFloat(getComputedStyle(emp.firstElementChild).paddingTop) : 0;
         ok('empty: an empty Game Log shows an icon and a title, lower in the window, not one grey line', !!emp.querySelector('.empty-state-roomy .empty-state-icon .ico') && /No rolls yet/.test((emp.querySelector('.empty-state-title') || {}).textContent || '') && empPad >= 40, empPad);
         emp.remove();
+        // Every theme: half health is amber, not the theme's own colour (red on Sanguine).
+        ok('themes: half health is amber in the combat tracker, whatever the theme', panelDefs.combat._hpColor(50) === 'var(--warning)', panelDefs.combat._hpColor(50));
+        // Parchment: no black stains, no smudged name on the sheet's banner.
+        const th0 = _readThemePref();
+        try {
+          applyTheme('parchment');
+          const mot = getComputedStyle(document.documentElement).getPropertyValue('--mottle');
+          const ttl = r.querySelector('.cs-hero .cb-title');
+          ok('themes: on Parchment the mottling is faint and the sheet’s name has no black shadow', /-\.28 \.14/.test(mot) && !!ttl && getComputedStyle(ttl).textShadow === 'none', ttl && getComputedStyle(ttl).textShadow);
+        } finally { applyTheme(th0.id, th0.custom, th0); }
         csClose();
         openPanel('party'); await sleep(250);
         const card = panelDefs.party._body.querySelector('.char-card');

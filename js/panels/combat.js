@@ -606,7 +606,9 @@ registerPanel('combat',{
   _hpColor(pct){
     if (pct <= 0) return '#5a3a3a';
     if (pct < 35) return 'var(--danger)';
-    if (pct < 75) return 'var(--accent)';
+    // Amber, not the theme's accent: on Sanguine the accent is red and a
+    // character at half health read as near death; on Royal, purple.
+    if (pct < 75) return 'var(--warning)';
     return 'var(--success)';
   },
 

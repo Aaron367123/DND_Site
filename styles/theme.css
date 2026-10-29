@@ -700,3 +700,16 @@ body.tools-in-dock .panel-dock .in-more { display: none !important; }
 .notes-source-tile .tile-icon .ico { width: 30px; height: 30px; stroke-width: 1.5; }
 #cs-root .cs-head .btn .ico, .time-btn .ico, .notes-picker-sent .ico, .notes-send-btn .ico, .notes-file-title .ico, .pa-build .ico { width: 15px; height: 15px; vertical-align: -3px; }
 .notes-picker-empty .empty-state { background: none; }
+
+/* ── 29. The light theme, looked at on its own ───────────── */
+/* Parchment inherited three things made for a dark table. The mottling,
+   black at up to half opacity, lay over the light page as grey stains; it
+   is a faint warm brown here. The heavy black shadow under the name on the
+   sheet and phone banners blurred dark letters into a smudge. And the
+   Inspiration badge's gold-on-cream text was nearly invisible. */
+:root[data-theme-tone="light"] {
+  --mottle: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='700' height='700'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='.008' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .4  0 0 0 0 .3  0 0 0 0 .16  0 0 0 -.28 .14'/></filter><rect width='100%' height='100%' filter='url(%23m)'/></svg>");
+}
+[data-theme-tone="light"] :is(.pa-hero .pa-you-name, .pa-hero .pa-you-sub, .cs-hero .cb-title, .cs-hero .cs-sub) { text-shadow: none; }
+[data-theme-tone="light"] .char-status-badges .status-badge.insp { color: #5e4500; background: rgba(214,170,40,.28); border-color: rgba(150,110,10,.5); }
+[data-theme-tone="light"] .char-status-badges .status-badge.bardic { color: #5a2a78; }
