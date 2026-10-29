@@ -318,10 +318,10 @@ registerPanel('party',{
         +'<button class="char-action-btn menu" data-act="actions-menu" data-idx="'+i+'" title="More actions — roll, combat toggle, hit die, inspiration, edit, remove">⋯</button>'
         +'</div>'
       +'</div>'
-      // Status badges — concentration, rage, wildshape, inspiration. Only
-      // renders for ACTIVE states. Empty row collapses to nothing.
-      + this._statusBadges(c, i)
-      + this._playerRollsHtml(c)
+      // Status badges — concentration, rage, wildshape, inspiration — and
+      // the player's latest roll, on one line that is there even when empty,
+      // so the hit points start at the same height on every card in a row.
+      + this._statusBadges(c, i, this._playerRollsHtml(c))
       // BIG HP block — large numeral, thick bar, color-coded by tier. The
       // current/max/temp inputs live UNDER the numeral as small fields so
       // the eye lands on the big number first. Heal/damage strip is below.
@@ -389,10 +389,10 @@ registerPanel('party',{
         + (downed
           ? (()=>{
               const h = sktDeathSaveHolder(c);
-              if (h.dead) return '<div class="char-downed-badge dead">💀 Dead</div>';
+              if (h.dead) return '<div class="char-downed-badge dead">' + ICO('i-skull') + ' Dead</div>';
               if (h.stable) return '<div class="char-downed-badge">⚕ Stable at 0 HP</div>';
               const ds = h.deathSaves || { success: 0, fail: 0 };
-              return '<button class="char-downed-badge" data-act="death-roll" data-idx="'+i+'" title="Roll a death save">💀 Downed · '
+              return '<button class="char-downed-badge" data-act="death-roll" data-idx="'+i+'" title="Roll a death save">' + ICO('i-skull') + ' Downed · '
                 + (ds.success||0) + '/3 saves · ' + (ds.fail||0) + '/3 fails · Roll</button>';
             })()
           : '')
@@ -449,7 +449,7 @@ registerPanel('party',{
           const bards = (typeof sktBards === 'function') ? sktBards().filter(b => b.id !== c.id) : [];
           if (!c.bardicInspiration && bards.length){
             const left = bards.reduce((n, b) => n + ((sktBardicPool(b) || {}).current || 0), 0);
-            parts.push(`<button class="insp-give-btn bardic" data-act="bardic-give" data-idx="${i}" title="${left ? 'Give Bardic Inspiration from ' + esc(bards.map(b => b.name).join(' or ')) : 'No Bardic Inspiration left'}"${left ? '' : ' disabled'}>🎵 Bardic</button>`);
+            parts.push(`<button class="insp-give-btn bardic" data-act="bardic-give" data-idx="${i}" title="${left ? 'Give Bardic Inspiration from ' + esc(bards.map(b => b.name).join(' or ')) : 'No Bardic Inspiration left'}"${left ? '' : ' disabled'}>${ICO('i-music')} Bardic</button>`);
           }
           return parts.length ? `<div class="insp-give-row">${parts.join('')}</div>` : '';
         })()
@@ -951,18 +951,18 @@ registerPanel('party',{
         const left = c.rageRounds;
         const leftTxt = left != null ? ` <span class="rage-rounds">${left}</span>` : '';
         const r24 = this._rulesOf(c) === '2024';
-        parts.push(`<button class="form-pill rage-on" data-act="rage-off" data-idx="${i}" title="Rage active — Advantage on STR checks/saves · ${rageDmg} damage on STR attacks · Resistance to bludgeoning, piercing, slashing · Can't cast or concentrate${r24 ? ' · Keep it going each turn by attacking, forcing a save or using a bonus action; up to 10 minutes' : ' · Ends early if your turn passes without attacking or taking damage'}${left != null ? ' · ' + left + ' round' + (left===1?'':'s') + ' left' : ''}. Click to end rage.">💢 RAGING${leftTxt} <span class="form-pill-x">×</span></button>`);
+        parts.push(`<button class="form-pill rage-on" data-act="rage-off" data-idx="${i}" title="Rage active — Advantage on STR checks/saves · ${rageDmg} damage on STR attacks · Resistance to bludgeoning, piercing, slashing · Can't cast or concentrate${r24 ? ' · Keep it going each turn by attacking, forcing a save or using a bonus action; up to 10 minutes' : ' · Ends early if your turn passes without attacking or taking damage'}${left != null ? ' · ' + left + ' round' + (left===1?'':'s') + ' left' : ''}. Click to end rage.">${ICO('i-burst')} Raging${leftTxt} <span class="form-pill-x">×</span></button>`);
       } else {
         const rr = (c.resources || []).find(x => x.name === 'Rage');
-        parts.push(`<button class="form-pill rage-off${rr && (+rr.current || 0) <= 0 ? ' is-spent' : ''}" data-act="rage-on" data-idx="${i}" title="Enter rage${rr ? ' (' + (+rr.current || 0) + ' of ' + rr.max + ' left)' : ''} — Advantage on STR · ${rageDmg} damage · Resist B/P/S · ${this._rulesOf(c) === '2024' ? 'Up to 10 minutes' : 'Lasts 1 minute'}">💢 Rage</button>`);
+        parts.push(`<button class="form-pill rage-off${rr && (+rr.current || 0) <= 0 ? ' is-spent' : ''}" data-act="rage-on" data-idx="${i}" title="Enter rage${rr ? ' (' + (+rr.current || 0) + ' of ' + rr.max + ' left)' : ''} — Advantage on STR · ${rageDmg} damage · Resist B/P/S · ${this._rulesOf(c) === '2024' ? 'Up to 10 minutes' : 'Lasts 1 minute'}">${ICO('i-burst')} Rage</button>`);
       }
     }
     if (isDruid){
       if (wildshape){
-        parts.push(`<button class="form-pill ws-on" data-act="ws-end" data-idx="${i}" title="Wild Shape active as ${esc(wildshape.name)} — Druid stats hidden, beast HP routes damage first. Click to revert.">🐺 ${esc(wildshape.name)} <span class="form-pill-x">×</span></button>`);
+        parts.push(`<button class="form-pill ws-on" data-act="ws-end" data-idx="${i}" title="Wild Shape active as ${esc(wildshape.name)} — Druid stats hidden, beast HP routes damage first. Click to revert.">${ICO('i-paw')} ${esc(wildshape.name)} <span class="form-pill-x">×</span></button>`);
         parts.push(`<button class="form-pill ws-edit" data-act="ws-edit" data-idx="${i}" title="Edit the beast's HP, AC, speed, attacks">${ICO('i-pencil')}</button>`);
       } else {
-        parts.push(`<button class="form-pill ws-off" data-act="ws-start" data-idx="${i}" title="Transform into a beast — opens an editor for the beast's HP, AC, speed, and attacks">🐺 Wild Shape</button>`);
+        parts.push(`<button class="form-pill ws-off" data-act="ws-start" data-idx="${i}" title="Transform into a beast — opens an editor for the beast's HP, AC, speed, and attacks">${ICO('i-paw')} Wild Shape</button>`);
       }
     }
     return `<div class="char-forms-row">${parts.join('')}</div>`;
@@ -1030,7 +1030,7 @@ registerPanel('party',{
     if (ws.vulnerabilities?.length) dmgMods.push(`VUL: ${ws.vulnerabilities.join(', ')}`);
     return `<div class="char-wildshape">
       <div class="ws-head">
-        <span class="ws-icon">🐺</span>
+        <span class="ws-icon">${ICO('i-paw')}</span>
         <span class="ws-name">${esc(ws.name)}${ws.cr!=null?` <span class="ws-cr">CR ${esc(String(ws.cr))}</span>`:''}</span>
         <span class="ws-stats">
           ${tempModel ? `<span title="2024 Wild Shape: you keep your own hit points, with the temporary ones it gave you on top (shown with your HP above)">♥ your own HP + temp</span>` : `<span title="Beast HP — damage from the strip drains here first">♥ ${ws.hp}/${ws.hpMax||ws.hp}</span>`}
@@ -1309,32 +1309,31 @@ registerPanel('party',{
   // rage, wild shape, heroic/bardic inspiration). Empty → returns ''. Each
   // badge is clickable to manage that state. Lives right under the name so
   // the eye catches it before falling to HP.
-  _statusBadges(c, i){
+  _statusBadges(c, i, extra){
     const badges = [];
     // Enough experience for the next level.
     if (c.build && c.build.advancement === 'xp' && (c.level || 1) < 20 && (+c.xp || 0) >= sktXpFor((c.level || 1) + 1) && typeof openCharBuilder === 'function'){
-      badges.push(`<span class="status-badge levelup" data-act="xp-levelup" data-idx="${i}" title="${esc(String(c.xp))} XP — click to level up">⬆ Level up!</span>`);
+      badges.push(`<span class="status-badge levelup" data-act="xp-levelup" data-idx="${i}" title="${esc(String(c.xp))} XP — click to level up">${ICO('i-up')} Level up</span>`);
     }
     if (c.concentration){
-      badges.push(`<span class="status-badge conc" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(c.concentration)} — click to drop">🌀 ${esc(c.concentration)}</span>`);
+      badges.push(`<span class="status-badge conc" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(c.concentration)} — click to drop">${ICO('i-conc')} ${esc(c.concentration)}</span>`);
     }
     if (c.rage){
-      badges.push(`<span class="status-badge rage" data-act="rage-off" data-idx="${i}" title="Raging — adv on STR · resist B/P/S${c.rageRounds != null ? ' · ' + c.rageRounds + ' round' + (c.rageRounds===1?'':'s') + ' left' : ''} · click to end">💢 RAGE${c.rageRounds != null ? ' ' + c.rageRounds : ''}</span>`);
+      badges.push(`<span class="status-badge rage" data-act="rage-off" data-idx="${i}" title="Raging — adv on STR · resist B/P/S${c.rageRounds != null ? ' · ' + c.rageRounds + ' round' + (c.rageRounds===1?'':'s') + ' left' : ''} · click to end">${ICO('i-burst')} Rage${c.rageRounds != null ? ' ' + c.rageRounds : ''}</span>`);
     }
     if (c.wildshape && c.wildshape.name){
-      badges.push(`<span class="status-badge wildshape" data-act="ws-end" data-idx="${i}" title="Wild Shape as ${esc(c.wildshape.name)} — click to revert">🐺 ${esc(c.wildshape.name)}</span>`);
+      badges.push(`<span class="status-badge wildshape" data-act="ws-end" data-idx="${i}" title="Wild Shape as ${esc(c.wildshape.name)} — click to revert">${ICO('i-paw')} ${esc(c.wildshape.name)}</span>`);
     }
     if (c.inspiration){
-      badges.push(`<span class="status-badge insp" data-act="insp" data-idx="${i}" title="Heroic Inspiration — click to spend">✨ Inspiration</span>`);
+      badges.push(`<span class="status-badge insp" data-act="insp" data-idx="${i}" title="Heroic Inspiration — click to spend">${ICO('i-sparkle')} Inspiration</span>`);
     }
     if (c.bardicInspiration){
       // The die is the BARD's, carried on the grant; the recipient's own
       // class has nothing to do with it.
       const bd = typeof c.bardicInspiration === 'string' ? c.bardicInspiration : this._bardicDie(c);
-      badges.push(`<span class="status-badge bardic" data-act="bardic-insp" data-idx="${i}" title="Bardic Inspiration${bd?' '+bd:''}${c.bardicFrom ? ' from ' + esc(c.bardicFrom) : ''} — click when it is used">🎵 Bardic${bd?' '+bd:''}</span>`);
+      badges.push(`<span class="status-badge bardic" data-act="bardic-insp" data-idx="${i}" title="Bardic Inspiration${bd?' '+bd:''}${c.bardicFrom ? ' from ' + esc(c.bardicFrom) : ''} — click when it is used">${ICO('i-music')} Bardic${bd?' '+bd:''}</span>`);
     }
-    if (!badges.length) return '';
-    return `<div class="char-status-badges">${badges.join('')}</div>`;
+    return `<div class="char-status-badges${badges.length || extra ? '' : ' empty'}">${badges.join('')}${extra || ''}</div>`;
   },
 
   // Bardic Inspiration die-size ladder (5e RAW): d6 at lv1, d8 at lv5, d10
@@ -2519,10 +2518,10 @@ registerPanel('party',{
       pips += `<span class="hd-pip ${n<=cur?'filled':''}" data-act="hd-spend" data-idx="${i}" data-n="${n}" title="${n<=cur?'Spend a hit die':'Already spent'}"></span>`;
     }
     return `<div class="hd-row">
-      <span class="hd-label">🎲 ${esc(hd.dieType||'d8')}</span>
+      <span class="hd-label">${ICO('i-dice')} ${esc(hd.dieType||'d8')}</span>
       <span class="hd-pips">${pips}</span>
       <span class="hd-count">${cur}/${hd.max}</span>
-      <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest for this character: HP, slots, resources, half the hit dice">🛌 Long rest</button>
+      <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest for this character: HP, slots, resources, half the hit dice">${ICO('i-moon')} Long rest</button>
     </div>`;
   },
 

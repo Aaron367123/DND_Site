@@ -711,16 +711,16 @@ registerPanel('combat',{
     }
     if (ragingPc){
       const rLeft = partyMatch && partyMatch.rageRounds;
-      chips.push(`<span class="status-pill rage-pill" title="Raging — Advantage on STR checks/saves · Resistance to bludgeoning/piercing/slashing · Can't cast or concentrate${rLeft ? ' · ' + rLeft + ' round' + (rLeft===1?'':'s') + ' left' : ''} · Toggle in the Party tracker">💢 RAGING${rLeft ? ' <span class="rage-rounds">'+rLeft+'</span>' : ''}</span>`);
+      chips.push(`<span class="status-pill rage-pill" title="Raging — Advantage on STR checks/saves · Resistance to bludgeoning/piercing/slashing · Can't cast or concentrate${rLeft ? ' · ' + rLeft + ' round' + (rLeft===1?'':'s') + ' left' : ''} · Toggle in the Party tracker">${ICO('i-burst')} Raging${rLeft ? ' <span class="rage-rounds">'+rLeft+'</span>' : ''}</span>`);
     }
     if (wildshape){
       // Beast HP visible on the chip itself so the DM doesn't have to hover
       // to see how close the form is to dropping. Format: "🐺 Bear 22/34".
       const wsHpMax = wildshape.hpMax || wildshape.hp || 1;
-      chips.push(`<span class="status-pill wildshape-pill" title="Wild Shape as ${esc(wildshape.name)} — damage routes to the beast HP pool. When the beast hits 0 HP the form auto-drops. Toggle in the Party tracker.">🐺 ${esc(wildshape.name)} <strong>${wildshape.hp}/${wsHpMax}</strong></span>`);
+      chips.push(`<span class="status-pill wildshape-pill" title="Wild Shape as ${esc(wildshape.name)} — damage routes to the beast HP pool. When the beast hits 0 HP the form auto-drops. Toggle in the Party tracker.">${ICO('i-paw')} ${esc(wildshape.name)} <strong>${wildshape.hp}/${wsHpMax}</strong></span>`);
     }
     if (conc){
-      chips.push(`<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">🌀 ${esc(conc)} ×</span>`);
+      chips.push(`<span class="status-pill conc-pill" data-act="clear-conc" data-idx="${i}" title="Concentrating on ${esc(conc)} — click to drop">${ICO('i-conc')} ${esc(conc)} ×</span>`);
     }
     // Reaction is no longer a conditional chip — it's an always-visible toggle
     // in the controls cluster below, so the DM can scan who still has one.
@@ -738,7 +738,7 @@ registerPanel('combat',{
     // reaction / set-conc / add-buff).
     const ctrls =
         `<button class="status-ctrl react-toggle${c.reactionUsed?' spent':''}" data-act="toggle-reaction" data-idx="${i}" aria-pressed="${c.reactionUsed?'true':'false'}" title="${c.reactionUsed?'Reaction used this round — click to refund':'Reaction available — click to mark used'}">↩</button>`
-      + `<button class="status-ctrl conc-ctrl${conc?' on':''}" data-act="set-conc" data-idx="${i}" title="${conc?('Concentrating on '+esc(conc)+' — click to change'):'Set concentration spell'}">🌀</button>`
+      + `<button class="status-ctrl conc-ctrl${conc?' on':''}" data-act="set-conc" data-idx="${i}" title="${conc?('Concentrating on '+esc(conc)+' — click to change'):'Set concentration spell'}">${ICO('i-conc')}</button>`
       + `<button class="status-ctrl buff-ctrl" data-act="add-buff" data-idx="${i}" title="Add a buff (AC / HP / duration)">✦</button>`;
     const statusRow = (mode === 'show')
       ? `<div class="combat-status-row">${chips.join('')}<span class="status-ctrls">${ctrls}</span></div>`

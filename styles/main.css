@@ -5520,7 +5520,7 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-xpbar { display:inline-block; width:90px; height:4px; border-radius:2px; background:var(--panel-2); overflow:hidden; }
 .cs-xpbar i { display:block; height:100%; background:var(--accent); }
 .cs-xp input { width:70px; padding:2px 4px; }
-.char-prolls { display:flex; align-items:center; gap:6px; width:100%; min-width:0; margin:0 0 4px; padding:3px 8px; border:0; border-radius:var(--r-sm,4px);
+.char-prolls { display:flex; align-items:center; gap:6px; max-width:100%; min-width:0; margin:0 0 0 auto; padding:2px 6px; border:0; border-radius:var(--r-sm,4px);
   background:transparent; font:inherit; font-size:var(--fs-xs); color:var(--text-muted); text-align:left; cursor:pointer; }
 .char-prolls:hover { background:rgba(255,255,255,.05); color:var(--text); }
 .char-prolls .ico { width:14px; height:14px; flex:0 0 auto; opacity:.7; }

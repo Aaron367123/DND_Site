@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = 'c60ee709f6';
+const BUILD = '464d926f08';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=f234a64205',
-  'styles/theme.css?v=40f535352e',
+  'styles/main.css?v=0aa7f7ae5f',
+  'styles/theme.css?v=b67f972c7d',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=f4b60a75c8',
   'js/core/theme.js?v=9db78fe46f',
@@ -53,12 +53,12 @@ const PRECACHE = [
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
   'js/core/window-manager.js?v=bf7448b3a4',
-  'js/panels/combat.js?v=489af12158',
+  'js/panels/combat.js?v=4fcf872eae',
   'js/panels/attacks.js?v=57acabc3ca',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=17e22f002d',
-  'js/panels/party.js?v=afc4daf753',
+  'js/panels/party.js?v=1f14f99177',
   'js/panels/shop.js?v=d1096bf206',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',

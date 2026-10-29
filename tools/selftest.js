@@ -6298,6 +6298,17 @@
         pc.rolls = [{ label: 'Stealth', total: 17, text: '17', at: Date.now() - 31 * 60 * 1000, from: 'player' }];
         P._render(); await sleep(30);
         ok('party: a roll from over half an hour ago leaves the card', !P._body.querySelector('.char-prolls'));
+        // Badges or none, every card's hit points start at the same height; and
+        // the badges carry line icons, not emoji.
+        const insp0 = state.party.map(p => [p.inspiration, p.concentration]);
+        try {
+          state.party.forEach((p, k) => { p.inspiration = k === 0; p.concentration = k === 1 ? 'Bless' : p.concentration; });
+          P._render(); await sleep(30);
+          const offs = [...P._body.querySelectorAll('.char-card')].map(cd => Math.round(cd.querySelector('.char-hp-block').getBoundingClientRect().top - cd.getBoundingClientRect().top));
+          ok('party: every card’s hit points start at the same height, badges or none', offs.length > 1 && offs.every(o => o === offs[0]), offs.join());
+          const bt = [...P._body.querySelectorAll('.char-status-badges, .hd-row')].map(e => e.textContent).join(' ');
+          ok('party: badges and rests in line icons, not emoji', /Inspiration/.test(bt) && /Bless/.test(bt) && !/\p{Extended_Pictographic}/u.test(bt) && !!P._body.querySelector('.status-badge.insp .ico'), (bt.match(/\p{Extended_Pictographic}/gu) || []).join('') + ' | ' + bt.replace(/\s+/g, ' ').slice(0, 120));
+        } finally { state.party.forEach((p, k) => { p.inspiration = insp0[k][0]; p.concentration = insp0[k][1]; }); }
         closePanel('party');
       } catch(e){ ok('builder: the D&D Beyond extras ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {

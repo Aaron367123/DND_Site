@@ -618,3 +618,56 @@ body.tools-in-dock .panel-dock .in-more { display: none !important; }
 .dmp-pin:hover { border-color: var(--border); color: var(--text); }
 .dmp-empty { padding: 8px; color: var(--text-muted); font-size: var(--fs-sm); }
 .dmp-hint { padding: 6px 8px 2px; border-top: 1px solid var(--border); margin-top: 4px; color: var(--text-muted); font-size: var(--fs-xs); }
+
+/* ── 26. Party and combat cards: fewer boxes ──────────────── */
+/* Each card was a box of boxes: a gilt frame round the hit points, a
+   shield and two hexagons round AC / Init / Speed, an outline round every
+   number, three separate buttons for damage, and dashed rules between the
+   rows. The card keeps its frame; what's inside goes plain, as the sheet's
+   boxes did (sections 11 and 12). Two classes: main.css's :is() list
+   weighs as much as its heaviest entry (.cb-side .cb-ab). */
+.char-card .char-hp-block, .char-card .char-stat, .char-card .char-stats-row > .char-stat:first-child {
+  clip-path: none; border: 1px solid color-mix(in srgb, var(--text) 9%, transparent); border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+.char-card .char-hp-block::before, .char-card .char-stat::before, .char-card .char-stats-row > .char-stat:first-child::before { content: none; }
+.char-stats-row > .char-stat:first-child { padding-bottom: 4px; }
+.char-stat .l { color: var(--text-muted); font-weight: 600; }
+.char-stat:hover, .char-stat:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.char-hp-block.has-wildshape { border-color: color-mix(in srgb, var(--success) 45%, transparent); }
+/* A number is a number until it's clicked. */
+.char-hp-current, .char-hp-max, .char-hp-temp, .char-stat input {
+  border-color: transparent !important; background: transparent !important; box-shadow: none !important;
+}
+:is(.char-hp-current, .char-hp-max, .char-hp-temp, .char-stat input):hover { background: color-mix(in srgb, var(--text) 5%, transparent) !important; }
+:is(.char-hp-current, .char-hp-max, .char-hp-temp, .char-stat input):focus { border-color: var(--accent) !important; }
+/* Damage − amount + as one control. */
+.party-hp-dmg, .hp-dmg-bar { gap: 0; }
+.party-hp-dmg > .party-hp-btn, .party-hp-dmg > .party-hp-amt, .hp-dmg-bar > * {
+  border-radius: 0; background: color-mix(in srgb, var(--text) 4%, transparent); border-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.party-hp-dmg > .party-hp-btn.dmg, .hp-dmg-bar > .hp-dmg-btn.dmg { border-radius: 6px 0 0 6px; }
+.party-hp-dmg > .party-hp-btn.heal, .hp-dmg-bar > .hp-dmg-btn.heal { border-radius: 0 6px 6px 0; }
+.party-hp-dmg > .party-hp-amt, .hp-dmg-bar > .hp-dmg-amt { border-left: 0; border-right: 0; }
+.party-hp-dmg > .party-hp-type-wrap { margin-left: 6px; border-radius: 6px; background: transparent; border-color: color-mix(in srgb, var(--text) 10%, transparent); }
+.hp-dmg-bar { border-top: 0; padding-top: 0; }
+/* Rows divided by space, not dashes. */
+.char-card > .hd-row, .char-card > .resource-section, .char-card > .insp-give-row, .char-card > .char-status-badges { border-top: 0; }
+/* Combat: the name beside the face, not centred over the numbers; the
+   little toggles and the remove button when the pointer is on the card. */
+.combatant-card .card-name { text-align: left; }
+@media (hover: hover) {
+  .combatant-card .status-ctrl:not(.on), .combatant-card .card-actions .btn.danger { opacity: 0; transition: opacity .12s; }
+  .combatant-card:hover .status-ctrl, .combatant-card:focus-within .status-ctrl,
+  .combatant-card:hover .card-actions .btn.danger, .combatant-card:focus-within .card-actions .btn.danger { opacity: 1; }
+}
+/* The badge line is always there, so every card's hit points start level. */
+.char-card > .char-status-badges { min-height: 22px; align-items: center; margin: 0; padding-top: 0; }
+.party-grid.compact .char-status-badges.empty { display: none; }
+/* Line icons where the emoji were. */
+.char-status-badges .status-badge .ico, .hd-label .ico, .insp-give-btn .ico, .hd-row .btn .ico,
+.status-pill .ico, .form-pill .ico, .char-downed-badge .ico, .status-ctrl .ico { width: 13px; height: 13px; flex: 0 0 auto; vertical-align: -2px; }
+.ws-icon .ico { width: 16px; height: 16px; }
+.insp-give-btn { border-style: solid; border-color: color-mix(in srgb, var(--text) 9%, transparent); display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.hd-label { display: inline-flex; align-items: center; gap: 4px; }
+.hd-label .ico { color: var(--text-muted); }
