@@ -770,3 +770,12 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
 .cs-mi .cs-ispell { margin-left: 12px; }
 .cs-ispell-from { font-size: var(--fs-xs); color: var(--text-muted); margin: 8px 0 2px; }
+
+/* ── 35. The phone's turn bar never makes room for the toolbar ─ */
+/* A phone shows no floating toolbar over the turn bar (only the search
+   strip, which has its own solid ground), so the bar reserves nothing.
+   A stale measurement once reserved the whole width and stacked
+   "5 turns until you" one word per line. */
+@media (max-width: 768px) and (pointer: coarse){
+  body.player-mode .pa-turn-head { padding-right: 0; min-height: 0; }
+}

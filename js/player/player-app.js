@@ -423,7 +423,7 @@ function paStartSearch(){
   if (typeof openSearch === 'function') openSearch();
   setTimeout(() => document.getElementById('search-input')?.focus(), 60);
 }
-function paEndSearch(){ document.body.classList.remove('pa-searching'); }
+function paEndSearch(){ document.body.classList.remove('pa-searching'); if (typeof _updatePlayerViewportVars === 'function') _updatePlayerViewportVars(); }
 
 function paMoreWho(){
   const pc = paPc(); if (!pc) return '';

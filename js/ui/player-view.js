@@ -39,7 +39,10 @@ function _updatePlayerViewportVars(){
   // view hides it, and a hidden element measures as a zero box at left 0 —
   // which made `w - r.left` the entire screen width, so the turn bar reserved
   // every pixel and wrapped "5 turns until you" one word per line.
-  const drawn = !!(r && r.width > 0 && r.height > 0);
+  // Nor the search strip a phone shows while searching: it spans the screen,
+  // and a keyboard opening or closing under it measured that width and left
+  // the turn bar reserving all of it after Done ("Zoey's turn" in a column).
+  const drawn = !!(r && r.width > 0 && r.height > 0) && !document.body.classList.contains('pa-searching');
   // Both are measured from the viewport edges, which is what the turn bar is
   // flush against in the player app.
   document.documentElement.style.setProperty('--pv-topright',

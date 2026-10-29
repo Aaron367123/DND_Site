@@ -13113,6 +13113,16 @@
           if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } B._tokens = JSON.parse(bm0).tokens || []; }
         }
       }
+      // A keyboard opening while searching re-measures with the search strip
+      // across the top; after Done the turn bar must not keep that room.
+      if (paIsPhone() && typeof _updatePlayerViewportVars === 'function'){
+        document.body.classList.add('pa-searching'); _updatePlayerViewportVars(); paEndSearch(); await sleep(50);
+        const hd = document.querySelector('.pa-turn-head');
+        ok('turn bar: no room kept for the search strip after Done', !hd || getComputedStyle(hd).paddingRight === '0px', hd && getComputedStyle(hd).paddingRight);
+        document.body.classList.add('pa-searching'); _updatePlayerViewportVars(); document.body.classList.remove('pa-searching'); await sleep(50);
+        ok('turn bar: on a phone it never makes room for the toolbar', !hd || getComputedStyle(hd).paddingRight === '0px', hd && getComputedStyle(hd).paddingRight);
+        _updatePlayerViewportVars();
+      }
       // A phone has no mouse: the sheet's roll hint says tap.
       if (paIsPhone()){
         const tab0 = paTab;
