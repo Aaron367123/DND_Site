@@ -745,3 +745,15 @@ body.tools-in-dock .panel-dock .in-more { display: none !important; }
   font-size: var(--fs-xs); line-height: 1.1; }
 .pa-draw-b span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pa-draw-b .ico { width: 19px; height: 19px; }
+
+/* ── 33. Small leftovers ─────────────────────────────────── */
+/* Tick boxes and radio buttons were the browser's own bright blue ("Only me"
+   in the Game Log, the shop filters, settings). They take the accent now,
+   which each theme sets. */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+/* A Bestiary card's HP, AC and CR on one line. They wrapped on some cards
+   (Vampire's "CR 13", Worg's "CR 1/2") and not others. */
+.bestiary-card-stats { flex-wrap: nowrap; gap: 4px; white-space: nowrap; }
+.bestiary-card-stats .ico { margin-right: -1px; }
+/* The padlock on a hidden roll, sized to the name beside it. */
+.glog-lock .ico { width: 11px; height: 11px; vertical-align: -1px; opacity: .8; }

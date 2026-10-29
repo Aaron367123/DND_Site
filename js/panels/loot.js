@@ -669,6 +669,13 @@ registerPanel('loot',{
   _parseGp(s){
     const str = String(s||'').toLowerCase().trim();
     if (!str) return 0;
+    // Several coins at once — "184 gp 7 sp", as the shop writes a price.
+    // Stripping every non-digit below would read that as 1847 sp.
+    const coins = [...str.matchAll(/(-?[\d,.]+)\s*(cp|sp|ep|gp|pp)\b/g)];
+    if (coins.length > 1){
+      const per = { cp:0.01, sp:0.1, ep:0.5, gp:1, pp:10 };
+      return Math.round(coins.reduce((t, m) => t + (parseFloat(m[1].replace(/,/g,'')) || 0) * per[m[2]], 0) * 100) / 100;
+    }
     const num = parseFloat(str.replace(/[^\d.-]/g,''));
     if (isNaN(num)) return 0;
     if (/\bcp\b/.test(str)) return num / 100;

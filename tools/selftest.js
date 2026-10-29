@@ -11426,6 +11426,49 @@
         closePanel('battlemap');
       }
     }
+    // -- Round 121: small leftovers — coins, labels, emoji, empty log -------
+    {
+      const keepLog = [localStorage.getItem(SKT_LOG_KEY), localStorage.getItem(SKT_LOG_PRIVATE_KEY)];
+      const keepSym = state.settings.currencySymbol;
+      try {
+        const sh = panelDefs.shop;
+        state.settings.currencySymbol = 'gp';
+        const got = [0.002, 0.05, 0.82, 1, 8.6, 184.7].map(v => sh._fmtPrice(v));
+        ok('shop: prices in coins, never "0.00gp"', JSON.stringify(got) === JSON.stringify(['1 cp', '5 cp', '8 sp 2 cp', '1 gp', '8 gp 6 sp', '184 gp 7 sp']), JSON.stringify(got));
+        state.settings.currencySymbol = 'cr';
+        ok('shop: a custom currency keeps its decimals', sh._fmtPrice(2.5) === '2.50cr', sh._fmtPrice(2.5));
+        const lp = panelDefs.loot._parseGp.bind(panelDefs.loot);
+        ok('loot: reads a price the shop wrote', lp('184 gp 7 sp') === 184.7 && lp('1 gp 5 cp') === 1.05 && lp('8 sp 2 cp') === 0.82 && lp('25GP') === 25 && lp('50 sp') === 5,
+          [lp('184 gp 7 sp'), lp('1 gp 5 cp'), lp('8 sp 2 cp'), lp('25GP'), lp('50 sp')].join());
+        ok('sheet: the 1d4 Psychic Blades is labelled the bonus action',
+          sktAtkLabel({ name: 'Psychic Blades', damage: '1d4+4 Psychic' }) === 'Psychic Blades (bonus action)'
+          && sktAtkLabel({ name: 'Psychic Blades', damage: '1d6+4 Psychic' }) === 'Psychic Blades'
+          && sktAtkLabel({ name: 'Dagger', damage: '1d4+2 piercing' }) === 'Dagger');
+        const card = cr => panelDefs.bestiary._renderCard({ id: 't', name: 'T', hp: 9, ac: 11, cr });
+        ok('bestiary: no "CR None" under a named NPC', !/CR/.test(card('None')) && !/CR/.test(card(null)) && /CR 1\/2/.test(card('1/2')));
+        localStorage.setItem(SKT_LOG_KEY, '[]'); localStorage.setItem(SKT_LOG_PRIVATE_KEY, '[]');
+        openPanel('gamelog'); await sleep(200);
+        const gb = document.getElementById('panel-body-gamelog');
+        ok('game log: no "Clear the log" on an empty log', gb && getComputedStyle(gb.querySelector('.glog-foot')).display === 'none');
+        const chk = gb && gb.querySelector('input[type=checkbox]');
+        ok('tick boxes take the accent, not the browser blue', chk && getComputedStyle(chk).accentColor !== 'auto', chk && getComputedStyle(chk).accentColor);
+        closePanel('gamelog');
+        openPanel('npclib'); await sleep(200);
+        const gen = document.getElementById('npclib-gen');
+        ok('NPC Library: the generate button is a line icon', gen && gen.querySelector('svg') && !/🎲/.test(document.getElementById('panel-body-npclib').textContent));
+        closePanel('npclib');
+        openPanel('world'); await sleep(300);
+        const wb = document.getElementById('panel-body-world');
+        const labs = wb ? [...wb.querySelectorAll('.weather-stat .lab')].map(l => l.textContent) : [];
+        ok('weather: box labels without emoji', labs.length >= 5 && labs.every(t => /^[A-Za-z. ]+$/.test(t.trim())), labs.join('|'));
+        closePanel('world');
+      } catch(e){ ok('round 121 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.settings.currencySymbol = keepSym;
+        if (keepLog[0] === null) localStorage.removeItem(SKT_LOG_KEY); else localStorage.setItem(SKT_LOG_KEY, keepLog[0]);
+        if (keepLog[1] === null) localStorage.removeItem(SKT_LOG_PRIVATE_KEY); else localStorage.setItem(SKT_LOG_PRIVATE_KEY, keepLog[1]);
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -12998,6 +13041,16 @@
           B._viewScale = vs0; state.sharedPanels = sh0; paTab = tab0; paRender();
           if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } B._tokens = JSON.parse(bm0).tokens || []; }
         }
+      }
+      // A phone has no mouse: the sheet's roll hint says tap.
+      if (paIsPhone()){
+        const tab0 = paTab;
+        try {
+          if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+          paTab = 'you'; paRender(); await sleep(250);
+          const hint = document.querySelector('#pa-screen .cs-last');
+          ok('sheet: the phone says tap, not click', !!hint && /^Tap /.test(hint.textContent.trim()) || !!hint && !/Click/.test(hint.textContent), hint ? hint.textContent.trim().slice(0, 60) : 'no hint');
+        } finally { paTab = tab0; paRender(); }
       }
 
       // -- The character sheet is the player's home screen --------------------

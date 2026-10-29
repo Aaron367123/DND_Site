@@ -182,7 +182,7 @@ registerPanel('shop',{
     })();
     const priceLine = '<div style="font-size:var(--fs-sm);color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px"><span>Category: ' + esc(item.category) + ' · Rarity: ' + esc(item.rarity) + ' · Price: ' + esc(this._fmtPrice(item.price)) + '</span><span style="flex:1"></span>' + sourceTag + '</div>';
     backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="width:560px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column">'
-      + '<h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px"><span style="font-size:var(--fs-2xl)">📜</span> ' + esc(item.name) + '</h3>'
+      + '<h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px">' + esc(item.name) + '</h3>'
       + priceLine
       + '<div style="flex:1;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>'
       + '<div class="modal-actions" style="margin-top:12px">'
@@ -1023,5 +1023,13 @@ registerPanel('shop',{
     // header on Generate so the button (and saved-shops list ordering) refresh.
     this._render();
   },
-  _fmtPrice(amt){const sym=state.settings.currencySymbol||'gp';if(amt<1)return`${amt.toFixed(2)}${sym}`;return`${Number.isInteger(amt)?amt:amt.toFixed(2)}${sym}`;}
+  // Coins the way the books write them — "8 sp 2 cp", "184 gp 7 sp" — not
+  // "0.82gp". Anything under a copper shows as 1 cp: shops saved before the
+  // 1cp floor still hold sub-copper prices, which printed as "0.00gp". A
+  // custom currency symbol has no sp/cp to break into, so it keeps decimals.
+  _fmtPrice(amt){const sym=state.settings.currencySymbol||'gp';
+    if(sym!=='gp')return`${Number.isInteger(amt)?amt:amt.toFixed(2)}${sym}`;
+    const cp=Math.max(1,Math.round((Number(amt)||0)*100));
+    const parts=[[Math.floor(cp/100),'gp'],[Math.floor(cp%100/10),'sp'],[cp%10,'cp']].filter(([n])=>n);
+    return parts.map(([n,u])=>n.toLocaleString()+' '+u).join(' ');},
 });

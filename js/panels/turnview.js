@@ -1096,7 +1096,7 @@ registerPanel('turnview', {
       const p = this._partyOf(c);
       const rows = (p && p.sheet && Array.isArray(p.sheet.attacks)) ? p.sheet.attacks : [];
       return rows.filter(a => a && a.name).map(a => ({
-        name: a.name, pc: true, str: !!a.str, spell: !!a.spell,
+        name: typeof sktAtkLabel === 'function' ? sktAtkLabel(a) : a.name, pc: true, str: !!a.str, spell: !!a.spell,
         mastery: typeof sktMasteryOf === 'function' ? sktMasteryOf(p, a) : (a.mastery || ''),
         bonus: parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0,
         dmgText: a.damage || '',

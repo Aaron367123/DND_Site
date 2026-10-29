@@ -142,7 +142,7 @@ function sktLogHtml(entries){
     // A sheet roll's text starts with its total ("17 (d20 15 +2)"); a quick roll's is the dice.
     const detail = String(e.text || '').replace(/^\s*-?\d+(?=\s|\(|$)\s*/, '').replace(/^—\s*/, '');
     h += '<div class="glog-e' + (e.crit ? ' crit' : '') + (e.fumble ? ' fumble' : '') + (e.hidden ? ' hidden' : '') + '" data-glog-id="' + esc(e.id) + '">'
-      + '<span class="glog-who" style="color:' + _sktLogColour(e) + '">' + esc(e.who || '?') + (e.hidden ? ' <i title="Only you can see this roll">🔒</i>' : '') + '</span>'
+      + '<span class="glog-who" style="color:' + _sktLogColour(e) + '">' + esc(e.who || '?') + (e.hidden ? ' <i class="glog-lock" title="Only you can see this roll">' + ICO('i-lock') + '</i>' : '') + '</span>'
       + '<span class="glog-l">' + esc(e.label || 'Roll') + '</span>'
       + '<b class="glog-t">' + esc(String(e.total)) + '</b>'
       + (detail ? '<span class="glog-d">' + esc(detail) + '</span>' : '')
@@ -206,6 +206,8 @@ registerPanel('gamelog', {
     const l = b.querySelector('.glog-list');
     l.innerHTML = sktLogHtml(entries);
     b.querySelector('.glog-count').textContent = entries.length ? entries.length + ' roll' + (entries.length === 1 ? '' : 's') : '';
+    // Nothing to clear on an empty log, so no button offering to.
+    b.querySelector('.glog-foot').style.display = entries.length ? '' : 'none';
     if (atBottom) l.scrollTop = l.scrollHeight;
     const t2 = b.querySelector('[data-glog-input]'); if (t2 && keep){ t2.value = keep; } if (t2 && focused) t2.focus();
     this._seen = Date.now(); this._badge();

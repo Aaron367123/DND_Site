@@ -424,7 +424,7 @@ function csTop(pc){
       .map(([k, l]) => '<button class="' + (CS.mode === k ? 'on' : '') + '" data-cs-mode="' + k + '">' + l + '</button>').join('') + '</span>'
     + (!ro && pc.inspiration && CS.log[0] && CS.log[0].kind === 'd20' && !CS.log[0].rerolled ? '<button class="btn small" data-cs="reroll" title="Spend Heroic Inspiration to roll that again">✦ Reroll</button>' : '')
     + (CS.log.length > 1 ? '<button class="btn small" data-cs="log">' + (CS.showLog ? 'Hide log' : 'Log') + '</button>' : '')
-    + '<span class="cs-last" aria-live="polite">' + (CS.log[0] ? csRollText(CS.log[0]) : '<span class="cb-dim">Click a score, save, skill or attack to roll.<span class="cs-keys"> Shift: advantage · Alt: disadvantage.</span></span>') + '</span></div>'
+    + '<span class="cs-last" aria-live="polite">' + (CS.log[0] ? csRollText(CS.log[0]) : '<span class="cb-dim">' + (window.matchMedia && matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click') + ' a score, save, skill or attack to roll.<span class="cs-keys"> Shift: advantage · Alt: disadvantage.</span></span>') + '</span></div>'
     + (CS.showLog ? '<div class="cs-log">' + CS.log.map(r => '<div>' + csRollText(r) + '</div>').join('') + '</div>' : '');
   return h + '</div>';
 }
@@ -761,6 +761,14 @@ function csRollText(r){
   return '<b class="cs-last-n' + (r.crit ? ' crit' : r.fumble ? ' fumble' : '') + '">' + r.total + '</b> ' + csE(csRollPlain(r).replace(/^[^:]*: \d+ ?/, r.label + ' '));
 }
 
+// An attack's name as shown. A D&D Beyond import lists the Soulknife's two
+// Psychic Blades under one name, so the 1d4 bonus-action blade read as a
+// duplicate row. The builder already names its own "(bonus action)".
+function sktAtkLabel(a){
+  const n = String((a && a.name) || '');
+  return n === 'Psychic Blades' && /^\s*1d4\b/i.test(String(a.damage || '')) ? n + ' (bonus action)' : n;
+}
+
 // An attack row's notes: its mastery (tap for what it does), range, ammunition.
 function csAtkNotes(pc, a){
   const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : a.mastery;
@@ -786,7 +794,7 @@ CS_TAB_RENDER.actions = pc => {
   });
   let h = '<div class="cs-asec" data-k="attack"><h4>Attacks' + (sh.attacksPerAction > 1 ? ' <span class="cb-dim">' + sh.attacksPerAction + ' per Attack action</span>' : '') + '</h4>';
   h += atks.length ? '<div class="cs-atks"><div class="cs-atk cs-atk-h"><span>Name</span><span>Hit / DC</span><span>Damage</span><span>Notes</span></div>'
-    + atks.map(a => { const i = a.i; return '<div class="cs-atk"><b>' + csE(a.name) + (a.n > 1 ? ' <span class="cs-atk-x">×' + a.n + '</span>' : '') + '</b>'
+    + atks.map(a => { const i = a.i; return '<div class="cs-atk"><b>' + csE(sktAtkLabel(a)) + (a.n > 1 ? ' <span class="cs-atk-x">×' + a.n + '</span>' : '') + '</b>'
       + (/^[+-]?\d+$/.test(String(a.atkBonus || '').trim()) ? '<button class="btn small" data-cs-atk="' + i + '">' + csE(a.atkBonus) + '</button>' : '<span>' + csE(a.atkBonus || '') + '</span>')
       + (a.damage ? '<span class="cs-dmgs"><button class="btn small" data-cs-dmg="' + i + '">' + csDmgHtml(a.damage) + '</button>'
         + (a.versatile ? '<button class="btn small" data-cs-dmg2="' + i + '" title="Two-handed">' + csDmgHtml(a.versatile) + '</button>' : '') + '</span>' : '<span></span>')

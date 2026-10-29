@@ -220,11 +220,11 @@ registerPanel('weather', {
         <div class="weather-feels">Feels like ${w.feelsLike}°C</div>
       </div>
       <div class="weather-stats">
-        <div class="weather-stat"><div class="lab">💨 Wind</div><div class="val">${w.wind} km/h${w.windDir?' '+esc(w.windDir):''}</div></div>
-        <div class="weather-stat"><div class="lab">💧 Precip.</div><div class="val">${esc(w.precip)}</div></div>
-        <div class="weather-stat"><div class="lab">🌫 Humidity</div><div class="val">${w.humid}%</div></div>
-        <div class="weather-stat"><div class="lab">☁ Cloud</div><div class="val">${w.clouds}%</div></div>
-        <div class="weather-stat"><div class="lab">🌡 Pressure</div><div class="val">${w.pressure?w.pressure+' hPa':'—'}</div></div>
+        <div class="weather-stat"><div class="lab">Wind</div><div class="val">${w.wind} km/h${w.windDir?' '+esc(w.windDir):''}</div></div>
+        <div class="weather-stat"><div class="lab">Precip.</div><div class="val">${esc(w.precip)}</div></div>
+        <div class="weather-stat"><div class="lab">Humidity</div><div class="val">${w.humid}%</div></div>
+        <div class="weather-stat"><div class="lab">Cloud</div><div class="val">${w.clouds}%</div></div>
+        <div class="weather-stat"><div class="lab">Pressure</div><div class="val">${w.pressure?w.pressure+' hPa':'—'}</div></div>
       </div>
       <div class="weather-controls">
         <label class="field-label">Biome
@@ -263,7 +263,7 @@ registerPanel('weather', {
     }).join('');
     return `<div class="weather-history">
       <div class="weather-history-head">
-        <span>📜 History · ${h.length}</span>
+        <span>History · ${h.length}</span>
         <span style="flex:1"></span>
         <button class="btn small" id="weather-history-clear" title="Clear the entire weather history">Clear</button>
       </div>

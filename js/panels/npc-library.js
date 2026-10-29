@@ -507,7 +507,7 @@ registerPanel('npclib', {
         <div class="npclib-toolbar">
           <input type="search" id="npclib-search" placeholder="Search NPCs..." value="${esc(this._searchQ)}">
           <button class="icon-btn npclib-tool-btn ${this._bulkMode?'active':''}" id="npclib-bulk-toggle" title="${this._bulkMode?'Done selecting':'Select several NPCs to move, tag or delete together'}">${this._bulkMode?'Done':'Select'}</button>
-          <button class="icon-btn npclib-tool-btn ${this._gen?'active':''}" id="npclib-gen" title="${this._gen?'Back to the selected NPC':'Generate an NPC — race, role, quirks, a secret'}">🎲</button>
+          <button class="icon-btn npclib-tool-btn ${this._gen?'active':''}" id="npclib-gen" title="${this._gen?'Back to the selected NPC':'Generate an NPC — race, role, quirks, a secret'}">${ICO('i-dice')}</button>
           <button class="icon-btn npclib-tool-btn" id="npclib-add" title="New NPC">+</button>
         </div>
         <div class="npclib-groups" id="npclib-groups">
@@ -518,7 +518,7 @@ registerPanel('npclib', {
       <div class="npclib-divider" id="npclib-divider" title="Drag to resize"></div>
       <div class="npclib-right">
         ${this._gen ? '<div class="npclib-gen"></div>'
-          : sel ? this._renderDetail(sel) : '<div class="empty-state" style="padding:30px">Select an NPC, click + to add one, or 🎲 to generate one.</div>'}
+          : sel ? this._renderDetail(sel) : emptyState({ icon:'i-user', title:'No NPC open', hint:'Pick one on the left, add one with +, or roll one up with the dice button.', roomy:true })}
       </div>
     </div>`;
     this._wire();
@@ -631,7 +631,7 @@ registerPanel('npclib', {
       <div class="npclib-notes" contenteditable="true" data-field="notes" data-placeholder="Click here to start typing.">${sanitizeHtml(n.notes||'')}</div>
 
       <div class="npclib-section-label npclib-secret-label">${ICO('i-lock')} SECRET
-        <button class="btn small npclib-secret-toggle" data-act="toggle-secret" title="${this._secretRevealed?'Hide the secret again':'Reveal — keep your screen private!'}">${this._secretRevealed?'🙈 Hide':'👁 Reveal'}</button>
+        <button class="btn small npclib-secret-toggle" data-act="toggle-secret" title="${this._secretRevealed?'Hide the secret again':'Reveal — keep your screen private!'}">${this._secretRevealed?ICO('i-eye-off')+' Hide':ICO('i-eye')+' Reveal'}</button>
       </div>
       <textarea class="npclib-secret${this._secretRevealed?'':' redacted'}" data-field="secret" placeholder="DM-only — what this NPC is hiding.">${esc(n.secret||'')}</textarea>
 

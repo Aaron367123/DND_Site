@@ -111,7 +111,7 @@ registerPanel('npcgen',{
       +'<button class="btn primary" id="npcgen-roll" style="flex:1;min-width:140px" title="'+(anyLocked?'Re-roll only unlocked fields':'Re-roll every field')+'">'+ICO('i-dice')+' '+(anyLocked?'Reroll unlocked':'Generate NPC')+'</button>'
       +'<button class="btn" id="npcgen-bulk" style="flex-shrink:0" title="Generate 5 NPCs straight into the NPC Library">+5 to Library</button>'
       +'<button class="btn" id="npcgen-save" style="flex-shrink:0" title="Keep this NPC in the library and open it">'+ICO('i-save')+' Keep</button>'
-      +'<button class="btn" id="npcgen-combat" style="flex-shrink:0" title="Add to combat">⚔ Combat</button>'
+      +'<button class="btn" id="npcgen-combat" style="flex-shrink:0" title="Add to combat">'+ICO('i-combat')+' Combat</button>'
     +'</div>';
 
     if(n){
@@ -159,7 +159,7 @@ registerPanel('npcgen',{
         const hidden = isSecret && !this._secretRevealed;
         const reveal = isSecret
           ? '<button class="btn small npcgen-reveal" data-act="toggle-secret" style="font-size:var(--fs-xs)">'
-              +(this._secretRevealed?'🙈 Hide':'👁 Reveal')
+              +(this._secretRevealed?ICO('i-eye-off')+' Hide':ICO('i-eye')+' Reveal')
             +'</button>'
           : '';
         const on = !!this._locks[key];
@@ -175,7 +175,7 @@ registerPanel('npcgen',{
       html+=field('Quirk','quirk',n.quirk,'var(--info)',false);
       html+=field('Also','quirk2',n.quirk2,'var(--info)',false);
       html+=field('Motivation','motivation',n.motivation,'var(--warning)',false);
-      html+=field('🔒 Secret','secret',n.secret,'var(--danger)',true);
+      html+=field(ICO('i-lock')+' Secret','secret',n.secret,'var(--danger)',true);
 
       html+='</div>';
     }

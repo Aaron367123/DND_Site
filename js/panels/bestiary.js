@@ -38,6 +38,12 @@ const BESTIARY_FOLDER_TEMPLATES = [
   { group:'Tier',  name:'Tier 4 (Lv 17-20)' },
 ];
 
+// Named NPCs saved from the NPC Library carry the string "None" for CR.
+// "CR None" under a face is noise; a card without a rating just leaves it off.
+function _bestHasCr(cr){
+  const v = String(cr ?? '').trim().toLowerCase();
+  return v !== '' && v !== 'none' && v !== 'null' && v !== '?' && v !== '—';
+}
 function _bestInitials(name){
   return (name||'?').split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
 }
@@ -140,7 +146,7 @@ registerPanel('bestiary', {
       <div class="bestiary-card-stats">
         <span title="HP">${ICO('i-heart')} ${m.hp||'?'}</span>
         <span title="AC">${ICO('i-shield')} ${m.ac||'?'}</span>
-        <span title="CR">CR ${esc(String(m.cr??'?'))}</span>
+        ${_bestHasCr(m.cr) ? `<span title="Challenge rating">CR ${esc(String(m.cr))}</span>` : ''}
       </div>
     </div>`;
   },
