@@ -11689,6 +11689,20 @@
         const B0 = sktComputeCharacter(mk([]), R), B1 = sktComputeCharacter(mk(['Gloves of Thievery', 'Cloak of Elvenkind']), R);
         ok('builder: Gloves of Thievery’s +5 and a Cloak of Elvenkind’s advantage', B1.sheet.skills.sleightOfHand === B0.sheet.skills.sleightOfHand + 5
           && B1.sheet.rollAdv.some(x => x.label === 'Cloak of Elvenkind' && x.on.includes('check:stealth')));
+        // Bracers of Archery: +2 damage with a longbow; a belt's darkvision and Dwarvish.
+        const atk0 = (C().sheet.attacks || []).slice();
+        C().sheet.attacks = atk0.concat([{ name: 'Longbow', atkBonus: '+5', damage: '1d8+3 Piercing' }]);
+        wear([make('Bracers of Archery'), make('Belt of Dwarvenkind')]);
+        const lb = C().sheet.attacks.find(a => a.name === 'Longbow');
+        ok('items: Bracers of Archery add 2 to a longbow’s damage', lb && lb.damage === '1d8+5 Piercing', lb && lb.damage);
+        tab('Abilities'); await sleep(150);
+        const pane = document.querySelector('#cs-root').textContent;
+        ok('items: a Belt of Dwarvenkind’s darkvision and Dwarvish show on the sheet', /Darkvision 60 ft\. \(Belt of Dwarvenkind\)/.test(pane) && /From items\s*Dwarvish; Longbow, Shortbow/.test(pane));
+        wear([]);
+        ok('items: the longbow’s damage goes back with the bracers off', C().sheet.attacks.find(a => a.name === 'Longbow').damage === '1d8+3 Piercing');
+        C().sheet.attacks = atk0;
+        const dawn = M.find(e => e.name === 'Dawnbringer');
+        ok('items: a sentient weapon that speaks Common doesn’t teach you Common', !(dawn && dawn.textFx && dawn.textFx.langs));
         csClose(); await sleep(100);
       } catch(e){ ok('round 124 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {

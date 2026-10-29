@@ -538,11 +538,14 @@ function csSide(pc){
   h += '<h5>Senses</h5><div class="cs-kv"><span>Passive Perception</span><b>' + (sh.passivePerception || pas('perception')) + '</b></div>'
     + '<div class="cs-kv"><span>Passive Investigation</span><b>' + pas('investigation') + '</b></div>'
     + '<div class="cs-kv"><span>Passive Insight</span><b>' + pas('insight') + '</b></div>'
-    + (sh.senses ? '<div class="cs-note">' + csE(sh.senses) + '</div>' : '');
+    + (sh.senses ? '<div class="cs-note">' + csE(sh.senses) + '</div>' : '')
+    + (pc.build ? '' : csItemSensesHtml(pc));
   const pr = Object.assign({}, csPdfProfs(sh.languages), sh.proficiencies || {});
   const langs = csPdfProfs(sh.languages).languages || sh.languages;
   const line = (l, v) => v && v.length ? '<div class="cs-prof"><b>' + l + '</b> ' + csE(Array.isArray(v) ? v.map(_csTitle).join(', ') : v) + '</div>' : '';
+  const fromItems = pc.build ? null : csItemProfs(pc);
   h += '<h5>Proficiencies &amp; languages</h5>' + line('Armor', pr.armor) + line('Weapons', pr.weapons) + line('Tools', pr.tools) + line('Languages', langs)
+    + (fromItems ? line('From items', fromItems) : '')
     + (!pr.armor && !pr.weapons && !langs ? '<div class="cb-dim">None recorded.</div>' : '');
   const def = [['Resistant', pc.resistances], ['Immune', pc.immunities], ['Vulnerable', pc.vulnerabilities]].filter(([, v]) => v && v.length);
   if (def.length) h += '<h5>Defenses</h5>' + def.map(([l, v]) => line(l, v)).join('');
@@ -2088,7 +2091,22 @@ function csItemEffects(m){
   const tf = f.textFx || {};
   (tf.adv || []).forEach(x => out.push('Advantage on ' + x.on.map(t => t === 'init' ? 'initiative' : t.startsWith('check:') ? _csTitle(t.slice(6).replace(/_/g, ' ')) + ' checks' : (CS_ABN[t.slice(3)] || t) + ' checks').join(' and ')));
   Object.keys(tf.skill || {}).forEach(k => out.push(sg(tf.skill[k]) + ' to ' + (typeof SKT_SKILL_LABEL !== 'undefined' ? SKT_SKILL_LABEL[k] : k) + ' checks'));
+  if (tf.senses && tf.senses.darkvision) out.push('Darkvision ' + tf.senses.darkvision + ' ft');
+  if ((tf.langs || []).length) out.push('Languages: ' + tf.langs.join(', '));
+  if ((tf.weapons || []).length) out.push('Proficiency: ' + tf.weapons.join(', '));
+  (tf.dmg || []).forEach(d => out.push(sg(d.n) + ' damage with a ' + d.w.join(' or ')));
   return { line: out, notes: (tf.notes || []).map(x => x.replace(/^[^:]*:\s*/, '')) };
+}
+// An imported character's senses and languages from items in use, shown
+// beside the PDF's (which are its own text, left alone).
+function csItemTextAll(pc){ return csActiveItems(pc).map(m => ({ m, f: (csItemFx(m).textFx || {}) })); }
+function csItemSensesHtml(pc){
+  const dv = csItemTextAll(pc).filter(x => x.f.senses && x.f.senses.darkvision);
+  return dv.length ? '<div class="cs-note">Darkvision ' + Math.max(...dv.map(x => x.f.senses.darkvision)) + ' ft. (' + csE(dv.map(x => x.m.name).join(', ')) + ')</div>' : '';
+}
+function csItemProfs(pc){
+  const all = csItemTextAll(pc), langs = [...new Set([].concat(...all.map(x => x.f.langs || [])))], wp = [...new Set([].concat(...all.map(x => x.f.weapons || [])))];
+  return [langs.length ? langs.join(', ') : '', wp.length ? wp.map(_csTitle).join(', ') : ''].filter(Boolean).join('; ');
 }
 // The items worth a place in Actions: what they change, their spells, a
 // usable ability, charges.
@@ -2681,7 +2699,7 @@ function csImpRecalc(p, R){
     const spell = /^spell:/.test(ab), key = spell ? ab.slice(6) : ab;
     const unarmed = /^(unarmed strike|flurry of blows)\b/i.test(String(r.name || ''));
     const hitD = (key ? (F.dMod[key] || 0) : 0) + (ab ? F.pbD : 0) + (unarmed ? ub : 0);
-    const dmgD = (key && !spell ? (F.dMod[key] || 0) : 0) + (unarmed ? ub : 0);
+    const dmgD = (key && !spell ? (F.dMod[key] || 0) : 0) + (unarmed ? ub : 0) + (spell ? 0 : sktItemWeaponDamage(F.fxs, r.name));
     if (!hitD && !dmgD){
       if (r.pdfAtk != null){ r.atkBonus = r.pdfAtk; r.damage = r.pdfDmg; delete r.pdfAtk; delete r.pdfDmg; delete r.fxAtk; delete r.fxDmg; base[k] = r; }
       return;
@@ -2703,7 +2721,7 @@ function csImpRecalc(p, R){
     const props = (s.property || []).map(x => String(x).split('|')[0]);
     const ab = t === 'R' ? md.dex : props.includes('F') ? Math.max(md.str, md.dex) : md.str;
     const hit = prof + ab + (+m.bonusWeapon || 0) + (+m.bonusWeaponAttack || 0);
-    const dm = ab + (+m.bonusWeapon || 0) + (+m.bonusWeaponDamage || 0);
+    const dm = ab + (+m.bonusWeapon || 0) + (+m.bonusWeaponDamage || 0) + sktItemWeaponDamage(F.fxs, m.name);
     const fmt = die => die ? die + (dm ? (dm > 0 ? '+' : '') + dm : '') + (s.dmgType ? ' ' + (DT[s.dmgType] || '') : '') : '';
     rows.push({ name: m.name, atkBonus: (hit >= 0 ? '+' : '') + hit, damage: fmt(s.dmg1) || String(1 + dm), versatile: props.includes('V') && s.dmg2 ? fmt(s.dmg2) : null,
       props, range: s.range ? String(s.range).split('/')[0] : '', fromInv: true });

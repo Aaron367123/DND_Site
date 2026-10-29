@@ -2418,6 +2418,9 @@ function sktComputeCharacter(build, R, prior){
   ctx.checkBonusAll = _sktItemSum(build, 'bonusAbilityCheck');
   _sktActiveItems(build).forEach(m => { const f = m.textFx; if (!f) return;
     (f.adv || []).forEach(x => ctx.rollAdv.push({ on: x.on, label: x.label, item: true }));
+    if (f.senses && f.senses.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, f.senses.darkvision);
+    (f.langs || []).forEach(l => ctx.languages.add(l));
+    (f.weapons || []).forEach(w => ctx.weaponProf.add(w));
     Object.keys(f.skill || {}).forEach(k => { ctx.skillBonus[k] = (ctx.skillBonus[k] || 0) + f.skill[k]; });
     (f.notes || []).forEach(n => _fxNote(ctx, n)); });
   ctx.concBonus += _sktItemSum(build, 'bonusSavingThrowConcentration');
@@ -3287,6 +3290,11 @@ function sktBuildAttacks(ctx, gear, sc){
     });
   }));
   out.forEach(a => { delete a._ab; delete a._flat; });
+  // Damage an item adds with its weapons (Bracers of Archery: +2 with a longbow).
+  const iw = _sktActiveItems(ctx.build);
+  out.forEach(a => { const n = a.spell ? 0 : sktItemWeaponDamage(iw, a.name); if (!n) return;
+    const m = /^(\s*\d*d\d+)(\s*[+-]\s*\d+)?(.*)$/i.exec(a.damage || ''); if (!m) return;
+    const f = (parseInt(String(m[2] || '0').replace(/\s/g, ''), 10) || 0) + n; a.damage = m[1] + (f ? (f > 0 ? '+' : '') + f : '') + m[3]; });
   return out;
 }
 function _sktDieAvg(d){ const m = /^(\d+)d(\d+)/.exec(String(d)); return m ? +m[1] * (+m[2] + 1) / 2 : +d || 0; }
@@ -3492,15 +3500,21 @@ function sktItemSpeeds(speeds, items){
 // "saving throws against spells"), as notes. The item's own condition —
 // "while you wear this cloak" — is what being attuned means, so it doesn't
 // make the rest conditional. { adv: [{ on, label }], skill: { stealth: 5 }, notes }
+const SKT_ITEM_WEAPONS = /\b(longbow|shortbow|hand crossbow|light crossbow|heavy crossbow|longsword|shortsword|greatsword|greataxe|battleaxe|handaxe|warhammer|light hammer|maul|rapier|scimitar|whip|trident|glaive|halberd|pike|lance|spear|javelin|dagger|club|greatclub|quarterstaff|mace|sickle|flail|morningstar|war pick|sling|dart|blowgun)s?\b/gi;
+const SKT_ITEM_LANGS = ['Common', 'Dwarvish', 'Elvish', 'Giant', 'Gnomish', 'Goblin', 'Halfling', 'Orc', 'Abyssal', 'Celestial', 'Draconic', 'Deep Speech', 'Infernal',
+  'Primordial', 'Sylvan', 'Undercommon', 'Aquan', 'Auran', 'Ignan', 'Terran', "Thieves' Cant", 'Druidic'];
 function sktItemTextFx(name, text){
-  const out = { adv: [], skill: {}, notes: [] };
+  const out = { adv: [], skill: {}, notes: [], senses: {}, langs: [], weapons: [], dmg: [] };
   const t = String(text || '').replace(/\{@\w+ ([^|}]+)[^}]*\}/g, '$1').replace(/\s+/g, ' ');
   const own = /^\s*while (?:you(?:'re| are)? )?(?:wear|wearing|hold|holding|carry|carrying|attuned|wield|wielding)\b[^,]*,\s*/i;
   const skills = words => Object.keys(SKT_SKILL_LABEL).filter(k => words.includes(String(SKT_SKILL_LABEL[k]).toLowerCase()));
   const cond = /\b(when|whenever|if|until|for 1 minute|for the next|the first|target|after)\b/i;
   const note = s => { s = s.charAt(0).toUpperCase() + s.slice(1); const n = name + ': ' + (s.length > 200 ? s.slice(0, 197).replace(/\s\S*$/, '') + '…' : s); if (!out.notes.includes(n)) out.notes.push(n); };
-  t.split(/(?<=[.!?])\s+/).forEach(s0 => {
-    const s = s0.replace(own, '').replace(/\s+while you (?:wear|hold|carry|wield) (?:this|these|it|them)[^.]*/i, '');
+  // A bulleted benefit ("• Darkvision You have Darkvision…") is its own
+  // sentence, its heading dropped, and not under the line before it ("If
+  // you aren't a dwarf, you gain the following:").
+  t.split(/(?<=[.!?:])\s+|\n+/).forEach(s0 => {
+    const s = s0.replace(/^\s*•\s*(?:[A-Z][\w'’-]*(?: (?:of|the|and|[A-Z][\w'’-]*))*\s+)?(?=(?:You|Your|While|When|As|If|Once|The|This|Each|In)\b)/, '').replace(own, '').replace(/\s+while you (?:wear|hold|carry|wield) (?:this|these|it|them)[^.]*/i, '');
     const a = /(?<!dis)advantage on ([^.;]*?\b(?:checks?|rolls?))(?![^.;]*\b(?:checks?|rolls?)\b)([^.;]*)/i.exec(s);
     if (a){
       const words = a[1].toLowerCase();
@@ -3515,13 +3529,36 @@ function sktItemTextFx(name, text){
         else out.adv.push({ on: [...new Set(on)], label: name });
       }
     } else if (/(?<!dis)advantage on saving throws/i.test(s)) note(s.trim());
+    // Darkvision ("darkvision out to a range of 60 feet").
+    const dv = /darkvision (?:out )?(?:to|with) a range of (\d+) feet|darkvision (?:out to )?(\d+) feet/i.exec(s);
+    if (dv && !cond.test(s.slice(0, dv.index))) out.senses.darkvision = Math.max(out.senses.darkvision || 0, +(dv[1] || dv[2]));
+    // Languages ("you can speak, read, and write Dwarvish").
+    // You, not a sentient weapon ("the weapon can speak Common").
+    if (/\byou (?:can |also |now )*(?:speak|know|understand|read|gain the ability to speak)\b/i.test(s)) SKT_ITEM_LANGS.forEach(l => { if (new RegExp('\\b' + l.replace(/'/g, "[’']") + '\\b').test(s) && !out.langs.includes(l)) out.langs.push(l); });
+    // Weapon proficiency ("you have proficiency with the longbow and shortbow").
+    const pf = /proficiency with (?:the )?([^.;]+)/i.exec(s);
+    if (pf) (pf[1].match(SKT_ITEM_WEAPONS) || []).forEach(w => { const k = w.toLowerCase().replace(/s$/, ''); if (!out.weapons.includes(k)) out.weapons.push(k); });
+    // Damage with some weapons ("a +2 bonus to damage rolls on ranged attacks made with such weapons").
+    const dm = /\+(\d+) bonus to damage rolls (?:(?:on|with|for) (?:ranged |melee )?(?:weapon )?attacks? )?made with ([^.;]+)/i.exec(s);
+    if (dm){
+      const named = (dm[2].match(SKT_ITEM_WEAPONS) || []).map(w => w.toLowerCase().replace(/s$/, ''));
+      const w = named.length ? named : /such weapons|them\b/i.test(dm[2]) ? (t.match(SKT_ITEM_WEAPONS) || []).map(x => x.toLowerCase().replace(/s$/, '')) : [];
+      if (w.length) out.dmg.push({ w: [...new Set(w)], n: +dm[1] });
+    }
     const b = /\+(\d+) bonus to ([^.;]*?\bchecks?)([^.;]*)/i.exec(s);
     if (b){
       const sk = skills(b[2].toLowerCase());
       if (sk.length && !cond.test(s.slice(0, b.index))) sk.forEach(k => { out.skill[k] = (out.skill[k] || 0) + (+b[1]); });
     }
   });
-  return out.adv.length || out.notes.length || Object.keys(out.skill).length ? out : null;
+  ['senses', 'langs', 'weapons', 'dmg'].forEach(k => { if (Array.isArray(out[k]) ? !out[k].length : !Object.keys(out[k]).length) delete out[k]; });
+  return out.adv.length || out.notes.length || Object.keys(out.skill).length || out.senses || out.langs || out.weapons || out.dmg ? out : null;
+}
+// The damage bonus items give an attack with one of their weapons (Bracers
+// of Archery's +2 with a longbow or shortbow).
+function sktItemWeaponDamage(items, attackName){
+  const n = String(attackName || '').toLowerCase();
+  return (items || []).reduce((t, m) => t + ((((m && m.textFx) || {}).dmg) || []).filter(d => d.w.some(w => n.includes(w))).reduce((a, d) => a + d.n, 0), 0);
 }
 // What items that improve unarmed strikes add to them.
 function sktItemUnarmedBonus(items){
