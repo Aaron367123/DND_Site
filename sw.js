@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '6f25027745';
+const BUILD = 'c60ee709f6';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=ecb7ded7fa',
+  'styles/main.css?v=f234a64205',
   'styles/theme.css?v=40f535352e',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=f4b60a75c8',
@@ -58,7 +58,7 @@ const PRECACHE = [
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=17e22f002d',
-  'js/panels/party.js?v=7930ba1cb7',
+  'js/panels/party.js?v=afc4daf753',
   'js/panels/shop.js?v=d1096bf206',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',

@@ -1986,10 +1986,18 @@ registerPanel('party',{
     this._render();
   },
 
+  // The player's latest roll, on one quiet line, for half an hour (the Game
+  // Log's break between sessions): the few before it and the dice are in the
+  // tooltip, and a click opens the Game Log.
   _playerRollsHtml(c){
-    const rs = (c.rolls || []).filter(r => r.from === 'player').slice(0, 3);
+    const rs = (c.rolls || []).filter(r => r.from === 'player' && Date.now() - (r.at || 0) < 30 * 60 * 1000).slice(0, 4);
     if (!rs.length) return '';
-    return '<div class="char-prolls" title="Rolled on their sheet">' + rs.map(r => '<span>🎲 ' + esc(r.label) + ' <b>' + esc(String(r.total)) + '</b></span>').join('') + '</div>';
+    const at = t => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const tip = rs.map(r => at(r.at) + '  ' + r.label + ': ' + (r.text || r.total)).join('\n') + '\n\nClick for the Game Log';
+    const r = rs[0];
+    return '<button class="char-prolls" data-act="open-log" title="' + esc(tip) + '">'
+      + '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dice"/></svg>'
+      + '<span class="char-proll-l">' + esc(r.label) + '</span><b>' + esc(String(r.total)) + '</b></button>';
   },
 
 
@@ -3117,6 +3125,9 @@ registerPanel('party',{
       // (Inventory tab removed.)
       else if(act==='xp-levelup'){
         if (typeof openCharBuilder === 'function') openCharBuilder({ idx: +el.dataset.idx, levelup: true });
+      }
+      else if(act==='open-log'){
+        openPanel('gamelog');
       }
       else if(act==='open-sheet'){
         const c = state.party[+el.dataset.idx]; if (c && typeof openCharSheet === 'function') openCharSheet(c.id);

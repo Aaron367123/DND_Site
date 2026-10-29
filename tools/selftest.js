@@ -6285,6 +6285,19 @@
         P._render(); await sleep(30);
         ok('party: a player’s roll pops up on the DM’s screen, and sits on the card',
            [...document.querySelectorAll('.toast-item')].some(t => /Toolsy — Stealth: 17/.test(t.textContent)) && /Stealth/.test((P._body.querySelector('.char-prolls') || {}).textContent || ''));
+        // One line, the latest; the ones before it in the tooltip; gone after half an hour.
+        pc.rolls = [{ label: 'Sneak Attack', total: 12, text: '12 — 3d6', at: Date.now() - 1000, from: 'player' },
+                    { label: 'Bardic Inspiration', total: 8, text: '8 — d8', at: Date.now() - 2000, from: 'player' }];
+        P._render(); await sleep(30);
+        const pr = P._body.querySelectorAll('.char-prolls');
+        ok('party: the card shows a player’s latest roll on one line, the rest in its tooltip',
+           pr.length === 1 && pr[0].textContent === 'Sneak Attack12' && /Bardic Inspiration: 8 — d8/.test(pr[0].title), pr.length + ' ' + (pr[0] || {}).textContent);
+        pr[0].click(); await sleep(200);
+        ok('party: and a click on it opens the Game Log', !!(panelDefs.gamelog && panelDefs.gamelog._body));
+        closePanel('gamelog');
+        pc.rolls = [{ label: 'Stealth', total: 17, text: '17', at: Date.now() - 31 * 60 * 1000, from: 'player' }];
+        P._render(); await sleep(30);
+        ok('party: a roll from over half an hour ago leaves the card', !P._body.querySelector('.char-prolls'));
         closePanel('party');
       } catch(e){ ok('builder: the D&D Beyond extras ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
       finally {
