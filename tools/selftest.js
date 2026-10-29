@@ -8893,6 +8893,23 @@
         const plainBox = el => !!el && getComputedStyle(el).clipPath === 'none' && getComputedStyle(el, '::before').content === 'none' && parseFloat(getComputedStyle(el).borderTopWidth) > 0;
         ok('frames: the sheet’s ability scores are framed; its stat boxes and hit points are plain boxes', framed(r.querySelector('.cs-ab')) && plainBox(r.querySelector('.cs-box')) && plainBox(r.querySelector('.cs-hp')));
         ok('frames: the sheet’s AC is a plain box like its neighbours, not a shield', plainBox(r.querySelector('.cs-boxes > .cs-box:first-child')), getComputedStyle(r.querySelector('.cs-boxes > .cs-box:first-child')).clipPath.slice(0, 60));
+        // Line icons, not emoji, on the sheet's buttons; and the Export menu
+        // still opens where it can be seen and pressed.
+        const hb = r.querySelector('.cs-headbtns');
+        ok('sheet: the header buttons carry line icons, not emoji', !!hb && hb.querySelectorAll('.ico').length >= 4 && !/\p{Extended_Pictographic}/u.test(hb.textContent), (hb || {}).textContent);
+        r.querySelector('[data-cs="exportmenu"]').click(); await sleep(60);
+        const exItem = document.querySelector('#cs-root .cs-exmenu button, #cs-root .cs-exmenu [role="menuitem"]');
+        const exBox = exItem && exItem.getBoundingClientRect();
+        ok('sheet: and Export still opens its menu on screen', !!exItem && exItem.contains(document.elementFromPoint(exBox.left + exBox.width / 2, exBox.top + exBox.height / 2)));
+        document.body.click(); await sleep(30);
+        // The sheet's save and skill bonuses are plain numbers, and its side headings plain rules.
+        const sv = r.querySelector('.cs-list .cs-row > b');
+        ok('frames: the sheet’s save and skill bonuses are numbers, not plaques', !!sv && getComputedStyle(sv).clipPath === 'none' && getComputedStyle(sv, '::before').content === 'none');
+        // An empty window: icon, title and how to start.
+        const emp = document.createElement('div'); emp.innerHTML = sktLogHtml([]); document.body.appendChild(emp);
+        const empPad = emp.firstElementChild ? parseFloat(getComputedStyle(emp.firstElementChild).paddingTop) : 0;
+        ok('empty: an empty Game Log shows an icon and a title, lower in the window, not one grey line', !!emp.querySelector('.empty-state-roomy .empty-state-icon .ico') && /No rolls yet/.test((emp.querySelector('.empty-state-title') || {}).textContent || '') && empPad >= 40, empPad);
+        emp.remove();
         csClose();
         openPanel('party'); await sleep(250);
         const card = panelDefs.party._body.querySelector('.char-card');
@@ -11786,7 +11803,7 @@
         ok('handouts: "Show again" re-announces it', JSON.parse(localStorage.getItem('skt-handouts-v1')).list[0].shownAt > t0);
         // One "Send to players…": everyone, some, or one.
         const pcs = state.party.filter(p => !p.foe);
-        ok('notes: every note has "📜 Send…"', /data-act="notes-send"/.test(panelDefs.notes._renderEditor({ name: 'x', content: '' })));
+        ok('notes: every note has "Send…"', /data-act="notes-send"/.test(panelDefs.notes._renderEditor({ name: 'x', content: '' })));
         const sent = panelDefs.notes._sendNote({ name: 'The innkeeper’s letter', content: 'Meet me at dawn.' }); await sleep(40);
         const dlg = document.getElementById('ho-send-back');
         ok('send: a note opens "Send to players", everyone ticked', !!dlg && /innkeeper/.test(dlg.textContent)

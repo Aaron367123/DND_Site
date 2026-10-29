@@ -315,12 +315,12 @@ function csHead(pc){
     + '</div>'
     // The buttons as a row on a wide screen; on a phone one ⋯ menu instead.
     + '<div class="cs-headbtns">'
-    + (ro ? '' : '<button class="btn" data-cs="short">💤 Short rest</button><button class="btn" data-cs="long">🛌 Long rest</button>')
+    + (ro ? '' : '<button class="btn" data-cs="short">' + ICO('i-clock') + ' Short rest</button><button class="btn" data-cs="long">' + ICO('i-moon') + ' Long rest</button>')
     + (!ro && pc.build && typeof openCharBuilder === 'function' ? '<button class="btn' + (ready ? ' primary' : '') + '" data-cs="levelup"' + ((pc.build.level || 1) >= 20 ? ' disabled' : '') + '>⬆ Level up</button><button class="btn" data-cs="edit">Edit</button>' : '')
-    + (!ro && !pc.foe ? '<button class="btn" data-cs="customize" title="Custom bonuses">⚙ Customize</button>' : '')
-    + (!ro && !pc.build && !pc.foe && typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="convert" title="Fill in the builder\u2019s choices from this sheet, so it can be levelled and edited like one made there">⇪ Rebuild in the builder</button>' : '')
-    + '<button class="btn" data-cs="print" title="Print the sheet, or save it as a PDF">🖨 Print</button>'
-    + '<span class="cs-exwrap"><button class="btn" data-cs="exportmenu" aria-haspopup="true" aria-expanded="' + !!CS.exportOpen + '" title="Save or share the character">⤓ Export ▾</button>'
+    + (!ro && !pc.foe ? '<button class="btn" data-cs="customize" title="Custom bonuses">' + ICO('i-gear') + ' Customize</button>' : '')
+    + (!ro && !pc.build && !pc.foe && typeof openCharBuilder === 'function' ? '<button class="btn" data-cs="convert" title="Fill in the builder\u2019s choices from this sheet, so it can be levelled and edited like one made there">' + ICO('i-refresh') + ' Rebuild in the builder</button>' : '')
+    + '<button class="btn" data-cs="print" title="Print the sheet, or save it as a PDF">' + ICO('i-print') + ' Print</button>'
+    + '<span class="cs-exwrap"><button class="btn" data-cs="exportmenu" aria-haspopup="true" aria-expanded="' + !!CS.exportOpen + '" title="Save or share the character">' + ICO('i-download') + ' Export ▾</button>'
     + (CS.exportOpen ? '<div class="cs-exmenu" role="menu">'
       + '<button role="menuitem" data-cs="print"><b>PDF character sheet</b><small>Opens the print dialog — choose “Save as PDF”, or print it</small></button>'
       + '<button role="menuitem" data-cs="cards"><b>Spell and item cards</b><small>Playing-card size, nine to a page, to cut out</small></button>'

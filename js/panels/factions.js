@@ -121,7 +121,7 @@ registerPanel('factions', {
     b.innerHTML = '<div class="fac">'
       + '<div class="qst-bar"><button class="btn primary small" data-f-new>+ New faction</button>'
       + (all.length ? '' : '<button class="btn small" data-f-starters title="The Harpers, the Order of the Gauntlet, the Emerald Enclave, the Lords’ Alliance and the Zhentarim">Add the five Realms factions</button>') + '</div>'
-      + '<div class="fac-list">' + (all.length ? all.map(f => this._cardHtml(f)).join('') : '<div class="msg-empty">No factions yet. Add the ones the party has met, and show each to the players when they know of it.</div>') + '</div></div>';
+      + '<div class="fac-list">' + (all.length ? all.map(f => this._cardHtml(f)).join('') : emptyState({ icon: 'i-crest', title: 'No factions yet', hint: 'Add the ones the party has met, and show each to the players when they know of it.', roomy: true })) + '</div></div>';
     this._wire(b);
     const l = b.querySelector('.fac-list'); if (l) l.scrollTop = scroll;
     if (fk){

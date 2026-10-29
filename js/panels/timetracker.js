@@ -245,10 +245,10 @@ registerPanel('time', {
       </div>
       <div class="time-advance-label" style="margin-top:10px">FAST-FORWARD</div>
       <div class="time-buttons" style="flex-wrap:wrap">
-        <button class="btn time-btn" data-delta-s="${toSunriseSec}" title="Advance to dawn (hour 6:00) — ${Math.round(toSunriseSec/3600*10)/10}h away">🌅 Sunrise</button>
-        <button class="btn time-btn" data-delta-s="${toSunsetSec}" title="Advance to dusk (hour 18:00) — ${Math.round(toSunsetSec/3600*10)/10}h away">🌇 Sunset</button>
-        <button class="btn time-btn" data-rest="long" title="The party takes a long rest: everyone recovers, and 8 hours pass">🛌 Long rest</button>
-        <button class="btn time-btn" data-rest="short" title="The party takes a short rest: each phone spends hit dice; an hour passes when you finish it">⏳ Short rest</button>
+        <button class="btn time-btn" data-delta-s="${toSunriseSec}" title="Advance to dawn (hour 6:00) — ${Math.round(toSunriseSec/3600*10)/10}h away">${ICO('i-sunrise')} Sunrise</button>
+        <button class="btn time-btn" data-delta-s="${toSunsetSec}" title="Advance to dusk (hour 18:00) — ${Math.round(toSunsetSec/3600*10)/10}h away">${ICO('i-sunset')} Sunset</button>
+        <button class="btn time-btn" data-rest="long" title="The party takes a long rest: everyone recovers, and 8 hours pass">${ICO('i-moon')} Long rest</button>
+        <button class="btn time-btn" data-rest="short" title="The party takes a short rest: each phone spends hit dice; an hour passes when you finish it">${ICO('i-clock')} Short rest</button>
       </div>
     `;
 

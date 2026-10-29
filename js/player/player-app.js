@@ -1454,7 +1454,7 @@ function paPickerScreen(){
   // A player can make their own character here; it joins the party like
   // any other and this phone becomes that character.
   const build = typeof openCharBuilder === 'function'
-    ? '<button class="btn primary pa-build" data-pa-build="new">🧙 Build a new character</button>' : '';
+    ? '<button class="btn primary pa-build" data-pa-build="new">' + (typeof ICO === 'function' ? ICO('i-user') : '') + ' Build a new character</button>' : '';
   if (!list.length && typeof sktAwaitingSync !== 'undefined' && sktAwaitingSync){
     return `<div class="pa-card pa-connecting">${typeof emptyState === 'function' ? emptyState({
       icon:'i-turn', title:'Connecting to your table…',

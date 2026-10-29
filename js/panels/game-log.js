@@ -131,7 +131,9 @@ function _sktLogAgo(at){
   return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 function sktLogHtml(entries){
-  if (!entries.length) return '<div class="glog-empty">No rolls yet. Rolls from every sheet and phone show up here.</div>';
+  if (!entries.length) return typeof emptyState === 'function'
+    ? emptyState({ icon: 'i-dice', title: 'No rolls yet', hint: 'Rolls from every sheet and phone show up here, newest at the bottom.', roomy: true })
+    : '<div class="glog-empty">No rolls yet. Rolls from every sheet and phone show up here.</div>';
   let last = 0, h = '';
   entries.forEach(e => {
     // A gap of half an hour or more: a break, marked with the time.

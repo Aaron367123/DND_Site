@@ -671,3 +671,32 @@ body.tools-in-dock .panel-dock .in-more { display: none !important; }
 .insp-give-btn { border-style: solid; border-color: color-mix(in srgb, var(--text) 9%, transparent); display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .hd-label { display: inline-flex; align-items: center; gap: 4px; }
 .hd-label .ico { color: var(--text-muted); }
+
+/* ── 27. Quieter gold ─────────────────────────────────────── */
+/* The notched frames stay; their rule goes from bright gilt to a warm grey
+   line, and the hairline inside them all but disappears. Gold is kept for
+   what is active: the open tab, the turn, a hovered frame. */
+:root, #cs-root {
+  --fx-line: color-mix(in srgb, var(--accent) 16%, var(--border));
+  --fx-hair: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+/* The sheet's side headings: a plain rule, no diamonds at the ends. */
+#cs-root .cs-side h5::before, #cs-root .cs-side h5::after, #cs-root .cs-side-tab h5::before, #cs-root .cs-side-tab h5::after {
+  background: linear-gradient(var(--fx-line), var(--fx-line)) center / 100% 1px no-repeat; height: 1px;
+}
+#cs-root .cs-side h5::before, #cs-root .cs-side-tab h5::before { display: none; }
+#cs-root .cs-side h5, #cs-root .cs-side-tab h5 { color: var(--text-muted); letter-spacing: .1em; }
+/* A save's or skill's bonus: a number, not a plaque. */
+#cs-root .cs-list .cs-row > b { clip-path: none; background: none; min-width: 34px; text-align: right; }
+#cs-root .cs-list .cs-row > b::before { content: none; }
+
+/* ── 28. Empty windows ───────────────────────────────────── */
+/* An empty window says what goes in it with an icon, a title and how to
+   start, nearer the middle — not one grey line under the toolbar. */
+.empty-state-roomy { padding: clamp(40px, 12vh, 110px) 22px 40px; }
+.empty-state-roomy .empty-state-icon .ico { width: 36px; height: 36px; }
+.empty-state-roomy .empty-state-title { color: var(--text); font-size: calc(var(--fs-lg) + 2px); font-family: var(--font-display); font-weight: 500; }
+/* The icons that took the place of the last emoji in buttons. */
+.notes-source-tile .tile-icon .ico { width: 30px; height: 30px; stroke-width: 1.5; }
+#cs-root .cs-head .btn .ico, .time-btn .ico, .notes-picker-sent .ico, .notes-send-btn .ico, .notes-file-title .ico, .pa-build .ico { width: 15px; height: 15px; vertical-align: -3px; }
+.notes-picker-empty .empty-state { background: none; }

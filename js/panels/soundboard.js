@@ -219,7 +219,7 @@ registerPanel('soundboard', {
     html+='<div style="flex:1;overflow-y:auto"><div class="sb-grid">';
     const all = [..._sb.shared, ..._sb.personal];
     if(!all.length){
-      html+='<div class="empty-state" style="grid-column:1/-1;padding:40px 20px">No sounds yet.<br><br>Upload MP3, WAV, or OGG files below — or add shared sounds in audio/manifest.json.</div>';
+      html+='<div style="grid-column:1/-1">'+emptyState({ icon:'i-speaker', title:'No sounds yet', hint:'Upload MP3, WAV or OGG files with the button below, or add shared sounds in audio/manifest.json.', roomy:true })+'</div>';
     } else {
       all.forEach(s=>{
         const isPlaying=!!_sb.playing[s.id];

@@ -490,7 +490,7 @@ registerPanel('notes', {
     b.innerHTML = '<div class="notes-sent">'
       + '<div class="notes-editor-head notes-sent-head">'
       +   '<button class="btn small" data-notes-sent="back" title="Back to your notes">← Notes</button>'
-      +   '<span class="notes-file-title notes-file-title-ro">📜 Sent to players</span>'
+      +   '<span class="notes-file-title notes-file-title-ro">' + ICO('i-scroll') + ' Sent to players</span>'
       + '</div><div class="notes-sent-body"></div></div>';
     b.querySelector('[data-notes-sent="back"]').addEventListener('click', () => this.showSent(false));
     if (H) H.mount(b.querySelector('.notes-sent-body'));
@@ -696,7 +696,7 @@ registerPanel('notes', {
             <span style="flex:1"></span>
             <button class="btn icon-btn" data-act="add-folder" title="New folder">${ICO('i-folder')}<span class="tb-plus">+</span></button>
             <button class="btn icon-btn" data-act="add-file" title="New file">${ICO('i-note')}<span class="tb-plus">+</span></button>
-            <button class="btn icon-btn" data-act="notes-sent" title="Sent to players — the handouts on their phones">📜</button>
+            <button class="btn icon-btn" data-act="notes-sent" title="Sent to players — the handouts on their phones">${ICO('i-scroll')}</button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
           <div class="notes-tree-body">${this._renderTree(tree, null, 0)}</div>
@@ -779,19 +779,19 @@ registerPanel('notes', {
           <div class="notes-picker-head">SELECT NOTE SOURCE</div>
           <div class="notes-picker-tiles">
             <button class="notes-source-tile${dropboxConfigured?'':' disabled'}" data-act="src-dropbox"${dropboxConfigured?'':' disabled title="Dropbox not configured — paste a token in js/sync/dropbox-config.js"'}>
-              <span class="tile-icon">📦</span>
+              <span class="tile-icon">${ICO('i-cloud')}</span>
               <span class="tile-label">DROPBOX</span>
               ${dropboxConfigured?'':'<span class="tile-coming">Not configured</span>'}
             </button>
             <button class="notes-source-tile${chromiumOnly?' disabled':''}" data-act="src-local"${chromiumOnly?' disabled title="Local Folder requires Chromium (Chrome/Edge/Opera)"':''}>
-              <span class="tile-icon">📁</span>
+              <span class="tile-icon">${ICO('i-folder')}</span>
               <span class="tile-label">LOCAL FOLDER</span>
               ${chromiumOnly?'<span class="tile-coming">Chromium only</span>':''}
             </button>
           </div>
-          <button class="btn notes-picker-sent" data-act="notes-sent" title="The handouts on the players' phones">📜 Sent to players</button>
+          <button class="btn notes-picker-sent" data-act="notes-sent" title="The handouts on the players' phones">${ICO('i-scroll')} Sent to players</button>
         </aside>
-        <div class="notes-picker-empty">Select a note source on the left to begin.</div>
+        <div class="notes-picker-empty">${emptyState({ icon: 'i-note', title: 'Choose where your notes live', hint: 'A folder on this computer, or Dropbox once it is set up. Pick one on the left.' })}</div>
       </div>`;
   },
 
@@ -815,7 +815,7 @@ registerPanel('notes', {
             <span style="flex:1"></span>
             <button class="btn icon-btn" data-act="add-folder" title="New folder">${ICO('i-folder')}<span class="tb-plus">+</span></button>
             <button class="btn icon-btn" data-act="add-file" title="New file">${ICO('i-note')}<span class="tb-plus">+</span></button>
-            <button class="btn icon-btn" data-act="notes-sent" title="Sent to players — the handouts on their phones">📜</button>
+            <button class="btn icon-btn" data-act="notes-sent" title="Sent to players — the handouts on their phones">${ICO('i-scroll')}</button>
             <span class="notes-vault-pill" id="notes-vault-pill"></span>
           </div>
           ${conflictBanner}
@@ -868,7 +868,7 @@ registerPanel('notes', {
         <span class="notes-file-tag">MARKDOWN</span>
         <button class="btn small notes-send-btn${file.shared ? ' active' : ''}" data-act="notes-send"
           title="${file.shared ? 'In players\u2019 Notes — click to change who, or stop sharing' : 'Send this note to the players\u2019 phones — a copy now, or kept in their Notes'}"
-          >${file.shared ? '👁 Shared…' : '📜 Send…'}</button>
+          >${file.shared ? ICO('i-eye') + ' Shared…' : ICO('i-scroll') + ' Send…'}</button>
         <!-- No spacer here: the title is already flex:1, and a second flex:1
              beside it took half the free room and truncated every title. -->
         <button class="btn small" id="note-download" title="Save to desktop">${ICO('i-save')}</button>

@@ -279,7 +279,7 @@ registerPanel('homebrew', {
       + '<span class="hb-from"><input class="input" data-hb-q placeholder="Start from an existing ' + one + '…" value="' + esc(this._q) + '" autocomplete="off"></span></div>'
       + '<div class="hb-results"></div>'
       + '<div class="hb-list">' + (list.length ? list.map(m => '<button class="hb-row" data-hb-open="' + esc(m.id) + '"><b>' + esc(m.name || 'Unnamed') + '</b><small>' + esc(this._sub(m)) + '</small></button>').join('')
-        : '<div class="msg-empty">No homebrew ' + one + 's yet. Make one from scratch, or start from an existing ' + one + ' and change it.</div>') + '</div></div>';
+        : emptyState({ icon: 'i-flask', title: 'No homebrew ' + one + 's yet', hint: 'Make one from scratch, or start from an existing ' + one + ' and change it.', roomy: true })) + '</div></div>';
     this._wire(b);
     if (this._q) this._search(b);
   },

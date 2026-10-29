@@ -105,7 +105,8 @@ registerPanel('quests', {
       + '<div class="qst-seg" role="tablist"><button role="tab" class="' + (this._view === 'active' ? 'on' : '') + '" data-q-view="active">Active (' + on.length + ')</button>'
       + '<button role="tab" class="' + (this._view !== 'active' ? 'on' : '') + '" data-q-view="past">Finished (' + off.length + ')</button></div></div>'
       + '<div class="qst-list">' + (shown.length ? shown.map(q => this._cardHtml(q)).join('')
-        : '<div class="msg-empty">' + (this._view === 'active' ? 'No quests on. Add one, and show it to the players when they take it up.' : 'Nothing finished yet.') + '</div>') + '</div></div>';
+        : (this._view === 'active' ? emptyState({ icon: 'i-flag', title: 'No quests yet', hint: 'Add one with <b>+ New quest</b>, and show it to the players when they take it up.', roomy: true })
+          : emptyState({ icon: 'i-check', title: 'Nothing finished yet', hint: 'Quests marked done move here.', roomy: true }))) + '</div></div>';
     this._wire(b);
     const l = b.querySelector('.qst-list'); if (l) l.scrollTop = scroll;
     if (fk){

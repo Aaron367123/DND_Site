@@ -161,10 +161,11 @@ function ICO(id, cls){
 // optional and renders dimmer and narrower; `action` takes raw HTML for a
 // button when there is one obvious next step. Everything is escaped by the
 // caller as usual — title and hint are inserted as HTML so they can carry
-// <strong> and the like.
+// <strong> and the like. `roomy` is for a whole window that is empty: it
+// sits lower, nearer the middle, rather than as a line under the toolbar.
 function emptyState(opts){
   const o = opts || {};
-  return '<div class="empty-state">'
+  return '<div class="empty-state' + (o.roomy ? ' empty-state-roomy' : '') + '">'
     + (o.icon  ? '<div class="empty-state-icon">' + ICO(o.icon) + '</div>' : '')
     + (o.title ? '<div class="empty-state-title">' + o.title + '</div>' : '')
     + (o.hint  ? '<div class="empty-state-hint">' + o.hint + '</div>' : '')
