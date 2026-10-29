@@ -11356,9 +11356,10 @@
       const bm = panelDefs.battlemap, L0 = window.realtimeLive;
       const sent = [], cbs = {};
       const fake = Object.assign({}, L0, {
-        push(path, v){ sent.push(['push', path, JSON.parse(JSON.stringify(v))]); },
-        patch(path, v){ sent.push(['patch', path, JSON.parse(JSON.stringify(v))]); },
-        clear(path){ sent.push(['clear', path]); },
+        // Strokes only: the presence heartbeat goes through here too.
+        push(path, v){ if (/^stroke_/.test(path)) sent.push(['push', path, JSON.parse(JSON.stringify(v))]); },
+        patch(path, v){ if (/^stroke_/.test(path)) sent.push(['patch', path, JSON.parse(JSON.stringify(v))]); },
+        clear(path){ if (/^stroke_/.test(path)) sent.push(['clear', path]); },
         listen(path, cb){ cbs[path] = cb; return () => {}; },
         watchPrefix(pfx, cb){ cbs['prefix:' + pfx] = cb; return () => {}; },
         isStale: v => !!(v && v.ts && v.ts < Date.now() - 8000),
@@ -11380,7 +11381,7 @@
         const beforeClear = sent.length;
         await sleep(1400);
         const chan = bm._liveChanName;
-        ok('live stroke: on a channel of this page’s own, not the table’s shared one', /^stroke_/.test(chan) && sent.every(x => x[1] === chan), sent.map(x => x[1]).join());
+        ok('live stroke: on a channel of this page’s own, not the table’s shared one', /^stroke_/.test(chan) && sent.length > 0 && sent.every(x => x[1] === chan), sent.map(x => x[1]).join());
         ok('live stroke: the first tick sends colour, size, start time and the opening point',
            sent[0][0] === 'push' && sent[0][2].c === '#123456' && sent[0][2].at === 4242 && JSON.stringify(sent[0][2].p0000) === '[10,10]');
         ok('live stroke: each tick after sends only the points added since',
