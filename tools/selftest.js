@@ -12907,6 +12907,11 @@
             if (!el || !sc) return 999; const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
             return Math.round(Math.hypot(r.left + r.width / 2 - s.left - s.width / 2, r.top + r.height / 2 - s.top - s.height / 2)); };
           ok('map: a Me button once your token is on the map', !!document.querySelector('[data-pa-me]'));
+          // The tools fit the phone: every button on screen, none over the map's scale line.
+          const dbar = document.querySelector('.pa-draw'), dr = dbar && dbar.getBoundingClientRect(), foot = document.querySelector('#pa-screen .map-foot');
+          const fr = foot && foot.getBoundingClientRect();
+          ok('map: the phone’s tools fit the screen, above the scale line', !!dr && [...dbar.children].every(b => { const q = b.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth; })
+             && (!fr || !fr.height || dr.bottom <= fr.top + 1), dr && [dr.left, dr.right, dr.bottom, fr ? fr.top : -1].map(Math.round).join() + ' of ' + innerWidth);
           document.querySelector('#pa-screen #map-scroll').scrollTo(0, 0); await sleep(30);
           document.querySelector('[data-pa-me]').click(); await sleep(450);
           ok('map: Me centres your token', off() <= 30, off() + 'px off');
