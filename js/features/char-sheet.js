@@ -1931,7 +1931,10 @@ function csItemEditHtml(m, i){
   return '<div class="cs-itemedit"><label>Name <input data-cs-itemedit="' + i + ':name" value="' + csE(m.name || '') + '" maxlength="60"></label>'
     + '<label>Notes <input data-cs-itemedit="' + i + ':notes" value="' + csE(m.notes || '') + '" maxlength="200" placeholder="Engraved, borrowed, cursed…"></label>'
     + '<label>Weight (lb each) <input type="number" min="0" step="0.1" data-cs-itemedit="' + i + ':weight" value="' + (m.weight || 0) + '"></label>'
-    + '<label>Value (gp each) <input type="number" min="0" step="0.01" data-cs-itemedit="' + i + ':gp" value="' + (m.value ? Math.round(m.value) / 100 : 0) + '"></label></div>';
+    + '<label>Value (gp each) <input type="number" min="0" step="0.01" data-cs-itemedit="' + i + ':gp" value="' + (m.value ? Math.round(m.value) / 100 : 0) + '"></label>'
+    // A homebrew or custom item can need attunement too, and then counts
+    // toward the limit like any other.
+    + '<label class="cb-inline"><input type="checkbox" data-cs-itemedit="' + i + ':reqAttune"' + (m.reqAttune ? ' checked' : '') + '> Requires attunement</label></div>';
 }
 function csGearEntries(){ return [].concat(CS.magic || [], CS.gear || []); }
 // An item's description: from the item data where it has one, else what
@@ -2087,6 +2090,7 @@ function csItemEffects(m){
     Object.keys(sp.static || {}).forEach(k => out.push(_csTitle(k) + ' ' + sp.static[k] + ' ft' + (k === 'walk' ? ' (unless higher)' : '')));
     Object.keys(sp.equal || {}).forEach(k => out.push(_csTitle(k) + ' speed equal to ' + sp.equal[k] + 'ing'));
     Object.keys(sp.bonus || {}).forEach(k => out.push(sg(+sp.bonus[k]) + ' ft to ' + (k === '*' ? 'every speed' : k + ' speed')));
+    Object.keys(sp.multiply || {}).forEach(k => out.push(_csTitle(k) + ' speed ×' + sp.multiply[k] + (f.active ? ' — on' : ' while switched on')));
   }
   const tf = f.textFx || {};
   (tf.adv || []).forEach(x => out.push('Advantage on ' + x.on.map(t => t === 'init' ? 'initiative' : t.startsWith('check:') ? _csTitle(t.slice(6).replace(/_/g, ' ')) + ' checks' : (CS_ABN[t.slice(3)] || t) + ' checks').join(' and ')));
@@ -2193,6 +2197,7 @@ function csItemActionsHtml(pc){
     const open = CS.open['ia:' + m.name];
     return '<div class="cs-act cs-mi"><div class="cs-act-h"><button class="cs-itemn" data-cs-open="' + csE('ia:' + m.name) + '" title="What it does"><b>' + csE(m.name) + '</b></button>'
       + (ab.kind ? '<span class="cs-mi-kind">' + csE(spells.length ? ab.kind + ' to cast' : ab.kind) + '</span>' : '')
+      + ((csItemFx(m).modifySpeed || {}).multiply && !ro ? '<button class="btn small' + (m.active ? ' on' : '') + '" data-cs-iactive="' + csE(m.name) + '" aria-pressed="' + !!m.active + '">' + (m.active ? 'Switch off' : 'Switch on') + '</button>' : '')
       + (abUse ? csItemPips(pc, m, abUse) + '<span class="cb-dim">once a day</span>'
         + (ro ? '' : '<button class="btn small" data-cs-iuse="' + csE(m.name) + '"' + (abUse.left ? '' : ' disabled') + '>Use</button>') : '')
       + (charges ? csItemPips(pc, m, charges) + '<span class="cb-dim">' + charges.left + '/' + charges.max + ' charges</span>'
@@ -2215,7 +2220,7 @@ function csItemSpellsHtml(pc){
 }
 // Spending and getting back an item's uses.
 function csItemClick(d, pc){
-  if (d.csIpip == null && d.csIcast == null && d.csIuse == null && d.csIcharge == null && d.csIprop == null) return false;
+  if (d.csIpip == null && d.csIcast == null && d.csIuse == null && d.csIcharge == null && d.csIprop == null && d.csIactive == null) return false;
   if (CS.readOnly) return true;
   const store = p => p.build ? (p.build.items || []) : (p.inventory || []);
   const spend = (p, name, key, n) => {
@@ -2242,6 +2247,12 @@ function csItemClick(d, pc){
     const parts = d.csIcharge.split('|'), n = parts.length > 1 && /^\d+$/.test(parts[parts.length - 1]) ? +parts.pop() : 1, name = parts.join('|');
     csEdit('Used ' + (n > 1 ? n + ' charges' : 'a charge') + ' of ' + name, p => { spend(p, name, 'c', n); });
     if (typeof showToast === 'function') showToast('Used ' + (n > 1 ? n + ' charges' : 'a charge') + ' of ' + name);
+    return true;
+  }
+  // Boots of Speed: on doubles the speed, off puts it back.
+  if (d.csIactive != null){
+    const name = d.csIactive;
+    csItemsEdit(name + ' switched', l => { const m = l.find(x => x.name === name); if (!m) return; if (m.active) delete m.active; else m.active = true; }, CS_QUIET);
     return true;
   }
   if (d.csIprop != null){
@@ -2496,7 +2507,7 @@ function csDeclarePdfGear(p, decl, R){
 // What a worn item does to the numbers, with what the catalogue knows filled
 // in under the character's copy (an item added before the sheet read a field).
 const CS_FX_KEYS = ['ability', 'bonusSavingThrow', 'bonusSpellAttack', 'bonusSpellSaveDc', 'bonusAbilityCheck', 'bonusProficiencyBonus',
-  'bonusSavingThrowConcentration', 'resist', 'immune', 'conditionImmune', 'vulnerable', 'modifySpeed', 'unarmed', 'textFx'];
+  'bonusSavingThrowConcentration', 'resist', 'immune', 'conditionImmune', 'vulnerable', 'modifySpeed', 'unarmed', 'textFx', 'active'];
 function csItemFx(m){
   const n = String((m && m.name) || '').toLowerCase();
   const e = ((CS && CS.magic) || []).find(x => x.name.toLowerCase() === n) || {};
@@ -3025,6 +3036,7 @@ function csInventoryChange(e, t, d, pc){
       else if (k === 'notes'){ if (raw.trim()) m.notes = raw.slice(0, 200); else delete m.notes; }
       else if (k === 'weight') m.weight = Math.max(0, +raw || 0);
       else if (k === 'gp') m.value = Math.max(0, Math.round((+raw || 0) * 100));
+      else if (k === 'reqAttune'){ if (t.checked) m.reqAttune = true; else { delete m.reqAttune; delete m.attuned; } }
     }, CS_QUIET);
     return true;
   }

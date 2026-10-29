@@ -3482,8 +3482,8 @@ function _sktItemSpells(a){
 }
 // Speeds with the items': "becomes 30 feet, unless higher" (static), "a
 // flying speed equal to your walking speed" (equal), "+10 feet" (bonus).
-// Boots of Speed's doubling is switched on with a bonus action, so a
-// multiply isn't applied.
+// Boots of Speed's doubling is switched on with a bonus action: a multiply
+// counts only while the item is switched on (active).
 function sktItemSpeeds(speeds, items){
   const out = Object.assign({}, speeds);
   (items || []).forEach(m => { const s = m && m.modifySpeed; if (!s || typeof s !== 'object') return;
@@ -3491,6 +3491,8 @@ function sktItemSpeeds(speeds, items){
   (items || []).forEach(m => { const s = m && m.modifySpeed; if (!s || typeof s !== 'object') return;
     Object.keys(s.equal || {}).forEach(k => { const v = out[s.equal[k]] || 0; if (v > (out[k] || 0)) out[k] = v; });
     Object.keys(s.bonus || {}).forEach(k => { const v = +s.bonus[k] || 0; if (k === '*') Object.keys(out).forEach(x => { if (out[x]) out[x] += v; }); else if (out[k]) out[k] += v; }); });
+  (items || []).forEach(m => { const s = m && m.modifySpeed; if (!s || !m.active) return;
+    Object.keys(s.multiply || {}).forEach(k => { if (out[k]) out[k] = Math.round(out[k] * (+s.multiply[k] || 1)); }); });
   return out;
 }
 // What an item's text gives that the data has no field for: advantage on

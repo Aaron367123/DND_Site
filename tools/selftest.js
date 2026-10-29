@@ -11701,6 +11701,24 @@
         wear([]);
         ok('items: the longbow’s damage goes back with the bracers off', C().sheet.attacks.find(a => a.name === 'Longbow').damage === '1d8+3 Piercing');
         C().sheet.attacks = atk0;
+        // Boots of Speed: double only while switched on.
+        wear([make('Boots of Speed')]);
+        const s0 = C().spd;
+        tab('Actions'); await sleep(120);
+        document.querySelector('#cs-root [data-cs-iactive]').click(); await sleep(250);
+        const s1 = C().spd;
+        tab('Actions'); await sleep(120);
+        document.querySelector('#cs-root [data-cs-iactive]').click(); await sleep(250);
+        ok('items: Boots of Speed double the speed while switched on, and only then', s1 === s0 * 2 && C().spd === s0, [s0, s1, C().spd].join());
+        // A custom item can need attunement, and then has the tick.
+        wear([{ name: 'Rug armour made by Creambak', qty: 1, weight: 0, custom: true }]);
+        tab('Inventory'); await sleep(150);
+        document.querySelector('#cs-root [data-cs-open="it:0"]').click(); await sleep(120);
+        const ra = document.querySelector('#cs-root [data-cs-itemedit="0:reqAttune"]');
+        ra.checked = true; ra.dispatchEvent(new Event('change', { bubbles: true })); await sleep(250);
+        tab('Inventory'); await sleep(120);
+        ok('items: a custom item marked “requires attunement” gets the attune tick', C().inventory[0].reqAttune === true && !!document.querySelector('#cs-root [data-cs-attune="0"]'));
+        wear([]);
         const dawn = M.find(e => e.name === 'Dawnbringer');
         ok('items: a sentient weapon that speaks Common doesn’t teach you Common', !(dawn && dawn.textFx && dawn.textFx.langs));
         csClose(); await sleep(100);
