@@ -11701,6 +11701,15 @@
         wear([]);
         ok('items: the longbow’s damage goes back with the bracers off', C().sheet.attacks.find(a => a.name === 'Longbow').damage === '1d8+3 Piercing');
         C().sheet.attacks = atk0;
+        // An item's spell: the item's own DC, else the character's; never "DC ?".
+        const svs = () => [...document.querySelectorAll('#cs-root .cs-ispell .cs-save')].map(x => x.textContent);
+        const dc0 = C().sheet.spellSaveDc; C().sheet.spellSaveDc = null;
+        wear([make('Pennant of the Vind Rune')]); tab('Actions'); await sleep(120);
+        const noDc = svs();
+        wear([make('Blast Scepter')]); tab('Actions'); await sleep(120);
+        const own = svs();
+        C().sheet.spellSaveDc = dc0;
+        ok('items: a spell’s DC is the item’s own, or none shown — never “DC ?”', noDc.length && noDc.every(x => !/\?/.test(x) && !/DC/.test(x)) && own.some(x => /DC 16/.test(x)), noDc.concat(own).join(' | '));
         // Boots of Speed: double only while switched on.
         wear([make('Boots of Speed')]);
         const s0 = C().spd;

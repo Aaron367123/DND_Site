@@ -2155,8 +2155,11 @@ function csItemSpellRow(pc, m, info, sp){
   const u = key ? csItemUses(pc, m, key) : null;
   const cost = sp.per === 'charges' ? (sp.k || 1) : 1;
   const can = !ro && (!u || u.left >= cost);
-  const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
-  const atk = s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
+  // The DC the item gives ("save DC 17"), else the character's own; a
+  // character who doesn't cast and an item that doesn't say: the save alone.
+  const idc = /\bsave DC (?:of |is )?(\d+)/i.exec(info.text || ''), dc = idc ? +idc[1] : sh.spellSaveDc;
+  const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save' + (dc ? ' DC ' + dc : '') : '';
+  const atk = s && (s.spellAttack || []).length && sh.spellAtkBonus != null && sh.spellAtkBonus !== '' ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
   const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '') + (sp.perLevel ? ', +1 a level higher' : '')
     : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/short rest' + (sp.each ? '' : ', shared') : '';
   const ok = 'isp:' + m.name + ':' + nm;
