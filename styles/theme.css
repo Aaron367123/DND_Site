@@ -708,3 +708,26 @@ body.tools-in-dock .panel-dock .in-more { display: none !important; }
 [data-theme-tone="light"] :is(.pa-hero .pa-you-name, .pa-hero .pa-you-sub, .cs-hero .cb-title, .cs-hero .cs-sub) { text-shadow: none; }
 [data-theme-tone="light"] .char-status-badges .status-badge.insp { color: #5e4500; background: rgba(214,170,40,.28); border-color: rgba(150,110,10,.5); }
 [data-theme-tone="light"] .char-status-badges .status-badge.bardic { color: #5a2a78; }
+
+/* ── 30. Menus ────────────────────────────────────────────── */
+/* Words only (js/core/utils.js showContextMenu), a real rule between
+   groups, small headings, and Remove in red. */
+.ctx-menu { padding: 5px; min-width: 190px; border-radius: 8px; border-color: color-mix(in srgb, var(--text) 14%, transparent); }
+.ctx-menu-item { padding: 6px 10px; border-radius: 5px; line-height: 1.3; }
+.ctx-menu-item:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+.ctx-menu-item:disabled { color: var(--text-dim); cursor: default; background: none; }
+.ctx-menu-item.danger { color: var(--danger); }
+.ctx-menu-item.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.ctx-menu-sep { height: 1px; margin: 5px 6px; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.ctx-menu-head { padding: 7px 10px 3px; font-size: var(--fs-2xs); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); }
+/* Settings: line icons by each group, in the accent. */
+.drawer-group-icon .ico { width: 16px; height: 16px; color: var(--accent); }
+
+/* ── 31. The builder's and the Turn View's stats, plain ─── */
+/* The last shields and hexagons: the builder's summary (AC, HP, Init, Speed,
+   Prof) and the Turn View's HP and AC. Plain boxes now, as on the sheet and
+   the party card. The ability scores keep their plaques. */
+#cb-root .cb-big > div, #cb-root .cb-big > div:first-child, .window-body .tv-vitals > .tv-vital:nth-child(n) {
+  clip-path: none; border: 1px solid var(--fx-line); border-radius: 8px; background: var(--fx-fill); padding-bottom: 6px;
+}
+#cb-root .cb-big > div::before, #cb-root .cb-big > div:first-child::before, .window-body .tv-vitals > .tv-vital:nth-child(n)::before { content: none; }

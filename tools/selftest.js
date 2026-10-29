@@ -8920,6 +8920,15 @@
           const ttl = r.querySelector('.cs-hero .cb-title');
           ok('themes: on Parchment the mottling is faint and the sheet’s name has no black shadow', /-\.28 \.14/.test(mot) && !!ttl && getComputedStyle(ttl).textShadow === 'none', ttl && getComputedStyle(ttl).textShadow);
         } finally { applyTheme(th0.id, th0.custom, th0); }
+        // Menus: the words without their leading emoji, rules for the dashes,
+        // headings for "Name ─────", Remove in red, and no tick column unasked.
+        showContextMenu(10, 10, [{ label: '🎲 Roll d20…', onClick(){} }, { label: '─────', disabled: true }, { label: '⚜ Legendary uses ─────', disabled: true },
+          { label: '＋ Zoey', onClick(){} }, { label: '+1 Longsword', onClick(){} }, { label: '🗑 Remove from party', onClick(){} }]);
+        const cm = document.querySelector('.ctx-menu'), cmi = cm ? [...cm.querySelectorAll('.ctx-menu-item')].map(b => b.textContent) : [];
+        ok('menus: words only, a real rule, a heading, Remove in red',
+           cmi.join('|') === 'Roll d20…|Zoey|+1 Longsword|Remove from party' && !!cm.querySelector('.ctx-menu-sep') && (cm.querySelector('.ctx-menu-head') || {}).textContent === 'Legendary uses'
+           && cm.querySelector('.ctx-menu-item.danger').textContent === 'Remove from party', cmi.join('|'));
+        cm && cm.remove();
         csClose();
         openPanel('party'); await sleep(250);
         const card = panelDefs.party._body.querySelector('.char-card');
@@ -8928,7 +8937,9 @@
         ok('frames: the party card’s hit points and stats are plain boxes, AC too', plainBox(card.querySelector('.char-hp-block')) && plainBox(card.querySelector('.char-stat')) && plainBox(card.querySelector('.char-stats-row > .char-stat:first-child')));
         closePanel('party');
         await openCharBuilder({}); for (let i = 0; i < 60 && !CB.R; i++) await sleep(100);
-        ok('frames: the builder\'s summary boxes are framed', framed(document.querySelector('#cb-root .cb-big > div')));
+        // Plain too since 2026-10-29, the last shields and hexagons; the
+        // ability scores beside them keep their plaques.
+        ok('frames: the builder’s summary boxes are plain, AC too; its ability scores framed', plainBox(document.querySelector('#cb-root .cb-big > div')) && plainBox(document.querySelector('#cb-root .cb-big > div:first-child')) && framed(document.querySelector('#cb-root .cb-side .cb-ab')));
         cbClose();
         // Every window's stat boxes and panels.
         const want = [['combat', '.combatant-card'], ['encounter', '.enc-stat-box'], ['loot', '.loot-coin'], ['loot', '.loot-item'], ['shop', '.shop-controls'],

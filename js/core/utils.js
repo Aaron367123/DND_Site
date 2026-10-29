@@ -892,10 +892,28 @@ function showContextMenu(x, y, items) {
 
   var menu = document.createElement('div');
   menu.className = 'ctx-menu';
+  var anyChecked = items.some(function(it){ return it.checked; });
   items.forEach(function(it) {
+    var lab = String(it.label == null ? '' : it.label);
+    // The emoji and odd glyphs that led most labels (🎲 ⚡ 💀 ✎ ⇪ 🗑 ＋) came
+    // out a different size and colour on every system; the words alone read
+    // as one menu. A label of dashes is a rule, and "Heading ─────" a small
+    // heading over the rows after it — they were buttons that did nothing.
+    var text = lab.replace(/^[^\p{L}\p{N}"'“(\[]+\s+/u, '');
+    if (/^[─—-]{3,}$/.test(lab.trim())){
+      var sep = document.createElement('div'); sep.className = 'ctx-menu-sep'; sep.setAttribute('role', 'separator');
+      menu.appendChild(sep); return;
+    }
+    var head = /^(.*?)\s*─{3,}$/.exec(text);
+    if (head && it.disabled){
+      var h = document.createElement('div'); h.className = 'ctx-menu-head'; h.textContent = head[1];
+      menu.appendChild(h); return;
+    }
     var btn = document.createElement('button');
-    btn.className = 'ctx-menu-item' + (it.checked ? ' checked' : '');
-    btn.textContent = (it.checked ? '✓ ' : '   ') + it.label;
+    btn.className = 'ctx-menu-item' + (it.checked ? ' checked' : '') + (it.danger || /^🗑/u.test(lab) ? ' danger' : '');
+    // The tick column only where the menu has ticks.
+    btn.textContent = (it.checked ? '✓ ' : anyChecked ? '   ' : '') + text;
+    if (it.disabled) btn.disabled = true;
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
       close();

@@ -104,7 +104,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&amp;display=swap">
-<link rel="stylesheet" href="styles/theme.css?v=c18c4fe63c">
+<link rel="stylesheet" href="styles/theme.css?v=965e89b17f">
 <!-- No Cache-Control/Pragma/Expires no-store tags here on purpose. They used
      to force a full re-download of the app (1.3 MB of JS) on EVERY load as a
      defence against stale code. That job now belongs to two mechanisms that
@@ -202,6 +202,7 @@
   <g id="i-sunset"><path d="M3 18.5h18M7.5 18.5a4.5 4.5 0 0 1 9 0M12 3.5v5M9.2 5.8 12 8.5l2.8-2.7M4.6 12.6l1.5 1M19.4 12.6l-1.5 1"/></g>
   <g id="i-print"><path d="M7 8.5V3.5h10v5M7 17.5H4.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H17"/><rect x="7" y="14" width="10" height="6.5" rx="1"/></g>
   <g id="i-download"><path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5M4 19.5h16"/></g>
+  <g id="i-palette"><path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.3-1.1-1.6-1.1-2.7 0-.9.7-1.6 1.6-1.6h2.1a4.1 4.1 0 0 0 4.1-4.1c0-3.8-3.8-6.9-8.5-6.9z"/><circle cx="7.6" cy="11" r="1.1"/><circle cx="10.4" cy="7.3" r="1.1"/><circle cx="15" cy="7.6" r="1.1"/></g>
   <g id="i-moon"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></g>
   <g id="i-burst"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/><circle cx="12" cy="12" r="3"/></g>
 </defs></svg>
@@ -305,7 +306,7 @@
 <div class="drawer" id="settings-drawer">
   <div class="drawer-head">
     <div class="drawer-head-titles">
-      <h2>⚙ Settings</h2>
+      <h2>Settings</h2>
       <p class="drawer-sub">Workspace preferences · saved to this browser</p>
     </div>
     <button class="btn icon-btn" id="close-drawer">✕</button>
@@ -326,7 +327,7 @@
   </div>
   <details class="drawer-group" open>
     <summary class="drawer-group-head">
-      <span class="drawer-group-icon">🎨</span>
+      <span class="drawer-group-icon"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-palette"/></svg></span>
       <span class="drawer-group-title">Appearance</span>
       <span class="drawer-group-meta">Font size, theme</span>
       <span class="drawer-group-caret">▾</span>
@@ -382,7 +383,7 @@
 
   <details class="drawer-group" open>
     <summary class="drawer-group-head">
-      <span class="drawer-group-icon">👁</span>
+      <span class="drawer-group-icon"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-eye"/></svg></span>
       <span class="drawer-group-title">Visibility</span>
       <span class="drawer-group-meta">Show / hide UI</span>
       <span class="drawer-group-caret">▾</span>
@@ -406,7 +407,7 @@
 
   <details class="drawer-group" open>
     <summary class="drawer-group-head">
-      <span class="drawer-group-icon">🛠</span>
+      <span class="drawer-group-icon"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear"/></svg></span>
       <span class="drawer-group-title">Behavior</span>
       <span class="drawer-group-meta">Search, windows</span>
       <span class="drawer-group-caret">▾</span>
@@ -440,7 +441,7 @@
 
   <details class="drawer-group" open>
     <summary class="drawer-group-head">
-      <span class="drawer-group-icon">👤</span>
+      <span class="drawer-group-icon"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user"/></svg></span>
       <span class="drawer-group-title">Identity</span>
       <span class="drawer-group-meta">Name, author color</span>
       <span class="drawer-group-caret">▾</span>
@@ -460,7 +461,7 @@
 
   <details class="drawer-group">
     <summary class="drawer-group-head">
-      <span class="drawer-group-icon">💾</span>
+      <span class="drawer-group-icon"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-save"/></svg></span>
       <span class="drawer-group-title">Data</span>
       <span class="drawer-group-meta">Backup, reset</span>
       <span class="drawer-group-caret">▾</span>
@@ -527,7 +528,7 @@
 <script defer src="js/generated/species-portraits.js?v=56581792b0"></script>
 <!-- 2. Pure utilities (no deps) -->
 <script defer src="js/core/campaign.js?v=171a617f55"></script>
-<script defer src="js/core/utils.js?v=509f94046a"></script>
+<script defer src="js/core/utils.js?v=6a481ec8f9"></script>
 <script defer src="js/ui/dice-fx.js?v=a3c77a159d"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/core/state.js?v=d4c96a7f2f"></script>
