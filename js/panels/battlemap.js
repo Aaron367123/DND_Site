@@ -2238,14 +2238,36 @@ registerPanel('battlemap',{
       // the one person at the table who could not see a stroke being made.
       if (window.realtimeLive){
         try { if (this._unsubLive) this._unsubLive(); } catch(e){}
-        this._unsubLive = window.realtimeLive.listen('skt_battlemap_live_v1', (val) => {
-          // Firebase echoes a write back to whoever made it. Painting a
-          // preview of our own stroke over the real one we are already
-          // drawing is at best redundant and at worst a visible double line.
+        // Each page's own channel (see _broadcastStrokeTick), one preview per
+        // person drawing; our own channel is skipped, since Firebase echoes a
+        // write back to whoever made it and a preview over the line we are
+        // drawing would double it. The old shared channel is still heard, for
+        // a phone that has not reloaded since the change.
+        const unLegacy = window.realtimeLive.listen('skt_battlemap_live_v1', (val) => {
           if (this._drawingNow) return;
-          if (!val || !val.stroke){ this._clearPreviewStroke(); return; }
-          this._applyPreviewStroke(val.stroke);
+          if (!val || !val.stroke){ this._clearPreviewStroke('legacy'); return; }
+          this._applyPreviewStroke(val.stroke, 'legacy');
         });
+        const onLive = all => {
+          clearTimeout(this._liveQuiet);
+          const mine = this._liveChanName ? this._liveChanName.slice('stroke_'.length) : null;
+          const next = {};
+          Object.keys(all || {}).forEach(k => {
+            if (k === mine || window.realtimeLive.isStale(all[k])) return;
+            const s = this._liveToStroke(all[k]); if (s) next['live:' + k] = s;
+          });
+          const prev = this._previews || {};
+          Object.keys(prev).forEach(k => { if (!k.startsWith('live:')) next[k] = prev[k]; });
+          this._previews = next;
+          // A finished stroke whose channel is not cleared yet is already drawn.
+          this._dropCommittedPreviews();
+          this._renderPreview();
+          // A sender that went quiet without clearing (phone locked mid-line):
+          // look again once its entry has gone stale.
+          if (Object.keys(next).some(k => k.startsWith('live:'))) this._liveQuiet = setTimeout(() => onLive(this._liveAll), window.realtimeLive.LIVE_STALE_MS + 500);
+        };
+        const unPrefix = window.realtimeLive.watchPrefix('stroke_', all => { this._liveAll = all; onLive(all); });
+        this._unsubLive = () => { try { unLegacy(); } catch(e){} try { unPrefix && unPrefix(); } catch(e){} clearTimeout(this._liveQuiet); };
       }
       // Token movement streams to EVERY device, both roles. Strokes only ever
       // travelled DM to player because only the DM draws; a token can be
@@ -2298,8 +2320,8 @@ registerPanel('battlemap',{
           let touched = false;
           if (Array.isArray(msg.drawings)){
             this._drawings = msg.drawings;
-            this._previewStroke = null;
-            this._drawAllStrokes();
+            this._dropCommittedPreviews();
+            this._renderPreview();
             touched = true;
           }
           if (this._mergeTokenPositions(msg.tokens)){
@@ -2315,8 +2337,8 @@ registerPanel('battlemap',{
         // touch _drawings. Once the DM finishes the stroke, a full state push
         // arrives (with the stroke now in _drawings) and the preview is
         // cleared.
-        if (msg.kind === 'strokeTick'){ this._applyPreviewStroke(msg.stroke); return; }
-        if (msg.kind === 'strokeEnd'){ this._clearPreviewStroke(); return; }
+        if (msg.kind === 'strokeTick'){ this._applyPreviewStroke(msg.stroke, 'tab'); return; }
+        if (msg.kind === 'strokeEnd'){ this._clearPreviewStroke('tab'); return; }
         if (msg.kind === 'tokenTick'){ this._applyLiveToken(msg.id, msg.x, msg.y); return; }
         if (msg.kind === 'tokenEnd'){ return; }   // the real position follows
         // Everything else is a full state snapshot. Hand it to the one
@@ -2482,10 +2504,10 @@ registerPanel('battlemap',{
     if (gridC) this._drawGrid(gridC, this._csScreen());
     this._drawFog();
     if (opts.drawings){
-      // Stroke now committed → drop the live preview (whichever client's tick
-      // last painted it) and redraw from canonical state.
-      this._previewStroke = null;
-      this._drawAllStrokes();
+      // A stroke now committed → drop its live preview, and only its: someone
+      // else may still be mid-line. Then redraw from canonical state.
+      this._dropCommittedPreviews();
+      this._renderPreview();
     }
     // Only re-render tokens when the token payload ACTUALLY changed. DM
     // fog-paint broadcasts the entire state every tick, so during a stroke
@@ -2596,15 +2618,57 @@ registerPanel('battlemap',{
   // stroke in a closure, and the live listener — which is what needs to know
   // — has no way to reach it.
   _drawingNow: false,
+  // A stroke being drawn, to the other screens. It went out whole, ten times
+  // a second, on one channel the whole table shared: a long line grew heavier
+  // with every tick, and two people drawing at once overwrote each other's
+  // preview — whoever finished first wiped the other's. Now each page has its
+  // own channel (stroke_<device>_<page>), the first tick sends the colour,
+  // size and opening point, and each tick after sends only the points added
+  // since, as one more child (p0000, p0001…).
+  _liveChan(){
+    if (!this._liveChanName){
+      const dev = typeof sktDeviceId === 'function' ? sktDeviceId() : 'd';
+      this._liveChanName = 'stroke_' + String(dev).replace(/[.#$\[\]\/]/g, '') + '_' + Math.random().toString(36).slice(2, 7);
+    }
+    return this._liveChanName;
+  },
   _broadcastStrokeTick(stroke){
     this._drawingNow = true;
     try { if (this._bc) this._bc.postMessage({ kind:'strokeTick', stroke }); } catch(e){}
-    try { if (window.realtimeLive) window.realtimeLive.push('skt_battlemap_live_v1', { stroke, ts: Date.now() }); } catch(e){}
+    const L = window.realtimeLive; if (!L || !stroke || !Array.isArray(stroke.p)) return;
+    try {
+      const chan = this._liveChan();
+      if (this._liveStroke !== stroke){
+        this._liveStroke = stroke; this._liveSent = stroke.p.length; this._liveChunk = 1;
+        L.push(chan, { c: stroke.c || '', s: stroke.s || 4, at: stroke.at || 0, p0000: stroke.p.slice() });
+      } else if (stroke.p.length > this._liveSent){
+        const add = stroke.p.slice(this._liveSent);
+        this._liveSent = stroke.p.length;
+        L.patch(chan, { ['p' + String(this._liveChunk++).padStart(4, '0')]: add });
+      }
+    } catch(e){}
   },
+  // The other screens drop a live preview the moment the finished stroke
+  // reaches them (_dropCommittedPreviews), so the channel is cleared a little
+  // later rather than first: cleared first, the line vanished for the moment
+  // before the saved stroke arrived. Not if a new stroke has begun on this
+  // channel by then — its opening tick has already replaced the node.
   _broadcastStrokeEnd(){
     this._drawingNow = false;
+    this._liveStroke = null;
     try { if (this._bc) this._bc.postMessage({ kind:'strokeEnd' }); } catch(e){}
-    try { if (window.realtimeLive) window.realtimeLive.clear('skt_battlemap_live_v1'); } catch(e){}
+    clearTimeout(this._liveClearT);
+    this._liveClearT = setTimeout(() => {
+      if (this._liveStroke) return;
+      try { if (window.realtimeLive) window.realtimeLive.clear(this._liveChan()); } catch(e){}
+    }, 1500);
+  },
+  // A live stroke node back into a stroke: its chunks in order.
+  _liveToStroke(v){
+    if (!v || typeof v !== 'object') return null;
+    const p = [];
+    Object.keys(v).filter(k => /^p\d{4}$/.test(k)).sort().forEach(k => { if (Array.isArray(v[k])) p.push(...v[k]); });
+    return p.length ? { c: v.c, s: v.s, at: v.at, p } : null;
   },
 
   // ─── Live token movement ──────────────────────────────────────────────────
@@ -2661,31 +2725,44 @@ registerPanel('battlemap',{
 
   // Preview-stroke layer (player view only). Lives on the existing draw-canvas
   // — we repaint the committed strokes plus the in-progress one on top.
-  _applyPreviewStroke(stroke){
+  // One preview per source: 'live:<channel>' for each person drawing on
+  // another device, 'tab' for another tab of this browser, 'legacy' for the
+  // old shared channel.
+  _applyPreviewStroke(stroke, key){
     if (!stroke) return;
-    this._previewStroke = stroke;
+    (this._previews = this._previews || {})[key || 'tab'] = stroke;
     this._renderPreview();
   },
-  _clearPreviewStroke(){
-    if (!this._previewStroke) return;
-    this._previewStroke = null;
+  _clearPreviewStroke(key){
+    const pv = this._previews || {};
+    if (key == null){ if (!Object.keys(pv).length) return; this._previews = {}; }
+    else { if (!pv[key]) return; delete pv[key]; }
     this._renderPreview();
+  },
+  // Previews of strokes that have arrived for real. A live preview carries
+  // the stroke's start time, so it goes when that stroke is in _drawings; the
+  // others (another tab, the old channel) carry none, and go with any commit.
+  _dropCommittedPreviews(){
+    const pv = this._previews || {}; if (!Object.keys(pv).length) return;
+    const have = new Set((this._drawings || []).map(d => d && d.at ? d.at + '|' + (d.c || '') : '').filter(Boolean));
+    Object.keys(pv).forEach(k => { const s = pv[k]; if (!s.at || have.has(s.at + '|' + (s.c || ''))) delete pv[k]; });
   },
   _renderPreview(){
     const b = this._body; if (!b) return;
     const drawC = b.querySelector('#draw-canvas'); if (!drawC) return;
-    // Repaint committed drawings, then layer the active stroke on top.
+    // Repaint committed drawings, then layer the strokes in progress on top.
     this._drawAllStrokes();
-    const s = this._previewStroke;
-    if (!s || !s.p || s.p.length < 2) return;
     const ctx = drawC.getContext('2d');
-    ctx.strokeStyle = s.c || '#ff4040';
-    ctx.lineWidth = (s.s || 4) * (this._bgMapScale || 1);
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(s.p[0], s.p[1]);
-    for (let i = 2; i < s.p.length; i += 2) ctx.lineTo(s.p[i], s.p[i+1]);
-    ctx.stroke();
+    Object.values(this._previews || {}).forEach(s => {
+      if (!s || !s.p || s.p.length < 2) return;
+      ctx.strokeStyle = s.c || '#ff4040';
+      ctx.lineWidth = (s.s || 4) * (this._bgMapScale || 1);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(s.p[0], s.p[1]);
+      for (let i = 2; i < s.p.length; i += 2) ctx.lineTo(s.p[i], s.p[i+1]);
+      ctx.stroke();
+    });
   },
 
   _render(){

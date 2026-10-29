@@ -11351,6 +11351,80 @@
         document.body.classList.remove('player-mode');
       }
     }
+    // -- Round 120: a stroke in progress, one channel per person, new points only --
+    {
+      const bm = panelDefs.battlemap, L0 = window.realtimeLive;
+      const sent = [], cbs = {};
+      const fake = Object.assign({}, L0, {
+        push(path, v){ sent.push(['push', path, JSON.parse(JSON.stringify(v))]); },
+        patch(path, v){ sent.push(['patch', path, JSON.parse(JSON.stringify(v))]); },
+        clear(path){ sent.push(['clear', path]); },
+        listen(path, cb){ cbs[path] = cb; return () => {}; },
+        watchPrefix(pfx, cb){ cbs['prefix:' + pfx] = cb; return () => {}; },
+        isStale: v => !!(v && v.ts && v.ts < Date.now() - 8000),
+      });
+      const keep = { pv: bm._previews, d: bm._drawings, chan: bm._liveChanName };
+      try {
+        openPanel('battlemap'); await sleep(400);
+        window.realtimeLive = fake;
+        try { bm._bc && bm._bc.close(); } catch(e){}
+        bm._startBroadcast();
+        // Sending: the whole opening, then only what was added, then the clear.
+        const st = { c: '#123456', s: 4, p: [10, 10], at: 4242 };
+        bm._broadcastStrokeTick(st);
+        st.p.push(20, 20, 30, 30); bm._broadcastStrokeTick(st);
+        bm._broadcastStrokeTick(st);
+        st.p.push(40, 40); bm._broadcastStrokeTick(st);
+        bm._broadcastStrokeEnd();
+        await sleep(300);
+        const beforeClear = sent.length;
+        await sleep(1400);
+        const chan = bm._liveChanName;
+        ok('live stroke: on a channel of this page’s own, not the table’s shared one', /^stroke_/.test(chan) && sent.every(x => x[1] === chan), sent.map(x => x[1]).join());
+        ok('live stroke: the first tick sends colour, size, start time and the opening point',
+           sent[0][0] === 'push' && sent[0][2].c === '#123456' && sent[0][2].at === 4242 && JSON.stringify(sent[0][2].p0000) === '[10,10]');
+        ok('live stroke: each tick after sends only the points added since',
+           sent.length === 4 && sent[1][0] === 'patch' && JSON.stringify(sent[1][2]) === '{"p0001":[20,20,30,30]}' && JSON.stringify(sent[2][2]) === '{"p0002":[40,40]}', JSON.stringify(sent.slice(1)));
+        ok('live stroke: and the end clears it, a moment later (the saved stroke goes first)', beforeClear === 3 && sent[3] && sent[3][0] === 'clear');
+        // A new stroke begun within that moment is not cleared by the old one's timer.
+        const st2 = { c: '#654321', s: 4, p: [1, 1], at: 4343 };
+        bm._broadcastStrokeTick({ c: '#111', s: 4, p: [0, 0], at: 4300 }); bm._broadcastStrokeEnd();
+        bm._broadcastStrokeTick(st2); const n0 = sent.length;
+        await sleep(1700);
+        ok('live stroke: a stroke begun straight after is not cleared by the last one’s timer', sent.slice(n0).every(x => x[0] !== 'clear'));
+        bm._broadcastStrokeEnd(); await sleep(1600);
+        // Receiving: two people at once, each their own preview; our own channel skipped.
+        const cb = cbs['prefix:stroke_'];
+        ok('live stroke: the map listens for every person’s channel', typeof cb === 'function');
+        const now = Date.now(), me = chan.slice('stroke_'.length);
+        bm._drawings = [];
+        cb({ devA: { c: '#a00', s: 4, at: 1, ts: now, p0000: [0, 0], p0001: [5, 5] },
+             devB: { c: '#0a0', s: 4, at: 2, ts: now, p0000: [9, 9], p0001: [8, 8], p0002: [7, 7] },
+             [me]: { c: '#00a', s: 4, at: 3, ts: now, p0000: [1, 1, 2, 2] },
+             devOld: { c: '#aaa', s: 4, at: 4, ts: now - 60000, p0000: [3, 3, 4, 4] } });
+        const pv = bm._previews || {};
+        ok('live stroke: two people drawing at once, both previews shown', !!pv['live:devA'] && !!pv['live:devB'] && JSON.stringify(pv['live:devB'].p) === '[9,9,8,8,7,7]', Object.keys(pv).join());
+        ok('live stroke: not our own echo, nor a sender gone quiet', !pv['live:' + me] && !pv['live:devOld']);
+        // One of them finishes: only that preview goes.
+        bm._drawings = [{ c: '#a00', s: 4, at: 1, p: [0, 0, 5, 5] }];
+        bm._dropCommittedPreviews();
+        ok('live stroke: when one finishes, the other’s preview stays', !bm._previews['live:devA'] && !!bm._previews['live:devB']);
+        // Its channel not cleared yet, the next update from anyone must not bring it back.
+        cb({ devA: { c: '#a00', s: 4, at: 1, ts: now, p0000: [0, 0], p0001: [5, 5] }, devB: { c: '#0a0', s: 4, at: 2, ts: now, p0000: [9, 9] } });
+        ok('live stroke: a finished stroke is not drawn again from its channel', !bm._previews['live:devA'] && !!bm._previews['live:devB']);
+        // A phone still on the old page uses the shared channel: still heard.
+        const lg = cbs['skt_battlemap_live_v1'];
+        lg && lg({ stroke: { c: '#999', s: 4, p: [1, 1, 3, 3] }, ts: now });
+        ok('live stroke: a phone on the old page is still heard', !!(bm._previews || {}).legacy);
+      } catch(e){ ok('round 120 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.realtimeLive = L0;
+        try { bm._bc && bm._bc.close(); } catch(e){}
+        try { bm._startBroadcast(); } catch(e){}
+        bm._previews = keep.pv || {}; bm._drawings = keep.d; bm._liveStroke = null; bm._drawingNow = false;
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

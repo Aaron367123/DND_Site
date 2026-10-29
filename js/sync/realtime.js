@@ -2063,6 +2063,12 @@ window.realtimeLive = {
       ref.set(value).catch(()=>{});
     } catch(e){}
   },
+  // Add children to a live node rather than replace it: a stroke being drawn
+  // sends each tick's new points as one more child, not the whole line again.
+  patch(path, fields){
+    if (!_fbDb) return;
+    try { _fbDb.ref(_livePath(path)).update({ ...fields, ts: _serverNow() }).catch(()=>{}); } catch(e){}
+  },
   clear(path){
     if (!_fbDb) return;
     try { _fbDb.ref(_livePath(path)).remove().catch(()=>{}); } catch(e){}
