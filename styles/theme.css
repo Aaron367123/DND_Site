@@ -781,3 +781,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 }
 /* The item is for another class: said plainly, in the warning colour. */
 .cs-item-warn { color: var(--warning); font-weight: 500; }
+/* An item's named powers, each a row under the item like its spells. */
+.cs-mi .cs-mi-prop { margin: 4px 0 0 12px; }
+.cs-mi-prop .cs-act-h { flex-wrap: wrap; }
+.cs-mi-prop .cs-act-d { margin-top: 2px; }
+/* What an item does, in a line under its name; what only sometimes applies, dimmer. */
+.cs-mi-fx { font-size: var(--fs-sm); color: var(--text-muted); margin: 2px 0 0 12px; }
+.cs-mi-fx.cs-mi-when { color: var(--text-dim); font-style: italic; }

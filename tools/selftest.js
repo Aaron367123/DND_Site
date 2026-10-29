@@ -11527,7 +11527,7 @@
         ok('sheet: an imported monk’s unarmed strike gets the tattoo’s +1', ua().atkBonus === '+7' && ua().damage === '1d8+4 Bludgeoning', ua().atkBonus + ' ' + ua().damage);
         tab('Actions'); await sleep(200);
         const sec = document.querySelector('#cs-root .cs-asec[data-k="items"]');
-        ok('sheet: the tattoo’s bonus action, once a day, with its 1d6 force', !!sec && /Bonus action/i.test(sec.textContent) && !!sec.querySelector('[data-cs-iuse]') && /1d6 force/.test(sec.textContent));
+        ok('sheet: the tattoo’s bonus action (Eldritch Maul), once a day, with its 1d6 force', !!sec && /Bonus action/i.test(sec.textContent) && !!sec.querySelector('[data-cs-iuse], [data-cs-iprop]') && /1d6 force/.test(sec.textContent) && /Eldritch Maul/.test(sec.textContent));
         tab('Inventory'); await sleep(200);
         const own = document.querySelector('#cs-root [data-cs-attune]');
         own.checked = false; own.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300);
@@ -11628,6 +11628,69 @@
         ok('builder: a Stone of Good Luck adds to skills, initiative and ability checks', Bg.init === B0.init + 1 && Bg.sheet.skills.arcana === B0.sheet.skills.arcana + 1 && Bg.sheet.checkBonus === 1);
         ok('builder: an item’s swim speed, poison immunity and CON 19', (Bs.speeds || {}).swim === 60 && Bs.immunities.includes('poison') && Bs.abilities.con === 19 && Bs.hpMax === B0.hpMax + 10);
       } catch(e){ ok('round 123 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { csClose(); } catch(e){}
+        state.party.splice(0, state.party.length, ...JSON.parse(keepParty)); save();
+      }
+    }
+    // -- Round 124: items' named powers, rests, advantage, what they show ---
+    {
+      const keepParty = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024'), M = await sktMagicLoad('2024');
+        const make = n => { const e = M.find(x => x.name === n); const m = sktMagicMake(R, e, null); m.attuned = !!m.reqAttune; m.equipped = true; m.qty = 1; return m; };
+        const ci = state.party.findIndex(p => /Creambak/.test(p.name)), C = () => state.party[ci];
+        openCharSheet(C().id); await sleep(300);
+        const tab = n => { const t = [...document.querySelectorAll('#cs-root .cs-tab')].find(b => b.textContent.trim().startsWith(n)); t && t.click(); };
+        tab('Inventory'); for (let k = 0; k < 60 && !CS.magic; k++) await sleep(100);
+        const wear = list => { const q = C(); q.inventory = list; delete q.acGear; csImpRecalc(q, CS.R); };
+        // The Banner's +1 is its Gift's area, not the bearer's.
+        ok('items: the Banner of the Krig Rune gives its bearer no +1 to AC', !make('Banner of the Krig Rune').bonusAc && make('Ingot of the Skold Rune').bonusAc === 1);
+        wear([make('Claw of the Wyrm Rune'), make('Pennant of the Vind Rune'), make('Ingot of the Skold Rune'), make('Wand of Magic Missiles')]);
+        tab('Actions'); await sleep(150);
+        const sec = () => document.querySelector('#cs-root .cs-asec[data-k="items"]');
+        const prop = n => [...sec().querySelectorAll('.cs-mi-prop')].find(x => x.querySelector('b').textContent === n);
+        ok('items: each named power its own row — Wyrmslayer, an action, DC 15 CON, three a day', !!prop('Wyrmslayer') && /Action/i.test(prop('Wyrmslayer').textContent)
+          && /DC 15 CON/.test(prop('Wyrmslayer').textContent) && prop('Wyrmslayer').querySelectorAll('[data-cs-ipip]').length === 3);
+        ok('items: a rune’s Gift, and a wand’s note on regaining charges, aren’t powers', !prop('Gift of Wind') && ![...sec().querySelectorAll('.cs-mi-prop b')].some(b => /Regaining/.test(b.textContent)));
+        prop('Winds Grasp').querySelector('[data-cs-iprop]').click(); await sleep(100);
+        tab('Actions'); await sleep(100);
+        prop('Wyrmslayer').querySelector('[data-cs-iprop]').click(); await sleep(100);
+        const used = n => (C().inventory.find(m => m.name === n).used || {});
+        ok('items: Use spends a power’s use', used('Pennant of the Vind Rune')['sr:Winds Grasp'] === 1 && used('Claw of the Wyrm Rune')['lr:Wyrmslayer'] === 1);
+        panelDefs.party._shortRestOne(C(), ci);
+        ok('short rest: a short-rest power comes back, a daily one doesn’t', !used('Pennant of the Vind Rune')['sr:Winds Grasp'] && used('Claw of the Wyrm Rune')['lr:Wyrmslayer'] === 1);
+        // A wand regains its roll, not everything.
+        C().inventory.find(m => m.name === 'Wand of Magic Missiles').used = { c: 7 };
+        // The lowest roll (1 on the d6, so 2 back), so the test can't pass by luck.
+        const rnd = Math.random; Math.random = () => 0;
+        try { panelDefs.party._longRestOne(C(), ci); } finally { Math.random = rnd; }
+        const wc = used('Wand of Magic Missiles').c || 0;
+        ok('long rest: a wand regains 1d6 + 1 charges, not all seven', wc === 5 && !used('Claw of the Wyrm Rune')['lr:Wyrmslayer'], 'still spent ' + wc);
+        // What each item does, on the sheet; advantage on the dice.
+        wear([make('Cloak of Protection'), make('Cloak of Elvenkind'), make('Sentinel Shield'), make('Eyes of the Eagle'), make('Opal of the Ild Rune')]);
+        tab('Actions'); await sleep(150);
+        const blk = n => [...sec().querySelectorAll('.cs-mi')].find(x => x.querySelector('.cs-itemn b').textContent === n);
+        ok('items: an item says what it does — “+1 AC · +1 to saving throws”', /\+1 AC · \+1 to saving throws/.test(blk('Cloak of Protection').textContent)
+          && /Resistance: cold/.test(blk('Opal of the Ild Rune').textContent));
+        ok('items: what only sometimes applies is a note, not advantage', /rely on sight/.test(blk('Eyes of the Eagle').textContent) && !csRollEffects(C(), 'check:perception').adv.includes('Eyes of the Eagle'));
+        ok('items: a Cloak of Elvenkind rolls Stealth with advantage, a Sentinel Shield initiative', csRollEffects(C(), 'check:stealth').adv.includes('Cloak of Elvenkind')
+          && csRollEffects(C(), 'init').adv.includes('Sentinel Shield') && !csRollEffects(C(), 'check:arcana').adv.length);
+        wear([]);
+        ok('items: their advantage goes when they come off', !(C().sheet.rollAdv || []).some(x => x.item));
+        // Gloves of Thievery's +5, on both kinds of character.
+        const sk0 = JSON.parse(JSON.stringify(C().sheet.skills || {}));
+        C().sheet.skills = Object.assign({ sleightOfHand: 3 }, C().sheet.skills); const soh0 = C().sheet.skills.sleightOfHand;
+        wear([make('Gloves of Thievery')]);
+        ok('imported: Gloves of Thievery, +5 to Sleight of Hand', C().sheet.skills.sleightOfHand === soh0 + 5, C().sheet.skills.sleightOfHand + ' vs ' + soh0);
+        wear([]); C().sheet.skills = sk0;
+        const mk = items => Object.assign(sktBlankBuild('2024'), { name: 'TR', species: 'Human', cls: 'Rogue', level: 3, background: 'Criminal',
+          abilities: { method: 'manual', base: { str: 8, dex: 16, con: 14, int: 12, wis: 12, cha: 10 } }, skills: ['stealth', 'perception'], items: items.map(make) });
+        const B0 = sktComputeCharacter(mk([]), R), B1 = sktComputeCharacter(mk(['Gloves of Thievery', 'Cloak of Elvenkind']), R);
+        ok('builder: Gloves of Thievery’s +5 and a Cloak of Elvenkind’s advantage', B1.sheet.skills.sleightOfHand === B0.sheet.skills.sleightOfHand + 5
+          && B1.sheet.rollAdv.some(x => x.label === 'Cloak of Elvenkind' && x.on.includes('check:stealth')));
+        csClose(); await sleep(100);
+      } catch(e){ ok('round 124 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         try { csClose(); } catch(e){}
         state.party.splice(0, state.party.length, ...JSON.parse(keepParty)); save();

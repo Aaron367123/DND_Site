@@ -1771,7 +1771,16 @@ registerPanel('party',{
       }
       // Magic items' uses: a lyre's spells, a tattoo's once a day, the charges
       // an imported character's wand keeps on itself. They come back at dawn.
-      [c.inventory, c.build && c.build.items].forEach(list => (list || []).forEach(m => { if (m && m.used) delete m.used; }));
+      // A charged item regains what its own roll says (a wand's 1d6 + 1), not
+      // all of them; everything else comes back whole.
+      [c.inventory, c.build && c.build.items].forEach(list => (list || []).forEach(m => {
+        if (!m || !m.used) return;
+        const r = /(\d+)d(\d+)(?:\s*\+\s*(\d+))?/.exec(String(m.rechargeAmount || ''));
+        const spent = +m.used.c || 0;
+        if (spent && r){ let n = +(r[3] || 0); for (let k = 0; k < +r[1]; k++) n += 1 + Math.floor(Math.random() * +r[2]); const left = Math.max(0, spent - n); m.used = left ? { c: left } : undefined; }
+        else m.used = undefined;
+        if (!m.used) delete m.used;
+      }));
       // Spell slots: clear all expended counters.
       const slots = c.sheet?.spellSlots;
       if (slots){
@@ -1861,6 +1870,13 @@ registerPanel('party',{
   // Magic slots came back. Does not save — the caller does, once.
   _shortRestOne(c, i){
     let pactRestored = false;
+    // Magic items' uses that come back on a short rest: a rune's "once per
+    // short or long rest", an item's spells "per rest".
+    [c.inventory, c.build && c.build.items].forEach(list => (list || []).forEach(m => {
+      if (!m || !m.used) return;
+      Object.keys(m.used).forEach(k => { if (/^(sr|spr|rest):/.test(k)) delete m.used[k]; });
+      if (!Object.keys(m.used).length) delete m.used;
+    }));
     c.concentration = null;
     // A rage lasts 1 minute; an hour's rest is well past that. Only the LONG
     // rest cleared it — and the long rest's own comment claims "rage and

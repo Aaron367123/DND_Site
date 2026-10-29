@@ -1963,7 +1963,7 @@ function csItemInfo(m){
   const charges = +m.charges || +e.charges || 0;
   return {
     rarity: m.rarity || e.rarity || '', reqAttune: !!(m.reqAttune || e.reqAttune), attuneBy: m.attuneBy || e.attuneBy || '',
-    spells: csItemSpellList(m.spells || e.spells || null, charges), unarmed: !!(m.unarmed || e.unarmed), charges,
+    spells: csItemSpellList(m.spells || e.spells || null, charges), unarmed: !!(m.unarmed || e.unarmed), charges, props: e.props || null,
     text: e.text || '',
   };
 }
@@ -2028,12 +2028,75 @@ function csItemAbility(text){
   const xd = /extra (\d+d\d+) (\w+) damage/i.exec(para);
   return { kind, daily: /until the next dawn|once per day|once each day/i.test(t), para, xdmg: xd ? xd[1] + ' ' + xd[2] : '' };
 }
-// The items worth a place in Actions: spells, a usable ability, charges.
+// One named property's use: the action it takes, how often ("once per
+// short or long rest", "three times ... at the next dawn"), the save it
+// calls for, extra damage, a charge it spends.
+const CS_NUMW = { once: 1, twice: 2, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+function csPropUse(text){
+  const t = String(text || ''), a = csItemAbility(t);
+  const times = /can be used (once|twice|one|two|three|four|five|six|\d+)(?: times?)?/i.exec(t) || /has (one|two|three|four|five|six|\d+) uses/i.exec(t);
+  const k = times ? (CS_NUMW[times[1].toLowerCase()] || +times[1] || 1) : 1;
+  let uses = null;
+  if (/until (?:you finish )?a short or long rest|until you finish a short rest/i.test(t)) uses = { k, rest: 'short' };
+  else if (/until (?:you finish )?a long rest|until the next dawn|at the next dawn|daily at dawn|until dawn|once per day|once each day/i.test(t) || times) uses = { k, rest: 'long' };
+  const sv = /(?:DC )?(\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw/i.exec(t);
+  const ch = /expend (\d+|one|a) charges?/i.exec(t);
+  return { kind: a.kind, uses, xdmg: a.xdmg, dc: sv ? 'DC ' + sv[1] + ' ' + sv[2].slice(0, 3).toUpperCase() : '',
+           charge: ch ? (CS_NUMW[ch[1].toLowerCase()] || +ch[1] || 1) : 0 };
+}
+// The properties worth a row: ones you use (an action, or uses it counts,
+// not a note on when charges come back),
+// leaving out a rune's Gift (an 8-hour transfer that destroys the item) and
+// one that only casts a spell the item already lists.
+function csItemPropRows(i){
+  const names = (i.spells || []).map(sp => csSpellNm(sp.n).toLowerCase());
+  return (i.props || []).map(pr => ({ pr, u: csPropUse(pr.text) }))
+    .filter(x => (x.u.kind || (x.u.uses && /can be used|has (?:one|two|three|four|five|six|\d+) uses/i.test(x.pr.text))) && !/^gift of\b/i.test(x.pr.name) && !names.some(n => x.pr.text.toLowerCase().includes(n)));
+}
+// What an item in use does to the character, in a line: "+1 AC · +1 to
+// saving throws", "STR 19", "Resistance: cold", "Advantage on Stealth
+// checks" — so it can be seen working. And what only sometimes applies.
+const CS_ABN = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
+function csItemEffects(m){
+  const f = csItemFx(m), out = [], sg = n => (n > 0 ? '+' : '') + n;
+  const n = (k, v) => { const x = parseInt(v != null ? v : f[k], 10); return isNaN(x) ? 0 : x; };
+  const gear = !!(m.stats || m.base);
+  if (n('bonusAc', m.bonusAc) && !gear) out.push(sg(n('bonusAc', m.bonusAc)) + ' AC' + (m.unarmoredOnly ? ' without armour' + (m.noShield ? ' or a shield' : '') : ''));
+  if (n('bonusWeapon', m.bonusWeapon) && gear) out.push(sg(n('bonusWeapon', m.bonusWeapon)) + ' to attack and damage');
+  if (f.unarmed && n('bonusWeapon', m.bonusWeapon)) out.push(sg(n('bonusWeapon', m.bonusWeapon)) + ' to unarmed strikes');
+  if (n('bonusSavingThrow')) out.push(sg(n('bonusSavingThrow')) + ' to saving throws');
+  if (n('bonusAbilityCheck')) out.push(sg(n('bonusAbilityCheck')) + ' to ability checks');
+  if (n('bonusProficiencyBonus')) out.push(sg(n('bonusProficiencyBonus')) + ' proficiency bonus');
+  if (n('bonusSpellAttack')) out.push(sg(n('bonusSpellAttack')) + ' spell attack');
+  if (n('bonusSpellSaveDc')) out.push(sg(n('bonusSpellSaveDc')) + ' spell save DC');
+  if (n('bonusSavingThrowConcentration')) out.push(sg(n('bonusSavingThrowConcentration')) + ' to concentration saves');
+  const a = f.ability;
+  if (a && typeof a === 'object'){
+    Object.keys(a.static || {}).forEach(k => out.push((CS_ABN[k] || k) + ' ' + a.static[k]));
+    Object.keys(CS_ABN).forEach(k => { if (typeof a[k] === 'number') out.push(CS_ABN[k] + ' ' + sg(a[k]) + ' (max 20)'); });
+  }
+  const list = v => [].concat(v || []).filter(x => typeof x === 'string');
+  if (list(f.resist).length) out.push('Resistance: ' + list(f.resist).join(', '));
+  if (list(f.immune).concat(list(f.conditionImmune)).length) out.push('Immunity: ' + list(f.immune).concat(list(f.conditionImmune)).join(', '));
+  if (list(f.vulnerable).length) out.push('Vulnerability: ' + list(f.vulnerable).join(', '));
+  const sp = f.modifySpeed;
+  if (sp && typeof sp === 'object'){
+    Object.keys(sp.static || {}).forEach(k => out.push(_csTitle(k) + ' ' + sp.static[k] + ' ft' + (k === 'walk' ? ' (unless higher)' : '')));
+    Object.keys(sp.equal || {}).forEach(k => out.push(_csTitle(k) + ' speed equal to ' + sp.equal[k] + 'ing'));
+    Object.keys(sp.bonus || {}).forEach(k => out.push(sg(+sp.bonus[k]) + ' ft to ' + (k === '*' ? 'every speed' : k + ' speed')));
+  }
+  const tf = f.textFx || {};
+  (tf.adv || []).forEach(x => out.push('Advantage on ' + x.on.map(t => t === 'init' ? 'initiative' : t.startsWith('check:') ? _csTitle(t.slice(6).replace(/_/g, ' ')) + ' checks' : (CS_ABN[t.slice(3)] || t) + ' checks').join(' and ')));
+  Object.keys(tf.skill || {}).forEach(k => out.push(sg(tf.skill[k]) + ' to ' + (typeof SKT_SKILL_LABEL !== 'undefined' ? SKT_SKILL_LABEL[k] : k) + ' checks'));
+  return { line: out, notes: (tf.notes || []).map(x => x.replace(/^[^:]*:\s*/, '')) };
+}
+// The items worth a place in Actions: what they change, their spells, a
+// usable ability, charges.
 function csItemActions(pc){
   return csActiveItems(pc).map(m => {
     const i = csItemInfo(m);
-    return { m, i, ab: csItemAbility(i.text) };
-  }).filter(x => x.i.spells || x.i.charges || (x.ab.kind && (x.i.rarity || x.i.reqAttune)));
+    return { m, i, ab: csItemAbility(i.text), rows: csItemPropRows(i), fx: csItemEffects(m) };
+  }).filter(x => x.i.spells || x.i.charges || x.rows.length || x.fx.line.length || x.fx.notes.length || (x.ab.kind && (x.i.rarity || x.i.reqAttune)));
 }
 const csSpellNm = n => { const s = csSpell(n); return s ? s.name : _csTitle(n); };
 // What one of an item's uses is: the item's charges ('c'), its once-a-day
@@ -2043,7 +2106,8 @@ function csItemUseMax(m, key){
   const info = csItemInfo(m);
   if (key === 'c') return info.charges;
   if (key === 'ab') return 1;
-  if (key.startsWith('sp:')){ const sp = (info.spells || []).find(s => 'sp:' + csSpellNm(s.n) === key); return sp ? (sp.k || 1) : 1; }
+  if (/^spr?:/.test(key)){ const nm = key.replace(/^spr?:/, ''); const sp = (info.spells || []).find(s => csSpellNm(s.n) === nm); return sp ? (sp.k || 1) : 1; }
+  if (/^(sr|lr):/.test(key)){ const pr = (info.props || []).find(x => x.name === key.slice(3)); const u = pr && csPropUse(pr.text).uses; return u ? u.k : 1; }
   return +key.split(':')[1] || 1;
 }
 // The uses left of one of those. Charges on a built character are its
@@ -2065,14 +2129,14 @@ function csItemPips(pc, m, u){
 // character's own numbers, its uses, and Cast.
 function csItemSpellRow(pc, m, info, sp){
   const sh = pc.sheet || {}, ro = CS.readOnly, s = csSpell(sp.n), nm = csSpellNm(sp.n);
-  const key = sp.per === 'charges' ? 'c' : sp.per === 'will' || sp.per === 'item' ? '' : sp.each ? 'sp:' + nm : sp.per + ':' + sp.k;
+  const key = sp.per === 'charges' ? 'c' : sp.per === 'will' || sp.per === 'item' ? '' : sp.each ? (sp.per === 'rest' ? 'spr:' : 'sp:') + nm : sp.per + ':' + sp.k;
   const u = key ? csItemUses(pc, m, key) : null;
   const cost = sp.per === 'charges' ? (sp.k || 1) : 1;
   const can = !ro && (!u || u.left >= cost);
   const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
   const atk = s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
   const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '') + (sp.perLevel ? ', +1 a level higher' : '')
-    : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/rest' + (sp.each ? '' : ', shared') : '';
+    : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/short rest' + (sp.each ? '' : ', shared') : '';
   const ok = 'isp:' + m.name + ':' + nm;
   return '<div class="cs-spell cs-ispell"><button class="cs-spell-n" data-cs-open="' + csE(ok) + '"><b>' + csE(nm) + '</b>'
     + (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '')
@@ -2087,8 +2151,23 @@ function csItemSpellRow(pc, m, info, sp){
 function csItemActionsHtml(pc){
   const list = csItemActions(pc); if (!list.length) return '';
   const ro = CS.readOnly;
-  return '<div class="cs-asec" data-k="items"><h4>Magic items</h4>' + list.map(({ m, i, ab }) => {
+  return '<div class="cs-asec" data-k="items"><h4>Magic items</h4>' + list.map(({ m, i, ab: ab0, rows, fx }) => {
     const spells = i.spells || [];
+    // An item with named properties lists them; its text as a whole isn't
+    // read for one ability then.
+    const ab = rows.length ? { kind: '', daily: false, para: '', xdmg: '' } : ab0;
+    const propRows = rows.map(({ pr, u }) => {
+      const key = u.uses ? (u.uses.rest === 'short' ? 'sr:' : 'lr:') + pr.name : '';
+      const uu = key ? csItemUses(pc, m, key) : null;
+      return '<div class="cs-mi-prop"><div class="cs-act-h"><b>' + csE(pr.name) + '</b>'
+        + (u.kind ? '<span class="cs-mi-kind">' + csE(u.kind) + '</span>' : '')
+        + (u.dc ? '<span class="cs-save">' + csE(u.dc) + '</span>' : '')
+        + (uu ? csItemPips(pc, m, uu) + '<span class="cb-dim">' + (uu.max > 1 ? uu.max + '/' : 'once a ') + (u.uses.rest === 'short' ? 'short rest' : 'day') + '</span>'
+          + (ro ? '' : '<button class="btn small" data-cs-iprop="' + csE(m.name + '|' + key) + '"' + (uu.left ? '' : ' disabled') + '>Use</button>') : '')
+        + (!uu && u.charge && i.charges && !ro ? '<button class="btn small" data-cs-icharge="' + csE(m.name + '|' + u.charge) + '">Use (' + u.charge + ' charge' + (u.charge > 1 ? 's' : '') + ')</button>' : '')
+        + (u.xdmg ? '<button class="btn small" data-cs-xdmg="' + csE(pr.name + '|' + u.xdmg) + '" title="Roll the extra damage">' + ICO('i-dice') + ' ' + csE(u.xdmg) + '</button>' : '')
+        + '</div><div class="cs-act-d">' + csE(pr.text) + '</div></div>';
+    }).join('');
     // Spells that share their uses ("3/day" across the list) get one row of pips.
     const pools = [...new Set(spells.filter(sp => (sp.per === 'day' || sp.per === 'rest') && !sp.each).map(sp => sp.per + ':' + sp.k))];
     const charges = i.charges ? csItemUses(pc, m, 'c') : null;
@@ -2099,13 +2178,15 @@ function csItemActionsHtml(pc){
       + (abUse ? csItemPips(pc, m, abUse) + '<span class="cb-dim">once a day</span>'
         + (ro ? '' : '<button class="btn small" data-cs-iuse="' + csE(m.name) + '"' + (abUse.left ? '' : ' disabled') + '>Use</button>') : '')
       + (charges ? csItemPips(pc, m, charges) + '<span class="cb-dim">' + charges.left + '/' + charges.max + ' charges</span>'
-        + (!spells.length && !ro ? '<button class="btn small" data-cs-icharge="' + csE(m.name) + '"' + (charges.left ? '' : ' disabled') + '>Use</button>' : '') : '')
+        + (!spells.length && !rows.some(x => x.u.charge) && !ro ? '<button class="btn small" data-cs-icharge="' + csE(m.name) + '"' + (charges.left ? '' : ' disabled') + '>Use</button>' : '') : '')
       + pools.map(k => { const u = csItemUses(pc, m, k), [per, n] = k.split(':'); return csItemPips(pc, m, u) + '<span class="cb-dim">' + n + '/' + per + '</span>'; }).join('')
       + (ab.xdmg ? '<button class="btn small" data-cs-xdmg="' + csE(m.name + '|' + ab.xdmg) + '" title="Roll the extra damage">' + ICO('i-dice') + ' ' + csE(ab.xdmg) + '</button>' : '')
       + '</div>'
       + (open && i.text ? '<div class="cs-act-d">' + csE(i.text).replace(/\n/g, '<br>') + '</div>'
         : !spells.length && ab.para ? '<div class="cs-act-d">' + csE(ab.para) + ' <button class="cs-linkbtn" data-cs-open="' + csE('ia:' + m.name) + '">more</button></div>' : '')
-      + spells.map(sp => csItemSpellRow(pc, m, i, sp)).join('') + '</div>';
+      + (fx.line.length ? '<div class="cs-mi-fx">' + csE(fx.line.join(' · ')) + '</div>' : '')
+      + fx.notes.map(x => '<div class="cs-mi-fx cs-mi-when">' + csE(x) + '</div>').join('')
+      + propRows + spells.map(sp => csItemSpellRow(pc, m, i, sp)).join('') + '</div>';
   }).join('') + '</div>';
 }
 // The Spells tab's list of what items cast.
@@ -2116,7 +2197,7 @@ function csItemSpellsHtml(pc){
 }
 // Spending and getting back an item's uses.
 function csItemClick(d, pc){
-  if (d.csIpip == null && d.csIcast == null && d.csIuse == null && d.csIcharge == null) return false;
+  if (d.csIpip == null && d.csIcast == null && d.csIuse == null && d.csIcharge == null && d.csIprop == null) return false;
   if (CS.readOnly) return true;
   const store = p => p.build ? (p.build.items || []) : (p.inventory || []);
   const spend = (p, name, key, n) => {
@@ -2140,9 +2221,15 @@ function csItemClick(d, pc){
     return true;
   }
   if (d.csIcharge != null){
-    const name = d.csIcharge;
-    csEdit('Used a charge of ' + name, p => { spend(p, name, 'c', 1); });
-    if (typeof showToast === 'function') showToast('Used a charge of ' + name);
+    const parts = d.csIcharge.split('|'), n = parts.length > 1 && /^\d+$/.test(parts[parts.length - 1]) ? +parts.pop() : 1, name = parts.join('|');
+    csEdit('Used ' + (n > 1 ? n + ' charges' : 'a charge') + ' of ' + name, p => { spend(p, name, 'c', n); });
+    if (typeof showToast === 'function') showToast('Used ' + (n > 1 ? n + ' charges' : 'a charge') + ' of ' + name);
+    return true;
+  }
+  if (d.csIprop != null){
+    const parts = d.csIprop.split('|'), key = parts.pop(), name = parts.join('|');
+    csEdit('Used ' + key.slice(3) + ' (' + name + ')', p => { spend(p, name, key, 1); });
+    if (typeof showToast === 'function') showToast('Used ' + key.slice(3));
     return true;
   }
   if (d.csIuse != null){
@@ -2391,7 +2478,7 @@ function csDeclarePdfGear(p, decl, R){
 // What a worn item does to the numbers, with what the catalogue knows filled
 // in under the character's copy (an item added before the sheet read a field).
 const CS_FX_KEYS = ['ability', 'bonusSavingThrow', 'bonusSpellAttack', 'bonusSpellSaveDc', 'bonusAbilityCheck', 'bonusProficiencyBonus',
-  'bonusSavingThrowConcentration', 'resist', 'immune', 'conditionImmune', 'vulnerable', 'modifySpeed', 'unarmed'];
+  'bonusSavingThrowConcentration', 'resist', 'immune', 'conditionImmune', 'vulnerable', 'modifySpeed', 'unarmed', 'textFx'];
 function csItemFx(m){
   const n = String((m && m.name) || '').toLowerCase();
   const e = ((CS && CS.magic) || []).find(x => x.name.toLowerCase() === n) || {};
@@ -2479,7 +2566,8 @@ function csImpItemFx(p, worn){
       const v = num(k2[k]), ab = skAb[k.replace(/_/g, '').toLowerCase()]; if (v == null || !ab) return;
       const b = v - ((was.skills || {})[k] || 0);
       const mult = Math.max(0, Math.min(2, Math.round((b - mod(base[ab])) / (pb0 || 2) * 2) / 2));
-      const d = (dMod[ab] || 0) + chk + Math.floor(mult * (pb0 + pbD)) - Math.floor(mult * pb0);
+      const own = fxs.reduce((n, f) => n + (+(((f.textFx || {}).skill || {})[Object.keys(SKT_SKILL_LABEL).find(x => x.toLowerCase() === k.replace(/_/g, '').toLowerCase()) || '']) || 0), 0);
+      const d = (dMod[ab] || 0) + chk + Math.floor(mult * (pb0 + pbD)) - Math.floor(mult * pb0) + own;
       k2[k] = b + d; if (d) fx.skills[k] = d;
       if (ab === 'wis' && /^perception$/i.test(k)) percD = d;
     });
@@ -2505,6 +2593,15 @@ function csImpItemFx(p, worn){
   const dcD = (dMod[cab] || 0) + pbD + sum('bonusSpellSaveDc'), atD = (dMod[cab] || 0) + pbD + sum('bonusSpellAttack');
   if (num(sh.spellSaveDc) != null){ sh.spellSaveDc = num(sh.spellSaveDc) - (was.dc || 0) + dcD; if (dcD) fx.dc = dcD; }
   if (num(sh.spellAtkBonus) != null){ sh.spellAtkBonus = sign(num(sh.spellAtkBonus) - (was.atk || 0) + atD); if (atD) fx.atk = atD; }
+  // Advantage an item gives (a Cloak of Elvenkind on Stealth, a Sentinel
+  // Shield on initiative), marked as the items', so they come off with them;
+  // and what only sometimes applies, as notes on the sheet.
+  const adv = [].concat(...fxs.map(f => (f.textFx || {}).adv || [])).map(x => ({ on: x.on, label: x.label, item: true }));
+  const keepAdv = (sh.rollAdv || []).filter(x => !x.item);
+  if (adv.length || keepAdv.length !== (sh.rollAdv || []).length) sh.rollAdv = keepAdv.concat(adv);
+  if (sh.rollAdv && !sh.rollAdv.length) delete sh.rollAdv;
+  const notes = [].concat(...fxs.map(f => (f.textFx || {}).notes || []));
+  if (notes.length) sh.itemNotes = notes; else delete sh.itemNotes;
   // Ability checks and concentration, for the dice.
   if (chk) sh.checkBonus = chk; else delete sh.checkBonus;
   const conc = sum('bonusSavingThrowConcentration'); if (conc) sh.concBonus = conc; else delete sh.concBonus;

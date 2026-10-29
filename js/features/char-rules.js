@@ -2416,6 +2416,10 @@ function sktComputeCharacter(build, R, prior){
   // check (a Stone of Good Luck), to concentration saves.
   _sktActiveItems(build).forEach(m => [].concat(m.immune || [], m.conditionImmune || []).forEach(r => { if (typeof r === 'string') ctx.immune.add(r.toLowerCase()); }));
   ctx.checkBonusAll = _sktItemSum(build, 'bonusAbilityCheck');
+  _sktActiveItems(build).forEach(m => { const f = m.textFx; if (!f) return;
+    (f.adv || []).forEach(x => ctx.rollAdv.push({ on: x.on, label: x.label, item: true }));
+    Object.keys(f.skill || {}).forEach(k => { ctx.skillBonus[k] = (ctx.skillBonus[k] || 0) + f.skill[k]; });
+    (f.notes || []).forEach(n => _fxNote(ctx, n)); });
   ctx.concBonus += _sktItemSum(build, 'bonusSavingThrowConcentration');
 
   // Proficiencies from the class, species, background and feats.
@@ -3481,10 +3485,59 @@ function sktItemSpeeds(speeds, items){
     Object.keys(s.bonus || {}).forEach(k => { const v = +s.bonus[k] || 0; if (k === '*') Object.keys(out).forEach(x => { if (out[x]) out[x] += v; }); else if (out[k]) out[k] += v; }); });
   return out;
 }
+// What an item's text gives that the data has no field for: advantage on
+// checks or initiative ("you have Advantage on Dexterity (Stealth)
+// checks"), a bonus to a skill (Gloves of Thievery's +5 to Sleight of
+// Hand), and what only sometimes applies ("checks that rely on sight",
+// "saving throws against spells"), as notes. The item's own condition —
+// "while you wear this cloak" — is what being attuned means, so it doesn't
+// make the rest conditional. { adv: [{ on, label }], skill: { stealth: 5 }, notes }
+function sktItemTextFx(name, text){
+  const out = { adv: [], skill: {}, notes: [] };
+  const t = String(text || '').replace(/\{@\w+ ([^|}]+)[^}]*\}/g, '$1').replace(/\s+/g, ' ');
+  const own = /^\s*while (?:you(?:'re| are)? )?(?:wear|wearing|hold|holding|carry|carrying|attuned|wield|wielding)\b[^,]*,\s*/i;
+  const skills = words => Object.keys(SKT_SKILL_LABEL).filter(k => words.includes(String(SKT_SKILL_LABEL[k]).toLowerCase()));
+  const cond = /\b(when|whenever|if|until|for 1 minute|for the next|the first|target|after)\b/i;
+  const note = s => { s = s.charAt(0).toUpperCase() + s.slice(1); const n = name + ': ' + (s.length > 200 ? s.slice(0, 197).replace(/\s\S*$/, '') + '…' : s); if (!out.notes.includes(n)) out.notes.push(n); };
+  t.split(/(?<=[.!?])\s+/).forEach(s0 => {
+    const s = s0.replace(own, '').replace(/\s+while you (?:wear|hold|carry|wield) (?:this|these|it|them)[^.]*/i, '');
+    const a = /(?<!dis)advantage on ([^.;]*?\b(?:checks?|rolls?))(?![^.;]*\b(?:checks?|rolls?)\b)([^.;]*)/i.exec(s);
+    if (a){
+      const words = a[1].toLowerCase();
+      if (/saving throw|attack roll/.test(words)){ note(s.trim()); return; }
+      const on = [];
+      if (/initiative/.test(words)) on.push('init');
+      const sk = skills(words);
+      sk.forEach(k => on.push('check:' + k.replace(/[A-Z]/g, c => '_' + c.toLowerCase())));
+      if (!sk.length && !/\(/.test(words)) (words.match(/\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\b/g) || []).forEach(x => on.push('ab:' + x.slice(0, 3)));
+      if (on.length){
+        if (cond.test(s.slice(0, a.index)) || a[2].trim()) note(s.trim());
+        else out.adv.push({ on: [...new Set(on)], label: name });
+      }
+    } else if (/(?<!dis)advantage on saving throws/i.test(s)) note(s.trim());
+    const b = /\+(\d+) bonus to ([^.;]*?\bchecks?)([^.;]*)/i.exec(s);
+    if (b){
+      const sk = skills(b[2].toLowerCase());
+      if (sk.length && !cond.test(s.slice(0, b.index))) sk.forEach(k => { out.skill[k] = (out.skill[k] || 0) + (+b[1]); });
+    }
+  });
+  return out.adv.length || out.notes.length || Object.keys(out.skill).length ? out : null;
+}
 // What items that improve unarmed strikes add to them.
 function sktItemUnarmedBonus(items){
   return (items || []).filter(m => m && m.unarmed).reduce((n, m) => n + (+m.bonusWeapon || 0), 0);
 }
+// An item's named properties ("Mark of Courage", "Wind Step"), each with its
+// own text, so the sheet can list them one by one.
+function _sktItemProps(entries){
+  const out = [];
+  (entries || []).forEach(e => { if (e && typeof e === 'object' && e.type === 'entries' && e.name) out.push({ name: String(e.name), text: sktRulesText(e.entries || []) }); });
+  return out.length ? out : null;
+}
+// Items whose data lists a bonus that belongs to something else: the Banner
+// of the Krig Rune's +1 to attacks and AC is the area its Gift of Battle
+// makes, not the bearer's.
+const SKT_ITEM_PLACE_BONUS = new Set(['Banner of the Krig Rune']);
 function _sktMagicEntry(i, kind){
   const t = String(i.type || '').split('|')[0];
   const isGear = /^(M|R|LA|MA|HA|S)$/.test(t);
@@ -3497,7 +3550,7 @@ function _sktMagicEntry(i, kind){
     stats: isGear && !i.baseItem ? { name: i.name, type: i.type, ac: i.ac, dmg1: i.dmg1, dmg2: i.dmg2, dmgType: i.dmgType,
                                     property: i.property, weaponCategory: i.weaponCategory, range: i.range, strength: i.strength } : null,
     bonusWeapon: _sktBonus(i.bonusWeapon), bonusWeaponAttack: _sktBonus(i.bonusWeaponAttack), bonusWeaponDamage: _sktBonus(i.bonusWeaponDamage),
-    bonusAc: _sktBonus(i.bonusAc), bonusSavingThrow: _sktBonus(i.bonusSavingThrow),
+    bonusAc: SKT_ITEM_PLACE_BONUS.has(i.name) ? 0 : _sktBonus(i.bonusAc), bonusSavingThrow: _sktBonus(i.bonusSavingThrow),
     bonusSpellAttack: _sktBonus(i.bonusSpellAttack), bonusSpellSaveDc: _sktBonus(i.bonusSpellSaveDc),
     ability: i.ability || null, resist: (i.resist || []).filter(r => typeof r === 'string'),
     unarmoredOnly: /wearing no armou?r/i.test(text), noShield: /no armou?r and (are )?(not )?(using|wielding) (a|no) shield|no shield/i.test(text),
@@ -3505,6 +3558,8 @@ function _sktMagicEntry(i, kind){
     // "by a bard", "by a spellcaster": who can attune, as the book words it.
     attuneBy: typeof i.reqAttune === 'string' ? i.reqAttune : '',
     spells: _sktItemSpells(i.attachedSpells),
+    props: _sktItemProps(i.entries),
+    textFx: sktItemTextFx(i.name, text),
     // A weapon bonus on something that isn't a weapon, for unarmed strikes.
     unarmed: !isGear && !i.baseItem && !!_sktBonus(i.bonusWeapon) && /unarmed strike/i.test(text),
     immune: (i.immune || []).filter(r => typeof r === 'string'), conditionImmune: (i.conditionImmune || []).filter(r => typeof r === 'string'),
@@ -3555,6 +3610,7 @@ function sktMagicMake(R, e, baseKey){
   ['bonusAbilityCheck', 'bonusProficiencyBonus', 'bonusSavingThrowConcentration'].forEach(k => { if (e[k]) out[k] = e[k]; });
   if (e.spells) out.spells = e.spells;
   if (e.unarmed) out.unarmed = true;
+  if (e.textFx) out.textFx = e.textFx;
   if (e.unarmoredOnly) out.unarmoredOnly = true;
   if (e.noShield) out.noShield = true;
   if (e.charges){ out.charges = e.charges; out.recharge = e.recharge; if (e.rechargeAmount) out.rechargeAmount = e.rechargeAmount; }
