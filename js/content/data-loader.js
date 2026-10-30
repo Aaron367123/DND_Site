@@ -975,11 +975,11 @@ async function load5eData() {
 // mid-range phone's speed, monsters 3.6 s of it), and in one piece it froze
 // the page: no taps, no scrolling, for six seconds on a player's first
 // visit. It now hands the page a turn every ~30 ms. The index it makes is
-// the same. scheduler.yield where there is one, else a message — not a
-// timer, which a background tab slows to once a second.
+// the same. A message, not scheduler.yield — whose continuation jumps the
+// queue, so a window opened mid-build waited for the whole build — and not
+// a timer, which a background tab slows to once a second.
 let _skYieldAt = 0;
 function _skYieldNow(){
-  if (typeof scheduler !== 'undefined' && scheduler && typeof scheduler.yield === 'function') return scheduler.yield();
   return new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
 }
 async function _skYield(){
