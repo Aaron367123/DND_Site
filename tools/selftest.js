@@ -11791,6 +11791,35 @@
       } catch(e){ ok('round 126 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { B._applyViewScale(vs0); closePanel('battlemap'); } catch(e){} }
     }
+    // -- Round 127: the rules index builds without freezing the page -------
+    {
+      const sig = rows => { let h = 0; for (const r of rows){ const s = r.cat + '|' + r.name + '|' + (r._source || '') + '|' + (r._h || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; } return h; };
+      const prev = _5eData, n0 = prev.length, h0 = sig(prev), rp0 = [..._5eReprintTo];
+      try {
+        // Built again from the files, watching for the page being held.
+        const lts = []; const ob = new PerformanceObserver(l => lts.push(...l.getEntries())); ob.observe({ type: 'longtask' });
+        _5eLoaded = false; _5eLoading = false;
+        await _buildIndexFromFiles();
+        await sleep(60); ob.disconnect();
+        const worst = Math.max(0, ...lts.map(e => e.duration));
+        ok('data: building the rules index gives the page a turn (no pause over 250 ms)', worst < 250, Math.round(worst) + ' ms, ' + lts.length + ' long tasks');
+        ok('data: and builds the same index as before', _5eLoaded && _5eData.length === n0 && sig(_5eData) === h0, _5eData.length + ' rows');
+        // Saved in chunks, read back whole.
+        for (let i = 0; i < 100; i++){ await sleep(100); const db = await _idbOpen(); const m = await _idbGet(db, 'meta'); db.close(); if (m && m.chunks) break; }
+        const db = await _idbOpen(); const meta = await _idbGet(db, 'meta'); db.close();
+        const hit = await _cacheHydrate();
+        ok('data: the saved index is in chunks and reads back whole', meta && meta.chunks > 1 && hit && hit.rows.length === n0 && sig(hit.rows) === h0, JSON.stringify(meta));
+        // One saved the old way (a single "rows") still reads.
+        await new Promise((res, rej) => { _idbOpen().then(d => { const t = d.transaction('index', 'readwrite'); const os = t.objectStore('index');
+          os.put(hit.rows.slice(0, 50), 'rows'); os.put({ key: meta.key, builtAt: Date.now(), rowCount: 50 }, 'meta'); t.oncomplete = () => { d.close(); res(); }; t.onerror = () => rej(t.error); }); });
+        const old = await _cacheHydrate();
+        ok('data: an index saved before the chunks still reads', old && old.rows.length === 50);
+      } catch(e){ ok('round 127 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        // The saved copy back to the real one, chunked.
+        try { _schedulePersist(_5eData && _5eData.length ? _5eData : prev, rp0); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

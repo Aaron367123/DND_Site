@@ -870,7 +870,17 @@ async function _cacheHydrate(){
   try {
     const meta = await _idbGet(db, 'meta');
     if (!meta || meta.key !== CACHE_KEY) return null;          // stale or absent
-    const rows = await _idbGet(db, 'rows');
+    // In chunks (meta.chunks), each read its own task, so a phone isn't
+    // frozen while 16k rows are rebuilt from storage; or one piece, as a
+    // cache written before the chunks was.
+    let rows = [];
+    if (meta.chunks){
+      for (let i = 0; i < meta.chunks; i++){
+        const part = await _idbGet(db, 'rows' + i);
+        if (!Array.isArray(part)) return null;                 // half-written: a miss
+        for (let j = 0; j < part.length; j++) rows.push(part[j]);
+      }
+    } else rows = await _idbGet(db, 'rows');
     if (!Array.isArray(rows) || !rows.length) return null;     // treat empty as a miss
     const reprintTo = await _idbGet(db, 'reprintTo');
     return { rows, reprintTo: Array.isArray(reprintTo) ? reprintTo : [] };
@@ -884,16 +894,28 @@ function _schedulePersist(rows, reprintTo){
   const run = async () => {
     try {
       const db = await _idbOpen();
+      // Each write is its own transaction: storing all 16k rows in one put
+      // copied them in one go, 0.8 s with the page frozen on a phone. In
+      // chunks of 1,500 with a turn for the page between them. meta still
+      // goes last, so a half-written cache reads as a miss.
+      const write = (fn) => new Promise((resolve, reject) => {
+        const tx = db.transaction(_IDB_STORE, 'readwrite');
+        fn(tx.objectStore(_IDB_STORE));
+        tx.oncomplete = resolve;
+        tx.onerror    = () => reject(tx.error);
+        tx.onabort    = () => reject(tx.error || new Error('idb abort'));
+      });
       try {
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(_IDB_STORE, 'readwrite');
-          const os = tx.objectStore(_IDB_STORE);
-          os.put(rows, 'rows');
+        const CHUNK = 1500, n = Math.ceil(rows.length / CHUNK);
+        await write(os => os.delete('meta'));
+        for (let i = 0; i < n; i++){
+          await write(os => os.put(rows.slice(i * CHUNK, (i + 1) * CHUNK), 'rows' + i));
+          await _skYieldNow();
+        }
+        await write(os => {
+          os.delete('rows');
           os.put(reprintTo, 'reprintTo');
-          os.put({ key: CACHE_KEY, builtAt: Date.now(), rowCount: rows.length }, 'meta');
-          tx.oncomplete = resolve;
-          tx.onerror    = () => reject(tx.error);
-          tx.onabort    = () => reject(tx.error || new Error('idb abort'));
+          os.put({ key: CACHE_KEY, builtAt: Date.now(), rowCount: rows.length, chunks: n }, 'meta');
         });
         console.info('[SKT] index cached (' + rows.length + ' rows · stamp ' + CACHE_KEY + ')');
       } finally { try { db.close(); } catch(e){} }
@@ -938,13 +960,38 @@ async function load5eData() {
   _5eLoading = true;
   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   try {
-    const hit = await _withTimeout(_cacheHydrate(), 3000);
+    // Long enough for a slow phone to read the chunks; a hung IndexedDB
+    // still falls through to building from the files.
+    const hit = await _withTimeout(_cacheHydrate(), 8000);
     if (hit){ _finishLoad(hit.rows, hit.reprintTo, 'cache', t0); return; }
   } catch(e){
     console.warn('[SKT] index cache read failed; rebuilding from files —', e && e.message || e);
   }
   _5eLoading = false;   // handed off to the builder
   return _buildIndexFromFiles();
+}
+
+// The first build on a phone is several seconds of work (about 9 s at a
+// mid-range phone's speed, monsters 3.6 s of it), and in one piece it froze
+// the page: no taps, no scrolling, for six seconds on a player's first
+// visit. It now hands the page a turn every ~30 ms. The index it makes is
+// the same. scheduler.yield where there is one, else a message — not a
+// timer, which a background tab slows to once a second.
+let _skYieldAt = 0;
+function _skYieldNow(){
+  if (typeof scheduler !== 'undefined' && scheduler && typeof scheduler.yield === 'function') return scheduler.yield();
+  return new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
+}
+async function _skYield(){
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (now - _skYieldAt < 30) return;
+  await _skYieldNow();
+  _skYieldAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+}
+// forEach that gives the page a turn as it goes.
+async function _skEach(list, fn){
+  const a = list || [];
+  for (let i = 0; i < a.length; i++){ fn(a[i], i); if ((i & 7) === 7) await _skYield(); }
 }
 
 async function _buildIndexFromFiles() {
@@ -1474,7 +1521,8 @@ async function _buildIndexFromFiles() {
       _monsterFluffByKey[k] = m;
     });
   });
-  Object.entries(_monsterFluffByKey).forEach(([k, m]) => {
+  await _skYield();
+  await _skEach(Object.entries(_monsterFluffByKey), ([k, m]) => {
     const resolved = m._copy ? _resolveCopy(m, _monsterFluffByKey, 0) : m;
     if (!resolved.images || !resolved.images.length) return;
     const first = resolved.images.find(im => im && im.href && im.href.path && im.imageType !== 'map' && im.imageType !== 'mapPlayer');
@@ -1494,8 +1542,8 @@ async function _buildIndexFromFiles() {
       if (!_monsterByKey[k]) _monsterByKey[k] = d;
     });
   });
-  _allRawMonsters.forEach(d => addMonster(d._copy ? _resolveCopy(d, _monsterByKey, 0) : d));
-  spellbooks.forEach(json     => json && (json.spell      ||[]).forEach(addSpell));
+  await _skEach(_allRawMonsters, d => addMonster(d._copy ? _resolveCopy(d, _monsterByKey, 0) : d));
+  for (const json of spellbooks) if (json) await _skEach(json.spell, addSpell);
   conditionFiles.forEach(json => { if (!json) return; (json.condition||[]).forEach(addCondition); });
   // Index every itemEntry template (e.g. "Absorbing Tattoo|TCE") so items
   // that reference one via {#itemEntry …} can have it resolved during
@@ -1520,7 +1568,7 @@ async function _buildIndexFromFiles() {
       const k = ((d.name||'') + '|' + (d.source||'')).toLowerCase();
       if (!_itemRawByKey[k]) _itemRawByKey[k] = d;
     });
-  if (itemFile) (itemFile.item||[]).forEach(d => addItem(d && d._copy ? _resolveCopy(d, _itemRawByKey, 0) : d));
+  if (itemFile) await _skEach(itemFile.item, d => addItem(d && d._copy ? _resolveCopy(d, _itemRawByKey, 0) : d));
   // Base items: mundane gear / weapons / armor / tools.
   const baseItems = (baseItemFile?.baseitem) || [];
 
@@ -1534,7 +1582,7 @@ async function _buildIndexFromFiles() {
     const namedVariants = allVariants.filter(v => !bonusRe.test(v.name||''));
 
     // Add each base item with its matching bonus variants attached as tabs.
-    baseItems.forEach(b => {
+    await _skEach(baseItems, b => {
       // Dedupe by tab label — both DMG and XDMG carry "+1 Weapon", but the
       // user only wants one "+1" tab. The first match wins.
       const byLabel = new Map();
@@ -1567,11 +1615,14 @@ async function _buildIndexFromFiles() {
     });
 
     // Standalone named variants (Adamantine Weapon, Mariner's Armor, etc.).
-    expandMagicVariants(baseItems, namedVariants).forEach(d => addItem(d));
+    await _skYield();
+    await _skEach(expandMagicVariants(baseItems, namedVariants), d => addItem(d));
   } else {
     baseItems.forEach(d => addItem(d));
   }
-  if (featFile) (featFile.feat||[]).forEach(addFeat);
+  await _skYield();
+  if (featFile) await _skEach(featFile.feat, addFeat);
+  await _skYield();
 
   // Classes, subclasses, and class/subclass features.
   // For each class file we build feature lookup tables, then attach the
@@ -1698,10 +1749,11 @@ async function _buildIndexFromFiles() {
     });
   });
 
-  _refSpecs.forEach(spec => {
+  await _skYield();
+  for (const spec0 of _refSpecs) await (async spec => {
     const json = _refByPath[spec.path];
     if (!json) return;
-    (json[spec.arr]||[]).forEach(d => {
+    await _skEach(json[spec.arr], d => {
       if (d && d._copy) d = _resolveCopy(d, _refRawByCatKey[spec.cat] || {}, 0);
       let meta = '', display, dedupe;
       switch (spec.cat) {
@@ -1781,7 +1833,7 @@ async function _buildIndexFromFiles() {
       }
       addRef(spec.cat, d, meta, {displayName: display, dedupeKey: dedupe});
     });
-  });
+  })(spec0);
 
   // ── Adventures are deliberately NOT indexed ──────────────────────────────
   // This used to fetch all ~98 per-adventure files (≈45 MB) and flatten their
@@ -1813,6 +1865,7 @@ async function _buildIndexFromFiles() {
   // lets `_raw` be dropped from the cached index and fetched lazily per entry.
   // Costs ~0.3 MB on a 7 MB index.
   for (let i = 0; i < results.length; i++){
+    if ((i & 127) === 127) await _skYield();
     const r = results[i];
     r._n = _normSearchIdx(r.name);
     let h = r._n + ' ' + _normSearchIdx(r.meta || '');
