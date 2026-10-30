@@ -1237,8 +1237,9 @@ registerPanel('battlemap',{
 
     if (this._mapRotation){
       // Viewport box in un-scaled #map-zoom coordinates.
-      const zx0 = scroll.scrollLeft / vs,       zy0 = scroll.scrollTop / vs;
-      const zx1 = (scroll.scrollLeft + vw) / vs, zy1 = (scroll.scrollTop + vh) / vs;
+      const so = this._sizerOff(scroll);
+      const zx0 = (scroll.scrollLeft - so.x) / vs,      zy0 = (scroll.scrollTop - so.y) / vs;
+      const zx1 = (scroll.scrollLeft - so.x + vw) / vs, zy1 = (scroll.scrollTop - so.y + vh) / vs;
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (const [zx, zy] of [[zx0,zy0],[zx1,zy0],[zx0,zy1],[zx1,zy1]]){
         const d = this._stageDelta(zx - W / 2, zy - H / 2);
@@ -1775,6 +1776,14 @@ registerPanel('battlemap',{
   //
   // Replaces the old _applyZoomTransform, which resized every canvas and
   // rebaked token coords because zoom used to BE the world scale.
+  // A map smaller than its window sits in the middle of it (#map-sizer's
+  // auto margins in a grid, main.css): the gap before the map, in scroll
+  // units. Zero once the map is bigger than the window, so scrolling is as
+  // it was. The zoom and pinch anchors measure from the map, not the corner.
+  _sizerOff(scrollEl){
+    const sizer = scrollEl && scrollEl.querySelector('#map-sizer');
+    return { x: sizer ? sizer.offsetLeft : 0, y: sizer ? sizer.offsetTop : 0 };
+  },
   _applyViewScale(v){
     if (v != null) this._viewScale = this._clampView(v);
     const b = this._body; if (!b) return;
@@ -3644,15 +3653,17 @@ registerPanel('battlemap',{
       const _wz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
       const cx = (e.clientX - rect.left)/_wz, cy = (e.clientY - rect.top)/_wz;
       // Stage-space point under the cursor before the zoom.
-      const imgX = (scrollEl.scrollLeft + cx) / oldScale;
-      const imgY = (scrollEl.scrollTop  + cy) / oldScale;
+      const off0 = this._sizerOff(scrollEl);
+      const imgX = (scrollEl.scrollLeft + cx - off0.x) / oldScale;
+      const imgY = (scrollEl.scrollTop  + cy - off0.y) / oldScale;
 
       this._isFitted = false; // manual zoom — panel resize should not re-fit
       // Display-only. No _scaleTokensTo: token coordinates are in stage space
       // and stage space does not move when this device zooms.
       this._applyViewScale(newScale);
-      scrollEl.scrollLeft = imgX * newScale - cx;
-      scrollEl.scrollTop  = imgY * newScale - cy;
+      const off1 = this._sizerOff(scrollEl);
+      scrollEl.scrollLeft = imgX * newScale - cx + off1.x;
+      scrollEl.scrollTop  = imgY * newScale - cy + off1.y;
 
       // Persist to the per-device key on settle. Note what is NOT here any
       // more: _saveMap(), which used to ship the whole battlemap blob
@@ -3734,8 +3745,8 @@ registerPanel('battlemap',{
           startScale: this._viewScale || 1,
           anchorX: mid.x, anchorY: mid.y,
           // Stage-space point under the pinch center, captured at the start.
-          imgX: (scrollEl.scrollLeft + mid.x) / (this._viewScale || 1),
-          imgY: (scrollEl.scrollTop  + mid.y) / (this._viewScale || 1),
+          imgX: (scrollEl.scrollLeft + mid.x - this._sizerOff(scrollEl).x) / (this._viewScale || 1),
+          imgY: (scrollEl.scrollTop  + mid.y - this._sizerOff(scrollEl).y) / (this._viewScale || 1),
         };
         this._isFitted = false;
       }
@@ -3750,8 +3761,9 @@ registerPanel('battlemap',{
         // Display-only, exactly like the wheel path — a player pinching their
         // phone must not rescale the DM's tokens.
         this._applyViewScale(newScale);
-        scrollEl.scrollLeft = _touchPinch.imgX * newScale - _touchPinch.anchorX;
-        scrollEl.scrollTop  = _touchPinch.imgY * newScale - _touchPinch.anchorY;
+        const po = this._sizerOff(scrollEl);
+        scrollEl.scrollLeft = _touchPinch.imgX * newScale - _touchPinch.anchorX + po.x;
+        scrollEl.scrollTop  = _touchPinch.imgY * newScale - _touchPinch.anchorY + po.y;
       } else if (_touchPan && e.touches.length === 1){
         const t = e.touches[0];
         const dx = t.clientX - _touchPan.startX, dy = t.clientY - _touchPan.startY;

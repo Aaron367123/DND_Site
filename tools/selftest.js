@@ -11765,6 +11765,32 @@
         state.party.splice(0, state.party.length, ...JSON.parse(keepParty)); save();
       }
     }
+    // -- Round 126: a small map in the middle of its window ----------------
+    {
+      const B = panelDefs.battlemap, vs0 = B._viewScale;
+      try {
+        openPanel('battlemap'); await sleep(500);
+        const win = document.getElementById('panel-body-battlemap').closest('.window');
+        const box0 = { w: win.style.width, h: win.style.height };
+        win.style.width = '1000px'; win.style.height = '700px'; await sleep(300);
+        const sc = document.querySelector('#map-scroll');
+        const gaps = () => { const st = document.querySelector('#map-stage').getBoundingClientRect(), r = sc.getBoundingClientRect();
+          return { l: Math.round(st.left - r.left), r: Math.round(r.right - st.right), t: Math.round(st.top - r.top), b: Math.round(r.bottom - st.bottom) }; };
+        B._applyViewScale(0.3); await sleep(80); sc.scrollLeft = 0; sc.scrollTop = 0;
+        const g = gaps();
+        ok('map: a map smaller than its window sits in the middle of it', g.l > 20 && Math.abs(g.l - g.r) <= 2 && Math.abs(g.t - g.b) <= 2, JSON.stringify(g));
+        // Zooming in from there keeps the point under the cursor where it was.
+        const st = document.querySelector('#map-stage').getBoundingClientRect();
+        const cx = st.left + st.width * 0.5, cy = st.top + st.height * 0.5, p0 = B._stagePoint(cx, cy);
+        for (let i = 0; i < 16; i++){ sc.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: cx, clientY: cy, bubbles: true, cancelable: true })); await sleep(15); }
+        await sleep(150);
+        const p1 = B._stagePoint(cx, cy), drift = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        ok('map: zooming in on a centred map keeps the point under the cursor', drift < 10 && sc.scrollWidth > sc.clientWidth, Math.round(drift) + ' px off at ×' + (B._viewScale || 1).toFixed(2));
+        ok('map: once bigger than the window, it starts at the edge and scrolls (nothing cut off)', B._sizerOff(sc).x === 0 && B._sizerOff(sc).y === 0);
+        win.style.width = box0.w; win.style.height = box0.h;
+      } catch(e){ ok('round 126 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { B._applyViewScale(vs0); closePanel('battlemap'); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -801,3 +801,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .feat-section .feat-lvl.act { text-transform: none; letter-spacing: 0; }
 /* The AC guess, in a line. */
 .cs-pdfgear-guess { color: var(--text-muted); }
+
+/* ── 37. A small map sits in the middle of its window ────── */
+/* A map smaller than the window sat in its top-left corner with black to
+   the right and below. Auto margins in a grid centre it, and fall back to
+   0 once the map is bigger, so it scrolls from its edge as before (unlike
+   justify/align-content: center, which would cut off the left of a big map). */
+#map-scroll { display: grid; }
+#map-sizer { margin: auto; }
