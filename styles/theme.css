@@ -788,3 +788,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 /* What an item does, in a line under its name; what only sometimes applies, dimmer. */
 .cs-mi-fx { font-size: var(--fs-sm); color: var(--text-muted); margin: 2px 0 0 12px; }
 .cs-mi-fx.cs-mi-when { color: var(--text-dim); font-style: italic; }
+
+/* ── 36. The sheet's details ─────────────────────────────── */
+/* Inspiration and Bardic share one box; at a fifth of the strip their
+   labels shrank to 9px beside AC and Initiative's. A wider fifth box. */
+@media (min-width: 761px) {
+  #cs-root .cs-boxes { grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.5fr); }
+}
+/* A feature's book, quietly ("14PHB" in bold red read like an error). */
+.sheet-block.feat-section .detail-source-badge { color: var(--text-dim); font-weight: 500; font-variant: normal; letter-spacing: 0; }
+/* The action kind on a feature: a word, in normal case. */
+.feat-section .feat-lvl.act { text-transform: none; letter-spacing: 0; }
+/* The AC guess, in a line. */
+.cs-pdfgear-guess { color: var(--text-muted); }

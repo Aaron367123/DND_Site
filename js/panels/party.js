@@ -646,28 +646,28 @@ registerPanel('party',{
     const sections = [];
     if (raceEntry){
       sections.push(`<div class="sheet-block feat-section">
-        <h5>🌿 Race: ${esc(raceEntry.name)}${raceEntry._source?` <span class="detail-source-badge">${esc(_formatSource(raceEntry._source))}</span>`:''}</h5>
+        <h5>Race: ${esc(raceEntry.name)}${raceEntry._source?` <span class="detail-source-badge">${esc(_formatSource(raceEntry._source))}</span>`:''}</h5>
         ${renderRaceFeatures(raceEntry)}
       </div>`);
     } else if (raceName){
-      sections.push(`<div class="sheet-block feat-section"><h5>🌿 Race</h5><div class="sheet-empty">No 5etools entry matched "${esc(c.race)}". Check spelling (case-insensitive match on name).</div></div>`);
+      sections.push(`<div class="sheet-block feat-section"><h5>Race</h5><div class="sheet-empty">No 5etools entry matched "${esc(c.race)}". Check spelling (case-insensitive match on name).</div></div>`);
     }
     if (classEntry){
       sections.push(`<div class="sheet-block feat-section">
-        <h5>⚔ Class: ${esc(classEntry.name)} <span class="feat-lvl-pill">level ${pcLevel||'?'}</span></h5>
+        <h5>Class: ${esc(classEntry.name)} <span class="feat-lvl-pill">level ${pcLevel||'?'}</span></h5>
         ${renderFeatureList(classEntry._raw?._resolvedFeatures, 'class', {dropSubclassMarkers:true})}
         ${!subEntry && pcLevel >= 3 ? '<div class="sheet-empty" style="text-align:left;padding:6px 8px">✦ <strong>Subclass features</strong> — set <em>Subclass</em> in Manage Party → ✏ Edit details to see the chosen archetype\'s features.</div>' : ''}
       </div>`);
     } else if (clsName){
-      sections.push(`<div class="sheet-block feat-section"><h5>⚔ Class</h5><div class="sheet-empty">No 5etools class matched "${esc(c.cls)}". Try "Fighter", "Wizard", etc.</div></div>`);
+      sections.push(`<div class="sheet-block feat-section"><h5>Class</h5><div class="sheet-empty">No 5etools class matched "${esc(c.cls)}". Try "Fighter", "Wizard", etc.</div></div>`);
     }
     if (subEntry){
       sections.push(`<div class="sheet-block feat-section">
-        <h5>✦ Subclass: ${esc(subEntry.name)}</h5>
+        <h5>Subclass: ${esc(subEntry.name)}</h5>
         ${renderFeatureList(subEntry._raw?._resolvedFeatures, 'subclass')}
       </div>`);
     } else if (subName){
-      sections.push(`<div class="sheet-block feat-section"><h5>✦ Subclass</h5><div class="sheet-empty">No 5etools subclass matched "${esc(c.subclass)}" for ${esc(c.cls||'class')}.</div></div>`);
+      sections.push(`<div class="sheet-block feat-section"><h5>Subclass</h5><div class="sheet-empty">No 5etools subclass matched "${esc(c.subclass)}" for ${esc(c.cls||'class')}.</div></div>`);
     }
 
     // What this character can actually activate, read off their own imported
@@ -684,7 +684,7 @@ registerPanel('party',{
     const notes = (c.build && c.sheet && Array.isArray(c.sheet.notes)) ? c.sheet.notes : [];
     if (notes.length){
       sections.unshift(`<div class="sheet-block feat-section">
-        <h5>📌 Always in effect <span class="feat-lvl-pill">${notes.length}</span></h5>
+        <h5>Always in effect <span class="feat-lvl-pill">${notes.length}</span></h5>
         ${notes.map(n => `<div class="feat-note">${esc(n)}</div>`).join('')}
       </div>`);
     }
@@ -695,7 +695,7 @@ registerPanel('party',{
       // one did nothing while the class features right below it opened —
       // and a tooltip is no use at all on a touch screen.
       sections.unshift(`<div class="sheet-block feat-section">
-        <h5>⚡ Activatable <span class="feat-lvl-pill">${acts.length}</span></h5>
+        <h5>Activatable <span class="feat-lvl-pill">${acts.length}</span></h5>
         ${acts.map(a => {
           const p = pool(a.resource || a.name);
           const n = a.amount || 1;
@@ -703,7 +703,7 @@ registerPanel('party',{
           const cost = p ? `${n} ${unit} · ${p.current}/${p.max}` : (a.uses || '');
           const from = (a.feature && a.feature !== a.name) ? a.feature : '';
           return `<details class="feat-block">
-            <summary><span class="feat-lvl act">${esc(sktActionShort(a.action))}</span> ${esc(a.name)}
+            <summary><span class="feat-lvl act">${esc(({ BONUS: 'Bonus', REACT: 'Reaction', ACT: 'Action', MAGIC: 'Magic', SPEC: 'Special', FREE: 'Free', LEG: 'Legendary' })[sktActionShort(a.action)] || String(a.action || '').replace(/^./, c => c.toUpperCase()))}</span> ${esc(a.name)}
               ${cost ? `<span class="feat-cost">${esc(cost)}</span>` : ''}</summary>
             <div class="feat-body">
               ${from ? `<div class="feat-from">from ${esc(from)}</div>` : ''}
@@ -716,7 +716,7 @@ registerPanel('party',{
 
     if (!sections.length){
       return `<div class="sheet-empty">
-        Set <strong>Race</strong>, <strong>Class</strong>, and <strong>Subclass</strong> on this character (use 📋 Manage Party → ✏ Edit details) to see their features here.
+        Set <strong>Race</strong>, <strong>Class</strong>, and <strong>Subclass</strong> on this character (Edit details, in the card's ⋯ menu) to see their features here.
       </div>`;
     }
     return sections.join('');

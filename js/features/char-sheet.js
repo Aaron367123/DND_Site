@@ -378,7 +378,7 @@ function csTop(pc){
     })()
     + (ro ? '' : '<div class="cs-hp-ctl"><input type="number" min="0" data-cs-amt value="' + (CS.amt || 5) + '" aria-label="Amount">'
       + '<button class="btn" data-cs-hp="-1">Damage</button><button class="btn" data-cs-hp="1">Heal</button><button class="btn" data-cs-hp="temp">Temp</button>'
-      + '<select class="cb-sel" data-cs-dtype aria-label="Damage type"><option value="">type…</option>' + ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
+      + '<select class="cb-sel" data-cs-dtype aria-label="Damage type"><option value="">Damage type</option>' + ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
         .map(t => '<option' + (CS.dtype === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>')
     + '</div>';
   // The boxes D&D Beyond puts along the top.
@@ -1845,6 +1845,10 @@ function csPdfGearHtml(pc){
   const describe = d => [d.armor ? (d.bonus ? '+' + d.bonus + ' ' : '') + nm(d.armor) : 'no armour', d.shield ? (d.shieldBonus ? '+' + d.shieldBonus + ' ' : '') + 'shield' : ''].filter(Boolean).join(' and ');
   if (g && !CS.pdfGearEdit) return '<div class="cs-pdfgear">AC <b>' + g.pdfAc + '</b> from the PDF: ' + csE(describe(g.decl)) + (g.misc ? ', plus ' + (g.misc > 0 ? '+' : '') + g.misc + ' from elsewhere' : '')
     + ' <button class="cs-linkbtn" data-cs="pdfgearedit">change</button></div>';
+  // Not confirmed yet: the guess in a line, not a box on every imported
+  // character's inventory. "check" opens the question.
+  if (!g && !CS.pdfGearEdit) return '<div class="cs-pdfgear cs-pdfgear-guess">AC <b>' + pc.ac + '</b> from the PDF, guessed as ' + csE(describe(csGuessPdfGear(pc, R)))
+    + ' <button class="cs-linkbtn" data-cs="pdfgearedit">check</button></div>';
   const d = g ? g.decl : csGuessPdfGear(pc, R);
   const armors = Object.keys(R.items).filter(k => /^(LA|MA|HA)$/.test(String(R.items[k].type || '').split('|')[0]) && (!R.items[k].rarity || R.items[k].rarity === 'none'))
     .sort((a, b) => (+R.items[a].ac || 0) - (+R.items[b].ac || 0));

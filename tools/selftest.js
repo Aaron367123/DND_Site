@@ -9075,7 +9075,9 @@
         const R = await sktRulesLoad('2024');
         const mk = (id, o) => { state.party = state.party.filter(p => p.id !== id); state.party.push(Object.assign({ id, foe: false, level: 6, hp: 40, hpMax: 40, inventory: [], resistances: [],
           sheet: { profBonus: 3, saves: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, attacks: [], bio: { features: '' } } }, o)); save(); return () => state.party.find(p => p.id === id); };
-        const open = async id => { openCharSheet(id, { tab: 'inventory' }); for (let i = 0; i < 80 && !(CS.R && CS.gear && CS.magic); i++) await sleep(100); csRender(); await sleep(20); };
+        // The AC question is a line with "check" until it's opened.
+        const open = async id => { openCharSheet(id, { tab: 'inventory' }); for (let i = 0; i < 80 && !(CS.R && CS.gear && CS.magic); i++) await sleep(100); csRender(); await sleep(20);
+          const ck = document.querySelector('#cs-root .cs-pdfgear-guess [data-cs="pdfgearedit"]'); if (ck){ ck.click(); await sleep(20); } };
         const q = s => document.querySelector('#cs-root ' + s);
         const add = (label, item) => new Promise(r => { csItemsEdit(label, l => { l.push(item); }); setTimeout(r, 40); });
         const inv = pc => pc().inventory || [];
@@ -11732,6 +11734,32 @@
         ok('items: a sentient weapon that speaks Common doesn’t teach you Common', !(dawn && dawn.textFx && dawn.textFx.langs));
         csClose(); await sleep(100);
       } catch(e){ ok('round 124 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { csClose(); } catch(e){}
+        state.party.splice(0, state.party.length, ...JSON.parse(keepParty)); save();
+      }
+    }
+    // -- Round 125: the sheet's details, quieter --------------------------
+    {
+      const keepParty = JSON.stringify(state.party);
+      try {
+        const zi = state.party.findIndex(p => /Zindle/.test(p.name)), Z = state.party[zi];
+        delete Z.acGear; Z.inventory = []; Z.race = Z.race || 'Half-Elf';
+        openCharSheet(Z.id, { tab: 'inventory' });
+        for (let i = 0; i < 80 && !(CS.R && CS.gear && CS.magic); i++) await sleep(100);
+        csRender(); await sleep(30);
+        const q = s => document.querySelector('#cs-root ' + s);
+        ok('sheet: the AC guess is a line with “check”, not an open question', !!q('.cs-pdfgear-guess [data-cs="pdfgearedit"]') && !q('[data-cs-pdfarmor]'));
+        q('.cs-pdfgear-guess [data-cs="pdfgearedit"]').click(); await sleep(40);
+        ok('sheet: “check” opens it', !!q('[data-cs-pdfarmor]'));
+        ok('sheet: the damage type list says what it is', (q('[data-cs-dtype] option') || {}).textContent === 'Damage type');
+        const ib = q('.cs-inspbox'), ac = q('.cs-boxes > .cs-box');
+        ok('sheet: Inspiration’s box is wider than AC’s, so its label isn’t shrunk', ib && ac && ib.getBoundingClientRect().width > ac.getBoundingClientRect().width * 1.3,
+          ib && Math.round(ib.getBoundingClientRect().width) + ' vs ' + Math.round(ac.getBoundingClientRect().width));
+        csClose(); await sleep(50);
+        const feat = panelDefs.party._tabFeatures(Object.assign({}, Z, { resources: [{ name: 'Bardic Inspiration', current: 3, max: 3 }] }));
+        ok('features: headings without coloured symbols', !/[\u{1F300}-\u{1FAFF}⚡⚔✦📌🌿📋✏]/u.test(feat), (feat.match(/<h5>[^<]{0,30}/g) || []).join(' | '));
+      } catch(e){ ok('round 125 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         try { csClose(); } catch(e){}
         state.party.splice(0, state.party.length, ...JSON.parse(keepParty)); save();
