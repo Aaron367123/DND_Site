@@ -1373,6 +1373,25 @@ function sktSpeciesResist(sp, sub, build){
   if (!c) return null;
   return c.options.find(o => o.name === (c.kind === 'ancestry' ? sc.ancestry : sc.resist)) || null;
 }
+// What a subrace or variant is called on screen. The data files a book's
+// optional variants under the species with a "Variant;" prefix (the Sword
+// Coast's half-elf descents, Eberron's dragonmarks): "Drow Descent", not
+// "Variant; Drow Descent"; the 2014 Human's "Variant" is "Variant Human".
+function sktSubName(sp, sub){
+  const n = String((sub && sub.name) || '');
+  if (/^variant$/i.test(n)) return 'Variant ' + ((sp && sp.name) || '');
+  return n.replace(/^Variant;\s*/i, '');
+}
+// The species as the sheet names it: "High Elf", "Variant Human",
+// "Half-Elf (Drow Descent)".
+function sktSpeciesLabel(sp, sub){
+  if (!sp) return '';
+  if (!sub) return sp.name;
+  const raw = String(sub.name || '');
+  if (/^variant$/i.test(raw)) return 'Variant ' + sp.name;
+  if (/^Variant;/i.test(raw)) return sp.name + ' (' + sktSubName(sp, sub) + ')';
+  return raw + ' ' + sp.name;
+}
 // The subrace or version a build has: the one named, or for a species that
 // picks it through its lineage's spells, the version of that lineage.
 function sktSpeciesSub(sp, build){
@@ -2804,7 +2823,7 @@ function sktComputeCharacter(build, R, prior){
   const featureList = features.map(f => ({ name: f.name, from: f.from, level: f.level, text: f.text, info: f.info || undefined,
     mech: f.mech || (!f.info && (appliedName.has(f.name) || poolFeature(f) || featPicked(f) || speciesDone(f) || givesSpell(f) || ctx.applied.has(f.name) || ctx.actions.some(a => a.feature === f.name || a.name === f.name) || (ctx.saveMods || []).some(m => m.src === f.name) || ctx.rollAdv.some(x => x.label === f.name))) }));
   const subName = sub ? sub.shortName : '';
-  const speciesLabel = species ? (subrace ? subrace.name + ' ' + species.name : species.name) : '';
+  const speciesLabel = sktSpeciesLabel(species, subrace);
   const moveSrc = (subrace && subrace.speed && typeof subrace.speed === 'object') ? subrace.speed : species && species.speed;
   if (moveSrc && typeof moveSrc === 'object'){
     const other = ['fly', 'swim', 'climb', 'burrow'].filter(k => moveSrc[k]).map(k =>

@@ -776,7 +776,11 @@ CB_RENDER.species = () => {
   if (subs.length){
     // A subrace's own picture where the art pack has one ("Elf (High)").
     const subPic = s => { const p = CB.spImg ? CB.spImg.portrait(sp.name + ' (' + s.name + ')', s.source) : ''; return p && p !== hero && p !== face(sp.name, sp.source) ? p : ''; };
-    html += '<h4>' + (R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>' + cbCards(subs.map(s => ({ value: s.name, label: s.name, sub: s.core === false ? s.source : '', img: subPic(s) })), b.subspecies, 'cb-subspecies');
+    // Optional variants: the standard species is a choice too, and the one
+    // made until another is picked.
+    const std = sp.subraceOptional ? [{ value: '-', label: 'Standard ' + sp.name, sub: 'no variant' }] : [];
+    html += '<h4>' + (sp.subraceOptional ? 'Variant (optional)' : R.edition === '2014' ? 'Subrace' : 'Lineage') + '</h4>'
+      + cbCards(std.concat(subs.map(s => ({ value: s.name, label: sktSubName(sp, s), sub: s.core === false ? s.source : '', img: subPic(s) }))), b.subspecies || (sp.subraceOptional ? '-' : ''), 'cb-subspecies');
   }
   // 2024 lineages that live in additionalSpells (Elf, Gnome, Tiefling).
   const lineages = (R.edition === '2024' && Array.isArray(sp.additionalSpells) && sp.additionalSpells.length > 1)
@@ -999,7 +1003,12 @@ function cbQuickBuild(){
   const order = SKT_ABILITY_ORDER[cls.key] || SKT_ABS;
   if (!b.species){ const sp = R.species.find(s => s.name === 'Human') || pickCore(R.species); b.species = sp.name; }
   const sp = sktRulesSpecies(R, b.species);
-  if (sp.subraces.length && !b.subspecies) b.subspecies = (sp.subraces.find(s => s.core !== false) || sp.subraces[0]).name;
+  // Only a species that needs one gets a subrace (an elf, a dwarf). One whose
+  // variants are optional — a Half-Elf's Sword Coast descents, the Variant
+  // Human, a Tiefling's bloodlines — stays the standard species, as D&D
+  // Beyond makes it. This used to give every quick-built Half-Elf "Aquatic
+  // Elf Descent" from another book.
+  if (sp.subraces.length && !sp.subraceOptional && !b.subspecies) b.subspecies = (sp.subraces.find(s => s.core !== false) || sp.subraces[0]).name;
   { const rc = sktSpeciesResistChoice(sp, sktSpeciesSub(sp, b));
     if (rc && !sktSpeciesResist(sp, sktSpeciesSub(sp, b), b)){ b.speciesChoice = b.speciesChoice || {}; b.speciesChoice[rc.kind === 'ancestry' ? 'ancestry' : 'resist'] = rc.options[0].name; } }
   if (!b.background){
@@ -1896,7 +1905,7 @@ function cbOnClick(e){
     if (b.toolPicks) delete b.toolPicks.species;
     b.originFeat = '';
   });
-  if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
+  if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies === '-' ? '' : d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
   if (d.cbAncestry) return cbSet(b => { b.speciesChoice.ancestry = d.cbAncestry; });
   if (d.cbSpresist) return cbSet(b => { b.speciesChoice.resist = d.cbSpresist; });
   if (d.cbMcpick){ const [i, v] = d.cbMcpick.split('||'); return cbSet(b => { if (b.multi[+i]) b.multi[+i].subclassPick = v; }); }

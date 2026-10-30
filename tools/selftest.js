@@ -11820,6 +11820,41 @@
         try { _schedulePersist(_5eData && _5eData.length ? _5eData : prev, rp0); } catch(e){}
       }
     }
+    // -- Round 128: optional variants stay optional, with clean names -------
+    {
+      try {
+        const R = await sktRulesLoad('2014');
+        const quick = async (species, extra) => { await openCharBuilder({ edition: '2014' }); await sleep(250);
+          Object.assign(CB.build, { species, subspecies: '' }, extra || {}); CB.rec = sktComputeCharacter(CB.build, CB.R); cbQuickBuild();
+          const sub = CB.build.subspecies; cbClose(); await sleep(60); return sub; };
+        const qs = { 'Half-Elf': await quick('Half-Elf'), Human: await quick('Human'), Tiefling: await quick('Tiefling', { allBooks: true }), Dragonborn: await quick('Dragonborn', { allBooks: true }), Elf: await quick('Elf') };
+        ok('builder: Quick Build leaves a species with optional variants standard', !qs['Half-Elf'] && !qs.Human && !qs.Tiefling && !qs.Dragonborn && !!qs.Elf, JSON.stringify(qs));
+        const he = sktRulesSpecies(R, 'Half-Elf'), hu = sktRulesSpecies(R, 'Human');
+        ok('builder: a variant’s name without the data’s “Variant;”', sktSubName(he, he.subraces.find(s => /Drow/.test(s.name))) === 'Drow Descent'
+          && sktSpeciesLabel(he, he.subraces.find(s => /Drow/.test(s.name))) === 'Half-Elf (Drow Descent)'
+          && sktSpeciesLabel(hu, hu.subraces.find(s => s.name === 'Variant')) === 'Variant Human' && sktSpeciesLabel(sktRulesSpecies(R, 'Elf'), { name: 'High' }) === 'High Elf');
+        await openCharBuilder({ edition: '2014' }); await sleep(250);
+        Object.assign(CB.build, { species: 'Half-Elf', subspecies: '', allBooks: true }); cbSet(x => x); await sleep(80);
+        CB.step = 'species'; cbRender && cbRender(); await sleep(80);
+        const btn = [...document.querySelectorAll('#cb-root button')].find(x => /Species$/.test(x.textContent.trim())); btn && btn.click(); await sleep(150);
+        const cards = [...document.querySelectorAll('#cb-root [data-cb-subspecies]')];
+        ok('builder: optional variants offer the standard species first, chosen until another is', cards.length > 1 && cards[0].dataset.cbSubspecies === '-' && /Standard Half-Elf/.test(cards[0].textContent)
+          && /optional/i.test((cards[0].closest('.cb-cards, div').previousElementSibling || {}).textContent || '') && !cards.some(c => /Variant;/.test(c.textContent)));
+        cards[2] && cards[2].click(); await sleep(80);
+        const picked = CB.build.subspecies;
+        const std = document.querySelector('#cb-root [data-cb-subspecies="-"]'); std && std.click(); await sleep(80);
+        ok('builder: picking Standard takes the variant off again', !!picked && CB.build.subspecies === '', picked + ' → ' + JSON.stringify(CB.build.subspecies));
+        cbClose(); await sleep(60);
+        // Rebuilding an imported Half-Elf in the builder (its quick build fills
+        // the rest): still a plain Half-Elf, not "Aquatic Elf Descent".
+        const zi = state.party.findIndex(p => /Zindle/.test(p.name)), race0 = state.party[zi].race;
+        state.party[zi].race = 'Half-Elf';
+        await openCharBuilder({ idx: zi }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100); await sleep(300);
+        const rb = { species: CB.build.species, sub: CB.build.subspecies };
+        cbClose(); state.party[zi].race = race0;
+        ok('builder: rebuilding an imported Half-Elf gives no variant', rb.species === 'Half-Elf' && !rb.sub, JSON.stringify(rb));
+      } catch(e){ ok('round 128 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
