@@ -865,3 +865,11 @@ body.player-app .toast-item.note, body.player-app .toast-item.action { backgroun
 .cs-prep input[type="checkbox"] { flex: none; margin: 0 2px 0 0; }
 .cs-prep.on .cs-spell-n b { color: var(--accent); }
 .cs-prep input:disabled + .cs-spell-n b { color: var(--text-muted); }
+
+/* ── 42. The builder names what breaks the rules ─────────── */
+/* Beside "Still to choose", what a change left behind: too many picks, a
+   prerequisite no longer met. Red, and first, because it is a different
+   kind of thing from a choice not made yet. */
+.cb-rules b { color: var(--danger); }
+.cb-todo-i.rule { color: var(--danger); }
+.cb-todo-i.rule::before { content: '✕ '; font-size: .85em; }

@@ -12011,6 +12011,53 @@
         cbClose(); await sleep(60);
       } catch(e){ ok('round 131 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
+    // -- Round 132: a finished character is checked against the rules -------
+    {
+      try {
+        // Every class, both editions, five levels: a quick build is complete
+        // and breaks nothing.
+        const bad = [];
+        for (const ed of ['2014', '2024']){
+          await openCharBuilder({ edition: ed }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100);
+          const R = CB.R;
+          for (const cn of R.classes.filter(c => c.core !== false).map(c => c.name)) for (const L of [1, 3, 5, 11, 20]){
+            CB.build = Object.assign(sktBlankBuild(ed), { cls: cn, level: L, name: 'Q' }); CB.rec = sktComputeCharacter(CB.build, R);
+            cbQuickBuild(); CB.rec = sktComputeCharacter(CB.build, R);
+            const rb = cbRuleBreaks().map(t => t.what), left = sktBuildTodo(CB.build, R).filter(t => !t.soft).map(t => t.what);
+            if (rb.length || left.length) bad.push(ed + ' ' + cn + ' ' + L + ': ' + rb.concat(left).join(' | '));
+          }
+          cbClose(); await sleep(60);
+        }
+        ok('builder: a quick build of every class at 1, 3, 5, 11 and 20 (both editions) is complete and within the rules', !bad.length, bad.slice(0, 3).join(' ;; '));
+        // What a later change leaves behind is named.
+        await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100);
+        const R = CB.R;
+        const rules = o => { const b = Object.assign(sktBlankBuild('2014'), { name: 'P', species: 'Human', subspecies: '', background: 'Acolyte' }, o);
+          b.abilities.method = 'manual'; b.abilities.base = Object.assign({ str: 15, dex: 14, con: 14, int: 10, wis: 12, cha: 8 }, o.base || {});
+          CB.build = b; CB.rec = sktComputeCharacter(b, R); return cbRuleBreaks().map(t => t.what).join(' | '); };
+        const wl = rules({ cls: 'Warlock', level: 3, subclass: 'Fiend', cantrips: ['Eldritch Blast', 'Mage Hand'], optional: { 'Eldritch Invocations': ['Agonizing Blast', 'Ascendant Step', 'Devil\'s Sight', 'Mask of Many Faces', 'Misty Visions'], 'Pact Boon': ['Pact of the Chain'] } });
+        ok('builder: a warlock taken back to 3rd is told its extra invocations, and the one it no longer qualifies for', /3 Eldritch Invocations too many/.test(wl) && /Ascendant Step needs Warlock level 9/.test(wl), wl);
+        const rg = rules({ cls: 'Rogue', level: 1, skills: ['stealth', 'insight', 'perception', 'deception', 'acrobatics'], expertise: ['stealth', 'arcana'] });
+        ok('builder: a skill twice, one too many, expertise without proficiency', /1 Rogue skill too many/.test(rg) && /Insight also comes from your background/.test(rg) && /expertise in Arcana without proficiency/.test(rg), rg);
+        ok('builder: a feat whose prerequisite is gone', /War Caster needs the ability to cast a spell/.test(rules({ cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: 'War Caster' } } })));
+        ok('builder: a half-elf’s +1s can’t go to Charisma', /species increase on Charisma/.test(rules({ cls: 'Fighter', level: 1, species: 'Half-Elf', speciesAsi: { cha: 1, str: 1, dex: 1 } })));
+        ok('builder: multiclassing without the score is named', /multiclassing needs INT 13 \(Wizard\)/.test(rules({ cls: 'Fighter', level: 3, multi: [{ cls: 'Wizard', level: 1 }], base: { int: 8 } })));
+        ok('builder: a clean character has nothing against it', rules({ cls: 'Fighter', level: 1, skills: ['athletics', 'perception'], optional: { 'Fighting Style': ['Defense'] } }) === '');
+        ok('builder: a wizard in chain mail is told what it costs', /Chain Mail without heavy armor training/.test(rules({ cls: 'Wizard', level: 1, equipment: { extra: ['chain mail'] } })));
+        const ol = rules({ cls: 'Wizard', level: 1, cantrips: ['Sacred Flame', 'Fire Bolt', 'Light'], spellbook: ['Magic Missile', 'Shield', 'Sleep', 'Mage Armor', 'Burning Hands', 'Cure Wounds'], spells: ['Magic Missile', 'Bless'] });
+        ok('builder: spells off the class list, and one prepared that isn’t in the book', /Sacred Flame, Bless, Cure Wounds aren’t on the Wizard spell list/.test(ol) && /Bless prepared but not in the spellbook/.test(ol), ol);
+        ok('builder: a warlock who changed patron keeps no patron spell', /Burning Hands isn’t on the Warlock spell list/.test(rules({ cls: 'Warlock', level: 1, subclass: 'Archfey', cantrips: ['Eldritch Blast', 'Mage Hand'], spells: ['Burning Hands', 'Hex'] })));
+        ok('builder: an Eldritch Knight with too many spells outside its schools', /1 spell\(s\) not abjuration or evocation too many/.test(rules({ cls: 'Fighter', level: 7, subclass: 'Eldritch Knight', spells: ['Shield', 'Sleep', 'Charm Person', 'Magic Missile', 'Burning Hands'] })));
+        // And the side panel says so.
+        rules({ cls: 'Rogue', level: 1, skills: ['stealth', 'insight', 'perception', 'deception', 'acrobatics'] }); cbRender(); await sleep(80);
+        ok('builder: the summary lists it under Against the rules', /Against the rules/.test((document.querySelector('#cb-root .cb-rules') || {}).textContent || ''));
+        cbClose(); await sleep(60);
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2024'), { name: 'P', species: 'Human', background: 'Soldier', cls: 'Fighter', level: 1, bgAsi: { int: 2, wis: 1 } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('builder: background increases on abilities the background doesn’t list', /background increase on Intelligence, Wisdom/.test(cbRuleBreaks().map(t => t.what).join()));
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 132 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

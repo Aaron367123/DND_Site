@@ -499,7 +499,7 @@ function cbClassCard(c){
 }
 
 function cbShell(main, side){
-  const todo = CB && CB.R ? sktBuildTodo(CB.build, CB.R) : [];
+  const todo = cbTodo();
   const count = id => todo.filter(t => t.step === id && !t.soft).length;
   const vis0 = cbVisibleSteps();
   const steps = vis0.map((s, i) => {
@@ -554,7 +554,7 @@ function cbSide(rec){
   const cls = sktRulesClass(R, b.cls);
   const ab = rec.abilities;
   const abil = SKT_ABS.map(k => '<div class="cb-ab"><span>' + k.toUpperCase() + '</span><b>' + ab[k] + '</b><i>' + sktSigned(sktMod(ab[k])) + '</i></div>').join('');
-  const todo = sktBuildTodo(b, R);
+  const todo = cbTodo(), rules = todo.filter(t => t.rule), left = todo.filter(t => !t.rule);
   return '<div class="cb-sheet">'
     + '<div class="cb-sheet-name">' + cbEsc(rec.icon) + ' ' + cbEsc(b.name || 'Unnamed') + '</div>'
     + '<div class="cb-sheet-sub">' + cbEsc([rec.race, cbClassLabel(rec), rec.subclass].filter(Boolean).join(' · ') || 'Choose a species and a class') + '</div>'
@@ -571,7 +571,8 @@ function cbSide(rec){
     +   (rec.sheet.senses ? '<div><span>Senses</span><b>' + cbEsc(rec.sheet.senses) + '</b></div>' : '')
     +   (rec.sheet.languages ? '<div><span>Languages</span><b>' + cbEsc(rec.sheet.languages) + '</b></div>' : '')
     + '</div>'
-    + (todo.length ? '<div class="cb-todo"><b>Still to choose</b>' + todo.map(t => '<div class="cb-todo-i' + (t.soft ? ' soft' : '') + '" data-cb-step="' + t.step + '">' + cbEsc(t.what) + '</div>').join('') + '</div>' : '<div class="cb-done">✓ Ready</div>')
+    + (rules.length ? '<div class="cb-todo cb-rules"><b>Against the rules</b>' + rules.map(t => '<div class="cb-todo-i rule" data-cb-step="' + t.step + '">' + cbEsc(t.what) + '</div>').join('') + '</div>' : '')
+    + (left.length ? '<div class="cb-todo"><b>Still to choose</b>' + left.map(t => '<div class="cb-todo-i' + (t.soft ? ' soft' : '') + '" data-cb-step="' + t.step + '">' + cbEsc(t.what) + '</div>').join('') + '</div>' : (rules.length ? '' : '<div class="cb-done">✓ Ready</div>'))
     + '</div>';
 }
 
@@ -1233,13 +1234,7 @@ CB_RENDER.skills = () => {
   if (!cls) return '<h3>Skills</h3><div class="cb-dim">Choose a class first.</div>';
   const rec = CB.rec;
   // What other choices already grant, shown ticked and fixed.
-  const granted = {};
-  const sp = sktRulesSpecies(R, b.species), bg = sktBuildBackground(R, b);
-  const grant = (list, label) => (list || []).forEach(o => Object.keys(o).forEach(k => { const sk = sktSkillKey(k); if (sk && o[k] === true) granted[sk] = label; }));
-  grant(bg && bg.skills, 'background'); grant(sp && sp.skills, 'species');
-  (b.speciesSkills || []).forEach(k => { granted[k] = 'species'; });
-  if (R.edition === '2014' && sp && sp.entries && sp.entries.some(e => e && e.name === 'Keen Senses')) granted.perception = 'species';
-  if (sp && sp.entries && sp.entries.some(e => e && e.name === 'Menacing')) granted.intimidation = 'species';
+  const granted = cbGrantedSkills();
   let html = '<h3>Skills</h3><h4>' + cbEsc(cls.name) + ' skills</h4>' + cbCounter((b.skills || []).length, cls.skillChoice.count, 'chosen')
     + cbChecks(cls.skillChoice.from.map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), b.skills || [], cls.skillChoice.count, 'cb-skill', granted);
   const ex = cbExpertiseCount();
@@ -1288,6 +1283,114 @@ CB_RENDER.skills = () => {
     '<div class="cb-sk' + (rec.sheet.skillProf[k] ? ' prof' + rec.sheet.skillProf[k] : '') + '"><span>' + SKT_SKILL_LABEL[k] + ' <i>' + SKT_SKILLS[k].toUpperCase() + '</i></span><b>' + sktSigned(rec.sheet.skills[k]) + '</b></div>').join('') + '</div>';
   return html;
 };
+// Skills a background or species gives outright: skill → where from.
+function cbGrantedSkills(){
+  const b = CB.build, R = CB.R, granted = {};
+  const sp = sktRulesSpecies(R, b.species), bg = sktBuildBackground(R, b);
+  const grant = (list, label) => (list || []).forEach(o => Object.keys(o).forEach(k => { const sk = sktSkillKey(k); if (sk && o[k] === true) granted[sk] = label; }));
+  grant(bg && bg.skills, 'background'); grant(sp && sp.skills, 'species');
+  (b.speciesSkills || []).forEach(k => { granted[k] = 'species'; });
+  if (R.edition === '2014' && sp && sp.entries && sp.entries.some(e => e && e.name === 'Keen Senses')) granted.perception = 'species';
+  if (sp && sp.entries && sp.entries.some(e => e && e.name === 'Menacing')) granted.intimidation = 'species';
+  return granted;
+}
+
+// What breaks the rules, beside what is still to choose: too many picks, a
+// pick that no longer fits (a level lowered, a background changed, a score
+// dropped) and a prerequisite no longer met. The pickers stop these as they
+// are made; this catches what a later change leaves behind, which nothing
+// did: a 9th-level warlock taken back to 3rd kept all five invocations,
+// Ascendant Step among them, and the sheet went on applying them. Saving is
+// still allowed (a DM's exception is theirs to make), but never unnamed.
+function cbRuleBreaks(){
+  const b = CB.build, R = CB.R, out = [];
+  // The sheet as the build stands now: CB.rec is the last render's, and a
+  // quick build or a save can run before the next one.
+  const key = JSON.stringify(b);
+  if (!CB._rbRec || CB._rbKey !== key){ CB._rbKey = key; CB._rbRec = sktComputeCharacter(b, R); }
+  const rec = CB._rbRec;
+  const cls = sktRulesClass(R, b.cls);
+  if (!cls || !rec) return out;
+  const add = (step, what) => out.push({ step, what, rule: true });
+  const SK = k => SKT_SKILL_LABEL[k] || k, list = a => a.join(', ');
+  const over = (have, max, step, what) => { if (have > max) add(step, (have - max) + ' ' + what + ' too many (' + max + ' allowed)'); };
+  // Skills.
+  const skills = b.skills || [];
+  over(skills.length, cls.skillChoice.count, 'skills', cls.name + ' skill' + (skills.length - cls.skillChoice.count === 1 ? '' : 's'));
+  { const off = skills.filter(k => !cls.skillChoice.from.includes(k)); if (off.length) add('skills', list(off.map(SK)) + ' isn’t a ' + cls.name + ' skill'); }
+  { const g = cbGrantedSkills(), dup = skills.filter(k => g[k]); if (dup.length) add('skills', list(dup.map(SK)) + ' also comes from your ' + g[dup[0]] + ' — choose another ' + cls.name + ' skill'); }
+  { const sp = sktRulesSpecies(R, b.species), sc = sp && cbSpeciesSkillChoice(sp, sktSpeciesSub(sp, b)); over((b.speciesSkills || []).length, sc ? sc.count : 0, 'species', 'species skill(s)'); }
+  // Expertise: how many, and only in skills the character is proficient in.
+  { const ex = cbExpertiseCount(), exp = b.expertise || [], prof = rec.sheet.skillProf || {};
+    over(exp.length, ex, 'skills', 'expertise');
+    const np = exp.filter(k => !prof[k]); if (np.length) add('skills', 'expertise in ' + list(np.map(SK)) + ' without proficiency');
+    if (R.edition === '2024' && cls.key === 'wizard'){ const bad = exp.filter(k => !['arcana', 'history', 'investigation', 'medicine', 'nature', 'religion'].includes(k)); if (bad.length) add('skills', 'Scholar can’t be ' + list(bad.map(SK))); } }
+  over((b.languages || []).length, cbLanguageCount(), 'skills', 'language(s)');
+  over((b.masteries || []).length, cbMasteryCount(), 'levels', 'weapon master' + ((b.masteries || []).length - cbMasteryCount() === 1 ? 'y' : 'ies'));
+  sktToolChoices(b, R).forEach(c => over(((b.toolPicks || {})[c.key] || []).length, c.count, 'skills', 'tool(s) for ' + c.label));
+  sktProfChoices(b, R).forEach(c => over(c.picked.length, c.count, 'skills', c.kind + ' from ' + c.feature));
+  // Invocations, maneuvers, metamagic, fighting styles, infusions.
+  { const ch = {}; sktOptionalChoices(b, R).forEach(o => { ch[o.name] = o; });
+    Object.keys(b.optional || {}).forEach(name => {
+      const have = b.optional[name] || []; if (!have.length) return;
+      const o = ch[name];
+      over(have.length, o ? o.count : 0, 'levels', name);
+      if (o && o.kind === 'feat') return;
+      have.forEach(n => { const x = R.optional.find(y => y.name === n); const q = x && sktOptionalPrereq(R, b, x); if (q && !q.ok) add('levels', n + ' needs ' + q.text); });
+    }); }
+  // Feats: no non-repeatable feat twice, and each one's prerequisite.
+  { const names = sktBuildFeatNames(b, R), seen = {};
+    names.forEach(n => { const f = sktRulesFeat(R, n); if (seen[n] && !(f && f.repeatable)) add('levels', n + ' is taken twice'); seen[n] = true; });
+    Object.keys(b.asi || {}).forEach(k => {
+      const pk = b.asi[k]; if (!pk || pk.type !== 'feat' || !pk.feat) return;
+      const f = sktRulesFeat(R, pk.feat), q = f && sktFeatPrereq(R, b, f, rec); if (q && !q.ok) add('levels', pk.feat + ' needs ' + q.text);
+    });
+    if (b.originFeat){ const f = sktRulesFeat(R, b.originFeat), q = f && sktFeatPrereq(R, Object.assign({}, b, { level: 1 }), f, rec); if (q && !q.ok) add('species', b.originFeat + ' needs ' + q.text); } }
+  // Ability increases on abilities they can't go to.
+  { const sum = o => Object.values(o || {}).reduce((n, v) => n + (+v || 0), 0);
+    if (R.edition === '2014'){
+      const sp = sktRulesSpecies(R, b.species), ac = sktSpeciesAsiChoice(sp, sp && sktSpeciesSub(sp, b), b), got = b.speciesAsi || {}, ks = Object.keys(got).filter(k => +got[k]);
+      if (ks.length && !ac) add('species', 'species ability increases this species doesn’t give');
+      else if (ac && ac.flex){ if (sum(got) > 3 || ks.some(k => +got[k] > 2)) add('species', 'species increases add up to more than +2 / +1'); }
+      else if (ac){ const bad = ks.filter(k => !(ac.from || []).includes(k)); if (bad.length) add('species', 'a species increase on ' + list(bad.map(cbAbLabel))); if (ks.length > ac.count) add('species', (ks.length - ac.count) + ' species increase(s) too many'); }
+    } else {
+      const bg = sktBuildBackground(R, b), a0 = bg && Array.isArray(bg.ability) && (bg.ability[0] || {}).choose;
+      const from = a0 && a0.weighted ? a0.weighted.from : SKT_ABS, got = b.bgAsi || {}, ks = Object.keys(got).filter(k => +got[k]);
+      const bad = ks.filter(k => !from.includes(k)); if (bad.length) add('background', 'a background increase on ' + list(bad.map(cbAbLabel)) + ' (' + (bg ? bg.name : 'this background') + ': ' + list(from.map(cbAbLabel)) + ')');
+      if (sum(got) > 3 || ks.some(k => +got[k] > 2)) add('background', 'background increases add up to more than +2 / +1');
+    }
+    Object.keys(b.asi || {}).forEach(k => { const pk = b.asi[k]; if (pk && pk.type === 'asi' && sum(pk.inc) > 2) add('levels', 'level ' + k + ' raises scores by more than 2'); }); }
+  // Armour worn without the training for it: allowed, but it costs
+  // disadvantage on every Strength and Dexterity roll and all spellcasting,
+  // which the sheet doesn't apply — a wizard in plate showed AC 18 and
+  // nothing else.
+  { const gear = sktBuildEquipment(b, R), pa = ((rec.sheet.proficiencies || {}).armor || []).map(x => String(x).toLowerCase());
+    const kind = gear.armor && { LA: 'light', MA: 'medium', HA: 'heavy' }[String(gear.armor.type || '').split('|')[0]];
+    if (kind && !pa.includes(kind)) add('equipment', (gear.armor._name || _sktTitle(gear.armor.name)) + ' without ' + kind + ' armor training: disadvantage on Strength and Dexterity rolls, and no spellcasting');
+    if (gear.shield && !pa.includes('shield')) add('equipment', 'a shield without shield training: disadvantage on Strength and Dexterity rolls, and no spellcasting'); }
+  // Spells off the class's list: a patron or domain changed, a feat or
+  // species that widened the list gone. The counts are sktBuildTodo's.
+  { const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R)), own = new Set((b.customSpells || []).map(c => c.name));
+    if (sc) (sc.classes || [{ primary: true, sc, view: b, entry: null, cls: b.cls }]).forEach(x => {
+      const v = x.view || b, lst = x.primary ? b : (x.entry || {});
+      const can0 = new Set(sktSpellOptions(R, v, 0).map(o => o.name)), can = new Set(sktBuildAlwaysPrepared(v, R));
+      for (let lv = 1; lv <= 9; lv++) sktSpellOptions(R, v, lv).forEach(o => can.add(o.name));
+      const off = (lst.cantrips || []).filter(n => !can0.has(n) && !own.has(n))
+        .concat([].concat(lst.spells || [], lst.spellbook || []).filter((n, i, a) => a.indexOf(n) === i && !can.has(n) && !own.has(n)));
+      if (off.length) add('spells', list(off) + (off.length === 1 ? ' isn’t' : ' aren’t') + ' on the ' + _sktTitle(x.cls || b.cls) + ' spell list');
+      // A wizard prepares from the book.
+      if (x.sc.spellbook && (lst.spellbook || []).length){ const nb = (lst.spells || []).filter(n => !lst.spellbook.includes(n) && !own.has(n)); if (nb.length) add('spells', list(nb) + ' prepared but not in the spellbook'); }
+    });
+    const lim = sktSchoolLimit(b, R); if (lim && lim.off > lim.free) add('spells', (lim.off - lim.free) + ' spell(s) not ' + lim.text + ' too many (' + lim.free + ' from any school allowed)'); }
+  // Multiclassing: each class's prerequisite, the first one's included.
+  { const parts = sktClassLevels(b, R);
+    if (parts.length > 1){ const ab = sktBuildAbilities(b, R), need = [...new Set(parts.map(q => q.cls).filter(n => !sktMulticlassOk(R, n, ab)))];
+      if (need.length) add('class', 'multiclassing needs ' + need.map(n => sktMulticlassNeedText(R, n) + ' (' + _sktTitle(n) + ')').join('; ')); } }
+  return out;
+}
+// Everything left: what is still to choose, then what breaks the rules.
+function cbTodo(){ return CB && CB.R ? sktBuildTodo(CB.build, CB.R).concat(cbRuleBreaks()) : []; }
+
 function cbExpertiseCount(){
   const cls = sktRulesClass(CB.R, CB.build.cls); if (!cls) return 0;
   const L = CB.build.level || 1;
@@ -1843,9 +1946,10 @@ CB_RENDER.review = () => {
   const mech = feats.filter(f => f.mech).length;
   const saves = SKT_ABS.map(k => '<div class="cb-sk' + (sh.saveProf.includes(k) ? ' prof1' : '') + '"><span>' + cbAbLabel(k) + '</span><b>' + sktSigned(sh.saves[k]) + '</b></div>').join('');
   const res = (rec.resources || []).filter(r => r.type === 'pool').map(r => cbEsc(r.name) + ' ' + r.max + (r.recharge === 'short' ? ' (short rest)' : r.recharge === 'short-one' ? ' (1 back on a short rest)' : '')).join(' · ');
-  const todo = sktBuildTodo(b, CB.R).filter(t => !t.soft);
+  const all = cbTodo(), todo = all.filter(t => !t.soft && !t.rule), rules = all.filter(t => t.rule);
   return '<h3>Review</h3>'
     + (CB.convertFrom ? cbConvertNote() : '')
+    + (rules.length ? '<div class="cb-warn">Against the rules: ' + cbEsc(rules.map(t => t.what).join('; ')) + '</div>' : '')
     + (todo.length ? '<div class="cb-warn">Still to choose: ' + cbEsc(todo.map(t => t.what).join(', ')) + '</div>' : '')
     + '<div class="cb-note cb-review-who">' + cbEsc([sh.size, (sh.details || {}).alignment, typeof rec.gold === 'number' ? rec.gold + ' gp' : ''].filter(Boolean).join(' · ')) + '</div>'
     + '<div class="cb-review">'
@@ -2308,7 +2412,7 @@ async function cbSwitchEdition(ed){
 // ── Saving ───────────────────────────────────────────────────────────────────
 function cbSave(){
   if (!CB || !CB.R) return;
-  const todo = sktBuildTodo(CB.build, CB.R).filter(t => !t.soft);
+  const all = cbTodo(), todo = all.filter(t => !t.soft && !t.rule), rules = all.filter(t => t.rule);
   const go = () => {
     const prior = CB.idx != null ? state.party[CB.idx] : null;
     const rec = sktComputeCharacter(CB.build, CB.R, prior);
@@ -2335,8 +2439,10 @@ function cbSave(){
     cbClose();
     if (typeof done === 'function') done(saved, idx);
   };
-  if (todo.length && typeof showConfirm === 'function'){
-    showConfirm('Still to choose: ' + todo.map(t => t.what).join(', ') + '. Save anyway? You can finish it later from the party card.',
-                { title: 'Not finished', confirmLabel: 'Save anyway' }).then(ok => { if (ok) go(); });
+  if ((todo.length || rules.length) && typeof showConfirm === 'function'){
+    showConfirm((rules.length ? 'Against the rules: ' + rules.map(t => t.what).join('; ') + '. ' : '')
+                + (todo.length ? 'Still to choose: ' + todo.map(t => t.what).join(', ') + '. ' : '')
+                + 'Save anyway?' + (rules.length ? ' (Only if your DM allows it.)' : ' You can finish it later from the party card.'),
+                { title: rules.length ? 'Against the rules' : 'Not finished', confirmLabel: 'Save anyway' }).then(ok => { if (ok) go(); });
   } else go();
 }
