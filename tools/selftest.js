@@ -11930,6 +11930,37 @@
         if (!PLAYER){ try { closePanel('battlemap'); } catch(e){} }
       }
     }
+    // -- Round 130: a species feat checks its prerequisites; prepare lists read --
+    {
+      const party0 = JSON.stringify(state.party);
+      try {
+        await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100);
+        Object.assign(CB.build, { cls: 'Fighter', level: 1, species: 'Human', subspecies: 'Variant' }); cbSet(x => x); await sleep(80);
+        CB.step = 'species'; cbRender(); await sleep(120);
+        const opts = () => [...document.querySelectorAll('#cb-root [data-cb-originfeat] option')].map(o => o.textContent);
+        const o1 = opts();
+        ok('builder: a Variant Human fighter is offered only feats it qualifies for', o1.includes('Alert') && !o1.some(t => /^(War Caster|Bountiful Luck)/.test(t)), o1.length + ' feats');
+        const box = document.querySelector('#cb-root [data-cb-qualified]'); box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+        ok('builder: and can see the rest, marked with what they need', opts().some(t => /^War Caster — needs/.test(t)));
+        const box2 = document.querySelector('#cb-root [data-cb-qualified]'); box2.checked = true; box2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
+        cbClose(); await sleep(80);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 3, species: 'Human', background: 'Sage' });
+        state.party.push(Object.assign({}, sktComputeCharacter(b, R), { id: 'r130_wiz', name: 'R130 Wizard', build: b })); save();
+        openCharSheet('r130_wiz', { tab: 'spells' }); for (let k = 0; k < 80 && !CS.R; k++) await sleep(100); await sleep(150);
+        document.querySelector('#cs-root [data-cs="manage"]').click(); await sleep(150);
+        const row = () => [...document.querySelectorAll('#cs-root .cs-prep')].find(r => /Magic Missile/.test(r.textContent));
+        ok('sheet: Manage spells shows each spell with its casting time and range', !!row() && /1 action · 120 feet/.test(row().textContent));
+        row().querySelector('.cs-spell-n').click(); await sleep(120);
+        ok('sheet: and tapping its name opens what it does', /glowing darts/.test((row().querySelector('.cs-feat-t') || {}).textContent || ''));
+        document.querySelectorAll('.toast-item').forEach(x => x.remove());
+        row().querySelector('input[type=checkbox]').click(); await sleep(250);
+        const w = state.party.find(p => p.id === 'r130_wiz');
+        ok('sheet: its box still prepares it, with no Undo toast', [].concat(w.build.spells || [], w.build.spellbook || []).includes('Magic Missile') && !document.querySelector('.toast-item .toast-action'));
+        if (typeof csClose === 'function') csClose();
+      } catch(e){ ok('round 130 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+      finally { state.party.splice(0, state.party.length, ...JSON.parse(party0)); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

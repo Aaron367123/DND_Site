@@ -834,12 +834,22 @@ CB_RENDER.species = () => {
   // A bonus feat: 2014 Variant Human; 2024 Human (Versatile, an origin feat).
   if ((R.edition === '2014' && ((sub && /variant/i.test(sub.name)) || cbSpeciesGivesFeat(sp, sub))) || (R.edition === '2024' && sp.name === 'Human')){
     const others = new Set(sktBuildFeatNames(Object.assign({}, b, { originFeat: '' }), R));
+    // Taken at 1st level, so its prerequisites are checked there, the same
+    // way the level-up picker checks its own. A 2014 Variant Human was offered
+    // every feat in the books: War Caster for a fighter, Bountiful Luck (a
+    // halfling's) for a human, feats that need 4th level.
+    const pre = f => sktFeatPrereq(R, Object.assign({}, b, { level: 1 }), f, CB.rec);
     const pool = R.feats.filter(f => (R.edition === '2014' ? true : f.category === 'O') && (sktBookOk(b, f) || f.name === b.originFeat)
-      && (f.repeatable || f.name === b.originFeat || !others.has(f.name)));
+      && (f.repeatable || f.name === b.originFeat || !others.has(f.name))
+      && (b.showAllFeats || f.name === b.originFeat || pre(f).ok));
+    const anyPre = R.feats.some(f => (R.edition === '2014' || f.category === 'O') && f.prerequisite);
     html += '<h4>' + (R.edition === '2024' ? 'Versatile — an origin feat' : 'Feat') + '</h4>'
       + '<select class="cb-sel" data-cb-originfeat><option value="">Choose a feat…</option>'
-      + pool.map(f => '<option' + (b.originFeat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select>'
-      + (b.originFeat ? cbFeatChoicesHtml(b.originFeat) + cbFeatureText(sktRulesText((sktRulesFeat(R, b.originFeat) || {}).entries)) : '');
+      + pool.map(f => { const q = pre(f); return '<option value="' + cbEsc(f.name) + '"' + (b.originFeat === f.name ? ' selected' : '') + '>' + cbEsc(f.name)
+          + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '') + (q.ok ? '' : ' — needs ' + cbEsc(q.text)) + '</option>'; }).join('') + '</select>'
+      + (anyPre ? '<label class="cb-inline"><input type="checkbox" data-cb-qualified' + (b.showAllFeats ? '' : ' checked') + '> Only feats this character qualifies for</label>' : '');
+    { const pf = b.originFeat && sktRulesFeat(R, b.originFeat), q = pf && pre(pf); if (q && q.text) html += '<div class="' + (q.ok ? 'cb-dim' : 'cb-warn') + '">Prerequisite: ' + cbEsc(q.text) + '</div>'; }
+    html += (b.originFeat ? cbFeatChoicesHtml(b.originFeat) + cbFeatureText(sktRulesText((sktRulesFeat(R, b.originFeat) || {}).entries)) : '');
   }
   // The species' spells (a Tiefling's legacy, a High Elf's cantrip…).
   const spg = sktSpeciesSpellGrant(R, b);

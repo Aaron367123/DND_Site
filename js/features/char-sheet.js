@@ -1687,9 +1687,19 @@ function csManageSpellsHtml(pc){
     const want = s.prepared || s.known;
     const always = typeof sktBuildAlwaysPrepared === 'function' ? sktBuildAlwaysPrepared(view, R) : [];
     const key = (kind, n) => mi + '|' + kind + '|' + n;
-    const box = (opts, chosen, max, kind) => '<div class="cs-checks">' + opts.map(n => {
+    // A row per spell, as in the list above: the box prepares it, the name
+    // opens what it does. Names alone left a player choosing spells they
+    // couldn't read without leaving the sheet.
+    const box = (opts, chosen, max, kind) => '<div class="cs-preplist">' + opts.map(n => {
       const on = (chosen || []).includes(n), full = max != null && (chosen || []).length >= max;
-      return '<label class="cs-check' + (on ? ' on' : '') + '"><input type="checkbox" data-cs-prep="' + csE(key(kind, n)) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + '>' + csE(n) + '</label>';
+      const s = csSpell(n), ok = 'pp:' + kind + ':' + n, open = CS.open[ok];
+      const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '');
+      return '<div class="cs-spell cs-prep' + (on ? ' on' : '') + '">'
+        + '<input type="checkbox" data-cs-prep="' + csE(key(kind, n)) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + ' aria-label="' + (kind === 'spellbook' ? 'In the spellbook: ' : 'Prepare ') + csE(n) + '">'
+        + '<button class="cs-spell-n" data-cs-open="' + csE(ok) + '" aria-expanded="' + !!open + '"><b>' + csE(n) + '</b>' + tags
+        + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></button>'
+        + (open ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '')
+        + '</div>';
     }).join('') + '</div>';
     h += '<h4>' + csE(_csTitle(x.cls)) + ' spells</h4>';
     if (s.cantrips) h += '<h5>Cantrips ' + (lst.cantrips || []).length + ' / ' + s.cantrips + '</h5>' + box(sktSpellOptions(R, view, 0).map(o => o.name), lst.cantrips, s.cantrips, 'cantrips');
@@ -3180,6 +3190,6 @@ function csSpellsChange(e, t, d, pc){
     if (t.checked && at < 0) lst[kind].push(name);
     if (!t.checked && at >= 0) lst[kind].splice(at, 1);
     if (kind === 'spellbook') lst.spells = (lst.spells || []).filter(n => lst.spellbook.includes(n));
-  });
+  }, CS_QUIET);   // a tick box: ticking it again is the undo
   return true;
 }

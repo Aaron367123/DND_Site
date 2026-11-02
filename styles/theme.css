@@ -857,3 +857,11 @@ body.player-app #toast-host { left: 50%; right: auto; transform: translateX(-50%
 body.player-app:has(#pa-screen .pa-draw) #toast-host { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 body.player-app:has(#pa-screen .pa-draw-sizes) #toast-host { bottom: calc(206px + env(safe-area-inset-bottom, 0px)); }
 body.player-app .toast-item.note, body.player-app .toast-item.action { background: var(--panel); }
+
+/* ── 41. Manage spells: rows you can read ────────────────── */
+/* The prepare list was names beside tick boxes. Each spell is a row now,
+   like the list above it: the box prepares it, the name opens its text. */
+.cs-preplist { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
+.cs-prep input[type="checkbox"] { flex: none; margin: 0 2px 0 0; }
+.cs-prep.on .cs-spell-n b { color: var(--accent); }
+.cs-prep input:disabled + .cs-spell-n b { color: var(--text-muted); }
