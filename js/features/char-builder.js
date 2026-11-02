@@ -1134,7 +1134,12 @@ function cbQuickBuild(){
     const mc = cbMasteryCount();
     if (mc && (b.masteries || []).length < mc){
       const kit = (rec.sheet.attacks || []).map(a => String(a.name).toLowerCase()).filter(n => R.items[n] && R.items[n].mastery);
-      b.masteries = [...new Set((b.masteries || []).concat(kit))].slice(0, mc);
+      // Then the weapons it could pick up: a converted sheet lists only the
+      // masteries it shows, and a kit has two or three weapons.
+      const can = cbMasteryOptions(rec).map(n => n.toLowerCase());
+      const more = ['longsword', 'shortsword', 'rapier', 'longbow', 'shortbow', 'handaxe', 'light crossbow', 'dagger', 'javelin', 'quarterstaff', 'spear', 'mace']
+        .concat(can).filter(n => can.includes(n));
+      b.masteries = [...new Set((b.masteries || []).concat(kit, more))].slice(0, mc);
     }
     // Spells: one of each level in turn, the highest first, so a high-level
     // caster has spells of every level (and a wizard's book has 3rd-level
@@ -1388,8 +1393,20 @@ function cbRuleBreaks(){
       if (need.length) add('class', 'multiclassing needs ' + need.map(n => sktMulticlassNeedText(R, n) + ' (' + _sktTitle(n) + ')').join('; ')); } }
   return out;
 }
+// The picks the builder counts itself (the rules engine's list doesn't know
+// them): a rogue reaching 6th level gained two expertise and nothing asked.
+function cbStillToChoose(){
+  const b = CB.build, R = CB.R, out = [];
+  if (!sktRulesClass(R, b.cls)) return out;
+  const short = (have, want, step, what) => { if (have < want) out.push({ step, what: (want - have) + ' ' + what }); };
+  short((b.expertise || []).length, cbExpertiseCount(), 'skills', 'expertise');
+  short((b.languages || []).length, cbLanguageCount(), 'skills', 'language' + (cbLanguageCount() - (b.languages || []).length === 1 ? '' : 's'));
+  short((b.masteries || []).length, cbMasteryCount(), 'levels', 'weapon master' + (cbMasteryCount() - (b.masteries || []).length === 1 ? 'y' : 'ies'));
+  { const sp = sktRulesSpecies(R, b.species), sc = sp && cbSpeciesSkillChoice(sp, sktSpeciesSub(sp, b)); if (sc) short((b.speciesSkills || []).length, sc.count, 'species', 'species skill' + (sc.count - (b.speciesSkills || []).length === 1 ? '' : 's')); }
+  return out;
+}
 // Everything left: what is still to choose, then what breaks the rules.
-function cbTodo(){ return CB && CB.R ? sktBuildTodo(CB.build, CB.R).concat(cbRuleBreaks()) : []; }
+function cbTodo(){ return CB && CB.R ? sktBuildTodo(CB.build, CB.R).concat(cbStillToChoose(), cbRuleBreaks()) : []; }
 
 function cbExpertiseCount(){
   const cls = sktRulesClass(CB.R, CB.build.cls); if (!cls) return 0;
@@ -1425,6 +1442,17 @@ function cbLanguageCount(){
     n += (+o.anyStandard || 0) + (+o.any || 0) + (o.choose ? (o.choose.count || 1) : 0);
   }));
   return n + cbSubclassLanguages() + cbClassLanguages();
+}
+// The weapons whose mastery the character can take: ones it is proficient
+// with. Weapons, not the focuses shaped like one: the arcane Staff and the
+// druid's Wooden Staff are a quarterstaff, and were listed again beside it.
+function cbMasteryOptions(rec){
+  const R = CB.R, P = rec.sheet.proficiencies;
+  const prof = P.weapons, rules = P.weaponRules || [];
+  const can = i => prof.includes(i.weaponCategory) || prof.includes(i.name.toLowerCase())
+    || rules.some(r => r.cat === i.weaponCategory && r.props.some(p => (i.property || []).map(x => String(x).split('|')[0]).includes(p)));
+  return Object.values(R.items).filter(i => i.mastery && i.weaponCategory && can(i) && !/^SCF/.test(String(i.type || '')))
+    .map(i => i.name).filter((n, k, a) => a.indexOf(n) === k).sort();
 }
 function cbMasteryCount(){
   if (!CB || !CB.R || CB.R.edition !== '2024') return 0;
@@ -1573,14 +1601,7 @@ CB_RENDER.levels = () => {
   // 2024 weapon masteries.
   const mc = cbMasteryCount();
   if (mc){
-    const P = CB.rec.sheet.proficiencies;
-    const prof = P.weapons, rules = P.weaponRules || [];
-    const can = i => prof.includes(i.weaponCategory) || prof.includes(i.name.toLowerCase())
-      || rules.some(r => r.cat === i.weaponCategory && r.props.some(p => (i.property || []).map(x => String(x).split('|')[0]).includes(p)));
-    // Weapons, not the focuses shaped like one: the arcane Staff and the
-    // druid's Wooden Staff are a quarterstaff, and were listed again beside it.
-    const weapons = Object.values(R.items).filter(i => i.mastery && i.weaponCategory && can(i) && !/^SCF/.test(String(i.type || '')))
-      .map(i => i.name).filter((n, k, a) => a.indexOf(n) === k).sort();
+    const weapons = cbMasteryOptions(CB.rec);
     html += '<h4>Weapon Mastery</h4><div class="cb-dim">Use the mastery property of ' + mc + ' kinds of weapon.</div>'
       + cbCounter((b.masteries || []).length, mc, 'chosen')
       + cbChecks(weapons.map(n => ({ value: n.toLowerCase(), label: n + ' — ' + String((R.items[n.toLowerCase()].mastery || [''])[0]).split('|')[0] })), b.masteries || [], mc, 'cb-mastery');

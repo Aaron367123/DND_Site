@@ -2611,7 +2611,11 @@ function sktComputeCharacter(build, R, prior){
       ctx.from = f.from;
       if (!fx && !ch && !f.info && read){
         const g = sktPassiveGrants(f.text);
-        g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r));
+        // A species whose resistance is a choice (a 2024 Tiefling's legacy,
+        // a Dragonborn's ancestry) gets it from the choice: the trait's text
+        // lists every option, and an unchosen legacy read as all three.
+        const chosenResist = f.from === 'species' && sktSpeciesResistChoice(species, subrace);
+        if (!chosenResist){ g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r)); }
         if (g.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, g.darkvision);
         if (g.speed) ctx.speedBonus += g.speed;
         g.conditions.forEach(c => ctx.immune.add(c));

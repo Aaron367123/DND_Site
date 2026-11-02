@@ -5490,12 +5490,14 @@
         click('[data-cb-step="skills"]'); await sleep(30);
         tick('[data-cb-skill="perception"]'); await sleep(20); tick('[data-cb-skill="survival"]'); await sleep(20);
         tick('[data-cb-tool="background||Dice Set"]'); await sleep(20);
+        // A 2024 character's two languages beside Common.
+        tick('[data-cb-lang="Dwarvish"]'); await sleep(20); tick('[data-cb-lang="Giant"]'); await sleep(20);
         click('[data-cb-step="levels"]'); await sleep(30);
         tick('[data-cb-opt-fighting-style="Defense"]'); await sleep(20);
         ['greatsword', 'flail', 'javelin'].forEach(n => tick('[data-cb-mastery="' + n + '"]'));
         await sleep(30);
-        ok('builder: the choices are all made', sktBuildTodo(CB.build, CB.R).filter(t => !t.soft).length === 0,
-           JSON.stringify(sktBuildTodo(CB.build, CB.R)));
+        ok('builder: the choices are all made', cbTodo().filter(t => !t.soft).length === 0,
+           JSON.stringify(cbTodo().filter(t => !t.soft)));
         click('[data-cb-step="review"]'); await sleep(30);
         const n0 = state.party.length;
         click('[data-cb="save"]'); await sleep(200);
@@ -12057,6 +12059,46 @@
         ok('builder: background increases on abilities the background doesn’t list', /background increase on Intelligence, Wisdom/.test(cbRuleBreaks().map(t => t.what).join()));
         cbClose(); await sleep(60);
       } catch(e){ ok('round 132 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+    }
+    // -- Round 133: level ups ask for everything; saved builds come back the same --
+    {
+      const party0 = JSON.stringify(state.party), conf0 = window.showConfirm;
+      try {
+        window.showConfirm = () => Promise.resolve(true);
+        // A 2024 tiefling who hasn't chosen a legacy resists nothing yet (the
+        // trait's table lists all three); each legacy, its own.
+        { const R = await sktRulesLoad('2024'), mk = ch => sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 1, background: 'Acolyte', species: 'Tiefling', speciesChoice: ch }), R).resistances || [];
+          ok('species: a tiefling’s resistance is its legacy’s, none before it’s chosen', mk({}).length === 0 && mk({ lineage: 'Infernal' }).join() === 'fire' && mk({ lineage: 'Abyssal' }).join() === 'poison', mk({}).join('/')); }
+        const make = async (ed, cn, L) => { let saved = null;
+          await openCharBuilder({ edition: ed, onDone: r => { saved = r; } }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100);
+          Object.assign(CB.build, { cls: cn, level: L, name: 'R133 ' + cn }); cbSet(x => x); cbQuickBuild(); const b0 = JSON.stringify(CB.build);
+          cbSave(); await sleep(200); if (document.getElementById('cb-root')) cbClose();
+          const pc = saved || state.party.find(p => p.name === 'R133 ' + cn); return { pc, idx: state.party.findIndex(p => p.id === pc.id), b0 }; };
+        // Saved and reopened: the same build, the same numbers, nothing left.
+        { const { pc, idx, b0 } = await make('2024', 'Cleric', 8);
+          const fresh = sktComputeCharacter(pc.build, await sktRulesLoad('2024'), pc);
+          await openCharBuilder({ idx }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100); await sleep(120);
+          const same = JSON.stringify(Object.assign({}, JSON.parse(b0), { name: '' })) === JSON.stringify(Object.assign({}, CB.build, { name: '' }));
+          ok('builder: a saved character reopens as it was, its numbers the same and nothing left to choose',
+             same && fresh.hpMax === pc.hpMax && fresh.ac === pc.ac && JSON.stringify(fresh.sheet.skills) === JSON.stringify(pc.sheet.skills) && !cbTodo().filter(t => !t.soft).length);
+          cbClose(); await sleep(60); }
+        // Levelling up asks for what the level brings.
+        { const { idx } = await make('2014', 'Rogue', 5);
+          await openCharBuilder({ idx, levelup: true }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100); await sleep(120);
+          const asks = cbTodo().filter(t => !t.soft).map(t => t.what).join('; ');
+          ok('builder: a rogue reaching 6th level is asked for its two new expertise', /2 expertise/.test(asks), asks);
+          cbClose(); await sleep(60); }
+        { const { idx } = await make('2024', 'Fighter', 3);
+          state.party[idx] = Object.assign({}, state.party[idx], { hp: state.party[idx].hpMax - 5, tempHp: 3 });
+          const hp0 = state.party[idx].hp, max0 = state.party[idx].hpMax;
+          await openCharBuilder({ idx, levelup: true }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100); await sleep(120);
+          const asks = cbTodo().filter(t => !t.soft).map(t => t.what).join('; ');
+          ok('builder: a 2024 fighter reaching 4th is asked for its feat and its third weapon mastery', /level 4 ability score improvement or feat/.test(asks) && /1 weapon mastery/.test(asks), asks);
+          cbQuickBuild(); cbSave(); await sleep(200); if (document.getElementById('cb-root')) cbClose();
+          const p2 = state.party[idx];
+          ok('builder: a level up raises current hit points by what the maximum gained, temporary ones kept', p2.hpMax > max0 && p2.hp - hp0 === p2.hpMax - max0 && p2.tempHp === 3, [hp0, max0, p2.hp, p2.hpMax, p2.tempHp].join()); }
+      } catch(e){ ok('round 133 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+      finally { window.showConfirm = conf0; state.party.splice(0, state.party.length, ...JSON.parse(party0)); save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {
