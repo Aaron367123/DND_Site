@@ -600,7 +600,7 @@ function sktBuildBackground(R, build){
 // A background without the 2024 parts (no ability increases), used in a 2024 build.
 function sktBgNeedsAdapt(R, bg){ return R.edition === '2024' && !!bg && !bg.custom && !Array.isArray(bg.ability); }
 function sktRulesFeat(R, name){
-  const n = String(name || '').toLowerCase().split(';')[0].trim();
+  const n = String(name || '').toLowerCase().split(';')[0].replace(/ #\d+$/, '').trim();
   return R.feats.find(f => f.name.toLowerCase() === n) || null;
 }
 function sktRulesSpell(R, name){
@@ -855,7 +855,7 @@ function sktFeatChoices(R, build, featName, rec){
 }
 // How many of a feat's choices are still to make.
 function sktFeatChoicesMissing(R, build, featName, rec){
-  const ch = (build.featChoices || {})[sktRulesFeat(R, featName) ? sktRulesFeat(R, featName).name : featName] || {};
+  const ch = (build.featChoices || {})[/ #\d+$/.test(featName) ? featName : (sktRulesFeat(R, featName) ? sktRulesFeat(R, featName).name : featName)] || {};
   return sktFeatChoices(R, build, featName, rec).choices.reduce((n, c) => {
     const have = c.kind === 'skillsTools' ? (ch.skills || []).length + (ch.tools || []).length : (ch[c.kind] || []).length;
     return n + Math.max(0, c.count - have);
@@ -1184,21 +1184,22 @@ function sktBuildAbilities(build, R, trace){
     const o = {}; Object.keys(a).forEach(k => { if (k in out && typeof a[k] === 'number') o[k] = a[k]; });
     return Object.keys(o).length ? o : null;
   };
+  const fkey = {}; sktBuildFeatEntries(build, R).forEach(e => { fkey[e.src] = e.key; });
   Object.keys(build.asi || {}).sort((a, b) => (parseInt(a.split('@').pop(), 10) || 0) - (parseInt(b.split('@').pop(), 10) || 0)).forEach(lvl => {
     if (!slots.has(String(lvl))) return;
     const pick = build.asi[lvl] || {};
     const at = String(lvl).includes('@') ? _sktTitle(String(lvl).split('@')[0]) + ' ' + String(lvl).split('@')[1] : 'Level ' + lvl;
     if (pick.type === 'asi') add(pick.inc, at + ' improvement');
-    else if (pick.type === 'feat'){ add(featFixed(pick.feat), pick.feat + ' (' + at + ')'); add((build.featChoices[pick.feat] || {}).inc, pick.feat + ' (' + at + ')'); }
+    else if (pick.type === 'feat'){ add(featFixed(pick.feat), pick.feat + ' (' + at + ')'); add((build.featChoices[fkey['asi:' + lvl] || pick.feat] || {}).inc, pick.feat + ' (' + at + ')'); }
   });
-  if (build.originFeat){ add(featFixed(build.originFeat), build.originFeat); add((build.featChoices[build.originFeat] || {}).inc, build.originFeat); }
+  if (build.originFeat){ add(featFixed(build.originFeat), build.originFeat); add((build.featChoices[fkey.origin || build.originFeat] || {}).inc, build.originFeat); }
   // Ability scores top out at 20; an Epic Boon (2024, level 19) raises the
   // cap to 30 for the score it improves.
   const boonCap = {};
   Object.keys(build.asi || {}).forEach(lvl => {
     const pick = build.asi[lvl] || {};
     const f = pick.type === 'feat' && sktRulesFeat(R, pick.feat);
-    if (f && f.category === 'EB') Object.keys((build.featChoices[pick.feat] || {}).inc || {}).forEach(k => { boonCap[k] = 30; });
+    if (f && f.category === 'EB') Object.keys((build.featChoices[fkey['asi:' + lvl] || pick.feat] || {}).inc || {}).forEach(k => { boonCap[k] = 30; });
   });
   SKT_ABS.forEach(k => { const c = Math.max(1, Math.min(boonCap[k] || 20, out[k])); if (c < out[k]) note('Capped at ' + (boonCap[k] || 20), k, c - out[k]); out[k] = c; });
   // Magic items: a score set to a number (it never lowers one), or raised.
@@ -1339,8 +1340,16 @@ function _sktTraits(entries){
 // Every feat the build holds: 2024 background origin feat, a 2024 Human's or
 // 2014 Variant Human's bonus feat, feats taken in place of an ASI, 2024
 // fighting styles (which are feats there) and epic boons.
-function sktBuildFeatNames(build, R){
-  const out = [];
+// Every feat the build holds, where each came from, and the key its choices
+// are kept under: the feat's name, or for a second copy of a repeatable feat
+// "Skilled #2". Taking Skilled twice gave three skills, not six — both copies
+// read one set of choices — and Elemental Adept twice one damage type.
+function sktBuildFeatEntries(build, R){
+  const out = [], seen = {};
+  const push = (name, src) => {
+    const f = sktRulesFeat(R, name), k = (seen[name] = (seen[name] || 0) + 1);
+    out.push({ name, src, key: k > 1 && f && f.repeatable ? name + ' #' + k : name });
+  };
   const bg = sktBuildBackground(R, build);
   // A background's feat: the 2024 origin feat, and the 2014 backgrounds from
   // later books that grant one (Astral Drifter, the Strixhaven students).
@@ -1348,16 +1357,19 @@ function sktBuildFeatNames(build, R){
   // Skilled), kept in build.bgFeat.
   if (bg && Array.isArray(bg.feats) && bg.feats.length){
     const o = bg.feats[Math.min(Math.max(0, +build.bgFeat || 0), bg.feats.length - 1)] || {};
-    Object.keys(o).forEach(k => { if (o[k] === true) out.push(_sktTitle(k.split('|')[0])); });
+    Object.keys(o).forEach(k => { if (o[k] === true) push(_sktTitle(k.split('|')[0]), 'bg'); });
   }
-  if (build.originFeat) out.push(build.originFeat);
+  if (build.originFeat) push(build.originFeat, 'origin');
   const slots = new Set(sktAsiSlots(build, R).map(s => s.key));
   Object.keys(build.asi || {}).forEach(lvl => {
     const p = build.asi[lvl];
-    if (slots.has(String(lvl)) && p && p.type === 'feat' && p.feat) out.push(p.feat);
+    if (slots.has(String(lvl)) && p && p.type === 'feat' && p.feat) push(p.feat, 'asi:' + lvl);
   });
-  (build.extraFeats || []).forEach(n => { if (n) out.push(n); });
+  (build.extraFeats || []).forEach((n, i) => { if (n) push(n, 'extra:' + i); });
   return out;
+}
+function sktBuildFeatNames(build, R){
+  return sktBuildFeatEntries(build, R).map(e => e.key);
 }
 // Subclass features that are a pick made when building, as D&D Beyond asks
 // it: the Hunter's Prey and the rest of the Hunter's options, the Totem
@@ -1736,7 +1748,8 @@ function _sktSpellGrant(R, build, name, spec, ch, hint){
 function sktFeatSpellGrant(R, build, featName){
   const f = sktRulesFeat(R, featName);
   if (!f || !Array.isArray(f.additionalSpells) || !f.additionalSpells.length) return null;
-  return _sktSpellGrant(R, build, f.name, f.additionalSpells, (build.featChoices || {})[f.name] || {}, _sktFeatHint(build, R, f.name));
+  const key = / #\d+$/.test(featName) ? featName : f.name;
+  return _sktSpellGrant(R, build, key, f.additionalSpells, (build.featChoices || {})[key] || {}, _sktFeatHint(build, R, f.name));
 }
 // A species' spells: a Tiefling's legacy, a High Elf's cantrip, a 2024
 // Elf's lineage. They granted nothing before. The 2024 lineage chosen on the
@@ -3838,7 +3851,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktDefineState, sktStateSig, sktStatesSyncAll, SKT_STATES, sktSaveAdvantages, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
-                     sktToolChoices, sktFeatPrereq, sktOptionalPrereq, sktSchoolLimit, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
+                     sktToolChoices, sktFeatPrereq, sktBuildFeatEntries, sktOptionalPrereq, sktSchoolLimit, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
                      sktBuildBackground, sktBgNeedsAdapt, SKT_CUSTOM_BG, SKT_ABILITY_ORDER, sktAbilityBreakdown,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,

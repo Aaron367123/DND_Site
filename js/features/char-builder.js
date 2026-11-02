@@ -129,7 +129,7 @@ function cbFromImported(pc){
   const want = Object.keys(prof).filter(k => prof[k] >= 1).map(camel), exp = Object.keys(prof).filter(k => prof[k] >= 2).map(camel);
   // A feat's skill picks left unmade count as made by default when the rules
   // work the character out: mark them empty so they aren't taken as given.
-  sktBuildFeatNames(b, R).forEach(n => { const f = sktRulesFeat(R, n); if (f && sktFeatChoices(R, b, n, null).choices.some(c => c.kind === 'skills' || c.kind === 'skillsTools')) b.featChoices[f.name] = Object.assign({ skills: [], tools: [] }, b.featChoices[f.name]); });
+  sktBuildFeatNames(b, R).forEach(n => { const f = sktRulesFeat(R, n); if (f && sktFeatChoices(R, b, n, null).choices.some(c => c.kind === 'skills' || c.kind === 'skillsTools')) b.featChoices[n] = Object.assign({ skills: [], tools: [] }, b.featChoices[n]); });
   const granted = new Set(Object.keys(sktComputeCharacter(b, R).sheet.skillProf || {}));
   const skp = sp ? cbSpeciesSkillChoice(sp, sktSpeciesSub(sp, b)) : null;
   const sFrom = new Set(skp ? skp.from : []);
@@ -183,11 +183,11 @@ function cbFromImported(pc){
         const sk = c.kind === 'skillsTools' ? c.options.filter(o => o.startsWith('s:')).map(o => o.slice(2)) : c.options;
         const got = left.filter(k => sk.includes(k)).slice(0, c.count);
         left = left.filter(k => !got.includes(k));
-        const ch = Object.assign({}, b.featChoices[f.name], { skills: got });
+        const ch = Object.assign({}, b.featChoices[n], { skills: got });
         if (c.kind === 'skillsTools' && got.length < c.count) ch.tools = c.options.filter(o => o.startsWith('t:')).map(o => o.slice(2)).slice(0, c.count - got.length);
         // Skills only: ones it already has from elsewhere, which change nothing.
         else if (got.length < c.count) ch.skills = got.concat(sk.filter(k => !got.includes(k) && rec0.sheet.skillProf && rec0.sheet.skillProf[k])).slice(0, c.count);
-        b.featChoices[f.name] = ch;
+        b.featChoices[n] = ch;
       }); }); }
   // A class feature that grants a skill (the 2024 barbarian's Primal Knowledge).
   sktProfChoices(b, R).forEach(c => {
@@ -1029,7 +1029,12 @@ function cbQuickBuild(){
   if (!b.background){
     // A background whose skills the class's abilities like.
     const score = bg => (bg.skills || []).reduce((n, o) => n + Object.keys(o).filter(k => o[k] === true).reduce((m, k) => { const sk = sktSkillKey(k); return m + (sk ? 6 - order.indexOf(SKT_SKILLS[sk]) : 0); }, 0), 0);
-    b.background = R.backgrounds.filter(x => x.core !== false).sort((x, y) => score(y) - score(x))[0].name;
+    // Not one whose feat the character already has (Alert at 4th level, then
+    // the Criminal's Alert again), unless that feat can be taken twice.
+    const have = new Set(sktBuildFeatNames(b, R).map(n => String(n).toLowerCase()));
+    const dupFeat = bg => (bg.feats || []).some(o => Object.keys(o).some(k => { const n = _sktTitle(k.split('|')[0]), f = sktRulesFeat(R, n); return o[k] === true && have.has(n.toLowerCase()) && !(f && f.repeatable); }));
+    const ok = R.backgrounds.filter(x => x.core !== false && !dupFeat(x));
+    b.background = (ok.length ? ok : R.backgrounds.filter(x => x.core !== false)).sort((x, y) => score(y) - score(x))[0].name;
   }
   if (!b.name) b.name = 'New ' + cls.name;
   // Untouched scores: all 10s, nothing assigned, or the standard array still
@@ -1112,7 +1117,9 @@ function cbQuickBuild(){
     if ((R.edition === '2014' && sub && /variant/i.test(sub.name) || (R.edition === '2024' && sp.name === 'Human')) && !b.originFeat)
     { // One the background doesn't already give: a Criminal or Farmer human
       // got Alert twice, and a feat that isn't repeatable counts once.
-      const owned = new Set([].concat(...((bg && bg.feats) || []).map(o => Object.keys(o))).map(k => String(k).split(/[|;]/)[0].trim().toLowerCase()));
+      // Nor one taken at a level (in 2024 an origin feat can be).
+      const owned = new Set([].concat(...((bg && bg.feats) || []).map(o => Object.keys(o))).map(k => String(k).split(/[|;]/)[0].trim().toLowerCase())
+        .concat(sktBuildFeatNames(b, R).map(n => String(n).toLowerCase())));
       b.originFeat = (['Alert', 'Tough', 'Lucky', 'Skilled', 'Savage Attacker'].map(n => R.feats.find(f => f.name === n && (R.edition === '2014' || f.category === 'O')))
         .find(f => f && !owned.has(f.name.toLowerCase())) || {}).name || ''; }
     sktBuildChoices(b, R).forEach(c => {
@@ -1187,7 +1194,7 @@ function cbQuickBuild(){
     });
     sktBuildFeatNames(b, R).forEach(n => {
       const fc = sktFeatChoices(R, b, n, rec), f = sktRulesFeat(R, n); if (!f) return;
-      const ch = b.featChoices[f.name] = Object.assign({}, b.featChoices[f.name]);
+      const ch = b.featChoices[n] = Object.assign({}, b.featChoices[n]);
       const held = new Set(Object.keys(sktComputeCharacter(b, R).sheet.skillProf || {}));
       const fresh = list => bySkill(list).sort((x, y) => held.has(x) - held.has(y));
       fc.choices.forEach(c => {
@@ -1432,6 +1439,11 @@ function cbStillToChoose(){
   if (!sktRulesClass(R, b.cls)) return out;
   const short = (have, want, step, what) => { if (have < want) out.push({ step, what: (want - have) + ' ' + what }); };
   short((b.expertise || []).length, cbExpertiseCount(), 'skills', 'expertise');
+  sktBuildFeatEntries(b, R).forEach(e => {
+    const f = sktRulesFeat(R, e.key), ac = f && !/^Ability Score Improvement$/i.test(f.name) && cbFeatAbilityChoice(f);
+    if (ac && !Object.keys((b.featChoices[e.key] || {}).inc || {}).length)
+      out.push({ step: e.src === 'origin' ? 'species' : e.src === 'bg' ? 'background' : 'levels', what: 'the ability increase from ' + e.key });
+  });
   short((b.replSkills || []).length, cbDupSkills().length, 'skills', 'skill in place of one you have twice');
   short((b.languages || []).length, cbLanguageCount(), 'skills', 'language' + (cbLanguageCount() - (b.languages || []).length === 1 ? '' : 's'));
   short((b.masteries || []).length, cbMasteryCount(), 'levels', 'weapon master' + (cbMasteryCount() - (b.masteries || []).length === 1 ? 'y' : 'ies'));
@@ -1561,7 +1573,12 @@ CB_RENDER.levels = () => {
     } else if (isFeat){
       const pre = f => sktFeatPrereq(R, Object.assign({}, b, { level: s.primary ? s.level : b.level }), f, CB.rec);
       const taken = new Set(sktBuildFeatNames(b, R));
-      const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || (s.level >= 19 && f.category === 'EB'))
+      // 2024: "the Ability Score Improvement feat or another feat of your
+      // choice for which you qualify" — a general feat, an origin feat (no
+      // prerequisite, so anyone qualifies), a fighting style feat for a class
+      // with Fighting Style, an epic boon from 19th. Only general feats were
+      // offered.
+      const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || f.category === 'O' || f.category === 'FS' || (s.level >= 19 && f.category === 'EB'))
                                     && (f.repeatable || p.feat === f.name || !taken.has(f.name))
                                     && (sktBookOk(b, f) || p.feat === f.name)
                                     && (b.showAllFeats || p.feat === f.name || pre(f).ok));
@@ -1569,17 +1586,18 @@ CB_RENDER.levels = () => {
         + '<label class="cb-inline"><input type="checkbox" data-cb-qualified' + (b.showAllFeats ? '' : ' checked') + '> Only feats this character qualifies for</label>';
       { const pf = p.feat && sktRulesFeat(R, p.feat), q = pf && pre(pf); if (q && q.text) html += '<div class="' + (q.ok ? 'cb-dim' : 'cb-warn') + '">Prerequisite: ' + cbEsc(q.text) + '</div>'; }
       const f = p.feat && sktRulesFeat(R, p.feat);
+      const fk = (sktBuildFeatEntries(b, R).find(e => e.src === 'asi:' + l) || {}).key || (f && f.name);
       if (f){
         const ch = cbFeatAbilityChoice(f);
         if (ch){
-          const cur = Object.keys((b.featChoices[f.name] || {}).inc || {})[0] || '';
-          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(f.name) + ':' + ch.amount + '"><option value="">—</option>'
+          const cur = Object.keys((b.featChoices[fk] || {}).inc || {})[0] || '';
+          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(fk) + ':' + ch.amount + '"><option value="">—</option>'
             + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
         }
-        html += cbFeatChoicesHtml(f.name);
+        html += cbFeatChoicesHtml(fk);
         if (/^Resilient$/i.test(f.name)){
-          const cur = (b.featChoices[f.name] || {}).save || '';
-          html += '<label class="cb-f">Saving throw proficiency<select class="cb-sel" data-cb-featsave="' + cbEsc(f.name) + '"><option value="">—</option>'
+          const cur = (b.featChoices[fk] || {}).save || '';
+          html += '<label class="cb-f">Saving throw proficiency<select class="cb-sel" data-cb-featsave="' + cbEsc(fk) + '"><option value="">—</option>'
             + SKT_ABS.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
         }
         html += cbFeatureText(sktRulesText(f.entries));
@@ -1591,16 +1609,16 @@ CB_RENDER.levels = () => {
   { const xs = b.extraFeats || [], taken = new Set(sktBuildFeatNames(b, R));
     html += '<div class="cb-asi"><h4>Other feats</h4><div class="cb-dim">Feats outside the usual slots — one your DM granted, or a campaign’s bonus feat.</div>';
     xs.forEach((n, i) => {
-      const f = sktRulesFeat(R, n);
+      const f = sktRulesFeat(R, n), fk = (sktBuildFeatEntries(b, R).find(e => e.src === 'extra:' + i) || {}).key || n;
       html += '<div class="cb-row"><b>' + cbEsc(n) + '</b> <button class="btn small" data-cb-xfeatdel="' + i + '">Remove</button></div>';
       if (f){
         const ch = cbFeatAbilityChoice(f);
         if (ch){
-          const cur = Object.keys((b.featChoices[f.name] || {}).inc || {})[0] || '';
-          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(f.name) + ':' + ch.amount + '"><option value="">—</option>'
+          const cur = Object.keys((b.featChoices[fk] || {}).inc || {})[0] || '';
+          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(fk) + ':' + ch.amount + '"><option value="">—</option>'
             + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
         }
-        html += cbFeatChoicesHtml(f.name);
+        html += cbFeatChoicesHtml(fk);
       }
     });
     html += cbFeatPicker({ key: 'xfeat', attr: 'cb-xfeatadd', val: '', pool: R.feats.filter(f => (f.repeatable || !taken.has(f.name)) && sktBookOk(b, f)), add: true })
@@ -1759,13 +1777,14 @@ function cbOptPicker(o){
 function cbFeatChoicesHtml(featName){
   const R = CB.R, b = CB.build;
   const f = sktRulesFeat(R, featName); if (!f) return '';
-  const fc = sktFeatChoices(R, b, f.name, CB.rec);
-  const ch = b.featChoices[f.name] || {};
+  const key = / #\d+$/.test(featName) ? featName : f.name;
+  const fc = sktFeatChoices(R, b, key, CB.rec);
+  const ch = b.featChoices[key] || {};
   const label = v => v.startsWith('s:') ? SKT_SKILL_LABEL[v.slice(2)] : v.startsWith('t:') ? v.slice(2) : (SKT_SKILL_LABEL[v] || _sktTitle(v));
   return fc.choices.map(c => {
     const picked = c.kind === 'skillsTools' ? [...(ch.skills || []).map(s => 's:' + s), ...(ch.tools || []).map(t => 't:' + t)] : (ch[c.kind] || []);
-    return '<div class="cb-fc"><div class="cb-dim">' + cbEsc(f.name) + ': choose ' + c.count + ' ' + c.label + (c.count === 1 ? '' : 's') + '</div>'
-      + cbChecks(c.options.map(o => ({ value: f.name + '||' + c.kind + '||' + o, label: label(o) })), picked.map(o => f.name + '||' + c.kind + '||' + o), c.count, 'cb-fc') + '</div>';
+    return '<div class="cb-fc"><div class="cb-dim">' + cbEsc(key) + ': choose ' + c.count + ' ' + c.label + (c.count === 1 ? '' : 's') + '</div>'
+      + cbChecks(c.options.map(o => ({ value: key + '||' + c.kind + '||' + o, label: label(o) })), picked.map(o => key + '||' + c.kind + '||' + o), c.count, 'cb-fc') + '</div>';
   }).join('');
 }
 function cbFeatAbilityChoice(f){
@@ -2507,7 +2526,7 @@ function cbOnChange(e){
       picks.filter(Boolean).forEach(k => { p.inc[k] = (p.inc[k] || 0) + 1; });
     });
   }
-  if (d.cbAsifeat) return cbSet(b => { b.asi[d.cbAsifeat] = { type: 'feat', feat: v }; });
+  if (d.cbAsifeat) return cbSet(b => { b.asi[d.cbAsifeat] = /^Ability Score Improvement$/i.test(v) ? { type: 'asi', inc: {} } : { type: 'feat', feat: v }; });
   if (d.cbFeatab){
     const [name, amount] = d.cbFeatab.split(':');
     return cbSet(b => { b.featChoices[name] = Object.assign({}, b.featChoices[name], { inc: v ? { [v]: +amount || 1 } : {} }); });

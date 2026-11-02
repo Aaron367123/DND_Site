@@ -12171,6 +12171,40 @@
         cbClose(); await sleep(60);
       } catch(e){ ok('round 136 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
+    // -- Round 137: level-up feats as 2024 has them; repeatable feats; a feat's +1 --
+    {
+      try {
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100);
+        const R = CB.R;
+        const look = async cls => { CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: 4, name: 'L', species: 'Human', background: 'Criminal', asi: { 4: { type: 'feat', feat: '' } } }); cbSet(x => x); CB.step = 'levels'; cbRender(); await sleep(80);
+          return [...document.querySelectorAll('#cb-root input[data-cb-asifeat="4"]')].map(i => i.value); };
+        const fi = await look('Fighter'), wz = await look('Wizard');
+        ok('feats: a 2024 level-up offers origin feats too (anyone qualifies), not one already had', fi.includes('Lucky') && !fi.includes('Alert') && wz.includes('Lucky'));
+        ok('feats: and fighting style feats to a class with Fighting Style only', fi.includes('Archery') && !wz.includes('Archery') && !fi.includes('Blessed Warrior'));
+        // Ability Score Improvement picked from the list is the ASI.
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', level: 4, name: 'L', species: 'Human', background: 'Soldier', asi: { 4: { type: 'feat', feat: '' } } }); cbSet(x => x); CB.step = 'levels'; cbRender(); await sleep(80);
+        const asiR = document.querySelector('#cb-root input[data-cb-asifeat="4"][value="Ability Score Improvement"]');
+        asiR.checked = true; asiR.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
+        ok('feats: choosing “Ability Score Improvement” from the list gives its +2 or +1/+1', CB.build.asi[4].type === 'asi', JSON.stringify(CB.build.asi[4]));
+        // Skilled twice: two sets of picks.
+        const b = Object.assign(sktBlankBuild('2024'), { cls: 'Fighter', level: 8, species: 'Human', background: 'Soldier', asi: { 4: { type: 'feat', feat: 'Skilled' }, 6: { type: 'feat', feat: 'Skilled' } }, featChoices: { Skilled: { skills: ['arcana', 'history', 'nature'], tools: [] } } });
+        ok('feats: a repeatable feat taken twice asks for its second set of picks', sktBuildTodo(b, R).some(t => t.what === 'choices for Skilled #2'));
+        b.featChoices['Skilled #2'] = { skills: ['religion', 'medicine', 'insight'], tools: [] };
+        ok('feats: and both count — Skilled twice is six skills', Object.keys(sktComputeCharacter(b, R).sheet.skillProf).length === 8);
+        CB.build = JSON.parse(JSON.stringify(b)); CB.build.name = 'R'; cbSet(x => x); CB.step = 'levels'; cbRender(); await sleep(80);
+        ok('feats: each copy has its own picks on the Levels step', [...new Set([...document.querySelectorAll('#cb-root [data-cb-fc]')].map(i => i.dataset.cbFc.split('||')[0]))].join() === 'Skilled,Skilled #2');
+        // Quick build: a human with Alert at 4th doesn't take Alert again as Versatile.
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', level: 8, name: 'Q', showAllFeats: true, asi: { 4: { type: 'feat', feat: 'Alert' } } }); CB.rec = sktComputeCharacter(CB.build, R);
+        cbQuickBuild(); CB.rec = sktComputeCharacter(CB.build, R);
+        ok('builder: quick build doesn’t give a feat the character already has', !cbRuleBreaks().some(t => /taken twice/.test(t.what)), CB.build.originFeat);
+        cbClose(); await sleep(60);
+        // A feat's "+1 to a score of your choice" left unpicked is asked for.
+        await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', level: 4, name: 'A', species: 'Human', background: 'Acolyte', asi: { 4: { type: 'feat', feat: 'Athlete' } } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+        ok('feats: Athlete’s +1 Strength or Dexterity is still to choose until it is chosen', cbTodo().some(t => t.what === 'the ability increase from Athlete'));
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 137 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
