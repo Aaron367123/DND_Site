@@ -348,7 +348,7 @@ async function _sktRulesBuild(edition, read){
       tools: (cls.startingProficiencies && cls.startingProficiencies.tools) || [],
       toolProfs: (cls.startingProficiencies && cls.startingProficiencies.toolProficiencies) || null,
       skillChoice: _sktSkillChoice(cls.startingProficiencies && cls.startingProficiencies.skills),
-      equipment: cls.startingEquipment || {},
+      equipment: _sktKitGold(cls.startingEquipment || {}, (cls.startingEquipment || {}).defaultData, (cls.startingEquipment || {}).entries),
       primaryAbility: cls.primaryAbility || null,
       spellcastingAbility: cls.spellcastingAbility || null,
       casterProgression: cls.casterProgression || null,
@@ -416,7 +416,7 @@ async function _sktRulesBuild(edition, read){
       name: b.name, source: b.source, core: b.source === src,
       ability: b.ability || null, feats: b.feats || null,
       skills: b.skillProficiencies || [], tools: b.toolProficiencies || [],
-      languages: b.languageProficiencies || [], equipment: b.startingEquipment || [],
+      languages: b.languageProficiencies || [], equipment: _sktKitGold(b.startingEquipment || [], b.startingEquipment, b.entries),
       entries: b.entries || [], characteristics: _sktCharacteristics(b.entries),
     });
   });
@@ -860,6 +860,24 @@ function sktFeatChoicesMissing(R, build, featName, rec){
     const have = c.kind === 'skillsTools' ? (ch.skills || []).length + (ch.tools || []).length : (ch[c.kind] || []).length;
     return n + Math.max(0, c.count - have);
   }, 0);
+}
+
+// The data's starting gold now and then disagrees with the book's own words
+// beside it: the 2024 cleric's "7 GP" is stored as 7,000 copper (70 gp), the
+// Investigator's "10 gp" as 10 copper. The words are the book, so a number
+// off from one of them by a factor of ten or a hundred is put right. Returns
+// the first argument, mended in place.
+function _sktKitGold(kit, blocks, words){
+  const txt = (JSON.stringify(words || '').match(/(\d+)\s*gp\b/gi) || []).map(x => parseInt(x, 10));
+  if (!txt.length || !Array.isArray(blocks)) return kit;
+  blocks.forEach(bl => Object.keys(bl || {}).forEach(k => (bl[k] || []).forEach(x => {
+    if (!x || !x.value) return;
+    const gp = x.value / 100;
+    if (txt.includes(gp)) return;
+    const t = txt.find(n => [10, 100, 0.1, 0.01].some(f => Math.abs(gp / f - n) < 1e-9));
+    if (t != null) x.value = t * 100;
+  })));
+  return kit;
 }
 
 // ── Feat prerequisites ───────────────────────────────────────────────────────

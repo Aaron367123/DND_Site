@@ -12131,6 +12131,17 @@
         cbClose(); await sleep(60);
       } catch(e){ ok('round 134 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
+    // -- Round 135: starting gold as the book prints it ------------------------
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const gold = (RR, ed, o) => sktBuildEquipment(Object.assign(sktBlankBuild(ed), { level: 1, species: 'Human' }, o), RR).gold;
+        ok('kit: a 2024 cleric starts with 7 gp, not 70 (the data stores its "7 GP" as 7,000 copper)', gold(R, '2024', { cls: 'Cleric', background: 'Acolyte' }) === 15, gold(R, '2024', { cls: 'Cleric', background: 'Acolyte' }));
+        ok('kit: every other 2024 class as printed (fighter 4 gp + acolyte 8)', gold(R, '2024', { cls: 'Fighter', background: 'Acolyte' }) === 12);
+        const inv = R14.backgrounds.find(b => b.name === 'Investigator');
+        if (inv) ok('kit: the Investigator’s 10 gp, not 10 copper', gold(R14, '2014', { cls: 'Fighter', background: 'Investigator' }) >= 10, gold(R14, '2014', { cls: 'Fighter', background: 'Investigator' }));
+      } catch(e){ ok('round 135 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
