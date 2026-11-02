@@ -1617,8 +1617,17 @@ function cbPrereqNote(x){
 // Initiative…", and how many more), else its first listed benefit (most
 // 2014 feats), else the first sentence with a rule in it — not the flavour
 // line ("You have inexplicable luck…") or "You gain the following benefits".
+// Worked out once per feat: each row asks twice on every redraw, and three
+// open lists of seventy made a tap take a third of a second on a phone.
+const _cbFeatSumCache = new WeakMap();
 function cbFeatSummary(f){
   if (!f) return '';
+  if (typeof f === 'object' && _cbFeatSumCache.has(f)) return _cbFeatSumCache.get(f);
+  const out = _cbFeatSummary(f);
+  if (typeof f === 'object') _cbFeatSumCache.set(f, out);
+  return out;
+}
+function _cbFeatSummary(f){
   const T = x => sktRulesText(Array.isArray(x) ? x : [x]).replace(/\s+/g, ' ').trim();
   const first = t => (String(t).split(/(?<=[.!?])\s+/)[0] || String(t));
   const named = [], items = [], plain = [];

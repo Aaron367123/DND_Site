@@ -884,13 +884,23 @@ function _sktKitGold(kit, blocks, words){
 // Whether a character meets a feat's prerequisite, and what it is in words.
 // The data lists alternatives; within one, every condition counts. A
 // condition this can't judge (a campaign, free text) passes, with its words.
+// The scores and feats a prerequisite is judged against, worked out once per
+// build rather than once per feat: a feat list asks for every feat in the
+// books, and three open lists cost a quarter of a second on a phone.
+let _sktPrereqMemo = { key: null, ab: null, feats: null };
+function _sktPrereqBase(R, build){
+  const key = JSON.stringify([R.edition, build.cls, build.level, build.multi, build.species, build.subspecies, build.speciesChoice, build.background,
+    build.bgAsi, build.bgAsiMode, build.speciesAsi, build.bgAdapt, build.customBg, build.bgFeat, build.abilities, build.asi, build.originFeat,
+    build.extraFeats, build.featChoices, build.items, build.overrides]);
+  if (_sktPrereqMemo.key !== key) _sktPrereqMemo = { key, ab: sktBuildAbilities(build, R), feats: sktBuildFeatNames(build, R).map(n => n.toLowerCase()) };
+  return _sktPrereqMemo;
+}
 function sktFeatPrereq(R, build, feat, rec){
   const ps = (feat && feat.prerequisite) || [];
   if (!ps.length) return { ok: true, text: '' };
-  const ab = sktBuildAbilities(build, R);
+  const base = _sktPrereqBase(R, build), ab = base.ab, feats = base.feats;
   const sh = (rec && rec.sheet) || {};
   const armor = ((sh.proficiencies || {}).armor || []).map(a => String(a).toLowerCase());
-  const feats = sktBuildFeatNames(build, R).map(n => n.toLowerCase());
   const texts = [], oks = ps.map(p => {
     const parts = [], ok = [];
     if (p.level != null){ const lv = typeof p.level === 'object' ? p.level.level : p.level; parts.push('level ' + lv); ok.push((build.level || 1) >= lv); }
