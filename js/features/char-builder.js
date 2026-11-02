@@ -1072,6 +1072,10 @@ function cbQuickBuild(){
     const skp = cbSpeciesSkillChoice(sp, sub);
     if (skp && (b.speciesSkills || []).length < skp.count)
       b.speciesSkills = bySkill(skp.from.filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k) && !(b.skills || []).includes(k))).slice(0, skp.count);
+    // A skill two fixed sources both give: another in its place.
+    { const dups = cbDupSkills();
+      if (dups.length && (b.replSkills || []).length < dups.length)
+        b.replSkills = (b.replSkills || []).concat(bySkill(Object.keys(SKT_SKILLS).filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k) && !(b.skills || []).includes(k) && !(b.speciesSkills || []).includes(k) && !(b.replSkills || []).includes(k)))).slice(0, dups.length); }
     const ex = cbExpertiseCount();
     if (ex && (b.expertise || []).length < ex){
       const scholar = R.edition === '2024' && sktRulesClass(R, b.cls).key === 'wizard';
@@ -1238,7 +1242,15 @@ CB_RENDER.skills = () => {
   const rec = CB.rec;
   // What other choices already grant, shown ticked and fixed.
   const granted = cbGrantedSkills();
-  let html = '<h3>Skills</h3><h4>' + cbEsc(cls.name) + ' skills</h4>' + cbCounter((b.skills || []).length, cls.skillChoice.count, 'chosen')
+  const dups = cbDupSkills();
+  let html = '<h3>Skills</h3>';
+  if (dups.length){
+    const have = new Set(Object.keys((rec.sheet || {}).skillProf || {}));
+    html += '<h4>In place of ' + cbEsc(dups.map(k => SKT_SKILL_LABEL[k]).join(', ')) + '</h4><div class="cb-dim">Two of your sources both give ' + cbEsc(dups.map(k => SKT_SKILL_LABEL[k]).join(', '))
+      + ', so choose ' + (dups.length === 1 ? 'another skill' : dups.length + ' other skills') + ' instead.</div>' + cbCounter((b.replSkills || []).length, dups.length, 'chosen')
+      + cbChecks(Object.keys(SKT_SKILLS).filter(k => !have.has(k) || (b.replSkills || []).includes(k)).map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), b.replSkills || [], dups.length, 'cb-replskill');
+  }
+  html += '<h4>' + cbEsc(cls.name) + ' skills</h4>' + cbCounter((b.skills || []).length, cls.skillChoice.count, 'chosen')
     + cbChecks(cls.skillChoice.from.map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), b.skills || [], cls.skillChoice.count, 'cb-skill', granted);
   const ex = cbExpertiseCount();
   if (ex){
@@ -1247,11 +1259,14 @@ CB_RENDER.skills = () => {
     // skills: Insight or Perception was on offer because the wizard had it.
     const scholar = R.edition === '2024' && cls.key === 'wizard';
     if (scholar) profd = profd.filter(k => ['arcana', 'history', 'investigation', 'medicine', 'nature', 'religion'].includes(k));
+    // A 2014 rogue: "two of your skill proficiencies, or one of your skill
+    // proficiencies and your proficiency with thieves' tools".
+    const tt = R.edition === '2014' && cls.key === 'rogue' && ((rec.sheet.proficiencies || {}).tools || []).some(t => /^thieves' tools/i.test(t));
     html += '<h4>' + (scholar ? 'Scholar' : 'Expertise') + '</h4><div class="cb-dim">' + (scholar
       ? 'Expertise in one of these you are proficient in: Arcana, History, Investigation, Medicine, Nature or Religion.'
       : 'Double your proficiency bonus in ' + ex + ' skill' + (ex === 1 ? '' : 's') + ' you are proficient in.') + '</div>'
       + cbCounter((b.expertise || []).length, ex, 'chosen')
-      + cbChecks(profd.map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), b.expertise || [], ex, 'cb-expert');
+      + cbChecks(profd.map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })).concat(tt ? [{ value: "thieves' tools", label: "Thieves' Tools" }] : []), b.expertise || [], ex, 'cb-expert');
   }
   const langCount = cbLanguageCount();
   if (langCount){
@@ -1286,6 +1301,19 @@ CB_RENDER.skills = () => {
     '<div class="cb-sk' + (rec.sheet.skillProf[k] ? ' prof' + rec.sheet.skillProf[k] : '') + '"><span>' + SKT_SKILL_LABEL[k] + ' <i>' + SKT_SKILLS[k].toUpperCase() + '</i></span><b>' + sktSigned(rec.sheet.skills[k]) + '</b></div>').join('') + '</div>';
   return html;
 };
+// Skills two fixed sources both give (a half-orc's Menacing and a background's
+// Intimidation): the rule is a different skill instead, which the builder
+// never offered, so that character came out a skill short.
+function cbDupSkills(){
+  const b = CB.build, R = CB.R, seen = {};
+  const sp = sktRulesSpecies(R, b.species), sub = sp && sktSpeciesSub(sp, b), bg = sktBuildBackground(R, b);
+  const from = (list, label) => (list || []).forEach(o => Object.keys(o).forEach(k => { const sk = sktSkillKey(k); if (sk && o[k] === true) (seen[sk] = seen[sk] || new Set()).add(label); }));
+  from(bg && bg.skills, 'background'); from(sp && sp.skills, 'species'); from(sub && sub.skills, 'species');
+  const trait = n => sp && (sp.entries || []).some(e => e && e.name === n);
+  if (R.edition === '2014' && trait('Keen Senses')) (seen.perception = seen.perception || new Set()).add('species trait');
+  if (trait('Menacing')) (seen.intimidation = seen.intimidation || new Set()).add('species trait');
+  return Object.keys(seen).filter(k => seen[k].size > 1);
+}
 // Skills a background or species gives outright: skill → where from.
 function cbGrantedSkills(){
   const b = CB.build, R = CB.R, granted = {};
@@ -1295,6 +1323,7 @@ function cbGrantedSkills(){
   (b.speciesSkills || []).forEach(k => { granted[k] = 'species'; });
   if (R.edition === '2014' && sp && sp.entries && sp.entries.some(e => e && e.name === 'Keen Senses')) granted.perception = 'species';
   if (sp && sp.entries && sp.entries.some(e => e && e.name === 'Menacing')) granted.intimidation = 'species';
+  (b.replSkills || []).forEach(k => { granted[k] = 'replacement'; });
   return granted;
 }
 
@@ -1326,9 +1355,11 @@ function cbRuleBreaks(){
   // Expertise: how many, and only in skills the character is proficient in.
   { const ex = cbExpertiseCount(), exp = b.expertise || [], prof = rec.sheet.skillProf || {};
     over(exp.length, ex, 'skills', 'expertise');
-    const np = exp.filter(k => !prof[k]); if (np.length) add('skills', 'expertise in ' + list(np.map(SK)) + ' without proficiency');
+    const tools = ((rec.sheet.proficiencies || {}).tools || []).map(t => String(t).toLowerCase().replace(/ \(expertise\)$/, ''));
+    const np = exp.filter(k => !prof[k] && !tools.includes(k)); if (np.length) add('skills', 'expertise in ' + list(np.map(SK)) + ' without proficiency');
     if (R.edition === '2024' && cls.key === 'wizard'){ const bad = exp.filter(k => !['arcana', 'history', 'investigation', 'medicine', 'nature', 'religion'].includes(k)); if (bad.length) add('skills', 'Scholar can’t be ' + list(bad.map(SK))); } }
   over((b.languages || []).length, cbLanguageCount(), 'skills', 'language(s)');
+  over((b.replSkills || []).length, cbDupSkills().length, 'skills', 'replacement skill(s)');
   over((b.masteries || []).length, cbMasteryCount(), 'levels', 'weapon master' + ((b.masteries || []).length - cbMasteryCount() === 1 ? 'y' : 'ies'));
   sktToolChoices(b, R).forEach(c => over(((b.toolPicks || {})[c.key] || []).length, c.count, 'skills', 'tool(s) for ' + c.label));
   sktProfChoices(b, R).forEach(c => over(c.picked.length, c.count, 'skills', c.kind + ' from ' + c.feature));
@@ -1384,7 +1415,10 @@ function cbRuleBreaks(){
       // A wizard prepares from the book.
       if (x.sc.spellbook && (lst.spellbook || []).length){ const nb = (lst.spells || []).filter(n => !lst.spellbook.includes(n) && !own.has(n)); if (nb.length) add('spells', list(nb) + ' prepared but not in the spellbook'); }
     });
-    const lim = sktSchoolLimit(b, R); if (lim && lim.off > lim.free) add('spells', (lim.off - lim.free) + ' spell(s) not ' + lim.text + ' too many (' + lim.free + ' from any school allowed)'); }
+    if (sc) (sc.classes || [{ view: b, cls: b.cls }]).forEach(x => {
+      const lim = sktSchoolLimit(x.view || b, R);
+      if (lim && lim.off > lim.free) add('spells', (sc.classes ? _sktTitle(x.cls) + ': ' : '') + (lim.off - lim.free) + ' spell(s) not ' + lim.text + ' too many (' + lim.free + ' from any school allowed)');
+    }); }
   // Multiclassing: each class's prerequisite, the first one's included.
   { const parts = sktClassLevels(b, R);
     if (parts.length > 1){ const ab = sktBuildAbilities(b, R), need = [...new Set(parts.map(q => q.cls).filter(n => !sktMulticlassOk(R, n, ab)))];
@@ -1398,6 +1432,7 @@ function cbStillToChoose(){
   if (!sktRulesClass(R, b.cls)) return out;
   const short = (have, want, step, what) => { if (have < want) out.push({ step, what: (want - have) + ' ' + what }); };
   short((b.expertise || []).length, cbExpertiseCount(), 'skills', 'expertise');
+  short((b.replSkills || []).length, cbDupSkills().length, 'skills', 'skill in place of one you have twice');
   short((b.languages || []).length, cbLanguageCount(), 'skills', 'language' + (cbLanguageCount() - (b.languages || []).length === 1 ? '' : 's'));
   short((b.masteries || []).length, cbMasteryCount(), 'levels', 'weapon master' + (cbMasteryCount() - (b.masteries || []).length === 1 ? 'y' : 'ies'));
   { const sp = sktRulesSpecies(R, b.species), sc = sp && cbSpeciesSkillChoice(sp, sktSpeciesSub(sp, b)); if (sc) short((b.speciesSkills || []).length, sc.count, 'species', 'species skill' + (sc.count - (b.speciesSkills || []).length === 1 ? '' : 's')); }
@@ -1865,7 +1900,9 @@ function cbMultiSpellsHtml(){
   if (!sc || !sc.classes) return '';
   return sc.classes.filter(x => !x.primary).map(x => {
     const i = b.multi.indexOf(x.entry), m = x.entry || {}, s = x.sc, v = x.view;
-    const chk = (opts, chosen, max, kind) => cbChecks(opts.map(n => ({ value: i + '|' + kind + '|' + n, label: n })), (chosen || []).map(n => i + '|' + kind + '|' + n), max, 'cb-mcspell');
+    const lim = sktSchoolLimit(v, R);
+    const block = lim && lim.off >= lim.free ? n => (lim.outside(n) ? 'Not ' + lim.text + ': your any-school spells are chosen' : null) : null;
+    const chk = (opts, chosen, max, kind) => cbSpellChecks(opts, (chosen || []).map(n => i + '|' + kind + '|' + n), max, 'cb-mcspell', n => i + '|' + kind + '|' + n, kind === 'spells' ? block : null);
     const always = sktBuildAlwaysPrepared(v, R);
     let h = '<h3>' + cbEsc(_sktTitle(x.cls)) + ' spells</h3><div class="cb-note">' + cbAbLabel(s.ability) + ' · save DC ' + s.dc + ' · attack ' + sktSigned(s.attack) + '</div>';
     if (s.cantrips) h += '<h4>Cantrips</h4>' + cbCounter((m.cantrips || []).length, s.cantrips, 'chosen') + chk(sktSpellOptions(R, v, 0).map(o => o.name), m.cantrips, s.cantrips, 'cantrips');
@@ -1876,7 +1913,8 @@ function cbMultiSpellsHtml(){
     }
     const want = s.prepared || s.known;
     if (want){
-      h += '<h4>' + (s.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((m.spells || []).length, want, 'chosen');
+      h += '<h4>' + (s.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((m.spells || []).length, want, 'chosen')
+        + (lim ? '<div class="' + (lim.off > lim.free ? 'cb-warn' : 'cb-dim') + '">' + cbEsc(lim.text.charAt(0).toUpperCase() + lim.text.slice(1)) + ' spells, but for ' + lim.free + ' from any school (' + lim.off + ' chosen).</div>' : '');
       if (book) h += chk(book.filter(n => !always.includes(n)), m.spells, want, 'spells');
       else h += cbSpellRows(R, s.maxSpellLevel, m.spells, lv => sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n)), opts => chk(opts, m.spells, want, 'spells'));
     }
@@ -1935,7 +1973,7 @@ CB_RENDER.equipment = () => {
       out += '<div class="cb-eqblock">' + letters.map(l => {
         const items = block[l];
         const picks = items.map((it, j) => it && it.equipmentType && l === chosen
-          ? '<select class="cb-sel" data-cb-eqpick="' + kind + ':' + i + ':' + ((block._ || []).length + j) + '">' + sktEquipmentOptions(R, it.equipmentType).map(n => '<option' + ((b.equipment.picks || {})[kind + ':' + i + ':' + ((block._ || []).length + j)] === n.toLowerCase() || (!(b.equipment.picks || {})[kind + ':' + i + ':' + ((block._ || []).length + j)] && _SKT_EQ_DEFAULT[it.equipmentType] === n.toLowerCase()) ? ' selected' : '') + ' value="' + cbEsc(n.toLowerCase()) + '">' + cbEsc(n) + '</option>').join('') + '</select>' : '').join('');
+          ? '<select class="cb-sel" data-cb-eqpick="' + kind + ':' + i + ':' + ((block._ || []).length + j) + '">' + sktEquipmentOptions(R, it.equipmentType).map(n => '<option title="' + cbEsc(cbItemBrief(n)) + '"' + ((b.equipment.picks || {})[kind + ':' + i + ':' + ((block._ || []).length + j)] === n.toLowerCase() || (!(b.equipment.picks || {})[kind + ':' + i + ':' + ((block._ || []).length + j)] && _SKT_EQ_DEFAULT[it.equipmentType] === n.toLowerCase()) ? ' selected' : '') + ' value="' + cbEsc(n.toLowerCase()) + '">' + cbEsc(n) + (cbItemBrief(n) ? ' — ' + cbEsc(cbItemBrief(n)) : '') + '</option>').join('') + '</select>' : '').join('');
         return '<label class="cb-eqopt' + (l === chosen ? ' on' : '') + '"><input type="radio" name="eq-' + kind + '-' + i + '" data-cb-eq="' + kind + ':' + i + ':' + l + '"' + (l === chosen ? ' checked' : '') + '>'
           + '<b>(' + l.toUpperCase() + ')</b> ' + cbEsc(items.map(itemText).filter(Boolean).join(', ')) + picks + '</label>';
       }).join('') + '</div>';
@@ -1960,10 +1998,27 @@ CB_RENDER.equipment = () => {
   const rec = CB.rec;
   const gold = sktBuildEquipment(b, R).gold;
   html += '<h4>Result</h4>' + (gold ? '<div class="cb-note">Starting gold: <b>' + gold + ' gp</b> — kept on the character</div>' : '') + '<div class="cb-note">AC ' + rec.ac + (rec.sheet.acSource ? ' (' + cbEsc(rec.sheet.acSource) + ')' : '') + '</div>'
-    + '<div class="cb-attacks">' + rec.sheet.attacks.map(a => '<div class="cb-atk"><b>' + cbEsc(a.name) + '</b><span>' + cbEsc(a.atkBonus) + '</span><span>' + cbEsc(a.damage) + '</span>' + (a.mastery ? '<i>' + cbEsc(a.mastery) + '</i>' : '') + '</div>').join('') + '</div>';
+    + '<div class="cb-attacks">' + rec.sheet.attacks.map(a => '<div class="cb-atk"><b>' + cbEsc(a.name) + '</b><span>' + cbEsc(a.atkBonus) + '</span><span>' + cbEsc(a.damage) + (a.versatile ? ' <i class="cb-dim">· ' + cbEsc(a.versatile) + ' two hands</i>' : '') + '</span>' + (a.mastery ? '<i>' + cbEsc(a.mastery) + '</i>' : '') + '</div>').join('') + '</div>';
   return html;
 };
 function _sktTitleCase(s){ return _sktTitle(s); }
+// A weapon or armour in a line, for the kit's "a martial weapon of your
+// choice": "1d8 slashing · 1d10 two hands · Sap", "AC 14 + Dex (max 2)".
+// Those picks were bare names, with nothing to choose between them by.
+function cbItemBrief(n){
+  const i = CB && CB.R && CB.R.items[String(n).toLowerCase()]; if (!i) return '';
+  const P = { F: 'finesse', L: 'light', H: 'heavy', R: 'reach', T: 'thrown', '2H': 'two-handed', A: 'ammunition', LD: 'loading' };
+  const D = { S: 'slashing', P: 'piercing', B: 'bludgeoning' };
+  const t = String(i.type || '').split('|')[0], bits = [];
+  if (i.dmg1) bits.push(i.dmg1 + (D[String(i.dmgType || '').charAt(0)] ? ' ' + D[String(i.dmgType).charAt(0)] : ''));
+  if (i.dmg2) bits.push(i.dmg2 + ' two hands');
+  const props = (i.property || []).map(x => P[String(x).split('|')[0]]).filter(Boolean);
+  if (props.length) bits.push(props.join(', '));
+  if (i.ac) bits.push((t === 'S' ? '+' + i.ac + ' AC' : 'AC ' + i.ac) + (t === 'LA' ? ' + Dex' : t === 'MA' ? ' + Dex (max 2)' : ''));
+  if (i.strength) bits.push('STR ' + i.strength);
+  if (CB.R.edition === '2024' && (i.mastery || [])[0]) bits.push(String(i.mastery[0]).split('|')[0]);
+  return bits.join(' · ');
+}
 
 // Magic items and gear given since the kit: a +1 longsword, magic armour, a
 // Ring of Protection, a shield bought in town. Searched by name; a variant
@@ -2078,7 +2133,7 @@ CB_RENDER.review = () => {
     + '<div class="cb-note cb-review-who">' + cbEsc([sh.size, (sh.details || {}).alignment, typeof rec.gold === 'number' ? rec.gold + ' gp' : ''].filter(Boolean).join(' · ')) + '</div>'
     + '<div class="cb-review">'
     + '<div><h4>Saving throws</h4><div class="cb-skilltable">' + saves + '</div></div>'
-    + '<div><h4>Attacks</h4><div class="cb-attacks">' + sh.attacks.map(a => '<div class="cb-atk"><b>' + cbEsc(a.name) + '</b><span>' + cbEsc(a.atkBonus) + '</span><span>' + cbEsc(a.damage) + '</span></div>').join('') + '</div>'
+    + '<div><h4>Attacks</h4><div class="cb-attacks">' + sh.attacks.map(a => '<div class="cb-atk"><b>' + cbEsc(a.name) + '</b><span>' + cbEsc(a.atkBonus) + '</span><span>' + cbEsc(a.damage) + (a.versatile ? ' <i class="cb-dim">· ' + cbEsc(a.versatile) + ' two hands</i>' : '') + '</span></div>').join('') + '</div>'
     + (sh.attacksPerAction > 1 ? '<div class="cb-dim">' + sh.attacksPerAction + ' attacks per Attack action</div>' : '') + '</div>'
     + '</div>'
     + (res ? '<h4>Resources</h4><div class="cb-note">' + res + '</div>' : '')
@@ -2188,7 +2243,7 @@ function cbOnClick(e){
   });
   if (d.cbSpecies) return cbSet(b => {
     if (b.species === d.cbSpecies) return;
-    b.species = d.cbSpecies; b.subspecies = ''; b.speciesAsi = {}; b.speciesSkills = []; b.speciesChoice = {};
+    b.species = d.cbSpecies; b.subspecies = ''; b.speciesAsi = {}; b.speciesSkills = []; b.speciesChoice = {}; b.replSkills = [];
     if (b.toolPicks) delete b.toolPicks.species;
     b.originFeat = '';
   });
@@ -2214,7 +2269,7 @@ function cbOnClick(e){
   }
   if (d.cbSuggestroll){ const list = (cbCharacteristics() || {})[d.cbSuggestroll] || []; if (list.length) cbAddCharacteristic(d.cbSuggestroll, sktD(list.length) - 1); return; }
   if (d.cbSpmode) return cbSet(b => { if ((b.speciesChoice.asiMode || '21') !== d.cbSpmode){ b.speciesChoice.asiMode = d.cbSpmode; b.speciesAsi = {}; } });
-  if (d.cbBg) return cbSet(b => { if (b.background !== d.cbBg){ b.background = d.cbBg; b.bgAsi = {}; b.bgSkills = []; } });
+  if (d.cbBg) return cbSet(b => { if (b.background !== d.cbBg){ b.background = d.cbBg; b.bgAsi = {}; b.bgSkills = []; b.replSkills = []; } });
   if ('cbXfeatdel' in d) return cbSet(b => { b.extraFeats = (b.extraFeats || []).filter((x, i) => i !== +d.cbXfeatdel); });
   if (d.cbBgmode) return cbSet(b => {
     b.bgAsiMode = d.cbBgmode; b.bgAsi = {};
@@ -2326,6 +2381,7 @@ function cbOnChange(e){
   }
   if (d.cbSkill){ const cls = sktRulesClass(CB.R, CB.build.cls); return cbSet(b => cbToggle(b.skills, d.cbSkill, cls.skillChoice.count)); }
   if (d.cbExpert) return cbSet(b => cbToggle(b.expertise, d.cbExpert, cbExpertiseCount()));
+  if (d.cbReplskill) return cbSet(b => { b.replSkills = (b.replSkills || []).slice(); cbToggle(b.replSkills, d.cbReplskill, cbDupSkills().length); });
   if (d.cbLang) return cbSet(b => cbToggle(b.languages, d.cbLang, cbLanguageCount()));
   if (d.cbTool){
     const [key, tool] = d.cbTool.split('||');

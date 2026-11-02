@@ -12142,6 +12142,35 @@
         if (inv) ok('kit: the Investigator’s 10 gp, not 10 copper', gold(R14, '2014', { cls: 'Fighter', background: 'Investigator' }) >= 10, gold(R14, '2014', { cls: 'Fighter', background: 'Investigator' }));
       } catch(e){ ok('round 135 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 136: a skill in place of a duplicate; tools expertise; two hands; kit picks --
+    {
+      try {
+        await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100);
+        const R = CB.R;
+        const fresh = o => { CB.build = Object.assign(sktBlankBuild('2014'), { name: 'T' }, o); CB.build.abilities.method = 'manual'; CB.build.abilities.base = Object.assign({ str: 16, dex: 14, con: 14, int: 13, wis: 12, cha: 10 }, o.base || {}); CB.rec = sktComputeCharacter(CB.build, R); };
+        fresh({ cls: 'Fighter', level: 1, species: 'Half-Orc', background: 'Soldier' });
+        ok('builder: a half-orc soldier (Intimidation twice) is asked for a skill in its place', cbDupSkills().join() === 'intimidation' && cbTodo().some(t => /in place of one you have twice/.test(t.what)));
+        cbQuickBuild(); CB.rec = sktComputeCharacter(CB.build, R);
+        ok('builder: and gets it — five skills, not four', (CB.build.replSkills || []).length === 1 && Object.keys(CB.rec.sheet.skillProf).length === 5 && !cbTodo().filter(t => !t.soft).length, JSON.stringify(CB.build.replSkills));
+        fresh({ cls: 'Rogue', level: 1, species: 'Human', background: 'Criminal', skills: ['acrobatics', 'perception', 'insight', 'investigation'] });
+        CB.step = 'skills'; cbRender(); await sleep(60);
+        ok('builder: a 2014 rogue may put expertise in thieves’ tools', !!document.querySelector('#cb-root [data-cb-expert="thieves\' tools"]'));
+        CB.build.expertise = ['perception', "thieves' tools"]; CB.rec = sktComputeCharacter(CB.build, R);
+        ok('builder: and the sheet says so, with nothing against it', CB.rec.sheet.proficiencies.tools.includes("thieves' tools (expertise)") && !cbRuleBreaks().length, JSON.stringify(cbRuleBreaks()));
+        fresh({ cls: 'Fighter', level: 1, species: 'Human', background: 'Soldier', optional: { 'Fighting Style': ['Dueling'] } });
+        const ls = CB.rec.sheet.attacks.find(a => /Longsword/.test(a.name));
+        ok('attacks: a longsword two-handed has no Dueling bonus (one hand only)', ls && /^1d8\+5/.test(ls.damage) && ls.versatile === '1d10+3', ls && ls.damage + ' / ' + ls.versatile);
+        CB.step = 'equipment'; cbRender(); await sleep(60);
+        ok('builder: the attack list shows two-handed damage', /two hands/.test(document.querySelector('#cb-root .cb-attacks').textContent));
+        const ko = [...document.querySelectorAll('#cb-root [data-cb-eqpick] option')].map(o => o.textContent);
+        ok('builder: a kit’s “weapon of your choice” says what each one is', ko.some(t => /^Battleaxe — 1d8 slashing · 1d10 two hands/.test(t)), ko.slice(0, 2).join(' | '));
+        fresh({ cls: 'Wizard', level: 4, species: 'Human', background: 'Sage', base: { int: 15, str: 13 }, multi: [{ cls: 'Fighter', level: 3, subclass: 'Eldritch Knight', spells: ['Sleep', 'Charm Person', 'Shield'] }] });
+        ok('builder: an Eldritch Knight as a second class keeps to its schools too', cbRuleBreaks().some(t => /Fighter: 1 spell\(s\) not abjuration or evocation too many/.test(t.what)));
+        CB.step = 'spells'; cbRender(); await sleep(60);
+        ok('builder: and a second class’s spells each open their text', document.querySelectorAll('#cb-root [data-cb-spin="cb-mcspell"]').length > 10);
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 136 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -2568,6 +2568,8 @@ function sktComputeCharacter(build, R, prior){
   (build.skills || []).forEach(k => ctx.skillProf.add(k));
   (build.speciesSkills || []).forEach(k => ctx.skillProf.add(k));
   (build.bgSkills || []).forEach(k => ctx.skillProf.add(k));
+  // The skill chosen in place of one two fixed sources both gave.
+  (build.replSkills || []).forEach(k => ctx.skillProf.add(k));
   [species, subrace].forEach(s => {
     if (!s) return;
     const ov = s === species && subrace && subrace.overrides || [];
@@ -3007,7 +3009,7 @@ function sktComputeCharacter(build, R, prior){
       hitDiceByClass: parts.length > 1 ? parts.filter(p => p.key).map(p => p.level + 'd' + ((sktRulesClass(R, p.cls) || {}).hd || 8)).join(' + ') : '',
       languages: [...ctx.languages].join(', '),
       proficiencies: { armor: [...ctx.armorProf].filter(Boolean), weapons: [...ctx.weaponProf].filter(Boolean),
-                       weaponRules: ctx.weaponPropRules, tools: [...ctx.toolProf].filter(Boolean) },
+                       weaponRules: ctx.weaponPropRules, tools: [...ctx.toolProf].filter(Boolean).map(t => ctx.expertise.has(String(t).toLowerCase()) ? t + ' (expertise)' : t) },
       attacks, attacksPerAction: ctx.attacksPerAction, critRange: ctx.critRange,
       states: states.map(x => ({ key: x.s.key, label: x.s.label, on: x.on, conc: x.conc, spell: x.s.spell || '', resource: x.s.resource || '',
         desc: typeof x.s.desc === 'function' ? x.s.desc(ctx, x.value) : (x.s.desc || ''), options: x.s.options && x.s.options(ctx).length ? x.s.options(ctx) : null, value: x.value })),
@@ -3314,7 +3316,8 @@ function sktBuildAttacks(ctx, gear, sc){
     const hit = ab + (prof(w) ? pb : 0) + (ranged ? ctx.rangedAttackBonus : 0) + (w._hit || 0) + ctx.weaponHit;
     // Rage adds its damage to a melee attack made with Strength.
     const flat = (w._dmg || 0) + (!ranged && ab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
-    let dmgBonus = ab + (!ranged && !props.includes('2H') && ctx.duelingBonus ? ctx.duelingBonus : 0) + flat;
+    const duel = !ranged && !props.includes('2H') && ctx.duelingBonus ? ctx.duelingBonus : 0;
+    let dmgBonus = ab + duel + flat;
     let die = shil ? ctx.shillelagh.die : (w.dmg1 || '1');
     if (ctx.martialArts && ctx.martialArtsDie && !ranged && monkWeapon(w, props, ranged) && _sktDieAvg(ctx.martialArtsDie) > _sktDieAvg(die)) die = ctx.martialArtsDie;
     const type = SKT_DMG[String(w.dmgType || '').charAt(0)] || '';
@@ -3322,7 +3325,7 @@ function sktBuildAttacks(ctx, gear, sc){
     out.push({
       name: w._name || _sktTitle(w.name), atkBonus: sktSigned(hit),
       damage: die + (dmgBonus ? (dmgBonus > 0 ? '+' : '') + dmgBonus : '') + (type ? ' ' + type : ''),
-      versatile: w.dmg2 ? w.dmg2 + (dmgBonus ? sktSigned(dmgBonus) : '') : null,
+      versatile: w.dmg2 ? w.dmg2 + ((dmgBonus - duel) ? sktSigned(dmgBonus - duel) : '') : null,
       range: w.range || null,
       mastery: (ctx.build.masteries || []).map(s => s.toLowerCase()).includes(w.name.toLowerCase()) ? mastery : '',
       props, str: !ranged && ab === m.str, _ab: ab, _flat: flat,
