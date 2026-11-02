@@ -957,14 +957,14 @@ registerPanel('combat',{
           // (or two, on crit). Clear the deathSaves struct so the pip row
           // doesn't render anymore.
           state.combatants[i] = {...state.combatants[i], deathSaves: null, stable: true};
-          showToast(c.name + ' stabilized');
+          showToast(c.name + ' stabilized', { alert: true });
         } else if (ds.fail >= 3){
           // Dead: lock the state so re-clicking the 3rd pip can't undo it,
           // and so future damage doesn't re-initialize saves. The death
           // pip row stops rendering; the card stays in its dead visual
           // (.dead class is added because c.hp is still ≤ 0).
           state.combatants[i] = {...state.combatants[i], deathSaves: null, dead: true};
-          showToast(c.name + ' has died');
+          showToast(c.name + ' has died', { alert: true });
         }
         save(); this._render();
       }
@@ -1204,7 +1204,6 @@ registerPanel('combat',{
     state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus,initiative:p.init||0,conditions:[]});
     if(!state.combatRound) state.combatRound=1;
     save();this._render();
-    showToast(`${p.name} added`);
   },
 
   _removeFromCombatById(id){
@@ -1318,7 +1317,6 @@ registerPanel('combat',{
   _startRound(round){
     state.combatRound = round;
     this._lairDue = null;
-    showToast(`Round ${round}`);
     this._log('— Round ' + round + ' —');
     // Legendary actions do NOT refresh here — see _refreshTurnEconomy, same
     // reasoning as reactions below. The round tick was said to be equivalent
@@ -1536,7 +1534,6 @@ registerPanel('combat',{
         if (round <= 1){ showToast('Already at start of round 1'); return; }
         pi = state.combatants.length - 1;
         round -= 1;
-        showToast(`Back to round ${round}`);
       }
       state.activeCombatantId = state.combatants[pi].id;
       state.combatRound = round;
@@ -1559,7 +1556,6 @@ registerPanel('combat',{
     });
     if (!rolled){ showToast('No NPCs to roll for'); return; }
     save(); this._render();
-    showToast(`Rolled initiative for ${rolled} NPC${rolled===1?'':'s'}`);
   },
 
   // Sort combatants by initiative DESC, with Dex modifier as tiebreaker
@@ -1587,7 +1583,6 @@ registerPanel('combat',{
       return dexMod(b) - dexMod(a);
     });
     save(); this._render();
-    if (!quiet) showToast('Sorted by initiative (Dex breaks ties)');
   },
 
   // Open the bestiary detail popout for a monster combatant. Looks up the
@@ -1882,7 +1877,7 @@ registerPanel('combat',{
             const beastName = ws.name;
             partySlot.wildshape = null;
             logParts.push('form drops');
-            if (typeof showToast === 'function') showToast(beastName + ' form drops — ' + c.name + ' reverts');
+            if (typeof showToast === 'function') showToast(beastName + ' form drops — ' + c.name + ' reverts', { alert: true });
           }
         }
       }
@@ -1926,7 +1921,7 @@ registerPanel('combat',{
           if (cap > 0 && overflow >= cap){
             c.deathSaves = null; c.stable = false; c.dead = true;
             this._log(`${c.name} — massive damage (${overflow} past 0 vs ${cap} max): dies instantly`);
-            showToast(`💀 ${c.name} dies instantly — massive damage`);
+            showToast(`💀 ${c.name} dies instantly — massive damage`, { alert: true });
           } else if (c.stable){
             c.stable = false;
             c.deathSaves = {success:0, fail: this._lastAtkCrit ? 2 : 1};
@@ -1946,7 +1941,7 @@ registerPanel('combat',{
             if (ds.fail >= 3){
               c.deathSaves = null; c.dead = true;
               this._log(`${c.name} — third failed death save: dies`);
-              showToast(`💀 ${c.name} has died`);
+              showToast(`💀 ${c.name} has died`, { alert: true });
             } else {
               c.deathSaves = ds;
             }
@@ -1982,7 +1977,7 @@ registerPanel('combat',{
         else c.concentration = null;
         concDropped = true;
         this._log(`${c.name} dropped to 0 HP — ${conc} ends`);
-        showToast(`🌀 ${conc} ends — ${c.name} is down`);
+        showToast(`🌀 ${conc} ends — ${c.name} is down`, { alert: true });
       }
       // Use damageForConc (after resist/vuln math, before absorption) so
       // the check fires even when the beast pool / temp HP ate everything.
@@ -1990,7 +1985,7 @@ registerPanel('combat',{
       else if (conc && damageForConc > 0){
         const dc = Math.max(10, Math.floor(damageForConc / 2));
         // On a player's phone the save itself pops up; no reminder on top of it.
-        if (!document.body.classList.contains('player-app')) showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`);
+        if (!document.body.classList.contains('player-app')) showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`, { alert: true });
         // The player's phone asks them to roll it (player-app.js).
         if (c.isPC && partySlot) partySlot.concCheck = { id: uid(), dc, spell: conc, at: Date.now() };
       }
@@ -2118,7 +2113,7 @@ registerPanel('combat',{
     if (!who.length) return;
     this._lairDue = { round: state.combatRound || 1, names: who.map(c => c.name) };
     this._log('🏰 Lair action (initiative 20): ' + this._lairDue.names.join(', '));
-    if (typeof showToast === 'function') showToast('🏰 Lair action — initiative 20: ' + this._lairDue.names.join(', '));
+    if (typeof showToast === 'function') showToast('🏰 Lair action — initiative 20: ' + this._lairDue.names.join(', '), { alert: true });
   },
 
   // ─── Saving throw bonus, for anyone in the fight ───────────────────────────
@@ -2660,7 +2655,6 @@ registerPanel('combat',{
     // waiting for the next party-panel render. Safe when party is closed —
     // the optional-chain no-ops.
     if (c.isPC) panelDefs.party?._render?.();
-    showToast(has?(cond+' removed from '+c.name):(cond+' → '+c.name));
   },
 
   applyCondition(cond){
@@ -2826,7 +2820,6 @@ registerPanel('combat',{
         if (!dataUrl) return;
         state.combatants[i] = {...state.combatants[i], portrait: dataUrl};
         save(); this._render();
-        showToast('Portrait uploaded');
       } catch(err){ showToast('Upload failed: '+err.message); }
     });
     inp.click();

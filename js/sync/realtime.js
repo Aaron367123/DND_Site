@@ -254,7 +254,9 @@ const _ENTITY_KEYS = {
     // The player view's turn bar is not a panel, so _reloadPanel can't reach
     // it — and it is the one surface a player watches between their turns.
     postApply(){
-      loadDomain('combat'); ['combat','party'].forEach(_reloadPanel);
+      loadDomain('combat');
+      if (typeof sktNoteRemoteCombat === 'function') sktNoteRemoteCombat();
+      ['combat','party'].forEach(_reloadPanel);
       if (typeof paRender === 'function') paRender();
     },
   },

@@ -809,3 +809,51 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
    justify/align-content: center, which would cut off the left of a big map). */
 #map-scroll { display: grid; }
 #map-sizer { margin: auto; }
+
+/* ── 38. Line width on the phone's map ───────────────────── */
+/* Players drew at one fixed width; the DM's Thin/Med/Thick select lives in
+   the toolbar a player never sees. With the pencil on, four dots sit above
+   the tool bar, each the width and colour of the line it draws. */
+.pa-draw-sizes { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 2px; padding: 4px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--border);
+  box-shadow: var(--sh-2); backdrop-filter: blur(6px); }
+.pa-draw-sz { width: 40px; height: 40px; display: grid; place-items: center; padding: 0;
+  border-radius: 50%; border: 1px solid transparent; background: none; cursor: pointer; }
+.pa-draw-sz i { display: block; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.pa-draw-sz.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* ── 39. Toasts let taps through ─────────────────────────── */
+/* A toast caught every tap on its patch of screen — over the phone's map
+   tools, the tab bar, the dock — until it timed out. Now only its action
+   button (Undo, Reload) takes a tap; everything else goes to what's below,
+   and showToast clears a toast that was tapped through. */
+.toast-item { pointer-events: none; }
+.toast-action { pointer-events: auto; }
+
+/* ── 40. Quieter toasts ──────────────────────────────────── */
+/* Every click raised the full framed plaque in the middle of the bottom of
+   the screen. Now a routine note (and a note with Undo) is a small flat line
+   in the bottom-right corner, out of the way of the dock and the work, and
+   only an alert or a question keeps the frame. On a phone they stay centred
+   above the tab bar, sized to their text instead of the screen. */
+#toast-host { left: auto; right: 16px; transform: none; align-items: flex-end; max-width: min(460px, calc(100vw - 32px)); }
+.toast-item.note, .toast-item.action {
+  clip-path: none; border-radius: 8px; border: 1px solid var(--border); min-height: 0;
+  padding: 6px 12px; font-size: var(--fs-sm); font-weight: 500; letter-spacing: 0;
+  background: color-mix(in srgb, var(--panel) 94%, transparent); color: var(--text-muted);
+  backdrop-filter: blur(6px); }
+.toast-item.note::before, .toast-item.note::after,
+.toast-item.action::before, .toast-item.action::after { display: none; }
+.toast-item.action { gap: 12px; padding-right: 6px; }
+.toast-item.action .toast-action { clip-path: none; background: none; color: var(--accent); padding: 3px 8px;
+  border-radius: 6px; font-size: var(--fs-xs); letter-spacing: .06em; }
+.toast-item.action .toast-action:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); filter: none; }
+@media (max-width: 768px) {
+  #toast-host { left: 50%; right: auto; transform: translateX(-50%); align-items: center; width: calc(100vw - 20px); max-width: none; }
+}
+body.player-app #toast-host { left: 50%; right: auto; transform: translateX(-50%); align-items: center; max-width: none; }
+/* On the phone's map, above its tools rather than on them. */
+body.player-app:has(#pa-screen .pa-draw) #toast-host { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+body.player-app:has(#pa-screen .pa-draw-sizes) #toast-host { bottom: calc(206px + env(safe-area-inset-bottom, 0px)); }
+body.player-app .toast-item.note, body.player-app .toast-item.action { background: var(--panel); }

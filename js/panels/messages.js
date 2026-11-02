@@ -67,7 +67,7 @@ function sktMsgChanged(local){
     // The DM: a pop-up per message unless that conversation is open.
     const P = panelDefs.messages, open = P && P._body && P._thread;
     fresh.filter(m => m.from !== open).forEach(m => {
-      if (typeof showToast === 'function') showToast('✉ ' + (m.name || 'A player') + ': ' + m.text.slice(0, 80) + (m.text.length > 80 ? '…' : ''));
+      if (typeof showToast === 'function') showToast('✉ ' + (m.name || 'A player') + ': ' + m.text.slice(0, 80) + (m.text.length > 80 ? '…' : ''), { alert: true });
     });
   }
 }

@@ -2816,7 +2816,7 @@ registerPanel('turnview', {
     save(); C._render?.(); this._render();
   },
   _endTurn(){
-    if (this._pending){ showToast('Resolve the reaction first'); return; }
+    if (this._pending){ showToast('Resolve the reaction first', { alert: true }); return; }
     this._clearPrompt();
     if (this._queue) this._finishMulti(true);   // the turn ends, so the sequence does
     // Advantage was set for THIS turn (Reckless Attack, a prone target), and

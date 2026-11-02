@@ -392,7 +392,6 @@ function initSettings(){
       if (!rec){ showToast('Snapshot not found'); return; }
       if (btn.dataset.snapact === 'download'){
         sktBackup.download(rec.snap);
-        showToast('Downloaded');
         return;
       }
       const parsed = { keys: rec.snap.keys, created: rec.created, version: rec.snap.version, legacy:false };

@@ -732,7 +732,6 @@ function smartArrange(){
     const cy = Math.floor(i / cols);
     snapWindowToZone(id, { x: cx*cellW, y: cy*cellH, w: cellW, h: cellH });
   });
-  if (typeof showToast === 'function') showToast('Arranged ' + n + ' window' + (n===1?'':'s') + ' into ' + cols + '×' + rows);
 }
 // Expose globally so the context menu, keyboard handler, and console can hit it.
 window.smartArrange = smartArrange;

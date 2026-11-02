@@ -127,7 +127,6 @@ registerPanel('battlemap',{
         const url = window.location.href.split('?')[0]+'?player=1';
         const w = window.open(url,'skt-player','width=1280,height=720');
         if (!w && typeof showToast==='function') showToast('Allow popups to open player view');
-        else if (typeof showToast==='function') showToast('Player view opened');
       } },
       syncItem,
       { label: 'Clear all drawings', icon: 'i-pencil', run: () => {
@@ -338,6 +337,19 @@ registerPanel('battlemap',{
   _drawings: [],
   _drawColor: '#ff4040',
   _drawSize: 4,
+  // Pencil widths, in map pixels at the map's own scale. Remembered per
+  // device: a player on a phone who wants a fat marker for circling things
+  // shouldn't have to pick it again every visit.
+  DRAW_SIZES: [2, 4, 8, 16],
+  _setDrawSize(v){
+    if (!this.DRAW_SIZES.includes(v)) return;
+    this._drawSize = v;
+    try { localStorage.setItem('skt-draw-size-v1', String(v)); } catch(e){}
+  },
+  _loadDrawSize(){
+    let v = NaN; try { v = parseInt(localStorage.getItem('skt-draw-size-v1')); } catch(e){}
+    if (this.DRAW_SIZES.includes(v)) this._drawSize = v;
+  },
   // Natural dimensions of the loaded image — derived from the Image object,
   // not persisted (re-read on next load).
   _bgMapNaturalW: 0,
@@ -464,6 +476,7 @@ registerPanel('battlemap',{
     // the first edit of a session has something to return to.
     this._undoStack.length = 0; this._redoStack.length = 0;
     this._lastCommitted = this._undoSnapshot();
+    this._loadDrawSize();
     // Catch up on anyone added to the tracker while this panel was closed.
     // The save()-driven reconciler skips a fight whose map has never been
     // created — there is nowhere to put a token before a map exists — and
@@ -2832,6 +2845,7 @@ registerPanel('battlemap',{
         +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
+        +'<option value="16"'+(this._drawSize===16?' selected':'')+'>Huge</option>'
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
       +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
@@ -2862,6 +2876,7 @@ registerPanel('battlemap',{
         +'<option value="2"'+(this._drawSize===2?' selected':'')+'>Thin</option>'
         +'<option value="4"'+(this._drawSize===4?' selected':'')+'>Med</option>'
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
+        +'<option value="16"'+(this._drawSize===16?' selected':'')+'>Huge</option>'
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
@@ -3127,7 +3142,6 @@ registerPanel('battlemap',{
         this._alignFirstClick=null;
         this._saveMap();
         this._render();
-        if (typeof showToast==='function') showToast('Grid offset reset');
       }
       else if(act==='clear-draw'){
         if (!this._drawings.length) return;
@@ -3158,7 +3172,6 @@ registerPanel('battlemap',{
         const url=window.location.href.split('?')[0]+'?player=1';
         const w=window.open(url,'skt-player','width=1280,height=720');
         if(!w)showToast('Allow popups to open player view');
-        else showToast('Player view opened');
       }
       else if(act==='add-party'){
         const pi=+btn.dataset.pi;
@@ -3203,7 +3216,7 @@ registerPanel('battlemap',{
     });
     b.querySelector('#fog-radius')?.addEventListener('input',e=>{this._fogRadius=parseInt(e.target.value)||1;});
     b.querySelector('#draw-color')?.addEventListener('input',e=>{this._drawColor=e.target.value;});
-    b.querySelector('#draw-size')?.addEventListener('change',e=>{this._drawSize=parseInt(e.target.value)||4;});
+    b.querySelector('#draw-size')?.addEventListener('change',e=>{this._setDrawSize(parseInt(e.target.value));});
 
     // Pencil + eraser — mousedown starts an action; subsequent mousemoves
     // continue it. Only active when draw/erase is selected (otherwise
@@ -3921,7 +3934,6 @@ registerPanel('battlemap',{
       if (k === 'reset-align'){
         this._gridOffsetX = 0; this._gridOffsetY = 0; this._alignFirstClick = null;
         this._saveMap(); this._render();
-        if (typeof showToast === 'function') showToast('Grid offset reset');
         return;
       }
       if (k === 'fog-toggle'){
@@ -4165,7 +4177,6 @@ registerPanel('battlemap',{
       if (!entry) return;
       this._restoreMapSnapshot(entry.snapshot);
       close();
-      if (typeof showToast === 'function') showToast('Loaded "' + entry.name + '"');
     }));
     backdrop.querySelectorAll('[data-savedmap-del]').forEach(btn => btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -4486,7 +4497,6 @@ registerPanel('battlemap',{
           this._saveMap();
           this._loadBgFromPath(path, /*autoFit=*/true);
           close();
-          showToast('Map loaded');
         });
       });
       // Star toggles — works both for cards in the main grid AND for the
@@ -4549,7 +4559,6 @@ registerPanel('battlemap',{
           this._saveMap();
           this._loadBgFromPath(path, /*autoFit=*/true);
           close();
-          showToast('Map loaded');
         });
       });
       backdrop.querySelectorAll('#mapsel-starred-host [data-mapsel-star]').forEach(btn => btn.addEventListener('click', e => {
@@ -5701,7 +5710,7 @@ registerPanel('battlemap',{
       }
     });
     this._renderTokens();this._saveMap();
-    showToast(placed?`${placed} token(s) added`:'Party already placed');
+    if (!placed) showToast('Party already placed');
   },
 });
 
@@ -5781,8 +5790,12 @@ function _sktTokenForNewCombatant(c, x, y){
 }
 
 // The reconciliation, over a plain view of the map. Mutates `tokens`.
-function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre){
+//
+// opts.hold  — combatant ids not to place a token for yet (see below)
+// opts.spare — t => true keeps an orphaned auto token for now
+function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
   const list = Array.isArray(combatants) ? combatants : [];
+  opts = opts || {};
   let added = 0, removed = 0, renamed = 0;
 
   // Drop auto tokens whose combatant has left the fight, and any duplicate
@@ -5804,7 +5817,14 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre){
   for (let i = tokens.length - 1; i >= 0; i--){
     const t = tokens[i];
     if (!t || !t.auto) continue;
-    if (!list.some(c => sktTokenForCombatant([t], c))){ tokens.splice(i, 1); removed++; }
+    if (list.some(c => sktTokenForCombatant([t], c))) continue;
+    // A character is still standing there when the fight ends. Removing PCs
+    // with the monsters meant the next fight put every one of them back in
+    // the middle of the map, wherever the party had walked to — the token
+    // "jumped to the centre". It keeps its cid, so the next fight finds it.
+    if (t.isPC) continue;
+    if (opts.spare && opts.spare(t)) continue;
+    tokens.splice(i, 1); removed++;
   }
 
   list.forEach(c => {
@@ -5827,6 +5847,7 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre){
       }
       return;
     }
+    if (opts.hold && c.id != null && opts.hold.has(c.id)) return;
     const { x, y } = sktFreeCell(tokens, cols, rows, cs, centre.x, centre.y);
     tokens.push(_sktTokenForNewCombatant(c, x, y));
     added++;
@@ -5846,6 +5867,54 @@ function _sktRosterSig(){
     .join('|');
 }
 let _sktLastRosterSig = null;
+
+// Combatants that came from ANOTHER DM screen (a second device, a second tab)
+// get their token from that screen. This one used to place its own the moment
+// it saw the new combatant, which is usually before the token that came with
+// it has synced — so it dropped a second token in the middle of the map, and
+// the de-duplication then kept whichever came first in the list, often this
+// one. The creature the DM had just placed jumped to the centre. Now a
+// combatant from elsewhere waits a few seconds for its token, and an auto
+// token for a combatant this screen has never had waits for its combatant,
+// before either is placed or removed here.
+const SKT_TOKEN_WAIT_MS = 4000;
+const _sktRosterSeen = new Set();     // combatant ids this screen has had
+const _sktArrived = new Map();        // combatant id → when it came from elsewhere
+const _sktOrphanSince = new Map();    // token id → when it was first found orphaned
+let _sktTokenTimer = null;
+function _sktRetryTokensSoon(){
+  clearTimeout(_sktTokenTimer);
+  _sktTokenTimer = setTimeout(() => { _sktTokenTimer = null; sktEnsureCombatTokens(true); }, SKT_TOKEN_WAIT_MS + 250);
+}
+// Called by the sync layer after it loads a combat update from elsewhere.
+function sktNoteRemoteCombat(){
+  if (typeof state === 'undefined' || !Array.isArray(state.combatants)) return;
+  const now = Date.now(); let any = false;
+  state.combatants.forEach(c => {
+    if (c && c.id != null && !_sktRosterSeen.has(c.id) && !_sktArrived.has(c.id)){ _sktArrived.set(c.id, now); any = true; }
+  });
+  if (any) _sktRetryTokensSoon();
+}
+// The hold and spare rules for one pass, and the bookkeeping after it.
+function _sktTokenRules(){
+  const now = Date.now();
+  const hold = new Set();
+  _sktArrived.forEach((at, id) => { if (now - at < SKT_TOKEN_WAIT_MS) hold.add(id); });
+  let waiting = hold.size > 0;
+  const spare = t => {
+    if (t.cid == null || _sktRosterSeen.has(t.cid)) return false;   // ours, and it left
+    if (!_sktOrphanSince.has(t.id)) _sktOrphanSince.set(t.id, now);
+    if (now - _sktOrphanSince.get(t.id) < SKT_TOKEN_WAIT_MS){ waiting = true; return true; }
+    return false;
+  };
+  const done = tokens => {
+    state.combatants.forEach(c => { if (c && c.id != null){ _sktRosterSeen.add(c.id); if (!hold.has(c.id)) _sktArrived.delete(c.id); } });
+    const live = new Set((tokens || []).map(t => t && t.id));
+    _sktOrphanSince.forEach((at, id) => { if (!live.has(id)) _sktOrphanSince.delete(id); });
+    if (waiting) _sktRetryTokensSoon();
+  };
+  return { hold, spare, done };
+}
 
 // Entry point, called from save(). Works whether or not the panel is mounted:
 // with it closed the STORED JSON is edited directly, because the panel's
@@ -5872,8 +5941,10 @@ function sktEnsureCombatTokens(force){
     if (def && def._body){
       const centre = def._viewCenterStage()
         || { x: def._cols * def._csScreen() / 2, y: def._rows * def._csScreen() / 2 };
+      const rules = _sktTokenRules();
       const r = sktReconcileTokens(def._tokens, state.combatants,
-                                   def._cols, def._rows, def._csScreen(), centre);
+                                   def._cols, def._rows, def._csScreen(), centre, rules);
+      rules.done(def._tokens);
       if (r.added || r.removed || r.renamed){ def._renderTokens(); def._saveMap(); }
       return r;
     }
@@ -5891,7 +5962,9 @@ function sktEnsureCombatTokens(force){
       ? { x: placed.reduce((s, t) => s + t.x, 0) / placed.length,
           y: placed.reduce((s, t) => s + t.y, 0) / placed.length }
       : { x: cols * cs / 2, y: rows * cs / 2 };
-    const r = sktReconcileTokens(d.tokens, state.combatants, cols, rows, cs, centre);
+    const rules = _sktTokenRules();
+    const r = sktReconcileTokens(d.tokens, state.combatants, cols, rows, cs, centre, rules);
+    rules.done(d.tokens);
     if (r.added || r.removed || r.renamed){
       // setItem is enough to sync: realtime.js patches Storage.prototype and
       // pushes any dirtied SKT_SYNC_KEYS key. Deliberately NOT broadcast on

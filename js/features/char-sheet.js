@@ -1140,7 +1140,9 @@ function csOnClick(e){
     // Hurt while concentrating: a CON save to keep it, DC 10 or half the damage.
     if (sign < 0 && pc.concentration && !CS.embed) CS.conc = { dc: Math.max(10, Math.floor(n / 2)), spell: pc.concentration };
     const run = () => { panelDefs.party._applyHpDelta(i, sign * n, type); csCommit(); };
-    if (typeof sktUndoable === 'function') return sktUndoable((sign < 0 ? 'Took ' : 'Healed ') + n, run);
+    // The number changes right in front of them, and the other button puts it
+    // back: no Undo toast for it (Ctrl+Z still works).
+    if (typeof sktUndoable === 'function') return sktUndoable((sign < 0 ? 'Took ' : 'Healed ') + n, run, CS_QUIET);
     return run();
   }
   if (d.cs === 'insp') return csEdit(pc.inspiration ? 'Spent Heroic Inspiration' : 'Heroic Inspiration', p => { p.inspiration = !p.inspiration; }, CS_QUIET);

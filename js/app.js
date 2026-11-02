@@ -107,6 +107,7 @@ function init(){
     try {
       if (e.key === 'skt-party-v1' || e.key === 'skt-combat-v1'){
         loadDomain(e.key === 'skt-party-v1' ? 'party' : 'combat');
+        if (e.key === 'skt-combat-v1' && typeof sktNoteRemoteCombat === 'function') sktNoteRemoteCombat();
         ['party', 'combat'].forEach(id => panelDefs[id]?._body && panelDefs[id]._render?.());
         for (const id in panelDefs){ const d = panelDefs[id]; if (d && typeof d._syncFromCombat === 'function'){ try { d._syncFromCombat(); } catch(err){} } }
       } else if (e.key === 'skt-loot-v1' && panelDefs.loot?._body){
@@ -203,7 +204,6 @@ function init(){
     // the browser preserved the parent's URL when the popup was blocked then
     // un-blocked, or when 'noopener' lost the reference.
     try { if (w && !w.closed && w.location && w.location.href !== url) w.location.href = url; } catch(_){}
-    showToast('Player view opened');
   });
   // Right-click = copy link only.
   pvBtn?.addEventListener('contextmenu', e => { e.preventDefault(); copyPvLink(); });

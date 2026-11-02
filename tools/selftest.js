@@ -11855,6 +11855,81 @@
         ok('builder: rebuilding an imported Half-Elf gives no variant', rb.species === 'Half-Elf' && !rb.sub, JSON.stringify(rb));
       } catch(e){ ok('round 128 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
+    // -- Round 129: tokens stay put when the roster changes; line widths ----
+    {
+      const keepC = JSON.stringify(state.combatants), ds0 = panelDefs.battlemap._drawSize;
+      let dsKey0 = null; try { dsKey0 = localStorage.getItem('skt-draw-size-v1'); } catch(e){}
+      try {
+        const C = { x: 500, y: 500 };
+        const pc = { id: 'pc-r129', name: 'R129 Hero', isPC: true, hp: 10 };
+        const toks = [{ id: 't-pc', cid: 'pc-r129', label: 'R129 Hero', x: 75, y: 75, isPC: true, auto: true },
+                      { id: 't-gob', cid: 'gob-r129', label: 'R129 Goblin', x: 125, y: 75, auto: true }];
+        sktReconcileTokens(toks, [], 20, 20, 50, C);
+        ok('map: when a fight ends a character’s token stays where they stand; the monster’s goes', toks.length === 1 && toks[0].id === 't-pc' && toks[0].x === 75, JSON.stringify(toks));
+        sktReconcileTokens(toks, [pc], 20, 20, 50, C);
+        ok('map: the next fight finds the character there, not in the middle of the map', toks.length === 1 && toks[0].x === 75 && toks[0].y === 75, JSON.stringify(toks));
+        // A monster added on another DM screen brings its own token.
+        state.combatants = [{ id: 'ogre-r129', name: 'R129 Ogre', hp: 5 }];
+        sktNoteRemoteCombat();
+        const rules = _sktTokenRules(), t2 = [];
+        sktReconcileTokens(t2, state.combatants, 20, 20, 50, C, rules);
+        ok('map: a monster from another DM screen gets no second token dropped here', t2.length === 0 && rules.hold.has('ogre-r129'));
+        rules.done(t2);
+        // The sync layer is what tells it a combatant came from elsewhere.
+        {
+          const ck = 'skt-combat-v1', c0 = localStorage.getItem(ck), roster = state.combatants;
+          const cur = JSON.parse(c0 || '{}'); cur.combatants = (cur.combatants || []).concat([{ id: 'net-r129', name: 'R129 Net', hp: 4 }]);
+          _remoteUpdate = true; try { localStorage.setItem(ck, JSON.stringify(cur)); } finally { _remoteUpdate = false; }
+          try { _ENTITY_KEYS[ck].postApply(); } catch(e){}
+          ok('map: a fight arriving over sync marks its new combatants as someone else’s to place', _sktArrived.has('net-r129'));
+          _remoteUpdate = true; try { if (c0 == null) localStorage.removeItem(ck); else localStorage.setItem(ck, c0); } finally { _remoteUpdate = false; }
+          state.combatants = roster; _sktArrived.delete('net-r129');
+        }
+        // And a token that lands before its monster is kept for it.
+        const t3 = [{ id: 't-troll', cid: 'troll-r129', label: 'R129 Troll', x: 25, y: 25, auto: true }];
+        sktReconcileTokens(t3, state.combatants, 20, 20, 50, C, _sktTokenRules());
+        ok('map: a token from another screen that arrives before its monster is not deleted', t3.length === 1);
+        // Added on this screen: placed at once, as before.
+        state.combatants.push({ id: 'imp-r129', name: 'R129 Imp', hp: 3 });
+        const t4 = [], r4 = _sktTokenRules();
+        sktReconcileTokens(t4, state.combatants, 20, 20, 50, C, r4);
+        ok('map: a monster added here still gets its token straight away', t4.length === 1 && t4[0].cid === 'imp-r129', JSON.stringify(t4.map(t => t.cid)));
+        // A toast lets a tap through to what's under it; only its button takes one.
+        document.getElementById('toast-host')?.remove();
+        showToast('R129 a toast over the bottom of the screen', { action: { label: 'Undo', run: () => {} } }); await sleep(260);
+        const ti = document.querySelector('.toast-item'), tr = ti.getBoundingClientRect(), tb = ti.querySelector('.toast-action').getBoundingClientRect();
+        const atText = document.elementFromPoint(tr.left + 30, tr.top + tr.height / 2), atBtn = document.elementFromPoint(tb.left + tb.width / 2, tb.top + tb.height / 2);
+        ok('toast: a tap on a toast reaches what is under it; its button still works', !(atText && atText.closest('#toast-host')) && !!(atBtn && atBtn.closest('.toast-action')),
+           (atText && atText.className) + ' / ' + (atBtn && atBtn.className));
+        document.getElementById('toast-host')?.remove();
+        // Routine notes take each other's place; the moments that matter stack.
+        showToast('R129 one'); showToast('R129 two'); showToast('R129 two');
+        const kinds = () => [...document.querySelectorAll('.toast-item')].map(t => t.dataset.kind + ':' + t.textContent);
+        ok('toast: a new note replaces the last one (and the same one twice is one)', kinds().join() === 'note:R129 two', kinds().join());
+        showToast('R129 died', { alert: true }); showToast('R129 sync failed'); showToast('R129 three');
+        ok('toast: alerts and failures stack and keep the frame; a note still replaces only notes', kinds().join() === 'alert:R129 died,alert:R129 sync failed,note:R129 three', kinds().join());
+        document.getElementById('toast-host')?.remove();
+        // The DM's pencil has a Huge width, remembered on this device.
+        if (!PLAYER){
+          const B = panelDefs.battlemap;
+          openPanel('battlemap'); await sleep(300);
+          B._tool = 'draw'; B._render(); await sleep(80);
+          const sel = document.querySelector('#draw-size');
+          ok('map: the pencil offers Thin to Huge', !!sel && [...sel.options].map(o => o.value).join() === '2,4,8,16', sel && [...sel.options].map(o => o.value).join());
+          sel.value = '16'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+          B._drawSize = 4; B._loadDrawSize();
+          ok('map: the chosen width is remembered', B._drawSize === 16 && localStorage.getItem('skt-draw-size-v1') === '16');
+          B._tool = ''; B._render();
+        }
+      } catch(e){ ok('round 129 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.combatants = JSON.parse(keepC); clearTimeout(_sktTokenTimer);
+        _sktArrived.clear();
+        panelDefs.battlemap._drawSize = ds0;
+        try { if (dsKey0 == null) localStorage.removeItem('skt-draw-size-v1'); else localStorage.setItem('skt-draw-size-v1', dsKey0); } catch(e){}
+        if (!PLAYER){ try { closePanel('battlemap'); } catch(e){} }
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -13422,6 +13497,16 @@
           document.querySelector('#pa-screen #map-scroll').scrollTo(0, 0); await sleep(30);
           const t = B._tokens.find(x => x.id === 'tk_follow'); t.x += 200; t.y += 150; B._render(); await sleep(700);
           ok('map: and follows it when it moves', off() <= 30, off() + 'px off');
+          // A player picks how thick their pencil draws.
+          const ds0 = B._drawSize; let dk0 = null; try { dk0 = localStorage.getItem('skt-draw-size-v1'); } catch(e){}
+          ok('map: no line widths until the pencil is on', !document.querySelector('.pa-draw-sizes'));
+          document.querySelector('[data-pa-draw="tool-draw"]').click(); await sleep(200);
+          const sz = [...document.querySelectorAll('.pa-draw-sz')];
+          ok('map: with the pencil on, four line widths, all on screen', sz.length === 4 && sz.every(b => { const q = b.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth && q.top > 0; }), sz.length + '');
+          document.querySelector('[data-pa-size="16"]').click(); await sleep(120);
+          ok('map: picking Huge makes the pencil draw huge, and marks it', B._drawSize === 16 && !!document.querySelector('.pa-draw-sz.on[data-pa-size="16"]'));
+          document.querySelector('[data-pa-draw="tool-draw"]').click(); await sleep(120);
+          B._drawSize = ds0; try { if (dk0 == null) localStorage.removeItem('skt-draw-size-v1'); else localStorage.setItem('skt-draw-size-v1', dk0); } catch(e){}
         } catch(e){ ok('map follow ran to completion', false, e.message); }
         finally {
           B._viewScale = vs0; state.sharedPanels = sh0; paTab = tab0; paRender();

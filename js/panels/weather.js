@@ -291,7 +291,6 @@ registerPanel('weather', {
     b.querySelector('#weather-tick-day')?.addEventListener('click', () => {
       this._rollAndKeepHistory(this._data.biome, this._data.season);
       this._render();
-      if (typeof showToast === 'function') showToast('Day ticked — fresh weather rolled');
     });
     b.querySelector('#weather-sync-season')?.addEventListener('click', () => {
       let monthIdx = null;

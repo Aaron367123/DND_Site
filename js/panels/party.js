@@ -1549,7 +1549,7 @@ registerPanel('party',{
             const beastName = c.wildshape.name;
             c.wildshape = null;
             if (typeof showToast === 'function'){
-              showToast(beastName + ' form drops — ' + c.name + ' reverts');
+              showToast(beastName + ' form drops — ' + c.name + ' reverts', { alert: true });
             }
           }
         }
@@ -1577,13 +1577,13 @@ registerPanel('party',{
       // creature is least able to shrug anything off.
       if (c.rage && (c.hp || 0) <= 0){
         c.rage = false; c.rageRounds = null;
-        if (typeof showToast === 'function') showToast(c.name + ' falls — the rage ends');
+        if (typeof showToast === 'function') showToast(c.name + ' falls — the rage ends', { alert: true });
       }
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
       if (c.concentration && damageForConc > 0){
         const dc = Math.max(10, Math.floor(damageForConc / 2));
         if (typeof showToast === 'function' && !document.body.classList.contains('player-app')){
-          showToast('🌀 ' + c.name + ': DC ' + dc + ' CON save to maintain ' + c.concentration);
+          showToast('🌀 ' + c.name + ': DC ' + dc + ' CON save to maintain ' + c.concentration, { alert: true });
         }
         // The player's phone asks them to roll it (player-app.js).
         c.concCheck = { id: uid(), dc, spell: c.concentration, at: Date.now() };
@@ -2617,7 +2617,6 @@ registerPanel('party',{
             state.party[idx] = {...state.party[idx], inspiration: true};
             save();
             this._render();
-            showToast('Inspiration: ' + r);
           },
         }));
         items.push({ label: '✏ Edit reasons…', onClick: () => this._manageInspirationReasons() });
@@ -3189,7 +3188,6 @@ registerPanel('party',{
             state.party[i]={...state.party[i],icon:dataUrl};
             this._pickerOpen=null; save(); this._render();
             panelDefs.combat?._render?.();
-            showToast('Icon uploaded');
           } catch(err){ showToast('Upload failed: '+err.message); }
         });
         inp.click();

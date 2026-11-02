@@ -470,7 +470,7 @@ function paOnQuests(){
   const news = sktQuestNews();
   if (news.length){
     try { navigator.vibrate && navigator.vibrate(60); } catch(e){}
-    if (typeof showToast === 'function') news.slice(0, 3).forEach(n => showToast('⚑ ' + n));
+    if (typeof showToast === 'function') showToast('⚑ ' + news[0] + (news.length > 1 ? ' (+' + (news.length - 1) + ' more)' : ''), { alert: true });
   }
   const tabs = paVisibleTabs();
   if (!tabs.some(t => t.id === paTab)){ paRender(); return; }
@@ -493,7 +493,7 @@ function paOnFactions(){
   const news = sktFactionNews();
   if (news.length){
     try { navigator.vibrate && navigator.vibrate(60); } catch(e){}
-    if (typeof showToast === 'function') news.slice(0, 3).forEach(n => showToast('⚜ ' + n));
+    if (typeof showToast === 'function') showToast('⚜ ' + news[0] + (news.length > 1 ? ' (+' + (news.length - 1) + ' more)' : ''), { alert: true });
   }
   const tabs = paVisibleTabs();
   if (!tabs.some(t => t.id === paTab)){ paRender(); return; }
@@ -525,7 +525,7 @@ function paOnMessages(fresh){
   if (!document.body.classList.contains('player-app')) return;
   if (fresh && fresh.length && !paMsgOpen()){
     try { navigator.vibrate && navigator.vibrate([80, 50, 80]); } catch(e){}
-    if (typeof showToast === 'function') showToast('✉ The DM: ' + fresh[fresh.length - 1].text.slice(0, 90));
+    if (typeof showToast === 'function') showToast('✉ The DM: ' + fresh[fresh.length - 1].text.slice(0, 90), { alert: true });
   }
   const el = document.getElementById('pa-screen');
   if (el && (paMsgOpen() || (paTab === 'more' && !paMoreSub))){
@@ -743,7 +743,7 @@ function paTurnAlert(cur, mine, until){
     paHideTurnBanner();
     if (until === 1){
       buzz(90);
-      if (typeof showToast === 'function') showToast("You're up next");
+      if (typeof showToast === 'function') showToast("You're up next", { alert: true });
     }
   }
 }
@@ -954,7 +954,34 @@ function paAddDrawBar(host){
     `<button class="pa-draw-b ${d.tool && B && B._tool === d.tool ? 'on' : ''}" data-pa-draw="${d.act}">
        ${typeof ICO === 'function' ? ICO(d.icon) : ''}<span>${d.label}</span>
      </button>`).join('');
+  // With the pencil on, its widths sit just above the bar: a dot each, drawn
+  // the size and colour the line will be.
+  if (B && B._tool === 'draw'){
+    const sizes = document.createElement('div');
+    sizes.className = 'pa-draw-sizes';
+    sizes.setAttribute('role', 'group');
+    sizes.setAttribute('aria-label', 'Line width');
+    sizes.innerHTML = PA_DRAW_SIZES.map(s =>
+      `<button class="pa-draw-sz ${B._drawSize === s.v ? 'on' : ''}" data-pa-size="${s.v}" aria-label="${s.label}" aria-pressed="${B._drawSize === s.v}" title="${s.label}">
+         <i style="width:${s.dot}px;height:${s.dot}px;background:${B._drawColor || '#ff4040'}"></i>
+       </button>`).join('');
+    bar.appendChild(sizes);
+  }
   host.appendChild(bar);
+}
+const PA_DRAW_SIZES = [
+  { v: 2,  label: 'Thin',   dot: 4  },
+  { v: 4,  label: 'Medium', dot: 7  },
+  { v: 8,  label: 'Thick',  dot: 11 },
+  { v: 16, label: 'Huge',   dot: 17 },
+];
+function paDrawSize(v){
+  const B = panelDefs.battlemap; if (!B || typeof B._setDrawSize !== 'function') return;
+  B._setDrawSize(v);
+  const host = document.getElementById('pa-screen');
+  const old = host && host.querySelector('.pa-draw');
+  if (old) old.remove();
+  if (host) paAddDrawBar(host);
 }
 function paDraw(act){
   const B = panelDefs.battlemap; if (!B) return;
@@ -2144,6 +2171,8 @@ function paOnClick(e){
     if (paOpenMates.has(id)) paOpenMates.delete(id); else paOpenMates.add(id);
     paRenderScreen(); return;
   }
+  const drawSz = e.target.closest('[data-pa-size]');
+  if (drawSz){ paDrawSize(+drawSz.dataset.paSize); return; }
   const draw = e.target.closest('[data-pa-draw]');
   if (draw){ paDraw(draw.dataset.paDraw); return; }
   const react = e.target.closest('[data-pa-react]');

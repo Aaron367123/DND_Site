@@ -596,20 +596,67 @@ function sktAnyResistApplies(arr, dmgType, attack){
     (typeof x === 'string' ? x : (x && (x.resist || x.immune || x.vulnerable || x.name)) || ''),
     dmgType, attack));
 }
-// Stacking toast system — up to 3 simultaneous toasts so fast repeat calls
-// don't overwrite each other (the previous single-element implementation
-// would clobber an "X saved" notification when the next one fired 100ms
-// later, leaving users uncertain what actually happened).
+// Toasts. Four kinds, and only the ones that matter get the full frame:
 //
-// `opts.action` is { label, run } — when set, the toast gains a clickable
-// action chip (e.g. an Undo button) and stays open longer so the user has
-// time to react.
+//   note    — the default. "Saved", "Link copied", "Cast Bless". A small, flat
+//             line in the corner (above the tab bar on a phone), gone in a
+//             second or two. A new note REPLACES the one on screen instead of
+//             stacking: when anything at all raised one, three of them piled
+//             up at the bottom of the screen during an ordinary turn.
+//   action  — opts.action = { label, run }: a note with a button (Undo). Lasts
+//             long enough to reach for it; replaces an earlier one too.
+//   alert   — opts.alert, or a message that reads like a failure: something
+//             went wrong, or a moment at the table (a death, a concentration
+//             save, the lair acting) that nothing else on screen shows. These
+//             keep the framed plaque and stack, up to three.
+//   sticky  — opts.sticky: stays until its button is tapped (a new version).
+//
+// The same message twice in a row restarts the one showing instead of
+// adding a copy.
+const SKT_TOAST_ALERT = /fail|could ?n.t|can.t |cannot|not found|too large|denied|blocked|rejected|error|went wrong|unavailable|not enough|no .+ left|requires/i;
 function showToast(msg, opts){
+  opts = opts || {};
   let host = document.getElementById('toast-host');
   if (!host){
     host = document.createElement('div');
     host.id = 'toast-host';
     document.body.appendChild(host);
+  }
+  // A toast never stands between a finger and what's under it. The CSS lets
+  // the tap through (only an action button catches one), and a tap where a
+  // toast is also clears it out of the way — it sat over the phone's map
+  // tools and the bottom of the screen until it timed out.
+  if (!showToast._tapThrough){
+    showToast._tapThrough = true;
+    document.addEventListener('pointerdown', e => {
+      if (e.target && e.target.closest && e.target.closest('.toast-action')) return;
+      const h = document.getElementById('toast-host'); if (!h) return;
+      [...h.children].forEach(c => {
+        if (c.classList.contains('sticky')) return;     // waiting for an answer
+        const r = c.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom){
+          c.classList.remove('show'); setTimeout(() => c.remove(), 200);
+        }
+      });
+    }, true);
+  }
+  const safeMsg = typeof msg === 'string' ? msg : String(msg ?? '');
+  const hasAction = !!(opts.action && typeof opts.action.run === 'function');
+  const kind = opts.sticky ? 'sticky' : (opts.alert || SKT_TOAST_ALERT.test(safeMsg)) ? 'alert' : hasAction ? 'action' : 'note';
+  const leave = (t, ms) => { clearTimeout(t._exit); t._exit = setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, ms); };
+  const timeoutMs = kind === 'note' ? 1500 + Math.min(1500, Math.max(0, safeMsg.length - 40) * 30)
+                  : kind === 'action' ? 4000 : 4500;
+  // Already showing: keep that one up a little longer rather than add a twin.
+  if (kind !== 'sticky' && !hasAction){
+    const twin = [...host.children].find(c => !c.classList.contains('sticky') && c._msg === safeMsg && c.classList.contains('show'));
+    if (twin){ leave(twin, timeoutMs); return; }
+  }
+  // One routine line at a time: a note takes the place of the last note, an
+  // action of the last note or action.
+  if (kind === 'note' || kind === 'action'){
+    [...host.children].forEach(c => {
+      if (c.dataset.kind === 'note' || (kind === 'action' && c.dataset.kind === 'action')) c.remove();
+    });
   }
   // Cap to 3 — pop the oldest if needed before adding the new one. A sticky
   // toast is never the one popped: it is waiting for a tap, and three
@@ -620,11 +667,11 @@ function showToast(msg, opts){
     victim.remove();
   }
   const t = document.createElement('div');
-  t.className = 'toast-item' + (opts && opts.sticky ? ' sticky' : '') + (opts && opts.action ? ' has-action' : '');
-  const safeMsg = typeof msg === 'string' ? msg : String(msg ?? '');
-  let timeoutMs = 1800;
-  if (opts && opts.action && typeof opts.action.run === 'function'){
-    timeoutMs = 5000;
+  t.className = 'toast-item ' + kind + (hasAction ? ' has-action' : '');
+  t.dataset.kind = kind;
+  t._msg = safeMsg;
+  t.setAttribute('role', kind === 'alert' || kind === 'sticky' ? 'alert' : 'status');
+  if (hasAction){
     const span = document.createElement('span');
     span.textContent = safeMsg;
     const btn = document.createElement('button');
@@ -645,11 +692,8 @@ function showToast(msg, opts){
   void t.offsetWidth;
   t.classList.add('show');
   // opts.sticky: stays until its action is tapped (which removes it above).
-  if (opts && opts.sticky) return;
-  setTimeout(() => {
-    t.classList.remove('show');
-    setTimeout(() => t.remove(), 200);
-  }, timeoutMs);
+  if (kind === 'sticky') return;
+  leave(t, timeoutMs);
 }
 
 // Keyboard-shortcut cheatsheet overlay. Triggered by pressing `?` (no
