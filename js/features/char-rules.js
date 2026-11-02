@@ -901,6 +901,64 @@ function sktFeatPrereq(R, build, feat, rec){
   return { ok: oks.some(Boolean), text: texts.filter(Boolean).join('; or ') };
 }
 
+// The same for an optional feature: an invocation, a maneuver, a fighting
+// style, metamagic. Its prerequisites are a level IN THE CLASS (a warlock 3 /
+// fighter 6 is a 3rd-level warlock for Thirsting Blade), a pact boon, a
+// cantrip, or another invocation. A condition with no way to judge it (an
+// artificer's "a suit of armor", a house's renown) passes, with its words.
+function sktOptionalPrereq(R, build, x){
+  const ps = (x && x.prerequisite) || [];
+  if (!ps.length) return { ok: true, text: '' };
+  const parts0 = sktClassLevels(build, R);
+  const chosen = new Set([].concat(...Object.values(build.optional || {})).map(n => String(n).toLowerCase()));
+  const cantrips = new Set([].concat(build.cantrips || [], ...(build.multi || []).map(m => m.cantrips || [])).map(n => String(n).toLowerCase()));
+  const texts = [], oks = ps.map(p => {
+    const parts = [], ok = [];
+    if (p.level != null){
+      const lv = typeof p.level === 'object' ? p.level.level : p.level;
+      const cn = typeof p.level === 'object' && p.level.class ? String(p.level.class.name || '') : '';
+      const part = cn ? parts0.find(q => String(q.cls).toLowerCase() === cn.toLowerCase()) : null;
+      parts.push((cn ? cn + ' ' : '') + 'level ' + lv);
+      ok.push((cn ? (part ? part.level : 0) : (build.level || 1)) >= lv);
+    }
+    if (p.pact){ parts.push('Pact of the ' + p.pact); ok.push(chosen.has(('pact of the ' + p.pact).toLowerCase())); }
+    if (p.optionalfeature){
+      const names = p.optionalfeature.map(n => String(n).split('|')[0]);
+      parts.push(names.map(_sktTitle).join(' or '));
+      ok.push(names.some(n => chosen.has(n.toLowerCase())));
+    }
+    if (p.spell){
+      p.spell.forEach(s => {
+        if (typeof s === 'string'){ const n = s.split('|')[0].replace(/#c$/, ''); parts.push(_sktTitle(n) + ' cantrip'); ok.push(cantrips.has(n.toLowerCase())); }
+        else { parts.push(sktRulesInline(String(s.entrySummary || s.entry || 'a cantrip'))); ok.push(cantrips.size > 0); }
+      });
+    }
+    if (p.item){ parts.push(p.item.join(' or ')); ok.push(true); }
+    if (p.otherSummary){ parts.push(sktRulesInline(String(p.otherSummary.entrySummary || p.otherSummary.entry || ''))); ok.push(true); }
+    texts.push(parts.filter(Boolean).join(', '));
+    return ok.every(Boolean);
+  });
+  return { ok: oks.some(Boolean), text: texts.filter(Boolean).join('; or ') };
+}
+
+// A 2014 Eldritch Knight's wizard spells are abjuration or evocation, and an
+// Arcane Trickster's enchantment or illusion, but for one spell of any school
+// gained at 3rd, 8th, 14th and 20th level. (The 2024 versions dropped it.)
+// `off` is how many of the build's spells are already outside the schools.
+const SKT_SCHOOL_NAME = { A: 'abjuration', V: 'evocation', E: 'enchantment', I: 'illusion', C: 'conjuration', D: 'divination', N: 'necromancy', T: 'transmutation' };
+function sktSchoolLimit(build, R){
+  if (!R || R.edition !== '2014') return null;
+  const cls = sktRulesClass(R, build.cls), sub = cls && sktRulesSubclass(cls, build.subclass);
+  if (!sub) return null;
+  const n = String(sub.shortName || sub.name || '');
+  const schools = /^Eldritch Knight/i.test(n) ? ['A', 'V'] : /^Arcane Trickster/i.test(n) ? ['E', 'I'] : null;
+  if (!schools) return null;
+  const L = build.level || 1;
+  const outside = name => { const s = sktRulesSpell(R, name); return !!(s && s.level > 0 && !schools.includes(s.school)); };
+  return { schools, free: [3, 8, 14, 20].filter(l => L >= l).length, off: (build.spells || []).filter(outside).length, outside,
+           text: schools.map(k => SKT_SCHOOL_NAME[k]).join(' or ') };
+}
+
 // ── Starting gold instead of the kit (2014) ──────────────────────────────────
 // "5d4 × 10" from the class's goldAlternative: the dice, the multiplier, and
 // the average a player can take instead of rolling.
@@ -3694,7 +3752,10 @@ function sktSpeciesAsiChoice(sp, sub, build){
 // The levels a class gets an Ability Score Improvement (or a feat instead).
 function sktAsiLevels(cls){
   if (!cls) return [];
-  return cls.features.filter(f => /^Ability Score Improvement$/i.test(f.name)).map(f => f.level);
+  // The 2024 classes' 19th-level slot is called Epic Boon: an epic boon or
+  // another feat. Matching only the first name left no slot at 19, so no
+  // character could ever take its boon.
+  return cls.features.filter(f => /^(Ability Score Improvement|Epic Boon)$/i.test(f.name)).map(f => f.level);
 }
 
 // Optional features chosen by count at a level: invocations, metamagic,
@@ -3741,7 +3802,7 @@ if (typeof module !== 'undefined' && module.exports){
                      sktDefineState, sktStateSig, sktStatesSyncAll, SKT_STATES, sktSaveAdvantages, sktFeatureSpellPicks, sktMagicalSecrets, sktUsesFromText, sktArcanumLevels, sktArcanumOptions, sktProfGrants, sktProfChoices, sktSubclassSpellPick, sktSubclassBlocks, sktSpeciesResistChoice, sktSpeciesResist, sktLanguageOptions, sktFeatSpellGrant, sktFeatSpells, sktSpeciesSpellGrant, sktSpeciesAsiChoice, sktSpellOnList,
                      sktRulesSpecies, sktRulesBackground, sktRulesFeat, sktRulesSpell,
                      sktMagicLoad, sktMagicBases, sktMagicMake, sktKitItems, sktGearLoad,
-                     sktToolChoices, sktFeatPrereq, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
+                     sktToolChoices, sktFeatPrereq, sktOptionalPrereq, sktSchoolLimit, sktClassGold, sktFeatChoices, sktBookOk, sktOtherBooks, sktCoinText,
                      sktBuildBackground, sktBgNeedsAdapt, SKT_CUSTOM_BG, SKT_ABILITY_ORDER, sktAbilityBreakdown,
                      sktClassLevels, sktClassView, sktAsiSlots, sktIsMulticlass, sktMulticlassOk, sktMulticlassNeedText,
                      sktAsiLevels, sktBuildSpellcasting, sktBuildAbilities, sktClassColumn, sktRulesText,

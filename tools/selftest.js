@@ -7237,8 +7237,12 @@
         const main = r.querySelector('.cb-main');
         const names = R14.optional.filter(o => (o.featureType || []).includes('AI')).map(o => o.name);
         const inf = [...main.querySelectorAll('label')].filter(l => l.querySelector('input[type=checkbox]') && names.some(n => l.textContent.startsWith(n)));
-        ok('artificer: infusions to choose without ticking other books', /Infusions/.test(main.textContent) && /Enhanced Defense/.test(main.textContent) && inf.length >= 10, inf.length);
-        ok('artificer: an infusion shows what it goes on and its level', /Boots of the Winding Path \(level 6\+ · A pair of boots/.test(main.textContent));
+        // A 2nd-level artificer is offered the infusions it can learn; the
+        // 6th-level ones wait (and show, marked, with the switch off).
+        ok('artificer: infusions to choose without ticking other books', /Infusions/.test(main.textContent) && /Enhanced Defense/.test(main.textContent) && inf.length >= 8 && !/Boots of the Winding Path/.test(main.textContent), inf.length);
+        { const q = main.querySelector('[data-cb-qualified]'); if (q){ q.checked = false; q.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); } }
+        ok('artificer: an infusion shows what it goes on and its level', /Boots of the Winding Path — needs Artificer level 6, A pair of boots/.test(r.querySelector('.cb-main').textContent));
+        { const q = r.querySelector('.cb-main [data-cb-qualified]'); if (q){ q.checked = true; q.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); } }
         cbClose();
         // An infusion's level is the artificer's, not the character's.
         await openCharBuilder({ edition: '2014' }); await sleep(300);
@@ -11960,6 +11964,52 @@
         if (typeof csClose === 'function') csClose();
       } catch(e){ ok('round 130 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
       finally { state.party.splice(0, state.party.length, ...JSON.parse(party0)); save(); }
+    }
+    // -- Round 131: the builder offers what the rules allow -----------------
+    {
+      try {
+        const open = async (ed, o) => { await openCharBuilder({ edition: ed }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100); Object.assign(CB.build, o); cbSet(x => x); await sleep(60); };
+        const step = async s => { CB.step = s; cbRender(); await sleep(120); };
+        const opts = sel => [...document.querySelectorAll('#cb-root ' + sel)].map(i => i.closest('label').textContent.trim());
+        // Invocations wait for their level, pact and cantrip.
+        await open('2014', { cls: 'Warlock', level: 2, subclass: 'Fiend', cantrips: ['Mage Hand', 'Minor Illusion'] }); await step('levels');
+        let inv = opts('[data-cb-opt-eldritch-invocations]');
+        ok('builder: a 2nd-level warlock isn’t offered Thirsting Blade, or Agonizing Blast without Eldritch Blast', inv.length > 5 && !inv.some(t => /Thirsting|Agonizing/.test(t)), inv.length + '');
+        CB.build.cantrips = ['Eldritch Blast', 'Mage Hand']; cbSet(x => x); await step('levels');
+        ok('builder: with Eldritch Blast, Agonizing Blast is there', opts('[data-cb-opt-eldritch-invocations]').some(t => /Agonizing/.test(t)));
+        cbClose(); await sleep(60);
+        // The 2024 19th-level Epic Boon has its slot.
+        await open('2024', { cls: 'Fighter', level: 19 });
+        ok('builder: a 2024 fighter has a feat slot at 19 for the Epic Boon', sktAsiSlots(CB.build, CB.R).some(s => s.level === 19));
+        CB.build.asi['19'] = { type: 'feat', feat: '' }; cbSet(x => x); await step('levels');
+        ok('builder: and it offers the epic boons', [...document.querySelectorAll('#cb-root [data-cb-asifeat="19"] option')].some(o => /^Boon of/.test(o.textContent)));
+        cbClose(); await sleep(60);
+        // Scholar names its skills; masteries are weapons.
+        await open('2024', { cls: 'Wizard', level: 2, skills: ['arcana', 'insight'] }); await step('skills');
+        const sch = [...document.querySelectorAll('#cb-root [data-cb-expert]')].map(i => i.dataset.cbExpert);
+        ok('builder: a wizard’s Scholar is one of its six skills, not Insight', sch.includes('arcana') && !sch.includes('insight'), sch.join());
+        Object.assign(CB.build, { cls: 'Rogue', level: 1 }); cbSet(x => x); await step('levels');
+        const ms = [...document.querySelectorAll('#cb-root [data-cb-mastery]')].map(i => i.dataset.cbMastery);
+        ok('builder: masteries list weapons, not the staffs that are a focus', ms.includes('quarterstaff') && !ms.includes('staff') && !ms.includes('wooden staff'));
+        cbClose(); await sleep(60);
+        // A 2014 Eldritch Knight: abjuration and evocation, and one from any school.
+        await open('2014', { cls: 'Fighter', level: 3, subclass: 'Eldritch Knight', spells: [], cantrips: [] });
+        cbQuickBuild(); await sleep(60);
+        const lim = sktSchoolLimit(CB.build, CB.R);
+        ok('builder: a 2014 Eldritch Knight’s quick build keeps to its schools but for one', !!lim && lim.free === 1 && lim.off <= 1 && (CB.build.spells || []).length === 3, (CB.build.spells || []).join());
+        CB.build.spells = ['Shield', 'Sleep']; cbSet(x => x); await step('spells');
+        const sc = n => (sktRulesSpell(CB.R, n) || {}).school;
+        const open1 = [...new Set([...document.querySelectorAll('#cb-root [data-cb-spell]')].filter(i => !i.disabled && !i.checked).map(i => sc(i.dataset.cbSpell)))].sort().join('');
+        ok('builder: with its any-school spell chosen, only abjuration and evocation are left', open1 === 'AV', open1);
+        // Multiclassing asks for both classes' scores: a paladin with CHA 8
+        // can't take up rogue, however good its Dexterity.
+        Object.assign(CB.build, { cls: 'Paladin', level: 5, subclass: '', multi: [] });
+        CB.build.abilities.method = 'manual'; CB.build.abilities.base = { str: 15, dex: 14, con: 12, int: 10, wis: 10, cha: 8 };
+        cbSet(x => x); await step('class');
+        const rogueOpt = [...document.querySelectorAll('#cb-root [data-cb-mcadd] option')].find(o => /^Rogue/.test(o.textContent));
+        ok('builder: adding a class names the current class’s prerequisite too', !!rogueOpt && /CHA 13/.test(rogueOpt.textContent), rogueOpt && rogueOpt.textContent);
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 131 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
     // -- Class features: represented, not just text ------------------------
     {

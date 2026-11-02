@@ -1690,8 +1690,10 @@ function csManageSpellsHtml(pc){
     // A row per spell, as in the list above: the box prepares it, the name
     // opens what it does. Names alone left a player choosing spells they
     // couldn't read without leaving the sheet.
+    // A 2014 Eldritch Knight or Arcane Trickster: two schools, and a few from any.
+    const lim = typeof sktSchoolLimit === 'function' ? sktSchoolLimit(Object.assign({}, view, { spells: lst.spells || [] }), R) : null;
     const box = (opts, chosen, max, kind) => '<div class="cs-preplist">' + opts.map(n => {
-      const on = (chosen || []).includes(n), full = max != null && (chosen || []).length >= max;
+      const on = (chosen || []).includes(n), full = (max != null && (chosen || []).length >= max) || (kind === 'spells' && lim && lim.off >= lim.free && lim.outside(n));
       const s = csSpell(n), ok = 'pp:' + kind + ':' + n, open = CS.open[ok];
       const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '');
       return '<div class="cs-spell cs-prep' + (on ? ' on' : '') + '">'
@@ -1713,7 +1715,8 @@ function csManageSpellsHtml(pc){
       }
     }
     if (want){
-      h += '<h5>' + (s.prepared ? 'Prepared' : 'Known') + ' ' + (lst.spells || []).length + ' / ' + want + '</h5>';
+      h += '<h5>' + (s.prepared ? 'Prepared' : 'Known') + ' ' + (lst.spells || []).length + ' / ' + want + '</h5>'
+        + (lim ? '<div class="' + (lim.off > lim.free ? 'cb-warn' : 'cb-dim') + '">' + csE(lim.text.charAt(0).toUpperCase() + lim.text.slice(1)) + ' spells, but for ' + lim.free + ' from any school (' + lim.off + ' chosen).</div>' : '');
       if (book) h += box(book.filter(n => !always.includes(n)), lst.spells, want, 'spells');
       else for (let lv = 1; lv <= s.maxSpellLevel; lv++){
         const opts = sktSpellOptions(R, view, lv).map(o => o.name).filter(n => !always.includes(n));

@@ -739,7 +739,13 @@ function cbMulticlassHtml(){
   const taken = new Set(parts.map(p => p.key));
   if (first.level > 1){
     h += '<label class="cb-f">Add a class<select class="cb-sel" data-cb-mcadd><option value="">Choose…</option>'
-      + R.classes.filter(c => !taken.has(c.key)).map(c => '<option value="' + cbEsc(c.name) + '">' + cbEsc(c.name) + (sktMulticlassOk(R, c.name, ab) ? '' : ' (needs ' + cbEsc(sktMulticlassNeedText(R, c.name)) + ')') + '</option>').join('') + '</select></label>';
+      + R.classes.filter(c => !taken.has(c.key)).map(c => {
+          // Both ends of it: the new class's prerequisite and every class the
+          // character already has (a fighter with INT 8 can't become a wizard,
+          // and a wizard with STR 8 and DEX 8 can't become a fighter).
+          const need = [c.name].concat(parts.map(p => p.cls)).filter(n => !sktMulticlassOk(R, n, ab));
+          return '<option value="' + cbEsc(c.name) + '">' + cbEsc(c.name) + (need.length ? ' (needs ' + cbEsc([...new Set(need)].map(n => sktMulticlassNeedText(R, n)).join('; ')) + ')' : '') + '</option>';
+        }).join('') + '</select></label>';
   } else h += '<div class="cb-dim">Raise the character’s level on Basics to add another class.</div>';
   return h;
 }
@@ -1068,7 +1074,10 @@ function cbQuickBuild(){
     if (skp && (b.speciesSkills || []).length < skp.count)
       b.speciesSkills = bySkill(skp.from.filter(k => !Object.keys(rec.sheet.skillProf || {}).includes(k) && !(b.skills || []).includes(k))).slice(0, skp.count);
     const ex = cbExpertiseCount();
-    if (ex && (b.expertise || []).length < ex) b.expertise = bySkill(Object.keys(rec.sheet.skillProf || {})).slice(0, ex);
+    if (ex && (b.expertise || []).length < ex){
+      const scholar = R.edition === '2024' && sktRulesClass(R, b.cls).key === 'wizard';
+      b.expertise = bySkill(Object.keys(rec.sheet.skillProf || {}).filter(k => !scholar || ['arcana', 'history', 'investigation', 'medicine', 'nature', 'religion'].includes(k))).slice(0, ex);
+    }
     const lc = cbLanguageCount();
     if (lc && (b.languages || []).length < lc){
       const known = (rec.sheet.languages || '').split(', ');
@@ -1140,7 +1149,12 @@ function cbQuickBuild(){
       for (let i = 0; byLv.some(l => l && l.length > i); i++) for (let lv = s.maxSpellLevel; lv >= 1; lv--) if (byLv[lv] && byLv[lv][i]) pool.push(byLv[lv][i]);
       if (s.spellbook && (lst.spellbook || []).length < s.spellbook) lst.spellbook = (lst.spellbook || []).concat(pool.filter(n => !(lst.spellbook || []).includes(n))).slice(0, s.spellbook);
       const want = s.prepared || s.known, src = s.spellbook ? lst.spellbook : pool;
-      if (want && (lst.spells || []).length < want) lst.spells = (lst.spells || []).concat(src.filter(n => !(lst.spells || []).includes(n))).slice(0, want);
+      // A 2014 Eldritch Knight or Arcane Trickster: from its two schools, but
+      // for the few any-school spells.
+      const lim = sktSchoolLimit(v, R);
+      let offLeft = lim ? lim.free - lim.off : Infinity;
+      const ok = n => { if (!lim || !lim.outside(n)) return true; if (offLeft > 0){ offLeft--; return true; } return false; };
+      if (want && (lst.spells || []).length < want) lst.spells = (lst.spells || []).concat(src.filter(n => !(lst.spells || []).includes(n) && ok(n))).slice(0, want);
     });
     // Another class's subclass and skill.
     sktClassLevels(b, R).slice(1).forEach(p => {
@@ -1230,8 +1244,14 @@ CB_RENDER.skills = () => {
     + cbChecks(cls.skillChoice.from.map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), b.skills || [], cls.skillChoice.count, 'cb-skill', granted);
   const ex = cbExpertiseCount();
   if (ex){
-    const profd = Object.keys(rec.sheet.skillProf || {});
-    html += '<h4>Expertise</h4><div class="cb-dim">Double your proficiency bonus in ' + ex + ' skill' + (ex === 1 ? '' : 's') + ' you are proficient in.</div>'
+    let profd = Object.keys(rec.sheet.skillProf || {});
+    // A 2024 wizard's only expertise is Scholar, and Scholar names its six
+    // skills: Insight or Perception was on offer because the wizard had it.
+    const scholar = R.edition === '2024' && cls.key === 'wizard';
+    if (scholar) profd = profd.filter(k => ['arcana', 'history', 'investigation', 'medicine', 'nature', 'religion'].includes(k));
+    html += '<h4>' + (scholar ? 'Scholar' : 'Expertise') + '</h4><div class="cb-dim">' + (scholar
+      ? 'Expertise in one of these you are proficient in: Arcana, History, Investigation, Medicine, Nature or Religion.'
+      : 'Double your proficiency bonus in ' + ex + ' skill' + (ex === 1 ? '' : 's') + ' you are proficient in.') + '</div>'
       + cbCounter((b.expertise || []).length, ex, 'chosen')
       + cbChecks(profd.map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), b.expertise || [], ex, 'cb-expert');
   }
@@ -1377,7 +1397,7 @@ CB_RENDER.levels = () => {
     } else if (isFeat){
       const pre = f => sktFeatPrereq(R, Object.assign({}, b, { level: s.primary ? s.level : b.level }), f, CB.rec);
       const taken = new Set(sktBuildFeatNames(b, R));
-      const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || (l >= 19 && f.category === 'EB'))
+      const pool = R.feats.filter(f => (R.edition === '2014' || f.category === 'G' || (s.level >= 19 && f.category === 'EB'))
                                     && (f.repeatable || p.feat === f.name || !taken.has(f.name))
                                     && (sktBookOk(b, f) || p.feat === f.name)
                                     && (b.showAllFeats || p.feat === f.name || pre(f).ok));
@@ -1431,9 +1451,21 @@ CB_RENDER.levels = () => {
       ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && (String(f.category) === 'FS' || o.types.includes(f.category)))
           .filter(f => sktBookOk(b, f) || have.includes(f.name))
       : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && (sktBookOk(b, x) || have.includes(x.name)));
+    // Only what the character qualifies for, as D&D Beyond: Thirsting Blade
+    // waits for 5th level and Pact of the Blade, Agonizing Blast for Eldritch
+    // Blast. These were all offered with the prerequisite as a note beside
+    // them. The same switch as the feat picker shows the rest.
+    const pre = x => o.kind === 'feat' ? { ok: true, text: '' } : sktOptionalPrereq(R, b, x);
+    const shown = pool.filter(x => b.showAllFeats || have.includes(x.name) || pre(x).ok);
+    const hidden = pool.length - shown.length;
     html += '<h4>' + cbEsc(o.name) + '</h4>' + cbCounter(have.length, o.count, 'chosen')
-      + cbChecks(pool.map(x => ({ value: x.name, label: x.name + cbPrereqNote(x) })), have, o.count, 'cb-opt-' + cbSlug(o.name));
-    have.forEach(n => { const x = pool.find(p => p.name === n); if (x) html += '<div class="cb-feat"><b>' + cbEsc(n) + '</b>' + cbFeatureText(sktRulesText(x.entries)) + '</div>'; });
+      + cbChecks(shown.map(x => { const q = pre(x); return { value: x.name, label: x.name + (q.text ? (q.ok ? ' (' + q.text + ')' : ' — needs ' + q.text) : '') }; }), have, o.count, 'cb-opt-' + cbSlug(o.name))
+      + (hidden || b.showAllFeats ? '<label class="cb-inline"><input type="checkbox" data-cb-qualified' + (b.showAllFeats ? '' : ' checked') + '> Only options this character qualifies for' + (hidden ? ' <span class="cb-dim">(' + hidden + ' more)</span>' : '') + '</label>' : '');
+    have.forEach(n => {
+      const x = pool.find(p => p.name === n); if (!x) return;
+      const q = pre(x);
+      html += '<div class="cb-feat"><b>' + cbEsc(n) + '</b>' + (q.ok ? '' : '<div class="cb-warn">Needs ' + cbEsc(q.text) + '</div>') + cbFeatureText(sktRulesText(x.entries)) + '</div>';
+    });
   });
   // 2024 weapon masteries.
   const mc = cbMasteryCount();
@@ -1442,7 +1474,9 @@ CB_RENDER.levels = () => {
     const prof = P.weapons, rules = P.weaponRules || [];
     const can = i => prof.includes(i.weaponCategory) || prof.includes(i.name.toLowerCase())
       || rules.some(r => r.cat === i.weaponCategory && r.props.some(p => (i.property || []).map(x => String(x).split('|')[0]).includes(p)));
-    const weapons = Object.values(R.items).filter(i => i.mastery && i.weaponCategory && can(i))
+    // Weapons, not the focuses shaped like one: the arcane Staff and the
+    // druid's Wooden Staff are a quarterstaff, and were listed again beside it.
+    const weapons = Object.values(R.items).filter(i => i.mastery && i.weaponCategory && can(i) && !/^SCF/.test(String(i.type || '')))
       .map(i => i.name).filter((n, k, a) => a.indexOf(n) === k).sort();
     html += '<h4>Weapon Mastery</h4><div class="cb-dim">Use the mastery property of ' + mc + ' kinds of weapon.</div>'
       + cbCounter((b.masteries || []).length, mc, 'chosen')
@@ -1525,7 +1559,9 @@ function cbArcanumHtml(){
       + cbSpellChecks(sktArcanumOptions(b, R, lv), (b.arcanum || {})[lv] ? [lv + '|' + b.arcanum[lv]] : [], 1, 'cb-arcanum', n => lv + '|' + n) + '</div>').join('');
 }
 // A checklist of spells, each with a button to read it.
-function cbSpellChecks(options, chosen, max, attr, valueOf){
+// block(n): why that spell can't be added now (a 2014 Eldritch Knight's
+// any-school picks used up), or nothing.
+function cbSpellChecks(options, chosen, max, attr, valueOf, block){
   valueOf = valueOf || (n => n);
   const shown = options.filter(n => cbSpellPass(n, chosen.map ? chosen.map(x => String(x).split('|').pop()) : []));
   const vals = chosen;
@@ -1534,8 +1570,8 @@ function cbSpellChecks(options, chosen, max, attr, valueOf){
   // A spell's text opens right under it, across the list (it opened above
   // the whole list, and the step scrolled up to it — away from your place).
   return '<div class="cb-checks">' + shown.map(n => {
-    const v = valueOf(n), on = vals.includes(v);
-    return '<label class="cb-check' + (on ? ' on' : '') + (!on && full ? ' dim' : '') + '"><input type="checkbox" data-' + attr + '="' + cbEsc(v) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + '>'
+    const v = valueOf(n), on = vals.includes(v), why = !on && block ? block(n) : null, dis = !on && (full || !!why);
+    return '<label class="cb-check' + (on ? ' on' : '') + (dis ? ' dim' : '') + '"' + (why ? ' title="' + cbEsc(why) + '"' : '') + '><input type="checkbox" data-' + attr + '="' + cbEsc(v) + '"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + '>'
       + '<span>' + cbEsc(n) + '</span><button class="cb-spi" data-cb-spinfo="' + cbEsc(n) + '" data-cb-spin="' + cbEsc(attr) + '" title="What it does" aria-label="About ' + cbEsc(n) + '">i</button></label>'
       + (CB.spInfo === n && CB.spInfoIn === attr ? cbSpellInfoHtml(n) : '');
   }).join('') + '</div>';
@@ -1565,10 +1601,17 @@ CB_RENDER.spells = () => {
   }
   if (want){
     html += '<h4>' + (sc.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((b.spells || []).length, want, 'chosen');
+    // A 2014 Eldritch Knight or Arcane Trickster: two schools, and a few from any.
+    const lim = sktSchoolLimit(b, R);
+    let block = null;
+    if (lim){
+      html += '<div class="' + (lim.off > lim.free ? 'cb-warn' : 'cb-dim') + '">' + cbEsc(lim.text.charAt(0).toUpperCase() + lim.text.slice(1)) + ' spells, but for ' + lim.free + ' from any school (' + lim.off + ' chosen).</div>';
+      if (lim.off >= lim.free) block = n => lim.outside(n) ? 'Not ' + lim.text + ': your any-school spells are chosen' : null;
+    }
     if (book){
       const opts = book.filter(n => !always.includes(n));
       html += opts.length ? cbSpellChecks(opts, b.spells || [], want, 'cb-spell') : '<div class="cb-dim">Write spells into the book first.</div>';
-    } else html += cbSpellRows(R, maxLv, b.spells, lv => sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n)), opts => cbSpellChecks(opts, b.spells || [], want, 'cb-spell'));
+    } else html += cbSpellRows(R, maxLv, b.spells, lv => sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n)), opts => cbSpellChecks(opts, b.spells || [], want, 'cb-spell', null, block));
   }
   if (always.length) html += '<h4>Always prepared</h4><div class="cb-dim">' + cbEsc(always.join(', ')) + '</div>';
   return html + cbSecretsHtml() + cbArcanumHtml() + cbWizardPicksHtml() + cbMultiSpellsHtml() + fromFeats;
