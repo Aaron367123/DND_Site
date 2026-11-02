@@ -851,9 +851,7 @@ CB_RENDER.species = () => {
       && (b.showAllFeats || f.name === b.originFeat || pre(f).ok));
     const anyPre = R.feats.some(f => (R.edition === '2014' || f.category === 'O') && f.prerequisite);
     html += '<h4>' + (R.edition === '2024' ? 'Versatile — an origin feat' : 'Feat') + '</h4>'
-      + '<select class="cb-sel" data-cb-originfeat><option value="">Choose a feat…</option>'
-      + pool.map(f => { const q = pre(f); return '<option value="' + cbEsc(f.name) + '"' + (b.originFeat === f.name ? ' selected' : '') + '>' + cbEsc(f.name)
-          + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '') + (q.ok ? '' : ' — needs ' + cbEsc(q.text)) + '</option>'; }).join('') + '</select>'
+      + cbFeatPicker({ key: 'origin', attr: 'cb-originfeat', val: '', pool, cur: b.originFeat, pre })
       + (anyPre ? '<label class="cb-inline"><input type="checkbox" data-cb-qualified' + (b.showAllFeats ? '' : ' checked') + '> Only feats this character qualifies for</label>' : '');
     { const pf = b.originFeat && sktRulesFeat(R, b.originFeat), q = pf && pre(pf); if (q && q.text) html += '<div class="' + (q.ok ? 'cb-dim' : 'cb-warn') + '">Prerequisite: ' + cbEsc(q.text) + '</div>'; }
     html += (b.originFeat ? cbFeatChoicesHtml(b.originFeat) + cbFeatureText(sktRulesText((sktRulesFeat(R, b.originFeat) || {}).entries)) : '');
@@ -898,8 +896,8 @@ CB_RENDER.background = () => {
     html += '<div class="cb-custombg"><div class="cb-dim">' + cbEsc(bg.name) + ' is a 2014 background. The 2024 rules give every background three abilities to increase'
       + (ownFeat ? '' : ' and an origin feat') + ' — choose them here.</div>'
       + '<h4>Three abilities</h4>' + cbChecks(SKT_ABS.map(k => ({ value: k, label: cbAbLabel(k) })), a.abilities || [], 3, 'cb-bgadab');
-    if (!ownFeat) html += '<label class="cb-f">Origin feat<select class="cb-sel" data-cb-bgadfeat="1"><option value="">Choose…</option>'
-      + R.feats.filter(f => f.category === 'O' && sktBookOk(b, f)).map(f => '<option' + (a.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select></label>';
+    if (!ownFeat) html += '<h4>Origin feat</h4>' + cbFeatPicker({ key: 'bgadapt', attr: 'cb-bgadfeat', val: '1', pool: R.feats.filter(f => f.category === 'O' && sktBookOk(b, f)), cur: a.feat })
+      + (a.feat ? cbFeatureText(sktRulesText((sktRulesFeat(R, a.feat) || {}).entries)) : '');
     html += '</div>';
   }
   if (R.edition === '2024' && Array.isArray(bg.ability)){
@@ -939,8 +937,8 @@ function cbCustomBgHtml(){
   h += '<h4>Two skills</h4>' + cbChecks(Object.keys(SKT_SKILLS).map(k => ({ value: k, label: SKT_SKILL_LABEL[k] })), c.skills || [], 2, 'cb-cbgskill');
   if (R.edition === '2024'){
     h += '<h4>Three abilities</h4><div class="cb-dim">The ones your background increases.</div>' + cbChecks(SKT_ABS.map(k => ({ value: k, label: cbAbLabel(k) })), c.abilities || [], 3, 'cb-cbgab');
-    h += '<label class="cb-f">Origin feat (optional)<select class="cb-sel" data-cb-cbg="feat"><option value="">None</option>'
-      + R.feats.filter(f => f.category === 'O' && sktBookOk(b, f)).map(f => '<option' + (c.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + '</option>').join('') + '</select></label>';
+    h += '<h4>Origin feat <span class="cb-dim">optional</span></h4>' + cbFeatPicker({ key: 'custombg', attr: 'cb-cbg', val: 'feat', pool: R.feats.filter(f => f.category === 'O' && sktBookOk(b, f)), cur: c.feat, none: 'No feat' })
+      + (c.feat ? cbFeatureText(sktRulesText((sktRulesFeat(R, c.feat) || {}).entries)) : '');
     h += '<h4>A tool</h4>' + cbChecks(ARTS, c.tools || [], 1, 'cb-cbgtool');
   } else {
     const n = (c.tools || []).length + (+c.languages || 0);
@@ -1532,9 +1530,7 @@ CB_RENDER.levels = () => {
                                     && (f.repeatable || p.feat === f.name || !taken.has(f.name))
                                     && (sktBookOk(b, f) || p.feat === f.name)
                                     && (b.showAllFeats || p.feat === f.name || pre(f).ok));
-      html += '<select class="cb-sel" data-cb-asifeat="' + l + '"><option value="">Choose a feat…</option>'
-        + pool.map(f => { const q = pre(f); return '<option value="' + cbEsc(f.name) + '"' + (p.feat === f.name ? ' selected' : '') + '>' + cbEsc(f.name) + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '')
-          + (q.ok ? '' : ' — needs ' + cbEsc(q.text)) + '</option>'; }).join('') + '</select>'
+      html += cbFeatPicker({ key: 'asi:' + l, attr: 'cb-asifeat', val: l, pool, cur: p.feat, pre })
         + '<label class="cb-inline"><input type="checkbox" data-cb-qualified' + (b.showAllFeats ? '' : ' checked') + '> Only feats this character qualifies for</label>';
       { const pf = p.feat && sktRulesFeat(R, p.feat), q = pf && pre(pf); if (q && q.text) html += '<div class="' + (q.ok ? 'cb-dim' : 'cb-warn') + '">Prerequisite: ' + cbEsc(q.text) + '</div>'; }
       const f = p.feat && sktRulesFeat(R, p.feat);
@@ -1572,9 +1568,8 @@ CB_RENDER.levels = () => {
         html += cbFeatChoicesHtml(f.name);
       }
     });
-    html += '<select class="cb-sel" data-cb-xfeatadd><option value="">Add a feat…</option>'
-      + R.feats.filter(f => (f.repeatable || !taken.has(f.name)) && sktBookOk(b, f)).map(f => '<option value="' + cbEsc(f.name) + '">' + cbEsc(f.name) + (f.core === false ? ' (' + cbEsc(f.source) + ')' : '') + '</option>').join('')
-      + '</select></div>'; }
+    html += cbFeatPicker({ key: 'xfeat', attr: 'cb-xfeatadd', val: '', pool: R.feats.filter(f => (f.repeatable || !taken.has(f.name)) && sktBookOk(b, f)), add: true })
+      + '</div>'; }
   // Optional features: invocations, metamagic, fighting styles, pact boons.
   sktOptionalChoices(b, R).forEach(o => {
     const have = (b.optional[o.name] || []);
@@ -1616,6 +1611,75 @@ function cbPrereqNote(x){
   if (p.pact) return ' (' + p.pact + ')';
   if (p.spell) return ' (needs ' + String(p.spell[0]).split('|')[0].replace(/#c$/, '') + ')';
   return '';
+}
+// What a feat does, in a line, from the feat's own parts: its first benefit
+// and what it does (a 2024 feat: "Initiative Proficiency: When you roll
+// Initiative…", and how many more), else its first listed benefit (most
+// 2014 feats), else the first sentence with a rule in it — not the flavour
+// line ("You have inexplicable luck…") or "You gain the following benefits".
+function cbFeatSummary(f){
+  if (!f) return '';
+  const T = x => sktRulesText(Array.isArray(x) ? x : [x]).replace(/\s+/g, ' ').trim();
+  const first = t => (String(t).split(/(?<=[.!?])\s+/)[0] || String(t));
+  const named = [], items = [], plain = [];
+  const walk = list => (list || []).forEach(e => {
+    if (typeof e === 'string') plain.push(T(e));
+    else if (e && e.name && e.entries){ if (!/^(Ability Score (Increase|Improvement)|Repeatable)/i.test(e.name)) named.push({ name: e.name, text: T(e.entries) }); }
+    else if (e && e.type === 'list') (e.items || []).forEach(i => items.push(typeof i === 'string' ? T(i) : ((i.name ? i.name + ' ' : '') + T(i.entries || i.entry || ''))));
+    else if (e && e.entries) walk(e.entries);
+  });
+  walk(f.entries);
+  let out;
+  if (named.length) out = sktRulesInline(named[0].name) + ': ' + first(named[0].text) + (named.length > 1 ? ' (+' + (named.length - 1) + ' more)' : '');
+  else if (items.length) out = first(items[0]) + (items.length > 1 ? ' (+' + (items.length - 1) + ' more)' : '');
+  else {
+    const sent = plain.join(' ').split(/(?<=[.!?:])\s+/).filter(x => x && !/following benefits/i.test(x));
+    out = sent.find(x => /\d|advantage|bonus|proficien|resistan|spell|you can|increase|reroll|reaction/i.test(x)) || sent[0] || '';
+  }
+  if (out.length > 160) out = out.slice(0, 157).replace(/\s+\S*$/, '') + '…';
+  return out;
+}
+// Choosing a feat, as D&D Beyond does it: every feat in a list you can
+// search, each with a line on what it does and its prerequisite; its name
+// opens the whole text. They were names in a dropdown, and what a feat did
+// was shown only once it had been picked.
+//   o.key   — this picker's own name (state: search, open text, "change")
+//   o.attr  — the data attribute the choice is saved through, and o.val its value
+//   o.pool  — the feats offered; o.cur the one chosen; o.pre(f) → { ok, text }
+//   o.none  — a label for choosing none; o.add — a list that adds (Other feats)
+function cbFeatPicker(o){
+  const R = CB.R, key = o.key, cur = o.cur || '';
+  const pre = o.pre || (() => ({ ok: true, text: '' }));
+  CB.featOpen = CB.featOpen || {}; CB.featQ = CB.featQ || {};
+  const cf = cur && sktRulesFeat(R, cur);
+  if (o.add && !CB.featOpen[key]) return '<button class="btn small cb-featadd" data-cb-featchange="' + cbEsc(key) + '">+ Add a feat</button>';
+  if (cur && !CB.featOpen[key]){
+    return '<div class="cb-featcard"><div class="cb-featcard-h"><b>' + cbEsc(cur) + '</b>'
+      + (cf && cf.core === false ? '<span class="cb-dim">' + cbEsc(cf.source) + '</span>' : '')
+      + '<button class="btn small" data-cb-featchange="' + cbEsc(key) + '">Change</button></div>'
+      + (cf ? '<div class="cb-featsum">' + cbEsc(cbFeatSummary(cf)) + '</div>' : '') + '</div>';
+  }
+  const q = CB.featQ[key] || '';
+  const hit = f => !q || (f.name + ' ' + cbFeatSummary(f)).toLowerCase().includes(q.toLowerCase());
+  const name = 'fp-' + cbSlug(key);
+  const row = (f) => {
+    const on = f.name === cur, pq = pre(f), open = CB.featInfo === key + '|' + f.name;
+    return '<div class="cb-featrow' + (on ? ' on' : '') + (pq.ok ? '' : ' dim') + '" data-find="' + cbEsc((f.name + ' ' + cbFeatSummary(f)).toLowerCase()) + '"' + (hit(f) ? '' : ' hidden') + '>'
+      + '<input type="radio" name="' + name + '" data-' + o.attr + '="' + cbEsc(o.val || '') + '" value="' + cbEsc(f.name) + '"' + (on ? ' checked' : '') + ' aria-label="Choose ' + cbEsc(f.name) + '">'
+      + '<button class="cb-featrow-n" data-cb-featinfo="' + cbEsc(key + '|' + f.name) + '" aria-expanded="' + open + '"><b>' + cbEsc(f.name) + '</b>'
+      + (f.core === false ? ' <span class="cb-dim">' + cbEsc(f.source) + '</span>' : '')
+      + (pq.text ? ' <i class="' + (pq.ok ? 'cb-featpre' : 'cb-featneed') + '">' + (pq.ok ? '' : 'needs ') + cbEsc(pq.text) + '</i>' : '')
+      + '<span class="cb-featsum">' + cbEsc(cbFeatSummary(f)) + '</span></button>'
+      + (open ? '<div class="cb-feattext">' + cbFeatureText(sktRulesText(f.entries), true) + '</div>' : '')
+      + '</div>';
+  };
+  return '<div class="cb-featpick">'
+    + '<div class="cb-featpick-h"><input type="search" class="cb-featq" data-cb-featq="' + cbEsc(key) + '" value="' + cbEsc(q) + '" placeholder="Search ' + o.pool.length + ' feats" aria-label="Search feats">'
+    + (cur || o.add ? '<button class="btn small" data-cb-featdone="' + cbEsc(key) + '">' + (o.add ? 'Cancel' : 'Keep ' + cbEsc(cur)) + '</button>' : '') + '</div>'
+    + '<div class="cb-featlist" data-cb-featlist="' + cbEsc(key) + '">'
+    + (o.none ? '<div class="cb-featrow' + (!cur ? ' on' : '') + '" data-find=""><input type="radio" name="' + name + '" data-' + o.attr + '="' + cbEsc(o.val || '') + '" value=""' + (!cur ? ' checked' : '') + ' aria-label="' + cbEsc(o.none) + '"><span class="cb-featrow-n"><b>' + cbEsc(o.none) + '</b></span></div>' : '')
+    + o.pool.map(row).join('')
+    + '</div><div class="cb-dim cb-featnone"' + (o.pool.some(hit) ? ' hidden' : '') + '>No feats match.</div></div>';
 }
 // A feat's skill, tool, language, weapon and expertise picks.
 function cbFeatChoicesHtml(featName){
@@ -1998,6 +2062,12 @@ function cbToggle(list, v, max){
 }
 
 function cbOnClick(e){
+  { const fi = e.target.closest && e.target.closest('[data-cb-featinfo]');
+    if (fi){ e.preventDefault(); CB.featInfo = CB.featInfo === fi.dataset.cbFeatinfo ? null : fi.dataset.cbFeatinfo; return cbSet(() => {}); }
+    const fc = e.target.closest && e.target.closest('[data-cb-featchange]');
+    if (fc){ CB.featOpen = CB.featOpen || {}; CB.featOpen[fc.dataset.cbFeatchange] = true; return cbSet(() => {}); }
+    const fd = e.target.closest && e.target.closest('[data-cb-featdone]');
+    if (fd){ if (CB.featOpen) delete CB.featOpen[fd.dataset.cbFeatdone]; return cbSet(() => {}); } }
   if (!CB) return;
   const t = e.target.closest('button, [data-cb-step], summary[data-cb]'); if (!t) return;
   const d = t.dataset;
@@ -2141,6 +2211,8 @@ function cbOnClick(e){
 }
 
 function cbOnChange(e){
+  // A feat picked from a list: the list folds to that feat's card.
+  { const fl = e.target.closest && e.target.closest('[data-cb-featlist]'); if (fl && CB.featOpen) delete CB.featOpen[fl.dataset.cbFeatlist]; }
   if (CB && e.target && 'cbQsp' in e.target.dataset){ CB.build.species = e.target.value; CB.build.subspecies = ''; return; }
   if (CB && e.target && 'cbQbg' in e.target.dataset){ CB.build.background = e.target.value; return; }
   if (!CB) return;
@@ -2373,6 +2445,16 @@ function cbOnChange(e){
 // Typing in the name or level box: update without a full re-render, so the
 // field keeps focus and the caret stays where it is.
 function cbOnInput(e){
+  // Searching a feat list filters it in place, so the box keeps its focus.
+  if (e.target.dataset && e.target.dataset.cbFeatq != null){
+    const k = e.target.dataset.cbFeatq, v = e.target.value.toLowerCase();
+    (CB.featQ = CB.featQ || {})[k] = e.target.value;
+    const box = e.target.closest('.cb-featpick'); if (!box) return;
+    let any = false;
+    box.querySelectorAll('.cb-featrow[data-find]').forEach(r => { const show = !v || !r.dataset.find || r.dataset.find.includes(v); r.hidden = !show; if (show && r.dataset.find) any = true; });
+    const none = box.querySelector('.cb-featnone'); if (none) none.hidden = any;
+    return;
+  }
   if (!CB) return;
   const t = e.target, d = t.dataset;
   // Search a long list as you type: cards that don't match step aside, and

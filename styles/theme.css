@@ -873,3 +873,31 @@ body.player-app .toast-item.note, body.player-app .toast-item.action { backgroun
 .cb-rules b { color: var(--danger); }
 .cb-todo-i.rule { color: var(--danger); }
 .cb-todo-i.rule::before { content: '✕ '; font-size: .85em; }
+
+/* ── 43. Choosing a feat ─────────────────────────────────── */
+/* Feats were names in a dropdown; what one did showed only after picking it.
+   A list you can search instead: a row each, its line of what it does, its
+   prerequisite, and the name opens the full text. Once chosen it folds to a
+   card with Change. */
+.cb-featpick { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); margin: 6px 0 8px; }
+.cb-featpick-h { display: flex; gap: 6px; align-items: center; padding: 6px; border-bottom: 1px solid var(--border); }
+.cb-featq { flex: 1; min-width: 0; }
+.cb-featlist { max-height: 380px; overflow-y: auto; overscroll-behavior: contain; }
+.cb-featrow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 7px 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.cb-featrow:last-child { border-bottom: none; }
+.cb-featrow[hidden] { display: none; }
+.cb-featrow input[type="radio"] { flex: none; margin-top: 3px; }
+.cb-featrow.on { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cb-featrow.dim .cb-featrow-n b { color: var(--text-muted); }
+.cb-featrow-n { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 0; border: none; background: none;
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.cb-featrow-n .cb-featsum { flex-basis: 100%; color: var(--text-muted); font-size: var(--fs-sm); line-height: 1.35; }
+.cb-featpre, .cb-featneed { font-style: normal; font-size: var(--fs-xs); color: var(--text-muted); }
+.cb-featneed { color: var(--warning); }
+.cb-feattext { flex-basis: 100%; padding-left: 24px; font-size: var(--fs-sm); }
+.cb-featnone { padding: 10px; }
+.cb-featcard { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); padding: 8px 10px; margin: 6px 0 8px; }
+.cb-featcard-h { display: flex; align-items: baseline; gap: 8px; }
+.cb-featcard-h .btn { margin-left: auto; }
+.cb-featcard .cb-featsum { color: var(--text-muted); font-size: var(--fs-sm); margin-top: 2px; }
+.cb-featadd { margin: 6px 0; }

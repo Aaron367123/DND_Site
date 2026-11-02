@@ -6257,10 +6257,10 @@
         const lvi = q('[data-cb-in="level"]'); lvi.value = '4'; lvi.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
         click('[data-cb-step="levels"]'); await sleep(30);
         click('[data-cb-asitype="4:feat"]'); await sleep(30);
-        const opts = () => [...q('[data-cb-asifeat="4"]').options].map(o => o.value);
+        const opts = () => [...document.querySelectorAll('#cb-root input[data-cb-asifeat="4"]')].map(o => o.value);
         ok('builder: feats the character can’t take are hidden', !opts().includes('Heavy Armor Master') && opts().includes('Alert'));
         tick('[data-cb-qualified]'); await sleep(30);
-        ok('builder: or shown, saying what they need', opts().includes('Heavy Armor Master') && /needs proficiency with heavy armor/.test(q('[data-cb-asifeat="4"] option[value="Heavy Armor Master"]').textContent));
+        ok('builder: or shown, saying what they need', opts().includes('Heavy Armor Master') && /needs proficiency with heavy armor/.test(q('[data-cb-asifeat="4"][value="Heavy Armor Master"]').closest('.cb-featrow').textContent));
         // Tasha's.
         click('[data-cb-step="species"]'); await sleep(30); click('[data-cb-species="Dwarf"]'); await sleep(30);
         tick('[data-cb-customorigin]'); await sleep(30);
@@ -6391,7 +6391,7 @@
         const lvi = (click('[data-cb-step="basics"]'), q('[data-cb-in="level"]')); lvi.value = '4'; lvi.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
         click('[data-cb-step="levels"]'); await sleep(30);
         click('[data-cb-asitype="4:feat"]'); await sleep(30);
-        set('[data-cb-asifeat="4"]', 'Skilled'); await sleep(30);
+        { const r = q('[data-cb-asifeat="4"][value="Skilled"]'); r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } await sleep(30);
         ok('builder: Skilled asks for its three picks', qa('[data-cb-fc^="Skilled||skillsTools||"]').length > 30);
         tick('[data-cb-fc="Skilled||skillsTools||s:stealth"]'); await sleep(20);
         tick('[data-cb-fc="Skilled||skillsTools||t:Lute"]'); await sleep(20);
@@ -7674,12 +7674,13 @@
         await openCharBuilder({ edition: '2014' }); await sleep(700);
         Object.assign(CB.build, { cls: 'Fighter', level: 8, showAllFeats: true, asi: { 4: { type: 'feat', feat: 'Alert' }, 6: { type: 'feat', feat: '' } } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
         CB.step = 'levels'; cbRender(); await sleep(20);
-        const opts = [...(document.querySelector('#cb-root [data-cb-asifeat="6"]') || { options: [] }).options].map(o => o.value);
+        const opts = [...document.querySelectorAll('#cb-root input[data-cb-asifeat="6"]')].map(o => o.value);
         ok('feats: a feat already taken isn\'t offered again', opts.length > 10 && !opts.includes('Alert'), opts.length);
         CB.build.asi[4] = { type: 'feat', feat: 'Elemental Adept' }; CB.rec = sktComputeCharacter(CB.build, CB.R); cbRender(); await sleep(20);
-        const opts2 = [...(document.querySelector('#cb-root [data-cb-asifeat="6"]') || { options: [] }).options].map(o => o.value);
+        const opts2 = [...document.querySelectorAll('#cb-root input[data-cb-asifeat="6"]')].map(o => o.value);
         ok('feats: a repeatable one is (Elemental Adept)', opts2.includes('Elemental Adept'));
-        const own = [...(document.querySelector('#cb-root [data-cb-asifeat="4"]') || { options: [] }).options].map(o => o.value);
+        document.querySelector('#cb-root [data-cb-featchange="asi:4"]').click(); await sleep(20);
+        const own = [...document.querySelectorAll('#cb-root input[data-cb-asifeat="4"]')].map(o => o.value);
         ok('feats: and a slot still lists its own pick', own.includes('Elemental Adept'));
         cbClose();
       } catch(e){ ok('round 28 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
@@ -7715,7 +7716,7 @@
         await openCharBuilder({ edition: '2014' }); await sleep(700);
         Object.assign(CB.build, { cls: 'Fighter', level: 4, species: 'Human', subspecies: 'Variant', asi: { 4: { type: 'feat', feat: 'Alert' } } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
         CB.step = 'species'; cbRender(); await sleep(20);
-        const of = [...(document.querySelector('#cb-root [data-cb-originfeat]') || { options: [] }).options].map(o => o.value);
+        const of = [...document.querySelectorAll('#cb-root input[data-cb-originfeat]')].map(o => o.value);
         ok('feats: the variant human\'s feat list leaves out one already taken', of.length > 10 && !of.includes('Alert') && of.includes('Lucky'), of.length);
         cbClose();
       } catch(e){ ok('round 29 ran to completion', false, e.message + ' ' + (e.stack || '').split('\n')[1]); }
@@ -10054,7 +10055,7 @@
         CB.build.bgAdapt = {}; CB.build.bgAsi = {}; cbQuickBuild();
         ok('backgrounds: quick build answers them', (CB.build.bgAdapt.abilities || []).length === 3 && !!CB.build.bgAdapt.feat && Object.keys(CB.build.bgAsi).length > 0, JSON.stringify(CB.build.bgAdapt));
         CB.step = 'background'; cbRender();
-        ok('backgrounds: the Background step shows the questions', !!document.querySelector('#cb-root [data-cb-bgadab]') && !!document.querySelector('#cb-root [data-cb-bgadfeat]'));
+        ok('backgrounds: the Background step shows the questions', !!document.querySelector('#cb-root [data-cb-bgadab]') && !!document.querySelector('#cb-root [data-cb-bgadfeat], #cb-root [data-cb-featchange="bgadapt"]'));
         { const box = document.querySelector('#cb-root [data-cb-bgadab]:checked'), was = (CB.build.bgAdapt.abilities || []).length;
           if (box){ box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(50); }
           ok('backgrounds: unticking an ability takes it off', !!box && (CB.build.bgAdapt.abilities || []).length === was - 1, JSON.stringify(CB.build.bgAdapt)); }
@@ -10100,8 +10101,9 @@
         cbQuickBuild();
         ok('other feats: an extra feat is one of the character\'s feats', sktBuildFeatNames(CB.build, R).includes('Aberrant Dragonmark'));
         CB.step = 'levels'; cbRender();
-        const addSel = document.querySelector('#cb-root [data-cb-xfeatadd]');
-        if (addSel){ addSel.value = 'Lucky'; addSel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60); }
+        document.querySelector('#cb-root [data-cb-featchange="xfeat"]').click(); await sleep(30);
+        const addSel = document.querySelector('#cb-root input[data-cb-xfeatadd][value="Lucky"]');
+        if (addSel){ addSel.checked = true; addSel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60); }
         ok('other feats: the Feats step adds one', (CB.build.extraFeats || []).includes('Lucky'), JSON.stringify(CB.build.extraFeats));
         const del = document.querySelector('#cb-root [data-cb-xfeatdel="0"]'); if (del){ del.click(); await sleep(60); }
         ok('other feats: and removes one', JSON.stringify(CB.build.extraFeats) === '["Lucky"]', JSON.stringify(CB.build.extraFeats));
@@ -11943,11 +11945,12 @@
         await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100);
         Object.assign(CB.build, { cls: 'Fighter', level: 1, species: 'Human', subspecies: 'Variant' }); cbSet(x => x); await sleep(80);
         CB.step = 'species'; cbRender(); await sleep(120);
-        const opts = () => [...document.querySelectorAll('#cb-root [data-cb-originfeat] option')].map(o => o.textContent);
+        const opts = () => [...document.querySelectorAll('#cb-root input[data-cb-originfeat]')].map(o => o.value);
+        const rowOf = n => { const i = document.querySelector('#cb-root input[data-cb-originfeat][value="' + n + '"]'); return i ? i.closest('.cb-featrow').textContent : ''; };
         const o1 = opts();
         ok('builder: a Variant Human fighter is offered only feats it qualifies for', o1.includes('Alert') && !o1.some(t => /^(War Caster|Bountiful Luck)/.test(t)), o1.length + ' feats');
         const box = document.querySelector('#cb-root [data-cb-qualified]'); box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
-        ok('builder: and can see the rest, marked with what they need', opts().some(t => /^War Caster — needs/.test(t)));
+        ok('builder: and can see the rest, marked with what they need', /needs the ability to cast a spell/.test(rowOf('War Caster')));
         const box2 = document.querySelector('#cb-root [data-cb-qualified]'); box2.checked = true; box2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
         cbClose(); await sleep(80);
         const R = await sktRulesLoad('2024');
@@ -11984,7 +11987,7 @@
         await open('2024', { cls: 'Fighter', level: 19 });
         ok('builder: a 2024 fighter has a feat slot at 19 for the Epic Boon', sktAsiSlots(CB.build, CB.R).some(s => s.level === 19));
         CB.build.asi['19'] = { type: 'feat', feat: '' }; cbSet(x => x); await step('levels');
-        ok('builder: and it offers the epic boons', [...document.querySelectorAll('#cb-root [data-cb-asifeat="19"] option')].some(o => /^Boon of/.test(o.textContent)));
+        ok('builder: and it offers the epic boons', [...document.querySelectorAll('#cb-root input[data-cb-asifeat="19"]')].some(o => /^Boon of/.test(o.value)));
         cbClose(); await sleep(60);
         // Scholar names its skills; masteries are weapons.
         await open('2024', { cls: 'Wizard', level: 2, skills: ['arcana', 'insight'] }); await step('skills');
@@ -12099,6 +12102,24 @@
           ok('builder: a level up raises current hit points by what the maximum gained, temporary ones kept', p2.hpMax > max0 && p2.hp - hp0 === p2.hpMax - max0 && p2.tempHp === 3, [hp0, max0, p2.hp, p2.hpMax, p2.tempHp].join()); }
       } catch(e){ ok('round 133 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
       finally { window.showConfirm = conf0; state.party.splice(0, state.party.length, ...JSON.parse(party0)); save(); }
+    }
+    // -- Round 134: a feat is chosen knowing what it does ----------------------
+    {
+      try {
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100);
+        Object.assign(CB.build, { cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: '' } } }); cbSet(x => x); CB.step = 'levels'; cbRender(); await sleep(120);
+        const rows = () => [...document.querySelectorAll('#cb-root .cb-featrow')].filter(r => r.querySelector('input[data-cb-asifeat="4"]'));
+        const charger = () => rows().find(r => r.querySelector('input').value === 'Charger');
+        ok('feats: each feat in the list says what it does', rows().length > 10 && /Dash/.test(charger().querySelector('.cb-featsum').textContent), (charger() || {}).textContent);
+        charger().querySelector('.cb-featrow-n').click(); await sleep(80);
+        ok('feats: its name opens the whole text', /Charge Attack/i.test((charger().querySelector('.cb-feattext') || {}).textContent || ''));
+        const box = document.querySelector('#cb-root [data-cb-featq="asi:4"]'); box.focus(); box.value = 'grapp'; box.dispatchEvent(new Event('input', { bubbles: true })); await sleep(30);
+        const shown = rows().filter(r => !r.hidden).map(r => r.querySelector('input').value);
+        ok('feats: searching narrows the list in place', shown.includes('Grappler') && !shown.includes('Charger') && document.activeElement === box, shown.join());
+        const g = rows().find(r => r.querySelector('input').value === 'Grappler').querySelector('input'); g.checked = true; g.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+        ok('feats: choosing one folds the list to its card, with a way to change it', CB.build.asi[4].feat === 'Grappler' && /Grappler/.test((document.querySelector('#cb-root .cb-featcard') || {}).textContent || '') && !!document.querySelector('#cb-root [data-cb-featchange="asi:4"]'));
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 134 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
     // -- Class features: represented, not just text ------------------------
     {

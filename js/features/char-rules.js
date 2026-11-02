@@ -1240,7 +1240,7 @@ function _sktBuildFeaturesOne(build, R){
       // feature") is a header: the subclass's own features are listed below.
       const slot = f.gainSubclass || f.name.toLowerCase() === title
         || new RegExp('^' + title.replace(/[^a-z ]/g, '') + ' features?$').test(f.name.toLowerCase())
-        || /(path|domain|college|circle|archetype|tradition|oath|origin|patron) features?$/i.test(f.name);
+        || /\b(path|domain|college|circle|archetype|tradition|oath|origin|patron) features?$/i.test(f.name);
       // An upgrade of an earlier feature ("Bardic Inspiration (d8)",
       // "Extra Attack (2)", "Destroy Undead (CR 1)", "… improvement") is
       // the same feature at a higher level. It inherits the base's status
