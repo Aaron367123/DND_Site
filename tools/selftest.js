@@ -12203,6 +12203,12 @@
         CB.build = Object.assign(sktBlankBuild('2014'), { cls: 'Fighter', level: 4, name: 'A', species: 'Human', background: 'Acolyte', asi: { 4: { type: 'feat', feat: 'Athlete' } } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
         ok('feats: Athlete’s +1 Strength or Dexterity is still to choose until it is chosen', cbTodo().some(t => t.what === 'the ability increase from Athlete'));
         cbClose(); await sleep(60);
+        // Elemental Adept twice: a damage type each.
+        await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2014'), { cls: 'Wizard', level: 8, name: 'E', species: 'Human', background: 'Acolyte', asi: { 4: { type: 'feat', feat: 'Elemental Adept' }, 8: { type: 'feat', feat: 'Elemental Adept' } }, featureChoices: { 'Elemental Adept': 'Fire', 'Elemental Adept #2': 'Cold' } });
+        { const notes = (sktComputeCharacter(CB.build, CB.R).sheet.notes || []).filter(n => /Elemental Adept/.test(n)).join(' ');
+          ok('feats: Elemental Adept twice is two damage types', /\(Fire\)/.test(notes) && /\(Cold\)/.test(notes), notes); }
+        cbClose(); await sleep(60);
       } catch(e){ ok('round 137 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
     // -- Class features: represented, not just text ------------------------

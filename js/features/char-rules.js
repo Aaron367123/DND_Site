@@ -1297,7 +1297,9 @@ function _sktBuildFeaturesOne(build, R){
   if (bg) _sktTraits(bg.entries).filter(t => /^Feature:/i.test(t.name) || R.edition === '2014')
     // A background's feature is a story benefit the DM rules on: nothing for the sheet to count.
     .filter(t => /^Feature:/i.test(t.name)).forEach(t => push(t, 'background', 1, true));
-  sktBuildFeatNames(build, R).forEach(n => { const f = sktRulesFeat(R, n); if (f) push(f, 'feat', 1); });
+  // Each copy's key rides along: a second Elemental Adept's damage type is
+  // kept under "Elemental Adept #2", not over the first's.
+  sktBuildFeatNames(build, R).forEach(n => { const f = sktRulesFeat(R, n); if (f){ push(f, 'feat', 1); if (n !== f.name) out[out.length - 1].ckey = n; } });
   Object.keys(build.optional || {}).forEach(group => (build.optional[group] || []).forEach(n => {
     const o = R.optional.find(x => x.name === n) || sktRulesFeat(R, n);
     if (o) push(o, 'optional', 1, (o.featureType || []).includes('EFA:Plan'));
@@ -1995,7 +1997,7 @@ function sktBuildChoices(build, R){
   const cls = sktRulesClass(R, build.cls);
   return sktBuildFeatures(build, R).filter(f => !f.info).map(f => {
     const spec = sktFeatureChoice(f.name, f.from, R.edition, f.cls || (cls && cls.key)) || f.optionSpec;
-    return spec ? { feature: f.name, level: f.level, cls: f.cls || '', spec, value: (build.featureChoices || {})[f.name] || '' } : null;
+    return spec ? { feature: f.ckey || f.name, level: f.level, cls: f.cls || '', spec, value: (build.featureChoices || {})[f.ckey || f.name] || '' } : null;
   }).filter(Boolean);
 }
 
@@ -2681,7 +2683,7 @@ function sktComputeCharacter(build, R, prior){
       // Advantage on saves a trait or feat gives (Dwarven Resilience…).
       if ((f.from === 'species' || f.from === 'feat' || f.from === 'class' || f.from === 'subclass')
           && !SKT_STATES.some(s => s.key === f.name)) sktSaveAdvantages(f.text).forEach(a => _sktSaveAdv(ctx, a, f.name));
-      const v = ch && (build.featureChoices || {})[f.name];
+      const v = ch && (build.featureChoices || {})[f.ckey || f.name];
       if (ch && v && ch.apply){ try { ch.apply(ctx, v); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
       const xf = !f.info && sktFeatureExtra(f.name, f.from, key);
       if (xf){ try { xf(ctx); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }

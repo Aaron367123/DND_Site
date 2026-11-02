@@ -1125,8 +1125,9 @@ function cbQuickBuild(){
     sktBuildChoices(b, R).forEach(c => {
       if (c.value) return;
       b.featureChoices = b.featureChoices || {};
-      const same = c.spec.options.find(o => Object.values(b.featureChoices).includes(o.value));
-      b.featureChoices[c.feature] = (same || c.spec.options[0]).value;
+      const used = Object.values(b.featureChoices);
+      const same = / #\d+$/.test(c.feature) ? null : c.spec.options.find(o => used.includes(o.value));
+      b.featureChoices[c.feature] = (same || (/ #\d+$/.test(c.feature) && c.spec.options.find(o => !used.includes(o.value))) || c.spec.options[0]).value;
     });
     sktOptionalChoices(b, R).forEach(o => {
       const have = (b.optional[o.name] || []);
