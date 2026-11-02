@@ -1585,12 +1585,12 @@ CB_RENDER.levels = () => {
     const shown = pool.filter(x => b.showAllFeats || have.includes(x.name) || pre(x).ok);
     const hidden = pool.length - shown.length;
     html += '<h4>' + cbEsc(o.name) + '</h4>' + cbCounter(have.length, o.count, 'chosen')
-      + cbChecks(shown.map(x => { const q = pre(x); return { value: x.name, label: x.name + (q.text ? (q.ok ? ' (' + q.text + ')' : ' — needs ' + q.text) : '') }; }), have, o.count, 'cb-opt-' + cbSlug(o.name))
+      + cbOptPicker({ key: 'opt:' + o.name, attr: 'cb-opt-' + cbSlug(o.name), pool: shown, have, max: o.count, pre })
       + (hidden || b.showAllFeats ? '<label class="cb-inline"><input type="checkbox" data-cb-qualified' + (b.showAllFeats ? '' : ' checked') + '> Only options this character qualifies for' + (hidden ? ' <span class="cb-dim">(' + hidden + ' more)</span>' : '') + '</label>' : '');
     have.forEach(n => {
       const x = pool.find(p => p.name === n); if (!x) return;
       const q = pre(x);
-      html += '<div class="cb-feat"><b>' + cbEsc(n) + '</b>' + (q.ok ? '' : '<div class="cb-warn">Needs ' + cbEsc(q.text) + '</div>') + cbFeatureText(sktRulesText(x.entries)) + '</div>';
+      if (!q.ok) html += '<div class="cb-warn">' + cbEsc(n) + ' needs ' + cbEsc(q.text) + '</div>';
     });
   });
   // 2024 weapon masteries.
@@ -1634,7 +1634,10 @@ function cbFeatSummary(f){
   else if (items.length) out = first(items[0]) + (items.length > 1 ? ' (+' + (items.length - 1) + ' more)' : '');
   else {
     const sent = plain.join(' ').split(/(?<=[.!?:])\s+/).filter(x => x && !/following benefits/i.test(x));
-    out = sent.find(x => /\d|advantage|bonus|proficien|resistan|spell|you can|increase|reroll|reaction/i.test(x)) || sent[0] || '';
+    const at = Math.max(0, sent.findIndex(x => /\d|advantage|bonus|proficien|resistan|spell|you can|increase|reroll|reaction/i.test(x)));
+    out = sent[at] || '';
+    // "…to that spell's damage" needs the sentence that names the spell.
+    if (at > 0 && /\b(that|this|those)\b/i.test(out)) out = sent[at - 1] + ' ' + out;
   }
   if (out.length > 160) out = out.slice(0, 157).replace(/\s+\S*$/, '') + '…';
   return out;
@@ -1680,6 +1683,33 @@ function cbFeatPicker(o){
     + (o.none ? '<div class="cb-featrow' + (!cur ? ' on' : '') + '" data-find=""><input type="radio" name="' + name + '" data-' + o.attr + '="' + cbEsc(o.val || '') + '" value=""' + (!cur ? ' checked' : '') + ' aria-label="' + cbEsc(o.none) + '"><span class="cb-featrow-n"><b>' + cbEsc(o.none) + '</b></span></div>' : '')
     + o.pool.map(row).join('')
     + '</div><div class="cb-dim cb-featnone"' + (o.pool.some(hit) ? ' hidden' : '') + '>No feats match.</div></div>';
+}
+// The same list for picks made by count: invocations, maneuvers, metamagic,
+// fighting styles, infusions. A box each instead of a radio; the same line
+// of what it does, and the name opens its text. They were names in a grid,
+// and what one did showed only once it was ticked.
+function cbOptPicker(o){
+  const key = o.key, have = o.have || [], full = have.length >= o.max;
+  const pre = o.pre || (() => ({ ok: true, text: '' }));
+  const q = (CB.featQ = CB.featQ || {})[key] || '';
+  const hit = x => !q || (x.name + ' ' + cbFeatSummary(x)).toLowerCase().includes(q.toLowerCase());
+  const row = x => {
+    const on = have.includes(x.name), pq = pre(x), open = CB.featInfo === key + '|' + x.name;
+    return '<div class="cb-featrow' + (on ? ' on' : '') + (pq.ok ? '' : ' dim') + '" data-find="' + cbEsc((x.name + ' ' + cbFeatSummary(x)).toLowerCase()) + '"' + (hit(x) ? '' : ' hidden') + '>'
+      + '<input type="checkbox" data-' + o.attr + '="' + cbEsc(x.name) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + ' aria-label="' + cbEsc(x.name) + '">'
+      + '<button class="cb-featrow-n" data-cb-featinfo="' + cbEsc(key + '|' + x.name) + '" aria-expanded="' + open + '"><b>' + cbEsc(x.name) + '</b>'
+      + (x.core === false ? ' <span class="cb-dim">' + cbEsc(x.source) + '</span>' : '')
+      + (pq.text ? ' <i class="' + (pq.ok ? 'cb-featpre' : 'cb-featneed') + '">' + (pq.ok ? '' : 'needs ') + cbEsc(pq.text) + '</i>' : '')
+      + '<span class="cb-featsum">' + cbEsc(cbFeatSummary(x)) + '</span></button>'
+      + (open ? '<div class="cb-feattext">' + cbFeatureText(sktRulesText(x.entries), true) + '</div>' : '')
+      + '</div>';
+  };
+  // Chosen first, so what the character has is at the top of a long list.
+  const list = o.pool.filter(x => have.includes(x.name)).concat(o.pool.filter(x => !have.includes(x.name)));
+  return '<div class="cb-featpick">'
+    + (o.pool.length > 8 ? '<div class="cb-featpick-h"><input type="search" class="cb-featq" data-cb-featq="' + cbEsc(key) + '" value="' + cbEsc(q) + '" placeholder="Search ' + o.pool.length + '" aria-label="Search"></div>' : '')
+    + '<div class="cb-featlist">' + list.map(row).join('') + '</div>'
+    + '<div class="cb-dim cb-featnone"' + (o.pool.some(hit) ? ' hidden' : '') + '>Nothing matches.</div></div>';
 }
 // A feat's skill, tool, language, weapon and expertise picks.
 function cbFeatChoicesHtml(featName){

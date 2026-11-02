@@ -7238,12 +7238,12 @@
         CB.step = 'levels'; cbRender(); await sleep(20);
         const main = r.querySelector('.cb-main');
         const names = R14.optional.filter(o => (o.featureType || []).includes('AI')).map(o => o.name);
-        const inf = [...main.querySelectorAll('label')].filter(l => l.querySelector('input[type=checkbox]') && names.some(n => l.textContent.startsWith(n)));
+        const inf = [...main.querySelectorAll('.cb-featrow')].filter(l => l.querySelector('input[type=checkbox]') && names.some(n => l.textContent.startsWith(n)));
         // A 2nd-level artificer is offered the infusions it can learn; the
         // 6th-level ones wait (and show, marked, with the switch off).
         ok('artificer: infusions to choose without ticking other books', /Infusions/.test(main.textContent) && /Enhanced Defense/.test(main.textContent) && inf.length >= 8 && !/Boots of the Winding Path/.test(main.textContent), inf.length);
         { const q = main.querySelector('[data-cb-qualified]'); if (q){ q.checked = false; q.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); } }
-        ok('artificer: an infusion shows what it goes on and its level', /Boots of the Winding Path — needs Artificer level 6, A pair of boots/.test(r.querySelector('.cb-main').textContent));
+        ok('artificer: an infusion shows what it goes on and its level', /Boots of the Winding Path\s*needs Artificer level 6, A pair of boots/.test(r.querySelector('.cb-main').textContent));
         { const q = r.querySelector('.cb-main [data-cb-qualified]'); if (q){ q.checked = true; q.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); } }
         cbClose();
         // An infusion's level is the artificer's, not the character's.
@@ -11975,7 +11975,7 @@
       try {
         const open = async (ed, o) => { await openCharBuilder({ edition: ed }); for (let k = 0; k < 60 && !(CB && CB.R); k++) await sleep(100); Object.assign(CB.build, o); cbSet(x => x); await sleep(60); };
         const step = async s => { CB.step = s; cbRender(); await sleep(120); };
-        const opts = sel => [...document.querySelectorAll('#cb-root ' + sel)].map(i => i.closest('label').textContent.trim());
+        const opts = sel => [...document.querySelectorAll('#cb-root ' + sel)].map(i => (i.closest('label') || i.closest('.cb-featrow')).textContent.trim());
         // Invocations wait for their level, pact and cantrip.
         await open('2014', { cls: 'Warlock', level: 2, subclass: 'Fiend', cantrips: ['Mage Hand', 'Minor Illusion'] }); await step('levels');
         let inv = opts('[data-cb-opt-eldritch-invocations]');
@@ -12117,6 +12117,16 @@
         const shown = rows().filter(r => !r.hidden).map(r => r.querySelector('input').value);
         ok('feats: searching narrows the list in place', shown.includes('Grappler') && !shown.includes('Charger') && document.activeElement === box, shown.join());
         const g = rows().find(r => r.querySelector('input').value === 'Grappler').querySelector('input'); g.checked = true; g.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+        // Invocations, maneuvers and the rest: the same line, the same tap.
+        { const keep = JSON.stringify(CB.build);
+          Object.assign(CB.build, { cls: 'Warlock', level: 5, subclass: 'Fiend', cantrips: ['Eldritch Blast', 'Mage Hand'], optional: { 'Eldritch Invocations': [] } }); cbSet(x => x); CB.step = 'levels'; cbRender(); await sleep(120);
+          const inv = () => [...document.querySelectorAll('#cb-root .cb-featrow')].find(r => { const i = r.querySelector('input[data-cb-opt-eldritch-invocations]'); return i && i.dataset.cbOptEldritchInvocations === 'Devil\'s Sight'; });
+          ok('options: each invocation says what it does', /120 feet/.test((inv() || {}).textContent || ''), (inv() || {}).textContent);
+          inv().querySelector('.cb-featrow-n').click(); await sleep(80);
+          ok('options: and its name opens the whole text', !!inv().querySelector('.cb-feattext'));
+          const box = inv().querySelector('input'); box.click(); await sleep(80);
+          ok('options: its box still chooses it', (CB.build.optional['Eldritch Invocations'] || []).includes('Devil\'s Sight'));
+          CB.build = JSON.parse(keep); cbSet(x => x); CB.step = 'levels'; cbRender(); await sleep(80); }
         ok('feats: choosing one folds the list to its card, with a way to change it', CB.build.asi[4].feat === 'Grappler' && /Grappler/.test((document.querySelector('#cb-root .cb-featcard') || {}).textContent || '') && !!document.querySelector('#cb-root [data-cb-featchange="asi:4"]'));
         cbClose(); await sleep(60);
       } catch(e){ ok('round 134 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }

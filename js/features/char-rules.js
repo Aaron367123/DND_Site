@@ -924,7 +924,8 @@ function sktOptionalPrereq(R, build, x){
     if (p.pact){ parts.push('Pact of the ' + p.pact); ok.push(chosen.has(('pact of the ' + p.pact).toLowerCase())); }
     if (p.optionalfeature){
       const names = p.optionalfeature.map(n => String(n).split('|')[0]);
-      parts.push(names.map(_sktTitle).join(' or '));
+      // As the book writes it ("Pact of the Blade", not "Pact Of The Blade").
+      parts.push(names.map(n => ((R.optional || []).find(o => o.name.toLowerCase() === n.toLowerCase()) || {}).name || _sktTitle(n)).join(' or '));
       ok.push(names.some(n => chosen.has(n.toLowerCase())));
     }
     if (p.spell){
