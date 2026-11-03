@@ -315,7 +315,7 @@ function csHead(pc){
   const xpOn = pc.build && pc.build.advancement === 'xp';
   const lvl = pc.level || 1, xp = +pc.xp || 0, next = CS_XP[Math.min(19, lvl)];
   const ready = xpOn && lvl < 20 && xp >= next;
-  return '<div class="cb-head cs-head cs-hero" style="--hero:' + csHeroColor(pc) + '">' + csHeroArt(pc) + (ro ? '<span class="cs-avatar">' + icon + '</span>' : '<button class="cs-avatar" data-cs="portrait" title="Change the portrait">' + icon + '</button>')
+  return '<div class="cb-head cs-head cs-hero" style="--hero:' + csHeroColor(pc) + '">' + csHeroArt(pc) + (ro ? '<span class="cs-avatar">' + icon + '</span>' : '<span class="cs-avatar-wrap"><button class="cs-avatar editable" data-cs="portrait" title="Change the portrait" aria-label="Change the portrait">' + icon + '</button><span class="cs-avatar-edit" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><use href="#i-pencil"/></svg></span></span>')
     + '<div class="cs-who"><b class="cb-title">' + csE(pc.name) + '</b><span class="cs-sub">' + csE(csClassLine(pc)) + '</span>'
     + (xpOn ? '<span class="cs-xp' + (ready ? ' ready' : '') + '">XP ' + xp.toLocaleString() + (lvl < 20 ? ' / ' + next.toLocaleString() : '')
       + '<i class="cs-xpbar"><i style="width:' + (lvl < 20 ? Math.min(100, Math.round(100 * (xp - CS_XP[lvl - 1]) / Math.max(1, next - CS_XP[lvl - 1]))) : 100) + '%"></i></i>'

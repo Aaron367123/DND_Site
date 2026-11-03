@@ -934,3 +934,17 @@ body:has(#cb-root) #toast-host { bottom: 64px; }
 /* The T reads on a light theme too (1.2:1 on parchment). */
 [data-theme-tone="light"] .hp-dmg-bar .hp-dmg-btn.temp { color: #123f6e; }
 .combatant-list.compact .hp-dmg-bar { grid-template-columns: 22px 34px 22px 20px; }
+
+/* ── 49. The sheet's portrait says it can be changed ─────────
+   A hover title was the only hint, and phones have no hover. A small pencil
+   on the avatar wherever tapping it changes the picture. Beside the button,
+   not in it: the avatar clips a species portrait zoomed onto the face. */
+.cs-avatar-wrap { position: relative; display: inline-flex; flex: 0 0 auto; }
+.cs-avatar-edit { position: absolute; right: -3px; bottom: -3px; width: 17px; height: 17px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: var(--panel); color: var(--text);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 3px rgba(0,0,0,.4); pointer-events: none; }
+.cs-avatar-edit .ico { width: 10px; height: 10px; }
+
+/* ── 50. A picture on a map token stays inside its circle ──── */
+.map-token-pic { display: block; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; pointer-events: none; }
+.map-token-pic > img { display: block; width: 100%; height: 100%; object-fit: cover; }

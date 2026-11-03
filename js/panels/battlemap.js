@@ -566,8 +566,12 @@ registerPanel('battlemap',{
   // compare rather than a full token re-render.
   _syncFromCombat(){
     if (!this._body || this._drag) return;
+    // A character's face is drawn from the party (_tokenFace), so a new
+    // picture is a reason to redraw too.
+    const face = p => { const f = String(p.portrait || (typeof sktPcIcon === 'function' ? sktPcIcon(p) : p.icon) || ''); return f.length + f.slice(-24); };
     const sig = (state.combatants || [])
-      .map(c => c.id + ':' + (c.hp || 0) + ':' + (c.hpMax || 0) + ':' + (c.dead ? 1 : 0)).join('|');
+      .map(c => c.id + ':' + (c.hp || 0) + ':' + (c.hpMax || 0) + ':' + (c.dead ? 1 : 0)).join('|')
+      + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|');
     if (sig === this._woundSig) return;
     this._woundSig = sig;
     this._renderTokens();
@@ -1526,6 +1530,20 @@ registerPanel('battlemap',{
     return c.name + (showNumbers ? ' — ' + (c.hp || 0) + '/' + (c.hpMax || 0) + ' HP' : (tier ? ' — ' + tier : ''));
   },
 
+  // What a token shows. A character's token shows the character's face as it
+  // is now — their picture, else their species' portrait (sktPcIcon) — not
+  // the icon copied when the token was made: that copy was a class emoji
+  // (Creambak's 👊) while every other screen showed his Dragonborn portrait,
+  // and a picture uploaded later never reached the map.
+  _tokenFace(t){
+    if (t && t.isPC && typeof sktPcIcon === 'function'){
+      const party = (typeof state !== 'undefined' && state.party) || [];
+      const pm = party.find(p => p.id === t.cid) || party.find(p => p.name === t.label);
+      if (pm) return pm.portrait || sktPcIcon(pm);
+    }
+    return t ? (t.portrait || t.icon) : '';
+  },
+
   _tokenDisplayLabel(t){
     if (!t || t.label == null) return '';
     if (!t.isPC) return t.label;
@@ -2241,10 +2259,10 @@ registerPanel('battlemap',{
     });
     b.querySelectorAll('.map-token').forEach(el => {
       const t = this._tokens.find(x => x.id === el.dataset.tid); if (!t) return;
-      const iconSource = t.portrait || t.icon;
+      const iconSource = this._tokenFace(t);
       const isImgIcon = typeof iconSource === 'string' && (iconSource.startsWith('data:image/') || iconSource.startsWith('img/') || /^https?:\/\//.test(iconSource));
       const isSvgIcon = typeof iconSource === 'string' && iconSource.startsWith('<svg');
-      if (!(!!(t.icon || t.portrait) && !isImgIcon && !isSvgIcon)) return;   // glyph icons only
+      if (!(!!iconSource && !isImgIcon && !isSvgIcon)) return;   // glyph icons only
       const dim = ((t.size || 1) * this._tokenUnit() - 4) * bg;
       el.style.fontSize = Math.max(14 / vs, dim * 0.6).toFixed(1) + 'px';
     });
@@ -5283,7 +5301,7 @@ registerPanel('battlemap',{
       const dim=(size*this._tokenUnit()-4) * tokScale;
 
       const el=document.createElement('div');
-      const hasIcon = !!(t.icon || t.portrait);
+      const hasIcon = !!this._tokenFace(t);
       // PCs only show their first name on the map ("Zindle" instead of the
       // full "Zindle \"Deathwhistle\" Farrago"). NPCs keep their full label.
       const displayLabel = this._tokenDisplayLabel(t);
@@ -5299,7 +5317,7 @@ registerPanel('battlemap',{
       //    emojis read as tiny specks.
       //  - When the token has only initials text (no icon set), keep the
       //    smaller readable size so two letters fit side-by-side.
-      const iconSource = t.portrait || t.icon;
+      const iconSource = this._tokenFace(t);
       const isImgIcon = typeof iconSource === 'string' && (iconSource.startsWith('data:image/') || iconSource.startsWith('img/') || /^https?:\/\//.test(iconSource));
       const isSvgIcon = typeof iconSource === 'string' && iconSource.startsWith('<svg');
       const isGlyphIcon = hasIcon && !isImgIcon && !isSvgIcon;
@@ -5327,8 +5345,12 @@ registerPanel('battlemap',{
       const ink = (typeof _bmInk === 'function') ? _bmInk(t.color) : '#fff';
       el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:${ink};text-shadow:${ink === '#fff' ? '0 1px 2px rgba(0,0,0,.7)' : 'none'};text-align:center;line-height:1.1;overflow:visible;box-sizing:border-box`;
       if (hasIcon){
+        // A picture sits in a round clip of its own. The token can't clip it
+        // (it overflows on purpose, for the touch target), and a species
+        // portrait is zoomed onto the face, so unclipped it spilled the whole
+        // figure across the map.
         el.innerHTML = (typeof renderIcon === 'function')
-          ? renderIcon(iconSource, displayLabel)
+          ? (isImgIcon ? '<span class="map-token-pic">' + renderIcon(iconSource, displayLabel) + '</span>' : renderIcon(iconSource, displayLabel))
           : esc(displayLabel.slice(0,2));
       } else {
         el.textContent = displayLabel.length>7?displayLabel.slice(0,6)+'…':displayLabel;

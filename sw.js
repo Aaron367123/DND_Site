@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = '7f756bef84';
+const BUILD = '195c72b959';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=70fe22c14d',
-  'styles/theme.css?v=b83d9e6923',
+  'styles/theme.css?v=9e1184e4c2',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=f4b60a75c8',
   'js/core/theme.js?v=9db78fe46f',
@@ -70,7 +70,7 @@ const PRECACHE = [
   'js/panels/quests.js?v=36e3261d56',
   'js/panels/factions.js?v=39b868d6d9',
   'js/panels/homebrew.js?v=3e3c4f0d84',
-  'js/panels/battlemap.js?v=eb712ca998',
+  'js/panels/battlemap.js?v=af8f4cd2fd',
   'js/panels/npc-library.js?v=84a549ccbc',
   'js/panels/bestiary.js?v=55d56a8c0d',
   'js/panels/content-panel.js?v=1a060dfd0b',
@@ -96,13 +96,13 @@ const PRECACHE = [
   'js/ui/command-palette.js?v=8aded06220',
   'js/features/char-rules.js?v=a1464d2987',
   'js/features/char-effects.js?v=6561f6c385',
-  'js/features/char-sheet.js?v=82dce986ed',
+  'js/features/char-sheet.js?v=fc7f7edb25',
   'js/features/char-print.js?v=01fba592ae',
   'js/features/char-builder.js?v=b6f03cea42',
   'js/features/pdf-import.js?v=cefe36cb0b',
   'js/player/player-app.js?v=bf01b6cb60',
   'js/ui/player-view.js?v=2481f28c78',
-  'js/sync/realtime.js?v=cc0ddddb53',
+  'js/sync/realtime.js?v=15b5b701a9',
   'js/sync/presence.js?v=50e9bead2e',
   'js/ui/tutorial.js?v=7427317caa',
   'js/ui/onboarding.js?v=af17803033',

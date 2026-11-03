@@ -211,6 +211,7 @@ function _portraitFetch(id, tries){
       _remoteUpdate = true;
       try { localStorage.setItem('skt-party-v1', JSON.stringify(arr)); } finally { _remoteUpdate = false; }
       loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
+      if (typeof panelDefs !== 'undefined' && panelDefs.battlemap && panelDefs.battlemap._syncFromCombat) panelDefs.battlemap._syncFromCombat();
       if (typeof paRender === 'function') paRender();
     } catch(e){ _diag('portrait', e); }
   });
@@ -303,6 +304,7 @@ const _ENTITY_KEYS = {
     recordOpts(n){ return n.indexOf('items/') === 0 ? _REC_HP : null; },
     postApply(){
       loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
+      if (typeof panelDefs !== 'undefined' && panelDefs.battlemap && panelDefs.battlemap._syncFromCombat) panelDefs.battlemap._syncFromCombat();
       if (typeof paRender === 'function') paRender();
     },
   },
