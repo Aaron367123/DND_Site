@@ -1901,9 +1901,11 @@ function sktActivationFromText(text, name, ctx){
     if (once > 0){
       let h = once - 1; while (h >= 0 && once - h <= 4 && !/^[A-Z][\w'’ -]{1,40}\.$/.test(sents[h])) h--;
       const titled = h >= 0 && once - h <= 4 && /^[A-Z][\w'’ -]{1,40}\.$/.test(sents[h]);
-      const start = titled ? h + 1 : Math.max(0, once - 2);
-      if (at < start || at > once){
-        head = titled ? sents[h].replace(/\.$/, '') + ': ' : '';
+      // Only a use under its own heading: a feature with one benefit (Tomb of
+      // Levistus, "As a reaction…") keeps the sentence that says how it's used.
+      const start = h + 1;
+      if (titled && (at < start || at > once)){
+        head = sents[h].replace(/\.$/, '') + ': ';
         action = timing(sents.slice(start, once + 1).join(' '));
         at = start;
       }
