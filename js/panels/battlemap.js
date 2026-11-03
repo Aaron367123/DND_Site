@@ -1956,6 +1956,43 @@ registerPanel('battlemap',{
   // they work in the same space as _csScreen().
   _tokenUnitScreen(){ return this._tokenUnit() * (this._bgMapScale || 1); },
 
+  // Where a dropped token actually lands. You can't end a move in another
+  // creature's space, so a token let go on top of someone slides to the
+  // nearest free square, on the side it came from when there's a choice.
+  // A body (a dead token) and a Tiny creature can share a square, as in the
+  // rules; the DM can stack on purpose (a mount, a swarm, a grapple) by
+  // holding Alt. (x, y) is already snapped and clamped; so is the answer.
+  _landing(t, x, y, from, stack){
+    const unit = this._tokenUnitScreen(), cs = this._csScreen(), size = t.size || 1;
+    const stageW = this._cols * cs, stageH = this._rows * cs, half = size * unit / 2;
+    const others = (this._tokens || []).filter(o => o && o !== t && o.id !== t.id && !o.dead && (o.size || 1) >= 1 && o.x != null);
+    if (stack || t.dead || size < 1 || !others.length) return { x, y, moved: false };
+    const clash = (px, py) => others.some(o => Math.hypot(o.x - px, o.y - py) < (size + (o.size || 1)) / 2 * unit * 0.75);
+    if (!clash(x, y)) return { x, y, moved: false };
+    const inside = (px, py) => px >= half - 0.5 && px <= stageW - half + 0.5 && py >= half - 0.5 && py <= stageH - half + 0.5;
+    for (let ring = 1; ring <= 8; ring++){
+      const spots = [];
+      for (let dx = -ring; dx <= ring; dx++) for (let dy = -ring; dy <= ring; dy++){
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        const px = x + dx * cs, py = y + dy * cs;
+        if (inside(px, py) && !clash(px, py)) spots.push([px, py]);
+      }
+      if (spots.length){
+        const d = (p, q) => Math.hypot(p[0] - q.x, p[1] - q.y);
+        spots.sort((a, b) => (d(a, { x, y }) - d(b, { x, y })) || (from ? d(a, from) - d(b, from) : 0));
+        return { x: spots[0][0], y: spots[0][1], moved: true };
+      }
+    }
+    return { x, y, moved: false };
+  },
+  // Said once a session, the first time a drop is moved aside.
+  _landingNote(){
+    if (this._landingTold) return;
+    this._landingTold = true;
+    const dm = !document.body.classList.contains('player-mode');
+    if (typeof showToast === 'function') showToast('Someone is already there, so it was set down beside them' + (dm ? '. Hold Alt to stack tokens.' : '.'));
+  },
+
   // Font sizes with a minimum are minimums in SCREEN pixels by intent, but the
   // CSS transform silently reinterprets them as stage pixels. Divide the floor
   // by the view scale so "at least 11px" keeps meaning 11px on the display.
@@ -5418,8 +5455,9 @@ registerPanel('battlemap',{
             // double-scaled the clamp — at 2x zoom, tokens released near the
             // right/bottom edge jumped inward by an extra full natural-cell.
             const half = size * this._tokenUnitScreen() / 2;
-            t.x = Math.max(half, Math.min(stageW - half, nx));
-            t.y = Math.max(half, Math.min(stageH - half, ny));
+            const land = this._landing(t, Math.max(half, Math.min(stageW - half, nx)), Math.max(half, Math.min(stageH - half, ny)), _oaFrom, !!(ev && ev.altKey) && !document.body.classList.contains('player-mode'));
+            t.x = land.x; t.y = land.y;
+            if (land.moved) this._landingNote();
             this._saveMap();
             this._renderTokens();
             // Opportunity attacks. The prompt lives in the Turn View — it owns
@@ -5531,8 +5569,9 @@ registerPanel('battlemap',{
             // Same double-scale fix as the mouse handler above. `cs` already
             // includes _bgMapScale via _csScreen() — don't apply it twice.
             const half = size * this._tokenUnitScreen() / 2;
-            t.x = Math.max(half, Math.min(stageW - half, nx));
-            t.y = Math.max(half, Math.min(stageH - half, ny));
+            const land = this._landing(t, Math.max(half, Math.min(stageW - half, nx)), Math.max(half, Math.min(stageH - half, ny)), _oaFrom, false);
+            t.x = land.x; t.y = land.y;
+            if (land.moved) this._landingNote();
             this._saveMap();
             this._renderTokens();
             // Opportunity attacks. The prompt lives in the Turn View — it owns

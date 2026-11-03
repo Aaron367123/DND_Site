@@ -12317,6 +12317,66 @@
         if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } if (panelDefs.battlemap) panelDefs.battlemap._tokens = JSON.parse(bm0).tokens || []; }
       }
     }
+    // -- Round 142: a token let go on someone else's square is set beside them --
+    if (!PLAYER){
+      const bm0 = localStorage.getItem('skt-battlemap-v1');
+      const B = panelDefs.battlemap;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const cs = B._csScreen(), snap0 = B._snapToGrid; B._snapToGrid = true;
+        const at = (c, r) => ({ x: cs * (c + 0.5), y: cs * (r + 0.5) });
+        const put = list => { B._tokens = list.map(([id, c, r, extra]) => Object.assign({ id, label: id, size: 1, color: '#555' }, at(c, r), extra || {})); B._renderTokens(); };
+        const scr = id => { const r = document.querySelector('.map-token[data-tid="' + id + '"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+        // A real mouse drag of `id` onto where `onto` stands.
+        const drop = async (id, onto, opts) => {
+          const a = scr(id), b = scr(onto), el = document.querySelector('.map-token[data-tid="' + id + '"]');
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: a.x, clientY: a.y }));
+          for (let k = 1; k <= 5; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, button: 0, buttons: 1, clientX: a.x + (b.x - a.x) * k / 5, clientY: a.y + (b.y - a.y) * k / 5 }));
+          document.dispatchEvent(new MouseEvent('mouseup', Object.assign({ bubbles: true, button: 0, clientX: b.x, clientY: b.y }, opts || {})));
+          await sleep(60);
+          return B._tokens.find(t => t.id === id);
+        };
+        const near = (t, p) => Math.abs(t.x - p.x) < 1 && Math.abs(t.y - p.y) < 1;
+        const toasts = []; const st0 = window.showToast; window.showToast = (m, o) => { toasts.push(m); };
+        try {
+          B._landingTold = false;
+          put([['r142a', 5, 5], ['r142b', 8, 5]]);
+          const b1 = await drop('r142b', 'r142a');
+          ok('map: a token dropped on someone’s square is set on the free square beside them, on the side it came from', near(b1, at(6, 5)), JSON.stringify([b1.x / cs - 0.5, b1.y / cs - 0.5]));
+          ok('map: and says why, once', toasts.length === 1 && /already there/.test(toasts[0]) && /Alt/.test(toasts[0]), JSON.stringify(toasts));
+          put([['r142a', 5, 5], ['r142b', 5, 2]]);
+          const b2 = await drop('r142b', 'r142a');
+          ok('map: from above, it stops above them', near(b2, at(5, 4)), JSON.stringify([b2.x / cs - 0.5, b2.y / cs - 0.5]));
+          ok('map: the note is not repeated', toasts.length === 1, JSON.stringify(toasts));
+          put([['r142a', 5, 5], ['r142b', 8, 5]]);
+          const b3 = await drop('r142b', 'r142a', { altKey: true });
+          ok('map: holding Alt, the DM can stack tokens on purpose', near(b3, at(5, 5)), JSON.stringify([b3.x / cs - 0.5, b3.y / cs - 0.5]));
+          put([['r142a', 5, 5, { dead: true }], ['r142b', 8, 5]]);
+          const b4 = await drop('r142b', 'r142a');
+          ok('map: a body can be stood on', near(b4, at(5, 5)), JSON.stringify([b4.x / cs - 0.5, b4.y / cs - 0.5]));
+          put([['r142a', 5, 5, { size: 0.5 }], ['r142b', 8, 5]]);
+          const b5 = await drop('r142b', 'r142a');
+          ok('map: so can a Tiny creature’s square', near(b5, at(5, 5)), JSON.stringify([b5.x / cs - 0.5, b5.y / cs - 0.5]));
+          put([['r142a', 5, 5], ['r142c', 6, 5], ['r142b', 9, 5]]);
+          const b6 = await drop('r142b', 'r142a');
+          ok('map: with the square beside taken too, the next free one', !near(b6, at(5, 5)) && !near(b6, at(6, 5)) && Math.hypot(b6.x - at(5, 5).x, b6.y - at(5, 5).y) < cs * 1.5, JSON.stringify([b6.x / cs - 0.5, b6.y / cs - 0.5]));
+          // A finger: the phone's path through the same rule.
+          put([['r142a', 5, 5], ['r142b', 8, 5]]);
+          const a = scr('r142b'), b = scr('r142a'), el = document.querySelector('.map-token[data-tid="r142b"]');
+          const touch = (x, y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y });
+          el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [touch(a.x, a.y)], changedTouches: [touch(a.x, a.y)] }));
+          for (let k = 1; k <= 5; k++){ const p = touch(a.x + (b.x - a.x) * k / 5, a.y + (b.y - a.y) * k / 5); document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [p], changedTouches: [p] })); }
+          document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [touch(b.x, b.y)] }));
+          await sleep(60);
+          const b7 = B._tokens.find(t => t.id === 'r142b');
+          ok('map: a finger drag onto someone is set beside them too', near(b7, at(6, 5)), JSON.stringify([b7.x / cs - 0.5, b7.y / cs - 0.5]));
+        } finally { window.showToast = st0; B._snapToGrid = snap0; }
+        closePanel('battlemap'); await sleep(60);
+      } catch(e){ ok('round 142 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } B._tokens = JSON.parse(bm0).tokens || []; }
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
