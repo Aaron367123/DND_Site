@@ -565,7 +565,9 @@ function cbShell(main, side){
     +   '<span class="cb-foot-todo' + (blocking.length ? '' : ' done') + '">' + (blocking.length ? blocking.length + ' still to choose' : 'Everything chosen') + '</span>'
     +   (last ? (CB.mode === 'create' && typeof openCharSheet === 'function' ? '<button class="btn" data-cb="save">Create</button><button class="btn primary" data-cb="savesheet">Create and open the sheet</button>'
                   : '<button class="btn primary" data-cb="save">' + (CB.mode === 'create' ? 'Create character' : 'Save changes') + '</button>')
-             : '<button class="btn primary" data-cb="next">Next ›</button>')
+             // Levelling up or editing, the choices are usually on one step:
+             // save from there, not four Nexts later on Review.
+             : (CB.mode !== 'create' ? '<button class="btn" data-cb="save">Save</button>' : '') + '<button class="btn primary" data-cb="next">Next ›</button>')
     + '</div>';
 }
 
@@ -2801,6 +2803,8 @@ function cbSave(){
         // Keep everything the builder does not own: conditions, notes,
         // death saves, a portrait, which combatant it is.
         state.party[idx] = Object.assign({}, prior, rec, { id: prior.id, portrait: prior.portrait });
+        // A level the DM gave (levelTo) is used up once the character has it.
+        if (+state.party[idx].levelTo <= (rec.level || 1)) delete state.party[idx].levelTo;
         // Rebuilt from an import: its gear is in the build now, and the PDF's
         // AC breakdown and inventory bookkeeping mean nothing to a built one.
         if (CB.convertFrom){ ['inventory', 'acGear', 'invResist'].forEach(k => { delete state.party[idx][k]; }); }

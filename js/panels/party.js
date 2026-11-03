@@ -137,6 +137,9 @@ registerPanel('party',{
     // Experience for everyone levelled by XP, split evenly (D&D Beyond's
     // party XP).
     if (state.party.some(c => c.build && c.build.advancement === 'xp')) items.push({ label:'Award XP…', icon:'i-star', run: () => this._awardXp() });
+    // Milestone levelling: the DM says the party has levelled; each player
+    // gets the Level up button on their own sheet.
+    if (state.party.some(c => c.build && !c.foe && (c.level || 1) < 20)) items.push({ label:'Level up the party…', icon:'i-up', run: () => this._grantLevel() });
     // A character exported from this or another campaign.
     if (typeof sktImportCharacter === 'function') items.push({ label:'Import a character…', icon:'i-upload', run: () => {
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
@@ -162,6 +165,26 @@ registerPanel('party',{
       });
       const ready = who.filter(c => (c.level || 1) < 20 && c.xp >= sktXpFor((c.level || 1) + 1));
       showToast(each + ' XP each' + (ready.length ? ' — ' + ready.map(c => c.name).join(', ') + ' can level up' : ''));
+    });
+  },
+
+  // A new level for the party (milestone levelling). Nothing is levelled here:
+  // each character gets levelTo, their sheet says the level is ready with a
+  // Level up button, and the player makes the level's choices themselves.
+  _grantLevel(){
+    const who = state.party.filter(c => c.build && !c.foe && (c.level || 1) < 20);
+    if (!who.length) return;
+    const top = Math.max(...who.map(c => c.level || 1)), low = Math.min(...who.map(c => c.level || 1));
+    const opts = []; for (let n = low + 1; n <= Math.min(20, top + 1); n++) opts.push({ value: String(n), label: 'Level ' + n });
+    showModal('Level up the party', [{ id: 'lvl', label: 'The party reaches', type: 'select', options: opts, value: String(Math.min(20, top + 1)) }], 'Level up').then(r => {
+      const n = parseInt(r && r.lvl, 10); if (!n) return;
+      const gets = who.filter(c => (c.level || 1) < n);
+      if (!gets.length) return;
+      sktUndoable('Party reaches level ' + n, () => {
+        gets.forEach(c => { c.levelTo = n; });
+        save(); this._render();
+      });
+      showToast('Level ' + n + ' is ready for ' + gets.map(c => c.name.split(' ')[0]).join(', ') + ': each levels up from their sheet');
     });
   },
 
@@ -300,6 +323,8 @@ registerPanel('party',{
         +'<div class="char-header-text">'
           +'<input class="char-name" value="'+esc(c.name)+'" data-field="name" data-idx="'+i+'" placeholder="Character name">'
           +sublineHtml
+          // A level the DM gave that this character hasn't taken yet.
+          +((c.level || 1) < 20 && +c.levelTo > (c.level || 1) ? '<span class="char-lvlready" title="Waiting for the player to level up from their sheet">Level ' + ((c.level || 1) + 1) + ' ready</span>' : '')
         +'</div>'
         // One-click toggle to add/remove this PC from the combat tracker —
         // drag-drop still works, this is the discoverable affordance for new

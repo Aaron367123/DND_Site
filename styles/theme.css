@@ -956,3 +956,9 @@ body:has(#cb-root) #toast-host { bottom: 64px; }
 .cb-hpup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 4px; }
 .cb-hpup > span:first-child { font-weight: 600; }
 .cb-hpup .cb-dim { flex-basis: 100%; }
+
+/* ── 53. A level the DM gave: on the sheet, and on the party card ── */
+.cs-lvlready { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 4px; padding: 8px 10px 8px 12px;
+  border: 1px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, var(--panel)); color: var(--text); font-weight: 600; }
+.char-lvlready { display: inline-block; margin-top: 2px; padding: 1px 7px; border-radius: 999px; font-size: var(--fs-xs, 11px); font-weight: 600;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); }

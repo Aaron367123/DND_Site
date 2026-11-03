@@ -12522,6 +12522,41 @@
       } catch(e){ ok('round 146 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 147: the DM gives the party a level; each player takes it from their sheet --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), modal0 = window.showModal;
+      try {
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(100);
+        CB.welcome = null; cbSet(b => { b.name = 'R147'; b.cls = 'Fighter'; b.level = 4; }); cbQuickBuild();
+        const build = JSON.parse(JSON.stringify(CB.build));
+        cbClose(); await sleep(60);
+        state.party.push({ id: 'r147', name: 'R147 Tester', hp: 30, hpMax: 30, ac: 16, level: 4, build }); save();
+        const idx = state.party.length - 1;
+        openPanel('party'); await sleep(300);
+        const P = panelDefs.party;
+        ok('party: “Level up the party…” is in the menu', P.menuItems().some(m => /Level up the party/.test(m.label)));
+        // The DM picks level 5.
+        let asked = null; window.showModal = (title, fields) => { asked = fields; return Promise.resolve({ lvl: '5' }); };
+        P._grantLevel(); await sleep(150);
+        const me = state.party[idx];
+        ok('party: the level is offered from the party’s level up', !!asked && asked[0].options.some(o => o.value === '5') && asked[0].value === '5', JSON.stringify(asked && asked[0]));
+        ok('party: giving it marks who has it waiting, and levels nobody', me.levelTo === 5 && me.level === 4 && state.party.filter(c => !c.build).every(c => !c.levelTo));
+        P._render(); await sleep(60);
+        ok('party: the card says the level is ready', [...document.querySelectorAll('.char-lvlready')].some(e => /Level 5 ready/.test(e.textContent)));
+        // On the sheet: the notice, with the button.
+        await openCharSheet(me.id); await sleep(300);
+        const note = document.querySelector('.cs-lvlready');
+        ok('sheet: “Level 5 is ready” with a Level up button', !!note && /Level 5 is ready/.test(note.textContent) && !!note.querySelector('[data-cs="levelup"]'));
+        note.querySelector('[data-cs="levelup"]').click(); for (let k = 0; k < 100 && !(CB && CB.R && !CB.loading); k++) await sleep(100);
+        ok('sheet: and it opens the level up', CB && CB.mode === 'levelup' && CB.build.level === 5);
+        // Saved from the Levels step itself.
+        ok('level up: Save is right there on the Levels step', CB.step === 'levels' && !!document.querySelector('#cb-root .cb-foot [data-cb="save"]'));
+        document.querySelector('#cb-root .cb-foot [data-cb="save"]').click(); await sleep(300);
+        ok('level up: taken, the waiting level is gone', state.party[idx].level === 5 && state.party[idx].levelTo == null, JSON.stringify([state.party[idx].level, state.party[idx].levelTo]));
+        if (typeof csClose === 'function') csClose(); await sleep(60);
+      } catch(e){ ok('round 147 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showModal = modal0; try { cbClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -15255,6 +15290,38 @@
         B._applyViewScale(keepV); B._saveViewState();
         state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA;
         paTab = keepTab; paRender(); await sleep(200);
+      }
+    }
+    // -- Round 148: a level the DM gave reaches the player's phone --
+    if (PLAYER){
+      const party0 = JSON.stringify(state.party), tab0 = paTab, toast0 = window.showToast;
+      try {
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(100);
+        CB.welcome = null; cbSet(b => { b.name = 'R148'; b.cls = 'Rogue'; b.level = 6; }); cbQuickBuild();
+        const build = JSON.parse(JSON.stringify(CB.build));
+        cbClose(); await sleep(60);
+        state.party.push({ id: 'r148', name: 'R148 Phone', hp: 40, hpMax: 40, ac: 15, level: 6, build });
+        try { localStorage.removeItem('skt-lvl-told-r148'); } catch(e){}
+        paSetPc('r148'); paTab = 'you'; paRender(); await sleep(400);
+        const toasts = []; window.showToast = (m, o) => toasts.push({ m, action: o && o.action && o.action.label });
+        // The DM's grant arrives.
+        state.party.find(p => p.id === 'r148').levelTo = 7; paRender(); await sleep(400);
+        ok('phone: the level arriving says so once, with a Level up button', toasts.length === 1 && /Level 7 is ready/.test(toasts[0].m) && toasts[0].action === 'Level up', JSON.stringify(toasts));
+        paRender(); await sleep(200);
+        ok('phone: and not again on the next redraw', toasts.length === 1);
+        const note = document.querySelector('#pa-screen .cs-lvlready');
+        ok('phone: the sheet shows “Level 7 is ready” with the button, without opening a menu', !!note && note.getBoundingClientRect().height > 0 && !!note.querySelector('[data-cs="levelup"]'));
+        note.querySelector('[data-cs="levelup"]').click(); for (let k = 0; k < 100 && !(CB && CB.R && !CB.loading); k++) await sleep(100);
+        const foot = document.querySelector('#cb-root .cb-foot'), btns = foot ? [...foot.querySelectorAll('button')] : [];
+        const fr = foot && foot.getBoundingClientRect();
+        ok('phone: level up opens, and its footer (Back, Save, Next) fits the screen', CB && CB.mode === 'levelup' && btns.length === 3 && btns.every(b => { const r = b.getBoundingClientRect(); return r.left >= fr.left - 1 && r.right <= fr.right + 1 && r.width > 30; }),
+           JSON.stringify(btns.map(b => [b.textContent, Math.round(b.getBoundingClientRect().left), Math.round(b.getBoundingClientRect().right)])));
+        cbClose(); await sleep(100);
+      } catch(e){ ok('round 148 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = toast0; try { cbClose(); } catch(e){}
+        state.party = JSON.parse(party0); try { localStorage.removeItem('skt-lvl-told-r148'); } catch(e){}
+        if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
       }
     }
   }

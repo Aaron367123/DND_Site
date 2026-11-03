@@ -314,7 +314,10 @@ function csHead(pc){
   const ro = CS.readOnly;
   const xpOn = pc.build && pc.build.advancement === 'xp';
   const lvl = pc.level || 1, xp = +pc.xp || 0, next = CS_XP[Math.min(19, lvl)];
-  const ready = xpOn && lvl < 20 && xp >= next;
+  // Ready to level: by experience, or because the DM gave the party a level
+  // (party panel → Level up the party, which sets levelTo).
+  const granted = lvl < 20 && +pc.levelTo > lvl;
+  const ready = (xpOn && lvl < 20 && xp >= next) || granted;
   return '<div class="cb-head cs-head cs-hero" style="--hero:' + csHeroColor(pc) + '">' + csHeroArt(pc) + (ro ? '<span class="cs-avatar">' + icon + '</span>' : '<span class="cs-avatar-wrap"><button class="cs-avatar editable" data-cs="portrait" title="Change the portrait" aria-label="Change the portrait">' + icon + '</button><span class="cs-avatar-edit" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><use href="#i-pencil"/></svg></span></span>')
     + '<div class="cs-who"><b class="cb-title">' + csE(pc.name) + '</b><span class="cs-sub">' + csE(csClassLine(pc)) + '</span>'
     + (xpOn ? '<span class="cs-xp' + (ready ? ' ready' : '') + '">XP ' + xp.toLocaleString() + (lvl < 20 ? ' / ' + next.toLocaleString() : '')
@@ -337,7 +340,10 @@ function csHead(pc){
     + '</span>' + (CS.embed ? '<button class="btn" data-pa-swap="1" title="Play a different character">⇄ Change character</button>' : '') + '</div>'
     + '<button class="cs-headmore" data-cs="headmenu" aria-haspopup="true" aria-expanded="' + !!CS.headMenu + '" aria-label="Sheet menu">⋯</button>'
     + (CS.embed ? '' : '<button class="cb-x" data-cs="close" aria-label="Close">✕</button>')
-    + (CS.headMenu ? csHeadMenuHtml(pc, ready) : '') + '</div>';
+    + (CS.headMenu ? csHeadMenuHtml(pc, ready) : '') + '</div>'
+    // On a phone Level up is in the ⋯ menu, so the level being ready says so
+    // where the player is looking, with the button.
+    + (ready && !ro && pc.build && typeof openCharBuilder === 'function' ? '<div class="cs-lvlready" role="status"><span>Level ' + (lvl + 1) + ' is ready' + (granted ? '' : ' — enough experience') + '</span><button class="btn primary small" data-cs="levelup">⬆ Level up</button></div>' : '');
 }
 // The phone's sheet menu: everything the header's row of buttons does, as a
 // list that opens under the header and closes after a choice.

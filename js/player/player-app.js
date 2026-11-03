@@ -598,6 +598,7 @@ function paRender(){
   if (!tabs.some(t => t.id === paTab)) paTab = 'you';
   paRenderTurn();
   paRenderPrompt();
+  paLevelReadyNote();
   paRenderTabs(tabs);
   paRenderScreen();
   paCheckConc();
@@ -624,6 +625,19 @@ function paMyOffers(){
   return mine.length ? { p, mine } : null;
 }
 
+// The DM gave the party a level: once per level, a heads-up that opens the
+// level-up. The sheet itself carries the notice until it's taken.
+function paLevelReadyNote(){
+  const pc = paPc(); if (!pc || !pc.build) return;
+  const to = +pc.levelTo || 0, lvl = pc.level || 1;
+  if (!(to > lvl) || lvl >= 20) return;
+  const key = 'skt-lvl-told-' + pc.id;
+  let told = 0; try { told = +localStorage.getItem(key) || 0; } catch(e){}
+  if (told >= to) return;
+  try { localStorage.setItem(key, String(to)); } catch(e){}
+  if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate([120, 60, 120]); } catch(e){}
+  if (typeof showToast === 'function') showToast('Level ' + (lvl + 1) + ' is ready', { alert: true, action: { label: 'Level up', run: () => { const i = paMyIdx(); if (i >= 0 && typeof openCharBuilder === 'function') openCharBuilder({ idx: i, levelup: true }); } } });
+}
 function paRenderPrompt(){
   const host = document.getElementById('pa-prompt');
   if (!host) return;
