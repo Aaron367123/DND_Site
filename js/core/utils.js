@@ -1796,7 +1796,10 @@ function sktAskBardic(opts){
 function sktCircleMagicOn(){ return !!(typeof state !== 'undefined' && state.settings && state.settings.circleMagic); }
 function sktShownActivations(list){
   const a = Array.isArray(list) ? list : [];
-  return sktCircleMagicOn() ? a : a.filter(x => !x || x.feature !== 'Circle Magic');
+  // The same list back when there's nothing to hide (the Turn View and the
+  // phone share it).
+  if (sktCircleMagicOn() || !a.some(x => x && x.feature === 'Circle Magic')) return a;
+  return a.filter(x => !x || x.feature !== 'Circle Magic');
 }
 function sktActivationsOf(pc){
   if (!pc) return [];
