@@ -3494,6 +3494,8 @@ function sktSpellExcess(lst, s, R){
   if (high.length) out.push('remove ' + pl(high.length, 'spell') + ' above level ' + (s.maxSpellLevel || 0) + ' (' + high.join(', ') + ')');
   return out;
 }
+// "1 spell", "2 spells": a count with its word, not "spell(s)".
+function _sktCount(n, word, plural){ return n + ' ' + (n === 1 ? word : (plural || word + 's')); }
 function sktBuildTodo(build, R){
   const todo = [];
   const cls = sktRulesClass(R, build.cls);
@@ -3524,11 +3526,11 @@ function sktBuildTodo(build, R){
   if (sc){
     (sc.classes || [{ primary: true, sc, cls: build.cls }]).forEach(x => {
       const s = x.sc, lst = x.primary ? build : (x.entry || {}), pre = multi ? _sktTitle(x.cls) + ': ' : '';
-      if ((lst.cantrips || []).length < s.cantrips) todo.push({ step: 'spells', what: pre + (s.cantrips - (lst.cantrips || []).length) + ' cantrip(s)' });
+      if ((lst.cantrips || []).length < s.cantrips) todo.push({ step: 'spells', what: pre + _sktCount(s.cantrips - (lst.cantrips || []).length, 'cantrip') });
       const want = s.prepared || s.known;
       if (s.spellbook && (lst.spellbook || []).length < s.spellbook)
-        todo.push({ step: 'spells', what: pre + (s.spellbook - (lst.spellbook || []).length) + ' spell(s) for the spellbook' });
-      if (want && (lst.spells || []).length < want) todo.push({ step: 'spells', what: pre + (want - (lst.spells || []).length) + ' spell(s)', soft: true });
+        todo.push({ step: 'spells', what: pre + _sktCount(s.spellbook - (lst.spellbook || []).length, 'spell') + ' for the spellbook' });
+      if (want && (lst.spells || []).length < want) todo.push({ step: 'spells', what: pre + _sktCount(want - (lst.spells || []).length, 'spell'), soft: true });
       sktSpellExcess(lst, s, R).forEach(x => todo.push({ step: 'spells', what: pre + x }));
     });
   }

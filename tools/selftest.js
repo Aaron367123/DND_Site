@@ -12557,6 +12557,37 @@
       } catch(e){ ok('round 147 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showModal = modal0; try { cbClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 149: a character's unfinished choices show on their sheet --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(100);
+        CB.welcome = null; cbSet(b => { b.name = 'R149'; b.cls = 'Fighter'; b.level = 5; }); cbQuickBuild();
+        const full = JSON.parse(JSON.stringify(CB.build)), R = CB.R;
+        const want = cbMasteryCount();
+        cbClose(); await sleep(60);
+        const gap = JSON.parse(JSON.stringify(full)); gap.masteries = (gap.masteries || []).slice(0, 1);
+        state.party.push({ id: 'r149', name: 'R149 Tester', hp: 44, hpMax: 44, ac: 16, level: 5, build: gap }); save();
+        await openCharSheet('r149'); for (let k = 0; k < 60 && !(CS && CS.R); k++) await sleep(100); await sleep(200);
+        const note = () => document.querySelector('.cs-todo-note');
+        const left = want - 1;
+        ok('sheet: what is still to choose shows on the sheet', !!note() && note().textContent.includes(left + ' weapon master' + (left === 1 ? 'y' : 'ies')), note() ? note().textContent : '(none)');
+        ok('sheet: counted in words, never “(s)”', !!note() && !/\(s\)/.test(note().textContent));
+        ok('sheet: working it out leaves the builder shut', CB === null);
+        note().querySelector('[data-cs="fixtodo"]').click(); for (let k = 0; k < 100 && !(CB && CB.R && !CB.loading); k++) await sleep(100);
+        ok('sheet: “Choose” opens the builder on the step that has it', CB && CB.mode === 'edit' && CB.step === 'levels', CB && CB.mode + ' ' + CB.step);
+        cbClose(); await sleep(100);
+        // A finished character: nothing shown.
+        state.party.find(p => p.id === 'r149').build = full; save();
+        await openCharSheet('r149'); for (let k = 0; k < 60 && !(CS && CS.R); k++) await sleep(100); await sleep(200);
+        ok('sheet: and nothing when everything is chosen', !note());
+        // A level waiting: the level-up notice instead of both.
+        state.party.find(p => p.id === 'r149').build = gap; state.party.find(p => p.id === 'r149').levelTo = 6; save(); csRender(); await sleep(150);
+        ok('sheet: with a level waiting, only “Level 6 is ready” shows', !note() && !!document.querySelector('.cs-lvlready'));
+        if (typeof csClose === 'function') csClose(); await sleep(60);
+      } catch(e){ ok('round 149 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { cbClose(); } catch(e){} try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

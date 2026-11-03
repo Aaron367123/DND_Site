@@ -343,7 +343,18 @@ function csHead(pc){
     + (CS.headMenu ? csHeadMenuHtml(pc, ready) : '') + '</div>'
     // On a phone Level up is in the ⋯ menu, so the level being ready says so
     // where the player is looking, with the button.
-    + (ready && !ro && pc.build && typeof openCharBuilder === 'function' ? '<div class="cs-lvlready" role="status"><span>Level ' + (lvl + 1) + ' is ready' + (granted ? '' : ' — enough experience') + '</span><button class="btn primary small" data-cs="levelup">⬆ Level up</button></div>' : '');
+    + (ready && !ro && pc.build && typeof openCharBuilder === 'function' ? '<div class="cs-lvlready" role="status"><span>Level ' + (lvl + 1) + ' is ready' + (granted ? '' : ' — enough experience') + '</span><button class="btn primary small" data-cs="levelup">⬆ Level up</button></div>' : '')
+    + (!ready ? csTodoNote(pc, ro) : '');
+}
+// Choices the builder says are still open (a mastery not picked, species
+// skills never chosen), with a button to the step that has them. Not while a
+// level is waiting: levelling up shows the same things.
+function csTodoNote(pc, ro){
+  if (ro || !pc.build || !CS.R || typeof cbTodoFor !== 'function' || typeof openCharBuilder !== 'function') return '';
+  const t = cbTodoFor(pc.build, CS.R, pc);
+  if (!t || !t.length) return '';
+  return '<div class="cs-todo-note" role="status"><span>' + t.length + (t.length === 1 ? ' choice' : ' choices') + ' to make: ' + csE(t.map(x => x.what).join(', ')) + '</span>'
+    + '<button class="btn small" data-cs="fixtodo" data-step="' + csE(t[0].step) + '">Choose</button></div>';
 }
 // The phone's sheet menu: everything the header's row of buttons does, as a
 // list that opens under the header and closes after a choice.
@@ -1292,6 +1303,10 @@ function csOnClick(e){
     const go = () => csEdit(pc.name + ' took a long rest', () => panelDefs.party._longRestOne(state.party[csIdx()], csIdx()));
     if (typeof showConfirm === 'function') return showConfirm('Hit points to full, ' + (((pc.build && pc.build.edition) || pc.rules || '2024') === '2024' ? 'every hit die' : 'half the hit dice') + ', every slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
     return go();
+  }
+  if (d.cs === 'fixtodo'){
+    const i = csIdx(); csClose();
+    return openCharBuilder({ idx: i, step: d.step || 'review' });
   }
   if (d.cs === 'levelup' || d.cs === 'edit' || d.cs === 'convert'){
     const i = csIdx(); csClose();

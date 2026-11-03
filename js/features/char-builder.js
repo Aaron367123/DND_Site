@@ -50,7 +50,7 @@ async function openCharBuilder(opts){
   const mode = prior ? (opts.levelup ? 'levelup' : 'edit') : 'create';
   if (mode === 'levelup') build.level = Math.min(20, (build.level || 1) + 1);
   const multi0 = JSON.parse(JSON.stringify(build.multi || []));
-  CB = { build, R: null, step: mode === 'create' ? 'basics' : (mode === 'levelup' ? 'levels' : 'review'),
+  CB = { build, R: null, step: opts.step || (mode === 'create' ? 'basics' : (mode === 'levelup' ? 'levels' : 'review')),
          mode, idx: opts.idx != null ? opts.idx : null, onDone: opts.onDone || null,
          fromLevel: prior && prior.build ? prior.build.level : null, loading: true, multi0, lvlTo: 'first' };
   if (convert) CB.convertFrom = prior.id;
@@ -1475,7 +1475,7 @@ function cbRuleBreaks(){
   if (!cls || !rec) return out;
   const add = (step, what) => out.push({ step, what, rule: true });
   const SK = k => SKT_SKILL_LABEL[k] || k, list = a => a.join(', ');
-  const over = (have, max, step, what) => { if (have > max) add(step, (have - max) + ' ' + what + ' too many (' + max + ' allowed)'); };
+  const over = (have, max, step, what) => { if (have > max) add(step, (have - max) + ' ' + String(what).replace(/(s)/g, have - max === 1 ? '' : 's') + ' too many (' + max + ' allowed)'); };
   // Skills.
   const skills = b.skills || [];
   over(skills.length, cls.skillChoice.count, 'skills', cls.name + ' skill' + (skills.length - cls.skillChoice.count === 1 ? '' : 's'));
@@ -1547,7 +1547,7 @@ function cbRuleBreaks(){
     });
     if (sc) (sc.classes || [{ view: b, cls: b.cls }]).forEach(x => {
       const lim = sktSchoolLimit(x.view || b, R);
-      if (lim && lim.off > lim.free) add('spells', (sc.classes ? _sktTitle(x.cls) + ': ' : '') + (lim.off - lim.free) + ' spell(s) not ' + lim.text + ' too many (' + lim.free + ' from any school allowed)');
+      if (lim && lim.off > lim.free) add('spells', (sc.classes ? _sktTitle(x.cls) + ': ' : '') + _sktCount(lim.off - lim.free, 'spell') + ' not ' + lim.text + ' too many (' + lim.free + ' from any school allowed)');
     }); }
   // Multiclassing: each class's prerequisite, the first one's included.
   { const parts = sktClassLevels(b, R);
@@ -1575,6 +1575,27 @@ function cbStillToChoose(){
 }
 // Everything left: what is still to choose, then what breaks the rules.
 function cbTodo(){ return CB && CB.R ? sktBuildTodo(CB.build, CB.R).concat(cbStillToChoose(), cbRuleBreaks()) : []; }
+// What a saved character still has to choose, for their sheet (Kael's second
+// weapon mastery, Zindle's species skills: invisible unless someone opened
+// the builder). The builder's own checks, run on a borrowed copy while the
+// builder is shut, remembered per build so a sheet redraw costs nothing.
+const _cbTodoMemo = new Map();
+function cbTodoFor(build, R, prior){
+  if (!build || !R || CB) return null;
+  const key = R.edition + '|' + JSON.stringify(build);
+  if (_cbTodoMemo.has(key)) return _cbTodoMemo.get(key);
+  let out = null;
+  try {
+    const b = JSON.parse(JSON.stringify(build));
+    CB = { build: b, R, mode: 'edit', idx: null, step: 'review', multi0: JSON.parse(JSON.stringify(b.multi || [])), fromLevel: b.level };
+    CB.rec = sktComputeCharacter(b, R, prior || null);
+    out = cbTodo().filter(t => t && t.step !== 'basics').map(t => ({ step: t.step, what: t.what || t.text, rule: !!t.rule }));
+  } catch(e){ out = null; }
+  finally { CB = null; }
+  if (_cbTodoMemo.size > 40) _cbTodoMemo.clear();
+  _cbTodoMemo.set(key, out);
+  return out;
+}
 
 function cbExpertiseCount(){
   const cls = sktRulesClass(CB.R, CB.build.cls); if (!cls) return 0;
