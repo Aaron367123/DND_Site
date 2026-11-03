@@ -838,7 +838,7 @@ CS_TAB_RENDER.actions = pc => {
     + ((s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '<span>DC ' + (sh.spellSaveDc || '?') + ' ' + csE(String(s.savingThrow[0]).slice(0, 3).toUpperCase()) + '</span>')
     + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csDmgHtml(csSpellDamage(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
   h += csExtraDamageHtml(pc) + '</div>';
-  const acts = sh.activations || [];
+  const acts = typeof sktShownActivations === 'function' ? sktShownActivations(sh.activations) : (sh.activations || []);
   // A 2024 Magic action is an action.
   const kind = a => a.action === 'Magic' ? 'Action' : (a.action || 'Action');
   const groups = [['Action', 'Actions', 'action'], ['Bonus Action', 'Bonus actions', 'bonus'], ['Reaction', 'Reactions', 'reaction']];

@@ -140,6 +140,16 @@ registerPanel('party',{
     // Milestone levelling: the DM says the party has levelled; each player
     // gets the Level up button on their own sheet.
     if (state.party.some(c => c.build && !c.foe && (c.level || 1) < 20)) items.push({ label:'Level up the party…', icon:'i-up', run: () => this._grantLevel() });
+    // Heroes of Faerûn's Circle Magic, for the table that uses it: offered
+    // once someone in the party could lead a Circle spell.
+    const circleOn = typeof sktCircleMagicOn === 'function' && sktCircleMagicOn();
+    if (circleOn || state.party.some(c => ((c.sheet || {}).activations || []).some(a => a && a.feature === 'Circle Magic'))){
+      items.push({ label: 'Circle Magic (Heroes of Faerûn): ' + (circleOn ? 'on — turn off' : 'off — turn on'), icon: 'i-sparkle', run: () => {
+        if (!state.settings) state.settings = {};
+        state.settings.circleMagic = !circleOn; save(); this._render();
+        showToast('Circle Magic ' + (circleOn ? 'off: the Circle spell actions are hidden from the sheets' : 'on: spellcasters’ sheets show the Circle spell actions'));
+      } });
+    }
     // A character exported from this or another campaign.
     if (typeof sktImportCharacter === 'function') items.push({ label:'Import a character…', icon:'i-upload', run: () => {
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';

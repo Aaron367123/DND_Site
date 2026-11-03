@@ -78,7 +78,7 @@ function csPrintSheet(pc){
     + (atks.length ? '<table class="cp-tbl"><tr><th>Name</th><th>Hit / DC</th><th>Damage</th><th>Notes</th></tr>'
       + atks.map(a => '<tr><td><b>' + csE(a.name) + '</b></td><td>' + csE(a.atkBonus || '') + '</td><td>' + csE(a.damage || '') + (a.versatile ? '<br><small>two hands ' + csE(a.versatile) + '</small>' : '') + '</td><td>'
         + csE([a.mastery ? 'Mastery: ' + a.mastery : '', a.range ? a.range + ' ft' : ''].filter(Boolean).join(' · ')) + '</td></tr>').join('') + '</table>' : '<div class="cp-dim">None.</div>');
-  const acts = sh.activations || [];
+  const acts = typeof sktShownActivations === 'function' ? sktShownActivations(sh.activations) : (sh.activations || []);
   if (acts.length) h += acts.map(a => '<div class="cp-act"><b>' + csE(a.name) + '</b> <small>' + csE([a.action, a.resource ? (a.amount || 1) + ' ' + a.resource : ''].filter(Boolean).join(' · ')) + '</small>'
     + (a.desc ? '<div>' + csE(a.desc) + '</div>' : '') + '</div>').join('');
   h += '</div>';

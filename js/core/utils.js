@@ -1788,9 +1788,19 @@ function sktAskBardic(opts){
   }
 }
 
+// Heroes of Faerûn's Circle Magic is a table rule: spellcasters casting one
+// spell together. The rules work it out for every 2024 caster when that book
+// is on, but it shows only when the DM has switched it on for the campaign
+// (party ⋯ menu), so a table that doesn't use it isn't handed seven actions
+// per caster. Filtered where shown, so switching it is instant both ways.
+function sktCircleMagicOn(){ return !!(typeof state !== 'undefined' && state.settings && state.settings.circleMagic); }
+function sktShownActivations(list){
+  const a = Array.isArray(list) ? list : [];
+  return sktCircleMagicOn() ? a : a.filter(x => !x || x.feature !== 'Circle Magic');
+}
 function sktActivationsOf(pc){
   if (!pc) return [];
-  if (pc.build && pc.sheet && Array.isArray(pc.sheet.activations)) return pc.sheet.activations;
+  if (pc.build && pc.sheet && Array.isArray(pc.sheet.activations)) return sktShownActivations(pc.sheet.activations);
   return sktDeriveActivations((pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '');
 }
 

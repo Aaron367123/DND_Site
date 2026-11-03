@@ -12622,6 +12622,37 @@
       } catch(e){ ok('round 151 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 152: Circle Magic shows only when the DM has switched it on --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), set0 = JSON.stringify(state.settings || {});
+      try {
+        if (state.settings) delete state.settings.circleMagic;
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(100);
+        CB.welcome = null; cbSet(b => { b.name = 'R152'; b.cls = 'Wizard'; b.level = 5; }); cbQuickBuild();
+        const rec = sktComputeCharacter(CB.build, CB.R);
+        cbClose(); await sleep(60);
+        ok('circle magic: worked out for a 2024 wizard (the rules are unchanged)', (rec.sheet.activations || []).some(a => a.name === 'Initiate a Circle Spell'));
+        state.party.push(Object.assign({}, rec, { id: 'r152' })); save();
+        const shown = () => { const t = document.querySelector('[data-cs-tab="actions"]'); if (t) t.click(); return /Initiate a Circle Spell/.test((document.querySelector('#cs-root') || document.body).innerText); };
+        await openCharSheet('r152'); await sleep(300);
+        ok('circle magic: off by default — not on the sheet', !shown() && !sktActivationsOf(state.party.find(p => p.id === 'r152')).some(a => a.feature === 'Circle Magic'));
+        csClose(); await sleep(60);
+        // The DM switches it on from the party menu.
+        openPanel('party'); await sleep(200);
+        const item = () => panelDefs.party.menuItems().find(m => /Circle Magic/.test(m.label));
+        ok('circle magic: the party menu offers it, saying it is off', !!item() && /off — turn on/.test(item().label), item() && item().label);
+        item().run(); await sleep(100);
+        ok('circle magic: switched on, it is a campaign setting', state.settings.circleMagic === true && /on — turn off/.test(item().label));
+        await openCharSheet('r152'); await sleep(300);
+        ok('circle magic: and the spellcaster’s sheet shows the Circle actions', shown());
+        csClose(); await sleep(60);
+        item().run(); await sleep(100);
+        await openCharSheet('r152'); await sleep(300);
+        ok('circle magic: switched off again, gone — nothing rebuilt', !shown() && state.settings.circleMagic === false);
+        csClose(); await sleep(60);
+      } catch(e){ ok('round 152 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { cbClose(); } catch(e){} try { csClose(); } catch(e){} state.party = JSON.parse(party0); state.settings = JSON.parse(set0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
