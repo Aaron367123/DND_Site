@@ -1600,6 +1600,11 @@ function csSpellsHtml(pc){
   const daily = new Set([].concat(...(sh.featSpells || []).map(g => g.daily || []), (sh.speciesSpells && sh.speciesSpells.daily) || []));
   const arcLv = {}; Object.keys(sh.arcanum || {}).forEach(lv => { arcLv[sh.arcanum[lv]] = lv; from[sh.arcanum[lv]] = 'Mystic Arcanum'; });
   const all = [...new Set(sh.spells || [])];
+  // Always-prepared spells the rules give now but a record saved before they
+  // did lacks: a 2024 ranger's Hunter's Mark, a druid's Speak with Animals.
+  // Shown, not written back: rebuilding the record could undo hand edits.
+  if (pc.build && CS.R && typeof sktBuildAlwaysPrepared === 'function')
+    sktBuildAlwaysPrepared(pc.build, CS.R).forEach(n => { if (!all.includes(n)) all.push(n); if (!from[n]) from[n] = 'Always prepared'; });
   // A wizard casts the rituals in the spellbook without preparing them: they
   // are listed with only the ritual to cast.
   const ritualOnly = new Set();

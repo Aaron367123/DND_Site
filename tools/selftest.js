@@ -12653,6 +12653,31 @@
       } catch(e){ ok('round 152 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { cbClose(); } catch(e){} try { csClose(); } catch(e){} state.party = JSON.parse(party0); state.settings = JSON.parse(set0); save(); }
     }
+    // -- Round 153: a class's own always-prepared spells (Hunter's Mark, Speak with Animals…) --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const al = (c, l, r) => sktBuildAlwaysPrepared(Object.assign(sktBlankBuild(r === R14 ? '2014' : '2024'), { cls: c, level: l }), r || R);
+        ok('always prepared: a 2024 ranger has Hunter’s Mark (Favored Enemy)', al('Ranger', 1).includes("Hunter's Mark"));
+        ok('always prepared: a 2024 druid has Speak with Animals (Druidic)', al('Druid', 1).includes('Speak with Animals'));
+        ok('always prepared: a 2024 paladin, Divine Smite at 2 and Find Steed at 5, not before', !al('Paladin', 1).includes('Divine Smite') && al('Paladin', 2).includes('Divine Smite') && !al('Paladin', 4).includes('Find Steed') && al('Paladin', 5).includes('Find Steed'));
+        ok('always prepared: a warlock’s Contact Other Plane at 9, a bard’s Power Words at 20', al('Warlock', 9).includes('Contact Other Plane') && al('Bard', 20).includes('Power Word Heal') && al('Bard', 20).includes('Power Word Kill'));
+        ok('always prepared: nothing new for the 2014 classes', !al('Ranger', 5, R14).length && !al('Druid', 5, R14).length);
+        const rk = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R', cls: 'Ranger', level: 3, species: 'Human', background: 'Guide' }), R);
+        ok('always prepared: and it is on the ranger’s sheet', rk.sheet.spells.includes("Hunter's Mark"));
+        // A record saved before: the spell is shown on its Spells tab all the same.
+        const old = JSON.parse(JSON.stringify(rk)); old.id = 'r153'; old.sheet.spells = old.sheet.spells.filter(s => s !== "Hunter's Mark"); old.sheet.alwaysPrepared = [];
+        state.party.push(old); save();
+        await openCharSheet('r153'); for (let k = 0; k < 60 && !(CS && CS.R); k++) await sleep(100); await sleep(200);
+        document.querySelector('[data-cs-tab="spells"]').click(); await sleep(300);
+        const txt = document.querySelector('#cs-root').innerText;
+        ok('always prepared: a ranger saved before still shows Hunter’s Mark, marked always prepared', /Hunter.s Mark[\s\S]{0,120}Always prepared/.test(txt), txt.slice(Math.max(0, txt.search(/Hunter/) - 40), txt.search(/Hunter/) + 120));
+        ok('always prepared: shown, not written into the saved record', !state.party.find(p => p.id === 'r153').sheet.spells.includes("Hunter's Mark"));
+        csClose(); await sleep(60);
+      } catch(e){ ok('round 153 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

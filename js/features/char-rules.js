@@ -3175,6 +3175,21 @@ function _sktAlwaysPreparedOne(build, R){
     });
   };
   if (sub) take(sktSubclassBlocks(sub, build).concat(_SKT_SUB_GRANTS[sub.shortName + '|' + sub.source] || []));
+  // The class's own: "You always have the Hunter's Mark spell prepared" (a
+  // 2024 ranger's Favored Enemy), Speak with Animals (Druidic), Divine Smite
+  // and Find Steed (paladin), Contact Other Plane, Power Word Heal and Kill.
+  // Only subclass lists were read, so a ranger's free Hunter's Mark had a pool
+  // on the sheet and no spell to cast with it.
+  ((cls && cls.features) || []).forEach(f => {
+    if (!f || (+f.level || 1) > (build.level || 1)) return;
+    JSON.stringify(f.entries || '').split(/(?<=\.)\s/).forEach(sentence => {
+      if (!/always have the /i.test(sentence) || !/prepared/i.test(sentence)) return;
+      (sentence.match(/\{@spell [^}]+\}/g) || []).forEach(tag => {
+        const ref = tag.slice(8, -1), sp = sktRulesSpell(R, ref);
+        out.push(sp ? sp.name : _sktTitle(ref.split('|')[0]));
+      });
+    });
+  });
   return [...new Set(out)];
 }
 
