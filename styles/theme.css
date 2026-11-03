@@ -948,3 +948,6 @@ body:has(#cb-root) #toast-host { bottom: 64px; }
 /* ── 50. A picture on a map token stays inside its circle ──── */
 .map-token-pic { display: block; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; pointer-events: none; }
 .map-token-pic > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* ── 51. The builder names the spells picked under each counter ── */
+.cb-chosen { margin: 2px 0 8px; font-size: var(--fs-sm); color: var(--text); line-height: 1.45; }

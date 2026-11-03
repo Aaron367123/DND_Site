@@ -12456,6 +12456,37 @@
         ok('builder: and that item is in the starting inventory', !inv.length, inv.slice(0, 5).join(' | '));
       } catch(e){ ok('round 144 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 145: the builder names the spells picked, not just how many --
+    if (!PLAYER){
+      try {
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(100);
+        CB.welcome = null; cbSet(b => { b.name = 'R145'; b.cls = 'Wizard'; b.level = 3; }); cbQuickBuild();
+        CB.step = 'spells'; cbRender(); await sleep(150);
+        const lines = [...document.querySelectorAll('.cb-chosen')].map(e => e.textContent);
+        const b = CB.build, book = b.spellbook && b.spellbook.length ? b.spellbook : b.spells;
+        ok('builder: under each counter, the spells picked by name (cantrips, spellbook, prepared)',
+           lines.length === 3 && b.cantrips.every(n => lines[0].includes(n)) && book.every(n => lines[1].includes(n)) && b.spells.every(n => lines[2].includes(n)),
+           JSON.stringify(lines).slice(0, 300));
+        cbSet(x => { x.cantrips = []; }); cbRender(); await sleep(60);
+        ok('builder: and nothing when none are picked', document.querySelectorAll('.cb-chosen').length === 2);
+        // Back to the species step: the one chosen is on screen, wherever it is in the list.
+        CB.step = 'species'; cbRender(); await sleep(60);
+        const cards = [...document.querySelectorAll('#cb-root .cb-card')], lastEl = cards[cards.length - 1];
+        const last = lastEl && Object.values(lastEl.dataset)[0];
+        cbSet(x => { x.species = last; });
+        CB.step = 'background'; cbRender(); await sleep(60);
+        document.querySelector('[data-cb="back"]').click(); await sleep(150);
+        const main = document.querySelector('#cb-root .cb-main'), card = document.querySelector('#cb-root .cb-card.on');
+        const v = main.getBoundingClientRect(), r = card ? card.getBoundingClientRect() : null;
+        ok('builder: going back to a step, the card already chosen is in view', CB.step === 'species' && !!r && r.top >= v.top - 1 && r.bottom <= v.bottom + 1 && main.scrollTop > 0,
+           JSON.stringify({ step: CB.step, last, r: r && [r.top, r.bottom], v: [v.top, v.bottom], st: main.scrollTop }));
+        // Choosing the card beside it doesn't move the page.
+        const st = main.scrollTop, sib = card.previousElementSibling || card.nextElementSibling; sib.click(); await sleep(120);
+        { const m2 = document.querySelector('#cb-root .cb-main'), on2 = document.querySelector('#cb-root .cb-card.on'), v2 = m2.getBoundingClientRect(), r2 = on2 && on2.getBoundingClientRect();
+          ok('builder: and picking the card beside it keeps the list where it was', !!r2 && r2.top >= v2.top - 1 && r2.bottom <= v2.bottom + 1 && Math.abs(m2.scrollTop - st) < 120, JSON.stringify([st, m2.scrollTop])); }
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 145 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

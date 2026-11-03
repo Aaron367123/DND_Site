@@ -450,6 +450,11 @@ function cbRender(){
   const main = (CB_RENDER[CB.step] || CB_RENDER.basics)();
   root.innerHTML = cbShell(main, cbSide(rec));
   const sc = root.querySelector('.cb-main'); if (sc && CB.scrollTop != null){ sc.scrollTop = CB.scrollTop; CB.scrollTop = null; }
+  // Coming to a step, the card already chosen is in view: a Human picked
+  // earlier sat below the fold of the species list, and going back to
+  // check it meant scrolling to find it.
+  if (sc && CB.entered){ CB.entered = false; const on = sc.querySelector('.cb-card.on');
+    if (on){ const r = on.getBoundingClientRect(), v = sc.getBoundingClientRect(); if (r.bottom > v.bottom) sc.scrollTop += r.top - v.top - Math.max(0, (v.height - r.height) / 2); } }
 }
 
 // ── The start screen ─────────────────────────────────────────────────────────
@@ -1961,7 +1966,7 @@ CB_RENDER.spells = () => {
   let html = '<h3>Spells</h3>' + cbSpellFilterHtml() + '<div class="cb-note">' + cbAbLabel(sc.ability) + ' · save DC ' + sc.dc + ' · attack ' + sktSigned(sc.attack)
     + ' · slots ' + (Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—') + '</div>';
   if (sc.cantrips){
-    html += '<h4>Cantrips</h4>' + cbCounter((b.cantrips || []).length, sc.cantrips, 'chosen')
+    html += '<h4>Cantrips</h4>' + cbCounter((b.cantrips || []).length, sc.cantrips, 'chosen') + cbChosenLine(b.cantrips)
       + cbSpellChecks(sktSpellOptions(R, b, 0).map(s => s.name), b.cantrips || [], sc.cantrips, 'cb-cantrip');
   }
   // A wizard writes spells into a book, and prepares from the book — the
@@ -1969,11 +1974,11 @@ CB_RENDER.spells = () => {
   const book = sc.spellbook ? (b.spellbook && b.spellbook.length ? b.spellbook : (b.spells || [])) : null;
   if (sc.spellbook){
     html += '<h4>Spellbook</h4><div class="cb-dim">Six spells at 1st level, two more each level after. You prepare from these.</div>'
-      + cbCounter(book.length, sc.spellbook, 'in the book');
+      + cbCounter(book.length, sc.spellbook, 'in the book') + cbChosenLine(book);
     html += cbSpellRows(R, maxLv, book, lv => sktSpellOptions(R, b, lv).map(s => s.name).filter(n => !always.includes(n)), opts => cbSpellChecks(opts, book, sc.spellbook, 'cb-book'));
   }
   if (want){
-    html += '<h4>' + (sc.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((b.spells || []).length, want, 'chosen');
+    html += '<h4>' + (sc.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((b.spells || []).length, want, 'chosen') + cbChosenLine(b.spells);
     // A 2014 Eldritch Knight or Arcane Trickster: two schools, and a few from any.
     const lim = sktSchoolLimit(b, R);
     let block = null;
@@ -2001,6 +2006,13 @@ function cbSpellRows(R, maxLv, chosen, optsAt, row){
   }
   return h;
 }
+// The picks by name under their counter. The list below is every spell on
+// offer, alphabetical, so "3 / 3 chosen" said how many but not which
+// without scrolling the whole of it.
+function cbChosenLine(list){
+  const l = (list || []).filter(Boolean);
+  return l.length ? '<div class="cb-chosen">' + l.slice().sort().map(cbEsc).join(' · ') + '</div>' : '';
+}
 function cbSlotText(sc){
   return Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—';
 }
@@ -2016,15 +2028,15 @@ function cbMultiSpellsHtml(){
     const chk = (opts, chosen, max, kind) => cbSpellChecks(opts, (chosen || []).map(n => i + '|' + kind + '|' + n), max, 'cb-mcspell', n => i + '|' + kind + '|' + n, kind === 'spells' ? block : null);
     const always = sktBuildAlwaysPrepared(v, R);
     let h = '<h3>' + cbEsc(_sktTitle(x.cls)) + ' spells</h3><div class="cb-note">' + cbAbLabel(s.ability) + ' · save DC ' + s.dc + ' · attack ' + sktSigned(s.attack) + '</div>';
-    if (s.cantrips) h += '<h4>Cantrips</h4>' + cbCounter((m.cantrips || []).length, s.cantrips, 'chosen') + chk(sktSpellOptions(R, v, 0).map(o => o.name), m.cantrips, s.cantrips, 'cantrips');
+    if (s.cantrips) h += '<h4>Cantrips</h4>' + cbCounter((m.cantrips || []).length, s.cantrips, 'chosen') + cbChosenLine(m.cantrips) + chk(sktSpellOptions(R, v, 0).map(o => o.name), m.cantrips, s.cantrips, 'cantrips');
     const book = s.spellbook ? (m.spellbook && m.spellbook.length ? m.spellbook : (m.spells || [])) : null;
     if (s.spellbook){
-      h += '<h4>Spellbook</h4>' + cbCounter(book.length, s.spellbook, 'in the book');
+      h += '<h4>Spellbook</h4>' + cbCounter(book.length, s.spellbook, 'in the book') + cbChosenLine(book);
       h += cbSpellRows(R, s.maxSpellLevel, book, lv => sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n)), opts => chk(opts, book, s.spellbook, 'spellbook'));
     }
     const want = s.prepared || s.known;
     if (want){
-      h += '<h4>' + (s.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((m.spells || []).length, want, 'chosen')
+      h += '<h4>' + (s.prepared ? 'Prepared spells' : 'Spells known') + '</h4>' + cbCounter((m.spells || []).length, want, 'chosen') + cbChosenLine(m.spells)
         + (lim ? '<div class="' + (lim.off > lim.free ? 'cb-warn' : 'cb-dim') + '">' + cbEsc(lim.text.charAt(0).toUpperCase() + lim.text.slice(1)) + ' spells, but for ' + lim.free + ' from any school (' + lim.off + ' chosen).</div>' : '');
       if (book) h += chk(book.filter(n => !always.includes(n)), m.spells, want, 'spells');
       else h += cbSpellRows(R, s.maxSpellLevel, m.spells, lv => sktSpellOptions(R, v, lv).map(o => o.name).filter(n => !always.includes(n)), opts => chk(opts, m.spells, want, 'spells'));
@@ -2285,11 +2297,11 @@ function cbOnClick(e){
   if (d.cb === 'start-back'){ CB.welcome = true; cbRender(); return; }
   if (d.cb === 'start-pdf'){ cbClose(); if (panelDefs.party && panelDefs.party._importPdf) panelDefs.party._importPdf(); return; }
   if (d.cbQcls){ CB.build.cls = d.cbQcls; cbRender(); return; }
-  if (d.cb === 'start-build'){ if (!CB.build.cls) return; CB.welcome = false; cbQuickBuild(); CB.step = 'review'; CB.scrollTop = 0; cbRender(); return; }
-  if (d.cbStep){ CB.step = d.cbStep; CB.scrollTop = 0; cbRender(); return; }
+  if (d.cb === 'start-build'){ if (!CB.build.cls) return; CB.welcome = false; cbQuickBuild(); CB.step = 'review'; CB.scrollTop = 0; CB.entered = true; cbRender(); return; }
+  if (d.cbStep){ CB.step = d.cbStep; CB.scrollTop = 0; CB.entered = true; cbRender(); return; }
   const vis = cbVisibleSteps(), at = vis.findIndex(s => s.id === CB.step);
-  if (d.cb === 'next'){ CB.step = vis[Math.min(vis.length - 1, at + 1)].id; CB.scrollTop = 0; cbRender(); return; }
-  if (d.cb === 'back'){ CB.step = vis[Math.max(0, at - 1)].id; CB.scrollTop = 0; cbRender(); return; }
+  if (d.cb === 'next'){ CB.step = vis[Math.min(vis.length - 1, at + 1)].id; CB.scrollTop = 0; CB.entered = true; cbRender(); return; }
+  if (d.cb === 'back'){ CB.step = vis[Math.max(0, at - 1)].id; CB.scrollTop = 0; CB.entered = true; cbRender(); return; }
   if (d.cb === 'save') return cbSave();
   if (d.cb === 'savesheet'){
     const done0 = CB.onDone;
