@@ -12260,6 +12260,14 @@
         cbClose(); await sleep(60);
       } catch(e){ ok('round 138 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
+    // -- Round 139: the 2024 concentration DC cap; the phone's class names ----
+    {
+      try {
+        ok('concentration: DC 10 or half the damage', sktConcDc(7, { rules: '2024' }) === 10 && sktConcDc(25, { rules: '2024' }) === 12);
+        ok('concentration: no more than 30 in the 2024 rules (none in 2014)', sktConcDc(80, { rules: '2024' }) === 30 && sktConcDc(80, { rules: '2014' }) === 40);
+        if (typeof paClsName === 'function') ok('phone: a class is shown as a name (Rogue, not rogue)', paClsName('rogue') === 'Rogue');
+      } catch(e){ ok('round 139 threw', false, e.message); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

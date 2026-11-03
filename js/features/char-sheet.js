@@ -378,7 +378,7 @@ function csTop(pc){
     })()
     + (ro ? '' : '<div class="cs-hp-ctl"><input type="number" min="0" data-cs-amt value="' + (CS.amt || 5) + '" aria-label="Amount">'
       + '<button class="btn" data-cs-hp="-1">Damage</button><button class="btn" data-cs-hp="1">Heal</button><button class="btn" data-cs-hp="temp">Temp</button>'
-      + '<select class="cb-sel" data-cs-dtype aria-label="Damage type"><option value="">Damage type</option>' + ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
+      + '<select class="cb-sel" data-cs-dtype aria-label="Damage type"><option value="">' + (window.innerWidth < 560 ? 'Type' : 'Damage type') + '</option>' + ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
         .map(t => '<option' + (CS.dtype === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>')
     + '</div>';
   // The boxes D&D Beyond puts along the top.
@@ -1138,7 +1138,7 @@ function csOnClick(e){
     if (d.csHp === 'temp') return csEdit('Temp HP ' + n, p => { p.tempHp = Math.max(p.tempHp || 0, n); });
     const i = csIdx(), sign = +d.csHp, type = sign < 0 ? (CS.dtype || null) : null;
     // Hurt while concentrating: a CON save to keep it, DC 10 or half the damage.
-    if (sign < 0 && pc.concentration && !CS.embed) CS.conc = { dc: Math.max(10, Math.floor(n / 2)), spell: pc.concentration };
+    if (sign < 0 && pc.concentration && !CS.embed) CS.conc = { dc: sktConcDc(n, pc), spell: pc.concentration };
     const run = () => { panelDefs.party._applyHpDelta(i, sign * n, type); csCommit(); };
     // The number changes right in front of them, and the other button puts it
     // back: no Undo toast for it (Ctrl+Z still works).

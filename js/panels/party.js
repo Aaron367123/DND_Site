@@ -1581,7 +1581,7 @@ registerPanel('party',{
       }
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
       if (c.concentration && damageForConc > 0){
-        const dc = Math.max(10, Math.floor(damageForConc / 2));
+        const dc = sktConcDc(damageForConc, c);
         if (typeof showToast === 'function' && !document.body.classList.contains('player-app')){
           showToast('🌀 ' + c.name + ': DC ' + dc + ' CON save to maintain ' + c.concentration, { alert: true });
         }

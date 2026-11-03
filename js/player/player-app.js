@@ -946,6 +946,8 @@ const PA_DRAW = [
   { act:'tool-ruler', icon:'i-ruler',  label:'Ruler', tool:'ruler' },
   { act:'undo',       icon:'i-undo',   label:'Undo'                },
 ];
+// A class as a name: "rogue" is how it's stored.
+function paClsName(c){ return String(c || '').replace(/\b\w/g, ch => ch.toUpperCase()); }
 function paAddDrawBar(host){
   const B = panelDefs.battlemap;
   const bar = document.createElement('div');
@@ -1500,7 +1502,7 @@ function paPickerScreen(){
       <button class="pa-pick-b" data-pa-pick="${paEsc(p.id)}">
         <span class="pa-avatar sm">${paFace(p)}</span>
         <span class="pa-pick-n">${paEsc(p.name)}</span>
-        <span class="pa-pick-s">${paEsc([p.cls, p.level ? 'lvl ' + p.level : ''].filter(Boolean).join(' · '))}</span>
+        <span class="pa-pick-s">${paEsc([paClsName(p.cls), p.level ? 'Level ' + p.level : ''].filter(Boolean).join(' · '))}</span>
       </button>`).join('')}</div>
     ${build}
   </div>`;
@@ -1615,7 +1617,7 @@ function paPartyScreen(){
     const col = pct <= 0 ? '#5a3a3a' : pct < 35 ? 'var(--danger)' : pct < 75 ? 'var(--warning)' : 'var(--success)';
     const conds = (c && c.conditions || []).map(x => `<span class="pa-cond sm">${paEsc(x)}</span>`).join('');
     const open = paOpenMates.has(p.id);
-    const sub = [p.cls, p.subclass, p.level ? 'lvl ' + p.level : ''].filter(Boolean).join(' · ');
+    const sub = [paClsName(p.cls), p.subclass, p.level ? 'Level ' + p.level : ''].filter(Boolean).join(' · ');
     return `<div class="pa-mate${p.id === meId ? ' me' : ''}${open ? ' open' : ''}">
       <button class="pa-mate-head" data-pa-mate="${paEsc(p.id)}" aria-expanded="${open}">
         <span class="pa-mate-row">

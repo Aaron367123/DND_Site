@@ -1916,6 +1916,15 @@ function sktDeriveActivations(featuresText){
   return acts;
 }
 
+// A concentration save's DC after damage: 10 or half the damage, whichever
+// is higher — and in the 2024 rules no more than 30. `who` is the party
+// member (its rules), or nothing for a monster (the campaign's rules).
+function sktConcDc(dmg, who){
+  const dc = Math.max(10, Math.floor((+dmg || 0) / 2));
+  const ed = (who && (who.rules || (who.build && who.build.edition))) || (typeof state !== 'undefined' && state.settings && state.settings.builderEdition) || '2024';
+  return ed === '2024' ? Math.min(30, dc) : dc;
+}
+
 function sktNormName(s){
   return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
 }

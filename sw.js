@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '4a6b8cf102';
+const BUILD = 'e7e2061ae3';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=0aa7f7ae5f',
@@ -46,19 +46,19 @@ const PRECACHE = [
   'js/generated/token-index.js?v=1c9cc1c826',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=507f06afa0',
+  'js/core/utils.js?v=688db1824a',
   'js/ui/dice-fx.js?v=a3c77a159d',
   'js/core/state.js?v=d4c96a7f2f',
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
   'js/core/window-manager.js?v=e2aed9109b',
-  'js/panels/combat.js?v=32085b665f',
+  'js/panels/combat.js?v=2854da3d33',
   'js/panels/attacks.js?v=57acabc3ca',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=81f50d851b',
-  'js/panels/party.js?v=d1fca44486',
+  'js/panels/party.js?v=83e828120c',
   'js/panels/shop.js?v=eff3f4575b',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -96,11 +96,11 @@ const PRECACHE = [
   'js/ui/command-palette.js?v=8aded06220',
   'js/features/char-rules.js?v=a1464d2987',
   'js/features/char-effects.js?v=6561f6c385',
-  'js/features/char-sheet.js?v=6ed7359b75',
+  'js/features/char-sheet.js?v=8c94afcf0d',
   'js/features/char-print.js?v=01fba592ae',
   'js/features/char-builder.js?v=b6f03cea42',
   'js/features/pdf-import.js?v=cefe36cb0b',
-  'js/player/player-app.js?v=85905614e4',
+  'js/player/player-app.js?v=0b0c958aeb',
   'js/ui/player-view.js?v=2481f28c78',
   'js/sync/realtime.js?v=cc0ddddb53',
   'js/sync/presence.js?v=50e9bead2e',
