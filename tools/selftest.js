@@ -12317,49 +12317,6 @@
         if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } if (panelDefs.battlemap) panelDefs.battlemap._tokens = JSON.parse(bm0).tokens || []; }
       }
     }
-    // -- Round 141: on your turn the phone hands you your token --
-    if (PLAYER){
-      const keepTab = paTab, keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
-      const B = panelDefs.battlemap, keepV = B._viewScale;
-      try {
-        if (paMyIdx() < 0) paSetPc(state.party[0].id);
-        paTab = 'map'; paRender(); await sleep(900);
-        const t = paMyToken();
-        if (!t) ok('map: the fixture puts my token on the map', false, 'no token for ' + (paPc() || {}).name);
-        else {
-          const sq = () => B._csScreen() * B._screenScale();
-          // A big map fitted to the phone: a square of a few pixels.
-          B._applyViewScale(4 / (B._csScreen() * (typeof getZoom === 'function' ? getZoom() || 1 : 1))); await sleep(80);
-          const tiny = sq();
-          paCenterOnMe(false, true); await sleep(120);
-          const el = document.querySelector('#pa-screen .pa-mount .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
-          const sc = document.querySelector('#pa-screen .pa-mount #map-scroll').getBoundingClientRect(), r = el.getBoundingClientRect();
-          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-          const top = document.elementFromPoint(cx, cy);
-          ok('map: “Me” on a zoomed-out map zooms in until a square takes a finger, on my token',
-             tiny < 10 && sq() >= 31.5 && cx > sc.left && cx < sc.right && cy > sc.top && cy < sc.bottom && !!top && (top === el || el.contains(top)),
-             JSON.stringify({ tiny, sq: sq(), cx, mid: sc.left + sc.width / 2, top: top && top.className }));
-          // Zoomed in further already: left alone.
-          B._applyViewScale(B._viewScale * 2); await sleep(60);
-          const big = sq(); paCenterOnMe(false, true); await sleep(60);
-          ok('map: and never zooms a player back out', Math.abs(sq() - big) < 0.01, big + ' → ' + sq());
-          // The turn arriving does the same.
-          B._applyViewScale(4 / (B._csScreen() * (typeof getZoom === 'function' ? getZoom() || 1 : 1))); await sleep(60);
-          const pc = paPc(); const other = state.combatants.find(c => c.id !== pc.id);
-          if (!state.combatants.some(c => c.id === pc.id)) state.combatants.push({ id: pc.id, name: pc.name, isPC: true, hp: pc.hp, hpMax: pc.hpMax, initiative: 1, conditions: [] });
-          if (!(state.sharedPanels || []).includes('combat')) state.sharedPanels = [...(state.sharedPanels || []), 'combat'];
-          state.activeCombatantId = other ? other.id : null; paRender(); await sleep(300);
-          state.activeCombatantId = pc.id; paRender(); await sleep(300);
-          ok('map: my turn starting zooms in to my token too', sq() >= 31.5 && !!document.getElementById('pa-turn-alert'), JSON.stringify({ sq: sq(), banner: !!document.getElementById('pa-turn-alert') }));
-          paHideTurnBanner();
-        }
-      } catch(e){ ok('round 141 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally {
-        B._applyViewScale(keepV); B._saveViewState();
-        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA;
-        paTab = keepTab; paRender(); await sleep(200);
-      }
-    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -15052,6 +15009,49 @@
     ok('player: no horizontal overflow',
        document.documentElement.scrollWidth <= window.innerWidth + 1,
        document.documentElement.scrollWidth + ' > ' + window.innerWidth);
+    // -- Round 141: on your turn the phone hands you your token --
+    if (PLAYER){
+      const keepTab = paTab, keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      const B = panelDefs.battlemap, keepV = B._viewScale;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        paTab = 'map'; paRender(); await sleep(900);
+        const t = paMyToken();
+        if (!t) ok('map: the fixture puts my token on the map', false, 'no token for ' + (paPc() || {}).name);
+        else {
+          const sq = () => B._csScreen() * B._screenScale();
+          // A big map fitted to the phone: a square of a few pixels.
+          B._applyViewScale(4 / (B._csScreen() * (typeof getZoom === 'function' ? getZoom() || 1 : 1))); await sleep(80);
+          const tiny = sq();
+          paCenterOnMe(false, true); await sleep(120);
+          const el = document.querySelector('#pa-screen .pa-mount .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+          const sc = document.querySelector('#pa-screen .pa-mount #map-scroll').getBoundingClientRect(), r = el.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          const top = document.elementFromPoint(cx, cy);
+          ok('map: “Me” on a zoomed-out map zooms in until a square takes a finger, on my token',
+             tiny < 10 && sq() >= 31.5 && cx > sc.left && cx < sc.right && cy > sc.top && cy < sc.bottom && !!top && (top === el || el.contains(top)),
+             JSON.stringify({ tiny, sq: sq(), cx, mid: sc.left + sc.width / 2, top: top && top.className }));
+          // Zoomed in further already: left alone.
+          B._applyViewScale(B._viewScale * 2); await sleep(60);
+          const big = sq(); paCenterOnMe(false, true); await sleep(60);
+          ok('map: and never zooms a player back out', Math.abs(sq() - big) < 0.01, big + ' → ' + sq());
+          // The turn arriving does the same.
+          B._applyViewScale(4 / (B._csScreen() * (typeof getZoom === 'function' ? getZoom() || 1 : 1))); await sleep(60);
+          const pc = paPc(); const other = state.combatants.find(c => c.id !== pc.id);
+          if (!state.combatants.some(c => c.id === pc.id)) state.combatants.push({ id: pc.id, name: pc.name, isPC: true, hp: pc.hp, hpMax: pc.hpMax, initiative: 1, conditions: [] });
+          if (!(state.sharedPanels || []).includes('combat')) state.sharedPanels = [...(state.sharedPanels || []), 'combat'];
+          state.activeCombatantId = other ? other.id : null; paRender(); await sleep(300);
+          state.activeCombatantId = pc.id; paRender(); await sleep(300);
+          ok('map: my turn starting zooms in to my token too', sq() >= 31.5 && !!document.getElementById('pa-turn-alert'), JSON.stringify({ sq: sq(), banner: !!document.getElementById('pa-turn-alert') }));
+          paHideTurnBanner();
+        }
+      } catch(e){ ok('round 141 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._applyViewScale(keepV); B._saveViewState();
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA;
+        paTab = keepTab; paRender(); await sleep(200);
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
