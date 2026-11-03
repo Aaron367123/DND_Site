@@ -1658,7 +1658,10 @@ CB_RENDER.levels = () => {
     if (hm === 'manual' && CB.hpUp){
       const hd = cbLevelHd(), u = CB.hpUp;
       html += '<div class="cb-hpup"><span>Level ' + L + ' adds</span><div class="cb-seg"><button class="' + (u.how === 'average' ? 'on' : '') + '" data-cb-hpup="average">Average +' + cbHpUpGain('average') + '</button>'
-        + '<button class="' + (u.how === 'rolled' ? 'on' : '') + '" data-cb-hpup="rolled">🎲 Roll d' + hd + (u.how === 'rolled' ? ': +' + cbHpUpGain('rolled', u.roll) : '') + '</button></div>'
+        + '<button class="' + (u.how === 'rolled' ? 'on' : '') + '" data-cb-hpup="rolled">Roll d' + hd + '</button></div>'
+        // Rolled at the table: the die is a box to type into; 🎲 rolls it here instead.
+        + (u.how === 'rolled' ? '<label class="cb-hproll">The d' + hd + ' rolled <input type="number" min="1" max="' + hd + '" data-cb-hpupdie value="' + (u.roll || '') + '" aria-label="What the d' + hd + ' rolled">'
+          + '<button class="btn small" data-cb-hpup="rolled" title="Roll it here">🎲</button></label><span class="cb-dim">Rolled real dice? Type what came up.</span>' : '')
         + '<span class="cb-dim">' + u.base + ' → ' + b.hp.manual + ' (the die, plus your Constitution modifier)</span></div>';
     }
     if (hm === 'manual') html += '<label class="cb-f">Hit point maximum<input type="number" min="1" data-cb-hpmanual value="' + (b.hp.manual || CB.rec.hpMax) + '"></label>';
@@ -2488,6 +2491,7 @@ function cbOnChange(e){
   if ('cbLegacy' in d) return cbSet(b => { b.legacy = t.checked; });
   if (d.cbSrccat && d.cbSrccat !== 'core') return cbSet(b => { b.sources = Object.assign(sktSources(b), { [d.cbSrccat]: t.checked }); delete b.allBooks; delete b.legacy; });
   if ('cbHpmanual' in d) return cbSet(b => { b.hp = Object.assign({}, b.hp, { manual: Math.max(1, parseInt(v, 10) || 1) }); });
+  if ('cbHpupdie' in d && CB.hpUp) return cbSet(b => { CB.hpUp.how = 'rolled'; CB.hpUp.roll = Math.max(1, Math.min(cbLevelHd(), parseInt(v, 10) || 1)); cbApplyHpUp(b); });
   if (d.cbCbg && d.cbCbg !== 'name') return cbSet(b => { b.customBg = Object.assign({}, b.customBg, { [d.cbCbg]: d.cbCbg === 'languages' ? +v : v });
     if (d.cbCbg === 'languages') b.customBg.tools = (b.customBg.tools || []).slice(0, 2 - (+v || 0)); });
   if (d.cbCbgskill) return cbSet(b => { b.customBg = Object.assign({}, b.customBg); b.customBg.skills = (b.customBg.skills || []).slice(); cbToggle(b.customBg.skills, d.cbCbgskill, 2); });

@@ -12509,6 +12509,13 @@
         document.querySelector('[data-cb-hpup="rolled"]').click(); await sleep(80);
         const g = CB.build.hp.manual - 47;
         ok('level up: or a roll of the die instead', CB.hpUp.how === 'rolled' && g >= Math.max(1, 1 + con) && g <= 8 + con && g === Math.max(1, CB.hpUp.roll + con), JSON.stringify([g, CB.hpUp.roll, con]));
+        // Rolled at the table: the player types what came up.
+        const die = document.querySelector('[data-cb-hpupdie]');
+        if (die){ die.value = '3'; die.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80); }
+        ok('level up: a roll made at the table can be typed in', !!die && CB.hpUp.roll === 3 && CB.build.hp.manual === 47 + Math.max(1, 3 + con), JSON.stringify([CB.hpUp.roll, CB.build.hp.manual]));
+        const die2 = document.querySelector('[data-cb-hpupdie]');
+        if (die2){ die2.value = '12'; die2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80); }
+        ok('level up: no higher than the die', CB.hpUp.roll === 8 && CB.build.hp.manual === 47 + 8 + con, JSON.stringify([CB.hpUp.roll, CB.build.hp.manual]));
         document.querySelector('[data-cb-hpup="average"]').click(); await sleep(80);
         ok('level up: and back to the average', CB.build.hp.manual === 47 + 5 + con);
         cbClose(); await sleep(60);
