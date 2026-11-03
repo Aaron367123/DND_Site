@@ -273,6 +273,17 @@ function bestiaryPortraitPath(p) {
   return 'bestiary/' + (cropped ? 'tokens/' : '') + key;
 }
 
+// A monster's own token, by its name and book: bestiary/tokens/<SRC>/<Name>.webp,
+// or null when it has none (TOKEN_NAME_MISSES) or the index hasn't loaded.
+// Preferred over the token derived from its art, which is often a group's
+// picture shared by several monsters (tools/make-token-index.js).
+function bestiaryOwnToken(name, source) {
+  const misses = window.TOKEN_NAME_MISSES;
+  if (!misses || !name || !source) return null;
+  const key = source + '/' + name + '.webp';
+  return misses.has(key) ? null : 'bestiary/tokens/' + key;
+}
+
 // Render an "icon" value (used by party / combatant portraits). Accepts:
 //   - data:image/...      → <img>
 //   - paths starting with img/ or http(s)/ → <img>

@@ -2858,8 +2858,11 @@ registerPanel('combat',{
     const already = state.combatants.filter(this._inGroup(m.name)).length;
     this._numberFirstOfGroup(m.name);
     const displayName = already ? `${m.name} ${this._nextGroupSuffix(m.name)}` : m.name;
-    let portrait = null;
-    if (m._img){
+    // Its own token first (a Berserker Commander, not the Berserkers' group
+    // picture its art is); then the token derived from its art.
+    const own = typeof bestiaryOwnToken === 'function' ? bestiaryOwnToken(m.name, m._source) : null;
+    let portrait = own ? 'img/' + own : null;
+    if (!portrait && m._img){
       // Prefer the head-shot token over the full creature art for the small
       // round portrait. Tokens live alongside the fluff at
       // img/bestiary/tokens/<source>/<name>.webp.

@@ -12588,6 +12588,26 @@
       } catch(e){ ok('round 149 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { cbClose(); } catch(e){} try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 150: a monster's portrait is its own token, not its group's picture --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && (!src || r._source === src));
+        const bc = find('Berserker Commander', 'XMM');
+        ok('tokens: the 2024 Berserker Commander’s art is the Berserkers’ group picture (the case this is about)', !!bc && /Berserkers\.webp$/.test(bc._img || ''), bc && bc._img);
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(bc); await sleep(50);
+        ok('tokens: added to a fight, it gets its own token', state.combatants[0] && state.combatants[0].portrait === 'img/bestiary/tokens/XMM/Berserker Commander.webp', state.combatants[0] && state.combatants[0].portrait);
+        // One of the few with no token of its own: back to its art's.
+        const miss = [...(window.TOKEN_NAME_MISSES || [])].map(k => k.replace(/\.webp$/, '').split('/')).map(([s, ...n]) => find(n.join('/'), s)).find(m => m && m._img);
+        state.combatants = []; save();
+        if (miss){ panelDefs.combat.addMonster(miss); await sleep(50); }
+        ok('tokens: a monster with no token of its own falls back to its art’s', !miss || (state.combatants[0] && state.combatants[0].portrait === 'img/' + bestiaryPortraitPath(miss._img)), miss ? miss.name + ' → ' + (state.combatants[0] || {}).portrait : 'none with art');
+        ok('tokens: and nothing is guessed before the index has loaded', (() => { const keep = window.TOKEN_NAME_MISSES; window.TOKEN_NAME_MISSES = undefined; const r = bestiaryOwnToken('Goblin', 'MM'); window.TOKEN_NAME_MISSES = keep; return r === null; })());
+      } catch(e){ ok('round 150 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

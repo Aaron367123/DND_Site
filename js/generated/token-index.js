@@ -345,3 +345,26 @@ window.TOKEN_MISSES = new Set([
   "XMM/Yuan-ti.webp",
   "XMM/Zombies.webp",
 ]);
+// Monsters with no token under their own name ("<SOURCE>/<name>.webp").
+window.TOKEN_NAME_MISSES = new Set([
+  "AI/Môrgæn.webp",
+  "CoA/Rothé.webp",
+  "CoS/Rosavalda \"Rose\" Durst.webp",
+  "CoS/Thornboldt \"Thorn\" Durst.webp",
+  "IMR/\"The Demogorgon\".webp",
+  "MPMM/Deep Rothé.webp",
+  "PaBTSO/Iarno \"Glasstaff\" Albrek.webp",
+  "PotA/Lyzandra \"Lyzzie\" Calderos.webp",
+  "PotA/Ogrémoch.webp",
+  "ToA/Kupalué.webp",
+  "ToA/Kwayothé.webp",
+  "ToA/Mwaxanaré.webp",
+  "ToA/Volothamp \"Volo\" Geddarm.webp",
+  "ToA/Zalkoré.webp",
+  "VEoR/Rezran \"Snake Eyes\" Agrodro.webp",
+  "VGM/Deep Rothé.webp",
+  "VGM/Rothé.webp",
+  "WDH/Laiba \"Nana\" Rosse.webp",
+  "WDH/Mattrim \"Threestrings\" Mereg.webp",
+  "WDH/Talisolvanar \"Tally\" Fellbranch.webp",
+]);

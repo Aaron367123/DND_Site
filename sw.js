@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'e1b4d22066';
+const BUILD = '425c31dc5c';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=70fe22c14d',
@@ -43,17 +43,17 @@ const PRECACHE = [
   'js/core/data.js?v=f4b60a75c8',
   'js/core/theme.js?v=9db78fe46f',
   'js/core/asset-config.js?v=9b018a4988',
-  'js/generated/token-index.js?v=1c9cc1c826',
+  'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=3e19e6d772',
+  'js/core/utils.js?v=7b18634c33',
   'js/ui/dice-fx.js?v=a3c77a159d',
   'js/core/state.js?v=d4c96a7f2f',
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
   'js/core/window-manager.js?v=e2aed9109b',
-  'js/panels/combat.js?v=db71c83b41',
+  'js/panels/combat.js?v=07900955ab',
   'js/panels/attacks.js?v=57acabc3ca',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
@@ -85,7 +85,7 @@ const PRECACHE = [
   'js/panels/timetracker.js?v=a4bf06c348',
   'js/panels/world.js?v=3363ff2d50',
   'js/content/data-loader.js?v=6ea2983f9e',
-  'js/content/search.js?v=ae293afe2c',
+  'js/content/search.js?v=7308305aee',
   'js/features/backup.js?v=210ab9c0a5',
   'js/ui/qr.js?v=b696ff33f3',
   'js/ui/settings.js?v=1f1f5ed5ec',

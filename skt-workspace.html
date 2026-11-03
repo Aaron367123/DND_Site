@@ -524,11 +524,11 @@
 <script defer src="js/core/asset-config.js?v=9b018a4988"></script>
 <!-- 1d. Which bestiary art lacks a token crop (generated; read by utils'
      bestiaryPortraitPath). Must load before anything renders a portrait. -->
-<script defer src="js/generated/token-index.js?v=1c9cc1c826"></script>
+<script defer src="js/generated/token-index.js?v=2840810fc7"></script>
 <script defer src="js/generated/species-portraits.js?v=56581792b0"></script>
 <!-- 2. Pure utilities (no deps) -->
 <script defer src="js/core/campaign.js?v=171a617f55"></script>
-<script defer src="js/core/utils.js?v=3e19e6d772"></script>
+<script defer src="js/core/utils.js?v=7b18634c33"></script>
 <script defer src="js/ui/dice-fx.js?v=a3c77a159d"></script>
 <!-- 3. State (depends on DEFAULT_* from data.js) -->
 <script defer src="js/core/state.js?v=d4c96a7f2f"></script>
@@ -538,7 +538,7 @@
 <script defer src="js/features/monster-picker.js?v=7030540ec7"></script>
 <script defer src="js/core/window-manager.js?v=e2aed9109b"></script>
 <!-- 5. Panels (each depends on window manager + state + utils) -->
-<script defer src="js/panels/combat.js?v=db71c83b41"></script>
+<script defer src="js/panels/combat.js?v=07900955ab"></script>
 <script defer src="js/panels/attacks.js?v=57acabc3ca"></script>
 <!-- Turn View reads combat, attacks and battlemap through panelDefs at call
      time, so load order only has to put it among the panels. -->
@@ -575,7 +575,7 @@
 <script defer src="js/panels/world.js?v=3363ff2d50"></script>
 <!-- 6. Features (depend on state + utils + panels) -->
 <script defer src="js/content/data-loader.js?v=6ea2983f9e"></script>
-<script defer src="js/content/search.js?v=ae293afe2c"></script>
+<script defer src="js/content/search.js?v=7308305aee"></script>
 <!-- Whole-state snapshot/restore. Before settings.js, which wires its UI. -->
 <script defer src="js/features/backup.js?v=210ab9c0a5"></script>
 <script defer src="js/ui/qr.js?v=b696ff33f3"></script>

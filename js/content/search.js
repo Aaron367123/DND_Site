@@ -1241,7 +1241,8 @@ function _detailImgTag(d) {
     // bestiaryPortraitPath picks whichever actually exists (see utils.js —
     // 10% of monsters have no token crop). Keep the onerror chain anyway for
     // art the index doesn't know about, then hide if neither loads.
-    const token = assetUrl(bestiaryPortraitPath(d._img));
+    const own = typeof bestiaryOwnToken === 'function' ? bestiaryOwnToken(d.name, d._source) : null;
+    const token = assetUrl(own || bestiaryPortraitPath(d._img));
     const full  = assetUrl(d._img);
     return `<img class="detail-img" crossorigin="anonymous" src="${esc(token)}" data-fb="${esc(full)}" alt="${esc(d.name)}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb');}else{this.style.display='none';}">`;
   }
