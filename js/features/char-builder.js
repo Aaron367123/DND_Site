@@ -762,6 +762,82 @@ function cbFitLevels(b){
   }
 }
 
+// A lower level takes away what the lost levels brought, as D&D Beyond does:
+// the feat or improvement of a slot no longer reached, a subclass chosen too
+// early now, invocations and other options past the count or whose
+// prerequisite went with the level (prerequisite first, then the latest
+// picked), spells above the new spell level or past the count, expertise,
+// masteries and languages past theirs, and hit point rolls for levels gone.
+// It only ever removes; a raised level adds nothing. Returns what went, for
+// a one-line note. Before this a level lowered kept all of it, flagged.
+function cbTrimToLevel(b){
+  const R = CB.R, gone = [];
+  cbFitLevels(b);
+  const parts = sktClassLevels(b, R);
+  // Slots no longer reached.
+  const slots = new Set(sktAsiSlots(b, R).map(x => x.key));
+  Object.keys(b.asi || {}).forEach(k => { if (!slots.has(String(k))){ const pk = b.asi[k]; if (pk && pk.type === 'feat' && pk.feat) gone.push(pk.feat); delete b.asi[k]; } });
+  // A subclass before its level.
+  const cls = sktRulesClass(R, b.cls);
+  if (cls && b.subclass && parts[0].level < cls.subclassLevel){ gone.push(b.subclass); b.subclass = ''; b.subclassPick = ''; }
+  (b.multi || []).forEach(m => { const c2 = sktRulesClass(R, m.cls); if (c2 && m.subclass && (+m.level || 1) < c2.subclassLevel){ gone.push(m.subclass); m.subclass = ''; m.subclassPick = ''; } });
+  // Invocations, maneuvers, metamagic, fighting styles, infusions.
+  const ch = {}; sktOptionalChoices(b, R).forEach(o => { ch[o.name] = o; });
+  Object.keys(b.optional || {}).forEach(name => {
+    const o = ch[name]; let have = (b.optional[name] || []).slice();
+    for (let again = true; again;){
+      again = false;
+      for (const n of have){
+        const x = o && o.kind !== 'feat' && R.optional.find(y => y.name === n);
+        const q = x && sktOptionalPrereq(R, Object.assign({}, b, { optional: Object.assign({}, b.optional, { [name]: have }) }), x);
+        if (q && !q.ok){ have = have.filter(v => v !== n); gone.push(n); again = true; break; }
+      }
+    }
+    const max = o ? o.count : 0;
+    if (have.length > max){ gone.push(...have.slice(max)); have = have.slice(0, max); }
+    b.optional[name] = have;
+  });
+  // Spells, each casting class.
+  const lvlOf = n => (sktRulesSpell(R, n) || {}).level || 0;
+  const fit = (lst, key, n, maxLv) => {
+    let a = (lst[key] || []).slice(), before = a.length, out = [];
+    if (maxLv != null) a = a.filter(x => { const ok = lvlOf(x) <= maxLv; if (!ok) out.push(x); return ok; });
+    if (n != null && a.length > n){ out.push(...a.slice(n)); a = a.slice(0, n); }
+    if (a.length !== before){ lst[key] = a; gone.push(...out); }
+  };
+  const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
+  const casting = new Set();
+  if (sc) (sc.classes || [{ primary: true, sc, entry: null }]).forEach(x => {
+    const sx = x.sc, lst = x.primary ? b : x.entry; if (!lst) return;
+    casting.add(x.primary ? '' : lst);
+    fit(lst, 'cantrips', sx.cantrips || 0, null);
+    if (sx.spellbook) fit(lst, 'spellbook', sx.spellbook, sx.maxSpellLevel);
+    fit(lst, 'spells', (sx.prepared || sx.known || 0), sx.maxSpellLevel);
+    if (sx.spellbook && (lst.spellbook || []).length) lst.spells = (lst.spells || []).filter(n => lst.spellbook.includes(n));
+  });
+  // A class that no longer casts at all (an Eldritch Knight back to 2nd).
+  [b].concat(b.multi || []).forEach(lst => { if (casting.has(lst === b ? '' : lst)) return;
+    ['cantrips', 'spells', 'spellbook'].forEach(k => { if ((lst[k] || []).length){ gone.push(...lst[k]); lst[k] = []; } }); });
+  { const ms = sktMagicalSecrets(b, R), was = (b.secrets || []).length; b.secrets = ms ? (b.secrets || []).filter(n => ms.options.includes(n)).slice(0, ms.count) : []; if (b.secrets.length < was) gone.push('Magical Secrets'); }
+  { const arc = new Set(sktArcanumLevels(b, R).map(String)); Object.keys(b.arcanum || {}).forEach(k => { if (!arc.has(String(k))){ gone.push(b.arcanum[k]); delete b.arcanum[k]; } }); }
+  // Expertise, masteries, languages, a subclass's skill and weapon picks.
+  const trim = (key, n, what) => { const a = b[key] || []; if (a.length > n){ gone.push(...a.slice(n).map(x => SKT_SKILL_LABEL[x] || _sktTitle(x))); b[key] = a.slice(0, n); } };
+  trim('expertise', cbExpertiseCount()); trim('masteries', cbMasteryCount()); trim('languages', cbLanguageCount());
+  { const live = new Set(); sktProfChoices(b, R).forEach(c => { live.add(c.feature); if (c.picked.length > c.count){ b.profPicks[c.feature][c.kind] = c.picked.slice(0, c.count); } });
+    Object.keys(b.profPicks || {}).forEach(k => { if (!live.has(k)) delete b.profPicks[k]; }); }
+  // Hit point rolls for levels no longer had.
+  if (b.hp && b.hp.rolls) Object.keys(b.hp.rolls).forEach(k => {
+    const at = String(k).split('@'), part = at.length > 1 ? parts.find(q => q.key === at[0]) : parts[0], n = +(at.length > 1 ? at[1] : at[0]);
+    if (!part || n > part.level) delete b.hp.rolls[k];
+  });
+  return gone;
+}
+function cbTrimNote(gone){
+  if (!gone.length || typeof showToast !== 'function') return;
+  const uniq = [...new Set(gone)];
+  showToast('Level ' + CB.build.level + ': took off ' + (uniq.length > 4 ? uniq.slice(0, 4).join(', ') + ' and ' + (uniq.length - 4) + ' more' : uniq.join(', ')));
+}
+
 CB_RENDER.species = () => {
   const b = CB.build, R = CB.R;
   const sp = sktRulesSpecies(R, b.species);
@@ -1134,12 +1210,14 @@ function cbQuickBuild(){
       if (have.length >= o.count) return;
       // The handbook's first, then whatever the sources switched on allow
       // (an Arcane Archer's shots are Xanathar's, not the handbook's).
-      const okBook = x => x.core !== false || sktBookOk(b, x);
+      const okBook = x => x.core !== false || sktBookOk(b, x) || (o.src && x.source === o.src);
       const byCore = (x, y) => (x.core === false) - (y.core === false);
       // A class's own style (Blessed Warrior is the paladin's) only for that class.
       const pool = (o.kind === 'feat' ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && (String(f.category) === 'FS' || o.types.includes(f.category)) && okBook(f))
                                       : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && okBook(x) && cbQuickPrereqOk(x, b))).sort(byCore);
-      b.optional[o.name] = have.concat(pool.map(x => x.name).filter(n => !have.includes(n))).slice(0, o.count);
+      const pool2 = pool.length >= o.count || o.kind === 'feat' ? pool
+        : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && cbQuickPrereqOk(x, b)).sort(byCore);
+      b.optional[o.name] = have.concat(pool2.map(x => x.name).filter(n => !have.includes(n))).slice(0, o.count);
     });
     const mc = cbMasteryCount();
     if (mc && (b.masteries || []).length < mc){
@@ -1538,14 +1616,17 @@ CB_RENDER.levels = () => {
     if (hm === 'manual') html += '<label class="cb-f">Hit point maximum<input type="number" min="1" data-cb-hpmanual value="' + (b.hp.manual || CB.rec.hpMax) + '"></label>';
     if (hm === 'rolled'){
       let rows = '';
-      for (let lv = 2; lv <= sktClassLevels(b, R)[0].level; lv++){
-        const v = (b.hp.rolls || {})[lv] || '';
-        rows += '<label class="cb-hproll">Level ' + lv + ' <input type="number" min="1" max="' + cls.hd + '" data-cb-hproll="' + lv + '" value="' + v + '"><button class="btn small" data-cb-hpdice="' + lv + '">🎲 d' + cls.hd + '</button></label>';
-      }
+      const parts = sktClassLevels(b, R), multi = parts.length > 1;
+      const row = (key, label, hd) => { const v = (b.hp.rolls || {})[key] || '';
+        return '<label class="cb-hproll">' + cbEsc(label) + ' <input type="number" min="1" max="' + hd + '" data-cb-hproll="' + cbEsc(key) + '" value="' + v + '"><button class="btn small" data-cb-hpdice="' + cbEsc(key) + '">🎲 d' + hd + '</button></label>'; };
+      for (let lv = 2; lv <= parts[0].level; lv++) rows += row(String(lv), (multi ? _sktTitle(parts[0].cls) + ' ' : 'Level ') + lv, cls.hd);
+      // Each other class's levels, its own die from its first level on.
+      parts.slice(1).forEach(p => { const h2 = (sktRulesClass(R, p.cls) || {}).hd || 8;
+        for (let i = 1; i <= p.level; i++) rows += row(p.key + '@' + i, _sktTitle(p.cls) + ' ' + i, h2); });
       html += '<div class="cb-hprolls">' + rows + '</div>';
     }
     html += '<div class="cb-dim">Level 1 is always the full d' + cls.hd + '. Your Constitution modifier is added every level.'
-      + (sktIsMulticlass(b, R) ? ' Levels in other classes take their average.' : '') + '</div>';
+      + (sktIsMulticlass(b, R) && hm !== 'rolled' ? ' Levels in other classes take their average.' : '') + '</div>';
   }
   // Features that are a choice: Divine Order, Primal Order, Blessed Strikes…
   sktBuildChoices(b, R).forEach(c => {
@@ -1630,7 +1711,13 @@ CB_RENDER.levels = () => {
     const pool = o.kind === 'feat'
       ? R.feats.filter(f => o.types.some(t => String(f.category).split(':')[0] === t.split(':')[0]) && (String(f.category) === 'FS' || o.types.includes(f.category)))
           .filter(f => sktBookOk(b, f) || have.includes(f.name))
-      : R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)) && (sktBookOk(b, x) || have.includes(x.name)));
+      : (() => {
+          const all = R.optional.filter(x => (x.featureType || []).some(t => o.types.includes(t)));
+          const inBooks = all.filter(x => sktBookOk(b, x) || have.includes(x.name) || (o.src && x.source === o.src));
+          // Never fewer than must be chosen: a College of Swords bard's two
+          // styles are the 2014 handbook's, from a Xanathar's subclass.
+          return inBooks.length >= o.count ? inBooks : all;
+        })();
     // Only what the character qualifies for, as D&D Beyond: Thirsting Blade
     // waits for 5th level and Pact of the Blade, Agonizing Blast for Eldritch
     // Blast. These were all offered with the prerequisite as a note beside
@@ -2250,7 +2337,7 @@ function cbOnClick(e){
       const m = b.multi[i]; if (!m) return;
       // "+" is disabled once the first class is down to one level.
       if (dlt > 0) m.level = (+m.level || 1) + 1;
-      if (dlt < 0 && m.level > 1) m.level -= 1;
+      if (dlt < 0 && m.level > 1){ m.level -= 1; cbTrimNote(cbTrimToLevel(b)); }
     });
   }
   if (d.cbMcdel != null) return cbSet(b => { b.multi.splice(+d.cbMcdel, 1); });
@@ -2311,7 +2398,9 @@ function cbOnClick(e){
   });
   if (d.cbHp) return cbSet(b => { b.hp = b.hp || { rolls: {} }; if (d.cbHp === 'manual' && !b.hp.manual) b.hp.manual = CB.rec.hpMax; b.hp.method = d.cbHp; b.hp.rolls = b.hp.rolls || {}; });
   if (d.cbHpdice) return cbSet(b => {
-    const cls = sktRulesClass(CB.R, b.cls); b.hp.rolls[d.cbHpdice] = sktD(cls.hd);
+    // "wizard@2" rolls a wizard's die; a plain level the first class's.
+    const at = String(d.cbHpdice).split('@'), cls = at.length > 1 ? (CB.R.classes.find(c => c.key === at[0]) || sktRulesClass(CB.R, b.cls)) : sktRulesClass(CB.R, b.cls);
+    b.hp.rolls[d.cbHpdice] = sktD(cls.hd);
   });
   if (d.cbFchoice) return cbSet(b => {
     const [feat, val] = d.cbFchoice.split('||');
@@ -2325,6 +2414,11 @@ function cbOnClick(e){
 }
 
 function cbOnChange(e){
+  // The level, once it's been set (not while it's typed: "12" passes through 1).
+  if (e.target.dataset && e.target.dataset.cbIn === 'level' && CB && CB.mode !== 'levelup'){
+    const n = Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1));
+    return cbSet(b => { b.level = n; cbTrimNote(cbTrimToLevel(b)); });
+  }
   // A feat picked from a list: the list folds to that feat's card.
   { const fl = e.target.closest && e.target.closest('[data-cb-featlist]'); if (fl && CB.featOpen) delete CB.featOpen[fl.dataset.cbFeatlist]; }
   if (CB && e.target && 'cbQsp' in e.target.dataset){ CB.build.species = e.target.value; CB.build.subspecies = ''; return; }

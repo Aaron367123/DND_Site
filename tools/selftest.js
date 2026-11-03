@@ -12211,6 +12211,46 @@
         cbClose(); await sleep(60);
       } catch(e){ ok('round 137 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
+    // -- Round 138: rolled hit points for a second class; a lower level takes its picks off; other books --
+    {
+      try {
+        await openCharBuilder({ edition: '2014' }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2014'), { name: 'H', cls: 'Fighter', level: 5, species: 'Human', background: 'Soldier', multi: [{ cls: 'Wizard', level: 2 }] });
+        CB.build.abilities.method = 'manual'; CB.build.abilities.base = { str: 15, dex: 13, con: 14, int: 14, wis: 10, cha: 8 };
+        CB.build.hp = { method: 'rolled', rolls: { 2: 10, 3: 1, 'wizard@1': 6, 'wizard@2': 1 } }; cbSet(x => x);
+        ok('hp: a second class’s levels can be rolled too (fighter 10+10+1, wizard 6+1, +2 CON each)', sktComputeCharacter(CB.build, CB.R).hpMax === 38, sktComputeCharacter(CB.build, CB.R).hpMax);
+        CB.step = 'levels'; cbRender(); await sleep(60);
+        ok('hp: with a box and a d6 for each wizard level', !!document.querySelector('#cb-root [data-cb-hproll="wizard@2"][max="6"]') && /d6/.test((document.querySelector('#cb-root [data-cb-hpdice="wizard@2"]') || {}).textContent || ''));
+        cbClose(); await sleep(60);
+        // Lowering the level.
+        const lower = async (ed, o, to) => { await openCharBuilder({ edition: ed }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100);
+          CB.build = Object.assign(sktBlankBuild(ed), { name: 'T' }, o); cbSet(x => x); cbQuickBuild(); cbSet(x => x);
+          CB.step = 'basics'; cbRender(); await sleep(40);
+          const lv = document.querySelector('#cb-root [data-cb-in="level"]'); lv.value = String(to); lv.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80); };
+        await lower('2014', { cls: 'Warlock', level: 9, subclass: 'Fiend' }, 3);
+        { const b = CB.build, inv = (b.optional['Eldritch Invocations'] || []);
+          ok('level: a warlock taken from 9th to 3rd keeps two invocations, none it no longer qualifies for', inv.length === 2 && !inv.includes('Ascendant Step'), inv.join());
+          ok('level: and its 4th- and 8th-level feats or improvements, and spells above 2nd, are gone', !Object.keys(b.asi || {}).length && (b.spells || []).every(n => ((sktRulesSpell(CB.R, n) || {}).level || 0) <= 2));
+          ok('level: with nothing against the rules after', !cbRuleBreaks().length && !sktBuildTodo(b, CB.R).some(t => /remove|above/.test(t.what)), JSON.stringify(cbRuleBreaks())); }
+        cbClose(); await sleep(60);
+        await lower('2024', { cls: 'Cleric', level: 3 }, 2);
+        ok('level: a cleric back to 2nd loses its subclass (chosen at 3rd)', !CB.build.subclass);
+        cbClose(); await sleep(60);
+        // Other books: a subclass's own options come with it.
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100);
+        for (const [cls, sub, name] of [['Fighter', 'Rune Knight', 'Runes'], ['Bard', 'Swords', 'Fighting Style']]){
+          CB.build = Object.assign(sktBlankBuild('2024'), { name: 'B', cls, level: 3, subclass: sub, sources: { core: true, expanded: true } }); CB.rec = sktComputeCharacter(CB.build, CB.R);
+          cbQuickBuild(); CB.rec = sktComputeCharacter(CB.build, CB.R);
+          ok('books: a ' + sub + ' gets its ' + name + ' though its book’s other options are off', (CB.build.optional[name] || []).length > 0 && !cbTodo().filter(t => !t.soft).length, JSON.stringify(CB.build.optional));
+        }
+        CB.build = Object.assign(sktBlankBuild('2024'), { name: 'D', cls: 'Fighter', level: 1, background: 'Dragon Cultist', sources: { core: true, expanded: true } });
+        if (CB.R.backgrounds.some(b => b.name === 'Dragon Cultist')){
+          CB.rec = sktComputeCharacter(CB.build, CB.R); cbQuickBuild(); CB.rec = sktComputeCharacter(CB.build, CB.R);
+          ok('books: a background’s feat by its own name (Cult of the Dragon Initiate), its choice found', sktBuildFeatNames(CB.build, CB.R).includes('Cult of the Dragon Initiate') && !cbTodo().filter(t => !t.soft).length);
+        }
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 138 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

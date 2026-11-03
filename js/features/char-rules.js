@@ -1359,7 +1359,10 @@ function sktBuildFeatEntries(build, R){
   // Skilled), kept in build.bgFeat.
   if (bg && Array.isArray(bg.feats) && bg.feats.length){
     const o = bg.feats[Math.min(Math.max(0, +build.bgFeat || 0), bg.feats.length - 1)] || {};
-    Object.keys(o).forEach(k => { if (o[k] === true) push(_sktTitle(k.split('|')[0]), 'bg'); });
+    // By the feat's own name: the key title-cased made "Cult Of The Dragon
+    // Initiate", and its choices were looked for under "Cult of the Dragon
+    // Initiate".
+    Object.keys(o).forEach(k => { if (o[k] === true){ const raw = k.split('|')[0], f = sktRulesFeat(R, raw); push(f ? f.name : _sktTitle(raw), 'bg'); } });
   }
   if (build.originFeat) push(build.originFeat, 'origin');
   const slots = new Set(sktAsiSlots(build, R).map(s => s.key));
@@ -2756,10 +2759,16 @@ function sktComputeCharacter(build, R, prior){
   const hd = (cls && cls.hd) || 8;
   let hpMax = 0;
   // The first class's dice (the full die at 1st level); each other class's
-  // average from its first level on.
+  // from its first level on: its average, or its roll ("wizard@2", the second
+  // wizard level) when the hit points are rolled. Only the first class's
+  // levels could be rolled before.
+  const rolled = !!(build.hp && build.hp.method === 'rolled' && build.hp.rolls);
   parts.slice(1).forEach(p => {
     const h2 = (sktRulesClass(R, p.cls) || {}).hd || 8;
-    for (let i = 0; i < p.level; i++) hpMax += Math.max(1, Math.floor(h2 / 2) + 1 + ctx.mod.con) + ctx.hpPerLevel;
+    for (let i = 1; i <= p.level; i++){
+      const r = rolled ? +build.hp.rolls[p.key + '@' + i] : 0;
+      hpMax += Math.max(1, (r > 0 ? Math.min(h2, r) : Math.floor(h2 / 2) + 1) + ctx.mod.con) + ctx.hpPerLevel;
+    }
   });
   for (let lv = 1; lv <= parts[0].level; lv++){
     const roll = lv === 1 ? hd
@@ -2771,7 +2780,7 @@ function sktComputeCharacter(build, R, prior){
   const conS = (ctx.mod.con >= 0 ? '+' : '') + ctx.mod.con;
   const hpBits = ['level 1: ' + hd + ' ' + conS + ' CON'];
   if (parts[0].level > 1) hpBits.push((cls ? cls.name : 'Class') + ' levels 2–' + parts[0].level + ': ' + (build.hp && build.hp.method === 'rolled' ? 'rolled' : (parts[0].level - 1) + ' × ' + (Math.floor(hd / 2) + 1)) + ' ' + conS + ' each');
-  parts.slice(1).forEach(p => { const h2 = (sktRulesClass(R, p.cls) || {}).hd || 8; hpBits.push(_sktTitle(p.cls) + ' ' + p.level + ' × ' + (Math.floor(h2 / 2) + 1) + ' ' + conS); });
+  parts.slice(1).forEach(p => { const h2 = (sktRulesClass(R, p.cls) || {}).hd || 8; hpBits.push(_sktTitle(p.cls) + ' ' + p.level + (rolled ? ' rolled' : ' × ' + (Math.floor(h2 / 2) + 1)) + ' ' + conS + ' each'); });
   if (ctx.hpPerLevel) hpBits.push('+' + ctx.hpPerLevel + ' a level (' + L + ')');
   // A flat bonus (Boon of Fortitude's 40).
   if (ctx.hpFlat){ hpMax += ctx.hpFlat; hpBits.push('+' + ctx.hpFlat); }
@@ -3822,7 +3831,7 @@ function sktOptionalChoices(build, R){
   // Fighting Initiate, Martial Adept, Eldritch Adept, Metamagic Adept.
   sktBuildFeatNames(build, R).forEach(n => {
     const f = sktRulesFeat(R, n);
-    (f && f.optionalProgression || []).forEach(p => add({ name: p.name, count: +((p.progression || {})['*']) || 1, types: p.featureType || [], kind: 'optional' }));
+    (f && f.optionalProgression || []).forEach(p => add({ name: p.name, count: +((p.progression || {})['*']) || 1, types: p.featureType || [], kind: 'optional', src: f.source }));
   });
   return Object.values(by);
 }
@@ -3835,7 +3844,7 @@ function _sktOptionalOne(build, R){
   };
   [cls, sub].forEach(src => (src && src.optionalfeatureProgression || []).forEach(p => {
     const n = read(p.progression);
-    if (n > 0) out.push({ name: p.name, count: n, types: p.featureType || [], kind: 'optional' });
+    if (n > 0) out.push({ name: p.name, count: n, types: p.featureType || [], kind: 'optional', src: src && src.source });
   }));
   [cls, sub].forEach(src => (src && src.featProgression || []).forEach(p => {
     if (!(p.category || []).some(c => /^FS/.test(c))) return;
