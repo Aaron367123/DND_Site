@@ -901,3 +901,8 @@ body.player-app .toast-item.note, body.player-app .toast-item.action { backgroun
 .cb-featcard-h .btn { margin-left: auto; }
 .cb-featcard .cb-featsum { color: var(--text-muted); font-size: var(--fs-sm); margin-top: 2px; }
 .cb-featadd { margin: 6px 0; }
+
+/* ── 44. Toasts clear the builder's footer ───────────────── */
+/* A note in the corner sat over the builder's Next button. While the
+   builder is open, toasts sit above its footer. */
+body:has(#cb-root) #toast-host { bottom: 64px; }

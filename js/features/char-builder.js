@@ -628,7 +628,10 @@ CB_RENDER.basics = () => {
   return '<h3>Basics</h3>'
     + '<div class="cb-quick"><button class="btn primary" data-cb="quick">⚡ Quick build</button><span class="cb-dim">Fills in every choice you haven’t made — scores, skills, spells, gear — with sensible picks for the class. Change anything after.</span></div>'
     + '<div class="cb-row"><label class="cb-f cb-grow">Name<input data-cb-in="name" value="' + cbEsc(b.name) + '" placeholder="Character name" maxlength="60"></label>'
-    + '<label class="cb-f">Level<input type="number" min="1" max="20" data-cb-in="level" value="' + (b.level || 1) + '"' + (CB.mode === 'levelup' ? ' disabled' : '') + '></label></div>'
+    // 1 to 20 and nothing else: a box let anything be typed, and a level was
+    // set on every keystroke ("12" passed through 1).
+    + '<label class="cb-f">Level<select class="cb-sel" data-cb-in="level"' + (CB.mode === 'levelup' ? ' disabled' : '') + '>'
+    + Array.from({ length: 20 }, (_, i) => '<option value="' + (i + 1) + '"' + ((b.level || 1) === i + 1 ? ' selected' : '') + '>' + (i + 1) + '</option>').join('') + '</select></label></div>'
     + '<div class="cb-f">Portrait<div class="cb-icons">' + (/^data:image|^img\/|^https?:/.test(String(b.icon || '')) ? '<span class="cb-portrait on">' + renderIcon(b.icon, b.name) + '</span>' : '')
     +   '<button class="cb-upload" data-cb="upload" title="Upload a picture">📷 Upload</button>'
     +   icons.map(i => '<button class="' + (b.icon === i ? 'on' : '') + '" data-cb-icon="' + i + '">' + i + '</button>').join('') + '</div></div>'

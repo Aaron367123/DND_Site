@@ -12227,6 +12227,10 @@
           CB.build = Object.assign(sktBlankBuild(ed), { name: 'T' }, o); cbSet(x => x); cbQuickBuild(); cbSet(x => x);
           CB.step = 'basics'; cbRender(); await sleep(40);
           const lv = document.querySelector('#cb-root [data-cb-in="level"]'); lv.value = String(to); lv.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80); };
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 80 && !(CB && CB.R); k++) await sleep(100); CB.step = 'basics'; cbRender(); await sleep(40);
+        { const sel = document.querySelector('#cb-root select[data-cb-in="level"]'); const v = sel ? [...sel.options].map(o => +o.value) : [];
+          ok('level: chosen from a list of 1 to 20, nothing else', v.length === 20 && v[0] === 1 && v[19] === 20); }
+        cbClose(); await sleep(60);
         await lower('2014', { cls: 'Warlock', level: 9, subclass: 'Fiend' }, 3);
         { const b = CB.build, inv = (b.optional['Eldritch Invocations'] || []);
           ok('level: a warlock taken from 9th to 3rd keeps two invocations, none it no longer qualifies for', inv.length === 2 && !inv.includes('Ascendant Step'), inv.join());
