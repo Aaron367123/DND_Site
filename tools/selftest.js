@@ -12489,6 +12489,32 @@
         cbClose(); await sleep(60);
       } catch(e){ ok('round 145 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 146: levelling up a hand-entered maximum adds the level's hit points --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        // A level 6 monk whose maximum was entered by hand, then changed on the sheet.
+        await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(100);
+        CB.welcome = null; cbSet(b => { b.name = 'R146'; b.cls = 'Monk'; b.level = 6; }); cbQuickBuild();
+        const build = JSON.parse(JSON.stringify(CB.build)); build.hp = { method: 'manual', manual: 39, rolls: {} };
+        const con = Math.floor((sktBuildAbilities(build, CB.R).con - 10) / 2);
+        cbClose(); await sleep(60);
+        state.party.push({ id: 'r146', name: 'R146', hp: 47, hpMax: 47, ac: 14, build }); save();
+        const idx = state.party.length - 1;
+        await openCharBuilder({ idx, levelup: true }); for (let k = 0; k < 100 && !(CB && CB.R && !CB.loading); k++) await sleep(100);
+        ok('level up: a hand-entered maximum gets the new level’s average and Constitution, from the sheet’s maximum', CB.build.level === 7 && CB.build.hp.manual === 47 + 5 + con && sktComputeCharacter(CB.build, CB.R).hpMax === 47 + 5 + con,
+           JSON.stringify([CB.build.level, CB.build.hp.manual, con]));
+        CB.step = 'levels'; cbRender(); await sleep(100);
+        ok('level up: and says what it added', /Level 7 adds/.test((document.querySelector('.cb-hpup') || {}).textContent || '') && /47 → /.test(document.querySelector('.cb-hpup').textContent));
+        document.querySelector('[data-cb-hpup="rolled"]').click(); await sleep(80);
+        const g = CB.build.hp.manual - 47;
+        ok('level up: or a roll of the die instead', CB.hpUp.how === 'rolled' && g >= Math.max(1, 1 + con) && g <= 8 + con && g === Math.max(1, CB.hpUp.roll + con), JSON.stringify([g, CB.hpUp.roll, con]));
+        document.querySelector('[data-cb-hpup="average"]').click(); await sleep(80);
+        ok('level up: and back to the average', CB.build.hp.manual === 47 + 5 + con);
+        cbClose(); await sleep(60);
+      } catch(e){ ok('round 146 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

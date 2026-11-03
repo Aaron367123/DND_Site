@@ -308,12 +308,45 @@ function cbImportDiff(pc, rec){
   return out;
 }
 
+// Levelling up a character whose maximum was entered by hand (every imported
+// character): the level's hit points were never added, so a monk went to
+// level 7 on level 6's 47 and the builder called it done. The new level adds
+// its hit die's average and the Constitution modifier, as D&D Beyond does,
+// or a roll; the total stays editable.
+function cbLevelHd(){
+  const b = CB.build, R = CB.R, was = {};
+  sktClassLevels(Object.assign({}, b, { level: CB.fromLevel, multi: CB.multi0 || [] }), R).forEach(p => { was[p.key] = p.level; });
+  const grew = sktClassLevels(b, R).find(p => p.level > (was[p.key] || 0));
+  const cls = sktRulesClass(R, grew ? grew.key : b.cls);
+  return (cls && cls.hd) || 8;
+}
+function cbHpUpGain(how, roll){
+  const con = Math.floor(((sktBuildAbilities(CB.build, CB.R) || {}).con - 10) / 2) || 0, hd = cbLevelHd();
+  return Math.max(1, (how === 'rolled' ? Math.max(1, Math.min(hd, +roll || 1)) : Math.floor(hd / 2) + 1) + con);
+}
+function cbLevelUpHp(){
+  const b = CB.build;
+  if (CB.mode !== 'levelup' || !CB.fromLevel || CB.hpUp || !b.hp || b.hp.method !== 'manual' || !(+b.hp.manual > 0)) return;
+  // From the maximum on the sheet now: it can be changed there directly, and
+  // the build's copy then lags (Zindle's said 39 against the sheet's 53, so
+  // levelling up took him down to 46).
+  const prior = CB.idx != null && typeof state !== 'undefined' ? state.party[CB.idx] : null;
+  const base = prior && +prior.hpMax > 0 ? +prior.hpMax : +b.hp.manual;
+  CB.hpUp = { base: Math.floor(base), how: 'average', roll: null };
+  b.hp = Object.assign({}, b.hp, { manual: CB.hpUp.base + cbHpUpGain('average') });
+}
+// After a different choice (average or a roll, or the level going to another class).
+function cbApplyHpUp(b){
+  if (!CB.hpUp) return;
+  b.hp = Object.assign({}, b.hp, { manual: CB.hpUp.base + cbHpUpGain(CB.hpUp.how, CB.hpUp.roll) });
+}
 async function cbLoad(edition){
   CB.loading = true; cbRender();
   try { CB.R = await sktRulesLoad(edition); }
   catch(e){ CB.error = 'The rules data did not load (' + e.message + '). Check the connection and try again.'; }
   if (CB.R && CB.build.edition === '2014' && !CB.build.allBooks && cbUsesOtherBooks(CB.build, CB.R)) CB.build.allBooks = true;
   if (CB.R && CB.build.edition !== '2014') cbEnsureSources(CB.build, CB.R);
+  if (CB.R) cbLevelUpHp();
   CB.loading = false;
   cbRender();
 }
@@ -1622,6 +1655,12 @@ CB_RENDER.levels = () => {
     html += '<h4>Hit points</h4><div class="cb-seg"><button class="' + (hm === 'average' ? 'on' : '') + '" data-cb-hp="average">Take the average (' + avg + ')</button>'
       + '<button class="' + (hm === 'rolled' ? 'on' : '') + '" data-cb-hp="rolled">Roll</button>'
       + '<button class="' + (hm === 'manual' ? 'on' : '') + '" data-cb-hp="manual">Enter it</button></div>';
+    if (hm === 'manual' && CB.hpUp){
+      const hd = cbLevelHd(), u = CB.hpUp;
+      html += '<div class="cb-hpup"><span>Level ' + L + ' adds</span><div class="cb-seg"><button class="' + (u.how === 'average' ? 'on' : '') + '" data-cb-hpup="average">Average +' + cbHpUpGain('average') + '</button>'
+        + '<button class="' + (u.how === 'rolled' ? 'on' : '') + '" data-cb-hpup="rolled">🎲 Roll d' + hd + (u.how === 'rolled' ? ': +' + cbHpUpGain('rolled', u.roll) : '') + '</button></div>'
+        + '<span class="cb-dim">' + u.base + ' → ' + b.hp.manual + ' (the die, plus your Constitution modifier)</span></div>';
+    }
     if (hm === 'manual') html += '<label class="cb-f">Hit point maximum<input type="number" min="1" data-cb-hpmanual value="' + (b.hp.manual || CB.rec.hpMax) + '"></label>';
     if (hm === 'rolled'){
       let rows = '';
@@ -2363,6 +2402,7 @@ function cbOnClick(e){
     b.multi = JSON.parse(JSON.stringify(CB.multi0 || []));
     if (d.cbLvlto !== 'first'){ const m = b.multi[+d.cbLvlto]; if (m) m.level = (+m.level || 1) + 1; }
     CB.lvlTo = d.cbLvlto;
+    cbApplyHpUp(b);
   });
   if (d.cbSpecies) return cbSet(b => {
     if (b.species === d.cbSpecies) return;
@@ -2412,6 +2452,7 @@ function cbOnClick(e){
     const spent = SKT_ABS.reduce((s, x) => s + SKT_POINT_BUY[x === k ? v : b.abilities.base[x]], 0);
     if (spent <= 27) b.abilities.base[k] = v;
   });
+  if (d.cbHpup) return cbSet(b => { CB.hpUp.how = d.cbHpup; if (d.cbHpup === 'rolled') CB.hpUp.roll = sktD(cbLevelHd()); cbApplyHpUp(b); });
   if (d.cbHp) return cbSet(b => { b.hp = b.hp || { rolls: {} }; if (d.cbHp === 'manual' && !b.hp.manual) b.hp.manual = CB.rec.hpMax; b.hp.method = d.cbHp; b.hp.rolls = b.hp.rolls || {}; });
   if (d.cbHpdice) return cbSet(b => {
     // "wizard@2" rolls a wizard's die; a plain level the first class's.

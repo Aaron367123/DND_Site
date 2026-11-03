@@ -951,3 +951,8 @@ body:has(#cb-root) #toast-host { bottom: 64px; }
 
 /* ── 51. The builder names the spells picked under each counter ── */
 .cb-chosen { margin: 2px 0 8px; font-size: var(--fs-sm); color: var(--text); line-height: 1.45; }
+
+/* ── 52. Level up adds the level's hit points to a hand-entered maximum ── */
+.cb-hpup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 4px; }
+.cb-hpup > span:first-child { font-weight: 600; }
+.cb-hpup .cb-dim { flex-basis: 100%; }
