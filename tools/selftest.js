@@ -12425,6 +12425,37 @@
         if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } B._tokens = JSON.parse(bm0).tokens || []; }
       }
     }
+    // -- Round 144: every "of your choice" in a starting kit can be chosen and is carried --
+    if (!PLAYER){
+      try {
+        const bad = [], inv = []; let slots = 0;
+        for (const ed of ['2014', '2024']){
+          await openCharBuilder({ edition: ed }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(100);
+          const R = CB.R;
+          const check = (owner, blocks, mk) => (blocks || []).forEach((block, i) => Object.keys(block).forEach(l => (block[l] || []).forEach(it => {
+            if (!it || !it.equipmentType) return;
+            slots++;
+            const opts = sktEquipmentOptions(R, it.equipmentType).map(n => n.toLowerCase()), def = sktEquipmentDefault(R, it.equipmentType, {});
+            if (!opts.length || !opts.includes(def)) bad.push(ed + ' ' + owner + ' ' + it.equipmentType);
+            if (!sktBuildEquipment(mk(l, i), R).names.includes(def)) inv.push(ed + ' ' + owner + ' ' + l + ' ' + def);
+          })));
+          R.classes.forEach(c => check(c.name, c.equipment && c.equipment.defaultData, (l, i) => ({ cls: c.name, level: 1, equipment: ed === '2024' ? { cls: l, bg: 'A' } : { clsBlocks: Object.assign([], { [i]: l }) } })));
+          R.backgrounds.forEach(bg => check(bg.name, bg.equipment, (l, i) => ({ cls: R.classes[0].name, background: bg.name, level: 1, equipment: ed === '2024' ? { cls: 'A', bg: l } : { bgBlocks: Object.assign([], { [i]: l }) } })));
+          if (ed === '2024'){
+            ok('builder: a kit’s gaming set matches the one the character plays', sktEquipmentDefault(R, 'setGaming', { toolPicks: { background: ['Three-Dragon Ante Set'] } }) === 'three-dragon ante set'
+               && sktEquipmentDefault(R, 'setGaming', { toolPicks: { background: ['Playing Card Set'] } }) === 'playing cards');
+            // On screen: the Guard's "a gaming set" is a dropdown with the sets in it.
+            cbSet(b => { b.name = 'R144'; b.cls = 'Fighter'; b.background = 'Guard'; b.toolPicks = { background: ['Three-Dragon Ante Set'] }; b.equipment = { cls: 'A', bg: 'A', picks: {} }; });
+            CB.step = 'equipment'; cbRender(); await sleep(150);
+            const sel = [...document.querySelectorAll('select[data-cb-eqpick^="bg:"]')][0];
+            ok('builder: the Guard’s “a gaming set” offers the sets, the one they play chosen', !!sel && sel.options.length === 4 && sel.value === 'three-dragon ante set', sel && JSON.stringify([sel.options.length, sel.value]));
+          }
+          cbClose(); await sleep(60);
+        }
+        ok('builder: every “of your choice” in every kit (both handbooks) has choices and a default', slots > 100 && !bad.length, slots + ' ' + bad.slice(0, 5).join(' | '));
+        ok('builder: and that item is in the starting inventory', !inv.length, inv.slice(0, 5).join(' | '));
+      } catch(e){ ok('round 144 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -3209,7 +3209,7 @@ function sktBuildEquipment(build, R){
         }
         if (it.equipmentType){
           const k = kind + ':' + i + ':' + j;
-          const pick = (eq.picks || {})[k] || _SKT_EQ_DEFAULT[it.equipmentType];
+          const pick = (eq.picks || {})[k] || sktEquipmentDefault(R, it.equipmentType, build);
           if (pick) for (let n = 0; n < (it.quantity || 1); n++) names.push(String(pick).toLowerCase());
         }
       });
@@ -3295,8 +3295,38 @@ const _SKT_EQ_DEFAULT = {
   weaponMartial: 'longsword', weaponMartialMelee: 'longsword', weaponMartialRanged: 'longbow',
   weaponSimple: 'spear', weaponSimpleMelee: 'handaxe', weaponSimpleRanged: 'light crossbow',
 };
-// The weapons that can fill a placeholder, for the builder's dropdown.
+// Not only weapons: kits also hand out "a gaming set" (twenty of them),
+// artisan's tools, a musical instrument and spellcasting focuses. Those had
+// no options and no default, so the dropdown was empty and the item never
+// reached the inventory. Names as each handbook prints them.
+const SKT_FOCUS_SETS = {
+  focusSpellcastingArcane: ['Crystal', 'Orb', 'Rod', 'Staff', 'Wand'],
+  focusSpellcastingDruidic: ['Sprig of Mistletoe', 'Wooden Staff', 'Yew Wand'],
+  focusSpellcastingHoly: ['Amulet', 'Emblem', 'Reliquary'],
+};
+const _SKT_FOCUS_DEFAULT = { focusSpellcastingArcane: 'wand', focusSpellcastingDruidic: 'sprig of mistletoe', focusSpellcastingHoly: 'amulet' };
+function _sktGearSet(R, type){
+  const e24 = R && R.edition === '2024';
+  if (type === 'setGaming') return SKT_TOOL_SETS.anyGamingSet.map(n => e24 && n === 'Playing Card Set' ? 'Playing Cards' : n);
+  if (type === 'toolArtisan') return SKT_TOOL_SETS.anyArtisansTool.slice();
+  if (type === 'instrumentMusical') return SKT_TOOL_SETS.anyMusicalInstrument.slice();
+  if (SKT_FOCUS_SETS[type]) return SKT_FOCUS_SETS[type].concat(type === 'focusSpellcastingDruidic' && !e24 ? ['Totem'] : []).sort();
+  return null;
+}
+// What fills a placeholder nobody has chosen for: a tool, instrument or game
+// the character is proficient with (a Guard who plays dice carries dice),
+// else the first; a weapon or focus by the table above.
+function sktEquipmentDefault(R, type, build){
+  if (_SKT_EQ_DEFAULT[type]) return _SKT_EQ_DEFAULT[type];
+  if (_SKT_FOCUS_DEFAULT[type]) return _SKT_FOCUS_DEFAULT[type];
+  const set = _sktGearSet(R, type); if (!set || !set.length) return null;
+  const mine = [].concat(...Object.values((build && build.toolPicks) || {}).map(v => [].concat(v || []))).map(n => String(n).toLowerCase().replace(/ set$/, ''));
+  const hit = set.find(n => mine.includes(n.toLowerCase().replace(/ set$/, '').replace(/^playing cards$/, 'playing card')));
+  return (hit || set[0]).toLowerCase();
+}
+// The items that can fill a placeholder, for the builder's dropdown.
 function sktEquipmentOptions(R, type){
+  const set = _sktGearSet(R, type); if (set) return set;
   const all = Object.values(R.items).filter(i => /^(M|R)(\||$)/.test(String(i.type)) && i.weaponCategory);
   const cat = /Martial/.test(type) ? 'martial' : /Simple/.test(type) ? 'simple' : null;
   const rng = /Ranged/.test(type) ? 'R' : /Melee/.test(type) ? 'M' : null;
