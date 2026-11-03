@@ -1889,6 +1889,26 @@ function sktActivationFromText(text, name, ctx){
     const nm = hit && hit[1].find(n => ctx.resources.some(r => r.name === n));
     if (nm){ resource = nm; amount = m[1] ? (SKT_NUM_WORDS[m[1].toLowerCase()] || parseInt(m[1], 10) || 1) : 1; }
   }
+  // A feature of several benefits with one limited use: describe the benefit
+  // the use belongs to, the paragraph that ends "Once you use this…, you can't
+  // use it again until…", under its own heading. Superior Atlas read "Your
+  // Adventurer's Atlas improves… Safe Haven." for its free Find the Path, and
+  // Refined Reanimation took its Life Transfer reaction for the once-a-day
+  // Raise Dead.
+  let head = '';
+  if (resource === name){
+    const once = sents.findIndex(s => /once you use (?:this|it)\b|can(?:'|’|no)t use (?:it|this(?: benefit| feature)?) again until/i.test(s));
+    if (once > 0){
+      let h = once - 1; while (h >= 0 && once - h <= 4 && !/^[A-Z][\w'’ -]{1,40}\.$/.test(sents[h])) h--;
+      const titled = h >= 0 && once - h <= 4 && /^[A-Z][\w'’ -]{1,40}\.$/.test(sents[h]);
+      const start = titled ? h + 1 : Math.max(0, once - 2);
+      if (at < start || at > once){
+        head = titled ? sents[h].replace(/\.$/, '') + ': ' : '';
+        action = timing(sents.slice(start, once + 1).join(' '));
+        at = start;
+      }
+    }
+  }
   if (!action && !resource) return null;
   // The dice: a die the resource rolls (a Superiority Die), else the first written.
   const pool = resource && ctx.resources.find(r => r.name === resource);
@@ -1898,7 +1918,7 @@ function sktActivationFromText(text, name, ctx){
   if (!dice){ const d = /\b(\d+d\d+)(?:\s*\+\s*(\d+))?\b/.exec(scope) || /\b(\d+d\d+)\b/.exec(t); if (d) dice = d[1] + (d[2] ? '+' + d[2] : ''); }
   // "You can then…", "In addition, …": the sentence before says what this follows.
   const back = at > 0 && /^(?:you can then|then|in addition|additionally|also|this|it|when you do|if you do)\b/i.test(sents[at]) ? 1 : 0;
-  const desc = (at >= 0 ? sents.slice(at - back, at + 2) : sents.filter(s => !/\|/.test(s)).slice(0, 2)).join(' ');
+  const desc = head + (at >= 0 ? sents.slice(at - back, at + 2) : sents.filter(s => !/\|/.test(s)).slice(0, 2)).join(' ');
   return { name, action: action || 'Special', resource: resource || undefined, amount: resource ? amount : undefined, dice: dice || undefined,
            desc: desc.length > 300 ? desc.slice(0, 297).replace(/\s\S*$/, '') + '…' : desc };
 }
@@ -2026,7 +2046,12 @@ function sktUsesFromText(text, ctx, name){
     max = _SKT_TIMES[m[1].toLowerCase()];
   } else if ((m = /you have (one|two|three|four) uses? of this (?:ability|feature)/i.exec(t))){
     max = _SKT_TIMES[m[1].toLowerCase()];
-  } else if (sentences.some(s => (/^once you\b/i.test(s) || /you (?:can't|cannot) use this feature again/i.test(s)) && /(?:can't|cannot) [^.]{0,60}again until you (?:finish|start) (?:a|\d+d\d+)/i.test(s))
+  // "Once you use it…", and also "Once this feature turns a failure into a
+  // success…" (Draconic Disciple) and "After you succeed…, you can't use this
+  // benefit again…" (Strength of the Grave). Not a limit on one creature
+  // ("you can't use this feature on that creature again"): that's no counter.
+  } else if (sentences.some(s => (/^(?:once|after)\b/i.test(s) || /you (?:can't|cannot) use this (?:feature|benefit|trait) again/i.test(s))
+          && !/\bon (?:that|the|this|an?) (?:creature|attacker|target)\b/i.test(s) && /(?:can't|cannot) [^.]{0,60}again until you (?:finish|start) (?:a|\d+d\d+)/i.test(s))
           || /you must finish a (?:short or long|long|short) rest before you (?:can )?(?:use (?:it|this feature) |do so )?again/i.test(t)){
     max = 1;
   }
@@ -2047,7 +2072,7 @@ const _SKT_CT = 'blinded|charmed|deafened|frightened|grappled|paralyzed|petrifie
 const _sktList = words => '((?:' + words + ')(?:(?:,? and |,? or |, )(?:' + words + '))*)';
 const _sktSplit = s => s.toLowerCase().split(/,? and |,? or |, /);
 function sktPassiveGrants(text){
-  const out = { resist: [], immune: [], darkvision: 0, speed: 0, conditions: [], moves: {} };
+  const out = { resist: [], immune: [], darkvision: 0, speed: 0, conditions: [], moves: {}, senses: {} };
   // Benefits listed under a condition ("While your Bladesong is active, you
   // gain the following benefits") are the condition's, not lasting.
   if (/\bwhile (?:the|your|you're|you are|raging|it is)[^.]*(?:following benefits|benefits:)/i.test(String(text || ''))) return Object.assign(out, { any: false });
@@ -2055,7 +2080,9 @@ function sktPassiveGrants(text){
   // form, you gain the benefits below", "choose one of the following benefits").
   const lead = /[^.|]*\b(?:following benefits?|benefits below)\b[^.|]*/i.exec(String(text || ''));
   if (lead && /\b(while|when|whenever|until|for \d+ (?:minute|hour)s?|choose|of your choice|transform|this form|is active)\b/i.test(lead[0])) return Object.assign(out, { any: false });
-  String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).forEach(s => {
+  String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).forEach(s0 => {
+    // "Resistance to Acid damage and Poison damage" (2024) reads as one list.
+    const s = s0.replace(new RegExp('(' + _SKT_DT + ') damage(,? and |,? or |, )(?=(?:' + _SKT_DT + ')\\b)', 'gi'), '$1$2');
     const lasting = (m) => {
       const before = s.slice(0, m.index), after = s.slice(m.index + m[0].length, m.index + m[0].length + 20);
       return !/\b(while|when|whenever|until|if|during|as long as|for the duration|for 1 (minute|hour)|each time|once|as an? (bonus )?action|as a reaction|to gain|to use)\b/i.test(before)
@@ -2070,13 +2097,19 @@ function sktPassiveGrants(text){
     if ((m = new RegExp('immun(?:ity|e) to the ' + _sktList(_SKT_CT) + ' conditions?', 'i').exec(s)) && lasting(m)) out.conditions.push(..._sktSplit(m[1]));
     if ((m = new RegExp('you can(?:\'|’|no)t be ' + _sktList(_SKT_CT), 'i').exec(s)) && lasting(m)
         && !/^ (by|while|until)\b/i.test(s.slice(m.index + m[0].length))) out.conditions.push(..._sktSplit(m[1]));
-    if ((m = /you have darkvision out to a range of (\d+) feet/i.exec(s)) && lasting(m)) out.darkvision = Math.max(out.darkvision, +m[1]);
+    // "out to a range of" (2014) or "with a range of" (2024: a Shadow sorcerer's
+    // "Darkvision with a range of 120 feet and Blindsight with a range of 10 feet").
+    if ((m = /you have darkvision (?:out to|with) a range of (\d+) feet/i.exec(s)) && lasting(m)) out.darkvision = Math.max(out.darkvision, +m[1]);
+    if (/you have (?:darkvision|blindsight|tremorsense|truesight)/i.test(s)){
+      const sr = /(blindsight|tremorsense|truesight) (?:out to|with) a range of (\d+) feet/gi; let k;
+      while ((k = sr.exec(s))){ if (lasting(k)) out.senses[k[1].toLowerCase()] = Math.max(out.senses[k[1].toLowerCase()] || 0, +k[2]); }
+    }
     if ((m = /your (?:walking )?speed increases by (\d+) feet/i.exec(s)) && lasting(m)) out.speed += +m[1];
     // "a swimming speed of 40 feet", "a climbing speed and a swimming speed equal to your walking speed".
     const mv = /you (?:also )?(?:gain|have) an? (swim|fly|climb|burrow)(?:ming|ing)? speed(?: and an? (swim|fly|climb|burrow)(?:ming|ing)? speed)? (?:of (\d+) feet|equal to your (?:walking )?speed)/i;
     if ((m = mv.exec(s)) && lasting(m)) [m[1], m[2]].filter(Boolean).forEach(k => { out.moves[k.toLowerCase()] = m[3] ? +m[3] : 'walk'; });
   });
-  out.any = out.resist.length || out.immune.length || out.darkvision || out.speed || out.conditions.length || Object.keys(out.moves).length;
+  out.any = out.resist.length || out.immune.length || out.darkvision || out.speed || out.conditions.length || Object.keys(out.moves).length || Object.keys(out.senses).length;
   return out;
 }
 
@@ -2666,6 +2699,7 @@ function sktComputeCharacter(build, R, prior){
         const chosenResist = f.from === 'species' && sktSpeciesResistChoice(species, subrace);
         if (!chosenResist){ g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r)); }
         if (g.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, g.darkvision);
+        Object.keys(g.senses || {}).forEach(k => { ctx.senses[k] = Math.max(ctx.senses[k] || 0, g.senses[k]); });
         if (g.speed) ctx.speedBonus += g.speed;
         g.conditions.forEach(c => ctx.immune.add(c));
         Object.keys(g.moves).forEach(k => { ctx.moveExtra[k] = g.moves[k]; });
@@ -3062,6 +3096,7 @@ function sktComputeCharacter(build, R, prior){
       hpDetail: hpSet != null && hpSet > 0 ? 'Set on the sheet: ' + hpMax : hpDetail + (add('hpMax') ? ' ' + (add('hpMax') > 0 ? '+' : '') + add('hpMax') + ' custom' : ''),
       senses: [ctx.senses.darkvision ? 'Darkvision ' + ctx.senses.darkvision + ' ft.' : '',
                ctx.senses.blindsight ? 'Blindsight ' + ctx.senses.blindsight + ' ft.' : '',
+               ctx.senses.tremorsense ? 'Tremorsense ' + ctx.senses.tremorsense + ' ft.' : '',
                ctx.senses.truesight ? 'Truesight ' + ctx.senses.truesight + ' ft.' : ''].concat(extraSenses).filter(Boolean).join(', '),
       bio: { features: featureList.map(f => '* ' + f.name + '\n' + f.text).join('\n\n') },
     },
@@ -3183,7 +3218,10 @@ function _sktAlwaysPreparedOne(build, R){
   ((cls && cls.features) || []).forEach(f => {
     if (!f || (+f.level || 1) > (build.level || 1)) return;
     JSON.stringify(f.entries || '').split(/(?<=\.)\s/).forEach(sentence => {
-      if (!/always have the /i.test(sentence) || !/prepared/i.test(sentence)) return;
+      // ...or a cantrip it simply gives: "You know the Mending cantrip" (the
+      // 2024 artificer's Tinker's Magic), not one to choose.
+      const given = /^\W*you know the \{@spell [^}]+\} cantrip/i.test(sentence) && !/choose|of your choice/i.test(sentence);
+      if (!given && (!/always have the /i.test(sentence) || !/prepared/i.test(sentence))) return;
       (sentence.match(/\{@spell [^}]+\}/g) || []).forEach(tag => {
         const ref = tag.slice(8, -1), sp = sktRulesSpell(R, ref);
         out.push(sp ? sp.name : _sktTitle(ref.split('|')[0]));

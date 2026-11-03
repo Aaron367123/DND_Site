@@ -39,7 +39,13 @@
     const plans = col(ctx, 'Plans Known') || 4, items = col(ctx, 'Magic Items') || 2;
     note(ctx, 'Replicate Magic Item: you know ' + plans + ' magic item plans; at the end of a long rest, make up to ' + items + ' items from them with the right tools. They last until you replace them.');
   });
-  def('2024:class:artificer:Magic Item Tinker', ctx => note(ctx, 'Magic Item Tinker: as a bonus action, recharge an item you replicated with a spell slot, or make one vanish to gain a spell slot (level 1 for Common, 2 for Uncommon or Rare) once per long rest.'));
+  def('2024:class:artificer:Magic Item Tinker', ctx => {
+    note(ctx, 'Magic Item Tinker: as a bonus action, recharge an item you replicated by expending a spell slot.');
+    // Drain Magic Item, once per long rest: a counter, as D&D Beyond shows it.
+    pool(ctx, 'Drain Magic Item', 1, 'long');
+    act(ctx, { name: 'Drain Magic Item', action: 'Bonus Action', resource: 'Drain Magic Item', amount: 1, feature: 'Magic Item Tinker',
+      desc: 'Touch a magic item you made with Replicate Magic Item within 5 feet; it vanishes and becomes a spell slot: level 1 for a Common item, level 2 for an Uncommon or Rare one.' });
+  });
   def('2024:class:artificer:Advanced Artifice', ctx => {
     ctx.attuneMax = Math.max(ctx.attuneMax || 3, 5);
     note(ctx, 'Advanced Artifice: you can attune to up to five magic items; a short rest restores one use of Flash of Genius.');

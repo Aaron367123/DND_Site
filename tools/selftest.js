@@ -12678,6 +12678,36 @@
       } catch(e){ ok('round 153 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 154: features that do what their text says (an audit of every class and subclass) --
+    if (!PLAYER){
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (cls, sub, lvl) => sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'A', cls, level: lvl, species: 'Human', background: 'Guide', subclass: sub, allBooks: true }), R);
+        const act = (r, feat) => (r.sheet.activations || []).find(a => a.feature === feat || a.name === feat);
+        // 2024 wording: "Darkvision with a range of 120 feet and Blindsight with a range of 10 feet".
+        const sh = mk('Sorcerer', 'Shadow', 3);
+        ok('features: a Shadow sorcerer has Darkvision 120 and Blindsight 10 (2024 wording)', /Darkvision 120 ft/.test(sh.sheet.senses) && /Blindsight 10 ft/.test(sh.sheet.senses), sh.sheet.senses);
+        // "Resistance to Acid damage and Poison damage".
+        const g = sktPassiveGrants('Chemical Resistance. You gain Resistance to Acid damage and Poison damage. You also gain Immunity to the Poisoned condition.');
+        ok('features: “Acid damage and Poison damage” reads as both', g.resist.includes('acid') && g.resist.includes('poison') && g.conditions.includes('poisoned'), JSON.stringify(g));
+        ok('features: but not a resistance while something lasts', !sktPassiveGrants('While raging, you have Resistance to Fire damage.').resist.length);
+        // "You know the Mending cantrip" (Tinker's Magic).
+        const ar = mk('Artificer', 'Alchemist', 1);
+        ok('features: a 2024 artificer knows Mending (Tinker’s Magic), without spending a cantrip on it', ar.sheet.spells.includes('Mending') && sktBuildAlwaysPrepared(Object.assign(sktBlankBuild('2024'), { cls: 'Artificer', level: 1, subclass: 'Alchemist' }), R).includes('Mending'));
+        // One limited use among several benefits: described by the benefit it belongs to.
+        const at = act(mk('Artificer', 'Cartographer', 15), 'Superior Atlas');
+        ok('features: Superior Atlas’s once-a-day use says it is a free Find the Path', !!at && /^Unerring Path: /.test(at.desc) && /Find the Path/.test(at.desc), at && at.desc);
+        const rr = act(mk('Artificer', 'Reanimator', 15), 'Refined Reanimation');
+        ok('features: Refined Reanimation’s use is the free Raise Dead, not its Life Transfer reaction', !!rr && /Raise Dead/.test(rr.desc) && rr.action !== 'Reaction', rr && rr.action + ' ' + rr.desc);
+        // "After you succeed…, you can't use this benefit again" and "Once this feature turns…".
+        ok('features: Strength of the Grave counts its once-a-day use', (sh.resources || []).some(r => r.name === 'Power of Shadow' && r.max === 1 && r.recharge === 'long'), JSON.stringify(sh.resources));
+        ok('features: so does Draconic Disciple', (mk('Monk', 'Ascendant Dragon', 3).resources || []).some(r => r.name === 'Draconic Disciple' && r.max === 1));
+        ok('features: but a limit on one creature is no counter (Hypnotic Gaze)', !(mk('Wizard', 'Enchantment', 3).resources || []).some(r => r.name === 'Hypnotic Gaze'));
+        // Magic Item Tinker's Drain Magic Item, once per long rest.
+        const mt = mk('Artificer', 'Alchemist', 6);
+        ok('features: Drain Magic Item is a once-a-day bonus action with a counter', (mt.resources || []).some(r => r.name === 'Drain Magic Item' && r.max === 1) && (act(mt, 'Drain Magic Item') || {}).action === 'Bonus Action');
+      } catch(e){ ok('round 154 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
