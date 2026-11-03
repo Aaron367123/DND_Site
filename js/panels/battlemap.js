@@ -568,7 +568,7 @@ registerPanel('battlemap',{
     if (!this._body || this._drag) return;
     // A character's face is drawn from the party (_tokenFace), so a new
     // picture is a reason to redraw too.
-    const face = p => { const f = String(p.portrait || (typeof sktPcIcon === 'function' ? sktPcIcon(p) : p.icon) || ''); return f.length + f.slice(-24); };
+    const face = p => { const f = String(p.portrait || p.icon || ''); return f.length + f.slice(-24); };
     const sig = (state.combatants || [])
       .map(c => c.id + ':' + (c.hp || 0) + ':' + (c.hpMax || 0) + ':' + (c.dead ? 1 : 0)).join('|')
       + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|');
@@ -1530,16 +1530,16 @@ registerPanel('battlemap',{
     return c.name + (showNumbers ? ' — ' + (c.hp || 0) + '/' + (c.hpMax || 0) + ' HP' : (tier ? ' — ' + tier : ''));
   },
 
-  // What a token shows. A character's token shows the character's face as it
-  // is now — their picture, else their species' portrait (sktPcIcon) — not
-  // the icon copied when the token was made: that copy was a class emoji
-  // (Creambak's 👊) while every other screen showed his Dragonborn portrait,
-  // and a picture uploaded later never reached the map.
+  // What a token shows. A character's token follows the character as they
+  // are now — the picture they uploaded, else their own emoji — not the icon
+  // copied when the token was made, so a picture uploaded later reaches the
+  // map. Not the species portrait the sheet falls back to: on the map Aaron
+  // wants a character without a picture to stay their emoji.
   _tokenFace(t){
-    if (t && t.isPC && typeof sktPcIcon === 'function'){
+    if (t && t.isPC){
       const party = (typeof state !== 'undefined' && state.party) || [];
       const pm = party.find(p => p.id === t.cid) || party.find(p => p.name === t.label);
-      if (pm) return pm.portrait || sktPcIcon(pm);
+      if (pm) return pm.portrait || pm.icon || t.icon || '⚔';
     }
     return t ? (t.portrait || t.icon) : '';
   },

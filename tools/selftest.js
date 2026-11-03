@@ -12377,7 +12377,7 @@
         if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } B._tokens = JSON.parse(bm0).tokens || []; }
       }
     }
-    // -- Round 143: a character's token shows the character's face as it is now --
+    // -- Round 143: a character's token shows their picture as it is now, else their emoji --
     if (!PLAYER){
       const bm0 = localStorage.getItem('skt-battlemap-v1'), party0 = JSON.stringify(state.party);
       const B = panelDefs.battlemap;
@@ -12387,26 +12387,28 @@
         if (!sktSpeciesPortrait('Dragonborn')) pm = null;
         if (!pm) ok('faces: the fixture has a character with species art', false, state.party.map(p => p.race).join());
         else {
-          // Made with the class emoji, the way older tokens were.
+          // Their emoji now, not the one the token was made with — and on the
+          // map, no species portrait for a character without a picture.
           pm.icon = '👊'; pm.portrait = null; save(); await sleep(60);
           const cs = B._csScreen();
-          B._tokens = [{ id: 'r143', label: pm.name, cid: pm.id, isPC: true, x: cs * 4.5, y: cs * 4.5, size: 1, color: '#696969', icon: '👊', portrait: null }];
+          B._tokens = [{ id: 'r143', label: pm.name, cid: pm.id, isPC: true, x: cs * 4.5, y: cs * 4.5, size: 1, color: '#696969', icon: '⚔', portrait: null }];
           B._renderTokens(); await sleep(60);
-          const img = () => document.querySelector('.map-token[data-tid="r143"] img');
-          ok('faces: a character token made with a class emoji shows their species portrait instead', !!img() && /races\/.*Dragonborn/.test(img().getAttribute('src') + (img().dataset.fb || '')), document.querySelector('.map-token[data-tid="r143"]').innerHTML.slice(0, 120));
-          // The portrait is zoomed onto the face; it must not spill past the circle.
-          const clip = img() && img().parentElement, tr = document.querySelector('.map-token[data-tid="r143"]').getBoundingClientRect();
-          ok('faces: and stays inside the token’s circle', !!clip && clip.classList.contains('map-token-pic') && getComputedStyle(clip).overflow === 'hidden'
-             && clip.getBoundingClientRect().width <= tr.width + 0.5, clip && JSON.stringify([clip.className, getComputedStyle(clip).overflow, clip.getBoundingClientRect().width, tr.width]));
+          const tokEl = () => document.querySelector('.map-token[data-tid="r143"]');
+          const img = () => tokEl().querySelector('img');
+          ok('faces: a character with no picture is their own emoji on the map, not their species art', !img() && /👊/.test(tokEl().textContent), tokEl().innerHTML.slice(0, 120));
           // The player sets a picture: the token follows without being rebuilt.
           const pic = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
           pm.icon = pic; save(); await sleep(80);
-          ok('faces: a picture the player sets reaches their token on the map', !!img() && img().getAttribute('src') === pic && B._tokens[0].icon === '👊', img() && img().getAttribute('src').slice(0, 40));
+          ok('faces: a picture the player sets reaches their token on the map', !!img() && img().getAttribute('src') === pic && B._tokens[0].icon === '⚔', img() && img().getAttribute('src').slice(0, 40));
+          // A picture must not spill past the circle (the token overflows on purpose).
+          const clip = img() && img().parentElement, tr = tokEl().getBoundingClientRect();
+          ok('faces: and stays inside the token’s circle', !!clip && clip.classList.contains('map-token-pic') && getComputedStyle(clip).overflow === 'hidden'
+             && clip.getBoundingClientRect().width <= tr.width + 0.5, clip && JSON.stringify([clip.className, getComputedStyle(clip).overflow, clip.getBoundingClientRect().width, tr.width]));
           // Over sync: the party key arrives from another device.
           const arr = JSON.parse(localStorage.getItem('skt-party-v1')); const q = arr.find(p => p.id === pm.id); q.icon = '🎵';
           _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', JSON.stringify(arr)); } finally { _remoteUpdate = false; }
           loadDomain('party'); B._syncFromCombat(); await sleep(60);
-          ok('faces: and a change from another device too (back to the species portrait for a class emoji)', !!img() && /races\/.*Dragonborn/.test(img().getAttribute('src') + (img().dataset.fb || '')));
+          ok('faces: and a change from another device too (a new emoji)', !img() && /🎵/.test(tokEl().textContent), tokEl().innerHTML.slice(0, 80));
           // A monster keeps its own art.
           B._tokens.push({ id: 'r143m', label: 'Goblin 1', isPC: false, x: cs * 6.5, y: cs * 4.5, size: 1, color: '#993333', icon: '👹', portrait: null }); B._renderTokens(); await sleep(40);
           ok('faces: a monster token keeps what it was given', /👹/.test(document.querySelector('.map-token[data-tid="r143m"]').textContent));
