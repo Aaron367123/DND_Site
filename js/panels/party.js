@@ -343,7 +343,7 @@ registerPanel('party',{
           +'<div class="char-hp-side">'
             +'<label class="char-hp-temp-row" title="Temporary HP (absorbs damage first)">'
               +'<span>Temp</span>'
-              +'<input class="char-hp-temp" type="number" value="'+(c.tempHp||0)+'" data-field="tempHp" data-idx="'+i+'" min="0">'
+              +'<input class="char-hp-temp" type="number" value="'+(c.tempHp||0)+'" data-field="tempHp" data-idx="'+i+'" min="0" aria-label="'+esc(c.name)+' temporary hit points">'
             +'</label>'
           +'</div>'
         +'</div>'
@@ -371,7 +371,7 @@ registerPanel('party',{
             const lastAbbr = (dmgTypes.find(t => t[0] === lastType) || dmgTypes[0])[2];
             return '<span class="party-hp-type-wrap" title="Damage type — applies this PC\'s resist/vuln/immune (set them in the Stats tab; current: '+(lastType||'untyped')+')">'
               + '<span class="party-hp-type-label">'+lastAbbr+'</span>'
-              + '<select class="party-hp-type" data-idx="'+i+'">'
+              + '<select class="party-hp-type" data-idx="'+i+'" aria-label="Damage type">'
               + dmgTypes.map(([val,full])=>'<option value="'+val+'"'+(val===lastType?' selected':'')+'>'+full+'</option>').join('')
               + '</select>'
               + '</span>';
@@ -403,8 +403,8 @@ registerPanel('party',{
       // inferred breakdown for DMs who track gear explicitly.
       +'<div class="char-stats-row">'
         +'<div class="char-stat"><div class="l">'+ICO('i-shield')+' AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'" title="'+esc(this._acBreakdown(c))+'"></div>'
-        +'<div class="char-stat"><div class="l">'+ICO('i-bolt')+' Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'"></div>'
-        +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'"></div>'
+        +'<div class="char-stat"><div class="l">'+ICO('i-bolt')+' Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'" aria-label="'+esc(c.name)+' initiative bonus"></div>'
+        +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'" aria-label="'+esc(c.name)+' speed"></div>'
       +'</div>'
       // Active-form row — class-aware buttons for rage (barbarian) and wild
       // shape (druid). Renders nothing for other classes. When active, the

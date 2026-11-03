@@ -115,6 +115,14 @@ function csRender(){
       if (l < tabs.scrollLeft + 8) tabs.scrollLeft = Math.max(0, l - 24);
       else if (r > tabs.scrollLeft + tabs.clientWidth - 8) tabs.scrollLeft = r - tabs.clientWidth + 24;
     }
+    // A fade at an edge with more tabs past it: on a phone the row ran off
+    // the right ("Featu…") with nothing to say it scrolls.
+    const edges = () => {
+      const more = tabs.scrollWidth - tabs.clientWidth;
+      tabs.classList.toggle('more-r', more > 2 && tabs.scrollLeft < more - 2);
+      tabs.classList.toggle('more-l', more > 2 && tabs.scrollLeft > 2);
+    };
+    edges(); tabs.addEventListener('scroll', edges, { passive: true });
   }
 }
 // On a phone a tab's content is at least as tall as the screen below the tab
@@ -398,7 +406,7 @@ function csTop(pc){
   // Conditions, exhaustion, concentration, death saves.
   h += '<div class="cs-state">'
     + conds.map(c => '<span class="cs-chip"><button class="cs-chip-n" data-cs-condinfo="' + csE(c) + '" aria-expanded="' + (CS.condOpen === c) + '" title="What ' + csE(c) + ' does">' + csE(c) + '</button>' + (ro ? '' : '<button data-cs-cond="' + csE(c) + '" aria-label="Remove ' + csE(c) + '">×</button>') + '</span>').join('')
-    + (ro ? '' : '<select class="cb-sel cs-addcond" data-cs-addcond><option value="">+ Condition</option>' + CS_CONDITIONS.filter(c => !conds.includes(c)).map(c => '<option>' + c + '</option>').join('') + '</select>')
+    + (ro ? '' : '<select class="cb-sel cs-addcond" data-cs-addcond aria-label="Add a condition"><option value="">+ Condition</option>' + CS_CONDITIONS.filter(c => !conds.includes(c)).map(c => '<option>' + c + '</option>').join('') + '</select>')
     + '<span class="cs-exh">' + (+pc.exhaustion > 0 ? '<button class="cs-chip-n" data-cs-condinfo="Exhaustion" aria-expanded="' + (CS.condOpen === 'Exhaustion') + '" title="What exhaustion does">Exhaustion</button> ' : 'Exhaustion ') + (ro ? '' : '<button class="btn small" data-cs-exh="-1" aria-label="Less exhaustion">−</button>') + '<b>' + (+pc.exhaustion || 0) + '</b>' + (ro ? '' : '<button class="btn small" data-cs-exh="1" aria-label="More exhaustion">+</button>') + '</span>'
     + (csEffectLine(pc) ? '<span class="cs-fx">' + csE(csEffectLine(pc)) + '</span>' : '')
     + (pc.rage ? '<span class="cs-chip conc">Raging' + (ro ? '' : '<button data-cs="endrage" aria-label="End the rage">×</button>') + '</span>' : '')

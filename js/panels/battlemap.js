@@ -1986,8 +1986,21 @@ registerPanel('battlemap',{
       // nothing, so hide the name until the token is hovered — what most
       // map tools do when zoomed out.
       const room = isFinite(near) ? near - 6 / vs : Infinity;
-      el.classList.toggle('tight', room < 40 / vs);
       el.style.maxWidth = isFinite(room) ? room.toFixed(1) + 'px' : '';
+      // A token standing right below this one: the name goes above instead,
+      // or it lay across the other token (Creambak's name over the
+      // Doppelganger beneath him). Below and above both taken: shown on
+      // hover, like a name with no room beside it.
+      const tokEl = b.querySelector('.map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+      const dim = (tokEl && tokEl.offsetHeight) || 40;
+      const blocked = dir => drawn.some(d => d.t !== t && Math.abs((d.t.x || 0) - (t.x || 0)) < dim * 0.9
+        && dir * ((d.t.y || 0) - (t.y || 0)) > 0 && dir * ((d.t.y || 0) - (t.y || 0)) < dim * 1.6);
+      const below = blocked(1), above = below && blocked(-1);
+      const dy = below && !above ? -(dim / 2 + 4 + h) : dim / 2 + 4;
+      el.style.top = ((t.y || 0) + dy).toFixed(1) + 'px';
+      el.dataset.dy = dy.toFixed(1);
+      el.classList.toggle('above', below && !above);
+      el.classList.toggle('tight', room < 40 / vs || (below && above));
     });
   },
 
@@ -2735,7 +2748,7 @@ registerPanel('battlemap',{
     const el = b.querySelector('.map-token[data-tid="' + CSS.escape(String(id)) + '"]');
     if (el){ el.style.left = x + 'px'; el.style.top = y + 'px'; }
     const nm = b.querySelector('.map-token-name[data-tid="' + CSS.escape(String(id)) + '"]');
-    if (nm){ nm.style.left = x + 'px'; nm.style.top = y + 'px'; }
+    if (nm){ nm.style.left = x + 'px'; nm.style.top = (y + (+nm.dataset.dy || 0)) + 'px'; }
     // The Turn View draws the same creature; let it follow too.
     const T = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
     if (T && T._body && typeof T._syncFromMap === 'function'){
@@ -5307,6 +5320,7 @@ registerPanel('battlemap',{
       // Floor divided by _viewScale for the same reason as the glyph floor
       // above — it must stay 11 SCREEN px, not 11 stage px.
       const nameFs = Math.max(11 / (this._viewScale || 1), 10 * tokScale);
+      nameEl.dataset.dy = (dim / 2 + 4).toFixed(1);
       nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis`;
       nameEl.textContent = displayLabel;
       frag.appendChild(nameEl);
@@ -5681,6 +5695,38 @@ registerPanel('battlemap',{
 
   _closePanel(){const tp=this._body?.querySelector('#token-panel');if(tp)tp.style.display='none';},
 
+  // Placing a group of new creatures where the DM clicks: the encounter
+  // builder's "Push and place on map". The tracker's tokens appear in the
+  // middle of the view as always; the next click on the map moves them to a
+  // cluster around it, clear of anyone already standing there. Esc keeps
+  // them where they are.
+  _placeCombatants(cids){
+    const b = this._body; if (!b || !Array.isArray(cids) || !cids.length) return false;
+    this._placing = cids.slice();
+    b.querySelector('.map-place-hint')?.remove();
+    const hint = document.createElement('div');
+    hint.className = 'map-place-hint';
+    hint.innerHTML = '<span>Click where they stand — ' + cids.length + ' creature' + (cids.length === 1 ? '' : 's') + '</span><button class="btn small" data-place-cancel>Keep them here</button>';
+    (b.querySelector('.bm-main') || b).appendChild(hint);
+    const done = () => { this._placing = null; hint.remove(); b.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); };
+    const onKey = e => { if (e.key === 'Escape'){ e.stopPropagation(); done(); } };
+    const onDown = e => {
+      if (e.target.closest && e.target.closest('[data-place-cancel]')){ e.preventDefault(); done(); return; }
+      const stage = b.querySelector('#map-stage');
+      if (!stage || !stage.contains(e.target)) return;
+      e.preventDefault(); e.stopPropagation();
+      const pt = this._stagePoint(e.clientX, e.clientY, stage); if (!pt) return;
+      const want = new Set(this._placing || []);
+      const moving = (this._tokens || []).filter(t => t && t.cid != null && want.has(t.cid));
+      const others = (this._tokens || []).filter(t => !moving.includes(t));
+      moving.forEach(t => { const spot = sktFreeCell(others, this._cols, this._rows, this._csScreen(), pt.x, pt.y); t.x = spot.x; t.y = spot.y; others.push(t); });
+      done();
+      if (moving.length){ this._renderTokens(); this._saveMap(); }
+    };
+    b.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return true;
+  },
   _syncParty(){
     let placed=0;
     // Layout positions are in stage pixels — use the on-screen cell size so

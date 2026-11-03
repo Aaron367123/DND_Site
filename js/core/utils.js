@@ -640,7 +640,9 @@ function showToast(msg, opts){
       });
     }, true);
   }
-  const safeMsg = typeof msg === 'string' ? msg : String(msg ?? '');
+  // Words only: a leading emoji (💀 🌀 💤 🎲 📜) came out a different size and
+  // colour on every system, as the menus' did. The alert's frame says it matters.
+  const safeMsg = (typeof msg === 'string' ? msg : String(msg ?? '')).replace(/^[^\p{L}\p{N}"'“(\[+−-]+\s+/u, '');
   const hasAction = !!(opts.action && typeof opts.action.run === 'function');
   const kind = opts.sticky ? 'sticky' : (opts.alert || SKT_TOAST_ALERT.test(safeMsg)) ? 'alert' : hasAction ? 'action' : 'note';
   const leave = (t, ms) => { clearTimeout(t._exit); t._exit = setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, ms); };
@@ -778,6 +780,7 @@ window.showHelpOverlay = showHelpOverlay;
 // returns Promise<object|null> — null if cancelled
 function showModal(title, fields, confirmLabel) {
   if(!confirmLabel) confirmLabel = 'OK';
+  title = String(title == null ? '' : title).replace(/^[^\p{L}\p{N}"'“(\[]+\s+/u, '');
   return new Promise(function(resolve) {
     var backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';

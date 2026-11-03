@@ -12268,6 +12268,55 @@
         if (typeof paClsName === 'function') ok('phone: a class is shown as a name (Rogue, not rogue)', paClsName('rogue') === 'Rogue');
       } catch(e){ ok('round 139 threw', false, e.message); }
     }
+    // -- Round 140: map labels, monster temp HP, placing an encounter, toasts and labels --
+    {
+      const keepC = JSON.stringify(state.combatants), bm0 = localStorage.getItem('skt-battlemap-v1');
+      try {
+        if (!PLAYER){
+          // A token right below another: the upper one's name goes above it.
+          openPanel('battlemap'); await sleep(400);
+          const B = panelDefs.battlemap, cs = B._csScreen();
+          B._tokens = [{ id: 'r140a', label: 'Upper', x: cs * 5.5, y: cs * 5.5, size: 1, color: '#555' }, { id: 'r140b', label: 'Lower', x: cs * 5.5, y: cs * 6.5, size: 1, color: '#555' }];
+          B._renderTokens(); await sleep(80);
+          const up = document.querySelector('.map-token-name[data-tid="r140a"]'), low = document.querySelector('.map-token-name[data-tid="r140b"]');
+          const tok = document.querySelector('.map-token[data-tid="r140b"]').getBoundingClientRect(), ur = up.getBoundingClientRect();
+          ok('map: a name above its token when another token stands right below it', up.classList.contains('above') && !low.classList.contains('above') && !(ur.bottom > tok.top && ur.top < tok.bottom));
+          closePanel('battlemap'); await sleep(60);
+          // A monster's temporary hit points.
+          state.combatants = [{ id: 'r140m', name: 'R140 Ogre', hp: 30, hpMax: 30, ac: 11, initiative: 5, conditions: [] }]; save();
+          openPanel('combat'); await sleep(300); const C = panelDefs.combat;
+          const card = () => [...document.querySelectorAll('.combatant-card')].find(el => el.querySelector('[data-act="hp-temp"]'));
+          const amt = card().querySelector('.hp-dmg-amt'); amt.value = 8; card().querySelector('[data-act="hp-temp"]').click(); await sleep(60);
+          ok('tracker: a monster can be given temporary hit points, shown as +8', state.combatants[0].tempHp === 8 && /\+8/.test(card().textContent));
+          C._applyHpDelta(0, -10, null);
+          ok('tracker: and damage takes them first', state.combatants[0].tempHp === 0 && state.combatants[0].hp === 28, JSON.stringify([state.combatants[0].tempHp, state.combatants[0].hp]));
+          ok('a11y: a tracker card’s fields say whose and what', !!document.querySelector('.combatant-card input[aria-label="R140 Ogre hit points"]'));
+          // An encounter placed where the DM clicks.
+          state.combatants = []; save();
+          openPanel('encounter'); await sleep(300);
+          const E = panelDefs.encounter; E._monsters = [{ name: 'Goblin', count: 2, hp: 7, ac: 15, dex: 14 }]; E._render(); await sleep(100);
+          document.querySelector('#enc-push-map').click(); await sleep(1200);
+          const stage = document.querySelector('#map-stage'), r = stage.getBoundingClientRect(), Bm = panelDefs.battlemap;
+          const cx = r.left + r.width * 0.85, cy = r.top + r.height * 0.85, target = Bm._stagePoint(cx, cy, stage);
+          const start = Bm._tokens.filter(t => /Goblin/.test(t.label)), cs1 = Bm._csScreen();
+          ok('encounter: the pushed creatures start away from where the test clicks', start.length === 2 && start.every(t => Math.hypot(t.x - target.x, t.y - target.y) > cs1 * 3), JSON.stringify([start.map(t => [t.x, t.y]), target]));
+          ok('encounter: a hint says to click where they stand', !!document.querySelector('.bm-main > .map-place-hint'));
+          stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: cx, clientY: cy, pointerId: 1 })); await sleep(150);
+          const gob = Bm._tokens.filter(t => /Goblin/.test(t.label));
+          ok('encounter: “Push and place on map” sets them down around the click', gob.length === 2 && gob.every(t => Math.hypot(t.x - target.x, t.y - target.y) < Bm._csScreen() * 2.2) && !document.querySelector('.map-place-hint'));
+          closePanel('battlemap'); closePanel('encounter'); await sleep(60);
+        }
+        // Toasts in words: a leading emoji is dropped.
+        document.getElementById('toast-host')?.remove();
+        showToast('💀 R140 has died', { alert: true });
+        ok('toast: a leading emoji is dropped, the words kept', (document.querySelector('.toast-item') || {}).textContent === 'R140 has died');
+        document.getElementById('toast-host')?.remove();
+      } catch(e){ ok('round 140 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.combatants = JSON.parse(keepC); save();
+        if (bm0 != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', bm0); } finally { _remoteUpdate = false; } if (panelDefs.battlemap) panelDefs.battlemap._tokens = JSON.parse(bm0).tokens || []; }
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -123,9 +123,9 @@ registerPanel('encounter',{
           <h3>Party</h3>
           <div class="enc-party-adj">
             <label>Level</label>
-            <input type="number" id="enc-level" value="${this._partyLevel}" min="1" max="20" style="font-size:var(--fs-sm);margin-bottom:6px">
+            <input type="number" id="enc-level" aria-label="Party level" value="${this._partyLevel}" min="1" max="20" style="font-size:var(--fs-sm);margin-bottom:6px">
             <label>Size</label>
-            <input type="number" id="enc-size" value="${this._partySize}" min="1" max="10" style="font-size:var(--fs-sm)">
+            <input type="number" id="enc-size" aria-label="Party size" value="${this._partySize}" min="1" max="10" style="font-size:var(--fs-sm)">
           </div>
         </div>
         <div class="enc-section" style="flex:1;overflow-y:auto">
@@ -136,7 +136,7 @@ registerPanel('encounter',{
                 const srcDisplay = m._source ? (typeof _formatSource==='function' ? _formatSource(m._source) : m._source) : '';
                 const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
                 return `<div class="enc-monster-row">
-                  <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" style="width:38px;font-size:var(--fs-sm);padding:2px 4px">
+                  <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" aria-label="How many ${esc(m.name)}" style="width:38px;font-size:var(--fs-sm);padding:2px 4px">
                   <span class="enc-name" title="${esc(m.name)}"><span class="enc-nm">${esc(m.name)}</span>${srcBadge}</span>
                   <span class="enc-cr">CR ${m.cr}</span>
                   <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
@@ -158,7 +158,7 @@ registerPanel('encounter',{
           ${this._renderEncStats(system, xp, diff)}
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <label style="font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Scale to:</label>
-            <select id="enc-scale-target" style="font-size:var(--fs-sm);padding:3px 24px 3px 6px;flex:0 0 auto;background-color:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
+            <select id="enc-scale-target" aria-label="Difficulty to scale to" style="font-size:var(--fs-sm);padding:3px 24px 3px 6px;flex:0 0 auto;background-color:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
               <option value="">—</option>
               ${(system==='2024'?['Moderate','High','Deadly']:['Easy','Medium','Hard','Deadly']).map(o=>`<option value="${o}">${o}</option>`).join('')}
             </select>
@@ -166,6 +166,7 @@ registerPanel('encounter',{
           </div>
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn small primary" id="enc-push-combat" ${!this._monsters.length?'disabled':''}>▶ Push to Combat Tracker</button>
+            <button class="btn small" id="enc-push-map" ${!this._monsters.length?'disabled':''} title="Add them to the fight, then click the battle map where they stand">Push and place on map</button>
             <button class="btn small danger" id="enc-clear">Clear encounter</button>
           </div>
           <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:14px 0 8px">Saved encounters</h3>
@@ -196,6 +197,19 @@ registerPanel('encounter',{
     // Push to combat — flash the button to confirm the action, open the
     // combat panel if it's not already up, and use a richer toast that names
     // a few of the monsters added (instead of just a count).
+    // The same, then the battle map opens and the next click there is where
+    // they stand.
+    b.querySelector('#enc-push-map')?.addEventListener('click', () => {
+      if (!this._monsters.length) return;
+      const before = new Set(state.combatants.map(c => c.id));
+      b.querySelector('#enc-push-combat').click();
+      const fresh = state.combatants.filter(c => !before.has(c.id)).map(c => c.id);
+      if (!fresh.length) return;
+      if (!layout.battlemap?.open) openPanel('battlemap');
+      const start = () => { const B = panelDefs.battlemap;
+        if (B && B._body){ if (typeof sktEnsureCombatTokens === 'function') sktEnsureCombatTokens(true); B._placeCombatants(fresh); } };
+      setTimeout(start, 350);
+    });
     b.querySelector('#enc-push-combat').addEventListener('click', e => {
       if (!this._monsters.length) return;
       const btn = e.currentTarget;

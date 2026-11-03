@@ -906,3 +906,31 @@ body.player-app .toast-item.note, body.player-app .toast-item.action { backgroun
 /* A note in the corner sat over the builder's Next button. While the
    builder is open, toasts sit above its footer. */
 body:has(#cb-root) #toast-host { bottom: 64px; }
+
+/* ── 45. Temporary hit points on the tracker ─────────────── */
+/* A fourth button, T, beside − amount +: smaller, quieter, blue as the
+   temp badge is. */
+.hp-dmg-bar { grid-template-columns: 1fr 36px 1fr 26px; }
+.hp-dmg-bar .hp-dmg-btn.temp { font-size: var(--fs-xs); color: #7fb0e0; }
+.hp-dmg-bar .hp-dmg-btn.temp:hover { background: rgba(90, 140, 200, .2); border-color: rgba(90, 140, 200, .55); }
+
+/* ── 46. Placing an encounter on the map ─────────────────── */
+.map-place-hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 30; display: flex; gap: 10px; align-items: center;
+  padding: 6px 8px 6px 14px; border-radius: 8px; border: 1px solid var(--accent); background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: var(--sh-2); font-size: var(--fs-sm); color: var(--text); }
+
+/* ── 47. The sheet's tabs say they scroll ────────────────── */
+.cs-tabs.more-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+.cs-tabs.more-l { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
+.cs-tabs.more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+
+/* ── 48. Keyboard focus you can see ──────────────────────── */
+/* Tabbing through the DM's screen showed nothing: most controls set their
+   own focus style to none. A ring in the accent, for the keyboard only
+   (:focus-visible), so a mouse or a finger never sees it. */
+:is(button, a[href], [role="button"], [tabindex]:not([tabindex="-1"]), input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent) !important; outline-offset: 2px;
+}
+/* The T reads on a light theme too (1.2:1 on parchment). */
+[data-theme-tone="light"] .hp-dmg-bar .hp-dmg-btn.temp { color: #123f6e; }
+.combatant-list.compact .hp-dmg-bar { grid-template-columns: 22px 34px 22px 20px; }

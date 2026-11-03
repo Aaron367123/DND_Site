@@ -626,7 +626,7 @@ registerPanel('combat',{
     // Temp HP for PCs is mirrored from state.party (the party tracker owns
     // the field). Shown as a small "+N" pill next to the HP value when > 0.
     const partyMatch = isPC ? state.party.find(p => p.id === c.id) : null;
-    const tempHp = partyMatch?.tempHp || 0;
+    const tempHp = (isPC ? partyMatch?.tempHp : c.tempHp) || 0;
     // Heal/damage controls — a permanent vertical strip sitting in its own
     // grid column to the LEFT of the HP cell. Stacks [+]/amount/[−]
     // top-to-bottom (up = heal, down = damage). Always visible (no hover),
@@ -648,15 +648,16 @@ registerPanel('combat',{
       ? ''
       : `<div class="hp-dmg-bar" data-idx="${i}" title="Type amount, click − to damage (drains temp HP first) or + to heal">
           <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
-          <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount">
+          <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Heal / damage amount" aria-label="${esc(c.name)}: amount to damage, heal or give as temporary hit points">
           <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal (clamped to max HP)">+</button>
+          <button class="hp-dmg-btn temp" data-act="hp-temp" data-idx="${i}" title="Temporary hit points: this many (they don't stack — the higher stays; 0 clears them)">T</button>
         </div>`;
     const tempBadge = tempHp > 0 ? `<span class="hp-temp-badge" title="Temporary HP (absorbs damage first)">+${tempHp}</span>` : '';
     const hpField = mode === 'hide'
       ? '<span class="card-stat-hidden">?</span>'
       : mode === 'conceal'
         ? `<span class="card-stat-tier" title="Concealed health">${esc(this._hpTier(c))}</span>`
-        : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp">${tempBadge}`;
+        : `<input type="number" value="${c.hp}" data-ci="${i}" data-cf="hp" aria-label="${esc(c.name)} hit points">${tempBadge}`;
     // While a PC is wild shaped the AC in play is the BEAST's — attacks resolve
     // against the form you're wearing. The mirrored c.ac is the druid's own and
     // was what the card showed, so the DM was rolling against the wrong number
@@ -671,7 +672,7 @@ registerPanel('combat',{
       ? '<span class="card-stat-hidden">?</span>'
       : wsForAc
         ? `<span title="${esc(wsForAc.name)} form — AC ${wsForAc.ac} (${esc(c.name)}'s own AC is ${c.ac})">${wsForAc.ac}</span>`
-        : `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac">`;
+        : `<input type="number" value="${c.ac}" data-ci="${i}" data-cf="ac" aria-label="${esc(c.name)} armor class">`;
 
     // HP bar — thin gradient fill across the card. Hidden in player-view
     // hide/conceal modes to avoid leaking remaining HP visually.
@@ -779,7 +780,7 @@ registerPanel('combat',{
         <div class="card-stats">
           <div class="card-stat" title="HP"><span class="lab">${ICO('i-heart')}</span>${hpField}${maxLossBadge}</div>
           <div class="card-stat" title="AC"><span class="lab">${ICO('i-shield')}</span>${acField}</div>
-          <div class="card-stat" title="Initiative"><span class="lab">${ICO('i-bolt')}</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative"></div>
+          <div class="card-stat" title="Initiative"><span class="lab">${ICO('i-bolt')}</span><input type="number" value="${c.initiative||0}" data-ci="${i}" data-cf="initiative" aria-label="${esc(c.name)} initiative"></div>
         </div>
         ${dmgStripRow}
         ${hpBar}
@@ -916,6 +917,21 @@ registerPanel('combat',{
         // (used = N+1). If it's filled (N < used), refund (used = N).
         c.legendaryUsed = n < used ? n : (n + 1);
         save(); this._render();
+      }
+      else if(act==='hp-temp'){
+        // Monsters had nowhere to keep temporary hit points (a spell's, a
+        // lair's); a character's live on its party slot as before.
+        const i = parseInt(el.dataset.idx), c = state.combatants[i]; if (!c) return;
+        const card = el.closest('.combatant-card');
+        const amtInp = card?.querySelector(`.hp-dmg-amt[data-idx="${i}"]`) || card?.querySelector('.hp-dmg-amt');
+        const amt = Math.max(0, parseInt(amtInp?.value) || 0);
+        const slot = c.isPC ? state.party.find(p => p.id === c.id) : null;
+        const cur = (slot ? slot.tempHp : c.tempHp) || 0;
+        const next = amt === 0 ? 0 : Math.max(cur, amt);
+        sktUndoable(c.name + (next ? ' has ' + next + ' temporary hit points' : '’s temporary hit points cleared'), () => {
+          if (slot) slot.tempHp = next; else state.combatants[i] = Object.assign({}, state.combatants[i], { tempHp: next });
+          save(); this._render(); panelDefs.party?._render?.();
+        });
       }
       else if(act==='hp-damage' || act==='hp-heal'){
         const i = parseInt(el.dataset.idx);
@@ -1881,7 +1897,8 @@ registerPanel('combat',{
           }
         }
       }
-      // Damage path — temp HP next (PC only, after beast pool).
+      // Damage path — temp HP next (after a beast pool): a character's on
+      // its party slot, a monster's on itself.
       if (c.isPC && remaining < 0){
         if (partySlot && (partySlot.tempHp || 0) > 0){
           const drain = Math.min(partySlot.tempHp, -remaining);
@@ -1889,6 +1906,11 @@ registerPanel('combat',{
           remaining += drain; // remaining is negative → becomes less negative
           if (drain) logParts.push(drain + ' temp');
         }
+      } else if (!c.isPC && remaining < 0 && (c.tempHp || 0) > 0){
+        const drain = Math.min(c.tempHp, -remaining);
+        c.tempHp -= drain;
+        remaining += drain;
+        if (drain) logParts.push(drain + ' temp');
       }
       const damageDealt = remaining < 0 ? -remaining : 0;
       if (remaining < 0){
