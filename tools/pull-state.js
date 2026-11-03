@@ -6,7 +6,9 @@
 // js/features/backup.js produces, so `shot.js --state` can boot the real
 // table instead of a synthetic fight:
 //
-//   node tools/pull-state.js
+//   node tools/pull-state.js                      (the 'main' campaign)
+//   node tools/pull-state.js --list               (every campaign under skt/c)
+//   node tools/pull-state.js --campaign <id> --out .state/other.json
 //   node tools/shot.js --state .state/live.json --eval "openPanel('turnview')"
 //
 // WHY THIS IS READ-ONLY, structurally and not by convention:
@@ -199,24 +201,43 @@ const ENTITY = {
   const out = outArg ? path.resolve(outArg) : OUT_FILE;
 
   const peek = (i => i >= 0 ? argv[i + 1] : null)(argv.indexOf('--peek'));
+  // Each campaign lives under skt/c/<id> (js/core/campaign.js, sktFbRoot).
+  // Plain `skt/` is the single campaign from before campaigns existed: it
+  // is still in the database, but nothing reads or writes it now, so
+  // pulling it gave a months-old table that looked live. The default is the
+  // site's own first campaign, 'main' (SKT_CAMPAIGN_MAIN); --campaign <id>
+  // pulls another (--list shows them); --root the old pre-campaign data.
+  const campaign = (i => i >= 0 ? argv[i + 1] : null)(argv.indexOf('--campaign')) || (argv.includes('--root') ? null : 'main');
+  const ROOT = campaign ? 'skt/c/' + campaign : 'skt';
 
   const cfg = readConfig();
   const tok = await getToken(cfg);
   if (!quiet) console.log('[pull] anonymous uid ' + tok.uid + (tok.fresh ? ' (new)' : ' (cached)'));
 
+  if (argv.includes('--list')){
+    const ids = Object.keys(JSON.parse(await get(cfg, tok.idToken, 'skt/c', 'shallow=true') || 'null') || {});
+    for (const id of ids){
+      const kids = Object.keys(JSON.parse(await get(cfg, tok.idToken, 'skt/c/' + id, 'shallow=true') || 'null') || {});
+      console.log('  ' + id + '  (' + kids.length + ' nodes: ' + kids.slice(0, 8).join(', ') + (kids.length > 8 ? ', …' : '') + ')');
+    }
+    if (!ids.length) console.log('  (no campaigns under skt/c)');
+    return;
+  }
+  if (!quiet) console.log('[pull] ' + (campaign ? 'campaign ' + campaign : 'the pre-campaign root skt/ (--root), which the site no longer uses'));
+
   // Diagnostic: print the shape of one node without writing a snapshot.
   // Still a GET, same as everything else here.
   if (peek){
-    const raw = await get(cfg, tok.idToken, 'skt/' + peek);
-    console.log('[peek] skt/' + peek + '  ' + raw.length + ' bytes');
+    const raw = await get(cfg, tok.idToken, ROOT + '/' + peek);
+    console.log('[peek] ' + ROOT + '/' + peek + '  ' + raw.length + ' bytes');
     console.log(raw.length > 3000 ? raw.slice(0, 3000) + '\n… truncated' : raw);
     return;
   }
 
   // Shallow first: list the top-level nodes without downloading a bestiary
   // to find out what exists.
-  const top = JSON.parse(await get(cfg, tok.idToken, 'skt', 'shallow=true') || 'null');
-  if (!top){ console.error('[pull] /skt is empty — nothing to pull.'); process.exit(1); }
+  const top = JSON.parse(await get(cfg, tok.idToken, ROOT, 'shallow=true') || 'null');
+  if (!top){ console.error('[pull] /' + ROOT + ' is empty — nothing to pull.'); process.exit(1); }
 
   const keys = {};
   const report = [];
@@ -235,7 +256,7 @@ const ENTITY = {
   const shadowed    = new Set(entityNodes.map(n => ENTITY[n].key));
 
   for (const node of plainNodes){
-    const raw = await get(cfg, tok.idToken, 'skt/' + node);
+    const raw = await get(cfg, tok.idToken, ROOT + '/' + node);
     const kb  = Math.round(raw.length / 1024);
     // Whole-key nodes hold the raw localStorage string, JSON-encoded once by
     // Firebase. Decode exactly one level — re-serializing would change bytes
@@ -255,7 +276,7 @@ const ENTITY = {
   }
 
   for (const node of entityNodes){
-    const raw  = await get(cfg, tok.idToken, 'skt/' + node);
+    const raw  = await get(cfg, tok.idToken, ROOT + '/' + node);
     const spec = ENTITY[node];
     keys[spec.key] = spec.assemble(flatten(JSON.parse(raw)));
     report.push(['  ' + spec.key, Math.round(raw.length / 1024) + ' KB', '(from ' + node + ')']);
