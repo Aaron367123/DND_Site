@@ -723,7 +723,7 @@ function cbMulticlassHtml(){
       + '<span class="cb-counter-ctl"><button class="btn small" data-cb-mclvl="' + i + ':-1"' + (p.level <= 1 ? ' disabled' : '') + ' aria-label="One level less">−</button>'
       + '<span>' + p.level + '</span><button class="btn small" data-cb-mclvl="' + i + ':1"' + (first.level <= 1 ? ' disabled' : '') + ' aria-label="One level more">+</button></span>'
       + '<button class="btn small" data-cb-mcdel="' + i + '">Remove</button></div>';
-    if (!ok) h += '<div class="cb-warn">Multiclassing asks for ' + cbEsc([sktMulticlassNeedText(R, b.cls), sktMulticlassNeedText(R, p.cls)].filter(Boolean).join('; ')) + '. The sheet allows it anyway.</div>';
+    if (!ok) h += '<div class="cb-warn">Multiclassing needs ' + cbEsc([sktMulticlassNeedText(R, b.cls), sktMulticlassNeedText(R, p.cls)].filter(Boolean).join('; ')) + ' — raise the score or remove this class.</div>';
     if (p.level >= c2.subclassLevel){
       const subs = c2.subclasses.filter(s => s.core || sktBookOk(b, Object.assign({ core: false }, s)) || s.shortName === p.subclass)
         .filter((s, k, a) => { const same = a.filter(x => x.shortName === s.shortName); const pick = sktRulesSubclass(c2, s.shortName); return same.includes(pick) ? s === pick : same[0] === s; })
@@ -748,8 +748,9 @@ function cbMulticlassHtml(){
           // character already has (a fighter with INT 8 can't become a wizard,
           // and a wizard with STR 8 and DEX 8 can't become a fighter).
           const need = [c.name].concat(parts.map(p => p.cls)).filter(n => !sktMulticlassOk(R, n, ab));
-          return '<option value="' + cbEsc(c.name) + '">' + cbEsc(c.name) + (need.length ? ' (needs ' + cbEsc([...new Set(need)].map(n => sktMulticlassNeedText(R, n)).join('; ')) + ')' : '') + '</option>';
-        }).join('') + '</select></label>';
+          return '<option value="' + cbEsc(c.name) + '"' + (need.length ? ' disabled' : '') + '>' + cbEsc(c.name) + (need.length ? ' — needs ' + cbEsc([...new Set(need)].map(n => sktMulticlassNeedText(R, n)).join('; ')) : '') + '</option>';
+        }).join('') + '</select></label>'
+      + '<div class="cb-dim">Multiclassing needs a score of 13 in each class’s main ability — this class’s and the new one’s.</div>';
   } else h += '<div class="cb-dim">Raise the character’s level on Basics to add another class.</div>';
   return h;
 }
@@ -2463,6 +2464,11 @@ function cbOnChange(e){
   if ('cbSpconc' in d){ CB.spConc = t.checked; return cbRender(); }
   if ('cbMcadd' in d){
     if (!v) return;
+    // Multiclassing's ability scores are a requirement, not advice: the new
+    // class's and every class the character has.
+    { const b0 = CB.build, ab = sktBuildAbilities(b0, CB.R);
+      const need = [v].concat(sktClassLevels(b0, CB.R).map(q => q.cls)).filter(n => !sktMulticlassOk(CB.R, n, ab));
+      if (need.length){ if (typeof showToast === 'function') showToast(v + ' needs ' + [...new Set(need)].map(n => sktMulticlassNeedText(CB.R, n)).join('; ') + ' to multiclass', { alert: true }); return cbSet(() => {}); } }
     return cbSet(b => {
       if (sktClassLevels(b, CB.R)[0].level <= 1) return;
       b.multi = (b.multi || []).concat([{ cls: v, subclass: '', level: 1, skills: [], cantrips: [], spells: [], spellbook: [] }]);

@@ -5939,6 +5939,11 @@
         const lv = q('[data-cb-in="level"]'); lv.value = '5'; lv.dispatchEvent(new Event('input', { bubbles: true }));
         click('[data-cb-step="class"]'); await sleep(30); click('[data-cb-cls="Fighter"]'); await sleep(30);
         ok('builder: the Class step offers another class', !!q('[data-cb-mcadd]'));
+        // Not without the scores: INT 12 can't take up wizard.
+        ok('builder: a class the character lacks the scores for can’t be chosen', !!q('[data-cb-mcadd] option[value="Wizard"][disabled]'));
+        set('[data-cb-mcadd]', 'Wizard'); await sleep(30);
+        ok('builder: and isn’t added', !(CB.build.multi || []).length);
+        CB.build.abilities.method = 'manual'; CB.build.abilities.base = { str: 15, dex: 14, con: 13, int: 13, wis: 10, cha: 8 }; cbSet(x => x); await sleep(30);
         set('[data-cb-mcadd]', 'Wizard'); await sleep(30);
         ok('builder: adding one takes a level from the first', CB.build.multi.length === 1 && sktClassLevels(CB.build, CB.R)[0].level === 4);
         click('[data-cb-mclvl="0:1"]'); await sleep(30);
