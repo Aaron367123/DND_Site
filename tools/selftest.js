@@ -12608,6 +12608,20 @@
       } catch(e){ ok('round 150 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); save(); }
     }
+    // -- Round 151: a pool whose name doesn't say what it's for gets a word of explanation --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        state.party.push({ id: 'r151', name: 'R151 Ranger', hp: 40, hpMax: 40, ac: 15, level: 6, resources: [{ name: 'Favored Enemy', type: 'pool', current: 2, max: 3, recharge: 'long' }, { name: 'Luck Points', type: 'pool', current: 3, max: 3, recharge: 'long' }] }); save();
+        await openCharSheet('r151'); await sleep(300);
+        const t = document.querySelector('[data-cs-tab="actions"]'); if (t){ t.click(); await sleep(200); }
+        const row = n => [...document.querySelectorAll('.cs-res')].find(r => r.querySelector('b') && r.querySelector('b').textContent === n);
+        ok('sheet: the 2024 Favored Enemy pool says it is free casts of Hunter’s Mark', !!row('Favored Enemy') && /free casts of Hunter’s Mark/.test(row('Favored Enemy').textContent), row('Favored Enemy') && row('Favored Enemy').textContent);
+        ok('sheet: and a pool that explains itself is left alone', !!row('Luck Points') && !/Hunter/.test(row('Luck Points').textContent));
+        if (typeof csClose === 'function') csClose(); await sleep(60);
+      } catch(e){ ok('round 151 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

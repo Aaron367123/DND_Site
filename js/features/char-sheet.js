@@ -28,6 +28,10 @@ const CS_TABS = [
 ];
 const CS_CONDITIONS = ['Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible',
                        'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious'];
+// A pool whose name doesn't say what it's for. The 2024 Ranger's Favored
+// Enemy is free casts of Hunter's Mark, no enemies to pick (that was 2014's,
+// which has no pool), and "Favored Enemy 3/3" read like a list left empty.
+const CS_RES_HINT = { 'Favored Enemy': 'free casts of Hunter’s Mark' };
 const CS_XP = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
 const CS_AB = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
 const CS_SKILLS = {
@@ -851,7 +855,7 @@ CS_TAB_RENDER.actions = pc => {
   if (res.length){
     h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(r.name) + '</b>'
       + '<span class="cs-pips">' + Array.from({ length: Math.min(r.max || 0, 20) }, (_, n) => '<button class="cs-pip' + (n < (r.current || 0) ? ' on' : '') + '" data-cs-res="' + i + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(r.name) + ' ' + (n + 1) + '"></button>').join('') + '</span>'
-      + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : /short/.test(r.recharge) ? 'short rest' : r.recharge === 'dawn' ? (r.note || 'at dawn') : 'long rest') : '') + '</span></div>').join('') + '</div>';
+      + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : /short/.test(r.recharge) ? 'short rest' : r.recharge === 'dawn' ? (r.note || 'at dawn') : 'long rest') : '') + (CS_RES_HINT[r.name] ? ' · ' + CS_RES_HINT[r.name] : '') + '</span></div>').join('') + '</div>';
   }
   if (!ro && pc.build){
     h += '<details class="cs-addcustom"><summary>+ Add a tracker or an action</summary>'
