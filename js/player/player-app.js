@@ -739,6 +739,8 @@ function paTurnAlert(cur, mine, until){
   if (mine){
     buzz([220, 90, 220]);
     paShowTurnBanner();
+    // Your token, under your finger: centred, and big enough to grab.
+    if (paTab === 'map') paCenterOnMe(true, true);
   } else {
     paHideTurnBanner();
     if (until === 1){
@@ -747,23 +749,32 @@ function paTurnAlert(cur, mine, until){
     }
   }
 }
+// The banner sits in the middle of the screen, which is exactly where the map
+// has just centred your token. It used to be a button that swallowed the
+// first touch, so reaching for your token closed the banner and nothing
+// else: you waited, or tapped twice. Now any touch closes it AND goes
+// through to whatever it was aimed at.
 let paBannerTimer = null;
+function paBannerTouch(){ paHideTurnBanner(); }
 function paShowTurnBanner(){
   paHideTurnBanner();
   const pc = paPc();
-  const b = document.createElement('button');
+  const b = document.createElement('div');
   b.id = 'pa-turn-alert';
   b.className = 'pa-turn-alert';
-  b.type = 'button';
+  b.setAttribute('role', 'alert');
   b.innerHTML = '<span class="pa-turn-alert-l">Your turn</span>'
     + (pc ? '<span class="pa-turn-alert-n">' + paEsc(pc.name) + '</span>' : '')
-    + '<span class="pa-turn-alert-h">Tap to close</span>';
-  b.addEventListener('click', paHideTurnBanner);
+    + '<span class="pa-turn-alert-h">Tap anywhere to close</span>';
   document.body.appendChild(b);
+  document.addEventListener('pointerdown', paBannerTouch, true);
+  document.addEventListener('keydown', paBannerTouch, true);
   paBannerTimer = setTimeout(paHideTurnBanner, 6000);
 }
 function paHideTurnBanner(){
   clearTimeout(paBannerTimer);
+  document.removeEventListener('pointerdown', paBannerTouch, true);
+  document.removeEventListener('keydown', paBannerTouch, true);
   document.getElementById('pa-turn-alert')?.remove();
 }
 
@@ -886,11 +897,26 @@ function paMyToken(){
   if (!pc || !B || !Array.isArray(B._tokens)) return null;
   return B._tokens.find(t => t.cid === pc.id) || B._tokens.find(t => t.isPC && t.label === pc.name) || null;
 }
-function paCenterOnMe(smooth){
+// zoomIn: on a big map fitted to a phone a square can be a few pixels, and
+// the finger-sized tap targets of neighbouring tokens cover each other —
+// reaching for your token picks up the one beside it. "Me" and the start of
+// your turn zoom in until a square is big enough to put a finger on. Only
+// in: a player who has zoomed in further keeps their zoom.
+const PA_MIN_SQUARE = 32;
+function paCenterOnMe(smooth, zoomIn){
   const t = paMyToken(); if (!t) return false;
   const host = document.getElementById('pa-screen');
-  const el = host && host.querySelector('.pa-mount .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
   const sc = host && host.querySelector('.pa-mount #map-scroll');
+  const B = panelDefs.battlemap;
+  if (zoomIn && sc && B && typeof B._screenScale === 'function'){
+    const sq = B._csScreen() * B._screenScale();
+    if (sq > 0 && sq < PA_MIN_SQUARE){
+      B._applyViewScale((B._viewScale || 1) * PA_MIN_SQUARE / sq);
+      B._isFitted = false; B._saveViewState();
+      smooth = false;
+    }
+  }
+  const el = host && host.querySelector('.pa-mount .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
   if (!el || !sc) return false;
   const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
   sc.scrollTo({ left: sc.scrollLeft + (r.left + r.width / 2) - (s.left + s.width / 2),
@@ -2104,7 +2130,7 @@ function paOnClick(e){
   const rm = e.target.closest('[data-pa-rmode]');
   if (rm){ paRollMode = rm.dataset.paRmode; paRenderScreen(); return; }
   if (e.target.closest('[data-pa-sktoggle]')){ paSkOpen = !paSkOpen; paRenderScreen(); return; }
-  if (e.target.closest('[data-pa-me]')){ paCenterOnMe(true); return; }
+  if (e.target.closest('[data-pa-me]')){ paCenterOnMe(true, true); return; }
   if (e.target.closest('[data-pa-undo]')){ if (typeof sktUndo === 'function') sktUndo(); paHideRoll(); paRender(); return; }
   if (e.target.closest('#pa-roll')){ paHideRoll(); return; }
   const ec = e.target.closest('[data-pa-econ]');
