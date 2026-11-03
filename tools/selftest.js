@@ -12057,7 +12057,7 @@
         const ol = rules({ cls: 'Wizard', level: 1, cantrips: ['Sacred Flame', 'Fire Bolt', 'Light'], spellbook: ['Magic Missile', 'Shield', 'Sleep', 'Mage Armor', 'Burning Hands', 'Cure Wounds'], spells: ['Magic Missile', 'Bless'] });
         ok('builder: spells off the class list, and one prepared that isn’t in the book', /Sacred Flame, Bless, Cure Wounds aren’t on the Wizard spell list/.test(ol) && /Bless prepared but not in the spellbook/.test(ol), ol);
         ok('builder: a warlock who changed patron keeps no patron spell', /Burning Hands isn’t on the Warlock spell list/.test(rules({ cls: 'Warlock', level: 1, subclass: 'Archfey', cantrips: ['Eldritch Blast', 'Mage Hand'], spells: ['Burning Hands', 'Hex'] })));
-        ok('builder: an Eldritch Knight with too many spells outside its schools', /1 spell\(s\) not abjuration or evocation too many/.test(rules({ cls: 'Fighter', level: 7, subclass: 'Eldritch Knight', spells: ['Shield', 'Sleep', 'Charm Person', 'Magic Missile', 'Burning Hands'] })));
+        ok('builder: an Eldritch Knight with too many spells outside its schools', /1 spell not abjuration or evocation too many/.test(rules({ cls: 'Fighter', level: 7, subclass: 'Eldritch Knight', spells: ['Shield', 'Sleep', 'Charm Person', 'Magic Missile', 'Burning Hands'] })));
         // And the side panel says so.
         rules({ cls: 'Rogue', level: 1, skills: ['stealth', 'insight', 'perception', 'deception', 'acrobatics'] }); cbRender(); await sleep(80);
         ok('builder: the summary lists it under Against the rules', /Against the rules/.test((document.querySelector('#cb-root .cb-rules') || {}).textContent || ''));
@@ -12170,7 +12170,7 @@
         const ko = [...document.querySelectorAll('#cb-root [data-cb-eqpick] option')].map(o => o.textContent);
         ok('builder: a kit’s “weapon of your choice” says what each one is', ko.some(t => /^Battleaxe — 1d8 slashing · 1d10 two hands/.test(t)), ko.slice(0, 2).join(' | '));
         fresh({ cls: 'Wizard', level: 4, species: 'Human', background: 'Sage', base: { int: 15, str: 13 }, multi: [{ cls: 'Fighter', level: 3, subclass: 'Eldritch Knight', spells: ['Sleep', 'Charm Person', 'Shield'] }] });
-        ok('builder: an Eldritch Knight as a second class keeps to its schools too', cbRuleBreaks().some(t => /Fighter: 1 spell\(s\) not abjuration or evocation too many/.test(t.what)));
+        ok('builder: an Eldritch Knight as a second class keeps to its schools too', cbRuleBreaks().some(t => /Fighter: 1 spell not abjuration or evocation too many/.test(t.what)));
         CB.step = 'spells'; cbRender(); await sleep(60);
         ok('builder: and a second class’s spells each open their text', document.querySelectorAll('#cb-root [data-cb-spin="cb-mcspell"]').length > 10);
         cbClose(); await sleep(60);

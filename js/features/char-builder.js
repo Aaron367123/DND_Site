@@ -1475,7 +1475,7 @@ function cbRuleBreaks(){
   if (!cls || !rec) return out;
   const add = (step, what) => out.push({ step, what, rule: true });
   const SK = k => SKT_SKILL_LABEL[k] || k, list = a => a.join(', ');
-  const over = (have, max, step, what) => { if (have > max) add(step, (have - max) + ' ' + String(what).replace(/(s)/g, have - max === 1 ? '' : 's') + ' too many (' + max + ' allowed)'); };
+  const over = (have, max, step, what) => { if (have > max) add(step, (have - max) + ' ' + String(what).replace(/\(s\)/g, have - max === 1 ? '' : 's') + ' too many (' + max + ' allowed)'); };
   // Skills.
   const skills = b.skills || [];
   over(skills.length, cls.skillChoice.count, 'skills', cls.name + ' skill' + (skills.length - cls.skillChoice.count === 1 ? '' : 's'));
