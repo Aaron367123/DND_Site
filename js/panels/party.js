@@ -150,6 +150,16 @@ registerPanel('party',{
         showToast('Circle Magic ' + (circleOn ? 'off: the Circle spell actions are hidden from the sheets' : 'on: spellcasters’ sheets show the Circle spell actions'));
       } });
     }
+    // Ammunition: counted for everyone, or for no one.
+    if (state.party.some(c => ((c.sheet || {}).attacks || []).some(a => (a.props || []).includes('A')))){
+      const ammoOn = typeof sktAmmoOn !== 'function' || sktAmmoOn();
+      items.push({ label: 'Ranged attacks use ammunition: ' + (ammoOn ? 'on — turn off' : 'off — turn on'), icon: 'i-target', run: () => {
+        if (!state.settings) state.settings = {};
+        if (ammoOn) state.settings.useAmmunition = false; else delete state.settings.useAmmunition;
+        save(); this._render();
+        showToast(ammoOn ? 'Ammunition off: ranged attacks no longer take arrows or bolts from anyone’s inventory' : 'Ammunition on: each ranged attack takes a piece from the inventory');
+      } });
+    }
     // A character exported from this or another campaign.
     if (typeof sktImportCharacter === 'function') items.push({ label:'Import a character…', icon:'i-upload', run: () => {
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';

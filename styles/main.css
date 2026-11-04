@@ -5983,9 +5983,9 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 #cs-root .cs-side h5::after, #cs-root .cs-side-tab h5::after { transform:scaleX(-1); }
 #cs-root .cs-pane h4, #cs-root .cs h4 { text-transform:uppercase; letter-spacing:.1em; font-size:var(--fs-sm); }
 #cs-root .cs-pane h4::after { content:''; flex:1; height:1px; background:linear-gradient(90deg, var(--fx-line), transparent); }
-/* "Use ammunition", at the right end of the Attacks heading, past its rule. */
-#cs-root .cs-ammotog { order:3; display:inline-flex; align-items:center; gap:5px; font-size:var(--fs-sm); font-weight:normal; text-transform:none; letter-spacing:0; color:var(--text-dim); cursor:pointer; white-space:nowrap; }
-#cs-root .cs-ammotog input { margin:0; }
+/* Drinking a potion: roll it here, or type what was rolled at the table. */
+#cs-root .cs-drink { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:6px 0 2px; padding:6px 8px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--panel-2); font-size:var(--fs-sm); }
+#cs-root .cs-drinkamt { width:72px; }
 
 /* Tabs as D&D Beyond sets them: small capitals, a rule under the open one. */
 #cs-root .cs-tab { text-transform:uppercase; letter-spacing:.08em; font-size:var(--fs-sm); font-weight:600; }

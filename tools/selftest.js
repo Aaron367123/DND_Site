@@ -13426,46 +13426,60 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 172 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
-    // -- Round 173: a toggle for ranged attacks using ammunition; drinking a healing potion --
+    // -- Round 173: ammunition is one campaign setting; a potion heals by the roll, the app's or the table's --
     if (!PLAYER){
-      const party0 = JSON.stringify(state.party), loot0 = localStorage.getItem(CS_LOOT_KEY);
+      const party0 = JSON.stringify(state.party), set0 = JSON.stringify(state.settings || {}), loot0 = localStorage.getItem(CS_LOOT_KEY);
       try {
         const R = await sktRulesLoad('2024');
         const rec = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R173', cls: 'Ranger', level: 3, species: 'Human', background: 'Guide' }), R), { id: 'r173', hp: 5 });
-        rec.build.items = [{ name: 'Potion of Healing', qty: 2 }, { name: 'Potion of Greater Healing', qty: 1 }];
+        rec.build.items = [{ name: 'Potion of Healing', qty: 3 }, { name: 'Potion of Greater Healing', qty: 1 }];
         state.party.push(Object.assign(sktComputeCharacter(rec.build, R, rec), { id: 'r173', hp: 5 })); save();
         const P = () => state.party.find(p => p.id === 'r173');
         const arrows = () => csItems(P()).filter(m => /arrow/i.test(m.name)).reduce((n, m) => n + (m.qty || 1), 0);
         await openCharSheet('r173'); await sleep(300);
         document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(400);
         const shoot = async () => { const b = [...document.querySelectorAll('#cs-root [data-cs-atk]')].find(x => /Longbow/.test((x.closest('.cs-atk, tr') || {}).textContent || '')); if (b){ b.click(); await sleep(250); } return !!b; };
-        const tog = () => document.querySelector('#cs-root [data-cs-ammoauto]');
-        ok('ammunition: the Attacks heading has a "Use ammunition" toggle, on by default', !!tog() && tog().checked);
+        ok('ammunition: no per-character checkbox on the sheet', !document.querySelector('#cs-root [data-cs-ammoauto]'));
         const a0 = arrows(); await shoot();
-        ok('ammunition: on, a Longbow attack takes an arrow', arrows() === a0 - 1, a0 + ' → ' + arrows());
-        tog().click(); await sleep(250);
+        ok('ammunition: on (the default), a Longbow attack takes an arrow', arrows() === a0 - 1, a0 + ' → ' + arrows());
+        // The Party menu's switch, for everyone.
+        openPanel('party'); panelDefs.party._render(); await sleep(150);
+        const item = () => panelDefs.party.menuItems().find(x => /use ammunition/i.test(x.label));
+        ok('ammunition: the Party menu has the switch, reading on', !!item() && /: on/.test(item().label), item() && item().label);
+        item().run(); await sleep(200);
+        ok('ammunition: turning it off there sets it for the campaign', state.settings.useAmmunition === false && /: off/.test(item().label));
+        csRender(); await sleep(200);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(250);
         const a1 = arrows(); await shoot();
-        ok('ammunition: off, it doesn’t — and the row says the arrows aren’t counted', P().ammoAuto === false && arrows() === a1 && /not counted/.test(document.querySelector('#cs-root').textContent), a1 + ' → ' + arrows());
-        tog().click(); await sleep(250);
-        ok('ammunition: back on, the setting clears', P().ammoAuto === undefined && tog().checked);
+        ok('ammunition: with the campaign setting off, it doesn’t — and the row says the arrows aren’t counted', !sktAmmoOn() && arrows() === a1 && /not counted/.test(document.querySelector('#cs-root').textContent), a1 + ' → ' + arrows());
+        delete state.settings.useAmmunition; save(); csRender(); await sleep(150);
+        ok('ammunition: and back on with the setting cleared', sktAmmoOn() && !/not counted/.test(document.querySelector('#cs-root').textContent));
         // Potions: the magic catalogue loads for them, and Drink heals and uses one up.
         let g = 0; while (!CS.magic && g++ < 40) await sleep(100);
         csRender(); await sleep(200);
         const drink = n => document.querySelector('#cs-root [data-cs-drink="' + n + '"]');
         ok('potion: Potion of Healing has Drink · 2d4+2, and Greater Healing 4d4+4', !!drink('Potion of Healing') && /2d4\+2/.test(drink('Potion of Healing').textContent) && !!drink('Potion of Greater Healing') && /4d4\+4/.test(drink('Potion of Greater Healing').textContent),
            [...document.querySelectorAll('#cs-root [data-cs-drink]')].map(b => b.textContent).join(' | '));
-        const hp0 = P().hp; drink('Potion of Healing').click(); await sleep(400);
-        const pot = () => ((P().build.items || []).find(m => m.name === 'Potion of Healing') || {}).qty;
-        ok('potion: drinking heals 4–10 and leaves one', P().hp - hp0 >= 4 && P().hp - hp0 <= 10 && pot() === 1, (P().hp - hp0) + ' healed, ' + pot() + ' left');
+        const pot = () => ((P().build.items || []).find(m => m.name === 'Potion of Healing') || csItems(P()).find(m => m.name === 'Potion of Healing') || {}).qty;
+        const hp0 = P().hp; drink('Potion of Healing').click(); await sleep(250);
+        ok('potion: Drink doesn’t heal by itself — it asks: roll it here, or the total rolled at the table', P().hp === hp0 && pot() === 3 && !!document.querySelector('#cs-root [data-cs-drinkroll]') && !!document.querySelector('#cs-root [data-cs-drinkamt]'), JSON.stringify([P().hp, hp0, pot()]));
+        document.querySelector('#cs-root [data-cs-drinkx]').click(); await sleep(200);
+        ok('potion: Cancel closes it, nothing spent', !document.querySelector('#cs-root [data-cs-drinkamt]') && P().hp === hp0 && pot() === 3);
+        drink('Potion of Healing').click(); await sleep(250);
+        document.querySelector('#cs-root [data-cs-drinkamt]').value = '7'; document.querySelector('#cs-root [data-cs-drinkgo]').click(); await sleep(400);
+        ok('potion: a total rolled at the table heals exactly that, and uses one up', P().hp === hp0 + 7 && pot() === 2, JSON.stringify([P().hp - hp0, pot()]));
+        const hp2 = P().hp; drink('Potion of Healing').click(); await sleep(250);
+        document.querySelector('#cs-root [data-cs-drinkroll]').click(); await sleep(400);
+        ok('potion: Roll it rolls 2d4+2 (4–10) and uses one more', P().hp - hp2 >= 4 && P().hp - hp2 <= 10 && pot() === 1, (P().hp - hp2) + ' healed, ' + pot() + ' left');
         // A claimed potion from the party loot.
         const L = csLootRead(); L.items = (L.items || []).concat([{ id: 'r173p', name: 'Potion of Healing', qty: 3, assignedTo: 'r173' }]); localStorage.setItem(CS_LOOT_KEY, JSON.stringify(L));
         document.querySelector('#cs-root [data-cs-tab="inventory"]').click(); await sleep(300);
         const lb = document.querySelector('#cs-root [data-cs-lootdrink="r173p"]');
-        const hp1 = P().hp; if (lb){ lb.click(); await sleep(400); }
+        const hp1 = P().hp; if (lb){ lb.click(); await sleep(250); const r = document.querySelector('#cs-root [data-cs-drinkroll]'); if (r){ r.click(); await sleep(400); } }
         ok('potion: a claimed one in the party loot can be drunk too — healed, one fewer in the loot', !!lb && P().hp > hp1 && (csLootRead().items.find(x => x.id === 'r173p') || {}).qty === 2, JSON.stringify([!!lb, hp1, P().hp, (csLootRead().items.find(x => x.id === 'r173p') || {}).qty]));
         if (typeof closeCharSheet === 'function') closeCharSheet();
       } catch(e){ ok('round 173 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { state.party = JSON.parse(party0); if (loot0 == null) localStorage.removeItem(CS_LOOT_KEY); else localStorage.setItem(CS_LOOT_KEY, loot0); save(); }
+      finally { state.party = JSON.parse(party0); state.settings = JSON.parse(set0); if (loot0 == null) localStorage.removeItem(CS_LOOT_KEY); else localStorage.setItem(CS_LOOT_KEY, loot0); save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {

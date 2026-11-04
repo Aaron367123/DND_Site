@@ -1827,6 +1827,9 @@ function sktAskBardic(opts){
 // is on, but it shows only when the DM has switched it on for the campaign
 // (party ⋯ menu), so a table that doesn't use it isn't handed seven actions
 // per caster. Filtered where shown, so switching it is instant both ways.
+// Whether a ranged attack takes a piece of ammunition from the inventory: one
+// setting for the whole table (the Party menu), on unless the DM turns it off.
+function sktAmmoOn(){ return !(typeof state !== 'undefined' && state.settings && state.settings.useAmmunition === false); }
 function sktCircleMagicOn(){ return !!(typeof state !== 'undefined' && state.settings && state.settings.circleMagic); }
 function sktShownActivations(list){
   const a = Array.isArray(list) ? list : [];

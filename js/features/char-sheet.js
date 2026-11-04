@@ -818,11 +818,7 @@ CS_TAB_RENDER.actions = pc => {
     const same = atks.find(x => x.k === k);
     if (same) same.n++; else atks.push(Object.assign({}, a, { k, i, n: 1 }));
   });
-  // Whether a ranged attack spends a piece of ammunition: on by default, off
-  // for a table that doesn't count arrows. Shown only with a weapon that uses it.
-  const ammoTog = (sh.attacks || []).some(a => (a.props || []).includes('A') && csAmmoFor(a))
-    ? '<label class="cs-ammotog" title="Take a piece of ammunition from the inventory with each ranged attack"><input type="checkbox" data-cs-ammoauto' + (pc.ammoAuto === false ? '' : ' checked') + (ro ? ' disabled' : '') + '> Use ammunition</label>' : '';
-  let h = '<div class="cs-asec" data-k="attack"><h4>Attacks' + (sh.attacksPerAction > 1 ? ' <span class="cb-dim">' + sh.attacksPerAction + ' per Attack action</span>' : '') + ammoTog + '</h4>';
+  let h = '<div class="cs-asec" data-k="attack"><h4>Attacks' + (sh.attacksPerAction > 1 ? ' <span class="cb-dim">' + sh.attacksPerAction + ' per Attack action</span>' : '') + '</h4>';
   h += atks.length ? '<div class="cs-atks"><div class="cs-atk cs-atk-h"><span>Name</span><span>Hit / DC</span><span>Damage</span><span>Notes</span></div>'
     + atks.map(a => { const i = a.i; return '<div class="cs-atk"><b>' + csE(sktAtkLabel(a)) + (a.n > 1 ? ' <span class="cs-atk-x">×' + a.n + '</span>' : '') + '</b>'
       + (/^[+-]?\d+$/.test(String(a.atkBonus || '').trim()) ? '<button class="btn small" data-cs-atk="' + i + '">' + csE(a.atkBonus) + '</button>' : '<span>' + csE(a.atkBonus || '') + '</span>')
@@ -1214,13 +1210,14 @@ function csOnClick(e){
     if (typeof sktUndoable === 'function') return sktUndoable((sign < 0 ? 'Took ' : 'Healed ') + n, run, CS_QUIET);
     return run();
   }
-  if (d.csDrink){
-    const items = csItems(pc), at = items.findIndex(x => x.name === d.csDrink && (x.qty || 1) > 0); if (at < 0) return;
-    const m = items[at], dice = csPotionHeal(m, csItemInfo(m)); if (!dice) return;
-    const r = Object.assign({ kind: 'dmg', label: m.name + ' heals' }, sktDamageRoll(dice, false)); r.type = 'hit points';
-    csItemsEdit('Drank ' + m.name, l => { const x = l[at]; if (!x) return; x.qty = (x.qty || 1) - 1; if (x.qty <= 0) l.splice(at, 1); });
-    panelDefs.party._applyHpDelta(csIdx(), r.total, null); csLog(r); csCommit();
-    return;
+  if (d.csDrink){ CS.drink = CS.drink === 'i:' + d.csDrink ? null : 'i:' + d.csDrink; return csRender(); }
+  if (d.csDrinkx){ CS.drink = null; return csRender(); }
+  if (d.csDrinkroll || d.csDrinkgo){
+    const key = CS.drink || ''; if (!key) return;
+    let typed = null;
+    if (d.csDrinkgo){ typed = parseInt((document.querySelector('#cs-root [data-cs-drinkamt]') || {}).value, 10); if (!(typed >= 0)){ if (typeof showToast === 'function') showToast('Type the hit points rolled, or press Roll it'); return; } }
+    CS.drink = null;
+    return csDrink(pc, key, typed);
   }
   if (d.cs === 'insp') return csEdit(pc.inspiration ? 'Spent Heroic Inspiration' : 'Heroic Inspiration', p => { p.inspiration = !p.inspiration; }, CS_QUIET);
   if (d.cs === 'bardic'){
@@ -1440,10 +1437,10 @@ function csAmmoFor(a){
 function csAmmoLeft(pc, a){
   const re = csAmmoFor(a); if (!re) return '';
   const n = csItems(pc).filter(x => re.test(String(x.name).toLowerCase())).reduce((t, x) => t + (x.qty || 1), 0);
-  return n + ' ' + (re.source === 'arrow' ? 'arrows' : re.source + 's') + (pc.ammoAuto === false ? ' (not counted)' : ' left');
+  return n + ' ' + (re.source === 'arrow' ? 'arrows' : re.source + 's') + (!sktAmmoOn() ? ' (not counted)' : ' left');
 }
 function csSpendAmmo(pc, a){
-  if (CS.readOnly || pc.ammoAuto === false || !(a.props || []).includes('A')) return;
+  if (CS.readOnly || !sktAmmoOn() || !(a.props || []).includes('A')) return;
   const re = csAmmoFor(a); if (!re) return;
   const items = csItems(pc), at = items.findIndex(x => re.test(String(x.name).toLowerCase()) && (x.qty || 1) > 0);
   if (at < 0){ if (typeof showToast === 'function') showToast('No ammunition for the ' + a.name + ' in the inventory'); return; }
@@ -1486,7 +1483,6 @@ function csOnChange(e){
   if (!CS) return;
   const t = e.target, d = t.dataset, pc = csPc(); if (!pc) return;
   if ('csDtype' in d){ CS.dtype = t.value; return; }
-  if ('csAmmoauto' in d && !CS.readOnly) return csEdit(t.checked ? 'Counting ammunition' : 'Not counting ammunition', p => { if (t.checked) delete p.ammoAuto; else p.ammoAuto = false; }, CS_QUIET);
   if ('csCastlvl' in d){ CS.castLvl = Object.assign({}, CS.castLvl, { [d.csCastlvl]: +t.value }); csRender(); return; }
   if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; }, CS_QUIET);
   if ('csCskill' in d && !CS.readOnly){
@@ -2309,6 +2305,37 @@ function csPotionHeal(m, i){
   const x = /regains? (\d+d\d+(?:\s*\+\s*\d+)?) hit points/i.exec((i && i.text) || '');
   return x ? x[1].replace(/\s+/g, '') : '';
 }
+// Drink it: heal by the roll (the app's, or the total typed), and one potion
+// fewer — from the character's own things ('i:Name') or the loot ('l:id').
+function csDrink(pc, key, typed){
+  const own = key.startsWith('i:'), id = key.slice(2);
+  let m, take;
+  if (own){
+    const items = csItems(pc), at = items.findIndex(x => x.name === id && (x.qty || 1) > 0); if (at < 0) return;
+    m = items[at];
+    take = () => csItemsEdit('Drank ' + m.name, l => { const x = l[at]; if (!x) return; x.qty = (x.qty || 1) - 1; if (x.qty <= 0) l.splice(at, 1); });
+  } else {
+    const L = csLootRead(), x = (L.items || []).find(y => y.id === id); if (!x) return;
+    m = csLootAsItem(x);
+    take = () => { const L2 = csLootRead(), y = (L2.items || []).find(z => z.id === id); if (!y) return; const q = Math.max(1, +y.qty || 1); if (q > 1) y.qty = q - 1; else L2.items = L2.items.filter(z => z !== y); csLootWrite(L2); };
+  }
+  const dice = csPotionHeal(m, csItemInfo(m)); if (!dice) return;
+  const r = typed != null ? { kind: 'dmg', label: m.name + ' heals', total: typed, detail: typed + ' (rolled at the table)' }
+    : Object.assign({ kind: 'dmg', label: m.name + ' heals' }, sktDamageRoll(dice, false));
+  r.type = 'hit points';
+  take();
+  panelDefs.party._applyHpDelta(csIdx(), r.total, null); csLog(r); csCommit();
+}
+// Drinking a potion, once Drink is pressed: roll it here, or type the total
+// rolled at the table — then it heals and the potion is used up. Drink healed
+// straight away with the app's own roll.
+function csDrinkHtml(key, dice){
+  if (CS.drink !== key || !dice) return '';
+  return '<div class="cs-drink" data-cs-drinkkey="' + csE(key) + '"><span>Heals <b>' + csE(dice) + '</b>:</span>'
+    + '<button class="btn small cs-heal" data-cs-drinkroll="1">🎲 Roll it</button>'
+    + '<span class="cb-dim">or what you rolled</span><input type="number" min="0" class="cs-drinkamt" data-cs-drinkamt aria-label="Hit points rolled" placeholder="Total">'
+    + '<button class="btn small" data-cs-drinkgo="1">Heal</button><button class="btn small" data-cs-drinkx="1">Cancel</button></div>';
+}
 function csItemActionsHtml(pc){
   const list = csItemActions(pc); if (!list.length) return '';
   const ro = CS.readOnly;
@@ -2344,8 +2371,8 @@ function csItemActionsHtml(pc){
       + pools.map(k => { const u = csItemUses(pc, m, k), [per, n] = k.split(':'); return csItemPips(pc, m, u) + '<span class="cb-dim">' + n + '/' + per + '</span>'; }).join('')
       + (ab.xdmg ? '<button class="btn small" data-cs-xdmg="' + csE(m.name + '|' + ab.xdmg) + '" title="Roll the extra damage">' + ICO('i-dice') + ' ' + csE(ab.xdmg) + '</button>' : '')
       // A healing potion: drink it — roll, heal, one fewer in the bag.
-      + (csPotionHeal(m, i) && !ro ? '<button class="btn small cs-heal" data-cs-drink="' + csE(m.name) + '" title="Drink it: roll the healing and take one from the inventory">Drink · ' + csE(csPotionHeal(m, i)) + (m.qty > 1 ? ' <span class="cb-dim">×' + m.qty + '</span>' : '') + '</button>' : '')
-      + '</div>'
+      + (csPotionHeal(m, i) && !ro ? '<button class="btn small cs-heal" data-cs-drink="' + csE(m.name) + '" title="Drink it: roll the healing here, or type what you rolled">Drink · ' + csE(csPotionHeal(m, i)) + (m.qty > 1 ? ' <span class="cb-dim">×' + m.qty + '</span>' : '') + '</button>' : '')
+      + '</div>' + csDrinkHtml('i:' + m.name, csPotionHeal(m, i))
       + (open && i.text ? '<div class="cs-act-d">' + csE(i.text).replace(/\n/g, '<br>') + '</div>'
         : !spells.length && ab.para ? '<div class="cs-act-d">' + csE(ab.para) + ' <button class="cs-linkbtn" data-cs-open="' + csE('ia:' + m.name) + '">more</button></div>' : '')
       + (fx.line.length ? '<div class="cs-mi-fx">' + csE(fx.line.join(' · ')) + '</div>' : '')
@@ -3041,10 +3068,10 @@ function csLootRows(pc){
       + '<span class="cs-qty">' + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':-1" aria-label="One fewer"' + (q <= 1 ? ' disabled' : '') + '>−</button>') + '×' + q
       + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':1" aria-label="One more">+</button>') + '</span>'
       + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
-      + (!ro && mine && CS.magic && csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it))) ? '<button class="btn small cs-heal" data-cs-lootdrink="' + csE(it.id) + '" title="Drink one: roll the healing">Drink · ' + csE(csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) + '</button>' : '')
+      + (!ro && mine && CS.magic && csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it))) ? '<button class="btn small cs-heal" data-cs-lootdrink="' + csE(it.id) + '" title="Drink one: roll the healing here, or type what you rolled">Drink · ' + csE(csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) + '</button>' : '')
       + (ro ? '' : '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Give it to the party loot (nobody\u2019s)">↩ To party loot</button>'
         + '<button class="btn small" data-cs-lootdel="' + csE(it.id) + '" aria-label="Remove ' + csE(it.name) + '" title="Used up, sold or lost: remove it">✕</button>')
-      + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
+      + '</div>' + (CS.drink === 'l:' + it.id ? csDrinkHtml('l:' + it.id, csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) : '') + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
   }).join('');
 }
 function csLootClick(d, pc){
@@ -3064,13 +3091,7 @@ function csLootClick(d, pc){
   }
   if (d.csLootdrink != null){
     if (CS.readOnly) return true;
-    const L = csLootRead(), x = L.items.find(y => y.id === d.csLootdrink); if (!x) return true;
-    const m = csLootAsItem(x), dice = csPotionHeal(m, csItemInfo(m)); if (!dice) return true;
-    const r = Object.assign({ kind: 'dmg', label: x.name + ' heals' }, sktDamageRoll(dice, false)); r.type = 'hit points';
-    const q = Math.max(1, +x.qty || 1);
-    if (q > 1) x.qty = q - 1; else L.items = L.items.filter(y => y !== x);
-    csLootWrite(L);
-    panelDefs.party._applyHpDelta(csIdx(), r.total, null); csLog(r); csCommit();
+    CS.drink = CS.drink === 'l:' + d.csLootdrink ? null : 'l:' + d.csLootdrink; csRender();
     return true;
   }
   if (d.csLootqty != null){
