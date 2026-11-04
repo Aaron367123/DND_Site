@@ -13753,6 +13753,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 183 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelectorAll('.modal-backdrop').forEach(e => e.remove()); state.party = JSON.parse(party0); if (loot0 == null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', loot0); if (panelDefs.loot && panelDefs.loot._loot) { try { panelDefs.loot._loot = JSON.parse(loot0 || '{}'); } catch(e){} } save(); }
     }
+    // -- Round 184: a feat's free cast is used up until a rest — a long rest, or a short one for Aberrant Dragonmark --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r184', cls: 'Druid', level: 4, species: 'Human', background: 'Sage',
+          asi: { 4: { type: 'feat', feat: 'Aberrant Dragonmark' } },
+          featChoices: { 'Magic Initiate': { spells: ['Light', 'Mage Hand', 'Sleep'], spellAbility: 'wis' }, 'Aberrant Dragonmark': { spells: ['Fire Bolt', 'Shield'] } } });
+        const rec = Object.assign(sktComputeCharacter(b, R), { id: 'r184' });
+        state.party = [rec]; save();
+        const fs = rec.sheet.featSpells || [];
+        const ad = fs.find(g => g.feat === 'Aberrant Dragonmark') || {}, mi = fs.find(g => /Magic Initiate/.test(g.feat)) || {};
+        ok('free casts: Aberrant Dragonmark\'s spell is free once per short or long rest, Magic Initiate\'s once per long rest',
+           (ad.daily || []).includes('Shield') && (ad.short || []).includes('Shield') && (mi.daily || []).includes('Sleep') && !(mi.short || []).length,
+           JSON.stringify(fs));
+        await openCharSheet('r184'); await sleep(500);
+        document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(400);
+        const freeBtn = n => document.querySelector('#cs-root [data-cs-cast="' + n + ':free"]');
+        const usedBtn = n => document.querySelector('#cs-root [data-cs-freeback="' + n + '"]');
+        const P = () => state.party.find(p => p.id === 'r184');
+        ok('free casts: each has a Free button to start with', !!freeBtn('Shield') && !!freeBtn('Sleep'), [!!freeBtn('Shield'), !!freeBtn('Sleep')].join(' '));
+        const slots0 = JSON.stringify(P().sheet.spellSlots);
+        freeBtn('Shield').click(); await sleep(300);
+        freeBtn('Sleep').click(); await sleep(300);
+        ok('free casts: casting free uses it up and spends no slot', !freeBtn('Shield') && !!usedBtn('Shield') && !freeBtn('Sleep') && JSON.stringify(P().sheet.spellSlots) === slots0 && P().freeUsed && P().freeUsed.Shield,
+           JSON.stringify([!!freeBtn('Shield'), !!usedBtn('Shield'), P().freeUsed]));
+        csClose && csClose();
+        panelDefs.party._shortRestOne(P(), 0); save();
+        ok('free casts: a short rest gives back Aberrant Dragonmark\'s, not Magic Initiate\'s', !(P().freeUsed || {}).Shield && (P().freeUsed || {})['Sleep'], JSON.stringify(P().freeUsed));
+        panelDefs.party._longRestOne(P(), 0); save();
+        ok('free casts: a long rest gives back the rest', !P().freeUsed, JSON.stringify(P().freeUsed));
+        await openCharSheet('r184'); await sleep(500);
+        document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(400);
+        freeBtn('Sleep').click(); await sleep(300);
+        usedBtn('Sleep').click(); await sleep(300);
+        ok('free casts: a used one can be given back by hand', !!freeBtn('Sleep') && !P().freeUsed, JSON.stringify(P().freeUsed));
+        csClose && csClose();
+      } catch(e){ ok('round 184 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

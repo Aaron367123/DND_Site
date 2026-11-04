@@ -1688,6 +1688,12 @@ function sktSpellsMatching(R, filter, build){
     return true;
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
+// The note for a grant's free casts: once per long rest, or per short or long rest.
+function _sktFreeNote(g){
+  const short = new Set(g.short || []), longs = (g.daily || []).filter(n => !short.has(n));
+  return (longs.length ? ' — ' + longs.join(', ') + ' once per long rest without a spell slot' : '')
+    + (short.size ? ' — ' + [...short].join(', ') + ' once per short or long rest without a spell slot' : '');
+}
 function _sktGrantItems(block){
   const out = [];
   const walk = (node, info, depth) => {
@@ -1702,7 +1708,9 @@ function _sktGrantItems(block){
     // The first keys under a kind are the character level it arrives at
     // ("3": …), or "_" for from the start.
     if (node && typeof node === 'object') Object.keys(node).forEach(k => walk(node[k], {
-      ...info, daily: info.daily || k === 'daily',
+      // "rest": once per short or long rest (Aberrant Dragonmark, a
+      // Firbolg's magic); "daily": once per long rest.
+      ...info, daily: info.daily || k === 'daily' || k === 'rest', short: info.short || k === 'rest',
       minLevel: depth === 0 && /^\d+$/.test(k) ? +k : info.minLevel,
     }, depth + 1));
   };
@@ -1738,22 +1746,22 @@ function _sktSpellGrant(R, build, name, spec, ch, hint){
   }
   const picked = Array.isArray(ch.spells) ? ch.spells : [];
   const used = new Set();
-  const choices = [], spells = [], daily = [], expanded = [];
+  const choices = [], spells = [], daily = [], short = [], expanded = [];
   if (block) block.items.forEach(it => {
     if (it.kind === 'expanded'){ if (it.fixed) expanded.push((sktRulesSpell(R, it.fixed) || { name: _sktTitle(it.fixed) }).name); return; }
     if (it.fixed){
       const sp = sktRulesSpell(R, it.fixed);
       const n = sp ? sp.name : _sktTitle(it.fixed);
-      spells.push(n); if (it.daily) daily.push(n);
+      spells.push(n); if (it.daily) daily.push(n); if (it.short) short.push(n);
       return;
     }
     const options = it.from ? it.from.map(n => (sktRulesSpell(R, n) || { name: _sktTitle(n) }).name) : sktSpellsMatching(R, it.choose, build).map(s => s.name);
     const mine = picked.filter(n => options.includes(n) && !used.has(n)).slice(0, it.count);
-    mine.forEach(n => { used.add(n); spells.push(n); if (it.daily) daily.push(n); });
+    mine.forEach(n => { used.add(n); spells.push(n); if (it.daily) daily.push(n); if (it.short) short.push(n); });
     choices.push({ filter: it.choose, count: it.count, options, picked: mine, daily: it.daily, minLevel: it.minLevel || 0 });
   });
   const missing = (block ? 0 : 1) + (abilityChoices && !ability ? 1 : 0) + choices.reduce((n, c) => n + Math.max(0, c.count - c.picked.length), 0);
-  return { feat: name, blocks, block, listFixed: blocks.length === 1 || !!hint, ability, abilityChoices, choices, spells, daily, expanded, missing };
+  return { feat: name, blocks, block, listFixed: blocks.length === 1 || !!hint, ability, abilityChoices, choices, spells, daily, short, expanded, missing };
 }
 function sktFeatSpellGrant(R, build, featName){
   const f = sktRulesFeat(R, featName);
@@ -2160,7 +2168,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-04d';
+const SKT_RULES_REV = '2026-11-04e';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -2897,7 +2905,7 @@ function sktComputeCharacter(build, R, prior){
     spGrant.spells.forEach(s => { if (!spellNames.includes(s)) spellNames.push(s); });
     const ab = spGrant.ability ? ' (' + (SKT_AB_NAME[spGrant.ability] || spGrant.ability) + ')' : '';
     _fxNote(ctx, spGrant.label + ab + ': ' + spGrant.spells.join(', ')
-      + (spGrant.daily.length ? ' — ' + spGrant.daily.join(', ') + ' once per long rest without a spell slot' : ''));
+      + _sktFreeNote(spGrant));
   }
   const featSpells = sktFeatSpells(build, R).filter(g => g.spells.length);
   // A wizard subclass's chosen spells (2024 Savant) are written in the spellbook, not prepared.
@@ -2906,7 +2914,7 @@ function sktComputeCharacter(build, R, prior){
     g.spells.forEach(s => { if (g.cls === 'wizard' && ((sktRulesSpell(R, s) || {}).level || 0) > 0){ toBook.push(s); return; } if (!spellNames.includes(s)) spellNames.push(s); });
     const ab = g.ability ? ' (' + (SKT_AB_NAME[g.ability] || g.ability) + ')' : '';
     _fxNote(ctx, g.feat + ab + ': ' + g.spells.join(', ')
-      + (g.daily.length ? ' — ' + g.daily.join(', ') + ' once per long rest without a spell slot' : ''));
+      + _sktFreeNote(g));
   });
   // The states that are on (Rage, Bladesong, Shield, Bless…) change the
   // numbers below.
@@ -3227,8 +3235,8 @@ function sktComputeCharacter(build, R, prior){
       spellSlots, spellSaveDc: sc ? sc.dc : null, spellAtkBonus: sc ? sktSigned(sc.attack) : null,
       spellAbility: sc ? sc.ability : null,
       spells: spellNames, alwaysPrepared: always, arcanum,
-      spellbook, featSpells: featSpells.map(g => ({ feat: g.feat, ability: g.ability, spells: g.spells, daily: g.daily })),
-      speciesSpells: spGrant && spGrant.spells.length ? { ability: spGrant.ability, spells: spGrant.spells, daily: spGrant.daily } : null,
+      spellbook, featSpells: featSpells.map(g => ({ feat: g.feat, ability: g.ability, spells: g.spells, daily: g.daily, short: (g.short || []).length ? g.short : undefined })),
+      speciesSpells: spGrant && spGrant.spells.length ? { ability: spGrant.ability, spells: spGrant.spells, daily: spGrant.daily, short: (spGrant.short || []).length ? spGrant.short : undefined } : null,
       size: SIZE_NAME[sizeCode] || 'Medium',
       details: Object.assign({}, build.details || {}),
       activations: ctx.actions, notes: ctx.notes, featureList,

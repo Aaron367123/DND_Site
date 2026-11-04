@@ -1797,6 +1797,9 @@ registerPanel('party',{
       // reviving is a deliberate act (revivify, or clearing the flag by hand).
       if ((combatant && combatant.dead) || c.dead) return;
       delete c.deathSaves; delete c.stable;
+      // Spells cast free from a feat or the species (Magic Initiate, Fey
+      // Touched, an elf's lineage spells) come back.
+      delete c.freeUsed;
       if (combatant){
         combatant.stable = false;
         combatant.deathSaves = null;
@@ -1941,6 +1944,13 @@ registerPanel('party',{
       if (!Object.keys(m.used).length) delete m.used;
     }));
     c.concentration = null;
+    // A free cast that comes back on a short rest too (Aberrant Dragonmark).
+    if (c.freeUsed){
+      const sh = c.sheet || {};
+      const short = new Set([].concat(...(sh.featSpells || []).map(g => g.short || []), (sh.speciesSpells && sh.speciesSpells.short) || []));
+      Object.keys(c.freeUsed).forEach(n => { if (short.has(n)) delete c.freeUsed[n]; });
+      if (!Object.keys(c.freeUsed).length) delete c.freeUsed;
+    }
     // A rage lasts 1 minute; an hour's rest is well past that. Only the LONG
     // rest cleared it — and the long rest's own comment claims "rage and
     // wild shape end at any rest", which was true of one of the two rests.

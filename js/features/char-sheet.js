@@ -1667,6 +1667,8 @@ function csSpellsHtml(pc){
   (sh.featSpells || []).forEach(g => g.spells.forEach(n => { from[n] = g.feat; }));
   if (sh.speciesSpells) sh.speciesSpells.spells.forEach(n => { from[n] = 'Species'; });
   const daily = new Set([].concat(...(sh.featSpells || []).map(g => g.daily || []), (sh.speciesSpells && sh.speciesSpells.daily) || []));
+  // Which of those come back on a short rest as well (Aberrant Dragonmark).
+  const shortFree = new Set([].concat(...(sh.featSpells || []).map(g => g.short || []), (sh.speciesSpells && sh.speciesSpells.short) || []));
   const arcLv = {}; Object.keys(sh.arcanum || {}).forEach(lv => { arcLv[sh.arcanum[lv]] = lv; from[sh.arcanum[lv]] = 'Mystic Arcanum'; });
   const all = [...new Set(sh.spells || [])];
   // Always-prepared spells the rules give now but a record saved before they
@@ -1697,7 +1699,9 @@ function csSpellsHtml(pc){
         : l === 0 ? '<button class="btn small" data-cs-cast="' + csE(n) + ':0">Cast</button>'
         : (avail.length ? (avail.length > 1 ? '<select class="cb-sel cs-castlvl" data-cs-castlvl="' + csE(n) + '">' + avail.map(x => '<option value="' + x + '"' + (x === at ? ' selected' : '') + '>' + CS_ORD[x] + '</option>').join('') + '</select>' : '')
           + '<button class="btn small" data-cs-cast="' + csE(n) + ':' + at + '">Cast</button>' : '<span class="cb-dim">no slots</span>')
-          + (daily.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':free" title="Once per long rest without a slot">Free</button>' : '')
+          + (!daily.has(n) ? '' : (pc.freeUsed || {})[n]
+            ? '<button class="btn small ghost" data-cs-freeback="' + csE(n) + '" title="The free cast is used until a ' + (shortFree.has(n) ? 'short or long' : 'long') + ' rest. Click to give it back.">Free: used</button>'
+            : '<button class="btn small" data-cs-cast="' + csE(n) + ':free" title="Once per ' + (shortFree.has(n) ? 'short or long' : 'long') + ' rest without a slot">Free</button>')
           + csCastUses(pc, n).map(({ a, r }) => '<button class="btn small" data-cs-cast="' + csE(n) + ':use"' + (r && (+r.current || 0) >= (a.amount || 1) ? '' : ' disabled')
             + ' title="Without a slot: ' + csE(sktResLabel(pc, a.resource)) + (r ? ', ' + (+r.current || 0) + ' left' : '') + '">' + csE(sktResLabel(pc, a.resource)) + '</button>').join('')
           + (arcLv[n] ? '<button class="btn small" data-cs-cast="' + csE(n) + ':arcanum"' + (((pc.resources || []).find(r => r.name === 'Mystic Arcanum (' + arcLv[n] + 'th)') || {}).current > 0 ? '' : ' disabled') + ' title="Mystic Arcanum: once per long rest">Arcanum</button>' : '')
@@ -1913,6 +1917,11 @@ function csSpellsClick(e, t, d, pc){
     }, CS_QUIET);
     return true;
   }
+  if (d.csFreeback != null){
+    const name = d.csFreeback;
+    csEdit('Gave back the free ' + name, p => { if (p.freeUsed){ delete p.freeUsed[name]; if (!Object.keys(p.freeUsed).length) delete p.freeUsed; } });
+    return true;
+  }
   if (d.csCast){
     const i = d.csCast.lastIndexOf(':'), name = d.csCast.slice(0, i);
     let how = d.csCast.slice(i + 1);
@@ -1925,6 +1934,11 @@ function csSpellsClick(e, t, d, pc){
         const slot = p.sheet.spellSlots[+how];
         if (!slot || slot.total - (slot.expended || 0) <= 0) return;
         slot.expended = (slot.expended || 0) + 1;
+      }
+      // The free cast a feat or the species gives: once until a rest.
+      if (how === 'free'){
+        if ((p.freeUsed || {})[name]) return;
+        p.freeUsed = Object.assign({}, p.freeUsed, { [name]: 1 });
       }
       if (how === 'arcanum'){
         const lv = Object.keys(p.sheet.arcanum || {}).find(k => p.sheet.arcanum[k] === name);
