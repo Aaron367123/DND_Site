@@ -13634,6 +13634,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 179 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); save(); }
     }
+    // -- Round 180: rebuilding from a PDF reads the ancestry, the subclass pick and the languages, or asks --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const S = o => Object.assign({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, o);
+        const mk = (id, o) => Object.assign({ id, name: id, level: 6, hp: 40, hpMax: 40, ac: 14, background: 'Guide',
+          abilities: { str: 14, dex: 16, con: 14, int: 10, wis: 14, cha: 10 }, sheet: { profBonus: 3, saves: S({}), skills: {}, attacks: [], bio: { features: '' } } }, o);
+        state.party.push(
+          mk('r180a', { cls: 'monk', race: 'Dragonborn', resistances: ['lightning'],
+            sheet: { profBonus: 3, saves: S({}), skills: {}, attacks: [], languages: '=== LANGUAGES === Common, Draconic',
+              bio: { features: '* Draconic Ancestry • PHB-2024 186 \n  Dragon | Damage Type\n Black | Acid\n Bronze | Lightning\n\n   | Bronze Dragon •  \nYou have a Bronze Dragon ancestor.\n* Damage Resistance (Lightning)\n' } } }),
+          mk('r180b', { cls: 'monk', race: 'Dragonborn', resistances: [],
+            sheet: { profBonus: 3, saves: S({}), skills: {}, attacks: [], languages: '=== LANGUAGES === Common, Draconic', bio: { features: '* Draconic Ancestry\n Dragon | Damage Type\n Black | Acid\n Red | Fire\n' } } }),
+          mk('r180c', { cls: 'barbarian', subclass: 'Giant', race: 'Human', abilities: { str: 17, dex: 14, con: 16, int: 8, wis: 12, cha: 10 },
+            sheet: { profBonus: 3, saves: S({}), skills: {}, attacks: [], spells: ['Thaumaturgy'], languages: '=== LANGUAGES === Common, Giant', bio: { features: '* Giant’s Power • You learn Druidcraft or Thaumaturgy (your choice).\n' } } }));
+        save();
+        const conv = async id => { await openCharBuilder({ idx: state.party.findIndex(x => x.id === id) }); for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100); await sleep(200); };
+        const close = () => { document.querySelectorAll('#cb-root').forEach(e => e.remove()); CB = null; };
+        await conv('r180a');
+        ok('rebuild: a dragonborn whose PDF names a Bronze ancestor keeps Bronze (not the first, Black)', (CB.build.speciesChoice || {}).ancestry === 'Bronze', JSON.stringify(CB.build.speciesChoice));
+        ok('rebuild: and no language the PDF didn’t list (it used to add Abyssal)', !(CB.build.languages || []).includes('Abyssal'), JSON.stringify(CB.build.languages));
+        close(); await sleep(150);
+        await conv('r180b');
+        ok('rebuild: one whose PDF doesn’t say is left to pick — the builder asks for a draconic ancestry', !(CB.build.speciesChoice || {}).ancestry && sktBuildTodo(CB.build, CB.R).some(t => /draconic ancestry/.test(t.what)), JSON.stringify(CB.build.speciesChoice));
+        close(); await sleep(150);
+        await conv('r180c');
+        ok('rebuild: a Giant barbarian’s cantrip is the one on the PDF (Thaumaturgy), not the first (Druidcraft)', CB.build.subclassPick === 'Thaumaturgy', CB.build.subclassPick);
+        close(); await sleep(150);
+        // Tools as the PDF lists them, even ones not among this book's options;
+        // cantrips it doesn't list stay to choose rather than made up.
+        state.party.push(mk('r180d', { cls: 'bard', race: 'Human', abilities: { str: 8, dex: 14, con: 14, int: 10, wis: 10, cha: 17 },
+          sheet: { profBonus: 3, saves: S({}), skills: {}, attacks: [], spells: ['Vicious Mockery'], languages: '=== TOOLS === Harp, Lute, Wargong === LANGUAGES === Common', bio: { features: '' } } }));
+        save();
+        await conv('r180d');
+        const tp = (CB.build.toolPicks || {}).class || [];
+        ok('rebuild: a bard’s instruments are the PDF’s — Lute, Harp, Wargong — not the first three in the list', ['Lute', 'Harp', 'Wargong'].every(x => tp.includes(x)) && !tp.includes('Bagpipes'), JSON.stringify(CB.build.toolPicks));
+        ok('rebuild: only the cantrip the PDF lists; the other is left to choose', (CB.build.cantrips || []).join() === 'Vicious Mockery' && sktBuildTodo(CB.build, CB.R).some(t => /cantrip/.test(t.what)), JSON.stringify(CB.build.cantrips));
+        close();
+      } catch(e){ ok('round 180 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelectorAll('#cb-root').forEach(e => e.remove()); CB = null; state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

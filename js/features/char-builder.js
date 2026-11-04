@@ -250,10 +250,69 @@ function cbFromImported(pc){
       const hit = (c.spec.options || []).map(o => ({ o, i: win.search(new RegExp('\\b' + _sktEsc(String(o.label || o.value)) + '\\b', 'i')) })).filter(x => x.i >= 0).sort((x, y) => x.i - y.i)[0];
       if (hit){ b.featureChoices = Object.assign({}, b.featureChoices, { [c.feature]: hit.o.value }); }
     }); }
+  // A dragonborn's ancestry (or a species' chosen resistance), as the PDF
+  // names it: "You have a Bronze Dragon ancestor", "Resistance (Lightning)".
+  // It wasn't read, and the quick build below took the first in the list:
+  // a Bronze dragonborn came back Black, with acid for lightning.
+  let pickedChoice = false;
+  if (sp){ const rc = sktSpeciesResistChoice(sp, sktSpeciesSub(sp, b));
+    if (rc){
+      const text = String((sh.bio || {}).features || '') + ' ' + String(pc.race || '') + ' ' + String(sh.race || '');
+      const res = (pc.resistances || []).map(lc);
+      const by = rc.kind === 'ancestry'
+        ? rc.options.find(o => new RegExp('\\b' + _sktEsc(o.name) + '\\s+(?:dragon|ancestry)\\b|ancestry:?\\s*' + _sktEsc(o.name) + '\\b', 'i').test(text))
+          // Else the one ancestry whose damage the PDF resists, when only one fits.
+          || ((m => m.length === 1 ? m[0] : null)(rc.options.filter(o => res.includes(lc(o.damage)))))
+        : rc.options.find(o => res.includes(lc(o.name)));
+      if (by){ b.speciesChoice = Object.assign({}, b.speciesChoice, { [rc.kind === 'ancestry' ? 'ancestry' : 'resist']: by.name }); pickedChoice = true; }
+      else pickedChoice = 'ask';
+    } }
+  // A subclass's pick (a Giant barbarian's Druidcraft or Thaumaturgy, a land
+  // druid's land) by the spells the PDF lists, not the first option.
+  { const pk = cls && b.subclass ? sktSubclassSpellPick(sktRulesSubclass(cls, b.subclass)) : null;
+    if (pk){
+      const mine = new Set((sh.spells || []).map(lc));
+      const spellsOf = o => JSON.stringify(o.block || {}).match(/[a-z][a-z' /-]+(?=\|[a-z]|#c|")/gi) || [];
+      // Named in the features text ("Polar Land •"), else the most of its spells on the sheet.
+      const ftext = String((sh.bio || {}).features || '');
+      const named = pk.options.find(o => new RegExp('\\b' + _sktEsc(o.value) + '\\b', 'i').test(ftext.replace(new RegExp('[^\\n]*\\b(?:choose|choice|one of)\\b[^\\n]*', 'gi'), '')));
+      const hit = named ? { o: named, n: 1 } : pk.options.map(o => ({ o, n: [o.value].concat(spellsOf(o)).filter(x => mine.has(lc(x))).length })).sort((x, y) => y.n - x.n)[0];
+      if (hit && hit.n) b.subclassPick = hit.o.value;
+    } }
+  // Tools the PDF names ("=== TOOLS === Harp, Lute, Wargong"), for each tool
+  // the build gets to choose.
+  { const norm = x => lc(x).replace(/[^a-z]/g, ''), t = norm(sh.languages || '');
+    const listed = String((typeof csPdfProfs === 'function' && csPdfProfs(sh.languages).tools) || '').split(/\s*,\s*/).filter(Boolean);
+    const granted = new Set(((sktComputeCharacter(b, R).sheet.proficiencies || {}).tools || []).map(norm));
+    const used = new Set();
+    sktToolChoices(b, R).forEach(c => { const got = c.options.filter(o => t.includes(norm(o)) && !used.has(norm(o))).slice(0, c.count);
+      got.forEach(o => used.add(norm(o)));
+      if (got.length){ b.toolPicks = Object.assign({}, b.toolPicks); b.toolPicks[c.key] = got; } });
+    // A tool the PDF lists that isn't among the options here (a harp, a war
+    // gong, from other books): kept by its own name in a choice with room,
+    // so the sheet lists what the PDF lists.
+    const extra = listed.filter(x => !used.has(norm(x)) && !granted.has(norm(x)) && !sktToolChoices(b, R).some(c => c.options.some(o => norm(o) === norm(x))));
+    sktToolChoices(b, R).forEach(c => { const have = ((b.toolPicks || {})[c.key] || []).slice();
+      while (have.length < c.count && extra.length) have.push(extra.shift());
+      if (have.length){ b.toolPicks = Object.assign({}, b.toolPicks); b.toolPicks[c.key] = have; } }); }
+  // What the PDF says, kept as it says it. The quick build below fills every
+  // choice still open with the first option — languages (Abyssal), cantrips
+  // and spells to the count, tools (Bagpipes) — which made up things the PDF
+  // never had. Those stay open instead, for the player to pick.
+  const pdf = { languages: (b.languages || []).slice(), cantrips: (b.cantrips || []).slice(), spells: (b.spells || []).slice(), toolPicks: JSON.parse(JSON.stringify(b.toolPicks || {})) };
   // The rest, as for a new character.
   b.abilities.method = 'manual';
   cbQuickBuild();
+  b.languages = pdf.languages; b.cantrips = pdf.cantrips; b.spells = pdf.spells; b.toolPicks = pdf.toolPicks;
+  // Not named in the PDF: left for the player to pick (the sheet lists it
+  // among the choices to make), not the first in the list.
+  if (pickedChoice === 'ask' && b.speciesChoice){ b.speciesChoice = Object.assign({}, b.speciesChoice); delete b.speciesChoice.ancestry; delete b.speciesChoice.resist;
+    notes.push('The PDF doesn’t say which ' + ((sktSpeciesResistChoice(sp, sktSpeciesSub(sp, b)) || {}).kind === 'ancestry' ? 'draconic ancestry' : 'damage resistance') + ' — pick it on the species step'); }
   // Too many spells for the slots it has now (or a spell list the PDF mixed): keep what fits.
+  // The PDF doesn't mark which are prepared, so the first it lists are kept: say so.
+  { const sc0 = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R)), s00 = sc0 && ((sc0.classes ? sc0.classes[0].sc : sc0) || {}), w0 = s00 && (s00.prepared || s00.known);
+    if (w0 && b.spells.length > w0) notes.push('The PDF lists ' + b.spells.length + ' ' + (cls ? cls.name.toLowerCase() : '') + ' spells, more than the ' + w0 + ' this character prepares, and doesn’t mark which: the first ' + w0 + ' it lists are kept — check them on the Spells step');
+    if (s00 && s00.cantrips != null && b.cantrips.length > s00.cantrips) notes.push('The PDF lists more cantrips than ' + s00.cantrips + ': the first are kept — check them on the Spells step'); }
   const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
   if (sc){ const s0 = (sc.classes ? sc.classes[0].sc : sc) || {};
     if (s0.cantrips != null && b.cantrips.length > s0.cantrips) b.cantrips = b.cantrips.slice(0, s0.cantrips);
@@ -2450,7 +2509,7 @@ function cbOnClick(e){
     if (b.toolPicks) delete b.toolPicks.species;
     b.originFeat = '';
   });
-  if (d.cbSubspecies) return cbSet(b => { b.subspecies = d.cbSubspecies === '-' ? '' : d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
+  if (d.cbSubspecies) return cbSet(b => { if ((b.subspecies || '') === (d.cbSubspecies === '-' ? '' : d.cbSubspecies)) return; b.subspecies = d.cbSubspecies === '-' ? '' : d.cbSubspecies; b.speciesAsi = {}; b.speciesSkills = []; b.originFeat = ''; delete b.speciesChoice.spells; });
   if (d.cbAncestry) return cbSet(b => { b.speciesChoice.ancestry = d.cbAncestry; });
   if (d.cbSpresist) return cbSet(b => { b.speciesChoice.resist = d.cbSpresist; });
   if (d.cbMcpick){ const [i, v] = d.cbMcpick.split('||'); return cbSet(b => { if (b.multi[+i]) b.multi[+i].subclassPick = v; }); }
