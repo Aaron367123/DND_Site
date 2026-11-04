@@ -12781,6 +12781,109 @@
         } finally { state.party = JSON.parse(party0); save(); }
       } catch(e){ ok('round 155 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 156: multiclass spell slots, 2014 prepared counts, the tables' dice columns --
+    if (!PLAYER){
+      try {
+        const mcslotsjs = await (async () => {
+  // The multiclass spellcaster table (both handbooks): slots by combined caster level.
+  const T = [null, [2], [3], [4, 2], [4, 3], [4, 3, 2], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1],
+    [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1, 1], [4, 3, 3, 3, 3, 1, 1, 1, 1], [4, 3, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 3, 2, 2, 1, 1]];
+  const out = { checked: 0, gaps: [] };
+  for (const ed of ['2014', '2024']){
+    const R = await sktRulesLoad(ed);
+    const kind = { bard: 1, cleric: 1, druid: 1, sorcerer: 1, wizard: 1, paladin: 0.5, ranger: 0.5, artificer: 'art' };
+    const names = { bard: 'Bard', cleric: 'Cleric', druid: 'Druid', sorcerer: 'Sorcerer', wizard: 'Wizard', paladin: 'Paladin', ranger: 'Ranger', artificer: 'Artificer' };
+    const keys = Object.keys(kind).filter(k => sktRulesClass(R, names[k]));
+    const part = (k, L) => kind[k] === 1 ? L : kind[k] === 0.5 ? (ed === '2024' ? Math.ceil(L / 2) : Math.floor(L / 2)) : Math.ceil(L / 2);
+    for (const a of keys) for (const c of keys){
+      if (a === c) continue;
+      for (const [La, Lc] of [[3, 2], [5, 4], [7, 6], [2, 9], [10, 10]]){
+        const b = Object.assign(sktBlankBuild(ed), { name: 'M', cls: names[a], level: La + Lc, species: 'Human', allBooks: true,
+          abilities: { method: 'manual', base: { str: 15, dex: 15, con: 15, int: 15, wis: 15, cha: 15 } },
+          multi: [{ cls: names[c], subclass: '', level: Lc, skills: [], cantrips: [], spells: [], spellbook: [] }] });
+        let sc; try { sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R)); } catch(e){ out.gaps.push(ed + ' ' + a + La + '/' + c + Lc + ' threw ' + e.message); continue; }
+        // A lone half caster at level 1 has no slots of its own; the rule counts its levels all the same.
+        const lvl = part(a, La) + part(c, Lc);
+        const want = (T[Math.min(20, lvl)] || []).reduce((o, n, i) => (o[i + 1] = n, o), {});
+        const have = Object.assign({}, (sc && sc.slots) || {});
+        if (sc && sc.pact) { /* warlock not in this set */ }
+        out.checked++;
+        if (JSON.stringify(want) !== JSON.stringify(have)) out.gaps.push(ed + ' ' + names[a] + ' ' + La + ' / ' + names[c] + ' ' + Lc + ' (caster level ' + lvl + '): want ' + JSON.stringify(want) + ' got ' + JSON.stringify(have));
+      }
+    }
+    // A warlock's pact slots stay apart from a wizard's.
+    const wb = Object.assign(sktBlankBuild(ed), { name: 'W', cls: 'Warlock', level: 8, species: 'Human', allBooks: true, abilities: { method: 'manual', base: { str: 15, dex: 15, con: 15, int: 15, wis: 15, cha: 15 } },
+      multi: [{ cls: 'Wizard', subclass: '', level: 3, skills: [], cantrips: [], spells: [], spellbook: [] }] });
+    const ws = sktBuildSpellcasting(wb, R, sktBuildAbilities(wb, R));
+    out.pact = (out.pact || []).concat(ed + ' Warlock 5 / Wizard 3: slots ' + JSON.stringify(ws.slots) + ' pact ' + JSON.stringify(ws.pact));
+  }
+
+          return out;
+        })();
+        ok('spell slots: every pair of casting classes, both handbooks (2024 rounds paladin and ranger halves up)', mcslotsjs.checked > 500 && !mcslotsjs.gaps.length, mcslotsjs.gaps.slice(0, 3).join(' | '));
+        const prep14js = await (async () => {
+ const R = await sktRulesLoad('2014'); const gaps = []; let n = 0;
+const rule = { Cleric: ['wis', L => L], Druid: ['wis', L => L], Wizard: ['int', L => L], Paladin: ['cha', L => Math.floor(L / 2)], Artificer: ['int', L => Math.floor(L / 2)] };
+for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const score of [10, 16, 20]){
+  const [ab, part] = rule[cls]; if (cls === 'Paladin' && L < 2) continue;
+  const base = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }; base[ab] = score;
+  const b = Object.assign(sktBlankBuild('2014'), { cls, level: L, species: 'Human', abilities: { method: 'manual', base } });
+  const abl = sktBuildAbilities(b, R), sc = sktBuildSpellcasting(b, R, abl); if (!sc) continue;
+  const s0 = sc.classes ? sc.classes[0].sc : sc; const mod = Math.floor((abl[ab] - 10) / 2);
+  const want = Math.max(1, mod + part(L)); n++;
+  if ((s0.prepared || 0) !== want) gaps.push(cls + ' L' + L + ' ' + ab + ' ' + abl[ab] + ': ' + s0.prepared + ' (want ' + want + ')');
+}
+
+          return { n, gaps };
+        })();
+        ok('prepared spells: a 2014 cleric, druid, wizard, paladin and artificer prepare modifier + level (or half)', prep14js.n > 250 && !prep14js.gaps.length, prep14js.gaps.slice(0, 3).join(' | '));
+        const auditdicejs = await (async () => {
+  const out = { cells: 0, gaps: [], samples: {} };
+  const lc = s => String(s || '').toLowerCase();
+  for (const ed of ['2024', '2014']){
+    const R = await sktRulesLoad(ed);
+    for (const cls of R.classes){
+      const sub = ((cls.subclasses || []).find(x => x.core) || (cls.subclasses || [])[0] || {}).shortName || '';
+      const seen = new Set();
+      for (let L = 1; L <= 20; L++){
+        const b = Object.assign(sktBlankBuild(ed), { name: 'T', cls: cls.name, level: L, species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte', subclass: L >= (cls.subclassLevel || 3) ? sub : '', allBooks: true,
+          abilities: { method: 'manual', base: { str: 14, dex: 14, con: 14, int: 14, wis: 14, cha: 14 } } });
+        let rec; try { rec = sktComputeCharacter(b, R); } catch(e){ continue; }
+        const sh = rec.sheet, blob = lc(JSON.stringify({ a: sh.attacks, r: rec.resources, n: sh.notes, s: sh.states, x: sh.extraDamage, act: sh.activations }));
+        const check = (label, want, ok, got) => {
+          const key = ed + ' ' + cls.name + ' ' + label; out.cells++;
+          if (!out.samples[key]) out.samples[key] = 'L' + L + ' table ' + want + ' → ' + got;
+          if (!ok && !seen.has(key)){ seen.add(key); out.gaps.push(key + ' L' + L + ': table ' + want + ', sheet ' + got); }
+        };
+        const v = lab => sktClassColumn(cls, lab, L, null);
+        // Martial Arts die: the unarmed strike's damage.
+        const ma = v('Martial Arts');
+        if (ma && /d\d+/.test(String(ma))){
+          const us = (sh.attacks || []).find(a => /unarmed/i.test(a.name));
+          const die = String(ma).match(/d\d+/)[0];
+          check('Martial Arts', ma, !!us && new RegExp('1' + die + '\\b').test(us.damage), us ? us.damage : 'no unarmed strike');
+        }
+        // Sneak Attack dice.
+        const sa = v('Sneak Attack');
+        if (sa && /\d+d\d+/.test(String(sa))){ const d = String(sa).match(/\d+d\d+/)[0]; check('Sneak Attack', sa, blob.includes(d), (blob.match(/\d+d6[^"]{0,30}sneak|sneak[^"]{0,40}\d+d6/) || ['?'])[0]); }
+        // Rage damage bonus.
+        const rd = v('Rage Damage');
+        if (rd != null && rd !== ''){ const n = parseInt(String(rd).replace('+', ''), 10); check('Rage Damage', rd, new RegExp('\\+' + n + '\\b|' + n + ' extra|extra ' + n).test(blob) || blob.includes('rage damage') && blob.includes('+' + n), (blob.match(/[^"]{0,40}rage[^"]{0,40}/) || ['?'])[0]); }
+        // Bardic inspiration die.
+        const bd = v('Bardic Die') || v('Bardic Inspiration');
+        if (bd && /d\d+/.test(String(bd))){ const die = String(bd).match(/d\d+/)[0]; const p = (rec.resources || []).find(r => /bardic/i.test(r.name)); check('Bardic Die', bd, !!p && (String(p.die || '').includes(die) || blob.includes(die)), p ? (p.die || '(no die)') : 'no pool'); }
+        // Unarmored movement.
+        const um = v('Unarmored Movement');
+        if (um != null && um !== '' && um !== 0){ const n = parseInt(String(um).replace(/\D/g, ''), 10) || 0; if (n) check('Unarmored Movement', um, (rec.speeds || {}).walk === 30 + n, (rec.speeds || {}).walk); }
+      }
+    }
+  }
+
+          return out;
+        })();
+        ok('class tables: Martial Arts, Sneak Attack, Rage Damage, the Bardic die and Unarmored Movement match the sheet', auditdicejs.cells > 150 && !auditdicejs.gaps.length, auditdicejs.gaps.slice(0, 3).join(' | '));
+      } catch(e){ ok('round 156 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
