@@ -184,9 +184,14 @@ function cbFromImported(pc){
         const got = left.filter(k => sk.includes(k)).slice(0, c.count);
         left = left.filter(k => !got.includes(k));
         const ch = Object.assign({}, b.featChoices[n], { skills: got });
-        if (c.kind === 'skillsTools' && got.length < c.count) ch.tools = c.options.filter(o => o.startsWith('t:')).map(o => o.slice(2)).slice(0, c.count - got.length);
-        // Skills only: ones it already has from elsewhere, which change nothing.
-        else if (got.length < c.count) ch.skills = got.concat(sk.filter(k => !got.includes(k) && rec0.sheet.skillProf && rec0.sheet.skillProf[k])).slice(0, c.count);
+        // Tools the PDF lists that nothing else gives; never the first in the
+        // list (a Noble's Skilled came back with Alchemist's, Brewer's and
+        // Calligrapher's Supplies the PDF never had). Short, it stays to choose.
+        if (c.kind === 'skillsTools' && got.length < c.count){
+          const pdfT = String((typeof csPdfProfs === 'function' && csPdfProfs(sh.languages).tools) || '').toLowerCase().replace(/[^a-z,]/g, '');
+          const own = ((rec0.sheet.proficiencies || {}).tools || []).map(t => String(t).toLowerCase().replace(/[^a-z]/g, ''));
+          ch.tools = c.options.filter(o => o.startsWith('t:')).map(o => o.slice(2)).filter(t => { const n = t.toLowerCase().replace(/[^a-z]/g, ''); return pdfT.split(',').includes(n) && !own.includes(n); }).slice(0, c.count - got.length);
+        }
         b.featChoices[n] = ch;
       }); }); }
   // A class feature that grants a skill (the 2024 barbarian's Primal Knowledge).
@@ -299,11 +304,14 @@ function cbFromImported(pc){
   // choice still open with the first option — languages (Abyssal), cantrips
   // and spells to the count, tools (Bagpipes) — which made up things the PDF
   // never had. Those stay open instead, for the player to pick.
-  const pdf = { languages: (b.languages || []).slice(), cantrips: (b.cantrips || []).slice(), spells: (b.spells || []).slice(), toolPicks: JSON.parse(JSON.stringify(b.toolPicks || {})) };
+  const pdf = { languages: (b.languages || []).slice(), cantrips: (b.cantrips || []).slice(), spells: (b.spells || []).slice(), toolPicks: JSON.parse(JSON.stringify(b.toolPicks || {})),
+                // A feat's skill and tool picks (Skilled), as read above.
+                featPicks: Object.fromEntries(Object.entries(b.featChoices || {}).filter(([, v]) => v && (v.skills || v.tools)).map(([k, v]) => [k, { skills: (v.skills || []).slice(), tools: (v.tools || []).slice() }])) };
   // The rest, as for a new character.
   b.abilities.method = 'manual';
   cbQuickBuild();
   b.languages = pdf.languages; b.cantrips = pdf.cantrips; b.spells = pdf.spells; b.toolPicks = pdf.toolPicks;
+  Object.entries(pdf.featPicks).forEach(([k, v]) => { b.featChoices[k] = Object.assign({}, b.featChoices[k], v); });
   // Not named in the PDF: left for the player to pick (the sheet lists it
   // among the choices to make), not the first in the list.
   if (pickedChoice === 'ask' && b.speciesChoice){ b.speciesChoice = Object.assign({}, b.speciesChoice); delete b.speciesChoice.ancestry; delete b.speciesChoice.resist;

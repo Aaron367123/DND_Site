@@ -13675,6 +13675,23 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 180 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelectorAll('#cb-root').forEach(e => e.remove()); CB = null; state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 181: rebuilding from a PDF — a feat's picks are the PDF's or left open, never the first in a list --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const S = o => Object.assign({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, o);
+        state.party.push({ id: 'r181', name: 'R181', cls: 'monk', level: 3, race: 'Human', background: 'Noble', hp: 20, hpMax: 20, ac: 14,
+          abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 14, cha: 10 },
+          sheet: { profBonus: 2, saves: S({}), skills: {}, attacks: [], languages: '=== TOOLS === Herbalism Kit === LANGUAGES === Common', bio: { features: '' } } });
+        save();
+        await openCharBuilder({ idx: state.party.findIndex(x => x.id === 'r181') }); for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100); await sleep(200);
+        const sk = (CB.build.featChoices || {}).Skilled || {};
+        ok('rebuild: a Noble’s Skilled gets no tools or skills the PDF doesn’t list (it got the first three tools)', !(sk.tools || []).length && !(sk.skills || []).length, JSON.stringify(sk));
+        ok('rebuild: and its picks are listed among the choices to make', sktBuildTodo(CB.build, CB.R).some(t => /Skilled/.test(t.what)));
+        ok('rebuild: the rebuilt numbers still match the PDF', (CB.convertDiff || []).filter(d => /Arcana|Stealth|Sleight/.test(d)).length === 0, JSON.stringify(CB.convertDiff));
+      } catch(e){ ok('round 181 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelectorAll('#cb-root').forEach(e => e.remove()); CB = null; state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
