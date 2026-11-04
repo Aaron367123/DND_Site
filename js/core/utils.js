@@ -1551,6 +1551,13 @@ const SKT_RESOURCE_ALIASES = {
   'ki':        'Focus Points',
   'focus':     'Focus Points',
 };
+// What a long rest gives back in hit dice, in words: every die (the 2024
+// rules: "all spent Hit Point Dice") or half of them (2014). For a party,
+// both when its characters use different handbooks.
+function sktHdRestWords(chars){
+  const eds = new Set((chars || []).filter(Boolean).map(c => ((c.build && c.build.edition) || c.rules || '2024') === '2014' ? '2014' : '2024'));
+  return eds.size > 1 ? 'hit dice back (all of them in 2024, half in 2014)' : eds.has('2014') ? 'half the hit dice back' : 'every hit die back';
+}
 // What a pool is called for this character. The pool is Focus Points
 // everywhere inside (the merge above keeps it so), but a 2014 monk's handbook,
 // and D&D Beyond's 2014 monk, call it Ki Points.

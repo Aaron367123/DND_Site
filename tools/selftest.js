@@ -7430,7 +7430,7 @@
         // Draconic ancestry / damage resistance.
         const db14 = mk(R14, '2014', { species: 'Dragonborn', speciesChoice: { ancestry: 'Silver' } }), db24 = mk(R24, '2024', { species: 'Dragonborn', speciesChoice: { ancestry: 'Red' } });
         ok('audit: a 2014 dragonborn resists the damage chosen', (db14.resistances || []).includes('cold'), JSON.stringify(db14.resistances));
-        ok('audit: a red 2024 dragonborn resists fire and breathes it', (db24.resistances || []).includes('fire') && db24.sheet.notes.some(n => /Breath Weapon: fire damage \(Red/.test(n)));
+        ok('audit: a red 2024 dragonborn resists fire and breathes it', (db24.resistances || []).includes('fire') && (db24.sheet.activations || []).some(a => a.name === 'Breath Weapon' && / fire damage /.test(a.desc) && /\(Red ancestry/.test(a.desc)));
         ok('audit: a dragonborn is asked for its ancestry', sktBuildTodo(Object.assign(sktBlankBuild('2024'), { cls: 'Wizard', species: 'Dragonborn' }), R24).some(t => t.what === 'a draconic ancestry'));
         ok('audit: a tiefling\'s legacy settles its resistance', !sktSpeciesResistChoice(sktRulesSpecies(R24, 'Tiefling'), sktSpeciesSub(sktRulesSpecies(R24, 'Tiefling'), { speciesChoice: { lineage: 'Infernal' } })));
         // Divine Soul: cleric spells, by sorcerer level.
@@ -13057,6 +13057,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           cbClose(); await sleep(40);
         }
       } catch(e){ ok('round 159 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 160: rests: hit dice back by the edition's rule, short-rest pools, and the words say so --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), confirm0 = window.showConfirm;
+      try {
+        const P = panelDefs.party;
+        const mkc = (id, ed) => ({ id, name: id, level: 5, hp: 10, hpMax: 40, ac: 14, rules: ed, build: { edition: ed, level: 5 },
+          hitDice: { current: 0, max: 5, dieType: 'd10' }, spellSlots: {},
+          resources: [{ name: 'Action Surge', type: 'pool', current: 0, max: 1, recharge: 'short' }, { name: 'Indomitable', type: 'pool', current: 0, max: 1, recharge: 'long' },
+                      { name: 'Channel Divinity', type: 'pool', current: 0, max: 3, recharge: 'short-one' }] });
+        state.party.push(mkc('r160a', '2024'), mkc('r160b', '2014')); save();
+        const a = () => state.party.find(p => p.id === 'r160a'), b = () => state.party.find(p => p.id === 'r160b');
+        // Short rest first: short pools full, short-one up one, long untouched.
+        P._shortRestOne(a(), state.party.indexOf(a()));
+        const res = n => a().resources.find(r => r.name === n).current;
+        ok('rests: a short rest refills a short-rest pool, gives one back to a one-per-short-rest pool, and leaves a long-rest pool', res('Action Surge') === 1 && res('Channel Divinity') === 1 && res('Indomitable') === 0, JSON.stringify(a().resources.map(r => r.name + ' ' + r.current)));
+        P._longRestOne(a(), state.party.indexOf(a())); P._longRestOne(b(), state.party.indexOf(b()));
+        ok('rests: a long rest gives a 2024 character every hit die back (“all spent Hit Point Dice”)', a().hitDice.current === 5, a().hitDice.current);
+        ok('rests: and a 2014 character half, rounded down', b().hitDice.current === 2, b().hitDice.current);
+        ok('rests: a long rest refills every pool', a().resources.every(r => r.current === r.max), JSON.stringify(a().resources.map(r => r.current + '/' + r.max)));
+        // The words.
+        ok('rests: what the confirmation says matches the edition', sktHdRestWords([a()]) === 'every hit die back' && sktHdRestWords([b()]) === 'half the hit dice back' && /all of them in 2024, half in 2014/.test(sktHdRestWords([a(), b()])));
+        let said = ''; window.showConfirm = (msg) => { said = msg; return Promise.resolve(false); };
+        state.party = state.party.filter(p => p.id === 'r160a'); save();
+        P._longRestAll(); await sleep(40);
+        ok('rests: the party’s long rest no longer says “hit dice ½ back” to a 2024 party', /every hit die back/.test(said) && !/½/.test(said), said);
+        openPanel('party'); P._render(); await sleep(100);
+        const btn = document.querySelector('[data-act="hd-rest"]');
+        ok('rests: nor does a 2024 character’s Long rest button', !btn || /every hit die back/.test(btn.title), btn && btn.title);
+      } catch(e){ ok('round 160 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = confirm0; state.party = JSON.parse(party0); save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {

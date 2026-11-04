@@ -2451,19 +2451,69 @@ sktDefineEffect(['species:Dwarven Toughness'], ctx => { ctx.hpPerLevel += 1; });
 sktDefineEffect(['species:Lucky'], ctx => _fxNote(ctx, 'Lucky: reroll a 1 on a d20 test and use the new roll.'));
 sktDefineEffect(['species:Keen Senses'], ctx => { if (ctx.edition === '2014') ctx.skillProf.add('perception'); });
 sktDefineEffect(['species:Menacing'], ctx => { ctx.skillProf.add('intimidation'); });
-sktDefineEffect(['species:Relentless Endurance'], ctx => { _fxPool(ctx, 'Relentless Endurance', 1, 'long'); });
-sktDefineEffect(['species:Breath Weapon'], ctx => {
-  const n = ctx.edition === '2024' ? ctx.pb : 1;
-  _fxPool(ctx, 'Breath Weapon', n, ctx.edition === '2024' ? 'long' : 'short');
-  const sp = sktRulesSpecies(ctx.R, ctx.build.species), pick = sktSpeciesResist(sp, sktSpeciesSub(sp, ctx.build), ctx.build);
-  if (pick) _fxNote(ctx, 'Breath Weapon: ' + pick.damage + ' damage' + (sp.ancestries.length ? ' (' + pick.name + ' ancestry)' : '') + '.');
+// Species traits with a use: an action on the sheet beside the counter, as
+// D&D Beyond lists them (there was only the counter).
+sktDefineEffect(['species:Relentless Endurance'], ctx => {
+  _fxPool(ctx, 'Relentless Endurance', 1, 'long');
+  _fxAction(ctx, { name: 'Relentless Endurance', action: 'Special', resource: 'Relentless Endurance', amount: 1, feature: 'Relentless Endurance',
+    desc: 'When you’re reduced to 0 hit points but not killed outright, you drop to 1 hit point instead.' });
 });
-sktDefineEffect(['species:Stone\'s Endurance'], ctx => { _fxPool(ctx, 'Stone’s Endurance', ctx.pb, 'long'); });
-sktDefineEffect(['species:Healing Hands'], ctx => { _fxPool(ctx, 'Healing Hands', 1, 'long'); });
-sktDefineEffect(['species:Adrenaline Rush'], ctx => { _fxPool(ctx, 'Adrenaline Rush', ctx.pb, 'short'); });
-sktDefineEffect(['species:Stonecunning'], ctx => { if (ctx.edition === '2024') _fxPool(ctx, 'Stonecunning', ctx.pb, 'long'); });
-sktDefineEffect(['2024:species:Celestial Revelation'], ctx => { if (ctx.level >= 3) _fxPool(ctx, 'Celestial Revelation', 1, 'long'); });
-sktDefineEffect(['2024:species:Large Form'], ctx => { if (ctx.level >= 5) _fxPool(ctx, 'Large Form', 1, 'long'); });
+// A dragonborn's breath, as an action on the sheet with its dice, area, save
+// and DC (there was only a counter and a note). Two versions: the 2014
+// Player's Handbook's (its own action, 2d6 to 5d6 at 6/11/16, line or cone and
+// Dexterity or Constitution by ancestry, once per short rest) and every later
+// one, 2024 and Fizban's (in place of one attack, 1d10 to 4d10 at 5/11/17, a
+// Dexterity save, proficiency-bonus uses per long rest). Going by edition
+// alone gave a Fizban's dragonborn in a 2014 game one use per short rest.
+sktDefineEffect(['species:Breath Weapon'], ctx => {
+  const sp = sktRulesSpecies(ctx.R, ctx.build.species), pick = sp && sktSpeciesResist(sp, sktSpeciesSub(sp, ctx.build), ctx.build);
+  const phb14 = !!sp && sp.source === 'PHB';
+  _fxPool(ctx, 'Breath Weapon', phb14 ? 1 : ctx.pb, phb14 ? 'short' : 'long');
+  const L = ctx.build.level || 1, anc = pick ? pick.name : '', type = pick ? pick.damage : '';
+  const dice = phb14 ? (L >= 16 ? '5d6' : L >= 11 ? '4d6' : L >= 6 ? '3d6' : '2d6') : (L >= 17 ? '4d10' : L >= 11 ? '3d10' : L >= 5 ? '2d10' : '1d10');
+  const t = sktRulesText(((sp && sp.entries) || []).filter(e => e && e.name === 'Breath Weapon').map(e => e.entries));
+  const area = phb14 ? (/^(Black|Blue|Brass|Bronze|Copper)$/.test(anc) ? '5-by-30-foot line' : '15-foot cone')
+    : /cone[^.]*\bor\b[^.]*line/i.test(t) ? '15-foot cone or 30-foot line (5 feet wide)' : /30-foot line/i.test(t) ? '30-foot line (5 feet wide)' : '15-foot cone';
+  const save = phb14 && /^(Green|Silver|White)$/.test(anc) ? 'Constitution' : 'Dexterity';
+  _fxAction(ctx, { name: 'Breath Weapon', action: 'Action', resource: 'Breath Weapon', amount: 1, feature: 'Breath Weapon', dice,
+    desc: (phb14 ? 'Exhale' : 'In place of one attack of the Attack action, exhale') + ' a ' + area + ': each creature in it makes a DC ' + (8 + ctx.mod.con + ctx.pb) + ' ' + save
+      + ' saving throw, taking ' + dice + (type ? ' ' + type : '') + ' damage on a failure, half as much on a success.' + (anc && sp.ancestries.length ? ' (' + anc + ' ancestry.)' : '') });
+});
+sktDefineEffect(['species:Stone\'s Endurance'], ctx => {
+  _fxPool(ctx, 'Stone’s Endurance', ctx.pb, 'long');
+  _fxAction(ctx, { name: 'Stone’s Endurance', action: 'Reaction', resource: 'Stone’s Endurance', amount: 1, feature: 'Stone\'s Endurance', dice: '1d12' + (ctx.mod.con ? (ctx.mod.con > 0 ? '+' : '') + ctx.mod.con : ''),
+    desc: 'When you take damage, roll 1d12 and add your Constitution modifier (' + (ctx.mod.con >= 0 ? '+' : '') + ctx.mod.con + '); the damage drops by that much.' });
+});
+// Every Healing Hands in the data (2024, Monsters of the Multiverse) rolls a
+// d4 per point of proficiency bonus; it had a counter and no action.
+sktDefineEffect(['species:Healing Hands'], ctx => {
+  _fxPool(ctx, 'Healing Hands', 1, 'long');
+  _fxAction(ctx, { name: 'Healing Hands', action: ctx.edition === '2024' ? 'Magic' : 'Action', resource: 'Healing Hands', amount: 1, feature: 'Healing Hands',
+    dice: ctx.pb + 'd4', desc: 'Touch a creature: it regains ' + ctx.pb + 'd4 hit points.' });
+});
+sktDefineEffect(['species:Adrenaline Rush'], ctx => {
+  _fxPool(ctx, 'Adrenaline Rush', ctx.pb, 'short');
+  _fxAction(ctx, { name: 'Adrenaline Rush', action: 'Bonus Action', resource: 'Adrenaline Rush', amount: 1, feature: 'Adrenaline Rush',
+    desc: 'Take the Dash action and gain ' + ctx.pb + ' temporary hit points.' });
+});
+sktDefineEffect(['species:Stonecunning'], ctx => {
+  if (ctx.edition !== '2024') return;
+  _fxPool(ctx, 'Stonecunning', ctx.pb, 'long');
+  _fxAction(ctx, { name: 'Stonecunning', action: 'Bonus Action', resource: 'Stonecunning', amount: 1, feature: 'Stonecunning',
+    desc: 'Gain Tremorsense with a range of 60 feet for 10 minutes, while on or touching stone.' });
+});
+sktDefineEffect(['2024:species:Celestial Revelation'], ctx => {
+  if ((ctx.build.level || ctx.level) < 3) return;
+  _fxPool(ctx, 'Celestial Revelation', 1, 'long');
+  _fxAction(ctx, { name: 'Celestial Revelation', action: 'Bonus Action', resource: 'Celestial Revelation', amount: 1, feature: 'Celestial Revelation',
+    desc: 'Transform for 1 minute: Heavenly Wings (a fly speed equal to your speed), Inner Radiance or Necrotic Shroud. Once on each of your turns, one target takes an extra ' + ctx.pb + ' radiant (or necrotic, with the Shroud) damage.' });
+});
+sktDefineEffect(['2024:species:Large Form'], ctx => {
+  if ((ctx.build.level || ctx.level) < 5) return;
+  _fxPool(ctx, 'Large Form', 1, 'long');
+  _fxAction(ctx, { name: 'Large Form', action: 'Bonus Action', resource: 'Large Form', amount: 1, feature: 'Large Form',
+    desc: 'Become Large for 10 minutes: advantage on Strength checks, and your speed increases by 10 feet.' });
+});
 sktDefineEffect(['2024:species:Skillful'], ctx => { /* applied as a species skill pick */ });
 
 // ---- Feats

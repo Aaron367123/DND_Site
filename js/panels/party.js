@@ -1722,7 +1722,7 @@ registerPanel('party',{
       this._applyLongRest();
       return;
     }
-    showConfirm('Long rest the whole party? HP to max, all spell slots and class resources restored, hit dice ½ back, exhaustion −1, concentration dropped.',
+    showConfirm('Long rest the whole party? HP to max, all spell slots and class resources restored, ' + sktHdRestWords(state.party) + ', exhaustion −1, concentration dropped.',
       {title:'Long rest', confirmLabel:'Rest', danger:false}).then(ok => {
         if (ok) this._applyLongRest();
       });
@@ -2575,7 +2575,7 @@ registerPanel('party',{
       <span class="hd-label">${ICO('i-dice')} ${esc(hd.dieType||'d8')}</span>
       <span class="hd-pips">${pips}</span>
       <span class="hd-count">${cur}/${hd.max}</span>
-      <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest for this character: HP, slots, resources, half the hit dice">${ICO('i-moon')} Long rest</button>
+      <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest for this character: HP, slots, resources, ${sktHdRestWords([c])}">${ICO('i-moon')} Long rest</button>
     </div>`;
   },
 

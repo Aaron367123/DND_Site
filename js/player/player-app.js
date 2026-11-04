@@ -1738,7 +1738,7 @@ function paLongRest(){
     if (typeof showToast === 'function') showToast('🛌 Long rest: hit points, slots and features back');
   };
   if (typeof showConfirm === 'function')
-    showConfirm('Hit points to full, half your hit dice, every spell slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
+    showConfirm('Hit points to full, ' + sktHdRestWords([pc]).replace(/^half the hit dice back$/, 'half your hit dice back') + ', every spell slot and feature back, one level of exhaustion gone.', { title: 'Long rest', confirmLabel: 'Rest' }).then(ok => { if (ok) go(); });
   else go();
 }
 
