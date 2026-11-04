@@ -1992,7 +1992,7 @@ function cbSpellInfoHtml(name){
   const s = sktRulesSpell(CB.R, name); if (!s) return '';
   const lvl = s.level ? 'level ' + s.level : 'cantrip';
   return '<div class="cb-spinfo"><b>' + cbEsc(s.name) + '</b> <span class="cb-dim">' + cbEsc(lvl + (s.concentration ? ' · concentration' : '') + (s.ritual ? ' · ritual' : '')) + '</span>'
-    + '<button class="cb-x" data-cb-spinfo="" aria-label="Close">✕</button>' + cbFeatureText(sktRulesText(s.entries), true) + '</div>';
+    + '<button class="cb-x" data-cb-spinfo="" aria-label="Close">✕</button>' + cbFeatureText(typeof csSpellText === 'function' ? csSpellText(s) : sktRulesText(s.entries), true) + '</div>';
 }
 // A wizard's Spell Mastery and Signature Spells, from the spellbook.
 function cbWizardPicksHtml(){

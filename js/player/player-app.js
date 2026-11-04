@@ -2027,7 +2027,7 @@ function paSpellsHtml(pc){
       let det = '';
       if (open){
         const meta = s && typeof csSpellMeta === 'function' ? csSpellMeta(s) : '';
-        const text = s ? (typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '') : paRules(pc) ? 'This spell isn’t in the rules data here (a newer book, or homebrew).' : 'Loading the rules…';
+        const text = s ? (typeof csSpellText === 'function' ? csSpellText(s) : typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '') : paRules(pc) ? 'This spell isn’t in the rules data here (a newer book, or homebrew).' : 'Loading the rules…';
         // Each level with what it rolls there ("2nd · 3d8"), as the sheet shows it.
         const atkB = parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, scMod = atkB - ((pc.sheet || {}).profBonus || 0);
         const rollAt = x => (s && typeof csSpellDamage === 'function' && csSpellDamage(s, x)) || (s && typeof csSpellHeal === 'function' && csSpellHeal(s, x, scMod) ? 'heal ' + csSpellHeal(s, x, scMod) : '');

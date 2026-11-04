@@ -1538,6 +1538,14 @@ function csSaveSoon(){ clearTimeout(_csSaveT); _csSaveT = setTimeout(() => save(
 // a Cast button that spends the slot (at a higher level if wanted) and starts
 // concentration, and — for a character made in the builder — preparing and
 // unpreparing on the sheet, the way D&D Beyond does it.
+// A spell's text as D&D Beyond shows it: what it does, then casting it with a
+// higher-level slot ("Using a Higher-Level Spell Slot", "Cantrip Upgrade"),
+// which the sheet left off.
+function csSpellText(s){
+  if (!s || typeof sktRulesText !== 'function') return '';
+  const h = s.entriesHigherLevel || s.higher;
+  return sktRulesText(s.entries) + (h ? '\n\n' + sktRulesText(h) : '');
+}
 function csSpell(name){
   // The character's own homebrew spells first.
   const pc0 = csPc();
@@ -1705,7 +1713,7 @@ function csSpellsHtml(pc){
       return '<div class="cs-spell"><button class="cs-spell-n" data-cs-open="sp:' + csE(n) + '"><b>' + csE(n) + '</b>' + tags
         + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span>' + (from[n] ? '<span class="cs-from">' + csE(from[n]) + '</span>' : '') + '</button>'
         + '<span class="cs-spell-c">' + info + cast + '</span>'
-        + (open ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>')
+        + (open ? '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>')
           : CS.R ? 'This spell isn’t in the rules data here (a newer book, or homebrew).' : 'Loading the rules…') + '</div>' : '') + '</div>';
     }).join('');
   });
@@ -1802,7 +1810,7 @@ function csManageSpellsHtml(pc){
         + '<input type="checkbox" data-cs-prep="' + csE(key(kind, n)) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + ' aria-label="' + (kind === 'spellbook' ? 'In the spellbook: ' : 'Prepare ') + csE(n) + '">'
         + '<button class="cs-spell-n" data-cs-open="' + csE(ok) + '" aria-expanded="' + !!open + '"><b>' + csE(n) + '</b>' + tags
         + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></button>'
-        + (open ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '')
+        + (open ? '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '')
         + '</div>';
     }).join('') + '</div>';
     h += '<h4>' + csE(_csTitle(x.cls)) + ' spells</h4>';
@@ -2310,7 +2318,7 @@ function csItemSpellRow(pc, m, info, sp){
     + (u && sp.each ? csItemPips(pc, m, u) : '')
     + '<span class="cb-dim">' + csE(per) + '</span>'
     + (ro ? '' : '<button class="btn small" data-cs-icast="' + csE(m.name + '|' + nm + '|' + key + '|' + cost) + '"' + (can ? '' : ' disabled') + '>Cast</button>') + '</span>'
-    + (CS.open[ok] ? '<div class="cs-feat-t">' + (s ? csE(typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '').replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '') + '</div>';
+    + (CS.open[ok] ? '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '') + '</div>';
 }
 // The Actions tab's "Magic items" section.
 // A healing potion's dice, from its text ("regains 2d4 + 2 Hit Points").

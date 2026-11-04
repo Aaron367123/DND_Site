@@ -13598,6 +13598,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 177 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 178: a spell's text includes casting it at a higher level --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const rec = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R178', cls: 'Druid', level: 3, species: 'Human', background: 'Guide' }), R), { id: 'r178' });
+        rec.sheet.spells = [...new Set((rec.sheet.spells || []).concat(['Thunderwave']))];
+        state.party.push(rec); save();
+        await openCharSheet('r178'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(300);
+        document.querySelector('#cs-root [data-cs-open="sp:Thunderwave"]').click(); await sleep(250);
+        const t = [...document.querySelectorAll('#cs-root .cs-spell')].map(e => e.innerText).find(x => /^Thunderwave/.test(x.trim())) || '';
+        ok('spells: an opened spell ends with "Using a Higher-Level Spell Slot" (Thunderwave: 1d8 a level)', /Higher-Level Spell Slot/.test(t) && /1d8 for each spell slot level above 1/.test(t), t.slice(-200));
+        ok('spells: csSpellText gives a cantrip its upgrade', /Cantrip Upgrade/.test(csSpellText(csSpell('Starry Wisp'))));
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+      } catch(e){ ok('round 178 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
