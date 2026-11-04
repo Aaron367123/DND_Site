@@ -13426,6 +13426,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 172 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 173: a toggle for ranged attacks using ammunition; drinking a healing potion --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), loot0 = localStorage.getItem(CS_LOOT_KEY);
+      try {
+        const R = await sktRulesLoad('2024');
+        const rec = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R173', cls: 'Ranger', level: 3, species: 'Human', background: 'Guide' }), R), { id: 'r173', hp: 5 });
+        rec.build.items = [{ name: 'Potion of Healing', qty: 2 }, { name: 'Potion of Greater Healing', qty: 1 }];
+        state.party.push(Object.assign(sktComputeCharacter(rec.build, R, rec), { id: 'r173', hp: 5 })); save();
+        const P = () => state.party.find(p => p.id === 'r173');
+        const arrows = () => csItems(P()).filter(m => /arrow/i.test(m.name)).reduce((n, m) => n + (m.qty || 1), 0);
+        await openCharSheet('r173'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(400);
+        const shoot = async () => { const b = [...document.querySelectorAll('#cs-root [data-cs-atk]')].find(x => /Longbow/.test((x.closest('.cs-atk, tr') || {}).textContent || '')); if (b){ b.click(); await sleep(250); } return !!b; };
+        const tog = () => document.querySelector('#cs-root [data-cs-ammoauto]');
+        ok('ammunition: the Attacks heading has a "Use ammunition" toggle, on by default', !!tog() && tog().checked);
+        const a0 = arrows(); await shoot();
+        ok('ammunition: on, a Longbow attack takes an arrow', arrows() === a0 - 1, a0 + ' → ' + arrows());
+        tog().click(); await sleep(250);
+        const a1 = arrows(); await shoot();
+        ok('ammunition: off, it doesn’t — and the row says the arrows aren’t counted', P().ammoAuto === false && arrows() === a1 && /not counted/.test(document.querySelector('#cs-root').textContent), a1 + ' → ' + arrows());
+        tog().click(); await sleep(250);
+        ok('ammunition: back on, the setting clears', P().ammoAuto === undefined && tog().checked);
+        // Potions: the magic catalogue loads for them, and Drink heals and uses one up.
+        let g = 0; while (!CS.magic && g++ < 40) await sleep(100);
+        csRender(); await sleep(200);
+        const drink = n => document.querySelector('#cs-root [data-cs-drink="' + n + '"]');
+        ok('potion: Potion of Healing has Drink · 2d4+2, and Greater Healing 4d4+4', !!drink('Potion of Healing') && /2d4\+2/.test(drink('Potion of Healing').textContent) && !!drink('Potion of Greater Healing') && /4d4\+4/.test(drink('Potion of Greater Healing').textContent),
+           [...document.querySelectorAll('#cs-root [data-cs-drink]')].map(b => b.textContent).join(' | '));
+        const hp0 = P().hp; drink('Potion of Healing').click(); await sleep(400);
+        const pot = () => ((P().build.items || []).find(m => m.name === 'Potion of Healing') || {}).qty;
+        ok('potion: drinking heals 4–10 and leaves one', P().hp - hp0 >= 4 && P().hp - hp0 <= 10 && pot() === 1, (P().hp - hp0) + ' healed, ' + pot() + ' left');
+        // A claimed potion from the party loot.
+        const L = csLootRead(); L.items = (L.items || []).concat([{ id: 'r173p', name: 'Potion of Healing', qty: 3, assignedTo: 'r173' }]); localStorage.setItem(CS_LOOT_KEY, JSON.stringify(L));
+        document.querySelector('#cs-root [data-cs-tab="inventory"]').click(); await sleep(300);
+        const lb = document.querySelector('#cs-root [data-cs-lootdrink="r173p"]');
+        const hp1 = P().hp; if (lb){ lb.click(); await sleep(400); }
+        ok('potion: a claimed one in the party loot can be drunk too — healed, one fewer in the loot', !!lb && P().hp > hp1 && (csLootRead().items.find(x => x.id === 'r173p') || {}).qty === 2, JSON.stringify([!!lb, hp1, P().hp, (csLootRead().items.find(x => x.id === 'r173p') || {}).qty]));
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+      } catch(e){ ok('round 173 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); if (loot0 == null) localStorage.removeItem(CS_LOOT_KEY); else localStorage.setItem(CS_LOOT_KEY, loot0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
