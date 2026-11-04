@@ -1098,6 +1098,7 @@ registerPanel('turnview', {
       return rows.filter(a => a && a.name).map(a => ({
         name: typeof sktAtkLabel === 'function' ? sktAtkLabel(a) : a.name, pc: true, str: !!a.str, spell: !!a.spell,
         mastery: typeof sktMasteryOf === 'function' ? sktMasteryOf(p, a) : (a.mastery || ''),
+        masteryText: typeof sktMasteryText === 'function' && typeof sktMasteryOf === 'function' ? sktMasteryText(p, a, sktMasteryOf(p, a)) : '',
         bonus: parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0,
         dmgText: a.damage || '',
       }));
@@ -1244,7 +1245,7 @@ registerPanel('turnview', {
       }
       return `<div class="tv-act">
         <div class="tv-act-body">
-          <div class="tv-act-name">${esc(a.name)}${a.mastery ? ` <span class="tv-mastery" title="${esc(SKT_MASTERY_TEXT[a.mastery] || '')}">${esc(a.mastery)}</span>` : ''}</div>
+          <div class="tv-act-name">${esc(a.name)}${a.mastery ? ` <span class="tv-mastery" title="${esc(a.masteryText || SKT_MASTERY_TEXT[a.mastery] || '')}">${esc(a.mastery)}</span>` : ''}</div>
           <div class="tv-act-line">${line}</div>
         </div>
         <div class="tv-act-ctl">${ctl}</div>

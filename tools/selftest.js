@@ -13530,6 +13530,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 174 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window._findCombatantForPartyMember = find0; state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); save(); }
     }
+    // -- Round 175: weapon masteries with the character's own numbers --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const pc = { id: 'r175', name: 'R175', level: 5, abilities: { str: 16, dex: 18, con: 14, int: 10, wis: 10, cha: 10 }, sheet: { profBonus: 3 } };
+        const t = (a, ms) => sktMasteryText(pc, a, ms);
+        ok('mastery: Graze says the damage on a miss — the Strength modifier for a Strength weapon', /takes 3 damage/.test(t({ name: 'Greatsword', str: true, props: ['H', '2H'] }, 'Graze')), t({ name: 'Greatsword', str: true }, 'Graze'));
+        ok('mastery: Topple gives its DC (8 + modifier + proficiency)', /DC 14 Constitution/.test(t({ name: 'Quarterstaff', str: true, props: ['V'] }, 'Topple')), t({ name: 'Quarterstaff', str: true }, 'Topple'));
+        ok('mastery: a finesse weapon uses the better of Strength and Dexterity', /DC 15 Constitution/.test(t({ name: 'Whip', props: ['F', 'R'] }, 'Topple')), t({ name: 'Whip', props: ['F'] }, 'Topple'));
+        ok('mastery: Cleave says the second hit leaves the modifier off', /without your \+3/.test(t({ name: 'Greataxe', str: true }, 'Cleave')));
+        // On the sheet: the mastery button's text, and the toast it shows, carry the numbers.
+        const R = await sktRulesLoad('2024');
+        const rec = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R175', cls: 'Fighter', level: 1, species: 'Human', background: 'Soldier', masteries: ['greatsword', 'flail', 'javelin'] }), R), { id: 'r175' });
+        state.party.push(rec); save();
+        await openCharSheet('r175'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(250);
+        const btn = [...document.querySelectorAll('#cs-root [data-cs-mastery]')].find(b => b.dataset.csMastery === 'Graze' || b.dataset.csMastery === 'Topple' || b.dataset.csMastery === 'Cleave');
+        ok('sheet: a mastery button carries the numbered text', !!btn && /\d/.test(btn.title) && /\d/.test(btn.dataset.csMasteryT || ''), btn ? btn.title : [...document.querySelectorAll('#cs-root [data-cs-mastery]')].map(b => b.dataset.csMastery).join(','));
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+      } catch(e){ ok('round 175 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

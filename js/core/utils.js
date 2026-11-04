@@ -1677,6 +1677,21 @@ const SKT_MASTERY_TEXT = {
   Topple: 'On a hit, the target makes a CON save (DC 8 + the attack\u2019s ability modifier + proficiency) or falls Prone.',
   Vex:    'On a hit that deals damage, Advantage on your next attack against it before the end of your next turn.',
 };
+// A mastery with this character's numbers in it, as D&D Beyond shows them:
+// Graze's damage on a miss, Topple's save DC. The ability is the one the
+// attack uses (Strength, or Dexterity for a ranged or finesse weapon that
+// isn't marked as using Strength).
+function sktMasteryText(pc, a, ms){
+  const base = SKT_MASTERY_TEXT[ms] || '';
+  if (!pc || !a) return base;
+  const ab = pc.abilities || {}, m = k => Math.floor(((+ab[k] || 10) - 10) / 2);
+  const mod = a.str ? m('str') : (a.range && !(a.props || []).includes('T')) || (a.props || []).includes('F') ? Math.max(m('dex'), (a.props || []).includes('F') ? m('str') : -99) : m('str');
+  const pb = +((pc.sheet || {}).profBonus) || (2 + Math.floor(((+pc.level || 1) - 1) / 4));
+  if (ms === 'Graze') return 'On a miss, the target still takes ' + Math.max(0, mod) + ' damage (your ' + (a.str ? 'Strength' : 'ability') + ' modifier), of the weapon’s type.';
+  if (ms === 'Topple') return 'On a hit, the target makes a DC ' + (8 + mod + pb) + ' Constitution save or falls Prone.';
+  if (ms === 'Cleave') return 'On a hit, attack a second creature within 5 ft of the first, once per turn: the weapon’s damage dice' + (mod > 0 ? ', without your +' + mod : '') + '.';
+  return base;
+}
 const _sktMasteryCache = new Map();
 function sktImportedMasteries(pc){
   const t = String((pc && pc.sheet && pc.sheet.bio && pc.sheet.bio.features) || '');

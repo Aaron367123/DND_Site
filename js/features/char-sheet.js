@@ -802,7 +802,7 @@ function sktAtkLabel(a){
 function csAtkNotes(pc, a){
   const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : a.mastery;
   const rest = [a.range ? a.range + ' ft' : '', (a.props || []).includes('A') ? csAmmoLeft(pc, a) : ''].filter(Boolean).join(' · ');
-  return (ms ? '<button class="cs-mastery" data-cs-mastery="' + csE(ms) + '" title="' + csE(SKT_MASTERY_TEXT[ms] || '') + '">Mastery: <b>' + csE(ms) + '</b></button>' + (rest ? ' · ' : '') : '') + csE(rest);
+  return (ms ? '<button class="cs-mastery" data-cs-mastery="' + csE(ms) + '" data-cs-mastery-t="' + csE(sktMasteryText(pc, a, ms)) + '" title="' + csE(sktMasteryText(pc, a, ms)) + '">Mastery: <b>' + csE(ms) + '</b></button>' + (rest ? ' · ' : '') : '') + csE(rest);
 }
 
 // ── The tabs ─────────────────────────────────────────────────────────────────
@@ -1154,7 +1154,7 @@ function csOnClick(e){
     return csRender();
   }
   if (d.csMastery){
-    const t = SKT_MASTERY_TEXT[d.csMastery] || '';
+    const t = d.csMasteryT || SKT_MASTERY_TEXT[d.csMastery] || '';
     if (CS.embed && typeof paShowRoll === 'function') paShowRoll('<div class="pa-roll-in"><span class="pa-roll-l">' + csE(d.csMastery) + ' (weapon mastery)</span><span class="pa-roll-why">' + csE(t) + '</span></div>');
     else if (typeof showToast === 'function') showToast(d.csMastery + ': ' + t);
     return;
@@ -1162,7 +1162,7 @@ function csOnClick(e){
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
-    { const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : ''; CS.rollNote = ms ? ms + ': ' + (SKT_MASTERY_TEXT[ms] || '') : null; }
+    { const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : ''; CS.rollNote = ms ? ms + ': ' + sktMasteryText(pc, a, ms) : null; }
     const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, a.spell ? 'attack:spell' : a.str ? 'attack:str' : 'attack');
     // A Champion crits on a 19 (or 18).
     if (!a.spell && r.natural >= ((pc.sheet || {}).critRange || 20) && !r.crit){ r.crit = true; r.why = [r.why, 'critical on ' + pc.sheet.critRange + '+'].filter(Boolean).join('; '); }
