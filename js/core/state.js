@@ -139,6 +139,7 @@ function loadDomain(domain){
       migratePartySpellSlots();
       migratePartyResourceAliases();
       migratePartyHpManual();
+      migratePartyDetailTraits();
       reconcilePcHp();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
@@ -246,6 +247,18 @@ function migratePartyHpManual(){
     if (!hp || hp.method !== 'manual' || typeof p.hpMaxNormal === 'number') return;
     const max = +p.hpMax;
     if (max > 0 && max !== +hp.manual) p.build.hp = Object.assign({}, hp, { manual: max });
+  });
+}
+// A sheet read from a PDF saved its personality traits as details.traits;
+// the sheet, the builder and the printout read details.personality, so they
+// showed an empty box.
+function migratePartyDetailTraits(){
+  (state.party || []).forEach(p => {
+    [p && p.build && p.build.details, p && p.sheet && p.sheet.details].forEach(d => {
+      if (!d || typeof d.traits !== 'string') return;
+      if (!d.personality && d.traits) d.personality = d.traits;
+      delete d.traits;
+    });
   });
 }
 function migratePartyResourceAliases(){

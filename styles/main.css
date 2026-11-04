@@ -5403,6 +5403,12 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-feat { padding:4px 0; border-bottom:1px solid var(--border); }
 .cs-feat summary { cursor:pointer; }
 .cs-feat-t { font-size:var(--fs-sm); color:var(--text); margin:6px 0; line-height:1.45; }
+/* What the background gave: label beside a value that can run long (equipment). */
+.cs-bgsum { margin:6px 0 10px; border-bottom:1px solid var(--border); padding-bottom:6px; }
+.cs-bgsum .cs-kv { justify-content:flex-start; align-items:baseline; }
+.cs-bgsum .cs-kv span { flex:0 0 150px; color:var(--text-dim); font-size:var(--fs-sm); }
+.cs-bgsum .cs-kv b { font-weight:normal; line-height:1.4; }
+@media (max-width:520px){ .cs-bgsum .cs-kv { flex-direction:column; gap:0; } .cs-bgsum .cs-kv span { flex:none; } }
 .cs-facts { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:4px 16px; margin:8px 0; }
 .cs textarea { width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm); padding:6px 8px; font:inherit; resize:vertical; }
 .cs-text { white-space:normal; line-height:1.45; }

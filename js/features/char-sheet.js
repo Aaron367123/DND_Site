@@ -944,11 +944,47 @@ function csFeatureUses(pc, name){
   return h + '</span>';
 }
 
+// What the background gave, as D&D Beyond lists it first: ability scores,
+// feat, skills, tools, languages, equipment. A printed background's own list,
+// with the increases this character chose; a custom one from its choices.
+// (The tab showed the name alone, and "(Custom)" for a custom background.)
+const CS_AB_NAME = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+function csBgSummary(pc){
+  const b = pc.build, R = CS.R, out = { name: '', rows: [] };
+  if (!b || !R || typeof sktBuildBackground !== 'function') return out;
+  let bg = null; try { bg = sktBuildBackground(R, b); } catch(e){ bg = null; }
+  if (!bg) return out;
+  out.name = bg.name || '';
+  const inc = Object.keys(b.bgAsi || {}).filter(k => +b.bgAsi[k]).sort((x, y) => b.bgAsi[y] - b.bgAsi[x]).map(k => (CS_AB_NAME[k] || k) + ' +' + b.bgAsi[k]).join(', ');
+  const plain = e => (typeof sktRulesText === 'function' ? sktRulesText([e]) : String(e)).replace(/\s+/g, ' ').trim();
+  const list = (bg.entries || []).find(e => e && e.type === 'list' && (e.items || []).some(i => i && i.name));
+  if (list){
+    list.items.filter(i => i && i.name).forEach(i => {
+      const k = String(i.name).replace(/:\s*$/, '');
+      let v = plain(i.entry != null ? i.entry : (i.entries || []).join(' '));
+      if (/^Ability Scores?$/i.test(k) && inc) v += ' (' + inc + ')';
+      // "Choose A or B": the one this character took.
+      const ab = /^Equipment$/i.test(k) && /\(A\)\s*(.*?);?\s*or\s*\(B\)\s*(.*)$/i.exec(v), took = ((b.equipment || {}).bg || '').toUpperCase();
+      if (ab && (took === 'A' || took === 'B')) v = (took === 'A' ? ab[1] : ab[2]).replace(/[;,]\s*$/, '');
+      out.rows.push([k, v]);
+    });
+  } else if (bg.custom){
+    const c = b.customBg || {};
+    if ((c.abilities || []).length) out.rows.push(['Ability Scores', c.abilities.map(k => CS_AB_NAME[k] || k).join(', ') + (inc ? ' (' + inc + ')' : '')]);
+    if (c.feat) out.rows.push(['Feat', c.feat]);
+    if ((c.skills || []).length) out.rows.push(['Skill Proficiencies', c.skills.map(k => (typeof SKT_SKILL_LABEL !== 'undefined' && SKT_SKILL_LABEL[k]) || k).join(', ')]);
+    if ((c.tools || []).length) out.rows.push(['Tool Proficiencies', c.tools.join(', ')]);
+    if (+c.languages) out.rows.push(['Languages', c.languages + ' of your choice']);
+  }
+  return out;
+}
 // Background: who they are. Written into the build too, so the builder shows it.
 CS_TAB_RENDER.background = pc => {
   const sh = pc.sheet || {}, d = sh.details || (pc.build && pc.build.details) || {}, ro = CS.readOnly;
   const bgFeat = (sh.featureList || []).filter(f => f.from === 'background');
-  let h = '<h4>' + csE(pc.background || (pc.build && pc.build.background) || 'Background') + '</h4>'
+  const sum = csBgSummary(pc);
+  let h = '<h4>' + csE(sum.name || pc.background || (pc.build && pc.build.background) || 'Background') + '</h4>'
+    + (sum.rows.length ? '<div class="cs-bgsum">' + sum.rows.map(([k, v]) => '<div class="cs-kv"><span>' + csE(k) + '</span><b>' + csE(v) + '</b></div>').join('') + '</div>' : '')
     + bgFeat.map(f => '<div class="cs-feat-t"><b>' + csE(f.name) + '</b><br>' + csE(f.text || '').replace(/\n/g, '<br>') + '</div>').join('');
   const facts = [['alignment', 'Alignment'], ['gender', 'Gender'], ['faith', 'Faith'], ['lifestyle', 'Lifestyle'], ['age', 'Age'], ['height', 'Height'], ['weight', 'Weight'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin']];
   h += '<div class="cs-facts">' + (sh.size ? '<div class="cs-kv"><span>Size</span><b>' + csE(sh.size) + '</b></div>' : '')

@@ -122,7 +122,7 @@ function cbFromImported(pc){
   else if (bg){ b.background = bg.name; }
   else if (pc.background) notes.push('Background “' + pc.background + '” isn’t in the rules here — pick one');
   b.details = Object.assign({}, b.details, { alignment: pc.alignment || '', backstory: (sh.bio || {}).backstory || '',
-    traits: (sh.bio || {}).traits || '', ideals: (sh.bio || {}).ideals || '', bonds: (sh.bio || {}).bonds || '', flaws: (sh.bio || {}).flaws || '' });
+    personality: (sh.bio || {}).traits || '', ideals: (sh.bio || {}).ideals || '', bonds: (sh.bio || {}).bonds || '', flaws: (sh.bio || {}).flaws || '' });
   // Skills it's proficient in: what the background and species don't give
   // are the class's picks (then a species pick), expertise where it has it.
   const prof = sh.skillProf || (typeof csImpProfs === 'function' ? csImpProfs(pc).skillProf : {});

@@ -13260,6 +13260,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 166 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); if (loot0 == null) localStorage.removeItem(CS_LOOT_KEY); else localStorage.setItem(CS_LOOT_KEY, loot0); save(); }
     }
+    // -- Round 167: the Background tab says what the background gave; imported traits show --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const sage = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R167', cls: 'Druid', level: 3, species: 'Human', background: 'Sage',
+          bgAsi: { wis: 2, con: 1 }, equipment: { cls: 'A', bg: 'A', picks: {} } }), R), { id: 'r167a' });
+        const cust = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R167b', cls: 'Rogue', level: 3, species: 'Human', background: SKT_CUSTOM_BG,
+          customBg: { name: 'Stage Magician', skills: ['performance', 'sleightOfHand'], tools: [], languages: 0, abilities: ['dex', 'cha', 'con'] }, bgAsi: { dex: 2, cha: 1 } }), R), { id: 'r167b' });
+        // A sheet read from a PDF kept its personality traits under "traits".
+        const imp = JSON.parse(JSON.stringify(sage)); imp.id = 'r167c';
+        imp.build.details = { traits: 'Talks to the moss.', ideals: 'Balance.' }; imp.sheet.details = { traits: 'Talks to the moss.', ideals: 'Balance.' };
+        state.party.push(sage, cust, imp);
+        migratePartyDetailTraits(); save();
+        const I = state.party.find(p => p.id === 'r167c');
+        ok('details: personality traits saved as "traits" move to the box the sheet, builder and printout read', I.build.details.personality === 'Talks to the moss.' && I.sheet.details.personality === 'Talks to the moss.' && !('traits' in I.build.details), JSON.stringify(I.build.details));
+        const tab = async id => {
+          await openCharSheet(id); await sleep(300);
+          document.querySelector('#cs-root [data-cs-tab="background"]').click(); await sleep(200);
+          const root = document.querySelector('#cs-root');
+          return { head: (root.querySelector('h4') || {}).textContent, rows: Object.fromEntries([...root.querySelectorAll('.cs-bgsum .cs-kv')].map(r => [r.querySelector('span').textContent, r.querySelector('b').textContent])),
+                   pers: (root.querySelector('[data-cs-detail="personality"]') || {}).value };
+        };
+        const a = await tab('r167a');
+        ok('Background tab: a 2024 Sage lists its ability scores with the increases chosen, its feat, skills and tool', /Constitution, Intelligence, Wisdom \(Wisdom \+2, Constitution \+1\)/.test(a.rows['Ability Scores'] || '')
+           && /Magic Initiate/.test(a.rows.Feat || '') && /Arcana, History/.test(a.rows['Skill Proficiencies'] || '') && /Calligrapher/.test(a.rows['Tool Proficiency'] || ''), JSON.stringify(a));
+        ok('Background tab: and the equipment it took (A), not "Choose A or B"', /Quarterstaff/.test(a.rows.Equipment || '') && !/Choose|50 GP/.test(a.rows.Equipment || ''), a.rows.Equipment);
+        const b = await tab('r167b');
+        ok('Background tab: a custom background goes by its own name, with its choices', b.head === 'Stage Magician' && /Performance/.test(b.rows['Skill Proficiencies'] || '') && /Dexterity \+2/.test(b.rows['Ability Scores'] || ''), JSON.stringify(b));
+        const c = await tab('r167c');
+        ok('Background tab: the imported traits are in the Personality traits box', c.pers === 'Talks to the moss.', c.pers);
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+      } catch(e){ ok('round 167 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
