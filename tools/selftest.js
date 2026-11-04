@@ -13112,6 +13112,59 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 162 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 163: AC, initiative and speed typed on the party card survive a recompute --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const rec = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R163', cls: 'Fighter', level: 5, species: 'Human', background: 'Guide' }), R);
+        state.party.push(Object.assign({}, rec, { id: 'r163' })); save();
+        openPanel('party'); panelDefs.party._render(); await sleep(150);
+        const res = {};
+        for (const [f, add] of [['ac', 3], ['init', 2], ['spd', 10]]){
+          const i = state.party.findIndex(p => p.id === 'r163');
+          const inp = document.querySelector('input[data-idx="' + i + '"][data-field="' + f + '"]'); const before = state.party[i][f];
+          if (!inp){ res[f] = 'no box'; continue; }
+          inp.value = String(before + add); inp.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+          res[f] = [before + add, sktComputeCharacter(state.party[i].build, R, state.party[i])[f]];
+          panelDefs.party._render(); await sleep(60);
+        }
+        ok('party card: AC, initiative and speed typed for a built character stay after a recompute', ['ac', 'init', 'spd'].every(f => Array.isArray(res[f]) && res[f][0] === res[f][1]), JSON.stringify(res));
+        // Typing the rules' own number back clears the bonus.
+        const i = state.party.findIndex(p => p.id === 'r163'), inp = document.querySelector('input[data-idx="' + i + '"][data-field="ac"]');
+        if (inp){ inp.value = String(rec.ac); inp.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80); }
+        ok('party card: and typing the rules’ own AC back takes the custom bonus away', !('ac' in (state.party[i].build.overrides || {})), JSON.stringify(state.party[i].build.overrides));
+      } catch(e){ ok('round 163 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
+    // -- Round 164: a character worked out by older rules is worked out again, once --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), calc0 = window.sktComputeCharacter;
+      try {
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'R164', cls: 'Monk', level: 6, species: 'Dragonborn', background: 'Guide', speciesChoice: { ancestry: 'Red' },
+          hp: { method: 'manual', manual: 47, rolls: {} }, overrides: { ac: 1 } });
+        const rec = sktComputeCharacter(b, R);
+        // As saved before Breath Weapon was an action: no action, no stamp.
+        const old = JSON.parse(JSON.stringify(rec)); old.id = 'r164'; delete old.rulesRev;
+        old.sheet.activations = old.sheet.activations.filter(a => a.name !== 'Breath Weapon');
+        state.party.push(old);
+        save(); await sleep(300);
+        const p = state.party.find(x => x.id === 'r164');
+        ok('rules refresh: a record from older rules is worked out again on the next save (its Breath Weapon action arrives)', p.rulesRev === SKT_RULES_REV && p.sheet.activations.some(a => a.name === 'Breath Weapon'), p.rulesRev);
+        ok('rules refresh: keeping its hand-entered maximum and custom AC', p.hpMax === 47 && p.ac === rec.ac, JSON.stringify([p.hpMax, p.ac, rec.ac]));
+        // Up to date: not worked out again.
+        let n = 0; window.sktComputeCharacter = function(){ n++; return calc0.apply(this, arguments); };
+        save(); await sleep(200);
+        ok('rules refresh: and once only — an up-to-date record isn’t worked out again', n === 0, n + ' recomputes');
+        // A record stamped by a newer build is left alone too.
+        window.sktComputeCharacter = calc0;
+        p.rulesRev = '9999-01-01'; n = 0; window.sktComputeCharacter = function(){ n++; return calc0.apply(this, arguments); };
+        save(); await sleep(200);
+        ok('rules refresh: nor one a newer build has done', n === 0 && p.rulesRev === '9999-01-01', n + ' ' + p.rulesRev);
+      } catch(e){ ok('round 164 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktComputeCharacter = calc0; state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

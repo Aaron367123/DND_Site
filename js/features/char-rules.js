@@ -2123,13 +2123,21 @@ function sktPassiveGrants(text){
 // worked out (Rage ended by the tracker, concentration lost to a hit, a
 // toggle on the sheet) is worked out again. Called from save(), which every
 // one of those paths ends in.
+// Also every one worked out by older rules than this build's, once: a fix to
+// the rules (Creambak's Breath Weapon action, Kael's Hunter's Mark) reached a
+// saved character only when something happened to rebuild it. The stamp only
+// moves forward: an older build doesn't know it, keeps it as it is, and
+// can't undo the newer work. Raise SKT_RULES_REV when a rules change should
+// reach every saved character.
+const SKT_RULES_REV = '2026-11-03';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
   _sktStatesBusy = true;
   try {
     state.party.forEach(p => {
-      if (!p || !p.build || !p.sheet || (p.sheet.stateSig || '') === sktStateSig(p)) return;
+      if (!p || !p.build || !p.sheet) return;
+      if ((p.rulesRev || '') >= SKT_RULES_REV && (p.sheet.stateSig || '') === sktStateSig(p)) return;
       const ed = (p.build.edition || p.rules) === '2014' ? '2014' : '2024';
       const R = _sktRulesReady[ed];
       if (!R){ if (!_sktRulesCache[ed]) sktRulesLoad(ed).then(() => typeof save === 'function' && save(), () => {}); return; }
@@ -3119,7 +3127,7 @@ function sktComputeCharacter(build, R, prior){
       const was = String((((prior.build || {}).overrides) || {}).vulnerable || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
       return [...new Set((prior.vulnerabilities || []).filter(v => !was.includes(String(v).toLowerCase())).concat(extraVuln))];
     })(),
-    rules: R.edition,
+    rules: R.edition, rulesRev: SKT_RULES_REV,
     build: JSON.parse(JSON.stringify(build)),
     sheet: {
       skills, skillProf: skillProfOut, saves, saveProf: [...ctx.saveProf], profBonus: pb, passivePerception: passive,

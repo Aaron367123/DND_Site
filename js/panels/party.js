@@ -2712,7 +2712,18 @@ registerPanel('party',{
         // before any further damage hits real HP, but the field itself
         // shouldn't display a negative buffer.
         if (f === 'tempHp' && v < 0) v = 0;
+        const was = state.party[i];
         state.party[i]={...state.party[i],[f]:v};
+        // A built character's AC, initiative and speed are worked out from its
+        // build: a number typed here that only reached the sheet was undone by
+        // the next recompute (16 typed as 19 came back as 16). It's the
+        // build's custom bonus now, as the sheet's Customize keeps one.
+        if (['ac', 'init', 'spd'].includes(f) && was && was.build){
+          const key = f === 'spd' ? 'speed' : f, ov = {...(was.build.overrides || {})};
+          const base = (+was[f] || 0) - (+ov[key] || 0), delta = v - base;
+          if (delta) ov[key] = delta; else delete ov[key];
+          state.party[i] = {...state.party[i], build: {...state.party[i].build, overrides: ov}};
+        }
         // Typing a max at or above the normal one (a level-up mid-drain, or a
         // fix) means the maximum IS that now — the reduction is over.
         if (f === 'hpMax' && typeof state.party[i].hpMaxNormal === 'number' && v >= state.party[i].hpMaxNormal){
