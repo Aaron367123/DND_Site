@@ -2665,7 +2665,11 @@ function sktComputeCharacter(build, R, prior){
     if (!f) return;
     (ch.skills || []).forEach(k => ctx.skillProf.add(k));
     (ch.expertise || []).forEach(k => ctx.expertise.add(k));
-    if (ch.save) ctx.saveProf.add(ch.save);
+    // Resilient: the saving throw is the ability it raises, in both handbooks.
+    // It used to be a second, separate pick, so the two could differ and a
+    // quick build left it empty (a fighter's Resilient gave no save at all).
+    const raised = (f.saves || []).some(s => s && s.choose) && Object.keys(ch.inc || {})[0];
+    if (raised) ctx.saveProf.add(raised); else if (ch.save) ctx.saveProf.add(ch.save);
     (ch.tools || []).forEach(t => ctx.toolProf.add(String(t).toLowerCase()));
     (ch.languages || []).forEach(l => ctx.languages.add(l));
     (ch.weapons || []).forEach(w => ctx.weaponProf.add(String(w).toLowerCase()));

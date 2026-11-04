@@ -13030,6 +13030,34 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('cantrips: every damaging cantrip on six class lists, both handbooks, at levels 1, 5, 11 and 17', ct.checked > 400 && !ct.gaps.length, ct.gaps.slice(0, 3).join(' | '));
       } catch(e){ ok('round 158 threw', false, e.message); }
     }
+    // -- Round 159: Resilient's saving throw is the ability it raises; in 2024, one you lack --
+    if (!PLAYER){
+      try {
+        for (const ed of ['2024', '2014']){
+          await openCharBuilder({ edition: ed }); for (let k = 0; k < 100 && !(CB && CB.R); k++) await sleep(60);
+          const R = CB.R;
+          CB.build = Object.assign(sktBlankBuild(ed), { name: 'Res', cls: 'Fighter', level: 8, species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte', allBooks: true, showAllFeats: true,
+            abilities: { method: 'manual', base: { str: 14, dex: 14, con: 14, int: 14, wis: 14, cha: 14 } }, asi: { 4: { type: 'feat', feat: 'Resilient' } } });
+          CB.welcome = null; cbQuickBuild();
+          const fk = (sktBuildFeatEntries(CB.build, R).find(e => e.src === 'asi:4') || {}).key || 'Resilient';
+          const picked = Object.keys(CB.build.featChoices[fk].inc || {})[0], rec = sktComputeCharacter(CB.build, R);
+          ok('resilient (' + ed + '): a quick-built fighter raises an ability it has no save in, and gains that save', !!picked && !['str', 'con'].includes(picked) && rec.sheet.saveProf.includes(picked), picked + ' ' + JSON.stringify(rec.sheet.saveProf));
+          // The save follows the ability raised, whatever an old separate pick said.
+          const b2 = JSON.parse(JSON.stringify(CB.build)); b2.featChoices[fk] = { inc: { wis: 1 }, save: 'cha' };
+          const r2 = sktComputeCharacter(b2, R).sheet.saveProf;
+          ok('resilient (' + ed + '): the save is the ability raised (an old separate pick no longer splits them)', r2.includes('wis') && !r2.includes('cha'), JSON.stringify(r2));
+          CB.step = 'levels'; cbRender(); await sleep(80);
+          const sel = document.querySelector('#cb-root select[data-cb-featab^="' + fk + ':"]');
+          const off = sel ? [...sel.options].filter(o => o.disabled).map(o => o.value) : null;
+          ok('resilient (' + ed + '): ' + (ed === '2024' ? 'Strength and Constitution, saves a fighter has, can’t be picked' : 'any ability can be picked (2014 Resilient has no such limit)') + ', and there’s no separate save pick',
+             !!sel && (ed === '2024' ? off.includes('str') && off.includes('con') && !off.includes('dex') : !off.length) && !document.querySelector('#cb-root [data-cb-featsave]'), JSON.stringify(off));
+          CB.build.featChoices[fk] = { inc: { str: 1 } };
+          const broke = cbRuleBreaks().some(x => /Resilient.*already proficient/i.test(x.what));
+          ok('resilient (' + ed + '): Strength anyway ' + (ed === '2024' ? 'is flagged' : 'is allowed'), ed === '2024' ? broke : !broke);
+          cbClose(); await sleep(40);
+        }
+      } catch(e){ ok('round 159 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

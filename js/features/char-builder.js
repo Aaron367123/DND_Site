@@ -1325,7 +1325,10 @@ function cbQuickBuild(){
         else if ((ch[c.kind] || []).length < c.count) ch[c.kind] = (c.kind === 'skills' ? fresh(c.options) : c.options).slice(0, c.count);
       });
       const ac2 = cbFeatAbilityChoice(f);
-      if (ac2 && !Object.keys(ch.inc || {}).length){ const k = order.find(x => ac2.from.includes(x)); if (k) ch.inc = { [k]: ac2.amount }; }
+      // Resilient gives the save proficiency in the ability it raises: a
+      // fighter's Strength (a save it already has) wasted it. One it lacks first.
+      const owned = ac2 && ac2.savesToo ? cbSavesWithout(b, R, n) : new Set();
+      if (ac2 && !Object.keys(ch.inc || {}).length){ const k = order.find(x => ac2.from.includes(x) && !owned.has(x)) || order.find(x => ac2.from.includes(x)); if (k) ch.inc = { [k]: ac2.amount }; }
     });
     if (R.edition === '2024' && sp.additionalSpells && sp.additionalSpells.length > 1 && !b.speciesChoice.lineage) b.speciesChoice.lineage = sp.additionalSpells[0].name;
   }
@@ -1502,6 +1505,12 @@ function cbRuleBreaks(){
       if (o && o.kind === 'feat') return;
       have.forEach(n => { const x = R.optional.find(y => y.name === n); const q = x && sktOptionalPrereq(R, b, x); if (q && !q.ok) add('levels', n + ' needs ' + q.text); });
     }); }
+  // A 2024 Resilient raises an ability "in which you lack saving throw
+  // proficiency": not one the class already gives.
+  sktBuildFeatEntries(b, R).forEach(e => {
+    const f = sktRulesFeat(R, e.key), ch = f && cbFeatAbilityChoice(f), k = ch && ch.lacksSave && Object.keys((b.featChoices[e.key] || {}).inc || {})[0];
+    if (k && cbSavesWithout(b, R, e.key).has(k)) add('levels', e.key + ': ' + cbAbLabel(k) + ' saves are already proficient; choose an ability without them');
+  });
   // Feats: no non-repeatable feat twice, and each one's prerequisite.
   { const names = sktBuildFeatNames(b, R), seen = {};
     names.forEach(n => { const f = sktRulesFeat(R, n); if (seen[n] && !(f && f.repeatable)) add('levels', n + ' is taken twice'); seen[n] = true; });
@@ -1747,15 +1756,11 @@ CB_RENDER.levels = () => {
         const ch = cbFeatAbilityChoice(f);
         if (ch){
           const cur = Object.keys((b.featChoices[fk] || {}).inc || {})[0] || '';
-          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(fk) + ':' + ch.amount + '"><option value="">—</option>'
-            + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
+          const held = ch.savesToo ? cbSavesWithout(b, R, fk) : new Set();
+          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + (ch.savesToo ? ', and its saving throw' : '') + '<select class="cb-sel" data-cb-featab="' + cbEsc(fk) + ':' + ch.amount + '"><option value="">—</option>'
+            + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + (ch.lacksSave && held.has(k) && cur !== k ? ' disabled' : '') + '>' + cbAbLabel(k) + (ch.savesToo && held.has(k) ? ' (save already proficient)' : '') + '</option>').join('') + '</select></label>';
         }
         html += cbFeatChoicesHtml(fk);
-        if (/^Resilient$/i.test(f.name)){
-          const cur = (b.featChoices[fk] || {}).save || '';
-          html += '<label class="cb-f">Saving throw proficiency<select class="cb-sel" data-cb-featsave="' + cbEsc(fk) + '"><option value="">—</option>'
-            + SKT_ABS.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
-        }
         html += cbFeatureText(sktRulesText(f.entries));
       }
     }
@@ -1771,8 +1776,9 @@ CB_RENDER.levels = () => {
         const ch = cbFeatAbilityChoice(f);
         if (ch){
           const cur = Object.keys((b.featChoices[fk] || {}).inc || {})[0] || '';
-          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + '<select class="cb-sel" data-cb-featab="' + cbEsc(fk) + ':' + ch.amount + '"><option value="">—</option>'
-            + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + cbAbLabel(k) + '</option>').join('') + '</select></label>';
+          const held = ch.savesToo ? cbSavesWithout(b, R, fk) : new Set();
+          html += '<label class="cb-f">' + (ch.amount === 1 ? 'Increase by 1' : 'Increase') + (ch.savesToo ? ', and its saving throw' : '') + '<select class="cb-sel" data-cb-featab="' + cbEsc(fk) + ':' + ch.amount + '"><option value="">—</option>'
+            + ch.from.map(k => '<option value="' + k + '"' + (cur === k ? ' selected' : '') + (ch.lacksSave && held.has(k) && cur !== k ? ' disabled' : '') + '>' + cbAbLabel(k) + (ch.savesToo && held.has(k) ? ' (save already proficient)' : '') + '</option>').join('') + '</select></label>';
         }
         html += cbFeatChoicesHtml(fk);
       }
@@ -1951,9 +1957,17 @@ function cbFeatChoicesHtml(featName){
 }
 function cbFeatAbilityChoice(f){
   for (const a of (f.ability || [])){
-    if (a.choose) return { from: a.choose.from || SKT_ABS, amount: a.choose.amount || 1 };
+    if (a.choose) return { from: a.choose.from || SKT_ABS, amount: a.choose.amount || 1,
+      // Resilient: the ability raised is the save gained; in 2024 it must be
+      // one "in which you lack saving throw proficiency".
+      savesToo: (f.saves || []).some(x => x && x.choose), lacksSave: /lack saving throw proficiency/i.test(a.choose.entry || '') };
   }
   return null;
+}
+// The saves a character has from everything but this feat's own pick.
+function cbSavesWithout(b, R, fk){
+  const c = JSON.parse(JSON.stringify(b)); if (c.featChoices && c.featChoices[fk]){ delete c.featChoices[fk].inc; delete c.featChoices[fk].save; }
+  return new Set(sktComputeCharacter(c, R).sheet.saveProf || []);
 }
 
 // Search and filters for every spell list on the Spells step; the chosen
