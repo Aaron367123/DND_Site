@@ -13692,6 +13692,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 181 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelectorAll('#cb-root').forEach(e => e.remove()); CB = null; state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 182: monsters' 2024 initiative; a magic weapon gets past nonmagical immunity --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), comb0 = JSON.stringify(state.combatants);
+      try {
+        let g = 0; while (!(typeof _5eLoaded !== 'undefined' && _5eLoaded) && g++ < 100) await sleep(100);
+        const C = panelDefs.combat; state.combatants = []; save();
+        const bc = _5eData.find(d => d.cat === 'monster' && d.name === 'Berserker Commander' && d._raw && d._raw.initiative);
+        if (bc){ C.addMonster(bc); await sleep(40); }
+        const last = () => state.combatants[state.combatants.length - 1];
+        ok('initiative: a 2024 block with proficiency in it (Berserker Commander) adds it — +5, not its Dex +2', !!bc && last().initBonus === 5, bc ? last().initBonus : 'no block');
+        const adv = _5eData.find(d => d.cat === 'monster' && d._raw && d._raw.initiative && d._raw.initiative.advantageMode === 'adv');
+        if (adv){ C.addMonster(adv); await sleep(40); }
+        ok('initiative: and one that rolls it with advantage is marked so', !adv || last().initMode === 'adv');
+        // A +1 longsword is a magic weapon; a plain one isn't.
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'R182', cls: 'Fighter', level: 3, species: 'Human', background: 'Soldier', equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true },
+          items: [{ name: '+1 Longsword', base: 'longsword', qty: 1, equipped: true, rarity: 'uncommon', bonusWeapon: 1 }, { name: 'Handaxe', base: 'handaxe', qty: 1, equipped: true }] });
+        const rec = Object.assign(sktComputeCharacter(b, R), { id: 'r182' });
+        const sw = (rec.sheet.attacks || []).find(a => /Longsword/.test(a.name)) || {}, ax = (rec.sheet.attacks || []).find(a => /Handaxe/.test(a.name)) || {};
+        ok('attacks: a +1 longsword is marked magical, a handaxe isn’t', sw.magic === true && !ax.magic, JSON.stringify([sw.name, sw.magic, ax.name, ax.magic]));
+        state.party.push(rec); state.combatants.push({ id: 'r182', name: 'R182', isPC: true, hp: 30, hpMax: 30, initiative: 10 }); save();
+        const T = panelDefs.turnview, rows = T._attacksFor(state.combatants.find(c => c.id === 'r182'));
+        ok('Turn View: the character’s +1 longsword attack is magical; the handaxe isn’t', (rows.find(a => /Longsword/.test(a.name)) || {}).magical === true && !(rows.find(a => /Handaxe/.test(a.name)) || {}).magical);
+        // A 2014 werewolf, immune to nonmagical slashing.
+        const ww = _5eData.find(d => d.cat === 'monster' && d.name === 'Werewolf' && /nonmagical/i.test(JSON.stringify(d._raw || {})));
+        if (ww){ C.addMonster(ww); await sleep(40); }
+        const wi = state.combatants.length - 1, hp0 = state.combatants[wi].hp;
+        C._lastAtkProp = null; C._applyHpDelta(wi, -10, 'slashing');
+        const plain = hp0 - state.combatants[wi].hp;
+        C._lastAtkProp = 'magical'; C._applyHpDelta(wi, -10, 'slashing'); C._lastAtkProp = null;
+        const magic = hp0 - plain - state.combatants[wi].hp;
+        ok('damage: a werewolf ignores a plain slashing blow and takes a magical one', !ww || (plain === 0 && magic === 10), JSON.stringify([plain, magic]));
+      } catch(e){ ok('round 182 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { const C = panelDefs.combat; if (C) C._lastAtkProp = null; state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

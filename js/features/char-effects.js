@@ -298,7 +298,7 @@
     desc: 'Reduce falling damage by ' + (5 * ctx.level) + '.' }));
   both(['class:monk:Stunning Strike'], ctx => act(ctx, { name: 'Stunning Strike', action: 'Free', resource: 'Focus Points', amount: 1, feature: 'Stunning Strike',
     desc: 'After you hit with a monk weapon or unarmed strike, the target makes a Constitution save (DC ' + (8 + ctx.pb + ctx.mod.wis) + ') or is Stunned until the start of your next turn.' }));
-  def('2014:class:monk:Ki-Empowered Strikes', ctx => note(ctx, 'Ki-Empowered Strikes: your unarmed strikes count as magical.'));
+  def('2014:class:monk:Ki-Empowered Strikes', ctx => { ctx.kiEmpowered = true; note(ctx, 'Ki-Empowered Strikes: your unarmed strikes count as magical.'); });
   def('2024:class:monk:Empowered Strikes', ctx => note(ctx, 'Empowered Strikes: your unarmed strikes can deal force damage instead of bludgeoning.'));
   def('2014:class:monk:Stillness of Mind', ctx => act(ctx, { name: 'Stillness of Mind', action: 'Action', feature: 'Stillness of Mind', desc: 'End one effect on yourself that is causing you to be Charmed or Frightened.' }));
   def('2014:class:monk:Purity of Body', ctx => { ctx.immune.add('poison'); note(ctx, 'Purity of Body: immune to disease and poison.'); });

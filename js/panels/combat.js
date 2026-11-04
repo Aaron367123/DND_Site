@@ -1571,7 +1571,9 @@ registerPanel('combat',{
     state.combatants.forEach((c, i) => {
       if (c.isPC) return;
       const bonus = c.initBonus || 0;
-      const d20 = sktD(20);
+      // A block that rolls initiative with advantage (or disadvantage).
+      const a = sktD(20), b2 = c.initMode ? sktD(20) : a;
+      const d20 = c.initMode === 'adv' ? Math.max(a, b2) : c.initMode === 'dis' ? Math.min(a, b2) : a;
       state.combatants[i] = {...c, initiative: d20 + bonus};
       rolled++;
     });
@@ -1595,7 +1597,8 @@ registerPanel('combat',{
         const ab = p && p.abilities;
         return (ab && typeof ab.dex === 'number') ? Math.floor((ab.dex - 10) / 2) : 0;
       }
-      // For monsters, initBonus IS the Dex mod (set in addMonster), so reuse.
+      // For monsters, initBonus is the stat block's initiative (the Dex mod,
+      // plus proficiency on a 2024 block that has it): close enough to break a tie.
       return c.initBonus || 0;
     };
     state.combatants.sort((a, b) => {
@@ -2856,7 +2859,11 @@ registerPanel('combat',{
   // Appends to the end of the combatant list — manual reordering is the user's
   // job now, so we don't auto-sort by initiative.
   addMonster(m){
-    const initMod = m.dex ? mod(m.dex) : 0;
+    // The stat block's own initiative: a 2024 block adds proficiency to it
+    // ("Initiative +5" on a Berserker Commander, Dex +2), or rolls it with
+    // advantage. Only the Dex modifier was used.
+    const ini = typeof sktMonsterInitiative === 'function' && m._raw ? sktMonsterInitiative(m._raw) : null;
+    const initMod = ini ? ini.bonus : (m.dex ? mod(m.dex) : 0);
     // Count BEFORE renaming — _numberFirstOfGroup turns a lone "Goblin" into
     // "Goblin 1", which would otherwise make the first duplicate look like a
     // fresh unnumbered add.
@@ -2904,7 +2911,8 @@ registerPanel('combat',{
       hpMax: m.hp,
       ac: m.ac,
       initBonus: initMod,
-      initiative: initMod, // pre-fill with dex modifier; user can bump it before/during combat
+      initiative: initMod, // pre-fill with the initiative bonus; user can bump it before/during combat
+      ...(ini && ini.mode ? { initMode: ini.mode } : {}),
       conditions: [],
       ...legendaryFields,
       portrait,

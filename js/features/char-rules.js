@@ -3430,7 +3430,9 @@ function sktBuildEquipment(build, R){
     items.push(Object.assign({}, st, { _name: m.name, _qty: Math.max(1, +m.qty || 1),
       _hit: on ? (m.bonusWeapon || 0) + (m.bonusWeaponAttack || 0) : 0,
       _dmg: on ? (m.bonusWeapon || 0) + (m.bonusWeaponDamage || 0) : 0,
-      _ac: on ? (m.bonusAc || 0) : 0 }));
+      _ac: on ? (m.bonusAc || 0) : 0,
+      // A magic weapon (gets past "nonmagical" resistance), once attuned if it needs it.
+      _magic: on && !!((m.rarity && !/^(none|mundane)$/i.test(String(m.rarity))) || m.bonusWeapon || m.bonusWeaponAttack || m.bonusWeaponDamage) }));
   });
   const armors = items.filter(i => /^(LA|MA|HA)/.test(String(i.type)));
   const shield = items.filter(i => /^S(\||$)/.test(String(i.type))).sort((a, b) => (b._ac || 0) - (a._ac || 0))[0] || null;
@@ -3580,6 +3582,9 @@ function sktBuildAttacks(ctx, gear, sc){
       range: w.range || null,
       mastery: (ctx.build.masteries || []).map(s => s.toLowerCase()).includes(w.name.toLowerCase()) ? mastery : '',
       props, str: !ranged && ab === m.str, _ab: ab, _flat: flat,
+      // Magical, for a creature that resists nonmagical blows: a magic weapon,
+      // or Shillelagh's (2014: "the weapon becomes magical").
+      ...(w._magic || (shil && ctx.edition === '2014') ? { magic: true } : {}),
     });
   });
   // Two light melee weapons: a bonus-action attack with the other one, its
@@ -3618,7 +3623,7 @@ function sktBuildAttacks(ctx, gear, sc){
     const ud = gear && (gear.shield || (gear.weapons || []).length) ? '1d6' : '1d8';
     if (!uDie || _sktDieAvg(ud) > _sktDieAvg(uDie)) uDie = ud;
   }
-  out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb + uItem), str: uab === m.str,
+  out.push({ name: 'Unarmed Strike', atkBonus: sktSigned(uab + pb + uItem), str: uab === m.str, ...(ctx.kiEmpowered ? { magic: true } : {}),
              damage: (uDie ? uDie + sktSigned(uab + uflat) : String(Math.max(1, 1 + m.str + uflat))) + ' ' + (ctx.unarmedType || 'bludgeoning') });
   // A species' natural weapons, each an unarmed strike of its own.
   (ctx.naturalAttacks || []).forEach(n => { const k = n.ab || 'str';

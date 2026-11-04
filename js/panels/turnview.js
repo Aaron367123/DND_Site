@@ -1108,6 +1108,8 @@ registerPanel('turnview', {
           masteryText: typeof sktMasteryText === 'function' && typeof sktMasteryOf === 'function' ? sktMasteryText(p, a, sktMasteryOf(p, a)) : '',
           bonus: parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0,
           dmgText: a.damage || '',
+          // A magic weapon or a spell: past "nonmagical" resistance.
+          magical: !!(a.magic || a.spell),
         };
         // A cantrip the target saves against (Vicious Mockery: "DC 15 WIS")
         // read as "+15 to hit". It's a save: the target fails or makes it.
@@ -2408,7 +2410,7 @@ registerPanel('turnview', {
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote,
                     type: parts.length ? parts[0].type : '', detail,
-                    magical: !a.pc && panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
+                    magical: a.pc ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
 
