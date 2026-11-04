@@ -878,6 +878,9 @@ function showModal(title, fields, confirmLabel) {
 //   showConfirm('Remove all tokens?')           — basic
 //   showConfirm('Delete X?', {danger:true})     — red confirm button
 //   showConfirm('…', {title:'Heads up', confirmLabel:'Delete'})
+//   showConfirm('…', {input:{label:'The d8 rolled', min:1, max:8}}) — with a
+//     number box for a die rolled at the table: resolves to that number, or
+//     true when it's left empty (roll it here), false on Cancel.
 function showConfirm(message, opts){
   opts = opts || {};
   var title = opts.title || 'Confirm';
@@ -889,6 +892,8 @@ function showConfirm(message, opts){
     backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true">'
       + '<h3>' + esc(title) + '</h3>'
       + '<p style="color:var(--text-muted);font-size:var(--fs-lg);margin:0 0 20px;line-height:1.5">' + esc(message) + '</p>'
+      + (opts.input ? '<label class="conf-input" style="display:flex;align-items:center;gap:10px;margin:-8px 0 20px;color:var(--text-muted)">' + esc(opts.input.label || 'Rolled at the table')
+        + ' <input type="number" inputmode="numeric" id="conf-val"' + (opts.input.min != null ? ' min="' + opts.input.min + '"' : '') + (opts.input.max != null ? ' max="' + opts.input.max + '"' : '') + ' style="width:80px" placeholder="—"></label>' : '')
       + '<div class="modal-actions">'
       + '<button class="btn" id="conf-cancel">Cancel</button>'
       + '<button class="btn ' + (danger ? 'danger' : 'primary') + '" id="conf-ok">' + esc(confirmLabel) + '</button>'
@@ -902,7 +907,11 @@ function showConfirm(message, opts){
       if (e.key === 'Enter')  { e.preventDefault(); close(true); }
       if (e.key === 'Escape') { close(false); }
     };
-    var close = function(result){ document.removeEventListener('keydown', onKey); backdrop.remove(); resolve(result); };
+    var close = function(result){
+      document.removeEventListener('keydown', onKey);
+      var v = opts.input && result ? parseInt((backdrop.querySelector('#conf-val') || {}).value, 10) : NaN;
+      backdrop.remove(); resolve(result && !isNaN(v) ? v : result);
+    };
     document.addEventListener('keydown', onKey);
     backdrop.querySelector('#conf-cancel').addEventListener('click', function(){ close(false); });
     ok.addEventListener('click', function(){ close(true); });

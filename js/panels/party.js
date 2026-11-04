@@ -2538,10 +2538,10 @@ registerPanel('party',{
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return;
     const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
     const sides = parseInt(String(c.hitDice.dieType||'d8').replace('d','')) || 8;
-    showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? You'll roll ${c.hitDice.dieType||'d8'} + ${conMod>=0?'+':''}${conMod} (CON) and heal that much.`,
-      {title:'Spend hit die', confirmLabel:'Roll & Heal'}).then(ok => {
+    showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? It heals the ${c.hitDice.dieType||'d8'} + ${conMod>=0?'+':''}${conMod} (CON). Rolled it at the table? Type the number on the die; leave it empty to roll here.`,
+      {title:'Spend hit die', confirmLabel:'Heal', input:{ label:'The ' + (c.hitDice.dieType||'d8') + ' rolled', min:1, max:sides }}).then(ok => {
         if (!ok) return;
-        const r = this._rollHitDie(i);
+        const r = this._rollHitDie(i, typeof ok === 'number' ? ok : null);
         if (!r) return;
         this._render();
         showToast(`Rolled ${r.roll}+${r.conMod>=0?'+':''}${r.conMod} = ${r.heal} HP`);
@@ -2550,11 +2550,12 @@ registerPanel('party',{
   // The roll itself, without the confirm or the repaint — the player's phone
   // spends hit dice through here too, so the two cannot heal differently.
   // Returns { roll, conMod, heal, sides } or null when there is none to spend.
-  _rollHitDie(i){
+  // given: the number on a die rolled at the table, in place of the app's.
+  _rollHitDie(i, given){
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return null;
     const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
     const sides = parseInt(String(c.hitDice.dieType||'d8').replace('d','')) || 8;
-    const roll = sktD(sides);
+    const roll = given >= 1 ? Math.min(sides, Math.round(given)) : sktD(sides);
     // Minimum 1, where the PHB says minimum 0. A deliberate table ruling,
     // confirmed and kept — spending a die and healing nothing is a bad
     // beat nobody enjoys. It can only differ for a character with a
@@ -3221,9 +3222,14 @@ registerPanel('party',{
       }
       else if(act==='death-roll'){
         const c = state.party[+el.dataset.idx]; if (!c) return;
-        const r = sktRollDeathSave(c);
-        save(); this._render(); panelDefs.combat?._render?.();
-        showToast(c.name + ' · death save ' + r.msg);
+        // Rolled at the table, or here.
+        showConfirm(c.name + ' makes a death save: 10 or more is a success, a 1 counts twice, a 20 brings them back at 1 HP. Rolled it at the table? Type the d20; leave it empty to roll here.',
+          { title: 'Death save', confirmLabel: 'Death save', input: { label: 'The d20 rolled', min: 1, max: 20 } }).then(ok => {
+          if (!ok) return;
+          const r = sktRollDeathSave(c, typeof ok === 'number' ? ok : null);
+          save(); this._render(); panelDefs.combat?._render?.();
+          showToast(c.name + ' · death save ' + r.msg);
+        });
       }
       else if(act==='hd-rest'){
         const idx = +el.dataset.idx;
@@ -3633,8 +3639,9 @@ function sktDeathSaveD20(pc){
   const b = sktD(20);
   return { nat: Math.max(a, b), note: ' (advantage, ' + by.join(', ') + ': ' + a + ' / ' + b + ')' };
 }
-function sktRollDeathSave(pc){
-  const d = sktDeathSaveD20(pc), nat = d.nat;
+// given: the d20 rolled at the table (advantage, if any, already taken).
+function sktRollDeathSave(pc, given){
+  const d = given >= 1 ? { nat: Math.min(20, Math.round(given)), note: ' (rolled at the table)' } : sktDeathSaveD20(pc), nat = d.nat;
   const C = panelDefs.combat;
   const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
   const kind = nat >= 10 ? 'success' : 'fail';

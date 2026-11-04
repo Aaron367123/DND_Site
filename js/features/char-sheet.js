@@ -414,7 +414,7 @@ function csTop(pc){
   const box = (l, v, act, title) => '<' + (act ? 'button data-cs-roll="' + act + '"' : 'div') + ' class="cs-box"' + (title ? ' title="' + csE(title) + '"' : '') + '><span>' + l + '</span><b>' + v + '</b></' + (act ? 'button' : 'div') + '>';
   h += csRestHtml(pc);
   if (CS.conc && pc.concentration && !ro) h += '<div class="cs-conc">Concentration check: <b>CON save DC ' + CS.conc.dc + '</b> to keep ' + csE(CS.conc.spell)
-    + ' <button class="btn primary" data-cs="concsave">Roll it</button><button class="btn" data-cs="dropconc">Drop it</button></div>';
+    + ' <button class="btn primary" data-cs="concsave">Roll it</button><button class="btn" data-cs="concok" title="Made the save at the table">Kept it</button><button class="btn" data-cs="dropconc">Drop it</button></div>';
   h += '<div class="cs-boxes">' + box('AC', pc.ac ?? '—', null, sh.acDetail || sh.acSource || '')
     + box('Initiative' + csAdvMark(pc, 'init'), csSigned(pc.init ?? csMod((pc.abilities || {}).dex)), 'init')
     + (() => { const mode = pc.speeds && pc.speeds[pc.speedShow] != null ? pc.speedShow : 'walk';
@@ -446,7 +446,9 @@ function csTop(pc){
     const ds = hold.deathSaves || { success: 0, fail: 0 };
     const pips = (k) => [0, 1, 2].map(n => '<i class="' + ((ds[k] || 0) > n ? 'on' : '') + '"></i>').join('');
     h += '<div class="cs-death">' + (hold.dead ? '<b>Dead</b>' : hold.stable ? '<b>Stable at 0 HP</b>'
-      : '<b>Death saves</b><span class="ok">' + pips('success') + '</span><span class="no">' + pips('fail') + '</span>' + (ro ? '' : '<button class="btn primary" data-cs="death">Roll</button>')) + '</div>';
+      : '<b>Death saves</b><span class="ok">' + pips('success') + '</span><span class="no">' + pips('fail') + '</span>' + (ro ? '' : '<button class="btn primary" data-cs="death">Roll</button>'
+        // Rolled at the table: the number on the d20, and the sheet does the rest.
+        + '<span class="cs-physical"><span class="cb-dim">or the d20 rolled</span><input type="number" min="1" max="20" inputmode="numeric" data-cs-deathval aria-label="The d20 rolled for the death save"><button class="btn" data-cs="deathset">Record</button></span>')) + '</div>';
   }
   // How a click rolls, and what it rolled.
   h += '<div class="cs-rollbar"><span class="cb-seg cs-mode">' + [['normal', 'Normal'], ['adv', 'Advantage'], ['dis', 'Disadvantage']]
@@ -495,6 +497,7 @@ function csRestHtml(pc){
     + '<div>Hit dice <b>' + Math.max(0, hd.current ?? hd.max) + ' / ' + hd.max + '</b> ' + csE(hd.dieType || '') + (pc.sheet && pc.sheet.hitDiceByClass ? ' <span class="cb-dim">(' + csE(pc.sheet.hitDiceByClass) + ')</span>' : '') + ' · HP <b>' + (pc.hp || 0) + ' / ' + (pc.hpMax || 0) + '</b></div>'
     + (CS.resting.rolls.length ? '<div class="cb-dim">Rolled ' + csE(CS.resting.rolls.join(', ')) + ' — healed ' + CS.resting.healed + '</div>' : '')
     + '<div class="cs-rest-b"><button class="btn" data-cs="restdie"' + ((hd.current || 0) > 0 && (pc.hp || 0) < (pc.hpMax || 0) ? '' : ' disabled') + '>🎲 Spend a hit die</button>'
+    + ((hd.current || 0) > 0 && (pc.hp || 0) < (pc.hpMax || 0) ? '<span class="cs-physical"><span class="cb-dim">or the ' + csE(hd.dieType || 'd8') + ' rolled</span><input type="number" min="1" max="' + (parseInt(String(hd.dieType || 'd8').replace('d', ''), 10) || 8) + '" inputmode="numeric" data-cs-restval aria-label="The hit die rolled"><button class="btn" data-cs="restset">Spend it</button></span>' : '')
     + '<button class="btn primary" data-cs="restdone">Finish the rest</button><button class="btn" data-cs="restcancel">Cancel</button></div>'
     + '<div class="cb-dim">Finishing gives back what a short rest restores (Second Wind, Action Surge, Pact Magic…).</div></div>';
 }
@@ -1243,6 +1246,7 @@ function csOnClick(e){
     return csRender();
   }
   if (d.cs === 'dropconc'){ CS.conc = null; return csEdit('Dropped concentration', p => { p.concentration = null; }); }
+  if (d.cs === 'concok'){ CS.conc = null; return csRender(); }
   if (d.cs === 'concsave'){
     const c = CS.conc; if (!c) return;
     const sh = pc.sheet || {}, mod = (sh.saves && sh.saves.con != null ? sh.saves.con : csMod((pc.abilities || {}).con)) + (+sh.concBonus || 0);
@@ -1258,8 +1262,10 @@ function csOnClick(e){
   if (d.csCondinfo != null){ CS.condOpen = CS.condOpen === d.csCondinfo ? null : d.csCondinfo; return csRender(); }
   if (d.csCond) return csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), d.csCond), CS_QUIET);
   if (d.csExh) return csEdit('Exhaustion', p => { p.exhaustion = Math.max(0, Math.min(6, (+p.exhaustion || 0) + (+d.csExh))); }, CS_QUIET);
-  if (d.cs === 'death'){
-    const r = sktRollDeathSave(pc);
+  if (d.cs === 'death' || d.cs === 'deathset'){
+    let given = null;
+    if (d.cs === 'deathset'){ given = parseInt((document.querySelector('#cs-root [data-cs-deathval]') || {}).value, 10); if (!(given >= 1 && given <= 20)){ if (typeof showToast === 'function') showToast('Type the d20 rolled, 1 to 20'); return; } }
+    const r = sktRollDeathSave(pc, given);
     csLog({ kind: 'd20', label: 'Death save', mod: 0, rolls: [r.nat], natural: r.nat, total: r.nat, mode: 'normal', crit: r.nat === 20, fumble: r.nat === 1 });
     return csCommit();
   }
@@ -1336,9 +1342,11 @@ function csOnClick(e){
     return;
   }
   if (d.cs === 'short'){ CS.resting = { healed: 0, rolls: [] }; return csRender(); }
-  if (d.cs === 'restdie'){
+  if (d.cs === 'restdie' || d.cs === 'restset'){
     const P = panelDefs.party, i = csIdx();
-    const r = P && P._rollHitDie ? P._rollHitDie(i) : null;
+    let given = null;
+    if (d.cs === 'restset'){ given = parseInt((document.querySelector('#cs-root [data-cs-restval]') || {}).value, 10); if (!(given >= 1)){ if (typeof showToast === 'function') showToast('Type the number on the hit die rolled'); return; } }
+    const r = P && P._rollHitDie ? P._rollHitDie(i, given) : null;
     if (!r) return;
     CS.resting.healed += r.heal; CS.resting.rolls.push(r.roll + csSigned(r.conMod) + ' = ' + r.heal);
     const p = state.party[i]; p.hp = Math.min(p.hpMax || p.hp, (p.hp || 0));

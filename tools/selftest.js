@@ -6011,7 +6011,12 @@
         const btn = P._body.querySelector('[data-act="death-roll"]');
         ok('party: a downed PC between fights gets a death-save button', !!btn && /0\/3 saves/.test(btn.textContent));
         btn.click(); await sleep(40);
+        ok('party: it asks first — roll here, or the d20 rolled at the table', !!document.querySelector('#conf-val'));
+        document.querySelector('#conf-ok').click(); await sleep(40);
         ok('party: which rolls and records it', (state.party[0].deathSaves || {}).success === 1 && /1\/3 saves/.test(P._body.querySelector('[data-act="death-roll"]').textContent));
+        P._body.querySelector('[data-act="death-roll"]').click(); await sleep(40);
+        document.querySelector('#conf-val').value = '4'; document.querySelector('#conf-ok').click(); await sleep(40);
+        ok('party: a 4 rolled at the table is recorded as a failure', (state.party[0].deathSaves || {}).fail === 1 && (state.party[0].deathSaves || {}).success === 1, JSON.stringify(state.party[0].deathSaves));
         closePanel('party');
       } catch(e){ ok('party: the death-save checks ran to completion', false, e.message); }
       finally {
@@ -13480,6 +13485,50 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (typeof closeCharSheet === 'function') closeCharSheet();
       } catch(e){ ok('round 173 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); state.settings = JSON.parse(set0); if (loot0 == null) localStorage.removeItem(CS_LOOT_KEY); else localStorage.setItem(CS_LOOT_KEY, loot0); save(); }
+    }
+    // -- Round 174: rolled at the table — death saves, hit dice and concentration take the real die --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), comb0 = JSON.stringify(state.combatants), find0 = window._findCombatantForPartyMember;
+      try {
+        window._findCombatantForPartyMember = () => -1; state.combatants = [];
+        const base = { id: 'r174', name: 'R174', cls: 'fighter', level: 4, hp: 0, hpMax: 30, ac: 15, spd: 30, rules: '2024', abilities: { str: 14, dex: 12, con: 14, int: 10, wis: 10, cha: 10 },
+          hitDice: { current: 4, max: 4, dieType: 'd10' }, conditions: [] };
+        state.party.push(Object.assign({}, base)); save();
+        const P = () => state.party.find(p => p.id === 'r174');
+        await openCharSheet('r174'); await sleep(300);
+        const typeDeath = async n => { const i = document.querySelector('#cs-root [data-cs-deathval]'); i.value = String(n); document.querySelector('#cs-root [data-cs="deathset"]').click(); await sleep(150); };
+        ok('death saves: beside Roll, a box for the d20 rolled at the table', !!document.querySelector('#cs-root [data-cs-deathval]') && !!document.querySelector('#cs-root [data-cs="deathset"]'));
+        await typeDeath(15);
+        ok('death saves: a 15 typed in is a success', (P().deathSaves || {}).success === 1 && !(P().deathSaves || {}).fail, JSON.stringify(P().deathSaves));
+        await typeDeath(1);
+        ok('death saves: a 1 typed in counts as two failures', (P().deathSaves || {}).fail === 2, JSON.stringify(P().deathSaves));
+        await typeDeath(20);
+        ok('death saves: a 20 typed in brings them back at 1 HP', P().hp === 1 && !P().deathSaves, JSON.stringify([P().hp, P().deathSaves]));
+        // Hit dice on a short rest.
+        P().hp = 10; save(); csRender(); await sleep(100);
+        document.querySelector('#cs-root [data-cs="short"]') ? document.querySelector('#cs-root [data-cs="short"]').click() : [...document.querySelectorAll('#cs-root button')].find(b => b.textContent.trim() === 'Short rest').click();
+        await sleep(200);
+        const rv = document.querySelector('#cs-root [data-cs-restval]');
+        ok('short rest: beside Spend a hit die, a box for the d10 rolled', !!rv && rv.max === '10');
+        rv.value = '6'; document.querySelector('#cs-root [data-cs="restset"]').click(); await sleep(200);
+        ok('short rest: a 6 rolled heals 6 + CON (8), and spends the die', P().hp === 18 && P().hitDice.current === 3, JSON.stringify([P().hp, P().hitDice]));
+        document.querySelector('#cs-root [data-cs="restcancel"]').click(); await sleep(100);
+        // Concentration made at the table.
+        P().concentration = 'Bless'; save(); CS.conc = { dc: 10, spell: 'Bless' }; csRender(); await sleep(100);
+        const kept = document.querySelector('#cs-root [data-cs="concok"]');
+        ok('concentration: a "Kept it" button for a save made at the table', !!kept);
+        if (kept){ kept.click(); await sleep(100); }
+        ok('concentration: which closes the check and keeps the spell', !document.querySelector('#cs-root .cs-conc') && P().concentration === 'Bless');
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+        // The party card's Spend hit die asks the same.
+        const i = state.party.findIndex(p => p.id === 'r174'), hp0 = P().hp;
+        panelDefs.party._spendHitDie(i); await sleep(60);
+        const box = document.querySelector('#conf-val');
+        ok('party card: Spend hit die asks for the die rolled at the table', !!box);
+        if (box){ box.value = '3'; document.querySelector('#conf-ok').click(); await sleep(80); }
+        ok('party card: a 3 rolled heals 3 + CON', P().hp === hp0 + 5 && P().hitDice.current === 2, JSON.stringify([P().hp - hp0, P().hitDice]));
+      } catch(e){ ok('round 174 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window._findCombatantForPartyMember = find0; state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {
