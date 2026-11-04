@@ -12996,6 +12996,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
            && sktPassiveGrants('Your walking speed increases by 10 feet.').speed === 10);
       } catch(e){ ok('round 157 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 158: every damaging cantrip scales at 5, 11 and 17 as its own data says --
+    if (!PLAYER){
+      try {
+        const ct = await (async () => {
+  const out = { checked: 0, gaps: [], noAttack: [] };
+  for (const ed of ['2024', '2014']){
+    const R = await sktRulesLoad(ed);
+    for (const cls of ['Wizard', 'Cleric', 'Druid', 'Sorcerer', 'Warlock', 'Bard']){
+      const opts = sktSpellOptions(R, Object.assign(sktBlankBuild(ed), { cls, level: 1, allBooks: true }), 0).map(o => o.name);
+      for (const name of opts){
+        const sp = sktRulesSpell(R, name); if (!sp || !sp.scalingLevelDice) continue;
+        const sc = [].concat(sp.scalingLevelDice)[0]; if (!sc || !sc.scaling) continue;
+        for (const L of [1, 5, 11, 17]){
+          const b = Object.assign(sktBlankBuild(ed), { name: 'C', cls, level: L, species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte', allBooks: true, cantrips: [name],
+            abilities: { method: 'manual', base: { str: 10, dex: 10, con: 10, int: 16, wis: 16, cha: 16 } } });
+          let rec; try { rec = sktComputeCharacter(b, R); } catch(e){ out.gaps.push(ed + ' ' + cls + ' ' + name + ' threw'); continue; }
+          const at = Object.keys(sc.scaling).map(Number).filter(n => n <= L).sort((a, c) => c - a)[0];
+          const want = String(sc.scaling[at]).replace(/\s/g, '');
+          const a = (rec.sheet.attacks || []).find(x => x.name === name);
+          out.checked++;
+          if (!a){ if (L === 1) out.noAttack.push(ed + ' ' + cls + ' ' + name); continue; }
+          const got = String(a.damage || '').replace(/\s.*$/, '');
+          if (!got.startsWith(want.replace(/\+.*$/, ''))) out.gaps.push(ed + ' ' + cls + ' L' + L + ' ' + name + ': want ' + want + ', got ' + a.damage);
+        }
+      }
+    }
+  }
+  out.gaps = [...new Set(out.gaps)].slice(0, 40); out.noAttack = [...new Set(out.noAttack)].slice(0, 40);
+
+          return out;
+        })();
+        ok('cantrips: every damaging cantrip on six class lists, both handbooks, at levels 1, 5, 11 and 17', ct.checked > 400 && !ct.gaps.length, ct.gaps.slice(0, 3).join(' | '));
+      } catch(e){ ok('round 158 threw', false, e.message); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
