@@ -1551,6 +1551,14 @@ const SKT_RESOURCE_ALIASES = {
   'ki':        'Focus Points',
   'focus':     'Focus Points',
 };
+// What a pool is called for this character. The pool is Focus Points
+// everywhere inside (the merge above keeps it so), but a 2014 monk's handbook,
+// and D&D Beyond's 2014 monk, call it Ki Points.
+function sktResLabel(pc, name){
+  const n = String(name == null ? '' : name);
+  const e = pc && ((pc.build && pc.build.edition) || pc.rules);
+  return n === 'Focus Points' && e === '2014' ? 'Ki Points' : n;
+}
 // Canonical display name for a resource, or the name unchanged. Comparison is
 // case- and space-insensitive on its own, which also folds "Ki points" and
 // "Focus  Points" into their canonical spelling.

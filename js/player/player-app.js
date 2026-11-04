@@ -1216,8 +1216,8 @@ function paYouScreen(){
   const res = (pc.resources || []).map((r, ri) => {
     const max = Math.max(0, Math.min(24, r.max || 0));
     let pips = '';
-    for (let i = 0; i < max; i++) pips += `<button class="pa-res-pip ${i < r.current ? '' : 'off'}" data-pa-res="${ri}" aria-label="${i < r.current ? 'Use one ' + paEsc(r.name) : 'Get one ' + paEsc(r.name) + ' back'}"></button>`;
-    return `<div class="pa-res"><span class="pa-res-n">${paEsc(r.name)}</span>
+    for (let i = 0; i < max; i++) pips += `<button class="pa-res-pip ${i < r.current ? '' : 'off'}" data-pa-res="${ri}" aria-label="${i < r.current ? 'Use one ' + paEsc(sktResLabel(pc, r.name)) : 'Get one ' + paEsc(sktResLabel(pc, r.name)) + ' back'}"></button>`;
+    return `<div class="pa-res"><span class="pa-res-n">${paEsc(sktResLabel(pc, r.name))}</span>
       <span class="pa-res-pips">${pips}</span>
       <span class="pa-res-c">${r.current}/${r.max}</span></div>`;
   }).join('');

@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'e068d2a738';
+const BUILD = '2f9fa6f339';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=70fe22c14d',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=fc54c7c55d',
+  'js/core/utils.js?v=13f385e727',
   'js/ui/dice-fx.js?v=a3c77a159d',
   'js/core/state.js?v=d4c96a7f2f',
   'js/core/undo.js?v=63ed223198',
@@ -57,8 +57,8 @@ const PRECACHE = [
   'js/panels/attacks.js?v=57acabc3ca',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
-  'js/panels/turnview.js?v=81f50d851b',
-  'js/panels/party.js?v=3d19944f28',
+  'js/panels/turnview.js?v=01a169e74e',
+  'js/panels/party.js?v=60e4244c4c',
   'js/panels/shop.js?v=eff3f4575b',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -96,11 +96,11 @@ const PRECACHE = [
   'js/ui/command-palette.js?v=8aded06220',
   'js/features/char-rules.js?v=0182ee471e',
   'js/features/char-effects.js?v=4c8697acbb',
-  'js/features/char-sheet.js?v=4197700097',
+  'js/features/char-sheet.js?v=36dfb19191',
   'js/features/char-print.js?v=940c5d7b3f',
   'js/features/char-builder.js?v=d8adb9fc72',
   'js/features/pdf-import.js?v=cefe36cb0b',
-  'js/player/player-app.js?v=8bf9eda47c',
+  'js/player/player-app.js?v=5f525e4a9b',
   'js/ui/player-view.js?v=2481f28c78',
   'js/sync/realtime.js?v=15b5b701a9',
   'js/sync/presence.js?v=50e9bead2e',

@@ -1025,7 +1025,7 @@ registerPanel('turnview', {
       const max = Math.max(0, Math.min(20, r.max || 0));
       let pips = '';
       for (let i = 0; i < max; i++) pips += `<span class="tv-pip-o ${i < r.current ? '' : 'off'}"></span>`;
-      return `<span class="tv-res-i">${esc(r.name)}<span class="tv-pips">${pips}</span></span>`;
+      return `<span class="tv-res-i">${esc(sktResLabel(p, r.name))}<span class="tv-pips">${pips}</span></span>`;
     }).join('') : '';
     const rx = this._reactionsFor(c);
     const own = rx.filter(r => r.from !== 'always');

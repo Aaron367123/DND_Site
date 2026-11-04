@@ -12708,6 +12708,79 @@
         ok('features: Drain Magic Item is a once-a-day bonus action with a counter', (mt.resources || []).some(r => r.name === 'Drain Magic Item' && r.max === 1) && (act(mt, 'Drain Magic Item') || {}).action === 'Bonus Action');
       } catch(e){ ok('round 154 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 155: every number in every class's level table matches the sheet; a 2014 monk's Ki Points --
+    if (!PLAYER){
+      try {
+        const tableCheck = await (async () => {
+        const out = { cells: 0, gaps: [], labels: {} };
+        const lc = s => String(s || '').toLowerCase();
+        const plain = s => String(s == null ? '' : (typeof s === 'object' ? (s.value != null ? s.value : s.toRoll ? s.toRoll.map(r => r.number + 'd' + r.faces).join('+') : JSON.stringify(s)) : s)).replace(/\{@\w+ ([^|}]+)[^}]*\}/g, '$1');
+        const ORD = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
+        for (const ed of ['2024', '2014']){
+          const R = await sktRulesLoad(ed);
+          for (const cls of R.classes){
+            const sub = ((cls.subclasses || []).find(x => x.core) || (cls.subclasses || [])[0] || {}).shortName || '';
+            const seen = new Set();
+            for (let L = 1; L <= 20; L++){
+              const b = Object.assign(sktBlankBuild(ed), { name: 'T', cls: cls.name, level: L, species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte', subclass: L >= (cls.subclassLevel || 3) ? sub : '', allBooks: true,
+                abilities: { method: 'manual', base: { str: 14, dex: 14, con: 14, int: 14, wis: 14, cha: 14 } } });
+              let rec, sc;
+              try { rec = sktComputeCharacter(b, R); sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R)); } catch(e){ out.gaps.push(ed + ' ' + cls.name + ' L' + L + ' threw ' + e.message); continue; }
+              const s0 = sc ? ((sc.classes ? sc.classes[0].sc : sc) || {}) : {};
+              (cls.tableGroups || []).forEach(g => {
+                const labels = (g.colLabels || []).map(plain);
+                const row = (g.rowsSpellProgression || g.rows || [])[L - 1] || [];
+                labels.forEach((lab, i) => {
+                  const v = plain(row[i]), key = ed + ' ' + cls.name + ' ' + lab;
+                  out.labels[lab] = (out.labels[lab] || 0) + 1;
+                  const num = /^\+?\d+$/.test(v) ? parseInt(v, 10) : (v === '—' || v === '-' || v === '') ? 0 : null;
+                  let have = undefined, why = '';
+                  const ordAt = /^[1-9]$/.test(lab) && g.rowsSpellProgression ? +lab - 1 : ORD.indexOf(lc(lab));
+                  if (/^(weapon mastery|invocations( known)?|plans known|magic items|infusions known|infused items)$/i.test(lab)) return;   // choices, not pools
+                  if (ordAt >= 0 && num != null){ have = (s0.slots || {})[ordAt + 1] || 0; why = 'slots'; }
+                  else if (/^cantrips( known)?$/i.test(lab) && num != null){ have = s0.cantrips || 0; why = 'cantrips'; }
+                  else if (/^(prepared spells|spells known)$/i.test(lab) && num != null){
+                    // A 2014 bard's Magical Secrets are in the table's count, and picked apart from it.
+                    const secrets = ed === '2014' && cls.name === 'Bard' ? (L >= 18 ? 6 : L >= 14 ? 4 : L >= 10 ? 2 : 0) : 0;
+                    have = (s0.prepared || s0.known || 0) + secrets; why = 'spells' + (secrets ? ' + ' + secrets + ' Magical Secrets' : ''); }
+                  else if (/^spell slots$/i.test(lab) && num != null && s0.pact){ have = s0.pact.count; why = 'pact slots'; }
+                  else if (/^slot level$/i.test(lab) && s0.pact){ have = s0.pact.level; why = 'pact level'; const m = /(\d)/.exec(v); if (m){ if (have !== +m[1] && !seen.has(key)){ seen.add(key); out.gaps.push(key + ' L' + L + ': table ' + v + ', sheet ' + have); } } out.cells++; return; }
+                  else if (num != null && !/proficiency|level|bonus|damage|die|dice|sneak|martial arts|unarmored|known$/i.test(lab)){
+                    const nm = lc(lab).replace(/s$/, '');
+                    const canon = n => lc(sktCanonResource(n)); const r = (rec.resources || []).find(x => lc(x.name) === lc(lab) || lc(x.name) === nm || lc(x.name).startsWith(nm) || canon(x.name) === canon(lab));
+                    if (r){ have = r.max; why = 'pool ' + r.name; }
+                    else if (num > 0){ if (!seen.has(key + '?')){ seen.add(key + '?'); out.gaps.push(key + ': no pool on the sheet (table ' + v + ' at L' + L + ')'); } out.cells++; return; }
+                    else return;
+                  } else return;
+                  out.cells++;
+                  if (have !== num && !seen.has(key)){ seen.add(key); out.gaps.push(key + ' L' + L + ': table ' + v + ', sheet ' + have + ' (' + why + ')'); }
+                });
+              });
+            }
+          }
+        }
+      
+          return out;
+        })();
+        ok('class tables: every class, levels 1-20, both handbooks — slots, cantrips, spells, pools — match the sheet', tableCheck.cells > 3000 && !tableCheck.gaps.length, tableCheck.cells + ' cells; ' + tableCheck.gaps.slice(0, 5).join(' | '));
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const m14 = sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Ki', cls: 'Monk', level: 5, species: 'Human', background: 'Acolyte', subclass: 'Open Hand' }), R14);
+        const m24 = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Fo', cls: 'Monk', level: 5, species: 'Human', background: 'Guide', subclass: 'Open Hand' }), R24);
+        ok('ki: the pool is one pool inside (Focus Points), called Ki Points for a 2014 monk', (m14.resources || []).some(r => r.name === 'Focus Points') && sktResLabel(m14, 'Focus Points') === 'Ki Points' && sktResLabel(m24, 'Focus Points') === 'Focus Points');
+        const party0 = JSON.stringify(state.party);
+        try {
+          state.party.push(Object.assign({}, m14, { id: 'r155a' }), Object.assign({}, m24, { id: 'r155b' })); save();
+          openPanel('party'); panelDefs.party._render(); await sleep(150);
+          const labels = [...document.querySelectorAll('.resource-label')].map(e => e.textContent);
+          ok('ki: the party cards say Ki Points for the 2014 monk and Focus Points for the 2024 one', labels.includes('Ki Points') && labels.includes('Focus Points'), labels.join(', '));
+          await openCharSheet('r155a'); await sleep(300);
+          const t = document.querySelector('[data-cs-tab="actions"]'); if (t){ t.click(); await sleep(200); }
+          const txt = document.querySelector('#cs-root').innerText;
+          ok('ki: and the 2014 monk’s sheet, its pool and what Flurry of Blows costs', /Ki Points/.test(txt) && !/Focus Points/.test(txt), (txt.match(/.{0,30}(Ki|Focus) Points.{0,20}/g) || []).slice(0, 3).join(' | '));
+          csClose(); await sleep(60);
+        } finally { state.party = JSON.parse(party0); save(); }
+      } catch(e){ ok('round 155 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

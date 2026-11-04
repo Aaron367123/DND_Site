@@ -853,7 +853,7 @@ CS_TAB_RENDER.actions = pc => {
   h += itemsH;
   const res = pc.resources || [];
   if (res.length){
-    h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(r.name) + '</b>'
+    h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(sktResLabel(pc, r.name)) + '</b>'
       + '<span class="cs-pips">' + Array.from({ length: Math.min(r.max || 0, 20) }, (_, n) => '<button class="cs-pip' + (n < (r.current || 0) ? ' on' : '') + '" data-cs-res="' + i + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(r.name) + ' ' + (n + 1) + '"></button>').join('') + '</span>'
       + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : /short/.test(r.recharge) ? 'short rest' : r.recharge === 'dawn' ? (r.note || 'at dawn') : 'long rest') : '') + (CS_RES_HINT[r.name] ? ' · ' + CS_RES_HINT[r.name] : '') + '</span></div>').join('') + '</div>';
   }
@@ -904,7 +904,7 @@ function csActHtml(pc, a){
   const can = !CS.readOnly && r && (r.current || 0) >= (a.amount || 1);
   return '<div class="cs-act"><div class="cs-act-h"><b>' + csE(a.name) + '</b>'
     + (a.dice ? '<button class="btn small" data-cs-actroll="' + csE(a.name) + '" title="Roll ' + csE(a.dice) + '">' + ICO('i-dice') + ' ' + csE(a.dice) + '</button>' : '')
-    + (r ? '<span class="cb-dim">' + (a.amount || 1) + ' ' + csE(r.name) + ' · ' + (r.current || 0) + ' left</span>'
+    + (r ? '<span class="cb-dim">' + (a.amount || 1) + ' ' + csE(sktResLabel(pc, r.name)) + ' · ' + (r.current || 0) + ' left</span>'
          + '<button class="btn small" data-cs-use="' + csE(a.name) + '"' + (can ? '' : ' disabled') + '>Use</button>' : '')
     + '</div>' + (a.desc ? '<div class="cs-act-d">' + csE(a.desc) + '</div>' : '') + '</div>';
 }
@@ -1234,7 +1234,7 @@ function csOnClick(e){
   if (d.csUse){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csUse); if (!a) return;
     const pool = a.resource ? (pc.resources || []).find(x => x.name === a.resource) : null;
-    if (pool && (+pool.current || 0) < (a.amount || 1)){ if (typeof showToast === 'function') showToast('No ' + a.resource + ' left'); return; }
+    if (pool && (+pool.current || 0) < (a.amount || 1)){ if (typeof showToast === 'function') showToast('No ' + sktResLabel(pc, a.resource) + ' left'); return; }
     // Wild Shape is the form picker, which spends the use when a beast is
     // chosen (party.js _applyWildShape), so backing out costs nothing.
     if (/^Wild Shape$/i.test(a.name) && panelDefs.party && panelDefs.party._editWildShape){

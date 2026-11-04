@@ -282,7 +282,7 @@ registerPanel('party',{
           pipHtml+='</div>';
         }
         resHtml+='<div class="resource-row">'
-          +'<span class="resource-label" title="'+esc(r.name)+'">'+esc(r.name)+'</span>'
+          +'<span class="resource-label" title="'+esc(sktResLabel(c, r.name))+'">'+esc(sktResLabel(c, r.name))+'</span>'
           +pipHtml
           +'</div>';
       });
@@ -2142,8 +2142,8 @@ registerPanel('party',{
       const rs = c.resources || [];
       if (!rs.length) return '<span class="mp-res-empty">+ Add</span>';
       return rs.map(r => r.type === 'toggle'
-        ? `<span class="mp-res-chip">${esc(r.name)} ${r.current?'✓':'—'}</span>`
-        : `<span class="mp-res-chip">${esc(r.name)} ${r.current}/${r.max}</span>`
+        ? `<span class="mp-res-chip">${esc(sktResLabel(c, r.name))} ${r.current?'✓':'—'}</span>`
+        : `<span class="mp-res-chip">${esc(sktResLabel(c, r.name))} ${r.current}/${r.max}</span>`
       ).join(' ');
     };
     const renderRows = () => state.party.map((c,i) => {
