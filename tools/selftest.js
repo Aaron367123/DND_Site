@@ -13218,6 +13218,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 165 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); state.activeCombatantId = act0; state.combatRound = rnd0; save(); }
     }
+    // -- Round 166: darkvision that adds on, Durable by edition, loot that weighs something --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), loot0 = localStorage.getItem(CS_LOOT_KEY);
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const mk = (ed, o) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { name: 'R166', species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte' }, o), ed === '2024' ? R : R14);
+        const dv = r => +((/Darkvision (\d+)/.exec(r.sheet.senses || '') || [])[1] || 0);
+        const gs = (ed, sp, extra) => mk(ed, Object.assign({ cls: 'Ranger', subclass: 'Gloom Stalker', level: 6, species: sp }, extra || {}));
+        // Umbral Sight: darkvision 60, or 60 more (30 more in 2014) on top of a species' own.
+        const res = { h24: dv(gs('2024', 'Human')), e24: dv(gs('2024', 'Elf', { speciesChoice: { lineage: 'Wood Elf' } })), d24: dv(gs('2024', 'Dwarf')),
+                      h14: dv(gs('2014', 'Human')), e14: dv(gs('2014', 'Elf')), f24: dv(mk('2024', { cls: 'Fighter', level: 6, species: 'Elf', speciesChoice: { lineage: 'Wood Elf' } })) };
+        ok('Umbral Sight: a human gets darkvision 60 ft; an elf 120 and a dwarf 180 (60 on top of their own)', res.h24 === 60 && res.e24 === 120 && res.d24 === 180, JSON.stringify(res));
+        ok('Umbral Sight (2014): 30 ft more on top of a race’s darkvision, 60 for a human', res.h14 === 60 && res.e14 === 90, JSON.stringify(res));
+        ok('darkvision: an elf without it stays at 60', res.f24 === 60, JSON.stringify(res));
+        // Fey Ancestry: the sleep part is 2014's.
+        const n24 = gs('2024', 'Elf', { speciesChoice: { lineage: 'Wood Elf' } }).sheet.notes.join(' | '), n14 = gs('2014', 'Elf').sheet.notes.join(' | ');
+        ok('Fey Ancestry: a 2024 elf’s note is the Charmed saves only; 2014 keeps magic not putting you to sleep', /Fey Ancestry: advantage on saving throws to avoid or end the Charmed/.test(n24) && !/put you to sleep/.test(n24.replace(/Trance[^|]*/g, '')) && /put you to sleep/.test(n14), n24);
+        // Dread Ambusher's counted use is Dreadful Strike.
+        const g = gs('2024', 'Human'), da = (g.sheet.activations || []).find(a => a.name === 'Dread Ambusher') || {};
+        ok('Dread Ambusher: its action describes Dreadful Strike, the benefit its uses pay for', /^Dreadful Strike:/.test(da.desc || '') && da.dice === '2d6', JSON.stringify(da));
+        // Durable: two different feats.
+        const d24 = mk('2024', { cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: 'Durable' } } }), d14 = mk('2014', { cls: 'Fighter', level: 4, asi: { 4: { type: 'feat', feat: 'Durable' } } });
+        const sr = (d24.sheet.activations || []).find(a => a.name === 'Speedy Recovery') || {};
+        ok('Durable (2024): Speedy Recovery is a bonus action, and no 2014 Hit Die minimum', sr.action === 'Bonus Action' && !/twice your Constitution/.test(d24.sheet.notes.join(' ')), JSON.stringify([sr, d24.sheet.notes.filter(x => /Durable/.test(x))]));
+        ok('Durable (2014): the Hit Die minimum, and no Speedy Recovery', /twice your Constitution/.test(d14.sheet.notes.join(' ')) && !(d14.sheet.activations || []).some(a => a.name === 'Speedy Recovery'));
+        // Claimed loot typed without a weight weighs what the catalog says.
+        const rec = Object.assign(mk('2024', { cls: 'Fighter', level: 1 }), { id: 'r166' });
+        state.party.push(rec); save();
+        const L = csLootRead(); L.items = (L.items || []).concat([{ id: 'r166a', name: 'Half Plate Armor', qty: 1, assignedTo: 'r166' }, { id: 'r166b', name: 'Handaxe', qty: 3, assignedTo: 'r166' }, { id: 'r166c', name: 'Rock of Odd Weight', qty: 1, weight: 7, assignedTo: 'r166' }]);
+        localStorage.setItem(CS_LOOT_KEY, JSON.stringify(L));
+        await openCharSheet('r166'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="inventory"]').click(); await sleep(250);
+        const row = id => (document.querySelector('#cs-root [data-loot="' + id + '"] .cs-wt') || {}).textContent || '';
+        const carry = (document.querySelector('#cs-root .cs-carry b') || {}).textContent || '';
+        const before = csItems(state.party.find(p => p.id === 'r166')).reduce((n, m, i, a) => n + csItemWeight(a, m), 0);
+        ok('loot: claimed Half Plate typed without a weight shows its 40 lb, three handaxes 6 lb, a typed weight is kept', /40 lb/.test(row('r166a')) && /6 lb/.test(row('r166b')) && /7 lb/.test(row('r166c')), JSON.stringify([row('r166a'), row('r166b'), row('r166c')]));
+        const coinsLb = 0;
+        ok('loot: and the carried total counts them', Math.abs(parseFloat(carry) - (before + 40 + 6 + 7 + coinsLb)) < 1.5, carry + ' vs gear ' + before);
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+      } catch(e){ ok('round 166 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); if (loot0 == null) localStorage.removeItem(CS_LOOT_KEY); else localStorage.setItem(CS_LOOT_KEY, loot0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

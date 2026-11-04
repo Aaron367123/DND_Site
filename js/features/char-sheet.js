@@ -2903,7 +2903,15 @@ function csLootAsItem(it){
   if (it.value) m.value = it.value;
   return m;
 }
-const csLootLb = rows => rows.filter(r => r.mine).reduce((n, r) => n + (+r.it.weight || 0) * Math.max(1, +r.it.qty || 1), 0);
+// A loot item's weight: as typed, else the catalog's. The DM types "Half Plate
+// Armor" with no weight, and the carried total left its 40 lb out.
+function csLootWt(it){
+  if (it.weight != null && it.weight !== '' && !isNaN(+it.weight)) return +it.weight;
+  const g = typeof csGearFind === 'function' ? csGearFind(it.name) : null;
+  const bi = g && g.base && CS.R && CS.R.items[g.base];
+  return +((g && g.weight) || (bi && bi.weight) || 0);
+}
+const csLootLb = rows => rows.filter(r => r.mine).reduce((n, r) => n + csLootWt(r.it) * Math.max(1, +r.it.qty || 1), 0);
 // The party's loot: what nobody has claimed (assigned to no current
 // character and no group). Every character's Inventory tab lists it, so a
 // player can see what's in the pile and claim it for themselves.
@@ -2916,7 +2924,7 @@ function csPartyLootHtml(pc){
   const ro = CS.readOnly;
   return '<h5>Party loot <span class="cb-dim cs-h5sub">' + items.length + (items.length === 1 ? ' item' : ' items') + ' nobody has claimed</span></h5><div class="cs-inv cs-partyloot">'
     + items.map(it => {
-      const k = 'pl:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
+      const k = 'pl:' + it.id, wt = csLootWt(it), q = Math.max(1, +it.qty || 1);
       return '<div class="cs-item cs-partylootitem"><span class="cs-eq"></span>'
         + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b></button>'
         + '<span class="cs-qty">×' + q + '</span>'
@@ -2936,7 +2944,7 @@ function csLootRows(pc){
   const ro = CS.readOnly;
   const items = csItems(pc), full = items.filter(m => m.reqAttune && m.attuned).length >= csAttuneMax(pc);
   return csLootFor(pc).map(({ it, mine, group }) => {
-    const k = 'lt:' + it.id, wt = +it.weight || 0, q = Math.max(1, +it.qty || 1);
+    const k = 'lt:' + it.id, wt = csLootWt(it), q = Math.max(1, +it.qty || 1);
     // A magic item that needs attuning: tick to attune, which makes it the
     // character's own (as equipping armour does), where it can do something.
     const mm = CS.magic ? csLootAsItem(it) : null, att = !!(mm && csItemInfo(mm).reqAttune);

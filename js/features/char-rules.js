@@ -1912,7 +1912,10 @@ function sktActivationFromText(text, name, ctx){
   // Raise Dead.
   let head = '';
   if (resource === name){
-    const once = sents.findIndex(s => /once you use (?:this|it)\b|can(?:'|’|no)t use (?:it|this(?: benefit| feature)?) again until/i.test(s));
+    let once = sents.findIndex(s => /once you use (?:this|it)\b|can(?:'|’|no)t use (?:it|this(?: benefit| feature)?) again until/i.test(s));
+    // Or the sentence that counts its uses (Dread Ambusher's Dreadful Strike:
+    // "…a number of times equal to your Wisdom modifier…").
+    if (once < 0) once = sents.findIndex(s => /a number of times equal to|regain all expended uses/i.test(s));
     if (once > 0){
       let h = once - 1; while (h >= 0 && once - h <= 4 && !_sktIsHeading(sents[h])) h--;
       const titled = h >= 0 && once - h <= 4 && _sktIsHeading(sents[h]);
@@ -2022,7 +2025,10 @@ function sktPassiveFromText(text, name, ctx){
   return did;
 }
 // Darkvision 60 ft, or 60 ft more if the character has it already (the 2024 way).
-function _fxDarkvision60(ctx){ ctx.senses.darkvision = ctx.senses.darkvision ? ctx.senses.darkvision + 60 : 60; }
+// "Darkvision 60 feet, or 60 more if you already have it": counted once
+// everything else is in. Class features come before species traits, so
+// adding on the spot lost an elf's or dwarf's own darkvision to max().
+function _fxDarkvision60(ctx, more){ ctx.dvBoosts.push(more || 60); }
 function sktDefineEffect(keys, fn){ (Array.isArray(keys) ? keys : [keys]).forEach(k => { SKT_FEATURE_EFFECTS[k] = fn; }); }
 
 // Features that are a CHOICE — a 2024 cleric's Divine Order, a druid's
@@ -2149,7 +2155,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-03b';
+const SKT_RULES_REV = '2026-11-03c';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -2440,8 +2446,6 @@ sktDefineExtra(['subclass:barbarian:Divine Fury'], () => {});
 // The Battle Master's dice grow in Combat Superiority itself.
 sktDefineExtra(['subclass:fighter:Improved Combat Superiority', 'subclass:fighter:Ultimate Combat Superiority'], () => {});
 sktDefineExtra(['subclass:ranger:Dread Ambusher'], ctx => { ctx.initBonus += ctx.mod.wis; _fxNote(ctx, 'Dread Ambusher: Initiative + WIS.'); });
-sktDefineExtra(['subclass:ranger:Umbral Sight'], ctx => { _fxDarkvision60(ctx); });
-sktDefineExtra(['subclass:monk:Darkvision'], ctx => { _fxDarkvision60(ctx); });
 sktDefineExtra(['subclass:paladin:Aura of Devotion'], ctx => { ctx.immune.add('charmed'); });
 sktDefineExtra(['subclass:rogue:Second-Story Work'], ctx => { ctx.moveExtra.climb = 'walk'; });
 sktDefineExtra(['subclass:druid:Aquatic Affinity'], ctx => { ctx.moveExtra.swim = 'walk'; });
@@ -2574,7 +2578,14 @@ sktDefineEffect(['feat:Lucky'], ctx => {
   _fxPool(ctx, 'Luck Points', ctx.edition === '2024' ? ctx.pb : 3, 'long');
 });
 sktDefineEffect(['feat:Medium Armor Master'], ctx => { ctx.mediumDexCap = 3; });
-sktDefineEffect(['feat:Durable'], ctx => _fxNote(ctx, 'Durable: when you roll a Hit Die to regain hit points, the minimum is twice your Constitution modifier.'));
+// Durable is two different feats: 2014's Hit Die minimum, 2024's Defy Death
+// (advantage on death saves, read from its text) and Speedy Recovery.
+sktDefineEffect(['feat:Durable'], ctx => {
+  if (ctx.edition !== '2024') return _fxNote(ctx, 'Durable: when you roll a Hit Die to regain hit points, the minimum is twice your Constitution modifier (at least 2).');
+  _fxNote(ctx, 'Durable: advantage on death saving throws.');
+  _fxAction(ctx, { name: 'Speedy Recovery', action: 'Bonus Action', feature: 'Durable',
+    desc: 'Expend one of your Hit Point Dice, roll it, and regain hit points equal to the roll.' });
+});
 sktDefineEffect(['2014:feat:Dual Wielder'], ctx => { ctx.dualWielder = true; });
 sktDefineEffect(['feat:Heavily Armored', 'feat:Moderately Armored', 'feat:Lightly Armored'], ctx => { /* proficiencies applied by name below */ });
 // 2024 Fighting Style feats, and 2014 Fighting Style optional features.
@@ -2617,7 +2628,7 @@ sktDefineEffect(['species:Darkvision', 'species:Superior Darkvision'], ctx => {
 });
 sktDefineEffect(['species:Variable Trait; Darkvision'], ctx => { ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, 60); });
 sktDefineEffect(['species:Dwarven Resilience'], ctx => { ctx.resist.add('poison'); _fxNote(ctx, 'Advantage on saving throws to avoid or end the Poisoned condition.'); });
-sktDefineEffect(['species:Fey Ancestry'], ctx => _fxNote(ctx, 'Advantage on saving throws against being Charmed; magic can’t put you to sleep (2014).'));
+sktDefineEffect(['species:Fey Ancestry'], ctx => _fxNote(ctx, ctx.edition === '2024' ? 'Fey Ancestry: advantage on saving throws to avoid or end the Charmed condition.' : 'Fey Ancestry: advantage on saving throws against being charmed, and magic can’t put you to sleep.'));
 sktDefineEffect(['species:Brave'], ctx => _fxNote(ctx, 'Advantage on saving throws against being Frightened.'));
 sktDefineEffect(['species:Gnome Cunning', 'species:Gnomish Cunning'], ctx => _fxNote(ctx, 'Advantage on Intelligence, Wisdom and Charisma saving throws against magic.'));
 sktDefineEffect(['species:Hellish Resistance'], ctx => { ctx.resist.add('fire'); });
@@ -2659,7 +2670,7 @@ function sktComputeCharacter(build, R, prior){
     initBonus: 0, saveBonusAll: _sktItemSum(build, 'bonusSavingThrow'), saveBonus: {}, passiveBonus: { perception: 0, investigation: 0, insight: 0 },
     saveProf: new Set((cls && cls.saves) || []), skillProf: new Set(), expertise: new Set(build.expertise || []),
     armorProf: new Set(), weaponProf: new Set(), weaponPropRules: [], toolProf: new Set(), languages: new Set(),
-    resources: [], actions: [], notes: [], attacksPerAction: 1, critRange: 20,
+    resources: [], actions: [], notes: [], attacksPerAction: 1, critRange: 20, dvBoosts: [],
     rangedAttackBonus: 0, duelingBonus: 0, twoWeaponMod: false,
     abilityBonus: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, abilityCapBonus: {},
     jackOfAllTrades: false, remarkableAthlete: false, martialArts: false, martialArtsDie: null,
@@ -2807,7 +2818,11 @@ function sktComputeCharacter(build, R, prior){
         // lists every option, and an unchosen legacy read as all three.
         const chosenResist = f.from === 'species' && sktSpeciesResistChoice(species, subrace);
         if (!chosenResist){ g.resist.forEach(r => ctx.resist.add(r)); g.immune.forEach(r => ctx.immune.add(r)); }
-        if (g.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, g.darkvision);
+        // "If you already have darkvision, its range increases by 60 feet"
+        // (Umbral Sight; 30 in 2014): a boost, not a flat 60.
+        const dvMore = /if you already have darkvision[^.]*?increases by (\d+) feet/i.exec(String(f.text || '').replace(/\s+/g, ' '));
+        if (dvMore) _fxDarkvision60(ctx, +dvMore[1]);
+        else if (g.darkvision) ctx.senses.darkvision = Math.max(ctx.senses.darkvision || 0, g.darkvision);
         Object.keys(g.senses || {}).forEach(k => { ctx.senses[k] = Math.max(ctx.senses[k] || 0, g.senses[k]); });
         if (g.speed) ctx.speedBonus += g.speed;
         g.conditions.forEach(c => ctx.immune.add(c));
@@ -2988,6 +3003,8 @@ function sktComputeCharacter(build, R, prior){
   const notSlowed = /speed is not reduced by wearing heavy armou?r/i.test(JSON.stringify([species && species.entries, subrace && subrace.entries]));
   if (heavy && armor.strength && abilities.str < +armor.strength && !notSlowed) speed -= 10;
   speed *= ctx.speedMult;
+
+  ctx.dvBoosts.forEach(n => { ctx.senses.darkvision = ctx.senses.darkvision ? ctx.senses.darkvision + n : 60; });
 
   // Initiative and passive perception.
   let init = ctx.mod.dex + ctx.initBonus + (ctx.checkBonusAll || 0);
