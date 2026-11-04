@@ -1906,7 +1906,8 @@ registerPanel('battlemap',{
   _tokenSpeed(t){
     if (!t) return null;
     const pc = (state.party || []).find(p => p && (p.id === t.cid || (t.isPC && p.name === t.label)));
-    if (pc){ const v = +(pc.speeds && pc.speeds.walk) || +pc.spd; return v > 0 ? v : null; }
+    // As it stands: a grappled or exhausted character's, which can be 0.
+    if (pc){ const v = +(pc.speeds && pc.speeds.walk) || +pc.spd; if (!(v > 0)) return null; return typeof sktSpeedNow === 'function' ? sktSpeedNow(Object.assign({}, pc, { spd: v })).ft : v; }
     const c = (state.combatants || []).find(x => x && x.id === t.cid);
     const m = c && c._slug && typeof _5eData !== 'undefined' ? _5eData.find(r => r && r.cat === 'monster' && r._slug === c._slug) : null;
     const v = m ? parseInt(String(m.speed || '').match(/\d+/) || '', 10) : NaN;
@@ -1928,11 +1929,11 @@ registerPanel('battlemap',{
     ln.setAttribute('stroke-width', 2.5 * k); ln.setAttribute('stroke-dasharray', (8 * k) + ' ' + (5 * k));
     [['.bm-measure-a', x0, y0], ['.bm-measure-b', x1, y1]].forEach(([sel, x, y]) => { const c = m.querySelector(sel); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 4 * k); });
     const ft = this._feetBetweenPts(x0, y0, x1, y1);
-    const over = speed && ft > speed;
+    const over = speed != null && ft > speed;
     const l = m.querySelector('.bm-measure-l');
     const unit = (this._ftPerCell || 5) >= 5280 ? ' mi' : ' ft';
     const show = n => unit === ' mi' ? +(n / 5280).toFixed(1) : n;
-    l.textContent = show(ft) + (speed ? ' / ' + show(speed) : '') + unit;
+    l.textContent = show(ft) + (speed != null ? ' / ' + show(speed) : '') + unit;
     l.classList.toggle('over', !!over);
     l.style.left = x1 + 'px'; l.style.top = y1 + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
     l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';

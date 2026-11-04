@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '2402ee646e';
+const BUILD = '357a313727';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=9ee18ad9f1',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=15ea150b9d',
+  'js/core/utils.js?v=855a388aab',
   'js/ui/dice-fx.js?v=a3c77a159d',
   'js/core/state.js?v=f7606a5b33',
   'js/core/undo.js?v=63ed223198',
@@ -70,7 +70,7 @@ const PRECACHE = [
   'js/panels/quests.js?v=36e3261d56',
   'js/panels/factions.js?v=39b868d6d9',
   'js/panels/homebrew.js?v=3e3c4f0d84',
-  'js/panels/battlemap.js?v=30de753a86',
+  'js/panels/battlemap.js?v=8733fd65f3',
   'js/panels/npc-library.js?v=84a549ccbc',
   'js/panels/bestiary.js?v=55d56a8c0d',
   'js/panels/content-panel.js?v=1a060dfd0b',
@@ -96,7 +96,7 @@ const PRECACHE = [
   'js/ui/command-palette.js?v=8aded06220',
   'js/features/char-rules.js?v=e690f99497',
   'js/features/char-effects.js?v=83e4fec598',
-  'js/features/char-sheet.js?v=ffbb5a88fd',
+  'js/features/char-sheet.js?v=e0a32f170a',
   'js/features/char-print.js?v=940c5d7b3f',
   'js/features/char-builder.js?v=5dadc5a2ff',
   'js/features/pdf-import.js?v=cefe36cb0b',

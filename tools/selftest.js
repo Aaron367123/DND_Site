@@ -13377,6 +13377,34 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 170 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 171: speed as it stands — 0 while grappled or restrained, exhaustion, on the sheet and the map --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const base = { id: 'r171', name: 'R171', cls: 'fighter', level: 3, hp: 20, hpMax: 20, ac: 15, spd: 30, rules: '2024', conditions: [] };
+        state.party.push(Object.assign({}, base)); save();
+        const P = () => state.party.find(p => p.id === 'r171');
+        const ft = () => sktSpeedNow(P()).ft;
+        P().conditions = ['Grappled'];
+        ok('speed: grappled is 0', ft() === 0);
+        P().conditions = ['Restrained']; const r = ft();
+        P().conditions = ['Stunned']; const s24 = ft();
+        P().rules = '2014'; const s14 = ft(); P().rules = '2024';
+        ok('speed: restrained 0; a 2014 stun stops movement, a 2024 one doesn’t', r === 0 && s14 === 0 && s24 === 30, JSON.stringify([r, s14, s24]));
+        P().conditions = []; P().exhaustion = 3;
+        ok('speed: exhaustion still slows (2024: 15 ft at level 3)', ft() === 15, ft());
+        P().exhaustion = 0; P().conditions = ['Grappled']; save();
+        await openCharSheet('r171'); await sleep(300);
+        const box = [...document.querySelectorAll('#cs-root .cs-stat, #cs-root .cs-box')].find(e => /SPEED/i.test(e.innerText)) || {};
+        ok('sheet: a grappled character’s Speed box reads 0 ft, saying why', /0 ft/.test(box.innerText || '') && /Grappled/.test((box.title || '') + (box.innerText || '') + ((box.querySelector && box.querySelector('[title]') || {}).title || '')), (box.innerText || '') + ' {' + (box.title || '') + '}');
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+        const BM = panelDefs.battlemap;
+        ok('map: the move a grappled character’s token measures against is 0 ft', BM && BM._tokenSpeed({ cid: 'r171', isPC: true, label: 'R171' }) === 0, BM && BM._tokenSpeed({ cid: 'r171', isPC: true, label: 'R171' }));
+        P().conditions = []; P().exhaustion = 2; save();
+        ok('map: and an exhausted one’s is slowed (20 ft)', BM && BM._tokenSpeed({ cid: 'r171', isPC: true, label: 'R171' }) === 20);
+      } catch(e){ ok('round 171 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

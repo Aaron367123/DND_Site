@@ -420,7 +420,7 @@ function csTop(pc){
     + (() => { const mode = pc.speeds && pc.speeds[pc.speedShow] != null ? pc.speedShow : 'walk';
         const all = pc.speeds ? Object.keys(CS_MOVES).filter(k => pc.speeds[k] != null).map(k => CS_MOVES[k] + ' ' + csSpeed(pc, k) + ' ft').join(', ') : '';
         return box(mode === 'walk' ? 'Speed' : CS_MOVES[mode], csSpeed(pc, mode) + ' ft', null,
-          [all.includes(',') ? all : '', csSpeed(pc) !== (pc.spd ?? 30) ? 'Exhaustion: ' + (pc.spd ?? 30) + ' ft walking normally' : ''].filter(Boolean).join(' · ')); })()
+          [all.includes(',') ? all : '', sktSpeedNow(pc).why ? sktSpeedNow(pc).why + ': ' + (pc.spd ?? 30) + ' ft walking normally' : ''].filter(Boolean).join(' · ')); })()
     + box('Proficiency', csSigned(sh.profBonus || 2))
     + csInspHtml(pc, ro) + '</div>';
   h += csStatesHtml(pc);
@@ -476,13 +476,7 @@ function csStatesHtml(pc){
 }
 // Exhaustion slows: 5 ft a level in 2024; halved at 2 and nothing at 5 in 2014.
 const CS_MOVES = { walk: 'Walk', fly: 'Fly', swim: 'Swim', climb: 'Climb', burrow: 'Burrow' };
-function csSpeed(pc, mode){
-  const s = mode && mode !== 'walk' && pc.speeds && pc.speeds[mode] != null ? +pc.speeds[mode] : (pc.spd ?? 30), exh = +pc.exhaustion || 0;
-  const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
-  if (!exh) return s;
-  if (ed === '2024') return Math.max(0, s - 5 * exh);
-  return exh >= 5 ? 0 : exh >= 2 ? Math.floor(s / 2) : s;
-}
+function csSpeed(pc, mode){ return sktSpeedNow(pc, mode).ft; }
 // In words, what the conditions are doing to rolls right now.
 function csEffectLine(pc){
   const parts = [];
