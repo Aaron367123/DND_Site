@@ -2718,6 +2718,13 @@ registerPanel('party',{
         if (f === 'hpMax' && typeof state.party[i].hpMaxNormal === 'number' && v >= state.party[i].hpMaxNormal){
           const p2 = {...state.party[i]}; delete p2.hpMaxNormal; delete p2.hpMaxNote; state.party[i] = p2;
         }
+        // A built character's maximum lives in its build; a number typed here
+        // that only reached the sheet was undone by the next recompute. It's
+        // the maximum entered by hand now (levelling up adds to it).
+        if (f === 'hpMax' && v > 0 && state.party[i].build && typeof state.party[i].hpMaxNormal !== 'number'){
+          const b2 = {...state.party[i].build, hp: {...(state.party[i].build.hp || { rolls: {} }), method: 'manual', manual: v}};
+          state.party[i] = {...state.party[i], build: b2};
+        }
         // Mirror to the combat slot BEFORE saving so localStorage (and the
         // resulting Firebase push) captures both halves in one write. If the
         // sync happened after save(), the persisted value would be stale and

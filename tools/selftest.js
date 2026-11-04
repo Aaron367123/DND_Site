@@ -13089,6 +13089,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 160 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showConfirm = confirm0; state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 162: a built character's maximum HP survives a recompute --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const build = Object.assign(sktBlankBuild('2024'), { name: 'R162', cls: 'Bard', level: 6, species: 'Human', background: 'Guide', hp: { method: 'manual', manual: 39, rolls: {} } });
+        // On load: the sheet's 53 wins over the build's stale 39; a drained maximum is left alone.
+        state.party.push({ id: 'r162a', name: 'R162 A', hp: 50, hpMax: 53, ac: 13, level: 6, build: JSON.parse(JSON.stringify(build)) },
+                         { id: 'r162b', name: 'R162 B', hp: 20, hpMax: 30, hpMaxNormal: 39, ac: 13, level: 6, build: JSON.parse(JSON.stringify(build)) });
+        migratePartyHpManual();
+        const A = () => state.party.find(p => p.id === 'r162a'), B = () => state.party.find(p => p.id === 'r162b');
+        ok('max hp: on load, a hand-entered build follows the sheet’s maximum (53, not a stale 39)', A().build.hp.manual === 53 && sktComputeCharacter(A().build, R, A()).hpMax === 53, JSON.stringify(A().build.hp));
+        ok('max hp: but not while a drain has lowered it for now', B().build.hp.manual === 39, JSON.stringify(B().build.hp));
+        // The party card's Max HP box writes the build too.
+        save(); openPanel('party'); panelDefs.party._render(); await sleep(150);
+        const i = state.party.findIndex(p => p.id === 'r162a');
+        const inp = document.querySelector('input.char-hp-max[data-idx="' + i + '"]');
+        if (inp){ inp.value = '58'; inp.dispatchEvent(new Event('change', { bubbles: true })); await sleep(100); }
+        ok('max hp: typed on the party card, it goes into the build and a recompute keeps it', !!inp && A().hpMax === 58 && A().build.hp.method === 'manual' && A().build.hp.manual === 58 && sktComputeCharacter(A().build, R, A()).hpMax === 58,
+           JSON.stringify([A().hpMax, A().build.hp]));
+      } catch(e){ ok('round 162 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

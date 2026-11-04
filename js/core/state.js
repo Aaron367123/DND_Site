@@ -138,6 +138,7 @@ function loadDomain(domain){
       if(r){const a=JSON.parse(r);if(Array.isArray(a))state.party=a.filter(p=>p&&typeof p==='object');}
       migratePartySpellSlots();
       migratePartyResourceAliases();
+      migratePartyHpManual();
       reconcilePcHp();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
@@ -232,6 +233,21 @@ function reconcilePcHp(){
 // Runs on every party load, not once, for the reason the slot migration gives:
 // another device on an older build can push the old shape back at any time,
 // and the pass is idempotent.
+// A built character whose maximum is entered by hand keeps it in the build
+// (build.hp.manual), and every recompute reads it from there. The party
+// card's Max HP box wrote only the sheet's number, so the two drifted —
+// Zindle's sheet said 53, his build 39 — and the next recompute (a toggle,
+// an edit) would have dropped him to 39. The sheet's number is the one the
+// table has been using: the build follows it. Not while a drain has lowered
+// the maximum (hpMaxNormal): that number is meant to differ.
+function migratePartyHpManual(){
+  (state.party || []).forEach(p => {
+    const hp = p && p.build && p.build.hp;
+    if (!hp || hp.method !== 'manual' || typeof p.hpMaxNormal === 'number') return;
+    const max = +p.hpMax;
+    if (max > 0 && max !== +hp.manual) p.build.hp = Object.assign({}, hp, { manual: max });
+  });
+}
 function migratePartyResourceAliases(){
   if (typeof sktMergeResources !== 'function') return;
   (state.party || []).forEach(p => {
