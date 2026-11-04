@@ -13352,6 +13352,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 169 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 170: the level chosen beside Cast is what the damage and healing show and roll at --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const rec = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R170', cls: 'Cleric', level: 5, species: 'Human', background: 'Acolyte' }), R), { id: 'r170' });
+        rec.sheet.spells = [...new Set((rec.sheet.spells || []).concat(['Guiding Bolt', 'Cure Wounds']))];
+        state.party.push(rec); save();
+        await openCharSheet('r170'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(300);
+        const row = n => [...document.querySelectorAll('#cs-root .cs-spell')].find(e => (e.querySelector('.cs-spell-n b') || {}).textContent === n);
+        const dm = n => ((row(n) || document).querySelector('[data-cs-spdmg],[data-cs-spheal]') || {}).textContent || '';
+        const pick = async (n, lv) => { const s = row(n).querySelector('[data-cs-castlvl]'); s.value = String(lv); s.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200); };
+        ok('upcast: at the lowest slot Guiding Bolt shows 4d6, Cure Wounds heals 2d8 + WIS', /^4d6/.test(dm('Guiding Bolt')) && /2d8/.test(dm('Cure Wounds')), dm('Guiding Bolt') + ' / ' + dm('Cure Wounds'));
+        await pick('Guiding Bolt', 3); await pick('Cure Wounds', 2);
+        ok('upcast: choosing a higher slot shows what it rolls there (Guiding Bolt 6d6 at 3rd, Cure Wounds 4d8 at 2nd)', /^6d6/.test(dm('Guiding Bolt')) && /4d8/.test(dm('Cure Wounds')), dm('Guiding Bolt') + ' / ' + dm('Cure Wounds'));
+        row('Guiding Bolt').querySelector('[data-cs-spdmg]').click(); await sleep(250);
+        const last = CS.log[CS.log.length - 1] || {};
+        ok('upcast: the roll is at that level, and the choice stays after it', /level 3/.test(last.label || '') && (last.rolls || last.dice || []).length !== 4 && /^6d6/.test(dm('Guiding Bolt')) && row('Guiding Bolt').querySelector('[data-cs-castlvl]').value === '3', JSON.stringify([last.label, last.detail, dm('Guiding Bolt')]));
+        ok('upcast: and Cast spends that slot', row('Guiding Bolt').querySelector('[data-cs-cast]').dataset.csCast === 'Guiding Bolt:3');
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+      } catch(e){ ok('round 170 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -1480,6 +1480,7 @@ function csOnChange(e){
   if (!CS) return;
   const t = e.target, d = t.dataset, pc = csPc(); if (!pc) return;
   if ('csDtype' in d){ CS.dtype = t.value; return; }
+  if ('csCastlvl' in d){ CS.castLvl = Object.assign({}, CS.castLvl, { [d.csCastlvl]: +t.value }); csRender(); return; }
   if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; }, CS_QUIET);
   if ('csCskill' in d && !CS.readOnly){
     const i = +((t.closest('[data-cs-cskill-i]') || {}).dataset || {}).csCskillI, k = d.csCskill;
@@ -1666,10 +1667,11 @@ function csSpellsHtml(pc){
       const open = CS.open['sp:' + n];
       const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '');
       const avail = l ? lvls.filter(x => x >= l && (slots[x].total - (slots[x].expended || 0)) > 0) : [];
+      const at = avail.includes(+(CS.castLvl || {})[n]) ? +CS.castLvl[n] : (avail[0] || l);
       const cast = ro ? '' : ritualOnly.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>'
         : l === 0 ? '<button class="btn small" data-cs-cast="' + csE(n) + ':0">Cast</button>'
-        : (avail.length ? (avail.length > 1 ? '<select class="cb-sel cs-castlvl" data-cs-castlvl="' + csE(n) + '">' + avail.map(x => '<option value="' + x + '">' + CS_ORD[x] + '</option>').join('') + '</select>' : '')
-          + '<button class="btn small" data-cs-cast="' + csE(n) + ':' + avail[0] + '">Cast</button>' : '<span class="cb-dim">no slots</span>')
+        : (avail.length ? (avail.length > 1 ? '<select class="cb-sel cs-castlvl" data-cs-castlvl="' + csE(n) + '">' + avail.map(x => '<option value="' + x + '"' + (x === at ? ' selected' : '') + '>' + CS_ORD[x] + '</option>').join('') + '</select>' : '')
+          + '<button class="btn small" data-cs-cast="' + csE(n) + ':' + at + '">Cast</button>' : '<span class="cb-dim">no slots</span>')
           + (daily.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':free" title="Once per long rest without a slot">Free</button>' : '')
           + csCastUses(pc, n).map(({ a, r }) => '<button class="btn small" data-cs-cast="' + csE(n) + ':use"' + (r && (+r.current || 0) >= (a.amount || 1) ? '' : ' disabled')
             + ' title="Without a slot: ' + csE(sktResLabel(pc, a.resource)) + (r ? ', ' + (+r.current || 0) + ' left' : '') + '">' + csE(sktResLabel(pc, a.resource)) + '</button>').join('')
@@ -1677,10 +1679,10 @@ function csSpellsHtml(pc){
           + (s && s.ritual ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>' : '');
       const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
       const atk = l && s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
-      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csDmgHtml(csSpellDamage(s, avail[0] || l)) + '</button>' : '';
+      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csDmgHtml(csSpellDamage(s, at)) + '</button>' : '';
       const cantripAtk = !l ? (sh.attacks || []).find(a => a.name === n) : null;
       const scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
-      const heal = l && csSpellHeal(s, avail[0] || l, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(n) + '">Heal ' + csE(csSpellHeal(s, avail[0] || l, scMod)) + '</button>' : '';
+      const heal = l && csSpellHeal(s, at, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(n) + '">Heal ' + csE(csSpellHeal(s, at, scMod)) + '</button>' : '';
       const info = [sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '', atk, dmg, heal,
                     cantripAtk ? '<button class="btn small" data-cs-dmg="' + (sh.attacks || []).indexOf(cantripAtk) + '">' + csDmgHtml(cantripAtk.damage) + '</button>' : ''].join('');
       return '<div class="cs-spell"><button class="cs-spell-n" data-cs-open="sp:' + csE(n) + '"><b>' + csE(n) + '</b>' + tags

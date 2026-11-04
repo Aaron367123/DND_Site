@@ -2028,7 +2028,10 @@ function paSpellsHtml(pc){
       if (open){
         const meta = s && typeof csSpellMeta === 'function' ? csSpellMeta(s) : '';
         const text = s ? (typeof sktRulesText === 'function' ? sktRulesText(s.entries) : '') : paRules(pc) ? 'This spell isn’t in the rules data here (a newer book, or homebrew).' : 'Loading the rules…';
-        const up = avail.length > 1 ? `<div class="pa-sp-up"><span>Cast at</span>${avail.map(x => `<button class="btn" data-pa-cast="${paEsc(n)}:${x}">${PA_ORD[x]}</button>`).join('')}</div>` : '';
+        // Each level with what it rolls there ("2nd · 3d8"), as the sheet shows it.
+        const atkB = parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, scMod = atkB - ((pc.sheet || {}).profBonus || 0);
+        const rollAt = x => (s && typeof csSpellDamage === 'function' && csSpellDamage(s, x)) || (s && typeof csSpellHeal === 'function' && csSpellHeal(s, x, scMod) ? 'heal ' + csSpellHeal(s, x, scMod) : '');
+        const up = avail.length > 1 ? `<div class="pa-sp-up"><span>Cast at</span>${avail.map(x => `<button class="btn" data-pa-cast="${paEsc(n)}:${x}">${PA_ORD[x]}${rollAt(x) ? ` <i class="pa-sp-dice">· ${paEsc(rollAt(x))}</i>` : ''}</button>`).join('')}</div>` : '';
         const rit = l && s && s.ritual && avail.length ? `<button class="btn" data-pa-cast="${paEsc(n)}:ritual">As a ritual</button>` : '';
         det = `<div class="pa-sp-det">${meta ? `<div class="pa-sp-meta">${paEsc(meta)}</div>` : ''}<p>${paEsc(text).replace(/\n/g, '<br>')}</p>${up}${rit}</div>`;
       }

@@ -5823,6 +5823,7 @@ body.player-app .pa-roll .pa-roll-in { box-shadow:var(--sh-4); background:var(--
 .pa-sp-up { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
 .pa-sp-up span { font-size:var(--fs-sm); color:var(--text-muted); margin-right:2px; }
 .pa-sp-up .btn, .pa-sp-det > .btn { min-height:38px; }
+.pa-sp-up .pa-sp-dice { font-style:normal; color:var(--text-dim); margin-left:2px; }
 /* A long name takes two lines at most, at a size that leaves the screen for
    the character's numbers. The damage type is a small picker, not a full-
    width bar the size of a button. */
