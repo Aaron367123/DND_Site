@@ -256,7 +256,13 @@ registerPanel('turnview', {
       const cls = String(p.cls || sheet.class || '').trim().toLowerCase();
       const sub = String(p.subclass || '').trim().toLowerCase();
       const lvl = parseInt(p.level || sheet.level || 0) || 0;
-      T.classes.forEach(r => {
+      // A character from the builder lists its own reactions, by its edition:
+      // the table below is the 2014 books', so a 2024 monk read "Deflect
+      // Missiles" and a 2024 rogue's Uncanny Dodge could be missed.
+      const own = p.build && Array.isArray(sheet.activations)
+        ? (typeof sktShownActivations === 'function' ? sktShownActivations(sheet.activations) : sheet.activations).filter(a => a && a.action === 'Reaction') : null;
+      if (own) own.forEach(a => out.push({ name: a.name, note: a.desc || '', from: 'feature', scope: 'self', range: null }));
+      if (!own) T.classes.forEach(r => {
         if (r.cls.toLowerCase() === cls && r.lvl <= lvl) out.push({ ...r, from:'class' });
       });
       // Matched the same fuzzy way the Party panel's Features tab matches, so
@@ -269,7 +275,7 @@ registerPanel('turnview', {
         const n = normSub(rs);
         return !!n && !!subN && (n === subN || n.includes(subN) || subN.includes(n));
       };
-      T.subclasses.forEach(r => {
+      if (!own) T.subclasses.forEach(r => {
         if (r.cls.toLowerCase() === cls && subHit(r.sub) && r.lvl <= lvl)
           out.push({ ...r, from:'subclass' });
       });
@@ -285,7 +291,7 @@ registerPanel('turnview', {
                      + ' ' + (Array.isArray(p.feats) ? p.feats.join(' ') : '');
       if (featText.trim()){
         const hay = featText.toLowerCase();
-        T.feats.forEach(f => { if (hay.includes(f.name.toLowerCase())) out.push({ ...f, from:'feat' }); });
+        T.feats.forEach(f => { if (hay.includes(f.name.toLowerCase()) && !out.some(x => x.name === f.name)) out.push({ ...f, from:'feat' }); });
       }
       // Reaction spells can't come from class and level — they depend on what
       // this character actually has written down.
@@ -1095,13 +1101,25 @@ registerPanel('turnview', {
       }
       const p = this._partyOf(c);
       const rows = (p && p.sheet && Array.isArray(p.sheet.attacks)) ? p.sheet.attacks : [];
-      return rows.filter(a => a && a.name).map(a => ({
-        name: typeof sktAtkLabel === 'function' ? sktAtkLabel(a) : a.name, pc: true, str: !!a.str, spell: !!a.spell,
-        mastery: typeof sktMasteryOf === 'function' ? sktMasteryOf(p, a) : (a.mastery || ''),
-        masteryText: typeof sktMasteryText === 'function' && typeof sktMasteryOf === 'function' ? sktMasteryText(p, a, sktMasteryOf(p, a)) : '',
-        bonus: parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0,
-        dmgText: a.damage || '',
-      }));
+      return rows.filter(a => a && a.name).map(a => {
+        const row = {
+          name: typeof sktAtkLabel === 'function' ? sktAtkLabel(a) : a.name, pc: true, str: !!a.str, spell: !!a.spell,
+          mastery: typeof sktMasteryOf === 'function' ? sktMasteryOf(p, a) : (a.mastery || ''),
+          masteryText: typeof sktMasteryText === 'function' && typeof sktMasteryOf === 'function' ? sktMasteryText(p, a, sktMasteryOf(p, a)) : '',
+          bonus: parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0,
+          dmgText: a.damage || '',
+        };
+        // A cantrip the target saves against (Vicious Mockery: "DC 15 WIS")
+        // read as "+15 to hit". It's a save: the target fails or makes it.
+        const dc = /^DC\s*(\d+)\s*([A-Za-z]{3})?/.exec(String(a.atkBonus || ''));
+        if (dc){
+          const d = /^(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?\s*([a-z]+)?/i.exec(String(a.damage || ''));
+          const avg = d ? Math.floor(+d[1] * (+d[2] + 1) / 2 + (d[4] ? (d[3] === '-' ? -1 : 1) * +d[4] : 0)) : 0;
+          row.save = { dc: +dc[1], ability: (dc[2] || 'DEX').toUpperCase(), half: false };
+          row.parts = d ? [{ dice: d[1] + 'd' + d[2] + (d[4] ? d[3] + d[4] : ''), type: d[5] || '', avg }] : [];
+        }
+        return row;
+      });
     }
     const entry = this._entryOf(c);
     const raw = entry && entry._raw;
@@ -1221,7 +1239,7 @@ registerPanel('turnview', {
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
     const rows = list.map((a, i) => {
       const line = a.pc
-        ? `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`
+        ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`)
         : `${esc(a.toHit || '')}${a.toHit ? ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg} (${esc(pt.dice)}) ${esc(pt.type)}`).join(' + ')}`;
       const spent = (c.rechargeSpent || []).includes(a.name);
       const rech = a.recharge

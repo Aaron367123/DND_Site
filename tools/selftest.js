@@ -13616,6 +13616,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 178 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 179: Turn View — a character's own reactions, and a save cantrip as a save --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), comb0 = JSON.stringify(state.combatants);
+      try {
+        const R = await sktRulesLoad('2024');
+        const monk = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R179m', cls: 'Monk', level: 6, species: 'Human', background: 'Guide' }), R), { id: 'r179m' });
+        const bard = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R179b', cls: 'Bard', level: 2, species: 'Human', background: 'Guide', cantrips: ['Vicious Mockery', 'Minor Illusion'] }), R), { id: 'r179b' });
+        state.party.push(monk, bard);
+        state.combatants = [{ id: 'r179m', name: 'R179m', isPC: true, hp: 40, hpMax: 40, initiative: 15 }, { id: 'r179b', name: 'R179b', isPC: true, hp: 15, hpMax: 15, initiative: 10 }];
+        save();
+        const T = panelDefs.turnview;
+        const rx = T._reactionsFor(state.combatants[0]).map(r => r.name);
+        ok('Turn View: a 2024 monk’s reactions are its own — Deflect Attacks, not 2014’s Deflect Missiles', rx.includes('Deflect Attacks') && !rx.includes('Deflect Missiles') && rx.includes('Slow Fall'), JSON.stringify(rx));
+        const vm = T._attacksFor(state.combatants[1]).find(a => a.name === 'Vicious Mockery') || {};
+        ok('Turn View: Vicious Mockery is a WIS save against the bard’s DC, not "+DC to hit"', !!vm.save && vm.save.ability === 'WIS' && vm.save.dc === +String(bard.sheet.spellSaveDc).replace(/\D/g, '') && (vm.parts || [])[0] && /d6/.test(vm.parts[0].dice), JSON.stringify(vm));
+      } catch(e){ ok('round 179 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
