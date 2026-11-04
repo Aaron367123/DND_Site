@@ -1069,7 +1069,9 @@
     apply: ctx => ['bludgeoning', 'piercing', 'slashing'].forEach(t => ctx.resist.add(t)) });
   st({ key: 'Shillelagh', label: 'Shillelagh', spell: 'Shillelagh',
     desc: 'A club or quarterstaff hits with your spellcasting ability and a bigger die.',
-    apply: ctx => { const L = ctx.level; ctx.shillelagh = { die: ctx.edition === '2014' || L < 5 ? '1d8' : L < 11 ? '1d10' : L < 17 ? '1d12' : '2d6' }; } });
+    // 2024: "you can deal Force damage or the weapon's normal damage type".
+    options: ctx => ctx.edition === '2024' ? ['Bludgeoning', 'Force'] : [],
+    apply: (ctx, v) => { const L = ctx.level; ctx.shillelagh = { die: ctx.edition === '2014' || L < 5 ? '1d8' : L < 11 ? '1d10' : L < 17 ? '1d12' : '2d6', type: v === 'Force' ? 'force' : '' }; } });
   st({ key: 'Divine Favor', label: 'Divine Favor', spell: 'Divine Favor', desc: '+1d4 radiant damage on weapon hits.',
     apply: ctx => ctx.extraDamage.push({ label: 'Divine Favor', dice: '1d4 radiant', note: 'each weapon hit' }) });
 

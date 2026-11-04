@@ -13552,6 +13552,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 175 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 176: Shillelagh — one die either way, and Force damage if chosen (2024) --
+    if (!PLAYER){
+      try {
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'R176', cls: 'Druid', level: 6, species: 'Human', background: 'Guide', cantrips: ['Shillelagh', 'Guidance', 'Druidcraft'],
+          items: [{ name: 'Quarterstaff', base: 'quarterstaff', qty: 1, weight: 4, equipped: true }], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const qs = r => (r.sheet.attacks || []).find(a => a.name === 'Quarterstaff') || {};
+        const off = sktComputeCharacter(b, R);
+        const on = sktComputeCharacter(b, R, { active: { Shillelagh: true } });
+        const force = sktComputeCharacter(b, R, { active: { Shillelagh: true, 'Shillelagh:opt': 'Force' } });
+        ok('Shillelagh: off, the quarterstaff is 1d6 and 1d8 two-handed', /^1d6/.test(qs(off).damage || '') && /^1d8/.test(qs(off).versatile || ''), JSON.stringify(qs(off)));
+        ok('Shillelagh: on at 6th, 1d10 with Wisdom — and no bigger two-handed die', /^1d10\+\d/.test(qs(on).damage || '') && !qs(on).versatile, JSON.stringify(qs(on)));
+        ok('Shillelagh: with Force chosen, the damage is force', /force$/.test(qs(force).damage || '') && /bludgeoning$/.test(qs(on).damage || ''), qs(force).damage);
+      } catch(e){ ok('round 176 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

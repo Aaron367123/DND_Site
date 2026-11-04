@@ -2160,7 +2160,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-04c';
+const SKT_RULES_REV = '2026-11-04d';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -3570,12 +3570,13 @@ function sktBuildAttacks(ctx, gear, sc){
     let dmgBonus = ab + duel + flat;
     let die = shil ? ctx.shillelagh.die : (w.dmg1 || '1');
     if (ctx.martialArts && ctx.martialArtsDie && !ranged && monkWeapon(w, props, ranged) && _sktDieAvg(ctx.martialArtsDie) > _sktDieAvg(die)) die = ctx.martialArtsDie;
-    const type = SKT_DMG[String(w.dmgType || '').charAt(0)] || '';
+    const type = (shil && ctx.shillelagh.type) || SKT_DMG[String(w.dmgType || '').charAt(0)] || '';
     const mastery = (w.mastery || [])[0] ? String(w.mastery[0]).split('|')[0] : '';
     out.push({
       name: w._name || _sktTitle(w.name), atkBonus: sktSigned(hit),
       damage: die + (dmgBonus ? (dmgBonus > 0 ? '+' : '') + dmgBonus : '') + (type ? ' ' + type : ''),
-      versatile: w.dmg2 ? w.dmg2 + ((dmgBonus - duel) ? sktSigned(dmgBonus - duel) : '') : null,
+      // Shillelagh's die replaces the weapon's either way: no bigger two-handed die.
+      versatile: w.dmg2 && !shil ? w.dmg2 + ((dmgBonus - duel) ? sktSigned(dmgBonus - duel) : '') : null,
       range: w.range || null,
       mastery: (ctx.build.masteries || []).map(s => s.toLowerCase()).includes(w.name.toLowerCase()) ? mastery : '',
       props, str: !ranged && ab === m.str, _ab: ab, _flat: flat,
