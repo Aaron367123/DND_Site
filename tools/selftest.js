@@ -7932,7 +7932,9 @@
         pc.id = 'pc_r39'; wr.current = 0; state.party.push(pc); save();
         Math.random = () => 0;
         panelDefs.party._longRestOne(state.party.find(p => p.id === 'pc_r39'), state.party.length - 1);
-        ok('charges: a long rest gives back 1d6 + 1, not all seven', state.party.find(p => p.id === 'pc_r39').resources.find(r => r.name === 'Wand of Magic Missiles').current === 2);
+        { const P39 = state.party.find(p => p.id === 'pc_r39');
+          ok('charges: a long rest leaves the wand’s 1d6 + 1 to roll (here, or at the table), not all seven back', P39.resources.find(r => r.name === 'Wand of Magic Missiles').current === 0
+             && (P39.dawnRegain || []).some(x => x.name === 'Wand of Magic Missiles' && x.dice === '1d6+1'), JSON.stringify(P39.dawnRegain)); }
         Math.random = st.rnd;
         const rings = [1, 2, 3, 4, 5].map(n => ({ name: 'Ring ' + n, reqAttune: true, attuned: true, bonusAc: 1 }));
         const ac = (cls, L) => sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { cls, level: L, items: rings, equipment: { materialized: true } }), R14).ac;
@@ -11687,7 +11689,7 @@
         const rnd = Math.random; Math.random = () => 0;
         try { panelDefs.party._longRestOne(C(), ci); } finally { Math.random = rnd; }
         const wc = used('Wand of Magic Missiles').c || 0;
-        ok('long rest: a wand regains 1d6 + 1 charges, not all seven', wc === 5 && !used('Claw of the Wyrm Rune')['lr:Wyrmslayer'], 'still spent ' + wc);
+        ok('long rest: a wand’s 1d6 + 1 is left to roll, not all seven back; a daily power is back', wc === 7 && (C().dawnRegain || []).some(x => x.name === 'Wand of Magic Missiles' && x.item) && !used('Claw of the Wyrm Rune')['lr:Wyrmslayer'], 'still spent ' + wc);
         // What each item does, on the sheet; advantage on the dice.
         wear([make('Cloak of Protection'), make('Cloak of Elvenkind'), make('Sentinel Shield'), make('Eyes of the Eagle'), make('Opal of the Ild Rune')]);
         tab('Actions'); await sleep(150);
@@ -13566,6 +13568,35 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('Shillelagh: on at 6th, 1d10 with Wisdom — and no bigger two-handed die', /^1d10\+\d/.test(qs(on).damage || '') && !qs(on).versatile, JSON.stringify(qs(on)));
         ok('Shillelagh: with Force chosen, the damage is force', /force$/.test(qs(force).damage || '') && /bludgeoning$/.test(qs(on).damage || ''), qs(force).damage);
       } catch(e){ ok('round 176 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 177: a magic item's charges at dawn: rolled on the sheet, or the table's number --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const rec = { id: 'r177', name: 'R177', cls: 'wizard', level: 5, hp: 20, hpMax: 20, ac: 12, spd: 30, rules: '2024', build: null,
+          resources: [{ name: 'Wand of Magic Missiles', type: 'pool', current: 1, max: 7, recharge: 'dawn', item: true, note: 'Regains 1d6 + 1 at dawn' }] };
+        state.party.push(rec); save();
+        const P = () => state.party.find(p => p.id === 'r177'), wand = () => P().resources.find(r => r.name === 'Wand of Magic Missiles');
+        panelDefs.party._longRestOne(P(), state.party.findIndex(p => p.id === 'r177'));
+        ok('dawn: the long rest leaves the wand’s 1d6+1 to roll, its charges as they were', wand().current === 1 && (P().dawnRegain || [])[0] && P().dawnRegain[0].dice === '1d6+1', JSON.stringify([wand().current, P().dawnRegain]));
+        save();
+        await openCharSheet('r177'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(250);
+        const box = document.querySelector('#cs-root [data-cs-dawnval="Wand of Magic Missiles"]');
+        ok('dawn: the sheet shows it by the counter — Roll, or the number rolled at the table', !!box && !!document.querySelector('#cs-root [data-cs-dawnroll="Wand of Magic Missiles"]') && /1d6\+1/.test(document.querySelector('#cs-root .cs-dawn').textContent));
+        box.value = '4'; document.querySelector('#cs-root [data-cs-dawnset="Wand of Magic Missiles"]').click(); await sleep(250);
+        ok('dawn: 4 rolled at the table gives four back, and the prompt goes', wand().current === 5 && !P().dawnRegain && !document.querySelector('#cs-root .cs-dawn'), JSON.stringify([wand().current, P().dawnRegain]));
+        // Roll it here, capped at the maximum.
+        wand().current = 6; save(); panelDefs.party._longRestOne(P(), state.party.findIndex(p => p.id === 'r177')); save(); csRender(); await sleep(150);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(200);
+        document.querySelector('#cs-root [data-cs-dawnroll="Wand of Magic Missiles"]').click(); await sleep(250);
+        ok('dawn: Roll rolls it here, no more than the wand holds', wand().current === 7 && !P().dawnRegain, wand().current);
+        // Full already: nothing to roll.
+        panelDefs.party._longRestOne(P(), state.party.findIndex(p => p.id === 'r177'));
+        ok('dawn: a full wand has nothing to roll', !P().dawnRegain);
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+      } catch(e){ ok('round 177 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {

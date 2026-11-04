@@ -1827,9 +1827,13 @@ registerPanel('party',{
       // all of them; everything else comes back whole.
       [c.inventory, c.build && c.build.items].forEach(list => (list || []).forEach(m => {
         if (!m || !m.used) return;
-        const r = /(\d+)d(\d+)(?:\s*\+\s*(\d+))?/.exec(String(m.rechargeAmount || ''));
+        const r = /(\d+d\d+(?:\s*\+\s*\d+)?)/.exec(String(m.rechargeAmount || ''));
         const spent = +m.used.c || 0;
-        if (spent && r){ let n = +(r[3] || 0); for (let k = 0; k < +r[1]; k++) n += 1 + Math.floor(Math.random() * +r[2]); const left = Math.max(0, spent - n); m.used = left ? { c: left } : undefined; }
+        // Its charges wait for the roll on the sheet (see the resources below).
+        if (spent && r){
+          m.used = { c: spent };
+          c.dawnRegain = (c.dawnRegain || []).filter(x => x.name !== m.name).concat([{ name: m.name, dice: r[1].replace(/\s+/g, ''), item: true }]);
+        }
         else m.used = undefined;
         if (!m.used) delete m.used;
       }));
@@ -1848,9 +1852,16 @@ registerPanel('party',{
       if (Array.isArray(c.resources)){
         c.resources = c.resources.map(r => {
           // A magic item regains its charges at dawn by its own roll (a
-          // wand's 1d6 + 1), not all of them.
-          const m = r.recharge === 'dawn' && /Regains (\d+)d(\d+)(?:\s*\+\s*(\d+))?/.exec(r.note || '');
-          if (m){ let n = +(m[3] || 0); for (let k = 0; k < +m[1]; k++) n += 1 + Math.floor(Math.random() * +m[2]); return { ...r, current: Math.min(r.max, (+r.current || 0) + n) }; }
+          // wand's 1d6 + 1), not all of them. The roll is left for the sheet
+          // (c.dawnRegain): rolled there, or the number rolled at the table
+          // typed in. The rest used to roll it with nobody seeing.
+          const m = r.recharge === 'dawn' && /Regains (\d+d\d+(?:\s*\+\s*\d+)?)/.exec(r.note || '');
+          if (m){
+            const dawn = (c.dawnRegain || []).filter(x => x.name !== r.name);
+            c.dawnRegain = (+r.current || 0) < (+r.max || 0) ? dawn.concat([{ name: r.name, dice: m[1].replace(/\s+/g, '') }]) : dawn;
+            if (!c.dawnRegain.length) delete c.dawnRegain;
+            return r;
+          }
           return { ...r, current: r.max ?? r.current };
         });
       }

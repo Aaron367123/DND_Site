@@ -852,7 +852,7 @@ CS_TAB_RENDER.actions = pc => {
   if (res.length){
     h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(sktResLabel(pc, r.name)) + '</b>'
       + '<span class="cs-pips">' + Array.from({ length: Math.min(r.max || 0, 20) }, (_, n) => '<button class="cs-pip' + (n < (r.current || 0) ? ' on' : '') + '" data-cs-res="' + i + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="' + csE(r.name) + ' ' + (n + 1) + '"></button>').join('') + '</span>'
-      + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : r.recharge === 'turn' ? 'once a turn' : /short/.test(r.recharge) ? 'short rest' : r.recharge === 'dawn' ? (r.note || 'at dawn') : 'long rest') : '') + (CS_RES_HINT[r.name] ? ' · ' + CS_RES_HINT[r.name] : '') + '</span></div>').join('') + '</div>';
+      + csDawnHtml(pc, r) + '<span class="cb-dim">' + (r.current || 0) + '/' + (r.max || 0) + (r.recharge ? ' · ' + (r.recharge === 'short-one' ? 'one back on a short rest' : r.recharge === 'turn' ? 'once a turn' : /short/.test(r.recharge) ? 'short rest' : r.recharge === 'dawn' ? (r.note || 'at dawn') : 'long rest') : '') + (CS_RES_HINT[r.name] ? ' · ' + CS_RES_HINT[r.name] : '') + '</span></div>').join('') + '</div>';
   }
   if (!ro && pc.build){
     h += '<details class="cs-addcustom"><summary>+ Add a tracker or an action</summary>'
@@ -1212,6 +1212,12 @@ function csOnClick(e){
     // back: no Undo toast for it (Ctrl+Z still works).
     if (typeof sktUndoable === 'function') return sktUndoable((sign < 0 ? 'Took ' : 'Healed ') + n, run, CS_QUIET);
     return run();
+  }
+  if (d.csDawnroll) return csDawnApply(pc, d.csDawnroll, null);
+  if (d.csDawnset){
+    const v = parseInt((document.querySelector('#cs-root [data-cs-dawnval="' + CSS.escape(d.csDawnset) + '"]') || {}).value, 10);
+    if (!(v >= 0)){ if (typeof showToast === 'function') showToast('Type the number rolled, or press Roll'); return; }
+    return csDawnApply(pc, d.csDawnset, v);
   }
   if (d.csDrink){ CS.drink = CS.drink === 'i:' + d.csDrink ? null : 'i:' + d.csDrink; return csRender(); }
   if (d.csDrinkx){ CS.drink = null; return csRender(); }
@@ -2313,6 +2319,41 @@ function csPotionHeal(m, i){
   const x = /regains? (\d+d\d+(?:\s*\+\s*\d+)?) hit points/i.exec((i && i.text) || '');
   return x ? x[1].replace(/\s+/g, '') : '';
 }
+// A magic item's charges back at dawn, after a long rest: its dice, to roll
+// here or to type the number rolled at the table.
+function csDawnHtml(pc, r){
+  const p = (pc.dawnRegain || []).find(x => x.name === r.name);
+  if (!p || CS.readOnly) return '';
+  return '<span class="cs-dawn" data-cs-dawnname="' + csE(r.name) + '"><span class="cb-dim">dawn: regains ' + csE(p.dice) + '</span>'
+    + '<button class="btn small" data-cs-dawnroll="' + csE(r.name) + '">🎲 Roll</button>'
+    + '<input type="number" min="0" inputmode="numeric" data-cs-dawnval="' + csE(r.name) + '" aria-label="Charges rolled" placeholder="rolled">'
+    + '<button class="btn small" data-cs-dawnset="' + csE(r.name) + '">Add</button></span>';
+}
+function csDawnApply(pc, name, typed){
+  const p = (pc.dawnRegain || []).find(x => x.name === name); if (!p) return;
+  if (p.item && !(pc.resources || []).some(x => x.name === name)){
+    // An imported character's item, which counts its own spent charges.
+    const roll = typed != null ? { total: typed, detail: typed + ' (rolled at the table)' } : sktDamageRoll(p.dice, false);
+    csLog({ kind: 'dmg', label: name + ' regains charges', total: roll.total, detail: roll.detail, type: 'charges' });
+    return csEdit(name + ': ' + roll.total + ' charges back', q => {
+      [q.inventory, q.build && q.build.items].forEach(l => (l || []).forEach(m => {
+        if (!m || m.name !== name || !m.used) return;
+        const left = Math.max(0, (+m.used.c || 0) - roll.total);
+        if (left) m.used = Object.assign({}, m.used, { c: left }); else { const u = Object.assign({}, m.used); delete u.c; if (Object.keys(u).length) m.used = u; else delete m.used; }
+      }));
+      q.dawnRegain = (q.dawnRegain || []).filter(x => x.name !== name);
+      if (!q.dawnRegain.length) delete q.dawnRegain;
+    });
+  }
+  const roll = typed != null ? { total: typed, detail: typed + ' (rolled at the table)' } : sktDamageRoll(p.dice, false);
+  csLog({ kind: 'dmg', label: name + ' regains charges', total: roll.total, detail: roll.detail, type: 'charges' });
+  csEdit(name + ': ' + roll.total + ' charges back', q => {
+    const r = (q.resources || []).find(x => x.name === name);
+    if (r) r.current = Math.min(+r.max || 0, (+r.current || 0) + roll.total);
+    q.dawnRegain = (q.dawnRegain || []).filter(x => x.name !== name);
+    if (!q.dawnRegain.length) delete q.dawnRegain;
+  });
+}
 // Drink it: heal by the roll (the app's, or the total typed), and one potion
 // fewer — from the character's own things ('i:Name') or the loot ('l:id').
 function csDrink(pc, key, typed){
@@ -2374,6 +2415,7 @@ function csItemActionsHtml(pc){
       + ((csItemFx(m).modifySpeed || {}).multiply && !ro ? '<button class="btn small' + (m.active ? ' on' : '') + '" data-cs-iactive="' + csE(m.name) + '" aria-pressed="' + !!m.active + '">' + (m.active ? 'Switch off' : 'Switch on') + '</button>' : '')
       + (abUse ? csItemPips(pc, m, abUse) + '<span class="cb-dim">once a day</span>'
         + (ro ? '' : '<button class="btn small" data-cs-iuse="' + csE(m.name) + '"' + (abUse.left ? '' : ' disabled') + '>Use</button>') : '')
+      + (charges && !(pc.resources || []).some(x => x.name === m.name) ? csDawnHtml(pc, { name: m.name }) : '')
       + (charges ? csItemPips(pc, m, charges) + '<span class="cb-dim">' + charges.left + '/' + charges.max + ' charges</span>'
         + (!spells.length && !rows.some(x => x.u.charge) && !ro ? '<button class="btn small" data-cs-icharge="' + csE(m.name) + '"' + (charges.left ? '' : ' disabled') + '>Use</button>' : '') : '')
       + pools.map(k => { const u = csItemUses(pc, m, k), [per, n] = k.split(':'); return csItemPips(pc, m, u) + '<span class="cb-dim">' + n + '/' + per + '</span>'; }).join('')
