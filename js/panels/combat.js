@@ -1571,9 +1571,12 @@ registerPanel('combat',{
     state.combatants.forEach((c, i) => {
       if (c.isPC) return;
       const bonus = c.initBonus || 0;
-      // A block that rolls initiative with advantage (or disadvantage).
-      const a = sktD(20), b2 = c.initMode ? sktD(20) : a;
-      const d20 = c.initMode === 'adv' ? Math.max(a, b2) : c.initMode === 'dis' ? Math.min(a, b2) : a;
+      // A block that rolls initiative with advantage (or disadvantage), and
+      // in the 2024 rules an Invisible creature (advantage) or an
+      // Incapacitated one (disadvantage).
+      const mode = sktInitCondMode(c.initMode, c.conditions, (state.settings && state.settings.builderEdition) || '2024');
+      const a = sktD(20), b2 = mode ? sktD(20) : a;
+      const d20 = mode === 'adv' ? Math.max(a, b2) : mode === 'dis' ? Math.min(a, b2) : a;
       state.combatants[i] = {...c, initiative: d20 + bonus};
       rolled++;
     });

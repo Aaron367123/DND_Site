@@ -2004,6 +2004,20 @@ function sktDeriveActivations(featuresText){
   return acts;
 }
 
+// How a creature rolls initiative: its own advantage or disadvantage ('adv',
+// 'dis' or ''), and in the 2024 rules advantage while Invisible and
+// disadvantage while Incapacitated (or a condition that includes it).
+// Both cancel to a straight roll.
+function sktInitCondMode(own, conditions, edition){
+  let up = own === 'adv', down = own === 'dis';
+  if (edition !== '2014'){
+    const cs = (conditions || []).map(x => String(x).toLowerCase());
+    if (cs.some(x => /^invisible\b/.test(x))) up = true;
+    if (cs.some(x => /^(incapacitated|paralyzed|petrified|stunned|unconscious)\b/.test(x))) down = true;
+  }
+  return up && !down ? 'adv' : down && !up ? 'dis' : '';
+}
+
 // A concentration save's DC after damage: 10 or half the damage, whichever
 // is higher — and in the 2024 rules no more than 30. `who` is the party
 // member (its rules), or nothing for a monster (the campaign's rules).

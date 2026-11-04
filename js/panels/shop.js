@@ -860,9 +860,14 @@ registerPanel('shop',{
     const blocklistSet = new Set(
       String(sf.blocklist || '').split('\n').map(s => s.trim().toLowerCase()).filter(Boolean)
     );
+    // An item printed in both editions (a 2014 and a 2024 Chain Mail, a DMG
+    // and an XDMG Bag of Holding) was stocked twice: only the printing the
+    // party plays by.
+    const ed = this._priceEdition();
     for (const d of _5eData){
       if (d.cat !== 'item') continue;
       if (isHidden(d._source)) continue;
+      if (ed === '2024' ? _isLegacyEntry(d) : _isReprintEntry(d)) continue;
       const r = d._raw || {};
       if (skipFirearms && this._isFirearm(r)) continue;
       if (!this._techLevelAllowed(r, techLevel)) continue;

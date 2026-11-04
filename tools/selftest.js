@@ -13793,6 +13793,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 184 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 185: 2024 initiative — Invisible rolls with advantage, Incapacitated with disadvantage --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), comb0 = JSON.stringify(state.combatants);
+      try {
+        ok('initiative: Invisible is advantage, Stunned disadvantage, both a straight roll; 2014 neither',
+           sktInitCondMode('', ['Invisible'], '2024') === 'adv' && sktInitCondMode('', ['Stunned'], '2024') === 'dis'
+           && sktInitCondMode('', ['Invisible', 'Incapacitated'], '2024') === '' && sktInitCondMode('adv', ['Unconscious'], '2024') === ''
+           && sktInitCondMode('', ['Invisible'], '2014') === '' && sktInitCondMode('dis', [], '2024') === 'dis',
+           [sktInitCondMode('', ['Invisible'], '2024'), sktInitCondMode('', ['Stunned'], '2024'), sktInitCondMode('', ['Invisible'], '2014')].join(' '));
+        // A monster that's invisible: two d20s, the higher kept.
+        state.combatants = [{ id: 'r185m', name: 'Ghost', isPC: false, cls: 'enemy', hp: 10, hpMax: 10, ac: 11, initBonus: 0, initiative: 0, conditions: ['Invisible'] }];
+        const real = sktD; const seq = [3, 17]; let k = 0;
+        sktD = n => n === 20 ? seq[k++ % 2] : real(n);
+        try { panelDefs.combat._rollInitiative(); } finally { sktD = real; }
+        ok('initiative: an invisible monster keeps the higher of two d20s', state.combatants[0].initiative === 17 && k === 2, state.combatants[0].initiative + ' rolls ' + k);
+        // A PC rolling from the sheet while incapacitated.
+        const R = await sktRulesLoad('2024');
+        const rec = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'r185', cls: 'Rogue', level: 3, species: 'Human', background: 'Guide' }), R), { id: 'r185', conditions: ['Incapacitated'] });
+        state.party = [rec]; save();
+        const fx = csRollEffects(rec, 'init');
+        ok('initiative: an incapacitated character rolls it with disadvantage', fx.dis.includes('incapacitated') && !fx.adv.length, JSON.stringify(fx));
+        const fx2 = csRollEffects(Object.assign({}, rec, { conditions: ['Invisible'] }), 'init');
+        ok('initiative: an invisible character rolls it with advantage', fx2.adv.includes('invisible') && !fx2.dis.length, JSON.stringify(fx2));
+      } catch(e){ ok('round 185 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); save(); }
+    }
+    // -- Round 186: a shop stocks one printing of each item — the party's edition's --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        if (typeof _5eLoaded !== 'undefined' && !_5eLoaded && typeof on5eLoaded === 'function') await new Promise(r => { on5eLoaded(r); setTimeout(r, 20000); });
+        const SH = panelDefs.shop;
+        const stock = ed => {
+          state.party = [{ id: 'r186', name: 'r186', build: { edition: ed } }];
+          const names = [], dup = [], srcs = {};
+          for (let k = 0; k < 6; k++){
+            const got = SH._buildShopCatalog('Blacksmith/Armory') || [];
+            const seen = new Set();
+            got.forEach(x => { if (seen.has(x.name)) dup.push(x.name); seen.add(x.name); (srcs[x.name] = srcs[x.name] || new Set()).add(x._source); });
+            names.push(got.length);
+          }
+          return { names, dup, srcs };
+        };
+        const a = stock('2024');
+        ok('shop: a 2024 party\'s blacksmith lists each item once, from the 2024 books', a.names[0] > 10 && !a.dup.length && !Object.values(a.srcs).some(s => s.size > 1) && [...(a.srcs['Battleaxe'] || new Set(['XPHB']))].join() === 'XPHB' && [...(a.srcs['Chain Mail'] || new Set(['XPHB']))].join() === 'XPHB',
+           JSON.stringify({ n: a.names, dup: a.dup.slice(0, 5), two: Object.entries(a.srcs).filter(([, s]) => s.size > 1).map(([n]) => n).slice(0, 5), axe: [...(a.srcs['Battleaxe'] || [])] }));
+        const b = stock('2014');
+        ok('shop: a 2014 party\'s lists each item once, from the 2014 books', b.names[0] > 10 && !b.dup.length && !Object.values(b.srcs).some(s => s.size > 1) && [...(b.srcs['Battleaxe'] || new Set(['PHB']))].join() === 'PHB',
+           JSON.stringify({ n: b.names, dup: b.dup.slice(0, 5), two: Object.entries(b.srcs).filter(([, s]) => s.size > 1).map(([n]) => n).slice(0, 5), axe: [...(b.srcs['Battleaxe'] || [])] }));
+      } catch(e){ ok('round 186 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

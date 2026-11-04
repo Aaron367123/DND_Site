@@ -675,6 +675,11 @@ function csRollEffects(pc, kind){
   ['blinded', 'prone', 'restrained'].forEach(c => { if (has(c) && isAtk) dis.push(c); });
   if (has('restrained') && save === 'dex') dis.push('restrained');
   if (has('invisible') && isAtk) adv.push('invisible');
+  // 2024: Invisible rolls initiative with advantage, Incapacitated with disadvantage.
+  if (kind === 'init' && ed !== '2014'){
+    if (has('invisible')) adv.push('invisible');
+    if (['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'].some(has)) dis.push('incapacitated');
+  }
   // Armour that's loud (chain mail, plate…): Stealth at disadvantage.
   if (skill === 'stealth' && pc.sheet && pc.sheet.stealthDis) dis.push('armour');
   if (save === 'str' || save === 'dex') ['paralyzed', 'stunned', 'petrified', 'unconscious'].forEach(c => { if (has(c) && !autoFail) autoFail = c; });
