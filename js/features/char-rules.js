@@ -1494,6 +1494,11 @@ function sktSpeciesLabel(sp, sub){
   const raw = String(sub.name || '');
   if (/^variant$/i.test(raw)) return 'Variant ' + sp.name;
   if (/^Variant;/i.test(raw)) return sp.name + ' (' + sktSubName(sp, sub) + ')';
+  // A 2024 lineage, legacy or ancestry: "Wood Elf Lineage" is a Wood Elf,
+  // "Drow Lineage" an Elf (Drow), "Abyssal Legacy" a Tiefling (Abyssal). It
+  // read "Wood Elf Lineage Elf".
+  const kind = /^(.*?)\s+(?:Lineage|Legacy|Ancestry)$/i.exec(raw);
+  if (kind) return new RegExp('\\b' + sp.name + '$', 'i').test(kind[1]) ? kind[1] : sp.name + ' (' + kind[1] + ')';
   return raw + ' ' + sp.name;
 }
 // The subrace or version a build has: the one named, or for a species that
@@ -2155,7 +2160,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-03c';
+const SKT_RULES_REV = '2026-11-04';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;

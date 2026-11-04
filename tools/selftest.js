@@ -13295,6 +13295,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 167 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 168: a 2024 lineage reads as a name, not "Wood Elf Lineage Elf" --
+    if (!PLAYER){
+      try {
+        const R = await sktRulesLoad('2024');
+        const race = ch => sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R168', cls: 'Fighter', level: 3, species: 'Elf', background: 'Guide', speciesChoice: ch }), R).race;
+        const got = { wood: race({ lineage: 'Wood Elf' }), drow: race({ lineage: 'Drow' }), high: race({ lineage: 'High Elf' }) };
+        ok('species label: Wood Elf and High Elf by name, a Drow as Elf (Drow)', got.wood === 'Wood Elf' && got.high === 'High Elf' && got.drow === 'Elf (Drow)', JSON.stringify(got));
+        ok('species label: a legacy without the species in it keeps it in brackets', sktSpeciesLabel({ name: 'Tiefling' }, { name: 'Abyssal Legacy' }) === 'Tiefling (Abyssal)' && sktSpeciesLabel({ name: 'Gnome' }, { name: 'Forest Gnome Lineage' }) === 'Forest Gnome',
+           sktSpeciesLabel({ name: 'Tiefling' }, { name: 'Abyssal Legacy' }));
+        // A 2014 background on a 2024 character lists the abilities and feat chosen for it.
+        const party0 = JSON.stringify(state.party);
+        const ad = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R168b', cls: 'Ranger', level: 3, species: 'Human', background: 'Outlander',
+          bgAdapt: { abilities: ['dex', 'con', 'wis'], feat: 'Lucky' }, bgAsi: { con: 2, dex: 1 } }), R), { id: 'r168b' });
+        state.party.push(ad); save();
+        await openCharSheet('r168b'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="background"]').click(); await sleep(200);
+        const rows = Object.fromEntries([...document.querySelectorAll('#cs-root .cs-bgsum .cs-kv')].map(r => [r.querySelector('span').textContent, r.querySelector('b').textContent]));
+        ok('Background tab: a 2014 background on a 2024 character shows its chosen abilities and origin feat', /Dexterity, Constitution, Wisdom \(Constitution \+2, Dexterity \+1\)/.test(rows['Ability Scores'] || '') && rows.Feat === 'Lucky' && /Athletics/.test(rows['Skill Proficiencies'] || ''), JSON.stringify(rows));
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+        state.party = JSON.parse(party0); save();
+      } catch(e){ ok('round 168 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

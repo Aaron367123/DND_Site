@@ -958,6 +958,12 @@ function csBgSummary(pc){
   const inc = Object.keys(b.bgAsi || {}).filter(k => +b.bgAsi[k]).sort((x, y) => b.bgAsi[y] - b.bgAsi[x]).map(k => (CS_AB_NAME[k] || k) + ' +' + b.bgAsi[k]).join(', ');
   const plain = e => (typeof sktRulesText === 'function' ? sktRulesText([e]) : String(e)).replace(/\s+/g, ' ').trim();
   const list = (bg.entries || []).find(e => e && e.type === 'list' && (e.items || []).some(i => i && i.name));
+  // A 2014 background in a 2024 build: the three abilities and origin feat chosen for it.
+  if (bg.adapted){
+    const a = b.bgAdapt || {};
+    if ((a.abilities || []).length) out.rows.push(['Ability Scores', a.abilities.map(k => CS_AB_NAME[k] || k).join(', ') + (inc ? ' (' + inc + ')' : '')]);
+    if (a.feat) out.rows.push(['Feat', a.feat]);
+  }
   if (list){
     list.items.filter(i => i && i.name).forEach(i => {
       const k = String(i.name).replace(/:\s*$/, '');
