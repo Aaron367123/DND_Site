@@ -313,7 +313,14 @@
       desc: 'When you roll initiative, regain all Focus Points and ' + (ctx.martialArtsDie || '1d6') + ' + ' + ctx.level + ' hit points.' });
   });
   def('2024:class:monk:Acrobatic Movement', ctx => note(ctx, 'Acrobatic Movement: without armor or a shield, move along vertical surfaces and across liquids on your turn.'));
-  def('2024:class:monk:Heightened Focus', ctx => note(ctx, 'Heightened Focus: Flurry of Blows makes three strikes, Patient Defense grants temporary hit points, Step of the Wind can carry an ally.'));
+  // Heightened Focus changes the three Focus actions themselves (it was only a
+  // note, and Flurry of Blows still read "two unarmed strikes" at 10th).
+  def('2024:class:monk:Heightened Focus', ctx => {
+    const a = n => ctx.actions.find(x => x.name === n), die = String(ctx.martialArtsDie || '1d8').replace(/^1?d/, '');
+    if (a('Flurry of Blows')) a('Flurry of Blows').desc = 'Make three unarmed strikes.';
+    if (a('Patient Defense')) Object.assign(a('Patient Defense'), { desc: 'Disengage and Dodge, and gain temporary hit points equal to two rolls of your Martial Arts die.', dice: '2d' + die });
+    if (a('Step of the Wind')) a('Step of the Wind').desc = 'Disengage and Dash; your jump distance doubles, and you can take one willing Large or smaller creature within 5 feet along with you.';
+  });
   def('2024:class:monk:Self-Restoration', ctx => note(ctx, 'Self-Restoration: end Charmed, Frightened or Poisoned on yourself at the end of each turn; going without food or drink doesn’t exhaust you.'));
   def('2024:class:monk:Disciplined Survivor', ctx => { ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(k => ctx.saveProf.add(k)); note(ctx, 'Disciplined Survivor: reroll a failed saving throw by spending 1 Focus Point.'); });
   def('2024:class:monk:Perfect Focus', ctx => note(ctx, 'Perfect Focus: when you roll initiative with 3 or fewer Focus Points, regain up to 4.'));

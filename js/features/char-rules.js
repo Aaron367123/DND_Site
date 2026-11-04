@@ -2160,7 +2160,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-04b';
+const SKT_RULES_REV = '2026-11-04c';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -2335,6 +2335,11 @@ sktDefineEffect(['2014:class:fighter:Extra Attack'], ctx => {
 sktDefineEffect(['class:monk:Martial Arts'], ctx => {
   ctx.martialArtsDie = _fxCol(ctx, 'Martial Arts') || '1d4';
   ctx.martialArts = true;
+  // The bonus unarmed strike, listed with the bonus actions as D&D Beyond
+  // does (only Flurry, Patient Defense and Step of the Wind were).
+  const m = Math.max(ctx.mod.str, ctx.mod.dex);
+  _fxAction(ctx, { name: 'Unarmed Strike (Martial Arts)', action: 'Bonus Action', feature: 'Martial Arts', dice: String(ctx.martialArtsDie).replace(/^d/, '1d') + (m ? (m > 0 ? '+' : '') + m : ''),
+    desc: ctx.edition === '2024' ? 'Make one Unarmed Strike as a Bonus Action.' : 'After you take the Attack action with an unarmed strike or a monk weapon, make one unarmed strike.' });
 });
 sktDefineEffect(['class:monk:Unarmored Defense'], ctx => {
   ctx.acOptions.push({ label: 'Unarmored Defense', value: 10 + ctx.mod.dex + ctx.mod.wis, noArmor: true, shieldOk: false });

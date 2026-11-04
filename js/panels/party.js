@@ -1798,6 +1798,9 @@ registerPanel('party',{
       // A lowered maximum lasts "until the target finishes a long rest".
       if (typeof c.hpMaxNormal === 'number'){ c.hpMax = c.hpMaxNormal; delete c.hpMaxNormal; delete c.hpMaxNote; }
       c.hp = c.hpMax || c.hp;
+      // A 2024 human's Resourceful: "You gain Heroic Inspiration whenever you
+      // finish a Long Rest." It was only a note on the sheet.
+      if (((c.sheet || {}).featureList || []).some(f => f.name === 'Resourceful' && f.from === 'species' && !f.info)) c.inspiration = true;
       c.tempHp = 0;
       // Hit dice: half of TOTAL back, minimum 1. Rounded DOWN — the PHB's
       // general rule is to round down when you divide, so a level 5 character

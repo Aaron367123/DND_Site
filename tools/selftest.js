@@ -13405,6 +13405,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 171 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 172: a 2024 human's Resourceful gives Heroic Inspiration on a long rest --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (id, sp) => Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: id, cls: 'Fighter', level: 2, species: sp, background: 'Guide' }), R), { id, inspiration: false });
+        state.party.push(mk('r172h', 'Human'), mk('r172d', 'Dwarf')); save();
+        const P = id => state.party.find(p => p.id === id);
+        panelDefs.party._longRestOne(P('r172h'), state.party.findIndex(p => p.id === 'r172h'));
+        panelDefs.party._longRestOne(P('r172d'), state.party.findIndex(p => p.id === 'r172d'));
+        ok('long rest: a 2024 human (Resourceful) gains Heroic Inspiration; a dwarf doesn’t', P('r172h').inspiration === true && P('r172d').inspiration === false, JSON.stringify([P('r172h').inspiration, P('r172d').inspiration]));
+        // Monks: the bonus unarmed strike is a bonus action; Heightened Focus changes Flurry and Patient Defense.
+        const monk = (ed, l) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { name: 'R172m', cls: 'Monk', level: l, species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte' }), ed === '2024' ? R : null);
+        const act = (r, n) => (r.sheet.activations || []).find(a => a.name === n) || {};
+        const m6 = monk('2024', 6), m10 = monk('2024', 10);
+        ok('monk: the Martial Arts bonus unarmed strike is listed as a bonus action, at the Martial Arts die', act(m6, 'Unarmed Strike (Martial Arts)').action === 'Bonus Action' && /^1d8/.test(act(m6, 'Unarmed Strike (Martial Arts)').dice || ''), JSON.stringify(act(m6, 'Unarmed Strike (Martial Arts)')));
+        ok('monk: Flurry of Blows is two strikes at 6th, three at 10th', /two/.test(act(m6, 'Flurry of Blows').desc) && /three/.test(act(m10, 'Flurry of Blows').desc), act(m10, 'Flurry of Blows').desc);
+        ok('monk: at 10th Patient Defense also gives two Martial Arts dice of temporary hit points', /temporary hit points/.test(act(m10, 'Patient Defense').desc) && act(m10, 'Patient Defense').dice === '2d8' && !act(m6, 'Patient Defense').dice, JSON.stringify(act(m10, 'Patient Defense')));
+      } catch(e){ ok('round 172 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
