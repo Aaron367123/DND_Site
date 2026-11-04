@@ -6090,7 +6090,8 @@
         click('[data-cs-slot="1:3"]'); await sleep(40);
         ok('sheet: a slot pip spends a slot', me().sheet.spellSlots[1].expended === s1 + 1);
         set('[data-cs-castlvl="Magic Missile"]', '2'); await sleep(10);
-        click('[data-cs-cast="Magic Missile:1"]'); await sleep(40);
+        ok('sheet: the Cast button follows the slot chosen beside it', !!q('[data-cs-cast="Magic Missile:2"]'));
+        click('[data-cs-cast^="Magic Missile:"]'); await sleep(40);
         ok('sheet: Cast spends the slot chosen (2nd level)', me().sheet.spellSlots[2].expended === 1);
         click('[data-cs-cast="Hold Person:2"]'); await sleep(40);
         ok('sheet: casting a concentration spell starts concentration', me().concentration === 'Hold Person' && me().sheet.spellSlots[2].expended === 2);
