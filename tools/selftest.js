@@ -9365,7 +9365,7 @@
           sheet: { profBonus: 3, saves: S({ str: 8, dex: 1, con: 6, int: -1, wis: 1, cha: 0 }),
             skills: { athletics: 8, perception: 4, insight: 4, intimidation: 3, survival: 4, acrobatics: 1, stealth: 1, history: -1 },
             attacks: [{ name: 'Greatsword', atkBonus: '+8', damage: '2d6+5 Slashing' }, { name: 'Javelin', atkBonus: '+8', damage: '1d6+5 Piercing' }],
-            languages: '=== ARMOR === Heavy Armor, Light Armor, Medium Armor, Shields === LANGUAGES === Common, Giant, Goblin',
+            languages: '=== ARMOR === Heavy Armor, Light Armor, Medium Armor, Shields === TOOLS === Dice Set === LANGUAGES === Common, Giant, Goblin',
             bio: { features: '* Fighting Style • PHB-2024 91 \n* Weapon Mastery • PHB-2024 91 \n\n   | Longsword (Sap) •  \n   | Slow (Javelin): 1 Action \n' } } });
         save();
         const conv = async id => { await openCharBuilder({ idx: state.party.findIndex(x => x.id === id) }); for (let i = 0; i < 100 && !(CB.R && CB.convertDiff); i++) await sleep(100); };
