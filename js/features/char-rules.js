@@ -2088,7 +2088,11 @@ function sktPassiveGrants(text){
     const lasting = (m) => {
       const before = s.slice(0, m.index), after = s.slice(m.index + m[0].length, m.index + m[0].length + 20);
       return !/\b(while|when|whenever|until|if|during|as long as|for the duration|for 1 (minute|hour)|each time|once|as an? (bonus )?action|as a reaction|to gain|to use)\b/i.test(before)
-        && !/^\W*(while|until|when|for|if|during)\b/i.test(after) && !/lasts until|until the end/i.test(s.slice(m.index));
+        && !/^\W*(while|until|when|for|if|during)\b/i.test(after)
+        // "Your speed increases by 10 feet, and you gain advantage… for 1
+        // minute" (an Ixalan vampire's Feast of Blood): the time it lasts can
+        // come at the end of the sentence.
+        && !/lasts until|until the end|\bfor (?:1|one|\d+) (?:minute|hour|round)s?\b/i.test(s.slice(m.index));
     };
     let m;
     // Not the 2014 "...damage from nonmagical attacks", which magic gets through.

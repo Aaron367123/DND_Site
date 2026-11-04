@@ -12884,6 +12884,118 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('class tables: Martial Arts, Sneak Attack, Rage Damage, the Bardic die and Unarmored Movement match the sheet', auditdicejs.cells > 150 && !auditdicejs.gaps.length, auditdicejs.gaps.slice(0, 3).join(' | '));
       } catch(e){ ok('round 156 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 157: weapon attacks, armour class, species speeds and darkvision; a benefit "for 1 minute" isn't lasting --
+    if (!PLAYER){
+      try {
+        const auditatkjs = await (async () => {
+  const out = { checked: 0, gaps: [], skipped: [] };
+  for (const ed of ['2024', '2014']){
+    const R = await sktRulesLoad(ed);
+    const weapons = Object.values(R.items).filter(i => /^(M|R)(\||$)/.test(String(i.type)) && i.weaponCategory && i.dmg1 && !i.firearm);
+    const seen = new Set();
+    for (const w of weapons){
+      if (seen.has(w.name)) continue; seen.add(w.name);
+      for (const [str, dex] of [[16, 12], [10, 18]]){
+        const b = Object.assign(sktBlankBuild(ed), { name: 'A', cls: 'Fighter', level: 5, species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte', allBooks: true,
+          abilities: { method: 'manual', base: { str, dex, con: 12, int: 10, wis: 10, cha: 10 } }, equipment: { cls: 'B', bg: 'B', clsBlocks: ['b', 'b', 'b', 'b'], bgBlocks: [], extra: [w.name.toLowerCase()], picks: {} }, optional: {}, featureChoices: {} });
+        let rec; try { rec = sktComputeCharacter(b, R); } catch(e){ out.gaps.push(ed + ' ' + w.name + ' threw ' + e.message); continue; }
+        const abl = sktBuildAbilities(b, R), mod = k => Math.floor((abl[k] - 10) / 2);
+        const props = (w.property || []).map(p => String(p).split('|')[0]);
+        const ranged = /^R/.test(String(w.type));
+        const finesse = props.includes('F');
+        const m = ranged ? mod('dex') : finesse ? Math.max(mod('str'), mod('dex')) : mod('str');
+        const pb = 3;
+        const atk = rec.sheet.attacks.find(a => a.name.toLowerCase() === w.name.toLowerCase());
+        if (!atk){ out.skipped.push(ed + ' ' + w.name); continue; }
+        out.checked++;
+        const wantHit = pb + m, gotHit = parseInt(String(atk.atkBonus).replace('+', ''), 10);
+        const sign = n => (n >= 0 ? '+' : '') + n;
+        const wantDmg = w.dmg1 + (m ? sign(m) : '');
+        const dmgOk = String(atk.damage).replace(/\s.*$/, '') === wantDmg;
+        let verOk = true, wantVer = '';
+        if (props.includes('V') && w.dmg2){ wantVer = w.dmg2 + (m ? sign(m) : ''); verOk = String(atk.versatile || '').replace(/\s.*$/, '') === wantVer; }
+        if (gotHit !== wantHit || !dmgOk || !verOk)
+          out.gaps.push(ed + ' ' + w.name + ' (STR ' + str + ' DEX ' + dex + (finesse ? ', finesse' : '') + (ranged ? ', ranged' : '') + '): want ' + sign(wantHit) + ' ' + wantDmg + (wantVer ? ' / ' + wantVer : '') + ', got ' + atk.atkBonus + ' ' + atk.damage + (atk.versatile ? ' / ' + atk.versatile : ''));
+      }
+    }
+  }
+  out.gaps = out.gaps.slice(0, 40); out.skipped = out.skipped.slice(0, 20);
+
+          return out;
+        })();
+        ok('attacks: every weapon, both handbooks: proficiency + the right ability to hit, its die + that modifier, and versatile', auditatkjs.checked > 120 && !auditatkjs.gaps.length && !auditatkjs.skipped.length, auditatkjs.gaps.slice(0, 3).join(' | '));
+        const auditacjs = await (async () => {
+  const out = { checked: 0, gaps: [] };
+  for (const ed of ['2024', '2014']){
+    const R = await sktRulesLoad(ed);
+    const armors = Object.values(R.items).filter(i => /^(LA|MA|HA)(\||$)/.test(String(i.type)) && i.ac);
+    const seen = new Set();
+    const mk = (cls, base, extra) => {
+      const b = Object.assign(sktBlankBuild(ed), { name: 'A', cls, level: 5, species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte', allBooks: true,
+        abilities: { method: 'manual', base }, equipment: { cls: 'C', bg: 'B', clsBlocks: ['b', 'b', 'b', 'b'], bgBlocks: [], extra, picks: {}, clsGold: 0 }, optional: {}, featureChoices: {} });
+      return { rec: sktComputeCharacter(b, R), abl: sktBuildAbilities(b, R) };
+    };
+    for (const a of armors){
+      if (seen.has(a.name)) continue; seen.add(a.name);
+      const t = String(a.type).split('|')[0];
+      for (const dex of [10, 18]) for (const shield of [false, true]){
+        const { rec, abl } = mk('Fighter', { str: 16, dex, con: 12, int: 10, wis: 10, cha: 10 }, [a.name.toLowerCase()].concat(shield ? ['shield'] : []));
+        const dm = Math.floor((abl.dex - 10) / 2);
+        const want = (+a.ac) + (t === 'LA' ? dm : t === 'MA' ? Math.min(2, dm) : 0) + (shield ? 2 : 0);
+        out.checked++;
+        if (rec.ac !== want) out.gaps.push(ed + ' ' + a.name + ' (' + t + ', DEX ' + abl.dex + (shield ? ', shield' : '') + '): want ' + want + ', got ' + rec.ac + ' (' + (rec.sheet.acSource || '') + ')');
+      }
+    }
+    // Unarmored Defense.
+    for (const [cls, k2] of [['Barbarian', 'con'], ['Monk', 'wis']]){
+      const base = { str: 10, dex: 16, con: 14, int: 10, wis: 14, cha: 10 };
+      const { rec, abl } = mk(cls, base, []);
+      const want = 10 + Math.floor((abl.dex - 10) / 2) + Math.floor((abl[k2] - 10) / 2);
+      out.checked++;
+      if (rec.ac !== want) out.gaps.push(ed + ' ' + cls + ' Unarmored Defense: want ' + want + ', got ' + rec.ac);
+      if (cls === 'Barbarian'){ const s = mk(cls, base, ['shield']); out.checked++; if (s.rec.ac !== want + 2) out.gaps.push(ed + ' Barbarian Unarmored Defense with a shield: want ' + (want + 2) + ', got ' + s.rec.ac); }
+      if (cls === 'Monk'){ const s = mk(cls, base, ['shield']); out.checked++; if (s.rec.ac !== 10 + Math.floor((abl.dex - 10) / 2) + 2) out.gaps.push(ed + ' Monk with a shield loses Unarmored Defense: want ' + (12 + Math.floor((abl.dex - 10) / 2)) + ', got ' + s.rec.ac); }
+    }
+  }
+
+          return out;
+        })();
+        ok('armour class: every armour with low and high Dexterity, with and without a shield; Unarmored Defense', auditacjs.checked > 90 && !auditacjs.gaps.length, auditacjs.gaps.slice(0, 3).join(' | '));
+        const auditspeciesjs = await (async () => {
+  const out = { checked: 0, gaps: [] };
+  for (const ed of ['2024', '2014']){
+    const R = await sktRulesLoad(ed);
+    for (const sp of R.species){
+      const subs = (sp.subraces || []).length ? sp.subraces.map(s => s.name) : [''];
+      for (const sub of subs){
+        const b = Object.assign(sktBlankBuild(ed), { name: 'S', cls: 'Wizard', level: 3, species: sp.name, subspecies: sub, background: ed === '2024' ? 'Guide' : 'Acolyte', allBooks: true });
+        let rec; try { rec = sktComputeCharacter(b, R); } catch(e){ out.gaps.push(ed + ' ' + sp.name + ' ' + sub + ' threw ' + e.message); continue; }
+        const so = sktSpeciesSub(sp, b) || {};
+        const spd = so.speed != null ? so.speed : sp.speed;
+        const walk = typeof spd === 'number' ? spd : spd && spd.walk;
+        const dv = so.darkvision != null ? so.darkvision : sp.darkvision;
+        out.checked++;
+        const tag = ed + ' ' + sp.name + (sub ? ' (' + sub + ')' : '');
+        if (walk && rec.speeds.walk !== walk) out.gaps.push(tag + ': walk ' + walk + ' in the data, ' + rec.speeds.walk + ' on the sheet');
+        if (spd && typeof spd === 'object') ['fly', 'swim', 'climb', 'burrow'].forEach(k => {
+          const v = spd[k]; if (!v) return;
+          const want = v === true ? walk : (typeof v === 'object' ? v.number : v);
+          if (typeof want === 'number' && rec.speeds[k] !== want && !(rec.sheet.notes || []).some(n => new RegExp(k, 'i').test(n))) out.gaps.push(tag + ': ' + k + ' ' + want + ' in the data, ' + (rec.speeds[k] || 'none') + ' on the sheet');
+        });
+        if (dv && !new RegExp('Darkvision ' + dv + ' ft').test(rec.sheet.senses || '')) out.gaps.push(tag + ': darkvision ' + dv + ' in the data, sheet senses "' + (rec.sheet.senses || '') + '"');
+      }
+    }
+  }
+  out.gaps = out.gaps.slice(0, 60);
+
+          return out;
+        })();
+        const spGaps = auditspeciesjs.gaps.filter(g => !/Kithkin \(Lorwyn\)/.test(g));   // Lorwyn kithkin have no darkvision; the 120 is Shadowmoor's
+        ok('species: every species and lineage, its walking and other speeds and its darkvision', auditspeciesjs.checked > 250 && !spGaps.length, spGaps.slice(0, 3).join(' | '));
+        ok('species: a speed boost "for 1 minute" at the end of its sentence is not lasting (Ixalan vampire)', !sktPassiveGrants('When you drain blood, you experience a surge of vitality. Your speed increases by 10 feet, and you gain advantage on Strength checks for 1 minute.').speed
+           && sktPassiveGrants('Your walking speed increases by 10 feet.').speed === 10);
+      } catch(e){ ok('round 157 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
