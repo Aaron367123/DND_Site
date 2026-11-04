@@ -13727,6 +13727,32 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 182 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { const C = panelDefs.combat; if (C) C._lastAtkProp = null; state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); save(); }
     }
+    // -- Round 183: shop prices by the 2024 DMG; loot divvied between the player characters and paid out --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), loot0 = localStorage.getItem('skt-loot-v1');
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = id => Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: id, cls: 'Fighter', level: 2, species: 'Human', background: 'Guide' }), R), { id, gold: 10, coins: { pp: 0, ep: 0, sp: 1, cp: 0 } });
+        state.party = [mk('r183a'), mk('r183b'), mk('r183c'), Object.assign(mk('r183foe'), { foe: true, name: 'Rival' })];
+        save();
+        const SH = panelDefs.shop;
+        ok('shop: a 2024 party prices magic items by the 2024 DMG — Rare 4,000 gp, a rare potion 2,000, Legendary 200,000',
+           SH._priceEdition() === '2024' && SH._magicPriceForRarity('Rare', false) === 4000 && SH._magicPriceForRarity('Rare', true) === 2000 && SH._magicPriceForRarity('Legendary', false) === 200000,
+           [SH._priceEdition(), SH._magicPriceForRarity('Rare', false), SH._magicPriceForRarity('Rare', true)].join(' '));
+        // Loot: 100 gp, 7 sp between three characters (the rival isn't owed a share).
+        openPanel('loot'); await sleep(300);
+        const L = panelDefs.loot; L._loot.gp = 100; L._loot.sp = 7; L._loot.cp = 0; L._loot.pp = 0; L._loot.ep = 0; L._save(); L._render(); await sleep(150);
+        L._body.querySelector('#loot-divvy').click(); await sleep(150);
+        const modal = [...document.querySelectorAll('.modal')].pop();
+        ok('loot: the divvy is between the three player characters, not the rival', !!modal && /between\s*3\s*party/.test(modal.textContent.replace(/\s+/g, ' ')) && !/Rival/.test(modal.textContent), modal && modal.textContent.replace(/\s+/g, ' ').slice(0, 200));
+        ok('loot: each gets 33 gp and 2 sp; 1 gp and 1 sp stay in the loot', /33 gp, 2 sp/.test(modal.textContent) && /Left in the party loot: 1 gp, 1 sp/.test(modal.textContent), modal.textContent.replace(/\s+/g, ' ').slice(0, 300));
+        modal.querySelector('#divvy-pay').click(); await sleep(200);
+        const P = id => state.party.find(p => p.id === id);
+        ok('loot: Pay it out puts it in their purses and leaves the remainder', P('r183a').gold === 43 && P('r183b').coins.sp === 3 && P('r183foe').gold === 10 && L._loot.gp === 1 && L._loot.sp === 1,
+           JSON.stringify([P('r183a').gold, P('r183b').coins, P('r183foe').gold, L._loot.gp, L._loot.sp]));
+      } catch(e){ ok('round 183 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelectorAll('.modal-backdrop').forEach(e => e.remove()); state.party = JSON.parse(party0); if (loot0 == null) localStorage.removeItem('skt-loot-v1'); else localStorage.setItem('skt-loot-v1', loot0); if (panelDefs.loot && panelDefs.loot._loot) { try { panelDefs.loot._loot = JSON.parse(loot0 || '{}'); } catch(e){} } save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

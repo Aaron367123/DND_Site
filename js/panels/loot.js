@@ -1010,10 +1010,19 @@ registerPanel('loot',{
 
     // Divvy
     b.querySelector('#loot-divvy').addEventListener('click',()=>{
-      const n=state.party.length;if(!n){showToast('No party members');return;}
+      // The player characters only: a rival or foe kept in the party list
+      // isn't owed a share (it was split between everyone in it).
+      const pcs = typeof sktPlayerParty === 'function' ? sktPlayerParty() : state.party;
+      const n=pcs.length;if(!n){showToast('No party members');return;}
       const each=(parseFloat(totalGp)/n).toFixed(2);
-      const rows = state.party.map(p =>
-        `<div class="divvy-row"><span>${esc(p.name)}</span><span class="divvy-amt">${each} gp</span></div>`
+      // Coin by coin, as it can be handed out: each gets an equal share of
+      // every coin, and what doesn't divide evenly stays in the party loot.
+      const COINS = ['pp','gp','ep','sp','cp'];
+      const share = Object.fromEntries(COINS.map(k => [k, Math.floor((+this._loot[k] || 0) / n)]));
+      const left = Object.fromEntries(COINS.map(k => [k, (+this._loot[k] || 0) - share[k] * n]));
+      const fmt = o => COINS.filter(k => o[k]).map(k => o[k] + ' ' + k).join(', ') || 'nothing';
+      const rows = pcs.map(p =>
+        `<div class="divvy-row"><span>${esc(p.name)}</span><span class="divvy-amt">${esc(fmt(share))}</span></div>`
       ).join('');
       const backdrop = document.createElement('div');
       backdrop.className = 'modal-backdrop';
@@ -1025,11 +1034,25 @@ registerPanel('loot',{
           <strong style="color:var(--accent)">${each} gp</strong> each.
         </p>
         <div class="divvy-list">${rows}</div>
-        <div class="modal-actions" style="margin-top:14px"><button class="btn primary" id="divvy-ok">Done</button></div>
+        <p style="color:var(--text-muted);font-size:var(--fs-sm);margin:10px 0 0">Left in the party loot: ${esc(fmt(left))}</p>
+        <div class="modal-actions" style="margin-top:14px"><button class="btn" id="divvy-ok">Close</button><button class="btn primary" id="divvy-pay"${COINS.some(k => share[k]) ? '' : ' disabled'}>Pay it out</button></div>
       </div>`;
       document.body.appendChild(backdrop);
       const close = () => backdrop.remove();
       backdrop.querySelector('#divvy-ok').addEventListener('click', close);
+      // Into each character's purse; the loot keeps the remainder.
+      backdrop.querySelector('#divvy-pay').addEventListener('click', () => {
+        const ids = new Set(pcs.map(p => p.id));
+        const run = () => {
+          state.party = state.party.map(p => ids.has(p.id) ? Object.assign({}, p, { gold: (+p.gold || 0) + share.gp,
+            coins: Object.assign({}, p.coins, { pp: (+(p.coins || {}).pp || 0) + share.pp, ep: (+(p.coins || {}).ep || 0) + share.ep, sp: (+(p.coins || {}).sp || 0) + share.sp, cp: (+(p.coins || {}).cp || 0) + share.cp }) }) : p);
+          COINS.forEach(k => { this._loot[k] = left[k]; });
+          this._save(); save(); this._render();
+          try { panelDefs.party && panelDefs.party._render && panelDefs.party._render(); } catch(e){}
+        };
+        if (typeof sktUndoable === 'function') sktUndoable('Paid out ' + fmt(share) + ' each', run, { keys: SKT_UNDO_DEFAULT_KEYS.concat(['skt-loot-v1']) }); else run();
+        close();
+      });
       backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) close(); });
       backdrop.addEventListener('keydown', e => { if (e.key==='Escape') close(); });
       setTimeout(()=>backdrop.querySelector('#divvy-ok')?.focus(), 30);

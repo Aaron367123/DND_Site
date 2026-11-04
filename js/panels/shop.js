@@ -808,7 +808,18 @@ registerPanel('shop',{
 
   // For magic items without an explicit price, sample from the standard
   // 5e fan-convention rarity bands.
-  _magicPriceForRarity(rarity){
+  // A table playing the 2024 rules: the 2024 DMG's price by rarity (Common
+  // 100 gp, Uncommon 400, Rare 4,000, Very Rare 40,000, Legendary 200,000),
+  // half for a consumable (a potion, a scroll). Otherwise Xanathar's ranges.
+  _priceEdition(){
+    const eds = (state.party || []).filter(p => p && p.build).map(p => p.build.edition || '2024');
+    return eds.length && eds.filter(e => e === '2024').length * 2 >= eds.length ? '2024' : '2014';
+  },
+  _magicPriceForRarity(rarity, consumable){
+    if (this._priceEdition() === '2024'){
+      const p = { Common: 100, Uncommon: 400, Rare: 4000, VeryRare: 40000, Legendary: 200000 }[rarity];
+      if (p) return consumable ? p / 2 : p;
+    }
     const rand = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
     switch (rarity){
       case 'Uncommon':  return rand(101,   500);
@@ -876,7 +887,7 @@ registerPanel('shop',{
       const category = TYPE_LABELS[tCode] || (rarity==='Common' ? 'Item' : 'Magic');
       const basePrice = (typeof r.value_cp === 'number' && r.value_cp > 0)
         ? r.value_cp / 100
-        : this._magicPriceForRarity(rarity);
+        : this._magicPriceForRarity(rarity, this._isConsumable(r));
       // Post-shape filters: price cap, scroll-level cap, custom blocklist.
       const shaped = { name: d.name, category, basePrice, rarity, _source: d._source };
       if (maxPrice > 0 && shaped.basePrice > maxPrice) continue;
