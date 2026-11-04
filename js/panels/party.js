@@ -1929,7 +1929,7 @@ registerPanel('party',{
     if (Array.isArray(c.resources)){
       c.resources = c.resources.map(r => {
         const rc = this._rechargeOf(c, r);
-        if (rc === 'short') return {...r, current: r.max ?? r.current};
+        if (rc === 'short' || rc === 'turn') return {...r, current: r.max ?? r.current};
         if (rc === 'short-one') return {...r, current: Math.min(r.max, (r.current || 0) + 1)};
         return r;
       });

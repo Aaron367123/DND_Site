@@ -1433,6 +1433,11 @@ registerPanel('combat',{
   _refreshTurnEconomy(id){
     const c = state.combatants.find(x => x.id === id);
     if (!c) return;
+    // "Once per turn" (Sneak Attack) means once on each turn, anyone's: a
+    // rogue's reaction attack on an enemy's turn can sneak attack again. So
+    // every character's once-a-turn tracker comes back as any turn begins;
+    // nothing did, and a marked Sneak Attack stayed spent until a rest.
+    for (const p of state.party || []) for (const r of (p && p.resources) || []) if (r.recharge === 'turn' && (r.current || 0) < (r.max || 1)) r.current = r.max || 1;
     c.reactionUsed = false;
     c.actionUsed = false;
     c.bonusUsed = false;

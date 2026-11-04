@@ -13165,6 +13165,59 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 164 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktComputeCharacter = calc0; state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 165: once-a-turn, once-a-long-rest: counters that say what they are --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), comb0 = JSON.stringify(state.combatants), act0 = state.activeCombatantId, rnd0 = state.combatRound;
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const mk = (ed, o) => sktComputeCharacter(Object.assign(sktBlankBuild(ed), { name: 'R165', species: 'Human', background: ed === '2024' ? 'Guide' : 'Acolyte' }, o), ed === '2024' ? R : R14);
+        const pool = (r, n) => (r.resources || []).find(x => x.name === n) || {};
+        const act = (r, n) => (r.sheet.activations || []).find(x => x.name === n) || {};
+        // Sneak Attack: once on each turn, not once a long rest.
+        const rog = Object.assign(mk('2024', { cls: 'Rogue', level: 5 }), { id: 'r165' });
+        state.party.push(rog); save();
+        await openCharSheet('r165'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(200);
+        const lim = [...document.querySelectorAll('#cs-root .cs-res')].find(e => /Sneak Attack/.test(e.textContent));
+        ok('Sneak Attack: its tracker says once a turn, not long rest', !!lim && /once a turn/.test(lim.textContent) && !/long rest/.test(lim.textContent), lim && lim.textContent);
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+        const C = panelDefs.combat;
+        state.combatants = [{ id: 'r165c', name: 'R165', isPC: true, partyId: 'r165', hp: 30, hpMax: 30, ac: 14, initiative: 15 },
+                            { id: 'r165m', name: 'Goblin', hp: 7, hpMax: 7, ac: 15, initiative: 10 }];
+        state.activeCombatantId = 'r165c'; state.combatRound = 1; save();
+        const P = () => state.party.find(p => p.id === 'r165');
+        pool(P(), 'Sneak Attack').current = 0;
+        C._nextTurn();
+        ok('Sneak Attack: marked used, it comes back as the next turn begins (anyone’s — a reaction attack can sneak attack too)', pool(P(), 'Sneak Attack').current === 1, pool(P(), 'Sneak Attack').current);
+        // Land druid 2024: two benefits, each once a long rest.
+        const dr = mk('2024', { cls: 'Druid', subclass: 'Land', level: 6 });
+        ok('Natural Recovery (2024): slot recovery comes back on a long rest, not every short rest', pool(dr, 'Natural Recovery').recharge === 'long' && act(dr, 'Natural Recovery').action === 'Short rest', JSON.stringify([pool(dr, 'Natural Recovery'), act(dr, 'Natural Recovery').action]));
+        ok('Natural Recovery (2024): and its free Circle spell is a use of its own', pool(dr, 'Natural Recovery: Circle Spell').max === 1 && pool(dr, 'Natural Recovery: Circle Spell').recharge === 'long' && act(dr, 'Natural Recovery: Circle Spell').resource === 'Natural Recovery: Circle Spell');
+        const dr14 = mk('2014', { cls: 'Druid', subclass: 'Land', level: 6 });
+        ok('Natural Recovery (2014): still the one use, once a long rest', pool(dr14, 'Natural Recovery').recharge === 'long' && !pool(dr14, 'Natural Recovery: Circle Spell').name);
+        // A feat that casts a spell can still have a use of its own.
+        const ab = mk('2024', { cls: 'Fighter', level: 5, extraFeats: ['Aberrant Dragonmark'] });
+        ok('Aberrant Dragonmark: Aberrant Fortitude is a reaction once a long rest, with its counter', pool(ab, 'Aberrant Dragonmark').max === 1 && pool(ab, 'Aberrant Dragonmark').recharge === 'long'
+           && act(ab, 'Aberrant Dragonmark').action === 'Reaction' && act(ab, 'Aberrant Dragonmark').resource === 'Aberrant Dragonmark', JSON.stringify([pool(ab, 'Aberrant Dragonmark'), act(ab, 'Aberrant Dragonmark')]));
+        const lb = mk('2024', { cls: 'Fighter', level: 5, extraFeats: ['Light Bringer'] });
+        ok('Light Bringer: its counted use is Sun’s Healing, a bonus action once a short rest', pool(lb, 'Light Bringer').recharge === 'short' && act(lb, 'Light Bringer').action === 'Bonus Action', JSON.stringify([pool(lb, 'Light Bringer'), act(lb, 'Light Bringer').action]));
+        const sg = mk('2024', { cls: 'Fighter', level: 5, extraFeats: ['Strike of the Giants'] });
+        const sgMod = k => Math.floor(((sg.abilities || {})[k] - 10) / 2), sgDC = 8 + 3 + Math.max(sgMod('str'), sgMod('con'));
+        ok('Strike of the Giants: proficiency-bonus uses a long rest, and its save DC (8 + PB + STR or CON)', pool(sg, 'Strike of the Giants').max === 3 && new RegExp('DC ' + sgDC + '\\b').test(act(sg, 'Strike of the Giants').desc || ''), JSON.stringify([sgDC, sg.abilities, act(sg, 'Strike of the Giants').desc]));
+        // Read from the text: the benefit the use belongs to, under its own heading.
+        const cu = mk('2024', { cls: 'Fighter', level: 5, extraFeats: ['Cult of the Dragon Initiate'] });
+        ok('feat text: Cult of the Dragon Initiate’s use is Inspired by Fear (a heading with "by" in it)', /^Inspired by Fear:/.test(act(cu, 'Cult of the Dragon Initiate').desc || ''), act(cu, 'Cult of the Dragon Initiate').desc);
+        const hx = mk('2014', { cls: 'Warlock', subclass: 'Hexblade', level: 3 });
+        ok('feature text: Hexblade’s Curse is a bonus action (a short sentence isn’t a heading)', act(hx, "Hexblade's Curse").action === 'Bonus Action', act(hx, "Hexblade's Curse").action);
+        const pv = mk('2014', { cls: 'Paladin', subclass: 'Vengeance', level: 15 });
+        ok('feature text: Relentless Avenger stays a reaction ("as part of the same reaction")', act(pv, 'Relentless Avenger').action === 'Reaction', act(pv, 'Relentless Avenger').action);
+        const of = mk('2014', { cls: 'Fighter', level: 5, species: 'Half-Orc', extraFeats: ['Orcish Fury'] });
+        ok('feat text: Orcish Fury’s use is its extra weapon die, not the reaction attack after it', act(of, 'Orcish Fury').action === 'Special' && /damage dice/.test(act(of, 'Orcish Fury').desc || ''), JSON.stringify(act(of, 'Orcish Fury')));
+        const ls = mk('2024',{ cls: 'Fighter', level: 5, extraFeats: ['Living Shadow'] });
+        ok('feat text: "as part of the Attack or Magic action" is when it applies, not a Magic action', act(ls, 'Living Shadow').action === 'Special', act(ls, 'Living Shadow').action);
+      } catch(e){ ok('round 165 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0); state.activeCombatantId = act0; state.combatRound = rnd0; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

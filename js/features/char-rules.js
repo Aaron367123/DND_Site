@@ -1863,11 +1863,26 @@ const SKT_RESOURCE_WORDS = [[/superiority di(?:c?e)/i, ['Superiority Dice']], [/
   [/sorcery points?/i, ['Sorcery Points']], [/bardic inspiration/i, ['Bardic Inspiration']], [/wild shape/i, ['Wild Shape']], [/lay on hands/i, ['Lay on Hands']],
   [/channel divinity/i, ['Channel Divinity']], [/\brages?\b/i, ['Rage']], [/luck points?/i, ['Luck Points']], [/healing light|dice from the pool|pool of d6s/i, ['Healing Light']]];
 const SKT_NUM_WORDS = { one: 1, a: 1, an: 1, two: 2, three: 3, four: 4, five: 5 };
+// A spell a trait or feat casts without a slot: the sheet counts that one.
+const SKT_FREE_CAST = /without (?:expending )?a spell slot|cast it in this way|cast (?:it|this spell|that spell|the spell|them) once|regain the ability to cast|with this trait/i;
+// A feature's benefits under their own headings ("Aberrant Fortitude. When
+// you fail…"), each with its heading.
+// A heading is in title case: "That ally gains Heroic Inspiration." and
+// "Doing so doesn't require a spell slot." are sentences.
+const _SKT_HEAD_WORD = "(?:[A-Z][\\w'’-]*|of|the|and|or|a|an|in|on|at|by|as|to|for|with|from|into|upon)";
+const _SKT_HEAD = new RegExp('^' + _SKT_HEAD_WORD + '(?: ' + _SKT_HEAD_WORD + '){0,5}\\.$');
+const _sktIsHeading = x => x.length <= 42 && _SKT_HEAD.test(x);
+function _sktTitledBlocks(text){
+  const sents = String(text || '').replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+/), out = [];
+  let cur = null;
+  for (const x of sents){ if (_sktIsHeading(x)){ cur = [x]; out.push(cur); } else if (cur) cur.push(x); }
+  return out.map(b => b.join(' '));
+}
 function sktActivationFromText(text, name, ctx){
   const t = String(text || '').replace(/\s+/g, ' ').trim(); if (!t) return null;
   const sents = t.split(/(?<=[.!?])\s+/);
-  const timing = s => /\breaction\b/i.test(s) ? 'Reaction' : /bonus action/i.test(s) ? 'Bonus Action' : /magic action/i.test(s) ? 'Magic'
-    : /\b(as an action|use your action|take an action|an action to|use an action)\b/i.test(s) ? 'Action' : null;
+  const timing = s0 => { const s = s0.replace(/as part of (?:the|an?) [\w ]{0,30}?\baction\b/gi, ''); return /\breaction\b/i.test(s) ? 'Reaction' : /bonus action/i.test(s) ? 'Bonus Action' : /magic action/i.test(s) ? 'Magic'
+    : /\b(as an action|use your action|take an action|an action to|use an action)\b/i.test(s) ? 'Action' : null; };
   // The sentence that says how it's used: the character's own action, not another creature's.
   let action = null, at = -1;
   for (let i = 0; i < sents.length; i++){
@@ -1899,8 +1914,8 @@ function sktActivationFromText(text, name, ctx){
   if (resource === name){
     const once = sents.findIndex(s => /once you use (?:this|it)\b|can(?:'|’|no)t use (?:it|this(?: benefit| feature)?) again until/i.test(s));
     if (once > 0){
-      let h = once - 1; while (h >= 0 && once - h <= 4 && !/^[A-Z][\w'’ -]{1,40}\.$/.test(sents[h])) h--;
-      const titled = h >= 0 && once - h <= 4 && /^[A-Z][\w'’ -]{1,40}\.$/.test(sents[h]);
+      let h = once - 1; while (h >= 0 && once - h <= 4 && !_sktIsHeading(sents[h])) h--;
+      const titled = h >= 0 && once - h <= 4 && _sktIsHeading(sents[h]);
       // Only a use under its own heading: a feature with one benefit (Tomb of
       // Levistus, "As a reaction…") keeps the sentence that says how it's used.
       const start = h + 1;
@@ -1908,6 +1923,11 @@ function sktActivationFromText(text, name, ctx){
         head = sents[h].replace(/\.$/, '') + ': ';
         action = timing(sents.slice(start, once + 1).join(' '));
         at = start;
+      } else if (!titled && at > once){
+        // No heading, and the action comes after the use: that's another
+        // benefit (Orcish Fury's reaction attack). The use is the one before.
+        action = timing(sents.slice(once - 1, once + 1).join(' '));
+        at = once - 1;
       }
     }
   }
@@ -2129,7 +2149,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-03';
+const SKT_RULES_REV = '2026-11-03b';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -2381,6 +2401,26 @@ sktDefineEffect(['class:wizard:Arcane Recovery'], ctx => {
   _fxPool(ctx, 'Arcane Recovery', 1, 'long');
   _fxAction(ctx, { name: 'Arcane Recovery', action: 'Short rest', resource: 'Arcane Recovery', amount: 1, feature: 'Arcane Recovery',
     desc: 'When you finish a Short Rest, regain spent spell slots with a combined level of up to half your wizard level (round up), none of 6th level or higher. Once per Long Rest.' });
+});
+// Strike of the Giants: uses and save DC. The data nests them inside the last
+// option (Storm Strike), so the text reader described every pick as Storm Strike.
+sktDefineEffect(['feat:Strike of the Giants'], ctx => {
+  _fxPool(ctx, 'Strike of the Giants', ctx.pb, 'long');
+  _fxAction(ctx, { name: 'Strike of the Giants', action: 'Special', resource: 'Strike of the Giants', amount: 1, feature: 'Strike of the Giants',
+    desc: 'Once per turn, when you hit with a melee weapon attack or a thrown weapon, add your giant’s strike: its extra damage and effect (save DC ' + (8 + ctx.pb + Math.max(ctx.mod.str, ctx.mod.con)) + ').' });
+});
+// 2024 Circle of the Land: two benefits, each once a Long Rest — a Circle
+// spell cast without a slot, and spell slots back as a Short Rest ends. The
+// text reader took the second's "Short Rest" for the recharge, so both came
+// back on every short rest, and spending one spent the other.
+sktDefineEffect(['2024:subclass:druid:Natural Recovery'], ctx => {
+  const half = Math.ceil(ctx.level / 2);
+  _fxPool(ctx, 'Natural Recovery', 1, 'long');
+  _fxPool(ctx, 'Natural Recovery: Circle Spell', 1, 'long');
+  _fxAction(ctx, { name: 'Natural Recovery: Circle Spell', action: 'Special', resource: 'Natural Recovery: Circle Spell', amount: 1, feature: 'Natural Recovery',
+    desc: 'Cast one of your prepared level 1+ Circle spells without expending a spell slot. Once per Long Rest.' });
+  _fxAction(ctx, { name: 'Natural Recovery', action: 'Short rest', resource: 'Natural Recovery', amount: 1, feature: 'Natural Recovery',
+    desc: 'When you finish a Short Rest, recover expended spell slots with a combined level of up to ' + half + ' (half your druid level, round up), none of 6th level or higher. Once per Long Rest.' });
 });
 
 // ---- Subclasses that change the numbers
@@ -2758,6 +2798,7 @@ function sktComputeCharacter(build, R, prior){
       // Species traits and feats too, except a once-a-day spell, which the
       // sheet already casts for free.
       const read = /^(class|subclass|optional|feat|species)$/.test(f.from);
+      let useText = null;
       ctx.from = f.from;
       if (!fx && !ch && !f.info && read){
         const g = sktPassiveGrants(f.text);
@@ -2773,9 +2814,16 @@ function sktComputeCharacter(build, R, prior){
         Object.keys(g.moves).forEach(k => { ctx.moveExtra[k] = g.moves[k]; });
         if (g.any) ctx.applied.add(f.name);
       }
-      if (!fx && !ch && !f.info && /^(class|subclass|species|feat|optional)$/.test(f.from) && !/^Channel Divinity:/.test(f.name)
-          && !((f.from === 'species' || f.from === 'feat') && /\bcast\b/i.test(f.text || ''))){
-        const u = sktUsesFromText(f.text, ctx, f.name);
+      // A trait or feat that casts a spell: the sheet casts it free, so only a
+      // benefit of its own under its own heading counts (Aberrant Dragonmark's
+      // Aberrant Fortitude, a reaction once a Long Rest, beside its spell).
+      const castsToo = (f.from === 'species' || f.from === 'feat') && /\bcast\b/i.test(f.text || '');
+      if (!fx && !ch && !f.info && /^(class|subclass|species|feat|optional)$/.test(f.from) && !/^Channel Divinity:/.test(f.name)){
+        const counted = castsToo ? _sktTitledBlocks(f.text).filter(b => !SKT_FREE_CAST.test(b) && sktUsesFromText(b, ctx, f.name)) : [];
+        const blk = counted.find(b => /\b(?:reaction|bonus action|magic action|as an action)\b/i.test(b)) || counted[0];
+        const u = sktUsesFromText(castsToo ? blk : f.text, ctx, f.name);
+        // Its action is that benefit's, not the spell's (Light Bringer's Sun's Healing).
+        if (blk) useText = blk;
         if (u){ _fxPool(ctx, f.name, u.max, u.recharge, { auto: true }); ctx.applied.add(f.name); }
       }
       if (!fx && (f.from === 'class' || f.from === 'subclass') && f.name !== 'Channel Divinity'
@@ -2794,7 +2842,7 @@ function sktComputeCharacter(build, R, prior){
       if (xf){ try { xf(ctx); } catch(e){ ctx.notes.push('Could not apply ' + f.name + ': ' + e.message); } }
       // An ability used in play, read from its text (beside whatever else it does).
       if (!fx && !f.info && read && !ctx.actions.some(a => a.name === f.name || a.feature === f.name)){
-        const a = sktActivationFromText(f.text, f.name, ctx);
+        const a = sktActivationFromText(useText || f.text, f.name, ctx);
         if (a) _fxAction(ctx, Object.assign(a, { feature: f.name, auto: true }));
       }
       // And what it adds without being used: damage on a hit, initiative, advantage on checks.
