@@ -298,11 +298,15 @@ registerPanel('party',{
     const subCls  = c.cls  || sheet.class || '';
     const subLvl  = c.level || sheet.level;
     const split   = Array.isArray(sheet.classLevels) && sheet.classLevels.length > 1 ? sheet.classLevels : null;
-    const clsLvl  = split ? split.map(p => p.cls + ' ' + p.level).join(' / ')
-                          : [subCls, subLvl].filter(x => x != null && x !== '').join(' ');
+    // "Rogue (Soulknife) 6", as the sheet's header has it; the class is kept
+    // lower-case on the record ("rogue 6" on the card).
+    const capCls  = s => String(s || '').replace(/(^|[\s/(-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+    const subSub  = c.subclass || sheet.subclass || '';
+    const clsLvl  = split ? split.map(p => capCls(p.cls) + ' ' + p.level).join(' / ')
+                          : [capCls(subCls) + (subCls && subSub ? ' (' + subSub + ')' : ''), subLvl].filter(x => x != null && x !== '').join(' ');
     const sublineParts = [subRace, clsLvl].filter(Boolean);
     const sublineHtml = sublineParts.length
-      ? '<div class="char-subline">' + esc(sublineParts.join(' · ')) + '</div>'
+      ? '<div class="char-subline" title="' + esc(sublineParts.join(' · ')) + '">' + esc(sublineParts.join(' · ')) + '</div>'
       : '';
     // Active-turn highlight intentionally NOT applied to the party card —
     // the combat tracker is the canonical "whose turn is it" surface. The

@@ -2160,7 +2160,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-04';
+const SKT_RULES_REV = '2026-11-04b';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -2373,7 +2373,7 @@ sktDefineEffect(['2014:subclass:paladin:Channel Divinity'], ctx => { _fxPool(ctx
 sktDefineEffect(['2024:class:ranger:Favored Enemy'], ctx => {
   const n = _fxCol(ctx, 'Favored Enemy') || 2;
   _fxPool(ctx, 'Favored Enemy', typeof n === 'number' ? n : 2, 'long');
-  _fxAction(ctx, { name: "Hunter's Mark (Favored Enemy)", action: 'Bonus Action', resource: 'Favored Enemy', amount: 1, feature: 'Favored Enemy',
+  _fxAction(ctx, { name: "Hunter's Mark (Favored Enemy)", action: 'Bonus Action', resource: 'Favored Enemy', amount: 1, feature: 'Favored Enemy', castSpell: "Hunter's Mark",
     desc: "Cast Hunter's Mark without expending a spell slot. You always have it prepared." });
 });
 

@@ -1289,6 +1289,7 @@ function csOnClick(e){
     csEdit('Used ' + a.name, p => {
       const r = (p.resources || []).find(x => x.name === a.resource);
       if (r) r.current = Math.max(0, (r.current || 0) - (a.amount || 1));
+      if (a.castSpell) csCastEffects(p, a.castSpell);
       if (CS.embed && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(a.action));
     });
     if (rage && panelDefs.party && panelDefs.party._setRage){ panelDefs.party._setRage(csIdx(), true, { paid: true }); csRender(); }
@@ -1670,6 +1671,8 @@ function csSpellsHtml(pc){
         : (avail.length ? (avail.length > 1 ? '<select class="cb-sel cs-castlvl" data-cs-castlvl="' + csE(n) + '">' + avail.map(x => '<option value="' + x + '">' + CS_ORD[x] + '</option>').join('') + '</select>' : '')
           + '<button class="btn small" data-cs-cast="' + csE(n) + ':' + avail[0] + '">Cast</button>' : '<span class="cb-dim">no slots</span>')
           + (daily.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':free" title="Once per long rest without a slot">Free</button>' : '')
+          + csCastUses(pc, n).map(({ a, r }) => '<button class="btn small" data-cs-cast="' + csE(n) + ':use"' + (r && (+r.current || 0) >= (a.amount || 1) ? '' : ' disabled')
+            + ' title="Without a slot: ' + csE(sktResLabel(pc, a.resource)) + (r ? ', ' + (+r.current || 0) + ' left' : '') + '">' + csE(sktResLabel(pc, a.resource)) + '</button>').join('')
           + (arcLv[n] ? '<button class="btn small" data-cs-cast="' + csE(n) + ':arcanum"' + (((pc.resources || []).find(r => r.name === 'Mystic Arcanum (' + arcLv[n] + 'th)') || {}).current > 0 ? '' : ' disabled') + ' title="Mystic Arcanum: once per long rest">Arcanum</button>' : '')
           + (s && s.ritual ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>' : '');
       const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
@@ -1889,6 +1892,7 @@ function csSpellsClick(e, t, d, pc){
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(name) + '"]');
     if (sel && /^\d+$/.test(how) && how !== '0') how = sel.value;
     const s = csSpell(name);
+    let used = null;
     csEdit('Cast ' + name, p => {
       if (/^\d+$/.test(how) && +how > 0){
         const slot = p.sheet.spellSlots[+how];
@@ -1901,19 +1905,37 @@ function csSpellsClick(e, t, d, pc){
         if (!r || r.current <= 0) return;
         r.current -= 1;
       }
-      if (s && s.concentration){
-        if (p.concentration && p.concentration !== name && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
-        p.concentration = name;
+      if (how === 'use'){
+        const u = csCastUses(p, name).find(x => x.r && (+x.r.current || 0) >= (x.a.amount || 1));
+        if (!u) return;
+        u.r.current = (+u.r.current || 0) - (u.a.amount || 1); used = u.a;
       }
-      const tg = ((p.sheet || {}).states || []).find(x => x.spell === name && !x.conc);
-      if (tg) p.active = Object.assign({}, p.active, { [tg.key]: true });
+      csCastEffects(p, name);
       const t = s && [].concat(s.time || [])[0];
       if (CS.embed && t && how !== 'ritual' && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(t.unit));
     });
-    if (typeof showToast === 'function') showToast('Cast ' + name + (/^\d+$/.test(how) && +how > 0 ? ' (' + CS_ORD[+how] + ' slot)' : how === 'ritual' ? ' as a ritual' : how === 'free' ? ' (free use)' : how === 'arcanum' ? ' (Mystic Arcanum)' : ''));
+    if (typeof showToast === 'function') showToast('Cast ' + name + (/^\d+$/.test(how) && +how > 0 ? ' (' + CS_ORD[+how] + ' slot)' : how === 'ritual' ? ' as a ritual' : how === 'free' ? ' (free use)' : how === 'arcanum' ? ' (Mystic Arcanum)' : how === 'use' && used ? ' (' + sktResLabel(pc, used.resource) + ')' : ''));
     return true;
   }
   return false;
+}
+// Actions that cast a spell for a use of a feature instead of a slot: a 2024
+// ranger's Hunter's Mark for Favored Enemy, a druid's Find Familiar for Wild
+// Shape. The spell's row offers it, and the action's Use casts the spell, so
+// either way concentration starts and Hunter's Mark's damage is counted.
+function csCastUses(pc, name){
+  return ((pc.sheet || {}).activations || []).filter(a => a.castSpell === name && a.resource)
+    .map(a => ({ a, r: (pc.resources || []).find(x => x.name === a.resource) }));
+}
+// What casting does beyond paying for it: concentration, a spell's own toggle.
+function csCastEffects(p, name){
+  const s = csSpell(name);
+  if (s && s.concentration){
+    if (p.concentration && p.concentration !== name && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
+    p.concentration = name;
+  }
+  const tg = ((p.sheet || {}).states || []).find(x => x.spell === name && !x.conc);
+  if (tg) p.active = Object.assign({}, p.active, { [tg.key]: true });
 }
 // ── Inventory ────────────────────────────────────────────────────────────────
 // Everything carried, with quantities, weight against what the character can

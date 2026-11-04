@@ -254,7 +254,7 @@
       if (v === 'Magician'){ const b = abm(ctx, 'wis'); ctx.skillBonus.arcana = (ctx.skillBonus.arcana || 0) + b; ctx.skillBonus.nature = (ctx.skillBonus.nature || 0) + b; }
     },
   });
-  def('2024:class:druid:Wild Companion', ctx => act(ctx, { name: 'Wild Companion', action: 'Magic', resource: 'Wild Shape', amount: 1, feature: 'Wild Companion',
+  def('2024:class:druid:Wild Companion', ctx => act(ctx, { name: 'Wild Companion', action: 'Magic', resource: 'Wild Shape', amount: 1, feature: 'Wild Companion', castSpell: 'Find Familiar',
     desc: 'Spend a Wild Shape use (or a spell slot) to cast Find Familiar without components; the familiar is a Fey.' }));
   def('2024:class:druid:Wild Resurgence', ctx => {
     act(ctx, { name: 'Regain Wild Shape', action: 'Free', feature: 'Wild Resurgence', desc: 'With no Wild Shape uses left, expend a spell slot to regain one (once on each of your turns).' });

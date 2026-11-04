@@ -5972,7 +5972,7 @@
         const i = state.party.findIndex(p => p.name === 'Duo');
         ok('builder: saved with both classes', i >= 0 && JSON.stringify(state.party[i].sheet.classLevels.map(p => p.cls + p.level)) === '["fighter4","wizard1"]');
         openPanel('party'); await sleep(200);
-        ok('party: the card names both classes', [...panelDefs.party._body.querySelectorAll('.char-subline')].some(e => /fighter 4 \/ wizard 1/.test(e.textContent)));
+        ok('party: the card names both classes', [...panelDefs.party._body.querySelectorAll('.char-subline')].some(e => /Fighter 4 \/ Wizard 1/.test(e.textContent)));
         closePanel('party');
         // Level up: the new level can go to either class.
         await openCharBuilder({ idx: i, levelup: true }); await sleep(150);
@@ -13316,6 +13316,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (typeof closeCharSheet === 'function') closeCharSheet();
         state.party = JSON.parse(party0); save();
       } catch(e){ ok('round 168 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 169: Hunter's Mark for a Favored Enemy use, from the spell or the action; card sublines --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const rec = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'R169', cls: 'Ranger', subclass: 'Gloom Stalker', level: 3, species: 'Human', background: 'Guide' }), R), { id: 'r169' });
+        state.party.push(rec); save();
+        const P = () => state.party.find(p => p.id === 'r169');
+        const fe = () => (P().resources || []).find(r => r.name === 'Favored Enemy') || {};
+        const spent = () => Object.values(P().sheet.spellSlots || {}).reduce((n, s) => n + (s.expended || 0), 0);
+        await openCharSheet('r169'); await sleep(300);
+        document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(250);
+        const row = () => [...document.querySelectorAll('#cs-root .cs-spell')].find(e => /^Hunter's Mark/.test(e.innerText.trim()));
+        const btn = () => row() && row().querySelector('[data-cs-cast="Hunter\'s Mark:use"]');
+        ok('Hunter’s Mark: its spell row offers a Favored Enemy cast beside the slot', !!btn() && /Favored Enemy/.test(btn().textContent), row() && row().innerText);
+        const fe0 = fe().current;
+        btn().click(); await sleep(300);
+        ok('Hunter’s Mark: cast that way it spends a Favored Enemy use, no slot, and starts concentration', fe().current === fe0 - 1 && spent() === 0 && P().concentration === "Hunter's Mark", JSON.stringify([fe(), spent(), P().concentration]));
+        // From the action's Use.
+        P().concentration = null; save();
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(250);
+        document.querySelector('#cs-root [data-cs-use="Hunter\'s Mark (Favored Enemy)"]').click(); await sleep(300);
+        ok('Hunter’s Mark (Favored Enemy): the action’s Use casts the spell too — concentration starts', P().concentration === "Hunter's Mark" && fe().current === fe0 - 2 && spent() === 0, JSON.stringify([fe(), P().concentration]));
+        // None left: the spell row's button can't be pressed.
+        fe().current = 0; save(); csRender(); await sleep(150);
+        document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(250);
+        ok('Hunter’s Mark: with no Favored Enemy uses left, that button is disabled', !!btn() && btn().disabled);
+        if (typeof closeCharSheet === 'function') closeCharSheet();
+        // The party card names class and subclass as the sheet does.
+        openPanel('party'); panelDefs.party._render(); await sleep(200);
+        const sub = [...panelDefs.party._body.querySelectorAll('.char-subline')].map(e => e.textContent);
+        ok('party card: "Human · Ranger (Gloom Stalker) 3", not "ranger 3"', sub.includes('Human · Ranger (Gloom Stalker) 3'), JSON.stringify(sub));
+      } catch(e){ ok('round 169 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(party0); save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {
