@@ -14731,7 +14731,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         C.addMonster(find('Ogre', 'MM')); await sleep(50);
         const ogre = state.combatants.find(x => !x.isPC);
         const cm = T._condMods(ogre, co);
-        ok('conditions: the ogre attacks the prone character with advantage', cm.adv.some(x => /target prone/.test(x)), JSON.stringify(cm));
+        ok('conditions: the ogre sees the character is prone (advantage in reach, disadvantage beyond)', [...cm.adv, ...cm.dis].some(x => /target prone/.test(x)), JSON.stringify(cm));
         co.conditions.push('Restrained');
         C._removeCombatantAt(state.combatants.indexOf(co));
         ok('conditions: taken out of the fight, they keep them', JSON.stringify(p.conditions) === JSON.stringify(['Poisoned', 'Prone', 'Restrained']), JSON.stringify(p.conditions));
@@ -14776,7 +14776,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.combatants = []; save();
         C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(50);
         const gob = state.combatants.find(x => /Goblin/.test(x.name)), ogre = state.combatants.find(x => /Ogre/.test(x.name));
-        const p = { id: 'r209p', name: 'Rogue', hp: 20, hpMax: 20, ac: 14, pp: 13, abilities: { dex: 16 }, build: { edition: '2014' }, sheet: { attacks: [], skills: { stealth: 7 } } };
+        const p = { id: 'r209p', name: 'Rogue', hp: 20, hpMax: 20, ac: 14, pp: 13, abilities: { dex: 16 }, rules: '2014', sheet: { attacks: [], skills: { stealth: 7 } } };
         state.party.push(p);
         const pc = { id: 'r209p', name: 'Rogue', isPC: true, hp: 20, hpMax: 20, ac: 14, initiative: 5, conditions: [] };
         state.combatants.push(pc); save();
