@@ -2168,7 +2168,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-04e';
+const SKT_RULES_REV = '2026-11-04f';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -3052,6 +3052,22 @@ function sktComputeCharacter(build, R, prior){
   if (sc && R.edition === '2024' && Object.keys(sc.slots || {}).length && sktBookOk(build, { source: 'FRHoF', core: false })) _sktCircleSpells(ctx, sc);
   if (sc && sc.classes) sc.classes.slice(1).forEach(x => _fxNote(ctx, _sktTitle(x.cls) + ' spells: ' + (SKT_AB_NAME[x.sc.ability] || x.sc.ability) + ', save DC ' + x.sc.dc + ', attack ' + sktSigned(x.sc.attack) + '.'));
 
+  // Attack cantrips a feat or the species gives (Magic Initiate's Ray of
+  // Frost, a tiefling's Fire Bolt) are cast with that grant's ability — by a
+  // character with no spellcasting of its own too. One the class already
+  // gives is listed once, as the class's.
+  {
+    const ipb = _sktItemSum(build, 'bonusProficiencyBonus');
+    const ba = _sktItemSum(build, 'bonusSpellAttack') + (+(build.overrides || {}).spellAttack || 0) + ctx.spellAtkBonus + ipb;
+    const bd = _sktItemSum(build, 'bonusSpellSaveDc') + (+(build.overrides || {}).spellDc || 0) + ctx.spellDcBonus + ipb;
+    const known = new Set(sc ? [].concat(...(sc.cantripLists || [{ names: build.cantrips || [] }]).map(l => l.names)) : []);
+    ctx.grantCantrips = featSpells.concat(spGrant && spGrant.spells.length ? [spGrant] : []).map(g => {
+      const ability = SKT_ABS.includes(g.ability) ? g.ability : sc && sc.ability;
+      const names = ability ? g.spells.filter(n => !known.has(n) && (sktRulesSpell(R, n) || {}).level === 0) : [];
+      names.forEach(n => known.add(n));
+      return { names, ability, ba, bd };
+    }).filter(l => l.names.length);
+  }
   // Attacks: weapons carried, an unarmed strike, and attack cantrips.
   const attacks = sktBuildAttacks(ctx, gear, sc);
 
@@ -3644,7 +3660,9 @@ function sktBuildAttacks(ctx, gear, sc){
     out.push(row('1d6'), row('1d4', { name: 'Psychic Blades (bonus action)' }));
   }
   // Attack cantrips the character knows.
-  if (sc) (sc.cantripLists || [{ names: ctx.build.cantrips || [], attack: sc.attack, dc: sc.dc }]).forEach(list => list.names.forEach(n => {
+  (sc ? sc.cantripLists || [{ names: ctx.build.cantrips || [], attack: sc.attack, dc: sc.dc }] : [])
+    .concat((ctx.grantCantrips || []).map(l => ({ names: l.names, attack: pb + m[l.ability] + l.ba, dc: 8 + pb + m[l.ability] + l.bd })))
+    .forEach(list => list.names.forEach(n => {
     const s = sktRulesSpell(ctx.R, n); if (!s) return;
     const dice = _sktCantripDice(s, ctx.level); if (!dice) return;
     const type = (s.damageInflict || [])[0] || '';

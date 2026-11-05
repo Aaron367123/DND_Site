@@ -13845,6 +13845,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 186 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 187: attack cantrips from a feat or the species get an attack row, with that grant's ability --
+    if (!PLAYER){
+      try {
+        const R = await sktRulesLoad('2024');
+        const ab = base => ({ method: 'manual', base });
+        const rows = r => r.sheet.attacks.filter(a => a.spell).map(a => a.name + ' ' + a.atkBonus + ' ' + a.damage);
+        // A druid whose Magic Initiate (Sage: wizard) gives Ray of Frost, cast with Intelligence as the feat chose.
+        const d = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'r187d', cls: 'Druid', level: 6, species: 'Human', background: 'Sage',
+          abilities: ab({ str: 10, dex: 12, con: 14, int: 13, wis: 16, cha: 8 }), cantrips: ['Guidance', 'Produce Flame'],
+          featChoices: { 'Magic Initiate': { spells: ['Ray of Frost', 'Light', 'Sleep'], spellAbility: 'int' } } }), R);
+        ok('cantrip rows: Magic Initiate\'s Ray of Frost is an attack with the feat\'s Intelligence, not the class\'s Wisdom',
+           rows(d).includes('Ray of Frost +4 2d8 cold') && rows(d).some(x => /^Produce Flame /.test(x)), JSON.stringify(rows(d)));
+        // A fighter (no spellcasting) whose infernal legacy gives Fire Bolt, with Charisma.
+        const f = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'r187f', cls: 'Fighter', level: 5, species: 'Tiefling', background: 'Guide',
+          speciesChoice: { lineage: 'Infernal', spellAbility: 'cha' }, abilities: ab({ str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 14 }) }), R);
+        ok('cantrip rows: a tiefling fighter\'s Fire Bolt is an attack with Charisma', rows(f).join('|') === 'Fire Bolt +5 2d10 fire', JSON.stringify(rows(f)));
+        // A sorcerer who knows Fire Bolt from the class and the legacy: one row, the class's.
+        const s = sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'r187s', cls: 'Sorcerer', level: 5, species: 'Tiefling', background: 'Guide', cantrips: ['Fire Bolt', 'Light', 'Mage Hand', 'Prestidigitation'],
+          speciesChoice: { lineage: 'Infernal', spellAbility: 'int' }, abilities: ab({ str: 8, dex: 14, con: 14, int: 10, wis: 10, cha: 16 }) }), R);
+        ok('cantrip rows: a cantrip both the class and the species give is listed once, as the class\'s', rows(s).filter(x => /^Fire Bolt /.test(x)).join('|') === 'Fire Bolt +6 2d10 fire', JSON.stringify(rows(s)));
+      } catch(e){ ok('round 187 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
