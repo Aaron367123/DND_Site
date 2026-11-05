@@ -812,6 +812,11 @@ registerPanel('turnview', {
       const ft = this._ftBetween(attacker, target);
       if (ft != null && ft <= 5) autoCrit = true;
     }
+    // Invisible: "attack rolls against the creature have disadvantage, and
+    // the creature's attack rolls have advantage" — unless the other one can
+    // see it anyway: blindsight or truesight that reaches.
+    if (this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('invisible');
+    if (this._hasCond(target, 'invisible') && !this._seesUnseen(attacker, target)) dis.push('target invisible');
     // Pack Tactics: "advantage on an attack roll against a creature if at
     // least one of the wolf's allies is within 5 feet of the creature and the
     // ally isn't incapacitated." Its side is its allies (monsters, or the
@@ -823,6 +828,20 @@ registerPanel('turnview', {
       if (ally) adv.push('pack tactics — ' + ally.name + ' beside the target');
     }
     return { adv, dis, autoCrit };
+  },
+  // Whether `who` sees `other` though it is invisible: a monster's
+  // blindsight or truesight, as far as it reaches (unknown distance: no).
+  _seesUnseen(who, other){
+    if (!who || who.isPC) return false;
+    const raw = (this._entryOf(who) || {})._raw || {};
+    // ({ blindsight: '60 ft.' } as the loader keeps it; a string from older data)
+    const sn = raw.senses || {};
+    const reach = typeof sn === 'string'
+      ? Math.max(0, ...[...sn.matchAll(/\b(?:blindsight|truesight)\s+(\d+)/gi)].map(x => +x[1]))
+      : Math.max(0, parseInt(sn.blindsight, 10) || 0, parseInt(sn.truesight, 10) || 0);
+    if (!reach) return false;
+    const ft = this._ftBetween(who, other);
+    return ft != null && ft <= reach;
   },
   // Can't act: no Pack Tactics help, no threat to a ranged attacker.
   _INCAP: ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'],
@@ -2608,6 +2627,17 @@ registerPanel('turnview', {
     if (asked < 0) disWhy.unshift('called');
     if (t.dodging) disWhy.push('target dodging');
     if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
+    // A character's exhaustion: 2024, −2 a level on the roll; 2014, from the
+    // third level, disadvantage. (Its conditions are already counted above.)
+    let exhBonus = 0;
+    if (c.isPC && typeof csRollEffects === 'function'){
+      const pp = this._partyOf(c);
+      if (pp && +pp.exhaustion > 0){
+        const fx = csRollEffects(pp, 'attack');
+        exhBonus = fx.bonus || 0;
+        if ((fx.dis || []).includes('exhaustion')) disWhy.push('exhaustion');
+      }
+    }
     const pcSheet = a.pc ? ((this._partyOf(c) || {}).sheet || {}) : {};
     const atkTags = ['attack', a.spell ? 'attack:spell' : a.str ? 'attack:str' : ''];
     (pcSheet.rollAdv || []).forEach(x => { if ((x.on || []).some(k => atkTags.includes(k))) advWhy.push(x.label); });
@@ -2639,7 +2669,8 @@ registerPanel('turnview', {
     // Dice a state adds to the roll (Bless's d4).
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
     if (extra.length) hitNote = (hitNote ? hitNote + ' · ' : '') + extra.map(x => x.label + ' +' + x.n).join(', ');
-    const total = nat + bonus + extra.reduce((s, x) => s + x.n, 0);
+    if (exhBonus) hitNote = (hitNote ? hitNote + ' · ' : '') + 'exhaustion ' + exhBonus;
+    const total = nat + bonus + exhBonus + extra.reduce((s, x) => s + x.n, 0);
     // "Any attack that hits a paralysed or unconscious creature is a
     // critical hit if the attacker is within 5 feet of it." It has to be a
     // hit first, so this is applied after the comparison and not before.

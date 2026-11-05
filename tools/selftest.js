@@ -14573,6 +14573,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 204: Invisible on attack rolls (and blindsight sees through it); a character's exhaustion --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const B = panelDefs.battlemap, T = panelDefs.turnview, keepR = T._resolve, keepD = T._d;
+      let tok0 = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        openPanel('battlemap'); await sleep(300);
+        tok0 = JSON.stringify(B._tokens || []);
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(find('Ogre', 'MM')); panelDefs.combat.addMonster(find('Gray Ooze', 'MM')); await sleep(50);
+        const [ogre, ooze] = state.combatants;
+        const hero = { id: 'r204h', name: 'Hero', isPC: true, hp: 300, hpMax: 300, ac: 12, initiative: 30, conditions: [] };
+        state.combatants.push(hero); save();
+        const cs = B._cellSize || 50;
+        const put = (c, x, y) => ({ id: 'tk' + c.id, label: c.name, cid: c.id, isPC: !!c.isPC, x: cs * (x + 0.5), y: cs * (y + 0.5), size: 1 });
+        B._tokens = [put(ogre, 4, 5), put(hero, 5, 5), put(ooze, 6, 5)]; B._saveMap && B._saveMap(); T._mapCache = null;
+        hero.conditions = ['Invisible'];
+        let cm = T._condMods(ogre, hero);
+        ok('invisible: attacking an invisible hero is at disadvantage', cm.dis.includes('target invisible'), JSON.stringify(cm));
+        cm = T._condMods(hero, ogre);
+        ok('invisible: the invisible hero attacks with advantage', cm.adv.includes('invisible'), JSON.stringify(cm));
+        cm = T._condMods(ooze, hero);
+        ok('invisible: a gray ooze\'s blindsight (60 ft) sees the hero beside it — no disadvantage', !cm.dis.includes('target invisible'), JSON.stringify(cm));
+        cm = T._condMods(hero, ooze);
+        ok('invisible: and the hero gets no advantage against it', !cm.adv.includes('invisible'), JSON.stringify(cm));
+        hero.conditions = [];
+        // A 2024 character with two levels of exhaustion: −4 on the attack roll.
+        const p = { id: 'r204p', name: 'Tester', hp: 30, hpMax: 30, ac: 15, build: { edition: '2024' },
+                    sheet: { attacks: [{ name: 'Longsword', atkBonus: '+5', damage: '1d8+3 slashing', props: ['V'] }] } };
+        state.party.push(p); save();
+        {
+          const pc = { id: p.id, name: p.name, isPC: true, hp: 30, hpMax: 30, ac: 15, initiative: 20, conditions: [] };
+          state.combatants.push(pc); save();
+          p.exhaustion = 2; p.build = Object.assign({}, p.build || {}, { edition: '2024' });
+          const list = T._attacksFor(pc), ai = list.findIndex(a => !a.save && a.dmgText);
+          const seen = []; T._resolve = o => seen.push(o); T._d = () => 10;
+          if (ai >= 0) T._rollAttack(ai, { attacker: pc, target: ogre });
+          ok('exhaustion: a character two levels exhausted (2024) attacks at −4, and the roll says so', ai >= 0 && seen.length === 1 && seen[0].total === 10 + list[ai].bonus - 4 && /exhaustion -4/.test(seen[0].hitNote),
+             JSON.stringify([ai, seen.map(o => [o.total, o.hitNote]), ai >= 0 && list[ai].bonus]));
+          seen.length = 0; p.exhaustion = 0;
+          if (ai >= 0) T._rollAttack(ai, { attacker: pc, target: ogre });
+          ok('exhaustion: rested, no penalty', ai >= 0 && seen.length === 1 && seen[0].total === 10 + list[ai].bonus, JSON.stringify(seen.map(o => [o.total, o.hitNote])));
+        }
+      } catch(e){ ok('round 204 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        T._resolve = keepR; T._d = keepD;
+        if (tok0 != null){ B._tokens = JSON.parse(tok0); B._saveMap && B._saveMap(); }
+        T._mapCache = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
