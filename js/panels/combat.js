@@ -2973,8 +2973,52 @@ registerPanel('combat',{
       ...(m._vulnerable ? {_vulnerable: m._vulnerable} : {}),
       ...legendaryFields,
     });
+    // A summoned spirit's numbers are the casting's: HP and AC by the spell's
+    // level, attacks at the caster's spell attack modifier. Added at the
+    // lowest level with the party's best caster's numbers, then asked.
+    const sm = this._summonGuess(m && m._raw);
+    if (sm){
+      const c = state.combatants[state.combatants.length - 1];
+      Object.assign(c, { summon: sm.summon, hp: sm.hp, hpMax: sm.hp, ac: sm.ac });
+    }
     if (!state.combatRound) state.combatRound = 1;
     save(); this._render();
     showToast(`Added ${displayName}`);
+    if (sm) this._askSummon(state.combatants[state.combatants.length - 1].id);
+  },
+
+  // Whether a stat block is a summoning spell's (Summon Beast's Bestial
+  // Spirit: "11 + the spell's level", "Bonus equals your spell attack
+  // modifier"), and its numbers at a level: { summon, hp, ac } or null.
+  _summonGuess(raw, given){
+    if (!raw) return null;
+    const txt = String(raw.hp_special || '') + ' ' + String(raw.ac_special || '');
+    const acts = JSON.stringify([].concat(raw.actions || [], raw.bonus_actions || []));
+    if (!/spell'?s level|level of the spell|spell level above/i.test(txt) && !/summonSpellLevel|your spell attack modifier/i.test(acts)) return null;
+    const party = (state.party || []).map(p => p.sheet || {});
+    const bestAtk = Math.max(0, ...party.map(s => parseInt(s.spellAtkBonus, 10)).filter(n => !isNaN(n)));
+    const bestDc = Math.max(0, ...party.map(s => +s.spellSaveDc || 0));
+    const summon = Object.assign({ level: sktSummonBaseLevel(raw) || 2, atk: bestAtk || 5, dc: bestDc || 13 }, given || {});
+    const hpN = sktSummonNumber(raw.hp_special, summon.level), acN = sktSummonNumber(raw.ac_special, summon.level);
+    return { summon, hp: hpN != null ? hpN : (raw.hit_points || 1), ac: acN != null ? acN : (((raw.armor_class || [])[0] || {}).value || 10) };
+  },
+  // Ask the casting for a summoned spirit just added; its HP, AC and attacks follow.
+  _askSummon(id){
+    const c = state.combatants.find(x => x.id === id); if (!c || !c.summon || typeof showModal !== 'function') return;
+    const raw = (this.statBlockFor(c) || {})._raw || this.statBlockFor(c);
+    showModal('Summoned — ' + c.name, [
+      { id: 'level', label: 'Spell level it was cast at', type: 'number', value: c.summon.level },
+      { id: 'atk',   label: "Caster's spell attack modifier", type: 'number', value: c.summon.atk },
+      { id: 'dc',    label: "Caster's spell save DC", type: 'number', value: c.summon.dc },
+    ], 'Set').then(r => {
+      if (!r) return;
+      const i = state.combatants.findIndex(x => x.id === id); if (i < 0) return;
+      const cur = state.combatants[i];
+      const sm = this._summonGuess(raw, { level: +r.level || cur.summon.level, atk: +r.atk || 0, dc: +r.dc || cur.summon.dc });
+      if (!sm) return;
+      const fresh = cur.hp === cur.hpMax;
+      state.combatants[i] = Object.assign({}, cur, { summon: sm.summon, ac: sm.ac, hpMax: sm.hp, hp: fresh ? sm.hp : Math.min(cur.hp, sm.hp) });
+      save(); this._render();
+    });
   },
 });

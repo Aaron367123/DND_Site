@@ -1141,7 +1141,26 @@ registerPanel('turnview', {
     const entry = this._entryOf(c);
     const raw = entry && entry._raw;
     if (!raw || !panelDefs.attacks) return [];
-    return panelDefs.attacks._parsed(raw).attacks || [];
+    return this._summonAttacks(c, panelDefs.attacks._parsed(raw).attacks || []);
+  },
+  // A summoned spirit's attacks for the casting it came from (c.summon: the
+  // spell's level, the caster's spell attack modifier and save DC): "Bonus
+  // equals your spell attack modifier" and "1d8 + 4 + summonSpellLevel".
+  _summonAttacks(c, list){
+    const s = c && c.summon;
+    if (!s) return list;
+    const lv = +s.level || 0, atk = +s.atk || 0;
+    const dice = d => sktSummonDice(d, lv);
+    return list.map(a => {
+      const b = Object.assign({}, a);
+      if (b.toHit === '@spell') b.toHit = (atk >= 0 ? '+' : '') + atk;
+      if (b.save && b.save.dc === '@spell') b.save = Object.assign({}, b.save, { dc: +s.dc || 13 });
+      if (b.rider && b.rider.dc === '@spell') b.rider = Object.assign({}, b.rider, { dc: +s.dc || 13 });
+      const fix = p => Object.assign({}, p, { dice: dice(p.dice), avg: /summon/i.test(p.dice) ? _sktDiceAvg(dice(p.dice)) : p.avg });
+      if (b.parts) b.parts = b.parts.map(fix);
+      if (b.alt) b.alt = b.alt.map(fix);
+      return b;
+    });
   },
 
   // The Multiattack sentence, and the plan it resolves to. Reuses the Attack
@@ -1157,7 +1176,12 @@ registerPanel('turnview', {
     if (!raw || !panelDefs.attacks) return null;
     const p = panelDefs.attacks._parsed(raw);
     if (!p.multi) return null;
-    return { text: p.multi.text, plan: panelDefs.attacks._plan({ multi: p.multi, attacks: p.attacks }) };
+    // A summoned spirit's attacks and count follow its casting; a hydra's
+    // follow its heads, asked when it runs (`ask`).
+    const attacks = ws ? p.attacks : this._summonAttacks(c, p.attacks);
+    const co = p.multi.combo || {};
+    return { text: p.multi.text, ask: co.ask ? { what: co.ask, n: +c.multiCount || co.dflt || 0 } : null,
+             plan: panelDefs.attacks._plan({ multi: p.multi, attacks }, { summonLevel: c.summon && c.summon.level, count: c.multiCount }) };
   },
 
   // The damage types THIS creature can actually deal, read off the same parse
@@ -1257,7 +1281,7 @@ registerPanel('turnview', {
     const rows = list.map((a, i) => {
       const line = a.pc
         ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`)
-        : `${esc(a.toHit || '')}${a.toHit ? ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg} (${esc(pt.dice)}) ${esc(pt.type)}${pt.ifAdv ? ' with advantage' : ''}`).join(' + ')}`;
+        : `${a.toHit === 'auto' ? 'automatic hit · ' : a.toHit ? esc(a.toHit) + ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg ? pt.avg + ' (' + esc(pt.dice) + ')' : esc(pt.dice)} ${esc(pt.type)}${pt.ifAdv ? ' with advantage' : ''}`).join(' + ') || esc(a.effect || '')}`;
       const spent = (c.rechargeSpent || []).includes(a.name);
       const left = a.pc ? null : this._usesLeft(c, a);
       const usedNow = left === 0 && (c.usesRound || {})[a.name] === (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
@@ -1277,7 +1301,7 @@ registerPanel('turnview', {
           <button class="btn" data-tv="save" data-ai="${i}" data-half="0" title="Target failed the save — full damage">Failed</button>
           ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>` : ''}
           <button class="btn" data-tv="area" data-ai="${i}" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>`;
-      } else if (a.pc ? !!a.dmgText : (a.parts || []).length){
+      } else if (a.pc ? !!a.dmgText : ((a.parts || []).length || (a.effect && a.toHit))){
         ctl = `${rech}<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`
           // A hit that then calls for a save (an assassin's poison): its damage, once the hit lands.
           + (a.rider ? `<span class="tv-save" title="On a hit: ${esc((a.rider.parts || []).map(pt => pt.dice + ' ' + pt.type).join(' + '))}">then DC ${a.rider.dc} ${esc(String(a.rider.ability).slice(0,3).toUpperCase())}</span>
@@ -1320,9 +1344,9 @@ registerPanel('turnview', {
       head = `<div class="tv-multi">
         <span class="tv-multi-tag">Multiattack</span>
         <span class="tv-multi-text">${esc(m.text)}</span>
-        ${m.plan.length ? `<button class="btn" data-tv="multi"
-            title="${esc(m.plan.map(p => p.name).join(' → '))} — roll each in turn, choosing a target for every one"
-            >${ICO('i-dice')}Run ${m.plan.length}</button>` : ''}
+        ${m.plan.length || m.ask ? `<button class="btn" data-tv="multi"
+            title="${esc(m.plan.length ? m.plan.map(p => p.name).join(' → ') : 'One for each of its ' + m.ask.what)} — roll each in turn, choosing a target for every one"
+            >${ICO('i-dice')}Run${m.plan.length ? ' ' + m.plan.length : '…'}</button>` : ''}
       </div>`;
     }
     const advBtn = (v, label, title) =>
@@ -2199,6 +2223,7 @@ registerPanel('turnview', {
     // Every type, not just the first: "22 piercing" hid the fire half.
     const dmgText = (o.parts && o.parts.length > 1)
       ? o.parts.filter(p => p.amt).map(p => `${p.amt} ${esc(p.type)}`).join(' + ')
+      : (o.parts && !o.parts.length && !o.dmg) ? 'no damage'
       : `${o.dmg} ${esc(o.type || 'damage')}`;
     this._setResult(`<span class="${o.crit ? 'crit' : o.save ? 'dim' : 'hit'}">${
         o.crit ? 'Critical hit' : o.save ? 'Save' : 'Hit'}</span> —
@@ -2412,9 +2437,14 @@ registerPanel('turnview', {
     // "Any attack that hits a paralysed or unconscious creature is a
     // critical hit if the attacker is within 5 feet of it." It has to be a
     // hit first, so this is applied after the comparison and not before.
-    const natCrit = nat === 20;
-    const hit = natCrit || (nat !== 1 && total >= (t.ac || 10));
-    const crit = natCrit || (hit && cm.autoCrit);
+    // A marut's Unerring Slam: "automatic hit", no roll to compare.
+    const autoHit = !a.pc && a.toHit === 'auto';
+    if (autoHit) hitNote = 'automatic hit';
+    const natCrit = !autoHit && nat === 20;
+    const hit = autoHit || natCrit || (nat !== 1 && total >= (t.ac || 10));
+    const crit = natCrit || (!autoHit && hit && cm.autoCrit);
+    // What a hit does when it deals no damage (a roper's tendril grapples).
+    if (hit && !a.pc && !(a.parts || []).length && a.effect) hitNote = (hitNote ? hitNote + ' · ' : '') + a.effect;
     if (crit && !natCrit){
       hitNote = (hitNote ? hitNote + ' · ' : '') + 'automatic crit within 5 ft';
     }
@@ -2450,9 +2480,19 @@ registerPanel('turnview', {
   // list is already on screen, so a swing costs one click on the creature you
   // want it to hit. Damage is rolled AT each step, not all up front, so what
   // you see is what the target is about to take.
-  _startMulti(){
+  async _startMulti(){
     const c = this._active(); if (!c) return;
-    const m = this._multiOf(c); if (!m || !m.plan.length) return;
+    let m = this._multiOf(c); if (!m) return;
+    // "As many bite attacks as it has heads": how many now (left blank, the
+    // last number given, else what its traits start it at).
+    if (m.ask && typeof showConfirm === 'function'){
+      const v = await showConfirm('How many ' + m.ask.what + ' does ' + c.name + ' have now?', { title: 'Multiattack', confirmLabel: 'Run',
+        input: { label: (m.ask.what.charAt(0).toUpperCase() + m.ask.what.slice(1)) + (m.ask.n ? ' (blank: ' + m.ask.n + ')' : ''), min: 1, max: 30 } });
+      if (v === false) return;
+      if (typeof v === 'number' && v > 0){ c.multiCount = v; save(); }
+      m = this._multiOf(c);
+    }
+    if (!m || !m.plan.length) return;
     this._queue = { srcId: c.id, name: c.name, items: m.plan, i: 0, hits: 0, misses: 0 };
     this._setResult(`<span class="dim">Multiattack — <b>${esc(m.plan[0].name)}</b>: pick a target.</span>`);
     this._render();
@@ -2481,7 +2521,49 @@ registerPanel('turnview', {
     // The creature can leave the fight mid-sequence — killed by a reaction, or
     // removed by the DM. Abandon rather than throw.
     if (!src || !t || !it){ this._finishMulti(true); return; }
+    const a = (this._attacksFor(src) || [])[it.ai];
+    if (a && !a.toHit && (a.save || a.rays)){ this._queueSave(src, t, it.ai); return; }
     this._rollAttack(it.ai, { attacker: src, target: t, queued: true });
+  },
+  // A save-based step of a Multiattack ("uses Eye Rays three times", "uses
+  // its Mind Thrust twice"): the target's save is rolled — with its
+  // conditions, through combat.rollSave — and the damage applied whole or
+  // halved. A beholder's ray is rolled on its table first, never one already
+  // used this turn, and what the ray does is in the result.
+  _queueSave(c, t, ai){
+    const a = (this._attacksFor(c) || [])[ai]; if (!a) return;
+    this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
+    let eff = a, label = a.name, note = '';
+    if (a.rays && a.rays.length){
+      const q = this._queue || {}, used = q.rays || [];
+      let pick = null;
+      for (let k = 0; k < 40 && !pick; k++){ const n = this._d(a.rayDie || a.rays.length); const r = a.rays.find(x => x.n === n); if (r && !used.includes(n)) pick = r; }
+      pick = pick || a.rays.find(x => !used.includes(x.n)) || a.rays[0];
+      q.rays = used.concat([pick.n]);
+      eff = { save: pick.dc ? { dc: pick.dc, ability: pick.ability, half: pick.half } : null, parts: pick.parts || [] };
+      label = a.name + ' — ' + pick.name + ' (' + pick.n + ')';
+      note = pick.effect || '';
+    }
+    if (a.recharge) this._markRechargeSpent(c, a.name);
+    this._markUsed(c, a);
+    if (!this._queue || this._queue.i === 0) this._spend(c, 'actionUsed');
+    const C = panelDefs.combat;
+    const sv = eff.save && C && typeof C.rollSave === 'function' ? C.rollSave(t, eff.save.ability, eff.save.dc, {}) : null;
+    const passed = !!(sv && sv.passed), half = passed && !!(eff.save && eff.save.half);
+    let detail = sv ? String(eff.save.ability).slice(0, 3).toUpperCase() + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + eff.save.dc + ' (' + sv.detail + ')') : '';
+    const parts = passed && !half ? [] : (eff.parts || []).map(pt => {
+      const r = this._roll(pt.dice), amt = half ? Math.floor(r.total / 2) : r.total;
+      detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (half ? ' ÷2' : '');
+      return { amt, type: pt.type };
+    });
+    if (note && !passed) detail += (detail ? ' · ' : '') + note;
+    this._resolve({
+      attackerId: c.id, attacker: c.name, target: t, save: true, queued: true,
+      label: label + (sv ? (passed ? ' (saved)' : ' (failed)') : ''),
+      total: null, crit: false, hit: true, parts, detail,
+      dmg: parts.reduce((s, x) => s + x.amt, 0), type: parts.length ? parts[0].type : '',
+      magical: true,
+    });
   },
 
   // ─── Action economy ───────────────────────────────────────────────────────

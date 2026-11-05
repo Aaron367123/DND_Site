@@ -1238,22 +1238,39 @@ function _sktDamageRe(){
 
 function _sktDamageClauses(segment){
   const out = [];
-  const re = _sktDamageRe();
-  let m;
-  while ((m = re.exec(segment))){
+  const T = SKT_DMG_TYPE_RE.source;
+  const push = (m, avg, dice, type) => {
     // A 2024 goblin's extra 1d4 "if the attack roll had Advantage", a Scout
     // Captain's 3d6: only on such a roll.
     const after = segment.slice(m.index + m[0].length, m.index + m[0].length + 60);
     out.push({
-      avg: parseInt(m[1]),
+      avg,
       // "2d10 + 8" → "2d10+8"; "1d12 + 4 plus 1d8" (an Orc War Chief) → "1d12+4+1d8".
-      dice: String(m[2]).replace(/\s*plus\s*/gi, '+').replace(/\s+/g, ''),
-      type: m[3].toLowerCase(),
-      at: m.index,
+      dice: String(dice).replace(/\s*plus\s*/gi, '+').replace(/\s+/g, ''),
+      type: String(type || '').toLowerCase(),
+      at: m.index, end: m.index + m[0].length,
       ifAdv: /^\s*if the attack (?:roll )?(?:had|was made with) advantage/i.test(after) || undefined,
     });
-  }
-  return out;
+  };
+  const free = (a, b) => !out.some(o => a < o.end && b > o.at);
+  let m;
+  // "19 (2d10 + 8) piercing damage", and "14 (4d6) Cold, Necrotic, Poison, or
+  // Psychic damage (horror's choice)" — the first type named.
+  const re = new RegExp('(\\d+)\\s*\\(([^)]*?)\\)\\s*((?:' + T + ')(?:\\s*,?\\s*(?:or\\s+)?(?:' + T + '))*)\\s+damage', 'gi');
+  while ((m = re.exec(segment))) push(m, parseInt(m[1]), m[2], (new RegExp(T, 'i').exec(m[3]) || [''])[0]);
+  // Dice with no average in front: a summoned spirit's "1d8 + 4 +
+  // summonSpellLevel Piercing damage" (worked out for the casting by
+  // sktSummonDice), and the "+ 1d6 force damage" after it.
+  const reSum = new RegExp('(\\d+d\\d+(?:\\s*[+-]\\s*(?:\\d+|summon(?:Spell|Class)Level)(?![d\\w]))*)\\s+(' + T + ')\\s+damage', 'gi');
+  while ((m = reSum.exec(segment))) if (free(m.index, m.index + m[0].length)) push(m, _sktDiceAvg(String(m[1]).replace(/summon(?:Spell|Class)Level/gi, '0')), m[1], m[2]);
+  // Dice and no type: a draconic spirit's "2d6 damage of a type this spirit
+  // has Resistance to".
+  const reBare = /(\d+d\d+(?:\s*[+-]\s*(?:\d+|summon(?:Spell|Class)Level)(?![d\w]))*)\s+damage\b/gi;
+  while ((m = reBare.exec(segment))) if (free(m.index, m.index + m[0].length) && !/\)\s*$/.test(segment.slice(0, m.index))) push(m, _sktDiceAvg(String(m[1]).replace(/summon(?:Spell|Class)Level/gi, '0')), m[1], '');
+  // A flat number: a marut's "Hit: 60 force damage", a tiny griffon's "1 piercing damage".
+  const reFlat = new RegExp('(?:^|[^\\w)(+])(\\d+)\\s+(' + T + ')\\s+damage', 'gi');
+  while ((m = reFlat.exec(segment))) if (free(m.index, m.index + m[0].length)) push(m, parseInt(m[1]), m[1], m[2]);
+  return out.sort((a, b) => a.at - b.at);
 }
 
 // Cut a description down to just the clause that carries the damage. Riders
@@ -1305,7 +1322,9 @@ function sktParseMonsterAttack(action){
     .replace(/\s*\{@recharge[^}]*\}/gi, '')
     .replace(/\s*\(\d+\/Day\b[^)]*\)/gi, '')
     .trim();
-  const desc = String((action && action.desc) || '');
+  // Without the entry parser's bold/italic markers (sktPlainEntries): "•
+  // \x041: Paralyzing Ray\x04" hid every ray of a beholder zombie's table.
+  const desc = String((action && action.desc) || '').replace(/[\x01-\x07]/g, '');
   if (!desc) return null;
 
   // Save-based, in either of the two house styles the dataset mixes:
@@ -1337,9 +1356,25 @@ function sktParseMonsterAttack(action){
   // the target must make a DC 15 Constitution saving throw, taking 24 (7d6)
   // poison damage". It read as the save alone: no attack roll, no piercing.
   // It's an attack, and the save is a rider on it.
+  // A summoned spirit's save at the caster's DC: "dex DC equals your spell
+  // save DC" (2024), "a Dexterity saving throw against your spell save DC"
+  // ('@spell', set from the casting when it's rolled).
+  if (saveDc == null){
+    const s24 = /\b(str|dex|con|int|wis|cha)\s+DC\s+equals\s+your\s+spell\s+save\s+DC/i.exec(desc);
+    const s14 = /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+saving throw against your spell save DC/i.exec(desc);
+    if (s24){ saveDc = '@spell'; saveAbility = ABIL[s24[1].toLowerCase()]; saveAt = s24.index; }
+    else if (s14){ saveDc = '@spell'; saveAbility = s14[1]; saveAt = s14.index; }
+  }
   const hitAt = desc.search(/\bHit:/i);
   const attackFirst = hitAt >= 0 && (saveAt < 0 || hitAt < saveAt)
-    && /([+-]\s*\d+)\s+to hit|\bAttack(?: Roll)?:\s*[+-]\s*\d+/i.test(desc.slice(0, hitAt));
+    && /([+-]\s*\d+)\s+to hit|\bAttack(?: Roll)?:\s*[+-]\s*\d+|\bautomatic hit\b|your spell attack modifier/i.test(desc.slice(0, hitAt));
+  // A beholder's Eye Rays: a d10 table of rays, each its own save and damage.
+  const rays = /roll\s+1d(\d+)/i.test(desc) && /•\s*\d+\s*:/.test(desc) ? _sktRayTable(desc) : null;
+  if (rays && rays.length){
+    const first = rays.find(r => r.parts.length) || rays[0];
+    return { name, recharge, uses, toHit: null, save: first.dc ? { dc: first.dc, ability: first.ability, half: first.half } : null,
+             parts: first.parts, alt: null, altLabel: '', rays, rayDie: +(/roll\s+1d(\d+)/i.exec(desc)[1]) };
+  }
   if (saveDc != null && !attackFirst){
     const seg = _sktFirstDamageSentence(desc, saveAt);
     const parts = _sktDamageClauses(seg);
@@ -1386,9 +1421,30 @@ function sktParseMonsterAttack(action){
   const riderAt = saveDc != null && saveAt > hitIdx ? saveAt : -1;
   const seg = _sktDamageSegment(desc, hitIdx).slice(0, riderAt > 0 ? riderAt - hitIdx : undefined);
   const clauses = _sktDamageClauses(seg);
+  // Damage with no type: "Hit: 10 (1d8 + 6)." (a dread doppelganger), "Hit:
+  // 7 (2d6) damage. Roll 1d4 to determine the damage type".
+  if (!clauses.length){
+    const tl = /\bHit:\s*(\d+)\s*\(([^)]*?\d+d\d+[^)]*?)\)/i.exec(seg);
+    if (tl) clauses.push({ avg: parseInt(tl[1], 10), dice: tl[2].replace(/\s+/g, ''), type: '', at: tl.index });
+  }
+  // "+14 to hit" (2014), "Melee Attack Roll: +7," (2024), a marut's "automatic
+  // hit", a summoned spirit's "Bonus equals your spell attack modifier" (the
+  // caster's, given when it was summoned: '@spell').
+  const toHitM = desc.match(/([+-]\s*\d+)\s+to hit/i)
+              || desc.match(/\bAttack(?: Roll)?:\s*([+-]\s*\d+)/i);
+  const toHit = toHitM ? toHitM[1].replace(/\s+/g, '')
+    : /\bautomatic hit\b/i.test(desc.slice(0, hitIdx)) ? 'auto'
+    : /your spell attack modifier/i.test(desc.slice(0, hitIdx)) ? '@spell' : null;
   // A hit that deals nothing itself ("Hit: the target must make a DC 13
   // Constitution saving throw, taking 9 (2d8) poison damage"): the save is it.
-  if (!clauses.length) return riderAt > 0 ? sktParseMonsterAttack(Object.assign({}, action, { desc: desc.slice(riderAt) })) : null;
+  if (!clauses.length && riderAt > 0) return sktParseMonsterAttack(Object.assign({}, action, { desc: desc.slice(riderAt) }));
+  // A hit that does something but no damage — a roper's tendril grapples, a
+  // web strand restrains. Still an attack to roll; what it does is the text.
+  if (!clauses.length){
+    if (!toHit) return null;
+    return { name, recharge, uses, toHit, save: null, parts: [], alt: null, altLabel: '', rider: null,
+             ranged: /^\s*Ranged\b/i.test(desc), effect: desc.slice(hitIdx + 4).trim().split(/(?<=\.)\s/)[0].slice(0, 160) };
+  }
   const riderParts = riderAt > 0 ? _sktDamageClauses(_sktDamageSegment(desc, riderAt)) : [];
   const rider = riderParts.length ? { dc: saveDc, ability: saveAbility,
     half: /half as much|half damage|half the damage/i.test(desc.slice(riderAt)),
@@ -1410,12 +1466,10 @@ function sktParseMonsterAttack(action){
     }
   });
 
-  // "+14 to hit" (2014) or "Melee Attack Roll: +7," (2024).
-  const toHitM = desc.match(/([+-]\s*\d+)\s+to hit/i)
-              || desc.match(/\bAttack(?: Roll)?:\s*([+-]\s*\d+)/i);
   return {
     name, recharge, uses,
-    toHit: toHitM ? toHitM[1].replace(/\s+/g, '') : null,
+    toHit,
+    ranged: /^\s*Ranged\b/i.test(desc),
     save: null,
     parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
     alt: alt.length ? alt.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})) : null,
@@ -1427,6 +1481,64 @@ function sktParseMonsterAttack(action){
 // Every damaging action on a monster, across the action groups worth having in
 // a fight. Legendary actions are included because they are exactly the thing a
 // DM is juggling when a stat block gets busy.
+// A summoned spirit's damage for the spell's level: "1d8+4+summonSpellLevel"
+// at level 4 is "1d8+8".
+function sktSummonDice(dice, level){
+  const s = String(dice || '');
+  if (!/summon(?:Spell|Class)Level/i.test(s)) return s;
+  const withLv = s.replace(/summon(?:Spell|Class)Level/gi, String(+level || 0));
+  // Fold the numbers together: "1d8+4+4" → "1d8+8".
+  const dice2 = (withLv.match(/[+-]?\d*d\d+/gi) || []).join('');
+  const flat = (withLv.replace(/[+-]?\d*d\d+/gi, '').match(/[+-]?\d+/g) || []).reduce((t, n) => t + parseInt(n, 10), 0);
+  return dice2 + (flat ? (flat > 0 ? '+' : '') + flat : '');
+}
+function _sktDiceAvg(d){
+  let t = 0;
+  String(d || '').replace(/\s+/g, '').replace(/([+-]?)(\d*d\d+|\d+)/gi, (_, sg, term) => {
+    const k = sg === '-' ? -1 : 1, m = /^(\d*)d(\d+)$/i.exec(term);
+    t += k * (m ? (parseInt(m[1] || '1', 10) * (parseInt(m[2], 10) + 1) / 2) : parseInt(term, 10));
+    return '';
+  });
+  return Math.floor(t);
+}
+// What a spirit's HP or AC is at a spell level: "11 + the spell's level",
+// "30 (Land and Water only) + 5 for each spell level above 2" (the first form
+// given), "40 + 10 for each spell level above 4th". null if it isn't that.
+function sktSummonNumber(text, level){
+  const s = String(text || '');
+  if (!/spell'?s level|level of the spell|spell level above/i.test(s)) return null;
+  const L = +level || 0;
+  const base = parseInt((/\d+/.exec(s) || ['0'])[0], 10);
+  let v = base;
+  const per = /\+\s*(\d+)\s+for each spell level above\s+(\d+)/i.exec(s);
+  if (per) v += +per[1] * Math.max(0, L - +per[2]);
+  if (/\+\s*(?:the\s+)?(?:spell'?s\s+level|level of the spell)/i.test(s)) v += L;
+  return v;
+}
+// The lowest level the summoning spell is cast at, read off the same text.
+function sktSummonBaseLevel(raw){
+  const t = String((raw && raw.hp_special) || '') + ' ' + String((raw && raw.ac_special) || '');
+  const m = /spell level above\s+(\d+)/i.exec(t);
+  return m ? +m[1] : null;
+}
+// "• 1: Charm Ray wis DC 16.  13 (3d8) Psychic damage, and the target has the
+// Charmed condition…  Half damage only." → one entry per numbered ray.
+function _sktRayTable(desc){
+  const ABIL = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+  const out = [];
+  const re = /•\s*(\d+)\s*:\s*([^•]+)/g;
+  let m;
+  while ((m = re.exec(desc))){
+    const body = m[2].trim();
+    const nm = (/^([A-Z][\w'’\- ]*?(?:Ray|Gaze|Beam|Bolt))\b/.exec(body) || /^([^.]+?)\s+(?:str|dex|con|int|wis|cha)\s+DC/i.exec(body) || /^([^.:]+)/.exec(body))[1].trim();
+    const s24 = /\b(str|dex|con|int|wis|cha)\s+DC\s*(\d+)/i.exec(body), s14 = /DC\s*(\d+)\s+(\w+)\s+saving throw/i.exec(body);
+    const parts = _sktDamageClauses(body).map(p => ({ avg: p.avg, dice: p.dice, type: p.type }));
+    out.push({ n: +m[1], name: nm, dc: s24 ? +s24[2] : s14 ? +s14[1] : null, ability: s24 ? ABIL[s24[1].toLowerCase()] : s14 ? s14[2] : '',
+               parts, half: /half damage|half as much/i.test(body),
+               effect: body.replace(/^[^.]*?DC\s*\d+[^.]*\.\s*/i, '').replace(/\s+/g, ' ').slice(0, 220) });
+  }
+  return out;
+}
 function sktParseMonsterAttacks(raw){
   if (!raw) return [];
   const groups = [
@@ -1507,19 +1619,20 @@ function sktParseMultiattack(raw){
   if (!raw) return null;
   const act = (raw.actions || []).find(a => /^multiattack/i.test(String(a && a.name || '').trim()));
   if (!act) return null;
-  const text = _stripTagsIfAvailable(act.desc || '');
+  // (and without the italic markers round "\x05Afterthought\x05")
+  const text = _stripTagsIfAvailable(act.desc || '').replace(/[\x01-\x07]/g, '');
   if (!text) return null;
   const counts = {}, soft = new Set();
   const TIMES_W = { once: 'one', twice: 'two', thrice: 'three' };
   // A name as the prose gives it, as an action would be called: no "its",
   // no "melee"/"weapon" ("two Trident melee attacks"); an unarmed strike.
   const clean = (s, strike) => {
-    let t = String(s || '').trim().toLowerCase().replace(/^(?:either\s+)?(?:its|his|her|their|the)\s+/, '').replace(/^either\s+/, '').replace(/^[+-]\d+\s+/, '').replace(/\s+(?:melee|ranged|weapon|only)$/, '').trim();
+    let t = String(s || '').trim().toLowerCase().replace(/^(?:either\s+)?(?:its|his|her|their|the)\s+/, '').replace(/^either\s+/, '').replace(/^[+-]\d+\s+/, '').replace(/\s+(?:melee|ranged|only)$/, '').replace(/(?<!breath)\s+weapon$/, '').trim();
     if (strike && !/strike$/.test(t)) t = t + ' strike';
     return t;
   };
   // Junk a lazy match can swallow: "attacks with his shortsword and two".
-  const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?)\b/.test(t) || /^(?:a|an|one|other|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
+  const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?|makes?)\b/.test(t) || /^(?:a|an|one|other|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
   // "a Lightning Antlers attack and a Thunder Hooves attack": one each.
   const num = w => /^an?$/i.test(String(w || '')) ? 1 : _sktCount(w);
   const add = (w, s, strike) => { const n = num(w), t = clean(s, strike); if (!n || junk(t)) return false; counts[t] = Math.max(counts[t] || 0, n); return true; };
@@ -1534,7 +1647,8 @@ function sktParseMultiattack(raw){
   // "makes two Slam attacks", "makes up to three Bite attacks", "makes one
   // bite attack and two unarmed strikes", "uses his staff to make three Arcane Blast attacks"
   // (and the middle of a list: "one Claw attack, one Tentacles attack, and one Trident attack")
-  const reNamed = /(?:\bmakes?|,\s+and|\band|,)\s+(?:up\s+to\s+)?(\w+)\s+([A-Za-z][\w'’\- ]*?)\s+(attacks?|strikes?)\b/gi;
+  // (or the start of an alternative: "…or | two fist attacks")
+  const reNamed = /(?:^|\bmakes?|,\s+and|\band|,)\s*(?:up\s+to\s+)?(\w+)\s+([A-Za-z][\w'’\- ]*?)\s+(attacks?|strikes?)\b/gi;
   // A rejected match (", the werebear makes two claw attacks" read from the
   // comma) is searched again from just past where it began, or it hides the
   // real "makes two claw attacks" inside it.
@@ -1543,18 +1657,39 @@ function sktParseMultiattack(raw){
   // attacks with his shortsword and two attacks with his rapier", "one
   // attack with its spear", "two melee attacks with its staff"
   // (an em dash ends a name too: "three attacks—one with its slam and two with its eldritch turrets—")
-  const reWith = /(\w+)\s+(?:(?:melee|ranged|weapon)\s+)?(?:attacks?\s+)?with\s+(?:its|his|her|their|the)?\s*([A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|—|\band\b|\bor\b|$))/gi;
+  // (a bonus in the name: "two with her +1 rapier")
+  const reWith = /(\w+)\s+(?:(?:melee|ranged|weapon)\s+)?(?:attacks?\s+)?with\s+(?:its|his|her|their|the)?\s*((?:[+-]\d+\s+)?[A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|—|\band\b|\bor\b|$))/gi;
   while ((m = reWith.exec(text))) add(m[1], m[2]);
   // "attacks twice with her flail and once with Matalotok", "three times with its daggers"
-  const reTimes = /\b(once|twice|thrice|\w+\s+times)\s+with\s+(?:its|his|her|their|the)?\s*([A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|\band\b|\bor\b|$))/gi;
+  const reTimes = /\b(once|twice|thrice|\w+\s+times)\s+with\s+(?:its|his|her|their|the)?\s*((?:[+-]\d+\s+)?[A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|\band\b|\bor\b|$))/gi;
   const TIMES = { once: 'one', twice: 'two', thrice: 'three' };
   while ((m = reTimes.exec(text))) add(TIMES[m[1].toLowerCase()] || m[1].split(/\s+/)[0], m[2]);
-  // "uses Polar Ray twice", "uses its Mind Thrust twice"
-  const reUses = /\buses?\s+(?:its|his|her|their)?\s*([A-Z][\w'’\- ]*?)\s+(once|twice|thrice|\w+\s+times)\b/g;
+  // "uses Polar Ray twice", "uses its Mind Thrust twice", "uses eldritch blast twice"
+  const reUses = /\buses?\s+(?:its|his|her|their)?\s*([A-Za-z][\w'’\- ]*?)\s+(once|twice|thrice|\w+\s+times)\b/gi;
   // A used ability may be no attack at all (Fear Gaze): `soft`, so a plan
   // isn't refused for leaving it out.
   while ((m = reUses.exec(text))){ if (add(TIMES[m[2].toLowerCase()] || m[2].split(/\s+/)[0], m[1])) soft.add(clean(m[1])); }
+  // "attacks with its bite and uses Eradication Gaze": one bite.
+  const reOnce = /\battacks\s+with\s+(?:its|his|her|their)\s+((?:[+-]\d+\s+)?[A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|\band\b|\bor\b|$))/gi;
+  while ((m = reOnce.exec(text))) add('one', m[1]);
+  // "uses Constrict and Touch of Order", "uses its orange blossom, then its
+  // yellow blossom, and then its red blossom", "and uses Eradication Gaze":
+  // one each (soft — some are no attack).
+  const reUse1 = /\buses\s+((?:(?:its|his|her|their)\s+)?[A-Za-z][\w'’\- ]*?(?:(?:\s*,\s*(?:and\s+)?(?:then\s+)?|\s+and\s+(?:then\s+)?)(?:(?:its|his|her|their)\s+)?[A-Za-z][\w'’\- ]*?)*)(?=\s*(?:[.;]|$|\s+if\b|\s+once\b|\s+twice\b|,\s+(?:or|and)\s+(?:makes?|casts?)|,\s*(?:or|and)\s+(?:it|he|she)\b|\s+and\s+(?:makes?|casts?)\b|\s+to\s+make\b))/gi;
+  while ((m = reUse1.exec(text))){
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 24);
+    // A count follows (reUses has it), or it's only "if available" — a
+    // recharge the DM decides on, not a step to run.
+    if (/^\s*(?:once|twice|thrice|\w+\s+times)\b|^\s*\(?if\s+(?:it'?s\s+|it\s+is\s+)?available/i.test(after)) continue;
+    m[1].split(/\s*,\s*(?:and\s+)?(?:then\s+)?|\s+and\s+(?:then\s+)?/i).forEach(x => { if (add('one', x)) soft.add(clean(x)); });
+  }
   };
+  // "makes three attacks using its chain, bite, or both", "attacks three
+  // times using his unarmed strike, darts, or both": a choice each swing.
+  // (and Mammon's "makes four attacks using Tail Swipe, Constrict, or a combination of the two")
+  const both = /(?:makes\s+(\w+)\s+attacks?|attacks\s+(once|twice|thrice|\w+\s+times))\s+using\s+(?:(?:its|his|her|their)\s+)?(.+?),?\s+or\s+(?:both|a\s+combination(?:\s+of\s+(?:the\s+)?(?:two|them))?)/i.exec(text);
+  // "It can replace one attack with Deadly Shaping if it is ready": not a count.
+  alts[0] = alts[0].replace(/(?:^|\.\s+|,\s*and\s+)(?:it|he|she|they|the\s+\w+)\s+can\s+(?:replace|substitute)\b[^.]*(?:\.|$)/gi, '. ');
   // "makes two melee attacks", "three melee weapon attacks": any of its attacks.
   const ANY_RE = /makes\s+(\w+)\s+(?:(?:melee|ranged|weapon)\s+){0,2}attacks?\b(?!\s*:\s*\S)/i;
   // "…three melee attacks, but can use Constrict only once": a limit, not a count.
@@ -1564,6 +1699,18 @@ function sktParseMultiattack(raw){
   // The first alternative naming nothing ("three melee weapon attacks.
   // Alternatively, two ranged attacks with its javelins") is still the default.
   if (!Object.keys(counts).length && alts.length > 1 && !ANY_RE.test(alts[0])) countIn(text);
+  // Each later alternative's own counts, for when the first names nothing
+  // the stat block can roll ("two longsword attacks or two fist attacks" on
+  // a knight whose longsword didn't parse).
+  const altCounts = alts.slice(1).map(a => {
+    const keep = Object.assign({}, counts);
+    Object.keys(counts).forEach(k => delete counts[k]);
+    countIn(a);
+    const got = Object.assign({}, counts);
+    Object.keys(counts).forEach(k => delete counts[k]);
+    Object.assign(counts, keep);
+    return got;
+  }).filter(c => Object.keys(c).length);
   // A choice of attacks, each swing any of them: "makes three attacks, using
   // Greataxe or Javelin in any combination" (2024), "two Greatsword or Heavy
   // Crossbow attacks", "two attacks with its greataxe or its spear". The
@@ -1577,11 +1724,17 @@ function sktParseMultiattack(raw){
     || (() => { const x = /makes\s+either\s+(\w+)\s+(.+?)\s+attacks?,?\s+(?:or\s+)?\1\s+(.+?)\s+attacks?/i.exec(text); return x ? [x[0], x[1], x[2] + ' or ' + x[3]] : null; })()
     // "two Greatsword or Heavy Crossbow attacks", "two Longsword, Musket, or Pistol attacks", "two Dagger or +1 Longsword attacks"
     || /makes\s+(\w+)\s+([A-Za-z+][\w'’,+\- ]*?\s+or\s+[A-Za-z+][\w'’+\- ]*?)\s+attacks?\b/i.exec(text)
-    || /makes\s+(\w+)\s+attacks?\s+with\s+((?:(?:its|his|her|their)\s+)?[\w'’+\- ]+?(?:(?:\s*,\s*|\s+or\s+)(?:its|his|her|their)?\s*[\w'’+\- ]+?)?)(?=\s*[.,;]|$)/i.exec(text)
+    // ("two attacks, either with its glaive or its longbow")
+    || /makes\s+(\w+)\s+attacks?,?\s+(?:either\s+)?with\s+((?:(?:its|his|her|their)\s+)?[\w'’+\- ]+?(?:(?:\s*,\s*|\s+or\s+)(?:its|his|her|their)?\s*[\w'’+\- ]+?)?)(?=\s*[.,;]|$)/i.exec(text)
     // "attacks twice, either with his longsword or dagger"
     || (() => { const x = /attacks\s+(once|twice|thrice|\w+\s+times),?\s+(?:either\s+)?with\s+(?:its|his|her|their)\s+([\w'’+\- ]+?\s+or\s+(?:(?:its|his|her|their)\s+)?[\w'’+\- ]+?)(?=\s*[.,;]|$)/i.exec(text); return x ? [x[0], TIMES_W[x[1].toLowerCase()] || x[1].split(/\s+/)[0], x[2]] : null; })();
   // A choice whose "names" are junk ("melee attacks or two ranged") is no choice.
   if (cm && _sktCount(cm[1]) && names(cm[2]).length && !names(cm[2]).some(junk)) combo = { n: _sktCount(cm[1]), names: names(cm[2]) };
+  if (!combo && both){
+    const nb = _sktCount(both[1] || TIMES_W[String(both[2]).toLowerCase()] || String(both[2]).split(/\s+/)[0]);
+    const nn = names(both[3].replace(/\s*,?\s*(?:its|his|her|their)\s+/gi, ', '));
+    if (nb && nn.length && !nn.some(junk)) combo = { n: nb, names: nn };
+  }
   // "one Bite attack and three other attacks, using Claw or Tail in any
   // combination" (the Tarrasque): the bite, then three swings of a choice.
   const other = !combo && /(\w+)\s+other\s+attacks?,?\s+using\s+(.+?)\s+in any combination/i.exec(text);
@@ -1596,8 +1749,33 @@ function sktParseMultiattack(raw){
     combo = { n: Math.max(...Object.values(counts)), names: Object.keys(counts), forms: true };
   // Or none named at all — "makes two attacks", "two melee attacks": any of its attacks.
   // A bare "makes three attacks:" whose list the data lost counts as that too.
-  const any = !combo && !Object.keys(counts).length && ANY_RE.exec(alts[0]);
+  const hard = () => Object.keys(counts).filter(k => !soft.has(k));
+  const any = !combo && !hard().length && ANY_RE.exec(alts[0]);
   if (any && _sktCount(any[1]) && !/\bwith\b/i.test(text.slice(any.index, any.index + any[0].length + 6))) combo = { n: _sktCount(any[1]), names: [], any: true, melee: /melee/i.test(any[0]) };
+  // Counts the sentence doesn't fix. A summoned spirit's "a number of Rend
+  // attacks equal to half this spell's level" (worked out from the casting,
+  // `perSpell`); a deck defender's "half its proficiency bonus" (from its CR);
+  // a hydra's "as many bite attacks as it has heads" (asked, `ask`, with the
+  // number its traits start it at).
+  const dyn = /makes\s+a\s+number\s+of\s+(?:([A-Za-z][\w'’\- ]*?)\s+)?attacks?\s+equal\s+to\s+half\s+(?:(?:this|the)\s+spell'?s\s+level|the\s+level\s+of\s+the\s+spell|(its\s+proficiency\s+bonus))/i.exec(text);
+  const many = /makes\s+as\s+many\s+([A-Za-z][\w'’\- ]*?)\s+attacks?\s+as\s+it\s+has\s+([A-Za-z][\w ]*?)(?=\s*[,.;]|\s+and\b|$)/i.exec(text);
+  Object.keys(counts).forEach(k => { if (/^number of\b/.test(k)) delete counts[k]; });
+  // "…equal to half the summoner's Proficiency Bonus (rounded up)" (an Avatar of Death): asked.
+  const byPb = !dyn && /makes\s+a\s+number\s+of\s+(?:([A-Za-z][\w'’\- ]*?)\s+)?attacks?\s+equal\s+to\s+half\s+the\s+summoner'?s\s+proficiency\s+bonus/i.exec(text);
+  if (byPb){
+    combo = { n: 0, ask: 'attacks (half the summoner’s Proficiency Bonus, rounded up)', dflt: 2, names: byPb[1] ? [clean(byPb[1])] : [], any: !byPb[1] };
+  } else if (dyn){
+    const nm = dyn[1] ? [clean(dyn[1])] : [];
+    combo = dyn[2] ? { n: Math.max(1, Math.floor(sktPbForCR(raw.challenge_rating) / 2)), names: nm, any: !nm.length }
+                   : { n: 0, perSpell: true, names: nm, any: !nm.length };
+    if (Object.keys(counts).length) combo.plus = true;
+  } else if (many){
+    const what = many[2].trim().toLowerCase();
+    const traits = JSON.stringify([].concat(raw.special_abilities || [], raw.trait || []).map(t => t && (t.name + ': ' + t.desc)));
+    const has = new RegExp('has\\s+(\\w+)\\s+' + what.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').exec(traits);
+    combo = { n: 0, ask: what, dflt: has ? (_sktCount(has[1]) || 0) : 0, names: [clean(many[1])] };
+    if (Object.keys(counts).length) combo.plus = true;
+  }
   // "It can replace one attack with a Bite attack": one more choice.
   const rep = /replace\s+(?:one|any)\s+(?:of\s+(?:the|those)\s+)?attacks?\s+with\s+(?:a|an|one)\s+([A-Za-z][\w'’\- ]*?)\s+attack/i.exec(text);
   if (combo && rep) combo.extra = [rep[1].trim().toLowerCase()];
@@ -1605,7 +1783,7 @@ function sktParseMultiattack(raw){
   const only = /only one of which can be (?:a|an|its)\s+([A-Za-z][\w'’\- ]*?)\s+attack/i.exec(text);
   if (combo && only) combo.notDefault = only[1].trim().toLowerCase();
   else if (combo && onlyOnce) combo.notDefault = clean(onlyOnce[1]);
-  return { text, counts, combo, soft: [...soft] };
+  return { text, counts, combo, soft: [...soft], altCounts };
 }
 // _stripTags lives in data-loader.js, which is not guaranteed to have parsed
 // yet in every context that loads utils.js. Descriptions are already stripped
@@ -2213,16 +2391,30 @@ function sktD(sides){
 // detail:'—'} rather than throwing, because callers render the detail straight
 // into the log. Total is floored at 0: a modifier must not heal the target.
 function sktRollDice(expr){
-  const m = String(expr || '').replace(/\s+/g, '').match(/^(\d*)d(\d+)([+-]\d+)?$/i);
-  if (!m) return { total: 0, detail: '—' };
-  const n = parseInt(m[1] || '1'), sides = parseInt(m[2]), mod = parseInt(m[3] || '0');
-  const rolls = [];
-  for (let i = 0; i < n; i++) rolls.push(sktD(sides));
-  const sum = rolls.reduce((a, b) => a + b, 0);
-  return {
-    total: Math.max(0, sum + mod),
-    detail: rolls.join('+') + (mod ? (mod > 0 ? '+' + mod : String(mod)) : ''),
-  };
+  const s = String(expr || '').replace(/\s+/g, '');
+  const m = s.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+  if (m){
+    const n = parseInt(m[1] || '1'), sides = parseInt(m[2]), mod = parseInt(m[3] || '0');
+    const rolls = [];
+    for (let i = 0; i < n; i++) rolls.push(sktD(sides));
+    const sum = rolls.reduce((a, b) => a + b, 0);
+    return {
+      total: Math.max(0, sum + mod),
+      detail: rolls.join('+') + (mod ? (mod > 0 ? '+' + mod : String(mod)) : ''),
+    };
+  }
+  // Any sum of dice and numbers: an Orc War Chief's "1d12+4+1d8", a marut's
+  // flat "60". Both came out as 0 — the one shape read was "XdY+N".
+  if (!/^[+-]?(?:\d*d\d+|\d+)(?:[+-](?:\d*d\d+|\d+))*$/i.test(s)) return { total: 0, detail: '—' };
+  let total = 0; const bits = [];
+  s.replace(/([+-]?)(\d*d\d+|\d+)/gi, (_, sign, term) => {
+    const k = sign === '-' ? -1 : 1;
+    const d = /^(\d*)d(\d+)$/i.exec(term);
+    if (d){ const r = []; for (let i = 0; i < parseInt(d[1] || '1', 10); i++) r.push(sktD(parseInt(d[2], 10))); total += k * r.reduce((a, b) => a + b, 0); bits.push((bits.length || k < 0 ? (k < 0 ? '-' : '+') : '') + '(' + r.join('+') + ')'); }
+    else { total += k * parseInt(term, 10); bits.push((bits.length || k < 0 ? (k < 0 ? '-' : '+') : '') + term); }
+    return '';
+  });
+  return { total: Math.max(0, total), detail: bits.join('') };
 }
 
 // ─── Reduced maximum HP ──────────────────────────────────────────────────────

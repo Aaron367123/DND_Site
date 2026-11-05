@@ -14077,7 +14077,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
            names(plan('Hill Giant', 'MM')) + ' / ' + names(plan('Adult Red Dragon', 'MM')));
         ok('multiattack: a 2024 "three attacks, using Greataxe or Javelin in any combination" is three swings, each a choice',
            names(plan('Berserker Commander', 'XMM')) === 'Greataxe*,Greataxe*,Greataxe*', names(plan('Berserker Commander', 'XMM')));
-        ok('multiattack: a vampire\'s "Grave Strike (Vampire Form Only)" is the Grave Strike the prose counts', names(plan('Vampire', 'XMM')) === 'Grave Strike,Grave Strike', names(plan('Vampire', 'XMM')));
+        ok('multiattack: a vampire\'s "Grave Strike (Vampire Form Only)" is the Grave Strike the prose counts, then Bite', names(plan('Vampire', 'XMM')) === 'Grave Strike,Grave Strike,Bite', names(plan('Vampire', 'XMM')));
         ok('multiattack: a werebear attacks as one form or the other — two swings, not four', names(plan('Werebear', 'MM')) === 'Claw*,Claw*', names(plan('Werebear', 'MM')));
         ok('multiattack: "two attacks with its scimitar", "two melee attacks", "only one of which can be a bite"',
            names(plan('Goblin Boss', 'MM')) === 'Scimitar,Scimitar' && names(plan('Spy', 'MM')) === 'Shortsword*,Shortsword*' && names(plan('Vampire Spawn', 'MM')) === 'Claws*,Claws*',
@@ -14157,7 +14157,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     // -- Round 196: Multiattack wordings — alternatives aren't summed, lists keep every item, "+1" and "Short bow" match --
     if (!PLAYER){
       try {
-        const atk = (name, extra) => Object.assign({ name, desc: 'Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) slashing damage.' }, extra || {});
+        const atk = (name, extra) => Object.assign({ name, desc: (/bow|sling/i.test(name) ? 'Ranged' : 'Melee') + ' Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) slashing damage.' }, extra || {});
         const raw = (text, names) => ({ name: 'R196', actions: [{ name: 'Multiattack', desc: text }].concat(names.map(n => atk(n))) });
         const plan = (text, names) => { const rw = raw(text, names); const p = { multi: sktParseMultiattack(rw), attacks: sktParseMonsterAttacks(rw) }; return panelDefs.attacks._plan(p).map(x => x.name + (x.choice && x.choice.length > 1 ? '*' : '')).join(','); };
         const cases = [
@@ -14175,11 +14175,96 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ['Ras Nsi makes three melee attacks, but can use Constrict only once.', ['Constrict', 'Longsword'], 'Longsword*,Longsword*,Longsword*'],
           ['The tarrasque makes one Bite attack and three other attacks, using Claw or Tail in any combination.', ['Bite', 'Claw', 'Tail'], 'Bite,Claw*,Claw*,Claw*'],
           ['The giant makes two adamantine greatclub attacks.', ['Greatclub', 'Rock'], 'Greatclub,Greatclub'],
-          ['Amarith makes two longsword attacks. If it has a shortsword drawn, it can also make a shortsword attack.', ['Warhammer', 'Shortsword'], ''],
+          ['Amarith makes two longsword attacks. If it has a shortsword drawn, it can also make a shortsword attack.', ['Warhammer', 'Shortsword', 'Heavy Crossbow'], 'Warhammer,Warhammer,Shortsword'],
         ];
         const bad = cases.filter(([t, n, want]) => plan(t, n) !== want).map(([t, n, want]) => t.slice(0, 40) + '… → ' + plan(t, n) + ' (want ' + want + ')');
         ok('multiattack wordings: ' + cases.length + ' stat-block sentences plan the right swings', !bad.length, bad.join(' | '));
       } catch(e){ ok('round 196 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 197: every Multiattack plans — attack lines read, summoned spirits from their casting, heads asked, saves rolled in the run --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, realD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const P = sktParseMonsterAttack;
+        const flat = P({ name: 'Unerring Slam', desc: 'Melee Weapon Attack: automatic hit, reach 5 ft., one target. Hit: 60 force damage, and the target is pushed.' });
+        const typeless = P({ name: 'Slam', desc: 'Melee Weapon Attack: +9 to hit, range 5 ft., one target. Hit: 10 (1d8 + 6).' });
+        const multi = P({ name: 'Phantasmic Assault', desc: 'Melee or Ranged Attack Roll: +8, reach 5 ft. or range 60 ft. Hit: 14 (4d6) Cold, Necrotic, Poison, or Psychic damage (horror\'s choice).' });
+        const nodmg = P({ name: 'Tendril', desc: 'Melee Weapon Attack: +7 to hit, reach 50 ft., one creature. Hit: The target is grappled (escape DC 15).' });
+        const sum = P({ name: 'Rend', desc: 'Melee Attack Roll: Bonus equals your spell attack modifier, reach 5 ft. Hit: 1d8 + 4 + summonSpellLevel Piercing damage.' });
+        ok('attack lines: "60 force damage", untyped "10 (1d8 + 6)", "Cold, Necrotic, or Psychic damage", a grapple with no damage, a spirit\'s "your spell attack modifier"',
+           flat && flat.toHit === 'auto' && flat.parts[0].dice === '60' && flat.parts[0].type === 'force'
+           && typeless && typeless.toHit === '+9' && typeless.parts[0].dice === '1d8+6'
+           && multi && multi.parts[0].type === 'cold' && multi.toHit === '+8'
+           && nodmg && nodmg.toHit === '+7' && !nodmg.parts.length && /grappled/.test(nodmg.effect)
+           && sum && sum.toHit === '@spell' && /summonSpellLevel/.test(sum.parts[0].dice),
+           JSON.stringify([flat, typeless && typeless.parts, multi && multi.parts, nodmg, sum && [sum.toHit, sum.parts]]));
+        window.sktD = n => n;
+        ok('dice: "1d12+4+1d8" and a flat "60" roll (they came out 0)', sktRollDice('1d12+4+1d8').total === 24 && sktRollDice('60').total === 60 && sktRollDice('2d6+3').total === 15,
+           JSON.stringify([sktRollDice('1d12+4+1d8'), sktRollDice('60')]));
+        window.sktD = realD;
+        ok('summons: 1d8+4+summonSpellLevel at level 4 is 1d8+8; "30 + 5 for each spell level above 2" at 4 is 40; "11 + the spell\'s level" 15',
+           sktSummonDice('1d8+4+summonSpellLevel', 4) === '1d8+8' && sktSummonNumber('30 (Land) + 5 for each spell level above 2', 4) === 40 && sktSummonNumber("11 + the spell's level", 4) === 15,
+           [sktSummonDice('1d8+4+summonSpellLevel', 4), sktSummonNumber('30 (Land) + 5 for each spell level above 2', 4), sktSummonNumber("11 + the spell's level", 4)].join(' '));
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const C = panelDefs.combat, T = panelDefs.turnview;
+        // A 2024 Bestial Spirit, summoned with a 4th-level slot by a caster at +7.
+        state.combatants = []; save();
+        C.addMonster(find('Bestial Spirit', 'XPHB')); await sleep(150);
+        const modal = [...document.querySelectorAll('.modal')].pop();
+        const sp = state.combatants[0];
+        ok('summons: a Bestial Spirit added is asked for its casting, and starts at the lowest level', !!modal && /Summoned/.test(modal.textContent) && sp.summon && sp.summon.level === 2 && sp.ac === 13 && sp.hp > 0, JSON.stringify([sp.summon, sp.hp, sp.ac]));
+        if (modal){
+          modal.querySelector('#mf-level').value = '4'; modal.querySelector('#mf-atk').value = '7'; modal.querySelector('#mf-dc').value = '15';
+          [...modal.querySelectorAll('button')].find(b => /^Set$/.test(b.textContent.trim())).click(); await sleep(150);
+        }
+        const sp2 = state.combatants[0];
+        const rend = T._attacksFor(sp2).find(a => a.name === 'Rend') || {};
+        const mo = T._multiOf(sp2);
+        ok('summons: at level 4 from a +7 caster — AC 15, Rend +7 for 1d8+8, and two Rends (half the spell\'s level)',
+           sp2.ac === 15 && rend.toHit === '+7' && (rend.parts || [])[0].dice === '1d8+8' && mo && mo.plan.map(x => x.name).join() === 'Rend,Rend',
+           JSON.stringify([sp2.ac, sp2.hp, rend.toHit, rend.parts, mo && mo.plan.map(x => x.name)]));
+        // A hydra: five bites by its traits, or however many heads it has now.
+        state.combatants = []; C.addMonster(find('Hydra', 'XMM')); await sleep(50);
+        document.querySelectorAll('.modal-backdrop').forEach(e => e.remove());
+        const hy = state.combatants[0];
+        const m5 = T._multiOf(hy); hy.multiCount = 7; const m7 = T._multiOf(hy);
+        ok('heads: a hydra runs five Bites, seven when it has grown seven heads', m5 && m5.ask && m5.plan.length === 5 && m7.plan.length === 7, [m5 && m5.plan.length, m7 && m7.plan.length].join(' '));
+        // A beholder's Eye Rays: the run rolls a ray, then the target's save.
+        const bh = find('Beholder', 'XMM');
+        const eye = sktParseMonsterAttacks(bh._raw).find(a => a.name === 'Eye Rays') || {};
+        ok('eye rays: the beholder\'s table reads as ten rays, each its own save', (eye.rays || []).length === 10 && eye.rays[0].name === 'Charm Ray' && eye.rays[0].dc === 16 && eye.rays[0].ability === 'Wisdom', JSON.stringify((eye.rays || []).slice(0, 2)));
+        state.combatants = []; C.addMonster(bh); await sleep(50);
+        state.combatants.push({ id: 'r197t', name: 'Dummy', isPC: false, hp: 300, hpMax: 300, ac: 10, initiative: 1, conditions: [] });
+        const b = state.combatants[0]; state.activeCombatantId = b.id; save();
+        openPanel('turnview'); await sleep(300);
+        const mb = T._multiOf(b);
+        ok('eye rays: the beholder runs three Eye Rays', mb && mb.plan.length === 3 && mb.plan.every(x => x.name === 'Eye Rays'), JSON.stringify(mb && mb.plan));
+        const was = T._resolve; const got = [];
+        T._resolve = o => { got.push(o); if (T._queue){ T._queue.hits++; T._advanceQueue(); } };
+        try {
+          await T._startMulti();
+          // d10 → ray 3 (Fear Ray), the dummy's save a 1.
+          window.sktD = n => n === 10 ? 3 : n === 20 ? 1 : 1;
+          T._rollQueueStep('r197t');
+        } finally { T._resolve = was; window.sktD = realD; }
+        const r = got[0] || {};
+        ok('eye rays: a step rolls the ray (Fear Ray), the target\'s Wisdom save, and the ray\'s damage', /Eye Rays — Fear Ray/.test(r.label || '') && /WIS save/.test(r.detail || '') && r.parts && r.parts[0].type === 'psychic' && r.save,
+           JSON.stringify([r.label, r.detail, r.parts]));
+        T._finishMulti && T._queue && T._finishMulti(true);
+        // An automatic hit is a hit without a roll.
+        state.combatants = []; C.addMonster(find('Marut', 'MPMM')); await sleep(50);
+        state.combatants.push({ id: 'r197t', name: 'Dummy', isPC: false, hp: 300, hpMax: 300, ac: 40, initiative: 1, conditions: [] });
+        state.activeCombatantId = state.combatants[0].id; save();
+        const mar = state.combatants[0];
+        const ui = T._attacksFor(mar).findIndex(a => a.name === 'Unerring Slam');
+        const got2 = []; const was2 = T._resolve; T._resolve = o => got2.push(o);
+        window.sktD = () => 1;
+        try { T._rollAttack(ui, { attacker: mar, target: state.combatants[1] }); } finally { T._resolve = was2; window.sktD = realD; }
+        ok('auto hit: a marut\'s Unerring Slam hits AC 40 on a 1, for 60 force', got2[0] && got2[0].hit && got2[0].dmg === 60 && /automatic hit/.test(got2[0].hitNote), JSON.stringify(got2[0] && [got2[0].hit, got2[0].dmg, got2[0].hitNote]));
+        closePanel('turnview');
+      } catch(e){ ok('round 197 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = realD; document.querySelectorAll('.modal-backdrop').forEach(e => e.remove()); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {
