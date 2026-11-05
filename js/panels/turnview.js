@@ -1263,7 +1263,11 @@ registerPanel('turnview', {
           ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>` : ''}
           <button class="btn" data-tv="area" data-ai="${i}" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>`;
       } else if (a.pc ? !!a.dmgText : (a.parts || []).length){
-        ctl = `${rech}<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`;
+        ctl = `${rech}<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`
+          // A hit that then calls for a save (an assassin's poison): its damage, once the hit lands.
+          + (a.rider ? `<span class="tv-save" title="On a hit: ${esc((a.rider.parts || []).map(pt => pt.dice + ' ' + pt.type).join(' + '))}">then DC ${a.rider.dc} ${esc(String(a.rider.ability).slice(0,3).toUpperCase())}</span>
+          <button class="btn" data-tv="rider" data-ai="${i}" data-half="0" title="On a hit, the target failed the save: ${esc((a.rider.parts || []).map(pt => pt.dice + ' ' + pt.type).join(' + '))}">Failed</button>
+          ${a.rider.half ? `<button class="btn" data-tv="rider" data-ai="${i}" data-half="1" title="On a hit, the target made the save: half">Saved ½</button>` : ''}` : '');
       } else {
         ctl = `<span class="tv-act-note">no damage parsed</span>`;
       }
@@ -2650,17 +2654,21 @@ registerPanel('turnview', {
   // whether the target made its save. Halve BEFORE resistance and round down,
   // because 5e rounds down at each step and doing it after would hand a point
   // back.
-  _rollSave(ai, half){
+  // `rider`: the save an attack's hit calls for — part of that attack, so it
+  // spends nothing of its own.
+  _rollSave(ai, half, rider){
     const c = this._active();
     const t = this._order().find(x => x.id === this._armed);
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
-    const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
-    this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
-    if (a.recharge) this._markRechargeSpent(c, a.name);
-    this._markUsed(c, a);
-    this._spend(c, 'actionUsed');
+    const a = this._attacksFor(c)[ai]; if (!a || !(rider ? a.rider : a.save)) return;
+    this._snapshot(`${c.name} · ${a.name}${rider ? ' (save)' : ''} → ${t.name}`);
+    if (!rider){
+      if (a.recharge) this._markRechargeSpent(c, a.name);
+      this._markUsed(c, a);
+      this._spend(c, 'actionUsed');
+    }
     let detail = '';
-    const parts = (a.parts || []).map(pt => {
+    const parts = ((rider ? a.rider : a).parts || []).map(pt => {
       const r = this._roll(pt.dice);
       const amt = half ? Math.floor(r.total / 2) : r.total;
       detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (half ? ' ÷2' : '');
@@ -2960,6 +2968,7 @@ registerPanel('turnview', {
         }
       }
       else if (act === 'save'){ this._rollSave(+el.dataset.ai, el.dataset.half === '1'); }
+      else if (act === 'rider'){ this._rollSave(+el.dataset.ai, el.dataset.half === '1', true); }
       else if (act === 'area'){ this._areaSave(+el.dataset.ai); }
       else if (act === 'multi'){ this._startMulti(); }
       else if (act === 'legend'){ this._useLegendary(el.dataset.id, +el.dataset.ai); }

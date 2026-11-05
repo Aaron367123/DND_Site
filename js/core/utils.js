@@ -1332,7 +1332,15 @@ function sktParseMonsterAttack(action){
     saveAbility = ABIL[save2024[1].toLowerCase()] || save2024[1];
     saveAt = save2024.index;
   }
-  if (saveDc != null){
+  // An attack whose hit then calls for a save — the Assassin's shortsword,
+  // a giant spider's bite: "+6 to hit … Hit: 6 (1d6 + 3) piercing damage, and
+  // the target must make a DC 15 Constitution saving throw, taking 24 (7d6)
+  // poison damage". It read as the save alone: no attack roll, no piercing.
+  // It's an attack, and the save is a rider on it.
+  const hitAt = desc.search(/\bHit:/i);
+  const attackFirst = hitAt >= 0 && (saveAt < 0 || hitAt < saveAt)
+    && /([+-]\s*\d+)\s+to hit|\bAttack(?: Roll)?:\s*[+-]\s*\d+/i.test(desc.slice(0, hitAt));
+  if (saveDc != null && !attackFirst){
     const seg = _sktFirstDamageSentence(desc, saveAt);
     const parts = _sktDamageClauses(seg);
     if (parts.length){
@@ -1359,7 +1367,7 @@ function sktParseMonsterAttack(action){
   // Requiring "each creature in/within … takes" separates the two — the
   // ongoing cases say "the target takes" or "it takes".
   const areaM = desc.match(/each creature (?:in|within)[^.]{0,80}?\btakes\b/i);
-  if (areaM){
+  if (areaM && !attackFirst){
     const parts = _sktDamageClauses(_sktDamageSegment(desc, areaM.index));
     if (parts.length){
       return {
@@ -1374,9 +1382,17 @@ function sktParseMonsterAttack(action){
   // fire damage."
   const hitIdx = desc.search(/\bHit:/i);
   if (hitIdx === -1) return null;
-  const seg = _sktDamageSegment(desc, hitIdx);
+  // The hit's damage stops where a save begins; what the save deals is the rider.
+  const riderAt = saveDc != null && saveAt > hitIdx ? saveAt : -1;
+  const seg = _sktDamageSegment(desc, hitIdx).slice(0, riderAt > 0 ? riderAt - hitIdx : undefined);
   const clauses = _sktDamageClauses(seg);
-  if (!clauses.length) return null;
+  // A hit that deals nothing itself ("Hit: the target must make a DC 13
+  // Constitution saving throw, taking 9 (2d8) poison damage"): the save is it.
+  if (!clauses.length) return riderAt > 0 ? sktParseMonsterAttack(Object.assign({}, action, { desc: desc.slice(riderAt) })) : null;
+  const riderParts = riderAt > 0 ? _sktDamageClauses(_sktDamageSegment(desc, riderAt)) : [];
+  const rider = riderParts.length ? { dc: saveDc, ability: saveAbility,
+    half: /half as much|half damage|half the damage/i.test(desc.slice(riderAt)),
+    parts: riderParts.map(p => ({ avg: p.avg, dice: p.dice, type: p.type })) } : null;
 
   // Split additive from alternative by the connector in front of each clause.
   // Anything introduced by "or" is a different way to make the SAME attack.
@@ -1404,6 +1420,7 @@ function sktParseMonsterAttack(action){
     parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
     alt: alt.length ? alt.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})) : null,
     altLabel: altLabel || (alt.length ? 'alternate' : ''),
+    rider,
   };
 }
 

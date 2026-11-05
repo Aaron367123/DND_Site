@@ -13970,6 +13970,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 190 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 191: an attack whose hit calls for a save is an attack with a rider, not the save alone --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const asn = find('Assassin', 'MM');
+        const sw = sktParseMonsterAttacks(asn._raw).find(a => a.name === 'Shortsword') || {};
+        ok('hit then save: the Assassin\'s shortsword is +6 to hit for 1d6+3 piercing, then a DC 15 Con save for 7d6 poison (half on a save)',
+           sw.toHit === '+6' && !sw.save && JSON.stringify((sw.parts || []).map(p => p.dice + ' ' + p.type)) === '["1d6+3 piercing"]'
+           && sw.rider && sw.rider.dc === 15 && /^Con/.test(sw.rider.ability) && sw.rider.half && sw.rider.parts.map(p => p.dice + ' ' + p.type).join() === '7d6 poison', JSON.stringify(sw));
+        const plain = sktParseMonsterAttack({ name: 'Swallowing Bite', desc: 'Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 11 (2d6 + 4) piercing damage. If the target is a Medium or smaller creature, it must succeed on a DC 13 Dexterity saving throw or be swallowed. A swallowed creature takes 10 (3d6) acid damage at the start of each of its turns.' });
+        ok('hit then save: a save that deals no damage of its own is just the attack', plain && plain.toHit === '+6' && !plain.save && !plain.rider && plain.parts.length === 1 && plain.parts[0].dice === '2d6+4', JSON.stringify(plain));
+        const only = sktParseMonsterAttack({ name: 'Sting', desc: 'Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: The target must succeed on a DC 13 Constitution saving throw or take 9 (2d8) poison damage.' });
+        ok('hit then save: a hit that deals only the save\'s damage is that save', only && only.save && only.save.dc === 13 && only.parts[0].dice === '2d8' && only.name === 'Sting', JSON.stringify(only));
+        const fire = sktParseMonsterAttack({ name: 'Fire Breath (Recharge 5–6)', desc: 'The dragon exhales fire in a 60-foot cone. Each creature in that area must make a DC 21 Dexterity saving throw, taking 63 (18d6) fire damage on a failed save, or half as much damage on a successful one.' });
+        ok('hit then save: a breath weapon is still a save', fire && fire.save && fire.save.dc === 21 && !fire.toHit, JSON.stringify(fire));
+        // In the turn view: roll the hit, then apply the poison on a failed save.
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(asn); await sleep(50);
+        state.combatants.push({ id: 'r191t', name: 'Dummy', isPC: false, hp: 300, hpMax: 300, ac: 1, initiative: 1, conditions: [] });
+        const c = state.combatants[0]; state.activeCombatantId = c.id; save();
+        openPanel('turnview'); await sleep(300);
+        const T = panelDefs.turnview; T._armed = 'r191t'; T._render(); await sleep(100);
+        const row = [...document.querySelectorAll('.tv-act')].find(r => /Shortsword/.test(r.textContent));
+        ok('hit then save: its row has Roll and, after it, the save\'s Failed / Saved ½', !!row && !!row.querySelector('[data-tv="roll"]') && !!row.querySelector('[data-tv="rider"][data-half="0"]') && !!row.querySelector('[data-tv="rider"][data-half="1"]') && /then DC 15 CON/.test(row.textContent),
+           row && row.textContent.replace(/\s+/g, ' ').slice(0, 200));
+        const was = T._resolve; const got = [];
+        T._resolve = o => { got.push(o); };
+        try {
+          const ai = T._attacksFor(c).findIndex(a => a.name === 'Shortsword');
+          c.actionUsed = false;
+          T._rollSave(ai, true, true);
+        } finally { T._resolve = was; }
+        ok('hit then save: the save\'s poison is rolled and halved, and spends no action of its own', got.length === 1 && got[0].parts.length === 1 && got[0].parts[0].type === 'poison' && got[0].parts[0].amt <= 21 && !c.actionUsed,
+           JSON.stringify(got.map(o => [o.label, o.detail, o.parts])) + ' action ' + c.actionUsed);
+        closePanel('turnview');
+      } catch(e){ ok('round 191 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
