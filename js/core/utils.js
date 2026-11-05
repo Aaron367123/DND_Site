@@ -1726,6 +1726,54 @@ function sktGridFeet(dx, dy, rule, ftPerCell){
   return Math.max(x, y) * ft;
 }
 
+// A stat block's Regeneration, read: "The troll regains 10 hit points at the
+// start of its turn. If the troll takes acid or fire damage, this trait
+// doesn't function at the start of the troll's next turn. The troll dies only
+// if it starts its turn with 0 hit points and doesn't regenerate."
+//   hp      — what it regains;
+//   reduced — what it regains instead after the damage that hampers it (a
+//             dire troll's "regains only 5"), else 0;
+//   types   — the damage types that hamper it; magic/crit/spell/silver: the
+//             blows that do (a cloud giant ghost's magic weapon, a beast of
+//             Malar's critical hit, a wereraven's silvered weapon or spell);
+//   needHp  — "if it has at least 1 hit point" (a vampire, a slaad);
+//   atZero  — it comes back from 0 ("dies only if it starts its turn with 0
+//             hit points and doesn't regenerate");
+//   bloodied— only while Bloodied (a cultist of Bane);
+//   ifText  — a condition only the table can judge ("if it isn't in
+//             sunlight"), for the log.
+const _SKT_DMG_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
+function sktRegenOf(raw){
+  const list = (raw && raw.special_abilities) || [];
+  for (const t of list){
+    const txt = (typeof sktPlainEntries === 'function' ? sktPlainEntries(String(t.desc || '')) : String(t.desc || '')).replace(/[\x01-\x07]/g, '');
+    const m = /\bregains?\s+(\d+)\s+hit points at the start of (?:its|each of its|their) turns?\b([^.]*)/i.exec(txt);
+    if (!m) continue;
+    const tail = m[2] || '';
+    const out = { name: sktPlainEntries ? sktPlainEntries(String(t.name || '')) : String(t.name || ''), hp: +m[1], reduced: 0, types: [], magic: false, crit: false, spell: false, silver: false,
+                  needHp: /at least 1 hit point/i.test(tail) || /reduced to 0 hit points, this trait doesn'?t function/i.test(txt), atZero: /\b0 hit points and doesn'?t regenerate/i.test(txt), bloodied: /\bbloodied\b/i.test(tail), ifText: '' };
+    // Before the number ("If the temperature … is 100 degrees or higher, Aurnozci regains…").
+    const pre = txt.slice(0, m.index).split('.').pop();
+    const cond = [];
+    if (/^\s*if\b/i.test(pre)) cond.push(pre.trim().replace(/,\s*[^,]*$/, ''));
+    const env = /\b(?:and\s+)?(isn'?t in [^.]*|is in [^.]*)/i.exec(tail);
+    if (env) cond.push('if it ' + env[1].replace(/\s+$/, ''));
+    out.ifText = cond.join('; ');
+    const hamper = /\bif [^.]*?\btakes\s+([^.]*?)(?:,\s*(?:this trait doesn'?t function|it regains only\s+(\d+))|\s*,?\s*this trait)/i.exec(txt);
+    if (hamper){
+      const what = hamper[1].toLowerCase();
+      out.types = _SKT_DMG_TYPES.filter(k => new RegExp('\\b' + k + '\\b').test(what));
+      out.magic = /magic(?:al)? weapon/.test(what);
+      out.crit = /critical hit/.test(what) || /critical hit/i.test(hamper[0]);
+      out.spell = /\bspell\b/.test(what);
+      out.silver = /\bsilver(?:ed)?\b/.test(what);
+      if (hamper[2]) out.reduced = +hamper[2];
+    }
+    return out;
+  }
+  return null;
+}
+
 // Monsters whose stat block says their strikes count as magical — "Its weapon
 // attacks are magical". Matters because a target resistant to nonmagical
 // bludgeoning/piercing/slashing should NOT halve these, and sktResistApplies

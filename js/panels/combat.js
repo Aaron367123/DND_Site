@@ -1474,6 +1474,51 @@ registerPanel('combat',{
     if (c) this._tickCondTimers(c, 'end');
   },
 
+  // ─── Regeneration ─────────────────────────────────────────────────────────
+  // "The troll regains 10 hit points at the start of its turn. If the troll
+  // takes acid or fire damage, this trait doesn't function at the start of
+  // the troll's next turn." Applied as its turn begins (only going forward,
+  // never stepping back); the damage that hampers it is noted as it lands.
+  // What only the table can judge — sunlight, a spell, a silvered weapon — is
+  // said in the log rather than guessed.
+  _regenCache: new WeakMap(),
+  _regenFor(c){
+    const raw = c && !c.isPC && ((this.statBlockFor(c) || {})._raw);
+    if (!raw || typeof sktRegenOf !== 'function') return null;
+    if (!this._regenCache.has(raw)) this._regenCache.set(raw, sktRegenOf(raw));
+    return this._regenCache.get(raw);
+  },
+  _noteRegenHamper(c, dmgType){
+    const r = this._regenFor(c); if (!r) return;
+    const t = String(dmgType || '').toLowerCase();
+    if (r.types.includes(t) || (r.magic && this._lastAtkProp === 'magical') || (r.crit && this._lastAtkCrit)) c.regenHampered = true;
+  },
+  _regenerate(id){
+    const c = state.combatants.find(x => x.id === id); if (!c || c.isPC) return;
+    const r = this._regenFor(c); if (!r) return;
+    const hampered = !!c.regenHampered; c.regenHampered = false;
+    const hp = +c.hp || 0, max = +c.hpMax || 0;
+    if (r.needHp && hp <= 0) return;
+    if (r.bloodied && !(hp <= max / 2)) return;
+    const amt = hampered ? r.reduced : r.hp;
+    const by = [r.types.length && r.types.join(' or ') + ' damage', r.magic && 'a magic weapon', r.crit && 'a critical hit'].filter(Boolean).join(', ');
+    if (hampered && !amt){
+      this._log(`${c.name}'s ${r.name} doesn't work this turn — it took ${by || 'the damage that stops it'}`);
+      if (hp <= 0 && r.atZero){
+        this._log(`${c.name} starts its turn at 0 hit points and doesn't regenerate: it dies`);
+        if (typeof showToast === 'function') showToast(`💀 ${c.name} dies — it couldn't regenerate`, { alert: true });
+      }
+      return;
+    }
+    if (!(max > 0) || hp >= max) return;
+    const gain = Math.min(amt, max - hp);
+    c.hp = hp + gain;
+    const manual = [r.spell && 'a spell', r.silver && 'a silvered weapon'].filter(Boolean);
+    this._log(`${c.name} regenerates ${gain} HP (${r.name}${hampered ? ', hampered' : ''})`
+      + (r.ifText ? ` — ${r.ifText}` : '') + (manual.length ? ` — not if it took damage from ${manual.join(' or ')}` : ''));
+    if (hp <= 0 && typeof showToast === 'function') showToast(`${c.name} regenerates — back up at ${c.hp} HP`, { alert: true });
+  },
+
   _nextTurn(){
     if(!state.combatants.length){ showToast('No combatants yet'); return; }
     const id = state.activeCombatantId;
@@ -1490,6 +1535,7 @@ registerPanel('combat',{
       state.activeCombatantId = state.combatants[0].id;
       state.combatRound = Math.max(1, state.combatRound || 0);
       this._refreshTurnEconomy(state.activeCombatantId);
+      this._regenerate(state.activeCombatantId);
     } else {
       const prevInit = +state.combatants[cur].initiative || 0;
       let ni = cur + 1, wrapped = false;
@@ -1504,6 +1550,7 @@ registerPanel('combat',{
       const nextInit = +state.combatants[ni].initiative || 0;
       if ((wrapped || prevInit >= 20) && nextInit < 20) this._lairCheck();
       this._refreshTurnEconomy(state.activeCombatantId);
+      this._regenerate(state.activeCombatantId);
     }
     save();this._render();
   },
@@ -1536,6 +1583,7 @@ registerPanel('combat',{
     }
     state.activeCombatantId = state.combatants[ni].id;
     this._refreshTurnEconomy(state.activeCombatantId);
+    this._regenerate(state.activeCombatantId);
     this._log(`${c.name} removed — turn passes to ${state.combatants[ni].name}`);
   },
 
@@ -1939,6 +1987,8 @@ registerPanel('combat',{
         // excess damage is discarded (except for the massive-damage rule
         // below). Same defect party.js had; see AUDIT.
         c.hp = Math.max(0, hpBefore - damageDealt);
+        // A troll burned: no Regeneration at the start of its next turn.
+        if (!c.isPC && damageDealt > 0) this._noteRegenHamper(c, dmgType);
         logParts.push(damageDealt + ' HP');
         // PC dropped to 0, or took damage while already there:
         //   • Already dead → stays dead, no death-save state changes.

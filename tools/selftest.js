@@ -14463,6 +14463,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 201 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { T._resolve = keepR; T._queue = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR0; save(); }
     }
+    // -- Round 202: Regeneration — a troll's 10 at the start of its turn, not after fire --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR0 = state.combatRound, keepL = JSON.stringify(state.combatLog || []);
+      const C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const tr = sktRegenOf(find('Troll', 'MM')._raw) || {}, vs = sktRegenOf(find('Vampire Spawn', 'MM')._raw) || {}, dt = sktRegenOf(find('Dire Troll', 'MPMM')._raw) || {};
+        ok('regeneration: a troll regains 10, stopped by acid or fire, back from 0; a vampire spawn needs 1 hit point and isn\'t in sunlight; a dire troll regains only 5 after fire',
+           tr.hp === 10 && tr.types.join() === 'acid,fire' && tr.atZero && vs.hp === 10 && vs.needHp && /sunlight/.test(vs.ifText) && dt.reduced === 5,
+           JSON.stringify([tr, vs.needHp, vs.ifText, dt.reduced]));
+        const lg = sktRegenOf(find('Loup Garou', 'VRGR')._raw) || {}, ms = sktRegenOf(find('Mighty Servant of Leuk-o', 'TCE')._raw) || {};
+        ok('regeneration: a loup garou\'s "silver weapon" is noted for the table; the Mighty Servant stops at 0 hit points', lg.silver === true && ms.needHp === true, JSON.stringify([lg.silver, ms.needHp]));
+        state.combatants = []; save();
+        C.addMonster(find('Troll', 'MM')); C.addMonster(find('Vampire Spawn', 'MM')); await sleep(50);
+        const [troll, spawn] = state.combatants;
+        const hero = { id: 'r202h', name: 'Hero', isPC: false, hp: 30, hpMax: 30, ac: 10, initiative: 30, conditions: [] };
+        state.combatants = [hero, troll, spawn];
+        state.activeCombatantId = hero.id; state.combatRound = 1; save();
+        troll.hp = 50;
+        const ix = c => state.combatants.indexOf(c);
+        const toTurn = id => { for (let k = 0; k < 6 && state.activeCombatantId !== id; k++) C._nextTurn(); };
+        toTurn(troll.id);
+        ok('regeneration: the troll\'s turn begins and it regains 10', troll.hp === 60, String(troll.hp));
+        C._applyHpDelta(ix(troll), -7, 'bludgeoning');
+        toTurn(hero.id); toTurn(troll.id);
+        ok('regeneration: a club doesn\'t stop it', troll.hp === 63, String(troll.hp));
+        C._applyHpDelta(ix(troll), -8, 'fire');
+        ok('regeneration: fire is noted as it lands', troll.regenHampered === true && troll.hp === 55, JSON.stringify([troll.regenHampered, troll.hp]));
+        toTurn(hero.id); toTurn(troll.id);
+        const log = (state.combatLog || []).slice(-6).map(e => e.text).join(' | ');
+        ok('regeneration: after fire, not this turn — and the log says why', troll.hp === 55 && /doesn't work this turn — it took acid or fire damage/.test(log), troll.hp + ' ' + log);
+        toTurn(hero.id); toTurn(troll.id);
+        ok('regeneration: and works again the turn after', troll.hp === 65, String(troll.hp));
+        troll.hp = 0; toTurn(hero.id); toTurn(troll.id);
+        ok('regeneration: a troll at 0 hit points that wasn\'t burned gets back up', troll.hp === 10, String(troll.hp));
+        spawn.hp = 0; toTurn(hero.id); toTurn(spawn.id);
+        ok('regeneration: a vampire spawn at 0 hit points doesn\'t ("at least 1 hit point")', spawn.hp === 0, String(spawn.hp));
+        spawn.hp = spawn.hpMax - 3; toTurn(hero.id); toTurn(spawn.id);
+        ok('regeneration: never past its maximum', spawn.hp === spawn.hpMax, JSON.stringify([spawn.hp, spawn.hpMax]));
+        troll.hp = 40; C._prevTurn();
+        ok('regeneration: stepping back to the troll\'s turn doesn\'t regenerate it again', state.activeCombatantId === troll.id && troll.hp === 40, JSON.stringify([state.activeCombatantId === troll.id, troll.hp]));
+      } catch(e){ ok('round 202 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR0; state.combatLog = JSON.parse(keepL); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
