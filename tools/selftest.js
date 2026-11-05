@@ -13935,6 +13935,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 189 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 190: 2024 monsters' attacks roll with their bonus; damage only "if the attack roll had Advantage" waits for one --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const ogre = find('Ogre', 'XMM'), boss = find('Goblin Boss', 'XMM'), chief = find('Orc War Chief', 'MM');
+        const acts = m => ((m._raw || {}).actions || []);
+        const club = acts(ogre).find(a => a.name === 'Greatclub') || {}, jav = acts(ogre).find(a => a.name === 'Javelin') || {};
+        ok('2024 stat blocks: an ogre\'s Greatclub reads "Melee Attack Roll: +6", its Javelin "Melee or Ranged Attack Roll: +6"',
+           /^Melee Attack Roll: \+6,/.test(club.desc || '') && /^Melee or Ranged Attack Roll: \+6,/.test(jav.desc || ''), [club.desc, jav.desc].join(' | '));
+        const cached = sktParseMonsterAttack({ name: 'Greatclub', desc: 'Attack: +6, reach 5 ft. Hit: 13 (2d8 + 4) Bludgeoning damage.' });
+        ok('2024 stat blocks: text cached before the fix ("Attack: +6") still reads +6', cached && cached.toHit === '+6', JSON.stringify(cached));
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(ogre); panelDefs.combat.addMonster(boss); await sleep(50);
+        state.combatants.push({ id: 'r190t', name: 'Dummy', isPC: false, hp: 300, hpMax: 300, ac: 1, initiative: 1, conditions: [] });
+        const T = panelDefs.turnview;
+        const [og, gb] = state.combatants;
+        ok('2024 monsters: the ogre\'s attacks are +6 to hit, not +0', T._attacksFor(og).map(a => a.name + ' ' + a.toHit).join(', ') === 'Greatclub +6, Javelin +6', T._attacksFor(og).map(a => a.name + ' ' + a.toHit).join(', '));
+        const sc = T._attacksFor(gb).find(a => a.name === 'Scimitar') || {};
+        ok('2024 monsters: the goblin boss\'s extra 1d4 is marked as advantage-only', (sc.parts || []).length === 2 && !sc.parts[0].ifAdv && sc.parts[1].ifAdv === true && sc.toHit === '+4', JSON.stringify(sc));
+        const was = T._resolve; let got = [];
+        T._resolve = o => { got.push(o); };
+        try {
+          const ai = T._attacksFor(gb).indexOf(sc);
+          T._rollAttack(ai, { attacker: gb, target: state.combatants[2], mode: 0 });
+          T._rollAttack(ai, { attacker: gb, target: state.combatants[2], mode: 1 });
+        } finally { T._resolve = was; }
+        ok('2024 monsters: a straight roll leaves the 1d4 off; one with advantage adds it', got.length === 2 && got[0].parts.length === 1 && got[1].parts.length === 2,
+           JSON.stringify(got.map(o => [o.parts.length, o.detail, o.hitNote])));
+        const sp = sktParseMonsterAttacks(chief._raw).find(a => a.name === 'Greataxe') || {};
+        ok('stat blocks: the Orc War Chief\'s "1d12 + 4 plus 1d8" rolls as 1d12+4+1d8', (sp.parts || [])[0] && sp.parts[0].dice === '1d12+4+1d8', JSON.stringify(sp.parts));
+      } catch(e){ ok('round 190 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

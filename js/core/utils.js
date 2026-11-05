@@ -1241,11 +1241,16 @@ function _sktDamageClauses(segment){
   const re = _sktDamageRe();
   let m;
   while ((m = re.exec(segment))){
+    // A 2024 goblin's extra 1d4 "if the attack roll had Advantage", a Scout
+    // Captain's 3d6: only on such a roll.
+    const after = segment.slice(m.index + m[0].length, m.index + m[0].length + 60);
     out.push({
       avg: parseInt(m[1]),
-      dice: String(m[2]).replace(/\s+/g, ''),   // "2d10 + 8" → "2d10+8"
+      // "2d10 + 8" → "2d10+8"; "1d12 + 4 plus 1d8" (an Orc War Chief) → "1d12+4+1d8".
+      dice: String(m[2]).replace(/\s*plus\s*/gi, '+').replace(/\s+/g, ''),
       type: m[3].toLowerCase(),
       at: m.index,
+      ifAdv: /^\s*if the attack (?:roll )?(?:had|was made with) advantage/i.test(after) || undefined,
     });
   }
   return out;
@@ -1339,7 +1344,7 @@ function sktParseMonsterAttack(action){
         // phrasing here silently drops the Saved ½ button, so the DM applies
         // the full amount to a creature that made its save.
         half: /half as much|half damage|half the damage/i.test(desc) },
-        parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
+        parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
         alt: null, altLabel: '',
       };
     }
@@ -1359,7 +1364,7 @@ function sktParseMonsterAttack(action){
     if (parts.length){
       return {
         name, recharge, uses, toHit: null, save: null,
-        parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
+        parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
         alt: null, altLabel: '',
       };
     }
@@ -1391,13 +1396,13 @@ function sktParseMonsterAttack(action){
 
   // "+14 to hit" (2014) or "Melee Attack Roll: +7," (2024).
   const toHitM = desc.match(/([+-]\s*\d+)\s+to hit/i)
-              || desc.match(/Attack Roll:\s*([+-]\s*\d+)/i);
+              || desc.match(/\bAttack(?: Roll)?:\s*([+-]\s*\d+)/i);
   return {
     name, recharge, uses,
     toHit: toHitM ? toHitM[1].replace(/\s+/g, '') : null,
     save: null,
-    parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
-    alt: alt.length ? alt.map(p => ({avg:p.avg, dice:p.dice, type:p.type})) : null,
+    parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
+    alt: alt.length ? alt.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})) : null,
     altLabel: altLabel || (alt.length ? 'alternate' : ''),
   };
 }

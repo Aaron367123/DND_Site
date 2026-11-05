@@ -31,6 +31,13 @@ function _stripTags(str) {
   if (typeof str !== 'string') return String(str ?? '');
   return str
     // Combat / dice / save semantics — replaced with human-readable text.
+    // 2024 stat blocks: {@atkr m} "Melee Attack Roll:", {@atkr r}, {@atkr m,r}.
+    // These came out as a bare "Attack:", which the attack parser didn't read.
+    .replace(/\{@atkr ([^}]+)\}/g, (_, t) => {
+      const parts = t.split(',').map(p=>p.trim());
+      const m = parts.includes('m'), r = parts.includes('r');
+      return (m && r ? 'Melee or Ranged' : m ? 'Melee' : r ? 'Ranged' : '') + (m || r ? ' ' : '') + 'Attack Roll:';
+    })
     .replace(/\{@(?:atk|atkr) ([^}]+)\}/g, (_, t) => {
       const parts = t.split(',').map(p=>p.trim());
       const melee = parts.some(p=>p==='mw'||p==='ms');
@@ -827,7 +834,9 @@ function _normSearchIdx(s) {
 // 20260927a — itemSub/itemSpell bodies and monster spellcasting blocks now
 // survive conversion; every index cached before this is missing them.
 // 20261027a — 5etools 2.39 (Ravenloft: The Horrors Within, Arcana Unleashed…).
-const DATA_STAMP   = '20261027a';
+// 20261104a — 2024 {@atkr m} renders "Melee Attack Roll:", not a bare
+// "Attack:" that left every 2024 monster attack at +0 to hit.
+const DATA_STAMP   = '20261104a';
 // A hash of data/'s contents, stamped by tools/stamp-build.js — so a data
 // refresh renews every device's cache (here and in sw.js) without anyone
 // remembering to bump DATA_STAMP. DATA_STAMP stays for converter changes.

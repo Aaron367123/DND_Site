@@ -1242,7 +1242,7 @@ registerPanel('turnview', {
     const rows = list.map((a, i) => {
       const line = a.pc
         ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`)
-        : `${esc(a.toHit || '')}${a.toHit ? ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg} (${esc(pt.dice)}) ${esc(pt.type)}`).join(' + ')}`;
+        : `${esc(a.toHit || '')}${a.toHit ? ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg} (${esc(pt.dice)}) ${esc(pt.type)}${pt.ifAdv ? ' with advantage' : ''}`).join(' + ')}`;
       const spent = (c.rechargeSpent || []).includes(a.name);
       const left = a.pc ? null : this._usesLeft(c, a);
       const usedNow = left === 0 && (c.usesRound || {})[a.name] === (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
@@ -2406,7 +2406,8 @@ registerPanel('turnview', {
       parts = [{ amt: r.total, type: (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, '') }];
       detail = r.detail;
     } else {
-      parts = (a.parts || []).map(pt => {
+      // Damage that comes only with advantage is left off a roll without it.
+      parts = (a.parts || []).filter(pt => !pt.ifAdv || mode > 0).map(pt => {
         const r = this._roll(crit ? dbl(pt.dice) : pt.dice);
         detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail;
         return { amt: r.total, type: pt.type };
