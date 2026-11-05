@@ -13867,6 +13867,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('cantrip rows: a cantrip both the class and the species give is listed once, as the class\'s', rows(s).filter(x => /^Fire Bolt /.test(x)).join('|') === 'Fire Bolt +6 2d10 fire', JSON.stringify(rows(s)));
       } catch(e){ ok('round 187 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 188: Sneak Attack with a 2024 Cunning Strike — the dice it costs come off, the effect and its DC are named --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (id, lvl) => Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: id, cls: 'Rogue', level: lvl, species: 'Human', background: 'Guide',
+          abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 10, wis: 12, cha: 10 } } }), R), { id });
+        state.party = [mk('r188', 5), mk('r188b', 4)]; save();
+        await openCharSheet('r188'); await sleep(500);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(400);
+        const sel = document.querySelector('#cs-root [data-cs-cunning]');
+        const opts = sel ? [...sel.options].map(o => o.value).filter(Boolean) : [];
+        const txt = (document.querySelector('#cs-root') || {}).textContent || '';
+        ok('cunning strike: a level-5 rogue picks Poison, Trip or Withdraw, at save DC 14 (8 + Dex 3 + PB 3)', opts.join(',') === 'Poison,Trip,Withdraw' && /save DC 14\b/.test(txt), opts.join(',') + ' ' + (/save DC \d+/.exec(txt) || [''])[0]);
+        const btn = () => document.querySelector('#cs-root [data-cs-sneak]');
+        btn().click(); await sleep(200);
+        const full = CS.log[0] || {};
+        sel.value = 'Trip'; document.querySelector('#cs-root [data-cs-cunning]').value = 'Trip';
+        btn().click(); await sleep(200);
+        const trip = CS.log[0] || {};
+        const dice = r => ((String(r.detail || '').match(/\d+/g) || []).length);
+        ok('cunning strike: a plain Sneak Attack rolls 3d6; Trip rolls 2d6 and says so', btn().dataset.csSneak === '3d6' && full.label === 'Sneak Attack' && /^Sneak Attack — Trip/.test(trip.label) && trip.total >= 2 && trip.total <= 12 && trip !== full,
+           JSON.stringify([btn().dataset.csSneak, full.label, full.detail, trip.label, trip.detail, trip.total]));
+        document.querySelector('#cs-root [data-cs-cunning]').value = 'Poison'; btn().click(); await sleep(200);
+        ok('cunning strike: the dice rolled are 3d6, then 2d6 with Trip or Poison', /^3d6 /.test(full.detail) && /^2d6 /.test(trip.detail) && /^2d6 /.test(CS.log[0].detail) && /Poison/.test(CS.log[0].label),
+           JSON.stringify([full.detail, trip.detail, CS.log[0].label, CS.log[0].detail]));
+        csClose();
+        await openCharSheet('r188b'); await sleep(500);
+        document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(400);
+        ok('cunning strike: a level-4 rogue has no Cunning Strike to pick', !document.querySelector('#cs-root [data-cs-cunning]') && !!document.querySelector('#cs-root [data-cs-sneak]'), String(!!document.querySelector('#cs-root [data-cs-cunning]')));
+        csClose();
+      } catch(e){ ok('round 188 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
