@@ -1521,6 +1521,24 @@ registerPanel('combat',{
     if (hp <= 0 && typeof showToast === 'function') showToast(`${c.name} regenerates — back up at ${c.hp} HP`, { alert: true });
   },
 
+  // A monster's concentration save, rolled: kept, or the spell ends.
+  _rollConcFor(id, dc, spell){
+    const c = state.combatants.find(x => x.id === id);
+    if (!c || c.isPC || !c.concentration || (spell && c.concentration !== spell)) return null;
+    const sv = this.rollSave(c, 'con', dc, {});
+    const what = c.concentration;
+    if (sv.passed){
+      this._log(`${c.name} keeps concentrating on ${what} (CON ${sv.auto ? sv.detail : sv.total + ' vs DC ' + dc + ': ' + sv.detail})`);
+      showToast(`🌀 ${c.name} keeps ${what} — ${sv.total} vs DC ${dc}`);
+    } else {
+      c.concentration = null;
+      this._log(`${c.name} loses concentration — ${what} ends (CON ${sv.auto ? sv.detail : sv.total + ' vs DC ' + dc + ': ' + sv.detail})`);
+      showToast(`🌀 ${what} ends — ${c.name} rolled ${sv.auto ? 'an automatic failure' : sv.total + ' vs DC ' + dc}`, { alert: true });
+    }
+    save(); this._render(); panelDefs.turnview?._render?.();
+    return sv;
+  },
+
   _nextTurn(){
     if(!state.combatants.length){ showToast('No combatants yet'); return; }
     const id = state.activeCombatantId;
@@ -2074,7 +2092,13 @@ registerPanel('combat',{
       else if (conc && damageForConc > 0){
         const dc = sktConcDc(damageForConc, partySlot);
         // On a player's phone the save itself pops up; no reminder on top of it.
-        if (!document.body.classList.contains('player-app')) showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`, { alert: true });
+        // A monster's save can be rolled from the reminder itself (its bonus,
+        // its conditions); a character's is the player's to roll.
+        if (!document.body.classList.contains('player-app')){
+          const cid = c.id;
+          showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`,
+            c.isPC ? { alert: true } : { alert: true, action: { label: 'Roll it', run: () => this._rollConcFor(cid, dc, conc) } });
+        }
         // The player's phone asks them to roll it (player-app.js).
         if (c.isPC && partySlot) partySlot.concCheck = { id: uid(), dc, spell: conc, at: Date.now() };
       }

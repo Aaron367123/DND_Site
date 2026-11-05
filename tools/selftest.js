@@ -14662,6 +14662,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 205 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { T._resolve = keepR; T._d = keepD; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); closePanel('turnview'); }
     }
+    // -- Round 206: a monster's concentration save, rolled from the reminder --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepL = JSON.stringify(state.combatLog || []);
+      const C = panelDefs.combat, keepDie = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.combatants = []; save();
+        C.addMonster(find('Oni', 'MM')); await sleep(50);
+        const oni = state.combatants[0]; oni.concentration = 'Fly'; save();
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        C._applyHpDelta(0, -24, 'slashing'); await sleep(50);
+        const btn = [...document.querySelectorAll('#toast-host .toast-item')].map(t => t.querySelector('.toast-action')).find(b => b && /Roll it/.test(b.textContent));
+        ok('concentration: the reminder for a monster has a "Roll it" button (DC 12 for 24 damage)', !!btn && /DC 12 CON save to maintain Fly/.test(btn.closest('.toast-item').textContent), [...document.querySelectorAll('#toast-host .toast-item')].map(t => t.textContent).join(' | '));
+        window.sktD = () => 1;
+        btn && btn.click(); await sleep(50);
+        ok('concentration: a failed save ends the spell, and the log says so', oni.concentration == null && /loses concentration — Fly ends/.test((state.combatLog || []).slice(-1)[0].text), JSON.stringify([oni.concentration, (state.combatLog || []).slice(-1)[0]]));
+        oni.concentration = 'Fly'; window.sktD = () => 20;
+        const sv = C._rollConcFor(oni.id, 12, 'Fly');
+        ok('concentration: a made save keeps it', sv && sv.passed && oni.concentration === 'Fly', JSON.stringify([sv, oni.concentration]));
+        oni.conditions = ['Stunned']; window.sktD = () => 20;
+        const sv2 = C._rollConcFor(oni.id, 30, 'Fly');
+        ok('concentration: the roll is the save (a 20 + its CON still misses DC 30)', sv2 && !sv2.passed && oni.concentration == null, JSON.stringify(sv2));
+        oni.conditions = [];
+        const hero = { id: 'r206h', name: 'Hero', isPC: true, hp: 30, hpMax: 30, ac: 12, initiative: 1, conditions: [], concentration: 'Bless' };
+        state.combatants.push(hero); save();
+        ok('concentration: a character\'s is not rolled for them', C._rollConcFor(hero.id, 10) === null);
+      } catch(e){ ok('round 206 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepDie; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatLog = JSON.parse(keepL); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
