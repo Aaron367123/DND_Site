@@ -14508,6 +14508,71 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 202 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR0; state.combatLog = JSON.parse(keepL); save(); }
     }
+    // -- Round 203: Pack Tactics, and a ranged attack with an enemy next to you --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      const B = panelDefs.battlemap, T = panelDefs.turnview, keepR = T._resolve, keepD = T._d;
+      let tok0 = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        openPanel('battlemap'); await sleep(300);
+        tok0 = JSON.stringify(B._tokens || []);
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(find('Wolf', 'MM')); panelDefs.combat.addMonster(find('Wolf', 'MM')); panelDefs.combat.addMonster(find('Scout', 'MM')); await sleep(50);
+        const [w1, w2, scout] = state.combatants;
+        const hero = { id: 'r203h', name: 'Hero', isPC: false, hp: 300, hpMax: 300, ac: 30, initiative: 30, conditions: [] };
+        // The hero stands for the party here: not a monster's ally.
+        hero.isPC = true;
+        state.combatants.push(hero); state.activeCombatantId = w1.id; save();
+        const cs = B._csScreen ? B._cellSize : 50;
+        const put = (c, x, y) => ({ id: 'tk' + c.id, label: c.name, cid: c.id, isPC: !!c.isPC, x: cs * (x + 0.5), y: cs * (y + 0.5), size: 1 });
+        const place = (pos) => { B._tokens = pos.map(([c, x, y]) => put(c, x, y)); B._saveMap && B._saveMap(); T._mapCache = null; };
+        // Wolf 1 beside the hero, wolf 2 on the hero's other side; the scout far off.
+        place([[w1, 4, 5], [w2, 6, 5], [hero, 5, 5], [scout, 15, 5]]);
+        let cm = T._condMods(w1, hero);
+        ok('pack tactics: a wolf with its packmate beside the target has advantage', cm.adv.some(x => /pack tactics/.test(x)), JSON.stringify([cm.adv, T._ftBetween(w2, hero)]));
+        place([[w1, 4, 5], [w2, 9, 5], [hero, 5, 5], [scout, 15, 5]]);
+        cm = T._condMods(w1, hero);
+        ok('pack tactics: the packmate 15 ft away doesn\'t help', !cm.adv.some(x => /pack tactics/.test(x)), JSON.stringify(cm.adv));
+        place([[w1, 4, 5], [w2, 6, 5], [hero, 5, 5], [scout, 15, 5]]);
+        w2.conditions = ['Stunned'];
+        cm = T._condMods(w1, hero);
+        ok('pack tactics: nor a stunned packmate', !cm.adv.some(x => /pack tactics/.test(x)), JSON.stringify(cm.adv));
+        w2.conditions = [];
+        cm = T._condMods(scout, hero);
+        ok('pack tactics: a scout has no Pack Tactics, wolves beside the hero or not', !cm.adv.some(x => /pack tactics/.test(x)), JSON.stringify(cm.adv));
+        // The scout's longbow with the hero next to it: disadvantage.
+        place([[w1, 4, 5], [w2, 9, 9], [hero, 5, 5], [scout, 6, 5]]);
+        const list = T._attacksFor(scout), bow = list.findIndex(a => /Longbow/.test(a.name)), sword = list.findIndex(a => /Shortsword/.test(a.name));
+        const seen = []; T._resolve = o => seen.push(o); T._d = () => 10;
+        T._rollAttack(bow, { attacker: scout, target: hero });
+        ok('ranged: the scout\'s longbow with the hero beside it rolls with disadvantage', bow >= 0 && seen.length === 1 && /dis/.test(seen[0].hitNote) && /ranged, Hero within 5 ft/.test(seen[0].hitNote), JSON.stringify([bow, seen.map(o => o.hitNote)]));
+        seen.length = 0;
+        T._rollAttack(sword, { attacker: scout, target: hero });
+        ok('ranged: its shortsword doesn\'t', sword >= 0 && seen.length === 1 && !/ranged/.test(seen[0].hitNote || ''), JSON.stringify(seen.map(o => o.hitNote)));
+        seen.length = 0;
+        place([[w1, 4, 5], [w2, 9, 9], [hero, 5, 5], [scout, 12, 5]]);
+        T._rollAttack(bow, { attacker: scout, target: hero });
+        ok('ranged: from 35 ft away, a straight roll', seen.length === 1 && !/ranged/.test(seen[0].hitNote || ''), JSON.stringify(seen.map(o => o.hitNote)));
+        seen.length = 0;
+        place([[w1, 4, 5], [w2, 9, 9], [hero, 5, 5], [scout, 6, 5]]);
+        hero.conditions = ['Unconscious'];
+        T._rollAttack(bow, { attacker: scout, target: hero });
+        ok('ranged: an unconscious hero beside it is no threat', seen.length === 1 && !/ranged,/.test(seen[0].hitNote || ''), JSON.stringify(seen.map(o => o.hitNote)));
+        hero.conditions = [];
+        await sktRulesLoad('2014');
+        ok('ranged: a character\'s bow (ammunition) and Fire Bolt are ranged; a longsword and Shocking Grasp aren\'t',
+           T._pcRanged({}, { name: 'Longbow', props: ['A', 'H', '2H'] }) === true && T._pcRanged({}, { name: 'Longsword', props: ['V'] }) === false
+           && T._pcRanged({ spell: true }, { name: 'Fire Bolt', spell: true }) === true && T._pcRanged({ spell: true }, { name: 'Shocking Grasp', spell: true }) === false,
+           JSON.stringify([T._pcRanged({ spell: true }, { name: 'Fire Bolt', spell: true }), T._pcRanged({ spell: true }, { name: 'Shocking Grasp', spell: true })]));
+      } catch(e){ ok('round 203 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        T._resolve = keepR; T._d = keepD;
+        if (tok0 != null){ B._tokens = JSON.parse(tok0); B._saveMap && B._saveMap(); }
+        T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

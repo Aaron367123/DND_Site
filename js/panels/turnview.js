@@ -812,7 +812,39 @@ registerPanel('turnview', {
       const ft = this._ftBetween(attacker, target);
       if (ft != null && ft <= 5) autoCrit = true;
     }
+    // Pack Tactics: "advantage on an attack roll against a creature if at
+    // least one of the wolf's allies is within 5 feet of the creature and the
+    // ally isn't incapacitated." Its side is its allies (monsters, or the
+    // party); measured on the map, so with no tokens it adds nothing.
+    const C = panelDefs.combat;
+    if (attacker && target && !attacker.isPC && C && typeof C._hasTrait === 'function' && C._hasTrait(attacker, /^Pack Tactics\b/i)){
+      const ally = this._order().find(o => o !== attacker && o !== target && !o.isPC === !attacker.isPC && (o.hp || 0) > 0 && !this._incap(o)
+        && (f => f != null && f <= 5)(this._ftBetween(o, target)));
+      if (ally) adv.push('pack tactics — ' + ally.name + ' beside the target');
+    }
     return { adv, dis, autoCrit };
+  },
+  // Can't act: no Pack Tactics help, no threat to a ranged attacker.
+  _INCAP: ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'],
+  _incap(c){ return this._INCAP.some(n => this._hasCond(c, n)); },
+  // A ranged attack with an enemy within 5 ft who can see you (and isn't
+  // incapacitated): disadvantage. The nearest such enemy, or null.
+  _rangedThreat(attacker){
+    if (!attacker) return null;
+    return this._order().find(o => o !== attacker && !o.isPC !== !attacker.isPC && (o.hp || 0) > 0 && !this._incap(o)
+      && !this._hasCond(o, 'blinded') && (f => f != null && f <= 5)(this._ftBetween(o, attacker))) || null;
+  },
+  // A character's attack that is ranged: a weapon with ammunition, or a
+  // spell attack the spell says is ranged (Fire Bolt, not Shocking Grasp).
+  _pcRanged(row, sheetRow){
+    if (((sheetRow && sheetRow.props) || []).includes('A')) return true;
+    if (!row.spell || typeof _sktRulesReady === 'undefined' || typeof sktRulesSpell !== 'function') return false;
+    for (const ed of ['2024', '2014']){
+      const R = _sktRulesReady[ed]; if (!R) continue;
+      const s = sktRulesSpell(R, sheetRow ? sheetRow.name : row.name);
+      if (s && (s.spellAttack || []).length) return (s.spellAttack || []).includes('R');
+    }
+    return false;
   },
 
   _reachOf(c){
@@ -1129,6 +1161,10 @@ registerPanel('turnview', {
           // A magic weapon or a spell: past "nonmagical" resistance.
           magical: !!(a.magic || a.spell),
         };
+        row.ranged = this._pcRanged(row, a);
+        // Crossbow Expert: no disadvantage for being close (2014: any ranged
+        // weapon; 2024: a crossbow — the line drawn here is "a weapon").
+        row.closeOk = !row.spell && ((p.sheet.featureList || []).some(f => /^Crossbow Expert$/i.test(f && f.name)) || (p.feats || []).some(f => /crossbow expert/i.test(String(f && (f.name || f)))));
         // A cantrip the target saves against (Vicious Mockery: "DC 15 WIS")
         // read as "+15 to hit". It's a save: the target fails or makes it.
         const dc = /^DC\s*(\d+)\s*([A-Za-z]{3})?/.exec(String(a.atkBonus || ''));
@@ -2571,6 +2607,7 @@ registerPanel('turnview', {
     if (asked > 0) advWhy.unshift('called');
     if (asked < 0) disWhy.unshift('called');
     if (t.dodging) disWhy.push('target dodging');
+    if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
     const pcSheet = a.pc ? ((this._partyOf(c) || {}).sheet || {}) : {};
     const atkTags = ['attack', a.spell ? 'attack:spell' : a.str ? 'attack:str' : ''];
     (pcSheet.rollAdv || []).forEach(x => { if ((x.on || []).some(k => atkTags.includes(k))) advWhy.push(x.label); });
