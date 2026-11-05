@@ -76,6 +76,7 @@ registerPanel('attacks', {
     }
     // One form's attacks or another's, not both; and a named choice ("two
     // attacks with its greataxe or its spear") over the count of its first.
+    if (co && co.plus) return out.length && combo.length ? out.concat(combo) : [];   // the fixed ones, then the choice
     if (combo.length && (co.forms || (!co.any && co.names.length > 1))) return combo;
     return out.length ? out : combo;
   },

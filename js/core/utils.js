@@ -1519,7 +1519,7 @@ function sktParseMultiattack(raw){
     return t;
   };
   // Junk a lazy match can swallow: "attacks with his shortsword and two".
-  const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?)\b/.test(t) || /^(?:a|an|one|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
+  const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?)\b/.test(t) || /^(?:a|an|one|other|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
   // "a Lightning Antlers attack and a Thunder Hooves attack": one each.
   const num = w => /^an?$/i.test(String(w || '')) ? 1 : _sktCount(w);
   const add = (w, s, strike) => { const n = num(w), t = clean(s, strike); if (!n || junk(t)) return false; counts[t] = Math.max(counts[t] || 0, n); return true; };
@@ -1582,6 +1582,10 @@ function sktParseMultiattack(raw){
     || (() => { const x = /attacks\s+(once|twice|thrice|\w+\s+times),?\s+(?:either\s+)?with\s+(?:its|his|her|their)\s+([\w'’+\- ]+?\s+or\s+(?:(?:its|his|her|their)\s+)?[\w'’+\- ]+?)(?=\s*[.,;]|$)/i.exec(text); return x ? [x[0], TIMES_W[x[1].toLowerCase()] || x[1].split(/\s+/)[0], x[2]] : null; })();
   // A choice whose "names" are junk ("melee attacks or two ranged") is no choice.
   if (cm && _sktCount(cm[1]) && names(cm[2]).length && !names(cm[2]).some(junk)) combo = { n: _sktCount(cm[1]), names: names(cm[2]) };
+  // "one Bite attack and three other attacks, using Claw or Tail in any
+  // combination" (the Tarrasque): the bite, then three swings of a choice.
+  const other = !combo && /(\w+)\s+other\s+attacks?,?\s+using\s+(.+?)\s+in any combination/i.exec(text);
+  if (other && _sktCount(other[1]) && names(other[2]).length && !names(other[2]).some(junk)) combo = { n: _sktCount(other[1]), names: names(other[2]), plus: true };
   // "attacks twice with a weapon", "three times with a melee weapon": any of them.
   // (and a bare "attacks twice." that names nothing)
   const anyW = !combo && !Object.keys(counts).length && (/attacks\s+(once|twice|thrice|\w+\s+times)\s+with\s+(?:a|any)\s+(?:melee\s+|ranged\s+)?weapon/i.exec(text) || /\battacks\s+(twice|thrice|\w+\s+times)\s*(?:[.;]|$)/i.exec(text));
@@ -1634,6 +1638,11 @@ function sktMultiattackCountFor(counts, name){
   for (const k of Object.keys(counts)){
     const kk = k.replace(/s$/, '');
     if (kk.length >= 3 && new RegExp('\\b' + esc(kk) + 's?\\b').test(full)) return counts[k];
+  }
+  // …and the other way: "two adamantine greatclub attacks" for a "Greatclub".
+  const bare = n.replace(/s$/, '');
+  if (bare.length >= 4) for (const k of Object.keys(counts)){
+    if (k.length > n.length && new RegExp('\\b' + esc(bare) + 's?$').test(k)) return counts[k];
   }
   return 0;
 }

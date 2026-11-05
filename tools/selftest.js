@@ -14173,6 +14173,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ['Ayo makes three Harpoon or Longbow attacks.', ['Ruidium Harpoon', 'Longbow'], 'Ruidium Harpoon*,Ruidium Harpoon*,Ruidium Harpoon*'],
           ['The merrenoloth uses Fear Gaze once and makes one oar attack.', ['Oar'], 'Oar'],
           ['Ras Nsi makes three melee attacks, but can use Constrict only once.', ['Constrict', 'Longsword'], 'Longsword*,Longsword*,Longsword*'],
+          ['The tarrasque makes one Bite attack and three other attacks, using Claw or Tail in any combination.', ['Bite', 'Claw', 'Tail'], 'Bite,Claw*,Claw*,Claw*'],
+          ['The giant makes two adamantine greatclub attacks.', ['Greatclub', 'Rock'], 'Greatclub,Greatclub'],
           ['Amarith makes two longsword attacks. If it has a shortsword drawn, it can also make a shortsword attack.', ['Warhammer', 'Shortsword'], ''],
         ];
         const bad = cases.filter(([t, n, want]) => plan(t, n) !== want).map(([t, n, want]) => t.slice(0, 40) + '… → ' + plan(t, n) + ' (want ' + want + ')');
