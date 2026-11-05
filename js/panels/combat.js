@@ -1446,6 +1446,8 @@ registerPanel('combat',{
     c.actionUsed = false;
     c.bonusUsed = false;
     c.dodging = false;
+    // A Help given last turn lapses now, used or not.
+    c.helping = null;
     // Normally already cleared by _endTurnEconomy when this creature's
     // previous turn ended. Cleared again here so a skipped turn, a
     // reordered initiative or a restore cannot leave it stuck on.

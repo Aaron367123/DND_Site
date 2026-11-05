@@ -2626,6 +2626,9 @@ registerPanel('turnview', {
     if (asked > 0) advWhy.unshift('called');
     if (asked < 0) disWhy.unshift('called');
     if (t.dodging) disWhy.push('target dodging');
+    // An ally's Help against this target: used by this roll.
+    const helper = this._order().find(o => o !== c && o.helping && o.helping.target === t.id && !o.isPC === !c.isPC);
+    if (helper){ advWhy.push('helped by ' + helper.name); helper.helping = null; }
     if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
     // A character's exhaustion: 2024, −2 a level on the roll; 2014, from the
     // third level, disadvantage. (Its conditions are already counted above.)
@@ -2824,7 +2827,7 @@ registerPanel('turnview', {
     // here tracks, so they are recorded and adjudicated — same rule as the
     // reactions with no mechanics.
     const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'];
-    const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : ''].filter(Boolean);
+    const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : ''].filter(Boolean);
     return `<div class="tv-econ-bar">
       ${pip('actionUsed', 'Action', 'This turn&rsquo;s action')}
       ${pip('bonusUsed', 'Bonus', 'This turn&rsquo;s bonus action')}
@@ -2836,6 +2839,7 @@ registerPanel('turnview', {
           data-tv="stdact" data-a="${a}"
           title="${a === 'Dodge' ? 'Attacks against this creature have disadvantage until the start of its next turn — applied automatically'
                   : a === 'Disengage' ? 'Its movement provokes no opportunity attacks for the rest of this turn — applied automatically'
+                  : a === 'Help' ? 'Pick the enemy on the right first: the next attack roll an ally makes against it has advantage, until the start of this creature\'s next turn — applied automatically'
                   : 'Take the ' + a + ' action: spends the action and logs it'}"
           >${a}</button>`).join('')}
     </div>`;
@@ -2852,6 +2856,16 @@ registerPanel('turnview', {
       c.disengaged = true;
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Disengage</strong> action —
         their movement provokes no opportunity attacks for the rest of the turn.`, true);
+    } else if (name === 'Help'){
+      // "The first attack roll your ally makes against the target before the
+      // start of your next turn has advantage" (2024: the next by any ally).
+      // The target is the one picked on the right; without one it is a Help
+      // with an ability check, or one the DM tracks.
+      const t = this._order().find(x => x.id === this._armed && x.id !== c.id);
+      c.helping = t ? { target: t.id, name: t.name } : null;
+      this._setResult(t
+        ? `<strong>${esc(c.name)}</strong> takes the <strong>Help</strong> action — the next attack roll an ally makes against <strong>${esc(t.name)}</strong> has advantage, until the start of ${esc(c.name)}'s next turn.`
+        : `<strong>${esc(c.name)}</strong> takes the <strong>Help</strong> action. <span class="dim">(Pick the enemy on the right first and the panel gives the next ally's attack its advantage.)</span>`, true);
     } else {
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>${esc(name)}</strong> action.`, true);
     }

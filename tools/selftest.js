@@ -14625,6 +14625,43 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         T._mapCache = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 205: the Help action gives the next ally's attack its advantage --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepR = T._resolve, keepD = T._d;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.combatants = []; save();
+        C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Goblin', 'MM')); await sleep(50);
+        const [g1, g2] = state.combatants;
+        const hero = { id: 'r205h', name: 'Hero', isPC: true, hp: 300, hpMax: 300, ac: 12, initiative: 1, conditions: [] };
+        state.combatants.push(hero); state.activeCombatantId = g1.id; save();
+        openPanel('turnview'); await sleep(300);
+        T._armed = hero.id;
+        T._takeStandardAction('Help');
+        ok('help: the goblin helps against the hero (its action spent)', g1.helping && g1.helping.target === hero.id && g1.actionUsed, JSON.stringify([g1.helping, g1.actionUsed]));
+        T._render(); await sleep(50);
+        ok('help: the turn says so', /Helping against Hero/.test(T._body.querySelector('.tv-econ-bar').textContent));
+        const seen = []; T._resolve = o => seen.push(o); T._d = () => 10;
+        const ai = T._attacksFor(g2).findIndex(a => a.toHit && (a.parts || []).length);
+        T._rollAttack(ai, { attacker: g2, target: hero });
+        ok('help: the other goblin\'s attack on the hero has advantage — helped by the first', seen.length === 1 && /adv/.test(seen[0].hitNote) && /helped by Goblin 1/.test(seen[0].hitNote) && !g1.helping,
+           JSON.stringify([seen.map(o => o.hitNote), g1.helping]));
+        seen.length = 0;
+        T._rollAttack(ai, { attacker: g2, target: hero });
+        ok('help: only the first attack', seen.length === 1 && !/helped/.test(seen[0].hitNote || ''), JSON.stringify(seen.map(o => o.hitNote)));
+        // Unused, it lapses at the start of the helper's next turn.
+        T._armed = hero.id; T._takeStandardAction('Help');
+        C._refreshTurnEconomy(g1.id);
+        ok('help: an unused Help lapses as the helper\'s next turn begins', !g1.helping, JSON.stringify(g1.helping));
+        // A Help is for the helper's allies: the hero's own attacks get nothing from it.
+        T._armed = hero.id; T._takeStandardAction('Help'); seen.length = 0;
+        T._rollAttack(ai, { attacker: g2, target: g1 });
+        ok('help: it helps only against the creature it named', seen.length === 1 && !/helped/.test(seen[0].hitNote || '') && g1.helping, JSON.stringify(seen.map(o => o.hitNote)));
+      } catch(e){ ok('round 205 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._resolve = keepR; T._d = keepD; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); closePanel('turnview'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
