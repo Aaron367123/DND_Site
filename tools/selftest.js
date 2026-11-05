@@ -406,7 +406,11 @@
           // prompt renders w.name straight off them.
           return !!(p && p.moved === 15 && (p.rows || []).some(r => r && r.id === 'wolf'));
         })(), JSON.stringify(T._pending && { ft: T._pending.moved }));
-        ok('oa: moving within reach does not', !provokes('zoey', 200+cs, 200, 200, 200));
+        // Counted against the wolf only: the 2×2 ogre beside it is, edge to
+        // edge, diagonally next to Zoey's first square, so that step does
+        // leave the OGRE's reach (it measured 10 ft centre to centre).
+        ok('oa: moving within reach does not', !provokes('zoey', 200+cs, 200, 200, 200) || !(T._pending.rows || []).some(r => r && r.id === 'wolf'),
+           JSON.stringify(T._pending && (T._pending.rows || []).map(r => r.id)));
         ok('oa: starting out of reach does not', !provokes('zoey', 200+cs*5, 200, 200+cs*9, 200));
 
         wolf.reactionUsed = true;
@@ -14128,6 +14132,52 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
            [T._edgeFeet(at(0, 3), at(2, 1)), T._edgeFeet(at(0, 1), at(1, 1)), T._edgeFeet(at(0, 1), at(2, 1)), T._edgeFeet(at(0, 2), at(2.5, 1))].join());
       } catch(e){ ok('round 194 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); save(); }
+    }
+    // -- Round 195: a character's reach — 10 ft with a reach weapon, +5 for a raging Path of the Giant barbarian --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (id, b) => Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: id, species: 'Human', background: 'Guide' }, b), R), { id });
+        const fighter = mk('r195f', { cls: 'Fighter', level: 3 });
+        const glaive = { id: 'r195g', name: 'r195g', hp: 20, hpMax: 20, sheet: { attacks: [{ name: 'Glaive', atkBonus: '+5', damage: '1d10+3 slashing', props: ['H', 'R', '2H'] }] } };
+        const giant = mk('r195b', { cls: 'Barbarian', level: 3, subclass: 'Giant' });
+        state.party = [fighter, glaive, giant]; save();
+        const T = panelDefs.turnview;
+        const r = id => T._reachOf({ id, name: id, isPC: true });
+        const hasGlaive = (glaive.sheet.attacks || []).some(a => a.name === 'Glaive' && (a.props || []).includes('R'));
+        ok('reach: a fighter with a sword reaches 5 ft; with a glaive 10 ft', r('r195f') === 5 && hasGlaive && r('r195g') === 10,
+           [r('r195f'), r('r195g'), hasGlaive, JSON.stringify((glaive.sheet.attacks || []).map(a => a.name + ':' + (a.props || []).join('/')))].join(' '));
+        const before = r('r195b');
+        state.party[2] = Object.assign({}, state.party[2], { rage: true }); save();
+        ok('reach: a Path of the Giant barbarian reaches 5 ft, and 10 ft while raging', before === 5 && r('r195b') === 10 && (giant.sheet.featureList || []).some(f => /Giant.s Havoc/.test(f.name)), before + ' → ' + r('r195b'));
+      } catch(e){ ok('round 195 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); save(); }
+    }
+    // -- Round 196: Multiattack wordings — alternatives aren't summed, lists keep every item, "+1" and "Short bow" match --
+    if (!PLAYER){
+      try {
+        const atk = (name, extra) => Object.assign({ name, desc: 'Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) slashing damage.' }, extra || {});
+        const raw = (text, names) => ({ name: 'R196', actions: [{ name: 'Multiattack', desc: text }].concat(names.map(n => atk(n))) });
+        const plan = (text, names) => { const rw = raw(text, names); const p = { multi: sktParseMultiattack(rw), attacks: sktParseMonsterAttacks(rw) }; return panelDefs.attacks._plan(p).map(x => x.name + (x.choice && x.choice.length > 1 ? '*' : '')).join(','); };
+        const cases = [
+          ['The captain makes three melee attacks: two with its scimitar and one with its dagger. Or the captain makes two ranged attacks with its daggers.', ['Scimitar', 'Dagger'], 'Scimitar,Scimitar,Dagger'],
+          ['Exul makes two handaxe attacks or uses his Hurl Flame twice.', ['Handaxe', 'Hurl Flame'], 'Handaxe,Handaxe'],
+          ['The giant makes three Soul Burst attacks. Alternatively, if the giant has its death rune, it can make three Reaping Scythe attacks.', ['Soul Burst', 'Reaping Scythe'], 'Soul Burst,Soul Burst,Soul Burst'],
+          ['The herald makes one Claw attack, one Tentacles attack, and one Trident attack.', ['Claw', 'Tentacles', 'Trident'], 'Claw,Tentacles,Trident'],
+          ['Zariel attacks twice with her flail and once with Matalotok.', ['Flail', 'Matalotok (Warhammer)'], 'Flail,Flail,Matalotok (Warhammer)'],
+          ['The scout makes two melee attacks or two ranged attacks.', ['Shortsword', 'Longbow'], 'Shortsword*,Shortsword*'],
+          ['The giff makes two Longsword, Musket, or Pistol attacks.', ['Longsword', 'Musket', 'Pistol'], 'Longsword*,Longsword*'],
+          ['The warlord makes two Greatsword or Short bow attacks.', ['Greatsword', 'Shortbow'], 'Greatsword*,Greatsword*'],
+          ['Grisha makes two attacks with his +1 flail.', ['+1 Flail'], '+1 Flail,+1 Flail'],
+          ['Ayo makes three Harpoon or Longbow attacks.', ['Ruidium Harpoon', 'Longbow'], 'Ruidium Harpoon*,Ruidium Harpoon*,Ruidium Harpoon*'],
+          ['The merrenoloth uses Fear Gaze once and makes one oar attack.', ['Oar'], 'Oar'],
+          ['Ras Nsi makes three melee attacks, but can use Constrict only once.', ['Constrict', 'Longsword'], 'Longsword*,Longsword*,Longsword*'],
+          ['Amarith makes two longsword attacks. If it has a shortsword drawn, it can also make a shortsword attack.', ['Warhammer', 'Shortsword'], ''],
+        ];
+        const bad = cases.filter(([t, n, want]) => plan(t, n) !== want).map(([t, n, want]) => t.slice(0, 40) + '… → ' + plan(t, n) + ' (want ' + want + ')');
+        ok('multiattack wordings: ' + cases.length + ' stat-block sentences plan the right swings', !bad.length, bad.join(' | '));
+      } catch(e){ ok('round 196 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Class features: represented, not just text ------------------------
     {

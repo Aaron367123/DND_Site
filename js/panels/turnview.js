@@ -813,7 +813,15 @@ registerPanel('turnview', {
   },
 
   _reachOf(c){
-    if (c.isPC) return 5;
+    // A character: 10 ft with a reach weapon (glaive, halberd, whip), and a
+    // Path of the Giant barbarian's Giant Stature adds 5 while raging. It
+    // was 5 for everyone, so walking away from Ulrick's 10 ft never provoked.
+    if (c.isPC){
+      const p = this._partyOf(c), sh = (p && p.sheet) || {};
+      let reach = (sh.attacks || []).some(a => (a.props || []).includes('R')) ? 10 : 5;
+      if (p && p.rage && (sh.featureList || []).some(f => /^Giant.s Havoc$/.test(f.name) && !f.info)) reach += 5;
+      return reach;
+    }
     const entry = this._entryOf(c);
     const raw = entry && entry._raw;
     // Read off the creature's own melee actions rather than assumed, so a

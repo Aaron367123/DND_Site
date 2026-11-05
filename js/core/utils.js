@@ -1509,32 +1509,90 @@ function sktParseMultiattack(raw){
   if (!act) return null;
   const text = _stripTagsIfAvailable(act.desc || '');
   if (!text) return null;
-  const counts = {};
-  // "makes two Slam attacks", "makes up to three Bite attacks"
-  const reNamed = /makes\s+(?:up\s+to\s+)?(\w+)\s+([A-Za-z][\w'’\- ]*?)\s+attacks?\b/gi;
-  // "three attacks: one with its mandibles and two with its claws"
-  const reWith  = /(\w+)\s+with\s+(?:its|his|her|their|the)?\s*([A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|and\b|or\b|$))/gi;
+  const counts = {}, soft = new Set();
+  const TIMES_W = { once: 'one', twice: 'two', thrice: 'three' };
+  // A name as the prose gives it, as an action would be called: no "its",
+  // no "melee"/"weapon" ("two Trident melee attacks"); an unarmed strike.
+  const clean = (s, strike) => {
+    let t = String(s || '').trim().toLowerCase().replace(/^(?:either\s+)?(?:its|his|her|their|the)\s+/, '').replace(/^either\s+/, '').replace(/^[+-]\d+\s+/, '').replace(/\s+(?:melee|ranged|weapon|only)$/, '').trim();
+    if (strike && !/strike$/.test(t)) t = t + ' strike';
+    return t;
+  };
+  // Junk a lazy match can swallow: "attacks with his shortsword and two".
+  const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?)\b/.test(t) || /^(?:a|an|one|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
+  // "a Lightning Antlers attack and a Thunder Hooves attack": one each.
+  const num = w => /^an?$/i.test(String(w || '')) ? 1 : _sktCount(w);
+  const add = (w, s, strike) => { const n = num(w), t = clean(s, strike); if (!n || junk(t)) return false; counts[t] = Math.max(counts[t] || 0, n); return true; };
   let m;
-  while ((m = reNamed.exec(text))){ const n = _sktCount(m[1]); if (n) counts[m[2].trim().toLowerCase()] = n; }
-  while ((m = reWith.exec(text))){  const n = _sktCount(m[1]); if (n) counts[m[2].trim().toLowerCase()] = n; }
-  // "two melee attacks" names no attack called "melee".
-  ['melee', 'ranged', 'weapon', 'melee weapon', 'ranged weapon', 'natural weapon'].forEach(k => { delete counts[k]; });
+  // "Makes two handaxe attacks OR uses his Hurl Flame twice", "attacks three
+  // times with his scimitar, OR twice with his darts": alternatives, not a
+  // sum. Count the first, unless it names nothing.
+  // ("…or she makes three attacks with her longbow", "…, or it makes two Eldritch Bolt attacks")
+  // ("…two Talon attacks or a Talon attack and a Beak attack", "…. Alternatively, it makes two…")
+  const alts = text.split(/,?\s+or\s+(?=(?:(?:it|he|she|they)\s+(?:can\s+)?)?(?:makes?|uses?|attacks?|throws?|casts?|twice|once|thrice|one|two|three|four|five)\b|an?\s+[\w'’\- ]+?\s+attack\b)|\.\s+(?:Alternatively,?|Or)\s+/i);
+  const countIn = text => {
+  // "makes two Slam attacks", "makes up to three Bite attacks", "makes one
+  // bite attack and two unarmed strikes", "uses his staff to make three Arcane Blast attacks"
+  // (and the middle of a list: "one Claw attack, one Tentacles attack, and one Trident attack")
+  const reNamed = /(?:\bmakes?|,\s+and|\band|,)\s+(?:up\s+to\s+)?(\w+)\s+([A-Za-z][\w'’\- ]*?)\s+(attacks?|strikes?)\b/gi;
+  // A rejected match (", the werebear makes two claw attacks" read from the
+  // comma) is searched again from just past where it began, or it hides the
+  // real "makes two claw attacks" inside it.
+  while ((m = reNamed.exec(text))){ if (!add(m[1], m[2], /^strike/i.test(m[3]))) reNamed.lastIndex = m.index + 1; }
+  // "three attacks: one with its mandibles and two with its claws", "two
+  // attacks with his shortsword and two attacks with his rapier", "one
+  // attack with its spear", "two melee attacks with its staff"
+  // (an em dash ends a name too: "three attacks—one with its slam and two with its eldritch turrets—")
+  const reWith = /(\w+)\s+(?:(?:melee|ranged|weapon)\s+)?(?:attacks?\s+)?with\s+(?:its|his|her|their|the)?\s*([A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|—|\band\b|\bor\b|$))/gi;
+  while ((m = reWith.exec(text))) add(m[1], m[2]);
+  // "attacks twice with her flail and once with Matalotok", "three times with its daggers"
+  const reTimes = /\b(once|twice|thrice|\w+\s+times)\s+with\s+(?:its|his|her|their|the)?\s*([A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|\band\b|\bor\b|$))/gi;
+  const TIMES = { once: 'one', twice: 'two', thrice: 'three' };
+  while ((m = reTimes.exec(text))) add(TIMES[m[1].toLowerCase()] || m[1].split(/\s+/)[0], m[2]);
+  // "uses Polar Ray twice", "uses its Mind Thrust twice"
+  const reUses = /\buses?\s+(?:its|his|her|their)?\s*([A-Z][\w'’\- ]*?)\s+(once|twice|thrice|\w+\s+times)\b/g;
+  // A used ability may be no attack at all (Fear Gaze): `soft`, so a plan
+  // isn't refused for leaving it out.
+  while ((m = reUses.exec(text))){ if (add(TIMES[m[2].toLowerCase()] || m[2].split(/\s+/)[0], m[1])) soft.add(clean(m[1])); }
+  };
+  // "makes two melee attacks", "three melee weapon attacks": any of its attacks.
+  const ANY_RE = /makes\s+(\w+)\s+(?:(?:melee|ranged|weapon)\s+){0,2}attacks?\b(?!\s*:\s*\S)/i;
+  // "…three melee attacks, but can use Constrict only once": a limit, not a count.
+  const onlyOnce = /,?\s*but\s+(?:it\s+|he\s+|she\s+)?can\s+(?:use|make)\s+(?:its\s+|his\s+|her\s+)?([A-Za-z][\w'’\- ]*?)\s+(?:attacks?\s+)?only\s+once(?:\s+each)?/i.exec(alts[0]);
+  if (onlyOnce) alts[0] = alts[0].slice(0, onlyOnce.index) + alts[0].slice(onlyOnce.index + onlyOnce[0].length);
+  countIn(alts[0]);
+  // The first alternative naming nothing ("three melee weapon attacks.
+  // Alternatively, two ranged attacks with its javelins") is still the default.
+  if (!Object.keys(counts).length && alts.length > 1 && !ANY_RE.test(alts[0])) countIn(text);
   // A choice of attacks, each swing any of them: "makes three attacks, using
   // Greataxe or Javelin in any combination" (2024), "two Greatsword or Heavy
   // Crossbow attacks", "two attacks with its greataxe or its spear". The
   // first-named is the default; the others are offered at each swing.
   let combo = null;
-  const names = s => s.split(/\s*,\s*(?:or\s+)?|\s+or\s+/i).map(x => x.replace(/^(?:its|his|her|their|the|a|an)\s+/i, '').trim().toLowerCase()).filter(Boolean);
+  const names = s => s.split(/\s*,\s*(?:or\s+|and\s+)?|\s+or\s+|\s+and\s+/i).map(x => clean(x.replace(/^(?:either|a|an)\s+/i, ''))).filter(Boolean);
   const cm = /makes\s+(\w+)\s+attacks?,?\s+using\s+(.+?)\s+in any combination/i.exec(text)
-    || /makes\s+(\w+)\s+([A-Za-z][\w'’\- ]*?\s+or\s+[A-Za-z][\w'’\- ]*?)\s+attacks?\b/i.exec(text)
-    || /makes\s+(\w+)\s+attacks?\s+with\s+((?:its|his|her|their)\s+[\w'’\- ]+?(?:(?:\s*,\s*|\s+or\s+)(?:its|his|her|their)?\s*[\w'’\- ]+?)?)(?=\s*[.,;]|$)/i.exec(text);
-  if (cm && _sktCount(cm[1])) combo = { n: _sktCount(cm[1]), names: names(cm[2]) };
+    // "makes any combination of two Bite, Claw, or Magic Longsword attacks"
+    || /makes\s+any\s+combination\s+of\s+(\w+)\s+(.+?)\s+attacks?\b/i.exec(text)
+    // "makes either two Hooves attacks, two Moon Bolt attacks, or one of each"
+    || (() => { const x = /makes\s+either\s+(\w+)\s+(.+?)\s+attacks?,?\s+(?:or\s+)?\1\s+(.+?)\s+attacks?/i.exec(text); return x ? [x[0], x[1], x[2] + ' or ' + x[3]] : null; })()
+    // "two Greatsword or Heavy Crossbow attacks", "two Longsword, Musket, or Pistol attacks", "two Dagger or +1 Longsword attacks"
+    || /makes\s+(\w+)\s+([A-Za-z+][\w'’,+\- ]*?\s+or\s+[A-Za-z+][\w'’+\- ]*?)\s+attacks?\b/i.exec(text)
+    || /makes\s+(\w+)\s+attacks?\s+with\s+((?:(?:its|his|her|their)\s+)?[\w'’+\- ]+?(?:(?:\s*,\s*|\s+or\s+)(?:its|his|her|their)?\s*[\w'’+\- ]+?)?)(?=\s*[.,;]|$)/i.exec(text)
+    // "attacks twice, either with his longsword or dagger"
+    || (() => { const x = /attacks\s+(once|twice|thrice|\w+\s+times),?\s+(?:either\s+)?with\s+(?:its|his|her|their)\s+([\w'’+\- ]+?\s+or\s+(?:(?:its|his|her|their)\s+)?[\w'’+\- ]+?)(?=\s*[.,;]|$)/i.exec(text); return x ? [x[0], TIMES_W[x[1].toLowerCase()] || x[1].split(/\s+/)[0], x[2]] : null; })();
+  // A choice whose "names" are junk ("melee attacks or two ranged") is no choice.
+  if (cm && _sktCount(cm[1]) && names(cm[2]).length && !names(cm[2]).some(junk)) combo = { n: _sktCount(cm[1]), names: names(cm[2]) };
+  // "attacks twice with a weapon", "three times with a melee weapon": any of them.
+  // (and a bare "attacks twice." that names nothing)
+  const anyW = !combo && !Object.keys(counts).length && (/attacks\s+(once|twice|thrice|\w+\s+times)\s+with\s+(?:a|any)\s+(?:melee\s+|ranged\s+)?weapon/i.exec(text) || /\battacks\s+(twice|thrice|\w+\s+times)\s*(?:[.;]|$)/i.exec(text));
+  if (anyW) combo = { n: _sktCount(TIMES_W[anyW[1].toLowerCase()] || anyW[1].split(/\s+/)[0]), names: [], any: true };
   // A werebear's "In bear form, two claw attacks. In humanoid form, two
   // greataxe attacks": one form's or the other's, not all four.
   if (!combo && (text.match(/\bIn\s+[\w-]+\s+form\b/gi) || []).length >= 2 && Object.keys(counts).length > 1)
     combo = { n: Math.max(...Object.values(counts)), names: Object.keys(counts), forms: true };
   // Or none named at all — "makes two attacks", "two melee attacks": any of its attacks.
-  const any = !combo && !Object.keys(counts).length && /makes\s+(\w+)\s+(?:melee\s+|weapon\s+)?attacks?\b(?!\s*:)/i.exec(text);
+  // A bare "makes three attacks:" whose list the data lost counts as that too.
+  const any = !combo && !Object.keys(counts).length && ANY_RE.exec(alts[0]);
   if (any && _sktCount(any[1]) && !/\bwith\b/i.test(text.slice(any.index, any.index + any[0].length + 6))) combo = { n: _sktCount(any[1]), names: [], any: true, melee: /melee/i.test(any[0]) };
   // "It can replace one attack with a Bite attack": one more choice.
   const rep = /replace\s+(?:one|any)\s+(?:of\s+(?:the|those)\s+)?attacks?\s+with\s+(?:a|an|one)\s+([A-Za-z][\w'’\- ]*?)\s+attack/i.exec(text);
@@ -1542,7 +1600,8 @@ function sktParseMultiattack(raw){
   // "…two attacks, only one of which can be a bite attack": not the default.
   const only = /only one of which can be (?:a|an|its)\s+([A-Za-z][\w'’\- ]*?)\s+attack/i.exec(text);
   if (combo && only) combo.notDefault = only[1].trim().toLowerCase();
-  return { text, counts, combo };
+  else if (combo && onlyOnce) combo.notDefault = clean(onlyOnce[1]);
+  return { text, counts, combo, soft: [...soft] };
 }
 // _stripTags lives in data-loader.js, which is not guaranteed to have parsed
 // yet in every context that loads utils.js. Descriptions are already stripped
@@ -1559,11 +1618,23 @@ function _stripTagsIfAvailable(s){
 function sktMultiattackCountFor(counts, name){
   if (!counts || !name) return 0;
   // "Grave Strike (Vampire Form Only)" is the Grave Strike the prose counts.
-  const n = String(name).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+  const n = String(name).replace(/\s*\([^)]*\)/g, '').replace(/^[+-]\d+\s+/, '').trim().toLowerCase();
   if (counts[n]) return counts[n];
   if (counts[n + 's']) return counts[n + 's'];
   const dep = n.replace(/s$/, '');
   if (dep !== n && counts[dep]) return counts[dep];
+  // Spacing and a trailing bonus aside: "Short bow" is the Shortbow, "Rapier +1" the +1 rapier.
+  const sq = s => s.replace(/\s+[+-]\d+$/, '').replace(/\s+/g, '');
+  for (const k of Object.keys(counts)){ const a = sq(k), b = sq(n); if (a === b || a === b + 's' || a.replace(/s$/, '') === b) return counts[k]; }
+  // The prose's word inside a longer action name: "harpoon" for "Ruidium
+  // Harpoon", "flail" for "Silvered Skull Flail", "scimitar" for
+  // "Foremother (+1 Scimitar)". Whole words only.
+  const full = String(name).toLowerCase();
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const k of Object.keys(counts)){
+    const kk = k.replace(/s$/, '');
+    if (kk.length >= 3 && new RegExp('\\b' + esc(kk) + 's?\\b').test(full)) return counts[k];
+  }
   return 0;
 }
 
