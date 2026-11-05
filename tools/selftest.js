@@ -14827,6 +14827,93 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 209 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._resolve = keepRes; state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 210: what a hit inflicts — a wolf's prone save, a constrictor's grapple, 2024 grappled attacks --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepS = JSON.stringify(state.settings || {});
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const oh = d => sktOnHitCondition(d);
+        ok('on hit: a wolf\'s bite is a DC 11 STR save or prone', JSON.stringify(oh('Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 7 (2d4 + 2) piercing damage. If the target is a creature, it must succeed on a DC 11 Strength saving throw or be knocked prone.')) === '{"cond":"Prone","dc":11,"ability":"STR"}');
+        const sn = oh('Melee Weapon Attack: +6 to hit, reach 5 ft., one creature. Hit: 13 (2d8 + 4) bludgeoning damage, and the target is grappled (escape DC 16). Until this grapple ends, the creature is restrained, and the snake can\'t constrict another target.');
+        ok('on hit: a constrictor grapples (escape DC 16) and restrains while it lasts', sn && sn.cond === 'Grappled' && sn.escape === 16 && sn.also === 'Restrained', JSON.stringify(sn));
+        const w24 = oh('Melee Attack Roll: +4, reach 5 ft. Hit: 7 (2d4 + 2) Piercing damage. If the target is a Medium or smaller creature, it has the Prone condition.');
+        ok('on hit: 2024 wording, with the size it needs', w24 && w24.cond === 'Prone' && !w24.dc && w24.when === 'the target is a Medium or smaller creature', JSON.stringify(w24));
+        ok('on hit: a condition the hit only tests for is not inflicted', oh('Melee Weapon Attack: +5 to hit. Hit: 8 (1d8 + 4) slashing damage. If the target is prone, it takes an extra 7 (2d6) damage.') === null);
+        const gh = oh('Melee Weapon Attack: +4 to hit, reach 5 ft., one creature. Hit: 7 (2d4 + 2) slashing damage. If the target is a creature other than an elf or undead, it must succeed on a DC 10 Constitution saving throw or be paralyzed for 1 minute. The target can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success.');
+        ok('on hit: a ghoul\'s claws paralyse for 1 minute, save ends', gh && gh.cond === 'Paralyzed' && gh.dc === 10 && gh.dur && gh.dur.kind === 'rounds' && gh.dur.left === 10 && gh.repeat === true && /elf or undead/.test(gh.when), JSON.stringify(gh));
+        const ns = oh('Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d6 + 3) Bludgeoning damage, and the target has the Prone condition.');
+        ok('on hit: no duration, no repeat when none is written', ns && !ns.dur && !ns.repeat, JSON.stringify(ns));
+        const wolfRaw = find('Wolf', 'MM');
+        ok('on hit: the wolf\'s parsed Bite carries it', ((panelDefs.attacks._parsed(wolfRaw._raw).attacks || []).find(a => a.name === 'Bite') || {}).onHit?.cond === 'Prone');
+        state.settings = Object.assign({}, state.settings, { builderEdition: '2024' });
+        const p = { id: 'r210p', name: 'Tank', hp: 40, hpMax: 40, ac: 12, rules: '2024', sheet: { attacks: [{ name: 'Axe', atkBonus: '+5', damage: '1d8+3 slashing' }] }, abilities: { str: 10, dex: 10 } };
+        state.party.push(p);
+        state.combatants = []; save();
+        C.addMonster(wolfRaw); C.addMonster(find('Giant Constrictor Snake', 'MM')); C.addMonster(find('Gelatinous Cube', 'MM')); await sleep(50);
+        const wolf = state.combatants[0], snake = state.combatants[1], cube = state.combatants[2];
+        const pc = { id: 'r210p', name: 'Tank', isPC: true, hp: 40, hpMax: 40, ac: 12, initiative: 1, conditions: [] };
+        state.combatants.push(pc); state.activeCombatantId = wolf.id; save();
+        T._onHits = [];
+        const bite = T._attacksFor(wolf).findIndex(a => a.name === 'Bite');
+        window.sktD = () => 15;
+        T._rollAttack(bite, { attacker: wolf, target: pc }); await sleep(20);
+        if (!T._body && typeof openPanel === 'function'){ openPanel('turnview'); await sleep(200); }
+        T._render(); await sleep(20);
+        const line = document.querySelector('.tv-onhit');
+        ok('on hit: the bite leaves a line to answer', T._onHits.length === 1 && !!line && /DC 11 STR save or prone/.test(line.textContent), T._onHits.length + ' ' + (line && line.textContent));
+        window.sktD = () => 2;
+        const rb = document.querySelector('.tv-onhit [data-tv="ohroll"]'); rb && rb.click(); await sleep(30);
+        ok('on hit: Roll save — a failed STR save knocks the character prone', pc.conditions.includes('Prone') && !T._onHits.length, JSON.stringify([pc.conditions, T._onHits]));
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40); ok('on hit: undo takes the prone off again', !(pc.conditions || []).includes('Prone'), JSON.stringify(pc.conditions)); }
+        pc.conditions = []; state.combatants.forEach(x => { if (x.id === 'r210p') x.hp = 40; }); 
+        window.sktD = () => 15;
+        T._rollAttack(bite, { attacker: wolf, target: pc });
+        ok('on hit: (a second bite, a second line)', T._onHits.length === 1, T._onHits.length);
+        window.sktD = () => 19;
+        T._onHitAct('roll', 0);
+        ok('on hit: a made save leaves them standing', !pc.conditions.includes('Prone'));
+        T._rollAttack(bite, { attacker: wolf, target: cube });
+        ok('on hit: a gelatinous cube can\'t be knocked prone (no line, it says so)', !T._onHits.length && /immune to prone/.test(T._log[0]), JSON.stringify([T._onHits, T._log[0]]));
+        state.combatants.forEach(x => { if (x.id === 'r210p') x.hp = 40; }); pc.hp = 40; p.hp = 40;
+        ok('on hit: the same record throughout', state.combatants.includes(pc));
+        state.activeCombatantId = snake.id;
+        const con = T._attacksFor(snake).findIndex(a => a.name === 'Constrict');
+        window.sktD = () => 15;
+        T._rollAttack(con, { attacker: snake, target: pc });
+        T._onHitAct('fail', T._onHits.length - 1);
+        ok('on hit: Apply — grappled and restrained, and who holds them', pc.conditions.includes('Grappled') && pc.conditions.includes('Restrained') && pc.grappledBy && pc.grappledBy.id === snake.id && pc.grappledBy.escape === 16, JSON.stringify([pc.conditions, pc.grappledBy]));
+        let cm = T._condMods(pc, wolf);
+        ok('grappled (2024): attacking anyone but the grappler is at disadvantage', cm.dis.some(x => /grappled by/.test(x)), JSON.stringify(cm));
+        cm = T._condMods(pc, snake);
+        ok('grappled (2024): not the grappler itself', !cm.dis.some(x => /grappled by/.test(x)), JSON.stringify(cm));
+        snake.conditions = ['Stunned'];
+        ok('grappled: a grappler who can\'t act holds nothing', !T._condMods(pc, wolf).dis.some(x => /grappled by/.test(x)));
+        snake.conditions = []; state.party.forEach(x => { if (x.id === 'r210p') x.rules = '2014'; });
+        ok('grappled (2014): no such rule', !T._condMods(pc, wolf).dis.some(x => /grappled by/.test(x)));
+        // A ghoul's paralysis goes onto the tracker's timer, with its repeat save.
+        { const g = find('Ghoul', 'MM'); C.addMonster(g); const ghoul = state.combatants[state.combatants.length - 1];
+          state.combatants.forEach(x => { if (x.id === 'r210p') { x.hp = 40; x.conditions = []; } });
+          state.activeCombatantId = ghoul.id; window.sktD = () => 15;
+          const cl = T._attacksFor(ghoul).findIndex(a => a.name === 'Claws');
+          T._rollAttack(cl, { attacker: ghoul, target: pc });
+          const qi = T._onHits.findIndex(x => x.cond === 'Paralyzed');
+          T._onHitAct('fail', qi);
+          const now = state.combatants.find(x => x.id === 'r210p');
+          const tm = now && now.condTimers && now.condTimers.Paralyzed;
+          ok('on hit: paralysed, for 10 rounds, CON 10 to end it at the end of each of its turns', qi >= 0 && now.conditions.includes('Paralyzed') && tm && tm.kind === 'rounds' && tm.left === 10 && tm.save && tm.save.ab === 'con' && tm.save.dc === 10, JSON.stringify([qi, now && now.conditions, tm]));
+          ok('on hit: (and the grip on the record is kept)', now.grappledBy && now.grappledBy.id === snake.id, JSON.stringify(now.grappledBy));
+          C._removeCombatantAt(state.combatants.indexOf(ghoul)); }
+        // The turn moving on drops an unanswered line.
+        window.sktD = () => 15; state.activeCombatantId = wolf.id; pc.conditions = []; state.combatants.forEach(x => { if (x.id === 'r210p') x.hp = 40; }); 
+        T._rollAttack(bite, { attacker: wolf, target: pc });
+        ok('on hit: (queued on the wolf’s turn)', T._renderOnHits() !== '');
+        state.activeCombatantId = snake.id;
+        ok('on hit: an unanswered line lapses with the turn', T._renderOnHits() === '', T._renderOnHits());
+      } catch(e){ ok('round 210 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._onHits = []; state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

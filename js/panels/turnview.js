@@ -823,6 +823,14 @@ registerPanel('turnview', {
     // see it anyway: blindsight or truesight that reaches.
     if (this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('invisible');
     if (this._hasCond(target, 'invisible') && !this._seesUnseen(attacker, target)) dis.push('target invisible');
+    // 2024 Grappled: "disadvantage on attack rolls against any target other
+    // than the grappler" — known when the grapple came from a hit here, and
+    // over when the grappler is gone or can't act.
+    const gb = attacker && attacker.grappledBy;
+    if (gb && target && this._hasCond(attacker, 'grappled') && gb.id !== target.id && this._edOf(attacker) !== '2014'){
+      const g = this._order().find(o => o.id === gb.id);
+      if (g && (g.hp || 0) > 0 && !this._incap(g)) dis.push('grappled by ' + g.name);
+    }
     // Hidden (the Hide action): unseen, so it works both ways like Invisible
     // — and blindsight or truesight that reaches still finds it.
     if (attacker && attacker.hidden && !this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('hidden');
@@ -1396,7 +1404,8 @@ registerPanel('turnview', {
           // A hit that then calls for a save (an assassin's poison): its damage, once the hit lands.
           + (a.rider ? `<span class="tv-save" title="On a hit: ${esc((a.rider.parts || []).map(pt => pt.dice + ' ' + pt.type).join(' + '))}">then DC ${a.rider.dc} ${esc(String(a.rider.ability).slice(0,3).toUpperCase())}</span>
           <button class="btn" data-tv="rider" data-ai="${i}" data-half="0" title="On a hit, the target failed the save: ${esc((a.rider.parts || []).map(pt => pt.dice + ' ' + pt.type).join(' + '))}">Failed</button>
-          ${a.rider.half ? `<button class="btn" data-tv="rider" data-ai="${i}" data-half="1" title="On a hit, the target made the save: half">Saved ½</button>` : ''}` : '');
+          ${a.rider.half ? `<button class="btn" data-tv="rider" data-ai="${i}" data-half="1" title="On a hit, the target made the save: half">Saved ½</button>` : ''}` : '')
+          + (!a.pc && a.onHit ? `<span class="tv-save" title="On a hit: ${esc(this._onHitText(a.onHit))}">then ${esc(a.onHit.dc ? 'DC ' + a.onHit.dc + ' ' + a.onHit.ability + ' or ' : '')}${esc(a.onHit.cond.toLowerCase())}</span>` : '');
       } else {
         ctl = `<span class="tv-act-note">no damage parsed</span>`;
       }
@@ -1480,7 +1489,7 @@ registerPanel('turnview', {
       ['.tv-init-tools', () => this._renderInitTools()],
       ['.tv-headwrap',   () => this._renderActorHead(c)],
       ['.tv-actbody',    () => this._renderActions(c)],
-      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair()],
+      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair() + this._renderOnHits()],
       // Beside a result, the way to take it back: the app's one history, so
       // it is the same step Ctrl+Z would undo.
       ['.tv-result',     () => !this._result ? '' : this._result
@@ -2305,6 +2314,7 @@ registerPanel('turnview', {
         // (a Help used by the roll being undone, and a hiding creature's
         // cover blown by it, come back with it)
         disengaged:c.disengaged, helping:c.helping ? {...c.helping} : null, hidden:c.hidden ? {...c.hidden} : null,
+        conditions:(c.conditions || []).slice(), grappledBy:c.grappledBy ? {...c.grappledBy} : null,
         legendaryUsed:c.legendaryUsed,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
@@ -2497,6 +2507,7 @@ registerPanel('turnview', {
       : String(o.detail || '').replace(/^[a-z]+\s+/i, '');
     const rollTxt = rollRaw ? ` <span style="opacity:.6">[${esc(rollRaw)}]</span>` : '';
     this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
+    if (o.onHit && !o.save) this._queueOnHit(o);
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
@@ -2727,7 +2738,7 @@ registerPanel('turnview', {
     }
     const dmg = parts.reduce((s, x) => s + x.amt, 0);
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
-                    total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote,
+                    total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null),
                     type: parts.length ? parts[0].type : '', detail,
                     magical: a.pc || a.magical ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
@@ -2967,6 +2978,84 @@ registerPanel('turnview', {
     this._bonusActionsFor(c).forEach(t => {
       const m = /\btakes the ([^.]*?) action\b/i.exec(t.text); if (m) said(m[1]).forEach(n => out.add(n)); });
     return [...out];
+  },
+  // ─── What a hit inflicts ──────────────────────────────────────────────────
+  // A wolf's bite knocks prone on a failed save, a constrictor grapples: the
+  // hit applied its damage and that was all. Each such hit leaves a line here
+  // until it is answered — roll the save (with the target's conditions,
+  // through combat.rollSave), take a save rolled at the table, or apply a
+  // condition that needs none — or until the turn moves on.
+  _onHitText(oh){
+    return (oh.dc ? 'DC ' + oh.dc + ' ' + oh.ability + ' save or ' : '') + oh.cond.toLowerCase()
+      + (oh.escape ? ' (escape DC ' + oh.escape + ')' : '')
+      + (oh.also ? ', and ' + oh.also.toLowerCase() + ' while it lasts' : '')
+      + (oh.dur ? (oh.dur.kind === 'rounds' ? ' for ' + oh.dur.left + ' rounds' : oh.dur.kind === 'end-next' ? ' until the end of its next turn' : ' until the start of its next turn') : '')
+      + (oh.repeat ? ' (save again at the end of each of its turns)' : '')
+      + (oh.when ? ' — if ' + oh.when : '');
+  },
+  _turnKey(){ return String(state.activeCombatantId) + '#' + (state.combatRound || 0); },
+  _queueOnHit(o){
+    const oh = o.onHit, t = this._order().find(x => x.id === o.target.id);
+    if (!oh || !t || (t.hp || 0) <= 0) return;
+    const name = o.attacker + '’s ' + o.label;
+    if (this._hasCond(t, oh.cond.toLowerCase()) && (!oh.also || this._hasCond(t, oh.also.toLowerCase()))) return;
+    // Immune to it: said, not offered.
+    if (!t.isPC){
+      const ci = JSON.stringify(((this._entryOf(t) || {})._raw || {}).condition_immunities || '').toLowerCase();
+      if (ci.includes(oh.cond.toLowerCase())){ this._log.unshift(`<strong>${esc(t.name)}</strong> is immune to ${esc(oh.cond.toLowerCase())} (${esc(name)})`); return; }
+    }
+    (this._onHits = (this._onHits || []).filter(x => x.turn === this._turnKey())).push(Object.assign({
+      turn: this._turnKey(), srcId: o.attackerId, srcName: o.attacker, tgtId: t.id, tgtName: t.name, name }, oh));
+  },
+  _renderOnHits(){
+    const list = (this._onHits || []).filter(x => x.turn === this._turnKey() && this._order().some(c => c.id === x.tgtId));
+    if (!list.length) return '';
+    return list.map(x => {
+      const i = this._onHits.indexOf(x);
+      return `<div class="tv-onhit"><span class="tv-onhit-l"><b>${esc(x.name)}</b> hit <b>${esc(x.tgtName)}</b>: ${esc(this._onHitText(x))}</span>
+        ${x.dc ? `<button class="btn" data-tv="ohroll" data-i="${i}" title="Roll ${esc(x.tgtName)}&rsquo;s ${esc(x.ability)} save here, with their conditions">Roll save</button>
+                  <button class="btn" data-tv="ohfail" data-i="${i}" title="Rolled at the table and failed: ${esc(x.cond)}">Failed</button>`
+               : `<button class="btn" data-tv="ohfail" data-i="${i}" title="${esc(x.tgtName)} is ${esc(x.cond.toLowerCase())}${x.when ? ' (if ' + esc(x.when) + ')' : ''}">Apply ${esc(x.cond.toLowerCase())}</button>`}
+        <button class="tv-manual-x" data-tv="ohx" data-i="${i}" title="It doesn&rsquo;t apply" aria-label="Dismiss">✕</button></div>`;
+    }).join('');
+  },
+  _onHitAct(kind, i){
+    const x = (this._onHits || [])[i]; if (!x) return;
+    this._onHits.splice(i, 1);
+    const t = this._order().find(c => c.id === x.tgtId);
+    if (kind === 'x' || !t){ this._render(); return; }
+    let fail = true, why = 'failed at the table';
+    if (kind === 'roll'){
+      const C = panelDefs.combat;
+      const sv = C && typeof C.rollSave === 'function' ? C.rollSave(t, x.ability, x.dc, {}) : null;
+      if (!sv){ this._render(); return; }
+      fail = !sv.passed;
+      why = x.ability + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + x.dc + ' (' + sv.detail + ')');
+    } else if (!x.dc) why = '';
+    this._snapshot(`${x.name} → ${t.name}: ${x.cond}`);
+    if (fail){
+      const add = [x.cond].concat(x.also ? [x.also] : []);
+      t.conditions = [...new Set([...(t.conditions || []), ...add])];
+      // Who holds it: a grapple ends with them, and (2024) the grappled
+      // creature's attacks on anyone else are at disadvantage.
+      if (add.includes('Grappled')) t.grappledBy = { id: x.srcId, name: x.srcName, escape: x.escape || null };
+      // Its duration and its repeat save, on the tracker's own condition
+      // timer: the save comes up at the end of each of the target's turns.
+      const C = panelDefs.combat, ti = state.combatants.indexOf(t);
+      if ((x.dur || x.repeat) && C && typeof C._setCondTimer === 'function' && ti >= 0)
+        C._setCondTimer(ti, x.cond, Object.assign({}, x.dur || {}, x.repeat ? { save: { ab: x.ability.toLowerCase(), dc: x.dc } } : {}));
+    }
+    const txt = `<strong>${esc(t.name)}</strong> ${fail ? 'is ' + esc(x.cond.toLowerCase()) + (x.also ? ' and ' + esc(x.also.toLowerCase()) : '') : 'resists — not ' + esc(x.cond.toLowerCase())}`
+      + (why ? ` <span class="dim">(${esc(why)})</span>` : '') + ` <span class="dim">· ${esc(x.name)}</span>`;
+    this._setResult(txt, true);
+    this._log.unshift(txt);
+    save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
+  },
+  // The edition a creature plays by: a character's build, otherwise the
+  // campaign's.
+  _edOf(c){
+    const p = c && c.isPC ? this._partyOf(c) : null;
+    return p ? ((p.build && p.build.edition) || p.rules || '2024') : ((state.settings && state.settings.builderEdition) || '2024');
   },
   _passivePerception(o){
     if (o.isPC){
@@ -3435,6 +3524,7 @@ registerPanel('turnview', {
         if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
+      else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx'){ this._onHitAct(act.slice(2), +el.dataset.i); }
       else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
       else if (act === 'undo'){ if (typeof sktUndo === 'function') sktUndo(); else this._undoLast(); }

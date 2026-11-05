@@ -1520,6 +1520,52 @@ function sktParseMonsterAttack(action){
   };
 }
 
+// A condition the HIT inflicts: "must succeed on a DC 11 Strength saving
+// throw or be knocked prone" (a wolf), "the target is grappled (escape DC
+// 16)" (a constrictor), 2024's "it has the Prone condition". 704 attacks in
+// the bestiary do this, and a hit applied the damage and nothing else.
+//   → { cond, dc?, ability?, escape?, also?, when? } or null
+// `when` is the sentence's condition ("the target is a Medium or smaller
+// creature"); `also` what lasts while the grapple does ("Until this grapple
+// ends, the target is restrained"). A condition the sentence only TESTS for
+// ("If the target is prone, …") is not one it inflicts.
+const SKT_HIT_CONDS = 'blinded|charmed|deafened|frightened|grappled|incapacitated|paralyzed|petrified|poisoned|prone|restrained|stunned|unconscious';
+function sktOnHitCondition(desc){
+  const s = String(desc || '');
+  const at = s.search(/\bHit:/i); if (at < 0) return null;
+  const sentences = s.slice(at + 4).split(/(?<=\.)\s+/);
+  const cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  const AB = { strength: 'STR', dexterity: 'DEX', constitution: 'CON', intelligence: 'INT', wisdom: 'WIS', charisma: 'CHA' };
+  const saveRe = new RegExp('\\bDC (\\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw or (?:be |become |fall |is )?(?:knocked )?(' + SKT_HIT_CONDS + ')\\b', 'i');
+  const flatRe = new RegExp('\\b(?:the target|it|the creature) (?:is|has the) (?:also )?(?:knocked )?(' + SKT_HIT_CONDS + ')\\b(?: condition)?(?:[^.(]*?\\(escape DC (\\d+)\\))?', 'i');
+  const alsoRe = new RegExp('\\buntil (?:this|the) grapple ends, the (?:target|creature) (?:is|has the) (' + SKT_HIT_CONDS + ')\\b', 'i');
+  for (let k = 0; k < sentences.length; k++){
+    const sen = sentences[k];
+    const ifM = /^(?:If|While|Unless)\s+([^,]*),\s*/i.exec(sen);
+    const body = ifM ? sen.slice(ifM[0].length) : sen;
+    let out = null, m = saveRe.exec(body);
+    if (m) out = { cond: cap(m[3]), dc: +m[1], ability: AB[m[2].toLowerCase()] };
+    else if ((m = flatRe.exec(body))){ out = { cond: cap(m[1]) }; if (m[2]) out.escape = +m[2]; }
+    if (!out) continue;
+    const when = ifM ? ifM[1].trim() : '';
+    if (when && !/^the target is a creature$/i.test(when)) out.when = when;
+    const also = alsoRe.exec(sentences.slice(k).join(' '));
+    if (also && cap(also[1]) !== out.cond) out.also = cap(also[1]);
+    // How long, and whether it can be shaken off: "paralyzed for 1 minute.
+    // The target can repeat the saving throw at the end of each of its turns".
+    // (A duration measured on the ATTACKER's turn is left to the DM.)
+    const near = sentences.slice(k, k + 2).join(' ');
+    const rounds = /\bfor (\d+) minutes?\b/i.exec(near), rds = /\bfor (\d+) rounds?\b/i.exec(near);
+    if (/\buntil the end of (?:its|the target['’]s) next turn\b/i.test(sen)) out.dur = { kind: 'end-next' };
+    else if (/\buntil the start of (?:its|the target['’]s) next turn\b/i.test(sen)) out.dur = { kind: 'start-next' };
+    else if (rds) out.dur = { kind: 'rounds', left: +rds[1] };
+    else if (rounds && +rounds[1] <= 10) out.dur = { kind: 'rounds', left: 10 * +rounds[1] };
+    if (out.dc && /\b(?:repeat|repeating) the sav(?:ing throw|e) at the end of each of its turns|\bat the end of each of its turns,? (?:repeating|it (?:can )?repeats?) the sav/i.test(near)) out.repeat = true;
+    return out;
+  }
+  return null;
+}
+
 // Every damaging action on a monster, across the action groups worth having in
 // a fight. Legendary actions are included because they are exactly the thing a
 // DM is juggling when a stat block gets busy.
@@ -1699,7 +1745,12 @@ function sktParseMonsterAttacks(raw){
       const parsed = sktParseMonsterAttack(a);
       // (a reaction's "the attacker takes 13 (3d8) fire damage" is its
       // trigger's answer, not something to roll on its turn)
-      if (parsed && !(tag === 'reaction' && parsed.autoDmg)){ parsed.group = tag; out.push(parsed); }
+      if (parsed && !(tag === 'reaction' && parsed.autoDmg)){
+        parsed.group = tag;
+        // what the hit does besides damage (prone, grappled…)
+        if (parsed.toHit && !parsed.save){ const oh = sktOnHitCondition(a.desc); if (oh) parsed.onHit = oh; }
+        out.push(parsed);
+      }
     });
   });
   return out;
