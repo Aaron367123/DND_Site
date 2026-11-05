@@ -1623,7 +1623,7 @@ function cbRuleBreaks(){
     });
     if (sc) (sc.classes || [{ view: b, cls: b.cls }]).forEach(x => {
       const lim = sktSchoolLimit(x.view || b, R);
-      if (lim && lim.off > lim.free) add('spells', (sc.classes ? _sktTitle(x.cls) + ': ' : '') + _sktCount(lim.off - lim.free, 'spell') + ' not ' + lim.text + ' too many (' + lim.free + ' from any school allowed)');
+      if (lim && lim.off > lim.free) add('spells', (sc.classes ? _sktTitle(x.cls) + ': ' : '') + _sktCountOf(lim.off - lim.free, 'spell') + ' not ' + lim.text + ' too many (' + lim.free + ' from any school allowed)');
     }); }
   // Multiclassing: each class's prerequisite, the first one's included.
   { const parts = sktClassLevels(b, R);

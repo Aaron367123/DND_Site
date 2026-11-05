@@ -1517,7 +1517,32 @@ function sktParseMultiattack(raw){
   let m;
   while ((m = reNamed.exec(text))){ const n = _sktCount(m[1]); if (n) counts[m[2].trim().toLowerCase()] = n; }
   while ((m = reWith.exec(text))){  const n = _sktCount(m[1]); if (n) counts[m[2].trim().toLowerCase()] = n; }
-  return { text, counts };
+  // "two melee attacks" names no attack called "melee".
+  ['melee', 'ranged', 'weapon', 'melee weapon', 'ranged weapon', 'natural weapon'].forEach(k => { delete counts[k]; });
+  // A choice of attacks, each swing any of them: "makes three attacks, using
+  // Greataxe or Javelin in any combination" (2024), "two Greatsword or Heavy
+  // Crossbow attacks", "two attacks with its greataxe or its spear". The
+  // first-named is the default; the others are offered at each swing.
+  let combo = null;
+  const names = s => s.split(/\s*,\s*(?:or\s+)?|\s+or\s+/i).map(x => x.replace(/^(?:its|his|her|their|the|a|an)\s+/i, '').trim().toLowerCase()).filter(Boolean);
+  const cm = /makes\s+(\w+)\s+attacks?,?\s+using\s+(.+?)\s+in any combination/i.exec(text)
+    || /makes\s+(\w+)\s+([A-Za-z][\w'’\- ]*?\s+or\s+[A-Za-z][\w'’\- ]*?)\s+attacks?\b/i.exec(text)
+    || /makes\s+(\w+)\s+attacks?\s+with\s+((?:its|his|her|their)\s+[\w'’\- ]+?(?:(?:\s*,\s*|\s+or\s+)(?:its|his|her|their)?\s*[\w'’\- ]+?)?)(?=\s*[.,;]|$)/i.exec(text);
+  if (cm && _sktCount(cm[1])) combo = { n: _sktCount(cm[1]), names: names(cm[2]) };
+  // A werebear's "In bear form, two claw attacks. In humanoid form, two
+  // greataxe attacks": one form's or the other's, not all four.
+  if (!combo && (text.match(/\bIn\s+[\w-]+\s+form\b/gi) || []).length >= 2 && Object.keys(counts).length > 1)
+    combo = { n: Math.max(...Object.values(counts)), names: Object.keys(counts), forms: true };
+  // Or none named at all — "makes two attacks", "two melee attacks": any of its attacks.
+  const any = !combo && !Object.keys(counts).length && /makes\s+(\w+)\s+(?:melee\s+|weapon\s+)?attacks?\b(?!\s*:)/i.exec(text);
+  if (any && _sktCount(any[1]) && !/\bwith\b/i.test(text.slice(any.index, any.index + any[0].length + 6))) combo = { n: _sktCount(any[1]), names: [], any: true, melee: /melee/i.test(any[0]) };
+  // "It can replace one attack with a Bite attack": one more choice.
+  const rep = /replace\s+(?:one|any)\s+(?:of\s+(?:the|those)\s+)?attacks?\s+with\s+(?:a|an|one)\s+([A-Za-z][\w'’\- ]*?)\s+attack/i.exec(text);
+  if (combo && rep) combo.extra = [rep[1].trim().toLowerCase()];
+  // "…two attacks, only one of which can be a bite attack": not the default.
+  const only = /only one of which can be (?:a|an|its)\s+([A-Za-z][\w'’\- ]*?)\s+attack/i.exec(text);
+  if (combo && only) combo.notDefault = only[1].trim().toLowerCase();
+  return { text, counts, combo };
 }
 // _stripTags lives in data-loader.js, which is not guaranteed to have parsed
 // yet in every context that loads utils.js. Descriptions are already stripped
@@ -1533,7 +1558,8 @@ function _stripTagsIfAvailable(s){
 // confident match — the caller then shows nothing rather than a wrong number.
 function sktMultiattackCountFor(counts, name){
   if (!counts || !name) return 0;
-  const n = String(name).trim().toLowerCase();
+  // "Grave Strike (Vampire Form Only)" is the Grave Strike the prose counts.
+  const n = String(name).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
   if (counts[n]) return counts[n];
   if (counts[n + 's']) return counts[n + 's'];
   const dep = n.replace(/s$/, '');

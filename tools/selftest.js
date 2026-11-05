@@ -14060,6 +14060,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 192 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = realD; document.getElementById('area-save-back')?.remove(); state.combatants = JSON.parse(keepC); state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 193: Multiattack plans — the counts parse again, and a choice of attacks is offered at each swing --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const plan = (n, src) => { const m = find(n, src); const p = panelDefs.attacks._parsed(m._raw); return panelDefs.attacks._plan(p); };
+        const names = pl => pl.map(x => x.name.replace(/\s*\(.*\)$/, '') + (x.choice && x.choice.length > 1 ? '*' : '')).join(',');
+        ok('multiattack: "two" is 2 again — the character builder\'s own _sktCount had replaced it', _sktCount('two') === 2 && typeof _sktCountOf === 'function' && _sktCountOf(2, 'spell') === '2 spells', String(_sktCount('two')));
+        ok('multiattack: a hill giant\'s two greatclub attacks; a dragon\'s bite and two claws', names(plan('Hill Giant', 'MM')) === 'Greatclub,Greatclub' && names(plan('Adult Red Dragon', 'MM')) === 'Bite,Claw,Claw',
+           names(plan('Hill Giant', 'MM')) + ' / ' + names(plan('Adult Red Dragon', 'MM')));
+        ok('multiattack: a 2024 "three attacks, using Greataxe or Javelin in any combination" is three swings, each a choice',
+           names(plan('Berserker Commander', 'XMM')) === 'Greataxe*,Greataxe*,Greataxe*', names(plan('Berserker Commander', 'XMM')));
+        ok('multiattack: a vampire\'s "Grave Strike (Vampire Form Only)" is the Grave Strike the prose counts', names(plan('Vampire', 'XMM')) === 'Grave Strike,Grave Strike', names(plan('Vampire', 'XMM')));
+        ok('multiattack: a werebear attacks as one form or the other — two swings, not four', names(plan('Werebear', 'MM')) === 'Claw*,Claw*', names(plan('Werebear', 'MM')));
+        ok('multiattack: "two attacks with its scimitar", "two melee attacks", "only one of which can be a bite"',
+           names(plan('Goblin Boss', 'MM')) === 'Scimitar,Scimitar' && names(plan('Spy', 'MM')) === 'Shortsword*,Shortsword*' && names(plan('Vampire Spawn', 'MM')) === 'Claws*,Claws*',
+           [names(plan('Goblin Boss', 'MM')), names(plan('Spy', 'MM')), names(plan('Vampire Spawn', 'MM'))].join(' / '));
+        // In the turn view: run it, and switch a swing to the javelin.
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(find('Berserker Commander', 'XMM')); await sleep(50);
+        const c = state.combatants[0]; state.activeCombatantId = c.id; save();
+        openPanel('turnview'); await sleep(300);
+        const T = panelDefs.turnview;
+        T._startMulti(); await sleep(50);
+        const jav = [...document.querySelectorAll('[data-tv="qpick"]')].find(b => /Javelin/.test(b.textContent));
+        ok('multiattack: each swing offers Greataxe or Javelin', !!jav && document.querySelectorAll('[data-tv="qpick"]').length === 2, document.querySelectorAll('[data-tv="qpick"]').length + '');
+        jav && jav.click(); await sleep(50);
+        ok('multiattack: picking Javelin makes this swing a javelin', T._queue && T._queue.items[0].name === 'Javelin' && T._queue.items[1].name === 'Greataxe', JSON.stringify(T._queue && T._queue.items.map(x => x.name)));
+        T._finishMulti(true);
+        closePanel('turnview');
+      } catch(e){ ok('round 193 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

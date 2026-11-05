@@ -1292,6 +1292,10 @@ registerPanel('turnview', {
       head = `<div class="tv-multi run">
         <span class="tv-multi-tag">Multiattack ${q.i + 1}/${q.items.length}</span>
         <span class="tv-multi-text"><b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
+        ${it && (it.choice || []).length > 1 ? `<span class="tv-multi-pick" title="The stat block lets this swing be any of these">${it.choice.map(ai => {
+          const nm = ((this._attacksFor(c) || [])[ai] || {}).name || '';
+          return `<button class="btn small${ai === it.ai ? ' primary' : ''}" data-tv="qpick" data-ai="${ai}">${esc(nm)}</button>`;
+        }).join('')}</span>` : ''}
         <span class="tv-multi-pips">${q.items.map((x, k) =>
           `<span class="tv-multi-pip${k < q.i ? ' done' : k === q.i ? ' now' : ''}">${esc(x.name)}</span>`).join('')}</span>
         <button class="btn" data-tv="qmiss" title="This one missed — skip to the next">Miss</button>
@@ -2973,6 +2977,13 @@ registerPanel('turnview', {
       else if (act === 'multi'){ this._startMulti(); }
       else if (act === 'legend'){ this._useLegendary(el.dataset.id, +el.dataset.ai); }
       else if (act === 'qmiss'){ if (this._queue){ this._queue.misses++; this._advanceQueue(); } }
+      else if (act === 'qpick'){
+        // This swing as another of the attacks the stat block allows.
+        const q = this._queue, it = q && q.items[q.i], ai = +el.dataset.ai;
+        const src = q && this._order().find(x => x.id === q.srcId);
+        const a = src && (this._attacksFor(src) || [])[ai];
+        if (it && a && (it.choice || []).includes(ai)){ q.items[q.i] = Object.assign({}, it, { ai, name: a.name }); this._render(); }
+      }
       else if (act === 'qstop'){ this._finishMulti(true); }
       else if (act === 'manual'){ this._manualAttack(); }
       else if (act === 'adj'){ this._adjust(+el.dataset.sign); }
