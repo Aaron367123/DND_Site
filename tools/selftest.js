@@ -6766,7 +6766,7 @@
         ok('off-hand: …until Two-Weapon Fighting adds it', offOf(Object.assign({}, fb, { optional: { 'Fighting Style': ['Two-Weapon Fighting'] } })) === '1d6+3 slashing', offOf(Object.assign({}, fb, { optional: { 'Fighting Style': ['Two-Weapon Fighting'] } })));
         RG.id = 'pc_r8a'; state.party.push(RG); save();
         openCharSheet('pc_r8a'); await sleep(300);
-        const sb = document.querySelector('#cs-root [data-cs-xdmg^="Sneak Attack|"]');
+        const sb = document.querySelector('#cs-root [data-cs-sneak]');
         ok('sneak attack: a 5th-level rogue rolls 3d6', !!sb && /3d6/.test(sb.textContent));
         window.sktD = () => 4;
         sb.click(); await sleep(30);
