@@ -14714,6 +14714,57 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 207 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 208: a character's conditions come into the fight and go out with them; Dodge needs to see and move --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const p = { id: 'r208p', name: 'Pois', hp: 20, hpMax: 20, ac: 12, conditions: ['Poisoned', 'Prone'], build: { edition: '2024' }, sheet: { attacks: [] } };
+        state.party.push(p);
+        state.combatants = []; save();
+        C._addPartyToCombat(state.party.length - 1);
+        const co = state.combatants.find(x => x.id === 'r208p');
+        ok('conditions: a character poisoned before the fight is poisoned in it', co && (co.conditions || []).includes('Poisoned') && co.conditions.includes('Prone'), JSON.stringify(co));
+        ok('conditions: the combat slot holds them now (no second copy on the sheet)', !(p.conditions || []).length && JSON.stringify(_csConditions(p)) === JSON.stringify(['Poisoned', 'Prone']), JSON.stringify([p.conditions, _csConditions(p)]));
+        C.addMonster(find('Ogre', 'MM')); await sleep(50);
+        const ogre = state.combatants.find(x => !x.isPC);
+        const cm = T._condMods(ogre, co);
+        ok('conditions: the ogre attacks the prone character with advantage', cm.adv.some(x => /target prone/.test(x)), JSON.stringify(cm));
+        co.conditions.push('Restrained');
+        C._removeCombatantAt(state.combatants.indexOf(co));
+        ok('conditions: taken out of the fight, they keep them', JSON.stringify(p.conditions) === JSON.stringify(['Poisoned', 'Prone', 'Restrained']), JSON.stringify(p.conditions));
+        C._addPartyToCombat(state.party.length - 1);
+        const co2 = state.combatants.find(x => x.id === 'r208p');
+        // Dodge: lost while restrained, or when the dodger can't see the attacker.
+        co2.conditions = []; co2.dodging = true; save();
+        state.activeCombatantId = ogre.id;
+        T._armed = co2.id;
+        const keepD = window.sktD; let notes = [];
+        const keepRes = T._resolve; T._resolve = r => notes.push(r.hitNote || '');
+        try {
+          window.sktD = () => 10;
+          ogre.actionUsed = false; T._rollAttack(0, { attacker: ogre, target: co2 });
+          co2.conditions = ['Restrained'];
+          ogre.actionUsed = false; T._rollAttack(0, { attacker: ogre, target: co2 });
+          co2.conditions = ['Blinded'];
+          ogre.actionUsed = false; T._rollAttack(0, { attacker: ogre, target: co2 });
+        } finally { window.sktD = keepD; T._resolve = keepRes; }
+        ok('dodge: a dodging target gives disadvantage', /target dodging/.test(notes[0]), JSON.stringify(notes));
+        ok('dodge: lost while restrained (speed 0)', !/target dodging/.test(notes[1]), JSON.stringify(notes));
+        ok('dodge: lost when the dodger cannot see the attacker', !/target dodging/.test(notes[2]), JSON.stringify(notes));
+        // End combat: everything comes back to the sheet.
+        co2.conditions = ['Frightened'];
+        C._render();
+        const endBtn = document.querySelector('#panel-combat [data-act="end"], [data-act="end"]');
+        endBtn && endBtn.click(); await sleep(80);
+        const okBtn = document.getElementById('conf-ok'); okBtn && okBtn.click(); await sleep(120);
+        ok('conditions: the End button ended it', !state.combatants.length, state.combatants.length + ' ' + !!endBtn + ' ' + !!okBtn);
+        ok('conditions: when combat ends they are on the sheet', JSON.stringify(p.conditions) === JSON.stringify(['Frightened']), JSON.stringify(p.conditions));
+      } catch(e){ ok('round 208 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; T._armed = null; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

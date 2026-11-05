@@ -2630,7 +2630,10 @@ registerPanel('turnview', {
     const advWhy = cm.adv.slice(), disWhy = cm.dis.slice();
     if (asked > 0) advWhy.unshift('called');
     if (asked < 0) disWhy.unshift('called');
-    if (t.dodging) disWhy.push('target dodging');
+    // Dodge: "if you can see the attacker", and lost "if you are
+    // incapacitated or if your speed drops to 0" (grappled, restrained).
+    if (t.dodging && !this._incap(t) && !this._hasCond(t, 'grappled') && !this._hasCond(t, 'restrained') && !this._hasCond(t, 'blinded')
+        && !(this._hasCond(c, 'invisible') && !this._seesUnseen(t, c))) disWhy.push('target dodging');
     // An ally's Help against this target: used by this roll.
     const helper = this._order().find(o => o !== c && o.helping && o.helping.target === t.id && !o.isPC === !c.isPC);
     if (helper){ advWhy.push('helped by ' + helper.name); helper.helping = null; }

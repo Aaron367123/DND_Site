@@ -843,6 +843,7 @@ registerPanel('combat',{
           // off the board, and an undo that brought the combatants back but
           // left the board empty would be worse than no undo at all.
           sktUndoable('Combat ended', () => {
+            state.combatants.forEach(c => this._returnConditions(c));
             state.combatants = [];
             state.combatRound = 0;
             state.activeCombatantId = null;
@@ -1221,7 +1222,13 @@ registerPanel('combat',{
     if(state.combatants.find(c=>c.isPC&&c.id===p.id)){showToast(p.name+' already in combat');return;}
     const dexMod = (p.abilities && typeof p.abilities.dex === 'number') ? Math.floor((p.abilities.dex - 10)/2) : null;
     const initBonus = (typeof p.init === 'number' ? p.init : null) ?? dexMod ?? 0;
-    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus,initiative:p.init||0,conditions:[]});
+    // The character's conditions come with them. They started the fight with
+    // none, so a character poisoned before it began showed no chip here and
+    // was attacked as if healthy. The combat slot holds them from now on
+    // (party._toggleCondition writes there while there is one).
+    const carried = Array.isArray(p.conditions) ? p.conditions.slice() : [];
+    if (carried.length) p.conditions = [];
+    state.combatants.push({id:p.id,name:p.name,isPC:true,cls:p.cls||'fighter',hp:p.hp,hpMax:p.hpMax,ac:p.ac,initBonus,initiative:p.init||0,conditions:carried});
     if(!state.combatRound) state.combatRound=1;
     save();this._render();
   },
@@ -1586,9 +1593,18 @@ registerPanel('combat',{
   // passes to whoever now occupies its slot. Falling off the end of the list
   // means the round ended with it, so the round has to tick — otherwise the
   // counter stalls forever if the last creature in the order keeps dying.
+  // And they leave with them: a character still poisoned when the fight ends
+  // (or when they're taken out of it) is still poisoned on their sheet. They
+  // were dropped with the combat slot.
+  _returnConditions(c){
+    if (!c || !c.isPC || !(c.conditions || []).length) return;
+    const p = state.party.find(x => x.id === c.id); if (!p) return;
+    p.conditions = [...new Set([...(p.conditions || []), ...c.conditions])];
+  },
   _removeCombatantAt(i){
     const c = state.combatants[i];
     if (!c) return;
+    this._returnConditions(c);
     const wasActive = state.activeCombatantId === c.id;
     state.combatants.splice(i, 1);
     if (!wasActive) return;

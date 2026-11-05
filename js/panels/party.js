@@ -3189,7 +3189,8 @@ registerPanel('party',{
             panelDefs.combat._addPartyToCombat(i);
           } else {
             const dexMod = (c.abilities && typeof c.abilities.dex==='number') ? Math.floor((c.abilities.dex-10)/2) : 0;
-            state.combatants.push({id:c.id, name:c.name, isPC:true, cls:c.cls||'fighter', hp:c.hp, hpMax:c.hpMax, ac:c.ac, initBonus: c.init || dexMod, initiative: c.init || 0, conditions:[]});
+            state.combatants.push({id:c.id, name:c.name, isPC:true, cls:c.cls||'fighter', hp:c.hp, hpMax:c.hpMax, ac:c.ac, initBonus: c.init || dexMod, initiative: c.init || 0, conditions:(c.conditions || []).slice()});
+            c.conditions = [];
             if (!state.combatRound) state.combatRound = 1;
             save();
           }
