@@ -2952,6 +2952,8 @@ registerPanel('combat',{
       ac: m.ac,
       initBonus: initMod,
       initiative: initMod, // pre-fill with the initiative bonus; user can bump it before/during combat
+      // Its space on the map (a Large ogre is 2×2): see sktTokenCellsForSize.
+      ...(m && m._raw && m._raw.size ? { size: String(m._raw.size) } : {}),
       ...(ini && ini.mode ? { initMode: ini.mode } : {}),
       conditions: [],
       ...legendaryFields,

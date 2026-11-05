@@ -3945,7 +3945,9 @@ registerPanel('battlemap',{
         // renderIcon() re-bases it through assetUrl() at render time.
         const tokenImg = m.img ? 'img/' + bestiaryPortraitPath(m.img) : null;
         const portrait = m.portrait || tokenImg || null;
-        this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:1, dead:false, icon:npcIcon, portrait});
+        // Its space from the stat block the folder entry points at.
+        const sb = typeof _5eData !== 'undefined' && Array.isArray(_5eData) ? _5eData.find(r => r.cat === 'monster' && r.name === m.name && (!m.source || r._source === m.source)) : null;
+        this._tokens.push({id:uid(), label:displayName, baseName:m.name, x, y, isPC:false, color:'#993333', size:sktTokenCellsForSize(m.size || (sb && sb._raw && sb._raw.size)), dead:false, icon:npcIcon, portrait});
         this._renderTokens(); this._saveMap();
       }
     });
@@ -5781,7 +5783,7 @@ registerPanel('battlemap',{
       const want = new Set(this._placing || []);
       const moving = (this._tokens || []).filter(t => t && t.cid != null && want.has(t.cid));
       const others = (this._tokens || []).filter(t => !moving.includes(t));
-      moving.forEach(t => { const spot = sktFreeCell(others, this._cols, this._rows, this._csScreen(), pt.x, pt.y); t.x = spot.x; t.y = spot.y; others.push(t); });
+      moving.forEach(t => { const spot = sktFreeCell(others, this._cols, this._rows, this._csScreen(), pt.x, pt.y, t.size); t.x = spot.x; t.y = spot.y; others.push(t); });
       done();
       if (moving.length){ this._renderTokens(); this._saveMap(); }
     };
@@ -5827,17 +5829,25 @@ registerPanel('battlemap',{
 // CLOSED, where `this._tokens` does not exist. Callers mutate `tokens`
 // between calls, which is the point: placing five creatures walks five
 // different cells instead of stacking them all on the first free one.
-function sktFreeCell(tokens, cols, rows, cs, px, py){
+// `size` (cells, default 1): a 2×2 ogre or 3×3 giant needs its whole
+// footprint clear, and its centre on a grid corner when it is an even size,
+// or it overlapped the creature beside it and straddled the grid lines.
+function sktFreeCell(tokens, cols, rows, cs, px, py, size){
   const list = Array.isArray(tokens) ? tokens : [];
-  const maxCol = Math.max(0, (cols || 1) - 1), maxRow = Math.max(0, (rows || 1) - 1);
-  const col0 = Math.max(0, Math.min(maxCol, Math.floor(px / cs)));
-  const row0 = Math.max(0, Math.min(maxRow, Math.floor(py / cs)));
+  const n = Math.max(1, Math.ceil(+size || 1));
+  const maxCol = Math.max(0, (cols || 1) - n), maxRow = Math.max(0, (rows || 1) - n);
+  const col0 = Math.max(0, Math.min(maxCol, Math.floor(px / cs - (n - 1) / 2)));
+  const row0 = Math.max(0, Math.min(maxRow, Math.floor(py / cs - (n - 1) / 2)));
+  const at = (c, r) => ({ x: (c + n / 2) * cs, y: (r + n / 2) * cs });
   const taken = (c, r) => {
-    const x = (c + 0.5) * cs, y = (r + 0.5) * cs;
-    return list.some(t => t.x != null &&
-      Math.abs(t.x - x) < cs / 2 && Math.abs(t.y - y) < cs / 2);
+    const { x, y } = at(c, r);
+    return list.some(t => {
+      if (t.x == null) return false;
+      const reach = (n + Math.max(1, +t.size || 1)) / 2 * cs - 1;
+      return Math.abs(t.x - x) < reach && Math.abs(t.y - y) < reach;
+    });
   };
-  if (!taken(col0, row0)) return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
+  if (!taken(col0, row0)) return at(col0, row0);
   // Rings outward from the centre cell. Bounded by the map, so this always
   // terminates; if every cell is occupied we fall back to the centre.
   const maxRing = Math.max(cols || 1, rows || 1);
@@ -5847,11 +5857,11 @@ function sktFreeCell(tokens, cols, rows, cs, px, py){
         if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;   // ring edge only
         const c = col0 + dc, r = row0 + dr;
         if (c < 0 || r < 0 || c > maxCol || r > maxRow) continue;
-        if (!taken(c, r)) return { x: (c + 0.5) * cs, y: (r + 0.5) * cs };
+        if (!taken(c, r)) return at(c, r);
       }
     }
   }
-  return { x: (col0 + 0.5) * cs, y: (row0 + 0.5) * cs };
+  return at(col0, row0);
 }
 
 // ─── Auto-tokens: the tracker is the roster, the map is the picture ──────────
@@ -5868,6 +5878,23 @@ function sktFreeCell(tokens, cols, rows, cs, px, py){
 // Only tokens it created carry `auto: true`, and only those are removed again:
 // a token the DM placed by hand is theirs and outlives the fight.
 
+// A creature's space in cells (5 ft each): Large 2×2, Huge 3×3,
+// Gargantuan 4×4, Tiny half a cell. Every monster token was 1×1, so a hill
+// giant stood in one square and reach and flanking read off a token a third
+// of its size. "Medium or Small" takes the first.
+function sktTokenCellsForSize(size){
+  const s = String(size || '').trim().toLowerCase().split(/[\s,/]+/)[0];
+  return { tiny: 0.5, small: 1, medium: 1, large: 2, huge: 3, gargantuan: 4 }[s] || 1;
+}
+function _sktCombatantSize(c){
+  if (!c || c.isPC) return '';
+  if (c.size) return c.size;
+  try {
+    const e = typeof panelDefs !== 'undefined' && panelDefs.combat && panelDefs.combat.statBlockFor ? panelDefs.combat.statBlockFor(c) : null;
+    const raw = e && (e._raw || e);
+    return (raw && raw.size) || '';
+  } catch(e){ return ''; }
+}
 function _sktTokenForNewCombatant(c, x, y){
   const isPC = !!c.isPC;
   const glyph = (typeof CLASS_ICONS !== 'undefined'
@@ -5887,7 +5914,7 @@ function _sktTokenForNewCombatant(c, x, y){
     x, y,
     isPC,
     color: isPC ? '#696969' : '#993333',
-    size: 1,
+    size: sktTokenCellsForSize(_sktCombatantSize(c)),
     dead: (c.hp || 0) <= 0,
     icon: c.icon || (mate && mate.icon) || glyph,
     portrait: c.portrait || (mate && mate.portrait) || null,
@@ -5956,8 +5983,10 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
       return;
     }
     if (opts.hold && c.id != null && opts.hold.has(c.id)) return;
-    const { x, y } = sktFreeCell(tokens, cols, rows, cs, centre.x, centre.y);
-    tokens.push(_sktTokenForNewCombatant(c, x, y));
+    const tok = _sktTokenForNewCombatant(c, 0, 0);
+    const { x, y } = sktFreeCell(tokens, cols, rows, cs, centre.x, centre.y, tok.size);
+    tok.x = x; tok.y = y;
+    tokens.push(tok);
     added++;
   });
 

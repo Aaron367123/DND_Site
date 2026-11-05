@@ -14094,6 +14094,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 193 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 194: a monster's token is its size (a Huge giant 3×3), and distance runs edge to edge --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        ok('tokens: Tiny ½, Small and Medium 1, Large 2, Huge 3, Gargantuan 4; "Medium or Small" is 1',
+           ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan', 'Medium or Small', ''].map(sktTokenCellsForSize).join() === '0.5,1,1,2,3,4,1,1',
+           ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan', 'Medium or Small', ''].map(sktTokenCellsForSize).join());
+        const giant = _5eData.find(r => r.cat === 'monster' && r.name === 'Hill Giant' && r._source === 'XMM');
+        const ogre = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'XMM');
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(giant); panelDefs.combat.addMonster(ogre); await sleep(50);
+        const toks = [];
+        sktReconcileTokens(toks, state.combatants, 24, 18, 50, { x: 600, y: 450 });
+        const tg = toks.find(t => t.cid === state.combatants[0].id), to = toks.find(t => t.cid === state.combatants[1].id);
+        ok('tokens: a hill giant joining the fight gets a 3×3 token, an ogre 2×2', state.combatants[0].size === 'Huge' && tg && tg.size === 3 && to && to.size === 2,
+           JSON.stringify([state.combatants[0].size, tg && tg.size, to && to.size]));
+        // An older combatant with no size recorded: read off its stat block.
+        const old = Object.assign({}, state.combatants[1]); delete old.size; old.id = 'r194old';
+        const t2 = []; sktReconcileTokens(t2, [old], 24, 18, 50, { x: 600, y: 450 });
+        ok('tokens: a combatant saved before sizes were kept still gets its stat block\'s', t2[0] && t2[0].size === 2, JSON.stringify(t2[0] && t2[0].size));
+        // Placement: a 3×3 giant next to a fighter doesn't overlap them; a 2×2 sits on the grid.
+        const pc = [{ x: 625, y: 475, size: 1 }];
+        const g = sktFreeCell(pc, 24, 18, 50, 625, 475, 3), o2 = sktFreeCell(pc, 24, 18, 50, 625, 475, 2);
+        const clear = (p, n) => Math.abs(p.x - 625) >= (n + 1) / 2 * 50 - 1 || Math.abs(p.y - 475) >= (n + 1) / 2 * 50 - 1;
+        ok('tokens: a 3×3 giant placed by a fighter leaves them their square; a 2×2 ogre lines up with the grid',
+           clear(g, 3) && clear(o2, 2) && g.x % 50 === 25 && o2.x % 50 === 0 && o2.y % 50 === 0, JSON.stringify([g, o2]));
+        const T = panelDefs.turnview, cs = T._cs() || 50;
+        const at = (x, size) => ({ x: x * cs, y: 0, size });
+        ok('distance: a 3×3 giant beside a fighter is 5 ft (it was 10); two Medium creatures side by side 5 ft; one square apart 10 ft',
+           T._edgeFeet(at(0, 3), at(2, 1)) === 5 && T._edgeFeet(at(0, 1), at(1, 1)) === 5 && T._edgeFeet(at(0, 1), at(2, 1)) === 10 && T._edgeFeet(at(0, 2), at(2.5, 1)) === 10,
+           [T._edgeFeet(at(0, 3), at(2, 1)), T._edgeFeet(at(0, 1), at(1, 1)), T._edgeFeet(at(0, 1), at(2, 1)), T._edgeFeet(at(0, 2), at(2.5, 1))].join());
+      } catch(e){ ok('round 194 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

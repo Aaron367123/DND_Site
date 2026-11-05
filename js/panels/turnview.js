@@ -744,9 +744,18 @@ registerPanel('turnview', {
   _feetBetween(a, b){
     const ta = this._tokenFor(a), tb = this._tokenFor(b);
     if (!ta || !tb) return null;                 // not on the map: unknown, not zero
+    return this._edgeFeet(ta, tb);
+  },
+  // From the nearest square of one creature to the nearest of the other. Token
+  // x/y is the centre, so centre-to-centre put a 2×2 giant standing next to
+  // the fighter at 10 ft: out of reach, no opportunity attack, no "within 5
+  // feet" auto-crit. Each axis loses the half-widths beyond one square.
+  _edgeFeet(ta, tb){
     const cs = this._cs() || 50;
-    const dx = Math.abs(ta.x - tb.x) / cs, dy = Math.abs(ta.y - tb.y) / cs;
-    return Math.round(Math.max(dx, dy)) * this._ftPerCell();
+    const span = ((ta.size || 1) + (tb.size || 1)) / 2 - 1;
+    const ax = Math.max(0, Math.abs(ta.x - tb.x) / cs - Math.max(0, span));
+    const ay = Math.max(0, Math.abs(ta.y - tb.y) / cs - Math.max(0, span));
+    return Math.round(Math.max(ax, ay)) * this._ftPerCell();
   },
   // Conditions that change an attack roll, and nothing else. The panel has
   // tracked and displayed twelve of them for a long time while every roll
@@ -772,9 +781,7 @@ registerPanel('turnview', {
   _ftBetween(a, b){
     const ta = this._tokenFor(a), tb = this._tokenFor(b);
     if (!ta || !tb || ta.x == null || tb.x == null) return null;
-    const cs = this._cs() || 50;
-    return Math.round(Math.max(Math.abs(ta.x - tb.x), Math.abs(ta.y - tb.y)) / cs)
-         * this._ftPerCell();
+    return this._edgeFeet(ta, tb);
   },
   // What the two creatures’ conditions do to this attack roll.
   _condMods(attacker, target){
@@ -2793,11 +2800,11 @@ registerPanel('turnview', {
   },
 
   _provokedBy(mover, fromXY){
-    const cs = this._cs() || 50;
-    const at = { x: fromXY.x, y: fromXY.y };
-    const ft = (t, q) => Math.round(Math.max(Math.abs(t.x - q.x), Math.abs(t.y - q.y)) / cs) * this._ftPerCell();
     const now = this._tokenFor(mover);
     if (!now) return [];
+    // Edge to edge, so a giant's reach is counted from its side, not its middle.
+    const at = { x: fromXY.x, y: fromXY.y, size: now.size };
+    const ft = (t, q) => this._edgeFeet(t, q);
     // The entire purpose of the Disengage action. The panel has detected
     // opportunity attacks since it could read token positions, and spent
     // and logged the action since the economy bar existed, but never
