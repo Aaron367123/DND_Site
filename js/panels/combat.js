@@ -2179,6 +2179,44 @@ registerPanel('combat',{
     return 0;
   },
 
+  // A saving throw rolled for anyone in the fight: the bonus, and what the
+  // rules add. Paralyzed, Stunned, Unconscious or Petrified fail Strength and
+  // Dexterity saves outright; Restrained is disadvantage on Dexterity; a
+  // character's own from its sheet (Rage, Danger Sense, exhaustion); a
+  // monster's Magic Resistance against a spell (opts.spell). These rolls were
+  // a bare d20 + bonus — a held ogre made its Dexterity save against a fireball.
+  // → { total, nat, passed, detail, auto }
+  rollSave(c, ab, dc, opts){
+    ab = String(ab || '').slice(0, 3).toLowerCase();
+    const bonus = this.saveBonus(c, ab);
+    const conds = ((c && c.conditions) || []).map(x => String(x).toLowerCase());
+    const has = n => conds.some(x => x === n || x.startsWith(n + ' '));
+    const adv = [], dis = []; let extra = 0, auto = '';
+    const p = c && c.isPC ? state.party.find(x => x.id === c.id) : null;
+    if (p && typeof csRollEffects === 'function'){
+      const fx = csRollEffects(p, 'save:' + ab);
+      adv.push(...fx.adv); dis.push(...fx.dis); extra = fx.bonus || 0; auto = fx.autoFail || '';
+    } else {
+      if (ab === 'str' || ab === 'dex') auto = ['paralyzed', 'stunned', 'unconscious', 'petrified'].find(has) || '';
+      if (ab === 'dex' && has('restrained')) dis.push('restrained');
+      if (opts && opts.spell && this._hasTrait(c, /^Magic Resistance\b/i)) adv.push('Magic Resistance');
+    }
+    if (auto) return { total: null, nat: null, passed: false, auto, detail: auto + ' — fails automatically' };
+    const mode = adv.length && !dis.length ? 1 : dis.length && !adv.length ? -1 : 0;
+    const a = sktD(20), b = mode ? sktD(20) : null;
+    const nat = b == null ? a : mode > 0 ? Math.max(a, b) : Math.min(a, b);
+    const total = nat + bonus + extra;
+    const why = [adv.length ? 'advantage: ' + adv.join(', ') : '', dis.length ? 'disadvantage: ' + dis.join(', ') : '', extra ? 'exhaustion ' + extra : ''].filter(Boolean).join('; ');
+    return { total, nat, passed: total >= dc, auto: '',
+      detail: 'd20 ' + (b == null ? a : a + '/' + b) + (bonus ? (bonus > 0 ? ' + ' : ' − ') + Math.abs(bonus) : '') + (extra ? ' ' + extra : '') + (why ? ' (' + why + ')' : '') };
+  },
+  // A monster trait by name, off its stat block.
+  _hasTrait(c, re){
+    const e = c && !c.isPC ? this.statBlockFor(c) : null;
+    const raw = e && (e._raw || e);
+    return !!(raw && [].concat(raw.special_abilities || [], raw.trait || []).some(t => t && re.test(String(t.name || ''))));
+  },
+
   // ─── Lowered maximum HP, from the combat card ───────────────────────────────
   _promptReduceMaxHp(i){
     const c = state.combatants[i]; if (!c) return;
@@ -2356,11 +2394,10 @@ registerPanel('combat',{
     const c = state.combatants[i];
     let passed = how === 'pass';
     if (how === 'roll' && c){
-      const bonus = this.saveBonus(c, p.ab);
-      const r = sktRollDice('1d20' + (bonus >= 0 ? '+' : '') + bonus);
-      passed = r.total >= p.dc;
-      this._log(`${c.name} ${String(p.ab).toUpperCase()} save vs ${p.cond}: ${r.total} (${r.detail}) — ${passed ? 'saved' : 'failed'}`);
-      if (typeof showToast === 'function') showToast(`${c.name}: ${String(p.ab).toUpperCase()} ${r.total} vs DC ${p.dc} — ${passed ? 'saved, ' + p.cond + ' ends' : 'failed'}`);
+      const r = this.rollSave(c, p.ab, p.dc, { spell: !!p.spell });
+      passed = r.passed;
+      this._log(`${c.name} ${String(p.ab).toUpperCase()} save vs ${p.cond}: ${r.auto ? 'fails' : r.total} (${r.detail}) — ${passed ? 'saved' : 'failed'}`);
+      if (typeof showToast === 'function') showToast(`${c.name}: ${String(p.ab).toUpperCase()} ${r.auto ? r.detail : r.total + ' vs DC ' + p.dc} — ${passed ? 'saved, ' + p.cond + ' ends' : 'failed'}`);
     } else if (c){
       this._log(`${c.name} — ${p.cond}: save ${passed ? 'passed' : 'failed'}`);
     }
@@ -2430,6 +2467,7 @@ registerPanel('combat',{
       </div>
       <div class="as-targets" id="as-targets"></div>
       <div class="as-result" id="as-result"></div>
+      <label class="as-showdc" title="A monster with Magic Resistance has advantage on saves against spells"><input type="checkbox" id="as-spell"${pre.spell ? ' checked' : ''}> It's a spell (Magic Resistance applies)</label>
       <label class="as-showdc" title="The pop-up on each phone either names the DC or just asks for the save"><input type="checkbox" id="as-showdc"${askShowDc ? ' checked' : ''}> When you ask the players, tell them the DC</label>
       <div class="modal-actions">
         <button class="btn" data-as="cancel">Cancel</button>
@@ -2488,9 +2526,8 @@ registerPanel('combat',{
     const dcNow = () => parseInt($('#as-dc').value, 10) || 10;
     const rollRow = (id, ab, dc) => {
       const c = state.combatants.find(x => x.id === id);
-      const bonus = this.saveBonus(c, ab);
-      const r = sktRollDice('1d20' + (bonus >= 0 ? '+' : '') + bonus);
-      return { id, total: r.total, detail: r.detail, passed: r.total >= dc, lr: false };
+      const r = this.rollSave(c, ab, dc, { spell: $('#as-spell') ? $('#as-spell').checked : !!pre.spell });
+      return { id, total: r.auto ? '—' : r.total, detail: r.detail, passed: r.passed, lr: false };
     };
     const close = () => {
       back.remove();

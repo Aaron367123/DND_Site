@@ -14010,6 +14010,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 191 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 192: saves rolled in a fight follow the rules — held creatures fail Dex, Restrained is disadvantage, Magic Resistance against spells --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepP = JSON.stringify(state.party), realD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const C = panelDefs.combat;
+        const ogre = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'XMM');
+        const mr = _5eData.find(r => r.cat === 'monster' && r._source === 'XMM' && r._raw && (r._raw.special_abilities || []).some(t => /^Magic Resistance/.test(t.name)));
+        state.combatants = []; save();
+        C.addMonster(ogre); C.addMonster(mr); await sleep(50);
+        const [og, mg] = state.combatants;
+        const seq = v => { let i = 0; window.sktD = n => n === 20 ? v[i++ % v.length] : realD(n); };
+        og.conditions = ['Paralyzed'];
+        seq([20]);
+        const r1 = C.rollSave(og, 'DEX', 5);
+        const r1b = C.rollSave(og, 'WIS', 5);
+        ok('fight saves: a paralyzed ogre fails a Dexterity save outright, but rolls Wisdom', r1.auto === 'paralyzed' && !r1.passed && !r1b.auto && r1b.passed, JSON.stringify([r1, r1b]));
+        og.conditions = ['Restrained'];
+        seq([18, 3]);
+        const r2 = C.rollSave(og, 'DEX', 10);
+        ok('fight saves: a restrained ogre rolls Dexterity with disadvantage (18 and 3, keeps 3)', r2.nat === 3 && /disadvantage: restrained/.test(r2.detail), JSON.stringify(r2));
+        seq([3, 18]);
+        const r3 = C.rollSave(mg, 'WIS', 1, { spell: true });
+        seq([3, 18]);
+        const r4 = C.rollSave(mg, 'WIS', 1, {});
+        ok('fight saves: ' + mr.name + '\'s Magic Resistance is advantage against a spell, not against a breath', r3.nat === 18 && /Magic Resistance/.test(r3.detail) && r4.nat === 3, JSON.stringify([r3, r4]));
+        // A character's rage: advantage on Strength saves, from its sheet.
+        const R = await sktRulesLoad('2024');
+        const bb = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'r192', cls: 'Barbarian', level: 3, species: 'Human', background: 'Guide' }), R), { id: 'r192' });
+        state.party = [bb]; save();
+        state.party[0] = Object.assign({}, bb, { rage: true, active: { Rage: true } });
+        state.party[0] = Object.assign(state.party[0], sktComputeCharacter(bb.build, R, state.party[0])); save();
+        state.combatants.push({ id: 'r192', name: 'r192', isPC: true, hp: 30, hpMax: 30, initiative: 3, conditions: [] });
+        seq([3, 18]);
+        const r5 = C.rollSave(state.combatants[2], 'STR', 10);
+        ok('fight saves: a raging barbarian has advantage on a Strength save', r5.nat === 18, JSON.stringify(r5) + ' ' + JSON.stringify((state.party[0].sheet.rollAdv || []).map(x => x.label + ':' + x.on)));
+        // The area-save dialog rolls through it.
+        og.conditions = ['Stunned'];
+        C.openAreaSave({ name: 'Fireball', ab: 'DEX', dc: 15, parts: [{ dice: '8d6', type: 'fire' }], half: true, targets: [og.id], spell: true });
+        await sleep(50);
+        const back = document.getElementById('area-save-back');
+        const spell = back && back.querySelector('#as-spell');
+        seq([20]);
+        back.querySelector('[data-as="roll"]').click(); await sleep(50);
+        const txt = back.querySelector('#as-result').textContent.replace(/\s+/g, ' ');
+        ok('fight saves: in the area save, the stunned ogre fails the fireball\'s Dex save even on a 20', !!spell && spell.checked && /stunned — fails automatically/.test(txt) && /failed/.test(txt), txt.slice(0, 200));
+        back.remove();
+      } catch(e){ ok('round 192 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = realD; document.getElementById('area-save-back')?.remove(); state.combatants = JSON.parse(keepC); state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

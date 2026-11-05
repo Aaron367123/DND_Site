@@ -2695,7 +2695,7 @@ registerPanel('turnview', {
     C.openAreaSave({
       name: c.name + ' · ' + a.name, ab: a.save.ability, dc: a.save.dc,
       parts: (a.parts || []).map(p => ({ dice: p.dice, type: p.type })),
-      half: !!a.save.half, exclude: c.id, targets: this._armed ? [this._armed] : [],
+      half: !!a.save.half, exclude: c.id, targets: this._armed ? [this._armed] : [], spell: !!a.spell,
       onApplied: () => {
         if (a.recharge) this._markRechargeSpent(c, a.name);
     this._markUsed(c, a);
