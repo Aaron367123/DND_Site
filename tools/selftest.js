@@ -14692,6 +14692,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 206 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepDie; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatLog = JSON.parse(keepL); save(); }
     }
+    // -- Round 207: attacks against a reckless barbarian have advantage, until their next turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const p = { id: 'r207p', name: 'Barb', hp: 40, hpMax: 40, ac: 14, build: { edition: '2024' }, sheet: { attacks: [] }, active: { 'Reckless Attack': true } };
+        state.party.push(p);
+        state.combatants = []; save();
+        C.addMonster(find('Ogre', 'MM')); await sleep(50);
+        const ogre = state.combatants[0];
+        const barb = { id: 'r207p', name: 'Barb', isPC: true, hp: 40, hpMax: 40, ac: 14, initiative: 10, conditions: [] };
+        state.combatants.push(barb); save();
+        let cm = T._condMods(ogre, barb);
+        ok('reckless: the ogre attacks the reckless barbarian with advantage', cm.adv.includes('target attacking recklessly'), JSON.stringify(cm));
+        C._refreshTurnEconomy(barb.id);
+        cm = T._condMods(ogre, barb);
+        ok('reckless: it ends as the barbarian\'s turn begins', !cm.adv.includes('target attacking recklessly') && !(p.active && p.active['Reckless Attack']), JSON.stringify([cm, p.active]));
+      } catch(e){ ok('round 207 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

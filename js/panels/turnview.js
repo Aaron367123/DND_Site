@@ -812,6 +812,11 @@ registerPanel('turnview', {
       const ft = this._ftBetween(attacker, target);
       if (ft != null && ft <= 5) autoCrit = true;
     }
+    // Reckless Attack: "attack rolls against you have advantage until your
+    // next turn" — the switch on the character's sheet, which the tracker
+    // turns off as their turn begins.
+    const tp = target && target.isPC ? this._partyOf(target) : null;
+    if (tp && tp.active && tp.active['Reckless Attack']) adv.push('target attacking recklessly');
     // Invisible: "attack rolls against the creature have disadvantage, and
     // the creature's attack rolls have advantage" — unless the other one can
     // see it anyway: blindsight or truesight that reaches.
