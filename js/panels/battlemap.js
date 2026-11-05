@@ -161,6 +161,7 @@ registerPanel('battlemap',{
   // On an overland map that is not a rounding error, it is three orders of
   // magnitude: the footer read "390x250 ft" for a map of the North.
   _ftPerCell: 5,
+  _diagRule: 'five',             // how a diagonal counts on squares: see sktGridFeet
   _fogHardness:50,               // 0–100 → blur on fog canvas
   _gridOpacity:60,               // 0–100 → grid line alpha
   // Grid line colour. null = Auto: sample the map art and pick black or white
@@ -396,6 +397,7 @@ registerPanel('battlemap',{
         // Settings sidebar state (new in v2 — defaults preserve old look).
         this._mapRotation   = d.mapRotation   || 0;
         this._ftPerCell     = +d.ftPerCell > 0 ? +d.ftPerCell : 5;
+        this._diagRule      = d.diagRule || 'five';
         this._fogHardness   = (d.fogHardness   != null) ? d.fogHardness   : 50;
         this._gridOpacity   = (d.gridOpacity   != null) ? d.gridOpacity   : 60;
         this._gridColor     = d.gridColor || null;
@@ -537,7 +539,7 @@ registerPanel('battlemap',{
     this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){
       // Fog sets and freehand strokes grow without bound on large maps — this
       // is a realistic place to hit the quota, and silently dropping the write
@@ -1657,6 +1659,7 @@ registerPanel('battlemap',{
       bgMapSize:    this._bgMapSize || null,
       mapRotation:  this._mapRotation || 0,
       ftPerCell:    this._ftPerCell || 5,
+      diagRule:     this._diagRule || 'five',
       gridOffsetX:  this._gridOffsetX || 0,
       gridOffsetY:  this._gridOffsetY || 0,
       cellSize:     this._cellSize,
@@ -1694,6 +1697,7 @@ registerPanel('battlemap',{
     this._bgMapSize    = snap.bgMapSize || null;
     this._mapRotation  = snap.mapRotation || 0;
     this._ftPerCell    = +snap.ftPerCell > 0 ? +snap.ftPerCell : 5;
+    this._diagRule     = snap.diagRule || 'five';
     this._gridOffsetX  = snap.gridOffsetX || 0;
     this._gridOffsetY  = snap.gridOffsetY || 0;
     this._cellSize     = snap.cellSize || this._cellSize;
@@ -1899,7 +1903,7 @@ registerPanel('battlemap',{
       return Math.round(Math.hypot(x1 - x0, y1 - y0) / u) * ft;
     }
     const cs = this._csScreen() || 50;
-    return Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / cs) * ft;
+    return sktGridFeet((x1 - x0) / cs, (y1 - y0) / cs, this._diagRule, ft);
   },
   // A token's walking speed in feet, when it's known: the character's, or the
   // monster's stat block. Null when it isn't.
@@ -2539,6 +2543,10 @@ registerPanel('battlemap',{
     if (src.gridOpacity != null) this._gridOpacity = src.gridOpacity;
     if ('gridColor' in src) this._gridColor = src.gridColor || null;
     if (src.gridWidth   != null) this._gridWidth   = src.gridWidth;
+    // The scale and the diagonal rule are the table's: a phone's ruler counts
+    // the way the DM's does.
+    if (+src.ftPerCell > 0) this._ftPerCell = +src.ftPerCell;
+    if (src.diagRule) this._diagRule = src.diagRule;
     this._bgMapPath = nextPath;
 
     // Three tiers, most expensive first. Only the last one is common.
@@ -2658,6 +2666,8 @@ registerPanel('battlemap',{
         gridOpacity: this._gridOpacity != null ? this._gridOpacity : 60,
         gridColor: this._gridColor || null,
         gridWidth: this._gridWidth || 1,
+        ftPerCell: this._ftPerCell || 5,
+        diagRule: this._diagRule || 'five',
         bgImageData: _mapBgImage?'present':null,
         bgMapPath: this._bgMapPath,
         // Pencil annotations — players see strokes as the DM commits them
@@ -4147,6 +4157,12 @@ registerPanel('battlemap',{
         this._saveMap(); this._render();
       };
       ftEl.addEventListener('change', commit);
+      const dgEl = b.querySelector('#bm-set-diag');
+      if (dgEl) dgEl.addEventListener('change', () => {
+        this._diagRule = SKT_DIAG_RULES.some(r => r[0] === dgEl.value) ? dgEl.value : 'five';
+        this._saveMap(); this._render();
+        panelDefs.turnview?._render?.();
+      });
       unEl.addEventListener('change', () => {
         // Switching the unit re-reads the SAME number in the new unit, which
         // is what someone means by picking "miles" next to a 5 — not a
@@ -5232,6 +5248,15 @@ registerPanel('battlemap',{
       +     '</select>'
       +   '</div>'
       + '</div>'
+      // How a diagonal counts. The Player's Handbook's 5 ft a square is the
+      // default; the DMG's 5-10-5 and the true distance are the table's call.
+      + (this._gridType === 'hex' ? '' : '<div class="bm-set-slider">'
+      +   '<div class="bm-set-slider-row"><span>Diagonals</span></div>'
+      +   '<select id="bm-set-diag" aria-label="How diagonals are counted" style="width:100%">'
+      +     SKT_DIAG_RULES.map(r => '<option value="' + r[0] + '"' + ((this._diagRule || 'five') === r[0] ? ' selected' : '') + ' title="' + esc(r[2]) + '">' + esc(r[1]) + '</option>').join('')
+      +   '</select>'
+      +   '<div style="font-size:var(--fs-xs);color:var(--text-muted);margin-top:4px">' + esc(((SKT_DIAG_RULES.find(r => r[0] === (this._diagRule || 'five')) || SKT_DIAG_RULES[0])[2])) + '</div>'
+      + '</div>')
       + slider('opacity',  'Opacity',   this._gridOpacity, '%', 0, 100)
       + slider('gridwidth','Line Width', this._gridWidth || 1, 'px', 1, 4)
       // Colour. Auto samples the map art for contrast; the swatch overrides it.

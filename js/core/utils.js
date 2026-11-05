@@ -1700,6 +1700,27 @@ function sktParseMonsterAttacks(raw){
   return out;
 }
 
+// Feet across a square grid, `dx`/`dy` in squares, by the map's diagonal rule:
+//   'five'   — every square 5 ft, diagonals included (the Player's Handbook;
+//              the default, and what every other VTT defaults to as well);
+//   'alt'    — diagonals alternate 5 ft and 10 ft (the DMG's optional rule,
+//              p. 252), for movement and for measuring range alike;
+//   'euclid' — the straight line, to the nearest square.
+// Whole squares for the first two: a move is so many squares entered.
+const SKT_DIAG_RULES = [
+  ['five',   '5 ft each',  'Every square is 5 ft, diagonals included (Player\'s Handbook)'],
+  ['alt',    '5-10-5',     'Diagonals alternate 5 ft and 10 ft (DMG optional rule)'],
+  ['euclid', 'True distance', 'The straight-line distance, to the nearest square'],
+];
+function sktGridFeet(dx, dy, rule, ftPerCell){
+  const ft = +ftPerCell > 0 ? +ftPerCell : 5;
+  const a = Math.abs(+dx || 0), b = Math.abs(+dy || 0);
+  if (rule === 'euclid') return Math.round(Math.hypot(a, b)) * ft;
+  const x = Math.round(a), y = Math.round(b);
+  if (rule === 'alt') return (Math.max(x, y) + Math.floor(Math.min(x, y) / 2)) * ft;
+  return Math.max(x, y) * ft;
+}
+
 // Monsters whose stat block says their strikes count as magical — "Its weapon
 // attacks are magical". Matters because a target resistant to nonmagical
 // bludgeoning/piercing/slashing should NOT halve these, and sktResistApplies

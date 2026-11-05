@@ -14379,6 +14379,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 199 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { T._entryOf = keepE; T._resolve = keepR; T._queue = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 200: how a diagonal counts — 5 ft each by default, the DMG's 5-10-5 or the true distance by choice --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T = panelDefs.turnview;
+      const st0 = { g: B._gridType, ft: B._ftPerCell, d: B._diagRule, open: B._settingsOpen };
+      const map0 = localStorage.getItem('skt-battlemap-v1');
+      try {
+        const F = (dx, dy, r) => sktGridFeet(dx, dy, r, 5);
+        ok('diagonals: 5 ft each — three squares diagonally is 15 ft; 5-10-5 makes it 20 (5, 10, 5), two is 15, one 5; true distance 20',
+           F(3, 3) === 15 && F(3, 3, 'alt') === 20 && F(2, 2, 'alt') === 15 && F(1, 1, 'alt') === 5 && F(4, 1, 'alt') === 20 && F(4, 0, 'alt') === 20 && F(3, 3, 'euclid') === 20 && F(1, 1, 'euclid') === 5,
+           [F(3, 3), F(3, 3, 'alt'), F(2, 2, 'alt'), F(1, 1, 'alt'), F(4, 1, 'alt'), F(3, 3, 'euclid'), F(1, 1, 'euclid')].join());
+        openPanel('battlemap'); await sleep(300);
+        B._gridType = 'square'; B._ftPerCell = 5; B._diagRule = 'five'; B._settingsOpen = true; B._render(); await sleep(80);
+        const cs = B._csScreen();
+        ok('diagonals: a new map counts 5 ft each (the ruler: three squares diagonally, 15 ft)', B._feetBetweenPts(0, 0, cs * 3, cs * 3) === 15, String(B._feetBetweenPts(0, 0, cs * 3, cs * 3)));
+        const sel = document.querySelector('#bm-set-diag');
+        ok('diagonals: the map settings have the choice, on "5 ft each"', !!sel && sel.value === 'five' && sel.options.length === 3, sel && [...sel.options].map(o => o.value + (o.selected ? '*' : '')).join());
+        sel.value = 'alt'; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+        const saved = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+        ok('diagonals: picking 5-10-5 is kept with the map (and so goes to the players)', B._diagRule === 'alt' && saved.diagRule === 'alt' && B._snapshotMap().diagRule === 'alt', JSON.stringify([B._diagRule, saved.diagRule]));
+        ok('diagonals: with 5-10-5 the ruler says 20 ft for three squares diagonally', B._feetBetweenPts(0, 0, cs * 3, cs * 3) === 20, String(B._feetBetweenPts(0, 0, cs * 3, cs * 3)));
+        // The turn view's reach and opportunity attacks count the same way.
+        T._mapCache = null;
+        const tcs = T._cs() || 50, at = (x, y) => ({ x: x * tcs, y: y * tcs, size: 1 });
+        const alt2 = T._edgeFeet(at(0, 0), at(3, 3));
+        B._diagRule = 'five'; B._saveMap(); T._mapCache = null;
+        const five2 = T._edgeFeet(at(0, 0), at(3, 3));
+        ok('diagonals: the turn view agrees — three squares off diagonally is 15 ft, 20 with 5-10-5; next to each other diagonally 5 ft either way',
+           five2 === 15 && alt2 === 20 && T._edgeFeet(at(0, 0), at(1, 1)) === 5, JSON.stringify([five2, alt2]));
+        // A phone gets the DM's rule with the map.
+        B.applyMapState(Object.assign({}, B._snapshotMap(), { diagRule: 'euclid' })); await sleep(50);
+        ok('diagonals: the rule arrives with a synced map', B._diagRule === 'euclid', B._diagRule);
+        B._diagRule = 'five';
+        // A hex map has no diagonals to count.
+        B._gridType = 'hex'; B._render(); await sleep(50);
+        ok('diagonals: a hex map doesn\'t offer the choice', !document.querySelector('#bm-set-diag'));
+      } catch(e){ ok('round 200 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._gridType = st0.g; B._ftPerCell = st0.ft; B._diagRule = st0.d || 'five'; B._settingsOpen = st0.open;
+        if (map0 == null) localStorage.removeItem('skt-battlemap-v1'); else localStorage.setItem('skt-battlemap-v1', map0);
+        T._mapCache = null; B._render();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

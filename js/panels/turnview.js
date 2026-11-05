@@ -602,7 +602,7 @@ registerPanel('turnview', {
                gridOffsetX:B._gridOffsetX || 0, gridOffsetY:B._gridOffsetY || 0,
                gridColor:B._gridColor || null,
                gridOpacity:B._gridOpacity, gridWidth:B._gridWidth,
-               ftPerCell:+B._ftPerCell > 0 ? +B._ftPerCell : 5,
+               ftPerCell:+B._ftPerCell > 0 ? +B._ftPerCell : 5, diagRule:B._diagRule || 'five',
                drawings:Array.isArray(B._drawings) ? B._drawings : [] };
     }
     try {
@@ -617,14 +617,14 @@ registerPanel('turnview', {
                  gridOffsetX:d.gridOffsetX || 0, gridOffsetY:d.gridOffsetY || 0,
                  gridColor:d.gridColor || null,
                  gridOpacity:d.gridOpacity, gridWidth:d.gridWidth,
-                 ftPerCell:+d.ftPerCell > 0 ? +d.ftPerCell : 5,
+                 ftPerCell:+d.ftPerCell > 0 ? +d.ftPerCell : 5, diagRule:d.diagRule || 'five',
                  drawings:Array.isArray(d.drawings) ? d.drawings : [] };
       }
     } catch(e){}
     return { live:false, tokens:[], cs:50, cols:24, rows:18, gridType:'square',
              bgPath:null, bgScale:1, rotation:0, snap:false,
              gridOffsetX:0, gridOffsetY:0, gridColor:null,
-             gridOpacity:60, gridWidth:1, ftPerCell:5, drawings:[] };
+             gridOpacity:60, gridWidth:1, ftPerCell:5, diagRule:'five', drawings:[] };
   },
   _map(){ return this._mapCache || (this._mapCache = this._mapSrc()); },
 
@@ -735,12 +735,14 @@ registerPanel('turnview', {
   },
   _cs(){ return this._map().cs || 50; },
   // 5e counts a diagonal as 5 ft like any other square, so the metric is
-  // Chebyshev. Euclidean would put a creature three squares away diagonally at
-  // 21 ft instead of 15 and quietly change who can react.
+  // Chebyshev — unless the map is set to the DMG's 5-10-5 or the true
+  // distance (sktGridFeet), which reach and opportunity attacks then follow.
   // How much ground one cell covers, as the MAP says rather than as this
   // panel assumes. It was a literal 5 in three places, which is right for a
   // dungeon and wrong by a factor of thousands on an overland map.
   _ftPerCell(){ const n = +this._map().ftPerCell; return n > 0 ? n : 5; },
+  // (on squares only: a hex is a hex whichever way you go)
+  _diagRule(){ const m = this._map(); return m.gridType === 'hex' ? 'five' : (m.diagRule || 'five'); },
   _feetBetween(a, b){
     const ta = this._tokenFor(a), tb = this._tokenFor(b);
     if (!ta || !tb) return null;                 // not on the map: unknown, not zero
@@ -755,7 +757,7 @@ registerPanel('turnview', {
     const span = ((ta.size || 1) + (tb.size || 1)) / 2 - 1;
     const ax = Math.max(0, Math.abs(ta.x - tb.x) / cs - Math.max(0, span));
     const ay = Math.max(0, Math.abs(ta.y - tb.y) / cs - Math.max(0, span));
-    return Math.round(Math.max(ax, ay)) * this._ftPerCell();
+    return sktGridFeet(ax, ay, this._diagRule(), this._ftPerCell());
   },
   // Conditions that change an attack roll, and nothing else. The panel has
   // tracked and displayed twelve of them for a long time while every roll
@@ -2990,8 +2992,7 @@ registerPanel('turnview', {
     const rows = this._provokedBy(mover, from);
     if (!rows.length) return;
     const cs = this._cs() || 50;
-    const ft = Math.round(Math.max(Math.abs(tok.x - from.x), Math.abs(tok.y - from.y)) / cs)
-             * this._ftPerCell();
+    const ft = sktGridFeet((tok.x - from.x) / cs, (tok.y - from.y) / cs, this._diagRule(), this._ftPerCell());
     this._pending = { kind:'move', mover, rows, moved: ft };
     this._render();
   },
