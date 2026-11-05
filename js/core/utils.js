@@ -1405,8 +1405,45 @@ function sktParseMonsterAttack(action){
   if (areaM && !attackFirst){
     const parts = _sktDamageClauses(_sktDamageSegment(desc, areaM.index));
     if (parts.length){
+      // No roll at all: it lands (it rolled a d20 against AC).
       return {
-        name, recharge, uses, toHit: null, save: null,
+        name, recharge, uses, toHit: 'auto', save: null,
+        parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
+        alt: null, altLabel: '',
+      };
+    }
+  }
+  // Damage that just lands on a creature, no roll and no save: "One creature
+  // Charmed by the aboleth takes 10 (3d6) psychic damage", "Each creature
+  // Restrained by Arasta's Web of Hair takes 18 (4d8)", "The target takes 35
+  // (4d12 + 9)", "slams a Grappled target …, dealing 13 (3d8) bludgeoning
+  // damage to it". Not damage over time ("a creature that starts its turn
+  // there takes…") — that is the trigger's, not the action's.
+  // An attack told in prose: "can make a melee spell attack (+4 to hit) …
+  // On a hit, the target takes 6 (1d8 + 2) force damage" (a choldrith's
+  // Spectral Dagger) — an attack roll, not damage that just lands.
+  const proseHit = desc.search(/\bHit:/i) === -1 && /([+-]\d+)\s+to hit\b/i.exec(desc);
+  if (proseHit){
+    const onHit = /\bon a hit\b[^.]*?\b(?:takes|deals?|dealing)\s+\d+\s*\(\d*d\d+/i.exec(desc);
+    const parts = onHit ? _sktDamageClauses(_sktDamageSegment(desc, onHit.index)) : [];
+    if (parts.length) return {
+      name, recharge, uses, toHit: proseHit[1].replace(/\s+/g, ''), save: null,
+      parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
+      alt: null, altLabel: '', ranged: /\branged\b/i.test(desc.slice(0, proseHit.index)),
+    };
+  }
+  if (saveDc == null && desc.search(/\bHit:/i) === -1 && !proseHit){
+    const re = /\b(?:one creature|each creature|each target|the target)\b[^.]{0,100}?\btakes\s+\d+\s*\(\d*d\d+|\b(?:dealing|deals)\s+\d+\s*\(\d*d\d+/ig;
+    let am;
+    while ((am = re.exec(desc))){
+      const from = desc.lastIndexOf('.', am.index) + 1, to = desc.indexOf('.', am.index + am[0].length);
+      const sentence = desc.slice(from, to < 0 ? undefined : to);
+      // (nor what a trigger deals — "each time the target is struck…, the
+      // attacker takes", "when she hits" — nor damage to a ship)
+      if (/\bstarts?\b|\b(?:start|end)\s+of\b|\beach of\b|\bturns?\b|\benters?\b|\bfor the first time\b|\bif\b|\beach time\b|\bwhen(?:ever)?\b|\bship\b/i.test(sentence)) continue;
+      const parts = _sktDamageClauses(_sktDamageSegment(desc, am.index));
+      if (parts.length) return {
+        name, recharge, uses, toHit: 'auto', save: null, autoDmg: true,
         parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
         alt: null, altLabel: '',
       };
@@ -1614,7 +1651,7 @@ function sktMonsterSpellRows(raw, R){
     if (!isAtk && !save) return;
     const ab = save ? save.charAt(0).toUpperCase() + save.slice(1) : '';
     out.push({
-      name: s.name + (castAt > lvl ? ' (' + ord(castAt) + ' level)' : ''), spellName: s.name, monsterSpell: true,
+      name: s.name + (castAt > lvl ? ' (' + ord(castAt) + ' level)' : ''), spellName: s.name, monsterSpell: true, spellLevel: lvl,
       toHit: isAtk && atk != null ? (atk >= 0 ? '+' : '') + atk : null,
       save: !isAtk && save && sc.dc != null ? { dc: sc.dc, ability: ab, half: /half as much|half damage/i.test(txt) } : null,
       parts, alt: null, altLabel: '', recharge: null,
@@ -1655,7 +1692,9 @@ function sktParseMonsterAttacks(raw){
   groups.forEach(([key, tag]) => {
     (raw[key] || []).forEach(a => {
       const parsed = sktParseMonsterAttack(a);
-      if (parsed){ parsed.group = tag; out.push(parsed); }
+      // (a reaction's "the attacker takes 13 (3d8) fire damage" is its
+      // trigger's answer, not something to roll on its turn)
+      if (parsed && !(tag === 'reaction' && parsed.autoDmg)){ parsed.group = tag; out.push(parsed); }
     });
   });
   return out;

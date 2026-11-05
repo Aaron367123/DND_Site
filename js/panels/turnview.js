@@ -1290,12 +1290,16 @@ registerPanel('turnview', {
     </div>`;
     // A character's turn has an action, a bonus action and a reaction too —
     // the pips were only drawn for a creature with attacks to roll.
-    if (!list.length){
+    // (Unless a legendary action off this turn is waiting for its targets.)
+    if (!list.length && !this._queue){
       return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderEconomy(c)}${this._renderClassRow(c)}${manual}</div></div>`;
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
     const rows = list.map((a, i) => {
+      // A legendary action is spent from the Legendary bar, at the end of
+      // someone else's turn — never one of the creature's own actions.
+      if (a.group === 'legendary') return '';
       const line = a.pc
         ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`)
         : `${a.toHit === 'auto' ? 'automatic hit · ' : a.toHit ? esc(a.toHit) + ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg ? pt.avg + ' (' + esc(pt.dice) + ')' : esc(pt.dice)} ${esc(pt.type)}${pt.ifAdv ? ' with advantage' : ''}`).join(' + ') || esc(a.effect || '')}`;
@@ -1345,11 +1349,14 @@ registerPanel('turnview', {
     let head = '';
     if (q){
       const it = q.items[q.i];
-      head = `<div class="tv-multi run">
-        <span class="tv-multi-tag">Multiattack ${q.i + 1}/${q.items.length}</span>
-        <span class="tv-multi-text"><b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
+      // (a legendary action's steps are the legendary creature's, not this one's)
+      const qsrc = this._order().find(x => x.id === q.srcId) || c;
+      head = `<div class="tv-multi run${q.legendary ? ' legend' : ''}">
+        <span class="tv-multi-tag">${q.legendary ? 'Legendary' : 'Multiattack'} ${q.i + 1}/${q.items.length}</span>
+        <span class="tv-multi-text">${q.legendary ? esc(q.name) + ' · ' + esc(q.legendary) + ': ' : ''}<b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
+        ${it && it.save ? `<button class="btn" data-tv="qarea" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>` : ''}
         ${it && (it.choice || []).length > 1 ? `<span class="tv-multi-pick" title="The stat block lets this swing be any of these">${it.choice.map(ai => {
-          const nm = ((this._attacksFor(c) || [])[ai] || {}).name || '';
+          const nm = ((this._attacksFor(qsrc) || [])[ai] || {}).name || '';
           return `<button class="btn small${ai === it.ai ? ' primary' : ''}" data-tv="qpick" data-ai="${ai}">${esc(nm)}</button>`;
         }).join('')}</span>` : ''}
         <span class="tv-multi-pips">${q.items.map((x, k) =>
@@ -1458,10 +1465,77 @@ registerPanel('turnview', {
         acts: this._rawList((this._entryOf(c) || {})._raw, ['legendary_actions', 'legendary']),
       }));
   },
-  // "Wing Attack (Costs 2 Actions)" — the price is written into the name.
+  // "Wing Attack (Costs 2 Actions)" — the price is written into the name, also
+  // as "(2 Actions)" and, for a spell by its level, "(Costs 1–3 Actions)": the
+  // least it can cost.
   _legendaryCost(name){
-    const m = /costs?\s+(\d+)\s+actions?/i.exec(String(name));
+    const m = /\((?:costs?\s+)?(\d+)(?:\s*[–-]\s*\d+)?\s+actions?\)/i.exec(String(name));
     return m ? parseInt(m[1], 10) : 1;
+  },
+  _legendaryBare(name){
+    return String(name).replace(/\s*\((?:costs?\s+)?\d+(?:\s*[–-]\s*\d+)?\s+actions?\)/i, '').trim();
+  },
+  // What a legendary action does, as steps the Multiattack queue runs: its own
+  // row (a Wing Attack's save, an "Infernal Majesty"), an attack its name
+  // names ("Tail Attack"), what its text says to make ("makes one Rend
+  // attack", "two Morningstar attacks or one Double-Barreled Musket attack",
+  // "uses Poison Breath"), or a damaging spell it casts ("Bel casts Fireball").
+  // Nothing rollable — a move, a Perception check — and there are no steps.
+  _legendarySteps(c, act){
+    const entry = this._entryOf(c), raw = entry && entry._raw;
+    const list = this._attacksFor(c) || [];
+    const bare = this._legendaryBare(act.name).toLowerCase();
+    const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const step = ai => [Object.assign({ ai, name: list[ai].name }, list[ai].save && !list[ai].toHit ? { save: true } : {})];
+    const usable = x => (x.parts || []).length || x.save || x.effect || x.rays;
+    const own = x => x.group !== 'legendary' && x.group !== 'reaction' && !x.monsterSpell;
+    let ai = list.findIndex(x => x.group === 'legendary' && this._legendaryBare(x.name).toLowerCase() === bare && usable(x));
+    if (ai >= 0) return step(ai);
+    // "Tail Attack", "Bite": the attack by that name, and only that ("Sever
+    // Psychic Link" is not the Psychic Link).
+    const base = s => String(s).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+    ai = list.findIndex(x => own(x) && x.name && (base(x.name) === bare || base(x.name) + ' attack' === bare));
+    if (ai >= 0) return step(ai);
+    const choose = ais => ais.length ? [Object.assign({ ai: ais[0], name: list[ais[0]].name }, ais.length > 1 ? { choice: ais } : {},
+      list[ais[0]].save && !list[ais[0]].toHit ? { save: true } : {})] : [];
+    const txt = act.text;
+    // "one claw attack, tail attack, wing attack, or flipper attack", "makes
+    // one bite attack or uses its Swallow", "uses one random eye ray": the
+    // ones it names, one of them.
+    const namedIn = list.map((x, i) => i).filter(i => {
+      if (!own(list[i]) || !usable(list[i])) return false;
+      const nm = reEsc(base(list[i].name).replace(/s$/, '')).replace(/\s+/g, '\\s+');
+      return nm && new RegExp('\\b' + nm + 's?\\s+attacks?\\b|\\buses\\s+(?:\\w+\\s+){0,2}' + nm + 's?\\b|\\brecharges\\s+(?:its|his|her|their)\\s+' + nm + 's?\\b', 'i').test(txt);
+    });
+    // The sentence read as a Multiattack's would be, against the creature's
+    // other actions (its legendary rows can't be one of the swings).
+    const parsed = raw && panelDefs.attacks ? panelDefs.attacks._parsed(raw) : null;
+    const multi = parsed && typeof sktParseMultiattack === 'function'
+      ? sktParseMultiattack({ actions: [{ name: 'Multiattack', desc: act.text }] }) : null;
+    if (multi){
+      const attacks = parsed.attacks.map(x => x.group === 'legendary' || x.group === 'reaction' ? { name: '\u0000', save: true, group: x.group } : x);
+      const plan = panelDefs.attacks._plan({ attacks, multi, magical: parsed.magical }, { count: c.multiCount, named: true });
+      // "one Claw or Tail attack" read as the Claw: either.
+      if (plan.length === 1 && !plan[0].choice && namedIn.length > 1 && namedIn.includes(plan[0].ai))
+        return choose([plan[0].ai].concat(namedIn.filter(i => i !== plan[0].ai)));
+      if (plan.length) return plan;
+    }
+    if (namedIn.length) return choose(namedIn);
+    // "makes one attack", "makes a weapon attack", "makes one melee attack":
+    // any of its own — a melee one when it says so.
+    const anyM = /\bmakes?\s+(?:one|an?)\s+(melee\s+|ranged\s+)?(?:weapon\s+)?attack\b/i.exec(txt);
+    if (anyM){
+      let ais = list.map((x, i) => i).filter(i => own(list[i]) && usable(list[i]) && !(list[i].save && !list[i].toHit));
+      if (anyM[1]) ais = ais.filter(i => /melee/i.test(anyM[1]) ? !list[i].ranged : list[i].ranged);
+      if (/weapon/i.test(anyM[0])) ais = ais.filter(i => !list[i].spell && !/spell|cantrip/i.test(list[i].name));
+      if (ais.length) return choose(ais);
+    }
+    // A damaging spell it casts: "Bel casts Fireball", "casts Blight or Dispel
+    // Magic"; "casts a cantrip", "one of its cantrips" — any of them.
+    const spells = list.map((x, i) => i).filter(i => list[i].monsterSpell && new RegExp('\\bcasts?\\s+(?:the\\s+)?(?:[\\w\'’-]+\\s+(?:or|and)\\s+)?' + reEsc(list[i].spellName) + '\\b', 'i').test(txt));
+    if (spells.length) return choose(spells);
+    if (/\bcasts?\s+(?:a|one|one of (?:its|his|her|their))\s+cantrips?\b/i.test(txt)) return choose(list.map((x, i) => i).filter(i => list[i].monsterSpell && list[i].spellLevel === 0));
+    return [];
   },
   _renderLegendary(){
     const rows = this._legendaryRows().filter(r => r.acts.length);
@@ -1474,7 +1548,7 @@ registerPanel('turnview', {
         const over = cost > r.left;
         return `<button class="btn ${over ? 'tv-cant' : ''}" data-tv="legend" data-id="${esc(r.c.id)}"
                         data-ai="${ai}" ${over ? 'disabled' : ''} title="${esc(a.text)}">
-          ${esc(a.name.replace(/\s*\(costs?[^)]*\)/i, ''))}${cost > 1 ? ` <span class="tv-react-cost">· ${cost}</span>` : ''}
+          ${esc(this._legendaryBare(a.name))}${cost > 1 ? ` <span class="tv-react-cost">· ${cost}</span>` : ''}
         </button>`;
       }).join('');
       return `<div class="tv-multi legend">
@@ -1492,20 +1566,24 @@ registerPanel('turnview', {
     const left = (c.legendaryMax || 0) - (c.legendaryUsed || 0);
     if (cost > left) return;
     c.legendaryUsed = (c.legendaryUsed || 0) + cost;
-    const bare = a.name.replace(/\s*\(costs?[^)]*\)/i, '').trim();
-    // "Tail Attack" is an instruction to make the Tail attack, so roll it if
-    // the stat block has one by that name. Everything else is spent, logged
-    // and adjudicated — the same line the reaction bar holds.
-    const list = this._attacksFor(c);
-    const idx = list.findIndex(x => x.name && new RegExp('\\b' + x.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(bare));
-    const t = this._order().find(x => x.id === this._armed);
+    const bare = this._legendaryBare(a.name);
     this._log.unshift(`<strong>${esc(c.name)}</strong> legendary — ${esc(bare)} <span style="opacity:.7">· ${c.legendaryMax - c.legendaryUsed}/${c.legendaryMax} left</span>`);
-    if (idx >= 0 && t && !list[idx].save){
-      this._rollAttack(idx, { attacker: c, target: t, label: list[idx].name + ' (legendary)' });
+    // What it rolls runs as a queue: a target clicked for each step (a save
+    // step can go to several through Area…), and none of it is the turn's
+    // action — it is the creature's, off its turn.
+    const steps = this._legendarySteps(c, a);
+    if (this._queue) this._finishMulti(true);
+    save(); panelDefs.combat?._render?.();
+    if (steps.length){
+      this._queue = { srcId: c.id, name: c.name, items: steps, i: 0, hits: 0, misses: 0, legendary: bare };
+      this._setResult(`<strong>${esc(c.name)}</strong> — ${esc(bare)}. <span class="dim">${esc(a.text)}</span>`, true);
+      // A single attack with a target already picked: rolled now.
+      if (steps.length === 1 && this._armed && !steps[0].save && this._armed !== c.id){ this._rollQueueStep(this._armed); return; }
+      this._render();
       return;
     }
     this._setResult(`<strong>${esc(c.name)}</strong> — ${esc(bare)}. <span class="dim">${esc(a.text)}</span>`, true);
-    save(); panelDefs.combat?._render?.(); this._render();
+    this._render();
   },
 
   // The rest of the stat block — the part a two-action monster otherwise
@@ -2445,7 +2523,7 @@ registerPanel('turnview', {
     if (a.recharge) this._markRechargeSpent(c, a.name);
     this._markUsed(c, a);
     // A multiattack is one action for the whole sequence, not one per swing.
-    if (!o.queued || (this._queue && this._queue.i === 0)) this._spend(c, 'actionUsed');
+    if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     // Dice a state adds to the roll (Bless's d4).
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
@@ -2523,7 +2601,7 @@ registerPanel('turnview', {
   },
   _finishMulti(stopped){
     const q = this._queue; if (!q) return;
-    this._log.unshift(`<strong>${esc(q.name)}</strong> Multiattack ${stopped ? 'stopped' : 'done'}`
+    this._log.unshift(`<strong>${esc(q.name)}</strong> ${q.legendary ? esc(q.legendary) + ' (legendary)' : 'Multiattack'} ${stopped ? 'stopped' : 'done'}`
       + ` — ${q.hits} hit${q.hits === 1 ? '' : 's'}` + (q.misses ? `, ${q.misses} missed` : ''));
     this._queue = null;
     this._render();
@@ -2563,7 +2641,7 @@ registerPanel('turnview', {
     }
     if (a.recharge) this._markRechargeSpent(c, a.name);
     this._markUsed(c, a);
-    if (!this._queue || this._queue.i === 0) this._spend(c, 'actionUsed');
+    if (!this._queue || (this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
     const C = panelDefs.combat;
     const sv = eff.save && C && typeof C.rollSave === 'function' ? C.rollSave(t, eff.save.ability, eff.save.dc, {}) : null;
     const passed = !!(sv && sv.passed), half = passed && !!(eff.save && eff.save.half);
@@ -2815,18 +2893,21 @@ registerPanel('turnview', {
   // The same action against several creatures at once — see combat.openAreaSave.
   // Preselects the target you have armed; recharge and the action are spent
   // only once the damage is actually applied.
-  _areaSave(ai){
-    const c = this._active(); if (!c) return;
+  // `src`/`then`: a legendary action's save step — the legendary creature's,
+  // costing no action, and its queue moved on afterwards.
+  _areaSave(ai, src, then){
+    const c = src || this._active(); if (!c) return;
     const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
     const C = panelDefs.combat; if (!C || typeof C.openAreaSave !== 'function') return;
     C.openAreaSave({
       name: c.name + ' · ' + a.name, ab: a.save.ability, dc: a.save.dc,
       parts: (a.parts || []).map(p => ({ dice: p.dice, type: p.type })),
-      half: !!a.save.half, exclude: c.id, targets: this._armed ? [this._armed] : [], spell: !!a.spell,
+      half: !!a.save.half, exclude: c.id, targets: this._armed && this._armed !== c.id ? [this._armed] : [], spell: !!a.spell,
       onApplied: () => {
         if (a.recharge) this._markRechargeSpent(c, a.name);
-    this._markUsed(c, a);
-        this._spend(c, 'actionUsed');
+        this._markUsed(c, a);
+        if (!src) this._spend(c, 'actionUsed');
+        if (then) then();
         this._render();
       },
     });
@@ -3105,9 +3186,16 @@ registerPanel('turnview', {
         const q = this._queue, it = q && q.items[q.i], ai = +el.dataset.ai;
         const src = q && this._order().find(x => x.id === q.srcId);
         const a = src && (this._attacksFor(src) || [])[ai];
-        if (it && a && (it.choice || []).includes(ai)){ q.items[q.i] = Object.assign({}, it, { ai, name: a.name }); this._render(); }
+        if (it && a && (it.choice || []).includes(ai)){ q.items[q.i] = Object.assign({}, it, { ai, name: a.name, save: !!((a.save || a.rays) && !a.toHit) }); this._render(); }
       }
       else if (act === 'qstop'){ this._finishMulti(true); }
+      else if (act === 'qarea'){
+        // A save step of the queue against several at once; the queue moves on
+        // once the damage is applied.
+        const q = this._queue, it = q && q.items[q.i];
+        const src = q && this._order().find(x => x.id === q.srcId);
+        if (it && src) this._areaSave(it.ai, src, () => { if (this._queue === q){ if (!q.legendary && q.i === 0) this._spend(src, 'actionUsed'); q.hits++; this._advanceQueue(); } });
+      }
       else if (act === 'manual'){ this._manualAttack(); }
       else if (act === 'adj'){ this._adjust(+el.dataset.sign); }
       else if (act === 'end'){ this._endTurn(); }

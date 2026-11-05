@@ -1067,7 +1067,11 @@ registerPanel('combat',{
           }
           items.push({ label:(c.lair ? '☑' : '☐') + ' In its lair — lair action on initiative 20', onClick:()=>{
             const i = resolve(); if (i < 0) return;
-            state.combatants[i] = {...state.combatants[i], lair: !state.combatants[i].lair};
+            const cur = state.combatants[i], on = !cur.lair;
+            // "3 (4 in Lair)": the pool follows where the fight is.
+            const raw = ((this.statBlockFor && this.statBlockFor(cur)) || {})._raw || {};
+            const pool = cur.legendaryMax && +raw.legendary_lair ? { legendaryMax: on ? +raw.legendary_lair : (+raw.legendary_count || 3) } : {};
+            state.combatants[i] = {...cur, lair: on, ...pool, ...(pool.legendaryMax ? { legendaryUsed: Math.min(cur.legendaryUsed || 0, pool.legendaryMax) } : {})};
             save(); this._render();
           }});
           items.push({ label:'─────', disabled:true });
@@ -2931,7 +2935,7 @@ registerPanel('combat',{
     // we just stop at 3 — DM can bump via the right-click menu.
     const hasLegendary = m && m._raw && Array.isArray(m._raw.legendary_actions) && m._raw.legendary_actions.length > 0;
     const legendaryFields = hasLegendary
-      ? { legendaryMax: 3, legendaryUsed: 0 }
+      ? { legendaryMax: +m._raw.legendary_count || 3, legendaryUsed: 0 }
       : {};
     // "Legendary Resistance (3/Day)" — also "(3/Day, or 4/Day in Lair)".
     const lrTrait = (m && m._raw && Array.isArray(m._raw.special_abilities) ? m._raw.special_abilities : [])

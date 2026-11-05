@@ -37,6 +37,11 @@ registerPanel('attacks', {
   _plan(r, ctx){
     if (!r || !r.multi) return [];
     ctx = ctx || {};
+    // A legendary action or a reaction is never one of the swings (Cryonax's
+    // "two Slam attacks with his tentacles" took his legendary Smash for the
+    // tentacles). Kept in place, matching nothing, so the indexes hold.
+    if (r.attacks.some(a => a.group === 'legendary' || a.group === 'reaction'))
+      r = Object.assign({}, r, { attacks: r.attacks.map(a => a.group === 'legendary' || a.group === 'reaction' ? { name: '\u0000', save: true, group: a.group } : a) });
     const soft = new Set(r.multi.soft || []);
     // (spacing aside: "Short bow" is the Shortbow; "hooves" is the Hoof)
     const norm = s => String(s).replace(/\s*\([^)]*\)/g, '').replace(/^[+-]\d+\s+|\s+[+-]\d+$/g, '').replace(/\s+/g, '').toLowerCase().replace(/ves$/, 'f');
@@ -66,7 +71,8 @@ registerPanel('attacks', {
       // deals lightning): an attack left unclaimed that the sentence doesn't
       // name otherwise — a melee one first; several, and the swing is a
       // choice between them (Xenk's daggersword, in its two forms).
-      Object.keys(counts).filter(k => !soft.has(k) || /ray|bolt|blast/.test(k)).sort((a, b) => counts[b] - counts[a]).forEach(k => {
+      // (Not for a legendary action's sentence, `ctx.named`: there only a name it has counts.)
+      if (!ctx.named) Object.keys(counts).filter(k => !soft.has(k) || /ray|bolt|blast/.test(k)).sort((a, b) => counts[b] - counts[a]).forEach(k => {
         const freeAll = r.attacks.map((a, ai) => ai).filter(ai => !per[ai] && !r.attacks[ai].save && !named(ai) && !/spell|cantrip/i.test(r.attacks[ai].name));
         const melee = freeAll.filter(ai => !r.attacks[ai].ranged);
         const free = melee.length ? melee : freeAll;
@@ -112,6 +118,9 @@ registerPanel('attacks', {
       const before = fixed.filter(x => x.soft && at(x) >= 0 && at(x) < atk), after = fixed.filter(x => x.soft && !before.includes(x));
       return before.concat(fixed.filter(x => !x.soft), choice, after);
     };
+    // An attack it "uses" that is one of the choice's own ("four attacks using
+    // Tail Swipe, Constrict, or a combination"): not a step of its own as well.
+    if (combo.length){ const inChoice = new Set(combo[0].choice); out = out.filter(x => !(x.soft && inChoice.has(x.ai))); }
     if (co && co.plus) return combo.length ? inOrder(out, combo) : [];   // the fixed ones, then the choice
     if (combo.length && out.length && out.every(x => x.soft)) return inOrder(out, combo);
     if (combo.length && (co.forms || (!co.any && co.names.length > 1))) return combo;

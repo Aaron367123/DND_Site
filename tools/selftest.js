@@ -14306,6 +14306,79 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 198 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 199: legendary actions roll what they say, off the turn and without its action --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      const T = panelDefs.turnview, keepE = T._entryOf, keepR = T._resolve;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        await sktRulesLoad('2014');
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const stepsOf = async (n, src, act) => {
+          const m = find(n, src); T._entryOf = () => m;
+          try {
+            T._attacksFor({ id: 'r199s' }); await sleep(0);
+            const a = T._rawList(m._raw, ['legendary_actions']).find(x => x.name.startsWith(act));
+            return T._legendarySteps({ id: 'r199s' }, a).map(s => s.name + (s.save ? '[s]' : '') + (s.choice ? '*' + s.choice.length : '')).join(', ');
+          } finally { T._entryOf = keepE; }
+        };
+        const got = {
+          wing: await stepsOf('Adult Red Dragon', 'MM', 'Wing Attack'), tail: await stepsOf('Adult Red Dragon', 'MM', 'Tail Attack'),
+          detect: await stepsOf('Adult Red Dragon', 'MM', 'Detect'), pounce: await stepsOf('Adult Red Dragon', 'XMM', 'Pounce'),
+          tiamat: await stepsOf('Aspect of Tiamat', 'FTD', 'Attack'), chomp: await stepsOf('Beholder', 'XMM', 'Chomp'), emrakul: await stepsOf('Emrakul', 'PSZ', 'Attack'),
+          cantrip: await stepsOf('Lich', 'MM', 'Cantrip'), drain: await stepsOf('Aboleth', 'MM', 'Psychic Drain'),
+        };
+        ok('legendary: a Wing Attack is its own save; "Tail Attack" the Tail; a Detect rolls nothing', got.wing === 'Wing Attack (Costs 2 Actions)[s]' && got.tail === 'Tail' && got.detect === '', JSON.stringify(got));
+        ok('legendary: what the text says to make — a 2024 Pounce\'s "one Rend attack", "one Claw or Tail attack" (either), Emrakul\'s "one claw attack or tail attack" (either), a beholder\'s two Bites', got.pounce === 'Rend' && got.tiamat === 'Claw*2' && got.emrakul === 'Claw*2' && got.chomp === 'Bite, Bite', JSON.stringify(got));
+        ok('legendary: a lich\'s "casts a cantrip" is its Ray of Frost', got.cantrip === 'Ray of Frost', got.cantrip);
+        const pd = sktParseMonsterAttacks(find('Aboleth', 'MM')._raw).find(a => /Psychic Drain/.test(a.name)) || {};
+        ok('legendary: an aboleth\'s Psychic Drain is damage that just lands (3d6 psychic, no roll)', /Psychic Drain/.test(got.drain) && pd.toHit === 'auto' && (pd.parts || []).map(p => p.dice + ' ' + p.type).join() === '3d6 psychic', JSON.stringify([got.drain, pd.toHit, pd.parts]));
+        // Area damage with no save and no roll did roll a d20 against AC.
+        const sc = sktParseMonsterAttacks(find('Maegera the Dawn Titan', 'SKT')._raw).find(a => /Smoke Cloud/.test(a.name)) || {};
+        ok('legendary: Maegera\'s Smoke Cloud lands with no attack roll', sc.toHit === 'auto' && !sc.save, JSON.stringify([sc.toHit, sc.save]));
+        const sd = sktParseMonsterAttacks(find('Choldrith', 'MPMM')._raw).find(a => /Spectral Dagger/.test(a.name)) || {};
+        ok('a choldrith\'s Spectral Dagger: an attack told in prose, +4 to hit for 1d8 + 2 force', sd.toHit === '+4' && (sd.parts || [])[0] && sd.parts[0].dice === '1d8+2', JSON.stringify([sd.toHit, sd.parts]));
+        ok('legendary: "(2 Actions)" costs 2, "(Costs 1–3 Actions)" at least 1', T._legendaryCost('Weapon of Choice (2 Actions)') === 2 && T._legendaryCost('Cast a Spell (Costs 1–3 Actions)') === 1 && T._legendaryBare('Weapon of Choice (2 Actions)') === 'Weapon of Choice', '');
+        const tia = find('Tiamat', 'RoT');
+        // In play: on the hero's turn the dragon's Tail Attack rolls against the
+        // armed target, and spends its pool, not its action.
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(tia || find('Adult Red Dragon', 'MM')); await sleep(30);
+        const tiaMax = state.combatants[0].legendaryMax;
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(find('Adult Red Dragon', 'MM')); await sleep(50);
+        const d = state.combatants[0];
+        state.combatants.push({ id: 'r199t', name: 'Hero', isPC: false, hp: 300, hpMax: 300, ac: 10, initiative: 30, conditions: [] });
+        state.activeCombatantId = 'r199t'; save();
+        ok('legendary: Tiamat takes five legendary actions, a red dragon three', !!tia && tiaMax === 5 && d.legendaryMax === 3, JSON.stringify([tiaMax, d.legendaryMax]));
+        openPanel('turnview'); await sleep(400);
+        const acts = T._rawList(T._entryOf(d)._raw, ['legendary_actions']);
+        const seen = [];
+        T._resolve = o => { seen.push(o); };
+        T._armed = 'r199t';
+        T._useLegendary(d.id, acts.findIndex(a => /^Tail Attack/.test(a.name)));
+        ok('legendary: the tail rolls at once against the armed target — the dragon\'s, its pool down one, its own action untouched',
+           seen.length === 1 && seen[0].attackerId === d.id && seen[0].target.id === 'r199t' && d.legendaryUsed === 1 && !d.actionUsed,
+           JSON.stringify([seen.map(o => [o.attackerId, o.label]), d.legendaryUsed, d.actionUsed]));
+        T._finishMulti(true); seen.length = 0;
+        T._useLegendary(d.id, acts.findIndex(a => /^Wing Attack/.test(a.name)));
+        T._render(); await sleep(80);
+        const head = T._body.querySelector('.tv-multi.run');
+        ok('legendary: the Wing Attack waits for its targets — "Legendary 1/1", with Area…', !!head && /Legendary 1\/1/.test(head.textContent) && /Wing Attack/.test(head.textContent) && !!head.querySelector('[data-tv="qarea"]') && d.legendaryUsed === 3,
+           head ? head.textContent.replace(/\s+/g, ' ') : 'no head');
+        T._rollQueueStep('r199t');
+        ok('legendary: clicking the target rolls its save; still not the dragon\'s action', seen.length === 1 && seen[0].attackerId === d.id && seen[0].save !== undefined && !d.actionUsed,
+           JSON.stringify([seen.map(o => [o.attackerId, o.label, o.save]), d.actionUsed]));
+        T._resolve = keepR;
+        if (T._queue) T._finishMulti(true);
+        // On the dragon's own turn its legendary actions are not among its actions.
+        state.activeCombatantId = d.id; save(); T._render(); await sleep(80);
+        const names = [...T._body.querySelectorAll('.tv-act-name')].map(e => e.textContent);
+        ok('legendary: on its own turn the dragon\'s list is its actions, not its Wing Attack', names.length > 0 && !names.some(n => /Wing Attack/.test(n)), JSON.stringify(names));
+        closePanel('turnview');
+      } catch(e){ ok('round 199 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._entryOf = keepE; T._resolve = keepR; T._queue = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

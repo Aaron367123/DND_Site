@@ -539,6 +539,10 @@ function _convertMonster(d) {
     legendary_actions: (d.legendary||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})).concat(_scFor('legendary')),
     reactions:         (d.reaction ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})).concat(_scFor('reaction')),
     mythic_actions:    (d.mythic   ||[]).map(a=>({name:_stripTags(a.name||''), desc:_parseEntries(a.entries)})),
+    // How many legendary actions, when not the usual 3 (Tiamat 5, some 2), and
+    // in its lair (2024: "Legendary Action Uses: 3 (4 in Lair)").
+    legendary_count:   d.legendaryActions != null ? d.legendaryActions : null,
+    legendary_lair:    d.legendaryActionsLair != null ? d.legendaryActionsLair : null,
   };
 }
 
@@ -836,7 +840,7 @@ function _normSearchIdx(s) {
 // 20261027a — 5etools 2.39 (Ravenloft: The Horrors Within, Arcana Unleashed…).
 // 20261104a — 2024 {@atkr m} renders "Melee Attack Roll:", not a bare
 // "Attack:" that left every 2024 monster attack at +0 to hit.
-const DATA_STAMP   = '20261104a';
+const DATA_STAMP   = '20261105a';
 // A hash of data/'s contents, stamped by tools/stamp-build.js — so a data
 // refresh renews every device's cache (here and in sw.js) without anyone
 // remembering to bump DATA_STAMP. DATA_STAMP stays for converter changes.
