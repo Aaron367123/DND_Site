@@ -1141,7 +1141,24 @@ registerPanel('turnview', {
     const entry = this._entryOf(c);
     const raw = entry && entry._raw;
     if (!raw || !panelDefs.attacks) return [];
-    return this._summonAttacks(c, panelDefs.attacks._parsed(raw).attacks || []);
+    // Its Spellcasting's damaging spells after its actions, so the indexes a
+    // Multiattack plan holds are untouched.
+    return this._summonAttacks(c, panelDefs.attacks._parsed(raw).attacks || []).concat(this._spellRowsFor(entry, raw));
+  },
+  // A monster's spells as rows (sktMonsterSpellRows), from the rules data of
+  // its edition — loaded on first need, the panel drawn again once it is.
+  _spellRowCache: new WeakMap(),
+  _spellRowsFor(entry, raw){
+    if (!raw || typeof sktMonsterSpellRows !== 'function') return [];
+    const hit = this._spellRowCache.get(raw);
+    if (hit) return hit;
+    if (!/spellcasting/i.test(JSON.stringify([].concat(raw.special_abilities || [], raw.actions || [], raw.bonus_actions || []).map(a => a && a.name)))){ this._spellRowCache.set(raw, []); return []; }
+    const ed = typeof SKT_2024_ERA !== 'undefined' && SKT_2024_ERA.has((entry && entry._source) || raw._source) ? '2024' : '2014';
+    const R = typeof _sktRulesReady !== 'undefined' ? _sktRulesReady[ed] : null;
+    if (!R){ if (typeof sktRulesLoad === 'function') sktRulesLoad(ed).then(() => this._body && this._render(), () => {}); return []; }
+    const rows = sktMonsterSpellRows(raw, R);
+    this._spellRowCache.set(raw, rows);
+    return rows;
   },
   // A summoned spirit's attacks for the casting it came from (c.summon: the
   // spell's level, the caster's spell attack modifier and save DC): "Bonus
@@ -1287,7 +1304,7 @@ registerPanel('turnview', {
       const usedNow = left === 0 && (c.usesRound || {})[a.name] === (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
       const rech = (a.recharge
         ? `<span class="tv-save rech" title="Recharges on a d6 roll of ${esc(String(a.recharge))} at the start of its turn">↺ ${esc(String(a.recharge))}</span>`
-        : '') + (left != null ? `<span class="tv-save rech" title="Uses that don't come back in this fight">${left}/${a.uses} left</span>` : '');
+        : '') + (left != null ? `<span class="tv-save rech" title="Uses that don't come back in this fight">${left}/${this._usesMax(a)} ${a.slotLevel ? this._ordLevel(a.slotLevel) + ' slots' : 'left'}</span>` : '');
       let ctl;
       if (left === 0 && !usedNow){
         ctl = `${rech}<span class="tv-act-note">used up</span>`;
@@ -2070,7 +2087,7 @@ registerPanel('turnview', {
         legendaryUsed:c.legendaryUsed,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
-        usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined,
+        usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
       })),
       party: (state.party || []).map(p => ({
         // hp was missing here, so undoing damage to a PC put the combatant
@@ -2470,7 +2487,7 @@ registerPanel('turnview', {
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote,
                     type: parts.length ? parts[0].type : '', detail,
-                    magical: a.pc ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
+                    magical: a.pc || a.magical ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
 
@@ -2662,13 +2679,22 @@ registerPanel('turnview', {
   // "(3/Day)", "(Recharges after a Short or Long Rest)": counted down, not
   // rolled back. One use a round: a breath applied to each target in turn
   // (Failed, Failed…) is still one breath.
-  _usesLeft(c, a){ return a && a.uses ? Math.max(0, a.uses - (+((c.usesSpent || {})[a.name]) || 0)) : null; },
+  // A spell from a slot draws on the pool of that level, shared by every
+  // spell of the level (a mage's three 3rd-level slots: Fireball or
+  // Counterspell), kept in c.slotsUsed.
+  _usesLeft(c, a){
+    if (a && a.slotLevel) return Math.max(0, (a.slotMax || 0) - (+((c.slotsUsed || {})[a.slotLevel]) || 0));
+    return a && a.uses ? Math.max(0, a.uses - (+((c.usesSpent || {})[a.name]) || 0)) : null;
+  },
+  _ordLevel(n){ return n + ([, 'st', 'nd', 'rd'][n % 10 > 3 || ~~(n % 100 / 10) === 1 ? 0 : n % 10] || 'th'); },
+  _usesMax(a){ return a && a.slotLevel ? a.slotMax : a && a.uses; },
   _markUsed(c, a){
-    if (!a || !a.uses) return;
+    if (!a || !(a.uses || a.slotLevel)) return;
     const at = (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
     if ((c.usesRound || {})[a.name] === at) return;
     c.usesRound = Object.assign({}, c.usesRound, { [a.name]: at });
-    c.usesSpent = Object.assign({}, c.usesSpent, { [a.name]: (+((c.usesSpent || {})[a.name]) || 0) + 1 });
+    if (a.slotLevel) c.slotsUsed = Object.assign({}, c.slotsUsed, { [a.slotLevel]: (+((c.slotsUsed || {})[a.slotLevel]) || 0) + 1 });
+    else c.usesSpent = Object.assign({}, c.usesSpent, { [a.name]: (+((c.usesSpent || {})[a.name]) || 0) + 1 });
   },
   _markRechargeSpent(c, name){
     c.rechargeSpent = c.rechargeSpent || [];
@@ -2781,8 +2807,8 @@ registerPanel('turnview', {
       total: null, crit: false, hit: true, parts, detail,
       dmg: parts.reduce((s, x) => s + x.amt, 0),
       type: parts.length ? parts[0].type : '',
-      magical: panelDefs.attacks && (this._entryOf(c) || {})._raw
-               ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false,
+      magical: a.magical || (panelDefs.attacks && (this._entryOf(c) || {})._raw
+               ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false),
     });
   },
 

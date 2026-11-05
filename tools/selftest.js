@@ -14266,6 +14266,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 197 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = realD; document.querySelectorAll('.modal-backdrop').forEach(e => e.remove()); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 198: a monster's Spellcasting — its damaging spells as rows, slots and daily uses counted --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const row = (rows, n) => rows.find(a => a.spellName === n) || {};
+        const mage = sktMonsterSpellRows(find('Mage', 'MM')._raw, R14);
+        const fb = row(mage, 'Fire Bolt'), fball = row(mage, 'Fireball'), ice = row(mage, 'Ice Storm');
+        ok('monster spells: a 2014 mage — Fire Bolt +6 for 2d10 (a 9th-level caster), Fireball DC 14 Dex from its three 3rd-level slots, Ice Storm both its rolls',
+           fb.toHit === '+6' && fb.parts[0].dice === '2d10' && fball.save && fball.save.dc === 14 && fball.save.ability === 'Dexterity' && fball.save.half && fball.slotLevel === 3 && fball.slotMax === 3
+           && (ice.parts || []).map(p => p.dice + ' ' + p.type).join() === '2d8 bludgeoning,4d6 cold',
+           JSON.stringify([fb.toHit, fb.parts, fball.save, fball.slotLevel, fball.slotMax, ice.parts]));
+        const m24 = sktMonsterSpellRows(find('Mage', 'XMM')._raw, R24);
+        const f4 = row(m24, 'Fireball');
+        ok('monster spells: a 2024 mage\'s "Fireball (level 4 version)" is 9d6, twice a day', f4.parts && f4.parts[0].dice === '9d6' && f4.uses === 2 && /4th level/.test(f4.name), JSON.stringify([f4.name, f4.parts, f4.uses]));
+        const pr = sktMonsterSpellRows(find('Priest', 'XMM')._raw, R24);
+        const sg = row(pr, 'Spirit Guardians');
+        ok('monster spells: a 2024 priest\'s Spirit Guardians is 3d8 radiant (or necrotic, not both) at DC 13 — worked out from its Wisdom', sg.parts && sg.parts.length === 1 && sg.parts[0].dice === '3d8' && sg.parts[0].type === 'radiant' && sg.save && sg.save.dc === 13,
+           JSON.stringify([sg.parts, sg.save]));
+        // In the turn view: casting Fireball spends one of the three 3rd-level slots.
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(find('Mage', 'MM')); await sleep(50);
+        state.combatants.push({ id: 'r198t', name: 'Dummy', isPC: false, hp: 300, hpMax: 300, ac: 10, initiative: 1, conditions: [] });
+        const c = state.combatants[0]; state.activeCombatantId = c.id; save();
+        openPanel('turnview'); await sleep(400);
+        const T = panelDefs.turnview;
+        const list = T._attacksFor(c), ai = list.findIndex(a => a.spellName === 'Fireball');
+        ok('monster spells: the mage\'s turn lists its spells after its dagger', ai > 0 && list[0].name === 'Dagger' && list[ai].spell && list[ai].magical, JSON.stringify(list.map(a => a.name)));
+        const was = T._resolve; T._resolve = () => {};
+        try { T._armed = 'r198t'; T._rollSave(ai, false); } finally { T._resolve = was; }
+        ok('monster spells: casting Fireball leaves two of its three 3rd-level slots', T._usesLeft(c, list[ai]) === 2 && c.slotsUsed && c.slotsUsed[3] === 1, JSON.stringify([T._usesLeft(c, list[ai]), c.slotsUsed]));
+        T._render(); await sleep(80);
+        const fr = [...document.querySelectorAll('.tv-act')].find(r => /Fireball/.test(r.textContent));
+        ok('monster spells: the row says 2/3 3rd slots', !!fr && /2\/3 3rd slots/.test(fr.textContent), fr && fr.textContent.replace(/\s+/g, ' '));
+        closePanel('turnview');
+      } catch(e){ ok('round 198 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

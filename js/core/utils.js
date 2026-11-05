@@ -1521,6 +1521,110 @@ function sktSummonBaseLevel(raw){
   const m = /spell level above\s+(\d+)/i.exec(t);
   return m ? +m[1] : null;
 }
+// A monster's Spellcasting block: its save DC and spell attack bonus, and
+// each spell with how often it can cast it.
+//   2014: "…spell save DC 14, +6 to hit with spell attacks… \x041st level (4
+//         slots)\x04 Detect magic, Magic missile"   → per 'slot', level 1, n 4
+//   2024: "\x042/day each\x04 Fireball (level 4 version), Invisibility"
+//                                                    → per 'day', n 2, cast at 4
+// → { dc, atk, casterLevel, spells: [{ name, per, n, each, level, at }] } | null
+function sktMonsterSpellcasting(raw){
+  const blocks = [].concat((raw && raw.special_abilities) || [], (raw && raw.actions) || [], (raw && raw.bonus_actions) || [])
+    .filter(a => a && /spellcasting/i.test(String(a.name || '')));
+  if (!blocks.length) return null;
+  const out = { dc: null, atk: null, casterLevel: null, spells: [] };
+  blocks.forEach(b => {
+    const t = String(b.desc || '');
+    const dc = /spell save DC\s*(\d+)/i.exec(t), atk = /([+-]\d+)\s+to hit with spell attacks/i.exec(t), lv = /(\d+)(?:st|nd|rd|th)-level spellcaster/i.exec(t);
+    if (dc && out.dc == null) out.dc = +dc[1];
+    if (atk && out.atk == null) out.atk = +atk[1];
+    if (lv && out.casterLevel == null) out.casterLevel = +lv[1];
+    // A block that names only the ability ("using Wisdom as the spellcasting
+    // ability", a 2024 priest): DC 8 + proficiency + its modifier.
+    const ab = /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\b(?: as the spellcasting ability|\)?\s*\(spell save)/i.exec(t) || /spellcasting ability is (\w+)/i.exec(t);
+    if (ab && out.dc == null){
+      const score = +(raw[ab[1].toLowerCase()] || 10), pb = typeof sktPbForCR === 'function' ? sktPbForCR(raw.challenge_rating) : 2;
+      out.dc = 8 + pb + Math.floor((score - 10) / 2);
+    }
+    t.split(/\n+/).forEach(line => {
+      const m = /^\s*\x04([^\x04]+)\x04[:\s]*(.+)$/.exec(line) || /^\s*((?:Cantrips|At will|\d+\/day(?: each)?|\d+(?:st|nd|rd|th) level)[^:]*):\s*(.+)$/i.exec(line);
+      if (!m) return;
+      const label = m[1].trim();
+      let per = '', n = 0, each = false, level = 0;
+      const slot = /(\d+)(?:st|nd|rd|th) level\s*\((\d+) slots?\)/i.exec(label), day = /(\d+)\s*\/\s*day/i.exec(label);
+      if (/cantrips|at will/i.test(label)) per = 'will';
+      else if (slot){ per = 'slot'; level = +slot[1]; n = +slot[2]; }
+      else if (day){ per = 'day'; n = +day[1]; each = /each/i.test(label); }
+      else return;
+      m[2].split(/\s*,\s*(?![^(]*\))/).forEach(s => {
+        const name = s.replace(/\s*\([^)]*\)/g, '').replace(/[*†]+/g, '').trim();
+        if (!name) return;
+        const at = /\(level\s+(\d+)\s+version\)/i.exec(s);
+        out.spells.push({ name, per, n, each, level, at: at ? +at[1] : 0 });
+      });
+    });
+  });
+  return out.spells.length ? out : null;
+}
+// The damaging spells of a monster's Spellcasting as attack rows the turn
+// view rolls like its other actions: a spell attack at its bonus (2024
+// blocks give only the DC — the bonus is DC − 8), a save at its DC, the
+// damage at the level it is cast (a cantrip by the caster's level, else its
+// CR). `R` is the rules data of the monster's edition.
+function sktMonsterSpellRows(raw, R){
+  const sc = sktMonsterSpellcasting(raw);
+  if (!sc || !R || typeof sktRulesSpell !== 'function') return [];
+  const ord = n => n + ([, 'st', 'nd', 'rd'][n % 10 > 3 || ~~(n % 100 / 10) === 1 ? 0 : n % 10] || 'th');
+  const cl = sc.casterLevel || Math.max(1, Math.round(parseFloat(String(raw.challenge_rating || '1').replace(/^(\d+)\/(\d+)$/, (_, a, b) => +a / +b)) || 1));
+  const atk = sc.atk != null ? sc.atk : sc.dc != null ? sc.dc - 8 : null;
+  const out = [];
+  sc.spells.forEach(sp => {
+    const s = sktRulesSpell(R, sp.name);
+    if (!s) return;
+    const lvl = +s.level || 0, castAt = sp.at || (sp.per === 'slot' ? sp.level : lvl);
+    const txt = JSON.stringify(s.entries || []);
+    // One roll per damage type the spell deals (Ice Storm: 2d8 bludgeoning and 4d6 cold).
+    const types = ((s.damageInflict || []).length ? s.damageInflict : ['']).slice();
+    // …but "3d8 Radiant damage (if you're good) or 3d8 Necrotic damage (if
+    // you're evil)" is one or the other: the first.
+    const tags = [], reD = /\{@damage ([^}|]+)[^}]*\}/g;
+    let dmm;
+    while ((dmm = reD.exec(txt))){
+      if (tags.length && /\bor\b/i.test(txt.slice(tags[tags.length - 1].end, dmm.index)) && !/\band\b|\bplus\b/i.test(txt.slice(tags[tags.length - 1].end, dmm.index))) break;
+      const end = dmm.index + dmm[0].length;
+      const ty = new RegExp('^\\W*(' + SKT_DMG_TYPE_RE.source + ')\\b', 'i').exec(txt.slice(end, end + 30));
+      tags.push({ d: dmm[1].replace(/\s+/g, ''), end, type: ty ? ty[1].toLowerCase() : '' });
+    }
+    const dms = tags.map(x => x.d).slice(0, types.length);
+    tags.forEach((x, i) => { if (x.type) types[i] = x.type; });
+    if (!dms.length) return;
+    const up = Math.max(0, castAt - lvl);
+    const scl = /\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || s.entriesHigherLevel || []));
+    const parts = dms.map((d0, i) => {
+      let dice = d0;
+      if (!lvl && !i && typeof _sktCantripDice === 'function') dice = _sktCantripDice(s, cl) || dice;
+      // The higher-level step goes on the first roll ("8d6 … +1d6 for each slot level above 3").
+      if (lvl && up && scl && !i){
+        const st = /^(\d+)d(\d+)$/.exec(scl[1].trim()), bm = /^(\d+)d(\d+)(.*)$/.exec(dice);
+        dice = st && bm && st[2] === bm[2] ? (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3] : dice + (st ? '+' + (up * +st[1]) + 'd' + st[2] : '');
+      }
+      return { avg: _sktDiceAvg(dice), dice, type: types[i] || types[0] || '' };
+    });
+    const isAtk = (s.spellAttack || []).length > 0, save = (s.savingThrow || [])[0];
+    if (!isAtk && !save) return;
+    const ab = save ? save.charAt(0).toUpperCase() + save.slice(1) : '';
+    out.push({
+      name: s.name + (castAt > lvl ? ' (' + ord(castAt) + ' level)' : ''), spellName: s.name, monsterSpell: true,
+      toHit: isAtk && atk != null ? (atk >= 0 ? '+' : '') + atk : null,
+      save: !isAtk && save && sc.dc != null ? { dc: sc.dc, ability: ab, half: /half as much|half damage/i.test(txt) } : null,
+      parts, alt: null, altLabel: '', recharge: null,
+      uses: sp.per === 'day' ? sp.n : 0, slotLevel: sp.per === 'slot' ? sp.level : 0, slotMax: sp.per === 'slot' ? sp.n : 0,
+      // A spell: Magic Resistance applies to its save, and its damage is magical.
+      ranged: /\bR\b/.test((s.spellAttack || []).join(' ')), group: 'spell', spell: true, magical: true,
+    });
+  });
+  return out;
+}
 // "• 1: Charm Ray wis DC 16.  13 (3d8) Psychic damage, and the target has the
 // Charmed condition…  Half damage only." → one entry per numbered ray.
 function _sktRayTable(desc){
