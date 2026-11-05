@@ -116,6 +116,7 @@ registerPanel('turnview', {
           [c.id, c.name, c.hp, c.hpMax, c.ac, c.initiative, c.isPC ? 1 : 0,
            c.reactionUsed ? 1 : 0, c.actionUsed ? 1 : 0, c.bonusUsed ? 1 : 0,
            c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0,
+           c.lair ? 1 : 0, c.lairUsed ? c.lairUsed.round + ':' + c.lairUsed.i : '',
            (c.conditions || []).join(',')].join('~')
         ).join('|');
   },
@@ -1145,7 +1146,8 @@ registerPanel('turnview', {
     if (!raw || !panelDefs.attacks) return [];
     // Its Spellcasting's damaging spells after its actions, so the indexes a
     // Multiattack plan holds are untouched.
-    return this._summonAttacks(c, panelDefs.attacks._parsed(raw).attacks || []).concat(this._spellRowsFor(entry, raw));
+    // Then its lair's effects (spent from the Lair bar, not listed as actions).
+    return this._summonAttacks(c, panelDefs.attacks._parsed(raw).attacks || []).concat(this._spellRowsFor(entry, raw), this._lairRowsFor(raw));
   },
   // A monster's spells as rows (sktMonsterSpellRows), from the rules data of
   // its edition — loaded on first need, the panel drawn again once it is.
@@ -1301,7 +1303,7 @@ registerPanel('turnview', {
     const rows = list.map((a, i) => {
       // A legendary action is spent from the Legendary bar, at the end of
       // someone else's turn — never one of the creature's own actions.
-      if (a.group === 'legendary') return '';
+      if (a.group === 'legendary' || a.group === 'lair') return '';
       const line = a.pc
         ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`)
         : `${a.toHit === 'auto' ? 'automatic hit · ' : a.toHit ? esc(a.toHit) + ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg ? pt.avg + ' (' + esc(pt.dice) + ')' : esc(pt.dice)} ${esc(pt.type)}${pt.ifAdv ? ' with advantage' : ''}`).join(' + ') || esc(a.effect || '')}`;
@@ -1354,8 +1356,8 @@ registerPanel('turnview', {
       // (a legendary action's steps are the legendary creature's, not this one's)
       const qsrc = this._order().find(x => x.id === q.srcId) || c;
       head = `<div class="tv-multi run${q.legendary ? ' legend' : ''}">
-        <span class="tv-multi-tag">${q.legendary ? 'Legendary' : 'Multiattack'} ${q.i + 1}/${q.items.length}</span>
-        <span class="tv-multi-text">${q.legendary ? esc(q.name) + ' · ' + esc(q.legendary) + ': ' : ''}<b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
+        <span class="tv-multi-tag">${q.lair ? 'Lair' : q.legendary ? 'Legendary' : 'Multiattack'} ${q.i + 1}/${q.items.length}</span>
+        <span class="tv-multi-text">${q.lair ? esc(q.name) + '’s lair: ' : q.legendary ? esc(q.name) + ' · ' + esc(q.legendary) + ': ' : ''}<b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
         ${it && it.save ? `<button class="btn" data-tv="qarea" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>` : ''}
         ${it && (it.choice || []).length > 1 ? `<span class="tv-multi-pick" title="The stat block lets this swing be any of these">${it.choice.map(ai => {
           const nm = ((this._attacksFor(qsrc) || [])[ai] || {}).name || '';
@@ -1413,7 +1415,7 @@ registerPanel('turnview', {
       ['.tv-init-tools', () => this._renderInitTools()],
       ['.tv-headwrap',   () => this._renderActorHead(c)],
       ['.tv-actbody',    () => this._renderActions(c)],
-      ['.tv-legendary',  () => this._renderLegendary()],
+      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair()],
       // Beside a result, the way to take it back: the app's one history, so
       // it is the same step Ctrl+Z would undo.
       ['.tv-result',     () => !this._result ? '' : this._result
@@ -1490,7 +1492,7 @@ registerPanel('turnview', {
     const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const step = ai => [Object.assign({ ai, name: list[ai].name }, list[ai].save && !list[ai].toHit ? { save: true } : {})];
     const usable = x => (x.parts || []).length || x.save || x.effect || x.rays;
-    const own = x => x.group !== 'legendary' && x.group !== 'reaction' && !x.monsterSpell;
+    const own = x => x.group !== 'legendary' && x.group !== 'reaction' && x.group !== 'lair' && !x.monsterSpell;
     let ai = list.findIndex(x => x.group === 'legendary' && this._legendaryBare(x.name).toLowerCase() === bare && usable(x));
     if (ai >= 0) return step(ai);
     // "Tail Attack", "Bite": the attack by that name, and only that ("Sever
@@ -1538,6 +1540,76 @@ registerPanel('turnview', {
     if (spells.length) return choose(spells);
     if (/\bcasts?\s+(?:a|one|one of (?:its|his|her|their))\s+cantrips?\b/i.test(txt)) return choose(list.map((x, i) => i).filter(i => list[i].monsterSpell && list[i].spellLevel === 0));
     return [];
+  },
+  // ─── Lair actions ─────────────────────────────────────────────────────────
+  // On initiative 20 a creature fighting in its lair (the tracker's "In its
+  // lair" switch) takes one of its lair's effects: once a round, and usually
+  // not the same one two rounds running. Each effect that rolls — a magma
+  // geyser's Dexterity save, a tremor's — is a row of its own, run through the
+  // queue like a legendary action; the rest are spent, logged and read out.
+  _lairRowCache: new WeakMap(),
+  _lairRowsFor(raw){
+    if (!raw || !Array.isArray(raw.lair_options) || !raw.lair_options.length) return [];
+    let rows = this._lairRowCache.get(raw);
+    if (!rows){
+      rows = [];
+      raw.lair_options.forEach((o, i) => {
+        const p = typeof sktParseMonsterAttack === 'function' ? sktParseMonsterAttack({ name: this._lairLabel(o), desc: o.desc }) : null;
+        if (p && ((p.parts || []).length || p.save || p.effect)) rows.push(Object.assign(p, { group: 'lair', lairIndex: i }));
+      });
+      this._lairRowCache.set(raw, rows);
+    }
+    return rows;
+  },
+  // A named effect by its name; an unnamed one by its first few words.
+  _lairLabel(o){
+    if (o && o.name) return sktPlainEntries(o.name);
+    const w = sktPlainEntries(String((o && o.desc) || '')).replace(/[\x01-\x07]/g, '').trim().split(/\s+/);
+    return w.slice(0, 4).join(' ').replace(/[,.;:]$/, '') + (w.length > 4 ? '…' : '');
+  },
+  _lairOpen(c, i){
+    const raw = (this._entryOf(c) || {})._raw || {};
+    const round = state.combatRound || 1, u = c.lairUsed;
+    if (u && u.round === round) return false;
+    if (raw.lair_norepeat && u && u.round === round - 1 && u.i === i) return false;
+    return true;
+  },
+  _renderLair(){
+    return this._order().filter(c => c.lair && (c.hp || 0) > 0 && !c.dead).map(c => {
+      const raw = (this._entryOf(c) || {})._raw || {};
+      const opts = raw.lair_options || [];
+      if (!opts.length) return '';
+      const round = state.combatRound || 1, used = c.lairUsed && c.lairUsed.round === round;
+      const btns = opts.map((o, i) => {
+        const open = this._lairOpen(c, i);
+        const why = used ? 'Its lair has acted this round' : !open ? 'Not the same effect two rounds in a row' : '';
+        return `<button class="btn ${open ? '' : 'tv-cant'}" data-tv="lair" data-id="${esc(c.id)}" data-i="${i}" ${open ? '' : 'disabled'}
+                        title="${esc((why ? why + ' — ' : '') + sktPlainEntries(String(o.desc || '')).replace(/[\x01-\x07]/g, ''))}">${esc(this._lairLabel(o))}</button>`;
+      }).join('');
+      return `<div class="tv-multi legend lair">
+        <span class="tv-multi-tag">Lair · init 20</span>
+        <span class="tv-multi-text"><b>${esc(c.name)}</b>${used ? ' <span class="dim">· done this round</span>' : ''}</span>
+        ${btns}
+      </div>`;
+    }).join('');
+  },
+  _useLair(id, i){
+    const c = this._order().find(x => x.id === id); if (!c || !this._lairOpen(c, i)) return;
+    const raw = (this._entryOf(c) || {})._raw || {};
+    const o = (raw.lair_options || [])[i]; if (!o) return;
+    c.lairUsed = { round: state.combatRound || 1, i };
+    const label = this._lairLabel(o), text = sktPlainEntries(String(o.desc || '')).replace(/[\x01-\x07]/g, '');
+    this._log.unshift(`<strong>${esc(c.name)}</strong> lair action — ${esc(label)}`);
+    const list = this._attacksFor(c) || [];
+    const ai = list.findIndex(x => x.group === 'lair' && x.lairIndex === i);
+    if (this._queue) this._finishMulti(true);
+    save(); panelDefs.combat?._render?.();
+    this._setResult(`<strong>${esc(c.name)}</strong>'s lair — ${esc(label)}. <span class="dim">${esc(text)}</span>`, true);
+    if (ai >= 0){
+      const a = list[ai];
+      this._queue = { srcId: c.id, name: c.name, items: [Object.assign({ ai, name: a.name }, a.save && !a.toHit ? { save: true } : {})], i: 0, hits: 0, misses: 0, legendary: label, lair: true };
+    }
+    this._render();
   },
   _renderLegendary(){
     const rows = this._legendaryRows().filter(r => r.acts.length);
@@ -2603,7 +2675,7 @@ registerPanel('turnview', {
   },
   _finishMulti(stopped){
     const q = this._queue; if (!q) return;
-    this._log.unshift(`<strong>${esc(q.name)}</strong> ${q.legendary ? esc(q.legendary) + ' (legendary)' : 'Multiattack'} ${stopped ? 'stopped' : 'done'}`
+    this._log.unshift(`<strong>${esc(q.name)}</strong> ${q.legendary ? esc(q.legendary) + (q.lair ? ' (lair)' : ' (legendary)') : 'Multiattack'} ${stopped ? 'stopped' : 'done'}`
       + ` — ${q.hits} hit${q.hits === 1 ? '' : 's'}` + (q.misses ? `, ${q.misses} missed` : ''));
     this._queue = null;
     this._render();
@@ -3181,6 +3253,7 @@ registerPanel('turnview', {
       else if (act === 'area'){ this._areaSave(+el.dataset.ai); }
       else if (act === 'multi'){ this._startMulti(); }
       else if (act === 'legend'){ this._useLegendary(el.dataset.id, +el.dataset.ai); }
+      else if (act === 'lair'){ this._useLair(el.dataset.id, +el.dataset.i); }
       else if (act === 'qmiss'){ if (this._queue){ this._queue.misses++; this._advanceQueue(); } }
       else if (act === 'qpick'){
         // This swing as another of the attacks the stat block allows.

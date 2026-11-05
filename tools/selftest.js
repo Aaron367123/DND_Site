@@ -14421,6 +14421,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         T._mapCache = null; B._render();
       }
     }
+    // -- Round 201: lair actions — one a round on initiative 20, each effect that rolls, rolled --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR0 = state.combatRound;
+      const T = panelDefs.turnview, keepR = T._resolve;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const red = find('Adult Red Dragon', 'MM'), raw = red._raw;
+        ok('lair: a red dragon\'s lair has its five effects (three, and Fizban\'s two), and not the same one two rounds running', (raw.lair_options || []).length === 5 && raw.lair_norepeat === true, JSON.stringify([(raw.lair_options || []).length, raw.lair_norepeat]));
+        const rows = T._lairRowsFor(raw), magma = rows.find(r => r.lairIndex === 0) || {};
+        ok('lair: the magma geyser is a DC 15 Dexterity save for 6d6 fire, half on a success', magma.save && magma.save.dc === 15 && /dex/i.test(magma.save.ability) && magma.save.half && (magma.parts || [])[0] && magma.parts[0].dice === '6d6' && magma.parts[0].type === 'fire',
+           JSON.stringify([magma.name, magma.save, magma.parts]));
+        const root = [].concat(..._5eData.filter(r => r.cat === 'monster' && r.name === 'Adult Green Dragon' && r._raw).map(r => T._lairRowsFor(r._raw))).find(r => r.toHit) || {};
+        ok('lair: a green dragon\'s grasping root attacks, +7 to hit for 3d6 bludgeoning', root.toHit === '+7' && (root.parts || [])[0] && root.parts[0].dice === '3d6', JSON.stringify([root.name, root.toHit, root.parts]));
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(red); await sleep(50);
+        const d = state.combatants[0]; d.lair = true;
+        state.combatants.push({ id: 'r201t', name: 'Hero', isPC: false, hp: 300, hpMax: 300, ac: 10, initiative: 30, conditions: [] });
+        state.activeCombatantId = 'r201t'; state.combatRound = 4; save();
+        openPanel('turnview'); await sleep(400);
+        let bar = T._body.querySelector('.tv-multi.lair');
+        const btns = () => [...T._body.querySelectorAll('.tv-multi.lair [data-tv="lair"]')];
+        ok('lair: in its lair the dragon has a Lair bar with its five effects', !!bar && btns().length === 5 && btns().every(b => !b.disabled), bar ? bar.textContent.replace(/\s+/g, ' ') : 'no bar');
+        const seen = []; T._resolve = o => { seen.push(o); };
+        btns()[0].click(); await sleep(80);
+        const head = T._body.querySelector('.tv-multi.run');
+        ok('lair: the geyser waits for its targets — "Lair 1/1", with Area…; the lair has acted this round', !!head && /Lair 1\/1/.test(head.textContent) && !!head.querySelector('[data-tv="qarea"]') && d.lairUsed && d.lairUsed.round === 4 && d.lairUsed.i === 0 && btns().every(b => b.disabled),
+           JSON.stringify([head && head.textContent.replace(/\s+/g, ' '), d.lairUsed, btns().map(b => b.disabled)]));
+        T._rollQueueStep('r201t');
+        ok('lair: clicking the target rolls its save, as the dragon\'s, without its action', seen.length === 1 && seen[0].attackerId === d.id && !d.actionUsed, JSON.stringify([seen.map(o => o.label), d.actionUsed]));
+        T._resolve = keepR; if (T._queue) T._finishMulti(true);
+        state.combatRound = 5; save(); T._render(); await sleep(80);
+        ok('lair: next round the geyser can\'t be repeated, the others can', btns().length === 5 && btns()[0].disabled && btns().slice(1).every(b => !b.disabled), JSON.stringify(btns().map(b => b.disabled)));
+        state.activeCombatantId = d.id; save(); T._render(); await sleep(80);
+        const names = [...T._body.querySelectorAll('.tv-act-name')].map(e => e.textContent);
+        ok('lair: the lair\'s effects are not among the dragon\'s own actions', names.length > 0 && !names.some(n => /Magma|tremor/i.test(n)), JSON.stringify(names));
+        d.lair = false; save(); T._render(); await sleep(50);
+        ok('lair: out of its lair, no Lair bar', !T._body.querySelector('.tv-multi.lair'));
+        closePanel('turnview');
+      } catch(e){ ok('round 201 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._resolve = keepR; T._queue = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR0; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

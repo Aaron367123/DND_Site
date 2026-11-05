@@ -1422,9 +1422,14 @@ function sktParseMonsterAttack(action){
   // An attack told in prose: "can make a melee spell attack (+4 to hit) …
   // On a hit, the target takes 6 (1d8 + 2) force damage" (a choldrith's
   // Spectral Dagger) — an attack roll, not damage that just lands.
-  const proseHit = desc.search(/\bHit:/i) === -1 && /([+-]\d+)\s+to hit\b/i.exec(desc);
+  // ("It has a +7 bonus to hit and deals 10 (3d6) bludgeoning damage on a
+  // hit" — a green dragon's lair root.)
+  const proseHit = desc.search(/\bHit:/i) === -1 && /([+-]\d+)\s+(?:bonus\s+)?to hit\b/i.exec(desc);
   if (proseHit){
-    const onHit = /\bon a hit\b[^.]*?\b(?:takes|deals?|dealing)\s+\d+\s*\(\d*d\d+/i.exec(desc);
+    // …or the same sentence as the bonus goes on to say what it deals.
+    const after = desc.slice(proseHit.index), dealM = /^[^.]*?\b(?:deals?|dealing)\s+\d+\s*\(\d*d\d+/i.exec(after);
+    const onHit = /\bon a hit\b[^.]*?\b(?:takes|deals?|dealing)\s+\d+\s*\(\d*d\d+/i.exec(desc)
+      || (dealM ? { index: proseHit.index + after.search(/\b(?:deals?|dealing)\s+\d+\s*\(\d*d\d+/i) } : null);
     const parts = onHit ? _sktDamageClauses(_sktDamageSegment(desc, onHit.index)) : [];
     if (parts.length) return {
       name, recharge, uses, toHit: proseHit[1].replace(/\s+/g, ''), save: null,

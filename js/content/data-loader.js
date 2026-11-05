@@ -840,7 +840,7 @@ function _normSearchIdx(s) {
 // 20261027a — 5etools 2.39 (Ravenloft: The Horrors Within, Arcana Unleashed…).
 // 20261104a — 2024 {@atkr m} renders "Melee Attack Roll:", not a bare
 // "Attack:" that left every 2024 monster attack at +0 to hit.
-const DATA_STAMP   = '20261105a';
+const DATA_STAMP   = '20261105b';
 // A hash of data/'s contents, stamped by tools/stamp-build.js — so a data
 // refresh renews every device's cache (here and in sw.js) without anyone
 // remembering to bump DATA_STAMP. DATA_STAMP stays for converter changes.
@@ -1029,8 +1029,24 @@ async function _buildIndexFromFiles() {
     if (d.legendaryGroup && d.legendaryGroup.name){
       const g = _legendaryGroupByKey[((d.legendaryGroup.name||'') + '|' + (d.legendaryGroup.source||'')).toLowerCase()];
       if (g){
-        if (Array.isArray(g.lairActions) && g.lairActions.length)
+        if (Array.isArray(g.lairActions) && g.lairActions.length){
           r.lair_actions = [{name:'', desc:_parseEntries(g.lairActions)}];
+          // Each effect on its own, for rolling one: the list's items, named
+          // ("Avandra's Grasp") or not ("Magma erupts from a point…").
+          const opts = [];
+          const walk = es => (es || []).forEach(e => {
+            if (!e || typeof e !== 'object') return;
+            if (e.type === 'list' && Array.isArray(e.items)) e.items.forEach(it => {
+              if (typeof it === 'string') opts.push({ name:'', desc:_parseEntries([it]) });
+              else if (it && (it.entries || it.entry)) opts.push({ name:_stripTags(it.name || ''), desc:_parseEntries(it.entries || [it.entry]) });
+            });
+            else if (e.type === 'entries') walk(e.entries);
+          });
+          walk(g.lairActions);
+          // "…can't use the same effect two rounds in a row"
+          const intro = g.lairActions.filter(e => typeof e === 'string').join(' ');
+          if (opts.length){ r.lair_options = opts; r.lair_norepeat = /\b(?:same|that) (?:effect|lair action|one)\b[^.]*\btwo rounds in a row|\bcan'?t (?:use|take|repeat)[^.]*\b(?:again|two rounds in a row)/i.test(intro); }
+        }
         if (Array.isArray(g.regionalEffects) && g.regionalEffects.length)
           r.regional_effects = [{name:'', desc:_parseEntries(g.regionalEffects)}];
       }
